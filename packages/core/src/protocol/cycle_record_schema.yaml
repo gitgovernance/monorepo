@@ -1,0 +1,68 @@
+# CycleRecord Schema (Canonical)
+# Source: cycle_protocol.md
+# Purpose: Define the canonical structure for grouping tasks into cycles
+# Version: 1.0.0
+
+$schema: "http://json-schema.org/draft-07/schema#"
+$id: "cycle_record_schema.yaml"
+title: "CycleRecord"
+description: "Canonical schema for cycle records (sprints, milestones)"
+additionalProperties: false
+type: object
+required:
+  - id
+  - title
+  - status
+properties:
+  id:
+    type: string
+    pattern: "^\\d{10}-cycle-[a-z0-9-]{1,50}$"
+    description: "Unique identifier for the cycle"
+
+  title:
+    type: string
+    minLength: 1
+    maxLength: 256
+    description: "Human-readable title for the cycle (e.g., 'Sprint 24.08')"
+
+  status:
+    type: string
+    enum: ["planning", "active", "completed", "archived"]
+    description: "The lifecycle status of the cycle"
+
+  taskIds:
+    type: array
+    items:
+      type: string
+      pattern: "^\\d{10}-task-[a-z0-9-]{1,50}$"
+
+  childCycleIds:
+    type: array
+    items:
+      type: string
+      pattern: "^\\d{10}-cycle-[a-z0-9-]{1,50}$"
+    description: "An optional array of Cycle IDs that are children of this cycle, allowing for hierarchies."
+
+  tags:
+    type: array
+    items:
+      type: string
+      pattern: "^[a-z0-9-]+(:[a-z0-9-]+)*$"
+    default: []
+    description: "Optional list of key:value tags for categorization (e.g., 'roadmap:q4', 'team:alpha')."
+
+  notes:
+    type: string
+    maxLength: 10000
+    description: "An optional description of the cycle's goals and objectives"
+
+examples:
+  - id: "1754400000-cycle-sprint-de-q4-api-performance"
+    title: "Sprint de Q4 - API Performance"
+    status: "active"
+    taskIds:
+      - "1752274500-task-optimizar-endpoint-search"
+      - "1752360900-task-anadir-cache-a-redis"
+    tags:
+      - "roadmap:q4"
+    notes: "Objetivo: Reducir la latencia p95 de la API por debajo de 200ms."

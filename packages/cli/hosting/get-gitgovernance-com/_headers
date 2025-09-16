@@ -1,0 +1,11 @@
+# Cloudflare Pages Headers for GitGovernance CLI Installer
+
+/*
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+
+/get-gitgovernance.sh
+  Content-Type: text/plain
+  Cache-Control: public, max-age=300
+  Access-Control-Allow-Origin: *

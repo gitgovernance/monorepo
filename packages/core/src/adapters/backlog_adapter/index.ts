@@ -1,0 +1,1157 @@
+import { createTaskRecord } from '../../factories/task_factory';
+import { createCycleRecord } from '../../factories/cycle_factory';
+import { RecordStore } from '../../store';
+import { IdentityAdapter } from '../identity_adapter';
+import { FeedbackAdapter } from '../feedback_adapter';
+import { ExecutionAdapter } from '../execution_adapter';
+import { ChangelogAdapter } from '../changelog_adapter';
+import { MetricsAdapter } from '../metrics_adapter';
+import { WorkflowMethodologyAdapter } from '../workflow_methodology_adapter';
+import { publishEvent } from '../../modules/event_bus_module';
+import type { TaskRecord } from '../../types/task_record';
+import type { CycleRecord } from '../../types/cycle_record';
+import type { FeedbackRecord } from '../../types/feedback_record';
+import type { ExecutionRecord } from '../../types/execution_record';
+import type { ChangelogRecord } from '../../types/changelog_record';
+import type { IWorkflowMethodology } from '../workflow_methodology_adapter';
+import type { ActorRecord } from '../../types/actor_record';
+import type {
+  IEventStream,
+  TaskCreatedEvent,
+  TaskStatusChangedEvent,
+  CycleCreatedEvent,
+  CycleStatusChangedEvent,
+  FeedbackCreatedEvent,
+  FeedbackStatusChangedEvent,
+  ExecutionCreatedEvent,
+  ChangelogCreatedEvent,
+  SystemDailyTickEvent,
+  EventMetadata
+} from '../../modules/event_bus_module';
+import type { GitGovRecord } from '../../models';
+
+/**
+ * BacklogAdapter Dependencies - Facade + Dependency Injection Pattern
+ */
+export type BacklogAdapterDependencies = {
+  // Data Layer (Protocols)
+  taskStore: RecordStore<TaskRecord>;
+  cycleStore: RecordStore<CycleRecord>;
+
+  // Cross-Adapter Dependencies (Mediator coordination) - PHASE 3 READY
+  feedbackStore: RecordStore<FeedbackRecord>;
+  executionStore: RecordStore<ExecutionRecord>;
+  changelogStore: RecordStore<ChangelogRecord>;
+
+  // Adapter Dependencies (Phase 3 Integration)
+  feedbackAdapter: FeedbackAdapter;
+  executionAdapter: ExecutionAdapter;
+  changelogAdapter: ChangelogAdapter;
+  metricsAdapter: MetricsAdapter;
+
+  // Business Rules Layer (Methodologies)
+  workflowMethodology: IWorkflowMethodology;
+  planningMethodology?: IWorkflowMethodology; // Future
+
+  // Infrastructure Layer
+  identity: IdentityAdapter;
+  eventBus: IEventStream; // For listening to events (consumer pattern)
+
+  // Configuration Layer (Optional)
+  config?: BacklogAdapterConfig; // Optional configuration, defaults to DEFAULT_CONFIG
+};
+
+/**
+ * BacklogAdapter Interface - The Facade/Mediator
+ */
+export interface IBacklogAdapter {
+  // Phase 1: Task/Cycle CRUD operations
+  createTask(payload: Partial<TaskRecord>, actorId: string): Promise<TaskRecord>;
+  getTask(taskId: string): Promise<TaskRecord | null>;
+  getAllTasks(): Promise<TaskRecord[]>;
+  submitTask(taskId: string, actorId: string): Promise<TaskRecord>;
+  approveTask(taskId: string, actorId: string): Promise<TaskRecord>;
+  updateTask(taskId: string, payload: Partial<TaskRecord>): Promise<TaskRecord>;
+  activateTask(taskId: string, actorId: string): Promise<TaskRecord>;
+  completeTask(taskId: string, actorId: string): Promise<TaskRecord>;
+
+  createCycle(payload: Partial<CycleRecord>, actorId: string): Promise<CycleRecord>;
+  getCycle(cycleId: string): Promise<CycleRecord | null>;
+  getAllCycles(): Promise<CycleRecord[]>;
+  updateCycle(cycleId: string, payload: Partial<CycleRecord>): Promise<CycleRecord>;
+  addTaskToCycle(cycleId: string, taskId: string): Promise<void>;
+
+  // Phase 2: Agent Navigation
+  getTasksAssignedToActor(actorId: string): Promise<TaskRecord[]>;
+
+  // Phase 3: Event Handlers (NEW)
+  handleFeedbackCreated(event: FeedbackCreatedEvent): Promise<void>;
+  handleFeedbackResolved(event: FeedbackStatusChangedEvent): Promise<void>;
+  handleExecutionCreated(event: ExecutionCreatedEvent): Promise<void>;
+  handleChangelogCreated(event: ChangelogCreatedEvent): Promise<void>;
+  handleCycleStatusChanged(event: CycleStatusChangedEvent): Promise<void>;
+  handleDailyTick(event: SystemDailyTickEvent): Promise<void>;
+
+  // Phase 4: Stubs and Polish (Future)
+  getSystemStatus(): Promise<SystemStatus>;
+  getTaskHealth(taskId: string): Promise<TaskHealthReport>;
+  lint(): Promise<LintReport>;
+  audit(): Promise<AuditReport>;
+  processChanges(changes: unknown[]): Promise<ExecutionRecord[]>;
+}
+
+// Type imports from MetricsAdapter
+import type { SystemStatus, TaskHealthReport } from '../metrics_adapter';
+
+// Configuration types
+export type BacklogAdapterConfig = {
+  healthThresholds: {
+    taskMinScore: number; // Minimum task health score before warning
+    maxDaysInStage: number; // Maximum days in stage before stale warning
+    systemMinScore: number; // Minimum system health score before alert
+  };
+}
+
+// Default configuration
+const DEFAULT_CONFIG: BacklogAdapterConfig = {
+  healthThresholds: {
+    taskMinScore: 50,
+    maxDaysInStage: 7,
+    systemMinScore: 60
+  }
+};
+
+// Future types
+type LintReport = { status: 'success' | 'failed'; issues: string[] };
+type AuditReport = { status: 'success' | 'failed'; violations: string[] };
+
+/**
+ * BacklogAdapter - The Facade/Mediator
+ * 
+ * Implements Facade + Dependency Injection Pattern for testeable and configurable orchestration.
+ * Acts as Mediator between Task/Cycle protocols and Workflow/Planning methodologies.
+ */
+export class BacklogAdapter implements IBacklogAdapter {
+  private taskStore: RecordStore<TaskRecord>;
+  private cycleStore: RecordStore<CycleRecord>;
+  private feedbackStore: RecordStore<FeedbackRecord>;
+  private executionStore: RecordStore<ExecutionRecord>;
+  private changelogStore: RecordStore<ChangelogRecord>;
+
+  private feedbackAdapter: FeedbackAdapter;
+  private executionAdapter: ExecutionAdapter;
+  private changelogAdapter: ChangelogAdapter;
+  private metricsAdapter: MetricsAdapter;
+
+  private workflowMethodology: IWorkflowMethodology;
+  private planningMethodology: IWorkflowMethodology | undefined;
+  private identity: IdentityAdapter;
+  private eventBus: IEventStream;
+  private config: BacklogAdapterConfig;
+
+  constructor(dependencies: BacklogAdapterDependencies) {
+    // Data Layer
+    this.taskStore = dependencies.taskStore;
+    this.cycleStore = dependencies.cycleStore;
+    this.feedbackStore = dependencies.feedbackStore;
+    this.executionStore = dependencies.executionStore;
+    this.changelogStore = dependencies.changelogStore;
+
+    // Adapter Dependencies
+    this.feedbackAdapter = dependencies.feedbackAdapter;
+    this.executionAdapter = dependencies.executionAdapter;
+    this.changelogAdapter = dependencies.changelogAdapter;
+    this.metricsAdapter = dependencies.metricsAdapter;
+
+    // Business Rules & Infrastructure
+    this.workflowMethodology = dependencies.workflowMethodology;
+    this.planningMethodology = dependencies.planningMethodology;
+    this.identity = dependencies.identity;
+    this.eventBus = dependencies.eventBus;
+
+    // Configuration with defaults
+    this.config = dependencies.config || DEFAULT_CONFIG;
+
+    // Phase 3: Setup event subscriptions
+    this.setupEventSubscriptions();
+  }
+
+  /**
+   * Setup event subscriptions for Phase 3 event handlers
+   */
+  private setupEventSubscriptions(): void {
+    this.eventBus.subscribe<FeedbackCreatedEvent>("feedback.created", (event) =>
+      this.handleFeedbackCreated(event)
+    );
+    this.eventBus.subscribe<FeedbackStatusChangedEvent>("feedback.status.changed", (event) =>
+      this.handleFeedbackResolved(event)
+    );
+    this.eventBus.subscribe<ExecutionCreatedEvent>("execution.created", (event) =>
+      this.handleExecutionCreated(event)
+    );
+    this.eventBus.subscribe<ChangelogCreatedEvent>("changelog.created", (event) =>
+      this.handleChangelogCreated(event)
+    );
+    this.eventBus.subscribe<CycleStatusChangedEvent>("cycle.status.changed", (event) =>
+      this.handleCycleStatusChanged(event)
+    );
+    this.eventBus.subscribe<SystemDailyTickEvent>("system.daily_tick", (event) =>
+      this.handleDailyTick(event)
+    );
+  }
+
+  // ===== PHASE 1: TASK/CYCLE CRUD OPERATIONS (IMPLEMENTED) =====
+
+  /**
+   * Creates a new task with workflow validation
+   */
+  async createTask(payload: Partial<TaskRecord>, actorId: string): Promise<TaskRecord> {
+    // 1. Build the record with factory
+    const validatedPayload = await createTaskRecord(payload);
+
+    // 2. Create unsigned record structure
+    const unsignedRecord: GitGovRecord & { payload: TaskRecord } = {
+      header: {
+        version: '1.0',
+        type: 'task',
+        payloadChecksum: 'will-be-calculated-by-signRecord',
+        signatures: [{
+          keyId: actorId,
+          role: 'author',
+          signature: 'placeholder',
+          timestamp: Date.now(),
+          timestamp_iso: new Date().toISOString()
+        }]
+      },
+      payload: validatedPayload,
+    };
+
+    // 3. Sign the record
+    const signedRecord = await this.identity.signRecord(unsignedRecord, actorId, 'author');
+
+    // 4. Persist the record
+    await this.taskStore.write(signedRecord as GitGovRecord & { payload: TaskRecord });
+
+    // 5. Emit event
+    this.eventBus.publish({
+      type: 'task.created',
+      timestamp: Date.now(),
+      source: 'backlog_adapter',
+      payload: {
+        taskId: validatedPayload.id,
+        actorId
+      },
+      metadata: {
+        eventId: `${Date.now()}-task-created-${validatedPayload.id}`,
+        timestamp: Date.now(),
+        sourceAdapter: 'backlog_adapter'
+      }
+    } as TaskCreatedEvent);
+
+    return validatedPayload;
+  }
+
+  /**
+   * Gets a specific task by ID
+   */
+  async getTask(taskId: string): Promise<TaskRecord | null> {
+    const record = await this.taskStore.read(taskId);
+    return record ? record.payload : null;
+  }
+
+  /**
+   * Gets all tasks in the system
+   */
+  async getAllTasks(): Promise<TaskRecord[]> {
+    const ids = await this.taskStore.list();
+    const tasks: TaskRecord[] = [];
+
+    for (const id of ids) {
+      const record = await this.taskStore.read(id);
+      if (record) {
+        tasks.push(record.payload);
+      }
+    }
+
+    return tasks;
+  }
+
+  /**
+   * Submits a task for review
+   */
+  async submitTask(taskId: string, actorId: string): Promise<TaskRecord> {
+    // Read and validate task exists
+    const taskRecord = await this.taskStore.read(taskId);
+    if (!taskRecord) {
+      throw new Error(`RecordNotFoundError: Task not found: ${taskId}`);
+    }
+
+    const task = taskRecord.payload;
+
+    // Validate current status
+    if (task.status !== 'draft') {
+      throw new Error(`ProtocolViolationError: Task ${taskId} is not in draft status`);
+    }
+
+    // Get actor with proper typing
+    const actor = await this.getActor(actorId);
+
+    // Delegate to workflow methodology for validation
+    const transitionRule = await this.workflowMethodology.getTransitionRule('draft', 'review', {
+      task,
+      actor,
+      signatures: taskRecord.header.signatures
+    });
+
+    if (!transitionRule) {
+      throw new Error(`ProtocolViolationError: Transition draft→review not allowed for task ${taskId}`);
+    }
+
+    // Update task status
+    const updatedPayload: TaskRecord = { ...task, status: 'review' as const };
+    const updatedRecord = { ...taskRecord, payload: updatedPayload };
+
+    // Sign and persist
+    const signedRecord = await this.identity.signRecord(updatedRecord, actorId, 'submitter');
+    await this.taskStore.write(signedRecord as GitGovRecord & { payload: TaskRecord });
+
+    // Emit event
+    this.eventBus.publish({
+      type: 'task.status.changed',
+      timestamp: Date.now(),
+      source: 'backlog_adapter',
+      payload: {
+        taskId,
+        oldStatus: 'draft',
+        newStatus: 'review',
+        actorId
+      }
+    } as TaskStatusChangedEvent);
+
+    return updatedPayload;
+  }
+
+  /**
+   * Approves a task for next stage with complete workflow validation
+   */
+  async approveTask(taskId: string, actorId: string): Promise<TaskRecord> {
+    // 1. Read and validate task exists
+    const taskRecord = await this.taskStore.read(taskId);
+    if (!taskRecord) {
+      throw new Error(`RecordNotFoundError: Task not found: ${taskId}`);
+    }
+
+    const task = taskRecord.payload;
+    const actor = await this.getActor(actorId);
+
+    // 2. Determine target transition from available transitions
+    const availableTransitions = await this.getAvailableTransitions(task.status);
+    const approvalTransition = availableTransitions.find(transition =>
+      transition.requires?.signatures && Object.keys(transition.requires.signatures).length > 0
+    );
+
+    if (!approvalTransition) {
+      throw new Error(`ProtocolViolationError: No approval transition available from ${task.status}`);
+    }
+
+    const targetState = approvalTransition.to;
+
+    // 3. Generate temporary signature for validation
+    const tempSignature = {
+      keyId: actorId,
+      role: 'approver',
+      signature: 'temp-signature',
+      timestamp: Date.now(),
+      timestamp_iso: new Date().toISOString()
+    };
+
+    // 4. Build complete validation context
+    const context = {
+      task,
+      actor,
+      signatures: [...taskRecord.header.signatures, tempSignature],
+      transitionTo: targetState as TaskRecord['status']
+    };
+
+    // 5. Delegate signature validation to methodology
+    const isValidSignature = await this.workflowMethodology.validateSignature(tempSignature, context);
+    if (!isValidSignature) {
+      throw new Error(`ProtocolViolationError: Signature is not valid for this approval`);
+    }
+
+    // 6. Update, sign and persist if validation successful
+    const updatedPayload: TaskRecord = { ...task, status: targetState as TaskRecord['status'] };
+    const updatedRecord = { ...taskRecord, payload: updatedPayload };
+
+    const signedRecord = await this.identity.signRecord(updatedRecord, actorId, 'approver');
+    await this.taskStore.write(signedRecord as GitGovRecord & { payload: TaskRecord });
+
+    // 7. Emit event
+    this.eventBus.publish({
+      type: 'task.status.changed',
+      timestamp: Date.now(),
+      source: 'backlog_adapter',
+      payload: {
+        taskId,
+        oldStatus: task.status,
+        newStatus: targetState,
+        actorId
+      }
+    } as TaskStatusChangedEvent);
+
+    return updatedPayload;
+  }
+
+  /**
+   * Activates a task transitioning from ready to active with permission validation
+   */
+  async activateTask(taskId: string, actorId: string): Promise<TaskRecord> {
+    // 1. Read and validate task exists
+    const taskRecord = await this.taskStore.read(taskId);
+    if (!taskRecord) {
+      throw new Error(`RecordNotFoundError: Task not found: ${taskId}`);
+    }
+
+    const task = taskRecord.payload;
+    const actor = await this.getActor(actorId);
+
+    // 2. Validate current status is 'ready'
+    if (task.status !== 'ready') {
+      throw new Error(`ProtocolViolationError: Task is in '${task.status}' state. Cannot activate from this state.`);
+    }
+
+    // 3. Validate transition with WorkflowMethodology
+    const context = {
+      task,
+      actor,
+      signatures: taskRecord.header.signatures,
+      transitionTo: 'active' as TaskRecord['status']
+    };
+
+    const transitionRule = await this.workflowMethodology.getTransitionRule('ready', 'active', context);
+    if (!transitionRule) {
+      throw new Error(`ProtocolViolationError: Workflow methodology rejected ready→active transition`);
+    }
+
+    // 4. Update task status to 'active'
+    const updatedPayload: TaskRecord = { ...task, status: 'active' };
+    const updatedRecord = { ...taskRecord, payload: updatedPayload };
+
+    // 5. Sign the record with 'executor' role
+    const signedRecord = await this.identity.signRecord(updatedRecord, actorId, 'executor');
+    await this.taskStore.write(signedRecord as GitGovRecord & { payload: TaskRecord });
+
+    // 6. Emit task status changed event
+    this.eventBus.publish({
+      type: 'task.status.changed',
+      timestamp: Date.now(),
+      source: 'backlog_adapter',
+      payload: {
+        taskId,
+        oldStatus: 'ready',
+        newStatus: 'active',
+        actorId
+      }
+    } as TaskStatusChangedEvent);
+
+    return updatedPayload;
+  }
+
+  /**
+   * Completes a task transitioning from active to done with signature validation
+   */
+  async completeTask(taskId: string, actorId: string): Promise<TaskRecord> {
+    // 1. Read and validate task exists
+    const taskRecord = await this.taskStore.read(taskId);
+    if (!taskRecord) {
+      throw new Error(`RecordNotFoundError: Task not found: ${taskId}`);
+    }
+
+    const task = taskRecord.payload;
+    const actor = await this.getActor(actorId);
+
+    // 2. Validate current status is 'active'
+    if (task.status !== 'active') {
+      throw new Error(`ProtocolViolationError: Task is in '${task.status}' state. Cannot complete from this state.`);
+    }
+
+    // 3. Validate transition with WorkflowMethodology
+    const context = {
+      task,
+      actor,
+      signatures: taskRecord.header.signatures,
+      transitionTo: 'done' as TaskRecord['status']
+    };
+
+    const transitionRule = await this.workflowMethodology.getTransitionRule('active', 'done', context);
+    if (!transitionRule) {
+      throw new Error(`ProtocolViolationError: Workflow methodology rejected active→done transition`);
+    }
+
+    // 4. Update task status to 'done'
+    const updatedPayload: TaskRecord = { ...task, status: 'done' };
+    const updatedRecord = { ...taskRecord, payload: updatedPayload };
+
+    // 5. Sign the record with 'approver' role
+    const signedRecord = await this.identity.signRecord(updatedRecord, actorId, 'approver');
+    await this.taskStore.write(signedRecord as GitGovRecord & { payload: TaskRecord });
+
+    // 6. Emit task status changed event
+    this.eventBus.publish({
+      type: 'task.status.changed',
+      timestamp: Date.now(),
+      source: 'backlog_adapter',
+      payload: {
+        taskId,
+        oldStatus: 'active',
+        newStatus: 'done',
+        actorId
+      }
+    } as TaskStatusChangedEvent);
+
+    return updatedPayload;
+  }
+
+  /**
+   * Cancels a task transitioning from ready/active to discarded
+   */
+  async cancelTask(taskId: string, actorId: string, reason?: string): Promise<TaskRecord> {
+    // 1. Read and validate task exists
+    const taskRecord = await this.taskStore.read(taskId);
+    if (!taskRecord) {
+      throw new Error(`RecordNotFoundError: Task not found: ${taskId}`);
+    }
+
+    const task = taskRecord.payload;
+    const actor = await this.getActor(actorId);
+
+    // 2. Validate current status allows cancellation
+    if (!['ready', 'active'].includes(task.status)) {
+      throw new Error(`ProtocolViolationError: Task is in '${task.status}' state. Cannot cancel from this state. Only 'ready' and 'active' tasks can be cancelled.`);
+    }
+
+    // 3. Validate transition with WorkflowMethodology
+    const context = {
+      task,
+      actor,
+      signatures: taskRecord.header.signatures,
+      transitionTo: 'discarded' as TaskRecord['status']
+    };
+
+    const transitionRule = await this.workflowMethodology.getTransitionRule(task.status, 'discarded', context);
+    if (!transitionRule) {
+      throw new Error(`ProtocolViolationError: Workflow methodology rejected ${task.status}→discarded transition`);
+    }
+
+    // 4. Update task status to 'discarded' and add cancellation reason
+    const updatedPayload: TaskRecord = {
+      ...task,
+      status: 'discarded',
+      // Add cancellation reason to notes if provided
+      ...(reason && { notes: `${task.notes || ''}\n[CANCELLED] ${reason} (${new Date().toISOString()})`.trim() })
+    };
+    const updatedRecord = { ...taskRecord, payload: updatedPayload };
+
+    // 5. Sign the record with 'canceller' role
+    const signedRecord = await this.identity.signRecord(updatedRecord, actorId, 'canceller');
+    await this.taskStore.write(signedRecord as GitGovRecord & { payload: TaskRecord });
+
+    // 6. Emit task status changed event
+    this.eventBus.publish({
+      type: 'task.status.changed',
+      timestamp: Date.now(),
+      source: 'backlog_adapter',
+      payload: {
+        taskId,
+        oldStatus: task.status,
+        newStatus: 'discarded',
+        actorId,
+        reason: reason || 'Task cancelled'
+      }
+    } as TaskStatusChangedEvent);
+
+    return updatedPayload;
+  }
+
+  /**
+   * Updates a task with new payload
+   */
+  async updateTask(taskId: string, payload: Partial<TaskRecord>): Promise<TaskRecord> {
+    const taskRecord = await this.taskStore.read(taskId);
+    if (!taskRecord) {
+      throw new Error(`RecordNotFoundError: Task not found: ${taskId}`);
+    }
+
+    // Validate not in final state
+    if (['archived'].includes(taskRecord.payload.status)) {
+      throw new Error(`ProtocolViolationError: Cannot update task in final state: ${taskRecord.payload.status}`);
+    }
+
+    // Merge and validate with factory
+    const updatedPayload = await createTaskRecord({ ...taskRecord.payload, ...payload });
+    const updatedRecord = { ...taskRecord, payload: updatedPayload };
+
+    await this.taskStore.write(updatedRecord);
+    return updatedPayload;
+  }
+
+  // ===== PHASE 2: AGENT NAVIGATION (IMPLEMENTED) =====
+
+  /**
+   * Gets tasks assigned to a specific actor
+   */
+  async getTasksAssignedToActor(actorId: string): Promise<TaskRecord[]> {
+    // Read all feedbacks to find assignments
+    const feedbackIds = await this.feedbackStore.list();
+    const assignedTaskIds: string[] = [];
+
+    for (const id of feedbackIds) {
+      const record = await this.feedbackStore.read(id);
+      if (record &&
+        record.payload.type === 'assignment' &&
+        record.payload.assignee === actorId) {
+        assignedTaskIds.push(record.payload.entityId);
+      }
+    }
+
+    // Read the assigned tasks
+    const assignedTasks: TaskRecord[] = [];
+    for (const taskId of assignedTaskIds) {
+      const task = await this.getTask(taskId);
+      if (task) {
+        assignedTasks.push(task);
+      }
+    }
+
+    return assignedTasks;
+  }
+
+  // ===== PHASE 3: EVENT HANDLERS (NEW IMPLEMENTATION) =====
+
+  /**
+   * [EARS-31] Handles feedback created events - pauses task if blocking
+   */
+  async handleFeedbackCreated(event: FeedbackCreatedEvent): Promise<void> {
+    try {
+      const metadata: EventMetadata = {
+        eventId: `${Date.now()}-handle-feedback-created`,
+        timestamp: Date.now(),
+        processedAt: Date.now(),
+        sourceAdapter: 'backlog_adapter'
+      };
+
+      // Only handle blocking feedbacks
+      if (event.payload.feedbackType !== 'blocking') {
+        return; // EARS-32: Do nothing for non-blocking feedback
+      }
+
+      // Read the associated task through feedback record
+      const feedbackRecord = await this.feedbackStore.read(event.payload.feedbackId);
+      if (!feedbackRecord) {
+        console.warn(`Feedback not found: ${event.payload.feedbackId}`);
+        return;
+      }
+
+      const task = await this.getTask(feedbackRecord.payload.entityId);
+      if (!task) {
+        console.warn(`Task not found for feedback: ${feedbackRecord.payload.entityId}`);
+        return;
+      }
+
+      // Only pause if task is in a pausable state
+      if (!['active', 'ready'].includes(task.status)) {
+        return;
+      }
+
+      // Update task to paused
+      const updatedTask = { ...task, status: 'paused' as const };
+      const taskRecord = await this.taskStore.read(task.id);
+      if (taskRecord) {
+        const updatedRecord = { ...taskRecord, payload: updatedTask };
+        await this.taskStore.write(updatedRecord);
+
+        // Emit status change event
+        this.eventBus.publish({
+          type: 'task.status.changed',
+          timestamp: Date.now(),
+          source: 'backlog_adapter',
+          payload: {
+            taskId: task.id,
+            oldStatus: task.status,
+            newStatus: 'paused',
+            actorId: 'system'
+          },
+          metadata
+        } as TaskStatusChangedEvent);
+      }
+    } catch (error) {
+      console.error('Error in handleFeedbackCreated:', error);
+    }
+  }
+
+  /**
+   * [EARS-33] Handles feedback resolved events - resumes task if no more blocks
+   */
+  async handleFeedbackResolved(event: FeedbackStatusChangedEvent): Promise<void> {
+    try {
+      // Only handle resolution of blocking feedbacks
+      if (event.payload.oldStatus !== 'open' || event.payload.newStatus !== 'resolved') {
+        return;
+      }
+
+      // Get the task through feedback record
+      const feedbackRecord = await this.feedbackStore.read(event.payload.feedbackId);
+      if (!feedbackRecord) {
+        return;
+      }
+
+      const task = await this.getTask(feedbackRecord.payload.entityId);
+      if (!task || task.status !== 'paused') {
+        return;
+      }
+
+      // EARS-33: Use MetricsAdapter to check for remaining blocks
+      const taskHealth = await this.metricsAdapter.getTaskHealth(task.id);
+
+      // EARS-34: Don't resume if other blocking feedbacks remain
+      if (taskHealth.blockingFeedbacks > 0) {
+        return;
+      }
+
+      // Resume task to active (assuming it was active before being paused)
+      const updatedTask = { ...task, status: 'active' as const };
+      const taskRecord = await this.taskStore.read(task.id);
+      if (taskRecord) {
+        const updatedRecord = { ...taskRecord, payload: updatedTask };
+        await this.taskStore.write(updatedRecord);
+
+        this.eventBus.publish({
+          type: 'task.status.changed',
+          timestamp: Date.now(),
+          source: 'backlog_adapter',
+          payload: {
+            taskId: task.id,
+            oldStatus: 'paused',
+            newStatus: 'active',
+            actorId: 'system'
+          }
+        } as TaskStatusChangedEvent);
+      }
+    } catch (error) {
+      console.error('Error in handleFeedbackResolved:', error);
+    }
+  }
+
+  /**
+   * [EARS-35] Handles execution created events - transitions ready→active on first execution
+   */
+  async handleExecutionCreated(event: ExecutionCreatedEvent): Promise<void> {
+    try {
+      // EARS-35: Use ExecutionAdapter isFirstExecution logic
+      if (!event.payload.isFirstExecution) {
+        return; // EARS-36: Do nothing on subsequent executions
+      }
+
+      const task = await this.getTask(event.payload.taskId);
+      if (!task || task.status !== 'ready') {
+        return;
+      }
+
+      // EARS-36: Validate with WorkflowMethodology before transition
+      const actor = await this.getActor(event.payload.actorId);
+      const transitionRule = await this.workflowMethodology.getTransitionRule('ready', 'active', {
+        task,
+        actor,
+        signatures: []
+      });
+
+      if (!transitionRule) {
+        console.warn(`Workflow methodology rejected ready→active transition for task ${task.id}`);
+        return;
+      }
+
+      // Transition to active
+      const updatedTask = { ...task, status: 'active' as const };
+      const taskRecord = await this.taskStore.read(task.id);
+      if (taskRecord) {
+        const updatedRecord = { ...taskRecord, payload: updatedTask };
+        await this.taskStore.write(updatedRecord);
+
+        this.eventBus.publish({
+          type: 'task.status.changed',
+          timestamp: Date.now(),
+          source: 'backlog_adapter',
+          payload: {
+            taskId: task.id,
+            oldStatus: 'ready',
+            newStatus: 'active',
+            actorId: event.payload.actorId
+          }
+        } as TaskStatusChangedEvent);
+      }
+    } catch (error) {
+      console.error('Error in handleExecutionCreated:', error);
+    }
+  }
+
+  /**
+   * [EARS-37] Handles changelog created events - transitions done→archived
+   */
+  async handleChangelogCreated(event: ChangelogCreatedEvent): Promise<void> {
+    try {
+      // Get changelog record to access entityType and entityId
+      const changelogRecord = await this.changelogStore.read(event.payload.changelogId);
+      if (!changelogRecord) {
+        console.warn(`Changelog not found: ${event.payload.changelogId}`);
+        return;
+      }
+
+      // EARS-37: Only handle task-related changelogs
+      if (changelogRecord.payload.entityType !== 'task') {
+        return;
+      }
+
+      const task = await this.getTask(changelogRecord.payload.entityId);
+      if (!task || task.status !== 'done') {
+        return;
+      }
+
+      // Transition to archived
+      const updatedTask = { ...task, status: 'archived' as const };
+      const taskRecord = await this.taskStore.read(task.id);
+      if (taskRecord) {
+        const updatedRecord = { ...taskRecord, payload: updatedTask };
+        await this.taskStore.write(updatedRecord);
+
+        this.eventBus.publish({
+          type: 'task.status.changed',
+          timestamp: Date.now(),
+          source: 'backlog_adapter',
+          payload: {
+            taskId: task.id,
+            oldStatus: 'done',
+            newStatus: 'archived',
+            actorId: 'system'
+          }
+        } as TaskStatusChangedEvent);
+      }
+    } catch (error) {
+      console.error('Error in handleChangelogCreated:', error);
+    }
+  }
+
+  /**
+   * [EARS-38] Handles daily tick events - proactive health auditing
+   */
+  async handleDailyTick(event: SystemDailyTickEvent): Promise<void> {
+    try {
+      // EARS-38: Use MetricsAdapter for proactive auditing
+      const systemStatus = await this.metricsAdapter.getSystemStatus();
+
+      // Get all active tasks for health analysis
+      const allTasks = await this.getAllTasks();
+      const activeTasks = allTasks.filter(task => task.status === 'active');
+
+      for (const task of activeTasks) {
+        const taskHealth = await this.metricsAdapter.getTaskHealth(task.id);
+
+        // Apply configurable health thresholds
+        if (taskHealth.healthScore < this.config.healthThresholds.taskMinScore ||
+          taskHealth.timeInCurrentStage > this.config.healthThresholds.maxDaysInStage) {
+          // Create automated warning feedback
+          await this.feedbackAdapter.create({
+            entityType: 'task',
+            entityId: task.id,
+            type: 'suggestion',
+            content: `Automated health warning: Task health score is ${taskHealth.healthScore}%. ${taskHealth.recommendations.join('. ')}.`,
+            status: 'open'
+          }, 'system');
+        }
+      }
+
+      // Log system health alert if critical issues (no custom event needed)
+      if (systemStatus.health.overallScore < this.config.healthThresholds.systemMinScore) {
+        console.warn(`System health alert: Score ${systemStatus.health.overallScore}%, blocked: ${systemStatus.health.blockedTasks}, stale: ${systemStatus.health.staleTasks}`);
+        // Note: Health alerts are logged, not emitted as events. 
+        // System monitoring should read logs for alerting.
+      }
+    } catch (error) {
+      console.error('Error in handleDailyTick:', error);
+    }
+  }
+
+  /**
+   * [EARS-45] Handles cycle status changed events - manages cycle hierarchy completion
+   */
+  async handleCycleStatusChanged(event: CycleStatusChangedEvent): Promise<void> {
+    try {
+      // Only handle cycle completion
+      if (event.payload.newStatus !== 'completed') {
+        return;
+      }
+
+      const completedCycle = await this.getCycle(event.payload.cycleId);
+      if (!completedCycle) {
+        console.warn(`Completed cycle not found: ${event.payload.cycleId}`);
+        return;
+      }
+
+      // Find parent cycles that contain this completed cycle
+      const allCycles = await this.getAllCycles();
+      const parentCycles = allCycles.filter(cycle =>
+        cycle.childCycleIds?.includes(event.payload.cycleId)
+      );
+
+      for (const parentCycle of parentCycles) {
+        // Check if ALL child cycles are completed
+        const childCycles = await Promise.all(
+          (parentCycle.childCycleIds || []).map(id => this.getCycle(id))
+        );
+
+        const allChildrenCompleted = childCycles.every(child =>
+          child && child.status === 'completed'
+        );
+
+        if (allChildrenCompleted) {
+          // Complete the parent cycle
+          await this.updateCycle(parentCycle.id, { status: 'completed' });
+
+          // TODO: Delegate epic task completion to planning methodology
+          // The logic for completing epic tasks based on cycle completion
+          // should be handled by planningMethodology, not backlogAdapter
+          /*
+          if (this.planningMethodology) {
+            await this.planningMethodology.handleEpicCompletion({
+              completedCycleId: parentCycle.id,
+              event
+            });
+          }
+          */
+
+          // For now, just log the completion - epic logic will be in planning methodology
+          console.log(`Parent cycle ${parentCycle.id} completed - epic task completion delegated to planning methodology`);
+        }
+      }
+    } catch (error) {
+      console.error('Error in handleCycleStatusChanged:', error);
+    }
+  }
+
+  // ===== PHASE 4: STUBS AND POLISH (DELEGATE TO ADAPTERS) =====
+
+  /**
+   * Gets system status by delegating to MetricsAdapter
+   */
+  async getSystemStatus(): Promise<SystemStatus> {
+    return await this.metricsAdapter.getSystemStatus();
+  }
+
+  /**
+   * Gets task health by delegating to MetricsAdapter
+   */
+  async getTaskHealth(taskId: string): Promise<TaskHealthReport> {
+    return await this.metricsAdapter.getTaskHealth(taskId);
+  }
+
+  // ===== HELPER METHODS =====
+
+  /**
+   * Helper to get actor record
+   */
+  private async getActor(actorId: string): Promise<ActorRecord> {
+    // Use IdentityAdapter to get real actor data
+    const actor = await this.identity.getActor(actorId);
+    if (!actor) {
+      throw new Error(`RecordNotFoundError: Actor not found: ${actorId}`);
+    }
+    return actor;
+  }
+
+  /**
+   * Helper to get available transitions from current state
+   */
+  private async getAvailableTransitions(fromStatus: string): Promise<Array<{ from: string; to: string; requires?: { signatures?: Record<string, { role: string }> } }>> {
+    // This would normally be implemented using workflowMethodology.getAvailableTransitions()
+    // For now, implementing basic logic based on canonical workflow
+    const transitions = [
+      { from: 'review', to: 'ready', requires: { signatures: { __default__: { role: 'approver' } } } },
+      { from: 'active', to: 'done', requires: { signatures: { __default__: { role: 'approver' } } } }
+    ];
+
+    return transitions.filter(t => t.from === fromStatus);
+  }
+
+  // ===== PHASE 1: CYCLE CRUD OPERATIONS (IMPLEMENTED) =====
+
+  /**
+   * Creates a new cycle with workflow validation
+   */
+  async createCycle(payload: Partial<CycleRecord>, actorId: string): Promise<CycleRecord> {
+    // 1. Build the record with factory
+    const validatedPayload = await createCycleRecord(payload);
+
+    // 2. Create unsigned record structure
+    const unsignedRecord: GitGovRecord & { payload: CycleRecord } = {
+      header: {
+        version: '1.0',
+        type: 'cycle',
+        payloadChecksum: 'will-be-calculated-by-signRecord',
+        signatures: [{
+          keyId: actorId,
+          role: 'author',
+          signature: 'placeholder',
+          timestamp: Date.now(),
+          timestamp_iso: new Date().toISOString()
+        }]
+      },
+      payload: validatedPayload,
+    };
+
+    // 3. Sign the record
+    const signedRecord = await this.identity.signRecord(unsignedRecord, actorId, 'author');
+
+    // 4. Persist the record
+    await this.cycleStore.write(signedRecord as GitGovRecord & { payload: CycleRecord });
+
+    // 5. Emit event
+    this.eventBus.publish({
+      type: 'cycle.created',
+      timestamp: Date.now(),
+      source: 'backlog_adapter',
+      payload: {
+        cycleId: validatedPayload.id,
+        actorId
+      },
+      metadata: {
+        eventId: `${Date.now()}-cycle-created-${validatedPayload.id}`,
+        timestamp: Date.now(),
+        sourceAdapter: 'backlog_adapter'
+      }
+    } as CycleCreatedEvent);
+
+    return validatedPayload;
+  }
+
+  /**
+   * Gets a specific cycle by ID
+   */
+  async getCycle(cycleId: string): Promise<CycleRecord | null> {
+    const record = await this.cycleStore.read(cycleId);
+    return record ? record.payload : null;
+  }
+
+  /**
+   * Gets all cycles in the system
+   */
+  async getAllCycles(): Promise<CycleRecord[]> {
+    const ids = await this.cycleStore.list();
+    const cycles: CycleRecord[] = [];
+
+    for (const id of ids) {
+      const record = await this.cycleStore.read(id);
+      if (record) {
+        cycles.push(record.payload);
+      }
+    }
+
+    return cycles;
+  }
+
+  /**
+   * Updates a cycle with new payload
+   */
+  async updateCycle(cycleId: string, payload: Partial<CycleRecord>): Promise<CycleRecord> {
+    const cycleRecord = await this.cycleStore.read(cycleId);
+    if (!cycleRecord) {
+      throw new Error(`RecordNotFoundError: Cycle not found: ${cycleId}`);
+    }
+
+    // Validate not in final state
+    if (['archived'].includes(cycleRecord.payload.status)) {
+      throw new Error(`ProtocolViolationError: Cannot update cycle in final state: ${cycleRecord.payload.status}`);
+    }
+
+    // Merge and validate with factory
+    const updatedPayload = await createCycleRecord({ ...cycleRecord.payload, ...payload });
+    const updatedRecord = { ...cycleRecord, payload: updatedPayload };
+
+    // Emit event if status changed
+    if (cycleRecord.payload.status !== updatedPayload.status) {
+      this.eventBus.publish({
+        type: 'cycle.status.changed',
+        timestamp: Date.now(),
+        source: 'backlog_adapter',
+        payload: {
+          cycleId,
+          oldStatus: cycleRecord.payload.status,
+          newStatus: updatedPayload.status,
+          actorId: 'system'
+        }
+      } as CycleStatusChangedEvent);
+    }
+
+    await this.cycleStore.write(updatedRecord);
+    return updatedPayload;
+  }
+
+  /**
+   * Creates bidirectional link between task and cycle
+   */
+  async addTaskToCycle(cycleId: string, taskId: string): Promise<void> {
+    // Read both records
+    const cycleRecord = await this.cycleStore.read(cycleId);
+    const taskRecord = await this.taskStore.read(taskId);
+
+    if (!cycleRecord) {
+      throw new Error(`RecordNotFoundError: Cycle not found: ${cycleId}`);
+    }
+    if (!taskRecord) {
+      throw new Error(`RecordNotFoundError: Task not found: ${taskId}`);
+    }
+
+    // Create bidirectional links
+    const updatedCycle = {
+      ...cycleRecord.payload,
+      taskIds: [...(cycleRecord.payload.taskIds || []), taskId]
+    };
+    const updatedTask = {
+      ...taskRecord.payload,
+      cycleIds: [...(taskRecord.payload.cycleIds || []), cycleId]
+    };
+
+    // Get current actor for signing (MVP mode)
+    const currentActor = await this.identity.getCurrentActor();
+
+    // Sign and persist both records with current actor
+    const signedCycleRecord = await this.identity.signRecord(
+      { ...cycleRecord, payload: updatedCycle },
+      currentActor.id,
+      'author'
+    );
+    const signedTaskRecord = await this.identity.signRecord(
+      { ...taskRecord, payload: updatedTask },
+      currentActor.id,
+      'author'
+    );
+
+    await Promise.all([
+      this.cycleStore.write(signedCycleRecord as GitGovRecord & { payload: CycleRecord }),
+      this.taskStore.write(signedTaskRecord as GitGovRecord & { payload: TaskRecord })
+    ]);
+  }
+
+  // TODO: Implement when lint_command.md is implemented
+  async lint(): Promise<LintReport> {
+    throw new Error('NotImplementedError: lint() will be implemented when lint_command.md is ready');
+  }
+
+  // TODO: Implement when audit_command.md is implemented  
+  async audit(): Promise<AuditReport> {
+    throw new Error('NotImplementedError: audit() will be implemented when audit_command.md is ready');
+  }
+
+  // TODO: Implement when commit_processor.md is implemented
+  async processChanges(changes: unknown[]): Promise<ExecutionRecord[]> {
+    throw new Error('NotImplementedError: processChanges() will be implemented when commit_processor.md is ready');
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "outDir": "dist",
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "strict": true,
+    "noImplicitAny": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force",
+    "esModuleInterop": true,
+    /* `allowSyntheticDefaultImports` es redundante con bundler/ESM */
+    // "allowSyntheticDefaultImports": true,
+    /* Opcionales de "seguridad" de tipos altamente recomendables */
+    "exactOptionalPropertyTypes": true,
+    "noUncheckedIndexedAccess": true,
+    "noPropertyAccessFromIndexSignature": true,
+    /* Útiles si importas JSON o usas paths */
+    "resolveJsonModule": true,
+    "baseUrl": ".",
+    // "paths": { "@/*": ["src/*"] },
+    "jsx": "react-jsx",
+    "jsxImportSource": "react",
+    "types": [
+      "node",
+      "jest"
+    ]
+  },
+  "include": [
+    "src",
+    "scripts",
+    "e2e"
+  ]
+}

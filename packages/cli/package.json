@@ -1,0 +1,68 @@
+{
+  "name": "@gitgov/cli",
+  "version": "1.0.0",
+  "description": "The canonical command-line interface for the GitGovernance ecosystem, designed for efficient collaboration between humans and AI agents.",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "gitgov": "./dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "clean": "rm -rf dist",
+    "build": "pnpm clean && tsc && node scripts/bundle-schemas.js",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
+    "test": "jest",
+    "prepublishOnly": "pnpm build",
+    "install:local": "./scripts/install-local-portable.sh",
+    "install:cloudflare": "cp scripts/get-gitgovernance.sh hosting/get-gitgovernance-com/installer.sh",
+    "package:mvp": "npm run build && npm pack",
+    "demo:install": "echo 'Demo: curl -sSL https://get.gitgovernance.com | sh'"
+  },
+  "keywords": [
+    "gitgovernance",
+    "ai-first",
+    "workflow",
+    "governance",
+    "cli",
+    "tui"
+  ],
+  "author": "GitGovernance Team",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gitgovernance/monorepo.git",
+    "directory": "packages/cli"
+  },
+  "homepage": "https://github.com/gitgovernance/monorepo/tree/main/packages/cli#readme",
+  "bugs": {
+    "url": "https://github.com/gitgovernance/monorepo/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@gitgov/core": "workspace:*",
+    "chokidar": "^3.6.0",
+    "commander": "^11.1.0",
+    "dotenv": "^17.2.2",
+    "ink": "^4.4.1",
+    "react": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.0.0",
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.3.24",
+    "jest": "^29.0.0",
+    "ts-jest": "^29.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
