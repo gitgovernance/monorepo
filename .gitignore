@@ -1,0 +1,11 @@
+node_modules
+.DS_Store
+companies
+book
+dist
+coverage
+tmp
+bin
+# GitGovernance
+.gitgov/.session.json
+.gitgov/actors/*.key
