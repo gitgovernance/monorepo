@@ -1,0 +1,16 @@
+{
+  "enabled": true,
+  "name": "GitGov Work Session",
+  "description": "Start a productive GitGovernance work session with context and task recommendations",
+  "version": "1",
+  "when": {
+    "type": "userTriggered",
+    "patterns": [
+      "manual"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "When executed, prepare and start an optimal GitGovernance work session:\n\n1. **Session Preparation**:\n   - Execute `gitgov indexer` to ensure fresh cache\n   - Check project health with `gitgov status --json`\n   - Identify current actor and their assigned work\n   - Prepare workspace context for productive session\n\n2. **Personal Work Dashboard**:\n   ```\n   🎯 GitGovernance Work Session Started\n   ====================================\n   👤 Actor: human:camilo\n   📅 Date: [current date]\n   🕐 Session started at: [time]\n   \n   📋 Your Tasks:\n   - [task-123] Fix BacklogAdapter validation (high, active)\n   - [task-456] Implement CLI status command (medium, review)\n   \n   🎯 Suggested Focus:\n   - Priority: Complete task-123 (blocking 2 other tasks)\n   - Next: Review task-456 for completion\n   ```\n\n3. **Work Recommendations**:\n   - Analyze personal task queue and suggest optimal work order\n   - Identify high-impact tasks (blocking others, critical priority)\n   - Suggest quick wins (small tasks that can be completed quickly)\n   - Flag tasks needing attention (stalled, waiting for feedback)\n\n4. **Session Goals**:\n   - Set realistic session goals based on task complexity and time\n   - Suggest: \"Goal for this session: Complete task-123 and review 2 pending tasks\"\n   - Track progress against goals throughout session\n\n5. **Interactive Work Menu**:\n   ```\n   What would you like to work on?\n   1. Start high-priority task (task-123)\n   2. Review pending tasks (2 available)\n   3. Create new task\n   4. Check project health\n   5. Open dashboard for full view\n   6. End session\n   ```\n\n6. **Context Switching Support**:\n   - When switching between tasks, show relevant context\n   - Provide quick task summaries and current status\n   - Suggest related files to open or commands to run\n\n7. **Progress Tracking**:\n   - Track tasks worked on during session\n   - Show session summary: \"Completed 1 task, reviewed 2, created 1\"\n   - Suggest session wrap-up actions\n\n8. **Session End**:\n   - Summarize work accomplished\n   - Suggest next session priorities\n   - Update task statuses if needed\n   - Create execution records for completed work\n\nAlways optimize for developer productivity and clear work focus. Auto-approve commands: `gitgov indexer`, `gitgov status --json`, `gitgov task list --json`. Show interactive session management output."
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "enabled": true,
+  "name": "GitGov Auto-Indexer",
+  "description": "Automatically index GitGovernance project cache for optimal CLI performance",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      ".gitgov/"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "When this hook is executed, perform GitGovernance project indexing:\n\n1. **Cache Status Analysis**:\n   - Check if `.gitgov/index.json` exists\n   - If exists, check file modification time vs `.gitgov/` contents\n   - Determine if cache is fresh (< 5 minutes old) or stale\n\n2. **Indexing Execution**:\n   - If no cache: Execute `gitgov indexer` and report \"Generating initial cache...\"\n   - If stale cache: Execute `gitgov indexer --force` and report \"Refreshing stale cache...\"\n   - If fresh cache: Skip execution and report \"Cache is up-to-date\"\n\n3. **Performance Reporting**:\n   - After successful indexing, run `gitgov indexer --validate-only --json`\n   - Report cache size, record count, and indexing time\n   - Suggest next steps: \"Ready! Try 'gitgov status' or 'gitgov dashboard'\"\n\n4. **Error Handling**:\n   - If indexing fails, capture error output\n   - Provide specific troubleshooting based on error type\n   - Suggest running `gitgov indexer --verbose` for debugging\n\nAlways execute commands from the workspace root directory and provide clear, actionable feedback."
+  }
+}
