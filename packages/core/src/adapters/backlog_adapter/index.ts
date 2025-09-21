@@ -513,7 +513,8 @@ export class BacklogAdapter implements IBacklogAdapter {
   }
 
   /**
-   * Cancels a task transitioning from ready/active to discarded
+   * Cancels a task transitioning from ready/active/review to discarded
+   * Supports both cancellation (ready/active) and rejection (review) operations
    */
   async cancelTask(taskId: string, actorId: string, reason?: string): Promise<TaskRecord> {
     // 1. Read and validate task exists
@@ -525,9 +526,9 @@ export class BacklogAdapter implements IBacklogAdapter {
     const task = taskRecord.payload;
     const actor = await this.getActor(actorId);
 
-    // 2. Validate current status allows cancellation
-    if (!['ready', 'active'].includes(task.status)) {
-      throw new Error(`ProtocolViolationError: Task is in '${task.status}' state. Cannot cancel from this state. Only 'ready' and 'active' tasks can be cancelled.`);
+    // 2. Validate current status allows cancellation/rejection
+    if (!['ready', 'active', 'review'].includes(task.status)) {
+      throw new Error(`ProtocolViolationError: Task is in '${task.status}' state. Cannot cancel from this state. Only 'ready', 'active', and 'review' tasks can be cancelled.`);
     }
 
     // 3. Validate transition with WorkflowMethodology
@@ -543,12 +544,14 @@ export class BacklogAdapter implements IBacklogAdapter {
       throw new Error(`ProtocolViolationError: Workflow methodology rejected ${task.status}→discarded transition`);
     }
 
-    // 4. Update task status to 'discarded' and add cancellation reason
+    // 4. Update task status to 'discarded' and add cancellation/rejection reason
     const updatedPayload: TaskRecord = {
       ...task,
       status: 'discarded',
-      // Add cancellation reason to notes if provided
-      ...(reason && { notes: `${task.notes || ''}\n[CANCELLED] ${reason} (${new Date().toISOString()})`.trim() })
+      // Add reason to notes with appropriate prefix based on current state
+      ...(reason && {
+        notes: `${task.notes || ''}\n${task.status === 'review' ? '[REJECTED]' : '[CANCELLED]'} ${reason} (${new Date().toISOString()})`.trim()
+      })
     };
     const updatedRecord = { ...taskRecord, payload: updatedPayload };
 
@@ -566,7 +569,7 @@ export class BacklogAdapter implements IBacklogAdapter {
         oldStatus: task.status,
         newStatus: 'discarded',
         actorId,
-        reason: reason || 'Task cancelled'
+        reason: reason || (task.status === 'review' ? 'Task rejected' : 'Task cancelled')
       }
     } as TaskStatusChangedEvent);
 
