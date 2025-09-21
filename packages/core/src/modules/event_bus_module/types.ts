@@ -52,6 +52,7 @@ export type TaskStatusChangedEvent = BaseEvent & {
     oldStatus: string;
     newStatus: string;
     actorId: string;
+    reason?: string;
   };
 };
 
