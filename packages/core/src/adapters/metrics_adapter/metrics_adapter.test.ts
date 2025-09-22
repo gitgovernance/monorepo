@@ -330,14 +330,15 @@ describe('MetricsAdapter', () => {
 
     it('[EARS-8] should calculate health percentage using protocol formula', () => {
       const tasks = [
-        createMockTaskRecord({ status: 'active' }).payload,
-        createMockTaskRecord({ status: 'active' }).payload,
-        createMockTaskRecord({ status: 'paused' }).payload
+        createMockTaskRecord({ status: 'done' }).payload,      // 100 points
+        createMockTaskRecord({ status: 'archived' }).payload,  // 100 points (NEW: Include archived)
+        createMockTaskRecord({ status: 'active' }).payload,    // 80 points
+        createMockTaskRecord({ status: 'paused' }).payload     // 0 points
       ];
 
       const result = metricsAdapter.calculateHealth(tasks);
 
-      expect(result).toBe(53); // (2*80 + 1*0) / (3*100) * 100 = 53.33% → rounded to 53
+      expect(result).toBe(70); // (100 + 100 + 80 + 0) / (4*100) * 100 = 70%
     });
 
     it('[EARS-9] should return status distribution with percentages', () => {
@@ -369,6 +370,25 @@ describe('MetricsAdapter', () => {
       const result = metricsAdapter.calculateTasksCreatedToday(tasks);
 
       expect(result).toBe(2); // Only tasks from today
+    });
+
+    it('[EARS-8.1] should include archived tasks to prevent health drops during archiving', () => {
+      const tasksBeforeArchiving = [
+        createMockTaskRecord({ status: 'done' }).payload,
+        createMockTaskRecord({ status: 'done' }).payload,
+      ];
+      
+      const tasksAfterArchiving = [
+        createMockTaskRecord({ status: 'archived' }).payload,  // Was 'done'
+        createMockTaskRecord({ status: 'done' }).payload,
+      ];
+
+      const healthBefore = metricsAdapter.calculateHealth(tasksBeforeArchiving);
+      const healthAfter = metricsAdapter.calculateHealth(tasksAfterArchiving);
+      
+      // Health should remain the same: both done and archived = 100%
+      expect(healthBefore).toBe(100);
+      expect(healthAfter).toBe(100);
     });
   });
 

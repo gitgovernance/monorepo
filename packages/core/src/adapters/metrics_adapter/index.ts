@@ -126,7 +126,6 @@ export class MetricsAdapter implements IMetricsAdapter {
     this.cycleStore = dependencies.cycleStore;
     this.feedbackStore = dependencies.feedbackStore; // Graceful degradation
     this.executionStore = dependencies.executionStore; // Graceful degradation
-    this.changelogStore = dependencies.changelogStore; // Graceful degradation
     this.actorStore = dependencies.actorStore; // Graceful degradation
     this.platformApi = dependencies.platformApi; // Graceful degradation
   }
@@ -154,8 +153,6 @@ export class MetricsAdapter implements IMetricsAdapter {
 
     // Calculate Tier 1 metrics
     const health = this.calculateHealth(tasks);
-    const backlogDistribution = this.calculateBacklogDistribution(tasks);
-    const tasksCreatedToday = this.calculateTasksCreatedToday(tasks);
 
     // Count blocked and stale tasks
     const blockedTasks = tasks.filter(task => task.status === 'paused').length;
@@ -440,17 +437,18 @@ export class MetricsAdapter implements IMetricsAdapter {
       // Count tasks by status
       const activeTasks = tasks.filter(task => task.status === 'active').length;
       const doneTasks = tasks.filter(task => task.status === 'done').length;
+      const archivedTasks = tasks.filter(task => task.status === 'archived').length;
       const readyTasks = tasks.filter(task => task.status === 'ready').length;
       const reviewTasks = tasks.filter(task => task.status === 'review').length;
       const pausedTasks = tasks.filter(task => task.status === 'paused').length;
       const draftTasks = tasks.filter(task => task.status === 'draft').length;
 
       // Calculate health based on workflow progress and blockers
-      // Healthy tasks: done (100%), active (80%), ready (60%), review (40%)
+      // Healthy tasks: done (100%), archived (100%), active (80%), ready (60%), review (40%)
       // Neutral tasks: draft (20%)
       // Problematic tasks: paused (0%)
-      const healthyScore = (doneTasks * 100) + (activeTasks * 80) + (readyTasks * 60) + (reviewTasks * 40) + (draftTasks * 20) + (pausedTasks * 0);
-      
+      const healthyScore = (doneTasks * 100) + (archivedTasks * 100) + (activeTasks * 80) + (readyTasks * 60) + (reviewTasks * 40) + (draftTasks * 20) + (pausedTasks * 0);
+
       const maxPossibleScore = tasks.length * 100;
 
       if (maxPossibleScore === 0) {
@@ -632,15 +630,13 @@ export class MetricsAdapter implements IMetricsAdapter {
       // Get unique agent IDs from recent executions
       const activeAgentIds = new Set<string>();
 
-      for (const execution of recentExecutions) {
+      if (recentExecutions.length > 0) {
         // Cross-reference executions with agent actors to find active agents
         const agentActors = actors.filter(actor => actor.type === 'agent');
         for (const agent of agentActors) {
           // In a complete implementation, we would track execution authorship
           // For now, if there are recent executions and agent actors, count them as active
-          if (recentExecutions.length > 0) {
-            activeAgentIds.add(agent.id);
-          }
+          activeAgentIds.add(agent.id);
         }
       }
 
