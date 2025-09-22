@@ -700,42 +700,42 @@ export class MetricsAdapter implements IMetricsAdapter {
   /**
    * [EARS-15] Throws NotImplementedError for Tier 3 functions.
    */
-  calculateQuality(_tasks: TaskRecord[]): number {
+  calculateQuality(tasks: TaskRecord[]): number {
     throw new Error('NotImplementedError: Tier 3 metrics not implemented yet');
   }
 
-  calculateReworkRate(_tasks: TaskRecord[]): number {
+  calculateReworkRate(tasks: TaskRecord[]): number {
     throw new Error('NotImplementedError: Tier 3 metrics not implemented yet');
   }
 
-  calculateCompletionRate(_tasks: TaskRecord[]): number {
+  calculateCompletionRate(tasks: TaskRecord[]): number {
     throw new Error('NotImplementedError: Tier 3 metrics not implemented yet');
   }
 
-  calculateAuditScoreDistribution(_tasks: TaskRecord[]): Record<string, number> {
+  calculateAuditScoreDistribution(tasks: TaskRecord[]): Record<string, number> {
     throw new Error('NotImplementedError: Tier 3 metrics not implemented yet');
   }
 
-  calculateEpicPromotionRate(_tasks: TaskRecord[]): number {
+  calculateEpicPromotionRate(tasks: TaskRecord[]): number {
     throw new Error('NotImplementedError: Tier 3 metrics not implemented yet');
   }
 
-  calculateTaskRefinementRate(_tasks: TaskRecord[]): number {
+  calculateTaskRefinementRate(tasks: TaskRecord[]): number {
     throw new Error('NotImplementedError: Tier 3 metrics not implemented yet');
   }
 
-  calculatePlanningAccuracy(_tasks: TaskRecord[]): number {
+  calculatePlanningAccuracy(tasks: TaskRecord[]): number {
     throw new Error('NotImplementedError: Tier 3 metrics not implemented yet');
   }
 
-  calculateDependencyDiscoveryRate(_tasks: TaskRecord[]): number {
+  calculateDependencyDiscoveryRate(tasks: TaskRecord[]): number {
     throw new Error('NotImplementedError: Tier 3 metrics not implemented yet');
   }
 
   /**
    * [EARS-16] Returns null for Premium metrics without Platform API.
    */
-  calculateCostBurnRate(_consumption: TokenConsumption[]): number {
+  calculateCostBurnRate(consumption: TokenConsumption[]): number {
     if (!this.platformApi) {
       console.warn('Platform API not available for premium metrics');
       return 0;
@@ -743,7 +743,7 @@ export class MetricsAdapter implements IMetricsAdapter {
     throw new Error('NotImplementedError: Tier 4 premium metrics not implemented yet');
   }
 
-  calculateTokenConsumption(_consumption: TokenConsumption[]): number {
+  calculateTokenConsumption(consumption: TokenConsumption[]): number {
     if (!this.platformApi) {
       console.warn('Platform API not available for premium metrics');
       return 0;
@@ -751,7 +751,7 @@ export class MetricsAdapter implements IMetricsAdapter {
     throw new Error('NotImplementedError: Tier 4 premium metrics not implemented yet');
   }
 
-  calculateTokenConsumptionByAgent(_consumption: TokenConsumption[]): Record<string, number> {
+  calculateTokenConsumptionByAgent(consumption: TokenConsumption[]): Record<string, number> {
     if (!this.platformApi) {
       console.warn('Platform API not available for premium metrics');
       return {};
@@ -759,7 +759,7 @@ export class MetricsAdapter implements IMetricsAdapter {
     throw new Error('NotImplementedError: Tier 4 premium metrics not implemented yet');
   }
 
-  calculateAiAccuracyRate(_tasks: TaskRecord[], _feedback: FeedbackRecord[]): number {
+  calculateAiAccuracyRate(tasks: TaskRecord[], feedback: FeedbackRecord[]): number {
     if (!this.platformApi) {
       console.warn('Platform API not available for premium metrics');
       return 0;
@@ -767,7 +767,7 @@ export class MetricsAdapter implements IMetricsAdapter {
     throw new Error('NotImplementedError: Tier 4 premium metrics not implemented yet');
   }
 
-  calculateAgentExecutionTime(_executions: ExecutionRecord[]): number {
+  calculateAgentExecutionTime(executions: ExecutionRecord[]): number {
     if (!this.platformApi) {
       console.warn('Platform API not available for premium metrics');
       return 0;
