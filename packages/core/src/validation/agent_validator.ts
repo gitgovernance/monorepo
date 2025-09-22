@@ -10,23 +10,29 @@ import { SchemaValidationCache } from "./schema-cache";
 import type { ActorRecord } from "../types/actor_record";
 
 // --- Schema Validation ---
-const root = ConfigManager.findProjectRoot();
-if (!root) {
-  throw new ProjectRootError();
-}
+let _schemaPath: string | null = null;
 
-const schemaPath = path.join(root, "packages/blueprints/03_products/protocol/03_agent/agent_record_schema.yaml");
+function getSchemaPath(): string {
+  if (!_schemaPath) {
+    const root = ConfigManager.findProjectRoot();
+    if (!root) {
+      throw new ProjectRootError();
+    }
+    _schemaPath = path.join(root, "packages/blueprints/03_products/protocol/03_agent/agent_record_schema.yaml");
+  }
+  return _schemaPath;
+}
 
 export function validateAgentRecordSchema(
   data: unknown
 ): [boolean, ValidateFunction["errors"]] {
-  const validateSchema = SchemaValidationCache.getValidator(schemaPath);
+  const validateSchema = SchemaValidationCache.getValidator(getSchemaPath());
   const isValid = validateSchema(data) as boolean;
   return [isValid, validateSchema.errors];
 }
 
 export function isAgentRecord(data: unknown): data is AgentRecord {
-  const validateSchema = SchemaValidationCache.getValidator(schemaPath);
+  const validateSchema = SchemaValidationCache.getValidator(getSchemaPath());
   return validateSchema(data) as boolean;
 }
 
