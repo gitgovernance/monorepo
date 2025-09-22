@@ -1,5 +1,5 @@
 {
-  "name": "@gitgov/core",
+  "name": "@gitgovernance/core",
   "version": "1.0.0",
   "description": "Universal SDK for the GitGovernance ecosystem, providing a type-safe, local-first API to manage identities, agents, and workflows.",
   "type": "module",
@@ -16,7 +16,7 @@
     "validate:schemas": "sh ./scripts/validate_schemas.sh",
     "precompile:types": "pnpm validate:schemas",
     "compile:types": "sh ./scripts/compile_to_types.sh",
-    "prepare": "pnpm build",
+    "prepublishOnly": "pnpm build",
     "dev": "tsx src/index.ts",
     "test": "jest",
     "test:coverage": "jest --coverage",
