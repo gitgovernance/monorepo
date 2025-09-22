@@ -22,7 +22,50 @@ export function registerTaskCommands(program: Command): void {
   const task = program
     .command('task')
     .description('Create and manage TaskRecords - Core operational interface')
-    .alias('t');
+    .alias('t')
+    .addHelpText('after', `
+TASK WORKFLOW (GitGovernance Default Methodology):
+  draft → review → ready → active → done → archived
+
+  Step 1: Create task     → gitgov task new "Fix login bug"
+  Step 2: Submit review   → gitgov task submit <taskId>
+  Step 3: Approve         → gitgov task approve <taskId>
+  Step 4: Start work      → gitgov task activate <taskId> (auto-assigns if unassigned)
+  Step 5: Complete        → gitgov task complete <taskId>
+
+REJECTION/CANCELLATION PATHS (Future):
+  review → discarded      → gitgov task reject <taskId> (not implemented yet)
+  ready/active → discarded → gitgov task cancel <taskId> (not implemented yet)
+
+STATUS MEANINGS:
+  draft     - Planning: Define requirements, write specs
+  review    - Review: Validate requirements before approval
+  ready     - Approved: Ready to start implementation
+  active    - Working: Currently being implemented
+  done      - Complete: Implementation finished
+  archived  - Final: Task completed and documented
+  discarded - Cancelled: Task rejected or cancelled
+
+ASSIGNMENT (Flexible - Any Status):
+  Manual Assignment:      gitgov task assign <taskId> --to human:developer
+  Auto-Assignment:        Automatic when activating unassigned task
+  Check Assignments:      gitgov task list --assigned-to me
+
+COMMON SCENARIOS:
+  📝 Create task:         gitgov task new "Your task title"
+  🔍 Find work:           gitgov task list --status ready
+  ⚡ Start work:          gitgov task activate <taskId>
+  ✅ Complete:            gitgov task complete <taskId>
+  👥 Assign:              gitgov task assign <taskId> --to human:dev
+  📊 View status:         gitgov status
+
+EXAMPLES:
+  gitgov task new "Implement user login"
+  gitgov task submit 1758573661-task-implement-user-login
+  gitgov task approve 1758573661-task-implement-user-login
+  gitgov task activate 1758573661-task-implement-user-login
+  gitgov task complete 1758573661-task-implement-user-login
+`);
 
   // gitgov task new
   task
