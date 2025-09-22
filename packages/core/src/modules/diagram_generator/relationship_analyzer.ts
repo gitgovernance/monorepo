@@ -1,24 +1,6 @@
-// Local interfaces that match the actual GitGovernance protocol implementation
-interface CycleRecord {
-  id: string;
-  title: string;
-  status: 'planning' | 'active' | 'completed' | 'archived';
-  taskIds?: string[];
-  childCycleIds?: string[];
-  tags?: string[];
-  notes?: string;
-}
-
-interface TaskRecord {
-  id: string;
-  status: 'draft' | 'audit_oracle_create' | 'pending' | 'in_progress' | 'audit_oracle_close' | 'validated' | 'paused' | 'discarded' | 'ready' | 'review' | 'active' | 'done' | 'completed' | 'archived' | 'blocked' | 'cancelled';
-  priority: 'low' | 'medium' | 'high' | 'critical';
-  description: string;
-  tags: string[];
-  cycleIds?: string[];
-  references?: string[];
-  notes?: string;
-}
+import type { TaskRecord } from '../../types/task_record';
+import type { CycleRecord } from '../../types/cycle_record';
+import { GraphValidator } from './graph_validator';
 
 export interface DiagramNode {
   id: string;
@@ -49,13 +31,6 @@ export interface RelationshipGraph {
   };
 }
 
-export class ValidationError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'ValidationError';
-  }
-}
-
 export class CircularDependencyError extends Error {
   constructor(message: string) {
     super(message);
@@ -69,49 +44,64 @@ export class RelationshipAnalyzer {
    * Analyzes relationships between cycles and tasks to build a complete graph
    */
   analyzeRelationships(cycles: CycleRecord[], tasks: TaskRecord[]): RelationshipGraph {
-    if (!Array.isArray(cycles) || !Array.isArray(tasks)) {
-      throw new ValidationError('Cycles and tasks must be arrays');
-    }
+    // Validate record integrity using specialized validator
+    GraphValidator.validateRecordIntegrity(cycles, tasks);
 
-    // Validate record integrity
-    this.validateRecordIntegrity(cycles, tasks);
+    const rawGraph = this.buildRawGraph(cycles, tasks);
+    const cleanGraph = this.processAndValidateGraph(rawGraph);
 
+    return this.createRelationshipGraph(rawGraph, cleanGraph);
+  }
+
+  /**
+   * Builds the initial graph with potential duplicates
+   */
+  private buildRawGraph(cycles: CycleRecord[], tasks: TaskRecord[]): { nodes: DiagramNode[], edges: DiagramEdge[] } {
     const rawNodes = this.buildNodes(cycles, tasks);
     const rawEdges = this.buildEdges(cycles, tasks, rawNodes);
+    return { nodes: rawNodes, edges: rawEdges };
+  }
 
+  /**
+   * Processes raw graph to remove duplicates and validate structure
+   */
+  private processAndValidateGraph(rawGraph: { nodes: DiagramNode[], edges: DiagramEdge[] }): { nodes: DiagramNode[], edges: DiagramEdge[] } {
     // Detect and report duplicates as warnings
-    this.reportDuplicateWarnings(rawNodes, rawEdges);
+    this.reportDuplicateWarnings(rawGraph.nodes, rawGraph.edges);
 
     // Deduplicate nodes and edges
-    const nodes = this.deduplicateNodes(rawNodes);
-    const edges = this.deduplicateEdges(rawEdges);
+    const nodes = this.deduplicateNodes(rawGraph.nodes);
+    const edges = this.deduplicateEdges(rawGraph.edges);
 
     // Detect circular dependencies
     this.detectCircularDependencies(edges);
 
+    return { nodes, edges };
+  }
+
+  /**
+   * Creates the final RelationshipGraph with metadata
+   */
+  private createRelationshipGraph(
+    rawGraph: { nodes: DiagramNode[], edges: DiagramEdge[] },
+    cleanGraph: { nodes: DiagramNode[], edges: DiagramEdge[] }
+  ): RelationshipGraph {
     return {
-      nodes,
-      edges,
+      nodes: cleanGraph.nodes,
+      edges: cleanGraph.edges,
       metadata: {
-        nodeCount: nodes.length,
-        edgeCount: edges.length,
+        nodeCount: cleanGraph.nodes.length,
+        edgeCount: cleanGraph.edges.length,
         generatedAt: new Date().toISOString(),
         duplicatesRemoved: {
-          nodes: rawNodes.length - nodes.length,
-          edges: rawEdges.length - edges.length,
+          nodes: rawGraph.nodes.length - cleanGraph.nodes.length,
+          edges: rawGraph.edges.length - cleanGraph.edges.length,
         },
       },
     };
   }
 
-  /**
-   * Detects epic tasks based on tags containing "epic:" pattern
-   */
-  detectEpicTasks(tasks: TaskRecord[]): TaskRecord[] {
-    return tasks.filter(task =>
-      task.tags?.some(tag => tag.startsWith('epic:'))
-    );
-  }
+
 
   /**
    * Generates clean node ID for Mermaid syntax (removes timestamp, converts hyphens)
@@ -122,51 +112,7 @@ export class RelationshipAnalyzer {
       .replace(/-/g, '_');   // Convert hyphens to underscores
   }
 
-  /**
-   * Validates record integrity before processing
-   */
-  private validateRecordIntegrity(cycles: CycleRecord[], tasks: TaskRecord[]): void {
-    // Validate cycles
-    for (let i = 0; i < cycles.length; i++) {
-      const cycle = cycles[i];
-      if (!cycle) {
-        throw new ValidationError(`Cycle at index ${i} is undefined`);
-      }
-      try {
-        if (!cycle.id || typeof cycle.id !== 'string') {
-          throw new ValidationError(`Invalid cycle ID: ${cycle.id} (expected string, got ${typeof cycle.id})`);
-        }
 
-        if (!cycle.title || typeof cycle.title !== 'string') {
-          throw new ValidationError(`Invalid cycle title: ${cycle.title} (expected string, got ${typeof cycle.title})`);
-        }
-      } catch (error) {
-        throw new ValidationError(`Cycle validation error at index ${i} (id: ${cycle.id || 'unknown'}): ${error instanceof Error ? error.message : String(error)}`);
-      }
-    }
-
-    // Validate tasks
-    for (let i = 0; i < tasks.length; i++) {
-      const task = tasks[i];
-      if (!task) {
-        throw new ValidationError(`Task at index ${i} is undefined`);
-      }
-      const sourceFile = (task as any)._sourceFile || 'unknown';
-
-      try {
-        if (!task.id || typeof task.id !== 'string') {
-          throw new ValidationError(`Invalid task ID: ${task.id} (expected string, got ${typeof task.id})`);
-        }
-
-        if (!task.description || typeof task.description !== 'string') {
-          throw new ValidationError(`Invalid task description: ${task.description} (expected string, got ${typeof task.description})`);
-        }
-      } catch (error) {
-        const fileInfo = sourceFile !== 'unknown' ? `\n📁 File: .gitgov/tasks/${sourceFile}` : '';
-        throw new ValidationError(`Task validation error at index ${i} (id: ${task?.id || 'unknown'}): ${error instanceof Error ? error.message : String(error)}${fileInfo}\n💡 Check this file for missing or invalid 'description' field in payload.`);
-      }
-    }
-  }
 
   /**
    * Builds all nodes from cycles and tasks
@@ -190,8 +136,8 @@ export class RelationshipAnalyzer {
     for (const task of tasks) {
       const isEpic = this.isEpicTask(task);
 
-      // Use description field for task display
-      const title = this.extractTitleFromDescription(task.description);
+      // Use title field for task display
+      const title = task.title || 'Untitled Task';
 
       nodes.push({
         id: this.generateNodeId(task),
@@ -204,16 +150,6 @@ export class RelationshipAnalyzer {
     }
 
     return nodes;
-  }
-
-  /**
-   * Extracts a short title from task description
-   */
-  private extractTitleFromDescription(description: string): string {
-    // Take first line or first 60 characters as title
-    const firstLine = description.split('\n')[0];
-    if (!firstLine) return 'Untitled Task';
-    return firstLine.length > 60 ? firstLine.substring(0, 57) + '...' : firstLine;
   }
 
   /**
@@ -290,7 +226,7 @@ export class RelationshipAnalyzer {
       if (!visited.has(node)) {
         const cyclePath = this.findCycleDFS(node, graph, visited, recursionStack, path);
         if (cyclePath.length > 0) {
-          const cycleDescription = this.formatCycleError(cyclePath, edges);
+          const cycleDescription = this.formatCycleError(cyclePath);
           throw new CircularDependencyError(cycleDescription);
         }
       }
@@ -333,7 +269,7 @@ export class RelationshipAnalyzer {
   /**
    * Formats a circular dependency error with helpful context
    */
-  private formatCycleError(cyclePath: string[], edges: DiagramEdge[]): string {
+  private formatCycleError(cyclePath: string[]): string {
     const cycleNodes = cyclePath.slice(0, -1); // Remove duplicate at end
     const nodeNames = cycleNodes.map(nodeId => {
       // Try to extract readable name from node ID
@@ -421,42 +357,40 @@ export class RelationshipAnalyzer {
   }
 
   /**
-   * Removes duplicate nodes based on their ID
+   * Removes duplicate nodes based on their ID (O(n) performance)
    */
   private deduplicateNodes(nodes: DiagramNode[]): DiagramNode[] {
-    const seen = new Set<string>();
-    const deduplicated: DiagramNode[] = [];
-
+    const nodeMap = new Map<string, DiagramNode>();
+    
+    // Use Map to automatically handle deduplication while preserving first occurrence
     for (const node of nodes) {
-      if (!seen.has(node.id)) {
-        seen.add(node.id);
-        deduplicated.push(node);
+      if (!nodeMap.has(node.id)) {
+        nodeMap.set(node.id, node);
       }
     }
-
-    return deduplicated;
+    
+    return Array.from(nodeMap.values());
   }
 
   /**
-   * Removes duplicate edges based on from-to combination
+   * Removes duplicate edges based on from-to combination (O(n) performance)
    */
   private deduplicateEdges(edges: DiagramEdge[]): DiagramEdge[] {
-    const seen = new Set<string>();
-    const deduplicated: DiagramEdge[] = [];
-
+    const edgeMap = new Map<string, DiagramEdge>();
+    
     for (const edge of edges) {
       const edgeKey = `${edge.from}->${edge.to}`;
-      if (!seen.has(edgeKey)) {
-        seen.add(edgeKey);
-        deduplicated.push(edge);
+      if (!edgeMap.has(edgeKey)) {
+        edgeMap.set(edgeKey, edge);
       }
     }
-
-    return deduplicated;
+    
+    return Array.from(edgeMap.values());
   }
 
   /**
    * Detects and reports duplicate nodes/edges for diagnostic purposes
+   * Useful for testing and debugging data quality issues
    */
   detectDuplicates(cycles: CycleRecord[], tasks: TaskRecord[]): {
     duplicateNodes: Array<{ id: string, count: number, sources: string[] }>;
@@ -515,17 +449,23 @@ export class RelationshipAnalyzer {
         const relatedCycleIds = new Set([filters.cycleId]);
         const relatedTaskIds = new Set<string>();
 
-        // Add child cycles
-        if (targetCycle.childCycleIds) {
-          targetCycle.childCycleIds.forEach(id => relatedCycleIds.add(id));
-        }
+        // Recursively add all descendant cycles
+        const addDescendantCycles = (cycleId: string) => {
+          const cycle = cycles.find(c => c.id === cycleId);
+          if (cycle?.childCycleIds) {
+            cycle.childCycleIds.forEach(childId => {
+              if (!relatedCycleIds.has(childId)) {
+                relatedCycleIds.add(childId);
+                addDescendantCycles(childId); // Recursive call
+              }
+            });
+          }
+        };
 
-        // Add tasks from the target cycle
-        if (targetCycle.taskIds) {
-          targetCycle.taskIds.forEach(id => relatedTaskIds.add(id));
-        }
+        // Start recursive traversal from target cycle
+        addDescendantCycles(filters.cycleId);
 
-        // Find tasks that belong to related cycles
+        // Add tasks from all related cycles
         cycles.forEach(cycle => {
           if (relatedCycleIds.has(cycle.id) && cycle.taskIds) {
             cycle.taskIds.forEach(taskId => relatedTaskIds.add(taskId));
