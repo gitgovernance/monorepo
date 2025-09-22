@@ -23,59 +23,32 @@ Our core principle is a **Protocol-First Approach**. Every component is first de
 
 This is the workflow to start using GitGovernance in your own project.
 
+### 1. Install the CLI (macOS)
 ```sh
-# 1. Install the CLI (macOS)
 curl -sSL https://get.gitgovernance.com | sh (coming soon)
+```
 
-# ✅ Installed GitGovernance CLI v1.0.0
+### ✅ Installed GitGovernance CLI v1.0.0
 
-# 2. Navigate to your project and initialize
+#### 2. Navigate to your project and initialize
+```sh
 cd your-project
 git init  # if not a git repository
 gitgov init --name "My Project"
+```
 
-# ✅ Project initialized with GitGovernance. Ready for human-agent collaboration.
+### ✅ Project initialized with GitGovernance. Ready for human-agent collaboration.
 
-# 3. Launch the dashboard to visualize the state
+#### 3. Launch the dashboard to visualize the state
+```sh
 gitgov dashboard                    # Live mode with 5s auto-refresh
 gitgov dashboard --template=kanban-7col  # Kanban workflow view
 gitgov dashboard --template=scrum-board  # Scrum ceremonies view
-
-# 4. Operate with the interactive dashboard
-╭────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│🚀 GitGovernance │ Repo: my-project │ Org: MyCompany │ Actor: developer    [Sort: 🔥 Recent Activity]Last update: 2:15:42 PM │
-│────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│
-│Health: 🟢 87% │ Throughput: 📈 12/w │ Lead Time: ⏱️ 4.2d │ Tasks 7d: 8 │ Agents: 🤖 2/3                                     │
-│────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│
-│Backlog Distribution: [ draft: 3 (15%) | review: 4 (20%) | ready: 5 (25%) | active: 8 (40%) ]                               │
-│────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│
-│TASK TITLE                     STATUS      PRIORITY    CYCLE        ACTOR             LAST ACTIVITY      HEALTH             │
-│────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│
-│📝 Implement user authentication active          🔴 critical   Sprint Q1      agent:architect      2h ago            🟢 95%  │
-│📝 Design API endpoints         review          🟡 high       Sprint Q1      human:developer      45m ago           🟡 78%   │
-│📝 Setup database schema        ready           🟡 high       Sprint Q1      —                    1d ago            🟢 85%   │
-│📝 Create user interface        draft           🔵 medium     Sprint Q1      —                    2d ago            🟢 90%   │
-│📝 Write unit tests            active          🟡 high       Sprint Q1      human:qa             1h ago            🟢 88%    │
-│📝 Deploy to staging           ready           🔴 critical   Sprint Q1      —                    3h ago            🟢 92%    │
-│📝 Performance optimization     paused          🟡 high       Sprint Q2      —                    5d ago            🔴 45%   │
-│📝 Documentation update        done            🔵 medium     Sprint Q1      agent:docs           1d ago            ✅ 100%   │
-│... and 5 more tasks                                                                                                        │
-│────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│
-│⚡ SYSTEM ACTIVITY - BACKLOG WITH LIFE                                                                                       │
-│────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│
-│[2:15] 🤖 EXECUTION by agent:architect on TASK-implement-user-auth                                                          │
-│[2:10] 🔄 STATUS CHANGE: task-api-endpoints draft → review by human:developer                                               │
-│[2:05] 💬 FEEDBACK (blocking) by human:qa on TASK-performance-optimization                                                  │
-│[2:00] ✅ TASK COMPLETED: task-documentation-update by agent:docs                                                           │
-│[1:55] 🔄 CYCLE CREATED: Sprint Q2 - Performance & Scale by human:scrum-master                                              │
-│[1:50] 📝 TASK CREATED: Performance optimization (high) by human:developer                                                  │
-│[1:45] 🤖 AGENT agent:architect COMPLETED task-database-schema (1.2d cycle)                                                 │
-│────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│
-│💡 AI SUGGESTIONS: 2 stalled tasks need attention │ 🚨 ALERTS: 1 urgent task blocked                                        │
-│────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│
-│n:New s:Submit a:Approve e:Edit c:Cycle v:View r:Refresh ?:Help q:Quit                                  (Live mode: 🟢 ON)  │
-╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ```
+
+#### 4. Operate with the interactive dashboard
+
+<img width="876" height="604" alt="Screen Shot 2025-09-18 at 06 08 59" src="https://github.com/user-attachments/assets/016a4bef-d374-4963-aef3-19303650fb3a" />
 
 ---
 
