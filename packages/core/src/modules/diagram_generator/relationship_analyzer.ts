@@ -361,14 +361,14 @@ export class RelationshipAnalyzer {
    */
   private deduplicateNodes(nodes: DiagramNode[]): DiagramNode[] {
     const nodeMap = new Map<string, DiagramNode>();
-    
+
     // Use Map to automatically handle deduplication while preserving first occurrence
     for (const node of nodes) {
       if (!nodeMap.has(node.id)) {
         nodeMap.set(node.id, node);
       }
     }
-    
+
     return Array.from(nodeMap.values());
   }
 
@@ -377,14 +377,14 @@ export class RelationshipAnalyzer {
    */
   private deduplicateEdges(edges: DiagramEdge[]): DiagramEdge[] {
     const edgeMap = new Map<string, DiagramEdge>();
-    
+
     for (const edge of edges) {
       const edgeKey = `${edge.from}->${edge.to}`;
       if (!edgeMap.has(edgeKey)) {
         edgeMap.set(edgeKey, edge);
       }
     }
-    
+
     return Array.from(edgeMap.values());
   }
 

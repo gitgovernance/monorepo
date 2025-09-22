@@ -1,4 +1,4 @@
-import type { RelationshipGraph, DiagramNode, DiagramEdge } from './relationship_analyzer.js';
+import type { RelationshipGraph, DiagramNode, DiagramEdge } from './relationship_analyzer';
 
 export interface DiagramOptions {
   layout: 'LR' | 'TD' | 'RL' | 'BT';
@@ -313,8 +313,8 @@ export class MermaidRenderer {
   }
 
   /**
- * Maps entity status to CSS class name with cycle and epic task special handling
- */
+   * Maps entity status to CSS class name with cycle and epic task special handling
+   */
   private getStatusClass(status: string, node?: DiagramNode): string {
     // Special case: Epic task paused (waiting for parent cycle)
     if (status === 'paused' && node?.type === 'epic-task') {
