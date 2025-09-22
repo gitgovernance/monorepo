@@ -27,6 +27,11 @@ describe('CLI Diagram Command - Functional Tests', () => {
   });
 
   beforeEach(() => {
+    setupTestProject();
+  });
+
+  // Helper function to set up test project structure
+  const setupTestProject = () => {
     // Create a fresh test project structure
     if (fs.existsSync(testProjectRoot)) {
       fs.rmSync(testProjectRoot, { recursive: true, force: true });
@@ -37,7 +42,11 @@ describe('CLI Diagram Command - Functional Tests', () => {
     // Initialize git repo (required for project root detection)
     execSync('git init', { cwd: testProjectRoot, stdio: 'pipe' });
 
-    // Create minimal .gitgov structure
+    createGitgovStructure();
+    createTestRecords();
+  };
+
+  const createGitgovStructure = () => {
     const gitgovDir = path.join(testProjectRoot, '.gitgov');
     fs.mkdirSync(gitgovDir, { recursive: true });
 
@@ -50,11 +59,17 @@ describe('CLI Diagram Command - Functional Tests', () => {
     };
     fs.writeFileSync(path.join(gitgovDir, 'config.json'), JSON.stringify(config, null, 2));
 
-    // Create basic cycle and task files
+    // Create directories
     const cyclesDir = path.join(gitgovDir, 'cycles');
     const tasksDir = path.join(gitgovDir, 'tasks');
     fs.mkdirSync(cyclesDir, { recursive: true });
     fs.mkdirSync(tasksDir, { recursive: true });
+  };
+
+  const createTestRecords = () => {
+    const gitgovDir = path.join(testProjectRoot, '.gitgov');
+    const cyclesDir = path.join(gitgovDir, 'cycles');
+    const tasksDir = path.join(gitgovDir, 'tasks');
 
     // Create test cycle
     const testCycle = {
@@ -108,7 +123,7 @@ describe('CLI Diagram Command - Functional Tests', () => {
       }
     };
     fs.writeFileSync(path.join(tasksDir, '1756365289-task-test-1.json'), JSON.stringify(testTask, null, 2));
-  });
+  };
 
   // Helper function to execute CLI command
   const runCliCommand = (args: string[], options: { expectError?: boolean; cwd?: string } = {}) => {
@@ -160,7 +175,7 @@ describe('CLI Diagram Command - Functional Tests', () => {
       expect(diagramContent).toContain('```mermaid');
       expect(diagramContent).toContain('flowchart');
       expect(diagramContent).toContain('Test Root Cycle');
-      expect(diagramContent).toContain('Test task for CLI functional'); // Uses description, not title
+      expect(diagramContent).toContain('Test Task 1'); // Uses title field correctly
     });
 
     it('[EARS-11.1.2] WHEN user specifies "--status <status>" THE SYSTEM SHALL filter only entities matching specified status', () => {
@@ -176,7 +191,7 @@ describe('CLI Diagram Command - Functional Tests', () => {
       const diagramContent = fs.readFileSync(outputFile, 'utf8');
 
       // Should contain all entities since filtering is not implemented
-      expect(diagramContent).toContain('Test task for CLI functional');
+      expect(diagramContent).toContain('Test Task 1');
       expect(diagramContent).toContain('Test Root Cycle');
     });
 
@@ -256,7 +271,7 @@ describe('CLI Diagram Command - Functional Tests', () => {
       // Should show relationships between cycle and task
       // The exact syntax depends on DiagramGenerator implementation
       expect(content).toContain('Test Root Cycle');
-      expect(content).toContain('Test task for CLI functional');
+      expect(content).toContain('Test Task 1');
       expect(content).toContain('cycle_test_root --> task_test_1'); // Relationship arrow
     });
   });
@@ -291,7 +306,7 @@ describe('CLI Diagram Command - Functional Tests', () => {
       const content = fs.readFileSync(outputFile, 'utf8');
 
       // Should contain basic entities and structure
-      expect(content).toContain('Test task for CLI functional');
+      expect(content).toContain('Test Task 1');
       expect(content).toContain('Test Root Cycle');
       expect(content).toContain('flowchart');
       expect(content).toContain('cycle_test_root --> task_test_1'); // Relationship
