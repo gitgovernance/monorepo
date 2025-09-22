@@ -1,29 +1,11 @@
-import { RelationshipAnalyzer, type RelationshipGraph, ValidationError } from './relationship_analyzer.js';
-import { MermaidRenderer, type DiagramOptions } from './mermaid_renderer.js';
+import { RelationshipAnalyzer, type RelationshipGraph } from './relationship_analyzer';
+import { MermaidRenderer, type DiagramOptions } from './mermaid_renderer';
+import type { TaskRecord } from '../../types/task_record';
+import type { CycleRecord } from '../../types/cycle_record';
 import { promises as fs } from "fs";
 import * as path from "path";
 
-// Local interfaces that match the actual GitGovernance protocol implementation
-interface CycleRecord {
-  id: string;
-  title: string;
-  status: 'planning' | 'active' | 'completed' | 'archived';
-  taskIds?: string[];
-  childCycleIds?: string[];
-  tags?: string[];
-  notes?: string;
-}
-
-interface TaskRecord {
-  id: string;
-  status: 'draft' | 'audit_oracle_create' | 'pending' | 'in_progress' | 'audit_oracle_close' | 'validated' | 'paused' | 'discarded' | 'ready' | 'review' | 'active' | 'done' | 'completed' | 'archived' | 'blocked' | 'cancelled';
-  priority: 'low' | 'medium' | 'high' | 'critical';
-  description: string;
-  tags: string[];
-  cycleIds?: string[];
-  references?: string[];
-  notes?: string;
-}
+const MAX_GENERATION_TIME_HISTORY = 100;
 
 export class DiagramMetrics {
   private cacheHits: number = 0;
@@ -41,8 +23,8 @@ export class DiagramMetrics {
   recordGenerationTime(timeMs: number): void {
     this.generationTimes.push(timeMs);
 
-    // Keep only last 100 measurements to prevent memory leak
-    if (this.generationTimes.length > 100) {
+    // Keep only last N measurements to prevent memory leak
+    if (this.generationTimes.length > MAX_GENERATION_TIME_HISTORY) {
       this.generationTimes.shift();
     }
   }
@@ -188,7 +170,12 @@ export class DiagramGenerator {
 
       return cycles;
     } catch (error) {
-      console.warn(`Warning: Could not read cycles directory:`, error);
+      if (error instanceof Error && error.message.includes('ENOENT')) {
+        console.warn(`⚠️  Cycles directory not found: ${cyclesDir}`);
+        console.warn(`💡 Run 'gitgov init' to create the .gitgov directory structure`);
+      } else {
+        console.warn(`❌ Could not read cycles directory:`, error instanceof Error ? error.message : String(error));
+      }
       return [];
     }
   }
@@ -229,7 +216,12 @@ export class DiagramGenerator {
 
       return tasks;
     } catch (error) {
-      console.warn(`Warning: Could not read tasks directory:`, error);
+      if (error instanceof Error && error.message.includes('ENOENT')) {
+        console.warn(`⚠️  Tasks directory not found: ${tasksDir}`);
+        console.warn(`💡 Run 'gitgov init' to create the .gitgov directory structure`);
+      } else {
+        console.warn(`❌ Could not read tasks directory:`, error instanceof Error ? error.message : String(error));
+      }
       return [];
     }
   }
@@ -246,40 +238,43 @@ export class DiagramGenerator {
    * Generates cache key for efficient lookups
    */
   private generateCacheKey(cycles: CycleRecord[], tasks: TaskRecord[]): string {
-    const cycleIds = cycles.map(c => c.id).sort().join('|');
-    const taskIds = tasks.map(t => t.id).sort().join('|');
-    const optionsStr = JSON.stringify(this.options);
+    // Use Set for O(1) deduplication and consistent ordering
+    const cycleIds = [...new Set(cycles.map(c => c.id))].sort();
+    const taskIds = [...new Set(tasks.map(t => t.id))].sort();
+    
+    const cycleHash = this.hashArray(cycleIds);
+    const taskHash = this.hashArray(taskIds);
+    const optionsHash = this.hashString(JSON.stringify(this.options));
 
-    return `diagram:${this.hashString(cycleIds + taskIds + optionsStr)}`;
+    return `diagram:${cycleHash}-${taskHash}-${optionsHash}`;
   }
 
   /**
-   * Simple hash function for cache keys
+   * Efficient hash function for arrays
    */
-  private hashString(str: string): string {
+  private hashArray(items: string[]): string {
     let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      const char = str.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
+    for (const item of items) {
+      hash = ((hash << 5) - hash) + this.hashString(item);
       hash = hash & hash; // Convert to 32bit integer
     }
     return hash.toString(36);
   }
 
   /**
-   * Creates empty graph for edge cases
+   * Simple hash function for strings
    */
-  private createEmptyGraph(): RelationshipGraph {
-    return {
-      nodes: [],
-      edges: [],
-      metadata: {
-        nodeCount: 0,
-        edgeCount: 0,
-        generatedAt: new Date().toISOString(),
-      },
-    };
+  private hashString(str: string): number {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    return hash;
   }
+
+
 
   /**
    * Get performance metrics
