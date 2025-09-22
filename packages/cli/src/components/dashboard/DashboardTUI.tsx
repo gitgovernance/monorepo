@@ -481,6 +481,7 @@ const KanbanView: React.FC<{
 }> = ({ intelligence, viewConfig, lastUpdate, live = false, sortTasks, sortMode, getSortModeDisplay }) => {
   const { stdout } = useStdout();
   const columns = stdout?.columns ?? 80;
+  const MAX_TASKS_PER_COLUMN = 10;
 
   const getStatusIcon = (status: string): string => {
     const icons: Record<string, string> = {
@@ -502,7 +503,7 @@ const KanbanView: React.FC<{
     for (const [columnName, statuses] of Object.entries(viewConfig.columns)) {
       tasksByColumn[columnName] = sortTasks(intelligence.tasks).filter(task =>
         statuses.includes(task.status)
-      ).slice(0, 4);
+      ).slice(0, MAX_TASKS_PER_COLUMN);
     }
   }
 
@@ -538,7 +539,7 @@ const KanbanView: React.FC<{
         <Text>{'─'.repeat(Math.max(columns, 0) - 4)}</Text>
 
         {/* Kanban Columns Content */}
-        {[0, 1, 2, 3].map((rowIndex) => (
+        {Array.from({ length: MAX_TASKS_PER_COLUMN }, (_, rowIndex) => (
           <Box key={rowIndex} flexDirection="row">
             {viewConfig.columns && Object.keys(viewConfig.columns).map((columnName) => {
               const maxTextWidth = Math.floor(80 / Object.keys(viewConfig.columns!).length) - 3;
