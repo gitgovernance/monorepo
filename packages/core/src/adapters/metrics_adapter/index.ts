@@ -434,24 +434,20 @@ export class MetricsAdapter implements IMetricsAdapter {
     }
 
     try {
-      // Optimized: Single pass through tasks using reduce (performance improvement)
-      const statusCounts = tasks.reduce((acc, task) => {
-        acc[task.status] = (acc[task.status] || 0) + 1;
-        return acc;
-      }, {} as Record<string, number>);
+      // Count tasks by status
+      const activeTasks = tasks.filter(task => task.status === 'active').length;
+      const doneTasks = tasks.filter(task => task.status === 'done').length;
+      const archivedTasks = tasks.filter(task => task.status === 'archived').length;
+      const readyTasks = tasks.filter(task => task.status === 'ready').length;
+      const reviewTasks = tasks.filter(task => task.status === 'review').length;
+      const pausedTasks = tasks.filter(task => task.status === 'paused').length;
+      const draftTasks = tasks.filter(task => task.status === 'draft').length;
 
       // Calculate health based on workflow progress and blockers
       // Healthy tasks: done (100%), archived (100%), active (80%), ready (60%), review (40%)
       // Neutral tasks: draft (20%)
       // Problematic tasks: paused (0%)
-      const healthyScore =
-        (statusCounts['done'] || 0) * 100 +
-        (statusCounts['archived'] || 0) * 100 +  // FIXED: Include archived tasks to prevent health drops
-        (statusCounts['active'] || 0) * 80 +
-        (statusCounts['ready'] || 0) * 60 +
-        (statusCounts['review'] || 0) * 40 +
-        (statusCounts['draft'] || 0) * 20 +
-        (statusCounts['paused'] || 0) * 0;
+      const healthyScore = (doneTasks * 100) + (archivedTasks * 100) + (activeTasks * 80) + (readyTasks * 60) + (reviewTasks * 40) + (draftTasks * 20) + (pausedTasks * 0);
 
       const maxPossibleScore = tasks.length * 100;
 
