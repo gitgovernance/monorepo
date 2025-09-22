@@ -14,17 +14,23 @@ import { calculatePayloadChecksum } from "../crypto/checksum";
 import { verifySignatures } from "../crypto/signatures";
 
 // --- Schema Validation ---
-const root = ConfigManager.findProjectRoot();
-if (!root) {
-  throw new ProjectRootError();
-}
+let _schemaPath: string | null = null;
 
-const schemaPath = path.join(root, "packages/blueprints/03_products/protocol/04_task/task_record_schema.yaml");
+function getSchemaPath(): string {
+  if (!_schemaPath) {
+    const root = ConfigManager.findProjectRoot();
+    if (!root) {
+      throw new ProjectRootError();
+    }
+    _schemaPath = path.join(root, "packages/blueprints/03_products/protocol/04_task/task_record_schema.yaml");
+  }
+  return _schemaPath;
+}
 
 export function validateTaskRecordSchema(
   data: unknown
 ): [boolean, ValidateFunction["errors"]] {
-  const validateSchema = SchemaValidationCache.getValidator(schemaPath);
+  const validateSchema = SchemaValidationCache.getValidator(getSchemaPath());
   const isValid = validateSchema(data) as boolean;
   return [isValid, validateSchema.errors];
 }
@@ -33,7 +39,7 @@ export function validateTaskRecordSchema(
  * Type guard to check if data is a valid TaskRecord.
  */
 export function isTaskRecord(data: unknown): data is TaskRecord {
-  const validateSchema = SchemaValidationCache.getValidator(schemaPath);
+  const validateSchema = SchemaValidationCache.getValidator(getSchemaPath());
   return validateSchema(data) as boolean;
 }
 
