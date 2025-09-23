@@ -74,6 +74,7 @@ export interface IBacklogAdapter {
   updateTask(taskId: string, payload: Partial<TaskRecord>): Promise<TaskRecord>;
   activateTask(taskId: string, actorId: string): Promise<TaskRecord>;
   completeTask(taskId: string, actorId: string): Promise<TaskRecord>;
+  discardTask(taskId: string, actorId: string, reason?: string): Promise<TaskRecord>
 
   createCycle(payload: Partial<CycleRecord>, actorId: string): Promise<CycleRecord>;
   getCycle(cycleId: string): Promise<CycleRecord | null>;
@@ -513,10 +514,10 @@ export class BacklogAdapter implements IBacklogAdapter {
   }
 
   /**
-   * Cancels a task transitioning from ready/active/review to discarded
+   * Discards a task transitioning from ready/active/review to discarded
    * Supports both cancellation (ready/active) and rejection (review) operations
    */
-  async cancelTask(taskId: string, actorId: string, reason?: string): Promise<TaskRecord> {
+  async discardTask(taskId: string, actorId: string, reason?: string): Promise<TaskRecord> {
     // 1. Read and validate task exists
     const taskRecord = await this.taskStore.read(taskId);
     if (!taskRecord) {
