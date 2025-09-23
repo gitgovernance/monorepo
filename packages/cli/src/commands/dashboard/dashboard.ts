@@ -17,7 +17,7 @@ export function registerDashboardCommands(program: Command): void {
     .option('--refresh-interval <seconds>', 'Refresh interval in seconds (default: 5)', '5')
     .option('--no-live', 'Disable real-time updates (static snapshot)')
     .option('--actor <actorId>', 'Specific actor view (admin feature)')
-    .option('--theme <type>', 'Visual theme (dark, light, corporate)', 'dark')
+    .option('--theme <type>', 'Visual theme (dark, light)', 'dark')
     .option('--no-cache', 'Bypass cache and use adapters directly')
     .option('--debug', 'Show debug panel with adapter performance')
     .option('--config <path>', 'Path to custom config file')
