@@ -1,9 +1,10 @@
 import { Command } from 'commander';
-import { render } from 'ink';
-import React from 'react';
+// Dynamic imports for TUI - only loaded when needed
+// import { render } from 'ink';
+// import React from 'react';
 import * as fs from 'fs';
 import * as path from 'path';
-import { DiagramDashboard } from '../../components/diagram/DiagramDashboard';
+// import { DiagramDashboard } from '../../components/diagram/DiagramDashboard';
 import type { DiagramCommandOptions } from '../../types/command-options';
 
 /**
@@ -58,7 +59,21 @@ export function registerDiagramCommands(program: Command): void {
           ...(options.package && { filterPackage: options.package }),
         };
 
-        render(React.createElement(DiagramDashboard, props));
+        try {
+          // Dynamic import - only load TUI dependencies when needed
+          const [{ render }, React, { DiagramDashboard }] = await Promise.all([
+            import('ink'),
+            import('react'),
+            import('../../components/diagram/DiagramDashboard')
+          ]);
+
+          render(React.createElement(DiagramDashboard, props));
+        } catch (error) {
+          console.error('❌ TUI not available. Use without --watch for headless mode.');
+          console.error('💡 To enable TUI, install dependencies: npm install ink react');
+          console.error('💡 Or reinstall with: curl -sSL https://get.gitgovernance.com | sh');
+          process.exit(1);
+        }
       } else {
         // Generate diagram directly (with or without filters)
         console.log('🎯 Generating diagram...');
@@ -90,6 +105,9 @@ export function registerDiagramCommands(program: Command): void {
           // If no filters specified, try to use rootCycle from config using core ConfigManager
           if (!finalFilters) {
             try {
+
+              console.log("projectRoot", projectRoot)
+
               const { Config } = await import('../../../../core/src');
               const configManager = Config.createConfigManager(projectRoot);
               const rootCycle = await configManager.getRootCycle();

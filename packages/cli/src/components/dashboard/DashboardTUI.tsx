@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Box, Text, useInput, useApp, useStdout } from 'ink';
-import type { TaskRecord } from '../../../../core/src/types/task_record';
 import type { CycleRecord } from '../../../../core/src/types/cycle_record';
 import type { ActorRecord } from '../../../../core/src/types/actor_record';
 import type { FeedbackRecord } from '../../../../core/src/types/feedback_record';
@@ -12,6 +11,73 @@ import type {
 
 // Import EnrichedTaskRecord from IndexerAdapter
 import type { EnrichedTaskRecord } from '../../../../core/src/adapters/indexer_adapter';
+
+type ThemeName = 'dark' | 'light';
+
+interface DashboardTheme {
+  name: ThemeName;
+  colors: {
+    headerPrimary: string;
+    headerSecondary: string;
+    muted: string;
+    controlPrimary: string;
+    magenta: string;
+    highlightBackground: string;
+    highlightText: string;
+  };
+}
+
+const THEMES: Record<ThemeName, DashboardTheme> = {
+  dark: {
+    name: 'dark',
+    colors: {
+      headerPrimary: '#00d4ff',
+      headerSecondary: '#f4d35e',
+      muted: '#a0a0a0',
+      controlPrimary: '#0def1b',
+      magenta: '#ff0883',
+      highlightBackground: '#ff0883',
+      highlightText: '#ffffff'
+    }
+  },
+  light: {
+    name: 'light',
+    colors: {
+      headerPrimary: '#005799',
+      headerSecondary: '#c26b00',
+      muted: '#555555',
+      controlPrimary: '#0a8c1d',
+      magenta: '#ff0883',
+      highlightBackground: '#ff0883',
+      highlightText: '#ffffff'
+    }
+  }
+};
+
+const resolveThemeName = (explicit?: ThemeName): ThemeName => {
+  if (explicit && THEMES[explicit]) {
+    return explicit;
+  }
+
+  const envTheme = process.env['GITGOV_THEME'] as ThemeName | undefined;
+  if (envTheme && THEMES[envTheme]) {
+    return envTheme;
+  }
+
+  const colorfgbg = process.env['COLORFGBG'];
+  if (colorfgbg) {
+    const segments = colorfgbg.split(';');
+    const lastSegment = segments[segments.length - 1];
+    if (lastSegment) {
+      const bg = parseInt(lastSegment, 10);
+      if (!Number.isNaN(bg) && bg >= 7) {
+        return 'light';
+      }
+    }
+  }
+
+  return 'dark';
+};
 
 // Sort modes for dynamic task ordering
 type SortMode = 'recent' | 'creation' | 'priority' | 'status';
@@ -42,7 +108,56 @@ interface Props {
   refreshInterval?: number;
   live?: boolean;
   onRefresh?: () => Promise<DashboardIntelligence>;
+  themeName?: ThemeName;
 }
+
+// Utility: calculate visual width of string (handles emojis and special chars)
+const getVisualWidth = (str: string): number => {
+  // Replace all wide characters (emojis, symbols) with XX to simulate 2-width
+  return str
+    .replace(/[\u{1F000}-\u{1F9FF}]/gu, 'XX')  // Emoticons, symbols
+    .replace(/[\u{2600}-\u{26FF}]/gu, 'XX')    // Miscellaneous symbols  
+    .replace(/[\u{2700}-\u{27BF}]/gu, 'XX')    // Dingbats
+    .replace(/[\u{23E9}-\u{23FA}]/gu, 'XX')    // Media control symbols
+    .replace(/[\u{25A0}-\u{25FF}]/gu, 'XX')    // Geometric shapes
+    .replace(/[\u{2190}-\u{21FF}]/gu, 'XX')    // Arrows
+    .replace(/[\u{2000}-\u{206F}]/gu, 'XX')    // General punctuation
+    .length;
+};
+
+// Utility: convert timestamp to relative time (3m, 1h, 2d)
+const getRelativeTime = (timestamp: number): string => {
+  const now = Date.now();
+  const diff = now - timestamp;
+  const minutes = Math.floor(diff / (1000 * 60));
+  const hours = Math.floor(diff / (1000 * 60 * 60));
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+
+  if (days > 0) return `${days}d`;
+  if (hours > 0) return `${hours}h`;
+  if (minutes > 0) return `${minutes}m`;
+  return 'now';
+};
+
+// Utility: adjust string to fixed VISUAL width (truncate and pad with spaces)
+const fitToVisualWidth = (str: string, visualWidth: number): string => {
+  if (!str) str = '';
+
+  const currentVisualWidth = getVisualWidth(str);
+
+  if (currentVisualWidth <= visualWidth) {
+    // Pad with spaces to reach exact visual width
+    const spacesToAdd = visualWidth - currentVisualWidth;
+    return str + ' '.repeat(spacesToAdd);
+  } else {
+    // Truncate to fit visual width
+    let truncated = str;
+    while (getVisualWidth(truncated) > visualWidth - 1) {
+      truncated = truncated.slice(0, -1);
+    }
+    return truncated + '…' + ' '.repeat(Math.max(0, visualWidth - getVisualWidth(truncated + '…')));
+  }
+};
 
 /**
  * Main Dashboard TUI Component - CONVERGENCIA ÉPICA
@@ -53,17 +168,22 @@ export const DashboardTUI: React.FC<Props> = ({
   template,
   refreshInterval = 5,
   live = true,
-  onRefresh
+  onRefresh,
+  themeName = 'dark'
 }) => {
+  const resolvedThemeName = useMemo<ThemeName>(() => resolveThemeName(themeName), [themeName]);
+  const theme = THEMES[resolvedThemeName];
+  const { colors } = theme;
   const { exit } = useApp();
   const [currentView, setCurrentView] = useState(template);
   const [showHelp, setShowHelp] = useState(false);
   const [lastUpdate, setLastUpdate] = useState(new Date());
   const [intelligence, setIntelligence] = useState(initialIntelligence);
   const [sortMode, setSortMode] = useState<SortMode>('recent'); // NUEVO - Sort mode state
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
 
   // NUEVO - Sort tasks dynamically based on current sort mode
-  const sortTasks = (tasks: EnrichedTaskRecord[]): EnrichedTaskRecord[] => {
+  const sortTasks = useCallback((tasks: EnrichedTaskRecord[]): EnrichedTaskRecord[] => {
     switch (sortMode) {
       case 'recent':
         // Sort by last updated (most recent first) - DEFAULT
@@ -101,10 +221,72 @@ export const DashboardTUI: React.FC<Props> = ({
       default:
         return tasks;
     }
-  };
+  }, [sortMode]);
+
+  // Keep a memoized sorted list so all views share the same ordering
+  const sortedTasks = useMemo(() => sortTasks(intelligence.tasks), [intelligence.tasks, sortTasks]);
+
+  const selectedIndex = useMemo(() => {
+    if (!selectedTaskId) return -1;
+    const idx = sortedTasks.findIndex((task) => task.id === selectedTaskId);
+    return idx;
+  }, [selectedTaskId, sortedTasks]);
+
+  const ensureWithinBounds = useCallback((index: number): number => {
+    if (sortedTasks.length === 0) {
+      return -1;
+    }
+    if (index < 0) return 0;
+    if (index >= sortedTasks.length) return sortedTasks.length - 1;
+    return index;
+  }, [sortedTasks]);
+
+  const selectByIndex = useCallback((index: number) => {
+    if (sortedTasks.length === 0) {
+      setSelectedTaskId(null);
+      return;
+    }
+    const bounded = ensureWithinBounds(index);
+    if (bounded === -1) {
+      setSelectedTaskId(null);
+      return;
+    }
+    const task = sortedTasks[bounded];
+    if (task) {
+      setSelectedTaskId(task.id);
+    }
+  }, [sortedTasks, ensureWithinBounds]);
+
+  const navigateDown = useCallback(() => {
+    if (sortedTasks.length === 0) return;
+    if (selectedIndex === -1) {
+      selectByIndex(0);
+      return;
+    }
+    selectByIndex(selectedIndex + 1);
+  }, [sortedTasks, selectedIndex, selectByIndex]);
+
+  const navigateUp = useCallback(() => {
+    if (sortedTasks.length === 0) return;
+    if (selectedIndex === -1) {
+      selectByIndex(0);
+      return;
+    }
+    selectByIndex(selectedIndex - 1);
+  }, [sortedTasks, selectedIndex, selectByIndex]);
+
+  const jumpToFirst = useCallback(() => {
+    if (sortedTasks.length === 0) return;
+    selectByIndex(0);
+  }, [sortedTasks, selectByIndex]);
+
+  const jumpToLast = useCallback(() => {
+    if (sortedTasks.length === 0) return;
+    selectByIndex(sortedTasks.length - 1);
+  }, [sortedTasks, selectByIndex]);
 
   // Helper function to extract timestamp from ID
-  const extractTimestampFromId = (id: string): number => {
+  function extractTimestampFromId(id: string): number {
     const parts = id.split('-');
     if (parts.length >= 1 && parts[0]) {
       const timestampPart = parts[0];
@@ -114,7 +296,7 @@ export const DashboardTUI: React.FC<Props> = ({
       }
     }
     return Date.now();
-  };
+  }
 
   // Helper function to get sort mode display name
   const getSortModeDisplay = (mode: SortMode): string => {
@@ -143,6 +325,21 @@ export const DashboardTUI: React.FC<Props> = ({
       return () => clearInterval(interval);
     }
   }, [live, refreshInterval, onRefresh]);
+
+  // Ensure selection stays valid when tasks change
+  useEffect(() => {
+    if (!sortedTasks.length) {
+      if (selectedTaskId !== null) setSelectedTaskId(null);
+      return;
+    }
+
+    if (selectedTaskId) {
+      const exists = sortedTasks.some((task) => task.id === selectedTaskId);
+      if (!exists) {
+        setSelectedTaskId(null);
+      }
+    }
+  }, [sortedTasks, selectedTaskId]);
 
   // Handle keyboard input
   useInput((input, key) => {
@@ -221,23 +418,41 @@ export const DashboardTUI: React.FC<Props> = ({
       case 'c':
         console.log('🎯 Use: gitgov cycle new');
         break;
+      case 'j':
+        navigateDown();
+        break;
+      case 'k':
+        navigateUp();
+        break;
+      case 'g':
+        jumpToFirst();
+        break;
+      case 'G':
+        jumpToLast();
+        break;
+    }
+
+    if (key.downArrow) {
+      navigateDown();
+    } else if (key.upArrow) {
+      navigateUp();
     }
   });
 
   if (showHelp) {
     return (
       <Box flexDirection="column" padding={1}>
-        <Text bold color="cyan">🎮 GitGovernance Dashboard - Interactive TUI</Text>
+        <Text bold color={colors.headerPrimary}>🎮 GitGovernance Dashboard - Interactive TUI</Text>
         <Text></Text>
-        <Text bold color="yellow">QUICK ACTIONS:</Text>
+        <Text bold color={colors.headerSecondary}>QUICK ACTIONS:</Text>
         <Text>  n: New task       a: Assign task    e: Edit task</Text>
         <Text>  c: New cycle      r: Refresh data</Text>
         <Text></Text>
-        <Text bold color="yellow">NAVIGATION:</Text>
+        <Text bold color={colors.headerSecondary}>NAVIGATION:</Text>
         <Text>  v: Cycle views    1: Row view       2: Kanban-4col     3: Kanban-7col    4: Scrum view</Text>
         <Text>  s: Sort tasks     ?: Toggle help    q: Quit</Text>
         <Text></Text>
-        <Text color="gray">Press ? again to return to dashboard</Text>
+        <Text color={colors.muted}>Press ? again to return to dashboard</Text>
       </Box>
     );
   }
@@ -296,9 +511,11 @@ export const DashboardTUI: React.FC<Props> = ({
       viewConfig={currentViewConfig}
       lastUpdate={lastUpdate}
       live={live}
-      sortTasks={sortTasks}
+      sortedTasks={sortedTasks}
+      selectedTaskId={selectedTaskId}
       sortMode={sortMode}
       getSortModeDisplay={getSortModeDisplay}
+      theme={theme}
     />;
   } else if (currentView === 'scrum-board') {
     return <ScrumView
@@ -307,9 +524,11 @@ export const DashboardTUI: React.FC<Props> = ({
       viewConfig={currentViewConfig}
       lastUpdate={lastUpdate}
       live={live}
-      sortTasks={sortTasks}
+      sortedTasks={sortedTasks}
+      selectedTaskId={selectedTaskId}
       sortMode={sortMode}
       getSortModeDisplay={getSortModeDisplay}
+      theme={theme}
     />;
   } else {
     return <RowView
@@ -318,9 +537,11 @@ export const DashboardTUI: React.FC<Props> = ({
       viewConfig={currentViewConfig}
       lastUpdate={lastUpdate}
       live={live}
-      sortTasks={sortTasks}
+      sortedTasks={sortedTasks}
+      selectedIndex={selectedIndex}
       sortMode={sortMode}
       getSortModeDisplay={getSortModeDisplay}
+      theme={theme}
     />;
   }
 };
@@ -333,12 +554,15 @@ const RowView: React.FC<{
   viewConfig: ViewConfig;
   lastUpdate: Date;
   live?: boolean;
-  sortTasks: (tasks: EnrichedTaskRecord[]) => EnrichedTaskRecord[];
+  sortedTasks: EnrichedTaskRecord[];
+  selectedIndex: number;
   sortMode: SortMode;
   getSortModeDisplay: (mode: SortMode) => string;
-}> = ({ intelligence, viewConfig, lastUpdate, live = false, sortTasks, sortMode, getSortModeDisplay }) => {
+  theme: DashboardTheme;
+}> = ({ intelligence, viewConfig, lastUpdate, live = false, sortedTasks, selectedIndex, sortMode, getSortModeDisplay, theme }) => {
   const { stdout } = useStdout();
   const columns = stdout?.columns ?? 80;
+  const { colors } = theme;
 
   const getHealthIcon = (score: number): string => {
     if (score >= 80) return '🟢';
@@ -349,7 +573,7 @@ const RowView: React.FC<{
   const getStatusIcon = (status: string): string => {
     const icons: Record<string, string> = {
       'draft': '📝', 'review': '👀', 'ready': '🟢', 'active': '⚡',
-      'done': '✅', 'paused': '⏸️', 'archived': '📦'
+      'done': '✅', 'paused': '💤', 'archived': '📦'
     };
     return icons[status] || '❓';
   };
@@ -361,14 +585,24 @@ const RowView: React.FC<{
     return flags[priority] || '⚪';
   };
 
+  const columnWidths = {
+    title: 0.40,
+    status: 0.10,
+    priority: 0.09,
+    cycle: 0.12,
+    actor: 0.15,
+    activity: 0.08,
+    health: 0.06
+  };
+
   return (
     <Box flexDirection="column" padding={1} marginTop={0} marginBottom={0}>
       <Box borderStyle="round" borderColor="white" flexDirection="column">
         <Box flexDirection="row" paddingRight={1} justifyContent="space-between">
-          <Text bold color="cyan">🚀 GitGovernance │ Repo: solo-hub │ Org: GitGovernance │ Actor: {intelligence.currentActor.displayName}</Text>
+          <Text bold color={colors.headerPrimary}>🚀 GitGovernance │ Repo: solo-hub │ Org: GitGovernance │ Actor: {intelligence.currentActor.displayName}</Text>
           <Box flexDirection="row">
-            <Text color="yellow">[Sort: {getSortModeDisplay(sortMode)}] </Text>
-            <Text color="gray">Last update: {lastUpdate.toLocaleTimeString()}</Text>
+            <Text color={colors.headerSecondary}>[Sort: {getSortModeDisplay(sortMode)}] </Text>
+            <Text color={colors.muted}>Last update: {lastUpdate.toLocaleTimeString()}</Text>
           </Box>
         </Box>
 
@@ -383,47 +617,101 @@ const RowView: React.FC<{
         <Text>{'─'.repeat(Math.max(columns, 0) - 4)}</Text>
 
         <Box flexDirection="column">
-          <Box flexDirection="row">
-            <Box width="25%"><Text bold>TASK TITLE</Text></Box>
-            <Box width="10%"><Text bold>STATUS</Text></Box>
-            <Box width="10%"><Text bold>PRIORITY</Text></Box>
-            <Box width="10%"><Text bold>CYCLE</Text></Box>
-            <Box width="15%"><Text bold>ACTOR</Text></Box>
-            <Box width="15%"><Text bold>LAST ACTIVITY</Text></Box>
-            <Box width="15%"><Text bold>HEALTH</Text></Box>
-          </Box>
+          {(() => {
+            return (
+              <Box flexDirection="row">
+                <Box width={`${columnWidths.title * 100}%`}><Text bold>TASK TITLE</Text></Box>
+                <Box width={`${columnWidths.status * 100}%`}><Text bold>STATUS</Text></Box>
+                <Box width={`${columnWidths.priority * 100}%`}><Text bold>PRIORITY</Text></Box>
+                <Box width={`${columnWidths.cycle * 100}%`}><Text bold>CYCLE</Text></Box>
+                <Box width={`${columnWidths.actor * 100}%`}><Text bold>ACTOR</Text></Box>
+                <Box width={`${columnWidths.activity * 100}%`}><Text bold>TIME</Text></Box>
+                <Box width={`${columnWidths.health * 100}%`}><Text bold>HEALTH</Text></Box>
+              </Box>
+            );
+          })()}
 
           <Text>{'─'.repeat(Math.max(columns, 0) - 4)}</Text>
 
-          {sortTasks(intelligence.tasks).slice(0, 10).map((task) => {
-            const derivedState = task.status === 'paused' ? '💤' :
-              task.priority === 'critical' ? '🔥' :
-                task.status === 'active' ? '⚡' : null;
-            const statusDisplay = derivedState ? `${derivedState} ${task.status}` : task.status;
+          {(() => {
+            const MAX_VISIBLE = 10;
+            const totalTasks = sortedTasks.length;
+            const anchorIndex = selectedIndex === -1 ? 0 : selectedIndex;
+            const maxStart = Math.max(totalTasks - MAX_VISIBLE, 0);
+            const startIndex = Math.min(Math.max(anchorIndex - Math.floor(MAX_VISIBLE / 2), 0), maxStart);
+            const visibleTasks = sortedTasks.slice(startIndex, startIndex + MAX_VISIBLE);
 
-            const actorInfo = task.priority === 'critical' ? 'agent:architect' :
-              task.status === 'done' ? 'human:camilo' : '—';
+            const computedRemaining = sortedTasks.length - Math.min(sortedTasks.length, startIndex + MAX_VISIBLE);
+
+            const rows = visibleTasks.map((task, index) => {
+              // Ensure task and its properties are defined before proceeding
+              if (!task || !task.status) {
+                return null;
+              }
+
+              const statusDisplay = task.status;
+              const actorInfo = '—'; // TODO: Implement actor assignment tracking
+              const pct = task.status === 'done' ? '100' : task.status === 'paused' ? '45' : '95';
+              const globalIndex = startIndex + index;
+              const isSelected = selectedIndex !== -1 && globalIndex === selectedIndex;
+
+              // Create a single continuous text line for the entire row
+              const titleText = `${getStatusIcon(task.status)} ${task.title}`;
+              const priorityText = `${getPriorityFlag(task.priority)} ${task.priority}`;
+              const cycleText = task.cycleIds?.[0]?.slice(-8) || "Build MVP";
+              const progressText = `🟢 ${pct}%`;
+              const activityText = task.lastUpdated ? getRelativeTime(task.lastUpdated) : '—';
+
+              // Calculate new column widths based on terminal width
+              const widths = {
+                title: Math.floor(columns * columnWidths.title),
+                status: Math.floor(columns * columnWidths.status),
+                priority: Math.floor(columns * columnWidths.priority),
+                cycle: Math.floor(columns * columnWidths.cycle),
+                actor: Math.floor(columns * columnWidths.actor),
+                activity: Math.floor(columns * columnWidths.activity),
+                health: Math.floor(columns * columnWidths.health)
+              };
+
+              // Truncate each field to fit its width
+              const titleFit = fitToVisualWidth(titleText, widths.title);
+              const statusFit = fitToVisualWidth(statusDisplay, widths.status);
+              const priorityFit = fitToVisualWidth(priorityText, widths.priority);
+              const cycleFit = fitToVisualWidth(cycleText, widths.cycle);
+              const actorFit = fitToVisualWidth(actorInfo, widths.actor);
+              const activityFit = fitToVisualWidth(activityText, widths.activity);
+              const healthFit = fitToVisualWidth(progressText, widths.health);
+
+              // Combine all text into one continuous line
+              const combinedText = titleFit + statusFit + priorityFit + cycleFit + actorFit + activityFit + healthFit;
+              const maxWidth = Math.max(columns - 6, 80);
+              const fullRowText = combinedText.slice(0, maxWidth);
+
+              const textProps = isSelected ? { backgroundColor: colors.highlightBackground, color: colors.highlightText } : {};
+
+              return (
+                <Text key={task.id} {...textProps}>
+                  {fullRowText}
+                </Text>
+              );
+            });
+
+            const moreIndicator = computedRemaining > 0
+              ? <Text color={colors.muted}>... and {computedRemaining} more tasks</Text>
+              : null;
 
             return (
-              <Box key={task.id} flexDirection="row">
-                <Box width="30%"><Text>{getStatusIcon(task.status)} {task.title.slice(0, Math.max(Math.floor((columns * 0.3) - 10), 10))}</Text></Box>
-                <Box width="12%"><Text>{statusDisplay}</Text></Box>
-                <Box width="12%"><Text>{getPriorityFlag(task.priority)} {task.priority}</Text></Box>
-                <Box width="12%"><Text>{task.cycleIds?.[0]?.slice(-8) || 'Build MVP'}</Text></Box>
-                <Box width="20%"><Text>{actorInfo}</Text></Box>
-                <Box width="14%"><Text color="green">🟢 {task.status === 'done' ? '100' : task.status === 'paused' ? '45' : '95'}%</Text></Box>
-              </Box>
+              <>
+                {rows}
+                {moreIndicator}
+              </>
             );
-          })}
-
-          {intelligence.tasks.length > 10 && (
-            <Text color="gray">... and {intelligence.tasks.length - 10} more tasks</Text>
-          )}
+          })()}
         </Box>
 
         <Text>{'─'.repeat(Math.max(columns, 0) - 4)}</Text>
 
-        <Text bold color="yellow">⚡ SYSTEM ACTIVITY - BACKLOG</Text>
+        <Text bold color={colors.headerSecondary}>⚡ SYSTEM ACTIVITY - BACKLOG</Text>
 
         <Text>{'─'.repeat(Math.max(columns, 0) - 4)}</Text>
 
@@ -459,8 +747,8 @@ const RowView: React.FC<{
         <Text>{'─'.repeat(Math.max(columns, 0) - 4)}</Text>
 
         <Box flexDirection="row" justifyContent="space-between" paddingRight={1}>
-          <Text bold color="green">n:New s:Submit a:Approve e:Edit c:Cycle v:View r:Refresh ?:Help q:Quit</Text>
-          <Text color="gray">(Live mode: {live ? '🟢 ON' : '🔴 OFF'})</Text>
+          <Text bold color={colors.controlPrimary}>n:New s:Submit a:Approve e:Edit c:Cycle v:View r:Refresh ?:Help q:Quit</Text>
+          <Text color={colors.muted}>(Live mode: {live ? '🟢 ON' : '🔴 OFF'})</Text>
         </Box>
       </Box>
     </Box>
@@ -475,18 +763,21 @@ const KanbanView: React.FC<{
   viewConfig: ViewConfig;
   lastUpdate: Date;
   live?: boolean;
-  sortTasks: (tasks: EnrichedTaskRecord[]) => EnrichedTaskRecord[];
+  sortedTasks: EnrichedTaskRecord[];
+  selectedTaskId: string | null;
   sortMode: SortMode;
   getSortModeDisplay: (mode: SortMode) => string;
-}> = ({ intelligence, viewConfig, lastUpdate, live = false, sortTasks, sortMode, getSortModeDisplay }) => {
+  theme: DashboardTheme;
+}> = ({ intelligence, viewConfig, lastUpdate, live = false, sortedTasks, selectedTaskId, sortMode, getSortModeDisplay, theme }) => {
   const { stdout } = useStdout();
   const columns = stdout?.columns ?? 80;
   const MAX_TASKS_PER_COLUMN = 10;
+  const { colors } = theme;
 
   const getStatusIcon = (status: string): string => {
     const icons: Record<string, string> = {
       'draft': '📝', 'review': '👀', 'ready': '🟢', 'active': '⚡',
-      'done': '✅', 'paused': '⏸️', 'archived': '📦'
+      'done': '✅', 'paused': '💤', 'archived': '📦'
     };
     return icons[status] || '❓';
   };
@@ -498,12 +789,12 @@ const KanbanView: React.FC<{
   };
 
   // Organize tasks by columns
-  const tasksByColumn: Record<string, TaskRecord[]> = {};
+  const tasksByColumn: Record<string, EnrichedTaskRecord[]> = {};
   if (viewConfig.columns) {
     for (const [columnName, statuses] of Object.entries(viewConfig.columns)) {
-      tasksByColumn[columnName] = sortTasks(intelligence.tasks).filter(task =>
-        statuses.includes(task.status)
-      ).slice(0, MAX_TASKS_PER_COLUMN);
+      tasksByColumn[columnName] = sortedTasks
+        .filter(task => statuses.includes(task.status))
+        .slice(0, MAX_TASKS_PER_COLUMN);
     }
   }
 
@@ -514,10 +805,10 @@ const KanbanView: React.FC<{
     <Box flexDirection="column" padding={1} marginTop={0} marginBottom={0}>
       <Box borderStyle="round" borderColor="white" flexDirection="column">
         <Box flexDirection="row" justifyContent="space-between" paddingRight={1}>
-          <Text bold color="cyan">🚀 {viewConfig.name} │ Repo: solo-hub │ Org: GitGovernance │ Actor: {intelligence.currentActor.displayName}</Text>
+          <Text bold color={colors.headerPrimary}>🚀 {viewConfig.name} │ Repo: solo-hub │ Org: GitGovernance │ Actor: {intelligence.currentActor.displayName}</Text>
           <Box flexDirection="row">
-            <Text color="yellow">[Sort: {getSortModeDisplay(sortMode)}] </Text>
-            <Text color="gray">Last update: {lastUpdate.toLocaleTimeString()}</Text>
+            <Text color={colors.headerSecondary}>[Sort: {getSortModeDisplay(sortMode)}] </Text>
+            <Text color={colors.muted}>Last update: {lastUpdate.toLocaleTimeString()}</Text>
           </Box>
         </Box>
 
@@ -531,7 +822,7 @@ const KanbanView: React.FC<{
         <Box flexDirection="row">
           {viewConfig.columns && Object.keys(viewConfig.columns).map((columnName) => (
             <Box key={columnName} width={columnWidth}>
-              <Text bold color="yellow">{columnName} ({tasksByColumn[columnName]?.length || 0})</Text>
+              <Text bold color={colors.headerSecondary}>{columnName} ({tasksByColumn[columnName]?.length || 0})</Text>
             </Box>
           ))}
         </Box>
@@ -547,7 +838,19 @@ const KanbanView: React.FC<{
               return (
                 <Box key={columnName} width={columnWidth}>
                   {task ? (
-                    <Text>{getStatusIcon(task.status)} {task.title.slice(0, maxTextWidth)}</Text>
+                    (() => {
+                      const isSelected = selectedTaskId === task.id;
+                      const textProps: Record<string, unknown> = {};
+                      if (isSelected) {
+                        textProps['backgroundColor'] = colors.highlightBackground;
+                        textProps['color'] = colors.highlightText;
+                      }
+                      return (
+                        <Text {...textProps}>
+                          {getStatusIcon(task.status)} {task.title.slice(0, maxTextWidth)}
+                        </Text>
+                      );
+                    })()
                   ) : (
                     <Text> </Text>
                   )}
@@ -559,7 +862,7 @@ const KanbanView: React.FC<{
 
         <Text>{'─'.repeat(Math.max(columns, 0) - 4)}</Text>
 
-        <Text bold color="yellow">📊 KANBAN FLOW INTELLIGENCE</Text>
+        <Text bold color={colors.headerSecondary}>📊 KANBAN FLOW INTELLIGENCE</Text>
 
         <Text>{'─'.repeat(Math.max(columns, 0) - 4)}</Text>
 
@@ -575,8 +878,8 @@ const KanbanView: React.FC<{
         <Text>{'─'.repeat(Math.max(columns, 0) - 4)}</Text>
 
         <Box flexDirection="row" justifyContent="space-between" paddingRight={1}>
-          <Text bold color="green">n:New s:Submit a:Assign e:Edit c:Cycle v:View r:Refresh ?:Help q:Quit</Text>
-          <Text color="gray">(Live mode: {live ? '🟢 ON' : '🔴 OFF'})</Text>
+          <Text bold color={colors.controlPrimary}>n:New s:Submit a:Assign e:Edit c:Cycle v:View r:Refresh ?:Help q:Quit</Text>
+          <Text color={colors.muted}>(Live mode: {live ? '🟢 ON' : '🔴 OFF'})</Text>
         </Box>
       </Box>
     </Box>
@@ -591,12 +894,15 @@ const ScrumView: React.FC<{
   viewConfig: ViewConfig;
   lastUpdate: Date;
   live?: boolean;
-  sortTasks: (tasks: EnrichedTaskRecord[]) => EnrichedTaskRecord[];
+  sortedTasks: EnrichedTaskRecord[];
+  selectedTaskId: string | null;
   sortMode: SortMode;
   getSortModeDisplay: (mode: SortMode) => string;
-}> = ({ intelligence, viewConfig, lastUpdate, live = false, sortTasks, sortMode, getSortModeDisplay }) => {
+  theme: DashboardTheme;
+}> = ({ intelligence, viewConfig, lastUpdate, live = false, sortedTasks, selectedTaskId, sortMode, getSortModeDisplay, theme }) => {
   const { stdout } = useStdout();
   const columns = stdout?.columns ?? 80;
+  const { colors } = theme;
 
   const getHealthIcon = (score: number): string => {
     if (score >= 80) return '🟢';
@@ -607,7 +913,7 @@ const ScrumView: React.FC<{
   const getStatusIcon = (status: string): string => {
     const icons: Record<string, string> = {
       'draft': '📝', 'review': '👀', 'ready': '🟢', 'active': '⚡',
-      'done': '✅', 'paused': '⏸️', 'archived': '📦'
+      'done': '✅', 'paused': '💤', 'archived': '📦'
     };
     return icons[status] || '❓';
   };
@@ -620,13 +926,12 @@ const ScrumView: React.FC<{
   };
 
   // Calculate sprint progress
-  const sortedTasks = sortTasks(intelligence.tasks);
   const activeTasks = sortedTasks.filter(t => t.status === 'active').length;
   const doneTasks = sortedTasks.filter(t => t.status === 'done').length;
   const sprintProgress = Math.round((doneTasks / (activeTasks + doneTasks || 1)) * 100);
 
   // Organize tasks by scrum columns
-  const tasksByColumn: Record<string, TaskRecord[]> = {};
+  const tasksByColumn: Record<string, EnrichedTaskRecord[]> = {};
   if (viewConfig.columns) {
     for (const [columnName, statuses] of Object.entries(viewConfig.columns)) {
       tasksByColumn[columnName] = sortedTasks.filter(task =>
@@ -639,10 +944,10 @@ const ScrumView: React.FC<{
     <Box flexDirection="column" padding={1} marginTop={0} marginBottom={0}>
       <Box borderStyle="round" borderColor="white" flexDirection="column">
         <Box flexDirection="row" justifyContent="space-between" paddingRight={1}>
-          <Text bold color="magenta">🏃 {viewConfig.name} │ Sprint: Active │ Repo: solo-hub │ Actor: {intelligence.currentActor.displayName}</Text>
+          <Text bold color={colors.magenta}>🏃 {viewConfig.name} │ Sprint: Active │ Repo: solo-hub │ Actor: {intelligence.currentActor.displayName}</Text>
           <Box flexDirection="row">
-            <Text color="yellow">[Sort: {getSortModeDisplay(sortMode)}] </Text>
-            <Text color="gray">Last update: {lastUpdate.toLocaleTimeString()}</Text>
+            <Text color={colors.headerSecondary}>[Sort: {getSortModeDisplay(sortMode)}] </Text>
+            <Text color={colors.muted}>Last update: {lastUpdate.toLocaleTimeString()}</Text>
           </Box>
         </Box>
 
@@ -657,7 +962,7 @@ const ScrumView: React.FC<{
         <Box flexDirection="row">
           {viewConfig.columns && Object.keys(viewConfig.columns).map((columnName) => (
             <Box key={columnName} width={`${Math.floor(100 / Object.keys(viewConfig.columns!).length)}%`}>
-              <Text bold color="yellow">{columnName}</Text>
+              <Text bold color={colors.headerSecondary}>{columnName}</Text>
             </Box>
           ))}
         </Box>
@@ -673,7 +978,19 @@ const ScrumView: React.FC<{
               return (
                 <Box key={columnName} width={`${Math.floor(100 / Object.keys(viewConfig.columns!).length)}%`}>
                   {task ? (
-                    <Text>{getStatusIcon(task.status)} {task.title.slice(0, maxTextWidth)} {getPriorityFlag(task.priority)}</Text>
+                    (() => {
+                      const isSelected = selectedTaskId === task.id;
+                      const textProps: Record<string, unknown> = {};
+                      if (isSelected) {
+                        textProps['backgroundColor'] = '#ff0883';
+                        textProps['color'] = '#ffffff';
+                      }
+                      return (
+                        <Text {...textProps}>
+                          {getStatusIcon(task.status)} {task.title.slice(0, maxTextWidth)} {getPriorityFlag(task.priority)}
+                        </Text>
+                      );
+                    })()
                   ) : (
                     <Text> </Text>
                   )}
@@ -685,7 +1002,7 @@ const ScrumView: React.FC<{
 
         <Text>{'─'.repeat(Math.max(columns, 0) - 4)}</Text>
 
-        <Text bold color="yellow">🏃 SPRINT INTELLIGENCE & CEREMONIES</Text>
+        <Text bold color={colors.headerSecondary}>🏃 SPRINT INTELLIGENCE & CEREMONIES</Text>
 
         <Text>{'─'.repeat(Math.max(columns, 0) - 4)}</Text>
 
@@ -701,8 +1018,8 @@ const ScrumView: React.FC<{
         <Text>{'─'.repeat(Math.max(columns, 0) - 4)}</Text>
 
         <Box flexDirection="row" justifyContent="space-between" paddingRight={1}>
-          <Text bold color="green">n:New s:Submit a:Assign e:Edit c:Sprint v:View r:Refresh ?:Help q:Quit</Text>
-          <Text color="gray">(Live mode: {live ? '🟢 ON' : '🔴 OFF'})</Text>
+          <Text bold color={colors.controlPrimary}>n:New s:Submit a:Assign e:Edit c:Sprint v:View r:Refresh ?:Help q:Quit</Text>
+          <Text color={colors.muted}>(Live mode: {live ? '🟢 ON' : '🔴 OFF'})</Text>
         </Box>
       </Box>
     </Box>

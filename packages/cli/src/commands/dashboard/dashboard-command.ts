@@ -1,9 +1,10 @@
-import React from 'react';
-import { render } from 'ink';
+// Dynamic imports for TUI - only loaded when needed
+// import React from 'react';
+// import { render } from 'ink';
 import * as fs from 'fs';
 import * as path from 'path';
 import { DependencyInjectionService } from '../../services/dependency-injection';
-import DashboardTUI from '../../components/dashboard/DashboardTUI';
+// import DashboardTUI from '../../components/dashboard/DashboardTUI';
 import type { TaskRecord } from '../../../../core/src/types/task_record';
 import type { CycleRecord } from '../../../../core/src/types/cycle_record';
 import type { ActorRecord } from '../../../../core/src/types/actor_record';
@@ -26,7 +27,7 @@ export interface DashboardCommandOptions {
   refreshInterval?: number;
   noLive?: boolean; // Flag para desactivar live mode
   actor?: string;
-  theme?: 'dark' | 'light' | 'corporate';
+  theme?: 'dark' | 'light';
   noCache?: boolean;
   debug?: boolean;
   config?: string;
@@ -246,23 +247,38 @@ export class DashboardCommand {
       console.log("🚀 Launching Interactive TUI Dashboard...");
     }
 
-    // Launch Ink TUI with real-time capabilities y re-fetch callback
-    const { waitUntilExit } = render(
-      React.createElement(DashboardTUI, {
-        intelligence,
-        viewConfig,
-        template: options.template || 'row-based',
-        refreshInterval: parseInt(String(options.refreshInterval || '1')), // DEMO: 1 segundo para respuesta inmediata
-        live: !options.noLive, // Live mode por defecto, --no-live para desactivar
-        onRefresh: async () => {
-          // Re-fetch REAL data from adapters
-          return await this.gatherDashboardIntelligence(options);
-        }
-      })
-    );
+    try {
+      // Dynamic import - only load TUI dependencies when needed
+      const [{ render }, React, { default: DashboardTUI }] = await Promise.all([
+        import('ink'),
+        import('react'),
+        import('../../components/dashboard/DashboardTUI')
+      ]);
 
-    // Wait for user to exit
-    await waitUntilExit();
+      // Launch Ink TUI with real-time capabilities y re-fetch callback
+      const { waitUntilExit } = render(
+        React.createElement(DashboardTUI, {
+          intelligence,
+          viewConfig,
+          template: options.template || 'row-based',
+          refreshInterval: parseInt(String(options.refreshInterval || '1')), // DEMO: 1 segundo para respuesta inmediata
+          live: !options.noLive, // Live mode por defecto, --no-live para desactivar
+          onRefresh: async () => {
+            // Re-fetch REAL data from adapters
+            return await this.gatherDashboardIntelligence(options);
+          },
+          themeName: options.theme ?? 'dark'
+        })
+      );
+
+      // Wait for user to exit
+      await waitUntilExit();
+    } catch (error) {
+      console.error('❌ TUI not available. Use --json for headless mode.');
+      console.error('💡 To enable TUI, install dependencies: npm install ink react');
+      console.error('💡 Or reinstall with: curl -sSL https://get.gitgovernance.com | sh');
+      process.exit(1);
+    }
   }
 
 
