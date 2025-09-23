@@ -709,7 +709,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       });
       mockDependencies.identity.signRecord.mockResolvedValue(cancelledTask);
 
-      const result = await backlogAdapter.cancelTask(taskId, 'human:product-manager', 'No longer needed');
+      const result = await backlogAdapter.discardTask(taskId, 'human:product-manager', 'No longer needed');
 
       expect(mockDependencies.taskStore.write).toHaveBeenCalled();
       expect(result.status).toBe('discarded');
@@ -743,7 +743,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         payload: { ...activeTask.payload, status: 'discarded' }
       });
 
-      const result = await backlogAdapter.cancelTask(taskId, 'human:team-lead');
+      const result = await backlogAdapter.discardTask(taskId, 'human:team-lead');
 
       expect(result.status).toBe('discarded');
       expect(mockDependencies.taskStore.write).toHaveBeenCalled();
@@ -765,7 +765,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         status: 'active'
       });
 
-      await expect(backlogAdapter.cancelTask('1757687335-task-draft', 'human:anyone'))
+      await expect(backlogAdapter.discardTask('1757687335-task-draft', 'human:anyone'))
         .rejects.toThrow('ProtocolViolationError: Task is in \'draft\' state. Cannot cancel from this state. Only \'ready\', \'active\', and \'review\' tasks can be cancelled.');
     });
 
@@ -797,7 +797,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         payload: { ...reviewTask.payload, status: 'discarded' }
       });
 
-      const result = await backlogAdapter.cancelTask(taskId, 'human:reviewer', 'Requirements unclear');
+      const result = await backlogAdapter.discardTask(taskId, 'human:reviewer', 'Requirements unclear');
 
       expect(result.status).toBe('discarded');
       expect(result.notes).toContain('[REJECTED] Requirements unclear');
@@ -833,7 +833,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         payload: { ...reviewTask.payload, status: 'discarded' }
       });
 
-      const result = await backlogAdapter.cancelTask(taskId, 'human:reviewer', 'Not aligned with architecture');
+      const result = await backlogAdapter.discardTask(taskId, 'human:reviewer', 'Not aligned with architecture');
 
       expect(result.status).toBe('discarded');
       expect(result.notes).toContain('[REJECTED] Not aligned with architecture');
@@ -868,7 +868,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         payload: { ...readyTask.payload, status: 'discarded' }
       });
 
-      const readyResult = await backlogAdapter.cancelTask('1757687335-task-ready', 'human:pm', 'Priorities changed');
+      const readyResult = await backlogAdapter.discardTask('1757687335-task-ready', 'human:pm', 'Priorities changed');
       expect(readyResult.notes).toContain('[CANCELLED] Priorities changed');
 
       // Test review state (should use [REJECTED])
@@ -878,7 +878,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       });
 
       mockDependencies.taskStore.read.mockResolvedValue(reviewTask as unknown as TaskRecord);
-      const reviewResult = await backlogAdapter.cancelTask('1757687335-task-review', 'human:pm', 'Requirements unclear');
+      const reviewResult = await backlogAdapter.discardTask('1757687335-task-review', 'human:pm', 'Requirements unclear');
       expect(reviewResult.notes).toContain('[REJECTED] Requirements unclear');
     });
   });
