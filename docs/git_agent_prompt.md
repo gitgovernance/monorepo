@@ -362,28 +362,25 @@ const subject = generateSubject(taskContext, changedFiles);
 
 Siguiendo el **Task Protocol Appendix**, el @git-agent actualiza automáticamente las `references` de la task con recursos relacionados usando prefijos tipados:
 
-| Prefijo  | Propósito                        | Formato               | Cuándo se agrega automáticamente |
-| :------- | :------------------------------- | :-------------------- | :------------------------------- |
-| `pr:`    | Pull Request relacionado         | `pr:{number}`         | Al crear PR exitosamente         |
-| `file:`  | Archivo del proyecto relacionado | `file:{relativePath}` | Archivos modificados en commits   |
-| `url:`   | Recurso web externo              | `url:{fullUrl}`       | Referencias externas mencionadas  |
+| Prefijo | Propósito                        | Formato               | Cuándo se agrega automáticamente |
+| :------ | :------------------------------- | :-------------------- | :------------------------------- |
+| `pr:`   | Pull Request relacionado         | `pr:{fullUrl}`        | Al crear PR exitosamente         |
+| `file:` | Archivo del proyecto relacionado | `file:{relativePath}` | Archivos modificados en commits  |
+| `url:`  | Recurso web externo              | `url:{fullUrl}`       | Referencias externas mencionadas |
 
 ### Workflow de Actualización de References
 
 **Cuando se crea un PR:**
 
 ```bash
-# 1. Crear PR y obtener URL
+# 1. Crear PR y obtener URL completa
 PR_URL=$(gh pr create --title "..." --body "..." --json url -q '.url')
 
-# 2. Extraer número del PR
-PR_NUMBER=$(echo $PR_URL | sed 's/.*\/pull\/\([0-9]*\).*/\1/')
+# 2. Actualizar task references con URL completa
+gitgov task edit <task-id> --add-refs "pr:$PR_URL"
 
-# 3. Actualizar task references
-gitgov task edit <task-id> --add-reference "pr:$PR_NUMBER"
-
-# 4. Confirmar actualización
-echo "✅ Task actualizada con referencia: pr:$PR_NUMBER"
+# 3. Confirmar actualización
+echo "✅ Task actualizada con referencia: pr:$PR_URL"
 ```
 
 **Ejemplo de actualización automática:**
@@ -400,7 +397,7 @@ echo "✅ Task actualizada con referencia: pr:$PR_NUMBER"
 {
   "references": [
     "file:docs/git_agent_prompt.md",
-    "pr:9"
+    "pr:https://github.com/gitgovernance/monorepo/pull/9"
   ]
 }
 ```
@@ -580,19 +577,53 @@ Git Agent:
 
 4. 🔗 ACTUALIZAR TASK REFERENCES:
    📊 PR creado: #123
-   🔄 Extraer número: 123
-   📝 Actualizar task: gitgov task edit 1758736314-task-validation --add-reference "pr:123"
-   ✅ Reference agregada: pr:123
+   🔗 URL obtenida: https://github.com/org/repo/pull/123
+   📝 Actualizar task: gitgov task edit 1758736314-task-validation --add-refs "pr:https://github.com/org/repo/pull/123"
+   ✅ Reference agregada: pr:https://github.com/org/repo/pull/123
 
 5. 📊 RESULTADO FINAL:
    🚀 PR creado: #123
    🔗 URL: https://github.com/org/repo/pull/123
-   📋 Task: Actualizada con referencia pr:123
+   📋 Task: Actualizada con referencia completa
    📋 Status: Sigue en 'active' (esperando review)
    🔗 Trazabilidad: Task ↔ PR completamente enlazados
 ```
 
-### Ejemplo 3: Hook de Otro Agente
+### Ejemplo 4: Workflow Natural (Branch/Commits → PR Automático)
+
+```
+Usuario: "@git-agent, commitea estos cambios y crea el PR"
+
+Git Agent:
+1. 🔍 PRE-VALIDACIONES:
+   ✅ Branch: feature/1758736314-task-validation
+   ✅ Task: 1758736314-task-validation (status: active)
+
+2. 🔄 COMMITS:
+   📁 Archivos: src/core/validator.ts, tests/validator.test.ts
+   📝 Commit: feat(core): implement input validation [task:1758736314-task-validation]
+   🚀 Push: git push origin feature/1758736314-task-validation
+
+3. 🚀 AUTO-CREATE PR:
+   💡 Detecta: Task tiene commits listos
+   📝 Título: feat(core): implement input validation
+   📋 Cuerpo: Metadata GitGovernance automática
+   👥 Reviewers: Basados en archivos modificados
+   🏷️ Labels: feat, needs-review, core
+
+4. 🔗 ACTUALIZAR TASK REFERENCES:
+   📊 PR creado: #124
+   🔗 URL: https://github.com/org/repo/pull/124
+   📝 Actualizar: gitgov task edit 1758736314-task-validation --add-refs "pr:https://github.com/org/repo/pull/124"
+
+5. 📊 RESULTADO COMPLETO:
+   ✅ Commit: abc123f
+   🚀 PR creado: #124 automáticamente
+   📋 Task: Actualizada con referencia completa
+   🔗 Workflow: Commit → PR → References en una sola operación
+```
+
+### Ejemplo 5: Hook de Otro Agente
 
 ```javascript
 // Agente de Testing termina tests
