@@ -193,12 +193,12 @@ Gestión end-to-end de una task:
 
 ### Estados de Task y Acciones Git
 
-| Estado Task | Acción Git Permitida | Comando Ejemplo                                  |
-| ----------- | -------------------- | ------------------------------------------------ |
-| `draft`     | ❌ NINGUNA           | Esperar a `active`                               |
-| `review`    | ❌ NINGUNA           | Esperar aprobación                               |
-| `ready`     | ❌ NINGUNA           | Esperar activación                               |
-| `active`    | ✅ Commits y PR      | `git commit -m "feat(core): progress [task:id]"` |
+| Estado Task | Acción Git Permitida | Comando Ejemplo                                       |
+| ----------- | -------------------- | ----------------------------------------------------- |
+| `draft`     | ❌ NINGUNA           | Esperar a `active`                                    |
+| `review`    | ❌ NINGUNA           | Esperar aprobación                                    |
+| `ready`     | ❌ NINGUNA           | Esperar activación                                    |
+| `active`    | ✅ Commits y PR      | `git commit -m "feat(core): progress [task:id]"`      |
 | `done`      | ✅ Commits y PR      | `git commit -m "feat(core): final changes [task:id]"` |
 
 ### ⚠️ REGLA CRÍTICA: Solo tasks en estado `active` o `done` pueden usar Git operations
@@ -297,7 +297,9 @@ echo "📁 Archivos modificados: $CHANGED_FILES"
 # 3.1 Verificar si task debe pasar a 'done'
 # 3.2 Crear PR con metadata GitGovernance
 # 3.3 Asignar reviewers y labels
-# 3.4 Notificar al usuario
+# 3.4 Extraer PR number de la URL
+# 3.5 Actualizar task references con pr:{number}
+# 3.6 Notificar al usuario
 ```
 
 ### Casos de Error y Manejo
@@ -353,6 +355,62 @@ const subject = generateSubject(taskContext, changedFiles);
 - `docs/`, `*.md` → `docs`
 - `package.json`, `.gitignore` → `repo`
 - `.github/workflows/` → `cicd`
+
+## 🔗 Actualización Automática de Task References
+
+### Sistema de Referencias Tipadas
+
+Siguiendo el **Task Protocol Appendix**, el @git-agent actualiza automáticamente las `references` de la task con recursos relacionados usando prefijos tipados:
+
+| Prefijo  | Propósito                        | Formato               | Cuándo se agrega automáticamente |
+| :------- | :------------------------------- | :-------------------- | :------------------------------- |
+| `pr:`    | Pull Request relacionado         | `pr:{number}`         | Al crear PR exitosamente         |
+| `file:`  | Archivo del proyecto relacionado | `file:{relativePath}` | Archivos modificados en commits   |
+| `url:`   | Recurso web externo              | `url:{fullUrl}`       | Referencias externas mencionadas  |
+
+### Workflow de Actualización de References
+
+**Cuando se crea un PR:**
+
+```bash
+# 1. Crear PR y obtener URL
+PR_URL=$(gh pr create --title "..." --body "..." --json url -q '.url')
+
+# 2. Extraer número del PR
+PR_NUMBER=$(echo $PR_URL | sed 's/.*\/pull\/\([0-9]*\).*/\1/')
+
+# 3. Actualizar task references
+gitgov task edit <task-id> --add-reference "pr:$PR_NUMBER"
+
+# 4. Confirmar actualización
+echo "✅ Task actualizada con referencia: pr:$PR_NUMBER"
+```
+
+**Ejemplo de actualización automática:**
+
+```json
+// Antes de crear PR
+{
+  "references": [
+    "file:docs/git_agent_prompt.md"
+  ]
+}
+
+// Después de crear PR #9
+{
+  "references": [
+    "file:docs/git_agent_prompt.md",
+    "pr:9"
+  ]
+}
+```
+
+### Validaciones de References
+
+- ✅ **Formato correcto**: Verificar que el prefijo sea válido (`pr:`, `file:`, `url:`)
+- ✅ **No duplicados**: Evitar agregar la misma referencia múltiples veces
+- ✅ **PR válido**: Verificar que el PR number existe antes de agregarlo
+- ✅ **Trazabilidad**: Mantener enlace bidireccional entre task y PR
 
 ## 🎯 Comandos y Operaciones
 
@@ -499,7 +557,7 @@ Git Agent:
    📋 Task: Sigue en 'active' (listo para más commits o PR)
 ```
 
-### Ejemplo 3: Crear PR Final
+### Ejemplo 3: Crear PR Final (Con Actualización de References)
 
 ```
 Usuario: "@git-agent, crear PR para esta task"
@@ -520,10 +578,18 @@ Git Agent:
    👥 Reviewers: Basado en archivos modificados
    🏷️ Labels: feat, needs-review, core
 
-4. 📊 RESULTADO:
+4. 🔗 ACTUALIZAR TASK REFERENCES:
+   📊 PR creado: #123
+   🔄 Extraer número: 123
+   📝 Actualizar task: gitgov task edit 1758736314-task-validation --add-reference "pr:123"
+   ✅ Reference agregada: pr:123
+
+5. 📊 RESULTADO FINAL:
    🚀 PR creado: #123
    🔗 URL: https://github.com/org/repo/pull/123
-   📋 Task: Sigue en 'active' (esperando review)
+   📋 Task: Actualizada con referencia pr:123
+   📋 Status: Sigue en 'active' (esperando review)
+   🔗 Trazabilidad: Task ↔ PR completamente enlazados
 ```
 
 ### Ejemplo 3: Hook de Otro Agente
