@@ -199,9 +199,11 @@ Gestión end-to-end de una task:
 | `review`    | ❌ NINGUNA           | Esperar aprobación                               |
 | `ready`     | ❌ NINGUNA           | Esperar activación                               |
 | `active`    | ✅ Commits y PR      | `git commit -m "feat(core): progress [task:id]"` |
-| `done`      | ❌ NINGUNA           | Task completada                                  |
+| `done`      | ✅ Commits y PR      | `git commit -m "feat(core): final changes [task:id]"` |
 
-### ⚠️ REGLA CRÍTICA: Solo tasks en estado `active` pueden usar Git operations
+### ⚠️ REGLA CRÍTICA: Solo tasks en estado `active` o `done` pueden usar Git operations
+
+**Nota temporal**: El estado `done` permite operaciones Git hasta que implementemos el sistema completo de `backlog_adapter` y `workflow_methodology`. En el futuro, `done` será más restrictivo.
 
 ## 🛡️ Workflow de Validación Robusto
 
@@ -221,8 +223,12 @@ fi
 
 ```bash
 # Usar GitGovernance CLI
-gitgov task show <task-id> --json | jq -r '.status'
-# DEBE ser 'active' para proceder
+TASK_STATUS=$(gitgov task show <task-id> --json | jq -r '.status')
+# DEBE ser 'active' o 'done' para proceder
+if [ "$TASK_STATUS" != "active" ] && [ "$TASK_STATUS" != "done" ]; then
+  echo "❌ ERROR: Task está en estado '$TASK_STATUS'. Solo 'active' o 'done' permitidos"
+  exit 1
+fi
 ```
 
 **3. Verificar/Crear Branch Correcta:**
@@ -436,27 +442,27 @@ Git Agent:
 1. 🔍 PRE-VALIDACIÓN: Verificar branch actual
    ❌ Detecta: Estás en 'main'
    🔄 Acción: Buscar task activa automáticamente
-   
+
 2. 🔍 TASK VALIDATION: Consultar GitGovernance CLI
    ✅ Task encontrada: 1758736314-task-validation (status: active)
-   
-3. 🔄 BRANCH MANAGEMENT: 
+
+3. 🔄 BRANCH MANAGEMENT:
    🆕 Crear branch: feature/1758736314-task-validation
    🔄 Ejecutar: git checkout -b feature/1758736314-task-validation
-   
+
 4. 🔄 PULL & SYNC:
    📡 git pull origin main
    ✅ Sin conflictos
-   
+
 5. 📁 ANÁLISIS DE ARCHIVOS:
    📋 Detectados: src/core/validator.ts, tests/validator.test.ts
    🎯 Scope detectado: core
    🎯 Type detectado: feat
-   
+
 6. ✅ COMMIT EXECUTION:
    📝 Mensaje: feat(core): implement input validation [task:1758736314-task-validation]
    🚀 Push: git push -u origin feature/1758736314-task-validation
-   
+
 7. 📊 RESULTADO:
    ✅ Commit: abc123f
    🔗 Branch: feature/1758736314-task-validation
@@ -471,23 +477,23 @@ Usuario: "@git-agent, commitea estos cambios" (2do commit)
 Git Agent:
 1. 🔍 PRE-VALIDACIÓN: Verificar branch actual
    ✅ Ya estás en: feature/1758736314-task-validation
-   
-2. 🔍 TASK VALIDATION: 
+
+2. 🔍 TASK VALIDATION:
    ✅ Task: 1758736314-task-validation (status: active)
-   
+
 3. 🔄 PULL & SYNC:
    📡 git pull origin main
    ✅ Sin conflictos
-   
+
 4. 📁 ANÁLISIS DE ARCHIVOS:
    📋 Detectados: docs/validation.md, README.md
    🎯 Scope detectado: docs
    🎯 Type detectado: docs
-   
+
 5. ✅ COMMIT EXECUTION:
    📝 Mensaje: docs(docs): add validation documentation [task:1758736314-task-validation]
    🚀 Push: git push origin feature/1758736314-task-validation
-   
+
 6. 📊 RESULTADO:
    ✅ Commit: def456g (2do commit en la branch)
    📋 Task: Sigue en 'active' (listo para más commits o PR)
@@ -503,17 +509,17 @@ Git Agent:
    ✅ Branch: feature/1758736314-task-validation
    ✅ Task: 1758736314-task-validation (status: active)
    ✅ Commits: 2 commits listos
-   
+
 2. 🔄 PULL FINAL:
    📡 git pull origin main
    ✅ Sin conflictos
-   
+
 3. 🚀 CREAR PR:
    📝 Título: feat(core): implement input validation
    📋 Cuerpo: Metadata GitGovernance completa
    👥 Reviewers: Basado en archivos modificados
    🏷️ Labels: feat, needs-review, core
-   
+
 4. 📊 RESULTADO:
    🚀 PR creado: #123
    🔗 URL: https://github.com/org/repo/pull/123
@@ -544,7 +550,7 @@ await gitAgent.trigger({
 
 - Commitear directamente en `main`
 - Commitear sin task ID válido
-- Operar con tasks que NO están en estado 'active'
+- Operar con tasks que NO están en estado 'active' o 'done'
 - Ignorar conflictos en pull
 - Hacer force push sin confirmación explícita
 - Ignorar el formato de commit obligatorio
@@ -553,7 +559,7 @@ await gitAgent.trigger({
 ### ✅ SIEMPRE haz esto:
 
 - Verificar que NO estás en `main` antes de cualquier operación
-- Verificar estado de task es 'active' usando GitGovernance CLI
+- Verificar estado de task es 'active' o 'done' usando GitGovernance CLI
 - Hacer pull antes de commitear
 - Incluir task ID en todos los commits
 - Commitear TODOS los archivos relacionados al trabajo de la task
@@ -569,13 +575,14 @@ Usuario: "@git-agent, commitea esto"
 
 Git Agent:
 1. 🔍 Consulta: gitgov task show 1758736314-task-example --json
-2. ❌ Detecta: Task en estado 'ready' (no 'active')
+2. ❌ Detecta: Task en estado 'ready' (no 'active' ni 'done')
 
 Respuesta:
 ❌ No puedo proceder: Task está en estado 'ready'
 💡 Solución: Activa la task primero
 🔧 Comando: gitgov task activate 1758736314-task-example
 📋 Workflow: ready → active → (aquí puedes commitear)
+📋 Estados permitidos: 'active' o 'done'
 ```
 
 ### Error B: Conflictos en Pull
