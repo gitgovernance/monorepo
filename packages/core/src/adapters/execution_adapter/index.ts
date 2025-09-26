@@ -1,11 +1,10 @@
 import { createExecutionRecord } from '../../factories/execution_factory';
 import { RecordStore } from '../../store';
 import { IdentityAdapter } from '../identity_adapter';
-import { publishEvent } from '../../modules/event_bus_module';
-import type { ExecutionRecord } from '../../types/execution_record';
-import type { TaskRecord } from '../../types/task_record';
-import type { IEventStream, ExecutionCreatedEvent } from '../../modules/event_bus_module';
-import type { GitGovRecord } from '../../models';
+import type { ExecutionRecord } from '../../types';
+import type { TaskRecord } from '../../types';
+import type { IEventStream, ExecutionCreatedEvent } from '../../event_bus';
+import type { GitGovRecord } from '../../types';
 
 /**
  * ExecutionAdapter Dependencies - Facade + Dependency Injection Pattern

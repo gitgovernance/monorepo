@@ -1,4 +1,4 @@
-import type { AgentRecord } from "../types/agent_record";
+import type { AgentRecord } from "../types";
 import { validateAgentRecordDetailed } from "../validation/agent_validator";
 import { DetailedValidationError } from "../validation/common";
 

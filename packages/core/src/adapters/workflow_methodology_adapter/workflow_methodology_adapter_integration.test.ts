@@ -1,12 +1,20 @@
-import path from 'path';
 import { WorkflowMethodologyAdapter } from './index';
-import type { TaskRecord } from '../../types/task_record';
-import type { ActorRecord } from '../../types/actor_record';
+import type { TaskRecord } from '../../types';
+import type { ActorRecord } from '../../types';
 import type { ValidationContext } from './index';
-import type { CycleRecord } from '../../types/cycle_record';
-import type { FeedbackRecord } from '../../types/feedback_record';
+import type { CycleRecord } from '../../types';
+import type { FeedbackRecord } from '../../types';
+import type { IFeedbackAdapter } from '../feedback_adapter';
 
 describe('WorkflowMethodologyAdapter - DEFAULT Methodology Integration Tests', () => {
+  // Mock IFeedbackAdapter
+  const mockFeedbackAdapter: IFeedbackAdapter = {
+    create: jest.fn(),
+    resolve: jest.fn(),
+    getFeedback: jest.fn(),
+    getFeedbackByEntity: jest.fn(),
+    getAllFeedback: jest.fn(),
+  };
   const createMockTask = (tags: string[] = [], status: TaskRecord['status'] = 'draft'): TaskRecord => ({
     id: '1752274500-task-test-task',
     title: 'Test Task',
@@ -32,11 +40,7 @@ describe('WorkflowMethodologyAdapter - DEFAULT Methodology Integration Tests', (
 
   beforeEach(() => {
     // Use real default config for integration tests
-    const realConfigPath = path.join(
-      process.cwd(),
-      '../blueprints/03_products/core/specs/adapters/workflow_methodology_adapter/workflow_methodology_default.json'
-    );
-    adapter = new WorkflowMethodologyAdapter(realConfigPath);
+    adapter = WorkflowMethodologyAdapter.createDefault(mockFeedbackAdapter);
   });
 
   describe('Real Configuration Tests', () => {
@@ -47,7 +51,7 @@ describe('WorkflowMethodologyAdapter - DEFAULT Methodology Integration Tests', (
 
       expect(rule).toBeDefined();
       expect(rule?.to).toBe('review');
-      expect(rule?.conditions.command).toBe('gitgov task submit');
+      expect(rule?.conditions?.command).toBe('gitgov task submit');
     });
 
     it('[EARS-25] should load real view configs from default config', async () => {
@@ -126,9 +130,9 @@ describe('WorkflowMethodologyAdapter - DEFAULT Methodology Integration Tests', (
 
         expect(rule).toBeDefined();
         expect(rule?.to).toBe('review');
-        expect(rule?.conditions.command).toBe('gitgov task submit');
-        expect(rule?.conditions.signatures?.['__default__']?.role).toBe('submitter');
-        expect(rule?.conditions.signatures?.['__default__']?.capability_roles).toContain('author');
+        expect(rule?.conditions?.command).toBe('gitgov task submit');
+        expect(rule?.conditions?.signatures?.['__default__']?.role).toBe('submitter');
+        expect(rule?.conditions?.signatures?.['__default__']?.capability_roles).toContain('author');
       });
 
       it('[EARS-51] should complete review to ready transition with default methodology', async () => {
@@ -144,8 +148,8 @@ describe('WorkflowMethodologyAdapter - DEFAULT Methodology Integration Tests', (
 
         expect(rule).toBeDefined();
         expect(rule?.to).toBe('ready');
-        expect(rule?.conditions.command).toBe('gitgov task approve');
-        expect(rule?.conditions.signatures?.['__default__']?.capability_roles).toContain('approver:product');
+        expect(rule?.conditions?.command).toBe('gitgov task approve');
+        expect(rule?.conditions?.signatures?.['__default__']?.capability_roles).toContain('approver:product');
 
         // Validate approver signature
         const signature = {
@@ -181,8 +185,8 @@ describe('WorkflowMethodologyAdapter - DEFAULT Methodology Integration Tests', (
 
         expect(rule).toBeDefined();
         expect(rule?.to).toBe('active');
-        expect(rule?.conditions.event).toBe('first_execution_record_created');
-        expect(rule?.conditions.custom_rules).toContain('task_must_have_valid_assignment_for_executor');
+        expect(rule?.conditions?.event).toBe('first_execution_record_created');
+        expect(rule?.conditions?.custom_rules).toContain('task_must_have_valid_assignment_for_executor');
 
         // Validate assignment required rule
         const customRuleResult = await adapter.validateCustomRules(['task_must_have_valid_assignment_for_executor'], context);
@@ -202,8 +206,8 @@ describe('WorkflowMethodologyAdapter - DEFAULT Methodology Integration Tests', (
 
         expect(rule).toBeDefined();
         expect(rule?.to).toBe('done');
-        expect(rule?.conditions.command).toBe('gitgov task complete');
-        expect(rule?.conditions.signatures?.['__default__']?.capability_roles).toContain('approver:quality');
+        expect(rule?.conditions?.command).toBe('gitgov task complete');
+        expect(rule?.conditions?.signatures?.['__default__']?.capability_roles).toContain('approver:quality');
 
         // Validate quality approver signature
         const signature = {
@@ -225,7 +229,7 @@ describe('WorkflowMethodologyAdapter - DEFAULT Methodology Integration Tests', (
 
         expect(rule).toBeDefined();
         expect(rule?.to).toBe('archived');
-        expect(rule?.conditions.event).toBe('changelog_record_created');
+        expect(rule?.conditions?.event).toBe('changelog_record_created');
       });
     });
 
@@ -241,7 +245,7 @@ describe('WorkflowMethodologyAdapter - DEFAULT Methodology Integration Tests', (
 
         const rule = await adapter.getTransitionRule('review', 'ready', context);
         expect(rule).toBeDefined();
-        expect(rule?.conditions.signatures?.['design']?.capability_roles).toContain('approver:design');
+        expect(rule?.conditions?.signatures?.['design']?.capability_roles).toContain('approver:design');
 
         // Validate design guild signature
         const signature = {
@@ -266,7 +270,7 @@ describe('WorkflowMethodologyAdapter - DEFAULT Methodology Integration Tests', (
 
         const rule = await adapter.getTransitionRule('review', 'ready', context);
         expect(rule).toBeDefined();
-        expect(rule?.conditions.signatures?.['quality']?.capability_roles).toContain('approver:quality');
+        expect(rule?.conditions?.signatures?.['quality']?.capability_roles).toContain('approver:quality');
       });
 
       it('[EARS-57] should handle default guild workflow with default methodology', async () => {
@@ -280,7 +284,7 @@ describe('WorkflowMethodologyAdapter - DEFAULT Methodology Integration Tests', (
 
         const rule = await adapter.getTransitionRule('review', 'ready', context);
         expect(rule).toBeDefined();
-        expect(rule?.conditions.signatures?.['__default__']?.capability_roles).toContain('approver:product');
+        expect(rule?.conditions?.signatures?.['__default__']?.capability_roles).toContain('approver:product');
       });
     });
 

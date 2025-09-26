@@ -2,7 +2,7 @@ import {
   createWorkflowMethodologyConfig,
   createDefaultWorkflowMethodologyConfig
 } from './workflow_methodology_factory';
-import type { WorkflowMethodologyRecord } from '../types/workflow_methodology_record';
+import type { WorkflowMethodologyRecord } from '../types';
 import { DetailedValidationError } from '../validation/common';
 
 // Manual mock for validateWorkflowMethodologyConfigDetailed

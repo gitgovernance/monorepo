@@ -1,4 +1,4 @@
-import type { ChangelogRecord } from '../types/changelog_record';
+import type { ChangelogRecord } from '../types';
 import { generateChangelogId } from '../utils/id_generator';
 import { validateChangelogRecordDetailed } from '../validation/changelog_validator';
 import { DetailedValidationError } from '../validation/common';

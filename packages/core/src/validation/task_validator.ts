@@ -1,36 +1,19 @@
 import type { ValidateFunction } from "ajv";
-import * as path from "path";
-import type { TaskRecord } from "../types/task_record";
-import type { GitGovRecord } from "../models";
-import { ConfigManager } from "../config_manager";
-import { SchemaValidationCache } from "./schema-cache";
+import type { TaskRecord } from "../types";
+import type { GitGovRecord } from "../types";
+import { SchemaValidationCache } from "../schemas/schema_cache";
+import { Schemas } from '../schemas';
 import {
-  SchemaValidationError,
-  ChecksumMismatchError,
-  SignatureVerificationError,
-  ProjectRootError
+  SchemaValidationError
 } from "./common";
-import { calculatePayloadChecksum } from "../crypto/checksum";
-import { verifySignatures } from "../crypto/signatures";
+import type { ValidationResult } from './errors';
+import { validateFullEmbeddedMetadataRecord } from './embedded_metadata_validator';
 
 // --- Schema Validation ---
-let _schemaPath: string | null = null;
-
-function getSchemaPath(): string {
-  if (!_schemaPath) {
-    const root = ConfigManager.findProjectRoot();
-    if (!root) {
-      throw new ProjectRootError();
-    }
-    _schemaPath = path.join(root, "packages/blueprints/03_products/protocol/04_task/task_record_schema.yaml");
-  }
-  return _schemaPath;
-}
-
 export function validateTaskRecordSchema(
   data: unknown
 ): [boolean, ValidateFunction["errors"]] {
-  const validateSchema = SchemaValidationCache.getValidator(getSchemaPath());
+  const validateSchema = SchemaValidationCache.getValidatorFromSchema(Schemas.TaskRecord);
   const isValid = validateSchema(data) as boolean;
   return [isValid, validateSchema.errors];
 }
@@ -39,7 +22,7 @@ export function validateTaskRecordSchema(
  * Type guard to check if data is a valid TaskRecord.
  */
 export function isTaskRecord(data: unknown): data is TaskRecord {
-  const validateSchema = SchemaValidationCache.getValidator(getSchemaPath());
+  const validateSchema = SchemaValidationCache.getValidatorFromSchema(Schemas.TaskRecord);
   return validateSchema(data) as boolean;
 }
 
@@ -47,14 +30,7 @@ export function isTaskRecord(data: unknown): data is TaskRecord {
  * Validates a TaskRecord and returns detailed validation result.
  * Use this in factories and adapters for comprehensive error reporting.
  */
-export function validateTaskRecordDetailed(data: unknown): {
-  isValid: boolean;
-  errors: Array<{
-    field: string;
-    message: string;
-    value: unknown;
-  }>;
-} {
+export function validateTaskRecordDetailed(data: unknown): ValidationResult {
   const [isValid, ajvErrors] = validateTaskRecordSchema(data);
 
   const formattedErrors = ajvErrors ? ajvErrors.map(error => ({
@@ -88,18 +64,6 @@ export async function validateFullTaskRecord(
     );
   }
 
-  // 2. Checksum Validation
-  const expectedChecksum = calculatePayloadChecksum(record.payload);
-  if (expectedChecksum !== record.header.payloadChecksum) {
-    throw new ChecksumMismatchError();
-  }
-
-  // 3. Signature Verification
-  const areSignaturesValid = await verifySignatures(
-    record,
-    getActorPublicKey
-  );
-  if (!areSignaturesValid) {
-    throw new SignatureVerificationError();
-  }
+  // 2. Embedded Metadata Validation (header + wrapper)
+  await validateFullEmbeddedMetadataRecord(record, getActorPublicKey);
 }

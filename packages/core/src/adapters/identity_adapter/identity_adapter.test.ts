@@ -1,7 +1,7 @@
 import { IdentityAdapter } from './index';
-import type { ActorRecord } from '../../types/actor_record';
-import type { AgentRecord } from '../../types/agent_record';
-import type { GitGovRecord } from '../../models';
+import type { ActorRecord } from '../../types';
+import type { AgentRecord } from '../../types';
+import type { GitGovRecord } from '../../types';
 import { RecordStore } from '../../store/record_store';
 import { createActorRecord } from '../../factories/actor_factory';
 import { validateFullActorRecord } from '../../validation/actor_validator';
@@ -28,7 +28,7 @@ const mockedSignPayload = signPayload as jest.MockedFunction<typeof signPayload>
 const mockedCalculatePayloadChecksum = calculatePayloadChecksum as jest.MockedFunction<typeof calculatePayloadChecksum>;
 const mockedGenerateActorId = generateActorId as jest.MockedFunction<typeof generateActorId>;
 
-import type { IEventStream } from '../../modules/event_bus_module';
+import type { IEventStream } from '../../event_bus';
 
 // Mock event bus interface
 interface MockEventBus extends IEventStream {
@@ -45,8 +45,6 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
   let mockActorStore: jest.Mocked<RecordStore<ActorRecord>>;
   let mockAgentStore: jest.Mocked<RecordStore<AgentRecord>>;
   let mockEventBus: MockEventBus;
-
-  const testRoot = '/tmp/test-gitgov';
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -689,7 +687,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
         source: 'identity_adapter',
         payload: {
           actorId: 'human:test-user',
-          actorType: 'human',
+          type: 'human',
           publicKey: 'sample-public-key',
           roles: ['author'],
           isBootstrap: true,

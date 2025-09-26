@@ -1,10 +1,9 @@
 import { createFeedbackRecord } from '../../factories/feedback_factory';
 import { RecordStore } from '../../store';
 import { IdentityAdapter } from '../identity_adapter';
-import { publishEvent } from '../../modules/event_bus_module';
-import type { FeedbackRecord } from '../../types/feedback_record';
-import type { IEventStream, FeedbackCreatedEvent, FeedbackStatusChangedEvent } from '../../modules/event_bus_module';
-import type { GitGovRecord } from '../../models';
+import type { FeedbackRecord } from '../../types';
+import type { IEventStream, FeedbackCreatedEvent, FeedbackStatusChangedEvent } from '../../event_bus';
+import type { GitGovRecord } from '../../types';
 
 /**
  * FeedbackAdapter Dependencies - Facade + Dependency Injection Pattern
@@ -124,9 +123,13 @@ export class FeedbackAdapter implements IFeedbackAdapter {
         source: 'feedback_adapter',
         payload: {
           feedbackId: validatedPayload.id,
+          entityType: validatedPayload.entityType,
           entityId: validatedPayload.entityId,
-          actorId,
-          feedbackType: (validatedPayload as FeedbackRecord).type
+          type: validatedPayload.type,
+          status: validatedPayload.status,
+          content: validatedPayload.content,
+          triggeredBy: actorId,
+          assignee: validatedPayload.assignee
         },
       } as FeedbackCreatedEvent);
 
@@ -185,10 +188,10 @@ export class FeedbackAdapter implements IFeedbackAdapter {
         source: 'feedback_adapter',
         payload: {
           feedbackId: updatedPayload.id,
-          entityId: updatedPayload.entityId,
-          actorId,
-          oldStatus: 'open',
-          newStatus: 'resolved'
+          oldStatus: existingRecord.payload.status,
+          newStatus: updatedPayload.status,
+          triggeredBy: actorId,
+          assignee: updatedPayload.assignee
         },
       } as FeedbackStatusChangedEvent);
 

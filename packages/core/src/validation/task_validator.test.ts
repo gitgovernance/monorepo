@@ -3,8 +3,8 @@ import {
   validateTaskRecordDetailed,
   validateFullTaskRecord
 } from './task_validator';
-import type { TaskRecord } from '../types/task_record';
-import type { GitGovRecord } from '../models';
+import type { TaskRecord } from '../types';
+import type { GitGovRecord } from '../types';
 
 describe('TaskValidator Module', () => {
   const validTaskPayload: TaskRecord = {
@@ -21,15 +21,6 @@ describe('TaskValidator Module', () => {
     status: 'draft',
     priority: 'high',
     description: 'This task is missing a required ID field',
-    tags: ['test']
-  };
-
-  const invalidTaskPayloadWithShortDescription = {
-    id: '1752274500-task-short-desc',
-    title: 'Task with short description',
-    status: 'draft',
-    priority: 'high',
-    description: 'Short', // Too short according to schema (min 10 chars)
     tags: ['test']
   };
 
@@ -66,11 +57,11 @@ describe('TaskValidator Module', () => {
         .rejects.toThrow('TaskRecord payload failed schema validation');
     });
 
-    it('[EARS-2] should throw ChecksumMismatchError for invalid checksum', async () => {
-      // Mock signature verification to return true to isolate checksum test
-      const { verifySignatures } = require('../crypto/signatures');
-      jest.spyOn(require('../crypto/signatures'), 'verifySignatures')
-        .mockResolvedValue(true);
+    it('[EARS-2] should throw error if embedded metadata validation fails', async () => {
+      // Mock embedded metadata validator to throw error
+      const embeddedError = new Error('Embedded metadata validation failed');
+      jest.spyOn(require('./embedded_metadata_validator'), 'validateFullEmbeddedMetadataRecord')
+        .mockRejectedValue(embeddedError);
 
       const recordWithWrongChecksum = {
         ...validRecord,
@@ -81,48 +72,40 @@ describe('TaskValidator Module', () => {
       };
 
       await expect(validateFullTaskRecord(recordWithWrongChecksum, mockGetActorPublicKey))
-        .rejects.toThrow('Payload checksum does not match the header');
+        .rejects.toThrow('Embedded metadata validation failed');
     });
 
-    it('[EARS-3] should throw SignatureVerificationError for invalid signatures', async () => {
-      // Calculate correct checksum to isolate signature test
-      const { calculatePayloadChecksum } = require('../crypto/checksum');
-      const actualChecksum = calculatePayloadChecksum(validRecord.payload);
+    it('[EARS-3] should call validateFullEmbeddedMetadataRecord with correct parameters', async () => {
+      // Mock embedded metadata validator to succeed
+      const { validateFullEmbeddedMetadataRecord } = require('./embedded_metadata_validator');
+      jest.spyOn(require('./embedded_metadata_validator'), 'validateFullEmbeddedMetadataRecord')
+        .mockResolvedValue(undefined);
 
       const recordWithCorrectChecksum = {
         ...validRecord,
         header: {
           ...validRecord.header,
-          payloadChecksum: actualChecksum
+          payloadChecksum: 'valid-checksum'
         }
       };
 
-      // Mock signature verification to return false
-      const { verifySignatures } = require('../crypto/signatures');
-      jest.spyOn(require('../crypto/signatures'), 'verifySignatures')
-        .mockResolvedValue(false);
+      await validateFullTaskRecord(recordWithCorrectChecksum, mockGetActorPublicKey);
 
-      await expect(validateFullTaskRecord(recordWithCorrectChecksum, mockGetActorPublicKey))
-        .rejects.toThrow('Signature verification failed');
+      expect(validateFullEmbeddedMetadataRecord).toHaveBeenCalledWith(recordWithCorrectChecksum, mockGetActorPublicKey);
     });
 
     it('[EARS-4] should complete without errors for a fully valid record', async () => {
-      // Calculate correct checksum and mock valid signature
-      const { calculatePayloadChecksum } = require('../crypto/checksum');
-      const actualChecksum = calculatePayloadChecksum(validRecord.payload);
+      // Mock embedded metadata validator to succeed
+      jest.spyOn(require('./embedded_metadata_validator'), 'validateFullEmbeddedMetadataRecord')
+        .mockResolvedValue(undefined);
 
       const recordWithCorrectChecksum = {
         ...validRecord,
         header: {
           ...validRecord.header,
-          payloadChecksum: actualChecksum
+          payloadChecksum: 'valid-checksum'
         }
       };
-
-      // Mock signature verification to return true
-      const { verifySignatures } = require('../crypto/signatures');
-      jest.spyOn(require('../crypto/signatures'), 'verifySignatures')
-        .mockResolvedValue(true);
 
       await expect(validateFullTaskRecord(recordWithCorrectChecksum, mockGetActorPublicKey))
         .resolves.not.toThrow();

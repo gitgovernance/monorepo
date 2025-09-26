@@ -1,0 +1,83 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "feedback_record_schema.json",
+  "title": "FeedbackRecord",
+  "description": "Canonical schema for feedback records",
+  "additionalProperties": false,
+  "type": "object",
+  "required": [
+    "id",
+    "entityType",
+    "entityId",
+    "type",
+    "status",
+    "content"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^\\d{10}-feedback-[a-z0-9-]{1,50}$",
+      "description": "Unique identifier for the feedback entry"
+    },
+    "entityType": {
+      "type": "string",
+      "enum": [
+        "task",
+        "execution",
+        "changelog",
+        "feedback"
+      ],
+      "description": "The type of entity this feedback refers to"
+    },
+    "entityId": {
+      "type": "string",
+      "description": "The ID of the entity this feedback refers to"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "blocking",
+        "suggestion",
+        "question",
+        "approval",
+        "clarification",
+        "assignment"
+      ],
+      "description": "The semantic intent of the feedback"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "open",
+        "acknowledged",
+        "resolved",
+        "wontfix"
+      ],
+      "description": "The lifecycle status of the feedback"
+    },
+    "content": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 10000,
+      "description": "The content of the feedback"
+    },
+    "assignee": {
+      "type": "string",
+      "description": "The Actor ID of the agent responsible for addressing the feedback"
+    },
+    "resolvesFeedbackId": {
+      "type": "string",
+      "description": "The ID of another feedback record that this one resolves or responds to"
+    }
+  },
+  "examples": [
+    {
+      "id": "1752788100-feedback-blocking-comment",
+      "entityType": "execution",
+      "entityId": "1752642000-exec-subtarea-9-4",
+      "type": "blocking",
+      "status": "open",
+      "content": "Esta implementación no cumple el estándar de rutas REST. Sugiero revisar el spec."
+    }
+  ]
+}

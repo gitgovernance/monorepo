@@ -1,71 +1,55 @@
-import * as path from 'path';
-import type { ChangelogRecord } from '../types/changelog_record';
-import type { GitGovRecord } from '../models';
-/**
- * Validation result interface
- */
-interface ValidationResult {
-  isValid: boolean;
-  errors: ValidationError[];
-}
-
-/**
- * Validation error interface
- */
-interface ValidationError {
-  field: string;
-  message: string;
-  value: unknown;
-}
-import { SchemaValidationCache } from './schema-cache';
-import { calculatePayloadChecksum } from '../crypto/checksum';
-import { verifySignatures } from '../crypto/signatures';
-import { DetailedValidationError, ChecksumMismatchError, SignatureVerificationError } from './common';
-import { ConfigManager } from '../config_manager';
+import type { ValidateFunction, ErrorObject } from "ajv";
+import type { ChangelogRecord } from '../types';
+import type { GitGovRecord } from '../types';
+import type { ValidationResult } from './errors';
+import { SchemaValidationCache } from '../schemas/schema_cache';
+import { DetailedValidationError } from './common';
+import { validateFullEmbeddedMetadataRecord } from './embedded_metadata_validator';
+import { Schemas } from '../schemas';
 
 /**
  * Schema-based validation for ChangelogRecord payload
  */
-export function validateChangelogRecordSchema(data: unknown): ValidationResult {
-  const projectRoot = ConfigManager.findProjectRoot();
-  if (!projectRoot) {
-    throw new Error('Project root not found. Please run from within a Git repository.');
-  }
-
-  const schemaPath = path.join(
-    projectRoot,
-    'packages/blueprints/03_products/protocol/06_changelog/changelog_record_schema.yaml'
-  );
-
-  const validator = SchemaValidationCache.getValidator(schemaPath);
+export function validateChangelogRecordSchema(
+  data: unknown
+): [boolean, ValidateFunction["errors"]] {
+  const validator = SchemaValidationCache.getValidatorFromSchema(Schemas.ChangelogRecord);
   const isValid = validator(data);
 
-  if (!isValid && validator.errors) {
-    const errors: ValidationError[] = validator.errors.map(error => ({
-      field: error.instancePath?.replace('/', '') || error.params?.['missingProperty'] || 'root',
-      message: error.message || 'Unknown validation error',
-      value: error.data
-    }));
-
-    return { isValid: false, errors };
-  }
-
-  return { isValid: true, errors: [] };
+  return [isValid, validator.errors];
 }
 
 /**
  * Type guard to check if data is a valid ChangelogRecord
  */
 export function isChangelogRecord(data: unknown): data is ChangelogRecord {
-  const result = validateChangelogRecordSchema(data);
-  return result.isValid;
+  const [isValid] = validateChangelogRecordSchema(data);
+  return isValid;
 }
 
 /**
  * Detailed validation with field-level error reporting
  */
 export function validateChangelogRecordDetailed(data: unknown): ValidationResult {
-  return validateChangelogRecordSchema(data);
+  const [isValid, errors] = validateChangelogRecordSchema(data);
+
+  if (!isValid && errors) {
+    const formattedErrors = errors.map((error: ErrorObject) => ({
+      field: error.instancePath?.replace('/', '') || error.params?.['missingProperty'] || 'root',
+      message: error.message || 'Unknown validation error',
+      value: error.data
+    }));
+
+    return {
+      isValid: false,
+      errors: formattedErrors
+    };
+  }
+
+  return {
+    isValid: true,
+    errors: []
+  };
 }
 
 /**
@@ -76,20 +60,16 @@ export async function validateFullChangelogRecord(
   getPublicKey: (keyId: string) => Promise<string>
 ): Promise<void> {
   // 1. Validate payload schema
-  const payloadValidation = validateChangelogRecordSchema(record.payload);
-  if (!payloadValidation.isValid) {
-    throw new DetailedValidationError('ChangelogRecord', payloadValidation.errors);
+  const [isValid, errors] = validateChangelogRecordSchema(record.payload);
+  if (!isValid) {
+    const formattedErrors = (errors || []).map((error: ErrorObject) => ({
+      field: error.instancePath?.replace('/', '') || error.params?.['missingProperty'] || 'root',
+      message: error.message || 'Unknown validation error',
+      value: error.data
+    }));
+    throw new DetailedValidationError('ChangelogRecord', formattedErrors);
   }
 
-  // 2. Verify payload checksum
-  const expectedChecksum = calculatePayloadChecksum(record.payload);
-  if (record.header.payloadChecksum !== expectedChecksum) {
-    throw new ChecksumMismatchError();
-  }
-
-  // 3. Verify signatures
-  const isSignatureValid = await verifySignatures(record, getPublicKey);
-  if (!isSignatureValid) {
-    throw new SignatureVerificationError();
-  }
+  // 2. Embedded Metadata Validation (header + wrapper)
+  await validateFullEmbeddedMetadataRecord(record, getPublicKey);
 }

@@ -1,12 +1,11 @@
 import { createChangelogRecord } from '../../factories/changelog_factory';
 import { RecordStore } from '../../store';
 import { IdentityAdapter } from '../identity_adapter';
-import { publishEvent } from '../../modules/event_bus_module';
-import type { ChangelogRecord } from '../../types/changelog_record';
-import type { TaskRecord } from '../../types/task_record';
-import type { CycleRecord } from '../../types/cycle_record';
-import type { IEventStream, ChangelogCreatedEvent } from '../../modules/event_bus_module';
-import type { GitGovRecord } from '../../models';
+import type { ChangelogRecord } from '../../types';
+import type { TaskRecord } from '../../types';
+import type { CycleRecord } from '../../types';
+import type { IEventStream, ChangelogCreatedEvent } from '../../event_bus';
+import type { GitGovRecord } from '../../types';
 
 /**
  * ChangelogAdapter Dependencies - Facade + Dependency Injection Pattern
@@ -177,8 +176,10 @@ export class ChangelogAdapter implements IChangelogAdapter {
           entityId: validatedPayload.entityId,
           entityType: validatedPayload.entityType,
           changeType: validatedPayload.changeType,
-          actorId,
-          riskLevel: validatedPayload.riskLevel
+          triggeredBy: actorId,
+          riskLevel: validatedPayload.riskLevel,
+          title: validatedPayload.title,
+          trigger: validatedPayload.trigger
         },
       } as ChangelogCreatedEvent);
 

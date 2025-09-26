@@ -1,5 +1,5 @@
 import { createAgentRecord } from './agent_factory';
-import type { AgentRecord } from '../types/agent_record';
+import type { AgentRecord } from '../types';
 import { DetailedValidationError } from '../validation/common';
 
 // Mock the validator to control test outcomes

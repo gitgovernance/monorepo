@@ -1,0 +1,39 @@
+/**
+ * This file was automatically generated from execution_record_schema.json.
+ * DO NOT MODIFY IT BY HAND. Instead, modify the source schema,
+ * and run 'pnpm compile:types' to regenerate this file.
+ */
+
+/**
+ * Canonical schema for execution log records
+ */
+export interface ExecutionRecord {
+  /**
+   * Unique identifier for the execution log entry
+   */
+  id: string;
+  /**
+   * ID of the parent task
+   */
+  taskId: string;
+  /**
+   * Semantic classification of the execution event
+   */
+  type?: 'analysis' | 'progress' | 'blocker' | 'completion' | 'info' | 'correction';
+  /**
+   * Human-readable title for the execution
+   */
+  title?: string;
+  /**
+   * The tangible, verifiable output or result of the execution
+   */
+  result: string;
+  /**
+   * Optional comments about decisions, blockers or context
+   */
+  notes?: string;
+  /**
+   * List of URIs to relevant commits, files, or external documents
+   */
+  references?: string[];
+}

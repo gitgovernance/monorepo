@@ -3,14 +3,14 @@ import * as fsSync from 'fs';
 import * as path from 'path';
 import { RecordStore } from '../../store';
 import { MetricsAdapter } from '../metrics_adapter';
-import type { TaskRecord } from '../../types/task_record';
-import type { CycleRecord } from '../../types/cycle_record';
-import type { FeedbackRecord } from '../../types/feedback_record';
-import type { ExecutionRecord } from '../../types/execution_record';
-import type { ChangelogRecord } from '../../types/changelog_record';
-import type { ActorRecord } from '../../types/actor_record';
-import type { SystemStatus, TaskHealthReport, ProductivityMetrics, CollaborationMetrics } from '../metrics_adapter';
-import type { ActivityEvent } from '../../modules/event_bus_module';
+import type { TaskRecord } from '../../types';
+import type { CycleRecord } from '../../types';
+import type { FeedbackRecord } from '../../types';
+import type { ExecutionRecord } from '../../types';
+import type { ChangelogRecord } from '../../types';
+import type { ActorRecord } from '../../types';
+import type { SystemStatus, ProductivityMetrics, CollaborationMetrics } from '../metrics_adapter';
+import type { ActivityEvent } from '../../event_bus';
 
 // Type for all records collection
 export type AllRecords = {

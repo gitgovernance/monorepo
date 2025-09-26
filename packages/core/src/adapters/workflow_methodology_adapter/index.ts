@@ -1,13 +1,14 @@
-import * as fs from 'fs/promises';
-import * as path from 'path';
-import type { WorkflowMethodologyRecord } from '../../types/workflow_methodology_record';
-import type { TaskRecord } from '../../types/task_record';
-import type { ActorRecord } from '../../types/actor_record';
-import type { FeedbackRecord } from '../../types/feedback_record';
-import type { CycleRecord } from '../../types/cycle_record';
-import type { Signature } from '../../models/embedded.types';
-import { ConfigManager } from '../../config_manager';
-import { RecordStore } from '../../store';
+import type { WorkflowMethodologyRecord } from '../../types';
+import type { TaskRecord } from '../../types';
+import type { ActorRecord } from '../../types';
+import type { FeedbackRecord } from '../../types';
+import type { CycleRecord } from '../../types';
+import type { Signature } from '../../types/embedded.types';
+import { Schemas } from '../../schemas';
+import { SchemaValidationCache } from '../../schemas/schema_cache';
+import type { IFeedbackAdapter } from '../feedback_adapter';
+import defaultConfig from './workflow_methodology_default.json';
+import scrumConfig from './workflow_methodology_scrum.json';
 
 type TaskStatus = TaskRecord['status'];
 
@@ -24,37 +25,28 @@ export type ValidationContext = {
 
 type TransitionRule = {
   to: TaskStatus;
-  conditions: NonNullable<WorkflowMethodologyRecord['state_transitions']>[string]['requires'];
+  conditions: NonNullable<NonNullable<WorkflowMethodologyRecord['state_transitions']>[string]>['requires'] | undefined;
 }
 
 type ViewConfig = NonNullable<WorkflowMethodologyRecord['view_configs']>[string];
-
-
-/**
- * WorkflowMethodologyAdapter Dependencies - Facade + Dependency Injection Pattern
- * EXACTAMENTE como especifica el blueprint sección 6
- */
-export interface WorkflowMethodologyAdapterDependencies {
-  // Configuration Layer
-  configPath?: string; // ✅ DISPONIBLE: Path to methodology JSON file
-
-  // Infrastructure Layer  
-  // No eventBus needed - methodology doesn't emit events
-
-  // Optional: Cross-adapter dependencies (graceful degradation)
-  feedbackStore?: RecordStore<FeedbackRecord>; // Para assignment_required validation
-  cycleStore?: RecordStore<CycleRecord>; // Para sprint_capacity validation
-}
 
 export interface IWorkflowMethodology {
   getTransitionRule(from: TaskStatus, to: TaskStatus, context: ValidationContext): Promise<TransitionRule | null>;
   validateSignature(signature: Signature, context: ValidationContext): Promise<boolean>;
   validateCustomRules(rules: string[], context: ValidationContext): Promise<boolean>;
   getViewConfig(viewName: string): Promise<ViewConfig | null>;
-  reloadConfig(): Promise<void>;
-  loadMethodologyConfig(filePath: string): Promise<WorkflowMethodologyRecord>;
-  validateMethodologyConfig(config: WorkflowMethodologyRecord): { isValid: boolean; errors?: string[] };
   getAvailableTransitions(from: TaskStatus): Promise<TransitionRule[]>;
+}
+
+/**
+ * WorkflowMethodologyAdapter Dependencies - Facade + Dependency Injection Pattern
+ */
+export interface WorkflowMethodologyAdapterDependencies {
+  // Configuration Layer
+  config: WorkflowMethodologyRecord; // ✅ Direct config object (validated)
+
+  // Required: Cross-adapter dependencies (critical for custom rules)
+  feedbackAdapter: IFeedbackAdapter; // Para assignment_required validation
 }
 
 /**
@@ -64,55 +56,43 @@ export interface IWorkflowMethodology {
  * Acts as Mediator between business rules and workflow validation.
  */
 export class WorkflowMethodologyAdapter implements IWorkflowMethodology {
-  private config: WorkflowMethodologyRecord | null = null;
-  private configPath: string;
-  private feedbackStore: RecordStore<FeedbackRecord> | undefined;
-  private cycleStore: RecordStore<CycleRecord> | undefined;
+  private config: WorkflowMethodologyRecord;
 
-  // Constructor siguiendo blueprint - backward compatible
-  constructor(configPathOrDependencies?: string | WorkflowMethodologyAdapterDependencies) {
-    // Handle both old (string) and new (dependencies) constructor patterns
-    if (typeof configPathOrDependencies === 'string') {
-      // Old pattern: constructor(configPath?: string)
-      this.configPath = configPathOrDependencies;
-    } else if (configPathOrDependencies && typeof configPathOrDependencies === 'object') {
-      // New pattern: constructor(dependencies: WorkflowMethodologyAdapterDependencies)
-      const deps = configPathOrDependencies;
-      this.configPath = deps.configPath || this.getDefaultConfigPath();
-      this.feedbackStore = deps.feedbackStore;
-      this.cycleStore = deps.cycleStore;
-    } else {
-      // No arguments - use defaults
-      this.configPath = this.getDefaultConfigPath();
-    }
+  constructor(dependencies: WorkflowMethodologyAdapterDependencies) {
+    this.validateConfig(dependencies.config, dependencies.config.name || 'custom');
+    this.config = dependencies.config;
   }
 
-  private getDefaultConfigPath(): string {
-    const projectRoot = ConfigManager.findProjectRoot();
-    if (!projectRoot) {
-      throw new Error('Project root not found. Please run from within a Git repository.');
+  // Factory methods para configuraciones predefinidas
+  static createDefault(feedbackAdapter: IFeedbackAdapter): WorkflowMethodologyAdapter {
+    return new WorkflowMethodologyAdapter({
+      config: defaultConfig as unknown as WorkflowMethodologyRecord,
+      feedbackAdapter
+    });
+  }
+
+  static createScrum(feedbackAdapter: IFeedbackAdapter): WorkflowMethodologyAdapter {
+    return new WorkflowMethodologyAdapter({
+      config: scrumConfig as unknown as WorkflowMethodologyRecord,
+      feedbackAdapter
+    });
+  }
+
+  private validateConfig(config: WorkflowMethodologyRecord, configName: string): void {
+    const validator = SchemaValidationCache.getValidatorFromSchema(Schemas.WorkflowMethodologyRecord);
+    const isValid = validator(config);
+
+    if (!isValid) {
+      const errors = validator.errors?.map(err => `${err.instancePath}: ${err.message}`).join(', ') || 'Unknown validation error';
+      throw new Error(`Invalid ${configName} configuration: ${errors}`);
     }
-    return path.join(
-      projectRoot,
-      'packages/blueprints/03_products/core/specs/adapters/workflow_methodology_adapter/workflow_methodology_default.json'
-    );
   }
 
   /**
-   * Loads the methodology configuration from JSON file
+   * Gets the current configuration (already loaded and validated)
    */
-  private async loadConfig(): Promise<WorkflowMethodologyRecord> {
-    if (this.config) {
-      return this.config;
-    }
-
-    try {
-      const configData = await fs.readFile(this.configPath, 'utf-8');
-      this.config = JSON.parse(configData) as WorkflowMethodologyRecord;
-      return this.config!;
-    } catch (error) {
-      throw new Error(`Failed to load methodology config from ${this.configPath}: ${error}`);
-    }
+  private getConfig(): WorkflowMethodologyRecord {
+    return this.config;
   }
 
   /**
@@ -126,8 +106,8 @@ export class WorkflowMethodologyAdapter implements IWorkflowMethodology {
   /**
    * Determines if a state transition is legal according to the methodology
    */
-  async getTransitionRule(from: TaskStatus, to: TaskStatus, context: ValidationContext): Promise<TransitionRule | null> {
-    const config = await this.loadConfig();
+  async getTransitionRule(from: TaskStatus, to: TaskStatus, _context: ValidationContext): Promise<TransitionRule | null> {
+    const config = this.getConfig();
 
     // Look for transition rule in configuration
     const transitionConfig = config.state_transitions?.[to];
@@ -151,7 +131,7 @@ export class WorkflowMethodologyAdapter implements IWorkflowMethodology {
    * Validates if an actor's signature meets the requirements for a transition
    */
   async validateSignature(signature: Signature, context: ValidationContext): Promise<boolean> {
-    const config = await this.loadConfig();
+    const config = this.getConfig();
     const guild = this.getTaskGuild(context);
 
     if (!context.transitionTo) {
@@ -210,57 +190,15 @@ export class WorkflowMethodologyAdapter implements IWorkflowMethodology {
    * Gets view configuration for mapping states to visual columns
    */
   async getViewConfig(viewName: string): Promise<ViewConfig | null> {
-    const config = await this.loadConfig();
+    const config = this.getConfig();
     return config.view_configs?.[viewName] || null;
   }
-
-  /**
-   * Loads methodology configuration from specific file path
-   */
-  async loadMethodologyConfig(filePath: string): Promise<WorkflowMethodologyRecord> {
-    try {
-      const configData = await fs.readFile(filePath, 'utf-8');
-      const config = JSON.parse(configData) as WorkflowMethodologyRecord;
-
-      // Validate against basic requirements
-      const validation = this.validateMethodologyConfig(config);
-      if (!validation.isValid) {
-        throw new Error(`Invalid methodology config: ${validation.errors?.join(', ')}`);
-      }
-
-      return config;
-    } catch (error) {
-      throw new Error(`Failed to load methodology config from ${filePath}: ${error}`);
-    }
-  }
-
-  /**
-   * Validates methodology configuration against schema requirements
-   */
-  validateMethodologyConfig(config: WorkflowMethodologyRecord): { isValid: boolean; errors?: string[] } {
-    const errors: string[] = [];
-
-    // Check required fields
-    if (!config.version) errors.push('version is required');
-    if (!config.name) errors.push('name is required');
-    if (!config.state_transitions) errors.push('state_transitions is required');
-
-    if (errors.length > 0) {
-      return { isValid: false, errors };
-    }
-
-    return { isValid: true };
-  }
-
-
-
-
 
   /**
    * Validates custom rules for a given context
    */
   async validateCustomRules(rules: string[], context: ValidationContext): Promise<boolean> {
-    const config = await this.loadConfig();
+    const config = this.getConfig();
 
     for (const ruleId of rules) {
       const customRule = config.custom_rules?.[ruleId];
@@ -330,16 +268,9 @@ export class WorkflowMethodologyAdapter implements IWorkflowMethodology {
     return true; // All rules passed
   }
 
-  /**
-   * Reloads the methodology configuration from disk
-   */
-  async reloadConfig(): Promise<void> {
-    this.config = null;
-    await this.loadConfig();
-  }
 
   async getAvailableTransitions(from: TaskStatus): Promise<TransitionRule[]> {
-    const config = await this.loadConfig();
+    const config = this.getConfig();
     if (!config.state_transitions) {
       return [];
     }
@@ -357,4 +288,5 @@ export class WorkflowMethodologyAdapter implements IWorkflowMethodology {
     return available;
   }
 }
+
 
