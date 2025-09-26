@@ -1,26 +1,26 @@
 {
   "name": "@gitgovernance/core",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "Universal SDK for the GitGovernance ecosystem, providing a type-safe, local-first API to manage identities, agents, and workflows.",
   "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
   "files": [
     "dist"
   ],
   "scripts": {
     "clean": "rm -rf dist",
-    "prebuild": "pnpm compile:types",
+    "clean:generated": "rm -rf src/schemas/generated/* src/types/generated/*",
+    "sync:schemas": "tsx scripts/sync-schemas.ts",
+    "sync:workflow-configs": "tsx scripts/sync-workflow-configs.ts",
+    "compile:types": "tsx scripts/compile-json-to-types.ts",
+    "generate:indexes": "tsx scripts/generate-indexes.ts",
+    "validate:schemas": "tsx scripts/validate-schemas.ts",
+    "prebuild": "pnpm sync:schemas && pnpm sync:workflow-configs && pnpm compile:types && pnpm generate:indexes",
     "build": "pnpm clean && tsc",
-    "start": "node dist/index.js",
-    "validate:schemas": "sh ./scripts/validate_schemas.sh",
-    "precompile:types": "pnpm validate:schemas",
-    "compile:types": "sh ./scripts/compile_to_types.sh",
-    "prepublishOnly": "pnpm build",
-    "dev": "tsx src/index.ts",
     "test": "jest",
     "test:coverage": "jest --coverage",
-    "update-diagram": "tsx scripts/update-diagram.ts"
+    "prepublishOnly": "pnpm build"
   },
   "keywords": [
     "git",
@@ -46,21 +46,16 @@
     "access": "public"
   },
   "dependencies": {
-    "@types/js-yaml": "^4.0.9",
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",
-    "axios": "^1.7.2",
-    "dotenv": "^17.2.0",
-    "js-yaml": "^4.1.0",
-    "openpgp": "^5.11.1"
+    "js-yaml": "^4.1.0"
   },
   "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
     "@types/jest": "^29.5.14",
     "@types/node": "^22.18.0",
-    "ajv-cli": "^5.0.0",
     "jest": "^29.7.0",
     "json-schema-to-typescript": "^15.0.4",
-    "swagger-cli": "^4.0.4",
     "ts-jest": "^29.1.1",
     "tsx": "^4.20.3",
     "typescript": "^5.8.3"
