@@ -1,0 +1,91 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "actor_record_schema.json",
+  "title": "ActorRecord",
+  "description": "Canonical schema for actor records as defined in actor_protocol.md",
+  "additionalProperties": false,
+  "type": "object",
+  "required": [
+    "id",
+    "type",
+    "displayName",
+    "publicKey",
+    "roles"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^(human|agent)(:[a-z0-9-]+)+$",
+      "description": "Unique, human-readable identifier for the actor.",
+      "examples": [
+        "human:camilo",
+        "agent:aion",
+        "agent:camilo:cursor"
+      ]
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "human",
+        "agent"
+      ],
+      "description": "The type of actor."
+    },
+    "displayName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100,
+      "description": "The name of the actor to be used in user interfaces."
+    },
+    "publicKey": {
+      "type": "string",
+      "description": "The Ed25519 public key (base64 encoded) for verifying the actor's signatures."
+    },
+    "roles": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9:]+$"
+      },
+      "minItems": 1,
+      "uniqueItems": true,
+      "description": "List of capacity roles defining the actor's skills and permissions.",
+      "examples": [
+        [
+          "developer:backend:go",
+          "auditor"
+        ],
+        [
+          "planner:ai"
+        ]
+      ]
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "revoked"
+      ],
+      "default": "active",
+      "description": "The lifecycle status of the actor."
+    },
+    "supersededBy": {
+      "type": "string",
+      "pattern": "^(human|agent)(:[a-z0-9-]+)+$",
+      "description": "Optional. The ID of the actor that replaces this one."
+    },
+    "metadata": {
+      "type": "object",
+      "description": "An optional field for additional, non-canonical metadata.",
+      "examples": [
+        {
+          "version": "1.2.0",
+          "source": "https://github.com/..."
+        },
+        {
+          "team": "frontend"
+        }
+      ]
+    }
+  }
+}
