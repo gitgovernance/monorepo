@@ -5,7 +5,7 @@
  * Usage: npx tsx packages/core/scripts/diagnose-duplicates.ts
  */
 
-import { DiagramGenerator } from '../src/modules/diagram_generator/index.js';
+import { DiagramGenerator } from '../src/diagram_generator/index.js';
 import { ConfigManager } from '../src/config_manager/index.js';
 import * as path from 'path';
 
