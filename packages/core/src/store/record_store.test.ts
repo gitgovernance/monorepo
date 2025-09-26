@@ -1,17 +1,39 @@
+// Mock IdentityAdapter before importing
+jest.doMock('../adapters/identity_adapter', () => ({
+  IdentityAdapter: jest.fn().mockImplementation(() => ({
+    getActorPublicKey: jest.fn().mockResolvedValue('mock-public-key'),
+    getActor: jest.fn(),
+    createActor: jest.fn(),
+    listActors: jest.fn(),
+    signRecord: jest.fn(),
+    rotateActorKey: jest.fn(),
+    revokeActor: jest.fn(),
+    resolveCurrentActorId: jest.fn(),
+    getCurrentActor: jest.fn(),
+    getEffectiveActorForAgent: jest.fn(),
+    authenticate: jest.fn(),
+    createAgentRecord: jest.fn(),
+    getAgentRecord: jest.fn(),
+    listAgentRecords: jest.fn(),
+  }))
+}));
+
 import { RecordStore } from './record_store';
-import type { ActorRecord } from '../types/actor_record';
-import type { AgentRecord } from '../types/agent_record';
-import type { TaskRecord } from '../types/task_record';
-import type { CycleRecord } from '../types/cycle_record';
-import type { ExecutionRecord } from '../types/execution_record';
-import type { ChangelogRecord } from '../types/changelog_record';
-import type { FeedbackRecord } from '../types/feedback_record';
-import type { GitGovRecord, Signature } from '../models';
+import type { FsDependencies } from './record_store';
+import type { ActorRecord } from '../types';
+import type { AgentRecord } from '../types';
+import type { TaskRecord } from '../types';
+import type { CycleRecord } from '../types';
+import type { ExecutionRecord } from '../types';
+import type { ChangelogRecord } from '../types';
+import type { FeedbackRecord } from '../types';
+import type { GitGovRecord, Signature } from '../types';
 import * as path from 'path';
+import type { Dirent } from 'fs';
 import { createExecutionRecord, createChangelogRecord, createFeedbackRecord } from '../factories';
 
 // This is our hand-made mock for the fs dependencies.
-const mockFs = {
+const mockFs: jest.Mocked<FsDependencies> = {
   mkdir: jest.fn(),
   writeFile: jest.fn(),
   readFile: jest.fn(),
@@ -21,6 +43,28 @@ const mockFs = {
 };
 
 const testRoot = '/tmp/gitgov-test-root';
+
+
+// Helper function to create mock Dirent objects
+const createMockDirent = (name: string, isFile = true) => ({
+  name,
+  isFile: () => isFile,
+  isDirectory: () => !isFile,
+  isBlockDevice: () => false,
+  isCharacterDevice: () => false,
+  isSymbolicLink: () => false,
+  isFIFO: () => false,
+  isSocket: () => false,
+}) as any; // Using any here because Jest mocks are complex to type correctly
+
+// Helper function to create mock Signature objects
+const createMockSignature = (keyId = 'human:test-user'): Signature => ({
+  keyId,
+  role: 'author',
+  signature: 'mock-signature-hash',
+  timestamp: 1704067200000,
+  timestamp_iso: '2024-01-01T00:00:00.000Z'
+});
 
 
 describe('RecordStore<ActorRecord>', () => {
@@ -38,7 +82,7 @@ describe('RecordStore<ActorRecord>', () => {
   beforeEach(() => {
     // Reset mocks before each test to ensure isolation
     jest.restoreAllMocks();
-    actorStore = new RecordStore<ActorRecord>('actors', testRoot, mockFs as any);
+    actorStore = new RecordStore<ActorRecord>('actors', testRoot, mockFs);
   });
 
   const actorPayload: ActorRecord = {
@@ -75,7 +119,7 @@ describe('RecordStore<ActorRecord>', () => {
   });
 
   describe('read', () => {
-    it('[EARS-3] should read an existing record', async () => {
+    it('[EARS-5] should read an existing record', async () => {
       const mockContent = JSON.stringify(actorRecord);
       mockFs.readFile.mockResolvedValue(mockContent);
       const readData = await actorStore.read(actorPayload.id);
@@ -83,7 +127,7 @@ describe('RecordStore<ActorRecord>', () => {
       expect(readData).toEqual(actorRecord);
     });
 
-    it('[EARS-4] should return null if the record does not exist', async () => {
+    it('[EARS-6] should return null if the record does not exist', async () => {
       const error = new Error('File not found') as NodeJS.ErrnoException;
       error.code = 'ENOENT';
       mockFs.readFile.mockRejectedValue(error);
@@ -93,7 +137,7 @@ describe('RecordStore<ActorRecord>', () => {
   });
 
   describe('delete', () => {
-    it('[EARS-5] should delete an existing file', async () => {
+    it('[EARS-10] should delete an existing file', async () => {
       mockFs.unlink.mockResolvedValue(undefined);
       await actorStore.delete(actorPayload.id);
       expect(mockFs.unlink).toHaveBeenCalledWith(expectedPath);
@@ -101,15 +145,15 @@ describe('RecordStore<ActorRecord>', () => {
   });
 
   describe('list', () => {
-    it('[EARS-6] should list all record IDs from the directory', async () => {
+    it('[EARS-11] should list all record IDs from the directory', async () => {
       // Mock the simplest case: readdir returns Dirent objects with just the properties we need
       const mockFiles = [
-        { name: 'human_test-user.json', isFile: () => true },
-        { name: 'agent_another.json', isFile: () => true },
-        { name: 'not-json.txt', isFile: () => true },
-        { name: 'a-directory', isFile: () => false, isDirectory: () => true },
+        createMockDirent('human_test-user.json'),
+        createMockDirent('agent_another.json'),
+        createMockDirent('not-json.txt'),
+        createMockDirent('a-directory', false),
       ];
-      mockFs.readdir.mockResolvedValue(mockFiles);
+      mockFs.readdir.mockResolvedValue(mockFiles as any);
       const ids = await actorStore.list();
       expect(mockFs.readdir).toHaveBeenCalledWith(actorsDir, { withFileTypes: true });
       expect(ids).toEqual(['human:test-user', 'agent:another']);
@@ -117,14 +161,14 @@ describe('RecordStore<ActorRecord>', () => {
   });
 
   describe('exists', () => {
-    it('[EARS-7] should return true if a record exists', async () => {
+    it('[EARS-12] should return true if a record exists', async () => {
       mockFs.access.mockResolvedValue(undefined);
       const result = await actorStore.exists(actorPayload.id);
       expect(mockFs.access).toHaveBeenCalled();
       expect(result).toBe(true);
     });
 
-    it('[EARS-8] should return false if a record does not exist', async () => {
+    it('[EARS-13] should return false if a record does not exist', async () => {
       mockFs.access.mockRejectedValue(new Error('ENOENT'));
       const result = await actorStore.exists('non-existent');
       expect(result).toBe(false);
@@ -142,7 +186,7 @@ describe('RecordStore<AgentRecord>', () => {
   beforeEach(() => {
     // Reset mocks before each test to ensure isolation
     jest.restoreAllMocks();
-    agentStore = new RecordStore<AgentRecord>('agents', testRoot, mockFs as any);
+    agentStore = new RecordStore<AgentRecord>('agents', testRoot, mockFs);
   });
 
   const agentPayload: AgentRecord = {
@@ -179,7 +223,7 @@ describe('RecordStore<AgentRecord>', () => {
   });
 
   describe('read', () => {
-    it('[EARS-3] should read an existing agent record', async () => {
+    it('[EARS-5] should read an existing agent record', async () => {
       const mockContent = JSON.stringify(agentRecord);
       mockFs.readFile.mockResolvedValue(mockContent);
       const readData = await agentStore.read(agentPayload.id);
@@ -187,7 +231,7 @@ describe('RecordStore<AgentRecord>', () => {
       expect(readData).toEqual(agentRecord);
     });
 
-    it('[EARS-4] should return null if the agent record does not exist', async () => {
+    it('[EARS-6] should return null if the agent record does not exist', async () => {
       const error = new Error('File not found') as NodeJS.ErrnoException;
       error.code = 'ENOENT';
       mockFs.readFile.mockRejectedValue(error);
@@ -197,7 +241,7 @@ describe('RecordStore<AgentRecord>', () => {
   });
 
   describe('delete', () => {
-    it('[EARS-5] should delete an existing agent file', async () => {
+    it('[EARS-10] should delete an existing agent file', async () => {
       mockFs.unlink.mockResolvedValue(undefined);
       await agentStore.delete(agentPayload.id);
       expect(mockFs.unlink).toHaveBeenCalledWith(expectedAgentPath);
@@ -205,14 +249,14 @@ describe('RecordStore<AgentRecord>', () => {
   });
 
   describe('list', () => {
-    it('[EARS-6] should list all agent record IDs from the directory', async () => {
+    it('[EARS-11] should list all agent record IDs from the directory', async () => {
       const mockFiles = [
-        { name: 'agent_test-agent.json', isFile: () => true },
-        { name: 'agent_design-bot.json', isFile: () => true },
-        { name: 'not-json.txt', isFile: () => true },
-        { name: 'a-directory', isFile: () => false, isDirectory: () => true },
+        createMockDirent('agent_test-agent.json'),
+        createMockDirent('agent_design-bot.json'),
+        createMockDirent('not-json.txt'),
+        createMockDirent('a-directory', false),
       ];
-      mockFs.readdir.mockResolvedValue(mockFiles);
+      mockFs.readdir.mockResolvedValue(mockFiles as any);
       const ids = await agentStore.list();
       expect(mockFs.readdir).toHaveBeenCalledWith(agentsDir, { withFileTypes: true });
       expect(ids).toEqual(['agent:test-agent', 'agent:design-bot']);
@@ -220,14 +264,14 @@ describe('RecordStore<AgentRecord>', () => {
   });
 
   describe('exists', () => {
-    it('[EARS-7] should return true if an agent record exists', async () => {
+    it('[EARS-12] should return true if an agent record exists', async () => {
       mockFs.access.mockResolvedValue(undefined);
       const result = await agentStore.exists(agentPayload.id);
       expect(mockFs.access).toHaveBeenCalled();
       expect(result).toBe(true);
     });
 
-    it('[EARS-8] should return false if an agent record does not exist', async () => {
+    it('[EARS-13] should return false if an agent record does not exist', async () => {
       mockFs.access.mockRejectedValue(new Error('ENOENT'));
       const result = await agentStore.exists('agent:non-existent');
       expect(result).toBe(false);
@@ -243,7 +287,7 @@ describe('RecordStore<TaskRecord>', () => {
 
   beforeEach(() => {
     jest.restoreAllMocks();
-    taskStore = new RecordStore<TaskRecord>('tasks', testRoot, mockFs as any);
+    taskStore = new RecordStore<TaskRecord>('tasks', testRoot, mockFs);
   });
 
   const taskPayload: TaskRecord = {
@@ -279,7 +323,7 @@ describe('RecordStore<TaskRecord>', () => {
   });
 
   describe('read', () => {
-    it('[EARS-3] should read an existing task record', async () => {
+    it('[EARS-5] should read an existing task record', async () => {
       const mockContent = JSON.stringify(taskRecord);
       mockFs.readFile.mockResolvedValue(mockContent);
       const readData = await taskStore.read(taskPayload.id);
@@ -287,7 +331,7 @@ describe('RecordStore<TaskRecord>', () => {
       expect(readData).toEqual(taskRecord);
     });
 
-    it('[EARS-4] should return null if the task record does not exist', async () => {
+    it('[EARS-6] should return null if the task record does not exist', async () => {
       const error = new Error('File not found') as NodeJS.ErrnoException;
       error.code = 'ENOENT';
       mockFs.readFile.mockRejectedValue(error);
@@ -297,14 +341,14 @@ describe('RecordStore<TaskRecord>', () => {
   });
 
   describe('list', () => {
-    it('[EARS-6] should list all task record IDs from the directory', async () => {
+    it('[EARS-11] should list all task record IDs from the directory', async () => {
       const mockFiles = [
-        { name: '1752274500-task-test-task.json', isFile: () => true },
-        { name: '1752360900-task-another-task.json', isFile: () => true },
-        { name: 'not-json.txt', isFile: () => true },
-        { name: 'a-directory', isFile: () => false, isDirectory: () => true },
+        createMockDirent('1752274500-task-test-task.json'),
+        createMockDirent('1752360900-task-another-task.json'),
+        createMockDirent('not-json.txt'),
+        createMockDirent('a-directory', false),
       ];
-      mockFs.readdir.mockResolvedValue(mockFiles);
+      mockFs.readdir.mockResolvedValue(mockFiles as any);
       const ids = await taskStore.list();
       expect(mockFs.readdir).toHaveBeenCalledWith(tasksDir, { withFileTypes: true });
       expect(ids).toEqual(['1752274500-task-test-task', '1752360900-task-another-task']);
@@ -312,14 +356,14 @@ describe('RecordStore<TaskRecord>', () => {
   });
 
   describe('exists', () => {
-    it('[EARS-7] should return true if a task record exists', async () => {
+    it('[EARS-12] should return true if a task record exists', async () => {
       mockFs.access.mockResolvedValue(undefined);
       const result = await taskStore.exists(taskPayload.id);
       expect(mockFs.access).toHaveBeenCalled();
       expect(result).toBe(true);
     });
 
-    it('[EARS-8] should return false if a task record does not exist', async () => {
+    it('[EARS-13] should return false if a task record does not exist', async () => {
       mockFs.access.mockRejectedValue(new Error('ENOENT'));
       const result = await taskStore.exists('1752274500-task-non-existent');
       expect(result).toBe(false);
@@ -335,7 +379,7 @@ describe('RecordStore<CycleRecord>', () => {
 
   beforeEach(() => {
     jest.restoreAllMocks();
-    cycleStore = new RecordStore<CycleRecord>('cycles', testRoot, mockFs as any);
+    cycleStore = new RecordStore<CycleRecord>('cycles', testRoot, mockFs);
   });
 
   const cyclePayload: CycleRecord = {
@@ -371,7 +415,7 @@ describe('RecordStore<CycleRecord>', () => {
   });
 
   describe('read', () => {
-    it('[EARS-3] should read an existing cycle record', async () => {
+    it('[EARS-5] should read an existing cycle record', async () => {
       const mockContent = JSON.stringify(cycleRecord);
       mockFs.readFile.mockResolvedValue(mockContent);
       const readData = await cycleStore.read(cyclePayload.id);
@@ -379,7 +423,7 @@ describe('RecordStore<CycleRecord>', () => {
       expect(readData).toEqual(cycleRecord);
     });
 
-    it('[EARS-4] should return null if the cycle record does not exist', async () => {
+    it('[EARS-6] should return null if the cycle record does not exist', async () => {
       const error = new Error('File not found') as NodeJS.ErrnoException;
       error.code = 'ENOENT';
       mockFs.readFile.mockRejectedValue(error);
@@ -389,14 +433,14 @@ describe('RecordStore<CycleRecord>', () => {
   });
 
   describe('list', () => {
-    it('[EARS-6] should list all cycle record IDs from the directory', async () => {
+    it('[EARS-11] should list all cycle record IDs from the directory', async () => {
       const mockFiles = [
-        { name: '1754400000-cycle-test-cycle.json', isFile: () => true },
-        { name: '1754500000-cycle-another-cycle.json', isFile: () => true },
-        { name: 'not-json.txt', isFile: () => true },
-        { name: 'a-directory', isFile: () => false, isDirectory: () => true },
+        createMockDirent('1754400000-cycle-test-cycle.json'),
+        createMockDirent('1754500000-cycle-another-cycle.json'),
+        createMockDirent('not-json.txt'),
+        createMockDirent('a-directory', false),
       ];
-      mockFs.readdir.mockResolvedValue(mockFiles);
+      mockFs.readdir.mockResolvedValue(mockFiles as any);
       const ids = await cycleStore.list();
       expect(mockFs.readdir).toHaveBeenCalledWith(cyclesDir, { withFileTypes: true });
       expect(ids).toEqual(['1754400000-cycle-test-cycle', '1754500000-cycle-another-cycle']);
@@ -404,14 +448,14 @@ describe('RecordStore<CycleRecord>', () => {
   });
 
   describe('exists', () => {
-    it('[EARS-7] should return true if a cycle record exists', async () => {
+    it('[EARS-12] should return true if a cycle record exists', async () => {
       mockFs.access.mockResolvedValue(undefined);
       const result = await cycleStore.exists(cyclePayload.id);
       expect(mockFs.access).toHaveBeenCalled();
       expect(result).toBe(true);
     });
 
-    it('[EARS-8] should return false if a cycle record does not exist', async () => {
+    it('[EARS-13] should return false if a cycle record does not exist', async () => {
       mockFs.access.mockRejectedValue(new Error('ENOENT'));
       const result = await cycleStore.exists('1754400000-cycle-non-existent');
       expect(result).toBe(false);
@@ -419,46 +463,201 @@ describe('RecordStore<CycleRecord>', () => {
   });
 });
 
+// --- Validation Methods Tests ---
+// Mock the validation module at the top level
+jest.mock('../validation/embedded_metadata_validator', () => ({
+  validateFullEmbeddedMetadataRecord: jest.fn().mockResolvedValue(undefined)
+}));
+
+import { validateFullEmbeddedMetadataRecord } from '../validation/embedded_metadata_validator';
+const mockValidateFullEmbeddedMetadataRecord = validateFullEmbeddedMetadataRecord as jest.MockedFunction<typeof validateFullEmbeddedMetadataRecord>;
+
+// Global beforeEach to reset validation mock
+beforeEach(() => {
+  mockValidateFullEmbeddedMetadataRecord.mockResolvedValue(undefined);
+});
+
+describe('RecordStore Validation Methods', () => {
+  let actorStore: RecordStore<ActorRecord>;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    actorStore = new RecordStore<ActorRecord>('actors', testRoot, mockFs);
+  });
+
+  const validActorRecord: GitGovRecord & { payload: ActorRecord } = {
+    header: {
+      version: '1.0' as const,
+      type: 'actor' as const,
+      payloadChecksum: 'valid-checksum',
+      signatures: [{ keyId: 'human:test-user', role: 'author', signature: 'sig', timestamp: 1, timestamp_iso: 'd' }] as [Signature, ...Signature[]],
+    },
+    payload: {
+      id: 'human:test-user', type: 'human', displayName: 'Test User',
+      publicKey: 'some-key', roles: ['author'], status: 'active',
+    }
+  };
+
+  describe('write (dumb storage)', () => {
+    it('[EARS-3] should persist record without validation (validation is adapter responsibility)', async () => {
+      mockFs.writeFile.mockResolvedValue(undefined);
+
+      await actorStore.write(validActorRecord);
+
+      expect(mockFs.writeFile).toHaveBeenCalledWith(
+        expect.stringContaining('human_test-user.json'),
+        JSON.stringify(validActorRecord, null, 2),
+        'utf-8'
+      );
+      // RecordStore should NOT call validation - that's adapter responsibility
+      expect(mockValidateFullEmbeddedMetadataRecord).not.toHaveBeenCalled();
+    });
+
+    it('[EARS-4] should persist any record without validation (even invalid ones)', async () => {
+      const invalidRecord = { ...validActorRecord, payload: { ...validActorRecord.payload, id: '' } };
+      mockFs.writeFile.mockResolvedValue(undefined);
+
+      await actorStore.write(invalidRecord);
+
+      expect(mockFs.writeFile).toHaveBeenCalledWith(
+        expect.stringContaining('.json'),
+        JSON.stringify(invalidRecord, null, 2),
+        'utf-8'
+      );
+      // RecordStore should NOT validate - it's "dumb storage"
+      expect(mockValidateFullEmbeddedMetadataRecord).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('read (dumb storage)', () => {
+    it('[EARS-7] should return record without validation (validation is adapter responsibility)', async () => {
+      mockFs.readFile.mockResolvedValue(JSON.stringify(validActorRecord));
+
+      const result = await actorStore.read('human:test-user');
+
+      expect(mockFs.readFile).toHaveBeenCalledWith(
+        expect.stringContaining('human_test-user.json'),
+        'utf-8'
+      );
+      expect(result).toEqual(validActorRecord);
+      // RecordStore should NOT call validation - that's adapter responsibility
+      expect(mockValidateFullEmbeddedMetadataRecord).not.toHaveBeenCalled();
+    });
+
+    it('[EARS-8] should return any record without validation (even invalid ones)', async () => {
+      const invalidRecord = { ...validActorRecord, payload: { ...validActorRecord.payload, id: '' } };
+      mockFs.readFile.mockResolvedValue(JSON.stringify(invalidRecord));
+
+      const result = await actorStore.read('human:test-user');
+
+      expect(mockFs.readFile).toHaveBeenCalled();
+      expect(result).toEqual(invalidRecord);
+      // RecordStore should NOT validate - it's "dumb storage"
+      expect(mockValidateFullEmbeddedMetadataRecord).not.toHaveBeenCalled();
+    });
+
+    it('[EARS-9] should return null when record does not exist', async () => {
+      const error = new Error('File not found') as NodeJS.ErrnoException;
+      error.code = 'ENOENT';
+      mockFs.readFile.mockRejectedValue(error);
+
+      const result = await actorStore.read('non-existent');
+
+      expect(result).toBeNull();
+      expect(mockFs.readFile).toHaveBeenCalled();
+      // Should not call validation for non-existent records
+      expect(mockValidateFullEmbeddedMetadataRecord).not.toHaveBeenCalled();
+    });
+  });
+});
+
 // --- ExecutionRecord Tests ---
 describe('RecordStore<ExecutionRecord>', () => {
   let executionStore: RecordStore<ExecutionRecord>;
-  let mockExecutionRecord: any;
+  let mockExecutionRecord: GitGovRecord & { payload: ExecutionRecord };
 
   beforeEach(async () => {
-    executionStore = new RecordStore('executions', testRoot, mockFs as any);
+    executionStore = new RecordStore('executions', testRoot, mockFs);
     mockExecutionRecord = {
-      header: { type: 'execution', version: '1.0' },
+      header: {
+        type: 'execution',
+        version: '1.0',
+        payloadChecksum: 'a'.repeat(64), // Mock SHA-256 hash
+        signatures: [createMockSignature()]
+      },
       payload: await createExecutionRecord({
         id: '1757460000-exec-test-execution',
         title: 'Test Execution',
         taskId: '1757452191-task-implement-workflow-methodology-adapter',
-        result: 'Completed successfully.', // Added valid result
+        result: 'Completed successfully.',
       }),
     };
   });
 
-  it('[EARS-9] should write an ExecutionRecord', async () => {
+  it('[EARS-1 & EARS-2] should write an ExecutionRecord', async () => {
     await executionStore.write(mockExecutionRecord);
     const expectedPath = path.join('/tmp/gitgov-test-root', '.gitgov', 'executions', '1757460000-exec-test-execution.json');
     expect(mockFs.writeFile).toHaveBeenCalledWith(expectedPath, expect.any(String), 'utf-8');
   });
 
-  it('[EARS-10] should read an ExecutionRecord', async () => {
+  it('[EARS-5] should read an ExecutionRecord', async () => {
     mockFs.readFile.mockResolvedValue(JSON.stringify(mockExecutionRecord));
     const record = await executionStore.read(mockExecutionRecord.payload.id);
     expect(record).toEqual(mockExecutionRecord);
+  });
+
+  it('[EARS-6] should return null if ExecutionRecord does not exist', async () => {
+    const error = new Error('File not found') as NodeJS.ErrnoException;
+    error.code = 'ENOENT';
+    mockFs.readFile.mockRejectedValue(error);
+    const readData = await executionStore.read('non-existent');
+    expect(readData).toBeNull();
+  });
+
+  it('[EARS-10] should delete an ExecutionRecord', async () => {
+    mockFs.unlink.mockResolvedValue(undefined);
+    await executionStore.delete(mockExecutionRecord.payload.id);
+    const expectedPath = path.join('/tmp/gitgov-test-root', '.gitgov', 'executions', '1757460000-exec-test-execution.json');
+    expect(mockFs.unlink).toHaveBeenCalledWith(expectedPath);
+  });
+
+  it('[EARS-11] should list ExecutionRecord IDs', async () => {
+    const mockFiles = [
+      createMockDirent('1757460000-exec-test-execution.json'),
+      createMockDirent('1757460001-exec-another.json'),
+    ] as Dirent[];
+    mockFs.readdir.mockResolvedValue(mockFiles as any);
+    const ids = await executionStore.list();
+    expect(ids).toEqual(['1757460000-exec-test-execution', '1757460001-exec-another']);
+  });
+
+  it('[EARS-12] should return true if ExecutionRecord exists', async () => {
+    mockFs.access.mockResolvedValue(undefined);
+    const result = await executionStore.exists(mockExecutionRecord.payload.id);
+    expect(result).toBe(true);
+  });
+
+  it('[EARS-13] should return false if ExecutionRecord does not exist', async () => {
+    mockFs.access.mockRejectedValue(new Error('ENOENT'));
+    const result = await executionStore.exists('non-existent');
+    expect(result).toBe(false);
   });
 });
 
 // --- ChangelogRecord Tests ---
 describe('RecordStore<ChangelogRecord>', () => {
   let changelogStore: RecordStore<ChangelogRecord>;
-  let mockChangelogRecord: any;
+  let mockChangelogRecord: GitGovRecord & { payload: ChangelogRecord };
 
   beforeEach(async () => {
-    changelogStore = new RecordStore('changelogs', testRoot, mockFs as any);
+    changelogStore = new RecordStore('changelogs', testRoot, mockFs);
     mockChangelogRecord = {
-      header: { type: 'changelog', version: '1.0' },
+      header: {
+        type: 'changelog',
+        version: '1.0',
+        payloadChecksum: 'b'.repeat(64), // Mock SHA-256 hash
+        signatures: [createMockSignature()]
+      },
       payload: await createChangelogRecord({
         id: '1757460001-changelog-task-implement-workflow-methodology-adapter',
         entityType: 'task',
@@ -472,28 +671,70 @@ describe('RecordStore<ChangelogRecord>', () => {
     };
   });
 
-  it('[EARS-11] should write a ChangelogRecord', async () => {
+  it('[EARS-1 & EARS-2] should write a ChangelogRecord', async () => {
     await changelogStore.write(mockChangelogRecord);
     const expectedPath = path.join('/tmp/gitgov-test-root', '.gitgov', 'changelogs', '1757460001-changelog-task-implement-workflow-methodology-adapter.json');
     expect(mockFs.writeFile).toHaveBeenCalledWith(expectedPath, expect.any(String), 'utf-8');
   });
 
-  it('[EARS-12] should read a ChangelogRecord', async () => {
+  it('[EARS-5] should read a ChangelogRecord', async () => {
     mockFs.readFile.mockResolvedValue(JSON.stringify(mockChangelogRecord));
     const record = await changelogStore.read(mockChangelogRecord.payload.id);
     expect(record).toEqual(mockChangelogRecord);
+  });
+
+  it('[EARS-6] should return null if ChangelogRecord does not exist', async () => {
+    const error = new Error('File not found') as NodeJS.ErrnoException;
+    error.code = 'ENOENT';
+    mockFs.readFile.mockRejectedValue(error);
+    const readData = await changelogStore.read('non-existent');
+    expect(readData).toBeNull();
+  });
+
+  it('[EARS-10] should delete a ChangelogRecord', async () => {
+    mockFs.unlink.mockResolvedValue(undefined);
+    await changelogStore.delete(mockChangelogRecord.payload.id);
+    const expectedPath = path.join('/tmp/gitgov-test-root', '.gitgov', 'changelogs', '1757460001-changelog-task-implement-workflow-methodology-adapter.json');
+    expect(mockFs.unlink).toHaveBeenCalledWith(expectedPath);
+  });
+
+  it('[EARS-11] should list ChangelogRecord IDs', async () => {
+    const mockFiles = [
+      createMockDirent('1757460001-changelog-task-implement-workflow-methodology-adapter.json'),
+      createMockDirent('1757460002-changelog-another.json'),
+    ] as Dirent[];
+    mockFs.readdir.mockResolvedValue(mockFiles as any);
+    const ids = await changelogStore.list();
+    expect(ids).toEqual(['1757460001-changelog-task-implement-workflow-methodology-adapter', '1757460002-changelog-another']);
+  });
+
+  it('[EARS-12] should return true if ChangelogRecord exists', async () => {
+    mockFs.access.mockResolvedValue(undefined);
+    const result = await changelogStore.exists(mockChangelogRecord.payload.id);
+    expect(result).toBe(true);
+  });
+
+  it('[EARS-13] should return false if ChangelogRecord does not exist', async () => {
+    mockFs.access.mockRejectedValue(new Error('ENOENT'));
+    const result = await changelogStore.exists('non-existent');
+    expect(result).toBe(false);
   });
 });
 
 // --- FeedbackRecord Tests ---
 describe('RecordStore<FeedbackRecord>', () => {
   let feedbackStore: RecordStore<FeedbackRecord>;
-  let mockFeedbackRecord: any;
+  let mockFeedbackRecord: GitGovRecord & { payload: FeedbackRecord };
 
   beforeEach(async () => {
-    feedbackStore = new RecordStore('feedback', testRoot, mockFs as any);
+    feedbackStore = new RecordStore('feedback', testRoot, mockFs);
     mockFeedbackRecord = {
-      header: { type: 'feedback', version: '1.0' },
+      header: {
+        type: 'feedback',
+        version: '1.0',
+        payloadChecksum: 'c'.repeat(64), // Mock SHA-256 hash
+        signatures: [createMockSignature()]
+      },
       payload: await createFeedbackRecord({
         id: '1757460002-feedback-test-feedback',
         entityId: '1757452191-task-implement-workflow-methodology-adapter',
@@ -502,15 +743,52 @@ describe('RecordStore<FeedbackRecord>', () => {
     };
   });
 
-  it('[EARS-13] should write a FeedbackRecord', async () => {
+  it('[EARS-1 & EARS-2] should write a FeedbackRecord', async () => {
     await feedbackStore.write(mockFeedbackRecord);
     const expectedPath = path.join('/tmp/gitgov-test-root', '.gitgov', 'feedback', '1757460002-feedback-test-feedback.json');
     expect(mockFs.writeFile).toHaveBeenCalledWith(expectedPath, expect.any(String), 'utf-8');
   });
 
-  it('[EARS-14] should read a FeedbackRecord', async () => {
+  it('[EARS-5] should read a FeedbackRecord', async () => {
     mockFs.readFile.mockResolvedValue(JSON.stringify(mockFeedbackRecord));
     const record = await feedbackStore.read(mockFeedbackRecord.payload.id);
     expect(record).toEqual(mockFeedbackRecord);
+  });
+
+  it('[EARS-6] should return null if FeedbackRecord does not exist', async () => {
+    const error = new Error('File not found') as NodeJS.ErrnoException;
+    error.code = 'ENOENT';
+    mockFs.readFile.mockRejectedValue(error);
+    const readData = await feedbackStore.read('non-existent');
+    expect(readData).toBeNull();
+  });
+
+  it('[EARS-10] should delete a FeedbackRecord', async () => {
+    mockFs.unlink.mockResolvedValue(undefined);
+    await feedbackStore.delete(mockFeedbackRecord.payload.id);
+    const expectedPath = path.join('/tmp/gitgov-test-root', '.gitgov', 'feedback', '1757460002-feedback-test-feedback.json');
+    expect(mockFs.unlink).toHaveBeenCalledWith(expectedPath);
+  });
+
+  it('[EARS-11] should list FeedbackRecord IDs', async () => {
+    const mockFiles = [
+      createMockDirent('1757460002-feedback-test-feedback.json'),
+      createMockDirent('1757460003-feedback-another.json'),
+    ] as Dirent[];
+    mockFs.readdir.mockResolvedValue(mockFiles as any);
+    const ids = await feedbackStore.list();
+    expect(ids).toEqual(['1757460002-feedback-test-feedback', '1757460003-feedback-another']);
+  });
+
+  it('[EARS-12] should return true if FeedbackRecord exists', async () => {
+    mockFs.access.mockResolvedValue(undefined);
+    const result = await feedbackStore.exists(mockFeedbackRecord.payload.id);
+    expect(result).toBe(true);
+  });
+
+  it('[EARS-13] should return false if FeedbackRecord does not exist', async () => {
+    mockFs.access.mockRejectedValue(new Error('ENOENT'));
+    const result = await feedbackStore.exists('non-existent');
+    expect(result).toBe(false);
   });
 });

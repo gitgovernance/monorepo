@@ -1,16 +1,13 @@
 import { validateFullActorRecord, isActorRecord, validateActorRecordDetailed } from './actor_validator';
-import { SchemaValidationError, ChecksumMismatchError, SignatureVerificationError } from './common';
-import { calculatePayloadChecksum } from '../crypto/checksum';
-import { verifySignatures } from '../crypto/signatures';
-import type { ActorRecord } from '../types/actor_record';
-import type { GitGovRecord } from '../models';
+import { SchemaValidationError } from './common';
+import { validateFullEmbeddedMetadataRecord } from './embedded_metadata_validator';
+import type { ActorRecord } from '../types';
+import type { GitGovRecord } from '../types';
 
-// Mock the crypto dependencies
-jest.mock('../crypto/checksum');
-jest.mock('../crypto/signatures');
+// Mock the embedded metadata validator
+jest.mock('./embedded_metadata_validator');
 
-const mockedCalculateChecksum = calculatePayloadChecksum as jest.Mock;
-const mockedVerifySignatures = verifySignatures as jest.Mock;
+const mockedValidateEmbeddedMetadata = validateFullEmbeddedMetadataRecord as jest.Mock;
 
 describe('ActorValidator Module', () => {
   const validActorPayload: ActorRecord = {
@@ -28,9 +25,8 @@ describe('ActorValidator Module', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    // Happy path defaults for mocks
-    mockedCalculateChecksum.mockReturnValue('valid_checksum');
-    mockedVerifySignatures.mockResolvedValue(true);
+    // Happy path default for embedded metadata validation
+    mockedValidateEmbeddedMetadata.mockResolvedValue(undefined);
   });
 
   describe('validateFullActorRecord', () => {
@@ -51,14 +47,15 @@ describe('ActorValidator Module', () => {
       await expect(validateFullActorRecord(invalidRecord, getActorPublicKey)).rejects.toThrow(SchemaValidationError);
     });
 
-    it('[EARS-2] should throw ChecksumMismatchError if checksum is invalid', async () => {
-      mockedCalculateChecksum.mockReturnValue('intentionally_wrong_checksum');
-      await expect(validateFullActorRecord(baseRecord, getActorPublicKey)).rejects.toThrow(ChecksumMismatchError);
+    it('[EARS-2] should throw error if embedded metadata validation fails', async () => {
+      const embeddedError = new Error('Embedded metadata validation failed');
+      mockedValidateEmbeddedMetadata.mockRejectedValue(embeddedError);
+      await expect(validateFullActorRecord(baseRecord, getActorPublicKey)).rejects.toThrow('Embedded metadata validation failed');
     });
 
-    it('[EARS-3] should throw SignatureVerificationError if signatures are invalid', async () => {
-      mockedVerifySignatures.mockResolvedValue(false);
-      await expect(validateFullActorRecord(baseRecord, getActorPublicKey)).rejects.toThrow(SignatureVerificationError);
+    it('[EARS-3] should call validateFullEmbeddedMetadataRecord with correct parameters', async () => {
+      await validateFullActorRecord(baseRecord, getActorPublicKey);
+      expect(mockedValidateEmbeddedMetadata).toHaveBeenCalledWith(baseRecord, getActorPublicKey);
     });
   });
 

@@ -3,20 +3,18 @@ import {
   isFeedbackRecord,
   validateFeedbackRecordDetailed
 } from './feedback_validator';
-import type { FeedbackRecord } from '../types/feedback_record';
-import type { GitGovRecord, Signature } from '../models';
-import { DetailedValidationError, ChecksumMismatchError, SignatureVerificationError } from './common';
+import type { FeedbackRecord } from '../types';
+import type { GitGovRecord, Signature } from '../types';
+import { DetailedValidationError } from './common';
 
 // Mock dependencies
-jest.mock('./schema-cache');
-jest.mock('../crypto/checksum');
-jest.mock('../crypto/signatures');
+jest.mock('../schemas/schema_cache');
+jest.mock('./embedded_metadata_validator');
 jest.mock('../config_manager');
 
 describe('FeedbackRecord Validator', () => {
-  const mockSchemaValidationCache = require('./schema-cache').SchemaValidationCache;
-  const mockCalculatePayloadChecksum = require('../crypto/checksum').calculatePayloadChecksum;
-  const mockVerifySignatures = require('../crypto/signatures').verifySignatures;
+  const mockSchemaValidationCache = require('../schemas/schema_cache').SchemaValidationCache;
+  const mockValidateEmbeddedMetadata = require('./embedded_metadata_validator').validateFullEmbeddedMetadataRecord;
   const mockConfigManager = require('../config_manager').ConfigManager;
 
   const createMockSignature = (): Signature => ({
@@ -39,8 +37,7 @@ describe('FeedbackRecord Validator', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockConfigManager.findProjectRoot.mockReturnValue('/test/project');
-    mockCalculatePayloadChecksum.mockReturnValue('valid-checksum');
-    mockVerifySignatures.mockResolvedValue(true);
+    mockValidateEmbeddedMetadata.mockResolvedValue(undefined);
 
     // Default validator mock
     const defaultValidator = jest.fn().mockReturnValue(true);
@@ -49,7 +46,7 @@ describe('FeedbackRecord Validator', () => {
       writable: true,
       configurable: true
     });
-    mockSchemaValidationCache.getValidator.mockReturnValue(defaultValidator);
+    mockSchemaValidationCache.getValidatorFromSchema.mockReturnValue(defaultValidator);
   });
 
   describe('validateFullFeedbackRecord', () => {
@@ -75,37 +72,38 @@ describe('FeedbackRecord Validator', () => {
         writable: true,
         configurable: true
       });
-      mockSchemaValidationCache.getValidator.mockReturnValue(invalidValidator);
+      mockSchemaValidationCache.getValidatorFromSchema.mockReturnValue(invalidValidator);
 
-      const invalidRecord = {
+      const invalidRecord: GitGovRecord & { payload: Partial<FeedbackRecord> } = {
         header: { version: '1.0', type: 'feedback', payloadChecksum: 'valid-checksum', signatures: [createMockSignature()] },
-        payload: { id: 'invalid-id', entityType: 'invalid', entityId: '', type: 'invalid', status: 'invalid', content: '' }
+        payload: { id: 'invalid-id', entityType: 'invalid' as any, entityId: '', type: 'invalid' as any, status: 'invalid' as any, content: '' }
       };
 
       const mockGetPublicKey = jest.fn().mockResolvedValue('mock-public-key');
-      await expect(validateFullFeedbackRecord(invalidRecord as any, mockGetPublicKey)).rejects.toThrow(DetailedValidationError);
+      await expect(validateFullFeedbackRecord(invalidRecord as GitGovRecord & { payload: FeedbackRecord }, mockGetPublicKey)).rejects.toThrow(DetailedValidationError);
     });
 
-    it('[EARS-3] should throw ChecksumMismatchError for mismatched checksum', async () => {
+    it('[EARS-3] should throw error if embedded metadata validation fails', async () => {
       const mockRecord: GitGovRecord & { payload: FeedbackRecord } = {
         header: { version: '1.0', type: 'feedback', payloadChecksum: 'wrong-checksum', signatures: [createMockSignature()] },
         payload: validRecord
       };
 
-      mockCalculatePayloadChecksum.mockReturnValue('correct-checksum');
+      const embeddedError = new Error('Embedded metadata validation failed');
+      mockValidateEmbeddedMetadata.mockRejectedValue(embeddedError);
       const mockGetPublicKey = jest.fn().mockResolvedValue('mock-public-key');
-      await expect(validateFullFeedbackRecord(mockRecord, mockGetPublicKey)).rejects.toThrow(ChecksumMismatchError);
+      await expect(validateFullFeedbackRecord(mockRecord, mockGetPublicKey)).rejects.toThrow('Embedded metadata validation failed');
     });
 
-    it('[EARS-4] should throw SignatureVerificationError for invalid signatures', async () => {
+    it('[EARS-4] should call validateFullEmbeddedMetadataRecord with correct parameters', async () => {
       const mockRecord: GitGovRecord & { payload: FeedbackRecord } = {
         header: { version: '1.0', type: 'feedback', payloadChecksum: 'valid-checksum', signatures: [createMockSignature()] },
         payload: validRecord
       };
 
-      mockVerifySignatures.mockResolvedValue(false);
       const mockGetPublicKey = jest.fn().mockResolvedValue('mock-public-key');
-      await expect(validateFullFeedbackRecord(mockRecord, mockGetPublicKey)).rejects.toThrow(SignatureVerificationError);
+      await validateFullFeedbackRecord(mockRecord, mockGetPublicKey);
+      expect(mockValidateEmbeddedMetadata).toHaveBeenCalledWith(mockRecord, mockGetPublicKey);
     });
   });
 
@@ -121,7 +119,7 @@ describe('FeedbackRecord Validator', () => {
         writable: true,
         configurable: true
       });
-      mockSchemaValidationCache.getValidator.mockReturnValue(invalidValidator);
+      mockSchemaValidationCache.getValidatorFromSchema.mockReturnValue(invalidValidator);
 
       expect(isFeedbackRecord({ id: 'invalid', entityType: 'invalid', entityId: '', type: 'invalid', status: 'invalid', content: '' })).toBe(false);
     });
@@ -142,7 +140,7 @@ describe('FeedbackRecord Validator', () => {
         writable: true,
         configurable: true
       });
-      mockSchemaValidationCache.getValidator.mockReturnValue(invalidValidator);
+      mockSchemaValidationCache.getValidatorFromSchema.mockReturnValue(invalidValidator);
 
       const result = validateFeedbackRecordDetailed({
         id: '1752788100-feedback-test',

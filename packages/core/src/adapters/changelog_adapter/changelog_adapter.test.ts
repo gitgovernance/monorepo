@@ -2,20 +2,20 @@ import { ChangelogAdapter } from './index';
 import { createChangelogRecord } from '../../factories/changelog_factory';
 import { RecordStore } from '../../store';
 import { IdentityAdapter } from '../identity_adapter';
-import { publishEvent } from '../../modules/event_bus_module';
-import type { ChangelogRecord } from '../../types/changelog_record';
-import type { TaskRecord } from '../../types/task_record';
-import type { CycleRecord } from '../../types/cycle_record';
-import type { IEventStream } from '../../modules/event_bus_module';
-import type { GitGovRecord, Signature } from '../../models';
+import { publishEvent } from '../../event_bus';
+import type { ChangelogRecord } from '../../types';
+import type { TaskRecord } from '../../types';
+import type { CycleRecord } from '../../types';
+import type { IEventStream } from '../../event_bus';
+import type { GitGovRecord, Signature } from '../../types';
 import { DetailedValidationError } from '../../validation/common';
 
 // Mock dependencies
 jest.mock('../../factories/changelog_factory');
 jest.mock('../../store');
 jest.mock('../identity_adapter');
-jest.mock('../../modules/event_bus_module', () => ({
-  ...jest.requireActual('../../modules/event_bus_module'),
+jest.mock('../../event_bus', () => ({
+  ...jest.requireActual('../../event_bus'),
   publishEvent: jest.fn(),
 }));
 

@@ -16,12 +16,12 @@ import { ChangelogAdapter } from '../changelog_adapter';
 import { MetricsAdapter } from '../metrics_adapter';
 import { WorkflowMethodologyAdapter } from '../workflow_methodology_adapter';
 import { IdentityAdapter } from '../identity_adapter';
-import type { SystemDailyTickEvent, IEventStream } from '../../modules/event_bus_module';
-import type { TaskRecord } from '../../types/task_record';
-import type { CycleRecord } from '../../types/cycle_record';
-import type { FeedbackRecord } from '../../types/feedback_record';
-import type { ExecutionRecord } from '../../types/execution_record';
-import type { ChangelogRecord } from '../../types/changelog_record';
+import type { SystemDailyTickEvent, IEventStream } from '../../event_bus';
+import type { TaskRecord } from '../../types';
+import type { CycleRecord } from '../../types';
+import type { FeedbackRecord } from '../../types';
+import type { ExecutionRecord } from '../../types';
+import type { ChangelogRecord } from '../../types';
 
 describe('BacklogAdapter - End-to-End Tests', () => {
   describe('[EARS-46] "Startup Week Simulation" - The Ultimate Integration Test', () => {
@@ -103,7 +103,7 @@ describe('BacklogAdapter - End-to-End Tests', () => {
           getProductivityMetrics: jest.fn(),
           getCollaborationMetrics: jest.fn()
         } as unknown as MetricsAdapter,
-        workflowMethodology: {
+        workflowMethodologyAdapter: {
           getTransitionRule: jest.fn(),
           validateSignature: jest.fn(),
           validateCustomRules: jest.fn(),

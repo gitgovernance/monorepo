@@ -3,20 +3,18 @@ import {
   isChangelogRecord,
   validateChangelogRecordDetailed
 } from './changelog_validator';
-import type { ChangelogRecord } from '../types/changelog_record';
-import type { GitGovRecord, Signature } from '../models';
-import { DetailedValidationError, ChecksumMismatchError, SignatureVerificationError } from './common';
+import type { ChangelogRecord } from '../types';
+import type { GitGovRecord, Signature } from '../types';
+import { DetailedValidationError } from './common';
 
 // Mock dependencies
-jest.mock('./schema-cache');
-jest.mock('../crypto/checksum');
-jest.mock('../crypto/signatures');
+jest.mock('../schemas/schema_cache');
+jest.mock('./embedded_metadata_validator');
 jest.mock('../config_manager');
 
 describe('ChangelogRecord Validator', () => {
-  const mockSchemaValidationCache = require('./schema-cache').SchemaValidationCache;
-  const mockCalculatePayloadChecksum = require('../crypto/checksum').calculatePayloadChecksum;
-  const mockVerifySignatures = require('../crypto/signatures').verifySignatures;
+  const mockSchemaValidationCache = require('../schemas/schema_cache').SchemaValidationCache;
+  const mockValidateEmbeddedMetadata = require('./embedded_metadata_validator').validateFullEmbeddedMetadataRecord;
   const mockConfigManager = require('../config_manager').ConfigManager;
 
   const createMockSignature = (): Signature => ({
@@ -44,8 +42,7 @@ describe('ChangelogRecord Validator', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockConfigManager.findProjectRoot.mockReturnValue('/test/project');
-    mockCalculatePayloadChecksum.mockReturnValue('valid-checksum');
-    mockVerifySignatures.mockResolvedValue(true);
+    mockValidateEmbeddedMetadata.mockResolvedValue(undefined);
 
     // Default validator mock
     const defaultValidator = jest.fn().mockReturnValue(true);
@@ -54,7 +51,7 @@ describe('ChangelogRecord Validator', () => {
       writable: true,
       configurable: true
     });
-    mockSchemaValidationCache.getValidator.mockReturnValue(defaultValidator);
+    mockSchemaValidationCache.getValidatorFromSchema.mockReturnValue(defaultValidator);
   });
 
   describe('validateFullChangelogRecord', () => {
@@ -80,37 +77,38 @@ describe('ChangelogRecord Validator', () => {
         writable: true,
         configurable: true
       });
-      mockSchemaValidationCache.getValidator.mockReturnValue(invalidValidator);
+      mockSchemaValidationCache.getValidatorFromSchema.mockReturnValue(invalidValidator);
 
-      const invalidRecord = {
+      const invalidRecord: GitGovRecord & { payload: Partial<ChangelogRecord> } = {
         header: { version: '1.0', type: 'changelog', payloadChecksum: 'valid-checksum', signatures: [createMockSignature()] },
-        payload: { id: 'invalid-id', entityType: 'task', entityId: '', changeType: 'invalid-type', title: '', description: '', timestamp: 0, trigger: 'manual', triggeredBy: '', reason: '', riskLevel: 'low' }
+        payload: { id: 'invalid-id', entityType: 'task', entityId: '', changeType: 'invalid-type' as any, title: '', description: '', timestamp: 0, trigger: 'manual', triggeredBy: '', reason: '', riskLevel: 'low' }
       };
 
       const mockGetPublicKey = jest.fn().mockResolvedValue('mock-public-key');
-      await expect(validateFullChangelogRecord(invalidRecord as any, mockGetPublicKey)).rejects.toThrow(DetailedValidationError);
+      await expect(validateFullChangelogRecord(invalidRecord as GitGovRecord & { payload: ChangelogRecord }, mockGetPublicKey)).rejects.toThrow(DetailedValidationError);
     });
 
-    it('[EARS-3] should throw ChecksumMismatchError for mismatched checksum', async () => {
+    it('[EARS-3] should throw error if embedded metadata validation fails', async () => {
       const mockRecord: GitGovRecord & { payload: ChangelogRecord } = {
         header: { version: '1.0', type: 'changelog', payloadChecksum: 'wrong-checksum', signatures: [createMockSignature()] },
         payload: validRecord
       };
 
-      mockCalculatePayloadChecksum.mockReturnValue('correct-checksum');
+      const embeddedError = new Error('Embedded metadata validation failed');
+      mockValidateEmbeddedMetadata.mockRejectedValue(embeddedError);
       const mockGetPublicKey = jest.fn().mockResolvedValue('mock-public-key');
-      await expect(validateFullChangelogRecord(mockRecord, mockGetPublicKey)).rejects.toThrow(ChecksumMismatchError);
+      await expect(validateFullChangelogRecord(mockRecord, mockGetPublicKey)).rejects.toThrow('Embedded metadata validation failed');
     });
 
-    it('[EARS-4] should throw SignatureVerificationError for invalid signatures', async () => {
+    it('[EARS-4] should call validateFullEmbeddedMetadataRecord with correct parameters', async () => {
       const mockRecord: GitGovRecord & { payload: ChangelogRecord } = {
         header: { version: '1.0', type: 'changelog', payloadChecksum: 'valid-checksum', signatures: [createMockSignature()] },
         payload: validRecord
       };
 
-      mockVerifySignatures.mockResolvedValue(false);
       const mockGetPublicKey = jest.fn().mockResolvedValue('mock-public-key');
-      await expect(validateFullChangelogRecord(mockRecord, mockGetPublicKey)).rejects.toThrow(SignatureVerificationError);
+      await validateFullChangelogRecord(mockRecord, mockGetPublicKey);
+      expect(mockValidateEmbeddedMetadata).toHaveBeenCalledWith(mockRecord, mockGetPublicKey);
     });
   });
 
@@ -126,7 +124,7 @@ describe('ChangelogRecord Validator', () => {
         writable: true,
         configurable: true
       });
-      mockSchemaValidationCache.getValidator.mockReturnValue(invalidValidator);
+      mockSchemaValidationCache.getValidatorFromSchema.mockReturnValue(invalidValidator);
 
       expect(isChangelogRecord({ id: 'invalid', entityType: 'task', entityId: '', changeType: 'invalid', title: '', description: '', timestamp: 0, trigger: 'manual', triggeredBy: '', reason: '', riskLevel: 'low' })).toBe(false);
     });
@@ -147,7 +145,7 @@ describe('ChangelogRecord Validator', () => {
         writable: true,
         configurable: true
       });
-      mockSchemaValidationCache.getValidator.mockReturnValue(invalidValidator);
+      mockSchemaValidationCache.getValidatorFromSchema.mockReturnValue(invalidValidator);
 
       const result = validateChangelogRecordDetailed({ id: '1752707800-changelog-test', entityType: 'task', entityId: 'invalid-entity-id', changeType: 'completion', title: 'Test', description: 'desc', timestamp: 1752707800, trigger: 'manual', triggeredBy: 'human:test', reason: 'test', riskLevel: 'low' });
       expect(result.isValid).toBe(false);
@@ -164,7 +162,7 @@ describe('ChangelogRecord Validator', () => {
           writable: true,
           configurable: true
         });
-        mockSchemaValidationCache.getValidator.mockReturnValue(invalidValidator);
+        mockSchemaValidationCache.getValidatorFromSchema.mockReturnValue(invalidValidator);
 
         const invalidRecord = { ...validRecord, entityType: 'invalid-entity' };
         const result = validateChangelogRecordDetailed(invalidRecord);
@@ -196,7 +194,7 @@ describe('ChangelogRecord Validator', () => {
           writable: true,
           configurable: true
         });
-        mockSchemaValidationCache.getValidator.mockReturnValue(invalidValidator);
+        mockSchemaValidationCache.getValidatorFromSchema.mockReturnValue(invalidValidator);
 
         const invalidRecord = { ...validRecord, changeType: 'invalid-change' };
         const result = validateChangelogRecordDetailed(invalidRecord);
@@ -228,7 +226,7 @@ describe('ChangelogRecord Validator', () => {
           writable: true,
           configurable: true
         });
-        mockSchemaValidationCache.getValidator.mockReturnValue(invalidValidator);
+        mockSchemaValidationCache.getValidatorFromSchema.mockReturnValue(invalidValidator);
 
         const invalidRecord = { ...validRecord, trigger: 'invalid-trigger' };
         const result = validateChangelogRecordDetailed(invalidRecord);
@@ -260,7 +258,7 @@ describe('ChangelogRecord Validator', () => {
           writable: true,
           configurable: true
         });
-        mockSchemaValidationCache.getValidator.mockReturnValue(invalidValidator);
+        mockSchemaValidationCache.getValidatorFromSchema.mockReturnValue(invalidValidator);
 
         const invalidRecord = { ...validRecord, riskLevel: 'invalid-risk' };
         const result = validateChangelogRecordDetailed(invalidRecord);
@@ -292,7 +290,7 @@ describe('ChangelogRecord Validator', () => {
           writable: true,
           configurable: true
         });
-        mockSchemaValidationCache.getValidator.mockReturnValue(invalidValidator);
+        mockSchemaValidationCache.getValidatorFromSchema.mockReturnValue(invalidValidator);
 
         const invalidRecord = { ...validRecord, riskLevel: 'high' };
         const result = validateChangelogRecordDetailed(invalidRecord);
@@ -324,7 +322,7 @@ describe('ChangelogRecord Validator', () => {
           writable: true,
           configurable: true
         });
-        mockSchemaValidationCache.getValidator.mockReturnValue(invalidValidator);
+        mockSchemaValidationCache.getValidatorFromSchema.mockReturnValue(invalidValidator);
 
         const invalidRecord = { ...validRecord, riskLevel: 'critical' };
         const result = validateChangelogRecordDetailed(invalidRecord);
@@ -356,7 +354,7 @@ describe('ChangelogRecord Validator', () => {
           writable: true,
           configurable: true
         });
-        mockSchemaValidationCache.getValidator.mockReturnValue(invalidValidator);
+        mockSchemaValidationCache.getValidatorFromSchema.mockReturnValue(invalidValidator);
 
         const invalidRecord = { ...validRecord, riskLevel: 'medium' };
         const result = validateChangelogRecordDetailed(invalidRecord);
@@ -388,7 +386,7 @@ describe('ChangelogRecord Validator', () => {
           writable: true,
           configurable: true
         });
-        mockSchemaValidationCache.getValidator.mockReturnValue(invalidValidator);
+        mockSchemaValidationCache.getValidatorFromSchema.mockReturnValue(invalidValidator);
 
         const invalidRecord = { ...validRecord, changeType: 'completion' };
         const result = validateChangelogRecordDetailed(invalidRecord);
@@ -422,7 +420,7 @@ describe('ChangelogRecord Validator', () => {
           writable: true,
           configurable: true
         });
-        mockSchemaValidationCache.getValidator.mockReturnValue(invalidValidator);
+        mockSchemaValidationCache.getValidatorFromSchema.mockReturnValue(invalidValidator);
 
         const invalidRecord = { ...validRecord, timestamp: 'invalid-timestamp' };
         const result = validateChangelogRecordDetailed(invalidRecord);
@@ -456,7 +454,7 @@ describe('ChangelogRecord Validator', () => {
           writable: true,
           configurable: true
         });
-        mockSchemaValidationCache.getValidator.mockReturnValue(invalidValidator);
+        mockSchemaValidationCache.getValidatorFromSchema.mockReturnValue(invalidValidator);
 
         const invalidRecord = { ...validRecord, timestamp: 1752707800 }; // seconds, not milliseconds
         const result = validateChangelogRecordDetailed(invalidRecord);

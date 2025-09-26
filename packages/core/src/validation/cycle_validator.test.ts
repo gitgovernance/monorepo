@@ -3,9 +3,8 @@ import {
   validateCycleRecordDetailed,
   validateFullCycleRecord
 } from './cycle_validator';
-import type { CycleRecord } from '../types/cycle_record';
-import type { GitGovRecord } from '../models';
-import type { Signature } from '../models/embedded.types';
+import type { CycleRecord } from '../types';
+import type { GitGovRecord } from '../types';
 
 describe('CycleValidator Module', () => {
   const validCyclePayload: CycleRecord = {
@@ -22,13 +21,6 @@ describe('CycleValidator Module', () => {
     title: 'Cycle without ID',
     status: 'active',
     taskIds: ['1752274500-task-test'],
-    tags: ['test']
-  };
-
-  const invalidCyclePayloadWithShortTitle = {
-    id: '1754400000-cycle-short',
-    title: '', // Empty title (invalid)
-    status: 'active',
     tags: ['test']
   };
 
@@ -65,11 +57,10 @@ describe('CycleValidator Module', () => {
         .rejects.toThrow('CycleRecord payload failed schema validation');
     });
 
-    it('[EARS-2] should throw ChecksumMismatchError for invalid checksum', async () => {
-      // Mock signature verification to return true to isolate checksum test
-      const { verifySignatures } = require('../crypto/signatures');
-      jest.spyOn(require('../crypto/signatures'), 'verifySignatures')
-        .mockResolvedValue(true);
+    it('[EARS-2] should throw error if embedded metadata validation fails', async () => {
+      // Mock embedded metadata validator to fail
+      jest.spyOn(require('./embedded_metadata_validator'), 'validateFullEmbeddedMetadataRecord')
+        .mockRejectedValue(new Error('Embedded metadata validation failed'));
 
       const recordWithWrongChecksum = {
         ...validRecord,
@@ -80,29 +71,17 @@ describe('CycleValidator Module', () => {
       };
 
       await expect(validateFullCycleRecord(recordWithWrongChecksum, mockGetActorPublicKey))
-        .rejects.toThrow('Payload checksum does not match the header');
+        .rejects.toThrow('Embedded metadata validation failed');
     });
 
-    it('[EARS-3] should throw SignatureVerificationError for invalid signatures', async () => {
-      // Calculate correct checksum to isolate signature test
-      const { calculatePayloadChecksum } = require('../crypto/checksum');
-      const actualChecksum = calculatePayloadChecksum(validRecord.payload);
+    it('[EARS-3] should call validateFullEmbeddedMetadataRecord with correct parameters', async () => {
+      // Mock embedded metadata validator to succeed
+      const mockValidateEmbedded = jest.spyOn(require('./embedded_metadata_validator'), 'validateFullEmbeddedMetadataRecord')
+        .mockResolvedValue(undefined);
 
-      const recordWithCorrectChecksum = {
-        ...validRecord,
-        header: {
-          ...validRecord.header,
-          payloadChecksum: actualChecksum
-        }
-      };
+      await validateFullCycleRecord(validRecord, mockGetActorPublicKey);
 
-      // Mock signature verification to return false
-      const { verifySignatures } = require('../crypto/signatures');
-      jest.spyOn(require('../crypto/signatures'), 'verifySignatures')
-        .mockResolvedValue(false);
-
-      await expect(validateFullCycleRecord(recordWithCorrectChecksum, mockGetActorPublicKey))
-        .rejects.toThrow('Signature verification failed');
+      expect(mockValidateEmbedded).toHaveBeenCalledWith(validRecord, mockGetActorPublicKey);
     });
 
     it('[EARS-4] should complete without errors for a fully valid record', async () => {
@@ -119,7 +98,6 @@ describe('CycleValidator Module', () => {
       };
 
       // Mock signature verification to return true
-      const { verifySignatures } = require('../crypto/signatures');
       jest.spyOn(require('../crypto/signatures'), 'verifySignatures')
         .mockResolvedValue(true);
 
