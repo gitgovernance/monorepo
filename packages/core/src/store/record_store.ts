@@ -1,12 +1,12 @@
 import { promises as fs, constants } from 'fs';
 import * as path from 'path';
 import { ConfigManager } from '../config_manager';
-import type { GitGovRecord, GitGovRecordPayload, CustomRecord } from '../models';
+import type { GitGovRecord, GitGovRecordPayload, CustomRecord } from '../types';
 
 type StorablePayload = Exclude<GitGovRecordPayload, CustomRecord>;
 
 // Define an interface for the filesystem dependencies for mocking
-interface FsDependencies {
+export interface FsDependencies {
   mkdir: typeof fs.mkdir;
   writeFile: typeof fs.writeFile;
   readFile: typeof fs.readFile;
@@ -20,7 +20,11 @@ export class RecordStore<T extends StorablePayload> {
   private recordsDir: string;
   private fs: FsDependencies;
 
-  constructor(recordType: string, rootPath?: string, fsDeps: FsDependencies = fs) {
+  constructor(
+    recordType: string,
+    rootPath?: string,
+    fsDeps: FsDependencies = fs
+  ) {
     const foundRoot = rootPath || ConfigManager.findProjectRoot();
     if (!foundRoot) {
       throw new Error("Could not find project root. RecordStore requires a valid project root.");
@@ -46,11 +50,14 @@ export class RecordStore<T extends StorablePayload> {
     await this.fs.writeFile(filePath, content, 'utf-8');
   }
 
+
   async read(recordId: string): Promise<(GitGovRecord & { payload: T }) | null> {
     const filePath = this.getRecordPath(recordId);
     try {
       const content = await this.fs.readFile(filePath, 'utf-8');
-      return JSON.parse(content) as GitGovRecord & { payload: T };
+      const record = JSON.parse(content) as GitGovRecord & { payload: T };
+
+      return record;
     } catch (e: unknown) {
       const error = e as NodeJS.ErrnoException;
       if (error.code === 'ENOENT') {
@@ -59,6 +66,7 @@ export class RecordStore<T extends StorablePayload> {
       throw error;
     }
   }
+
 
   async delete(recordId: string): Promise<void> {
     const filePath = this.getRecordPath(recordId);
