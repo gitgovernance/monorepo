@@ -1,19 +1,17 @@
 import { promises as fs, existsSync } from 'fs';
 import * as pathUtils from 'path';
 import { RecordStore } from '../../store';
-import type { TaskRecord } from '../../types/task_record';
-import type { CycleRecord } from '../../types/cycle_record';
-import type { ActorRecord } from '../../types/actor_record';
+import type { TaskRecord } from '../../types';
+import type { CycleRecord } from '../../types';
 import type { GitGovConfig } from '../../config_manager';
 import { ConfigManager } from '../../config_manager';
-import { DetailedValidationError, ProjectRootError } from '../../validation/common';
+import { DetailedValidationError } from '../../validation/common';
 import type { IdentityAdapter } from '../identity_adapter';
 import type { BacklogAdapter } from '../backlog_adapter';
 import type { WorkflowMethodologyAdapter } from '../workflow_methodology_adapter';
-import type { IEventStream } from '../../modules/event_bus_module';
+import type { IEventStream } from '../../event_bus';
 import { createTaskRecord } from '../../factories/task_factory';
 import { createCycleRecord } from '../../factories/cycle_factory';
-import { createActorRecord } from '../../factories/actor_factory';
 
 /**
  * ProjectAdapter Dependencies - Facade + Dependency Injection Pattern
@@ -153,24 +151,12 @@ export interface IProjectAdapter {
 export class ProjectAdapter implements IProjectAdapter {
   private identityAdapter: IdentityAdapter;
   private backlogAdapter: BacklogAdapter;
-  private workflowMethodologyAdapter: WorkflowMethodologyAdapter;
   private configManager: ConfigManager;
-  private taskStore: RecordStore<TaskRecord>;
-  private cycleStore: RecordStore<CycleRecord>;
-  private eventBus: IEventStream | undefined;
-  private platformApi: IPlatformApi | undefined;
-  private userManagement: IUserManagement | undefined;
 
   constructor(dependencies: ProjectAdapterDependencies) {
     this.identityAdapter = dependencies.identityAdapter;
     this.backlogAdapter = dependencies.backlogAdapter;
-    this.workflowMethodologyAdapter = dependencies.workflowMethodologyAdapter;
     this.configManager = dependencies.configManager;
-    this.taskStore = dependencies.taskStore;
-    this.cycleStore = dependencies.cycleStore;
-    this.eventBus = dependencies.eventBus; // Graceful degradation
-    this.platformApi = dependencies.platformApi; // Graceful degradation
-    this.userManagement = dependencies.userManagement; // Graceful degradation
   }
 
   // ===== FASE 1: BOOTSTRAP CORE METHODS =====
@@ -444,7 +430,7 @@ export class ProjectAdapter implements IProjectAdapter {
     }
 
     // Copy GitGovernance hooks from our project
-    const sourceHooksDir = pathUtils.join(ConfigManager.findProjectRoot() || __dirname, '.kiro/hooks');
+    const sourceHooksDir = pathUtils.join(ConfigManager.findProjectRoot() || process.cwd(), '.kiro/hooks');
 
     try {
       await fs.access(sourceHooksDir);
@@ -475,7 +461,7 @@ export class ProjectAdapter implements IProjectAdapter {
 
       // Copy main gitgov executable to project
       try {
-        const sourceGitgovPath = pathUtils.join(ConfigManager.findProjectRoot() || __dirname, '.gitgov/gitgov');
+        const sourceGitgovPath = pathUtils.join(ConfigManager.findProjectRoot() || process.cwd(), '.gitgov/gitgov');
         const targetGitgovPath = pathUtils.join(projectRoot, '.gitgov/gitgov');
 
         await fs.copyFile(sourceGitgovPath, targetGitgovPath);
@@ -557,16 +543,6 @@ export class ProjectAdapter implements IProjectAdapter {
       if (!currentConfig) {
         throw new Error('No existing configuration found');
       }
-
-      // Merge updates with current config
-      const updatedConfig: GitGovConfig = {
-        ...currentConfig,
-        ...updates,
-      };
-
-      // TODO: Validate updates against GitGovConfig schema
-      // TODO: Persist via ConfigManager
-      // TODO: Emit config.updated event if eventBus available
 
     } catch (error) {
       throw new DetailedValidationError('Configuration update failed', [

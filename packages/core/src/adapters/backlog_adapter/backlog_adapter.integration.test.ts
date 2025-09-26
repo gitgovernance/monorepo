@@ -1,66 +1,132 @@
-import path from 'path';
+// Mock IdentityAdapter before importing
+jest.doMock('../identity_adapter', () => ({
+  IdentityAdapter: jest.fn().mockImplementation(() => ({
+    getActorPublicKey: jest.fn().mockResolvedValue('mock-public-key'),
+    getActor: jest.fn(),
+    createActor: jest.fn(),
+    listActors: jest.fn(),
+    signRecord: jest.fn().mockImplementation(async (record) => record),
+    rotateActorKey: jest.fn(),
+    revokeActor: jest.fn(),
+    resolveCurrentActorId: jest.fn(),
+    getCurrentActor: jest.fn().mockResolvedValue({
+      id: 'human:test-user',
+      type: 'human',
+      displayName: 'Test User',
+      publicKey: 'mock-public-key',
+      roles: ['developer'],
+      status: 'active',
+      metadata: {}
+    }),
+    getEffectiveActorForAgent: jest.fn(),
+    authenticate: jest.fn(),
+    createAgentRecord: jest.fn(),
+    getAgentRecord: jest.fn(),
+    listAgentRecords: jest.fn(),
+  }))
+}));
+
 import { BacklogAdapter } from './index';
 import { RecordStore } from '../../store';
 import { IdentityAdapter } from '../identity_adapter';
 import { WorkflowMethodologyAdapter } from '../workflow_methodology_adapter';
 import { FeedbackAdapter } from '../feedback_adapter';
 import { ExecutionAdapter } from '../execution_adapter';
+import type { IFeedbackAdapter } from '../feedback_adapter';
 import { ChangelogAdapter } from '../changelog_adapter';
 import { MetricsAdapter } from '../metrics_adapter';
-import { eventBus } from '../../modules/event_bus_module';
+import { eventBus } from '../../event_bus';
 import type {
   FeedbackCreatedEvent,
   FeedbackStatusChangedEvent,
   ChangelogCreatedEvent,
   SystemDailyTickEvent
-} from '../../modules/event_bus_module';
-import type { TaskRecord } from '../../types/task_record';
-import type { CycleRecord } from '../../types/cycle_record';
-import type { FeedbackRecord } from '../../types/feedback_record';
-import type { ExecutionRecord } from '../../types/execution_record';
-import type { ChangelogRecord } from '../../types/changelog_record';
-import type { ActorRecord } from '../../types/actor_record';
-import type { AgentRecord } from '../../types/agent_record';
-import type { GitGovRecord } from '../../models';
-import type { Signature } from '../../models/embedded.types';
+} from '../../event_bus';
+import type { TaskRecord } from '../../types';
+import type { CycleRecord } from '../../types';
+import type { FeedbackRecord } from '../../types';
+import type { ExecutionRecord } from '../../types';
+import type { ChangelogRecord } from '../../types';
+import type { ActorRecord } from '../../types';
+import type { AgentRecord } from '../../types';
+import type { GitGovRecord } from '../../types';
+import type { Signature } from '../../types/embedded.types';
+import { generateTaskId, generateCycleId } from '../../utils/id_generator';
+import { calculatePayloadChecksum } from '../../crypto/checksum';
 
 // Helper to create properly typed mock records for integration tests
 function createMockTaskRecord(payload: Partial<TaskRecord>): GitGovRecord & { payload: TaskRecord } {
+  const timestamp = Date.now();
+  const title = payload.title || 'Mock Task';
+  const taskId = payload.id || generateTaskId(title, timestamp);
+
+  const fullPayload: TaskRecord = {
+    id: taskId,
+    title,
+    status: 'draft',
+    priority: 'medium',
+    description: 'Mock description',
+    tags: [],
+    ...payload
+  };
+
+  // Calculate real checksum
+  const payloadChecksum = calculatePayloadChecksum(fullPayload);
+
+  // Create mock signature (we'll use a simplified version for testing)
+  const mockSignature: Signature = {
+    keyId: 'human:mock-author',
+    role: 'author',
+    signature: 'mock-signature-base64',
+    timestamp: Math.floor(timestamp / 1000),
+    timestamp_iso: new Date(timestamp).toISOString()
+  };
+
   return {
     header: {
       version: '1.0',
       type: 'task',
-      payloadChecksum: 'mock-checksum',
-      signatures: [{ keyId: 'mock-author', role: 'author', signature: 'mock-sig', timestamp: 123, timestamp_iso: '2025-01-01T00:00:00Z' }] as [Signature, ...Signature[]]
+      payloadChecksum,
+      signatures: [mockSignature] as [Signature, ...Signature[]]
     },
-    payload: {
-      id: 'mock-task',
-      title: 'Mock Task',
-      status: 'draft',
-      priority: 'medium',
-      description: 'Mock description',
-      tags: [],
-      ...payload
-    } as TaskRecord
+    payload: fullPayload
   };
 }
 
 function createMockCycleRecord(payload: Partial<CycleRecord>): GitGovRecord & { payload: CycleRecord } {
+  const timestamp = Date.now();
+  const title = payload.title || 'Mock Cycle';
+  const cycleId = payload.id || generateCycleId(title, timestamp);
+
+  const fullPayload: CycleRecord = {
+    id: cycleId,
+    title,
+    status: 'planning',
+    taskIds: [],
+    childCycleIds: [],
+    ...payload
+  };
+
+  // Calculate real checksum
+  const payloadChecksum = calculatePayloadChecksum(fullPayload);
+
+  // Create mock signature
+  const mockSignature: Signature = {
+    keyId: 'human:mock-author',
+    role: 'author',
+    signature: 'mock-signature-base64',
+    timestamp: Math.floor(timestamp / 1000),
+    timestamp_iso: new Date(timestamp).toISOString()
+  };
+
   return {
     header: {
       version: '1.0',
       type: 'cycle',
-      payloadChecksum: 'mock-checksum',
-      signatures: [{ keyId: 'mock-author', role: 'author', signature: 'mock-sig', timestamp: 123, timestamp_iso: '2025-01-01T00:00:00Z' }] as [Signature, ...Signature[]]
+      payloadChecksum,
+      signatures: [mockSignature] as [Signature, ...Signature[]]
     },
-    payload: {
-      id: 'mock-cycle',
-      title: 'Mock Cycle',
-      status: 'planning',
-      taskIds: [],
-      childCycleIds: [],
-      ...payload
-    } as CycleRecord
+    payload: fullPayload
   };
 }
 
@@ -70,31 +136,42 @@ describe('BacklogAdapter Integration Tests', () => {
   let cycleStore: RecordStore<CycleRecord>;
   let identityAdapter: IdentityAdapter;
   let methodologyAdapter: WorkflowMethodologyAdapter;
+  let feedbackAdapter: IFeedbackAdapter;
 
   beforeEach(async () => {
     // Use real WorkflowMethodologyAdapter with default configuration
-    const realConfigPath = path.join(
-      process.cwd(),
-      '../blueprints/03_products/core/specs/adapters/workflow_methodology_adapter/workflow_methodology_default.json'
-    );
 
+    // Create mock stores for IdentityAdapter constructor
+    const mockActorStore = new RecordStore<ActorRecord>('actors');
+    const mockAgentStore = new RecordStore<AgentRecord>('agents');
+
+    // Create identity adapter - will be mocked by jest.doMock
+    identityAdapter = new IdentityAdapter({
+      actorStore: mockActorStore,
+      agentStore: mockAgentStore,
+    });
+
+    // Create stores with identity for validation
     taskStore = new RecordStore<TaskRecord>('tasks');
     cycleStore = new RecordStore<CycleRecord>('cycles');
-    const actorStore = new RecordStore<ActorRecord>('actors');
-    const agentStore = new RecordStore<AgentRecord>('agents');
-    identityAdapter = new IdentityAdapter({
-      actorStore,
-      agentStore,
-    });
-    methodologyAdapter = new WorkflowMethodologyAdapter(realConfigPath);
 
-    // Ensure config is loaded
-    await methodologyAdapter.reloadConfig();
+    // Create mock feedback adapter for methodology adapter
+    feedbackAdapter = {
+      create: jest.fn(),
+      resolve: jest.fn(),
+      getFeedback: jest.fn(),
+      getFeedbackByEntity: jest.fn(),
+      getAllFeedback: jest.fn(),
+    };
+
+    methodologyAdapter = WorkflowMethodologyAdapter.createDefault(feedbackAdapter);
+
+    // Config is loaded at construction, no need to reload
 
     backlogAdapter = new BacklogAdapter({
       taskStore,
       cycleStore,
-      workflowMethodology: methodologyAdapter,
+      workflowMethodologyAdapter: methodologyAdapter,
       identity: identityAdapter,
       eventBus: eventBus,
       // The following adapters are mocked as they are not the focus of these integration tests
@@ -213,7 +290,6 @@ describe('BacklogAdapter Integration Tests', () => {
       // Mock the stores
       jest.spyOn(taskStore, 'read').mockResolvedValue(task);
       jest.spyOn(cycleStore, 'read').mockResolvedValue(cycle);
-      jest.spyOn(identityAdapter, 'signRecord').mockImplementation(async (record) => record);
 
       const writeTaskSpy = jest.spyOn(taskStore, 'write').mockResolvedValue(undefined);
       const writeCycleSpy = jest.spyOn(cycleStore, 'write').mockResolvedValue(undefined);

@@ -2,18 +2,18 @@ import { FeedbackAdapter } from './index';
 import { createFeedbackRecord } from '../../factories/feedback_factory';
 import { RecordStore } from '../../store';
 import { IdentityAdapter } from '../identity_adapter';
-import { publishEvent } from '../../modules/event_bus_module';
-import type { FeedbackRecord } from '../../types/feedback_record';
-import type { IEventStream } from '../../modules/event_bus_module';
-import type { GitGovRecord, Signature } from '../../models';
+import { publishEvent } from '../../event_bus';
+import type { FeedbackRecord } from '../../types';
+import type { IEventStream } from '../../event_bus';
+import type { GitGovRecord, Signature } from '../../types';
 import { DetailedValidationError } from '../../validation/common';
 
 // Mock dependencies
 jest.mock('../../factories/feedback_factory');
 jest.mock('../../store');
 jest.mock('../identity_adapter');
-jest.mock('../../modules/event_bus_module', () => ({
-  ...jest.requireActual('../../modules/event_bus_module'),
+jest.mock('../../event_bus', () => ({
+  ...jest.requireActual('../../event_bus'),
   publishEvent: jest.fn(),
 }));
 

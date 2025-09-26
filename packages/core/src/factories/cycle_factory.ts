@@ -1,4 +1,4 @@
-import type { CycleRecord } from "../types/cycle_record";
+import type { CycleRecord } from "../types";
 import { validateCycleRecordDetailed } from "../validation/cycle_validator";
 import { DetailedValidationError } from "../validation/common";
 import { generateCycleId } from "../utils/id_generator";

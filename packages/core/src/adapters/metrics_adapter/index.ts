@@ -1,10 +1,9 @@
 import { RecordStore } from '../../store';
-import type { TaskRecord } from '../../types/task_record';
-import type { CycleRecord } from '../../types/cycle_record';
-import type { FeedbackRecord } from '../../types/feedback_record';
-import type { ExecutionRecord } from '../../types/execution_record';
-import type { ChangelogRecord } from '../../types/changelog_record';
-import type { ActorRecord } from '../../types/actor_record';
+import type { TaskRecord } from '../../types';
+import type { CycleRecord } from '../../types';
+import type { FeedbackRecord } from '../../types';
+import type { ExecutionRecord } from '../../types';
+import type { ActorRecord } from '../../types';
 
 /**
  * MetricsAdapter Dependencies - Facade + Dependency Injection Pattern
@@ -17,7 +16,6 @@ export type MetricsAdapterDependencies = {
   // Optional: Additional stores for enhanced metrics (graceful degradation)
   feedbackStore?: RecordStore<FeedbackRecord>;
   executionStore?: RecordStore<ExecutionRecord>;
-  changelogStore?: RecordStore<ChangelogRecord>;
   actorStore?: RecordStore<ActorRecord>;
 
   // Optional: Platform API for Premium metrics (Tier 4)
@@ -117,7 +115,6 @@ export class MetricsAdapter implements IMetricsAdapter {
   private cycleStore: RecordStore<CycleRecord>;
   private feedbackStore: RecordStore<FeedbackRecord> | undefined;
   private executionStore: RecordStore<ExecutionRecord> | undefined;
-  private changelogStore: RecordStore<ChangelogRecord> | undefined;
   private actorStore: RecordStore<ActorRecord> | undefined;
   private platformApi: IPlatformApi | undefined;
 
@@ -700,42 +697,42 @@ export class MetricsAdapter implements IMetricsAdapter {
   /**
    * [EARS-15] Throws NotImplementedError for Tier 3 functions.
    */
-  calculateQuality(tasks: TaskRecord[]): number {
+  calculateQuality(_tasks: TaskRecord[]): number {
     throw new Error('NotImplementedError: Tier 3 metrics not implemented yet');
   }
 
-  calculateReworkRate(tasks: TaskRecord[]): number {
+  calculateReworkRate(_tasks: TaskRecord[]): number {
     throw new Error('NotImplementedError: Tier 3 metrics not implemented yet');
   }
 
-  calculateCompletionRate(tasks: TaskRecord[]): number {
+  calculateCompletionRate(_tasks: TaskRecord[]): number {
     throw new Error('NotImplementedError: Tier 3 metrics not implemented yet');
   }
 
-  calculateAuditScoreDistribution(tasks: TaskRecord[]): Record<string, number> {
+  calculateAuditScoreDistribution(_tasks: TaskRecord[]): Record<string, number> {
     throw new Error('NotImplementedError: Tier 3 metrics not implemented yet');
   }
 
-  calculateEpicPromotionRate(tasks: TaskRecord[]): number {
+  calculateEpicPromotionRate(_tasks: TaskRecord[]): number {
     throw new Error('NotImplementedError: Tier 3 metrics not implemented yet');
   }
 
-  calculateTaskRefinementRate(tasks: TaskRecord[]): number {
+  calculateTaskRefinementRate(_tasks: TaskRecord[]): number {
     throw new Error('NotImplementedError: Tier 3 metrics not implemented yet');
   }
 
-  calculatePlanningAccuracy(tasks: TaskRecord[]): number {
+  calculatePlanningAccuracy(_tasks: TaskRecord[]): number {
     throw new Error('NotImplementedError: Tier 3 metrics not implemented yet');
   }
 
-  calculateDependencyDiscoveryRate(tasks: TaskRecord[]): number {
+  calculateDependencyDiscoveryRate(_tasks: TaskRecord[]): number {
     throw new Error('NotImplementedError: Tier 3 metrics not implemented yet');
   }
 
   /**
    * [EARS-16] Returns null for Premium metrics without Platform API.
    */
-  calculateCostBurnRate(consumption: TokenConsumption[]): number {
+  calculateCostBurnRate(_consumption: TokenConsumption[]): number {
     if (!this.platformApi) {
       console.warn('Platform API not available for premium metrics');
       return 0;
@@ -743,7 +740,7 @@ export class MetricsAdapter implements IMetricsAdapter {
     throw new Error('NotImplementedError: Tier 4 premium metrics not implemented yet');
   }
 
-  calculateTokenConsumption(consumption: TokenConsumption[]): number {
+  calculateTokenConsumption(_consumption: TokenConsumption[]): number {
     if (!this.platformApi) {
       console.warn('Platform API not available for premium metrics');
       return 0;
@@ -751,7 +748,7 @@ export class MetricsAdapter implements IMetricsAdapter {
     throw new Error('NotImplementedError: Tier 4 premium metrics not implemented yet');
   }
 
-  calculateTokenConsumptionByAgent(consumption: TokenConsumption[]): Record<string, number> {
+  calculateTokenConsumptionByAgent(_consumption: TokenConsumption[]): Record<string, number> {
     if (!this.platformApi) {
       console.warn('Platform API not available for premium metrics');
       return {};
@@ -759,7 +756,7 @@ export class MetricsAdapter implements IMetricsAdapter {
     throw new Error('NotImplementedError: Tier 4 premium metrics not implemented yet');
   }
 
-  calculateAiAccuracyRate(tasks: TaskRecord[], feedback: FeedbackRecord[]): number {
+  calculateAiAccuracyRate(_tasks: TaskRecord[], _feedback: FeedbackRecord[]): number {
     if (!this.platformApi) {
       console.warn('Platform API not available for premium metrics');
       return 0;
@@ -767,7 +764,7 @@ export class MetricsAdapter implements IMetricsAdapter {
     throw new Error('NotImplementedError: Tier 4 premium metrics not implemented yet');
   }
 
-  calculateAgentExecutionTime(executions: ExecutionRecord[]): number {
+  calculateAgentExecutionTime(_executions: ExecutionRecord[]): number {
     if (!this.platformApi) {
       console.warn('Platform API not available for premium metrics');
       return 0;

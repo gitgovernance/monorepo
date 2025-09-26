@@ -1,12 +1,12 @@
 import { calculatePayloadChecksum } from "./checksum";
-import type { TaskRecord } from "../types/task_record";
-import type { CycleRecord } from "../types/cycle_record";
-import type { ActorRecord } from "../types/actor_record";
-import type { AgentRecord } from "../types/agent_record";
-import type { ExecutionRecord } from "../types/execution_record";
-import type { ChangelogRecord } from "../types/changelog_record";
-import type { FeedbackRecord } from "../types/feedback_record";
-import type { GitGovRecordPayload, GitGovRecordType } from "../models";
+import type { TaskRecord } from "../types";
+import type { CycleRecord } from "../types";
+import type { ActorRecord } from "../types";
+import type { AgentRecord } from "../types";
+import type { ExecutionRecord } from "../types";
+import type { ChangelogRecord } from "../types";
+import type { FeedbackRecord } from "../types";
+import type { GitGovRecordPayload, GitGovRecordType } from "../types";
 
 describe("calculatePayloadChecksum", () => {
   const testCases: { name: GitGovRecordType; payload: GitGovRecordPayload }[] = [

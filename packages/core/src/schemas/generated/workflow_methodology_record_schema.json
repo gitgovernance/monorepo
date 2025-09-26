@@ -1,0 +1,393 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "workflow_methodology_schema.json",
+  "title": "WorkflowMethodologyRecord",
+  "description": "Complete schema for workflow methodology configuration files that define state transitions, signatures, and view configurations",
+  "type": "object",
+  "required": [
+    "version",
+    "name",
+    "state_transitions"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "JSON Schema reference"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Semantic version of the methodology configuration"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100,
+      "description": "Human-readable name of the methodology"
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 500,
+      "description": "Brief description of the methodology's purpose and scope"
+    },
+    "state_transitions": {
+      "type": "object",
+      "description": "Defines valid state transitions and their requirements",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "from",
+          "requires"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "from": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "draft",
+                "review",
+                "ready",
+                "active",
+                "done",
+                "archived",
+                "paused",
+                "discarded"
+              ]
+            },
+            "minItems": 1,
+            "description": "Valid source states for this transition"
+          },
+          "requires": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "command": {
+                "type": "string",
+                "description": "CLI command that triggers this transition"
+              },
+              "event": {
+                "type": "string",
+                "description": "System event that triggers this transition"
+              },
+              "signatures": {
+                "type": "object",
+                "description": "Signature requirements keyed by guild",
+                "additionalProperties": {
+                  "type": "object",
+                  "required": [
+                    "role",
+                    "capability_roles",
+                    "min_approvals"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "role": {
+                      "type": "string",
+                      "description": "Required signature role"
+                    },
+                    "capability_roles": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "minItems": 1,
+                      "description": "Required capability roles in actor record"
+                    },
+                    "min_approvals": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "description": "Minimum number of required approvals"
+                    },
+                    "actor_type": {
+                      "type": "string",
+                      "enum": [
+                        "human",
+                        "agent"
+                      ],
+                      "description": "Optional: restrict to specific actor type"
+                    },
+                    "specific_actors": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "Optional: specific actors that can sign"
+                    }
+                  }
+                }
+              },
+              "custom_rules": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "List of custom rule identifiers to validate"
+              }
+            }
+          }
+        }
+      }
+    },
+    "custom_rules": {
+      "type": "object",
+      "description": "Definitions for custom validation rules",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "description",
+          "validation"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Human-readable description of the rule"
+          },
+          "validation": {
+            "type": "string",
+            "enum": [
+              "assignment_required",
+              "sprint_capacity",
+              "epic_complexity",
+              "custom",
+              "javascript"
+            ],
+            "description": "Validation type identifier"
+          },
+          "parameters": {
+            "type": "object",
+            "description": "Optional parameters for the validation rule"
+          },
+          "javascript_function": {
+            "type": "string",
+            "description": "JavaScript function code for 'javascript' validation type. Must return Promise<boolean>"
+          },
+          "module_path": {
+            "type": "string",
+            "description": "Path to external module for custom validation (alternative to javascript_function)"
+          }
+        }
+      }
+    },
+    "view_configs": {
+      "type": "object",
+      "description": "Visual representation configurations for different view types",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "columns"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "columns": {
+            "type": "object",
+            "description": "Column definitions mapping visual names to task states",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "draft",
+                  "review",
+                  "ready",
+                  "active",
+                  "done",
+                  "archived",
+                  "paused",
+                  "discarded"
+                ]
+              },
+              "minItems": 1
+            }
+          },
+          "theme": {
+            "type": "string",
+            "enum": [
+              "default",
+              "dark",
+              "minimal",
+              "corporate"
+            ],
+            "description": "Visual theme for this view configuration"
+          },
+          "layout": {
+            "type": "string",
+            "enum": [
+              "horizontal",
+              "vertical",
+              "grid"
+            ],
+            "description": "Layout direction for the view"
+          }
+        }
+      }
+    },
+    "agent_integration": {
+      "type": "object",
+      "description": "Optional agent automation configuration for methodology",
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Brief description of the agent integration"
+        },
+        "required_agents": {
+          "type": "array",
+          "description": "List of agents required for this methodology",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "gremio",
+              "engine"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^agent:[a-z0-9:-]+$",
+                "description": "Unique agent identifier"
+              },
+              "gremio": {
+                "type": "string",
+                "enum": [
+                  "design",
+                  "intelligence",
+                  "strategy",
+                  "operations",
+                  "quality"
+                ],
+                "description": "Agent guild classification"
+              },
+              "engine": {
+                "type": "object",
+                "oneOf": [
+                  {
+                    "required": [
+                      "type"
+                    ],
+                    "properties": {
+                      "type": {
+                        "const": "local"
+                      },
+                      "runtime": {
+                        "type": "string"
+                      },
+                      "entrypoint": {
+                        "type": "string"
+                      },
+                      "function": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  {
+                    "required": [
+                      "type"
+                    ],
+                    "properties": {
+                      "type": {
+                        "const": "api"
+                      },
+                      "url": {
+                        "type": "string"
+                      },
+                      "method": {
+                        "type": "string",
+                        "enum": [
+                          "POST",
+                          "GET"
+                        ]
+                      },
+                      "auth": {
+                        "type": "object"
+                      }
+                    }
+                  },
+                  {
+                    "required": [
+                      "type"
+                    ],
+                    "properties": {
+                      "type": {
+                        "const": "mcp"
+                      },
+                      "url": {
+                        "type": "string"
+                      },
+                      "auth": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                ]
+              },
+              "triggers": {
+                "type": "array",
+                "description": "Event triggers for this agent",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "event",
+                    "action"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "event": {
+                      "type": "string",
+                      "description": "Event that triggers the agent"
+                    },
+                    "action": {
+                      "type": "string",
+                      "description": "Action the agent should perform"
+                    }
+                  }
+                }
+              },
+              "knowledge_dependencies": {
+                "type": "array",
+                "description": "Knowledge files this agent depends on",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "automation_rules": {
+          "type": "array",
+          "description": "Automation rules linking triggers to agents",
+          "items": {
+            "type": "object",
+            "required": [
+              "trigger",
+              "agent",
+              "action"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "trigger": {
+                "type": "string",
+                "description": "Event or condition that triggers automation"
+              },
+              "agent": {
+                "type": "string",
+                "pattern": "^agent:[a-z0-9:-]+$",
+                "description": "Agent ID that handles this automation"
+              },
+              "action": {
+                "type": "string",
+                "description": "Specific action the agent should perform"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

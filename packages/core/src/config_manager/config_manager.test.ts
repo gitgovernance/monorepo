@@ -317,7 +317,6 @@ describe('ConfigManager', () => {
       // When user wants to create NEW project in subdirectory
 
       const currentPath = '/Users/camilo/new-project';
-      const parentPath = '/Users/camilo/solo-hub';
 
       // Mock: parent has .gitgov but current doesn't
       mockedExistsSync.mockImplementation((path: string) => {

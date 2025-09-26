@@ -1,18 +1,16 @@
 import { ProjectAdapter } from './index';
 import { RecordStore } from '../../store';
 import { ConfigManager } from '../../config_manager';
-import type { TaskRecord } from '../../types/task_record';
-import type { CycleRecord } from '../../types/cycle_record';
-import type { ActorRecord } from '../../types/actor_record';
+import type { TaskRecord } from '../../types';
+import type { CycleRecord } from '../../types';
+import type { ActorRecord } from '../../types';
 import type { IdentityAdapter } from '../identity_adapter';
 import type { BacklogAdapter } from '../backlog_adapter';
 import type { WorkflowMethodologyAdapter } from '../workflow_methodology_adapter';
 import { DetailedValidationError } from '../../validation/common';
 import { promises as fs, existsSync } from 'fs';
-import * as pathUtils from 'path';
 import { createTaskRecord } from '../../factories/task_factory';
 import { createCycleRecord } from '../../factories/cycle_factory';
-import { createActorRecord } from '../../factories/actor_factory';
 
 // Mock the factories before importing
 jest.mock('../../factories/task_factory', () => ({
@@ -95,7 +93,6 @@ describe('ProjectAdapter', () => {
   let mockFs: jest.Mocked<typeof fs> & { existsSync: jest.MockedFunction<any> };
   let mockCreateTaskRecord: jest.MockedFunction<typeof createTaskRecord>;
   let mockCreateCycleRecord: jest.MockedFunction<typeof createCycleRecord>;
-  let mockCreateActorRecord: jest.MockedFunction<typeof createActorRecord>;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -165,7 +162,6 @@ describe('ProjectAdapter', () => {
     // Mock factories
     mockCreateTaskRecord = createTaskRecord as jest.MockedFunction<typeof createTaskRecord>;
     mockCreateCycleRecord = createCycleRecord as jest.MockedFunction<typeof createCycleRecord>;
-    mockCreateActorRecord = createActorRecord as jest.MockedFunction<typeof createActorRecord>;
 
     // Setup factory mocks
     mockCreateTaskRecord.mockImplementation(async (payload) => ({

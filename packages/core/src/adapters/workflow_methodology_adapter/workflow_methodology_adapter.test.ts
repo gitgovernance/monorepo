@@ -1,11 +1,12 @@
-import path from 'path';
 import { WorkflowMethodologyAdapter } from './index';
-import type { TaskRecord } from '../../types/task_record';
-import type { ActorRecord } from '../../types/actor_record';
-import type { FeedbackRecord } from '../../types/feedback_record';
-import type { CycleRecord } from '../../types/cycle_record';
-import type { Signature } from '../../models/embedded.types';
+import type { TaskRecord } from '../../types';
+import type { ActorRecord } from '../../types';
+import type { FeedbackRecord } from '../../types';
+import type { CycleRecord } from '../../types';
+import type { Signature } from '../../types/embedded.types';
 import type { ValidationContext } from './index';
+import type { WorkflowMethodologyRecord } from '../../types';
+import type { IFeedbackAdapter } from '../feedback_adapter';
 
 // Mock fs and ConfigManager
 jest.mock('fs/promises');
@@ -14,6 +15,15 @@ jest.mock('../../config_manager');
 describe('WorkflowMethodologyAdapter', () => {
   const mockFs = require('fs/promises');
   const mockConfigManager = require('../../config_manager').ConfigManager;
+
+  // Mock IFeedbackAdapter
+  const mockFeedbackAdapter: IFeedbackAdapter = {
+    create: jest.fn(),
+    resolve: jest.fn(),
+    getFeedback: jest.fn(),
+    getFeedbackByEntity: jest.fn(),
+    getAllFeedback: jest.fn(),
+  };
 
   const createMockSignature = (role: string = 'author', keyId: string = 'human:test'): Signature => ({
     keyId,
@@ -49,23 +59,38 @@ describe('WorkflowMethodologyAdapter', () => {
   });
 
   describe('Constructor', () => {
-    it('[EARS-1] should initialize with default config path when none provided', () => {
-      const adapter = new WorkflowMethodologyAdapter();
-      expect(mockConfigManager.findProjectRoot).toHaveBeenCalled();
-    });
-
-    it('[EARS-2] should use provided config path when specified', () => {
-      const customPath = '/custom/methodology.json';
-      const adapter = new WorkflowMethodologyAdapter(customPath);
-      // Should not call findProjectRoot when custom path is provided
+    it('[EARS-1] should initialize with default config when none provided', () => {
+      const adapter = WorkflowMethodologyAdapter.createDefault(mockFeedbackAdapter);
+      expect(adapter).toBeDefined();
+      // Should use default config without calling ConfigManager
       expect(mockConfigManager.findProjectRoot).not.toHaveBeenCalled();
     });
 
-    it('[EARS-3] should throw error when project root not found', () => {
-      mockConfigManager.findProjectRoot.mockReturnValue(null);
+    it('[EARS-2] should use scrum config when specified', () => {
+      const adapter = WorkflowMethodologyAdapter.createScrum(mockFeedbackAdapter);
+      expect(adapter).toBeDefined();
+      // Should not call ConfigManager for predefined configs
+      expect(mockConfigManager.findProjectRoot).not.toHaveBeenCalled();
+    });
 
-      expect(() => new WorkflowMethodologyAdapter())
-        .toThrow('Project root not found. Please run from within a Git repository.');
+    it('[EARS-3] should accept custom config object', () => {
+      const customConfig = {
+        version: '1.0.0',
+        name: 'Custom Methodology',
+        state_transitions: {
+          'draft': {
+            from: ['draft'],
+            requires: { command: 'gitgov task submit' }
+          }
+        }
+      };
+
+      const adapter = new WorkflowMethodologyAdapter({
+        config: customConfig as unknown as WorkflowMethodologyRecord,
+        feedbackAdapter: mockFeedbackAdapter
+      });
+      expect(adapter).toBeDefined();
+      expect(mockConfigManager.findProjectRoot).not.toHaveBeenCalled();
     });
   });
 
@@ -151,7 +176,7 @@ describe('WorkflowMethodologyAdapter', () => {
       };
 
       mockFs.readFile.mockResolvedValue(JSON.stringify(mockConfig));
-      adapter = new WorkflowMethodologyAdapter('/test/methodology.json');
+      adapter = WorkflowMethodologyAdapter.createDefault(mockFeedbackAdapter);
     });
 
     it('[EARS-4] should return transition rule for draft to review', async () => {
@@ -185,6 +210,16 @@ describe('WorkflowMethodologyAdapter', () => {
             '__default__': {
               role: 'approver',
               capability_roles: ['approver:product'],
+              min_approvals: 1
+            },
+            'design': {
+              role: 'approver',
+              capability_roles: ['approver:design'],
+              min_approvals: 1
+            },
+            'quality': {
+              role: 'approver',
+              capability_roles: ['approver:quality'],
               min_approvals: 1
             }
           }
@@ -280,7 +315,7 @@ describe('WorkflowMethodologyAdapter', () => {
       };
 
       mockFs.readFile.mockResolvedValue(JSON.stringify(mockConfig));
-      adapter = new WorkflowMethodologyAdapter('/test/methodology.json');
+      adapter = WorkflowMethodologyAdapter.createDefault(mockFeedbackAdapter);
     });
 
     it('[EARS-10] should validate signature with required capability role', async () => {
@@ -375,7 +410,7 @@ describe('WorkflowMethodologyAdapter', () => {
       };
 
       mockFs.readFile.mockResolvedValue(JSON.stringify(mockConfig));
-      adapter = new WorkflowMethodologyAdapter('/test/methodology.json');
+      adapter = WorkflowMethodologyAdapter.createDefault(mockFeedbackAdapter);
     });
 
     it('[EARS-14] should validate task assignment rule', async () => {
@@ -455,84 +490,34 @@ describe('WorkflowMethodologyAdapter', () => {
     });
   });
 
-  describe('reloadConfig', () => {
-    let adapter: WorkflowMethodologyAdapter;
-
-    beforeEach(() => {
-      adapter = new WorkflowMethodologyAdapter('/test/methodology.json');
-    });
-
-    it('[EARS-19] should reload configuration from disk', async () => {
-      const mockConfig = {
-        version: '1.0.0',
-        name: 'Test Methodology',
-        description: 'Test methodology config',
-        state_transitions: {}
-      };
-
-      mockFs.readFile.mockResolvedValue(JSON.stringify(mockConfig));
-
-      await adapter.reloadConfig();
-
-      expect(mockFs.readFile).toHaveBeenCalledWith('/test/methodology.json', 'utf-8');
-    });
-
-    it('[EARS-20] should throw error when config file cannot be read', async () => {
-      mockFs.readFile.mockRejectedValue(new Error('File not found'));
-
-      await expect(adapter.reloadConfig())
-        .rejects.toThrow('Failed to load methodology config from /test/methodology.json');
-    });
-  });
 
   describe('getViewConfig', () => {
     let adapter: WorkflowMethodologyAdapter;
 
     beforeEach(() => {
-      const mockConfig = {
-        version: '1.0.0',
-        name: 'Test Methodology',
-        description: 'Test methodology config',
-        state_transitions: {},
-        custom_rules: {},
-        view_configs: {
-          'kanban-7col': {
-            columns: {
-              'Active': ['active'],
-              'Done': ['done']
-            },
-            theme: 'corporate',
-            layout: 'vertical'
-          },
-          'kanban-4col': {
-            columns: {
-              'In Progress': ['review', 'ready', 'active'],
-              'Done': ['done', 'archived']
-            },
-            theme: 'minimal',
-            layout: 'horizontal'
-          }
-        }
-      };
-
-      mockFs.readFile.mockResolvedValue(JSON.stringify(mockConfig));
-      adapter = new WorkflowMethodologyAdapter('/test/methodology.json');
+      adapter = WorkflowMethodologyAdapter.createDefault(mockFeedbackAdapter); // Uses default config
     });
 
-    it('[EARS-22] should return view config for valid view name', async () => {
+    it('[EARS-19] should return view config for valid view name', async () => {
       const viewConfig = await adapter.getViewConfig('kanban-7col');
 
       expect(viewConfig).toEqual({
         columns: {
+          'Draft': ['draft'],
+          'Review': ['review'],
+          'Ready': ['ready'],
           'Active': ['active'],
-          'Done': ['done']
+          'Done': ['done'],
+          'Archived': ['archived'],
+          'Blocked': ['paused'],
+          'Cancelled': ['discarded']
         },
         theme: 'corporate',
         layout: 'vertical'
       });
     });
 
-    it('[EARS-23] should return null for non-existent view', async () => {
+    it('[EARS-20] should return null for non-existent view', async () => {
       const viewConfig = await adapter.getViewConfig('non-existent-view');
       expect(viewConfig).toBeNull();
     });

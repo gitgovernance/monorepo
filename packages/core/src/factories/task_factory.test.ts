@@ -1,5 +1,5 @@
 import { createTaskRecord } from './task_factory';
-import type { TaskRecord } from '../types/task_record';
+import type { TaskRecord } from '../types';
 import { DetailedValidationError } from '../validation/common';
 
 // Manual mock for validateTaskRecordDetailed

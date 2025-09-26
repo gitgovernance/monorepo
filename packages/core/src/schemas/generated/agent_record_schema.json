@@ -1,0 +1,142 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "agent_record_schema.json",
+  "title": "AgentRecord",
+  "description": "Canonical schema for agent operational manifests.",
+  "type": "object",
+  "required": [
+    "id",
+    "guild",
+    "engine"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^agent:[a-z0-9:-]+$",
+      "description": "Unique identifier for the agent, linking to an ActorRecord."
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "archived"
+      ],
+      "default": "active"
+    },
+    "guild": {
+      "type": "string",
+      "enum": [
+        "design",
+        "intelligence",
+        "strategy",
+        "operations",
+        "quality"
+      ]
+    },
+    "triggers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "manual",
+              "webhook",
+              "scheduled"
+            ]
+          }
+        },
+        "required": [
+          "type"
+        ]
+      }
+    },
+    "knowledge_dependencies": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "prompt_engine_requirements": {
+      "type": "object",
+      "properties": {
+        "roles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "skills": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "engine": {
+      "type": "object",
+      "oneOf": [
+        {
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "const": "local"
+            },
+            "runtime": {
+              "type": "string"
+            },
+            "entrypoint": {
+              "type": "string"
+            },
+            "function": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "const": "api"
+            },
+            "url": {
+              "type": "string"
+            },
+            "method": {
+              "type": "string",
+              "enum": [
+                "POST",
+                "GET"
+              ]
+            },
+            "auth": {
+              "type": "object"
+            }
+          }
+        },
+        {
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "const": "mcp"
+            },
+            "url": {
+              "type": "string"
+            },
+            "auth": {
+              "type": "object"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

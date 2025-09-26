@@ -1,28 +1,13 @@
 import type { ValidateFunction } from "ajv";
-import * as path from "path";
-import type { WorkflowMethodologyRecord } from "../types/workflow_methodology_record";
-import { ConfigManager } from "../config_manager";
-import { SchemaValidationCache } from "./schema-cache";
-import { SchemaValidationError, ProjectRootError } from "./common";
+import type { WorkflowMethodologyRecord } from "../types";
+import { SchemaValidationCache } from "../schemas/schema_cache";
+import { Schemas } from '../schemas';
 
 // --- Schema Validation ---
-let _schemaPath: string | null = null;
-
-function getSchemaPath(): string {
-  if (!_schemaPath) {
-    const root = ConfigManager.findProjectRoot();
-    if (!root) {
-      throw new ProjectRootError();
-    }
-    _schemaPath = path.join(root, "packages/blueprints/03_products/protocol/09_workflow_methodology/workflow_methodology_schema.yaml");
-  }
-  return _schemaPath;
-}
-
 export function validateWorkflowMethodologyConfigSchema(
   data: unknown
 ): [boolean, ValidateFunction["errors"]] {
-  const validateSchema = SchemaValidationCache.getValidator(getSchemaPath());
+  const validateSchema = SchemaValidationCache.getValidatorFromSchema(Schemas.WorkflowMethodologyRecord);
   const isValid = validateSchema(data) as boolean;
   return [isValid, validateSchema.errors];
 }
@@ -31,7 +16,7 @@ export function validateWorkflowMethodologyConfigSchema(
  * Type guard to check if data is a valid WorkflowMethodologyConfig.
  */
 export function isWorkflowMethodologyConfig(data: unknown): data is WorkflowMethodologyRecord {
-  const validateSchema = SchemaValidationCache.getValidator(getSchemaPath());
+  const validateSchema = SchemaValidationCache.getValidatorFromSchema(Schemas.WorkflowMethodologyRecord);
   return validateSchema(data) as boolean;
 }
 
@@ -90,7 +75,7 @@ export function validateWorkflowMethodologyConfigBusinessRules(
     }
 
     // Validate 'from' states are valid
-    if (transition.from) {
+    if (transition?.from) {
       for (const fromState of transition.from) {
         if (!validStates.includes(fromState)) {
           errors.push({
@@ -103,7 +88,7 @@ export function validateWorkflowMethodologyConfigBusinessRules(
     }
 
     // Validate custom_rules reference existing rules
-    if (transition.requires.custom_rules && config.custom_rules) {
+    if (transition?.requires?.custom_rules && config.custom_rules) {
       for (const ruleId of transition.requires.custom_rules) {
         if (!config.custom_rules[ruleId]) {
           errors.push({
@@ -121,7 +106,7 @@ export function validateWorkflowMethodologyConfigBusinessRules(
     const validValidationTypes = ['assignment_required', 'sprint_capacity', 'epic_complexity', 'custom'];
 
     for (const [ruleId, rule] of Object.entries(config.custom_rules)) {
-      if (!validValidationTypes.includes(rule.validation)) {
+      if (rule && !validValidationTypes.includes(rule.validation)) {
         errors.push({
           field: `custom_rules.${ruleId}.validation`,
           message: `Invalid validation type: ${rule.validation}`,

@@ -1,10 +1,10 @@
-import type { ActorRecord } from "../../types/actor_record";
-import type { AgentRecord } from "../../types/agent_record";
+import type { ActorRecord } from "../../types";
+import type { AgentRecord } from "../../types";
 import type {
   GitGovRecord,
   ActorPayload,
   AgentPayload,
-} from "../../models";
+} from "../../types";
 import { RecordStore } from "../../store/record_store";
 import { createActorRecord } from "../../factories/actor_factory";
 import { validateFullActorRecord } from "../../validation/actor_validator";
@@ -13,13 +13,13 @@ import { validateFullAgentRecord } from "../../validation/agent_validator";
 import { generateKeys, signPayload } from "../../crypto/signatures";
 import { calculatePayloadChecksum } from "../../crypto/checksum";
 import { generateActorId } from "../../utils/id_generator";
-import type { Signature } from "../../models";
+import type { Signature } from "../../types";
 import type {
   IEventStream,
   ActorCreatedEvent,
   ActorRevokedEvent,
   AgentRegisteredEvent
-} from "../../modules/event_bus_module";
+} from "../../event_bus";
 import { ConfigManager } from "../../config_manager";
 
 /**
@@ -41,6 +41,7 @@ export interface IIdentityAdapter {
   signRecord(record: GitGovRecord, actorId: string, role: string): Promise<GitGovRecord>;
   rotateActorKey(actorId: string): Promise<{ oldActor: ActorRecord; newActor: ActorRecord }>;
   authenticate(sessionToken: string): Promise<void>;
+  getActorPublicKey(keyId: string): Promise<string | null>;
 
   // AgentRecord Operations
   createAgentRecord(payload: Partial<AgentPayload>): Promise<AgentRecord>;
@@ -71,9 +72,21 @@ export class IdentityAdapter implements IIdentityAdapter {
     this.eventBus = dependencies.eventBus; // Graceful degradation
   }
 
+  /**
+   * Get actor public key for validation - used by other adapters
+   */
+  async getActorPublicKey(keyId: string): Promise<string | null> {
+    try {
+      const actor = await this.getActor(keyId);
+      return actor?.publicKey || null;
+    } catch (error) {
+      return null;
+    }
+  }
+
   async createActor(
     payload: ActorPayload,
-    signerId: string
+    _signerId: string
   ): Promise<ActorRecord> {
     // Validate required fields
     if (!payload.type || !payload.displayName) {
@@ -126,7 +139,7 @@ export class IdentityAdapter implements IIdentityAdapter {
       return signerActor?.publicKey || null;
     });
 
-    // Store the record
+    // Store the record with validation
     await this.actorStore.write(record);
 
     // Emit actor created event (graceful degradation if no eventBus)
@@ -141,7 +154,7 @@ export class IdentityAdapter implements IIdentityAdapter {
         source: "identity_adapter",
         payload: {
           actorId,
-          actorType: validatedPayload.type,
+          type: validatedPayload.type,
           publicKey: validatedPayload.publicKey,
           roles: validatedPayload.roles,
           isBootstrap,
@@ -278,7 +291,7 @@ export class IdentityAdapter implements IIdentityAdapter {
   }
 
   async rotateActorKey(
-    actorId: string
+    _actorId: string
   ): Promise<{ oldActor: ActorRecord; newActor: ActorRecord }> {
     // TODO: Implement key rotation workflow
     throw new Error('rotateActorKey not implemented yet - complex operation');
@@ -311,7 +324,7 @@ export class IdentityAdapter implements IIdentityAdapter {
       payload: revokedPayload
     };
 
-    // Store the updated record
+    // Store the updated record with validation
     await this.actorStore.write(updatedRecord);
 
     // Emit actor revoked event (graceful degradation if no eventBus)
@@ -338,7 +351,7 @@ export class IdentityAdapter implements IIdentityAdapter {
     return revokedPayload;
   }
 
-  async authenticate(sessionToken: string): Promise<void> {
+  async authenticate(_sessionToken: string): Promise<void> {
     // TODO: Implement session token storage for SaaS mode
     console.warn('authenticate not fully implemented yet');
   }
@@ -401,7 +414,7 @@ export class IdentityAdapter implements IIdentityAdapter {
       return signerActor?.publicKey || null;
     });
 
-    // Store the record
+    // Store the record with validation
     await this.agentStore.write(record);
 
     // Emit agent registered event (graceful degradation if no eventBus)

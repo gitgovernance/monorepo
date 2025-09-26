@@ -1,4 +1,4 @@
-import type { TaskRecord } from "../types/task_record";
+import type { TaskRecord } from "../types";
 import { validateTaskRecordDetailed } from "../validation/task_validator";
 import { DetailedValidationError } from "../validation/common";
 import { generateTaskId } from "../utils/id_generator";

@@ -15,16 +15,22 @@
     "verbatimModuleSyntax": true,
     "moduleDetection": "force",
     "esModuleInterop": true,
-    /* `allowSyntheticDefaultImports` es redundante con bundler/ESM */
-    // "allowSyntheticDefaultImports": true,
+    "noImplicitOverride": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
     /* Opcionales de “seguridad” de tipos altamente recomendables */
     "exactOptionalPropertyTypes": true,
     "noUncheckedIndexedAccess": true,
     "noPropertyAccessFromIndexSignature": true,
     /* Útiles si importas JSON o usas paths */
-    // "resolveJsonModule": true,
-    // "baseUrl": ".",
-    // "paths": { "@/*": ["src/*"] },
+    "resolveJsonModule": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": [
+        "src/*"
+      ]
+    },
     "types": [
       "node",
       "jest"

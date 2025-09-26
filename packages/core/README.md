@@ -1,11 +1,11 @@
-# @gitgov/core: The Governance Engine
+# @gitgovernance/core: The Governance Engine
 
-[![NPM Version](https://img.shields.io/npm/v/@gitgov/core)](https://www.npmjs.com/package/@gitgov/core)
+[![NPM Version](https://img.shields.io/npm/v/@gitgovernance/core)](https://www.npmjs.com/package/@gitgovernance/core)
 [![License: MPL-2.0](https://img.shields.io/badge/License-MPL%202.0-brightgreen.svg)](https://opensource.org/licenses/MPL-2.0)
-[![Tests](https://img.shields.io/badge/tests-503%20passing-brightgreen.svg)](./src)
+[![Tests](https://img.shields.io/badge/tests-711%20passing-brightgreen.svg)](./src)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue.svg)](./tsconfig.json)
 
-`@gitgov/core` is the **universal SDK** for the GitGovernance ecosystem. It provides a type-safe, local-first, and schema-driven API to manage identities, agents, and workflows in software projects.
+`@gitgovernance/core` is the **universal SDK** for the GitGovernance ecosystem. It provides a type-safe, local-first, and schema-driven API to manage identities, agents, and workflows in software projects.
 
 ## 🚀 Quick Start
 
@@ -19,19 +19,9 @@ import {
   IdentityAdapter,
   BacklogAdapter,
   WorkflowMethodologyAdapter,
-} from "@gitgov/core";
+} from "@gitgovernance/core";
 import path from "path";
 import fs from "fs/promises";
-
-// --- Setup a temporary directory for the demo ---
-const projectRoot = path.join(__dirname, "temp-project");
-await fs.rm(projectRoot, { recursive: true, force: true });
-await fs.mkdir(projectRoot, { recursive: true });
-process.chdir(projectRoot);
-// In a real project, you would run this inside an existing git repo.
-// For this demo, we simulate it.
-await fs.mkdir(path.join(projectRoot, ".git"), { recursive: true });
-// --- End Setup ---
 
 // 1. Instantiate all core adapters and their dependencies
 const identityAdapter = new IdentityAdapter();
@@ -154,7 +144,7 @@ The package is built with a domain-driven architecture to separate responsibilit
 
 ```mermaid
 graph TD
-    subgraph "@gitgov/core"
+    subgraph "@gitgovernance/core"
         PA[ProjectAdapter] --> IA[IdentityAdapter];
         PA --> BA[BacklogAdapter];
         PA --> WMA[WorkflowMethodologyAdapter];
@@ -167,7 +157,7 @@ graph TD
     end
 
     subgraph "Consumidores"
-        CLI["@gitgov/cli"]
+        CLI["@gitgovernance/cli"]
         SAAS["@gitgov/saas"]
     end
 
@@ -183,9 +173,10 @@ graph TD
 
 1.  **Protocol-Driven**: The canonical JSON Schemas that define the governance protocol are bundled with the package and are the single source of truth for all data validation.
 2.  **Type Safety**: Strict TypeScript with no `any` to prevent compile-time errors.
-3.  **Rich Errors**: Detailed, field-level validation errors to make debugging easier.
-4.  **Performance**: A compiled schema cache (`SchemaValidationCache`) minimizes I/O and accelerates repetitive validations.
-5.  **Local-First**: Designed to operate directly on a Git repository as its database.
+3.  **Event Coherence Guarantee**: Event payloads are derived from canonical records using TypeScript Utility Types, ensuring 100% consistency between system state and system events.
+4.  **Rich Errors**: Detailed, field-level validation errors to make debugging easier.
+5.  **Performance**: A compiled schema cache (`SchemaValidationCache`) minimizes I/O and accelerates repetitive validations.
+6.  **Local-First**: Designed to operate directly on a Git repository as its database.
 
 ## 🔧 Advanced Usage
 
@@ -195,7 +186,7 @@ graph TD
 import {
   validateActorRecordDetailed,
   DetailedValidationError,
-} from "@gitgov/core";
+} from "@gitgovernance/core";
 
 const result = validateActorRecordDetailed(userData);
 if (!result.isValid) {
@@ -213,7 +204,7 @@ import {
   DetailedValidationError,
   RecordNotFoundError,
   ProjectRootError,
-} from "@gitgov/core";
+} from "@gitgovernance/core";
 
 function handleCoreErrors(error: unknown) {
   if (error instanceof DetailedValidationError) {
@@ -230,7 +221,7 @@ function handleCoreErrors(error: unknown) {
 ### Performance Monitoring
 
 ```typescript
-import { SchemaValidationCache } from "@gitgov/core";
+import { SchemaValidationCache } from "@gitgovernance/core";
 
 // Monitor cache efficiency
 const stats = SchemaValidationCache.getCacheStats();
@@ -255,9 +246,9 @@ npm test -- --watch
 
 ### Test Coverage
 
-- **503 tests total** with EARS methodology
+- **711 tests total** with EARS methodology
 - **ProjectAdapter**: 18 tests (complete project initialization + template processing + error recovery)
-- **BacklogAdapter**: 33 tests (complete workflow lifecycle + event handlers + E2E simulation)
+- **BacklogAdapter**: 43 tests (complete workflow lifecycle + event handlers + E2E simulation)
 - **MetricsAdapter**: 32 tests (Tier 1+2 calculations + performance validation)
 - **ChangelogAdapter**: 31 tests (multi-entity changelog + conditional validation)
 - **EventBusModule**: 32 tests (20 unit + 12 integration tests with cross-adapter scenarios)
@@ -294,10 +285,7 @@ npm test -- --watch
 
 ## 📚 Documentation
 
-- **[Technical Design](../blueprints/03_products/core/core_tech_design.md)**: Architecture overview
-- **[API Reference](../blueprints/03_products/core/core_reference.md)**: Complete API documentation
-- **[Module Blueprints](../blueprints/03_products/core/specs/)**: Detailed specifications
-- **[Protocol Specs](../blueprints/03_products/protocol/)**: Canonical schemas and rules
+- **[Protocol Specs](./src/schemas/)**: Canonical schemas and rules
 
 ## 🤝 Contributing
 

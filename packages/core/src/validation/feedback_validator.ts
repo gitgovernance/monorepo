@@ -1,71 +1,55 @@
-import * as path from 'path';
-import type { FeedbackRecord } from '../types/feedback_record';
-import type { GitGovRecord } from '../models';
-/**
- * Validation result interface
- */
-interface ValidationResult {
-  isValid: boolean;
-  errors: ValidationError[];
-}
-
-/**
- * Validation error interface
- */
-interface ValidationError {
-  field: string;
-  message: string;
-  value: unknown;
-}
-import { SchemaValidationCache } from './schema-cache';
-import { calculatePayloadChecksum } from '../crypto/checksum';
-import { verifySignatures } from '../crypto/signatures';
-import { DetailedValidationError, ChecksumMismatchError, SignatureVerificationError } from './common';
-import { ConfigManager } from '../config_manager';
+import type { ValidateFunction, ErrorObject } from "ajv";
+import type { FeedbackRecord } from '../types';
+import type { GitGovRecord } from '../types';
+import type { ValidationResult } from './errors';
+import { SchemaValidationCache } from '../schemas/schema_cache';
+import { DetailedValidationError } from './common';
+import { validateFullEmbeddedMetadataRecord } from './embedded_metadata_validator';
+import { Schemas } from '../schemas';
 
 /**
  * Schema-based validation for FeedbackRecord payload
  */
-export function validateFeedbackRecordSchema(data: unknown): ValidationResult {
-  const projectRoot = ConfigManager.findProjectRoot();
-  if (!projectRoot) {
-    throw new Error('Project root not found. Please run from within a Git repository.');
-  }
-
-  const schemaPath = path.join(
-    projectRoot,
-    'packages/blueprints/03_products/protocol/07_feedback/feedback_record_schema.yaml'
-  );
-
-  const validator = SchemaValidationCache.getValidator(schemaPath);
+export function validateFeedbackRecordSchema(
+  data: unknown
+): [boolean, ValidateFunction["errors"]] {
+  const validator = SchemaValidationCache.getValidatorFromSchema(Schemas.FeedbackRecord);
   const isValid = validator(data);
 
-  if (!isValid && validator.errors) {
-    const errors: ValidationError[] = validator.errors.map(error => ({
-      field: error.instancePath?.replace('/', '') || error.params?.['missingProperty'] || 'root',
-      message: error.message || 'Unknown validation error',
-      value: error.data
-    }));
-
-    return { isValid: false, errors };
-  }
-
-  return { isValid: true, errors: [] };
+  return [isValid, validator.errors];
 }
 
 /**
  * Type guard to check if data is a valid FeedbackRecord
  */
 export function isFeedbackRecord(data: unknown): data is FeedbackRecord {
-  const result = validateFeedbackRecordSchema(data);
-  return result.isValid;
+  const [isValid] = validateFeedbackRecordSchema(data);
+  return isValid;
 }
 
 /**
  * Detailed validation with field-level error reporting
  */
 export function validateFeedbackRecordDetailed(data: unknown): ValidationResult {
-  return validateFeedbackRecordSchema(data);
+  const [isValid, errors] = validateFeedbackRecordSchema(data);
+
+  if (!isValid && errors) {
+    const formattedErrors = errors.map((error: ErrorObject) => ({
+      field: error.instancePath?.replace('/', '') || error.params?.['missingProperty'] || 'root',
+      message: error.message || 'Unknown validation error',
+      value: error.data
+    }));
+
+    return {
+      isValid: false,
+      errors: formattedErrors
+    };
+  }
+
+  return {
+    isValid: true,
+    errors: []
+  };
 }
 
 /**
@@ -76,20 +60,16 @@ export async function validateFullFeedbackRecord(
   getPublicKey: (keyId: string) => Promise<string>
 ): Promise<void> {
   // 1. Validate payload schema
-  const payloadValidation = validateFeedbackRecordSchema(record.payload);
-  if (!payloadValidation.isValid) {
-    throw new DetailedValidationError('FeedbackRecord', payloadValidation.errors);
+  const [isValid, errors] = validateFeedbackRecordSchema(record.payload);
+  if (!isValid) {
+    const formattedErrors = (errors || []).map((error: ErrorObject) => ({
+      field: error.instancePath?.replace('/', '') || error.params?.['missingProperty'] || 'root',
+      message: error.message || 'Unknown validation error',
+      value: error.data
+    }));
+    throw new DetailedValidationError('FeedbackRecord', formattedErrors);
   }
 
-  // 2. Verify payload checksum
-  const expectedChecksum = calculatePayloadChecksum(record.payload);
-  if (record.header.payloadChecksum !== expectedChecksum) {
-    throw new ChecksumMismatchError();
-  }
-
-  // 3. Verify signatures
-  const isSignatureValid = await verifySignatures(record, getPublicKey);
-  if (!isSignatureValid) {
-    throw new SignatureVerificationError();
-  }
+  // 2. Embedded Metadata Validation (header + wrapper)
+  await validateFullEmbeddedMetadataRecord(record, getPublicKey);
 }
