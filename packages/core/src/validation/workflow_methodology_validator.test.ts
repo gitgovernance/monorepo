@@ -3,7 +3,7 @@ import {
   validateWorkflowMethodologyConfigDetailed,
   validateWorkflowMethodologyConfigBusinessRules
 } from './workflow_methodology_validator';
-import type { WorkflowMethodologyRecord } from '../types/workflow_methodology_record';
+import type { WorkflowMethodologyRecord } from '../types';
 
 describe('WorkflowMethodologyValidator Module', () => {
   const validWorkflowMethodologyConfig: WorkflowMethodologyRecord = {
@@ -60,17 +60,6 @@ describe('WorkflowMethodologyValidator Module', () => {
     name: 'Test Methodology',
     state_transitions: {}
     // Missing required 'version' field
-  };
-
-  const invalidConfigWithBadStateTransition = {
-    version: '1.0.0',
-    name: 'Test Methodology',
-    state_transitions: {
-      invalid_state: {
-        from: ['draft'],
-        requires: {}
-      }
-    }
   };
 
   describe('isWorkflowMethodologyConfig', () => {
@@ -250,7 +239,7 @@ describe('WorkflowMethodologyValidator Module', () => {
         custom_rules: {
           'bad_rule': {
             description: 'Rule with invalid validation type',
-            validation: 'invalid_validation_type' as any
+            validation: 'invalid_validation_type' as 'assignment_required'
           }
         }
       };

@@ -1,4 +1,4 @@
-import type { ActorRecord } from "../types/actor_record";
+import type { ActorRecord } from "../types";
 import { validateActorRecordDetailed } from "../validation/actor_validator";
 import { generateActorId } from "../utils/id_generator";
 import { DetailedValidationError } from "../validation/common";

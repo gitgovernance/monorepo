@@ -1,12 +1,11 @@
 import { MetricsAdapter } from './index';
 import { RecordStore } from '../../store';
-import type { TaskRecord } from '../../types/task_record';
-import type { CycleRecord } from '../../types/cycle_record';
-import type { FeedbackRecord } from '../../types/feedback_record';
-import type { ExecutionRecord } from '../../types/execution_record';
-import type { ChangelogRecord } from '../../types/changelog_record';
-import type { ActorRecord } from '../../types/actor_record';
-import type { GitGovRecord, Signature } from '../../models';
+import type { TaskRecord } from '../../types';
+import type { CycleRecord } from '../../types';
+import type { FeedbackRecord } from '../../types';
+import type { ExecutionRecord } from '../../types';
+import type { ActorRecord } from '../../types';
+import type { GitGovRecord, Signature } from '../../types';
 
 // Mock dependencies
 jest.mock('../../store');
@@ -152,7 +151,6 @@ describe('MetricsAdapter', () => {
   let mockCycleStore: jest.Mocked<RecordStore<CycleRecord>>;
   let mockFeedbackStore: jest.Mocked<RecordStore<FeedbackRecord>>;
   let mockExecutionStore: jest.Mocked<RecordStore<ExecutionRecord>>;
-  let mockChangelogStore: jest.Mocked<RecordStore<ChangelogRecord>>;
   let mockActorStore: jest.Mocked<RecordStore<ActorRecord>>;
 
   beforeEach(() => {
@@ -191,14 +189,6 @@ describe('MetricsAdapter', () => {
       exists: jest.fn().mockResolvedValue(false),
     } as unknown as jest.Mocked<RecordStore<ExecutionRecord>>;
 
-    mockChangelogStore = {
-      write: jest.fn().mockResolvedValue(undefined),
-      read: jest.fn().mockResolvedValue(null),
-      list: jest.fn().mockResolvedValue([]),
-      delete: jest.fn().mockResolvedValue(undefined),
-      exists: jest.fn().mockResolvedValue(false),
-    } as unknown as jest.Mocked<RecordStore<ChangelogRecord>>;
-
     mockActorStore = {
       write: jest.fn().mockResolvedValue(undefined),
       read: jest.fn().mockResolvedValue(null),
@@ -213,7 +203,6 @@ describe('MetricsAdapter', () => {
       cycleStore: mockCycleStore,
       feedbackStore: mockFeedbackStore,
       executionStore: mockExecutionStore,
-      changelogStore: mockChangelogStore,
       actorStore: mockActorStore
     });
   });
@@ -377,7 +366,7 @@ describe('MetricsAdapter', () => {
         createMockTaskRecord({ status: 'done' }).payload,
         createMockTaskRecord({ status: 'done' }).payload,
       ];
-      
+
       const tasksAfterArchiving = [
         createMockTaskRecord({ status: 'archived' }).payload,  // Was 'done'
         createMockTaskRecord({ status: 'done' }).payload,
@@ -385,7 +374,7 @@ describe('MetricsAdapter', () => {
 
       const healthBefore = metricsAdapter.calculateHealth(tasksBeforeArchiving);
       const healthAfter = metricsAdapter.calculateHealth(tasksAfterArchiving);
-      
+
       // Health should remain the same: both done and archived = 100%
       expect(healthBefore).toBe(100);
       expect(healthAfter).toBe(100);

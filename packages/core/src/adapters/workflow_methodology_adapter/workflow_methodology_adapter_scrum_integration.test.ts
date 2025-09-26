@@ -1,12 +1,20 @@
-import path from 'path';
 import { WorkflowMethodologyAdapter } from './index';
-import type { TaskRecord } from '../../types/task_record';
-import type { ActorRecord } from '../../types/actor_record';
+import type { TaskRecord } from '../../types';
+import type { ActorRecord } from '../../types';
 import type { ValidationContext } from './index';
-import type { CycleRecord } from '../../types/cycle_record';
-import type { FeedbackRecord } from '../../types/feedback_record';
+import type { CycleRecord } from '../../types';
+import type { FeedbackRecord } from '../../types';
+import type { IFeedbackAdapter } from '../feedback_adapter';
 
 describe('WorkflowMethodologyAdapter - SCRUM Methodology Integration Tests', () => {
+  // Mock IFeedbackAdapter
+  const mockFeedbackAdapter: IFeedbackAdapter = {
+    create: jest.fn(),
+    resolve: jest.fn(),
+    getFeedback: jest.fn(),
+    getFeedbackByEntity: jest.fn(),
+    getAllFeedback: jest.fn(),
+  };
   const createMockTask = (tags: string[] = [], status: TaskRecord['status'] = 'draft'): TaskRecord => ({
     id: '1752274500-task-test-task',
     title: 'Test Task',
@@ -32,11 +40,7 @@ describe('WorkflowMethodologyAdapter - SCRUM Methodology Integration Tests', () 
 
     beforeEach(() => {
       // Use scrum methodology for integration tests
-      const scrumConfigPath = path.join(
-        process.cwd(),
-        '../blueprints/03_products/core/specs/adapters/workflow_methodology_adapter/workflow_methodology_scrum.json'
-      );
-      scrumAdapter = new WorkflowMethodologyAdapter(scrumConfigPath);
+      scrumAdapter = WorkflowMethodologyAdapter.createScrum(mockFeedbackAdapter);
     });
 
     describe('Complete Scrum Lifecycle - Canonical States', () => {
@@ -53,9 +57,9 @@ describe('WorkflowMethodologyAdapter - SCRUM Methodology Integration Tests', () 
 
         expect(rule).toBeDefined();
         expect(rule?.to).toBe('review');
-        expect(rule?.conditions.command).toBe('gitgov task submit');
-        expect(rule?.conditions.signatures?.['__default__']?.role).toBe('product_owner');
-        expect(rule?.conditions.signatures?.['__default__']?.capability_roles).toContain('product:owner');
+        expect(rule?.conditions?.command).toBe('gitgov task submit');
+        expect(rule?.conditions?.signatures?.['__default__']?.role).toBe('product_owner');
+        expect(rule?.conditions?.signatures?.['__default__']?.capability_roles).toContain('product:owner');
       });
 
       it('[EARS-62] should complete review to ready transition with scrum methodology', async () => {
@@ -74,8 +78,8 @@ describe('WorkflowMethodologyAdapter - SCRUM Methodology Integration Tests', () 
 
         expect(rule).toBeDefined();
         expect(rule?.to).toBe('ready');
-        expect(rule?.conditions.command).toBe('gitgov task approve');
-        expect(rule?.conditions.custom_rules).toContain('task_fits_in_sprint_capacity');
+        expect(rule?.conditions?.command).toBe('gitgov task approve');
+        expect(rule?.conditions?.custom_rules).toContain('task_fits_in_sprint_capacity');
 
         // Validate custom rule
         const customRuleResult = await scrumAdapter.validateCustomRules(['task_fits_in_sprint_capacity'], context);
@@ -104,8 +108,8 @@ describe('WorkflowMethodologyAdapter - SCRUM Methodology Integration Tests', () 
 
         expect(rule).toBeDefined();
         expect(rule?.to).toBe('active');
-        expect(rule?.conditions.event).toBe('sprint_started');
-        expect(rule?.conditions.custom_rules).toContain('task_assigned_to_team_member');
+        expect(rule?.conditions?.event).toBe('sprint_started');
+        expect(rule?.conditions?.custom_rules).toContain('task_assigned_to_team_member');
 
         // Validate assignment rule
         const customRuleResult = await scrumAdapter.validateCustomRules(['task_assigned_to_team_member'], context);
@@ -125,9 +129,9 @@ describe('WorkflowMethodologyAdapter - SCRUM Methodology Integration Tests', () 
 
         expect(rule).toBeDefined();
         expect(rule?.to).toBe('done');
-        expect(rule?.conditions.command).toBe('gitgov task complete');
-        expect(rule?.conditions.signatures?.['__default__']?.role).toBe('scrum_master');
-        expect(rule?.conditions.signatures?.['__default__']?.capability_roles).toContain('scrum:master');
+        expect(rule?.conditions?.command).toBe('gitgov task complete');
+        expect(rule?.conditions?.signatures?.['__default__']?.role).toBe('scrum_master');
+        expect(rule?.conditions?.signatures?.['__default__']?.capability_roles).toContain('scrum:master');
 
         // Validate signature
         const signature = {
@@ -149,7 +153,7 @@ describe('WorkflowMethodologyAdapter - SCRUM Methodology Integration Tests', () 
 
         expect(rule).toBeDefined();
         expect(rule?.to).toBe('archived');
-        expect(rule?.conditions.event).toBe('changelog_record_created');
+        expect(rule?.conditions?.event).toBe('changelog_record_created');
       });
     });
 
@@ -166,7 +170,7 @@ describe('WorkflowMethodologyAdapter - SCRUM Methodology Integration Tests', () 
         // Product Owner can groom tasks (draft → review)
         const rule = await scrumAdapter.getTransitionRule('draft', 'review', context);
         expect(rule).toBeDefined();
-        expect(rule?.conditions.signatures?.['__default__']?.capability_roles).toContain('product:owner');
+        expect(rule?.conditions?.signatures?.['__default__']?.capability_roles).toContain('product:owner');
 
         // Validate product owner signature
         const signature = {
@@ -192,7 +196,7 @@ describe('WorkflowMethodologyAdapter - SCRUM Methodology Integration Tests', () 
         // Scrum Master can approve demos (active → done)
         const rule = await scrumAdapter.getTransitionRule('active', 'done', context);
         expect(rule).toBeDefined();
-        expect(rule?.conditions.signatures?.['__default__']?.capability_roles).toContain('scrum:master');
+        expect(rule?.conditions?.signatures?.['__default__']?.capability_roles).toContain('scrum:master');
 
         // Validate scrum master signature
         const signature = {

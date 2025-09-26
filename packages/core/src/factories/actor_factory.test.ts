@@ -1,5 +1,5 @@
 import { createActorRecord } from './actor_factory';
-import type { ActorRecord } from '../types/actor_record';
+import type { ActorRecord } from '../types';
 import { DetailedValidationError } from '../validation/common';
 
 // Mock the validator to control test outcomes

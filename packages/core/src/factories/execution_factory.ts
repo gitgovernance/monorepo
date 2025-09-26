@@ -1,4 +1,4 @@
-import type { ExecutionRecord } from '../types/execution_record';
+import type { ExecutionRecord } from '../types';
 import { generateExecutionId } from '../utils/id_generator';
 import { validateExecutionRecordDetailed } from '../validation/execution_validator';
 import { DetailedValidationError } from '../validation/common';
@@ -11,7 +11,7 @@ import { DetailedValidationError } from '../validation/common';
  */
 export async function createExecutionRecord(payload: Partial<ExecutionRecord>): Promise<ExecutionRecord> {
   const timestamp = Math.floor(Date.now() / 1000);
-  
+
   const execution: ExecutionRecord = {
     id: payload.id || generateExecutionId(payload.title || 'execution', timestamp),
     taskId: payload.taskId || '',

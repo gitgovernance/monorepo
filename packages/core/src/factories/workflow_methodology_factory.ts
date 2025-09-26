@@ -1,4 +1,4 @@
-import type { WorkflowMethodologyRecord } from "../types/workflow_methodology_record";
+import type { WorkflowMethodologyRecord } from "../types";
 import {
   validateWorkflowMethodologyConfigDetailed,
   validateWorkflowMethodologyConfigBusinessRules
