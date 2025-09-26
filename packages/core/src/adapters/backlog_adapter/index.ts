@@ -6,15 +6,13 @@ import { FeedbackAdapter } from '../feedback_adapter';
 import { ExecutionAdapter } from '../execution_adapter';
 import { ChangelogAdapter } from '../changelog_adapter';
 import { MetricsAdapter } from '../metrics_adapter';
-import { WorkflowMethodologyAdapter } from '../workflow_methodology_adapter';
-import { publishEvent } from '../../modules/event_bus_module';
-import type { TaskRecord } from '../../types/task_record';
-import type { CycleRecord } from '../../types/cycle_record';
-import type { FeedbackRecord } from '../../types/feedback_record';
-import type { ExecutionRecord } from '../../types/execution_record';
-import type { ChangelogRecord } from '../../types/changelog_record';
+import type { TaskRecord } from '../../types';
+import type { CycleRecord } from '../../types';
+import type { FeedbackRecord } from '../../types';
+import type { ExecutionRecord } from '../../types';
+import type { ChangelogRecord } from '../../types';
 import type { IWorkflowMethodology } from '../workflow_methodology_adapter';
-import type { ActorRecord } from '../../types/actor_record';
+import type { ActorRecord } from '../../types';
 import type {
   IEventStream,
   TaskCreatedEvent,
@@ -27,8 +25,8 @@ import type {
   ChangelogCreatedEvent,
   SystemDailyTickEvent,
   EventMetadata
-} from '../../modules/event_bus_module';
-import type { GitGovRecord } from '../../models';
+} from '../../event_bus';
+import type { GitGovRecord } from '../../types';
 
 /**
  * BacklogAdapter Dependencies - Facade + Dependency Injection Pattern
@@ -50,8 +48,8 @@ export type BacklogAdapterDependencies = {
   metricsAdapter: MetricsAdapter;
 
   // Business Rules Layer (Methodologies)
-  workflowMethodology: IWorkflowMethodology;
-  planningMethodology?: IWorkflowMethodology; // Future
+  workflowMethodologyAdapter: IWorkflowMethodology;
+  planningMethodologyAdapter?: IWorkflowMethodology; // Future
 
   // Infrastructure Layer
   identity: IdentityAdapter;
@@ -74,6 +72,7 @@ export interface IBacklogAdapter {
   updateTask(taskId: string, payload: Partial<TaskRecord>): Promise<TaskRecord>;
   activateTask(taskId: string, actorId: string): Promise<TaskRecord>;
   completeTask(taskId: string, actorId: string): Promise<TaskRecord>;
+  resumeTask(taskId: string, actorId: string, force?: boolean): Promise<TaskRecord>;
   discardTask(taskId: string, actorId: string, reason?: string): Promise<TaskRecord>
 
   createCycle(payload: Partial<CycleRecord>, actorId: string): Promise<CycleRecord>;
@@ -136,37 +135,30 @@ export class BacklogAdapter implements IBacklogAdapter {
   private taskStore: RecordStore<TaskRecord>;
   private cycleStore: RecordStore<CycleRecord>;
   private feedbackStore: RecordStore<FeedbackRecord>;
-  private executionStore: RecordStore<ExecutionRecord>;
   private changelogStore: RecordStore<ChangelogRecord>;
 
   private feedbackAdapter: FeedbackAdapter;
-  private executionAdapter: ExecutionAdapter;
-  private changelogAdapter: ChangelogAdapter;
   private metricsAdapter: MetricsAdapter;
 
-  private workflowMethodology: IWorkflowMethodology;
-  private planningMethodology: IWorkflowMethodology | undefined;
+  private workflowMethodologyAdapter: IWorkflowMethodology;
   private identity: IdentityAdapter;
   private eventBus: IEventStream;
   private config: BacklogAdapterConfig;
+
 
   constructor(dependencies: BacklogAdapterDependencies) {
     // Data Layer
     this.taskStore = dependencies.taskStore;
     this.cycleStore = dependencies.cycleStore;
     this.feedbackStore = dependencies.feedbackStore;
-    this.executionStore = dependencies.executionStore;
     this.changelogStore = dependencies.changelogStore;
 
     // Adapter Dependencies
     this.feedbackAdapter = dependencies.feedbackAdapter;
-    this.executionAdapter = dependencies.executionAdapter;
-    this.changelogAdapter = dependencies.changelogAdapter;
     this.metricsAdapter = dependencies.metricsAdapter;
 
     // Business Rules & Infrastructure
-    this.workflowMethodology = dependencies.workflowMethodology;
-    this.planningMethodology = dependencies.planningMethodology;
+    this.workflowMethodologyAdapter = dependencies.workflowMethodologyAdapter;
     this.identity = dependencies.identity;
     this.eventBus = dependencies.eventBus;
 
@@ -230,7 +222,7 @@ export class BacklogAdapter implements IBacklogAdapter {
     // 3. Sign the record
     const signedRecord = await this.identity.signRecord(unsignedRecord, actorId, 'author');
 
-    // 4. Persist the record
+    // 4. Persist the record with validation
     await this.taskStore.write(signedRecord as GitGovRecord & { payload: TaskRecord });
 
     // 5. Emit event
@@ -298,7 +290,7 @@ export class BacklogAdapter implements IBacklogAdapter {
     const actor = await this.getActor(actorId);
 
     // Delegate to workflow methodology for validation
-    const transitionRule = await this.workflowMethodology.getTransitionRule('draft', 'review', {
+    const transitionRule = await this.workflowMethodologyAdapter.getTransitionRule('draft', 'review', {
       task,
       actor,
       signatures: taskRecord.header.signatures
@@ -375,7 +367,7 @@ export class BacklogAdapter implements IBacklogAdapter {
     };
 
     // 5. Delegate signature validation to methodology
-    const isValidSignature = await this.workflowMethodology.validateSignature(tempSignature, context);
+    const isValidSignature = await this.workflowMethodologyAdapter.validateSignature(tempSignature, context);
     if (!isValidSignature) {
       throw new Error(`ProtocolViolationError: Signature is not valid for this approval`);
     }
@@ -429,7 +421,7 @@ export class BacklogAdapter implements IBacklogAdapter {
       transitionTo: 'active' as TaskRecord['status']
     };
 
-    const transitionRule = await this.workflowMethodology.getTransitionRule('ready', 'active', context);
+    const transitionRule = await this.workflowMethodologyAdapter.getTransitionRule('ready', 'active', context);
     if (!transitionRule) {
       throw new Error(`ProtocolViolationError: Workflow methodology rejected ready→active transition`);
     }
@@ -450,6 +442,69 @@ export class BacklogAdapter implements IBacklogAdapter {
       payload: {
         taskId,
         oldStatus: 'ready',
+        newStatus: 'active',
+        actorId
+      }
+    } as TaskStatusChangedEvent);
+
+    return updatedPayload;
+  }
+
+  /**
+   * Resumes a paused task transitioning back to active with optional force override
+   */
+  async resumeTask(taskId: string, actorId: string, force: boolean = false): Promise<TaskRecord> {
+    // 1. Read and validate task exists
+    const taskRecord = await this.taskStore.read(taskId);
+    if (!taskRecord) {
+      throw new Error(`RecordNotFoundError: Task not found: ${taskId}`);
+    }
+
+    const task = taskRecord.payload;
+
+    // 2. Validate current status is 'paused'
+    if (task.status !== 'paused') {
+      throw new Error(`ProtocolViolationError: Task is in '${task.status}' state. Cannot resume (requires paused).`);
+    }
+
+    // 3. Resolve actor and validate permissions via workflow methodology
+    const actor = await this.getActor(actorId);
+
+    if (!force) {
+      const taskHealth = await this.metricsAdapter.getTaskHealth(task.id);
+      if (taskHealth.blockingFeedbacks > 0) {
+        throw new Error('BlockingFeedbackError: Task has blocking feedbacks. Resolve them before resuming or use force.');
+      }
+    }
+
+    const context = {
+      task,
+      actor,
+      signatures: taskRecord.header.signatures,
+      transitionTo: 'active' as TaskRecord['status']
+    };
+
+    const transitionRule = await this.workflowMethodologyAdapter.getTransitionRule('paused', 'active', context);
+    if (!transitionRule) {
+      throw new Error('ProtocolViolationError: Workflow methodology rejected paused→active transition');
+    }
+
+    // 4. Update task status back to 'active'
+    const updatedPayload: TaskRecord = { ...task, status: 'active' };
+    const updatedRecord = { ...taskRecord, payload: updatedPayload };
+
+    // 5. Sign and persist with resumer role
+    const signedRecord = await this.identity.signRecord(updatedRecord, actorId, 'resumer');
+    await this.taskStore.write(signedRecord as GitGovRecord & { payload: TaskRecord });
+
+    // 6. Emit task status changed event
+    this.eventBus.publish({
+      type: 'task.status.changed',
+      timestamp: Date.now(),
+      source: 'backlog_adapter',
+      payload: {
+        taskId,
+        oldStatus: 'paused',
         newStatus: 'active',
         actorId
       }
@@ -484,7 +539,7 @@ export class BacklogAdapter implements IBacklogAdapter {
       transitionTo: 'done' as TaskRecord['status']
     };
 
-    const transitionRule = await this.workflowMethodology.getTransitionRule('active', 'done', context);
+    const transitionRule = await this.workflowMethodologyAdapter.getTransitionRule('active', 'done', context);
     if (!transitionRule) {
       throw new Error(`ProtocolViolationError: Workflow methodology rejected active→done transition`);
     }
@@ -540,7 +595,7 @@ export class BacklogAdapter implements IBacklogAdapter {
       transitionTo: 'discarded' as TaskRecord['status']
     };
 
-    const transitionRule = await this.workflowMethodology.getTransitionRule(task.status, 'discarded', context);
+    const transitionRule = await this.workflowMethodologyAdapter.getTransitionRule(task.status, 'discarded', context);
     if (!transitionRule) {
       throw new Error(`ProtocolViolationError: Workflow methodology rejected ${task.status}→discarded transition`);
     }
@@ -645,7 +700,7 @@ export class BacklogAdapter implements IBacklogAdapter {
       };
 
       // Only handle blocking feedbacks
-      if (event.payload.feedbackType !== 'blocking') {
+      if (event.payload.type !== 'blocking') {
         return; // EARS-32: Do nothing for non-blocking feedback
       }
 
@@ -762,8 +817,8 @@ export class BacklogAdapter implements IBacklogAdapter {
       }
 
       // EARS-36: Validate with WorkflowMethodology before transition
-      const actor = await this.getActor(event.payload.actorId);
-      const transitionRule = await this.workflowMethodology.getTransitionRule('ready', 'active', {
+      const actor = await this.getActor(event.payload.triggeredBy);
+      const transitionRule = await this.workflowMethodologyAdapter.getTransitionRule('ready', 'active', {
         task,
         actor,
         signatures: []
@@ -789,7 +844,7 @@ export class BacklogAdapter implements IBacklogAdapter {
             taskId: task.id,
             oldStatus: 'ready',
             newStatus: 'active',
-            actorId: event.payload.actorId
+            actorId: event.payload.triggeredBy
           }
         } as TaskStatusChangedEvent);
       }
@@ -847,7 +902,7 @@ export class BacklogAdapter implements IBacklogAdapter {
   /**
    * [EARS-38] Handles daily tick events - proactive health auditing
    */
-  async handleDailyTick(event: SystemDailyTickEvent): Promise<void> {
+  async handleDailyTick(_event: SystemDailyTickEvent): Promise<void> {
     try {
       // EARS-38: Use MetricsAdapter for proactive auditing
       const systemStatus = await this.metricsAdapter.getSystemStatus();
@@ -1155,7 +1210,7 @@ export class BacklogAdapter implements IBacklogAdapter {
   }
 
   // TODO: Implement when commit_processor.md is implemented
-  async processChanges(changes: unknown[]): Promise<ExecutionRecord[]> {
+  async processChanges(_changes: unknown[]): Promise<ExecutionRecord[]> {
     throw new Error('NotImplementedError: processChanges() will be implemented when commit_processor.md is ready');
   }
 }
