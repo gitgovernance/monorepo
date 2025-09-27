@@ -126,7 +126,7 @@ console.log(duplicates.duplicateEdges);
 The duplicate detection can be integrated into the lint command:
 
 ```typescript
-import { DiagramGenerator } from "@gitgovernance/core";
+import { DiagramGenerator } from "@gitgov/core";
 
 const generator = new DiagramGenerator();
 const duplicates = generator.analyzer.detectDuplicates(cycles, tasks);
