@@ -9,7 +9,11 @@
     "markdown-link-check": "^3.12.1"
   },
   "scripts": {
-    "build": "bash .gitgov/scripts/compiler/build.sh",
-    "build-all": "node .gitgov/scripts/compiler/build-all.js"
+    "cli": "pnpm --filter @gitgov/cli dev",
+    "build": "pnpm -r build",
+    "build-blueprints": "bash .gitgov/scripts/compiler/build.sh",
+    "build-all-blueprints": "node .gitgov/scripts/compiler/build-all.js",
+    "check": "pnpm test && pnpm build",
+    "test": "pnpm -r test"
   }
 }

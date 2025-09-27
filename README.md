@@ -2,8 +2,9 @@
 
 ![License: MPL-2.0](https://img.shields.io/badge/Core_License-MPL--2.0-brightgreen.svg)
 ![License: Apache-2.0](https://img.shields.io/badge/CLI_License-Apache--2.0-blue.svg)
-![Tests](https://img.shields.io/badge/tests-667%20passing-success)
-![npm version](https://img.shields.io/npm/v/@gitgov/cli)
+![Tests](https://img.shields.io/badge/tests-871%20passing-success)
+![core npm version](https://img.shields.io/npm/v/@gitgov/core)
+![cli npm version](https://img.shields.io/npm/v/@gitgov/cli)
 
 **An Operating System for Intelligent Work, built on a Git-based ledger.**
 
@@ -19,72 +20,36 @@ Our core principle is a **Protocol-First Approach**. Every component is first de
 
 ---
 
-## 🚀 For Users: Get Started in 2 Minutes
+## 🚀 Getting Started
 
-This is the workflow to start using GitGovernance in your own project.
+```bash
+# 1. Install from NPM
+# Requires Node.js >= 18
+npm install -g @gitgov/cli
 
-### 1. Install the CLI (macOS)
-```sh
-curl -sSL https://get.gitgovernance.com | sh (coming soon)
-```
-
-### ✅ Installed GitGovernance CLI v1.0.0
-
-#### 2. Navigate to your project and initialize
-```sh
+# 2. Initialize in your project repository
 cd your-project
-git init  # if not a git repository
+git init # If not already a Git repository
 gitgov init --name "My Project"
+
+# 3. Launch the interactive dashboard
+gitgov dashboard
 ```
 
-### ✅ Project initialized with GitGovernance. Ready for human-agent collaboration.
-
-#### 3. Launch the dashboard to visualize the state
-```sh
-gitgov dashboard                    # Live mode with 5s auto-refresh
-gitgov dashboard --template=kanban-7col  # Kanban workflow view
-gitgov dashboard --template=scrum-board  # Scrum ceremonies view
-```
-
-#### 4. Operate with the interactive dashboard
-
-<img width="876" height="604" alt="Screen Shot 2025-09-18 at 06 08 59" src="https://github.com/user-attachments/assets/016a4bef-d374-4963-aef3-19303650fb3a" />
+<img width="876" height="604" alt="GitGovernance TUI Dashboard" src="https://github.com/user-attachments/assets/016a4bef-d374-4963-aef3-19303650fb3a" />
 
 ---
 
-## 📦 Installation Methods
+## 🔧 Developer Guide
 
-### 🚀 **For End Users (Recommended)**
-
-**One-line installation via Cloudflare Pages:**
-
-```bash
-curl -sSL https://get.gitgovernance.com | sh
-```
-
-**Requirements:**
-
-- macOS (Linux/Windows support coming soon)
-- Node.js 18+
-- Git (recommended)
-
-**What it does:**
-
-- Downloads and installs GitGovernance CLI from source
-- Creates executable wrapper in `~/.local/bin/gitgov`
-- Sets up proper PATH configuration
-- Provides perfect first impression experience
-
-### 🔧 **For Developers: Local Development Setup**
-
-This guide is for contributors who want to work on the GitGovernance ecosystem (core, platform, etc.).
+This guide is for contributors who want to work on the GitGovernance ecosystem.
 
 ### Prerequisites
 
 - Node.js (v18 or higher)
 - pnpm
 
-### Installation and Setup
+### Setup and Verification
 
 1.  **Clone the repository:**
 
@@ -99,40 +64,27 @@ This guide is for contributors who want to work on the GitGovernance ecosystem (
     pnpm install
     ```
 
-3.  **Install CLI for development:**
+3.  **Verify the packages:**
+
+    This command builds the code and runs all tests for both `core` and `cli`.
 
     ```bash
-    # Install portable wrapper (for demos/testing):
-    cd packages/cli && npm run install:local
-    ```
-
-4.  **Verify installation:**
-
-    ```bash
-    # Complete tests:
-    cd packages/core && npm test  # 503 tests
-    cd packages/cli && npm test   # 164 tests
-
-    # CLI working (development mode):
-    gitgov-local init --name "Test Project"
+    pnpm -r verify
     ```
 
 ### Development Workflow
 
 ```bash
-# Normal development from the project:
+# To run the CLI with hot-reloading:
 cd packages/cli
-pnpm dev status              # Direct CLI development
-pnpm dev init               # Init testing
+pnpm dev status
 
-# E2E testing and demos (portable wrapper):
-cd /tmp && mkdir demo && cd demo && git init
-gitgov-local init --name "Demo"  # Portable, works anywhere
-gitgov-local status
+# To test the CLI system-wide (from any directory):
+cd packages/cli
+pnpm build && npm link
 
-# Production installation testing:
-curl -sSL https://get.gitgovernance.com | sh
-gitgov init --name "Production Test"
+# Now you can use `gitgov` anywhere
+gitgov status
 ```
 
 ## 📦 Monorepo Structure
@@ -192,21 +144,21 @@ GitGovernance includes native integration with [Kiro IDE](https://kiro.dev), a n
 
 ### ✅ **Core Ecosystem (Complete)**
 
-- **@gitgov/core**: 503 tests passing, 7/7 adapters implemented
+- **@gitgov/core**: 704 tests passing, 9/9 adapters implemented
   - ProjectAdapter, BacklogAdapter, MetricsAdapter, IndexerAdapter
   - IdentityAdapter, ExecutionAdapter, FeedbackAdapter, ChangelogAdapter
   - WorkflowMethodologyAdapter, EventBusModule
-- **@gitgov/cli**: 164 tests passing, 7/7 commands functional
+- **@gitgov/cli**: 167 tests passing, 7/7 commands functional
   - `gitgov init`, `gitgov indexer`, `gitgov task`, `gitgov cycle`
   - `gitgov status`, `gitgov dashboard`, `gitgov diagram`
 
 ### 🚀 **Available Commands**
 
 ```bash
-# Project initialization (perfect first impression)
+# Project initialization
 gitgov init --name "My Project" --actor-name "Project Owner"
 
-# Cache management (critical for performance)
+# Cache management
 gitgov indexer
 
 # Task management (complete operational workflow)
@@ -240,18 +192,21 @@ Instead of memorizing commands, you can ask the agent in natural language to che
 
 #### **Project Health Check**
 
-- **You:** `"Hey @gitgov, how are we doing?"`
-- **Agent:** `"Our backlog health is at 87%, but task 'Refactor Compiler' has been stalled for 12 days, and there are 3 critical blockers. Throughput is excellent, but our lead time is high. Run \`gitgov status --health --alerts\` for full details."`
+- **You:** `"@gitgov, how are we doing?"`
+- **Agent:** `"Our backlog health is at 87%, but task 'Refactor Compiler' has been stalled for 12 days, and there are 3 critical blockers. Throughput is excellent, but our lead time is high."`
+- _Run `gitgov status --health --alerts` for full details._
 
 #### **Work Assignment**
 
 - **You:** `"@gitgov, what should I work on next?"`
-- **Agent:** `"You have one high-priority feedback item assigned to you: 'Refactor Compiler', which is blocking 3 other tasks. This is critical. Use \`gitgov task show <task-id>\` for details."`
+- **Agent:** `"You have one high-priority feedback item assigned to you: 'Refactor Compiler', which is blocking 3 other tasks. This is critical."`
+- _Use `gitgov task show <task-id>` for details._
 
 #### **Blocking Issues**
 
 - **You:** `"@gitgov, what's blocked?"`
-- **Agent:** `"There are 3 critical blockers: Task X (12 days), Task Y (8 days), and Task Z (5 days). I recommend prioritizing these to improve project flow. Use \`gitgov task list --status blocked\` for analysis."`
+- **Agent:** `"There are 3 critical blockers: Task X (12 days), Task Y (8 days), and Task Z (5 days). I recommend prioritizing these to improve project flow."`
+- _Use `gitgov task list --status blocked` for analysis._
 
 ### 🎯 **Dashboard Views - Multi-Methodology Support**
 
@@ -260,10 +215,10 @@ GitGovernance includes a sophisticated TUI dashboard with multiple views for dif
 #### **Row-Based View (Default)**
 
 ```bash
-gitgov dashboard  # Default view - "Backlog with Life"
+gitgov dashboard  # Default view
 ```
 
-- **Epic Convergence**: Shows 6 adapters working in harmony
+- **Integrated View**: Shows multiple adapters working in coordination
 - **Real-Time Intelligence**: Auto-refresh every 5 seconds
 - **Activity Stream**: Live system activity with agent collaboration
 - **Interactive Controls**: Keyboard shortcuts for quick actions
