@@ -1,7 +1,7 @@
 {
-  "name": "@gitgovernance/core",
-  "version": "1.0.2",
-  "description": "Universal SDK for the GitGovernance ecosystem, providing a type-safe, local-first API to manage identities, agents, and workflows.",
+  "name": "@gitgov/core",
+  "version": "1.0.0",
+  "description": "SDK for the GitGovernance ecosystem, providing a type-safe, local-first API to manage identities, agents, and workflows.",
   "type": "module",
   "main": "dist/src/index.js",
   "types": "dist/src/index.d.ts",

@@ -1,69 +1,88 @@
-# @gitgovernance/core: The Governance Engine
+# @gitgov/core: The Governance Engine
 
-[![NPM Version](https://img.shields.io/npm/v/@gitgovernance/core)](https://www.npmjs.com/package/@gitgovernance/core)
+[![NPM Version](https://img.shields.io/npm/v/@gitgov/core)](https://www.npmjs.com/package/@gitgov/core)
 [![License: MPL-2.0](https://img.shields.io/badge/License-MPL%202.0-brightgreen.svg)](https://opensource.org/licenses/MPL-2.0)
-[![Tests](https://img.shields.io/badge/tests-711%20passing-brightgreen.svg)](./src)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue.svg)](./tsconfig.json)
 
-`@gitgovernance/core` is the **universal SDK** for the GitGovernance ecosystem. It provides a type-safe, local-first, and schema-driven API to manage identities, agents, and workflows in software projects.
+`@gitgov/core` is the **SDK** for the GitGovernance ecosystem. It provides a type-safe, local-first, and schema-driven API to manage identities, agents, and workflows in software projects.
 
 ## 🚀 Quick Start
 
-This example initializes a complete GitGovernance project in a new directory, creating the necessary configuration, the first user actor, and a root cycle for tasks.
+This example shows how to create a new task using the `BacklogAdapter`. The SDK uses dependency injection - each adapter requires its dependencies to be explicitly provided.
+
+*Note: This example assumes it is run inside an initialized GitGovernance project.*
 
 ```typescript
-import {
-  ProjectAdapter,
-  ConfigManager,
-  RecordStore,
-  IdentityAdapter,
-  BacklogAdapter,
-  WorkflowMethodologyAdapter,
-} from "@gitgovernance/core";
-import path from "path";
-import fs from "fs/promises";
+import { Adapters, Store, EventBus } from "@gitgov/core";
+import type { TaskRecord, CycleRecord, ActorRecord, AgentRecord } from "@gitgov/core";
 
-// 1. Instantiate all core adapters and their dependencies
-const identityAdapter = new IdentityAdapter();
+// Extract classes from namespaces
+const { IdentityAdapter, BacklogAdapter, WorkflowMethodologyAdapter } = Adapters;
+const { RecordStore } = Store;
+const { EventBus: EventBusClass } = EventBus;
+
+// 1. Setup core infrastructure
+const eventBus = new EventBusClass();
+const actorStore = new RecordStore<ActorRecord>("actors");
+const agentStore = new RecordStore<AgentRecord>("agents");
+const taskStore = new RecordStore<TaskRecord>("tasks");
+const cycleStore = new RecordStore<CycleRecord>("cycles");
+
+// 2. Setup identity adapter
+const identity = new IdentityAdapter({
+  actorStore,
+  agentStore,
+});
+
+// 3. Setup workflow methodology
+const workflowMethodology = WorkflowMethodologyAdapter.createDefault();
+
+// 4. Setup BacklogAdapter with minimal dependencies for basic task creation
 const backlogAdapter = new BacklogAdapter({
-  taskStore: new RecordStore("tasks"),
-  cycleStore: new RecordStore("cycles"),
-  workflowMethodology: new WorkflowMethodologyAdapter(),
-  identity: identityAdapter,
-});
-const projectAdapter = new ProjectAdapter({
-  identityAdapter,
-  backlogAdapter,
-  workflowMethodologyAdapter: new WorkflowMethodologyAdapter(),
-  configManager: new ConfigManager(),
-  taskStore: new RecordStore("tasks"),
-  cycleStore: new RecordStore("cycles"),
-});
-
-// 2. Validate environment and initialize the project
-const validation = await projectAdapter.validateEnvironment();
-if (!validation.isValid) {
-  console.error("Environment issues:", validation.warnings);
-  process.exit(1);
-}
-
-const result = await projectAdapter.initializeProject({
-  name: "My GitGovernance Project",
-  actorName: "Project Owner",
+  taskStore,
+  cycleStore,
+  identity,
+  eventBus,
+  workflowMethodologyAdapter: workflowMethodology,
+  // Optional dependencies (can be undefined for basic usage)
+  feedbackStore: undefined,
+  executionStore: undefined,
+  changelogStore: undefined,
+  feedbackAdapter: undefined,
+  executionAdapter: undefined,
+  changelogAdapter: undefined,
+  metricsAdapter: undefined,
 });
 
-// 3. Project is now ready!
-console.log(`✅ Project initialized: ${result.projectId}`);
-console.log(`🔗 Root cycle: ${result.rootCycle}`);
-console.log(
-  `👤 Actor created: ${result.actor.displayName} (${result.actor.id})`
+// 5. Create a new task
+const newTaskPayload = {
+  title: "Implement user authentication",
+  priority: "high",
+  description: "Add OAuth2 integration for Google and GitHub.",
+};
+
+const taskRecord = await backlogAdapter.createTask(
+  newTaskPayload,
+  "human:project-lead" // The actor performing the action
 );
 
+console.log("✅ Task Created Successfully:");
+console.log({
+  id: taskRecord.id,
+  title: taskRecord.title,
+  status: taskRecord.status, // The adapter sets the default status
+});
+
 // Expected output:
-// ✅ Project initialized: my-gitgovernance-project
-// 🔗 Root cycle: cycle:my-gitgovernance-project.root
-// 👤 Actor created: Project Owner (human:project-owner)
+// ✅ Task Created Successfully:
+// {
+//   id: 'task:1727445600000-implement-user-authentication',
+//   title: 'Implement user authentication',
+//   status: 'draft'
+// }
 ```
+
+> **💡 For production usage:** See the [complete setup example](../../blueprints/03_products/core/core_reference.md#quick-start) with all adapters and dependencies properly configured.
 
 ## ✅ What's Implemented (v1.0)
 
@@ -75,17 +94,19 @@ console.log(
 - **Schema Validation**: JSON Schema-driven with detailed errors
 - **Performance**: Schema validation caching
 
-### Complete Adapter Ecosystem (7/7 Adapters)
+### Complete Adapter Ecosystem (9/9 Adapters)
 
 - **ProjectAdapter**: Project initialization engine with 3-adapter orchestration (✅ Implemented - 18 tests)
-- **BacklogAdapter**: Task and cycle lifecycle management with workflow validation (✅ Implemented - 33 tests)
+- **BacklogAdapter**: Task and cycle lifecycle management with workflow validation (✅ Implemented - 43 tests)
 - **MetricsAdapter**: Pure calculation engine for system analytics (✅ Implemented - 32 tests)
-- **ChangelogAdapter**: System historian for change documentation (🏆 PERFECTION - 31 tests)
-- **ExecutionAdapter**: Immutable audit log for work execution (🏆 PERFECTION - 13 tests)
-- **FeedbackAdapter**: Structured communication and blocking management (🏆 PERFECTION - 15 tests)
+- **ChangelogAdapter**: System historian for change documentation (✅ Implemented - 31 tests)
+- **ExecutionAdapter**: Immutable audit log for work execution (✅ Implemented - 13 tests)
+- **FeedbackAdapter**: Structured communication and blocking management (✅ Implemented - 15 tests)
 - **IdentityAdapter**: Cryptographic identity and agent management (✅ Implemented - 25 tests)
+- **WorkflowMethodologyAdapter**: Configurable workflow validation engine (✅ Implemented - 51 tests)
+- **IndexerAdapter**: Local cache optimization for performance (✅ Implemented - 5 tests)
 
-### Complete Record System (7/7 Records)
+### Complete Record System (8/8 Records)
 
 - **TaskRecord**: Factory and validation for task management
 - **CycleRecord**: Factory and validation for cycle organization
@@ -98,45 +119,11 @@ console.log(
 ### Infrastructure Modules
 
 - **Generic Store**: CRUD operations for all record types
-- **Integration Testing**: Cross-module validation framework (35 tests)
+- **Integration Testing**: Cross-module validation framework
 - **WorkflowMethodologyAdapter**: Configurable workflow validation engine (✅ Implemented)
 - **EventBusModule**: Event-driven architecture foundation with 9 event types (✅ Implemented)
-
-```typescript
-// Complete project initialization workflow
-const projectAdapter = new ProjectAdapter({
-  identityAdapter: new IdentityAdapter(),
-  backlogAdapter: new BacklogAdapter(/* dependencies */),
-  workflowMethodologyAdapter: new WorkflowMethodologyAdapter(),
-  configManager: new ConfigManager(),
-  taskStore: new RecordStore("tasks"),
-  cycleStore: new RecordStore("cycles"),
-});
-
-// 1. Validate environment
-const validation = await projectAdapter.validateEnvironment();
-if (!validation.isValid) {
-  console.error("Environment issues:", validation.warnings);
-  process.exit(1);
-}
-
-// 2. Initialize complete project
-const result = await projectAdapter.initializeProject({
-  name: "My GitGovernance Project",
-  actorName: "Project Owner",
-  template: "./templates/basic.json",
-  methodology: "scrum",
-});
-
-// 3. Project is now ready
-console.log(`✅ Project initialized: ${result.projectId}`);
-console.log(`🔗 Root cycle: ${result.rootCycle}`);
-console.log(`👤 Actor: ${result.actor.displayName}`);
-
-// 4. Get project information
-const projectInfo = await projectAdapter.getProjectInfo();
-console.log(`📊 Project: ${projectInfo?.name}`);
-```
+- **DiagramGenerator**: Automatic Mermaid diagram generation with deduplication and data quality warnings (✅ Implemented)
+- **Schema Generation Pipeline**: Automatic YAML→JSON→TypeScript transformation with build-time validation (✅ Implemented)
 
 ## 🏗️ Architecture
 
@@ -144,7 +131,7 @@ The package is built with a domain-driven architecture to separate responsibilit
 
 ```mermaid
 graph TD
-    subgraph "@gitgovernance/core"
+    subgraph "@gitgov/core"
         PA[ProjectAdapter] --> IA[IdentityAdapter];
         PA --> BA[BacklogAdapter];
         PA --> WMA[WorkflowMethodologyAdapter];
@@ -157,7 +144,7 @@ graph TD
     end
 
     subgraph "Consumidores"
-        CLI["@gitgovernance/cli"]
+        CLI["@gitgov/cli"]
         SAAS["@gitgov/saas"]
     end
 
@@ -172,11 +159,12 @@ graph TD
 ### Core Principles
 
 1.  **Protocol-Driven**: The canonical JSON Schemas that define the governance protocol are bundled with the package and are the single source of truth for all data validation.
-2.  **Type Safety**: Strict TypeScript with no `any` to prevent compile-time errors.
-3.  **Event Coherence Guarantee**: Event payloads are derived from canonical records using TypeScript Utility Types, ensuring 100% consistency between system state and system events.
-4.  **Rich Errors**: Detailed, field-level validation errors to make debugging easier.
-5.  **Performance**: A compiled schema cache (`SchemaValidationCache`) minimizes I/O and accelerates repetitive validations.
-6.  **Local-First**: Designed to operate directly on a Git repository as its database.
+2.  **Build-Time Generation**: Schemas and types are automatically generated from YAML protocols using `npm run prebuild` (complete pipeline) or individual commands, ensuring 100% coherence.
+3.  **Type Safety**: Strict TypeScript with no `any` to prevent compile-time errors.
+4.  **Event Coherence Guarantee**: Event payloads are derived from canonical records using TypeScript Utility Types, ensuring 100% consistency between system state and system events.
+5.  **Rich Errors**: Detailed, field-level validation errors to make debugging easier.
+6.  **Performance**: A compiled schema cache (`SchemaValidationCache`) minimizes I/O and accelerates repetitive validations.
+7.  **Local-First**: Designed to operate directly on a Git repository as its database.
 
 ## 🔧 Advanced Usage
 
@@ -186,7 +174,7 @@ graph TD
 import {
   validateActorRecordDetailed,
   DetailedValidationError,
-} from "@gitgovernance/core";
+} from "@gitgov/core";
 
 const result = validateActorRecordDetailed(userData);
 if (!result.isValid) {
@@ -204,7 +192,7 @@ import {
   DetailedValidationError,
   RecordNotFoundError,
   ProjectRootError,
-} from "@gitgovernance/core";
+} from "@gitgov/core";
 
 function handleCoreErrors(error: unknown) {
   if (error instanceof DetailedValidationError) {
@@ -221,7 +209,7 @@ function handleCoreErrors(error: unknown) {
 ### Performance Monitoring
 
 ```typescript
-import { SchemaValidationCache } from "@gitgovernance/core";
+import { SchemaValidationCache } from "@gitgov/core";
 
 // Monitor cache efficiency
 const stats = SchemaValidationCache.getCacheStats();
@@ -231,11 +219,43 @@ console.log(`Cache hit ratio: ${stats.cachedSchemas} schemas loaded`);
 SchemaValidationCache.clearCache();
 ```
 
+### Diagram Generation
+
+```typescript
+import { DiagramGenerator } from "@gitgov/core";
+
+const generator = new DiagramGenerator();
+
+// Generate Mermaid diagrams from GitGovernance records
+const result = await generator.generateFromRecords(cycles, tasks, {
+  cycleId: "1704067200-cycle-identity-adapter",
+  layout: 'TD',
+  showWarnings: true,
+});
+
+console.log(result.mermaidCode);
+// Automatic deduplication and data quality warnings included
+```
+
 ## 🧪 Testing & Development
 
 ```bash
-# Run all tests (500+ passing)
+# Run all tests (704 tests total)
 npm test
+npm run test:coverage    # Run tests with coverage report
+
+# Build-time schema and type generation
+npm run sync:schemas           # Generate JSON schemas from YAML protocols
+npm run sync:workflow-configs  # Sync workflow methodology configurations
+npm run compile:types          # Generate TypeScript types from JSON schemas
+npm run generate:indexes       # Generate organized export indexes
+npm run validate:schemas       # Validate all generated schemas
+
+# Development workflow
+npm run prebuild         # Complete pipeline: sync → compile → generate
+npm run build           # Clean build with TypeScript compilation
+npm run clean           # Remove dist directory
+npm run clean:generated # Remove all generated schemas and types
 
 # Type checking
 npx tsc --noEmit
@@ -246,7 +266,7 @@ npm test -- --watch
 
 ### Test Coverage
 
-- **711 tests total** with EARS methodology
+- **704 tests total** with EARS methodology
 - **ProjectAdapter**: 18 tests (complete project initialization + template processing + error recovery)
 - **BacklogAdapter**: 43 tests (complete workflow lifecycle + event handlers + E2E simulation)
 - **MetricsAdapter**: 32 tests (Tier 1+2 calculations + performance validation)
@@ -261,43 +281,26 @@ npm test -- --watch
 - **Store**: 26 tests (generic CRUD for all record types)
 - **Crypto**: 23 tests (signatures + checksums for all 7 record types)
 - **ConfigManager**: 20 tests (configuration + session state + project utilities)
+- **IndexerAdapter**: 5 tests (cache generation, validation, and retrieval)
 - **Utils**: 10 tests (ID generation utilities)
-- **Integration**: 18 tests (cross-module validation)
+- **Integration**: 74 tests (cross-module validation)
 
 ## 🔮 Roadmap
 
-### Next: CLI Integration & Polish
+### Next Steps
 
-- CLI init command integration with ProjectAdapter
-- Real adapter integration tests (replace mocks with actual adapters)
-- IndexerModule for local cache optimization
-- Performance benchmarking with enterprise datasets
-- ConfigManager write methods (architectural improvement)
+- **Git Adapter**: Development of a low-level adapter for direct Git operations.
+- **Platform Adapters**: Integration with platform-specific features (e.g., GitHub Adapter).
+- **Advanced Validation**: Creation of `lint` and `audit` modules for structural and protocol validation.
 
 ### Recently Completed
 
-- ✅ **ProjectAdapter**: Complete implementation with 3-adapter orchestration (Blueprint 9.6/10 → Implementation → 18 tests)
-- ✅ **BacklogAdapter**: Complete implementation with event-driven coordination (Blueprint 10.0/10 → Implementation → 33 tests)
-- ✅ **MetricsAdapter**: Complete calculation engine with Tier 1+2 functions (Blueprint 10.0/10 → Implementation → 32 tests)
-- ✅ **ChangelogAdapter**: Complete implementation with conditional validation (Blueprint 10.0/10 → Implementation → 31 tests)
-- ✅ **ExecutionAdapter**: Complete implementation with perfect traceability (Blueprint 10.0/10 → Implementation → 13 tests)
-- ✅ **FeedbackAdapter**: Complete implementation with dual event emission (Blueprint 10.0/10 → Implementation → 15 tests)
-
-## 📚 Documentation
-
-- **[Protocol Specs](./src/schemas/)**: Canonical schemas and rules
-
-## 🤝 Contributing
-
-This package follows **a protocol-first approach**. Every feature must:
-
-1. Have a corresponding specification (blueprint) in `specs/`
-2. Include comprehensive tests with EARS references
-3. Follow the established architectural patterns
-4. Pass TypeScript strict compilation
-5. Update relevant documentation
-
-See [CONTRIBUTING.md](../../CONTRIBUTING.md) for detailed guidelines.
+- ✅ **Complete Adapter Ecosystem**: All 9 core adapters for the foundational domains have been implemented and tested.
+- ✅ **IndexerAdapter**: A dedicated module for local cache optimization to enhance performance is now available.
+- ✅ **EventBusModule**: The foundational event-driven architecture is in place, enabling decoupled communication between modules.
+- ✅ **ProjectAdapter**: The project initialization and orchestration logic is fully functional.
+- ✅ **DiagramGenerator Module**: Automatic Mermaid diagram generation with deduplication, data quality warnings, and advanced filtering.
+- ✅ **Schema Generation Pipeline**: Complete YAML→JSON→TypeScript build-time transformation with automatic synchronization.
 
 ---
 
