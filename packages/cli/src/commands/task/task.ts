@@ -7,7 +7,10 @@ import type {
   TaskSubmitOptions,
   TaskApproveOptions,
   TaskActivateOptions,
+  TaskResumeOptions,
   TaskCompleteOptions,
+  TaskCancelOptions,
+  TaskRejectOptions,
   TaskAssignOptions,
   TaskEditOptions,
   TaskPromoteOptions
@@ -156,6 +159,19 @@ EXAMPLES:
       await taskCommand.executeActivate(taskId, options);
     });
 
+  // gitgov task resume
+  task
+    .command('resume <taskId>')
+    .description('Resume paused TaskRecord from paused to active with blocking validation')
+    .alias('r')
+    .option('-f, --force', 'Force resume ignoring blocking feedbacks')
+    .option('--json', 'Output in JSON format')
+    .option('-v, --verbose', 'Show blocking validation details')
+    .option('-q, --quiet', 'Minimal output for scripting')
+    .action(async (taskId: string, options: TaskResumeOptions) => {
+      await taskCommand.executeResume(taskId, options);
+    });
+
   // gitgov task complete
   task
     .command('complete <taskId>')
@@ -167,6 +183,33 @@ EXAMPLES:
     .action(async (taskId: string, options: TaskCompleteOptions) => {
       await taskCommand.executeComplete(taskId, options);
     });
+
+  // gitgov task cancel
+  task
+    .command('cancel <taskId>')
+    .description('Cancel TaskRecord from ready/active to discarded with optional reason')
+    .alias('can')
+    .option('-r, --reason <reason>', 'Reason for cancellation')
+    .option('--json', 'Output in JSON format')
+    .option('-v, --verbose', 'Show cancellation process details')
+    .option('-q, --quiet', 'Minimal output for scripting')
+    .action(async (taskId: string, options: TaskCancelOptions) => {
+      await taskCommand.executeCancel(taskId, options);
+    });
+
+  // gitgov task reject
+  task
+    .command('reject <taskId>')
+    .description('Reject TaskRecord from review to discarded with optional reason')
+    .alias('rej')
+    .option('-r, --reason <reason>', 'Reason for rejection')
+    .option('--json', 'Output in JSON format')
+    .option('-v, --verbose', 'Show rejection process details')
+    .option('-q, --quiet', 'Minimal output for scripting')
+    .action(async (taskId: string, options: TaskRejectOptions) => {
+      await taskCommand.executeReject(taskId, options);
+    });
+
 
   // gitgov task assign
   task
