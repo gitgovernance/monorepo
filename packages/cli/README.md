@@ -1,50 +1,36 @@
-# @gitgov/cli: The Command Interface for the AI-First Enterprise
+# @gitgov/cli: AI-First Project Governance
 
 [![NPM Version](https://img.shields.io/npm/v/@gitgov/cli)](https://www.npmjs.com/package/@gitgov/cli)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-`@gitgov/cli` is the canonical command-line interface for interacting with the GitGovernance ecosystem. It's a tool designed for efficient collaboration between humans and AI agents directly from the terminal.
+**AI-first governance CLI** for intelligent work. Built on the principle **`AI-first = Prompt + Código`** - every feature is defined first as a formal prompt specification, then implemented as code.
 
-## Getting Started
-
-The recommended way to install `@gitgov/cli` is via `npm`.
+## Quick Start
 
 ```bash
-# 1. Install from NPM
-# Requires Node.js >= 18
+# Install globally
 npm install -g @gitgov/cli
 
-# 2. Initialize in your project repository
-cd my-project
-git init # If not already a Git repository
-gitgov init --name "My Project"
+# Initialize your project
+cd my-project && gitgov init
 
-# 3. See your project status
-gitgov status
-
-# 4. Launch the interactive dashboard
+# Launch interactive dashboard
 gitgov dashboard
 ```
 
-_For developer setup and other installation options, see the [Developer Guide](#developer-guide) below._
+## AI-First Architecture
 
-## Philosophy: Specification-Driven Development
+This CLI materializes **formal specifications** into working code. Each command, flag, and behavior follows the **`Prompt + Código`** methodology:
 
-This is not a traditional CLI. Its development strictly follows our `AI-first` principle: **`Specification -> Core -> CLI`**.
-
-Every command, `flag`, and behavior of this tool is the **direct materialization of a formal specification**. The specifications are the source of truth that define the vision, architecture, and requirements, allowing AI and humans to build coherently. The CLI consumes the logic from the `@gitgov/core` SDK, which in turn is a faithful implementation of the Protocol.
-
-### A CLI for Humans and Agents
-
-`gitgov` is designed with a dual purpose. It's a powerful tool for developers who master the terminal, but its true power is revealed when operated by `@gitgov`, our AI agent.
-
-**You don't need to memorize every command.** You can "talk to the dashboard" through the agent. Ask for a project status summary, inquire what you should work on, or request a new task in natural language. The agent will translate your intent into the precise commands, turning the CLI into an intelligent conversational interface with your project.
+1. **Prompt**: Formal specification defines the vision
+2. **Código**: Implementation faithfully follows the spec
 
 ```mermaid
-graph TD
-    A["<code>Specifications</code> </br> (The Vision)"] --> B["<code>@gitgov/core</code> </br> (The SDK Engine)"];
-    B --> C["<code>@gitgov/cli</code> </br> (The Tool)"];
+graph LR
+    A[Prompt Specs] --> B[@gitgov/core] --> C[@gitgov/cli]
 ```
+
+**Designed for humans and AI agents.** Use it directly or through natural language with AI agents - the CLI becomes an intelligent conversational interface with your project.
 
 ## Technology Stack
 
