@@ -2,6 +2,7 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { fileURLToPath } from 'url';
 
 /**
  * Functional Tests for CLI Diagram Command
@@ -127,6 +128,7 @@ describe('CLI Diagram Command - Functional Tests', () => {
 
   // Helper function to execute CLI command
   const runCliCommand = (args: string[], options: { expectError?: boolean; cwd?: string } = {}) => {
+    // Path to schemas (Jest runs in CommonJS mode)
     const cliPath = path.join(__dirname, '../src/index.ts');
     const command = `npx tsx "${cliPath}" ${args.join(' ')}`;
     const workingDir = options.cwd || testProjectRoot;
