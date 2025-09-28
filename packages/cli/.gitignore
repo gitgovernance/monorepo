@@ -2,3 +2,21 @@
 # GitGovernance
 .gitgov/.session.json
 .gitgov/actors/*.key
+
+# Build artifacts
+build/
+
+# Legacy (remove after migration)
+temp-binaries/
+share/
+releases/
+lib/
+include/
+temp-binaries
+share
+releases
+lib
+include
+bi
+dist
+dist-cjs
