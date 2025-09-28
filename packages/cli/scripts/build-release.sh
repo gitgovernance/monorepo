@@ -12,7 +12,12 @@ BLUE='\033[0;34m'
 NC='\033[0m'
 
 # Configuration
-VERSION=${1:-"1.0.0"}
+# Get version from package.json if not provided as argument
+if [ -z "$1" ]; then
+    VERSION=$(node -p "require('./package.json').version")
+else
+    VERSION="$1"
+fi
 RELEASE_DIR="releases"
 PLATFORMS=("macos-x64" "macos-arm64" "linux-x64" "linux-arm64")
 
