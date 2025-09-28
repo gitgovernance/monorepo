@@ -13,7 +13,7 @@
   "scripts": {
     "clean": "rm -rf build",
     "build": "pnpm clean && pnpm build:full",
-    "build:esm": "mkdir -p build/dist && esbuild src/cli-tui.ts --bundle --platform=node --format=esm --target=node20 --outfile=build/dist/gitgov.mjs --jsx=automatic --jsx-import-source=react --external:react-devtools-core --external:commander --external:ink --external:react --external:assert --external:events --external:util --external:path --external:fs --external:crypto && chmod +x build/dist/gitgov.mjs",
+    "build:esm": "mkdir -p build/dist && esbuild src/index.ts --bundle --platform=node --format=esm --target=node20 --outfile=build/dist/gitgov.mjs --jsx=automatic --jsx-import-source=react --external:react-devtools-core --external:commander --external:ink --external:react --external:assert --external:events --external:util --external:path --external:fs --external:crypto && chmod +x build/dist/gitgov.mjs",
     "build:cjs": "mkdir -p build/dist && esbuild src/cli-tui.ts --bundle --platform=node --format=cjs --target=node20 --outfile=build/dist/cli-tui.cjs --jsx=automatic --jsx-import-source=react --external:react-devtools-core --external:commander --external:ink --external:react --external:assert --external:events --external:util --external:path --external:fs --external:crypto",
     "build:full": "pnpm build:esm && pnpm build:cjs && cp build/dist/cli-tui.cjs build/dist/bundle.cjs",
     "build:test": "mkdir -p build/dist-cjs && tsc -p tsconfig.cjs.json",
