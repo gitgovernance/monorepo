@@ -1,14 +1,14 @@
-import type { IIndexerAdapter, IndexGenerationReport, IntegrityReport } from '../../../../core/src/adapters/indexer_adapter';
+import { Command } from 'commander';
+import { SimpleCommand } from '../../base/base-command';
+import type { Adapters } from '@gitgov/core';
+import type { BaseCommandOptions } from '../../interfaces/command';
 
 /**
  * IndexerCommand Options - CLI flags and arguments
  */
-export interface IndexerCommandOptions {
+export interface IndexerCommandOptions extends BaseCommandOptions {
   validateOnly?: boolean;  // --validate-only, -c
   force?: boolean;         // --force, -f
-  json?: boolean;          // --json
-  verbose?: boolean;       // --verbose, -v
-  quiet?: boolean;         // --quiet, -q
 }
 
 /**
@@ -24,29 +24,48 @@ export interface IndexerCommandOptions {
  * - Handle errors with user-friendly messages
  * - Provide progress feedback during operations
  */
-export class IndexerCommand {
-  constructor(private indexerAdapter: IIndexerAdapter) { }
+export class IndexerCommand extends SimpleCommand<IndexerCommandOptions> {
+
+  /**
+   * Register the indexer command with Commander.js
+   */
+  register(program: Command): void {
+    program
+      .command('indexer')
+      .description('Cache management and validation')
+      .option('-c, --validate-only', 'Validate integrity only')
+      .option('-f, --force', 'Force regeneration')
+      .option('--json', 'JSON output')
+      .option('--verbose', 'Verbose output')
+      .option('--quiet', 'Quiet mode')
+      .action(async (options) => {
+        await this.execute(options);
+      });
+  }
 
   /**
    * [EARS-1] Main execution method for gitgov indexer command
    */
   async execute(options: IndexerCommandOptions): Promise<void> {
     try {
+      // Get indexer adapter from dependency injection
+      const indexerAdapter = await this.dependencyService.getIndexerAdapter();
+
       // 1. Validate flag combinations
       this.validateOptions(options);
 
       // 2. Execute appropriate operation based on flags
       if (options.validateOnly) {
-        await this.executeValidateOnly(options);
+        await this.executeValidateOnly(indexerAdapter, options);
       } else if (options.force) {
-        await this.executeForceRegeneration(options);
+        await this.executeForceRegeneration(indexerAdapter, options);
       } else {
-        await this.executeGeneration(options);
+        await this.executeGeneration(indexerAdapter, options);
       }
 
     } catch (error) {
       // 3. Handle errors with user-friendly messages
-      this.handleError(error, options);
+      this.handleIndexerError(error, options);
       process.exit(1);
     }
   }
@@ -54,42 +73,42 @@ export class IndexerCommand {
   /**
    * [EARS-2] Validates integrity without regenerating cache
    */
-  private async executeValidateOnly(options: IndexerCommandOptions): Promise<void> {
+  private async executeValidateOnly(indexerAdapter: Adapters.IIndexerAdapter, options: IndexerCommandOptions): Promise<void> {
     if (!options.quiet) {
       console.log("🔍 Validating cache integrity...");
     }
 
-    const report = await this.indexerAdapter.validateIntegrity();
+    const report = await indexerAdapter.validateIntegrity();
     this.formatIntegrityReport(report, options);
   }
 
   /**
    * [EARS-3] Forces cache invalidation before regeneration
    */
-  private async executeForceRegeneration(options: IndexerCommandOptions): Promise<void> {
+  private async executeForceRegeneration(indexerAdapter: Adapters.IIndexerAdapter, options: IndexerCommandOptions): Promise<void> {
     if (!options.quiet) {
       console.log("🗑️  Invalidating existing cache...");
     }
 
-    await this.indexerAdapter.invalidateCache();
+    await indexerAdapter.invalidateCache();
 
     if (!options.quiet) {
       console.log("🔄 Generating fresh index...");
     }
 
-    const report = await this.indexerAdapter.generateIndex();
+    const report = await indexerAdapter.generateIndex();
     this.formatGenerationReport(report, options);
   }
 
   /**
    * [EARS-1] Standard cache generation
    */
-  private async executeGeneration(options: IndexerCommandOptions): Promise<void> {
+  private async executeGeneration(indexerAdapter: Adapters.IIndexerAdapter, options: IndexerCommandOptions): Promise<void> {
     if (!options.quiet) {
       console.log("🔄 Generating index...");
     }
 
-    const report = await this.indexerAdapter.generateIndex();
+    const report = await indexerAdapter.generateIndex();
     this.formatGenerationReport(report, options);
   }
 
@@ -110,7 +129,7 @@ export class IndexerCommand {
   /**
    * [EARS-4] Formats JSON output for generation report
    */
-  private formatGenerationReport(report: IndexGenerationReport, options: IndexerCommandOptions): void {
+  private formatGenerationReport(report: Adapters.IndexGenerationReport, options: IndexerCommandOptions): void {
     if (options.json) {
       console.log(JSON.stringify({
         success: report.success,
@@ -151,7 +170,7 @@ export class IndexerCommand {
       console.error("❌ Index generation failed");
       if (report.errors.length > 0) {
         console.error("Errors:");
-        report.errors.forEach(error => console.error(`  • ${error}`));
+        report.errors.forEach((error: string) => console.error(`  • ${error}`));
       }
     }
   }
@@ -159,7 +178,7 @@ export class IndexerCommand {
   /**
    * [EARS-4] Formats JSON output for integrity report
    */
-  private formatIntegrityReport(report: IntegrityReport, options: IndexerCommandOptions): void {
+  private formatIntegrityReport(report: Adapters.IntegrityReport, options: IndexerCommandOptions): void {
     if (options.json) {
       console.log(JSON.stringify({
         status: report.status,
@@ -186,14 +205,14 @@ export class IndexerCommand {
 
     if (report.errorsFound.length > 0) {
       console.log("❌ Errors found:");
-      report.errorsFound.forEach(error => {
+      report.errorsFound.forEach((error: any) => {
         console.log(`  • ${error.type}: ${error.message} (${error.recordId})`);
       });
     }
 
     if (report.warningsFound.length > 0) {
       console.log("⚠️  Warnings found:");
-      report.warningsFound.forEach(warning => {
+      report.warningsFound.forEach((warning: any) => {
         console.log(`  • ${warning.type}: ${warning.message} (${warning.recordId})`);
       });
     }
@@ -210,7 +229,7 @@ export class IndexerCommand {
   /**
    * [EARS-5] Handles errors with user-friendly messages and exit codes
    */
-  private handleError(error: unknown, options: IndexerCommandOptions): void {
+  private handleIndexerError(error: unknown, options: IndexerCommandOptions): void {
     let message: string;
     let exitCode: number = 1;
 

@@ -1,11 +1,11 @@
 import { Command } from 'commander';
 import { IndexerCommand } from './indexer-command';
-import type { IIndexerAdapter } from '../../../../core/src/adapters/indexer_adapter';
+import type { IndexerAdapter } from '@gitgov/core';
 
 /**
  * Register indexer commands following GitGovernance CLI standard
  */
-export function registerIndexerCommands(program: Command, indexerAdapter: IIndexerAdapter | null): void {
+export function registerIndexerCommands(program: Command, indexerAdapter: IndexerAdapter.IIndexerAdapter | null): void {
   // Register indexer command
   program
     .command('indexer')
@@ -21,7 +21,7 @@ export function registerIndexerCommands(program: Command, indexerAdapter: IIndex
         process.exit(1);
       }
 
-      const indexerCommand = new IndexerCommand(indexerAdapter);
+      const indexerCommand = new IndexerCommand();
       await indexerCommand.execute(options);
     });
 }
