@@ -1,0 +1,31 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "commonjs",
+    "target": "ES2020",
+    "outDir": "build/dist-cjs",
+    "moduleResolution": "node",
+    "verbatimModuleSyntax": false,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true
+  },
+  "include": [
+    "src/base/**/*.ts",
+    "src/interfaces/**/*.ts",
+    "src/services/**/*.ts",
+    "src/types/**/*.ts",
+    "src/commands/task/**/*.ts",
+    "src/commands/cycle/**/*.ts",
+    "src/commands/indexer/**/*.ts",
+    "src/commands/init/**/*.ts",
+    "src/services/**/*.test.ts",
+    "src/commands/task/**/*.test.ts",
+    "src/commands/cycle/**/*.test.ts",
+    "src/commands/indexer/**/*.test.ts",
+    "src/commands/init/**/*.test.ts"
+  ],
+  "exclude": [
+    "build"
+  ]
+}

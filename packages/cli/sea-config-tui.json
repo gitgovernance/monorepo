@@ -1,0 +1,5 @@
+{
+  "main": "build/dist/cli-tui.cjs",
+  "output": "build/releases/sea-prep-tui.blob",
+  "disableExperimentalSEAWarning": true
+}

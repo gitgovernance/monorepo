@@ -1,0 +1,8 @@
+{
+  "main": "dist/bundle.cjs",
+  "output": "gitgov.blob",
+  "disableExperimentalSEAWarning": true,
+  "useSnapshot": false,
+  "useCodeCache": true,
+  "assets": {}
+}
