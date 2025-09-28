@@ -1,4 +1,4 @@
-# @gitgov/cli: The Command Interface for the AI-First Enterprise
+# @gitgov/cli: The Command Interface for GitGovernance
 
 [![NPM Version](https://img.shields.io/npm/v/@gitgov/cli)](https://www.npmjs.com/package/@gitgov/cli)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
@@ -28,23 +28,15 @@ gitgov dashboard
 
 _For developer setup and other installation options, see the [Developer Guide](#developer-guide) below._
 
-## Philosophy: Specification-Driven Development
+## A CLI for Humans and Agents
 
-This is not a traditional CLI. Its development strictly follows our `AI-first` principle: **`Specification -> Core -> CLI`**.
+`gitgov` is designed with a dual purpose. It's a powerful tool for developers who work in the terminal, and becomes even more effective when operated by `@gitgov`, our AI agent.
 
-Every command, `flag`, and behavior of this tool is the **direct materialization of a formal specification**. The specifications are the source of truth that define the vision, architecture, and requirements, allowing AI and humans to build coherently. The CLI consumes the logic from the `@gitgov/core` SDK, which in turn is a faithful implementation of the Protocol.
+**You don't need to memorize commands.** Talk to the dashboard through the agent. Ask for project status, what to work on, or request new tasks in natural language. The agent translates your intent into precise commands, creating a conversational interface with your project.
 
-### A CLI for Humans and Agents
+Built on **`AI-first = Prompt + Code`** - every command materializes formal specifications into working code. The CLI consumes logic from `@gitgov/core`, ensuring coherent collaboration between AI and humans.
 
-`gitgov` is designed with a dual purpose. It's a powerful tool for developers who master the terminal, but its true power is revealed when operated by `@gitgov`, our AI agent.
-
-**You don't need to memorize every command.** You can "talk to the dashboard" through the agent. Ask for a project status summary, inquire what you should work on, or request a new task in natural language. The agent will translate your intent into the precise commands, turning the CLI into an intelligent conversational interface with your project.
-
-```mermaid
-graph TD
-    A["<code>Specifications</code> </br> (The Vision)"] --> B["<code>@gitgov/core</code> </br> (The SDK Engine)"];
-    B --> C["<code>@gitgov/cli</code> </br> (The Tool)"];
-```
+<img width="876" height="604" alt="GitGovernance TUI Dashboard" src="https://github.com/user-attachments/assets/016a4bef-d374-4963-aef3-19303650fb3a" />
 
 ## Technology Stack
 
@@ -93,20 +85,20 @@ This method uses an installer script to download a self-contained executable wit
 curl -sSL https://get.gitgovernance.com | sh
 ```
 
-## Current Status (September 2025)
+## Current Status
 
-**🎯 ECOSYSTEM STATUS:**
+**ECOSYSTEM STATUS:**
 
 - ✅ **Core Adapters:** ProjectAdapter, BacklogAdapter, MetricsAdapter, IndexerAdapter, IdentityAdapter implemented
 - ✅ **CLI Implementation:** 7 commands are fully functional and operational
-- ✅ **Quality Assurance:** Comprehensive test suite, clean TypeScript, full EARS coverage
+- ✅ **Quality Assurance:** Test suite with clean TypeScript and EARS coverage
 - ✅ **Production Ready:** Commands work with real project data, MVP mode is operational
 - ✅ **TUI Dashboard:** The interactive TUI Dashboard is functional
 - ✅ **Project Initialization:** The `gitgov init` command is ready for demos
 
-**🎯 AVAILABLE COMMANDS:** `gitgov init`, `gitgov indexer`, `gitgov diagram`, `gitgov task` (9 subcommands), `gitgov cycle`, `gitgov status`, `gitgov dashboard`
-**❌ PENDING:** `gitgov task cancel`, `gitgov task reject` (completes the workflow)
-**🚀 NEXT STEP:** Complete cancellation/rejection workflow and polish for production release.
+**AVAILABLE COMMANDS:** `gitgov init`, `gitgov indexer`, `gitgov diagram`, `gitgov task` (9 subcommands), `gitgov cycle`, `gitgov status`, `gitgov dashboard`
+**PENDING:** `gitgov task cancel`, `gitgov task reject` (completes the workflow)
+**NEXT STEP:** Complete cancellation/rejection workflow and polish for production release.
 
 ## Development Workflow
 
@@ -160,7 +152,7 @@ gitgov init --name "Production Project"
 
 ## Command Reference
 
-**🔧 AVAILABLE COMMANDS:**
+**AVAILABLE COMMANDS:**
 
 ```bash
 # 0. Initialize a GitGovernance project (FIRST TIME)
@@ -205,7 +197,7 @@ gitgov dashboard
 gitgov indexer --force
 ```
 
-**✅ CORE COMMANDS COMPLETED:**
+**CORE COMMANDS COMPLETED:**
 
 ```bash
 # Project Initialization (IMPLEMENTED)
@@ -215,17 +207,17 @@ gitgov init --blueprint=saas-mvp
 gitgov indexer && gitgov status && gitgov dashboard
 ```
 
-**🎯 IMPLEMENTATION STATUS:**
+**IMPLEMENTATION STATUS:**
 
-- ✅ **7/7 commands** fully implemented (`init`, `indexer`, `diagram`, `task`, `cycle`, `status`, `dashboard`)
-- ✅ **All specifications** ready (10/10 quality)
-- ✅ **All core dependencies** ready
-- ✅ **TUI Dashboard** achieved
-- ✅ **Project Initialization** achieved with init command
+- ✅ **7/7 commands** implemented (`init`, `indexer`, `diagram`, `task`, `cycle`, `status`, `dashboard`)
+- ✅ **All specifications** ready
+- ✅ **Core dependencies** ready
+- ✅ **TUI Dashboard** functional
+- ✅ **Project Initialization** functional
 
 ## Implementation Guidelines for Agents
 
-**🤖 FOR IMPLEMENTER AGENTS:**
+**FOR IMPLEMENTER AGENTS:**
 
 ### **📋 Verified Prerequisites:**
 
@@ -256,7 +248,7 @@ gitgov indexer && gitgov status && gitgov dashboard
 #### **Project Initialization (`gitgov init`)**
 
 ```bash
-# Basic bootstrap (perfect for demos)
+# Basic bootstrap (ideal for demos)
 gitgov init
 
 # Specific project with metadata
@@ -265,9 +257,9 @@ gitgov init --name "GitGovernance CLI" --actor-name "Project Owner"
 # SaaS MVP template
 gitgov init --blueprint=saas-mvp --methodology=scrum
 
-# Complete enterprise setup
-gitgov init --name "Enterprise Project" \
-  --blueprint=enterprise \
+# Complete business setup
+gitgov init --name "Business Project" \
+  --blueprint=saas-mvp \
   --methodology=scrum \
   --actor-name "Tech Lead" \
   --verbose
@@ -384,10 +376,10 @@ gitgov status --alerts --quiet
 gitgov status --from-source --verbose
 ```
 
-#### **Epic Convergence TUI (`gitgov dashboard`)**
+#### **Interactive TUI (`gitgov dashboard`)**
 
 ```bash
-# Interactive TUI with live mode (EPIC CONVERGENCE)
+# Interactive TUI with live mode
 gitgov dashboard
 
 # Specific views
@@ -412,16 +404,16 @@ gitgov dashboard --json --quiet
 - **r**: Manual refresh, **?**: Help, **q**: Quit
 - **n,s,a,e,c**: Educational shortcuts (show CLI commands)
 
-**Verified Performance:**
+**Performance Metrics:**
 
-- ✅ `gitgov init`: Complete bootstrap <500ms with 3-adapter orchestration
+- ✅ `gitgov init`: Bootstrap <500ms with 3-adapter orchestration
 - ✅ `gitgov indexer`: 146 records in ~50ms
-- ✅ `gitgov diagram`: Full generation in <2s
-- ✅ `gitgov task`: Operational CRUD with full workflow (submit→approve→activate→complete)
-- ✅ `gitgov cycle`: Strategic planning with bidirectional linking
+- ✅ `gitgov diagram`: Generation in <2s
+- ✅ `gitgov task`: CRUD with workflow (submit→approve→activate→complete)
+- ✅ `gitgov cycle`: Planning with bidirectional linking
 - ✅ `gitgov status`: Personal dashboard <100ms, global <200ms with cache
 - ✅ `gitgov dashboard`: TUI launch <500ms, live refresh every 5s
-- ✅ Cache size: ~146 KB for a real project
+- ✅ Cache size: ~146 KB for a project
 
 ## Complete Documentation
 

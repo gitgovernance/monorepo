@@ -43,8 +43,6 @@ cd ../cli
 # Build CLI with bundle for production
 echo -e "${BLUE}📦 Building CLI...${NC}"
 pnpm build
-echo -e "${BLUE}📦 Creating production bundle...${NC}"
-pnpm build:bundle
 
 # Create release packages for each platform
 for platform in "${PLATFORMS[@]}"; do
@@ -56,10 +54,10 @@ for platform in "${PLATFORMS[@]}"; do
     mkdir -p "$platform_dir/lib"
     
     # Copy built CLI (regular build for lib structure)
-    cp -r dist/* "$platform_dir/lib/"
+    cp -r build/dist/* "$platform_dir/lib/"
     
-    # Copy production bundle as main executable (no wrapper needed)
-    cp dist/bundle.cjs "$platform_dir/bin/gitgov"
+    # Copy production bundle as main executable (use ESM for better compatibility)
+    cp build/dist/gitgov.mjs "$platform_dir/bin/gitgov"
     chmod +x "$platform_dir/bin/gitgov"
     
     chmod +x "$platform_dir/bin/gitgov"
