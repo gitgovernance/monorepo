@@ -9,13 +9,14 @@ import { registerCycleCommands } from './commands/cycle/cycle';
 import { registerStatusCommands } from './commands/status/status';
 import { registerDashboardCommands } from './commands/dashboard/dashboard';
 import { DependencyInjectionService } from './services/dependency-injection';
+import packageJson from '../package.json' assert { type: 'json' };
 
 const program = new Command();
 
 program
   .name('gitgov')
   .description('GitGovernance CLI - AI-first governance for intelligent work')
-  .version('1.0.0');
+  .version(packageJson.version);
 
 // Setup dependency injection and register commands
 async function setupCommands() {
