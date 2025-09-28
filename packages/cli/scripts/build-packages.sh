@@ -18,7 +18,7 @@ if [ -z "$1" ]; then
 else
     VERSION="$1"
 fi
-RELEASE_DIR="releases"
+RELEASE_DIR="releases/packages"
 PLATFORMS=("macos-x64" "macos-arm64" "linux-x64" "linux-arm64")
 
 echo -e "${BLUE}🚀 Building GitGovernance CLI Release v$VERSION${NC}"
