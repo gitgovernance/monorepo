@@ -5,6 +5,29 @@
 
 `@gitgov/cli` is the canonical command-line interface for interacting with the GitGovernance ecosystem. It's a tool designed for efficient collaboration between humans and AI agents directly from the terminal.
 
+## Getting Started
+
+The recommended way to install `@gitgov/cli` is via `npm`.
+
+```bash
+# 1. Install from NPM
+# Requires Node.js >= 18
+npm install -g @gitgov/cli
+
+# 2. Initialize in your project repository
+cd my-project
+git init # If not already a Git repository
+gitgov init --name "My Project"
+
+# 3. See your project status
+gitgov status
+
+# 4. Launch the interactive dashboard
+gitgov dashboard
+```
+
+_For developer setup and other installation options, see the [Developer Guide](#developer-guide) below._
+
 ## Philosophy: Specification-Driven Development
 
 This is not a traditional CLI. Its development strictly follows our `AI-first` principle: **`Specification -> Core -> CLI`**.
@@ -29,7 +52,9 @@ graph TD
 - **TUI Framework:** `Ink` and `React` (for `gitgov dashboard`)
 - **Logic Engine:** `@gitgov/core`
 
-## Installation and Setup
+## Developer Guide
+
+This guide is for contributors or those who want to run the CLI from the source code.
 
 ### 🔧 **For Developers:**
 
@@ -38,43 +63,46 @@ graph TD
 git clone https://github.com/gitgovernance/monorepo.git
 cd monorepo && pnpm install
 
-# 2. CLI Development:
+# 2. Verify the CLI package:
 cd packages/cli
-pnpm dev status              # Direct development
-pnpm test                   # Run tests (185+ tests)
-pnpm build                  # Build TypeScript
+pnpm verify                  # Build and run all tests
 ```
 
-### 🎯 **For Demos and E2E Testing:**
+### 🎯 **For Demos and E2E Testing (System-wide):**
 
 ```bash
-# 1. Install portable wrapper (one time):
-cd packages/cli && npm run install:local
+# 1. Link the package to your system (one time):
+cd packages/cli
+pnpm build
+npm link
 
-# 2. Use from any directory:
+# 2. Now use the `gitgov` command from any directory:
 cd /tmp/demo && git init
-gitgov-local init --name "Demo Project"
-gitgov-local status
+gitgov init --name "Demo Project"
+gitgov status
+
+# 3. To unlink when you're done:
+npm unlink
 ```
 
-### 🚀 **For End Users:**
+### 🚀 **Alternative Installation: Standalone Binary**
+
+This method uses an installer script to download a self-contained executable with no external dependencies (like Node.js).
 
 ```bash
-# Public installation (via Cloudflare Pages):
 curl -sSL https://get.gitgovernance.com | sh
-gitgov init --name "My Project"
 ```
 
 ## Current Status (September 2025)
 
 **🎯 ECOSYSTEM STATUS:**
 
-- ✅ **Core Adapters:** ProjectAdapter, BacklogAdapter, MetricsAdapter, IndexerAdapter, IdentityAdapter implemented (503+ tests)
+- ✅ **Core Adapters:** ProjectAdapter, BacklogAdapter, MetricsAdapter, IndexerAdapter, IdentityAdapter implemented
 - ✅ **CLI Implementation:** 7 commands are fully functional and operational
-- ✅ **Quality Assurance:** 185+ CLI tests passing, clean TypeScript, full EARS coverage
+- ✅ **Quality Assurance:** Comprehensive test suite, clean TypeScript, full EARS coverage
 - ✅ **Production Ready:** Commands work with real project data, MVP mode is operational
-- ✅ **EPIC CONVERGENCE:** TUI Dashboard with 6-adapter orchestration is functional
-- ✅ **PERFECT FIRST IMPRESSION:** `gitgov init` is ready for demos
+- ✅ **TUI Dashboard:** The interactive TUI Dashboard is functional
+- ✅ **Project Initialization:** The `gitgov init` command is ready for demos
 
 **🎯 AVAILABLE COMMANDS:** `gitgov init`, `gitgov indexer`, `gitgov diagram`, `gitgov task` (9 subcommands), `gitgov cycle`, `gitgov status`, `gitgov dashboard`
 **❌ PENDING:** `gitgov task cancel`, `gitgov task reject` (completes the workflow)
@@ -92,45 +120,45 @@ pnpm dev init               # Test commands
 pnpm dev dashboard          # TUI development
 
 # Run tests from anywhere in the project:
-pnpm test                   # Run all tests
+pnpm verify                 # Build and run all tests
 pnpm build                  # Build TypeScript
 ```
 
-### 🎯 **Demos and E2E Testing:**
+### 🎯 **Demos and E2E Testing (using `npm link`):**
+
+This method allows you to use the `gitgov` command globally on your machine, pointing directly to your development code.
 
 ```bash
-# 1. Install portable wrapper (one time):
-cd packages/cli && npm run install:local
+# 1. Link the package (one time from packages/cli):
+pnpm build && npm link
 
 # 2. Use from any external directory:
 cd /tmp/demo && git init
-gitgov-local init --name "Demo Project"
-gitgov-local status
-gitgov-local dashboard
+gitgov init --name "Demo Project"
+gitgov status
+gitgov dashboard
 
-# 3. Perfect for:
-# • Client demos in clean directories
-# • E2E testing without affecting development
-# • Validating the public installer
+# 3. When finished, unlink the package:
+npm unlink
 ```
 
 ### 🚀 **Production:**
 
 ```bash
-# Public installation:
-curl -sSL https://get.gitgovernance.com | sh
+# Public installation via NPM (Recommended):
+npm install -g @gitgov/cli
 gitgov init --name "Production Project"
 ```
 
 ### 📋 **Command Summary:**
 
-| Command        | When to Use            | From Where                |
-| -------------- | ---------------------- | ------------------------- |
-| `pnpm dev`     | Daily development      | `/packages/cli/`          |
-| `gitgov-local` | Demos/E2E Testing      | Any directory             |
-| `gitgov`       | Work on actual project | Any GitGovernance project |
+| Command    | When to Use                            | From Where                |
+| ---------- | -------------------------------------- | ------------------------- |
+| `pnpm dev` | Daily development (hot-reload)         | `/packages/cli/`          |
+| `gitgov`   | Demos/E2E (after `npm link`)           | Any directory             |
+| `gitgov`   | Work on actual project (after install) | Any GitGovernance project |
 
-## Quick Start Guide
+## Command Reference
 
 **🔧 AVAILABLE COMMANDS:**
 
@@ -146,7 +174,7 @@ gitgov indexer
 # 3. Generate a workflow diagram
 gitgov diagram
 
-# 4. Manage tasks (OPERATIONAL CORE)
+# 4. Manage tasks (Core Operations)
 gitgov task new "Implement user authentication"
 gitgov task list --status draft
 gitgov task show task-id-123 --verbose
@@ -170,7 +198,7 @@ gitgov status --all --health --team
 # 9. Validate project integrity
 gitgov indexer --validate-only
 
-# 10. EPIC CONVERGENCE: Interactive TUI Dashboard
+# 10. Interactive TUI Dashboard
 gitgov dashboard
 
 # 11. Troubleshoot cache issues
@@ -180,7 +208,7 @@ gitgov indexer --force
 **✅ CORE COMMANDS COMPLETED:**
 
 ```bash
-# Perfect first impression (IMPLEMENTED)
+# Project Initialization (IMPLEMENTED)
 gitgov init --blueprint=saas-mvp
 
 # All core commands are implemented
@@ -191,9 +219,9 @@ gitgov indexer && gitgov status && gitgov dashboard
 
 - ✅ **7/7 commands** fully implemented (`init`, `indexer`, `diagram`, `task`, `cycle`, `status`, `dashboard`)
 - ✅ **All specifications** ready (10/10 quality)
-- ✅ **All core dependencies** ready (503+ tests)
-- ✅ **EPIC CONVERGENCE** achieved with TUI dashboard
-- ✅ **PERFECT FIRST IMPRESSION** achieved with init command
+- ✅ **All core dependencies** ready
+- ✅ **TUI Dashboard** achieved
+- ✅ **Project Initialization** achieved with init command
 
 ## Implementation Guidelines for Agents
 
@@ -201,19 +229,19 @@ gitgov indexer && gitgov status && gitgov dashboard
 
 ### **📋 Verified Prerequisites:**
 
-- ✅ **IndexerAdapter:** `packages/core/src/adapters/indexer_adapter/index.ts` (18/18 tests)
-- ✅ **MetricsAdapter:** `packages/core/src/adapters/metrics_adapter/index.ts` (32/32 tests)
-- ✅ **BacklogAdapter:** `packages/core/src/adapters/backlog_adapter/index.ts` (29/29 tests)
+- ✅ **IndexerAdapter:** `packages/core/src/adapters/indexer_adapter/index.ts`
+- ✅ **MetricsAdapter:** `packages/core/src/adapters/metrics_adapter/index.ts`
+- ✅ **BacklogAdapter:** `packages/core/src/adapters/backlog_adapter/index.ts`
 - ✅ **CLI Specifications:** 7 commands with 10/10 quality specs ready to implement
 
 ### **🎯 Implementation Order (COMPLETED):**
 
-1. ✅ **`gitgov init`** - Perfect first impression (Specification: `init_command.md`) - **COMPLETED**
+1. ✅ **`gitgov init`** - Project Initialization (Specification: `init_command.md`) - **COMPLETED**
 2. ✅ **`gitgov indexer`** - Cache control foundation (Specification: `index_command.md`) - **COMPLETED**
 3. ✅ **`gitgov task`** - Core operations (Specification: `task_command.md`) - **COMPLETED**
 4. ✅ **`gitgov cycle`** - Strategic planning (Specification: `cycle_command.md`) - **COMPLETED**
 5. ✅ **`gitgov status`** - Intelligence dashboard (Specification: `status_command.md`) - **COMPLETED**
-6. ✅ **`gitgov dashboard`** - EPIC CONVERGENCE (Specification: `dashboard_command.md`) - **COMPLETED**
+6. ✅ **`gitgov dashboard`** - TUI Dashboard (Specification: `dashboard_command.md`) - **COMPLETED**
 7. ✅ **`gitgov diagram`** - Workflow visualization (Specification: `diagram_command.md`) - **COMPLETED**
 
 ### **🏗️ Architectural Patterns:**

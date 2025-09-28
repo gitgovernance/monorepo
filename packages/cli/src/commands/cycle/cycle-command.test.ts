@@ -5,11 +5,9 @@ jest.mock('../../services/dependency-injection', () => ({
   }
 }));
 
+import { Records } from '@gitgov/core';
 import { CycleCommand } from './cycle-command';
 import { DependencyInjectionService } from '../../services/dependency-injection';
-import type { CycleRecord } from '../../../../core/src/types/cycle_record';
-import type { TaskRecord } from '../../../../core/src/types/task_record';
-import type { ActorRecord } from '../../../../core/src/types/actor_record';
 
 // Mock console methods to capture output
 const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation();
@@ -20,25 +18,25 @@ const mockProcessExit = jest.spyOn(process, 'exit').mockImplementation();
 describe('CycleCommand - Complete Unit Tests', () => {
   let cycleCommand: CycleCommand;
   let mockBacklogAdapter: {
-    createCycle: jest.MockedFunction<(payload: Partial<CycleRecord>, actorId: string) => Promise<CycleRecord>>;
-    getCycle: jest.MockedFunction<(cycleId: string) => Promise<CycleRecord | null>>;
-    getAllCycles: jest.MockedFunction<() => Promise<CycleRecord[]>>;
-    updateCycle: jest.MockedFunction<(cycleId: string, payload: Partial<CycleRecord>) => Promise<CycleRecord>>;
+    createCycle: jest.MockedFunction<(payload: Partial<Records.CycleRecord>, actorId: string) => Promise<Records.CycleRecord>>;
+    getCycle: jest.MockedFunction<(cycleId: string) => Promise<Records.CycleRecord | null>>;
+    getAllCycles: jest.MockedFunction<() => Promise<Records.CycleRecord[]>>;
+    updateCycle: jest.MockedFunction<(cycleId: string, payload: Partial<Records.CycleRecord>) => Promise<Records.CycleRecord>>;
     addTaskToCycle: jest.MockedFunction<(cycleId: string, taskId: string) => Promise<void>>;
-    getTask: jest.MockedFunction<(taskId: string) => Promise<TaskRecord | null>>;
+    getTask: jest.MockedFunction<(taskId: string) => Promise<Records.TaskRecord | null>>;
   };
   let mockIndexerAdapter: {
     isIndexUpToDate: jest.MockedFunction<() => Promise<boolean>>;
-    getIndexData: jest.MockedFunction<() => Promise<{ cycles: CycleRecord[]; metadata: { generatedAt: string } } | null>>;
+    getIndexData: jest.MockedFunction<() => Promise<{ cycles: Records.CycleRecord[]; metadata: { generatedAt: string } } | null>>;
     generateIndex: jest.MockedFunction<() => Promise<void>>;
     invalidateCache: jest.MockedFunction<() => Promise<void>>;
   };
   let mockIdentityAdapter: {
-    getCurrentActor: jest.MockedFunction<() => Promise<ActorRecord>>;
-    getActor: jest.MockedFunction<(actorId: string) => Promise<ActorRecord | null>>;
+    getCurrentActor: jest.MockedFunction<() => Promise<Records.ActorRecord>>;
+    getActor: jest.MockedFunction<(actorId: string) => Promise<Records.ActorRecord | null>>;
   };
 
-  const sampleCycle: CycleRecord = {
+  const sampleCycle: Records.CycleRecord = {
     id: '1757792000-cycle-test-cycle',
     title: 'Test Cycle',
     status: 'planning',
@@ -48,7 +46,7 @@ describe('CycleCommand - Complete Unit Tests', () => {
     notes: 'Test cycle description'
   };
 
-  const sampleActor: ActorRecord = {
+  const sampleActor: Records.ActorRecord = {
     id: 'human:test-user',
     type: 'human',
     displayName: 'Test User',
@@ -186,7 +184,7 @@ describe('CycleCommand - Complete Unit Tests', () => {
       const sampleTask = { id: 'task-123', title: 'Test Task' };
 
       mockBacklogAdapter.getCycle.mockResolvedValue(sampleCycle);
-      mockBacklogAdapter.getTask.mockResolvedValue(sampleTask as TaskRecord);
+      mockBacklogAdapter.getTask.mockResolvedValue(sampleTask as Records.TaskRecord);
       mockBacklogAdapter.addTaskToCycle.mockResolvedValue();
       mockIndexerAdapter.invalidateCache.mockResolvedValue();
 

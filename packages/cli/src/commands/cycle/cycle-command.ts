@@ -1,19 +1,17 @@
-import { DependencyInjectionService } from '../../services/dependency-injection';
-import type { CycleRecord } from '../../../../core/src/types/cycle_record';
-import type { TaskRecord } from '../../../../core/src/types/task_record';
+import { Command } from 'commander';
+import { BaseCommand } from '../../base/base-command';
+import { Records } from '@gitgov/core';
+import type { BaseCommandOptions } from '../../interfaces/command';
 
 /**
  * Cycle Command Options interfaces
  */
-export interface CycleNewOptions {
+export interface CycleNewOptions extends BaseCommandOptions {
   description?: string;
   status?: 'planning' | 'active';
   taskIds?: string;
   tags?: string;
   notes?: string;
-  json?: boolean;
-  verbose?: boolean;
-  quiet?: boolean;
 }
 
 export interface CycleListOptions {
@@ -89,11 +87,38 @@ export interface CycleAddChildOptions {
  * Implements strategic planning CLI following the blueprint specification.
  * Delegates all business logic to BacklogAdapter and uses IndexerAdapter for performance.
  */
-export class CycleCommand {
-  private dependencyService = DependencyInjectionService.getInstance();
+export class CycleCommand extends BaseCommand<BaseCommandOptions> {
 
   /**
-   * [EARS-1] Creates new CycleRecord with $EDITOR integration
+   * Register the cycle command with Commander.js
+   */
+  register(program: Command): void {
+    program
+      .command('cycle')
+      .description('Cycle management')
+      .argument('[subcommand]', 'Cycle subcommand')
+      .argument('[args...]', 'Cycle arguments')
+      .option('--json', 'JSON output')
+      .option('--verbose', 'Verbose output')
+      .option('--quiet', 'Quiet mode')
+      .action(async (subcommand, args, options) => {
+        if (subcommand) {
+          await this.executeSubCommand(subcommand, args, options);
+        } else {
+          await this.execute(options);
+        }
+      });
+  }
+
+  /**
+   * Execute main cycle command (show help)
+   */
+  async execute(options: BaseCommandOptions): Promise<void> {
+    this.handleError('Cycle command requires a subcommand. Use: new, list, show, activate, complete, archive', options);
+  }
+
+  /**
+   * [EARS-1] Creates new Records.CycleRecord with $EDITOR integration
    */
   async executeNew(title: string, options: CycleNewOptions): Promise<void> {
     try {
@@ -107,14 +132,14 @@ export class CycleCommand {
       }
 
       // 3. Build payload (BacklogAdapter will use cycle_factory internally)
-      const payload: Partial<CycleRecord> = {
+      const payload: Partial<Records.CycleRecord> = {
         title: title.trim(),
         notes: options.description || await this.openEditor(title),
         status: options.status || 'planning',
         tags: options.tags ? options.tags.split(',').map(t => t.trim()) : []
       };
 
-      // Note: Using only fields from actual CycleRecord schema
+      // Note: Using only fields from actual Records.CycleRecord schema
 
       // 4. Get current actor dynamically
       const identityAdapter = await this.dependencyService.getIdentityAdapter();
@@ -154,12 +179,12 @@ export class CycleCommand {
       }
 
     } catch (error) {
-      this.handleError(error, options.json, options.verbose);
+      this.handleCycleError(error, options);
     }
   }
 
   /**
-   * [EARS-2] Lists CycleRecords with auto-indexation and hierarchy filtering
+   * [EARS-2] Lists Records.CycleRecords with auto-indexation and hierarchy filtering
    */
   async executeList(options: CycleListOptions): Promise<void> {
     try {
@@ -167,7 +192,7 @@ export class CycleCommand {
       const backlogAdapter = await this.dependencyService.getBacklogAdapter();
       const indexerAdapter = await this.dependencyService.getIndexerAdapter();
 
-      let cycles: CycleRecord[] = [];
+      let cycles: Records.CycleRecord[] = [];
 
       // 2. Auto-indexation strategy (unless --from-source)
       if (!options.fromSource) {
@@ -197,7 +222,7 @@ export class CycleCommand {
       if (options.status) {
         cycles = cycles.filter(cycle => cycle.status === options.status);
       }
-      // Note: parentCycle filtering not available in current CycleRecord schema
+      // Note: parentCycle filtering not available in current Records.CycleRecord schema
       if (options.tags) {
         const filterTags = options.tags.split(',').map(t => t.trim());
         cycles = cycles.filter(cycle =>
@@ -237,12 +262,12 @@ export class CycleCommand {
       }
 
     } catch (error) {
-      this.handleError(error, options.json, options.verbose);
+      this.handleCycleError(error, options);
     }
   }
 
   /**
-   * [EARS-3] Shows complete CycleRecord details with task hierarchy
+   * [EARS-3] Shows complete Records.CycleRecord details with task hierarchy
    */
   async executeShow(cycleId: string, options: CycleShowOptions): Promise<void> {
     try {
@@ -250,7 +275,7 @@ export class CycleCommand {
       const backlogAdapter = await this.dependencyService.getBacklogAdapter();
       const indexerAdapter = await this.dependencyService.getIndexerAdapter();
 
-      let cycle: CycleRecord | null = null;
+      let cycle: Records.CycleRecord | null = null;
 
       // 2. Auto-indexation strategy (unless --from-source)
       if (!options.fromSource) {
@@ -263,7 +288,7 @@ export class CycleCommand {
         // Use cache first
         const indexData = await indexerAdapter.getIndexData();
         if (indexData) {
-          cycle = indexData.cycles?.find((c: CycleRecord) => c.id === cycleId) || null;
+          cycle = indexData.cycles?.find((c: Records.CycleRecord) => c.id === cycleId) || null;
         }
       }
 
@@ -313,7 +338,7 @@ export class CycleCommand {
       }
 
     } catch (error) {
-      this.handleError(error, options.json, options.verbose);
+      this.handleCycleError(error, options);
     }
   }
 
@@ -372,7 +397,7 @@ export class CycleCommand {
       }
 
     } catch (error) {
-      this.handleError(error, options.json, options.verbose);
+      this.handleCycleError(error, options);
     }
   }
 
@@ -428,7 +453,7 @@ export class CycleCommand {
       }
 
     } catch (error) {
-      this.handleError(error, options.json, options.verbose);
+      this.handleCycleError(error, options);
     }
   }
 
@@ -478,7 +503,7 @@ export class CycleCommand {
       }
 
     } catch (error) {
-      this.handleError(error, options.json, options.verbose);
+      this.handleCycleError(error, options);
     }
   }
 
@@ -504,7 +529,7 @@ export class CycleCommand {
       }
 
       // 4. Build update payload
-      const updatePayload: Partial<CycleRecord> = {};
+      const updatePayload: Partial<Records.CycleRecord> = {};
 
       if (options.title) updatePayload.title = options.title;
       if (options.description) updatePayload.notes = options.description;
@@ -552,7 +577,7 @@ export class CycleCommand {
       }
 
     } catch (error) {
-      this.handleError(error, options.json, options.verbose);
+      this.handleCycleError(error, options);
     }
   }
 
@@ -616,7 +641,7 @@ export class CycleCommand {
       }
 
     } catch (error) {
-      this.handleError(error, options.json, options.verbose);
+      this.handleCycleError(error, options);
     }
   }
 
@@ -644,39 +669,58 @@ export class CycleCommand {
   }
 
   /**
-   * Handles errors with user-friendly messages
+   * Handles errors with user-friendly messages and exit codes specific to cycle operations
    */
-  private handleError(error: unknown, isJson = false, isVerbose = false): void {
+  private handleCycleError(error: unknown, options: BaseCommandOptions): void {
     let message: string;
-    let exitCode = 1;
+    let exitCode: number = 1;
 
     if (error instanceof Error) {
+      // Map specific error types to user-friendly messages
       if (error.message.includes('RecordNotFoundError')) {
-        message = error.message;
-      } else if (error.message.includes('ProtocolViolationError')) {
-        message = error.message;
-      } else if (error.message.includes('not initialized')) {
-        message = "❌ GitGovernance not initialized. Run 'gitgov init' first.";
+        message = error.message; // Keep original format for RecordNotFoundError
+        exitCode = 1;
+      } else if (error.message.includes('Cycle title cannot be empty')) {
+        message = "❌ Cycle operation failed: ❌ Cycle title cannot be empty";
+        exitCode = 1;
+      } else if (error.message.includes('Cycle not found:')) {
+        const cycleId = error.message.split('Cycle not found: ')[1];
+        message = `❌ Cycle operation failed: ❌ Cycle not found: ${cycleId}`;
+        exitCode = 1;
+      } else if (error.message.includes("Cycle is in '") && error.message.includes("' state. Cannot activate")) {
+        message = `❌ Cycle operation failed: ${error.message}`;
+        exitCode = 1;
+      } else if (error.message.includes("Cycle is in '") && error.message.includes("' state. Cannot complete")) {
+        message = `❌ Cycle operation failed: ${error.message}`;
+        exitCode = 1;
+      } else if (error.message.includes('Task not found:')) {
+        const taskId = error.message.split('Task not found: ')[1];
+        message = `❌ Cycle operation failed: ❌ Task not found: ${taskId}`;
+        exitCode = 1;
       } else {
         message = `❌ Cycle operation failed: ${error.message}`;
+        exitCode = 1;
       }
     } else {
       message = "❌ Unknown error occurred during cycle operation.";
+      exitCode = 1;
     }
 
-    if (isJson) {
+    if (options.json) {
       console.log(JSON.stringify({
-        success: false,
         error: message,
+        success: false,
         exitCode
       }, null, 2));
     } else {
       console.error(message);
-      if (isVerbose && error instanceof Error) {
-        console.error(`🔍 Technical details: ${error.stack}`);
+
+      if (options.verbose && error instanceof Error) {
+        console.error("🔍 Technical details:", error.stack);
       }
     }
 
     process.exit(exitCode);
   }
+
 }

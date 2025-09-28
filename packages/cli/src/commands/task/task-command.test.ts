@@ -7,8 +7,7 @@ jest.mock('../../services/dependency-injection', () => ({
 
 import { TaskCommand } from './task-command';
 import { DependencyInjectionService } from '../../services/dependency-injection';
-import type { TaskRecord } from '../../../../core/src/types/task_record';
-import type { ActorRecord } from '../../../../core/src/types/actor_record';
+import type { Records } from '@gitgov/core';
 
 // Mock console methods to capture output
 const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation();
@@ -19,28 +18,29 @@ const mockProcessExit = jest.spyOn(process, 'exit').mockImplementation();
 describe('TaskCommand - Complete Unit Tests', () => {
   let taskCommand: TaskCommand;
   let mockBacklogAdapter: {
-    createTask: jest.MockedFunction<(payload: Partial<TaskRecord>, actorId: string) => Promise<TaskRecord>>;
-    getTask: jest.MockedFunction<(taskId: string) => Promise<TaskRecord | null>>;
-    getAllTasks: jest.MockedFunction<() => Promise<TaskRecord[]>>;
-    submitTask: jest.MockedFunction<(taskId: string, actorId: string) => Promise<TaskRecord>>;
-    approveTask: jest.MockedFunction<(taskId: string, actorId: string) => Promise<TaskRecord>>;
-    updateTask: jest.MockedFunction<(taskId: string, payload: Partial<TaskRecord>) => Promise<TaskRecord>>;
+    createTask: jest.MockedFunction<(payload: Partial<Records.TaskRecord>, actorId: string) => Promise<Records.TaskRecord>>;
+    getTask: jest.MockedFunction<(taskId: string) => Promise<Records.TaskRecord | null>>;
+    getAllTasks: jest.MockedFunction<() => Promise<Records.TaskRecord[]>>;
+    submitTask: jest.MockedFunction<(taskId: string, actorId: string) => Promise<Records.TaskRecord>>;
+    approveTask: jest.MockedFunction<(taskId: string, actorId: string) => Promise<Records.TaskRecord>>;
+    updateTask: jest.MockedFunction<(taskId: string, payload: Partial<Records.TaskRecord>) => Promise<Records.TaskRecord>>;
+    resumeTask: jest.MockedFunction<(taskId: string, actorId: string, force?: boolean) => Promise<Records.TaskRecord>>;
   };
   let mockIndexerAdapter: {
     isIndexUpToDate: jest.MockedFunction<() => Promise<boolean>>;
-    getIndexData: jest.MockedFunction<() => Promise<{ tasks: TaskRecord[]; metadata: { generatedAt: string } } | null>>;
+    getIndexData: jest.MockedFunction<() => Promise<{ tasks: Records.TaskRecord[]; metadata: { generatedAt: string } } | null>>;
     generateIndex: jest.MockedFunction<() => Promise<void>>;
     invalidateCache: jest.MockedFunction<() => Promise<void>>;
   };
   let mockIdentityAdapter: {
-    getCurrentActor: jest.MockedFunction<() => Promise<ActorRecord>>;
-    getActor: jest.MockedFunction<(actorId: string) => Promise<ActorRecord | null>>;
+    getCurrentActor: jest.MockedFunction<() => Promise<Records.ActorRecord>>;
+    getActor: jest.MockedFunction<(actorId: string) => Promise<Records.ActorRecord | null>>;
   };
   let mockFeedbackAdapter: {
     create: jest.MockedFunction<(payload: Record<string, string>, actorId: string) => Promise<{ id: string; type: string }>>;
   };
 
-  const sampleTask: TaskRecord = {
+  const sampleTask: Records.TaskRecord = {
     id: '1757789000-task-test-task',
     title: 'Test Task',
     status: 'draft',
@@ -51,7 +51,7 @@ describe('TaskCommand - Complete Unit Tests', () => {
     cycleIds: []
   };
 
-  const sampleActor: ActorRecord = {
+  const sampleActor: Records.ActorRecord = {
     id: 'human:test-user',
     type: 'human',
     displayName: 'Test User',
@@ -70,7 +70,8 @@ describe('TaskCommand - Complete Unit Tests', () => {
       getAllTasks: jest.fn(),
       submitTask: jest.fn(),
       approveTask: jest.fn(),
-      updateTask: jest.fn()
+      updateTask: jest.fn(),
+      resumeTask: jest.fn()
     };
 
     mockIndexerAdapter = {
@@ -330,6 +331,48 @@ describe('TaskCommand - Complete Unit Tests', () => {
 
       expect(mockConsoleError).toHaveBeenCalledWith('RecordNotFoundError: Task not found');
       expect(mockProcessExit).toHaveBeenCalledWith(1);
+    });
+  });
+
+  describe('Manual Workflow Control (EARS 20-22)', () => {
+    it('[EARS-20] should resume paused task with blocking validation', async () => {
+      const resumedTask = { ...sampleTask, status: 'active' as const };
+
+      mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
+      mockBacklogAdapter.resumeTask.mockResolvedValue(resumedTask);
+      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+
+      await taskCommand.executeResume('1757789000-task-test-task', {});
+
+      expect(mockBacklogAdapter.resumeTask).toHaveBeenCalledWith('1757789000-task-test-task', 'human:test-user', false);
+      expect(mockIndexerAdapter.invalidateCache).toHaveBeenCalled();
+      expect(mockConsoleLog).toHaveBeenCalledWith('✅ Task resumed: 1757789000-task-test-task');
+    });
+
+    it('[EARS-21] should show error when paused task has blocking feedbacks', async () => {
+      const error = new Error('BlockingFeedbackError: Task has blocking feedbacks. Resolve them before resuming or use force.');
+
+      mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
+      mockBacklogAdapter.resumeTask.mockRejectedValue(error);
+
+      await taskCommand.executeResume('1757789000-task-test-task', {});
+
+      expect(mockConsoleError).toHaveBeenCalledWith('❌ Task operation failed: BlockingFeedbackError: Task has blocking feedbacks. Resolve them before resuming or use force.');
+      expect(mockProcessExit).toHaveBeenCalledWith(1);
+    });
+
+    it('[EARS-22] should force resume ignoring blocking feedbacks with force flag', async () => {
+      const resumedTask = { ...sampleTask, status: 'active' as const };
+
+      mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
+      mockBacklogAdapter.resumeTask.mockResolvedValue(resumedTask);
+      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+
+      await taskCommand.executeResume('1757789000-task-test-task', { force: true });
+
+      expect(mockBacklogAdapter.resumeTask).toHaveBeenCalledWith('1757789000-task-test-task', 'human:test-user', true);
+      const forceLog = mockConsoleLog.mock.calls.find(call => typeof call[0] === 'string' && call[0].includes('Resumed by'));
+      expect(forceLog?.[0]).toContain('[force]');
     });
   });
 

@@ -1,16 +1,9 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Box, Text, useInput, useApp, useStdout } from 'ink';
-import type { CycleRecord } from '../../../../core/src/types/cycle_record';
-import type { ActorRecord } from '../../../../core/src/types/actor_record';
-import type { FeedbackRecord } from '../../../../core/src/types/feedback_record';
-import type {
-  SystemStatus,
-  ProductivityMetrics,
-  CollaborationMetrics
-} from '../../../../core/src/adapters/metrics_adapter';
+import type { Records, MetricsAdapter, EventBus } from '@gitgov/core';
 
-// Import EnrichedTaskRecord from IndexerAdapter
-import type { EnrichedTaskRecord } from '../../../../core/src/adapters/indexer_adapter';
+// Import IndexerAdapter.EnrichedTaskRecord from IndexerAdapter
+import type { IndexerAdapter } from '@gitgov/core';
 
 type ThemeName = 'dark' | 'light';
 
@@ -81,17 +74,16 @@ const resolveThemeName = (explicit?: ThemeName): ThemeName => {
 
 // Sort modes for dynamic task ordering
 type SortMode = 'recent' | 'creation' | 'priority' | 'status';
-import type { ActivityEvent } from '../../../../core/src/modules/event_bus_module';
 
 interface DashboardIntelligence {
-  systemHealth: SystemStatus;
-  productivityMetrics: ProductivityMetrics;
-  collaborationMetrics: CollaborationMetrics;
-  tasks: EnrichedTaskRecord[]; // UPDATED - Now uses enriched tasks with activity info from IndexerAdapter
-  cycles: CycleRecord[];
-  feedback: FeedbackRecord[];
-  currentActor: ActorRecord;
-  activityHistory: ActivityEvent[]; // NUEVO - Activity history real
+  systemHealth: MetricsAdapter.SystemStatus;
+  productivityMetrics: MetricsAdapter.ProductivityMetrics;
+  collaborationMetrics: MetricsAdapter.CollaborationMetrics;
+  tasks: IndexerAdapter.EnrichedTaskRecord[]; // UPDATED - Now uses enriched tasks with activity info from IndexerAdapter
+  cycles: Records.CycleRecord[];
+  feedback: Records.FeedbackRecord[];
+  currentActor: Records.ActorRecord;
+  activityHistory: EventBus.ActivityEvent[]; // NUEVO - Activity history real
 }
 
 interface ViewConfig {
@@ -183,7 +175,7 @@ export const DashboardTUI: React.FC<Props> = ({
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
 
   // NUEVO - Sort tasks dynamically based on current sort mode
-  const sortTasks = useCallback((tasks: EnrichedTaskRecord[]): EnrichedTaskRecord[] => {
+  const sortTasks = useCallback((tasks: IndexerAdapter.EnrichedTaskRecord[]): IndexerAdapter.EnrichedTaskRecord[] => {
     switch (sortMode) {
       case 'recent':
         // Sort by last updated (most recent first) - DEFAULT
@@ -554,7 +546,7 @@ const RowView: React.FC<{
   viewConfig: ViewConfig;
   lastUpdate: Date;
   live?: boolean;
-  sortedTasks: EnrichedTaskRecord[];
+  sortedTasks: IndexerAdapter.EnrichedTaskRecord[];
   selectedIndex: number;
   sortMode: SortMode;
   getSortModeDisplay: (mode: SortMode) => string;
@@ -763,7 +755,7 @@ const KanbanView: React.FC<{
   viewConfig: ViewConfig;
   lastUpdate: Date;
   live?: boolean;
-  sortedTasks: EnrichedTaskRecord[];
+  sortedTasks: IndexerAdapter.EnrichedTaskRecord[];
   selectedTaskId: string | null;
   sortMode: SortMode;
   getSortModeDisplay: (mode: SortMode) => string;
@@ -789,7 +781,7 @@ const KanbanView: React.FC<{
   };
 
   // Organize tasks by columns
-  const tasksByColumn: Record<string, EnrichedTaskRecord[]> = {};
+  const tasksByColumn: Record<string, IndexerAdapter.EnrichedTaskRecord[]> = {};
   if (viewConfig.columns) {
     for (const [columnName, statuses] of Object.entries(viewConfig.columns)) {
       tasksByColumn[columnName] = sortedTasks
@@ -894,7 +886,7 @@ const ScrumView: React.FC<{
   viewConfig: ViewConfig;
   lastUpdate: Date;
   live?: boolean;
-  sortedTasks: EnrichedTaskRecord[];
+  sortedTasks: IndexerAdapter.EnrichedTaskRecord[];
   selectedTaskId: string | null;
   sortMode: SortMode;
   getSortModeDisplay: (mode: SortMode) => string;
@@ -931,7 +923,7 @@ const ScrumView: React.FC<{
   const sprintProgress = Math.round((doneTasks / (activeTasks + doneTasks || 1)) * 100);
 
   // Organize tasks by scrum columns
-  const tasksByColumn: Record<string, EnrichedTaskRecord[]> = {};
+  const tasksByColumn: Record<string, IndexerAdapter.EnrichedTaskRecord[]> = {};
   if (viewConfig.columns) {
     for (const [columnName, statuses] of Object.entries(viewConfig.columns)) {
       tasksByColumn[columnName] = sortedTasks.filter(task =>
