@@ -1,18 +1,17 @@
-import { DependencyInjectionService } from '../../services/dependency-injection';
-import type { TaskRecord } from '../../../../core/src/types/task_record';
+import { Command } from 'commander';
+import { BaseCommand } from '../../base/base-command';
+import type { Records } from '@gitgov/core';
+import type { BaseCommandOptions } from '../../interfaces/command';
 
 /**
  * Task Command Options interfaces
  */
-export interface TaskNewOptions {
+export interface TaskNewOptions extends BaseCommandOptions {
   description?: string;
   priority?: 'low' | 'medium' | 'high' | 'critical';
   cycleIds?: string;
   tags?: string;
   references?: string;
-  json?: boolean;
-  verbose?: boolean;
-  quiet?: boolean;
 }
 
 export interface TaskListOptions {
@@ -88,6 +87,24 @@ export interface TaskActivateOptions {
   quiet?: boolean;
 }
 
+export interface TaskResumeOptions extends BaseCommandOptions {
+  force?: boolean;
+}
+
+export interface TaskCancelOptions {
+  reason?: string;
+  json?: boolean;
+  verbose?: boolean;
+  quiet?: boolean;
+}
+
+export interface TaskRejectOptions {
+  reason?: string;
+  json?: boolean;
+  verbose?: boolean;
+  quiet?: boolean;
+}
+
 export interface TaskCompleteOptions {
   json?: boolean;
   verbose?: boolean;
@@ -100,11 +117,38 @@ export interface TaskCompleteOptions {
  * Implements the heart of GitGovernance CLI following the blueprint specification.
  * Delegates all business logic to BacklogAdapter and uses IndexerAdapter for performance.
  */
-export class TaskCommand {
-  private dependencyService = DependencyInjectionService.getInstance();
+export class TaskCommand extends BaseCommand<BaseCommandOptions> {
 
   /**
-   * [EARS-1] Creates new TaskRecord with $EDITOR integration
+   * Register the task command with Commander.js
+   */
+  register(program: Command): void {
+    program
+      .command('task')
+      .description('Task management')
+      .argument('[subcommand]', 'Task subcommand')
+      .argument('[args...]', 'Task arguments')
+      .option('--json', 'JSON output')
+      .option('--verbose', 'Verbose output')
+      .option('--quiet', 'Quiet mode')
+      .action(async (subcommand, args, options) => {
+        if (subcommand) {
+          await this.executeSubCommand(subcommand, args, options);
+        } else {
+          await this.execute(options);
+        }
+      });
+  }
+
+  /**
+   * Execute main task command (show help)
+   */
+  async execute(options: BaseCommandOptions): Promise<void> {
+    this.handleError('Task command requires a subcommand. Use: new, list, show, submit, approve, activate, resume, complete, cancel, reject, assign, edit, promote', options);
+  }
+
+  /**
+   * [EARS-1] Creates new Records.TaskRecord with $EDITOR integration
    */
   async executeNew(title: string, options: TaskNewOptions): Promise<void> {
     try {
@@ -118,7 +162,7 @@ export class TaskCommand {
       }
 
       // 3. Build payload (BacklogAdapter will use task_factory internally)
-      const payload: Partial<TaskRecord> = {
+      const payload: Partial<Records.TaskRecord> = {
         title: title.trim(),
         description: options.description || await this.openEditor(title),
         priority: options.priority || 'medium',
@@ -164,7 +208,7 @@ export class TaskCommand {
       }
 
     } catch (error) {
-      this.handleError(error, options.json, options.verbose);
+      this.handleTaskError(error, options);
     }
   }
 
@@ -177,7 +221,7 @@ export class TaskCommand {
       const backlogAdapter = await this.dependencyService.getBacklogAdapter();
       const indexerAdapter = await this.dependencyService.getIndexerAdapter();
 
-      let tasks: TaskRecord[] = [];
+      let tasks: Records.TaskRecord[] = [];
 
       // 2. Auto-indexation strategy (unless --from-source)
       if (!options.fromSource) {
@@ -241,12 +285,12 @@ export class TaskCommand {
       }
 
     } catch (error) {
-      this.handleError(error, options.json, options.verbose);
+      this.handleTaskError(error, options);
     }
   }
 
   /**
-   * [EARS-3] Shows complete TaskRecord details with health analysis
+   * [EARS-3] Shows complete Records.TaskRecord details with health analysis
    */
   async executeShow(taskId: string, options: TaskShowOptions): Promise<void> {
     try {
@@ -254,7 +298,7 @@ export class TaskCommand {
       const backlogAdapter = await this.dependencyService.getBacklogAdapter();
       const indexerAdapter = await this.dependencyService.getIndexerAdapter();
 
-      let task: TaskRecord | null = null;
+      let task: Records.TaskRecord | null = null;
 
       // 2. Auto-indexation strategy (unless --from-source)
       if (!options.fromSource) {
@@ -267,7 +311,7 @@ export class TaskCommand {
         // Use cache first
         const indexData = await indexerAdapter.getIndexData();
         if (indexData) {
-          task = indexData.tasks.find((t: TaskRecord) => t.id === taskId) || null;
+          task = indexData.tasks.find((t: Records.TaskRecord) => t.id === taskId) || null;
         }
       }
 
@@ -301,7 +345,7 @@ export class TaskCommand {
       }
 
     } catch (error) {
-      this.handleError(error, options.json, options.verbose);
+      this.handleTaskError(error, options);
     }
   }
 
@@ -339,7 +383,7 @@ export class TaskCommand {
       }
 
     } catch (error) {
-      this.handleError(error, options.json, options.verbose);
+      this.handleTaskError(error, options);
     }
   }
 
@@ -378,7 +422,7 @@ export class TaskCommand {
       }
 
     } catch (error) {
-      this.handleError(error, options.json, options.verbose);
+      this.handleTaskError(error, options);
     }
   }
 
@@ -417,7 +461,48 @@ export class TaskCommand {
       }
 
     } catch (error) {
-      this.handleError(error, options.json, options.verbose);
+      this.handleTaskError(error, options);
+    }
+  }
+
+  /**
+   * [EARS-20] Resumes a paused task with blocking validation and optional force override
+   */
+  async executeResume(taskId: string, options: TaskResumeOptions): Promise<void> {
+    try {
+      // 1. Get dependencies
+      const backlogAdapter = await this.dependencyService.getBacklogAdapter();
+      const indexerAdapter = await this.dependencyService.getIndexerAdapter();
+
+      // 2. Resolve current actor
+      const identityAdapter = await this.dependencyService.getIdentityAdapter();
+      const currentActor = await identityAdapter.getCurrentActor();
+      const actorId = currentActor.id;
+
+      // 3. Resume task (paused → active)
+      const resumedTask = await backlogAdapter.resumeTask(taskId, actorId, Boolean(options.force));
+
+      // 4. Cache invalidation to keep listings accurate
+      await indexerAdapter.invalidateCache();
+
+      // 5. Output feedback according to flags
+      if (options.json) {
+        console.log(JSON.stringify({
+          success: true,
+          taskId: resumedTask.id,
+          newStatus: resumedTask.status,
+          resumedBy: actorId,
+          forced: Boolean(options.force)
+        }, null, 2));
+      } else {
+        console.log(`✅ Task resumed: ${taskId}`);
+        console.log(`📊 Status: paused → active`);
+        const forceSuffix = options.force ? ' [force]' : '';
+        console.log(`✍️  Resumed by: ${currentActor.displayName} (${actorId})${forceSuffix}`);
+      }
+
+    } catch (error) {
+      this.handleTaskError(error, options);
     }
   }
 
@@ -456,7 +541,93 @@ export class TaskCommand {
       }
 
     } catch (error) {
-      this.handleError(error, options.json, options.verbose);
+      this.handleTaskError(error, options);
+    }
+  }
+
+  /**
+ * Cancels a task transitioning from ready/active to discarded with reason
+ */
+  async executeCancel(taskId: string, options: TaskCancelOptions): Promise<void> {
+    try {
+      // 1. Get dependencies
+      const backlogAdapter = await this.dependencyService.getBacklogAdapter();
+      const indexerAdapter = await this.dependencyService.getIndexerAdapter();
+
+      // 2. Get current actor
+      const identityAdapter = await this.dependencyService.getIdentityAdapter();
+      const currentActor = await identityAdapter.getCurrentActor();
+      const actorId = currentActor.id;
+
+      // 3. Delegate to BacklogAdapter
+      const updatedTask = await backlogAdapter.discardTask(taskId, actorId, options.reason);
+
+      // 4. Cache invalidation
+      await indexerAdapter.invalidateCache();
+
+      // 5. Output feedback
+      if (options.json) {
+        console.log(JSON.stringify({
+          success: true,
+          taskId: updatedTask.id,
+          newStatus: updatedTask.status,
+          cancelledBy: actorId,
+          reason: options.reason || 'No reason provided'
+        }, null, 2));
+      } else {
+        console.log(`❌ Task cancelled: ${taskId}`);
+        console.log(`📊 Status: ${updatedTask.status === 'discarded' ? 'ready/active → discarded' : 'cancelled'}`);
+        console.log(`✍️  Cancelled by: ${currentActor.displayName} (${actorId})`);
+        if (options.reason) {
+          console.log(`📝 Reason: ${options.reason}`);
+        }
+      }
+
+    } catch (error) {
+      this.handleTaskError(error, options);
+    }
+  }
+
+  /**
+   * Rejects a task transitioning from review to discarded with reason
+   */
+  async executeReject(taskId: string, options: TaskRejectOptions): Promise<void> {
+    try {
+      // 1. Get dependencies
+      const backlogAdapter = await this.dependencyService.getBacklogAdapter();
+      const indexerAdapter = await this.dependencyService.getIndexerAdapter();
+
+      // 2. Get current actor
+      const identityAdapter = await this.dependencyService.getIdentityAdapter();
+      const currentActor = await identityAdapter.getCurrentActor();
+      const actorId = currentActor.id;
+
+      // 3. Delegate to BacklogAdapter (same method as cancel, but from review state)
+      const updatedTask = await backlogAdapter.discardTask(taskId, actorId, options.reason);
+
+      // 4. Cache invalidation
+      await indexerAdapter.invalidateCache();
+
+      // 5. Output feedback
+      if (options.json) {
+        console.log(JSON.stringify({
+          success: true,
+          taskId: updatedTask.id,
+          newStatus: updatedTask.status,
+          rejectedBy: actorId,
+          reason: options.reason || 'No reason provided'
+        }, null, 2));
+      } else {
+        console.log(`🚫 Task rejected: ${taskId}`);
+        console.log(`📊 Status: review → discarded`);
+        console.log(`✍️  Rejected by: ${currentActor.displayName} (${actorId})`);
+        if (options.reason) {
+          console.log(`📝 Reason: ${options.reason}`);
+        }
+      }
+
+    } catch (error) {
+      this.handleTaskError(error, options);
     }
   }
 
@@ -518,7 +689,7 @@ export class TaskCommand {
       }
 
     } catch (error) {
-      this.handleError(error, options.json, options.verbose);
+      this.handleTaskError(error, options);
     }
   }
 
@@ -546,7 +717,7 @@ export class TaskCommand {
       }
 
       // 4. Build update payload
-      const updatePayload: Partial<TaskRecord> = {};
+      const updatePayload: Partial<Records.TaskRecord> = {};
 
       if (options.title) updatePayload.title = options.title;
       if (options.description) updatePayload.description = options.description;
@@ -601,7 +772,7 @@ export class TaskCommand {
       }
 
     } catch (error) {
-      this.handleError(error, options.json, options.verbose);
+      this.handleTaskError(error, options);
     }
   }
 
@@ -648,7 +819,7 @@ export class TaskCommand {
       }
 
     } catch (error) {
-      this.handleError(error, options.json, options.verbose);
+      this.handleTaskError(error, options);
     }
   }
 
@@ -679,39 +850,55 @@ export class TaskCommand {
   }
 
   /**
-   * Handles errors with user-friendly messages
+   * Handles errors with user-friendly messages and exit codes specific to task operations
    */
-  private handleError(error: unknown, isJson = false, isVerbose = false): void {
+  private handleTaskError(error: unknown, options: BaseCommandOptions): void {
     let message: string;
-    let exitCode = 1;
+    let exitCode: number = 1;
 
     if (error instanceof Error) {
+      // Map specific error types to user-friendly messages
       if (error.message.includes('RecordNotFoundError')) {
-        message = error.message;
-      } else if (error.message.includes('ProtocolViolationError')) {
-        message = error.message;
-      } else if (error.message.includes('not initialized')) {
-        message = "❌ GitGovernance not initialized. Run 'gitgov init' first.";
+        message = error.message; // Keep original format for RecordNotFoundError
+        exitCode = 1;
+      } else if (error.message.includes('Task title cannot be empty')) {
+        message = "❌ Task operation failed: ❌ Task title cannot be empty";
+        exitCode = 1;
+      } else if (error.message.includes('Task not found:')) {
+        const taskId = error.message.split('Task not found: ')[1];
+        message = `❌ Task operation failed: ❌ Task not found: ${taskId}`;
+        exitCode = 1;
+      } else if (error.message.includes('Actor not found:')) {
+        const actorId = error.message.split('Actor not found: ')[1];
+        message = `❌ Task operation failed: ❌ Actor not found: ${actorId}`;
+        exitCode = 1;
+      } else if (error.message.includes("Task must have 'epic:' tag")) {
+        message = "❌ Task operation failed: ❌ Task must have 'epic:' tag to be promoted to cycle.";
+        exitCode = 1;
       } else {
         message = `❌ Task operation failed: ${error.message}`;
+        exitCode = 1;
       }
     } else {
       message = "❌ Unknown error occurred during task operation.";
+      exitCode = 1;
     }
 
-    if (isJson) {
+    if (options.json) {
       console.log(JSON.stringify({
-        success: false,
         error: message,
+        success: false,
         exitCode
       }, null, 2));
     } else {
       console.error(message);
-      if (isVerbose && error instanceof Error) {
-        console.error(`🔍 Technical details: ${error.stack}`);
+
+      if (options.verbose && error instanceof Error) {
+        console.error("🔍 Technical details:", error.stack);
       }
     }
 
     process.exit(exitCode);
   }
+
 }

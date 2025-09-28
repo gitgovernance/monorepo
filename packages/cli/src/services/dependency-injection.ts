@@ -1,23 +1,5 @@
 import * as path from 'path';
-import { RecordStore } from '../../../core/src/store';
-import { MetricsAdapter } from '../../../core/src/adapters/metrics_adapter';
-import { FileIndexerAdapter } from '../../../core/src/adapters/indexer_adapter';
-import { BacklogAdapter } from '../../../core/src/adapters/backlog_adapter';
-import { FeedbackAdapter } from '../../../core/src/adapters/feedback_adapter';
-import { ExecutionAdapter } from '../../../core/src/adapters/execution_adapter';
-import { ChangelogAdapter } from '../../../core/src/adapters/changelog_adapter';
-import { IdentityAdapter } from '../../../core/src/adapters/identity_adapter';
-import { WorkflowMethodologyAdapter } from '../../../core/src/adapters/workflow_methodology_adapter';
-import { EventBus } from '../../../core/src/modules/event_bus_module';
-import { ConfigManager } from '../../../core/src/config_manager';
-import type { TaskRecord } from '../../../core/src/types/task_record';
-import type { CycleRecord } from '../../../core/src/types/cycle_record';
-import type { FeedbackRecord } from '../../../core/src/types/feedback_record';
-import type { ExecutionRecord } from '../../../core/src/types/execution_record';
-import type { ChangelogRecord } from '../../../core/src/types/changelog_record';
-import type { ActorRecord } from '../../../core/src/types/actor_record';
-import type { AgentRecord } from '../../../core/src/types/agent_record';
-import type { IIndexerAdapter } from '../../../core/src/adapters/indexer_adapter';
+import { Adapters, Config, Records, Store, EventBus } from '@gitgov/core';
 
 /**
  * Dependency Injection Service for GitGovernance CLI
@@ -27,16 +9,16 @@ import type { IIndexerAdapter } from '../../../core/src/adapters/indexer_adapter
  */
 export class DependencyInjectionService {
   private static instance: DependencyInjectionService | null = null;
-  private indexerAdapter: IIndexerAdapter | null = null;
-  private backlogAdapter: BacklogAdapter | null = null;
+  private indexerAdapter: Adapters.IIndexerAdapter | null = null;
+  private backlogAdapter: Adapters.BacklogAdapter | null = null;
   private stores: {
-    taskStore: RecordStore<TaskRecord>;
-    cycleStore: RecordStore<CycleRecord>;
-    feedbackStore: RecordStore<FeedbackRecord>;
-    executionStore: RecordStore<ExecutionRecord>;
-    changelogStore: RecordStore<ChangelogRecord>;
-    actorStore: RecordStore<ActorRecord>;
-    agentStore: RecordStore<AgentRecord>;
+    taskStore: Store.RecordStore<Records.TaskRecord>;
+    cycleStore: Store.RecordStore<Records.CycleRecord>;
+    feedbackStore: Store.RecordStore<Records.FeedbackRecord>;
+    executionStore: Store.RecordStore<Records.ExecutionRecord>;
+    changelogStore: Store.RecordStore<Records.ChangelogRecord>;
+    actorStore: Store.RecordStore<Records.ActorRecord>;
+    agentStore: Store.RecordStore<Records.AgentRecord>;
   } | null = null;
 
   private constructor() { }
@@ -59,7 +41,7 @@ export class DependencyInjectionService {
       return; // Already initialized
     }
 
-    const projectRoot = process.env['GITGOV_ORIGINAL_DIR'] || ConfigManager.findGitgovRoot() || process.cwd();
+    const projectRoot = process.env['GITGOV_ORIGINAL_DIR'] || Config.ConfigManager.findGitgovRoot() || process.cwd();
     // Verify .gitgov directory exists in current directory
     const { promises: fs } = await import('fs');
     const gitgovPath = `${projectRoot}/.gitgov`;
@@ -70,20 +52,20 @@ export class DependencyInjectionService {
     }
 
     this.stores = {
-      taskStore: new RecordStore<TaskRecord>('tasks', projectRoot),
-      cycleStore: new RecordStore<CycleRecord>('cycles', projectRoot),
-      feedbackStore: new RecordStore<FeedbackRecord>('feedback', projectRoot),
-      executionStore: new RecordStore<ExecutionRecord>('executions', projectRoot),
-      changelogStore: new RecordStore<ChangelogRecord>('changelogs', projectRoot),
-      actorStore: new RecordStore<ActorRecord>('actors', projectRoot),
-      agentStore: new RecordStore<AgentRecord>('agents', projectRoot),
+      taskStore: new Store.RecordStore<Records.TaskRecord>('tasks', projectRoot),
+      cycleStore: new Store.RecordStore<Records.CycleRecord>('cycles', projectRoot),
+      feedbackStore: new Store.RecordStore<Records.FeedbackRecord>('feedback', projectRoot),
+      executionStore: new Store.RecordStore<Records.ExecutionRecord>('executions', projectRoot),
+      changelogStore: new Store.RecordStore<Records.ChangelogRecord>('changelogs', projectRoot),
+      actorStore: new Store.RecordStore<Records.ActorRecord>('actors', projectRoot),
+      agentStore: new Store.RecordStore<Records.AgentRecord>('agents', projectRoot),
     };
   }
 
   /**
    * Creates and returns IndexerAdapter with all required dependencies
    */
-  async getIndexerAdapter(): Promise<IIndexerAdapter> {
+  async getIndexerAdapter(): Promise<Adapters.IIndexerAdapter> {
     if (this.indexerAdapter) {
       return this.indexerAdapter;
     }
@@ -94,21 +76,20 @@ export class DependencyInjectionService {
         throw new Error("Failed to initialize stores");
       }
 
-      // Create MetricsAdapter with dependencies
-      const metricsAdapter = new MetricsAdapter({
+      // Create Adapters.MetricsAdapter with dependencies
+      const metricsAdapter = new Adapters.MetricsAdapter({
         taskStore: this.stores.taskStore,
         cycleStore: this.stores.cycleStore,
         feedbackStore: this.stores.feedbackStore,
         executionStore: this.stores.executionStore,
-        changelogStore: this.stores.changelogStore,
         actorStore: this.stores.actorStore
       });
 
       // Create IndexerAdapter with all dependencies
-      const projectRoot = process.env['GITGOV_ORIGINAL_DIR'] || ConfigManager.findGitgovRoot() || process.cwd();
+      const projectRoot = process.env['GITGOV_ORIGINAL_DIR'] || Config.ConfigManager.findGitgovRoot() || process.cwd();
       const absoluteCachePath = path.join(projectRoot, '.gitgov', 'index.json');
 
-      this.indexerAdapter = new FileIndexerAdapter({
+      this.indexerAdapter = new Adapters.FileIndexerAdapter({
         metricsAdapter,
         taskStore: this.stores.taskStore,
         cycleStore: this.stores.cycleStore,
@@ -134,9 +115,9 @@ export class DependencyInjectionService {
   }
 
   /**
-   * Creates and returns BacklogAdapter with all required dependencies
+   * Creates and returns Adapters.BacklogAdapter with all required dependencies
    */
-  async getBacklogAdapter(): Promise<BacklogAdapter> {
+  async getBacklogAdapter(): Promise<Adapters.BacklogAdapter> {
     if (this.backlogAdapter) {
       return this.backlogAdapter;
     }
@@ -148,49 +129,48 @@ export class DependencyInjectionService {
       }
 
       // Create EventBus
-      const eventBus = new EventBus();
+      const eventBus = new EventBus.EventBus();
 
       // Create IdentityAdapter with correct dependencies
-      const identityAdapter = new IdentityAdapter({
+      const identityAdapter = new Adapters.IdentityAdapter({
         actorStore: this.stores.actorStore,
         agentStore: this.stores.agentStore,
         eventBus
       });
 
       // Create other adapters
-      const feedbackAdapter = new FeedbackAdapter({
+      const feedbackAdapter = new Adapters.FeedbackAdapter({
         feedbackStore: this.stores.feedbackStore,
         identity: identityAdapter,
         eventBus
       });
 
-      const executionAdapter = new ExecutionAdapter({
+      const executionAdapter = new Adapters.ExecutionAdapter({
         executionStore: this.stores.executionStore,
         identity: identityAdapter,
         eventBus
       });
 
-      const changelogAdapter = new ChangelogAdapter({
+      const changelogAdapter = new Adapters.ChangelogAdapter({
         changelogStore: this.stores.changelogStore,
         identity: identityAdapter,
         eventBus
       });
 
-      // Create MetricsAdapter
-      const metricsAdapter = new MetricsAdapter({
+      // Create Adapters.MetricsAdapter
+      const metricsAdapter = new Adapters.MetricsAdapter({
         taskStore: this.stores.taskStore,
         cycleStore: this.stores.cycleStore,
         feedbackStore: this.stores.feedbackStore,
         executionStore: this.stores.executionStore,
-        changelogStore: this.stores.changelogStore,
         actorStore: this.stores.actorStore
       });
 
       // Create WorkflowMethodologyAdapter
-      const workflowMethodology = new WorkflowMethodologyAdapter({});
+      const workflowMethodologyAdapter = Adapters.WorkflowMethodologyAdapter.createDefault(feedbackAdapter);
 
-      // Create BacklogAdapter with all dependencies
-      this.backlogAdapter = new BacklogAdapter({
+      // Create Adapters.BacklogAdapter with all dependencies
+      this.backlogAdapter = new Adapters.BacklogAdapter({
         taskStore: this.stores.taskStore,
         cycleStore: this.stores.cycleStore,
         feedbackStore: this.stores.feedbackStore,
@@ -200,7 +180,7 @@ export class DependencyInjectionService {
         executionAdapter,
         changelogAdapter,
         metricsAdapter,
-        workflowMethodology,
+        workflowMethodologyAdapter,
         identity: identityAdapter,
         eventBus
       });
@@ -221,7 +201,7 @@ export class DependencyInjectionService {
   /**
    * Creates and returns IdentityAdapter with all required dependencies
    */
-  async getIdentityAdapter(): Promise<IdentityAdapter> {
+  async getIdentityAdapter(): Promise<Adapters.IdentityAdapter> {
     try {
       await this.initializeStores();
       if (!this.stores) {
@@ -229,10 +209,10 @@ export class DependencyInjectionService {
       }
 
       // Create EventBus
-      const eventBus = new EventBus();
+      const eventBus = new EventBus.EventBus();
 
       // Create IdentityAdapter with dependencies
-      return new IdentityAdapter({
+      return new Adapters.IdentityAdapter({
         actorStore: this.stores.actorStore,
         agentStore: this.stores.agentStore,
         eventBus
@@ -252,7 +232,7 @@ export class DependencyInjectionService {
   /**
    * Creates and returns FeedbackAdapter with all required dependencies
    */
-  async getFeedbackAdapter(): Promise<FeedbackAdapter> {
+  async getFeedbackAdapter(): Promise<Adapters.FeedbackAdapter> {
     try {
       await this.initializeStores();
       if (!this.stores) {
@@ -260,15 +240,15 @@ export class DependencyInjectionService {
       }
 
       // Create EventBus and IdentityAdapter
-      const eventBus = new EventBus();
-      const identityAdapter = new IdentityAdapter({
+      const eventBus = new EventBus.EventBus();
+      const identityAdapter = new Adapters.IdentityAdapter({
         actorStore: this.stores.actorStore,
         agentStore: this.stores.agentStore,
         eventBus
       });
 
       // Create FeedbackAdapter with dependencies
-      return new FeedbackAdapter({
+      return new Adapters.FeedbackAdapter({
         feedbackStore: this.stores.feedbackStore,
         identity: identityAdapter,
         eventBus
@@ -286,22 +266,21 @@ export class DependencyInjectionService {
   }
 
   /**
-   * Creates and returns MetricsAdapter with all required dependencies
+   * Creates and returns Adapters.MetricsAdapter with all required dependencies
    */
-  async getMetricsAdapter(): Promise<MetricsAdapter> {
+  async getMetricsAdapter(): Promise<Adapters.MetricsAdapter> {
     try {
       await this.initializeStores();
       if (!this.stores) {
         throw new Error("Failed to initialize stores");
       }
 
-      // Create MetricsAdapter with dependencies
-      return new MetricsAdapter({
+      // Create Adapters.MetricsAdapter with dependencies
+      return new Adapters.MetricsAdapter({
         taskStore: this.stores.taskStore,
         cycleStore: this.stores.cycleStore,
         feedbackStore: this.stores.feedbackStore,
         executionStore: this.stores.executionStore,
-        changelogStore: this.stores.changelogStore,
         actorStore: this.stores.actorStore
       });
 
@@ -328,7 +307,7 @@ export class DependencyInjectionService {
    */
   async validateDependencies(): Promise<boolean> {
     try {
-      const projectRoot = process.env['GITGOV_ORIGINAL_DIR'] || ConfigManager.findGitgovRoot() || process.cwd();
+      const projectRoot = process.env['GITGOV_ORIGINAL_DIR'] || Config.ConfigManager.findGitgovRoot() || process.cwd();
 
       // Check if .gitgov directory exists
       const { promises: fs } = await import('fs');

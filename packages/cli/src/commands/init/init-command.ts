@@ -1,17 +1,7 @@
 import { DependencyInjectionService } from '../../services/dependency-injection';
-import { ConfigManager } from '../../../../core/src/config_manager';
-import type { ProjectAdapter, ProjectInitOptions, ProjectInitResult, EnvironmentValidation } from '../../../../core/src/adapters/project_adapter';
-import type { TaskRecord } from '../../../../core/src/types/task_record';
-import type { CycleRecord } from '../../../../core/src/types/cycle_record';
-import type { ActorRecord } from '../../../../core/src/types/actor_record';
-import type { AgentRecord } from '../../../../core/src/types/agent_record';
-import type { FeedbackRecord } from '../../../../core/src/types/feedback_record';
-import type { ExecutionRecord } from '../../../../core/src/types/execution_record';
-import type { ChangelogRecord } from '../../../../core/src/types/changelog_record';
-import { FeedbackAdapter } from '../../../../core/src/adapters/feedback_adapter';
-import { ExecutionAdapter } from '../../../../core/src/adapters/execution_adapter';
-import { ChangelogAdapter } from '../../../../core/src/adapters/changelog_adapter';
-import { MetricsAdapter } from '../../../../core/src/adapters/metrics_adapter';
+import type { Adapters, Records } from '@gitgov/core';
+import { Config } from '@gitgov/core';
+
 import * as pathUtils from 'path';
 
 /**
@@ -63,7 +53,7 @@ export class InitCommand {
       progressTracker.start("🚀 Initializing GitGovernance Project...");
 
       // Build ProjectInitOptions with only defined values
-      const projectInitOptions: ProjectInitOptions = {
+      const projectInitOptions: Adapters.ProjectInitOptions = {
         name: completeOptions.name!,
       };
 
@@ -123,66 +113,61 @@ export class InitCommand {
   /**
    * Gets ProjectAdapter from dependency injection
    */
-  private async getProjectAdapter(): Promise<ProjectAdapter> {
+  private async getProjectAdapter(): Promise<Adapters.ProjectAdapter> {
     // For init command, ALWAYS create adapter manually using current directory
     // NEVER use DependencyInjectionService which searches for existing .gitgov
     try {
-      const { ProjectAdapter } = await import('../../../../core/src/adapters/project_adapter');
-      const { IdentityAdapter } = await import('../../../../core/src/adapters/identity_adapter');
-      const { BacklogAdapter } = await import('../../../../core/src/adapters/backlog_adapter');
-      const { WorkflowMethodologyAdapter } = await import('../../../../core/src/adapters/workflow_methodology_adapter');
-      const { RecordStore } = await import('../../../../core/src/store');
-      const { EventBus } = await import('../../../../core/src/modules/event_bus_module');
-      const { ConfigManager } = await import('../../../../core/src/config_manager');
+      const { Adapters, Store, Config, EventBus } = await import('@gitgov/core');
 
       // For init: Use original directory where user executed command
       const projectRoot = process.env['GITGOV_ORIGINAL_DIR'] || process.cwd();
-      const eventBus = new EventBus();
+      const eventBus = new EventBus.EventBus();
 
-      const taskStore = new RecordStore<TaskRecord>('tasks', projectRoot);
-      const cycleStore = new RecordStore<CycleRecord>('cycles', projectRoot);
-      const actorStore = new RecordStore<ActorRecord>('actors', projectRoot);
-      const agentStore = new RecordStore<AgentRecord>('agents', projectRoot);
-      const feedbackStore = new RecordStore<FeedbackRecord>('feedback', projectRoot);
-      const executionStore = new RecordStore<ExecutionRecord>('executions', projectRoot);
-      const changelogStore = new RecordStore<ChangelogRecord>('changelogs', projectRoot);
+      const taskStore = new Store.RecordStore<Records.TaskRecord>('tasks', projectRoot);
+      const cycleStore = new Store.RecordStore<Records.CycleRecord>('cycles', projectRoot);
+      const actorStore = new Store.RecordStore<Records.ActorRecord>('actors', projectRoot);
+      const agentStore = new Store.RecordStore<Records.AgentRecord>('agents', projectRoot);
+      const feedbackStore = new Store.RecordStore<Records.FeedbackRecord>('feedback', projectRoot);
+      const executionStore = new Store.RecordStore<Records.ExecutionRecord>('executions', projectRoot);
+      const changelogStore = new Store.RecordStore<Records.ChangelogRecord>('changelogs', projectRoot);
 
       // Create adapters
-      const identityAdapter = new IdentityAdapter({
+      const identityAdapter = new Adapters.IdentityAdapter({
         actorStore,
         agentStore,
         eventBus
       });
 
       // Create other adapters first
-      const feedbackAdapter = new FeedbackAdapter({
+      const feedbackAdapter = new Adapters.FeedbackAdapter({
         feedbackStore,
         identity: identityAdapter,
         eventBus
       });
 
-      const executionAdapter = new ExecutionAdapter({
+      const executionAdapter = new Adapters.ExecutionAdapter({
         executionStore,
         identity: identityAdapter,
         eventBus
       });
 
-      const changelogAdapter = new ChangelogAdapter({
+      const changelogAdapter = new Adapters.ChangelogAdapter({
         changelogStore,
         identity: identityAdapter,
         eventBus
       });
 
-      const metricsAdapter = new MetricsAdapter({
+      const metricsAdapter = new Adapters.MetricsAdapter({
         taskStore,
         cycleStore,
         feedbackStore,
         executionStore,
-        changelogStore,
-        actorStore
+        actorStore,
       });
 
-      const backlogAdapter = new BacklogAdapter({
+      const workflowMethodologyAdapter = Adapters.WorkflowMethodologyAdapter.createDefault(feedbackAdapter);
+
+      const backlogAdapter = new Adapters.BacklogAdapter({
         taskStore,
         cycleStore,
         feedbackStore,
@@ -192,19 +177,22 @@ export class InitCommand {
         executionAdapter,
         changelogAdapter,
         metricsAdapter,
-        workflowMethodology: new WorkflowMethodologyAdapter(),
+        workflowMethodologyAdapter,
         identity: identityAdapter,
         eventBus
       });
 
-      return new ProjectAdapter({
+      const projectAdapter = new Adapters.ProjectAdapter({
         identityAdapter,
         backlogAdapter,
-        workflowMethodologyAdapter: new WorkflowMethodologyAdapter(),
-        configManager: new ConfigManager(projectRoot), // Pass explicit project root
+        workflowMethodologyAdapter,
+        configManager: Config.createConfigManager(projectRoot), // Pass explicit project root
         taskStore,
         cycleStore,
+        eventBus,
       });
+
+      return projectAdapter;
     } catch (error) {
       throw new Error(`Failed to create ProjectAdapter for init: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
@@ -276,7 +264,7 @@ export class InitCommand {
   /**
    * [EARS-14] Shows success output with visual impact
    */
-  private showSuccessOutput(result: ProjectInitResult, options: InitCommandOptions): void {
+  private showSuccessOutput(result: Adapters.ProjectInitResult, options: InitCommandOptions): void {
     if (options.json) {
       console.log(JSON.stringify({
         success: result.success,

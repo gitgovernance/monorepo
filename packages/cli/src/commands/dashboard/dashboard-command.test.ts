@@ -16,23 +16,57 @@ jest.mock('../../components/dashboard/DashboardTUI', () => ({
   default: jest.fn()
 }));
 
+// Mock @gitgov/core with all required modules
+jest.doMock('@gitgov/core', () => ({
+  Factories: {
+    createActorRecord: jest.fn().mockResolvedValue({
+      id: 'human:demo-user',
+      displayName: 'Demo User',
+      type: 'human',
+      publicKey: 'demo-public-key-base64',
+      roles: ['developer'],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }),
+    createTaskRecord: jest.fn().mockResolvedValue({
+      id: '1757789000-task-demo-task',
+      title: 'Demo Task',
+      status: 'active',
+      priority: 'high',
+      description: 'Demo task for dashboard',
+      tags: ['demo'],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }),
+    createCycleRecord: jest.fn().mockResolvedValue({
+      id: '1757789000-cycle-demo-cycle',
+      title: 'Demo Cycle',
+      status: 'active',
+      notes: 'Demo cycle for dashboard',
+      tags: ['demo'],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }),
+    createFeedbackRecord: jest.fn().mockResolvedValue({
+      id: '1757789000-feedback-demo',
+      entityType: 'task',
+      entityId: '1757789000-task-demo-task',
+      type: 'blocking',
+      status: 'open',
+      assignee: 'human:demo-user',
+      content: 'Demo feedback',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    })
+  },
+  Adapters: {},
+  Records: {},
+  Modules: {}
+}));
+
 import { DashboardCommand } from './dashboard-command';
 import { DependencyInjectionService } from '../../services/dependency-injection';
-import { createTaskRecord } from '../../../../core/src/factories/task_factory';
-import { createActorRecord } from '../../../../core/src/factories/actor_factory';
-import { createCycleRecord } from '../../../../core/src/factories/cycle_factory';
-import { createFeedbackRecord } from '../../../../core/src/factories/feedback_factory';
-import type { TaskRecord } from '../../../../core/src/types/task_record';
-import type { CycleRecord } from '../../../../core/src/types/cycle_record';
-import type { ActorRecord } from '../../../../core/src/types/actor_record';
-import type { FeedbackRecord } from '../../../../core/src/types/feedback_record';
-import type { ActivityEvent } from '../../../../core/src/modules/event_bus_module';
-import type { IndexData, IndexGenerationReport } from '../../../../core/src/adapters/indexer_adapter';
-import type {
-  SystemStatus,
-  ProductivityMetrics,
-  CollaborationMetrics
-} from '../../../../core/src/adapters/metrics_adapter';
+import { Records, Factories, Adapters, EventBus } from '@gitgov/core';
 
 // Mock console methods to capture output
 const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation();
@@ -42,25 +76,25 @@ const mockProcessExit = jest.spyOn(process, 'exit').mockImplementation();
 describe('DashboardCommand - Demo Optimizations', () => {
   let dashboardCommand: DashboardCommand;
   let mockBacklogAdapter: {
-    getAllTasks: jest.MockedFunction<() => Promise<TaskRecord[]>>;
-    getAllCycles: jest.MockedFunction<() => Promise<CycleRecord[]>>;
+    getAllTasks: jest.MockedFunction<() => Promise<Records.TaskRecord[]>>;
+    getAllCycles: jest.MockedFunction<() => Promise<Records.CycleRecord[]>>;
   };
   let mockFeedbackAdapter: {
-    getAllFeedback: jest.MockedFunction<() => Promise<FeedbackRecord[]>>;
+    getAllFeedback: jest.MockedFunction<() => Promise<Records.FeedbackRecord[]>>;
   };
   let mockMetricsAdapter: {
-    getSystemStatus: jest.MockedFunction<() => Promise<SystemStatus>>;
-    getProductivityMetrics: jest.MockedFunction<() => Promise<ProductivityMetrics>>;
-    getCollaborationMetrics: jest.MockedFunction<() => Promise<CollaborationMetrics>>;
+    getSystemStatus: jest.MockedFunction<() => Promise<Adapters.SystemStatus>>;
+    getProductivityMetrics: jest.MockedFunction<() => Promise<Adapters.ProductivityMetrics>>;
+    getCollaborationMetrics: jest.MockedFunction<() => Promise<Adapters.CollaborationMetrics>>;
   };
   let mockIndexerAdapter: {
-    getIndexData: jest.MockedFunction<() => Promise<IndexData | null>>;
-    generateIndex: jest.MockedFunction<() => Promise<IndexGenerationReport>>;
+    getIndexData: jest.MockedFunction<() => Promise<Adapters.IndexData | null>>;
+    generateIndex: jest.MockedFunction<() => Promise<Adapters.IndexGenerationReport>>;
     isIndexUpToDate: jest.MockedFunction<() => Promise<boolean>>;
-    calculateActivityHistory: jest.MockedFunction<() => Promise<ActivityEvent[]>>;
+    calculateActivityHistory: jest.MockedFunction<() => Promise<EventBus.ActivityEvent[]>>;
   };
   let mockIdentityAdapter: {
-    getCurrentActor: jest.MockedFunction<() => Promise<ActorRecord>>;
+    getCurrentActor: jest.MockedFunction<() => Promise<Records.ActorRecord>>;
   };
   let mockDependencyService: {
     getBacklogAdapter: jest.MockedFunction<() => Promise<typeof mockBacklogAdapter>>;
@@ -71,12 +105,12 @@ describe('DashboardCommand - Demo Optimizations', () => {
   };
 
   // Sample data using factories
-  let sampleActor: ActorRecord;
-  let sampleTask: TaskRecord;
-  let sampleCycle: CycleRecord;
-  let sampleFeedback: FeedbackRecord;
+  let sampleActor: Records.ActorRecord;
+  let sampleTask: Records.TaskRecord;
+  let sampleCycle: Records.CycleRecord;
+  let sampleFeedback: Records.FeedbackRecord;
 
-  const sampleSystemStatus: SystemStatus = {
+  const sampleSystemStatus: Adapters.SystemStatus = {
     tasks: {
       total: 10,
       byStatus: { active: 3, done: 5, draft: 2 },
@@ -94,7 +128,7 @@ describe('DashboardCommand - Demo Optimizations', () => {
     }
   };
 
-  const sampleProductivityMetrics: ProductivityMetrics = {
+  const sampleProductivityMetrics: Adapters.ProductivityMetrics = {
     throughput: 10,
     leadTime: 5.5,
     cycleTime: 3.2,
@@ -102,7 +136,7 @@ describe('DashboardCommand - Demo Optimizations', () => {
     averageCompletionTime: 5.5
   };
 
-  const sampleCollaborationMetrics: CollaborationMetrics = {
+  const sampleCollaborationMetrics: Adapters.CollaborationMetrics = {
     activeAgents: 2,
     totalAgents: 5,
     agentUtilization: 40,
@@ -110,7 +144,7 @@ describe('DashboardCommand - Demo Optimizations', () => {
     collaborationIndex: 65
   };
 
-  const sampleIndexData: IndexData = {
+  const sampleIndexData: Adapters.IndexData = {
     metadata: {
       generatedAt: new Date().toISOString(),
       lastCommitHash: 'abc123',
@@ -135,41 +169,11 @@ describe('DashboardCommand - Demo Optimizations', () => {
     // Reset all mocks
     jest.clearAllMocks();
 
-    // Create sample data using factories
-    sampleActor = await createActorRecord({
-      id: 'human:demo-user',
-      displayName: 'Demo User',
-      type: 'human',
-      publicKey: 'demo-public-key-base64',
-      roles: ['developer']
-    });
-
-    sampleTask = await createTaskRecord({
-      id: '1757789000-task-demo-task',
-      title: 'Demo Task',
-      status: 'active',
-      priority: 'high',
-      description: 'Demo task for dashboard',
-      tags: ['demo']
-    });
-
-    sampleCycle = await createCycleRecord({
-      id: '1757789000-cycle-demo-cycle',
-      title: 'Demo Cycle',
-      status: 'active',
-      notes: 'Demo cycle for dashboard',
-      tags: ['demo']
-    });
-
-    sampleFeedback = await createFeedbackRecord({
-      id: '1757789000-feedback-demo',
-      entityType: 'task',
-      entityId: '1757789000-task-demo-task',
-      type: 'blocking',
-      status: 'open',
-      assignee: 'human:demo-user',
-      content: 'Demo feedback'
-    });
+    // Get sample data from mocked factories
+    sampleActor = await Factories.createActorRecord({});
+    sampleTask = await Factories.createTaskRecord({});
+    sampleCycle = await Factories.createCycleRecord({});
+    sampleFeedback = await Factories.createFeedbackRecord({});
 
     // Create mock adapters
     mockBacklogAdapter = {
@@ -234,7 +238,7 @@ describe('DashboardCommand - Demo Optimizations', () => {
   describe('EARS-19: Activity Stream Never Disappears', () => {
     it('should immediately regenerate cache when indexData is null', async () => {
       // Arrange: Mock scenario where cache is invalidated (indexData is null)
-      const sampleActivity: ActivityEvent[] = [
+      const sampleActivity: EventBus.ActivityEvent[] = [
         {
           timestamp: Date.now(),
           type: 'task_created',
@@ -248,7 +252,7 @@ describe('DashboardCommand - Demo Optimizations', () => {
         }
       ];
 
-      const mockGenerationReport: IndexGenerationReport = {
+      const mockGenerationReport: Adapters.IndexGenerationReport = {
         success: true,
         recordsProcessed: 10,
         metricsCalculated: 3,
@@ -263,7 +267,7 @@ describe('DashboardCommand - Demo Optimizations', () => {
         }
       };
 
-      const indexDataWithActivity: IndexData = {
+      const indexDataWithActivity: Adapters.IndexData = {
         ...sampleIndexData,
         activityHistory: sampleActivity
       };
@@ -285,7 +289,7 @@ describe('DashboardCommand - Demo Optimizations', () => {
 
     it('should preserve activity history even when cache is regenerated', async () => {
       // Arrange: Mock activity history
-      const expectedActivity: ActivityEvent[] = [
+      const expectedActivity: EventBus.ActivityEvent[] = [
         {
           timestamp: Date.now() - 1000,
           type: 'task_created',
@@ -310,7 +314,7 @@ describe('DashboardCommand - Demo Optimizations', () => {
         }
       ];
 
-      const mockGenerationReport: IndexGenerationReport = {
+      const mockGenerationReport: Adapters.IndexGenerationReport = {
         success: true,
         recordsProcessed: 15,
         metricsCalculated: 4,
@@ -325,7 +329,7 @@ describe('DashboardCommand - Demo Optimizations', () => {
         }
       };
 
-      const indexDataWithActivity: IndexData = {
+      const indexDataWithActivity: Adapters.IndexData = {
         ...sampleIndexData,
         activityHistory: expectedActivity
       };
@@ -395,7 +399,7 @@ describe('DashboardCommand - Demo Optimizations', () => {
 
     it('should regenerate cache in under 100ms for demo responsiveness', async () => {
       // Arrange: Mock cache miss scenario
-      const mockGenerationReport: IndexGenerationReport = {
+      const mockGenerationReport: Adapters.IndexGenerationReport = {
         success: true,
         recordsProcessed: 50,
         metricsCalculated: 5,
@@ -432,7 +436,7 @@ describe('DashboardCommand - Demo Optimizations', () => {
   describe('Integration: Complete Demo Flow', () => {
     it('should handle complete demo scenario: cache miss -> regeneration -> activity display', async () => {
       // Arrange: Complete demo scenario
-      const demoActivity: ActivityEvent[] = [
+      const demoActivity: EventBus.ActivityEvent[] = [
         {
           timestamp: Date.now() - 2000,
           type: 'task_created',
@@ -467,7 +471,7 @@ describe('DashboardCommand - Demo Optimizations', () => {
         }
       ];
 
-      const mockGenerationReport: IndexGenerationReport = {
+      const mockGenerationReport: Adapters.IndexGenerationReport = {
         success: true,
         recordsProcessed: 25,
         metricsCalculated: 6,
@@ -482,7 +486,7 @@ describe('DashboardCommand - Demo Optimizations', () => {
         }
       };
 
-      const completeIndexData: IndexData = {
+      const completeIndexData: Adapters.IndexData = {
         ...sampleIndexData,
         tasks: [sampleTask],
         activityHistory: demoActivity

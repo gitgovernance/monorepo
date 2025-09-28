@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { Command } from 'commander';
-import { registerDiagramCommands } from './commands/diagram';
+import { DiagramCommand } from './commands/diagram';
 import { registerIndexerCommands } from './commands/indexer/indexer';
 import { registerInitCommands } from './commands/init/init';
 import { registerTaskCommands } from './commands/task/task';
@@ -24,7 +24,8 @@ async function setupCommands() {
     registerInitCommands(program);
 
     // Register diagram commands (no dependencies required)
-    registerDiagramCommands(program);
+    const diagramCommand = new DiagramCommand();
+    diagramCommand.register(program);
 
     // Setup adapters dependency injection
     const diService = DependencyInjectionService.getInstance();

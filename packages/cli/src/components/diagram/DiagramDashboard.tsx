@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Text, useInput, useApp } from 'ink';
-import { DiagramGenerator, type DiagramOptions } from '../../../../core/src/modules/diagram_generator';
-import { ConfigManager } from '../../../../core/src/config_manager';
+import { Config, DiagramGenerator } from '@gitgov/core';
 import { StatusBadge } from '../shared/StatusBadge';
 
 interface DiagramDashboardProps {
@@ -34,7 +33,7 @@ export const DiagramDashboard: React.FC<DiagramDashboardProps> = ({
 
   useEffect(() => {
     const initialSetup = async () => {
-      const root = ConfigManager.findProjectRoot();
+      const root = Config.ConfigManager.findProjectRoot();
       if (!root) {
         setStatus('error');
         setMessage('❌ Error: Could not find project root. Make sure you are in a GitGovernance repository.');
@@ -48,7 +47,7 @@ export const DiagramDashboard: React.FC<DiagramDashboardProps> = ({
     initialSetup();
   }, [watchMode]);
 
-  const generator = new DiagramGenerator({
+  const generator = new DiagramGenerator.DiagramGenerator({
     layout: 'LR',
     includeEpicTasks: true,
     maxDepth: 4,
@@ -63,10 +62,10 @@ export const DiagramDashboard: React.FC<DiagramDashboardProps> = ({
       setWarnings([]); // Clear previous warnings
 
       // Find project root and paths using core utilities
-      const projectRoot = ConfigManager.findProjectRoot();
+      const projectRoot = Config.ConfigManager.findProjectRoot();
       if (!projectRoot) throw new Error("Project root not found.");
 
-      const actualGitgovPath = ConfigManager.getGitgovPath();
+      const actualGitgovPath = Config.ConfigManager.getGitgovPath();
       const path = await import('path');
       const actualOutputPath = path.join(projectRoot, outputPath);
 
@@ -132,7 +131,7 @@ export const DiagramDashboard: React.FC<DiagramDashboardProps> = ({
 
       const fs = await import('fs');
       const path = await import('path');
-      const projectRoot = ConfigManager.findProjectRoot();
+      const projectRoot = Config.ConfigManager.findProjectRoot();
       if (!projectRoot) throw new Error("Project root not found.");
       const gitgovDir = path.join(projectRoot, '.gitgov');
 
@@ -157,15 +156,15 @@ export const DiagramDashboard: React.FC<DiagramDashboardProps> = ({
             await new Promise(resolve => setTimeout(resolve, 200));
 
             // Get paths
-            const projectRoot = ConfigManager.findProjectRoot();
+            const projectRoot = Config.ConfigManager.findProjectRoot();
             if (!projectRoot) throw new Error("Project root not found.");
-            const actualGitgovPath = ConfigManager.getGitgovPath();
+            const actualGitgovPath = Config.ConfigManager.getGitgovPath();
             const path = await import('path');
 
             console.log(`📖 About to regenerate after ${fileName} changed`);
 
             // Force a new generator instance to avoid caching issues
-            const freshGenerator = new DiagramGenerator({
+            const freshGenerator = new DiagramGenerator.DiagramGenerator({
               layout: 'LR',
               includeEpicTasks: true,
               maxDepth: 4,

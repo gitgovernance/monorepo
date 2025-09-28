@@ -13,8 +13,9 @@ BOLD='\033[1m'
 NC='\033[0m' # No Color
 
 # Configuration
-GITGOV_VERSION="1.0.0"
-REPO_URL="https://github.com/solocompanyai/solo-hub"
+GITGOV_VERSION="latest"
+REPO_URL="https://github.com/gitgovernance/monorepo"
+GITHUB_RELEASES_URL="https://api.github.com/repos/gitgovernance/monorepo/releases/latest"
 INSTALL_DIR="$HOME/.gitgov"
 BIN_DIR="$HOME/.local/bin"
 
@@ -24,25 +25,33 @@ echo "=============================="
 echo "The future of human-agent collaboration"
 echo -e "${NC}"
 
-# Check if Node.js is installed
-if ! command -v node &> /dev/null; then
-    echo -e "${RED}❌ Node.js is required but not installed.${NC}"
-    echo -e "${YELLOW}💡 Install Node.js from: https://nodejs.org${NC}"
-    echo -e "${YELLOW}   Minimum version: 18.0.0${NC}"
-    exit 1
-fi
+# Detect platform and architecture
+detect_platform() {
+    local os=""
+    local arch=""
+    
+    case "$(uname -s)" in
+        Linux*)     os="linux" ;;
+        Darwin*)    os="darwin" ;;
+        MINGW*|CYGWIN*|MSYS*) os="win32" ;;
+        *)          echo -e "${RED}❌ Unsupported operating system: $(uname -s)${NC}"; exit 1 ;;
+    esac
+    
+    case "$(uname -m)" in
+        x86_64|amd64)   arch="x64" ;;
+        arm64|aarch64)  arch="arm64" ;;
+        *)              echo -e "${RED}❌ Unsupported architecture: $(uname -m)${NC}"; exit 1 ;;
+    esac
+    
+    if [[ "$os" == "win32" ]]; then
+        echo "gitgov-${os}-${arch}.exe"
+    else
+        echo "gitgov-${os}-${arch}"
+    fi
+}
 
-NODE_VERSION=$(node --version)
-echo -e "${GREEN}✅ Node.js detected: $NODE_VERSION${NC}"
-
-# Check if npm is available
-if ! command -v npm &> /dev/null; then
-    echo -e "${RED}❌ npm is required but not installed.${NC}"
-    exit 1
-fi
-
-NPM_VERSION=$(npm --version)
-echo -e "${GREEN}✅ npm detected: $NPM_VERSION${NC}"
+BINARY_NAME=$(detect_platform)
+echo -e "${GREEN}✅ Platform detected: $BINARY_NAME${NC}"
 
 # Check if running on macOS (MVP limitation)
 if [[ "$OSTYPE" != "darwin"* ]]; then
@@ -66,37 +75,27 @@ echo -e "${BLUE}📦 Installing GitGovernance CLI...${NC}"
 mkdir -p "$INSTALL_DIR"
 mkdir -p "$BIN_DIR"
 
-# For MVP: Clone and install from source
-echo "📥 Downloading GitGovernance..."
-if [ -d "$INSTALL_DIR/source" ]; then
-    rm -rf "$INSTALL_DIR/source"
+# Download binary from GitHub Releases
+echo "📥 Downloading GitGovernance CLI binary..."
+
+# Get latest release info
+RELEASE_INFO=$(curl -s "$GITHUB_RELEASES_URL")
+DOWNLOAD_URL=$(echo "$RELEASE_INFO" | grep -o "https://github.com/gitgovernance/monorepo/releases/download/[^\"]*/$BINARY_NAME" | head -1)
+
+if [ -z "$DOWNLOAD_URL" ]; then
+    echo -e "${RED}❌ Could not find binary for your platform: $BINARY_NAME${NC}"
+    echo -e "${YELLOW}💡 Try: npm install -g @gitgov/cli${NC}"
+    exit 1
 fi
 
-git clone --depth 1 "$REPO_URL" "$INSTALL_DIR/source" > /dev/null 2>&1
+echo "🔗 Download URL: $DOWNLOAD_URL"
 
-# Navigate to CLI package and install
-echo "🔧 Setting up CLI..."
-cd "$INSTALL_DIR/source/packages/cli"
-
-# Install dependencies
-npm install > /dev/null 2>&1
-
-# Create executable wrapper (based on working gitgov-local)
-echo "⚡ Creating executable..."
-cat > "$INSTALL_DIR/gitgov" << 'EOF'
-#!/bin/bash
-# GitGovernance CLI - Production Wrapper
-
-# Store original directory where user executed command
-export GITGOV_ORIGINAL_DIR="$(pwd)"
-
-# Execute CLI from source with proper context
-cd "INSTALL_DIR_PLACEHOLDER/source/packages/cli"
-npx tsx src/index.ts "$@"
-EOF
-
-# Fix the install directory placeholder
-sed -i '' "s|INSTALL_DIR_PLACEHOLDER|$INSTALL_DIR|g" "$INSTALL_DIR/gitgov"
+# Download binary
+curl -fsSL "$DOWNLOAD_URL" -o "$INSTALL_DIR/gitgov"
+if [ $? -ne 0 ]; then
+    echo -e "${RED}❌ Failed to download GitGovernance CLI${NC}"
+    exit 1
+fi
 
 chmod +x "$INSTALL_DIR/gitgov"
 

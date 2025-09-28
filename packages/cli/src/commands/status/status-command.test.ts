@@ -1,3 +1,21 @@
+// Mock @gitgov/core with all required modules
+jest.doMock('@gitgov/core', () => ({
+  Adapters: {
+    BacklogAdapter: jest.fn().mockImplementation(() => ({})),
+    IdentityAdapter: jest.fn().mockImplementation(() => ({})),
+    MetricsAdapter: jest.fn().mockImplementation(() => ({}))
+  },
+  Factories: {
+    createMetricsAdapter: jest.fn(),
+    createActorRecord: jest.fn().mockImplementation((data) => Promise.resolve(data)),
+    createTaskRecord: jest.fn().mockImplementation((data) => Promise.resolve(data)),
+    createCycleRecord: jest.fn().mockImplementation((data) => Promise.resolve(data)),
+    createFeedbackRecord: jest.fn().mockImplementation((data) => Promise.resolve(data))
+  },
+  Records: {},
+  MetricsAdapter: jest.fn().mockImplementation(() => ({}))
+}));
+
 // Mock DependencyInjectionService before importing
 jest.mock('../../services/dependency-injection', () => ({
   DependencyInjectionService: {
@@ -7,20 +25,7 @@ jest.mock('../../services/dependency-injection', () => ({
 
 import { StatusCommand } from './status-command';
 import { DependencyInjectionService } from '../../services/dependency-injection';
-import { createTaskRecord } from '../../../../core/src/factories/task_factory';
-import { createActorRecord } from '../../../../core/src/factories/actor_factory';
-import { createCycleRecord } from '../../../../core/src/factories/cycle_factory';
-import { createFeedbackRecord } from '../../../../core/src/factories/feedback_factory';
-import type { TaskRecord } from '../../../../core/src/types/task_record';
-import type { CycleRecord } from '../../../../core/src/types/cycle_record';
-import type { ActorRecord } from '../../../../core/src/types/actor_record';
-import type { FeedbackRecord } from '../../../../core/src/types/feedback_record';
-import type {
-  SystemStatus,
-  ProductivityMetrics,
-  CollaborationMetrics,
-  TaskHealthReport
-} from '../../../../core/src/adapters/metrics_adapter';
+import { Factories, Records, MetricsAdapter } from "@gitgov/core";
 
 // Mock console methods to capture output
 const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation();
@@ -30,25 +35,25 @@ const mockProcessExit = jest.spyOn(process, 'exit').mockImplementation();
 describe('StatusCommand - Complete Unit Tests', () => {
   let statusCommand: StatusCommand;
   let mockBacklogAdapter: {
-    getTasksAssignedToActor: jest.MockedFunction<(actorId: string) => Promise<TaskRecord[]>>;
-    getAllTasks: jest.MockedFunction<() => Promise<TaskRecord[]>>;
-    getAllCycles: jest.MockedFunction<() => Promise<CycleRecord[]>>;
+    getTasksAssignedToActor: jest.MockedFunction<(actorId: string) => Promise<Records.TaskRecord[]>>;
+    getAllTasks: jest.MockedFunction<() => Promise<Records.TaskRecord[]>>;
+    getAllCycles: jest.MockedFunction<() => Promise<Records.CycleRecord[]>>;
   };
   let mockFeedbackAdapter: {
-    getAllFeedback: jest.MockedFunction<() => Promise<FeedbackRecord[]>>;
+    getAllFeedback: jest.MockedFunction<() => Promise<Records.FeedbackRecord[]>>;
   };
   let mockMetricsAdapter: {
-    getSystemStatus: jest.MockedFunction<() => Promise<SystemStatus>>;
-    getProductivityMetrics: jest.MockedFunction<() => Promise<ProductivityMetrics>>;
-    getCollaborationMetrics: jest.MockedFunction<() => Promise<CollaborationMetrics>>;
-    getTaskHealth: jest.MockedFunction<(taskId: string) => Promise<TaskHealthReport>>;
+    getSystemStatus: jest.MockedFunction<() => Promise<MetricsAdapter.SystemStatus>>;
+    getProductivityMetrics: jest.MockedFunction<() => Promise<MetricsAdapter.ProductivityMetrics>>;
+    getCollaborationMetrics: jest.MockedFunction<() => Promise<MetricsAdapter.CollaborationMetrics>>;
+    getTaskHealth: jest.MockedFunction<(taskId: string) => Promise<MetricsAdapter.TaskHealthReport>>;
   };
   let mockIndexerAdapter: {
     isIndexUpToDate: jest.MockedFunction<() => Promise<boolean>>;
     generateIndex: jest.MockedFunction<() => Promise<void>>;
   };
   let mockIdentityAdapter: {
-    getCurrentActor: jest.MockedFunction<() => Promise<ActorRecord>>;
+    getCurrentActor: jest.MockedFunction<() => Promise<Records.ActorRecord>>;
   };
   let mockDependencyService: {
     getBacklogAdapter: jest.MockedFunction<() => Promise<typeof mockBacklogAdapter>>;
@@ -59,12 +64,12 @@ describe('StatusCommand - Complete Unit Tests', () => {
   };
 
   // Sample data using factories
-  let sampleActor: ActorRecord;
-  let sampleTask: TaskRecord;
-  let sampleCycle: CycleRecord;
-  let sampleFeedback: FeedbackRecord;
+  let sampleActor: Records.ActorRecord;
+  let sampleTask: Records.TaskRecord;
+  let sampleCycle: Records.CycleRecord;
+  let sampleFeedback: Records.FeedbackRecord;
 
-  const sampleSystemStatus: SystemStatus = {
+  const sampleSystemStatus: MetricsAdapter.SystemStatus = {
     tasks: {
       total: 10,
       byStatus: { active: 3, done: 5, draft: 2 },
@@ -82,7 +87,7 @@ describe('StatusCommand - Complete Unit Tests', () => {
     }
   };
 
-  const sampleProductivityMetrics: ProductivityMetrics = {
+  const sampleProductivityMetrics: MetricsAdapter.ProductivityMetrics = {
     throughput: 10,
     leadTime: 5.5,
     cycleTime: 3.2,
@@ -90,7 +95,7 @@ describe('StatusCommand - Complete Unit Tests', () => {
     averageCompletionTime: 5.5
   };
 
-  const sampleCollaborationMetrics: CollaborationMetrics = {
+  const sampleCollaborationMetrics: MetricsAdapter.CollaborationMetrics = {
     activeAgents: 2,
     totalAgents: 5,
     agentUtilization: 40,
@@ -103,7 +108,7 @@ describe('StatusCommand - Complete Unit Tests', () => {
     jest.clearAllMocks();
 
     // Create sample data using factories
-    sampleActor = await createActorRecord({
+    sampleActor = await Factories.createActorRecord({
       id: 'human:test-user',
       displayName: 'Test User',
       type: 'human',
@@ -111,7 +116,7 @@ describe('StatusCommand - Complete Unit Tests', () => {
       roles: ['developer', 'reviewer']
     });
 
-    sampleTask = await createTaskRecord({
+    sampleTask = await Factories.createTaskRecord({
       id: '1757789000-task-test-task',
       title: 'Test Task',
       status: 'active',
@@ -121,7 +126,7 @@ describe('StatusCommand - Complete Unit Tests', () => {
       cycleIds: ['1757789000-cycle-test-cycle']
     });
 
-    sampleCycle = await createCycleRecord({
+    sampleCycle = await Factories.createCycleRecord({
       id: '1757789000-cycle-test-cycle',
       title: 'Test Cycle',
       status: 'active',
@@ -130,7 +135,7 @@ describe('StatusCommand - Complete Unit Tests', () => {
       taskIds: ['1757789000-task-test-task']
     });
 
-    sampleFeedback = await createFeedbackRecord({
+    sampleFeedback = await Factories.createFeedbackRecord({
       id: '1757789000-feedback-test',
       entityType: 'task',
       entityId: '1757789000-task-test-task',
@@ -213,9 +218,9 @@ describe('StatusCommand - Complete Unit Tests', () => {
 
     it('[EARS-2] should execute global dashboard with --all flag', async () => {
       // Setup multiple tasks using factory
-      const multipleTasks: TaskRecord[] = [];
+      const multipleTasks: Records.TaskRecord[] = [];
       for (let i = 0; i < 10; i++) {
-        const task = await createTaskRecord({
+        const task = await Factories.createTaskRecord({
           title: `Test Task ${i}`,
           status: 'active',
           priority: 'medium',
@@ -367,7 +372,7 @@ describe('StatusCommand - Complete Unit Tests', () => {
     });
 
     it('[EARS-16] should generate appropriate health alerts', async () => {
-      const unhealthySystemStatus: SystemStatus = {
+      const unhealthySystemStatus: MetricsAdapter.SystemStatus = {
         ...sampleSystemStatus,
         health: {
           overallScore: 30,

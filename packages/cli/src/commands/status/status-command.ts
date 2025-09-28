@@ -1,13 +1,5 @@
 import { DependencyInjectionService } from '../../services/dependency-injection';
-import type { TaskRecord } from '../../../../core/src/types/task_record';
-import type { CycleRecord } from '../../../../core/src/types/cycle_record';
-import type { ActorRecord } from '../../../../core/src/types/actor_record';
-import type { FeedbackRecord } from '../../../../core/src/types/feedback_record';
-import type {
-  SystemStatus,
-  ProductivityMetrics,
-  CollaborationMetrics
-} from '../../../../core/src/adapters/metrics_adapter';
+import { Records, MetricsAdapter } from "@gitgov/core";
 
 /**
  * Status Command Options interface
@@ -28,9 +20,9 @@ export interface StatusCommandOptions {
  * Personal Work Summary
  */
 interface PersonalWorkSummary {
-  assignedTasks: TaskRecord[];
-  pendingFeedback: FeedbackRecord[];
-  activeCycles: CycleRecord[];
+  assignedTasks: Records.TaskRecord[];
+  pendingFeedback: Records.FeedbackRecord[];
+  activeCycles: Records.CycleRecord[];
   suggestedActions: string[];
 }
 
@@ -183,7 +175,7 @@ export class StatusCommand {
     const feedbackAdapter = await this.dependencyService.getFeedbackAdapter();
 
     // Get assigned tasks (graceful degradation)
-    let assignedTasks: TaskRecord[] = [];
+    let assignedTasks: Records.TaskRecord[] = [];
     try {
       assignedTasks = await backlogAdapter.getTasksAssignedToActor(actorId);
     } catch (error) {
@@ -191,7 +183,7 @@ export class StatusCommand {
     }
 
     // Get pending feedback for actor (graceful degradation)
-    let pendingFeedback: FeedbackRecord[] = [];
+    let pendingFeedback: Records.FeedbackRecord[] = [];
     try {
       const allFeedback = await feedbackAdapter.getAllFeedback();
       pendingFeedback = allFeedback.filter(feedback =>
@@ -203,7 +195,7 @@ export class StatusCommand {
     }
 
     // Get active cycles (graceful degradation)
-    let activeCycles: CycleRecord[] = [];
+    let activeCycles: Records.CycleRecord[] = [];
     try {
       const allCycles = await backlogAdapter.getAllCycles();
       activeCycles = allCycles.filter(cycle =>
@@ -306,7 +298,7 @@ export class StatusCommand {
   /**
    * Generates suggested actions based on work state
    */
-  private generateSuggestedActions(assignedTasks: TaskRecord[], pendingFeedback: FeedbackRecord[]): string[] {
+  private generateSuggestedActions(assignedTasks: Records.TaskRecord[], pendingFeedback: Records.FeedbackRecord[]): string[] {
     const suggestions: string[] = [];
 
     // Blocking feedback suggestions
@@ -334,7 +326,7 @@ export class StatusCommand {
    * Renders personal dashboard view
    */
   private renderPersonalDashboard(
-    actor: ActorRecord,
+    actor: Records.ActorRecord,
     personalWork: PersonalWorkSummary,
     systemHealth: { healthScore: number; alerts: Array<{ type: string; message: string; severity: string }> },
     options: StatusCommandOptions
@@ -405,8 +397,8 @@ export class StatusCommand {
    */
   private renderGlobalDashboard(
     overview: SystemOverview,
-    productivityMetrics: ProductivityMetrics | null,
-    collaborationMetrics: CollaborationMetrics | null,
+    productivityMetrics: MetricsAdapter.ProductivityMetrics | null,
+    collaborationMetrics: MetricsAdapter.CollaborationMetrics | null,
     options: StatusCommandOptions
   ): void {
     console.log('📊 GitGovernance Project Status');
@@ -495,7 +487,7 @@ export class StatusCommand {
   /**
    * Counts tasks by priority
    */
-  private countByPriority(tasks: TaskRecord[]): Record<string, number> {
+  private countByPriority(tasks: Records.TaskRecord[]): Record<string, number> {
     const counts: Record<string, number> = {};
     tasks.forEach(task => {
       counts[task.priority] = (counts[task.priority] || 0) + 1;

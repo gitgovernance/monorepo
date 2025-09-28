@@ -1,33 +1,134 @@
+// Mock @gitgov/core with complete adapter mocks
+jest.doMock('@gitgov/core', () => ({
+  Config: {
+    ConfigManager: {
+      findProjectRoot: jest.fn().mockReturnValue('/mock/project/root'),
+      findGitgovRoot: jest.fn().mockReturnValue('/mock/project/root/.gitgov'),
+      getGitgovPath: jest.fn().mockReturnValue('/mock/project/root/.gitgov'),
+      isGitgovProject: jest.fn().mockReturnValue(true)
+    }
+  },
+  Store: {
+    RecordStore: jest.fn().mockImplementation(() => ({
+      findAll: jest.fn().mockResolvedValue([]),
+      findById: jest.fn().mockResolvedValue(null),
+      save: jest.fn().mockResolvedValue({}),
+      delete: jest.fn().mockResolvedValue(true)
+    }))
+  },
+  Adapters: {
+    IIndexerAdapter: jest.fn(),
+    IndexerAdapter: jest.fn().mockImplementation(() => ({
+      generateIndex: jest.fn().mockResolvedValue({
+        success: true,
+        recordsProcessed: 10,
+        metricsCalculated: 5,
+        generationTime: 250,
+        cacheSize: 1536,
+        errors: []
+      }),
+      validateIntegrity: jest.fn().mockResolvedValue({
+        status: 'valid',
+        recordsScanned: 10,
+        errorsFound: [],
+        warningsFound: [],
+        checksumFailures: 0,
+        signatureFailures: 0,
+        validationTime: 150
+      }),
+      invalidateCache: jest.fn().mockResolvedValue(undefined)
+    })),
+    MetricsAdapter: jest.fn().mockImplementation(() => ({})),
+    IdentityAdapter: jest.fn().mockImplementation(() => ({})),
+    FeedbackAdapter: jest.fn().mockImplementation(() => ({})),
+    ProjectAdapter: jest.fn().mockImplementation(() => ({})),
+    BacklogAdapter: jest.fn().mockImplementation(() => ({}))
+  },
+  Modules: {
+    EventBus: jest.fn().mockImplementation(() => ({
+      emit: jest.fn(),
+      on: jest.fn(),
+      off: jest.fn()
+    }))
+  }
+}));
+
+// Mock IndexerAdapter will be created inside the jest.mock factory
+
+// Mock DependencyInjectionService to return our controllable mock
+jest.mock('../../services/dependency-injection', () => {
+  // Define mock inside the factory function to avoid closure issues
+  const mockAdapter = {
+    generateIndex: jest.fn(),
+    validateIntegrity: jest.fn(),
+    invalidateCache: jest.fn()
+  };
+
+  return {
+    DependencyInjectionService: {
+      getInstance: jest.fn().mockReturnValue({
+        getIndexerAdapter: jest.fn().mockResolvedValue(mockAdapter)
+      })
+    }
+  };
+});
+
 import { IndexerCommand } from './indexer-command';
-import type { IIndexerAdapter, IndexGenerationReport, IntegrityReport } from '../../../../core/src/adapters/indexer_adapter';
+import { DependencyInjectionService } from '../../services/dependency-injection';
 
 // Mock console methods to capture output
 const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation();
 const mockConsoleError = jest.spyOn(console, 'error').mockImplementation();
 const mockProcessExit = jest.spyOn(process, 'exit').mockImplementation();
 
+// Get access to the mocked DependencyInjectionService
+const mockDI = jest.mocked(DependencyInjectionService);
+let mockGetIndexerAdapter: jest.MockedFunction<any>;
+
+// Global reference to the mock adapter for easy access in tests
+let mockIndexerAdapter: any;
+
 describe('IndexerCommand - Complete Unit Tests', () => {
   let indexerCommand: IndexerCommand;
-  let mockIndexerAdapter: jest.Mocked<IIndexerAdapter>;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     // Reset all mocks
     jest.clearAllMocks();
 
-    // Create mock IndexerAdapter with all required methods
-    mockIndexerAdapter = {
-      generateIndex: jest.fn(),
-      getIndexData: jest.fn(),
-      validateIntegrity: jest.fn(),
-      calculateActivityHistory: jest.fn(),
-      isIndexUpToDate: jest.fn(),
-      invalidateCache: jest.fn(),
-      calculateLastUpdated: jest.fn(),
-      enrichTaskRecord: jest.fn()
-    };
+    // Create fresh IndexerCommand instance
+    indexerCommand = new IndexerCommand();
 
-    // Create IndexerCommand with mocked adapter
-    indexerCommand = new IndexerCommand(mockIndexerAdapter);
+    // Get the mocked adapter from DI
+    const diInstance = mockDI.getInstance();
+    mockGetIndexerAdapter = diInstance.getIndexerAdapter as jest.MockedFunction<any>;
+
+    // Set up default successful responses
+    mockIndexerAdapter = await mockGetIndexerAdapter();
+    mockIndexerAdapter.generateIndex.mockResolvedValue({
+      success: true,
+      recordsProcessed: 10,
+      metricsCalculated: 5,
+      generationTime: 250,
+      cacheSize: 1536,
+      errors: [],
+      performance: {
+        readTime: 80,
+        calculationTime: 150,
+        writeTime: 90
+      }
+    });
+
+    mockIndexerAdapter.validateIntegrity.mockResolvedValue({
+      status: 'valid',
+      recordsScanned: 10,
+      errorsFound: [],
+      warningsFound: [],
+      checksumFailures: 0,
+      signatureFailures: 0,
+      validationTime: 150
+    });
+
+    mockIndexerAdapter.invalidateCache.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -39,7 +140,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
 
   describe('Core Index Generation (EARS 1-3)', () => {
     it('[EARS-1] should generate index and show progress to user', async () => {
-      const mockReport: IndexGenerationReport = {
+      const mockReport: any = {
         success: true,
         recordsProcessed: 10,
         metricsCalculated: 3,
@@ -66,7 +167,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
     });
 
     it('[EARS-2] should validate integrity without generating cache', async () => {
-      const mockReport: IntegrityReport = {
+      const mockReport: any = {
         status: 'valid',
         recordsScanned: 15,
         errorsFound: [],
@@ -87,7 +188,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
     });
 
     it('[EARS-3] should invalidate cache before generating with force flag', async () => {
-      const mockReport: IndexGenerationReport = {
+      const mockReport: any = {
         success: true,
         recordsProcessed: 8,
         metricsCalculated: 3,
@@ -116,7 +217,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
 
   describe('JSON Output Format (EARS 4)', () => {
     it('[EARS-4] should format output as JSON when json flag is used', async () => {
-      const mockReport: IndexGenerationReport = {
+      const mockReport: any = {
         success: true,
         recordsProcessed: 5,
         metricsCalculated: 2,
@@ -150,7 +251,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
     });
 
     it('[EARS-4] should format integrity report as JSON', async () => {
-      const mockReport: IntegrityReport = {
+      const mockReport: any = {
         status: 'warnings',
         recordsScanned: 12,
         errorsFound: [],
@@ -225,7 +326,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
 
   describe('Verbose and Quiet Mode Output (EARS 7-8)', () => {
     it('[EARS-7] should show detailed output with verbose flag', async () => {
-      const mockReport: IndexGenerationReport = {
+      const mockReport: any = {
         success: true,
         recordsProcessed: 20,
         metricsCalculated: 5,
@@ -251,7 +352,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
     });
 
     it('[EARS-8] should suppress output with quiet flag for scripting', async () => {
-      const mockReport: IndexGenerationReport = {
+      const mockReport: any = {
         success: true,
         recordsProcessed: 10,
         metricsCalculated: 3,
@@ -276,7 +377,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
     });
 
     it('[EARS-8] should suppress validation output with quiet flag', async () => {
-      const mockReport: IntegrityReport = {
+      const mockReport: any = {
         status: 'valid',
         recordsScanned: 15,
         errorsFound: [],
@@ -318,7 +419,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
 
   describe('Generation Statistics and Performance (EARS 6)', () => {
     it('[EARS-6] should show generation stats and exit with code 0', async () => {
-      const mockReport: IndexGenerationReport = {
+      const mockReport: any = {
         success: true,
         recordsProcessed: 25,
         metricsCalculated: 4,
@@ -347,7 +448,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
     });
 
     it('[EARS-6] should handle failed generation appropriately', async () => {
-      const mockReport: IndexGenerationReport = {
+      const mockReport: any = {
         success: false,
         recordsProcessed: 0,
         metricsCalculated: 0,
@@ -375,7 +476,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
 
   describe('Integrity Validation Details (EARS 10-12)', () => {
     it('[EARS-10] should show integrity validation with errors and warnings', async () => {
-      const mockReport: IntegrityReport = {
+      const mockReport: any = {
         status: 'errors',
         recordsScanned: 18,
         errorsFound: [
@@ -445,7 +546,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
 
   describe('Performance & Output Quality (EARS 13-18)', () => {
     it('[EARS-13] should complete in under 1s for typical datasets', async () => {
-      const mockReport: IndexGenerationReport = {
+      const mockReport: any = {
         success: true,
         recordsProcessed: 400, // Typical dataset size
         metricsCalculated: 5,
@@ -472,7 +573,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
     });
 
     it('[EARS-14] should show performance breakdown with verbose flag', async () => {
-      const mockReport: IndexGenerationReport = {
+      const mockReport: any = {
         success: true,
         recordsProcessed: 15,
         metricsCalculated: 3,
@@ -517,7 +618,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
     });
 
     it('[EARS-16] should format cache size human-readable with 1 decimal precision', async () => {
-      const mockReport: IndexGenerationReport = {
+      const mockReport: any = {
         success: true,
         recordsProcessed: 10,
         metricsCalculated: 2,
@@ -541,7 +642,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
     });
 
     it('[EARS-17] should handle cache size 0 correctly without format errors', async () => {
-      const mockReport: IndexGenerationReport = {
+      const mockReport: any = {
         success: true,
         recordsProcessed: 0,
         metricsCalculated: 0,
@@ -578,7 +679,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
 
   describe('Integration & Cache Behavior (EARS 19-22)', () => {
     it('[EARS-19] should show specific errors with bullet points user-friendly', async () => {
-      const mockReport: IndexGenerationReport = {
+      const mockReport: any = {
         success: false,
         recordsProcessed: 5,
         metricsCalculated: 0,
@@ -606,7 +707,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
     });
 
     it('[EARS-20] should show warnings with distinctive icons and record details', async () => {
-      const mockReport: IntegrityReport = {
+      const mockReport: any = {
         status: 'warnings',
         recordsScanned: 20,
         errorsFound: [],
@@ -639,7 +740,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
     });
 
     it('[EARS-21] should show specific counts for checksum and signature failures', async () => {
-      const mockReport: IntegrityReport = {
+      const mockReport: any = {
         status: 'errors',
         recordsScanned: 25,
         errorsFound: [
@@ -678,7 +779,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
 
   describe('Helper Methods and Edge Cases', () => {
     it('should format bytes correctly', async () => {
-      const mockReport: IndexGenerationReport = {
+      const mockReport: any = {
         success: true,
         recordsProcessed: 10,
         metricsCalculated: 3,
@@ -701,7 +802,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
     });
 
     it('should handle zero cache size', async () => {
-      const mockReport: IndexGenerationReport = {
+      const mockReport: any = {
         success: true,
         recordsProcessed: 0,
         metricsCalculated: 0,
