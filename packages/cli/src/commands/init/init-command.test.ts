@@ -1,36 +1,81 @@
-// Mock ALL core modules that InitCommand uses
-jest.mock('../../../../core/src/adapters/project_adapter', () => ({
-  ProjectAdapter: jest.fn()
-}));
-jest.mock('../../../../core/src/adapters/identity_adapter', () => ({
-  IdentityAdapter: jest.fn()
-}));
-jest.mock('../../../../core/src/adapters/backlog_adapter', () => ({
-  BacklogAdapter: jest.fn()
-}));
-jest.mock('../../../../core/src/adapters/workflow_methodology_adapter', () => ({
-  WorkflowMethodologyAdapter: jest.fn()
-}));
-jest.mock('../../../../core/src/store', () => ({
-  RecordStore: jest.fn()
-}));
-jest.mock('../../../../core/src/modules/event_bus_module', () => ({
-  EventBus: jest.fn()
-}));
-jest.mock('../../../../core/src/config_manager', () => ({
-  ConfigManager: jest.fn()
-}));
-jest.mock('../../../../core/src/adapters/feedback_adapter', () => ({
-  FeedbackAdapter: jest.fn()
-}));
-jest.mock('../../../../core/src/adapters/execution_adapter', () => ({
-  ExecutionAdapter: jest.fn()
-}));
-jest.mock('../../../../core/src/adapters/changelog_adapter', () => ({
-  ChangelogAdapter: jest.fn()
-}));
-jest.mock('../../../../core/src/adapters/metrics_adapter', () => ({
-  MetricsAdapter: jest.fn()
+// Mock @gitgov/core with all required modules
+jest.doMock('@gitgov/core', () => ({
+  Adapters: {
+    ProjectAdapter: jest.fn().mockImplementation(() => ({
+      initializeProject: jest.fn(),
+      validateEnvironment: jest.fn()
+    })),
+    IdentityAdapter: jest.fn().mockImplementation(() => ({})),
+    BacklogAdapter: jest.fn().mockImplementation(() => ({})),
+    WorkflowMethodologyAdapter: Object.assign(
+      jest.fn().mockImplementation(() => ({
+        getTransitionRule: jest.fn().mockResolvedValue({
+          to: 'active',
+          conditions: { signatures: { __default__: { role: 'author' } } }
+        }),
+        validateSignature: jest.fn().mockResolvedValue(true)
+      })),
+      {
+        createDefault: jest.fn().mockImplementation(() => ({
+          getTransitionRule: jest.fn().mockResolvedValue({
+            to: 'active',
+            conditions: { signatures: { __default__: { role: 'author' } } }
+          }),
+          validateSignature: jest.fn().mockResolvedValue(true)
+        }))
+      }
+    ),
+    FeedbackAdapter: jest.fn().mockImplementation(() => ({})),
+    ExecutionAdapter: jest.fn().mockImplementation(() => ({})),
+    ChangelogAdapter: jest.fn().mockImplementation(() => ({
+      create: jest.fn().mockResolvedValue({
+        id: 'test-changelog',
+        name: 'Test Changelog',
+        description: 'Description for test changelog',
+        createdAt: '2023-10-27T10:00:00Z',
+        updatedAt: '2023-10-27T10:00:00Z',
+        createdBy: 'human:test-user',
+        updatedBy: 'human:test-user',
+        version: 1,
+        cycles: [],
+        tasks: []
+      }),
+      getAllChangelogs: jest.fn().mockResolvedValue([])
+    })),
+    MetricsAdapter: jest.fn().mockImplementation(() => ({}))
+  },
+  EventBus: {
+    EventBus: jest.fn().mockImplementation(() => ({
+      publish: jest.fn(),
+      subscribe: jest.fn().mockReturnValue({ id: 'mock-subscription' }),
+      unsubscribe: jest.fn()
+    }))
+  },
+  Store: {
+    RecordStore: jest.fn().mockImplementation(() => ({}))
+  },
+  Modules: {
+    EventBus: jest.fn().mockImplementation(() => ({}))
+  },
+  EventBusModule: {
+    EventBus: jest.fn().mockImplementation(() => ({}))
+  },
+  Config: {
+    ConfigManager: {
+      findProjectRoot: jest.fn(),
+      findGitgovRoot: jest.fn(),
+      getGitgovPath: jest.fn(),
+      isGitgovProject: jest.fn()
+    },
+    createConfigManager: jest.fn().mockImplementation(() => ({
+      loadConfig: jest.fn(),
+      loadSession: jest.fn(),
+      saveConfig: jest.fn(),
+      saveSession: jest.fn(),
+      getRootCycle: jest.fn()
+    }))
+  },
+  Records: {}
 }));
 
 // Mock child_process for git config
@@ -41,7 +86,7 @@ jest.mock('child_process', () => ({
 import { InitCommand } from './init-command';
 import { DependencyInjectionService } from '../../services/dependency-injection';
 import { execSync } from 'child_process';
-import type { ProjectInitResult, EnvironmentValidation } from '../../../../core/src/adapters/project_adapter';
+import type { Adapters } from '@gitgov/core';
 
 // Mock console methods to capture output
 const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation();
@@ -52,8 +97,8 @@ const mockProcessExit = jest.spyOn(process, 'exit').mockImplementation();
 describe('InitCommand - Complete Unit Tests', () => {
   let initCommand: InitCommand;
   let mockProjectAdapter: {
-    initializeProject: jest.MockedFunction<(options: any) => Promise<ProjectInitResult>>;
-    validateEnvironment: jest.MockedFunction<(path?: string) => Promise<EnvironmentValidation>>;
+    initializeProject: jest.MockedFunction<(options: any) => Promise<Adapters.ProjectInitResult>>;
+    validateEnvironment: jest.MockedFunction<(path?: string) => Promise<Adapters.EnvironmentValidation>>;
   };
   let mockDependencyService: {
     getProjectAdapter: jest.MockedFunction<() => Promise<typeof mockProjectAdapter>>;
@@ -61,7 +106,7 @@ describe('InitCommand - Complete Unit Tests', () => {
     getBacklogAdapter: jest.MockedFunction<() => Promise<any>>;
   };
 
-  const sampleInitResult: ProjectInitResult = {
+  const sampleInitResult: Adapters.ProjectInitResult = {
     success: true,
     projectId: 'test-project',
     projectName: 'Test Project',
@@ -78,7 +123,7 @@ describe('InitCommand - Complete Unit Tests', () => {
     ]
   };
 
-  const sampleValidEnvironment: EnvironmentValidation = {
+  const sampleValidEnvironment: Adapters.EnvironmentValidation = {
     isValid: true,
     isGitRepo: true,
     hasWritePermissions: true,
@@ -90,15 +135,18 @@ describe('InitCommand - Complete Unit Tests', () => {
   beforeEach(() => {
     jest.clearAllMocks();
 
-    // Mock ProjectAdapter
+    // Get mocked ProjectAdapter from the unified mock
+    const { Adapters } = require('@gitgov/core');
+    const MockedProjectAdapter = Adapters.ProjectAdapter as jest.MockedClass<any>;
+
+    // Create a mock instance
     mockProjectAdapter = {
       initializeProject: jest.fn(),
       validateEnvironment: jest.fn()
     };
 
-    // Mock all the imported classes
-    const { ProjectAdapter } = require('../../../../core/src/adapters/project_adapter');
-    ProjectAdapter.mockImplementation(() => mockProjectAdapter);
+    // Configure the mock to return our instance
+    MockedProjectAdapter.mockImplementation(() => mockProjectAdapter);
 
     // Mock execSync for git config
     (execSync as jest.MockedFunction<typeof execSync>).mockReturnValue('Test User\n');
@@ -109,37 +157,6 @@ describe('InitCommand - Complete Unit Tests', () => {
     // Setup default mock returns for ALL tests
     mockProjectAdapter.validateEnvironment.mockResolvedValue(sampleValidEnvironment);
     mockProjectAdapter.initializeProject.mockResolvedValue(sampleInitResult);
-
-    // Mock all other required classes to return mocks
-    const coreModules = require('../../../../core/src/adapters/identity_adapter');
-    coreModules.IdentityAdapter.mockImplementation(() => ({}));
-
-    const backlogModule = require('../../../../core/src/adapters/backlog_adapter');
-    backlogModule.BacklogAdapter.mockImplementation(() => ({}));
-
-    const workflowModule = require('../../../../core/src/adapters/workflow_methodology_adapter');
-    workflowModule.WorkflowMethodologyAdapter.mockImplementation(() => ({}));
-
-    const storeModule = require('../../../../core/src/store');
-    storeModule.RecordStore.mockImplementation(() => ({}));
-
-    const eventModule = require('../../../../core/src/modules/event_bus_module');
-    eventModule.EventBus.mockImplementation(() => ({}));
-
-    const configModule = require('../../../../core/src/config_manager');
-    configModule.ConfigManager.mockImplementation(() => ({}));
-
-    const feedbackModule = require('../../../../core/src/adapters/feedback_adapter');
-    feedbackModule.FeedbackAdapter.mockImplementation(() => ({}));
-
-    const executionModule = require('../../../../core/src/adapters/execution_adapter');
-    executionModule.ExecutionAdapter.mockImplementation(() => ({}));
-
-    const changelogModule = require('../../../../core/src/adapters/changelog_adapter');
-    changelogModule.ChangelogAdapter.mockImplementation(() => ({}));
-
-    const metricsModule = require('../../../../core/src/adapters/metrics_adapter');
-    metricsModule.MetricsAdapter.mockImplementation(() => ({}));
   });
 
   afterEach(() => {
@@ -248,7 +265,7 @@ describe('InitCommand - Complete Unit Tests', () => {
 
   describe('Environment Validation (EARS 15)', () => {
     it('[EARS-15] should show user-friendly error when already initialized', async () => {
-      const invalidEnvironment: EnvironmentValidation = {
+      const invalidEnvironment: Adapters.EnvironmentValidation = {
         isValid: false,
         isGitRepo: true,
         hasWritePermissions: true,
@@ -490,7 +507,7 @@ describe('InitCommand - Complete Unit Tests', () => {
     });
 
     it('[EARS-7] should handle ProjectAdapter validation errors', async () => {
-      const invalidEnvironment: EnvironmentValidation = {
+      const invalidEnvironment: Adapters.EnvironmentValidation = {
         isValid: false,
         isGitRepo: false,
         hasWritePermissions: true,
