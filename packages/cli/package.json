@@ -1,6 +1,6 @@
 {
   "name": "@gitgov/cli",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "description": "🚀 AI-first governance CLI for intelligent work. Install with `npm install -g @gitgov/cli` and start governing your projects with interactive dashboards, task management, and workflow automation.",
   "type": "module",
   "main": "build/dist/gitgov.mjs",
@@ -19,6 +19,7 @@
     "build:test": "mkdir -p build/dist-cjs && tsc -p tsconfig.cjs.json",
     "build:npm": "./scripts/build-packages.sh",
     "build:binaries": "./scripts/build-binaries.sh",
+    "version:bump": "./scripts/version.sh",
     "sea:tui": "node --experimental-sea-config sea-config-tui.json",
     "start": "./build/dist/gitgov.mjs",
     "dev": "tsx src/index.ts",
