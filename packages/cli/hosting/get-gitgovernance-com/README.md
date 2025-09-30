@@ -38,9 +38,19 @@ curl -sSL http://localhost:8000/get-gitgovernance.sh | sh
 ## 📁 Archivos
 
 - `index.html` - Landing page con diseño atractivo
-- `get-gitgovernance.sh` - Script de instalación
+- `get-gitgovernance.sh` - Script de instalación NPM (actualizado)
 - `_headers` - Headers de seguridad para Cloudflare
 - `README.md` - Esta documentación
+
+## 🔄 Cómo Funciona el Installer
+
+El script `get-gitgovernance.sh` ahora:
+
+1. **Verifica Node.js 18+** - Valida versión requerida
+2. **Verifica NPM** - Confirma que npm está disponible
+3. **Instala via NPM** - Ejecuta `npm install -g @gitgov/cli`
+4. **Verifica instalación** - Confirma que `gitgov` está disponible
+5. **Muestra quick start** - Guía al usuario para empezar
 
 ## 🎯 URL Final
 
