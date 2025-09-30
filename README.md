@@ -1,22 +1,37 @@
-# GitGovernance
-
 ![License: MPL-2.0](https://img.shields.io/badge/Core_License-MPL--2.0-brightgreen.svg)
 ![License: Apache-2.0](https://img.shields.io/badge/CLI_License-Apache--2.0-blue.svg)
-![Tests](https://img.shields.io/badge/tests-871%20passing-success)
+![Tests](https://img.shields.io/badge/tests-704%20core%20+%20167%20cli-success)
 ![core npm version](https://img.shields.io/npm/v/@gitgov/core)
 ![cli npm version](https://img.shields.io/npm/v/@gitgov/cli)
 
-**An Operating System for Intelligent Work, built on a Git-based ledger.**
+# GitGovernance
+
+**An Operating System for Intelligent Work, built on Git.**
 
 GitGovernance provides the infrastructure of trust to orchestrate collaboration between human and AI agents, bringing engineering discipline to hybrid teams.
 
 ## The Vision: Why GitGovernance?
 
-In the era of AI, high-performance teams face a new kind of chaos: zero accountability, coordination silos, and inconsistent quality. Leaders operate blindly, unable to see progress or risks in time.
+Modern software teams combine humans and AI agents, but face coordination challenges: operational gaps between where developers work, managers track, and agents execute. The result is coordination silos and leaders operating without unified, verifiable truth.
 
-GitGovernance is not another management tool. It's a foundational protocol layer that unifies all work into an immutable, auditable, and signed ledger. We built it on Git because it's the most robust and adopted distributed traceability system in the world.
+GitGovernance is not another management tool. It's a foundational protocol layer that unifies all work into an auditable, verifiable Git history. We built it on Git because it's the most robust and adopted distributed traceability system in the world.
 
-Our core principle is a **Protocol-First Approach**. Every component is first defined as a formal specification—a contract readable by both humans and LLMs—before a single line of code is written. This ensures that the system's logic is guided by a clear purpose that an AI can understand and audit.
+<img width="876" height="604" alt="GitGovernance TUI Dashboard" src="https://github.com/user-attachments/assets/016a4bef-d374-4963-aef3-19303650fb3a" />
+
+It's not about replacing your board; it's about giving it a foundation of truth.
+
+And, of course, you can talk to it:
+
+> **You ask:** "Are we okay?"  
+> **@gitgov answers:** "Backlog health is at 87%, but 80 tasks are stalled. You have 1 critical feedback blocking 3 other tasks."
+
+## A CLI for Humans and Agents
+
+`gitgov` works two ways: powerful for developers who live in the terminal, but effective when operated by `@gitgov`, our AI agent.
+
+**You don't need to memorize commands.** Just talk to it. Ask for a project status, what you should work on, or request a new task in natural language. The agent translates your intent into precise commands.
+
+Built on **`AI-first = Prompt + Code`** - every command materializes formal specifications into working code through `@gitgov/core`.
 
 ---
 
@@ -36,7 +51,31 @@ gitgov init --name "My Project"
 gitgov dashboard
 ```
 
-<img width="876" height="604" alt="GitGovernance TUI Dashboard" src="https://github.com/user-attachments/assets/016a4bef-d374-4963-aef3-19303650fb3a" />
+## 🤝 Converse with Your Project
+
+After installation, open your preferred IDE—Cursor, VS Code, or any editor with AI capabilities. Open the chat and use `@gitgov` (located in `.gitgov/gitgov` if your editor uses different syntax like `#gitgov`) to start conversing with your project.
+
+Natural language becomes your primary interface. Ask the agent to check project health, assign work, or identify priorities. The agent executes `gitgov` commands on your behalf, providing conversational access to the complete system functionality.
+
+### Example Interactions
+
+#### **Project Health Check**
+
+- **You:** `"@gitgov, how are we doing?"`
+- **Agent:** `"Our backlog health is at 87%, but task 'Refactor Compiler' has been stalled for 12 days, and there are 3 critical blockers. Throughput is good, but our lead time is high."`
+- _Run `gitgov status --health --alerts` for full details._
+
+#### **Work Assignment**
+
+- **You:** `"@gitgov, what should I work on next?"`
+- **Agent:** `"You have one high-priority feedback item assigned to you: 'Refactor Compiler', which is blocking 3 other tasks. This is critical."`
+- _Use `gitgov task show <task-id>` for details._
+
+#### **Blocking Issues**
+
+- **You:** `"@gitgov, what's blocked?"`
+- **Agent:** `"There are 3 critical blockers: Task X (12 days), Task Y (8 days), and Task Z (5 days). I recommend prioritizing these to improve project flow."`
+- _Use `gitgov task list --status blocked` for analysis._
 
 ---
 
@@ -108,7 +147,7 @@ For a high-level view of the product architecture, consult the **[Core Technical
       +--------------+--------------+
                      |
      +---------------v----------------+
-     |     .gitgov/ (Ledger)          |
+     |     .gitgov/ (Records)         |
      | (Tasks, Cycles, Feedback, etc) |
      +--------------------------------+
 ```
@@ -140,7 +179,7 @@ GitGovernance includes native integration with [Kiro IDE](https://kiro.dev), a n
 - **Git Diagnostics:** Automatic correlation between commits and TaskRecords
 - **Spec-Driven Development:** Task export to Kiro Spec format
 
-## 🎯 Current Implementation Status (September 2025)
+## 🎯 Current Implementation Status
 
 ### ✅ **Core Ecosystem (Complete)**
 
@@ -161,7 +200,7 @@ gitgov init --name "My Project" --actor-name "Project Owner"
 # Cache management
 gitgov indexer
 
-# Task management (complete operational workflow)
+# Task management (operational workflow)
 gitgov task new "Implement user authentication"
 gitgov task submit task-id-123    # Send definition to review
 gitgov task approve task-id-123   # Approve definition
@@ -181,32 +220,6 @@ gitgov dashboard --template=scrum-board  # Scrum ceremonies view
 # Workflow visualization
 gitgov diagram --watch  # Auto-regenerating diagrams
 ```
-
-## 🤝 Converse with Your Project
-
-GitGovernance is more than a set of commands; it's a system you can converse with. Our AI agent, `@gitgov`, acts as your project co-pilot.
-
-Instead of memorizing commands, you can ask the agent in natural language to check the project's health, assign work, or identify priorities. The agent uses the `gitgov` CLI on your behalf, giving you access to the full power of the system.
-
-### Example Interactions
-
-#### **Project Health Check**
-
-- **You:** `"@gitgov, how are we doing?"`
-- **Agent:** `"Our backlog health is at 87%, but task 'Refactor Compiler' has been stalled for 12 days, and there are 3 critical blockers. Throughput is excellent, but our lead time is high."`
-- _Run `gitgov status --health --alerts` for full details._
-
-#### **Work Assignment**
-
-- **You:** `"@gitgov, what should I work on next?"`
-- **Agent:** `"You have one high-priority feedback item assigned to you: 'Refactor Compiler', which is blocking 3 other tasks. This is critical."`
-- _Use `gitgov task show <task-id>` for details._
-
-#### **Blocking Issues**
-
-- **You:** `"@gitgov, what's blocked?"`
-- **Agent:** `"There are 3 critical blockers: Task X (12 days), Task Y (8 days), and Task Z (5 days). I recommend prioritizing these to improve project flow."`
-- _Use `gitgov task list --status blocked` for analysis._
 
 ### 🎯 **Dashboard Views - Multi-Methodology Support**
 
@@ -255,11 +268,11 @@ gitgov dashboard --template=scrum-board
 
 ### 📊 **Performance Metrics**
 
-- **Core Tests**: 503 passing (100% success rate)
-- **CLI Tests**: 164 passing (100% success rate)
+- **Core Tests**: 704 passing (100% success rate)
+- **CLI Tests**: 167 passing (100% success rate)
 - **Cache Performance**: 146 records indexed in ~50ms
 - **Dashboard Launch**: <500ms with 6-adapter orchestration
-- **Project Bootstrap**: Complete initialization <500ms
+- **Project Bootstrap**: Initialization <500ms
 
 ## 🤝 Community and Support
 

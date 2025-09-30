@@ -65,6 +65,21 @@ async function setupCommands() {
   }
 }
 
+// Global error handling
+process.on('uncaughtException', (error) => {
+  console.error('❌ Unexpected error:', error.message);
+  const opts = program.opts() as any;
+  if (opts['verbose']) {
+    console.error(error.stack);
+  }
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('❌ Unhandled promise rejection:', reason);
+  process.exit(1);
+});
+
 // Initialize commands and parse
 setupCommands().then(() => {
   program.parse();
