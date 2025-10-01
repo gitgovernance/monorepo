@@ -17,8 +17,7 @@
     "generate:indexes": "tsx scripts/generate-indexes.ts",
     "validate:schemas": "tsx scripts/validate-schemas.ts",
     "prebuild": "pnpm compile:types && pnpm generate:indexes",
-    "build": "pnpm clean && tsc",
-    "build:ci": "tsc",
+    "build": "pnpm clean && pnpm prebuild && tsc",
     "test": "jest",
     "test:coverage": "jest --coverage",
     "prepublishOnly": "pnpm build"
