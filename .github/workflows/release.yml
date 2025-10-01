@@ -42,7 +42,7 @@ jobs:
       - name: Build Core
         run: |
           cd packages/core
-          pnpm build
+          tsc
 
       - name: Build CLI
         run: |
