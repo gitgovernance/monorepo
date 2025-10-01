@@ -99,24 +99,40 @@ echo -e "${BLUE}🔍 Pre-version validations...${NC}"
 
 # Git validations
 if [ "$SKIP_GIT" = false ]; then
-    # Check if we're on main branch
     CURRENT_BRANCH=$(git branch --show-current)
-    if [ "$CURRENT_BRANCH" != "main" ]; then
-        echo -e "${RED}❌ Must be on main branch for version bump${NC}"
+    
+    # Smart branch validation: Allow main, release/*, and feature/* with warnings
+    if [ "$CURRENT_BRANCH" = "main" ]; then
+        echo -e "${GREEN}✅ On main branch - Production release${NC}"
+        RELEASE_TYPE="production"
+    elif [[ "$CURRENT_BRANCH" =~ ^release/ ]]; then
+        echo -e "${YELLOW}⚡ On release branch - Release preparation${NC}"
+        RELEASE_TYPE="release-prep"
+    elif [[ "$CURRENT_BRANCH" =~ ^feature/ ]]; then
+        echo -e "${YELLOW}⚠️  On feature branch - Development release${NC}"
+        echo -e "${YELLOW}💡 Recommended: Create PR → merge to main → release${NC}"
+        echo -e "${YELLOW}💡 Continue anyway? This is for testing/development only${NC}"
+        RELEASE_TYPE="development"
+    else
+        echo -e "${RED}❌ Unsupported branch for version bump${NC}"
         echo -e "${YELLOW}💡 Current branch: $CURRENT_BRANCH${NC}"
+        echo -e "${YELLOW}💡 Allowed: main, release/*, feature/*${NC}"
         exit 1
     fi
 
-    # Check if working directory is clean
-    if [ -n "$(git status --porcelain)" ]; then
-        echo -e "${RED}❌ Working directory must be clean${NC}"
+    # Check if working directory is clean (only for production releases)
+    if [ "$RELEASE_TYPE" = "production" ] && [ -n "$(git status --porcelain)" ]; then
+        echo -e "${RED}❌ Working directory must be clean for production release${NC}"
         echo -e "${YELLOW}💡 Commit or stash changes first${NC}"
         exit 1
+    elif [ "$RELEASE_TYPE" != "production" ] && [ -n "$(git status --porcelain)" ]; then
+        echo -e "${YELLOW}⚠️  Working directory not clean - OK for development release${NC}"
     fi
     
-    echo -e "${GREEN}✅ Git validations passed${NC}"
+    echo -e "${GREEN}✅ Git validations passed (${RELEASE_TYPE})${NC}"
 else
     echo -e "${YELLOW}⏭️  Skipping git validations${NC}"
+    RELEASE_TYPE="manual"
 fi
 
 # Build validation
@@ -154,11 +170,30 @@ npm version $VERSION_TYPE --no-git-tag-version
 NEW_VERSION=$(node -p "require('./package.json').version")
 echo -e "${GREEN}✅ New version: $NEW_VERSION${NC}"
 
-# Commit version change
-echo -e "${BLUE}💾 Committing version change...${NC}"
-git add package.json
-git commit -m "chore(cli): bump version to $NEW_VERSION"
-git push origin main
+# Commit version change (intelligent based on release type)
+if [ "$SKIP_GIT" = false ]; then
+    echo -e "${BLUE}💾 Committing version change...${NC}"
+    git add package.json
+    git commit -m "chore(cli): bump version to $NEW_VERSION"
+    
+    # Smart push based on release type
+    if [ "$RELEASE_TYPE" = "production" ]; then
+        echo -e "${BLUE}📤 Pushing to main (production release)...${NC}"
+        git push origin main
+    elif [ "$RELEASE_TYPE" = "release-prep" ]; then
+        echo -e "${YELLOW}📤 Pushing to release branch...${NC}"
+        git push origin "$CURRENT_BRANCH"
+        echo -e "${YELLOW}💡 Next: Merge release branch to main${NC}"
+    elif [ "$RELEASE_TYPE" = "development" ]; then
+        echo -e "${YELLOW}📤 Pushing to feature branch (development)...${NC}"
+        git push origin "$CURRENT_BRANCH"
+        echo -e "${YELLOW}💡 This is a development release - create PR when ready${NC}"
+    else
+        echo -e "${YELLOW}💡 Manual push required${NC}"
+    fi
+else
+    echo -e "${YELLOW}⏭️  Skipping git commit (--skip-git)${NC}"
+fi
 
 # Create git tag
 if [ "$SKIP_TAG" = false ]; then
