@@ -42,8 +42,9 @@ jobs:
       - name: Build Core
         run: |
           cd packages/core
-          pnpm prebuild
-          tsc
+          # Skip prebuild in CI - generated files are already committed
+          # blueprints/ is not in the repo, so sync:schemas would fail
+          pnpm run build --ignore-scripts
 
       - name: Build CLI
         run: |
