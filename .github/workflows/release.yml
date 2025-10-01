@@ -44,8 +44,8 @@ jobs:
       - name: Build Core (for workspace)
         run: |
           cd packages/core
-          # Use build:ci which skips prebuild (no blueprints needed)
-          pnpm run build:ci
+          # prebuild generates schemas/types from committed sources (no blueprints needed)
+          pnpm build
 
       - name: Build CLI
         run: |
