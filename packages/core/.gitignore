@@ -4,7 +4,6 @@ dist/
 
 # Generated schemas (auto-synced from blueprints)
 src/schemas/*.json
-src/schemas/index.ts
 
 # Test coverage
 coverage/
