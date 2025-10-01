@@ -12,7 +12,7 @@
   ],
   "scripts": {
     "clean": "rm -rf build",
-    "build": "pnpm clean && mkdir -p build/dist && esbuild src/index.ts --bundle --platform=node --format=esm --target=node20 --outfile=build/dist/gitgov.mjs --jsx=automatic --jsx-import-source=react --external:react-devtools-core --external:commander --external:ink --external:react --external:assert --external:events --external:util --external:path --external:fs --external:crypto && chmod +x build/dist/gitgov.mjs",
+    "build": "pnpm clean && mkdir -p build/dist && esbuild src/index.ts --bundle --platform=node --format=esm --target=node20 --outfile=build/dist/gitgov.mjs --jsx=automatic --jsx-import-source=react --external:react-devtools-core --external:commander --external:ink --external:react --external:assert --external:events --external:util --external:path --external:fs --external:crypto --external:@gitgov/core && chmod +x build/dist/gitgov.mjs",
     "build:npm": "./scripts/build-npm.sh",
     "start": "./build/dist/gitgov.mjs",
     "dev": "tsx src/index.ts",
