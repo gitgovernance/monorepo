@@ -42,6 +42,7 @@ jobs:
       - name: Build Core
         run: |
           cd packages/core
+          pnpm prebuild
           tsc
 
       - name: Build CLI
