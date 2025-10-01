@@ -3,10 +3,18 @@
 # Release NPM - Publishes package to NPM registry
 # Usage: ./scripts/release-npm.sh [flags]
 # Flags:
+#   --tag <tag>           NPM dist-tag (default: latest)
+#                         Examples: --tag demo, --tag beta, --tag next
 #   --skip-build-check    Skip build validation
 #   --skip-npm-check      Skip NPM registry version check
 #   --skip-publish        Skip NPM publish
 #   --skip-all            Skip all steps (dry run)
+# 
+# Examples:
+#   ./scripts/release-npm.sh                # Production release (tag: latest)
+#   ./scripts/release-npm.sh --tag demo     # Demo release (tag: demo)
+#   ./scripts/release-npm.sh --tag beta     # Beta release (tag: beta)
+# 
 # Note: Run ./scripts/version.sh first to set the version
 
 set -e
@@ -22,13 +30,24 @@ echo -e "${BLUE}📦 GitGovernance CLI - NPM Release${NC}"
 echo -e "${BLUE}==================================${NC}"
 
 # Parse flags
+NPM_TAG="latest"
 SKIP_BUILD_CHECK=false
 SKIP_NPM_CHECK=false
 SKIP_PUBLISH=false
 SKIP_ALL=false
+EXPECT_TAG_VALUE=false
 
 for arg in "$@"; do
+    if [ "$EXPECT_TAG_VALUE" = true ]; then
+        NPM_TAG="$arg"
+        EXPECT_TAG_VALUE=false
+        continue
+    fi
+    
     case $arg in
+        --tag)
+            EXPECT_TAG_VALUE=true
+            ;;
         --skip-build-check)
             SKIP_BUILD_CHECK=true
             ;;
@@ -46,7 +65,7 @@ for arg in "$@"; do
             ;;
         --*)
             echo -e "${RED}❌ Unknown flag: $arg${NC}"
-            echo -e "${YELLOW}💡 Usage: ./scripts/release-npm.sh [--skip-flags]${NC}"
+            echo -e "${YELLOW}💡 Usage: ./scripts/release-npm.sh [--tag <tag>] [--skip-flags]${NC}"
             exit 1
             ;;
         *)
@@ -55,9 +74,26 @@ for arg in "$@"; do
     esac
 done
 
+# Validate tag value if flag was provided
+if [ "$EXPECT_TAG_VALUE" = true ]; then
+    echo -e "${RED}❌ --tag requires a tag value${NC}"
+    echo -e "${YELLOW}💡 Usage: --tag latest|demo|beta|alpha${NC}"
+    exit 1
+fi
+
 # Get current version from package.json
 NEW_VERSION=$(node -p "require('./package.json').version")
 echo -e "${BLUE}📦 Publishing version: $NEW_VERSION${NC}"
+echo -e "${BLUE}🏷️  NPM dist-tag: $NPM_TAG${NC}"
+
+# Detect if this is a pre-release version
+if [[ "$NEW_VERSION" =~ -[a-z]+\.[0-9]+ ]]; then
+    echo -e "${YELLOW}⚡ Pre-release version detected${NC}"
+    if [ "$NPM_TAG" = "latest" ]; then
+        echo -e "${YELLOW}⚠️  Warning: Publishing pre-release with 'latest' tag${NC}"
+        echo -e "${YELLOW}💡 Consider using: --tag demo|beta|alpha${NC}"
+    fi
+fi
 
 # Show skip flags if any
 if [ "$SKIP_ALL" = true ]; then
@@ -106,7 +142,14 @@ fi
 # Publish to NPM
 if [ "$SKIP_PUBLISH" = false ]; then
     echo -e "${BLUE}🚀 Publishing to NPM...${NC}"
-    pnpm publish --no-git-checks
+    
+    if [ "$NPM_TAG" = "latest" ]; then
+        echo -e "${BLUE}📦 Publishing with default 'latest' tag${NC}"
+        pnpm publish --no-git-checks
+    else
+        echo -e "${BLUE}📦 Publishing with custom tag: $NPM_TAG${NC}"
+        pnpm publish --no-git-checks --tag "$NPM_TAG"
+    fi
     
     # Verify publication
     echo -e "${BLUE}🔍 Verifying publication...${NC}"
@@ -124,4 +167,13 @@ fi
 echo ""
 echo -e "${GREEN}✅ NPM Release completed successfully!${NC}"
 echo -e "${GREEN}📦 Package @gitgov/cli@$NEW_VERSION published${NC}"
+echo -e "${GREEN}🏷️  Dist-tag: $NPM_TAG${NC}"
 echo -e "${BLUE}🔗 NPM Package: https://www.npmjs.com/package/@gitgov/cli/v/$NEW_VERSION${NC}"
+
+# Show installation commands based on tag
+if [ "$NPM_TAG" != "latest" ]; then
+    echo ""
+    echo -e "${BLUE}💡 Installation commands:${NC}"
+    echo -e "   ${YELLOW}npm install @gitgov/cli@$NPM_TAG${NC}        # Latest $NPM_TAG version"
+    echo -e "   ${YELLOW}npm install @gitgov/cli@$NEW_VERSION${NC}  # Specific version"
+fi
