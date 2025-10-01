@@ -41,6 +41,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
 
+      - name: Build Core (for workspace)
+        run: |
+          cd packages/core
+          # Use build:ci which skips prebuild (no blueprints needed)
+          pnpm run build:ci
+
       - name: Build CLI
         run: |
           cd packages/cli
