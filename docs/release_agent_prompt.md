@@ -81,12 +81,12 @@ pnpm release:npm --tag alpha    # Publishes with 'alpha' tag
 
 ## 🏷️ Recommended Tags
 
-| Tag     | Use Case                     | Example                  |
-| ------- | ---------------------------- | ------------------------ |
-| `demo`  | Showcase specific features   | `1.3.0-demo.1704067200`  |
-| `beta`  | Testing with early adopters  | `1.3.0-beta.1704067200`  |
-| `alpha` | Experimental/development     | `1.3.0-alpha.1704067200` |
-| `next`  | Preview of upcoming version  | `1.3.0-next.1704067200`  |
+| Tag     | Use Case                    | Example                  |
+| ------- | --------------------------- | ------------------------ |
+| `demo`  | Showcase specific features  | `1.3.0-demo.1704067200`  |
+| `beta`  | Testing with early adopters | `1.3.0-beta.1704067200`  |
+| `alpha` | Experimental/development    | `1.3.0-alpha.1704067200` |
+| `next`  | Preview of upcoming version | `1.3.0-next.1704067200`  |
 
 ## ✅ User Interaction Flow
 
