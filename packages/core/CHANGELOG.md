@@ -1,3 +1,10 @@
+## [1.0.2](https://github.com/gitgovernance/monorepo/compare/core-v1.0.1...core-v1.0.2) (2025-10-03)
+
+
+### 🐛 Bug Fixes
+
+* **core:** normalize repository url format for npm ([452b2c6](https://github.com/gitgovernance/monorepo/commit/452b2c69b785e1e0b737673f0cb8082de618c060))
+
 ## [1.0.1](https://github.com/gitgovernance/monorepo/compare/core-v1.0.0...core-v1.0.1) (2025-10-03)
 
 
