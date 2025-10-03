@@ -1,6 +1,6 @@
 {
   "name": "@gitgov/cli",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "🚀 AI-first governance CLI for intelligent work. Install with `npm install -g @gitgov/cli` and start governing your projects with interactive dashboards, task management, and workflow automation.",
   "type": "module",
   "main": "build/dist/gitgov.mjs",
@@ -45,7 +45,7 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/gitgovernance/monorepo.git",
+    "url": "git+https://github.com/gitgovernance/monorepo.git",
     "directory": "packages/cli"
   },
   "homepage": "https://github.com/gitgovernance/monorepo/tree/main/packages/cli#readme",
@@ -56,7 +56,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@gitgov/core": "^1.0.1",
+    "@gitgov/core": "^1.0.2",
     "commander": "^11.1.0"
   },
   "optionalDependencies": {
