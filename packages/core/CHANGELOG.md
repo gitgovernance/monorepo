@@ -1,3 +1,10 @@
+## [1.0.1](https://github.com/gitgovernance/monorepo/compare/core-v1.0.0...core-v1.0.1) (2025-10-03)
+
+
+### 🐛 Bug Fixes
+
+* **core:** use tsup for proper ES modules compilation ([#22](https://github.com/gitgovernance/monorepo/issues/22)) ([e3d755f](https://github.com/gitgovernance/monorepo/commit/e3d755f0e01637dda01074f590ef0387a9fce5f2)), closes [#1759460529](https://github.com/gitgovernance/monorepo/issues/1759460529)
+
 ## 1.0.0 (2025-10-01)
 
 
