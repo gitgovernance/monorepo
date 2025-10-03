@@ -8,6 +8,12 @@
   "files": [
     "dist"
   ],
+  "exports": {
+    ".": {
+      "import": "./dist/src/index.js",
+      "types": "./dist/src/index.d.ts"
+    }
+  },
   "scripts": {
     "clean": "rm -rf dist",
     "clean:generated": "rm -rf src/schemas/generated/* src/types/generated/*",
@@ -17,7 +23,7 @@
     "generate:indexes": "tsx scripts/generate-indexes.ts",
     "validate:schemas": "tsx scripts/validate-schemas.ts",
     "prebuild": "pnpm compile:types && pnpm generate:indexes",
-    "build": "pnpm clean && tsc",
+    "build": "pnpm clean && tsup",
     "test": "jest",
     "test:coverage": "jest --coverage",
     "prepublishOnly": "pnpm build"
@@ -62,6 +68,7 @@
     "json-schema-to-typescript": "^15.0.4",
     "semantic-release": "^22.0.12",
     "ts-jest": "^29.1.1",
+    "tsup": "^8.0.0",
     "tsx": "^4.20.3",
     "typescript": "^5.8.3"
   }
