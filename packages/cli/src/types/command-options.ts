@@ -21,6 +21,7 @@ export interface DiagramCommandOptions {
   cycle?: string;
   task?: string;
   package?: string;
+  showArchived?: boolean;
 }
 
 export interface EntityCommandOptions extends BaseCommandOptions {
