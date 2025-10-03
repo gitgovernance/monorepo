@@ -41,7 +41,7 @@
   "license": "MPL-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/gitgovernance/monorepo.git",
+    "url": "git+https://github.com/gitgovernance/monorepo.git",
     "directory": "packages/core"
   },
   "homepage": "https://github.com/gitgovernance/monorepo/tree/main/packages/core#readme",
