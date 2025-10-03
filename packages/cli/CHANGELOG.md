@@ -1,3 +1,10 @@
+## [1.1.1](https://github.com/gitgovernance/monorepo/compare/v1.1.0...v1.1.1) (2025-10-03)
+
+
+### 🐛 Bug Fixes
+
+* **cli:** configure Jest to resolve @gitgov/core from workspace ([#25](https://github.com/gitgovernance/monorepo/issues/25)) ([bf01f58](https://github.com/gitgovernance/monorepo/commit/bf01f588fce67b806637ea86d49ea29e332f4876)), closes [#1759460529](https://github.com/gitgovernance/monorepo/issues/1759460529)
+
 ## [1.1.0](https://github.com/gitgovernance/monorepo/compare/v1.0.0...v1.1.0) (2025-10-03)
 
 
