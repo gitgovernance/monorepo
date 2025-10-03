@@ -1,3 +1,10 @@
+## [1.2.0](https://github.com/gitgovernance/monorepo/compare/v1.1.1...v1.2.0) (2025-10-03)
+
+
+### 🚀 Features
+
+* **cli:** add --show-archived flag to diagram command ([#26](https://github.com/gitgovernance/monorepo/issues/26)) ([0126746](https://github.com/gitgovernance/monorepo/commit/0126746c1e69457d42a46b383d9de1f84f508f21)), closes [#1758517322](https://github.com/gitgovernance/monorepo/issues/1758517322)
+
 ## [1.1.1](https://github.com/gitgovernance/monorepo/compare/v1.1.0...v1.1.1) (2025-10-03)
 
 
