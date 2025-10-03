@@ -83,9 +83,10 @@ export class DiagramGenerator {
       cycleId?: string;
       taskId?: string;
       packageName?: string;
-    }
+    },
+    showArchived: boolean = false
   ): Promise<string> {
-    const cacheKey = this.generateCacheKey(cycles, tasks);
+    const cacheKey = this.generateCacheKey(cycles, tasks, showArchived);
 
     if (this.cache.has(cacheKey)) {
       this.metrics.incrementCacheHits();
@@ -99,8 +100,14 @@ export class DiagramGenerator {
       let finalCycles = cycles;
       let finalTasks = tasks;
 
+      // Filter out archived entities by default (EARS-18)
+      if (!showArchived) {
+        finalCycles = cycles.filter(cycle => cycle.status !== 'archived');
+        finalTasks = tasks.filter(task => task.status !== 'archived');
+      }
+
       if (filters && (filters.cycleId || filters.taskId || filters.packageName)) {
-        const filtered = this.analyzer.filterEntities(cycles, tasks, filters);
+        const filtered = this.analyzer.filterEntities(finalCycles, finalTasks, filters);
         finalCycles = filtered.filteredCycles;
         finalTasks = filtered.filteredTasks;
       }
@@ -128,12 +135,13 @@ export class DiagramGenerator {
       cycleId?: string;
       taskId?: string;
       packageName?: string;
-    }
+    },
+    showArchived: boolean = false
   ): Promise<string> {
     const cycles = await this.loadCycleRecords(gitgovPath);
     const tasks = await this.loadTaskRecords(gitgovPath);
 
-    return this.generateFromRecords(cycles, tasks, filters);
+    return this.generateFromRecords(cycles, tasks, filters, showArchived);
   }
 
   /**
@@ -237,7 +245,7 @@ export class DiagramGenerator {
   /**
    * Generates cache key for efficient lookups
    */
-  private generateCacheKey(cycles: CycleRecord[], tasks: TaskRecord[]): string {
+  private generateCacheKey(cycles: CycleRecord[], tasks: TaskRecord[], showArchived: boolean = false): string {
     // Use Set for O(1) deduplication and consistent ordering
     const cycleIds = [...new Set(cycles.map(c => c.id))].sort();
     const taskIds = [...new Set(tasks.map(t => t.id))].sort();
@@ -245,8 +253,9 @@ export class DiagramGenerator {
     const cycleHash = this.hashArray(cycleIds);
     const taskHash = this.hashArray(taskIds);
     const optionsHash = this.hashString(JSON.stringify(this.options));
+    const archivedFlag = showArchived ? 'with-archived' : 'no-archived';
 
-    return `diagram:${cycleHash}-${taskHash}-${optionsHash}`;
+    return `diagram:${cycleHash}-${taskHash}-${optionsHash}-${archivedFlag}`;
   }
 
   /**

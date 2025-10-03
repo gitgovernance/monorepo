@@ -36,6 +36,7 @@ class DiagramCommand {
       .option('--cycle <cycleId>', 'Filter to show only a specific cycle and its related entities')
       .option('--task <taskId>', 'Filter to show only a specific task and its related entities')
       .option('--package <packageName>', 'Filter to show only entities related to a specific package')
+      .option('--show-archived', 'Include archived entities in the diagram (excluded by default)')
       .action(async (options: DiagramCommandOptions) => {
         // NEW LOGIC:
         // - If --watch is specified: show TUI (with or without filters)
@@ -60,6 +61,7 @@ class DiagramCommand {
             watchMode: true as const, // Always true when --watch is specified
             verbose: options.verbose || false,
             quiet: options.quiet || false,
+            showArchived: options.showArchived || false,
             ...(options.cycle && { filterCycle: options.cycle }),
             ...(options.task && { filterTask: options.task }),
             ...(options.package && { filterPackage: options.package }),
@@ -132,7 +134,7 @@ class DiagramCommand {
               }
             }
 
-            const diagramContent = await generator.generateFromFiles(gitgovPath, finalFilters);
+            const diagramContent = await generator.generateFromFiles(gitgovPath, finalFilters, options.showArchived || false);
             await fs.promises.writeFile(fullOutputPath, diagramContent, 'utf-8');
 
             let filterInfo = '📊 Full diagram (no filters)';

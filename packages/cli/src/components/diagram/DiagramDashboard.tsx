@@ -9,6 +9,7 @@ interface DiagramDashboardProps {
   watchMode?: boolean;
   verbose?: boolean;
   quiet?: boolean;
+  showArchived?: boolean;
   filterCycle?: string;
   filterTask?: string;
   filterPackage?: string;
@@ -20,6 +21,7 @@ export const DiagramDashboard: React.FC<DiagramDashboardProps> = ({
   watchMode = false,
   verbose = false,
   quiet = false,
+  showArchived = false,
   filterCycle,
   filterTask,
   filterPackage,
@@ -83,7 +85,7 @@ export const DiagramDashboard: React.FC<DiagramDashboardProps> = ({
       if (filterTask) filters.taskId = filterTask;
       if (filterPackage) filters.packageName = filterPackage;
 
-      const diagramContent = await generator.generateFromFiles(actualGitgovPath, Object.keys(filters).length > 0 ? filters : undefined);
+      const diagramContent = await generator.generateFromFiles(actualGitgovPath, Object.keys(filters).length > 0 ? filters : undefined, showArchived || false);
 
       // Restore original console.warn
       console.warn = originalWarn;
