@@ -1,3 +1,22 @@
+## [1.1.0](https://github.com/gitgovernance/monorepo/compare/v1.0.0...v1.1.0) (2025-10-03)
+
+
+### 🚀 Features
+
+* **cicd:** separate release workflows for cli and core packages ([631046a](https://github.com/gitgovernance/monorepo/commit/631046a017ccfeecefbdeb2f89a221e626d616cf))
+
+
+### 🐛 Bug Fixes
+
+* **cicd:** add build:ci script to build core without blueprints ([49d2d35](https://github.com/gitgovernance/monorepo/commit/49d2d3522c722e798b070916415577665f16df61)), closes [#1759283096](https://github.com/gitgovernance/monorepo/issues/1759283096)
+* **cicd:** upgrade pnpm to v9 to enable pre/post scripts by default ([673240e](https://github.com/gitgovernance/monorepo/commit/673240e330bb0fa0a412ab27383966aa7a27eac6))
+* **cicd:** use standard build for core (prebuild doesn't need blueprints) ([a1760ba](https://github.com/gitgovernance/monorepo/commit/a1760ba789014fae8e7f89e43812f5c184019a16))
+* **cli:** update core dependency to use fixed v1.0.2 ([#24](https://github.com/gitgovernance/monorepo/issues/24)) ([418a39a](https://github.com/gitgovernance/monorepo/commit/418a39a742152a6ab3c816e2643dafcab898ef24)), closes [#1759460529](https://github.com/gitgovernance/monorepo/issues/1759460529)
+* **core:** commit schemas/index.ts barrel export ([50724da](https://github.com/gitgovernance/monorepo/commit/50724dab1c87a891e0d2d6cac92d08af532cd121))
+* **core:** execute prebuild explicitly in build script ([0080536](https://github.com/gitgovernance/monorepo/commit/00805361b12bf4d8e017196d2c807f43bef71d8b))
+* **core:** normalize repository url format for npm ([452b2c6](https://github.com/gitgovernance/monorepo/commit/452b2c69b785e1e0b737673f0cb8082de618c060))
+* **core:** use tsup for proper ES modules compilation ([#22](https://github.com/gitgovernance/monorepo/issues/22)) ([e3d755f](https://github.com/gitgovernance/monorepo/commit/e3d755f0e01637dda01074f590ef0387a9fce5f2)), closes [#1759460529](https://github.com/gitgovernance/monorepo/issues/1759460529)
+
 ## 1.0.0 (2025-10-01)
 
 
