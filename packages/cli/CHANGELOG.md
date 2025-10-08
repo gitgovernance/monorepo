@@ -1,3 +1,11 @@
+## [1.4.2](https://github.com/gitgovernance/monorepo/compare/cli-v1.4.1...cli-v1.4.2) (2025-10-08)
+
+
+### 🐛 Bug Fixes
+
+* **cli:** add JSON schema to semantic-release config for better IDE support ([0709dde](https://github.com/gitgovernance/monorepo/commit/0709ddecf92723032ddf9fe01f673a615c078e36))
+* **cli:** configure tagFormat in semantic-release to prevent version downgrades ([17f719b](https://github.com/gitgovernance/monorepo/commit/17f719b17d80dfd7f0b29abf4431e9c253b444d7))
+
 ## [1.4.1](https://github.com/gitgovernance/monorepo/compare/cli-v1.4.0...cli-v1.4.1) (2025-10-08)
 
 
