@@ -1,3 +1,11 @@
+## [1.3.0](https://github.com/gitgovernance/monorepo/compare/v1.2.0...v1.3.0) (2025-10-08)
+
+
+### 🚀 Features
+
+* **cli,core:** add cycle remove-task and move-task commands ([#29](https://github.com/gitgovernance/monorepo/issues/29)) ([a2f2ba8](https://github.com/gitgovernance/monorepo/commit/a2f2ba8acc69aedef51d4043b4fc69f83859d3f2)), closes [#1758521733](https://github.com/gitgovernance/monorepo/issues/1758521733)
+* **cli:** add task details modal to Dashboard TUI ([#28](https://github.com/gitgovernance/monorepo/issues/28)) ([e52e129](https://github.com/gitgovernance/monorepo/commit/e52e129b033cbef2e5c9e2df5fef36b2770f8273)), closes [#1759487663](https://github.com/gitgovernance/monorepo/issues/1759487663)
+
 ## [1.2.0](https://github.com/gitgovernance/monorepo/compare/v1.1.1...v1.2.0) (2025-10-03)
 
 
