@@ -1,3 +1,10 @@
+## [1.3.1](https://github.com/gitgovernance/monorepo/compare/v1.3.0...v1.3.1) (2025-10-08)
+
+
+### 🐛 Bug Fixes
+
+* **cli:** resolve dashboard TUI dynamic require error ([#30](https://github.com/gitgovernance/monorepo/issues/30)) ([687bb2c](https://github.com/gitgovernance/monorepo/commit/687bb2cf619a16264a954ca130f045bca91460a9)), closes [#1759918556](https://github.com/gitgovernance/monorepo/issues/1759918556)
+
 ## [1.3.0](https://github.com/gitgovernance/monorepo/compare/v1.2.0...v1.3.0) (2025-10-08)
 
 
