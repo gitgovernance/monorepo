@@ -7,6 +7,8 @@ import type {
   CycleActivateOptions,
   CycleCompleteOptions,
   CycleAddTaskOptions,
+  CycleRemoveTaskOptions,
+  CycleMoveTaskOptions,
   CycleEditOptions,
   CycleAddChildOptions
 } from './cycle-command';
@@ -114,6 +116,33 @@ export function registerCycleCommands(program: Command): void {
     .option('-q, --quiet', 'Minimal output for scripting')
     .action(async (cycleId: string, options: CycleAddTaskOptions) => {
       await cycleCommand.executeAddTask(cycleId, options);
+    });
+
+  // gitgov cycle remove-task
+  cycle
+    .command('remove-task <cycleId>')
+    .description('Remove TaskRecord from CycleRecord with bidirectional unlinking')
+    .alias('rt')
+    .requiredOption('-t, --task <taskIds>', 'Task IDs to remove from the cycle (comma-separated)')
+    .option('--json', 'Output in JSON format')
+    .option('-v, --verbose', 'Show unlinking process details')
+    .option('-q, --quiet', 'Minimal output for scripting')
+    .action(async (cycleId: string, options: CycleRemoveTaskOptions) => {
+      await cycleCommand.executeRemoveTask(cycleId, options);
+    });
+
+  // gitgov cycle move-task
+  cycle
+    .command('move-task <targetCycleId>')
+    .description('Move TaskRecord between CycleRecords atomically')
+    .alias('mt')
+    .requiredOption('-t, --task <taskIds>', 'Task IDs to move (comma-separated)')
+    .requiredOption('-f, --from <sourceCycleId>', 'Source cycle ID')
+    .option('--json', 'Output in JSON format')
+    .option('-v, --verbose', 'Show move process details')
+    .option('-q, --quiet', 'Minimal output for scripting')
+    .action(async (targetCycleId: string, options: CycleMoveTaskOptions) => {
+      await cycleCommand.executeMoveTask(targetCycleId, options);
     });
 
   // gitgov cycle edit

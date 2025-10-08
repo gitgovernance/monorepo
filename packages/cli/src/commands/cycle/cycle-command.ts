@@ -81,6 +81,21 @@ export interface CycleAddChildOptions {
   quiet?: boolean;
 }
 
+export interface CycleRemoveTaskOptions {
+  task: string;
+  json?: boolean;
+  verbose?: boolean;
+  quiet?: boolean;
+}
+
+export interface CycleMoveTaskOptions {
+  task: string;
+  from: string;
+  json?: boolean;
+  verbose?: boolean;
+  quiet?: boolean;
+}
+
 /**
  * CycleCommand - Strategic Planning Interface
  * 
@@ -500,6 +515,79 @@ export class CycleCommand extends BaseCommand<BaseCommandOptions> {
         console.log(`✅ Tasks added to cycle: ${cycleId}`);
         console.log(`📋 Added tasks: ${taskIds.join(', ')}`);
         console.log(`🔗 Total tasks in cycle: ${(cycle.taskIds?.length || 0) + taskIds.length}`);
+      }
+
+    } catch (error) {
+      this.handleCycleError(error, options);
+    }
+  }
+
+  /**
+   * Removes tasks from cycle - thin CLI layer
+   * All business logic is in BacklogAdapter
+   */
+  async executeRemoveTask(cycleId: string, options: CycleRemoveTaskOptions): Promise<void> {
+    try {
+      // 1. Parse input (CLI responsibility)
+      const taskIds = options.task.split(',').map(id => id.trim());
+
+      // 2. Delegate to BacklogAdapter (all logic happens here)
+      const backlogAdapter = await this.dependencyService.getBacklogAdapter();
+      await backlogAdapter.removeTasksFromCycle(cycleId, taskIds);
+
+      // 3. Invalidate cache
+      const indexerAdapter = await this.dependencyService.getIndexerAdapter();
+      await indexerAdapter.invalidateCache();
+
+      // 4. Output feedback (CLI responsibility)
+      if (options.json) {
+        console.log(JSON.stringify({
+          success: true,
+          cycleId: cycleId,
+          removedTasks: taskIds,
+          taskCount: taskIds.length
+        }, null, 2));
+      } else {
+        console.log(`✅ Tasks removed from cycle: ${cycleId}`);
+        console.log(`📋 Removed tasks: ${taskIds.join(', ')}`);
+      }
+
+    } catch (error) {
+      this.handleCycleError(error, options);
+    }
+  }
+
+  /**
+   * Moves tasks between cycles - thin CLI layer
+   * All business logic is in BacklogAdapter
+   */
+  async executeMoveTask(targetCycleId: string, options: CycleMoveTaskOptions): Promise<void> {
+    try {
+      // 1. Parse input (CLI responsibility)
+      const taskIds = options.task.split(',').map(id => id.trim());
+
+      // 2. Delegate to BacklogAdapter (all logic happens here)
+      const backlogAdapter = await this.dependencyService.getBacklogAdapter();
+      await backlogAdapter.moveTasksBetweenCycles(targetCycleId, taskIds, options.from);
+
+      // 3. Invalidate cache
+      const indexerAdapter = await this.dependencyService.getIndexerAdapter();
+      await indexerAdapter.invalidateCache();
+
+      // 4. Output feedback (CLI responsibility)
+      if (options.json) {
+        console.log(JSON.stringify({
+          success: true,
+          sourceCycleId: options.from,
+          targetCycleId: targetCycleId,
+          movedTasks: taskIds,
+          taskCount: taskIds.length
+        }, null, 2));
+      } else {
+        console.log(`✅ Tasks moved successfully`);
+        console.log(`📤 From cycle: ${options.from}`);
+        console.log(`📥 To cycle: ${targetCycleId}`);
+        console.log(`📋 Moved tasks: ${taskIds.join(', ')}`);
       }
 
     } catch (error) {
