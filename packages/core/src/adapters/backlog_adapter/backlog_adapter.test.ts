@@ -434,6 +434,236 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       await expect(backlogAdapter.updateCycle('1757687335-cycle-archived', { title: 'New Title' }))
         .rejects.toThrow('ProtocolViolationError: Cannot update cycle in final state: archived');
     });
+
+    it('[EARS-33] should remove multiple tasks with batch processing and validation', async () => {
+      const cycleId = '1757687335-cycle-test-cycle';
+      const taskIds = ['1757687335-task-test-1', '1757687335-task-test-2'];
+
+      const mockCycle = createMockCycleRecord({
+        id: cycleId,
+        taskIds: taskIds
+      });
+
+      const mockTask1 = createMockTaskRecord({
+        id: taskIds[0]!,
+        cycleIds: [cycleId]
+      });
+
+      const mockTask2 = createMockTaskRecord({
+        id: taskIds[1]!,
+        cycleIds: [cycleId]
+      });
+
+      mockDependencies.cycleStore.read.mockResolvedValue(mockCycle);
+      mockDependencies.taskStore.read
+        .mockResolvedValueOnce(mockTask1 as unknown as TaskRecord)
+        .mockResolvedValueOnce(mockTask2 as unknown as TaskRecord);
+      mockDependencies.cycleStore.write.mockResolvedValue(undefined);
+      mockDependencies.taskStore.write.mockResolvedValue(undefined);
+      mockDependencies.identity.signRecord.mockImplementation(async (record) => record);
+
+      // Mock getCurrentActor
+      mockDependencies.identity.getCurrentActor = jest.fn().mockResolvedValue({
+        id: 'human:test-user',
+        displayName: 'Test User'
+      });
+
+      await backlogAdapter.removeTasksFromCycle(cycleId, taskIds);
+
+      // Verify cycle was updated (taskIds removed)
+      expect(mockDependencies.cycleStore.write).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            taskIds: []
+          })
+        })
+      );
+
+      // Verify both tasks were updated (cycleId removed)
+      expect(mockDependencies.taskStore.write).toHaveBeenCalledTimes(2);
+      expect(mockDependencies.taskStore.write).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            cycleIds: []
+          })
+        })
+      );
+    });
+
+    it('[EARS-34] should validate tasks are linked to cycle before removing', async () => {
+      const cycleId = '1757687335-cycle-test-cycle';
+      const taskId = '1757687335-task-test-1';
+
+      const mockCycle = createMockCycleRecord({
+        id: cycleId,
+        taskIds: [] // Task is NOT linked to cycle
+      });
+
+      const mockTask = createMockTaskRecord({
+        id: taskId,
+        cycleIds: []
+      });
+
+      mockDependencies.cycleStore.read.mockResolvedValue(mockCycle);
+      mockDependencies.taskStore.read.mockResolvedValue(mockTask as unknown as TaskRecord);
+
+      await expect(backlogAdapter.removeTasksFromCycle(cycleId, [taskId]))
+        .rejects.toThrow(`Tasks not linked to cycle ${cycleId}: ${taskId}`);
+    });
+
+    it('[EARS-35] should move tasks atomically between cycles with all-or-nothing', async () => {
+      const sourceCycleId = '1757687335-cycle-source';
+      const targetCycleId = '1757687335-cycle-target';
+      const taskIds = ['1757687335-task-test-1', '1757687335-task-test-2'];
+
+      // Make sure source cycle has the tasks
+      const mockSourceCycle = createMockCycleRecord({
+        id: sourceCycleId,
+        taskIds: [...taskIds] // Explicitly include taskIds
+      });
+
+      const mockTargetCycle = createMockCycleRecord({
+        id: targetCycleId,
+        taskIds: []
+      });
+
+      const mockTask1 = createMockTaskRecord({
+        id: taskIds[0]!,
+        cycleIds: [sourceCycleId]
+      });
+
+      const mockTask2 = createMockTaskRecord({
+        id: taskIds[1]!,
+        cycleIds: [sourceCycleId]
+      });
+
+      // Order: first source, then target (Promise.all reads in method line 1303-1306)
+      mockDependencies.cycleStore.read
+        .mockResolvedValueOnce(mockSourceCycle)
+        .mockResolvedValueOnce(mockTargetCycle);
+
+      mockDependencies.taskStore.read
+        .mockResolvedValueOnce(mockTask1 as unknown as TaskRecord)
+        .mockResolvedValueOnce(mockTask2 as unknown as TaskRecord);
+
+      mockDependencies.cycleStore.write.mockResolvedValue(undefined);
+      mockDependencies.taskStore.write.mockResolvedValue(undefined);
+      mockDependencies.identity.signRecord.mockImplementation(async (record) => record);
+
+      // Mock getCurrentActor
+      mockDependencies.identity.getCurrentActor = jest.fn().mockResolvedValue({
+        id: 'human:test-user',
+        displayName: 'Test User'
+      });
+
+      await backlogAdapter.moveTasksBetweenCycles(targetCycleId, taskIds, sourceCycleId);
+
+      // Verify source cycle was updated (tasks removed)
+      expect(mockDependencies.cycleStore.write).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            id: sourceCycleId,
+            taskIds: []
+          })
+        })
+      );
+
+      // Verify target cycle was updated (tasks added)
+      expect(mockDependencies.cycleStore.write).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            id: targetCycleId,
+            taskIds: expect.arrayContaining(taskIds)
+          })
+        })
+      );
+
+      // Verify tasks were updated (cycleIds changed)
+      expect(mockDependencies.taskStore.write).toHaveBeenCalledTimes(2);
+    });
+
+    it('[EARS-36] should validate source !== target and tasks in source before moving', async () => {
+      const cycleId = '1757687335-cycle-test';
+      const taskIds = ['1757687335-task-test-1'];
+
+      // Test 1: Same source and target
+      await expect(backlogAdapter.moveTasksBetweenCycles(cycleId, taskIds, cycleId))
+        .rejects.toThrow('Source and target cycles must be different');
+
+      // Test 2: Tasks not in source cycle
+      const mockSourceCycle = createMockCycleRecord({
+        id: '1757687335-cycle-source',
+        taskIds: [] // Task is NOT in source
+      });
+
+      const mockTargetCycle = createMockCycleRecord({
+        id: '1757687335-cycle-target',
+        taskIds: []
+      });
+
+      const mockTask = createMockTaskRecord({
+        id: taskIds[0]!,
+        cycleIds: []
+      });
+
+      mockDependencies.cycleStore.read
+        .mockResolvedValueOnce(mockTargetCycle)
+        .mockResolvedValueOnce(mockSourceCycle);
+
+      mockDependencies.taskStore.read.mockResolvedValue(mockTask as unknown as TaskRecord);
+
+      await expect(backlogAdapter.moveTasksBetweenCycles('1757687335-cycle-target', taskIds, '1757687335-cycle-source'))
+        .rejects.toThrow(`Tasks not linked to source cycle 1757687335-cycle-source: ${taskIds[0]}`);
+    });
+
+    it('[EARS-37] should rollback automatically if move operation fails', async () => {
+      const sourceCycleId = '1757687335-cycle-source';
+      const targetCycleId = '1757687335-cycle-target';
+      const taskIds = ['1757687335-task-test-1'];
+
+      const mockSourceCycle = createMockCycleRecord({
+        id: sourceCycleId,
+        taskIds: [...taskIds]
+      });
+
+      const mockTargetCycle = createMockCycleRecord({
+        id: targetCycleId,
+        taskIds: []
+      });
+
+      const mockTask = createMockTaskRecord({
+        id: taskIds[0]!,
+        cycleIds: [sourceCycleId]
+      });
+
+      // Order: source, target (Promise.all reads in method)
+      mockDependencies.cycleStore.read
+        .mockResolvedValueOnce(mockSourceCycle)
+        .mockResolvedValueOnce(mockTargetCycle);
+
+      mockDependencies.taskStore.read.mockResolvedValue(mockTask as unknown as TaskRecord);
+
+      // Mock getCurrentActor
+      mockDependencies.identity.getCurrentActor = jest.fn().mockResolvedValue({
+        id: 'human:test-user',
+        displayName: 'Test User'
+      });
+
+      // Mock signRecord to succeed, but make writes fail
+      mockDependencies.identity.signRecord.mockImplementation(async (record) => record);
+
+      // Make the first cycle write succeed, but second one fail (simulating partial failure)
+      mockDependencies.cycleStore.write
+        .mockResolvedValueOnce(undefined) // First cycle write succeeds
+        .mockRejectedValueOnce(new Error('Simulated cycle write failure')); // Second cycle write fails
+
+      // The operation should fail because writes are atomic (Promise.all)
+      await expect(backlogAdapter.moveTasksBetweenCycles(targetCycleId, taskIds, sourceCycleId))
+        .rejects.toThrow('AtomicOperationError');
+
+      // Verify that at least one write was attempted
+      expect(mockDependencies.cycleStore.write).toHaveBeenCalled();
+    });
   });
 
   describe('Enhanced Task Operations', () => {

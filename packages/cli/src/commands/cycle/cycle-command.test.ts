@@ -23,6 +23,8 @@ describe('CycleCommand - Complete Unit Tests', () => {
     getAllCycles: jest.MockedFunction<() => Promise<Records.CycleRecord[]>>;
     updateCycle: jest.MockedFunction<(cycleId: string, payload: Partial<Records.CycleRecord>) => Promise<Records.CycleRecord>>;
     addTaskToCycle: jest.MockedFunction<(cycleId: string, taskId: string) => Promise<void>>;
+    removeTasksFromCycle: jest.MockedFunction<(cycleId: string, taskIds: string[]) => Promise<void>>;
+    moveTasksBetweenCycles: jest.MockedFunction<(targetCycleId: string, taskIds: string[], sourceCycleId: string) => Promise<void>>;
     getTask: jest.MockedFunction<(taskId: string) => Promise<Records.TaskRecord | null>>;
   };
   let mockIndexerAdapter: {
@@ -65,6 +67,8 @@ describe('CycleCommand - Complete Unit Tests', () => {
       getAllCycles: jest.fn(),
       updateCycle: jest.fn(),
       addTaskToCycle: jest.fn(),
+      removeTasksFromCycle: jest.fn(),
+      moveTasksBetweenCycles: jest.fn(),
       getTask: jest.fn()
     };
 
@@ -478,6 +482,200 @@ describe('CycleCommand - Complete Unit Tests', () => {
       await cycleCommand.executeActivate('1757792000-cycle-test-cycle', {});
 
       expect(mockConsoleWarn).toHaveBeenCalledWith('⚠️ Cycle has no tasks. Consider adding tasks before activation.');
+    });
+  });
+
+  describe('Task Management - Remove and Move (EARS 11-12)', () => {
+    it('[EARS-11] should delegate to removeTasksFromCycle with batch processing', async () => {
+      const cycleId = '1757792000-cycle-test-cycle';
+      const taskIds = ['task-123', 'task-456'];
+
+      mockBacklogAdapter.removeTasksFromCycle.mockResolvedValue();
+      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+
+      await cycleCommand.executeRemoveTask(cycleId, { task: 'task-123,task-456' });
+
+      expect(mockBacklogAdapter.removeTasksFromCycle).toHaveBeenCalledWith(cycleId, taskIds);
+      expect(mockIndexerAdapter.invalidateCache).toHaveBeenCalled();
+      expect(mockConsoleLog).toHaveBeenCalledWith(`✅ Tasks removed from cycle: ${cycleId}`);
+      expect(mockConsoleLog).toHaveBeenCalledWith(`📋 Removed tasks: ${taskIds.join(', ')}`);
+    });
+
+    it('[EARS-11] should handle single task removal', async () => {
+      const cycleId = '1757792000-cycle-test-cycle';
+      const taskId = 'task-123';
+
+      mockBacklogAdapter.removeTasksFromCycle.mockResolvedValue();
+      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+
+      await cycleCommand.executeRemoveTask(cycleId, { task: taskId });
+
+      expect(mockBacklogAdapter.removeTasksFromCycle).toHaveBeenCalledWith(cycleId, [taskId]);
+      expect(mockIndexerAdapter.invalidateCache).toHaveBeenCalled();
+    });
+
+    it('[EARS-11] should return JSON output for remove-task with --json flag', async () => {
+      const cycleId = '1757792000-cycle-test-cycle';
+      const taskIds = ['task-123', 'task-456'];
+
+      mockBacklogAdapter.removeTasksFromCycle.mockResolvedValue();
+      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+
+      await cycleCommand.executeRemoveTask(cycleId, { task: 'task-123,task-456', json: true });
+
+      const jsonOutput = mockConsoleLog.mock.calls.find(call =>
+        typeof call[0] === 'string' && call[0].includes('"success": true')
+      );
+      expect(jsonOutput).toBeDefined();
+
+      const parsedOutput = JSON.parse(jsonOutput![0] as string);
+      expect(parsedOutput.success).toBe(true);
+      expect(parsedOutput.cycleId).toBe(cycleId);
+      expect(parsedOutput.removedTasks).toEqual(taskIds);
+      expect(parsedOutput.taskCount).toBe(2);
+    });
+
+    it('[EARS-11] should handle errors in remove-task gracefully', async () => {
+      const error = new Error('Task not found');
+      mockBacklogAdapter.removeTasksFromCycle.mockRejectedValue(error);
+
+      await cycleCommand.executeRemoveTask('cycle-123', { task: 'non-existent-task' });
+
+      expect(mockConsoleError).toHaveBeenCalledWith('❌ Cycle operation failed: Task not found');
+      expect(mockProcessExit).toHaveBeenCalledWith(1);
+    });
+
+    it('[EARS-12] should move tasks atomically between cycles with all-or-nothing', async () => {
+      const sourceCycleId = 'cycle-source';
+      const targetCycleId = 'cycle-target';
+      const taskIds = ['task-123', 'task-456'];
+
+      mockBacklogAdapter.moveTasksBetweenCycles.mockResolvedValue();
+      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+
+      await cycleCommand.executeMoveTask(targetCycleId, {
+        task: 'task-123,task-456',
+        from: sourceCycleId
+      });
+
+      expect(mockBacklogAdapter.moveTasksBetweenCycles).toHaveBeenCalledWith(
+        targetCycleId,
+        taskIds,
+        sourceCycleId
+      );
+      expect(mockIndexerAdapter.invalidateCache).toHaveBeenCalled();
+      expect(mockConsoleLog).toHaveBeenCalledWith('✅ Tasks moved successfully');
+      expect(mockConsoleLog).toHaveBeenCalledWith(`📤 From cycle: ${sourceCycleId}`);
+      expect(mockConsoleLog).toHaveBeenCalledWith(`📥 To cycle: ${targetCycleId}`);
+      expect(mockConsoleLog).toHaveBeenCalledWith(`📋 Moved tasks: ${taskIds.join(', ')}`);
+    });
+
+    it('[EARS-12] should handle single task move', async () => {
+      const sourceCycleId = 'cycle-source';
+      const targetCycleId = 'cycle-target';
+      const taskId = 'task-123';
+
+      mockBacklogAdapter.moveTasksBetweenCycles.mockResolvedValue();
+      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+
+      await cycleCommand.executeMoveTask(targetCycleId, {
+        task: taskId,
+        from: sourceCycleId
+      });
+
+      expect(mockBacklogAdapter.moveTasksBetweenCycles).toHaveBeenCalledWith(
+        targetCycleId,
+        [taskId],
+        sourceCycleId
+      );
+      expect(mockIndexerAdapter.invalidateCache).toHaveBeenCalled();
+    });
+
+    it('[EARS-12] should return JSON output for move-task with --json flag', async () => {
+      const sourceCycleId = 'cycle-source';
+      const targetCycleId = 'cycle-target';
+      const taskIds = ['task-123', 'task-456'];
+
+      mockBacklogAdapter.moveTasksBetweenCycles.mockResolvedValue();
+      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+
+      await cycleCommand.executeMoveTask(targetCycleId, {
+        task: 'task-123,task-456',
+        from: sourceCycleId,
+        json: true
+      });
+
+      const jsonOutput = mockConsoleLog.mock.calls.find(call =>
+        typeof call[0] === 'string' && call[0].includes('"success": true')
+      );
+      expect(jsonOutput).toBeDefined();
+
+      const parsedOutput = JSON.parse(jsonOutput![0] as string);
+      expect(parsedOutput.success).toBe(true);
+      expect(parsedOutput.sourceCycleId).toBe(sourceCycleId);
+      expect(parsedOutput.targetCycleId).toBe(targetCycleId);
+      expect(parsedOutput.movedTasks).toEqual(taskIds);
+      expect(parsedOutput.taskCount).toBe(2);
+    });
+
+    it('[EARS-12] should handle errors in move-task gracefully', async () => {
+      const error = new Error('Source and target cycles must be different');
+      mockBacklogAdapter.moveTasksBetweenCycles.mockRejectedValue(error);
+
+      await cycleCommand.executeMoveTask('cycle-123', {
+        task: 'task-123',
+        from: 'cycle-123'
+      });
+
+      expect(mockConsoleError).toHaveBeenCalledWith('❌ Cycle operation failed: Source and target cycles must be different');
+      expect(mockProcessExit).toHaveBeenCalledWith(1);
+    });
+
+    it('[EARS-12] should handle validation errors before moving tasks', async () => {
+      const error = new Error('Task task-123 is not in source cycle');
+      mockBacklogAdapter.moveTasksBetweenCycles.mockRejectedValue(error);
+
+      await cycleCommand.executeMoveTask('cycle-target', {
+        task: 'task-123',
+        from: 'cycle-source'
+      });
+
+      expect(mockConsoleError).toHaveBeenCalledWith('❌ Cycle operation failed: Task task-123 is not in source cycle');
+      expect(mockProcessExit).toHaveBeenCalledWith(1);
+    });
+
+    it('[EARS-11] should trim whitespace from task IDs in remove-task', async () => {
+      const cycleId = '1757792000-cycle-test-cycle';
+      const taskIds = ['task-123', 'task-456'];
+
+      mockBacklogAdapter.removeTasksFromCycle.mockResolvedValue();
+      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+
+      // Task IDs with extra whitespace
+      await cycleCommand.executeRemoveTask(cycleId, { task: ' task-123 , task-456 ' });
+
+      expect(mockBacklogAdapter.removeTasksFromCycle).toHaveBeenCalledWith(cycleId, taskIds);
+    });
+
+    it('[EARS-12] should trim whitespace from task IDs in move-task', async () => {
+      const sourceCycleId = 'cycle-source';
+      const targetCycleId = 'cycle-target';
+      const taskIds = ['task-123', 'task-456'];
+
+      mockBacklogAdapter.moveTasksBetweenCycles.mockResolvedValue();
+      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+
+      // Task IDs with extra whitespace
+      await cycleCommand.executeMoveTask(targetCycleId, {
+        task: ' task-123 , task-456 ',
+        from: sourceCycleId
+      });
+
+      expect(mockBacklogAdapter.moveTasksBetweenCycles).toHaveBeenCalledWith(
+        targetCycleId,
+        taskIds,
+        sourceCycleId
+      );
     });
   });
 });
