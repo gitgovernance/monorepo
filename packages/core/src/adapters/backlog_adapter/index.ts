@@ -80,6 +80,8 @@ export interface IBacklogAdapter {
   getAllCycles(): Promise<CycleRecord[]>;
   updateCycle(cycleId: string, payload: Partial<CycleRecord>): Promise<CycleRecord>;
   addTaskToCycle(cycleId: string, taskId: string): Promise<void>;
+  removeTasksFromCycle(cycleId: string, taskIds: string[]): Promise<void>;
+  moveTasksBetweenCycles(targetCycleId: string, taskIds: string[], sourceCycleId: string): Promise<void>;
 
   // Phase 2: Agent Navigation
   getTasksAssignedToActor(actorId: string): Promise<TaskRecord[]>;
@@ -1197,6 +1199,194 @@ export class BacklogAdapter implements IBacklogAdapter {
       this.cycleStore.write(signedCycleRecord as GitGovRecord & { payload: CycleRecord }),
       this.taskStore.write(signedTaskRecord as GitGovRecord & { payload: TaskRecord })
     ]);
+  }
+
+  /**
+   * Removes multiple tasks from a cycle with bidirectional unlinking
+   * All business logic and validation happens here in the adapter
+   */
+  async removeTasksFromCycle(cycleId: string, taskIds: string[]): Promise<void> {
+    // 1. Validate inputs
+    if (!cycleId || typeof cycleId !== 'string') {
+      throw new Error('ValidationError: cycleId must be a non-empty string');
+    }
+    if (!Array.isArray(taskIds) || taskIds.length === 0) {
+      throw new Error('ValidationError: taskIds must be a non-empty array');
+    }
+
+    // 2. Read cycle record
+    const cycleRecord = await this.cycleStore.read(cycleId);
+    if (!cycleRecord) {
+      throw new Error(`RecordNotFoundError: Cycle not found: ${cycleId}`);
+    }
+
+    // 3. Read all task records and validate they exist
+    const taskRecords = await Promise.all(
+      taskIds.map(async (taskId) => {
+        const taskRecord = await this.taskStore.read(taskId);
+        if (!taskRecord) {
+          throw new Error(`RecordNotFoundError: Task not found: ${taskId}`);
+        }
+        return { taskId, record: taskRecord };
+      })
+    );
+
+    // 4. Validate that all tasks are actually linked to this cycle
+    const cycleTaskIds = cycleRecord.payload.taskIds || [];
+    const notLinkedTasks = taskIds.filter(taskId => !cycleTaskIds.includes(taskId));
+    if (notLinkedTasks.length > 0) {
+      throw new Error(`ValidationError: Tasks not linked to cycle ${cycleId}: ${notLinkedTasks.join(', ')}`);
+    }
+
+    // 5. Prepare updated cycle (remove all taskIds)
+    const updatedCycle = {
+      ...cycleRecord.payload,
+      taskIds: cycleTaskIds.filter(id => !taskIds.includes(id))
+    };
+
+    // 6. Get current actor for signing
+    const currentActor = await this.identity.getCurrentActor();
+
+    // 7. Sign cycle record
+    const signedCycleRecord = await this.identity.signRecord(
+      { ...cycleRecord, payload: updatedCycle },
+      currentActor.id,
+      'author'
+    );
+
+    // 8. Prepare and sign all task records (remove cycleId from each)
+    const signedTaskRecords = await Promise.all(
+      taskRecords.map(async ({ record }) => {
+        const taskCycleIds = record.payload.cycleIds || [];
+        const updatedTask = {
+          ...record.payload,
+          cycleIds: taskCycleIds.filter(id => id !== cycleId)
+        };
+        return await this.identity.signRecord(
+          { ...record, payload: updatedTask },
+          currentActor.id,
+          'author'
+        );
+      })
+    );
+
+    // 9. Atomic write - all or nothing
+    await Promise.all([
+      this.cycleStore.write(signedCycleRecord as GitGovRecord & { payload: CycleRecord }),
+      ...signedTaskRecords.map(signedTask =>
+        this.taskStore.write(signedTask as GitGovRecord & { payload: TaskRecord })
+      )
+    ]);
+  }
+
+  /**
+   * Moves multiple tasks from one cycle to another atomically
+   * Provides transactional semantics - all tasks move or none do
+   * All business logic and validation happens here in the adapter
+   */
+  async moveTasksBetweenCycles(targetCycleId: string, taskIds: string[], sourceCycleId: string): Promise<void> {
+    // 1. Validate inputs
+    if (!sourceCycleId || typeof sourceCycleId !== 'string') {
+      throw new Error('ValidationError: sourceCycleId must be a non-empty string');
+    }
+    if (!targetCycleId || typeof targetCycleId !== 'string') {
+      throw new Error('ValidationError: targetCycleId must be a non-empty string');
+    }
+    if (!Array.isArray(taskIds) || taskIds.length === 0) {
+      throw new Error('ValidationError: taskIds must be a non-empty array');
+    }
+    if (sourceCycleId === targetCycleId) {
+      throw new Error('ValidationError: Source and target cycles must be different');
+    }
+
+    // 2. Read all records
+    const [sourceCycleRecord, targetCycleRecord] = await Promise.all([
+      this.cycleStore.read(sourceCycleId),
+      this.cycleStore.read(targetCycleId)
+    ]);
+
+    if (!sourceCycleRecord) {
+      throw new Error(`RecordNotFoundError: Source cycle not found: ${sourceCycleId}`);
+    }
+    if (!targetCycleRecord) {
+      throw new Error(`RecordNotFoundError: Target cycle not found: ${targetCycleId}`);
+    }
+
+    // 3. Read all task records and validate they exist
+    const taskRecords = await Promise.all(
+      taskIds.map(async (taskId) => {
+        const taskRecord = await this.taskStore.read(taskId);
+        if (!taskRecord) {
+          throw new Error(`RecordNotFoundError: Task not found: ${taskId}`);
+        }
+        return { taskId, record: taskRecord };
+      })
+    );
+
+    // 4. Validate that all tasks are actually linked to source cycle
+    const sourceTaskIds = sourceCycleRecord.payload.taskIds || [];
+    const notLinkedTasks = taskIds.filter(taskId => !sourceTaskIds.includes(taskId));
+    if (notLinkedTasks.length > 0) {
+      throw new Error(`ValidationError: Tasks not linked to source cycle ${sourceCycleId}: ${notLinkedTasks.join(', ')}`);
+    }
+
+    // 5. Prepare updated cycles
+    const updatedSourceCycle = {
+      ...sourceCycleRecord.payload,
+      taskIds: sourceTaskIds.filter(id => !taskIds.includes(id))
+    };
+    const updatedTargetCycle = {
+      ...targetCycleRecord.payload,
+      taskIds: [...(targetCycleRecord.payload.taskIds || []), ...taskIds]
+    };
+
+    // 6. Get current actor for signing
+    const currentActor = await this.identity.getCurrentActor();
+
+    // 7. Sign both cycle records
+    const [signedSourceCycle, signedTargetCycle] = await Promise.all([
+      this.identity.signRecord(
+        { ...sourceCycleRecord, payload: updatedSourceCycle },
+        currentActor.id,
+        'author'
+      ),
+      this.identity.signRecord(
+        { ...targetCycleRecord, payload: updatedTargetCycle },
+        currentActor.id,
+        'author'
+      )
+    ]);
+
+    // 8. Prepare and sign all task records (update cycleIds)
+    const signedTaskRecords = await Promise.all(
+      taskRecords.map(async ({ record }) => {
+        const taskCycleIds = record.payload.cycleIds || [];
+        const updatedTask = {
+          ...record.payload,
+          cycleIds: taskCycleIds
+            .filter(id => id !== sourceCycleId)  // Remove source
+            .concat(targetCycleId)                // Add target
+        };
+        return await this.identity.signRecord(
+          { ...record, payload: updatedTask },
+          currentActor.id,
+          'author'
+        );
+      })
+    );
+
+    // 9. Atomic write - all or nothing
+    try {
+      await Promise.all([
+        this.cycleStore.write(signedSourceCycle as GitGovRecord & { payload: CycleRecord }),
+        this.cycleStore.write(signedTargetCycle as GitGovRecord & { payload: CycleRecord }),
+        ...signedTaskRecords.map(signedTask =>
+          this.taskStore.write(signedTask as GitGovRecord & { payload: TaskRecord })
+        )
+      ]);
+    } catch (error) {
+      throw new Error(`AtomicOperationError: Failed to move tasks between cycles: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
 
   // TODO: Implement when lint_command.md is implemented
