@@ -1,9 +1,21 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Box, Text, useInput, useApp, useStdout } from 'ink';
 import type { Records, MetricsAdapter, EventBus } from '@gitgov/core';
+import clipboard from 'clipboardy';
 
 // Import IndexerAdapter.EnrichedTaskRecord from IndexerAdapter
 import type { IndexerAdapter } from '@gitgov/core';
+
+// Task AI Prompt Template - Used when copying task to clipboard for AI agents
+const TASK_AI_PROMPT_TEMPLATE = (taskId: string): string => {
+  return `Hello @gitgov, please work on task ${taskId}
+
+Use \`gitgov task show ${taskId}\` for full requirements and details.`;
+};
+
+// Modal dimension configuration
+const MODAL_WIDTH_PERCENT = 0.8;  // 80% of terminal width
+const MODAL_HEIGHT_PERCENT = 0.8; // 80% of terminal height
 
 type ThemeName = 'dark' | 'light';
 
@@ -173,6 +185,7 @@ export const DashboardTUI: React.FC<Props> = ({
   const [intelligence, setIntelligence] = useState(initialIntelligence);
   const [sortMode, setSortMode] = useState<SortMode>('recent'); // NUEVO - Sort mode state
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [showTaskModal, setShowTaskModal] = useState(false); // NUEVO - Task detail modal state
 
   // NUEVO - Sort tasks dynamically based on current sort mode
   const sortTasks = useCallback((tasks: IndexerAdapter.EnrichedTaskRecord[]): IndexerAdapter.EnrichedTaskRecord[] => {
@@ -340,6 +353,22 @@ export const DashboardTUI: React.FC<Props> = ({
       return;
     }
 
+    // Handle modal-specific keys
+    if (showTaskModal) {
+      if (key.escape || input === 'q') {
+        setShowTaskModal(false);
+        return;
+      }
+      // Ignore other keys when modal is open
+      return;
+    }
+
+    // Handle Enter key to open task details modal
+    if (key.return && selectedTaskId) {
+      setShowTaskModal(true);
+      return;
+    }
+
     switch (input) {
       case 'q':
         exit();
@@ -431,6 +460,17 @@ export const DashboardTUI: React.FC<Props> = ({
     }
   });
 
+  // Get selected task for modal
+  const selectedTask = useMemo(() => {
+    if (!selectedTaskId) return null;
+    return sortedTasks.find(task => task.id === selectedTaskId) || null;
+  }, [selectedTaskId, sortedTasks]);
+
+  // Show task detail modal
+  if (showTaskModal && selectedTask) {
+    return <TaskDetailModal task={selectedTask} theme={theme} onClose={() => setShowTaskModal(false)} />;
+  }
+
   if (showHelp) {
     return (
       <Box flexDirection="column" padding={1}>
@@ -442,7 +482,8 @@ export const DashboardTUI: React.FC<Props> = ({
         <Text></Text>
         <Text bold color={colors.headerSecondary}>NAVIGATION:</Text>
         <Text>  v: Cycle views    1: Row view       2: Kanban-4col     3: Kanban-7col    4: Scrum view</Text>
-        <Text>  s: Sort tasks     ?: Toggle help    q: Quit</Text>
+        <Text>  s: Sort tasks     ↑↓/j/k: Navigate  Enter: Task details</Text>
+        <Text>  ?: Toggle help    q: Quit</Text>
         <Text></Text>
         <Text color={colors.muted}>Press ? again to return to dashboard</Text>
       </Box>
@@ -1013,6 +1054,284 @@ const ScrumView: React.FC<{
           <Text bold color={colors.controlPrimary}>n:New s:Submit a:Assign e:Edit c:Sprint v:View r:Refresh ?:Help q:Quit</Text>
           <Text color={colors.muted}>(Live mode: {live ? '🟢 ON' : '🔴 OFF'})</Text>
         </Box>
+      </Box>
+    </Box>
+  );
+};
+
+/**
+ * Simple Markdown Renderer for Terminal
+ * Converts markdown to formatted Ink components
+ */
+const renderMarkdown = (markdown: string, width: number, colors: DashboardTheme['colors']): React.ReactElement[] => {
+  if (!markdown) return [];
+
+  const lines = markdown.split('\n');
+  const elements: React.ReactElement[] = [];
+
+  lines.forEach((line, index) => {
+    // Headers (## Title)
+    if (line.startsWith('## ')) {
+      elements.push(<Text bold color={colors.headerSecondary}>  {line.slice(3)}</Text>);
+    }
+    // Headers (### Title)
+    else if (line.startsWith('### ')) {
+      elements.push(<Text bold color={colors.headerSecondary}>  {line.slice(4)}</Text>);
+    }
+    // Bold (**text**)
+    else if (line.includes('**')) {
+      const parts = line.split('**');
+      const formatted = parts.map((part, i) => i % 2 === 1 ? <Text key={i} bold>{part}</Text> : part);
+      elements.push(<Text color={colors.muted}>  {formatted}</Text>);
+    }
+    // Lists (- item or 1. item)
+    else if (line.match(/^\s*[-*]\s/) || line.match(/^\s*\d+\.\s/)) {
+      elements.push(<Text color={colors.muted}>  {line}</Text>);
+    }
+    // Code blocks (`)
+    else if (line.includes('`')) {
+      const formatted = line.replace(/`([^`]+)`/g, (_, code) => code);
+      elements.push(<Text color={colors.controlPrimary}>  {formatted}</Text>);
+    }
+    // Empty lines
+    else if (line.trim() === '') {
+      elements.push(<Text> </Text>);
+    }
+    // Regular text
+    else {
+      // Wrap long lines
+      if (line.length > width) {
+        const words = line.split(' ');
+        let currentLine = '';
+        words.forEach(word => {
+          if ((currentLine + ' ' + word).length <= width) {
+            currentLine += (currentLine ? ' ' : '') + word;
+          } else {
+            if (currentLine) elements.push(<Text color={colors.muted}>  {currentLine}</Text>);
+            currentLine = word;
+          }
+        });
+        if (currentLine) elements.push(<Text color={colors.muted}>  {currentLine}</Text>);
+      } else {
+        elements.push(<Text color={colors.muted}>  {line}</Text>);
+      }
+    }
+  });
+
+  return elements;
+};
+
+/**
+ * Task Detail Modal - Shows full task information
+ */
+const TaskDetailModal: React.FC<{
+  task: IndexerAdapter.EnrichedTaskRecord;
+  theme: DashboardTheme;
+  onClose: () => void;
+}> = ({ task, theme, onClose }) => {
+  const { stdout } = useStdout();
+  const columns = stdout?.columns ?? 80;
+  const rows = stdout?.rows ?? 24;
+  const { colors } = theme;
+  const [copied, setCopied] = useState(false);
+  const [scrollOffset, setScrollOffset] = useState(0);
+
+  // Calculate modal dimensions based on terminal size
+  // Ensure modalWidth doesn't exceed actual available space
+  const maxModalWidth = columns - 6; // Leave margin for borders and padding
+  const modalWidth = Math.min(Math.floor(columns * MODAL_WIDTH_PERCENT), maxModalWidth);
+  const modalHeight = Math.floor(rows * MODAL_HEIGHT_PERCENT);
+  // Account for: outer padding (4 chars) + double border (4 chars) + inner padding (4 chars) = 12 total
+  const contentWidth = modalWidth - 12;
+  const contentHeight = modalHeight - 8; // Account for borders, header, footer
+
+  // Calculate max scroll early (needed for keyboard handlers)
+  const maxModalHeightCalc = Math.floor(rows * MODAL_HEIGHT_PERCENT);
+  const maxContentHeightCalc = maxModalHeightCalc - 6;
+
+  // We'll calculate actual maxScroll later after building contentLines
+  const maxScrollRef = React.useRef(0);
+
+  // Handle keyboard input
+  useInput((input, key) => {
+    if (key.return && !copied) {
+      // Copy AI prompt to clipboard
+      const prompt = TASK_AI_PROMPT_TEMPLATE(task.id);
+      clipboard.writeSync(prompt);
+      setCopied(true);
+
+      // Close modal after showing feedback briefly
+      setTimeout(() => {
+        onClose();
+      }, 800);
+      return;
+    }
+
+    // Handle scroll with arrow keys - now with proper bounds
+    if (key.upArrow) {
+      setScrollOffset(prev => Math.max(0, prev - 1));
+    } else if (key.downArrow) {
+      setScrollOffset(prev => Math.min(maxScrollRef.current, prev + 1));
+    }
+  });
+
+  // Helper to wrap text to fit width (uses visual width for correct emoji/char handling)
+  const wrapText = (text: string, width: number): string[] => {
+    if (!text) return [];
+    const lines: string[] = [];
+    const words = text.split(' ');
+    let currentLine = '';
+
+    for (const word of words) {
+      // Handle very long words (like IDs) by hard-wrapping them
+      if (getVisualWidth(word) > width) {
+        // Push current line if it exists
+        if (currentLine) {
+          lines.push(currentLine);
+          currentLine = '';
+        }
+        // Break the long word into chunks
+        let remainingWord = word;
+        while (getVisualWidth(remainingWord) > width) {
+          let chunk = '';
+          for (let i = 0; i < remainingWord.length; i++) {
+            const testChunk = remainingWord.slice(0, i + 1);
+            if (getVisualWidth(testChunk) <= width) {
+              chunk = testChunk;
+            } else {
+              break;
+            }
+          }
+          if (chunk) {
+            lines.push(chunk);
+            remainingWord = remainingWord.slice(chunk.length);
+          } else {
+            // Edge case: even 1 char is too wide
+            lines.push(remainingWord.slice(0, 1));
+            remainingWord = remainingWord.slice(1);
+          }
+        }
+        currentLine = remainingWord;
+        continue;
+      }
+
+      const testLine = currentLine ? `${currentLine} ${word}` : word;
+      if (getVisualWidth(testLine) <= width) {
+        currentLine = testLine;
+      } else {
+        if (currentLine) lines.push(currentLine);
+        currentLine = word;
+      }
+    }
+    if (currentLine) lines.push(currentLine);
+    return lines;
+  };
+
+  const idLines = useMemo(() => wrapText(task.id, contentWidth - 2), [task.id, contentWidth]);
+  const titleLines = useMemo(() => wrapText(task.title, contentWidth - 2), [task.title, contentWidth]);
+
+  // Format cycle IDs to show only last part
+  const cycleDisplay = task.cycleIds?.map(id => id.split('-').slice(-2).join('-')).join(', ') || 'None';
+
+  // Build content lines array (each element = 1 visual line)
+  const contentLines: React.ReactNode[] = [];
+
+  contentLines.push(<Text key="id-label" color={colors.headerSecondary}>ID:</Text>);
+  idLines.forEach((line, i) => {
+    // Ensure line doesn't exceed contentWidth
+    const safeLine = line.length > contentWidth ? line.slice(0, contentWidth - 1) + '…' : line;
+    contentLines.push(<Text key={`id-value-${i}`} color={colors.muted}>{safeLine}</Text>);
+  });
+  contentLines.push(<Text key="space-1">{' '}</Text>);
+
+  contentLines.push(<Text key="title-label" color={colors.headerSecondary}>Title:</Text>);
+  titleLines.forEach((line, i) => {
+    // Ensure line doesn't exceed contentWidth
+    const safeLine = line.length > contentWidth ? line.slice(0, contentWidth - 1) + '…' : line;
+    contentLines.push(<Text key={`title-value-${i}`} bold>{safeLine}</Text>);
+  });
+  contentLines.push(<Text key="space-2">{' '}</Text>);
+
+  contentLines.push(
+    <Box key="status-priority" flexDirection="row" gap={2}>
+      <Text color={colors.headerSecondary}>Status: <Text color={colors.muted}>{task.status}</Text></Text>
+      <Text color={colors.headerSecondary}>Priority: <Text color={colors.muted}>{task.priority}</Text></Text>
+    </Box>
+  );
+  contentLines.push(<Text key="space-3">{' '}</Text>);
+
+  if (task.tags && task.tags.length > 0) {
+    contentLines.push(<Text key="tags-label" color={colors.headerSecondary}>Tags:</Text>);
+    contentLines.push(<Text key="tags-value" color={colors.muted}>{task.tags.join(', ')}</Text>);
+    contentLines.push(<Text key="space-4">{' '}</Text>);
+  }
+
+  contentLines.push(<Text key="cycles-label" color={colors.headerSecondary}>Cycles:</Text>);
+  contentLines.push(<Text key="cycles-value" color={colors.muted}>{cycleDisplay}</Text>);
+  contentLines.push(<Text key="space-5">{' '}</Text>);
+
+  contentLines.push(<Text key="desc-label" color={colors.headerSecondary}>Description:</Text>);
+  // Render description as formatted markdown
+  renderMarkdown(task.description, contentWidth - 2, colors).forEach((element, i) => {
+    contentLines.push(React.cloneElement(element, { key: `desc-${i}` }));
+  });
+
+  if (task.references && task.references.length > 0) {
+    contentLines.push(<Text key="space-6">{' '}</Text>);
+    contentLines.push(<Text key="ref-label" color={colors.headerSecondary}>References:</Text>);
+    task.references.forEach((ref, i) => {
+      contentLines.push(<Text key={`ref-${i}`} color={colors.muted}>  {ref}</Text>);
+    });
+  }
+
+  if (task.notes) {
+    contentLines.push(<Text key="space-7">{' '}</Text>);
+    contentLines.push(<Text key="notes-label" color={colors.headerSecondary}>Notes:</Text>);
+    // Render notes as formatted markdown
+    renderMarkdown(task.notes, contentWidth - 2, colors).forEach((element, i) => {
+      contentLines.push(React.cloneElement(element, { key: `note-${i}` }));
+    });
+  }
+
+  // Calculate flexible height
+  const totalContentLines = contentLines.length;
+  const maxModalHeight = Math.floor(rows * MODAL_HEIGHT_PERCENT);
+  const maxContentHeight = maxModalHeight - 6; // Reserve space for header/footer
+
+  // Use actual content height if smaller than max, otherwise use max
+  const displayHeight = Math.min(totalContentLines, maxContentHeight);
+  const needsScrolling = totalContentLines > displayHeight;
+
+  // Calculate scroll bounds
+  const maxScroll = Math.max(0, totalContentLines - displayHeight);
+  const clampedScrollOffset = Math.min(scrollOffset, maxScroll);
+
+  // Update ref for keyboard handlers
+  maxScrollRef.current = maxScroll;
+
+  // Get visible lines
+  const visibleLines = contentLines.slice(clampedScrollOffset, clampedScrollOffset + displayHeight);
+
+  // Scroll indicators
+  const hasContentAbove = needsScrolling && clampedScrollOffset > 0;
+  const hasContentBelow = needsScrolling && clampedScrollOffset < maxScroll;
+
+  return (
+    <Box flexDirection="column" padding={1} justifyContent="center" alignItems="center">
+      <Box borderStyle="double" borderColor={colors.headerPrimary} flexDirection="column" width={modalWidth} padding={1}>
+        <Text bold color={colors.headerPrimary}>📋 Task Details {hasContentAbove && '▲'} {hasContentBelow && '▼'}</Text>
+        <Text>{' '}</Text>
+
+        <Box flexDirection="column" width={contentWidth} height={displayHeight} overflow="hidden">
+          {visibleLines}
+        </Box>
+
+        <Text>{' '}</Text>
+        {copied ? (
+          <Text bold color={colors.controlPrimary}>✅ Prompt copied to clipboard!</Text>
+        ) : (
+          <Text dimColor>{needsScrolling ? '↑↓: Scroll | ' : ''}Enter: Copy AI prompt | ESC/q: Close</Text>
+        )}
       </Box>
     </Box>
   );
