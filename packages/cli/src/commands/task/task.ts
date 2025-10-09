@@ -7,6 +7,7 @@ import type {
   TaskSubmitOptions,
   TaskApproveOptions,
   TaskActivateOptions,
+  TaskPauseOptions,
   TaskResumeOptions,
   TaskCompleteOptions,
   TaskCancelOptions,
@@ -157,6 +158,19 @@ EXAMPLES:
     .option('-q, --quiet', 'Minimal output for scripting')
     .action(async (taskId: string, options: TaskActivateOptions) => {
       await taskCommand.executeActivate(taskId, options);
+    });
+
+  // gitgov task pause
+  task
+    .command('pause <taskId>')
+    .description('Pause active TaskRecord from active to paused with optional reason tracking')
+    .alias('p')
+    .option('-r, --reason <reason>', 'Reason for pausing (tracked in notes with [PAUSED] prefix)')
+    .option('--json', 'Output in JSON format')
+    .option('-v, --verbose', 'Show pause process details')
+    .option('-q, --quiet', 'Minimal output for scripting')
+    .action(async (taskId: string, options: TaskPauseOptions) => {
+      await taskCommand.executePause(taskId, options);
     });
 
   // gitgov task resume
