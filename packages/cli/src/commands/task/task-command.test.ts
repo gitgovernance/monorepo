@@ -71,6 +71,7 @@ describe('TaskCommand - Complete Unit Tests', () => {
       submitTask: jest.fn(),
       approveTask: jest.fn(),
       updateTask: jest.fn(),
+      pauseTask: jest.fn(),
       resumeTask: jest.fn()
     };
 
@@ -331,6 +332,48 @@ describe('TaskCommand - Complete Unit Tests', () => {
 
       expect(mockConsoleError).toHaveBeenCalledWith('RecordNotFoundError: Task not found');
       expect(mockProcessExit).toHaveBeenCalledWith(1);
+    });
+  });
+
+  describe('Manual Task Pause (EARS 18-19, 23)', () => {
+    it('[EARS-18] should pause active task with optional reason tracking', async () => {
+      const pausedTask = { ...sampleTask, status: 'paused' as const };
+
+      mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
+      mockBacklogAdapter.pauseTask.mockResolvedValue(pausedTask);
+      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+
+      await taskCommand.executePause('1757789000-task-test-task', { reason: 'Waiting for API approval' });
+
+      expect(mockBacklogAdapter.pauseTask).toHaveBeenCalledWith('1757789000-task-test-task', 'human:test-user', 'Waiting for API approval');
+      expect(mockIndexerAdapter.invalidateCache).toHaveBeenCalled();
+      expect(mockConsoleLog).toHaveBeenCalledWith('⏸️  Task paused: 1757789000-task-test-task');
+    });
+
+    it('[EARS-19] should show error when trying to pause non-active task', async () => {
+      const error = new Error(`ProtocolViolationError: Task is in 'paused' state. Cannot pause (requires active).`);
+
+      mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
+      mockBacklogAdapter.pauseTask.mockRejectedValue(error);
+
+      await taskCommand.executePause('1757789000-task-test-task', {});
+
+      expect(mockConsoleError).toHaveBeenCalledWith(`❌ Task operation failed: ProtocolViolationError: Task is in 'paused' state. Cannot pause (requires active).`);
+      expect(mockProcessExit).toHaveBeenCalledWith(1);
+    });
+
+    it('[EARS-23] should pause task without reason (optional parameter)', async () => {
+      const pausedTask = { ...sampleTask, status: 'paused' as const };
+
+      mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
+      mockBacklogAdapter.pauseTask.mockResolvedValue(pausedTask);
+      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+
+      await taskCommand.executePause('1757789000-task-test-task', {});
+
+      expect(mockBacklogAdapter.pauseTask).toHaveBeenCalledWith('1757789000-task-test-task', 'human:test-user', undefined);
+      expect(mockIndexerAdapter.invalidateCache).toHaveBeenCalled();
+      expect(mockConsoleLog).toHaveBeenCalledWith('⏸️  Task paused: 1757789000-task-test-task');
     });
   });
 

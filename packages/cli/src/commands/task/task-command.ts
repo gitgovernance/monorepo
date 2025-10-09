@@ -87,6 +87,13 @@ export interface TaskActivateOptions {
   quiet?: boolean;
 }
 
+export interface TaskPauseOptions {
+  reason?: string;
+  json?: boolean;
+  verbose?: boolean;
+  quiet?: boolean;
+}
+
 export interface TaskResumeOptions extends BaseCommandOptions {
   force?: boolean;
 }
@@ -144,7 +151,137 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
    * Execute main task command (show help)
    */
   async execute(options: BaseCommandOptions): Promise<void> {
-    this.handleError('Task command requires a subcommand. Use: new, list, show, submit, approve, activate, resume, complete, cancel, reject, assign, edit, promote', options);
+    this.handleError('Task command requires a subcommand. Use: new, list, show, submit, approve, activate, pause, resume, complete, cancel, reject, assign, edit, promote', options);
+  }
+
+  /**
+   * Routes subcommands to their respective execute methods
+   */
+  async executeSubCommand(subcommand: string, args: string[], options: any): Promise<void> {
+    switch (subcommand) {
+      case 'new':
+      case 'n':
+        if (!args[0]) {
+          this.handleError('Task title is required for new command', options);
+          return;
+        }
+        await this.executeNew(args[0], options);
+        break;
+
+      case 'list':
+      case 'ls':
+        await this.executeList(options);
+        break;
+
+      case 'show':
+      case 's':
+        if (!args[0]) {
+          this.handleError('Task ID is required for show command', options);
+          return;
+        }
+        await this.executeShow(args[0], options);
+        break;
+
+      case 'submit':
+        if (!args[0]) {
+          this.handleError('Task ID is required for submit command', options);
+          return;
+        }
+        await this.executeSubmit(args[0], options);
+        break;
+
+      case 'approve':
+        if (!args[0]) {
+          this.handleError('Task ID is required for approve command', options);
+          return;
+        }
+        await this.executeApprove(args[0], options);
+        break;
+
+      case 'activate':
+      case 'a':
+        if (!args[0]) {
+          this.handleError('Task ID is required for activate command', options);
+          return;
+        }
+        await this.executeActivate(args[0], options);
+        break;
+
+      case 'pause':
+      case 'p':
+        if (!args[0]) {
+          this.handleError('Task ID is required for pause command', options);
+          return;
+        }
+        await this.executePause(args[0], options);
+        break;
+
+      case 'resume':
+      case 'r':
+        if (!args[0]) {
+          this.handleError('Task ID is required for resume command', options);
+          return;
+        }
+        await this.executeResume(args[0], options);
+        break;
+
+      case 'complete':
+      case 'c':
+        if (!args[0]) {
+          this.handleError('Task ID is required for complete command', options);
+          return;
+        }
+        await this.executeComplete(args[0], options);
+        break;
+
+      case 'cancel':
+        if (!args[0]) {
+          this.handleError('Task ID is required for cancel command', options);
+          return;
+        }
+        await this.executeCancel(args[0], options);
+        break;
+
+      case 'reject':
+        if (!args[0]) {
+          this.handleError('Task ID is required for reject command', options);
+          return;
+        }
+        await this.executeReject(args[0], options);
+        break;
+
+      case 'assign':
+        if (!args[0]) {
+          this.handleError('Task ID is required for assign command', options);
+          return;
+        }
+        if (!options.to) {
+          this.handleError('--to option is required for assign command', options);
+          return;
+        }
+        await this.executeAssign(args[0], options);
+        break;
+
+      case 'edit':
+      case 'e':
+        if (!args[0]) {
+          this.handleError('Task ID is required for edit command', options);
+          return;
+        }
+        await this.executeEdit(args[0], options);
+        break;
+
+      case 'promote':
+        if (!args[0]) {
+          this.handleError('Task ID is required for promote command', options);
+          return;
+        }
+        await this.executePromote(args[0], options);
+        break;
+
+      default:
+        this.handleError(`Unknown subcommand: ${subcommand}. Use: new, list, show, submit, approve, activate, pause, resume, complete, cancel, reject, assign, edit, promote`, options);
+    }
   }
 
   /**
@@ -458,6 +595,49 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
         console.log(`✅ Task activated: ${taskId}`);
         console.log(`📊 Status: ready → active`);
         console.log(`✍️  Activated by: ${currentActor.displayName} (${actorId})`);
+      }
+
+    } catch (error) {
+      this.handleTaskError(error, options);
+    }
+  }
+
+  /**
+   * [EARS-18] Pauses an active task manually with optional reason tracking
+   */
+  async executePause(taskId: string, options: TaskPauseOptions): Promise<void> {
+    try {
+      // 1. Get dependencies
+      const backlogAdapter = await this.dependencyService.getBacklogAdapter();
+      const indexerAdapter = await this.dependencyService.getIndexerAdapter();
+
+      // 2. Resolve current actor
+      const identityAdapter = await this.dependencyService.getIdentityAdapter();
+      const currentActor = await identityAdapter.getCurrentActor();
+      const actorId = currentActor.id;
+
+      // 3. Pause task (active → paused)
+      const pausedTask = await backlogAdapter.pauseTask(taskId, actorId, options.reason);
+
+      // 4. Cache invalidation to keep listings accurate
+      await indexerAdapter.invalidateCache();
+
+      // 5. Output feedback according to flags
+      if (options.json) {
+        console.log(JSON.stringify({
+          success: true,
+          taskId: pausedTask.id,
+          newStatus: pausedTask.status,
+          pausedBy: actorId,
+          reason: options.reason || 'No reason provided'
+        }, null, 2));
+      } else {
+        console.log(`⏸️  Task paused: ${taskId}`);
+        console.log(`📊 Status: active → paused`);
+        console.log(`✍️  Paused by: ${currentActor.displayName} (${actorId})`);
+        if (options.reason) {
+          console.log(`📝 Reason: ${options.reason}`);
+        }
       }
 
     } catch (error) {
