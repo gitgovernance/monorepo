@@ -814,6 +814,120 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         .rejects.toThrow('ProtocolViolationError: Workflow methodology rejected ready→active transition');
     });
 
+    it('[EARS-34A] should pause task from active to paused with optional reason', async () => {
+      const taskId = '1757687335-task-active';
+      const activeTask = createMockTaskRecord({
+        id: taskId,
+        status: 'active'
+      });
+      const pausedTask = createMockTaskRecord({
+        id: taskId,
+        status: 'paused',
+        notes: '[PAUSED] Waiting for external API approval'
+      });
+
+      mockDependencies.taskStore.read.mockResolvedValue(activeTask as unknown as TaskRecord);
+      mockDependencies.identity.getActor.mockResolvedValue({
+        id: 'human:tech-lead',
+        type: 'human',
+        displayName: 'Tech Lead',
+        publicKey: 'mock-key',
+        roles: ['pauser'],
+        status: 'active'
+      });
+      mockDependencies.workflowMethodologyAdapter.getTransitionRule.mockResolvedValue({
+        to: 'paused',
+        conditions: {}
+      });
+      mockDependencies.identity.signRecord.mockResolvedValue({
+        ...activeTask,
+        payload: pausedTask.payload
+      });
+
+      const result = await backlogAdapter.pauseTask(taskId, 'human:tech-lead', 'Waiting for external API approval');
+
+      expect(mockDependencies.workflowMethodologyAdapter.getTransitionRule).toHaveBeenCalledWith(
+        'active',
+        'paused',
+        expect.objectContaining({
+          task: activeTask.payload,
+          transitionTo: 'paused'
+        })
+      );
+      expect(mockDependencies.identity.signRecord).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            status: 'paused',
+            notes: expect.stringContaining('[PAUSED] Waiting for external API approval')
+          })
+        }),
+        'human:tech-lead',
+        'pauser'
+      );
+      expect(mockDependencies.taskStore.write).toHaveBeenCalled();
+      expect(mockDependencies.eventBus.publish).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'task.status.changed',
+          payload: expect.objectContaining({
+            taskId,
+            oldStatus: 'active',
+            newStatus: 'paused',
+            actorId: 'human:tech-lead',
+            reason: 'Waiting for external API approval'
+          })
+        })
+      );
+      expect(result.status).toBe('paused');
+    });
+
+    it('[EARS-35A] should throw error when task not found for pause', async () => {
+      mockDependencies.taskStore.read.mockResolvedValue(null);
+
+      await expect(backlogAdapter.pauseTask('nonexistent-task', 'human:tech-lead'))
+        .rejects.toThrow('RecordNotFoundError: Task not found: nonexistent-task');
+    });
+
+    it('[EARS-36A] should throw error when task is not in active state for pause', async () => {
+      const pausedTask = createMockTaskRecord({
+        id: '1757687335-task-paused',
+        status: 'paused'
+      });
+
+      mockDependencies.taskStore.read.mockResolvedValue(pausedTask as unknown as TaskRecord);
+      mockDependencies.identity.getActor.mockResolvedValue({
+        id: 'human:tech-lead',
+        type: 'human',
+        displayName: 'Tech Lead',
+        publicKey: 'mock-key',
+        roles: ['pauser'],
+        status: 'active'
+      });
+
+      await expect(backlogAdapter.pauseTask('1757687335-task-paused', 'human:tech-lead'))
+        .rejects.toThrow(`ProtocolViolationError: Task is in 'paused' state. Cannot pause (requires active).`);
+    });
+
+    it('[EARS-37A] should reject pause when workflow methodology denies transition', async () => {
+      const activeTask = createMockTaskRecord({
+        id: '1757687335-task-active',
+        status: 'active'
+      });
+
+      mockDependencies.taskStore.read.mockResolvedValue(activeTask as unknown as TaskRecord);
+      mockDependencies.identity.getActor.mockResolvedValue({
+        id: 'human:tech-lead',
+        type: 'human',
+        displayName: 'Tech Lead',
+        publicKey: 'mock-key',
+        roles: ['pauser'],
+        status: 'active'
+      });
+      mockDependencies.workflowMethodologyAdapter.getTransitionRule.mockResolvedValue(null);
+
+      await expect(backlogAdapter.pauseTask('1757687335-task-active', 'human:tech-lead'))
+        .rejects.toThrow('ProtocolViolationError: Workflow methodology rejected active→paused transition');
+    });
+
     it('[EARS-38A] should resume task from paused to active with blocking validation', async () => {
       const taskId = '1757687335-task-paused';
       const pausedTask = createMockTaskRecord({

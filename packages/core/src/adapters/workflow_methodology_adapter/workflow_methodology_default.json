@@ -53,7 +53,8 @@
     },
     "active": {
       "from": [
-        "ready"
+        "ready",
+        "paused"
       ],
       "requires": {
         "event": "first_execution_record_created",

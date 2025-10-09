@@ -33,7 +33,8 @@
     },
     "active": {
       "from": [
-        "ready"
+        "ready",
+        "paused"
       ],
       "requires": {
         "event": "sprint_started",

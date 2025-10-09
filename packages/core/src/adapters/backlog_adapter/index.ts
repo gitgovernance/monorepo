@@ -72,6 +72,7 @@ export interface IBacklogAdapter {
   updateTask(taskId: string, payload: Partial<TaskRecord>): Promise<TaskRecord>;
   activateTask(taskId: string, actorId: string): Promise<TaskRecord>;
   completeTask(taskId: string, actorId: string): Promise<TaskRecord>;
+  pauseTask(taskId: string, actorId: string, reason?: string): Promise<TaskRecord>;
   resumeTask(taskId: string, actorId: string, force?: boolean): Promise<TaskRecord>;
   discardTask(taskId: string, actorId: string, reason?: string): Promise<TaskRecord>
 
@@ -446,6 +447,70 @@ export class BacklogAdapter implements IBacklogAdapter {
         oldStatus: 'ready',
         newStatus: 'active',
         actorId
+      }
+    } as TaskStatusChangedEvent);
+
+    return updatedPayload;
+  }
+
+  /**
+   * Pauses a task manually transitioning from active to paused with optional reason
+   */
+  async pauseTask(taskId: string, actorId: string, reason?: string): Promise<TaskRecord> {
+    // 1. Read and validate task exists
+    const taskRecord = await this.taskStore.read(taskId);
+    if (!taskRecord) {
+      throw new Error(`RecordNotFoundError: Task not found: ${taskId}`);
+    }
+
+    const task = taskRecord.payload;
+
+    // 2. Validate current status is 'active'
+    if (task.status !== 'active') {
+      throw new Error(`ProtocolViolationError: Task is in '${task.status}' state. Cannot pause (requires active).`);
+    }
+
+    // 3. Resolve actor and validate permissions via workflow methodology
+    const actor = await this.getActor(actorId);
+
+    const context = {
+      task,
+      actor,
+      signatures: taskRecord.header.signatures,
+      transitionTo: 'paused' as TaskRecord['status']
+    };
+
+    const transitionRule = await this.workflowMethodologyAdapter.getTransitionRule('active', 'paused', context);
+    if (!transitionRule) {
+      throw new Error('ProtocolViolationError: Workflow methodology rejected active→paused transition');
+    }
+
+    // 4. Update task status to 'paused' and add reason to notes if provided
+    const updatedPayload: TaskRecord = {
+      ...task,
+      status: 'paused',
+      // Add reason to notes with [PAUSED] prefix if provided
+      ...(reason && {
+        notes: `${task.notes || ''}\n[PAUSED] ${reason} (${new Date().toISOString()})`.trim()
+      })
+    };
+    const updatedRecord = { ...taskRecord, payload: updatedPayload };
+
+    // 5. Sign and persist with pauser role
+    const signedRecord = await this.identity.signRecord(updatedRecord, actorId, 'pauser');
+    await this.taskStore.write(signedRecord as GitGovRecord & { payload: TaskRecord });
+
+    // 6. Emit task status changed event
+    this.eventBus.publish({
+      type: 'task.status.changed',
+      timestamp: Date.now(),
+      source: 'backlog_adapter',
+      payload: {
+        taskId,
+        oldStatus: 'active',
+        newStatus: 'paused',
+        actorId,
+        reason: reason || 'Task manually paused'
       }
     } as TaskStatusChangedEvent);
 
