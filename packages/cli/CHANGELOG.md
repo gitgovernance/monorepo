@@ -1,3 +1,11 @@
+## [1.5.0](https://github.com/gitgovernance/monorepo/compare/cli-v1.4.2...cli-v1.5.0) (2025-10-09)
+
+
+### 🚀 Features
+
+* **cli:** add task pause and resume commands ([#32](https://github.com/gitgovernance/monorepo/issues/32)) ([181485e](https://github.com/gitgovernance/monorepo/commit/181485eadb1b8dcb9f8fb96c62cb98cd227afc92)), closes [#1758587001](https://github.com/gitgovernance/monorepo/issues/1758587001) [#1758587002](https://github.com/gitgovernance/monorepo/issues/1758587002)
+* **core:** add task pause/resume and fix init actor roles ([#31](https://github.com/gitgovernance/monorepo/issues/31)) ([5aab230](https://github.com/gitgovernance/monorepo/commit/5aab2308f374fd513de6ba5a994a0f169a6f93d9)), closes [#1758587001](https://github.com/gitgovernance/monorepo/issues/1758587001) [#1758587002](https://github.com/gitgovernance/monorepo/issues/1758587002) [#1759983132](https://github.com/gitgovernance/monorepo/issues/1759983132)
+
 ## [1.4.2](https://github.com/gitgovernance/monorepo/compare/cli-v1.4.1...cli-v1.4.2) (2025-10-08)
 
 
