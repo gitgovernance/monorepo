@@ -231,6 +231,29 @@ describe('WorkflowMethodologyAdapter - DEFAULT Methodology Integration Tests', (
         expect(rule?.to).toBe('archived');
         expect(rule?.conditions?.event).toBe('changelog_record_created');
       });
+
+      it('[EARS-54A] should complete active to paused transition with default methodology', async () => {
+        const task = createMockTask([], 'active');
+        const context: ValidationContext = { task, transitionTo: 'paused' };
+
+        const rule = await adapter.getTransitionRule('active', 'paused', context);
+
+        expect(rule).toBeDefined();
+        expect(rule?.to).toBe('paused');
+        expect(rule?.conditions?.event).toBe('feedback_blocking_created');
+      });
+
+      it('[EARS-54B] should complete paused to active transition with default methodology', async () => {
+        const task = createMockTask([], 'paused');
+        const context: ValidationContext = { task, transitionTo: 'active' };
+
+        const rule = await adapter.getTransitionRule('paused', 'active', context);
+
+        expect(rule).toBeDefined();
+        expect(rule?.to).toBe('active');
+        expect(rule?.conditions?.event).toBe('first_execution_record_created');
+        expect(rule?.conditions?.custom_rules).toContain('task_must_have_valid_assignment_for_executor');
+      });
     });
 
     describe('Guild-Specific Workflows', () => {

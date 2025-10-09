@@ -269,6 +269,31 @@ describe('WorkflowMethodologyAdapter', () => {
       });
     });
 
+    it('[EARS-8A] should return transition rule for active to paused', async () => {
+      const context: ValidationContext = { task: createMockTask() };
+      const rule = await adapter.getTransitionRule('active', 'paused', context);
+
+      expect(rule).toEqual({
+        to: 'paused',
+        conditions: {
+          event: 'feedback_blocking_created'
+        }
+      });
+    });
+
+    it('[EARS-8B] should return transition rule for paused to active (resume)', async () => {
+      const context: ValidationContext = { task: createMockTask() };
+      const rule = await adapter.getTransitionRule('paused', 'active', context);
+
+      expect(rule).toEqual({
+        to: 'active',
+        conditions: {
+          event: 'first_execution_record_created',
+          custom_rules: ['task_must_have_valid_assignment_for_executor']
+        }
+      });
+    });
+
     it('[EARS-9] should return null for invalid transition', async () => {
       const context: ValidationContext = { task: createMockTask() };
       const rule = await adapter.getTransitionRule('archived', 'draft', context);

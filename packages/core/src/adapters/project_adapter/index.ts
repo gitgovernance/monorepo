@@ -186,7 +186,13 @@ export class ProjectAdapter implements IProjectAdapter {
         {
           type: "human" as const,
           displayName: options.actorName || "Project Owner",
-          roles: ["admin", "author"] as const,
+          roles: [
+            "admin",             // Platform admin (future use)
+            "author",            // Create & submit tasks
+            "approver:product",  // Approve tasks (product decisions)
+            "approver:quality",  // Complete tasks (quality validation)
+            "developer"          // General development work
+          ] as const,
         },
         "bootstrap"
       );

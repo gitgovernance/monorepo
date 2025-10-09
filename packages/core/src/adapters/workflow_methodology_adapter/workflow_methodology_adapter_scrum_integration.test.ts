@@ -231,6 +231,29 @@ describe('WorkflowMethodologyAdapter - SCRUM Methodology Integration Tests', () 
         const customRuleResult = await scrumAdapter.validateCustomRules(['task_assigned_to_team_member'], context);
         expect(customRuleResult).toBe(true);
       });
+
+      it('[EARS-68A] should handle task pause transition with scrum methodology', async () => {
+        const task = createMockTask(['sprint:current'], 'active');
+        const context: ValidationContext = { task, transitionTo: 'paused' };
+
+        // Task can be paused from active state
+        const rule = await scrumAdapter.getTransitionRule('active', 'paused', context);
+        expect(rule).toBeDefined();
+        expect(rule?.to).toBe('paused');
+        expect(rule?.conditions?.event).toBe('feedback_blocking_created');
+      });
+
+      it('[EARS-68B] should handle task resume transition with scrum methodology', async () => {
+        const task = createMockTask(['sprint:current'], 'paused');
+        const context: ValidationContext = { task, transitionTo: 'active' };
+
+        // Task can be resumed from paused to active
+        const rule = await scrumAdapter.getTransitionRule('paused', 'active', context);
+        expect(rule).toBeDefined();
+        expect(rule?.to).toBe('active');
+        expect(rule?.conditions?.event).toBe('sprint_started');
+        expect(rule?.conditions?.custom_rules).toContain('task_assigned_to_team_member');
+      });
     });
 
     describe('Scrum Custom Rules Validation', () => {

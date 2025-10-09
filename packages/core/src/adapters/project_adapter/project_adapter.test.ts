@@ -400,7 +400,13 @@ describe('ProjectAdapter', () => {
         {
           type: 'human',
           displayName: 'Test User',
-          roles: ['admin', 'author'],
+          roles: [
+            'admin',
+            'author',
+            'approver:product',
+            'approver:quality',
+            'developer'
+          ],
         },
         'bootstrap'
       );
