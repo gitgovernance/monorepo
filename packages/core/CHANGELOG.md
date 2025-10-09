@@ -1,3 +1,22 @@
+## [1.1.0](https://github.com/gitgovernance/monorepo/compare/core-v1.0.2...core-v1.1.0) (2025-10-09)
+
+
+### ✨ Features
+
+* **cli,core:** add cycle remove-task and move-task commands ([#29](https://github.com/gitgovernance/monorepo/issues/29)) ([a2f2ba8](https://github.com/gitgovernance/monorepo/commit/a2f2ba8acc69aedef51d4043b4fc69f83859d3f2)), closes [#1758521733](https://github.com/gitgovernance/monorepo/issues/1758521733)
+* **cli:** add --show-archived flag to diagram command ([#26](https://github.com/gitgovernance/monorepo/issues/26)) ([0126746](https://github.com/gitgovernance/monorepo/commit/0126746c1e69457d42a46b383d9de1f84f508f21)), closes [#1758517322](https://github.com/gitgovernance/monorepo/issues/1758517322)
+* **cli:** add task details modal to Dashboard TUI ([#28](https://github.com/gitgovernance/monorepo/issues/28)) ([e52e129](https://github.com/gitgovernance/monorepo/commit/e52e129b033cbef2e5c9e2df5fef36b2770f8273)), closes [#1759487663](https://github.com/gitgovernance/monorepo/issues/1759487663)
+* **core:** add task pause/resume and fix init actor roles ([#31](https://github.com/gitgovernance/monorepo/issues/31)) ([5aab230](https://github.com/gitgovernance/monorepo/commit/5aab2308f374fd513de6ba5a994a0f169a6f93d9)), closes [#1758587001](https://github.com/gitgovernance/monorepo/issues/1758587001) [#1758587002](https://github.com/gitgovernance/monorepo/issues/1758587002) [#1759983132](https://github.com/gitgovernance/monorepo/issues/1759983132)
+
+
+### 🐛 Bug Fixes
+
+* **cli:** add JSON schema to semantic-release config for better IDE support ([0709dde](https://github.com/gitgovernance/monorepo/commit/0709ddecf92723032ddf9fe01f673a615c078e36))
+* **cli:** configure Jest to resolve @gitgov/core from workspace ([#25](https://github.com/gitgovernance/monorepo/issues/25)) ([bf01f58](https://github.com/gitgovernance/monorepo/commit/bf01f588fce67b806637ea86d49ea29e332f4876)), closes [#1759460529](https://github.com/gitgovernance/monorepo/issues/1759460529)
+* **cli:** configure tagFormat in semantic-release to prevent version downgrades ([17f719b](https://github.com/gitgovernance/monorepo/commit/17f719b17d80dfd7f0b29abf4431e9c253b444d7))
+* **cli:** resolve dashboard TUI dynamic require error ([#30](https://github.com/gitgovernance/monorepo/issues/30)) ([687bb2c](https://github.com/gitgovernance/monorepo/commit/687bb2cf619a16264a954ca130f045bca91460a9)), closes [#1759918556](https://github.com/gitgovernance/monorepo/issues/1759918556)
+* **cli:** update core dependency to use fixed v1.0.2 ([#24](https://github.com/gitgovernance/monorepo/issues/24)) ([418a39a](https://github.com/gitgovernance/monorepo/commit/418a39a742152a6ab3c816e2643dafcab898ef24)), closes [#1759460529](https://github.com/gitgovernance/monorepo/issues/1759460529)
+
 ## [1.0.2](https://github.com/gitgovernance/monorepo/compare/core-v1.0.1...core-v1.0.2) (2025-10-03)
 
 
