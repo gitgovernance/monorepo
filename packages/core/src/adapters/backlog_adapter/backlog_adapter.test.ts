@@ -32,6 +32,7 @@ type MockBacklogAdapterDependencies = {
     list: jest.MockedFunction<() => Promise<TaskRecord[]>>;
     read: jest.MockedFunction<(id: string) => Promise<TaskRecord | null>>;
     write: jest.MockedFunction<(record: TaskRecord) => Promise<void>>;
+    delete: jest.MockedFunction<(id: string) => Promise<void>>;
   };
   cycleStore: {
     list: jest.MockedFunction<() => Promise<string[]>>;
@@ -171,7 +172,8 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       taskStore: {
         list: jest.fn().mockResolvedValue([]),
         read: jest.fn(),
-        write: jest.fn()
+        write: jest.fn(),
+        delete: jest.fn()
       },
       cycleStore: {
         list: jest.fn().mockResolvedValue([]),
@@ -1287,7 +1289,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       });
 
       await expect(backlogAdapter.discardTask('1757687335-task-draft', 'human:anyone'))
-        .rejects.toThrow('ProtocolViolationError: Task is in \'draft\' state. Cannot cancel from this state. Only \'ready\', \'active\', and \'review\' tasks can be cancelled.');
+        .rejects.toThrow('ProtocolViolationError: Cannot cancel task in \'draft\' state. Use \'gitgov task delete 1757687335-task-draft\' to remove draft tasks.');
     });
 
     it('[EARS-31B] should reject task from review to discarded with reason', async () => {
@@ -1401,6 +1403,144 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       mockDependencies.taskStore.read.mockResolvedValue(reviewTask as unknown as TaskRecord);
       const reviewResult = await backlogAdapter.discardTask('1757687335-task-review', 'human:pm', 'Requirements unclear');
       expect(reviewResult.notes).toContain('[REJECTED] Requirements unclear');
+    });
+
+    it('[EARS-43A] should delete draft task completely without discarded state', async () => {
+      const taskId = '1757687335-task-draft-to-delete';
+      const draftTask = createMockTaskRecord({
+        id: taskId,
+        status: 'draft',
+        title: 'Draft Task to Delete'
+      });
+
+      mockDependencies.taskStore.read.mockResolvedValue(draftTask as unknown as TaskRecord);
+      mockDependencies.taskStore.delete = jest.fn().mockResolvedValue(undefined);
+      mockDependencies.identity.getActor.mockResolvedValue({
+        id: 'human:author',
+        type: 'human',
+        displayName: 'Author',
+        publicKey: 'mock-key',
+        roles: ['author'],
+        status: 'active'
+      });
+
+      await backlogAdapter.deleteTask(taskId, 'human:author');
+
+      expect(mockDependencies.taskStore.delete).toHaveBeenCalledWith(taskId);
+      expect(mockDependencies.eventBus.publish).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'task.status.changed',
+          payload: expect.objectContaining({
+            taskId,
+            oldStatus: 'draft',
+            newStatus: 'deleted',
+            actorId: 'human:author',
+            reason: 'Draft task deleted'
+          })
+        })
+      );
+    });
+
+    it('[EARS-44A] should throw error when task not found for deletion', async () => {
+      mockDependencies.taskStore.read.mockResolvedValue(null);
+
+      await expect(backlogAdapter.deleteTask('nonexistent-task', 'human:author'))
+        .rejects.toThrow('RecordNotFoundError: Task not found: nonexistent-task');
+    });
+
+    it('[EARS-45A] should throw error when task is not in draft state for deletion', async () => {
+      const activeTask = createMockTaskRecord({
+        id: '1757687335-task-active',
+        status: 'active'
+      });
+
+      mockDependencies.taskStore.read.mockResolvedValue(activeTask as unknown as TaskRecord);
+      mockDependencies.identity.getActor.mockResolvedValue({
+        id: 'human:author',
+        type: 'human',
+        displayName: 'Author',
+        publicKey: 'mock-key',
+        roles: ['author'],
+        status: 'active'
+      });
+
+      await expect(backlogAdapter.deleteTask('1757687335-task-active', 'human:author'))
+        .rejects.toThrow('ProtocolViolationError: Cannot delete task in \'active\' state');
+    });
+
+    it('[EARS-46A] should show educational error suggesting reject for review task', async () => {
+      const reviewTask = createMockTaskRecord({
+        id: '1757687335-task-review',
+        status: 'review'
+      });
+
+      mockDependencies.taskStore.read.mockResolvedValue(reviewTask as unknown as TaskRecord);
+      mockDependencies.identity.getActor.mockResolvedValue({
+        id: 'human:author',
+        type: 'human',
+        displayName: 'Author',
+        publicKey: 'mock-key',
+        roles: ['author'],
+        status: 'active'
+      });
+
+      await expect(backlogAdapter.deleteTask('1757687335-task-review', 'human:author'))
+        .rejects.toThrow('ProtocolViolationError: Cannot delete task in \'review\' state. Use \'gitgov task reject 1757687335-task-review\' to discard tasks under review.');
+    });
+
+    it('[EARS-47A] should show educational error suggesting cancel for ready/active tasks', async () => {
+      const readyTask = createMockTaskRecord({
+        id: '1757687335-task-ready',
+        status: 'ready'
+      });
+
+      mockDependencies.taskStore.read.mockResolvedValue(readyTask as unknown as TaskRecord);
+      mockDependencies.identity.getActor.mockResolvedValue({
+        id: 'human:author',
+        type: 'human',
+        displayName: 'Author',
+        publicKey: 'mock-key',
+        roles: ['author'],
+        status: 'active'
+      });
+
+      await expect(backlogAdapter.deleteTask('1757687335-task-ready', 'human:author'))
+        .rejects.toThrow('ProtocolViolationError: Cannot delete task in \'ready\' state. Use \'gitgov task cancel 1757687335-task-ready\' to discard tasks from ready/active states.');
+    });
+
+    it('[EARS-48A] should emit task status changed event with deleted status', async () => {
+      const taskId = '1757687335-task-draft-emit-event';
+      const draftTask = createMockTaskRecord({
+        id: taskId,
+        status: 'draft'
+      });
+
+      mockDependencies.taskStore.read.mockResolvedValue(draftTask as unknown as TaskRecord);
+      mockDependencies.taskStore.delete = jest.fn().mockResolvedValue(undefined);
+      mockDependencies.identity.getActor.mockResolvedValue({
+        id: 'human:author',
+        type: 'human',
+        displayName: 'Author',
+        publicKey: 'mock-key',
+        roles: ['author'],
+        status: 'active'
+      });
+
+      await backlogAdapter.deleteTask(taskId, 'human:author');
+
+      expect(mockDependencies.eventBus.publish).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'task.status.changed',
+          source: 'backlog_adapter',
+          payload: expect.objectContaining({
+            taskId,
+            oldStatus: 'draft',
+            newStatus: 'deleted',
+            actorId: 'human:author',
+            reason: 'Draft task deleted'
+          })
+        })
+      );
     });
   });
 
