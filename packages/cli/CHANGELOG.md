@@ -1,3 +1,11 @@
+## [1.6.0](https://github.com/gitgovernance/monorepo/compare/cli-v1.5.0...cli-v1.6.0) (2025-10-13)
+
+
+### 🚀 Features
+
+* **cli:** add task delete command with interactive dashboard modal ([#34](https://github.com/gitgovernance/monorepo/issues/34)) ([f43f8a0](https://github.com/gitgovernance/monorepo/commit/f43f8a0e3e28dc63b699bd81f2bab9987cff062a)), closes [#1760017977](https://github.com/gitgovernance/monorepo/issues/1760017977)
+* **core:** add deleteTask for draft tasks with educational errors ([#33](https://github.com/gitgovernance/monorepo/issues/33)) ([e70ccd4](https://github.com/gitgovernance/monorepo/commit/e70ccd474d4d876922a26a0ef8b7bf8860246576)), closes [#1760017977](https://github.com/gitgovernance/monorepo/issues/1760017977)
+
 ## [1.5.0](https://github.com/gitgovernance/monorepo/compare/cli-v1.4.2...cli-v1.5.0) (2025-10-09)
 
 
