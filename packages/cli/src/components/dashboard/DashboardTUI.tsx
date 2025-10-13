@@ -91,11 +91,11 @@ interface DashboardIntelligence {
   systemHealth: MetricsAdapter.SystemStatus;
   productivityMetrics: MetricsAdapter.ProductivityMetrics;
   collaborationMetrics: MetricsAdapter.CollaborationMetrics;
-  tasks: IndexerAdapter.EnrichedTaskRecord[]; // UPDATED - Now uses enriched tasks with activity info from IndexerAdapter
+  tasks: IndexerAdapter.EnrichedTaskRecord[];
   cycles: Records.CycleRecord[];
   feedback: Records.FeedbackRecord[];
   currentActor: Records.ActorRecord;
-  activityHistory: EventBus.ActivityEvent[]; // NUEVO - Activity history real
+  activityHistory: EventBus.ActivityEvent[];
 }
 
 interface ViewConfig {
@@ -183,11 +183,13 @@ export const DashboardTUI: React.FC<Props> = ({
   const [showHelp, setShowHelp] = useState(false);
   const [lastUpdate, setLastUpdate] = useState(new Date());
   const [intelligence, setIntelligence] = useState(initialIntelligence);
-  const [sortMode, setSortMode] = useState<SortMode>('recent'); // NUEVO - Sort mode state
+  const [sortMode, setSortMode] = useState<SortMode>('recent');
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
-  const [showTaskModal, setShowTaskModal] = useState(false); // NUEVO - Task detail modal state
+  const [showTaskModal, setShowTaskModal] = useState(false); // NUEV
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  // NUEVO - Sort tasks dynamically based on current sort mode
+  // Sort tasks dynamically based on current sort mode
   const sortTasks = useCallback((tasks: IndexerAdapter.EnrichedTaskRecord[]): IndexerAdapter.EnrichedTaskRecord[] => {
     switch (sortMode) {
       case 'recent':
@@ -363,6 +365,12 @@ export const DashboardTUI: React.FC<Props> = ({
       return;
     }
 
+    // Handle delete modal - block ALL other keys
+    if (showDeleteModal) {
+      // Delete modal handles its own keys (y/n/ESC), ignore everything else here
+      return;
+    }
+
     // Handle Enter key to open task details modal
     if (key.return && selectedTaskId) {
       setShowTaskModal(true);
@@ -439,6 +447,25 @@ export const DashboardTUI: React.FC<Props> = ({
       case 'c':
         console.log('🎯 Use: gitgov cycle new');
         break;
+      case 'd':
+        if (selectedTaskId) {
+          const selectedTask = sortedTasks.find(t => t.id === selectedTaskId);
+          if (selectedTask) {
+            if (selectedTask.status === 'draft') {
+              // Task is draft, show confirmation modal
+              setShowDeleteModal(true);
+              setDeleteError(null);
+            } else {
+              // Task is not draft, show error modal
+              const errorMsg = selectedTask.status === 'review'
+                ? `Cannot delete task in '${selectedTask.status}' state. Use: gitgov task reject ${selectedTaskId}`
+                : `Cannot delete task in '${selectedTask.status}' state. Use: gitgov task cancel ${selectedTaskId}`;
+              setDeleteError(errorMsg);
+              setShowDeleteModal(true);
+            }
+          }
+        }
+        break;
       case 'j':
         navigateDown();
         break;
@@ -471,13 +498,58 @@ export const DashboardTUI: React.FC<Props> = ({
     return <TaskDetailModal task={selectedTask} theme={theme} onClose={() => setShowTaskModal(false)} />;
   }
 
+  // Show delete confirmation/error modal
+  if (showDeleteModal && selectedTask) {
+    return <DeleteConfirmationModal
+      task={selectedTask}
+      error={deleteError}
+      theme={theme}
+      onConfirm={async () => {
+        try {
+          // Import DependencyInjectionService
+          const { DependencyInjectionService } = await import('../../services/dependency-injection');
+          const diService = DependencyInjectionService.getInstance();
+          const backlogAdapter = await diService.getBacklogAdapter();
+          const identityAdapter = await diService.getIdentityAdapter();
+          const indexerAdapter = await diService.getIndexerAdapter();
+
+          const currentActor = await identityAdapter.getCurrentActor();
+
+          // Delete the task
+          await backlogAdapter.deleteTask(selectedTask.id, currentActor.id);
+
+          // Invalidate cache
+          await indexerAdapter.invalidateCache();
+
+          // Close modal and refresh
+          setShowDeleteModal(false);
+          setSelectedTaskId(null);
+
+          // Refresh dashboard
+          if (onRefresh) {
+            const newIntelligence = await onRefresh();
+            setIntelligence(newIntelligence);
+            setLastUpdate(new Date());
+          }
+        } catch (error) {
+          // Show error in modal
+          setDeleteError(error instanceof Error ? error.message : String(error));
+        }
+      }}
+      onClose={() => {
+        setShowDeleteModal(false);
+        setDeleteError(null);
+      }}
+    />;
+  }
+
   if (showHelp) {
     return (
       <Box flexDirection="column" padding={1}>
         <Text bold color={colors.headerPrimary}>🎮 GitGovernance Dashboard - Interactive TUI</Text>
         <Text></Text>
         <Text bold color={colors.headerSecondary}>QUICK ACTIONS:</Text>
-        <Text>  n: New task       a: Assign task    e: Edit task</Text>
+        <Text>  n: New task       a: Assign task    e: Edit task       d: Delete task</Text>
         <Text>  c: New cycle      r: Refresh data</Text>
         <Text></Text>
         <Text bold color={colors.headerSecondary}>NAVIGATION:</Text>
@@ -780,7 +852,7 @@ const RowView: React.FC<{
         <Text>{'─'.repeat(Math.max(columns, 0) - 4)}</Text>
 
         <Box flexDirection="row" justifyContent="space-between" paddingRight={1}>
-          <Text bold color={colors.controlPrimary}>n:New s:Submit a:Approve e:Edit c:Cycle v:View r:Refresh ?:Help q:Quit</Text>
+          <Text bold color={colors.controlPrimary}>n:New a:Assign e:Edit d:Delete c:Cycle v:View s:Sort r:Refresh ?:Help q:Quit</Text>
           <Text color={colors.muted}>(Live mode: {live ? '🟢 ON' : '🔴 OFF'})</Text>
         </Box>
       </Box>
@@ -1333,6 +1405,83 @@ const TaskDetailModal: React.FC<{
           <Text dimColor>{needsScrolling ? '↑↓: Scroll | ' : ''}Enter: Copy AI prompt | ESC/q: Close</Text>
         )}
       </Box>
+    </Box>
+  );
+};
+
+/**
+ * Delete Confirmation Modal - Confirms task deletion or shows error
+ */
+const DeleteConfirmationModal: React.FC<{
+  task: IndexerAdapter.EnrichedTaskRecord;
+  error: string | null;
+  theme: DashboardTheme;
+  onConfirm: () => Promise<void>;
+  onClose: () => void;
+}> = ({ task, error, theme, onConfirm, onClose }) => {
+  const { colors } = theme;
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  useInput((input, key) => {
+    if (isDeleting) return; // Ignore input while deleting
+
+    // ESC always closes (both error and confirmation modes)
+    if (key.escape) {
+      onClose();
+      return;
+    }
+
+    if (error) {
+      // Error mode: only ESC closes (no other keys needed)
+      return;
+    }
+
+    // Confirmation mode (task is draft)
+    if (input === 'y' || input === 'Y') {
+      setIsDeleting(true);
+      onConfirm().catch(() => {
+        setIsDeleting(false);
+      });
+    } else if (input === 'n' || input === 'N') {
+      onClose();
+    }
+  });
+
+  return (
+    <Box flexDirection="column" padding={1}>
+      <Text bold color={colors.headerPrimary}>
+        {error ? '❌ Cannot Delete Task' : '🗑️  Confirm Task Deletion'}
+      </Text>
+      <Text>{' '}</Text>
+
+      {error ? (
+        // Error mode - cannot delete
+        <>
+          <Text color={colors.muted}>Task: <Text bold>{task.title}</Text></Text>
+          <Text color={colors.muted}>Status: <Text bold color={colors.headerPrimary}>{task.status}</Text></Text>
+          <Text>{' '}</Text>
+          <Text color={colors.magenta}>{error}</Text>
+          <Text>{' '}</Text>
+          <Text dimColor>Press ESC to close</Text>
+        </>
+      ) : isDeleting ? (
+        // Deleting in progress
+        <>
+          <Text color={colors.muted}>Deleting task <Text bold>{task.title}</Text>...</Text>
+        </>
+      ) : (
+        // Confirmation mode
+        <>
+          <Text color={colors.muted}>Task: <Text bold>{task.title}</Text></Text>
+          <Text color={colors.muted}>Status: <Text bold color={colors.controlPrimary}>{task.status}</Text></Text>
+          <Text>{' '}</Text>
+          <Text color={colors.headerPrimary}>⚠️  This action will permanently delete this draft task.</Text>
+          <Text>{' '}</Text>
+          <Text bold>Are you sure you want to delete this task?</Text>
+          <Text>{' '}</Text>
+          <Text dimColor>y: Yes, delete   n: No, cancel</Text>
+        </>
+      )}
     </Box>
   );
 };

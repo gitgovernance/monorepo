@@ -24,7 +24,12 @@ describe('TaskCommand - Complete Unit Tests', () => {
     submitTask: jest.MockedFunction<(taskId: string, actorId: string) => Promise<Records.TaskRecord>>;
     approveTask: jest.MockedFunction<(taskId: string, actorId: string) => Promise<Records.TaskRecord>>;
     updateTask: jest.MockedFunction<(taskId: string, payload: Partial<Records.TaskRecord>) => Promise<Records.TaskRecord>>;
+    pauseTask: jest.MockedFunction<(taskId: string, actorId: string, reason?: string) => Promise<Records.TaskRecord>>;
     resumeTask: jest.MockedFunction<(taskId: string, actorId: string, force?: boolean) => Promise<Records.TaskRecord>>;
+    deleteTask: jest.MockedFunction<(taskId: string, actorId: string) => Promise<void>>;
+    discardTask: jest.MockedFunction<(taskId: string, actorId: string, reason?: string) => Promise<Records.TaskRecord>>;
+    activateTask: jest.MockedFunction<(taskId: string, actorId: string) => Promise<Records.TaskRecord>>;
+    completeTask: jest.MockedFunction<(taskId: string, actorId: string) => Promise<Records.TaskRecord>>;
   };
   let mockIndexerAdapter: {
     isIndexUpToDate: jest.MockedFunction<() => Promise<boolean>>;
@@ -72,7 +77,11 @@ describe('TaskCommand - Complete Unit Tests', () => {
       approveTask: jest.fn(),
       updateTask: jest.fn(),
       pauseTask: jest.fn(),
-      resumeTask: jest.fn()
+      resumeTask: jest.fn(),
+      deleteTask: jest.fn(),
+      discardTask: jest.fn(),
+      activateTask: jest.fn(),
+      completeTask: jest.fn()
     };
 
     mockIndexerAdapter = {
@@ -416,6 +425,71 @@ describe('TaskCommand - Complete Unit Tests', () => {
       expect(mockBacklogAdapter.resumeTask).toHaveBeenCalledWith('1757789000-task-test-task', 'human:test-user', true);
       const forceLog = mockConsoleLog.mock.calls.find(call => typeof call[0] === 'string' && call[0].includes('Resumed by'));
       expect(forceLog?.[0]).toContain('[force]');
+    });
+  });
+
+  describe('Delete Command & Educational Errors (EARS 10A, 32-35)', () => {
+    it('[EARS-10A] should delegate to deleteTask() for draft task deletion', async () => {
+      mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
+      mockBacklogAdapter.deleteTask.mockResolvedValue();
+      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+
+      await taskCommand.executeDelete('1757789000-task-test-task', {});
+
+      expect(mockBacklogAdapter.deleteTask).toHaveBeenCalledWith('1757789000-task-test-task', 'human:test-user');
+      expect(mockIndexerAdapter.invalidateCache).toHaveBeenCalled();
+      expect(mockConsoleLog).toHaveBeenCalledWith('🗑️  Task deleted: 1757789000-task-test-task');
+    });
+
+    it('[EARS-32] should delete draft task file directly without discarded state', async () => {
+      mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
+      mockBacklogAdapter.deleteTask.mockResolvedValue();
+      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+
+      await taskCommand.executeDelete('1757789000-task-test-task', {});
+
+      expect(mockBacklogAdapter.deleteTask).toHaveBeenCalledWith('1757789000-task-test-task', 'human:test-user');
+      expect(mockConsoleLog).toHaveBeenCalledWith('📊 Status: draft → deleted');
+    });
+
+    it('[EARS-33] should show educational error when deleting non-draft task', async () => {
+      const error = new Error("ProtocolViolationError: Cannot delete task in 'review' state. Use 'gitgov task reject 1757789000-task-test-task' to discard tasks under review.");
+
+      mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
+      mockBacklogAdapter.deleteTask.mockRejectedValue(error);
+
+      await taskCommand.executeDelete('1757789000-task-test-task', {});
+
+      expect(mockConsoleError).toHaveBeenCalledWith(expect.stringContaining("Cannot delete task in 'review' state"));
+      expect(mockConsoleError).toHaveBeenCalledWith(expect.stringContaining('gitgov task reject'));
+      expect(mockProcessExit).toHaveBeenCalledWith(1);
+    });
+
+    it('[EARS-34] should show educational error when cancelling draft task', async () => {
+      const error = new Error("ProtocolViolationError: Cannot cancel task in 'draft' state. Use 'gitgov task delete 1757789000-task-test-task' to remove draft tasks.");
+
+      mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
+      mockBacklogAdapter.discardTask.mockRejectedValue(error);
+
+      await taskCommand.executeCancel('1757789000-task-test-task', {});
+
+      expect(mockConsoleError).toHaveBeenCalledWith(expect.stringContaining("Cannot cancel task in 'draft' state"));
+      expect(mockConsoleError).toHaveBeenCalledWith(expect.stringContaining('gitgov task delete'));
+      expect(mockProcessExit).toHaveBeenCalledWith(1);
+    });
+
+    it('[EARS-35] should provide educational message for incorrect discard command', async () => {
+      // Test delete on ready task (should suggest cancel)
+      const deleteError = new Error("ProtocolViolationError: Cannot delete task in 'ready' state. Use 'gitgov task cancel 1757789000-task-test-task' to discard tasks from ready/active states.");
+
+      mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
+      mockBacklogAdapter.deleteTask.mockRejectedValue(deleteError);
+
+      await taskCommand.executeDelete('1757789000-task-test-task', {});
+
+      expect(mockConsoleError).toHaveBeenCalledWith(expect.stringContaining("Cannot delete task in 'ready' state"));
+      expect(mockConsoleError).toHaveBeenCalledWith(expect.stringContaining('gitgov task cancel'));
+      expect(mockProcessExit).toHaveBeenCalledWith(1);
     });
   });
 

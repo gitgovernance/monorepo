@@ -118,6 +118,12 @@ export interface TaskCompleteOptions {
   quiet?: boolean;
 }
 
+export interface TaskDeleteOptions {
+  json?: boolean;
+  verbose?: boolean;
+  quiet?: boolean;
+}
+
 /**
  * TaskCommand - Core Operational Interface
  * 
@@ -151,7 +157,7 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
    * Execute main task command (show help)
    */
   async execute(options: BaseCommandOptions): Promise<void> {
-    this.handleError('Task command requires a subcommand. Use: new, list, show, submit, approve, activate, pause, resume, complete, cancel, reject, assign, edit, promote', options);
+    this.handleError('Task command requires a subcommand. Use: new, list, show, submit, approve, activate, pause, resume, complete, cancel, reject, delete, assign, edit, promote', options);
   }
 
   /**
@@ -250,6 +256,15 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
         await this.executeReject(args[0], options);
         break;
 
+      case 'delete':
+      case 'del':
+        if (!args[0]) {
+          this.handleError('Task ID is required for delete command', options);
+          return;
+        }
+        await this.executeDelete(args[0], options);
+        break;
+
       case 'assign':
         if (!args[0]) {
           this.handleError('Task ID is required for assign command', options);
@@ -280,7 +295,7 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
         break;
 
       default:
-        this.handleError(`Unknown subcommand: ${subcommand}. Use: new, list, show, submit, approve, activate, pause, resume, complete, cancel, reject, assign, edit, promote`, options);
+        this.handleError(`Unknown subcommand: ${subcommand}. Use: new, list, show, submit, approve, activate, pause, resume, complete, cancel, reject, delete, assign, edit, promote`, options);
     }
   }
 
@@ -804,6 +819,45 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
         if (options.reason) {
           console.log(`📝 Reason: ${options.reason}`);
         }
+      }
+
+    } catch (error) {
+      this.handleTaskError(error, options);
+    }
+  }
+
+  /**
+   * Deletes a draft task completely (no discarded state)
+   */
+  async executeDelete(taskId: string, options: TaskDeleteOptions): Promise<void> {
+    try {
+      // 1. Get dependencies
+      const backlogAdapter = await this.dependencyService.getBacklogAdapter();
+      const indexerAdapter = await this.dependencyService.getIndexerAdapter();
+
+      // 2. Get current actor
+      const identityAdapter = await this.dependencyService.getIdentityAdapter();
+      const currentActor = await identityAdapter.getCurrentActor();
+      const actorId = currentActor.id;
+
+      // 3. Delegate to BacklogAdapter
+      await backlogAdapter.deleteTask(taskId, actorId);
+
+      // 4. Cache invalidation
+      await indexerAdapter.invalidateCache();
+
+      // 5. Output feedback
+      if (options.json) {
+        console.log(JSON.stringify({
+          success: true,
+          taskId: taskId,
+          deletedBy: actorId,
+          message: 'Draft task deleted successfully'
+        }, null, 2));
+      } else {
+        console.log(`🗑️  Task deleted: ${taskId}`);
+        console.log(`📊 Status: draft → deleted`);
+        console.log(`✍️  Deleted by: ${currentActor.displayName} (${actorId})`);
       }
 
     } catch (error) {
