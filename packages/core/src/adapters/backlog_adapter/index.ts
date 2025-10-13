@@ -74,7 +74,8 @@ export interface IBacklogAdapter {
   completeTask(taskId: string, actorId: string): Promise<TaskRecord>;
   pauseTask(taskId: string, actorId: string, reason?: string): Promise<TaskRecord>;
   resumeTask(taskId: string, actorId: string, force?: boolean): Promise<TaskRecord>;
-  discardTask(taskId: string, actorId: string, reason?: string): Promise<TaskRecord>
+  discardTask(taskId: string, actorId: string, reason?: string): Promise<TaskRecord>;
+  deleteTask(taskId: string, actorId: string): Promise<void>;
 
   createCycle(payload: Partial<CycleRecord>, actorId: string): Promise<CycleRecord>;
   getCycle(cycleId: string): Promise<CycleRecord | null>;
@@ -649,8 +650,12 @@ export class BacklogAdapter implements IBacklogAdapter {
     const task = taskRecord.payload;
     const actor = await this.getActor(actorId);
 
-    // 2. Validate current status allows cancellation/rejection
+    // 2. Validate current status allows cancellation/rejection with educational error messages
     if (!['ready', 'active', 'review'].includes(task.status)) {
+      // Educational error messages for semantic clarity
+      if (task.status === 'draft') {
+        throw new Error(`ProtocolViolationError: Cannot cancel task in 'draft' state. Use 'gitgov task delete ${taskId}' to remove draft tasks.`);
+      }
       throw new Error(`ProtocolViolationError: Task is in '${task.status}' state. Cannot cancel from this state. Only 'ready', 'active', and 'review' tasks can be cancelled.`);
     }
 
@@ -697,6 +702,51 @@ export class BacklogAdapter implements IBacklogAdapter {
     } as TaskStatusChangedEvent);
 
     return updatedPayload;
+  }
+
+  /**
+   * Deletes a draft task completely (no discarded state)
+   * Only works for tasks in 'draft' status that never entered formal workflow
+   */
+  async deleteTask(taskId: string, actorId: string): Promise<void> {
+    // 1. Read and validate task exists
+    const taskRecord = await this.taskStore.read(taskId);
+    if (!taskRecord) {
+      throw new Error(`RecordNotFoundError: Task not found: ${taskId}`);
+    }
+
+    const task = taskRecord.payload;
+
+    // 2. Validate current status is 'draft' with educational error messages
+    if (task.status !== 'draft') {
+      // Educational error messages for semantic clarity
+      if (task.status === 'review') {
+        throw new Error(`ProtocolViolationError: Cannot delete task in 'review' state. Use 'gitgov task reject ${taskId}' to discard tasks under review.`);
+      } else if (task.status === 'ready' || task.status === 'active') {
+        throw new Error(`ProtocolViolationError: Cannot delete task in '${task.status}' state. Use 'gitgov task cancel ${taskId}' to discard tasks from ready/active states.`);
+      }
+      throw new Error(`ProtocolViolationError: Cannot delete task in '${task.status}' state. Only draft tasks can be deleted.`);
+    }
+
+    // 3. Validate actor has permission (simplified for MVP - in production would check permissions)
+    await this.getActor(actorId);
+
+    // 4. Delete the task file directly (no discarded state needed for draft)
+    await this.taskStore.delete(taskId);
+
+    // 5. Emit task deleted event (not a status change since it's being removed)
+    this.eventBus.publish({
+      type: 'task.status.changed',
+      timestamp: Date.now(),
+      source: 'backlog_adapter',
+      payload: {
+        taskId,
+        oldStatus: 'draft',
+        newStatus: 'deleted',
+        actorId,
+        reason: 'Draft task deleted'
+      }
+    } as TaskStatusChangedEvent);
   }
 
   /**
