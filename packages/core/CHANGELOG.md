@@ -1,3 +1,11 @@
+## [1.2.0](https://github.com/gitgovernance/monorepo/compare/core-v1.1.0...core-v1.2.0) (2025-10-13)
+
+
+### ✨ Features
+
+* **cli:** add task pause and resume commands ([#32](https://github.com/gitgovernance/monorepo/issues/32)) ([181485e](https://github.com/gitgovernance/monorepo/commit/181485eadb1b8dcb9f8fb96c62cb98cd227afc92)), closes [#1758587001](https://github.com/gitgovernance/monorepo/issues/1758587001) [#1758587002](https://github.com/gitgovernance/monorepo/issues/1758587002)
+* **core:** add deleteTask for draft tasks with educational errors ([#33](https://github.com/gitgovernance/monorepo/issues/33)) ([e70ccd4](https://github.com/gitgovernance/monorepo/commit/e70ccd474d4d876922a26a0ef8b7bf8860246576)), closes [#1760017977](https://github.com/gitgovernance/monorepo/issues/1760017977)
+
 ## [1.1.0](https://github.com/gitgovernance/monorepo/compare/core-v1.0.2...core-v1.1.0) (2025-10-09)
 
 
