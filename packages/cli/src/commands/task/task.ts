@@ -12,6 +12,7 @@ import type {
   TaskCompleteOptions,
   TaskCancelOptions,
   TaskRejectOptions,
+  TaskDeleteOptions,
   TaskAssignOptions,
   TaskEditOptions,
   TaskPromoteOptions
@@ -37,9 +38,10 @@ TASK WORKFLOW (GitGovernance Default Methodology):
   Step 4: Start work      → gitgov task activate <taskId> (auto-assigns if unassigned)
   Step 5: Complete        → gitgov task complete <taskId>
 
-REJECTION/CANCELLATION PATHS (Future):
-  review → discarded      → gitgov task reject <taskId> (not implemented yet)
-  ready/active → discarded → gitgov task cancel <taskId> (not implemented yet)
+REJECTION/CANCELLATION/DELETION PATHS:
+  draft → deleted         → gitgov task delete <taskId>
+  review → discarded      → gitgov task reject <taskId>
+  ready/active → discarded → gitgov task cancel <taskId>
 
 STATUS MEANINGS:
   draft     - Planning: Define requirements, write specs
@@ -48,7 +50,8 @@ STATUS MEANINGS:
   active    - Working: Currently being implemented
   done      - Complete: Implementation finished
   archived  - Final: Task completed and documented
-  discarded - Cancelled: Task rejected or cancelled
+  discarded - Cancelled: Task rejected or cancelled (formal workflow)
+  deleted   - Removed: Draft task removed (never entered workflow)
 
 ASSIGNMENT (Flexible - Any Status):
   Manual Assignment:      gitgov task assign <taskId> --to human:developer
@@ -61,6 +64,7 @@ COMMON SCENARIOS:
   ⚡ Start work:          gitgov task activate <taskId>
   ✅ Complete:            gitgov task complete <taskId>
   👥 Assign:              gitgov task assign <taskId> --to human:dev
+  🗑️  Delete draft:       gitgov task delete <taskId>
   📊 View status:         gitgov status
 
 EXAMPLES:
@@ -224,6 +228,17 @@ EXAMPLES:
       await taskCommand.executeReject(taskId, options);
     });
 
+  // gitgov task delete
+  task
+    .command('delete <taskId>')
+    .description('Delete draft TaskRecord completely (no discarded state)')
+    .alias('del')
+    .option('--json', 'Output in JSON format')
+    .option('-v, --verbose', 'Show deletion process details')
+    .option('-q, --quiet', 'Minimal output for scripting')
+    .action(async (taskId: string, options: TaskDeleteOptions) => {
+      await taskCommand.executeDelete(taskId, options);
+    });
 
   // gitgov task assign
   task
