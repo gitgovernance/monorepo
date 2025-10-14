@@ -1,3 +1,10 @@
+## [1.6.1](https://github.com/gitgovernance/monorepo/compare/cli-v1.6.0...cli-v1.6.1) (2025-10-14)
+
+
+### 🐛 Bug Fixes
+
+* **cli:** translate status command output to English ([#35](https://github.com/gitgovernance/monorepo/issues/35)) ([626884e](https://github.com/gitgovernance/monorepo/commit/626884ef5c2fbb1f4da2419322ff96c7c4b36959)), closes [#1758572792](https://github.com/gitgovernance/monorepo/issues/1758572792)
+
 ## [1.6.0](https://github.com/gitgovernance/monorepo/compare/cli-v1.5.0...cli-v1.6.0) (2025-10-13)
 
 
