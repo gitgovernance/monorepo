@@ -1,3 +1,11 @@
+## [1.6.2](https://github.com/gitgovernance/monorepo/compare/cli-v1.6.1...cli-v1.6.2) (2025-10-14)
+
+
+### 🐛 Bug Fixes
+
+* **cicd:** run tests before semantic-release to prevent faulty publishes ([f2f04d4](https://github.com/gitgovernance/monorepo/commit/f2f04d46d235d2a8dff6d4d6f1a0c719d90f8866))
+* **cli:** use compiled CLI instead of tsx in E2E tests ([7259b96](https://github.com/gitgovernance/monorepo/commit/7259b96b6561c931d5e6c43ac59ed6e1632e1f0a))
+
 ## [1.6.1](https://github.com/gitgovernance/monorepo/compare/cli-v1.6.0...cli-v1.6.1) (2025-10-14)
 
 
