@@ -213,7 +213,7 @@ describe('StatusCommand - Complete Unit Tests', () => {
       expect(mockIdentityAdapter.getCurrentActor).toHaveBeenCalled();
       expect(mockBacklogAdapter.getTasksAssignedToActor).toHaveBeenCalledWith('human:test-user');
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('👤 Actor: Test User'));
-      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('✅ Mi Trabajo (1 tasks)'));
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('✅ My Work (1 tasks)'));
     });
 
     it('[EARS-2] should execute global dashboard with --all flag', async () => {
@@ -342,7 +342,7 @@ describe('StatusCommand - Complete Unit Tests', () => {
       await statusCommand.execute({});
 
       expect(mockBacklogAdapter.getTasksAssignedToActor).toHaveBeenCalledWith('human:test-user');
-      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('✅ Mi Trabajo (1 tasks)'));
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('✅ My Work (1 tasks)'));
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('Test Task'));
     });
 
@@ -350,14 +350,14 @@ describe('StatusCommand - Complete Unit Tests', () => {
       await statusCommand.execute({});
 
       expect(mockFeedbackAdapter.getAllFeedback).toHaveBeenCalled();
-      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('❗️ Feedback Pendiente (1)'));
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('❗️ Pending Feedback (1)'));
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('Test blocking feedback'));
     });
 
     it('[EARS-14] should show active cycles with --cycles flag', async () => {
       await statusCommand.execute({ cycles: true });
 
-      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('🚀 Cycles Activos (1)'));
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('🚀 Active Cycles (1)'));
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('Test Cycle'));
     });
   });
@@ -493,7 +493,7 @@ describe('StatusCommand - Complete Unit Tests', () => {
       expect(mockIdentityAdapter.getCurrentActor).toHaveBeenCalled();
       expect(mockBacklogAdapter.getTasksAssignedToActor).toHaveBeenCalled();
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('👤 Actor: Test User'));
-      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('✅ Mi Trabajo'));
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('✅ My Work'));
     });
 
     it('[EARS-27] should maintain data consistency across adapters', async () => {
