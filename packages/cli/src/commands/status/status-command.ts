@@ -335,7 +335,7 @@ export class StatusCommand {
     console.log('');
 
     // My Work section
-    console.log(`✅ Mi Trabajo (${personalWork.assignedTasks.length} tasks)`);
+    console.log(`✅ My Work (${personalWork.assignedTasks.length} tasks)`);
     if (personalWork.assignedTasks.length > 0) {
       personalWork.assignedTasks.forEach(task => {
         const statusIcon = this.getStatusIcon(task.status);
@@ -352,7 +352,7 @@ export class StatusCommand {
 
     // Pending Feedback section
     if (personalWork.pendingFeedback.length > 0) {
-      console.log(`❗️ Feedback Pendiente (${personalWork.pendingFeedback.length})`);
+      console.log(`❗️ Pending Feedback (${personalWork.pendingFeedback.length})`);
       personalWork.pendingFeedback.forEach(feedback => {
         const typeIcon = feedback.type === 'blocking' ? '🔴' : feedback.type === 'question' ? '🟡' : '🔵';
         console.log(`  ${typeIcon} [${feedback.type}] ${feedback.id} - ${feedback.content}`);
@@ -362,7 +362,7 @@ export class StatusCommand {
 
     // Active Cycles section
     if (personalWork.activeCycles.length > 0 && (options.cycles || options.verbose)) {
-      console.log(`🚀 Cycles Activos (${personalWork.activeCycles.length})`);
+      console.log(`🚀 Active Cycles (${personalWork.activeCycles.length})`);
       personalWork.activeCycles.forEach(cycle => {
         const taskCount = cycle.taskIds?.length || 0;
         console.log(`  📊 ${cycle.title}: ${taskCount} tasks - Status: ${cycle.status}`);
