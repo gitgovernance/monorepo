@@ -62,13 +62,10 @@ jobs:
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      # TODO: Re-enable tests once core workspace dependency is resolved
-      # Tests currently fail because they expect @gitgov/core from workspace
-      # but CI doesn't have blueprints/ needed to build core locally
-      # - name: Run Tests
-      #   run: |
-      #     cd packages/cli
-      #     pnpm test
+      - name: Run Tests
+        run: |
+          cd packages/cli
+          pnpm test
 
       - name: Semantic Release
         env:
@@ -82,7 +79,7 @@ jobs:
         if: success()
         run: |
           cd packages/cli
-          pnpm build:npm
+          ./scripts/build-npm.sh --skip-tests
 
       - name: Get Version
         id: version
