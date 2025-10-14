@@ -129,8 +129,9 @@ describe('CLI Diagram Command - Functional Tests', () => {
   // Helper function to execute CLI command
   const runCliCommand = (args: string[], options: { expectError?: boolean; cwd?: string } = {}) => {
     // Path to schemas (Jest runs in CommonJS mode)
-    const cliPath = path.join(__dirname, '../src/index.ts');
-    const command = `npx tsx "${cliPath}" ${args.join(' ')}`;
+    // Use compiled CLI instead of tsx for reliability in CI
+    const cliPath = path.join(__dirname, '../build/dist/gitgov.mjs');
+    const command = `node "${cliPath}" ${args.join(' ')}`;
     const workingDir = options.cwd || testProjectRoot;
 
     try {
