@@ -1,3 +1,19 @@
+## [1.3.0](https://github.com/gitgovernance/monorepo/compare/core-v1.2.0...core-v1.3.0) (2025-10-15)
+
+
+### ✨ Features
+
+* **cli/task:** implement long description support with --description-file flag ([#36](https://github.com/gitgovernance/monorepo/issues/36)) ([dd46f82](https://github.com/gitgovernance/monorepo/commit/dd46f82f7918fd93e624fb2363eb44008663330d))
+* **cli:** add task delete command with interactive dashboard modal ([#34](https://github.com/gitgovernance/monorepo/issues/34)) ([f43f8a0](https://github.com/gitgovernance/monorepo/commit/f43f8a0e3e28dc63b699bd81f2bab9987cff062a)), closes [#1760017977](https://github.com/gitgovernance/monorepo/issues/1760017977)
+
+
+### 🐛 Bug Fixes
+
+* **cicd:** run tests before semantic-release to prevent faulty publishes ([f2f04d4](https://github.com/gitgovernance/monorepo/commit/f2f04d46d235d2a8dff6d4d6f1a0c719d90f8866))
+* **cli:** translate status command output to English ([#35](https://github.com/gitgovernance/monorepo/issues/35)) ([626884e](https://github.com/gitgovernance/monorepo/commit/626884ef5c2fbb1f4da2419322ff96c7c4b36959)), closes [#1758572792](https://github.com/gitgovernance/monorepo/issues/1758572792)
+* **cli:** use compiled CLI instead of tsx in E2E tests ([7259b96](https://github.com/gitgovernance/monorepo/commit/7259b96b6561c931d5e6c43ac59ed6e1632e1f0a))
+* **core:** resolve duplicate task display in personal status view ([#37](https://github.com/gitgovernance/monorepo/issues/37)) ([b1bb3b4](https://github.com/gitgovernance/monorepo/commit/b1bb3b430fc8ba074ce174db3ac28c0f759d6047)), closes [#1758573347](https://github.com/gitgovernance/monorepo/issues/1758573347)
+
 ## [1.2.0](https://github.com/gitgovernance/monorepo/compare/core-v1.1.0...core-v1.2.0) (2025-10-13)
 
 
