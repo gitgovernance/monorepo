@@ -10,14 +10,20 @@
 
 This example shows how to create a new task using the `BacklogAdapter`. The SDK uses dependency injection - each adapter requires its dependencies to be explicitly provided.
 
-*Note: This example assumes it is run inside an initialized GitGovernance project.*
+_Note: This example assumes it is run inside an initialized GitGovernance project._
 
 ```typescript
 import { Adapters, Store, EventBus } from "@gitgov/core";
-import type { TaskRecord, CycleRecord, ActorRecord, AgentRecord } from "@gitgov/core";
+import type {
+  TaskRecord,
+  CycleRecord,
+  ActorRecord,
+  AgentRecord,
+} from "@gitgov/core";
 
 // Extract classes from namespaces
-const { IdentityAdapter, BacklogAdapter, WorkflowMethodologyAdapter } = Adapters;
+const { IdentityAdapter, BacklogAdapter, WorkflowMethodologyAdapter } =
+  Adapters;
 const { RecordStore } = Store;
 const { EventBus: EventBusClass } = EventBus;
 
@@ -97,11 +103,11 @@ console.log({
 ### Adapter Ecosystem (9/9 Adapters)
 
 - **ProjectAdapter**: Project initialization engine with 3-adapter orchestration (18 tests)
-- **BacklogAdapter**: Task and cycle lifecycle management with workflow validation (43 tests)
+- **BacklogAdapter**: Task and cycle lifecycle management with workflow validation (71 tests)
 - **MetricsAdapter**: Pure calculation engine for system analytics (32 tests)
 - **ChangelogAdapter**: System historian for change documentation (31 tests)
 - **ExecutionAdapter**: Audit log for work execution (13 tests)
-- **FeedbackAdapter**: Structured communication and blocking management (15 tests)
+- **FeedbackAdapter**: Structured communication and blocking management (21 tests)
 - **IdentityAdapter**: Cryptographic identity and agent management (25 tests)
 - **WorkflowMethodologyAdapter**: Configurable workflow validation engine (51 tests)
 - **IndexerAdapter**: Local cache optimization for performance (5 tests)
@@ -229,7 +235,7 @@ const generator = new DiagramGenerator();
 // Generate Mermaid diagrams from GitGovernance records
 const result = await generator.generateFromRecords(cycles, tasks, {
   cycleId: "1704067200-cycle-identity-adapter",
-  layout: 'TD',
+  layout: "TD",
   showWarnings: true,
 });
 
@@ -240,7 +246,7 @@ console.log(result.mermaidCode);
 ## 🧪 Testing & Development
 
 ```bash
-# Run all tests (704 tests total)
+# Run all tests (737 tests total)
 npm test
 npm run test:coverage    # Run tests with coverage report
 
@@ -266,13 +272,13 @@ npm test -- --watch
 
 ### Test Coverage
 
-- **704 tests total** with EARS methodology
+- **737 tests total** with EARS methodology
 - **ProjectAdapter**: 18 tests (project initialization + template processing + error recovery)
-- **BacklogAdapter**: 43 tests (workflow lifecycle + event handlers + E2E simulation)
+- **BacklogAdapter**: 71 tests (workflow lifecycle + event handlers + E2E simulation + deduplication)
 - **MetricsAdapter**: 32 tests (Tier 1+2 calculations + performance validation)
 - **ChangelogAdapter**: 31 tests (multi-entity changelog + conditional validation)
 - **EventBusModule**: 32 tests (20 unit + 12 integration tests with cross-adapter scenarios)
-- **FeedbackAdapter**: 15 tests (EARS coverage with dual event emission)
+- **FeedbackAdapter**: 21 tests (EARS coverage with dual event emission + duplicate assignment prevention)
 - **ExecutionAdapter**: 13 tests (EARS coverage with performance validation)
 - **WorkflowMethodologyAdapter**: 51 tests (29 unit + 22 integration tests)
 - **Identity Domain**: 66 tests (Adapter + ActorRecord/AgentRecord factories & validators)
