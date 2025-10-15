@@ -8,6 +8,8 @@ import type { BaseCommandOptions } from '../../interfaces/command';
  */
 export interface TaskNewOptions extends BaseCommandOptions {
   description?: string;
+  descriptionFile?: string;
+  cleanupFile?: boolean;
   priority?: 'low' | 'medium' | 'high' | 'critical';
   cycleIds?: string;
   tags?: string;
@@ -313,10 +315,27 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
         throw new Error("❌ Task title cannot be empty");
       }
 
-      // 3. Build payload (BacklogAdapter will use task_factory internally)
+      // 3. Validate --cleanup-file usage
+      if (options.cleanupFile && !options.descriptionFile) {
+        throw new Error("❌ --cleanup-file requires --description-file to be specified");
+      }
+
+      // 4. Resolve description from multiple sources (priority: file > inline > editor)
+      let description: string;
+      let descriptionFilePath: string | undefined;
+      if (options.descriptionFile) {
+        descriptionFilePath = options.descriptionFile;
+        description = await this.readDescriptionFromFile(descriptionFilePath);
+      } else if (options.description) {
+        description = options.description;
+      } else {
+        description = await this.openEditor(title);
+      }
+
+      // 4. Build payload (BacklogAdapter will use task_factory internally)
       const payload: Partial<Records.TaskRecord> = {
         title: title.trim(),
-        description: options.description || await this.openEditor(title),
+        description,
         priority: options.priority || 'medium',
         tags: options.tags ? options.tags.split(',').map(t => t.trim()) : [],
         references: options.references ? options.references.split(',').map(r => r.trim()) : []
@@ -338,10 +357,15 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
         }
       }
 
-      // 7. Cache invalidation
+      // 7. Cleanup description file if requested
+      if (options.cleanupFile && descriptionFilePath) {
+        await this.cleanupDescriptionFile(descriptionFilePath, options);
+      }
+
+      // 8. Cache invalidation
       await indexerAdapter.invalidateCache();
 
-      // 8. Output feedback
+      // 9. Output feedback
       if (options.json) {
         console.log(JSON.stringify({
           success: true,
@@ -1065,6 +1089,71 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
   private async openEditor(title: string): Promise<string> {
     // Simplified implementation - would open $EDITOR in real implementation
     return `Description for: ${title}`;
+  }
+
+  /**
+   * Reads description from a file
+   */
+  private async readDescriptionFromFile(filePath: string): Promise<string> {
+    try {
+      const fs = await import('fs/promises');
+      const path = await import('path');
+
+      // Resolve path (handle relative paths)
+      const resolvedPath = path.isAbsolute(filePath)
+        ? filePath
+        : path.resolve(process.cwd(), filePath);
+
+      // Read file content
+      const content = await fs.readFile(resolvedPath, 'utf-8');
+
+      if (!content || content.trim().length === 0) {
+        throw new Error(`❌ Description file is empty: ${filePath}`);
+      }
+
+      return content.trim();
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message.includes('ENOENT')) {
+          throw new Error(`❌ Description file not found: ${filePath}`);
+        }
+        if (error.message.includes('EACCES')) {
+          throw new Error(`❌ Permission denied reading file: ${filePath}`);
+        }
+        throw error;
+      }
+      throw new Error(`❌ Failed to read description file: ${filePath}`);
+    }
+  }
+
+  /**
+   * Cleans up description file after task creation
+   */
+  private async cleanupDescriptionFile(filePath: string, options: BaseCommandOptions): Promise<void> {
+    try {
+      const fs = await import('fs/promises');
+      const path = await import('path');
+
+      // Resolve path
+      const resolvedPath = path.isAbsolute(filePath)
+        ? filePath
+        : path.resolve(process.cwd(), filePath);
+
+      // Delete the file
+      await fs.unlink(resolvedPath);
+
+      if (options.verbose) {
+        console.log(`🗑️  Cleaned up description file: ${filePath}`);
+      }
+    } catch (error) {
+      // Non-critical error - task was already created successfully
+      if (!options.quiet) {
+        console.warn(`⚠️  Could not cleanup description file: ${filePath}`);
+        if (options.verbose && error instanceof Error) {
+          console.warn(`   ${error.message}`);
+        }
+      }
+    }
   }
 
   /**

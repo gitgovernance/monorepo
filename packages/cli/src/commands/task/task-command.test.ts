@@ -141,6 +141,281 @@ describe('TaskCommand - Complete Unit Tests', () => {
       expect(mockConsoleLog).toHaveBeenCalledWith('✅ Task created: 1757789000-task-test-task');
     });
 
+    it('[EARS-1A] should create task with description from file using --description-file', async () => {
+      const fs = require('fs/promises');
+      const path = require('path');
+
+      // Mock file reading
+      const mockFileContent = `# Test Task
+
+## Problem
+This is a long description with proper markdown formatting.
+
+## Solution
+The solution involves multiple steps...`;
+
+      jest.spyOn(fs, 'readFile').mockResolvedValue(mockFileContent);
+      jest.spyOn(path, 'isAbsolute').mockReturnValue(false);
+      jest.spyOn(path, 'resolve').mockReturnValue('/mock/path/description.md');
+
+      mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
+      mockBacklogAdapter.createTask.mockResolvedValue(sampleTask);
+      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+
+      await taskCommand.executeNew('Test Task', { descriptionFile: 'description.md' });
+
+      expect(mockBacklogAdapter.createTask).toHaveBeenCalledWith({
+        title: 'Test Task',
+        description: mockFileContent,
+        priority: 'medium',
+        tags: [],
+        references: []
+      }, 'human:test-user');
+      expect(mockIndexerAdapter.invalidateCache).toHaveBeenCalled();
+      expect(mockConsoleLog).toHaveBeenCalledWith('✅ Task created: 1757789000-task-test-task');
+    });
+
+    it('[EARS-1B] should handle file not found error for --description-file', async () => {
+      const fs = require('fs/promises');
+      const path = require('path');
+
+      const mockError = new Error('ENOENT: no such file or directory');
+      (mockError as any).code = 'ENOENT';
+
+      jest.spyOn(fs, 'readFile').mockRejectedValue(mockError);
+      jest.spyOn(path, 'isAbsolute').mockReturnValue(false);
+      jest.spyOn(path, 'resolve').mockReturnValue('/mock/path/nonexistent.md');
+
+      mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
+
+      await taskCommand.executeNew('Test Task', { descriptionFile: 'nonexistent.md' });
+
+      expect(mockConsoleError).toHaveBeenCalledWith(expect.stringContaining('Description file not found'));
+      expect(mockProcessExit).toHaveBeenCalledWith(1);
+    });
+
+    it('[EARS-1C] should handle empty description file error', async () => {
+      const fs = require('fs/promises');
+      const path = require('path');
+
+      jest.spyOn(fs, 'readFile').mockResolvedValue('   \n\n   '); // Only whitespace
+      jest.spyOn(path, 'isAbsolute').mockReturnValue(false);
+      jest.spyOn(path, 'resolve').mockReturnValue('/mock/path/empty.md');
+
+      mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
+
+      await taskCommand.executeNew('Test Task', { descriptionFile: 'empty.md' });
+
+      expect(mockConsoleError).toHaveBeenCalledWith(expect.stringContaining('Description file is empty'));
+      expect(mockProcessExit).toHaveBeenCalledWith(1);
+    });
+
+    it('[EARS-1D] should handle permission denied error for --description-file', async () => {
+      const fs = require('fs/promises');
+      const path = require('path');
+
+      const mockError = new Error('EACCES: permission denied');
+      (mockError as any).code = 'EACCES';
+
+      jest.spyOn(fs, 'readFile').mockRejectedValue(mockError);
+      jest.spyOn(path, 'isAbsolute').mockReturnValue(false);
+      jest.spyOn(path, 'resolve').mockReturnValue('/mock/path/restricted.md');
+
+      mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
+
+      await taskCommand.executeNew('Test Task', { descriptionFile: 'restricted.md' });
+
+      expect(mockConsoleError).toHaveBeenCalledWith(expect.stringContaining('Permission denied reading file'));
+      expect(mockProcessExit).toHaveBeenCalledWith(1);
+    });
+
+    it('[EARS-1E] should resolve relative path for description file', async () => {
+      const fs = require('fs/promises');
+      const path = require('path');
+
+      const mockFileContent = '# Relative Path Test\n\nThis file uses a relative path.';
+      const relativePath = 'tasks/description.md';
+
+      jest.spyOn(fs, 'readFile').mockResolvedValue(mockFileContent);
+      jest.spyOn(path, 'isAbsolute').mockReturnValue(false);
+      jest.spyOn(path, 'resolve').mockReturnValue('/current/working/dir/tasks/description.md');
+
+      mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
+      mockBacklogAdapter.createTask.mockResolvedValue(sampleTask);
+      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+
+      await taskCommand.executeNew('Test Task', { descriptionFile: relativePath });
+
+      expect(path.resolve).toHaveBeenCalledWith(process.cwd(), relativePath);
+      expect(mockBacklogAdapter.createTask).toHaveBeenCalledWith({
+        title: 'Test Task',
+        description: mockFileContent,
+        priority: 'medium',
+        tags: [],
+        references: []
+      }, 'human:test-user');
+    });
+
+    it('[EARS-1F] should handle absolute paths for --description-file', async () => {
+      const fs = require('fs/promises');
+      const path = require('path');
+
+      const mockFileContent = '# Absolute Path Test\n\nThis file uses an absolute path.';
+      const absolutePath = '/tmp/absolute-test.md';
+
+      jest.spyOn(fs, 'readFile').mockResolvedValue(mockFileContent);
+      jest.spyOn(path, 'isAbsolute').mockReturnValue(true);
+
+      mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
+      mockBacklogAdapter.createTask.mockResolvedValue(sampleTask);
+      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+
+      await taskCommand.executeNew('Test Task', { descriptionFile: absolutePath });
+
+      expect(mockBacklogAdapter.createTask).toHaveBeenCalledWith({
+        title: 'Test Task',
+        description: mockFileContent,
+        priority: 'medium',
+        tags: [],
+        references: []
+      }, 'human:test-user');
+    });
+
+    it('[EARS-1G] should preserve special characters and markdown formatting', async () => {
+      const fs = require('fs/promises');
+      const path = require('path');
+
+      const complexMarkdown = `# Task with Special Characters
+
+## Code Block
+\`\`\`typescript
+const test = "value";
+\`\`\`
+
+## Lists
+- Backticks: \`code\`
+- Parentheses: (test)
+- Pipes: |column|
+- Asterisks: **bold**
+
+## Tables
+| Column | Value |
+|--------|-------|
+| A      | 1     |`;
+
+      jest.spyOn(fs, 'readFile').mockResolvedValue(complexMarkdown);
+      jest.spyOn(path, 'isAbsolute').mockReturnValue(false);
+      jest.spyOn(path, 'resolve').mockReturnValue('/mock/path/complex.md');
+
+      mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
+      mockBacklogAdapter.createTask.mockResolvedValue(sampleTask);
+      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+
+      await taskCommand.executeNew('Test Task', { descriptionFile: 'complex.md' });
+
+      expect(mockBacklogAdapter.createTask).toHaveBeenCalledWith({
+        title: 'Test Task',
+        description: complexMarkdown,
+        priority: 'medium',
+        tags: [],
+        references: []
+      }, 'human:test-user');
+    });
+
+    it('[EARS-1H] should validate --cleanup-file requires --description-file', async () => {
+      mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
+
+      await taskCommand.executeNew('Test Task', {
+        description: 'inline description',
+        cleanupFile: true // Invalid: no descriptionFile
+      });
+
+      expect(mockConsoleError).toHaveBeenCalledWith(expect.stringContaining('--cleanup-file requires --description-file'));
+      expect(mockProcessExit).toHaveBeenCalledWith(1);
+    });
+
+    it('[EARS-1I] should cleanup file after task creation with --cleanup-file', async () => {
+      const fs = require('fs/promises');
+      const path = require('path');
+
+      const mockFileContent = '# Test Cleanup\n\nThis file should be deleted.';
+
+      jest.spyOn(fs, 'readFile').mockResolvedValue(mockFileContent);
+      jest.spyOn(fs, 'unlink').mockResolvedValue(undefined);
+      jest.spyOn(path, 'isAbsolute').mockReturnValue(false);
+      jest.spyOn(path, 'resolve').mockReturnValue('/tmp/test-cleanup.md');
+
+      mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
+      mockBacklogAdapter.createTask.mockResolvedValue(sampleTask);
+      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+
+      await taskCommand.executeNew('Test Task', {
+        descriptionFile: '/tmp/test-cleanup.md',
+        cleanupFile: true,
+        verbose: true
+      });
+
+      expect(fs.unlink).toHaveBeenCalledWith('/tmp/test-cleanup.md');
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('Cleaned up description file'));
+      expect(mockBacklogAdapter.createTask).toHaveBeenCalled();
+    });
+
+    it('[EARS-1J] should handle cleanup failure gracefully without breaking task creation', async () => {
+      const fs = require('fs/promises');
+      const path = require('path');
+
+      const mockFileContent = '# Test Cleanup Failure\n\nCleanup will fail but task should be created.';
+      const cleanupError = new Error('EACCES: permission denied');
+
+      jest.spyOn(fs, 'readFile').mockResolvedValue(mockFileContent);
+      jest.spyOn(fs, 'unlink').mockRejectedValue(cleanupError);
+      jest.spyOn(path, 'isAbsolute').mockReturnValue(false);
+      jest.spyOn(path, 'resolve').mockReturnValue('/tmp/readonly.md');
+
+      mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
+      mockBacklogAdapter.createTask.mockResolvedValue(sampleTask);
+      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+
+      await taskCommand.executeNew('Test Task', {
+        descriptionFile: '/tmp/readonly.md',
+        cleanupFile: true
+      });
+
+      // Task should still be created
+      expect(mockBacklogAdapter.createTask).toHaveBeenCalled();
+      expect(mockConsoleLog).toHaveBeenCalledWith('✅ Task created: 1757789000-task-test-task');
+
+      // Warning about cleanup failure
+      expect(mockConsoleWarn).toHaveBeenCalledWith(expect.stringContaining('Could not cleanup description file'));
+    });
+
+    it('[EARS-1J] should handle cleanup failure gracefully and suppress warning in quiet mode', async () => {
+      const fs = require('fs/promises');
+      const path = require('path');
+
+      const mockFileContent = '# Test Quiet Mode\n\nCleanup fails but quiet mode suppresses warning.';
+      const cleanupError = new Error('EACCES: permission denied');
+
+      jest.spyOn(fs, 'readFile').mockResolvedValue(mockFileContent);
+      jest.spyOn(fs, 'unlink').mockRejectedValue(cleanupError);
+      jest.spyOn(path, 'isAbsolute').mockReturnValue(false);
+      jest.spyOn(path, 'resolve').mockReturnValue('/tmp/quiet-test.md');
+
+      mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
+      mockBacklogAdapter.createTask.mockResolvedValue(sampleTask);
+      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+
+      await taskCommand.executeNew('Test Task', {
+        descriptionFile: '/tmp/quiet-test.md',
+        cleanupFile: true,
+        quiet: true
+      });
+
+      // Task created but no warning shown
+      expect(mockBacklogAdapter.createTask).toHaveBeenCalled();
+      expect(mockConsoleWarn).not.toHaveBeenCalled();
+    });
+
     it('[EARS-2] should verify cache freshness and use IndexerAdapter for performance', async () => {
       mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(true);
       mockIndexerAdapter.getIndexData.mockResolvedValue({
