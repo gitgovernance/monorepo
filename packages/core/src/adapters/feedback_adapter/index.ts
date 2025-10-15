@@ -83,6 +83,21 @@ export class FeedbackAdapter implements IFeedbackAdapter {
       throw new Error('InvalidEntityTypeError: entityType must be task, execution, changelog, or feedback');
     }
 
+    // Validate no duplicate assignments: a task can be assigned to multiple actors,
+    // but the same task cannot have multiple open assignments to the same actor
+    if (payload.type === 'assignment' && payload.assignee) {
+      const existingFeedbacks = await this.getFeedbackByEntity(payloadWithEntityId.entityId);
+      const duplicateAssignment = existingFeedbacks.find(feedback =>
+        feedback.type === 'assignment' &&
+        feedback.assignee === payload.assignee &&
+        feedback.status === 'open'
+      );
+
+      if (duplicateAssignment) {
+        throw new Error(`DuplicateAssignmentError: Task ${payloadWithEntityId.entityId} is already assigned to ${payload.assignee} (feedback: ${duplicateAssignment.id})`);
+      }
+    }
+
     // Set default status to "open"
     const enrichedPayload = {
       ...payload,

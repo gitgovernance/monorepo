@@ -151,6 +151,151 @@ describe('FeedbackAdapter', () => {
       await expect(feedbackAdapter.create(invalidPayload, mockActorId))
         .rejects.toThrow('InvalidEntityTypeError: entityType must be task, execution, changelog, or feedback');
     });
+
+    it('[EARS-20] should prevent duplicate assignment to same actor', async () => {
+      const assignmentPayload = {
+        entityType: 'task' as const,
+        entityId: 'task-123',
+        type: 'assignment' as const,
+        assignee: 'human:developer',
+        content: 'Assign task to developer'
+      };
+
+      // Mock existing assignment feedback for same task and actor
+      const existingAssignment = createMockFeedbackRecord({
+        id: 'existing-assignment',
+        entityId: 'task-123',
+        type: 'assignment',
+        assignee: 'human:developer',
+        status: 'open'
+      });
+
+      mockFeedbackStore.list.mockResolvedValue(['existing-assignment']);
+      mockFeedbackStore.read.mockResolvedValue(existingAssignment);
+
+      await expect(feedbackAdapter.create(assignmentPayload, 'human:manager'))
+        .rejects.toThrow('DuplicateAssignmentError: Task task-123 is already assigned to human:developer (feedback: existing-assignment)');
+
+      // Ensure no side effects occurred
+      expect(mockFeedbackStore.write).not.toHaveBeenCalled();
+    });
+
+    it('[EARS-21] should allow assignment of same task to different actors', async () => {
+      const assignmentPayload = {
+        entityType: 'task' as const,
+        entityId: 'task-123',
+        type: 'assignment' as const,
+        assignee: 'human:developer-2',
+        content: 'Assign task to second developer'
+      };
+
+      // Mock existing assignment to a DIFFERENT actor
+      const existingAssignment = createMockFeedbackRecord({
+        id: 'existing-assignment',
+        entityId: 'task-123',
+        type: 'assignment',
+        assignee: 'human:developer-1',
+        status: 'open'
+      });
+
+      mockFeedbackStore.list.mockResolvedValue(['existing-assignment']);
+      mockFeedbackStore.read.mockResolvedValue(existingAssignment);
+
+      const newAssignment = {
+        id: 'new-assignment',
+        entityType: 'task' as const,
+        entityId: 'task-123',
+        type: 'assignment' as const,
+        assignee: 'human:developer-2',
+        content: 'Assign task to second developer',
+        status: 'open' as const
+      };
+
+      (createFeedbackRecord as jest.Mock).mockResolvedValue(newAssignment);
+      mockIdentityAdapter.signRecord.mockResolvedValue(createMockFeedbackRecord(newAssignment));
+
+      const result = await feedbackAdapter.create(assignmentPayload, 'human:manager');
+
+      expect(result).toEqual(newAssignment);
+      expect(mockFeedbackStore.write).toHaveBeenCalled();
+    });
+
+    it('[EARS-22] should allow new assignment if previous one is resolved', async () => {
+      const assignmentPayload = {
+        entityType: 'task' as const,
+        entityId: 'task-123',
+        type: 'assignment' as const,
+        assignee: 'human:developer',
+        content: 'Reassign task to developer'
+      };
+
+      // Mock existing assignment that is RESOLVED (not open)
+      const existingAssignment = createMockFeedbackRecord({
+        id: 'resolved-assignment',
+        entityId: 'task-123',
+        type: 'assignment',
+        assignee: 'human:developer',
+        status: 'resolved'
+      });
+
+      mockFeedbackStore.list.mockResolvedValue(['resolved-assignment']);
+      mockFeedbackStore.read.mockResolvedValue(existingAssignment);
+
+      const newAssignment = {
+        id: 'new-assignment',
+        entityType: 'task' as const,
+        entityId: 'task-123',
+        type: 'assignment' as const,
+        assignee: 'human:developer',
+        content: 'Reassign task to developer',
+        status: 'open' as const
+      };
+
+      (createFeedbackRecord as jest.Mock).mockResolvedValue(newAssignment);
+      mockIdentityAdapter.signRecord.mockResolvedValue(createMockFeedbackRecord(newAssignment));
+
+      const result = await feedbackAdapter.create(assignmentPayload, 'human:manager');
+
+      expect(result).toEqual(newAssignment);
+      expect(mockFeedbackStore.write).toHaveBeenCalled();
+    });
+
+    it('[EARS-23] should not validate duplicates for non-assignment feedbacks', async () => {
+      const suggestionPayload = {
+        entityType: 'task' as const,
+        entityId: 'task-123',
+        type: 'suggestion' as const,
+        content: 'Multiple suggestions should be allowed'
+      };
+
+      // Mock existing suggestion for same task
+      const existingSuggestion = createMockFeedbackRecord({
+        id: 'existing-suggestion',
+        entityId: 'task-123',
+        type: 'suggestion',
+        status: 'open'
+      });
+
+      mockFeedbackStore.list.mockResolvedValue(['existing-suggestion']);
+      mockFeedbackStore.read.mockResolvedValue(existingSuggestion);
+
+      const newSuggestion = {
+        id: 'new-suggestion',
+        entityType: 'task' as const,
+        entityId: 'task-123',
+        type: 'suggestion' as const,
+        content: 'Multiple suggestions should be allowed',
+        status: 'open' as const
+      };
+
+      (createFeedbackRecord as jest.Mock).mockResolvedValue(newSuggestion);
+      mockIdentityAdapter.signRecord.mockResolvedValue(createMockFeedbackRecord(newSuggestion));
+
+      const result = await feedbackAdapter.create(suggestionPayload, 'human:reviewer');
+
+      expect(result).toEqual(newSuggestion);
+      expect(mockFeedbackStore.write).toHaveBeenCalled();
+    });
   });
 
   describe('resolve', () => {

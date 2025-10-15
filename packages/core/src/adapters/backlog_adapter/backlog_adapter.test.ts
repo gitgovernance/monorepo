@@ -2006,6 +2006,347 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
 
       expect(result).toEqual([]);
     });
+
+    it('[EARS-50] should deduplicate tasks when multiple assignment feedbacks exist for same task', async () => {
+      const taskId = '1757687335-task-duplicate-assignments';
+      const actorId = 'human:developer';
+
+      // Mock MULTIPLE assignment feedbacks for the SAME task to the SAME actor
+      // This simulates the bug scenario where duplicate assignments were created
+      const assignmentFeedback1 = {
+        id: '1757687335-feedback-assignment-1',
+        payload: {
+          entityId: taskId,
+          type: 'assignment',
+          assignee: actorId,
+          status: 'open'
+        }
+      };
+      const assignmentFeedback2 = {
+        id: '1757687335-feedback-assignment-2',
+        payload: {
+          entityId: taskId,
+          type: 'assignment',
+          assignee: actorId,
+          status: 'open'
+        }
+      };
+
+      // Mock task (should only be returned once)
+      const task = createMockTaskRecord({ id: taskId, title: 'Task with Duplicate Assignments' });
+
+      // Setup mocks - both feedbacks point to the same task
+      mockDependencies.feedbackStore.list.mockResolvedValue([
+        createMockFeedbackRecord({ id: '1757687335-feedback-assignment-1' }) as unknown as FeedbackRecord,
+        createMockFeedbackRecord({ id: '1757687335-feedback-assignment-2' }) as unknown as FeedbackRecord
+      ]);
+      mockDependencies.feedbackStore.read
+        .mockResolvedValueOnce(assignmentFeedback1 as unknown as FeedbackRecord)
+        .mockResolvedValueOnce(assignmentFeedback2 as unknown as FeedbackRecord);
+
+      // Task should only be read ONCE due to deduplication
+      mockDependencies.taskStore.read.mockResolvedValue(task as unknown as TaskRecord);
+
+      const result = await backlogAdapter.getTasksAssignedToActor(actorId);
+
+      // Critical assertion: Should return only 1 task, not 2
+      expect(result).toHaveLength(1);
+      expect(result[0]?.id).toBe(taskId);
+      expect(result[0]?.title).toBe('Task with Duplicate Assignments');
+
+      // Verify task store was only read once (deduplication happened)
+      expect(mockDependencies.taskStore.read).toHaveBeenCalledTimes(1);
+      expect(mockDependencies.taskStore.read).toHaveBeenCalledWith(taskId);
+    });
+
+    it('[EARS-51] should handle multiple tasks with some having duplicate assignments', async () => {
+      const taskId1 = '1757687335-task-with-duplicates';
+      const taskId2 = '1757687335-task-normal';
+      const actorId = 'human:developer';
+
+      // Mock feedbacks: task1 has 3 duplicate assignments, task2 has 1 normal assignment
+      const feedbacks = [
+        {
+          id: '1757687335-feedback-1',
+          payload: { entityId: taskId1, type: 'assignment', assignee: actorId, status: 'open' }
+        },
+        {
+          id: '1757687335-feedback-2',
+          payload: { entityId: taskId1, type: 'assignment', assignee: actorId, status: 'open' }
+        },
+        {
+          id: '1757687335-feedback-3',
+          payload: { entityId: taskId1, type: 'assignment', assignee: actorId, status: 'open' }
+        },
+        {
+          id: '1757687335-feedback-4',
+          payload: { entityId: taskId2, type: 'assignment', assignee: actorId, status: 'open' }
+        }
+      ];
+
+      const task1 = createMockTaskRecord({ id: taskId1, title: 'Task with 3 duplicate assignments' });
+      const task2 = createMockTaskRecord({ id: taskId2, title: 'Normal task' });
+
+      mockDependencies.feedbackStore.list.mockResolvedValue(
+        feedbacks.map(f => createMockFeedbackRecord(f) as unknown as FeedbackRecord)
+      );
+
+      feedbacks.forEach(f => {
+        mockDependencies.feedbackStore.read.mockResolvedValueOnce(f as unknown as FeedbackRecord);
+      });
+
+      mockDependencies.taskStore.read
+        .mockResolvedValueOnce(task1 as unknown as TaskRecord)
+        .mockResolvedValueOnce(task2 as unknown as TaskRecord);
+
+      const result = await backlogAdapter.getTasksAssignedToActor(actorId);
+
+      // Should return only 2 unique tasks despite 4 assignment feedbacks
+      expect(result).toHaveLength(2);
+      expect(result[0]?.id).toBe(taskId1);
+      expect(result[1]?.id).toBe(taskId2);
+
+      // Verify deduplication: task store called only twice (once per unique task)
+      expect(mockDependencies.taskStore.read).toHaveBeenCalledTimes(2);
+    });
+
+    it('[EARS-52] should handle task assigned to multiple different actors correctly', async () => {
+      const taskId = '1757687335-task-multi-actor';
+      const actor1 = 'human:developer-1';
+      const actor2 = 'human:developer-2';
+
+      // Mock assignments for the same task to TWO DIFFERENT actors
+      const feedbacks = [
+        {
+          id: '1757687335-feedback-actor1',
+          payload: { entityId: taskId, type: 'assignment', assignee: actor1, status: 'open' }
+        },
+        {
+          id: '1757687335-feedback-actor2',
+          payload: { entityId: taskId, type: 'assignment', assignee: actor2, status: 'open' }
+        }
+      ];
+
+      const task = createMockTaskRecord({ id: taskId, title: 'Task assigned to multiple actors' });
+
+      mockDependencies.feedbackStore.list.mockResolvedValue(
+        feedbacks.map(f => createMockFeedbackRecord(f) as unknown as FeedbackRecord)
+      );
+
+      feedbacks.forEach(f => {
+        mockDependencies.feedbackStore.read.mockResolvedValueOnce(f as unknown as FeedbackRecord);
+      });
+
+      mockDependencies.taskStore.read.mockResolvedValue(task as unknown as TaskRecord);
+
+      // Query for actor1 - should only return 1 task
+      const resultActor1 = await backlogAdapter.getTasksAssignedToActor(actor1);
+      expect(resultActor1).toHaveLength(1);
+      expect(resultActor1[0]?.id).toBe(taskId);
+
+      // Reset mocks
+      jest.clearAllMocks();
+      mockDependencies.feedbackStore.list.mockResolvedValue(
+        feedbacks.map(f => createMockFeedbackRecord(f) as unknown as FeedbackRecord)
+      );
+      feedbacks.forEach(f => {
+        mockDependencies.feedbackStore.read.mockResolvedValueOnce(f as unknown as FeedbackRecord);
+      });
+      mockDependencies.taskStore.read.mockResolvedValue(task as unknown as TaskRecord);
+
+      // Query for actor2 - should also return 1 task
+      const resultActor2 = await backlogAdapter.getTasksAssignedToActor(actor2);
+      expect(resultActor2).toHaveLength(1);
+      expect(resultActor2[0]?.id).toBe(taskId);
+    });
+
+    it('[EARS-53] should handle edge case with no duplicate assignments gracefully', async () => {
+      const actorId = 'human:developer';
+      const taskId1 = '1757687335-task-unique-1';
+      const taskId2 = '1757687335-task-unique-2';
+      const taskId3 = '1757687335-task-unique-3';
+
+      // Mock 3 unique assignments (no duplicates)
+      const feedbacks = [
+        {
+          id: '1757687335-feedback-1',
+          payload: { entityId: taskId1, type: 'assignment', assignee: actorId, status: 'open' }
+        },
+        {
+          id: '1757687335-feedback-2',
+          payload: { entityId: taskId2, type: 'assignment', assignee: actorId, status: 'open' }
+        },
+        {
+          id: '1757687335-feedback-3',
+          payload: { entityId: taskId3, type: 'assignment', assignee: actorId, status: 'open' }
+        }
+      ];
+
+      const task1 = createMockTaskRecord({ id: taskId1, title: 'Unique Task 1' });
+      const task2 = createMockTaskRecord({ id: taskId2, title: 'Unique Task 2' });
+      const task3 = createMockTaskRecord({ id: taskId3, title: 'Unique Task 3' });
+
+      mockDependencies.feedbackStore.list.mockResolvedValue(
+        feedbacks.map(f => createMockFeedbackRecord(f) as unknown as FeedbackRecord)
+      );
+
+      feedbacks.forEach(f => {
+        mockDependencies.feedbackStore.read.mockResolvedValueOnce(f as unknown as FeedbackRecord);
+      });
+
+      mockDependencies.taskStore.read
+        .mockResolvedValueOnce(task1 as unknown as TaskRecord)
+        .mockResolvedValueOnce(task2 as unknown as TaskRecord)
+        .mockResolvedValueOnce(task3 as unknown as TaskRecord);
+
+      const result = await backlogAdapter.getTasksAssignedToActor(actorId);
+
+      // Should work normally with no duplicates
+      expect(result).toHaveLength(3);
+      expect(result.map(t => t.id)).toEqual([taskId1, taskId2, taskId3]);
+      expect(mockDependencies.taskStore.read).toHaveBeenCalledTimes(3);
+    });
+  });
+
+  describe('pauseTask', () => {
+    it('[EARS-34A] should pause task from active to paused with permission validation', async () => {
+      // Arrange: Task in 'active' state
+      const taskId = '1757687335-task-active';
+      const actorId = 'human:developer';
+
+      const activeTask = createMockTaskRecord({
+        id: taskId,
+        title: 'Active Task',
+        status: 'active',
+        notes: 'Original notes'
+      });
+
+      const actor: ActorRecord = {
+        id: actorId,
+        type: 'human',
+        displayName: 'Developer',
+        publicKey: 'mock-public-key',
+        roles: ['author', 'executor'],
+        status: 'active'
+      };
+
+      // Mock dependencies
+      mockDependencies.taskStore.read.mockResolvedValue(activeTask as unknown as TaskRecord);
+      mockDependencies.identity.getActor.mockResolvedValue(actor);
+      mockDependencies.workflowMethodologyAdapter.getTransitionRule.mockResolvedValue({
+        to: 'paused',
+        conditions: undefined
+      });
+      mockDependencies.identity.signRecord.mockResolvedValue(activeTask);
+      mockDependencies.taskStore.write.mockResolvedValue(undefined);
+
+      // Act
+      const result = await backlogAdapter.pauseTask(taskId, actorId, 'Waiting for external API approval');
+
+      // Assert
+      expect(result.status).toBe('paused');
+      expect(result.notes).toContain('[PAUSED] Waiting for external API approval');
+      expect(mockDependencies.workflowMethodologyAdapter.getTransitionRule).toHaveBeenCalledWith(
+        'active',
+        'paused',
+        expect.objectContaining({
+          task: expect.any(Object),
+          actor: actor,
+          transitionTo: 'paused'
+        })
+      );
+      expect(mockDependencies.identity.signRecord).toHaveBeenCalledWith(
+        expect.any(Object),
+        actorId,
+        'pauser'
+      );
+      expect(mockDependencies.eventBus.publish).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'task.status.changed',
+          payload: expect.objectContaining({
+            taskId,
+            oldStatus: 'active',
+            newStatus: 'paused',
+            actorId,
+            reason: 'Waiting for external API approval'
+          })
+        })
+      );
+    });
+
+    it('[EARS-35A] should throw error when task not found for pause', async () => {
+      // Arrange
+      const taskId = '1757687335-task-nonexistent';
+      const actorId = 'human:developer';
+
+      mockDependencies.taskStore.read.mockResolvedValue(null);
+
+      // Act & Assert
+      await expect(backlogAdapter.pauseTask(taskId, actorId, 'Some reason'))
+        .rejects.toThrow('RecordNotFoundError: Task not found');
+    });
+
+    it('[EARS-36A] should throw error when task is not in active state for pause', async () => {
+      // Arrange: Task in 'draft' state (not 'active')
+      const taskId = '1757687335-task-draft';
+      const actorId = 'human:developer';
+
+      const draftTask = createMockTaskRecord({
+        id: taskId,
+        title: 'Draft Task',
+        status: 'draft'
+      });
+
+      mockDependencies.taskStore.read.mockResolvedValue(draftTask as unknown as TaskRecord);
+
+      // Act & Assert
+      await expect(backlogAdapter.pauseTask(taskId, actorId, 'Cannot pause draft'))
+        .rejects.toThrow("ProtocolViolationError: Task is in 'draft' state");
+    });
+
+    it('[EARS-37A] should add reason with PAUSED prefix in notes', async () => {
+      // Arrange: Active task with existing notes
+      const taskId = '1757687335-task-with-notes';
+      const actorId = 'human:pm';
+      const existingNotes = 'Task created for Q1 sprint';
+      const pauseReason = 'Blocked by design review';
+
+      const activeTask = createMockTaskRecord({
+        id: taskId,
+        title: 'Task with Notes',
+        status: 'active',
+        notes: existingNotes
+      });
+
+      const actor: ActorRecord = {
+        id: actorId,
+        type: 'human',
+        displayName: 'Project Manager',
+        publicKey: 'mock-public-key-pm',
+        roles: ['author', 'approver'],
+        status: 'active'
+      };
+
+      // Mock dependencies
+      mockDependencies.taskStore.read.mockResolvedValue(activeTask as unknown as TaskRecord);
+      mockDependencies.identity.getActor.mockResolvedValue(actor);
+      mockDependencies.workflowMethodologyAdapter.getTransitionRule.mockResolvedValue({
+        to: 'paused',
+        conditions: undefined
+      });
+      mockDependencies.identity.signRecord.mockImplementation((record) => Promise.resolve(record));
+      mockDependencies.taskStore.write.mockResolvedValue(undefined);
+
+      // Act
+      const result = await backlogAdapter.pauseTask(taskId, actorId, pauseReason);
+
+      // Assert: Verify notes contains existing content + new content with [PAUSED] prefix
+      expect(result.notes).toContain(existingNotes);
+      expect(result.notes).toContain('[PAUSED]');
+      expect(result.notes).toContain(pauseReason);
+      // Verify ISO timestamp format
+      expect(result.notes).toMatch(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
+    });
   });
 
   describe('Future Methods (Not Implemented)', () => {

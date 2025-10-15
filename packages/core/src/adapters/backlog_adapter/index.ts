@@ -790,9 +790,12 @@ export class BacklogAdapter implements IBacklogAdapter {
       }
     }
 
+    // Deduplicate task IDs (same task may have multiple assignment records)
+    const uniqueTaskIds = [...new Set(assignedTaskIds)];
+
     // Read the assigned tasks
     const assignedTasks: TaskRecord[] = [];
-    for (const taskId of assignedTaskIds) {
+    for (const taskId of uniqueTaskIds) {
       const task = await this.getTask(taskId);
       if (task) {
         assignedTasks.push(task);
