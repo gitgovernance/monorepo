@@ -56,7 +56,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@gitgov/core": "^1.2.0",
+    "@gitgov/core": "^1.3.0",
     "clipboardy": "^5.0.0",
     "commander": "^11.1.0"
   },
