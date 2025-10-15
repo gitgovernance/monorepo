@@ -1,3 +1,10 @@
+## [1.7.1](https://github.com/gitgovernance/monorepo/compare/cli-v1.7.0...cli-v1.7.1) (2025-10-15)
+
+
+### 🐛 Bug Fixes
+
+* **core:** resolve duplicate task display in personal status view ([#37](https://github.com/gitgovernance/monorepo/issues/37)) ([b1bb3b4](https://github.com/gitgovernance/monorepo/commit/b1bb3b430fc8ba074ce174db3ac28c0f759d6047)), closes [#1758573347](https://github.com/gitgovernance/monorepo/issues/1758573347)
+
 ## [1.7.0](https://github.com/gitgovernance/monorepo/compare/cli-v1.6.2...cli-v1.7.0) (2025-10-15)
 
 
