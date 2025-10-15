@@ -81,6 +81,8 @@ EXAMPLES:
     .description('Create new TaskRecord with $EDITOR integration')
     .alias('n')
     .option('-d, --description <desc>', 'Provide description directly (avoids opening $EDITOR)')
+    .option('-f, --description-file <path>', 'Read description from file (for long markdown descriptions)')
+    .option('--cleanup-file', 'Delete the description file after task creation (requires --description-file)')
     .option('-p, --priority <priority>', 'Set priority (low, medium, high, critical)', 'medium')
     .option('-c, --cycle-ids <ids>', 'Associate Task to specific Cycles (comma-separated)')
     .option('-t, --tags <tags>', 'Add tags for categorization (comma-separated)')
