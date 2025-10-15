@@ -1,3 +1,10 @@
+## [1.7.0](https://github.com/gitgovernance/monorepo/compare/cli-v1.6.2...cli-v1.7.0) (2025-10-15)
+
+
+### 🚀 Features
+
+* **cli/task:** implement long description support with --description-file flag ([#36](https://github.com/gitgovernance/monorepo/issues/36)) ([dd46f82](https://github.com/gitgovernance/monorepo/commit/dd46f82f7918fd93e624fb2363eb44008663330d))
+
 ## [1.6.2](https://github.com/gitgovernance/monorepo/compare/cli-v1.6.1...cli-v1.6.2) (2025-10-14)
 
 
