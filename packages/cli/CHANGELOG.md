@@ -1,3 +1,10 @@
+## [1.7.2](https://github.com/gitgovernance/monorepo/compare/cli-v1.7.1...cli-v1.7.2) (2025-10-16)
+
+
+### 🐛 Bug Fixes
+
+* **cli:** handle --help flag with pnpm start -- separator ([#39](https://github.com/gitgovernance/monorepo/issues/39)) ([16b1670](https://github.com/gitgovernance/monorepo/commit/16b16703a3cc9b0605c629942f391e3210f3e077)), closes [#1759984817](https://github.com/gitgovernance/monorepo/issues/1759984817)
+
 ## [1.7.1](https://github.com/gitgovernance/monorepo/compare/cli-v1.7.0...cli-v1.7.1) (2025-10-15)
 
 
