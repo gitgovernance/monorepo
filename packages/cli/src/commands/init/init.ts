@@ -22,7 +22,11 @@ export function registerInitCommands(program: Command): void {
     .option('--json', 'Output in JSON format for automation')
     .option('-v, --verbose', 'Show detailed bootstrap process')
     .option('-q, --quiet', 'Minimal output for scripting')
-    .action(async (options: InitCommandOptions) => {
+    .action(async (options: InitCommandOptions, command: Command) => {
+      // Handle --help flag when passed via pnpm start
+      if (process.argv.includes('--help') || process.argv.includes('-h')) {
+        command.help();
+      }
       await initCommand.execute(options);
     });
 }

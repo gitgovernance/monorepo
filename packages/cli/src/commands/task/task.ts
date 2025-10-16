@@ -127,7 +127,11 @@ EXAMPLES:
     .option('--json', 'Output in structured JSON format')
     .option('-v, --verbose', 'Include all metadata and derived states')
     .option('-q, --quiet', 'Minimal output (core fields only)')
-    .action(async (taskId: string, options: TaskShowOptions) => {
+    .action(async (taskId: string, options: TaskShowOptions, command: Command) => {
+      // Handle --help flag when passed as taskId (fixes pnpm start -- task show --help)
+      if (taskId === '--help' || taskId === '-h') {
+        command.help(); // This will exit the process
+      }
       await taskCommand.executeShow(taskId, options);
     });
 
@@ -138,7 +142,11 @@ EXAMPLES:
     .option('--json', 'Output in JSON format')
     .option('-v, --verbose', 'Show workflow validation details')
     .option('-q, --quiet', 'Minimal output for scripting')
-    .action(async (taskId: string, options: TaskSubmitOptions) => {
+    .action(async (taskId: string, options: TaskSubmitOptions, command: Command) => {
+      // Handle --help flag when passed as taskId (fixes pnpm start -- task submit --help)
+      if (taskId === '--help' || taskId === '-h') {
+        command.help(); // This will exit the process
+      }
       await taskCommand.executeSubmit(taskId, options);
     });
 
@@ -150,7 +158,11 @@ EXAMPLES:
     .option('--json', 'Output in JSON format')
     .option('-v, --verbose', 'Show signature validation details')
     .option('-q, --quiet', 'Minimal output for scripting')
-    .action(async (taskId: string, options: TaskApproveOptions) => {
+    .action(async (taskId: string, options: TaskApproveOptions, command: Command) => {
+      // Handle --help flag when passed as taskId (fixes pnpm start -- task approve --help)
+      if (taskId === '--help' || taskId === '-h') {
+        command.help(); // This will exit the process
+      }
       await taskCommand.executeApprove(taskId, options);
     });
 
@@ -162,7 +174,11 @@ EXAMPLES:
     .option('--json', 'Output in JSON format')
     .option('-v, --verbose', 'Show activation process details')
     .option('-q, --quiet', 'Minimal output for scripting')
-    .action(async (taskId: string, options: TaskActivateOptions) => {
+    .action(async (taskId: string, options: TaskActivateOptions, command: Command) => {
+      // Handle --help flag when passed as taskId (fixes pnpm start -- task activate --help)
+      if (taskId === '--help' || taskId === '-h') {
+        command.help(); // This will exit the process
+      }
       await taskCommand.executeActivate(taskId, options);
     });
 
@@ -175,7 +191,11 @@ EXAMPLES:
     .option('--json', 'Output in JSON format')
     .option('-v, --verbose', 'Show pause process details')
     .option('-q, --quiet', 'Minimal output for scripting')
-    .action(async (taskId: string, options: TaskPauseOptions) => {
+    .action(async (taskId: string, options: TaskPauseOptions, command: Command) => {
+      // Handle --help flag when passed as taskId (fixes pnpm start -- task pause --help)
+      if (taskId === '--help' || taskId === '-h') {
+        command.help(); // This will exit the process
+      }
       await taskCommand.executePause(taskId, options);
     });
 
@@ -188,7 +208,11 @@ EXAMPLES:
     .option('--json', 'Output in JSON format')
     .option('-v, --verbose', 'Show blocking validation details')
     .option('-q, --quiet', 'Minimal output for scripting')
-    .action(async (taskId: string, options: TaskResumeOptions) => {
+    .action(async (taskId: string, options: TaskResumeOptions, command: Command) => {
+      // Handle --help flag when passed as taskId (fixes pnpm start -- task resume --help)
+      if (taskId === '--help' || taskId === '-h') {
+        command.help(); // This will exit the process
+      }
       await taskCommand.executeResume(taskId, options);
     });
 
@@ -200,7 +224,11 @@ EXAMPLES:
     .option('--json', 'Output in JSON format')
     .option('-v, --verbose', 'Show completion process details')
     .option('-q, --quiet', 'Minimal output for scripting')
-    .action(async (taskId: string, options: TaskCompleteOptions) => {
+    .action(async (taskId: string, options: TaskCompleteOptions, command: Command) => {
+      // Handle --help flag when passed as taskId (fixes pnpm start -- task complete --help)
+      if (taskId === '--help' || taskId === '-h') {
+        command.help(); // This will exit the process
+      }
       await taskCommand.executeComplete(taskId, options);
     });
 
@@ -213,7 +241,11 @@ EXAMPLES:
     .option('--json', 'Output in JSON format')
     .option('-v, --verbose', 'Show cancellation process details')
     .option('-q, --quiet', 'Minimal output for scripting')
-    .action(async (taskId: string, options: TaskCancelOptions) => {
+    .action(async (taskId: string, options: TaskCancelOptions, command: Command) => {
+      // Handle --help flag when passed as taskId (fixes pnpm start -- task cancel --help)
+      if (taskId === '--help' || taskId === '-h') {
+        command.help(); // This will exit the process
+      }
       await taskCommand.executeCancel(taskId, options);
     });
 
@@ -226,7 +258,11 @@ EXAMPLES:
     .option('--json', 'Output in JSON format')
     .option('-v, --verbose', 'Show rejection process details')
     .option('-q, --quiet', 'Minimal output for scripting')
-    .action(async (taskId: string, options: TaskRejectOptions) => {
+    .action(async (taskId: string, options: TaskRejectOptions, command: Command) => {
+      // Handle --help flag when passed as taskId (fixes pnpm start -- task reject --help)
+      if (taskId === '--help' || taskId === '-h') {
+        command.help(); // This will exit the process
+      }
       await taskCommand.executeReject(taskId, options);
     });
 
@@ -238,7 +274,11 @@ EXAMPLES:
     .option('--json', 'Output in JSON format')
     .option('-v, --verbose', 'Show deletion process details')
     .option('-q, --quiet', 'Minimal output for scripting')
-    .action(async (taskId: string, options: TaskDeleteOptions) => {
+    .action(async (taskId: string, options: TaskDeleteOptions, command: Command) => {
+      // Handle --help flag when passed as taskId (fixes pnpm start -- task delete --help)
+      if (taskId === '--help' || taskId === '-h') {
+        command.help(); // This will exit the process
+      }
       await taskCommand.executeDelete(taskId, options);
     });
 
@@ -252,7 +292,11 @@ EXAMPLES:
     .option('--json', 'Output in JSON format')
     .option('-v, --verbose', 'Show assignment process details')
     .option('-q, --quiet', 'Minimal output for scripting')
-    .action(async (taskId: string, options: TaskAssignOptions) => {
+    .action(async (taskId: string, options: TaskAssignOptions, command: Command) => {
+      // Handle --help flag when passed as taskId (fixes pnpm start -- task assign --help)
+      if (taskId === '--help' || taskId === '-h') {
+        command.help(); // This will exit the process
+      }
       await taskCommand.executeAssign(taskId, options);
     });
 
@@ -271,7 +315,11 @@ EXAMPLES:
     .option('--json', 'Output in JSON format')
     .option('-v, --verbose', 'Show validation and change details')
     .option('-q, --quiet', 'Minimal output for scripting')
-    .action(async (taskId: string, options: TaskEditOptions) => {
+    .action(async (taskId: string, options: TaskEditOptions, command: Command) => {
+      // Handle --help flag when passed as taskId (fixes pnpm start -- task edit --help)
+      if (taskId === '--help' || taskId === '-h') {
+        command.help(); // This will exit the process
+      }
       await taskCommand.executeEdit(taskId, options);
     });
 
@@ -285,7 +333,11 @@ EXAMPLES:
     .option('--json', 'Output in JSON format')
     .option('-v, --verbose', 'Show promotion process details')
     .option('-q, --quiet', 'Minimal output for scripting')
-    .action(async (taskId: string, options: TaskPromoteOptions) => {
+    .action(async (taskId: string, options: TaskPromoteOptions, command: Command) => {
+      // Handle --help flag when passed as taskId (fixes pnpm start -- task promote --help)
+      if (taskId === '--help' || taskId === '-h') {
+        command.help(); // This will exit the process
+      }
       await taskCommand.executePromote(taskId, options);
     });
 }
