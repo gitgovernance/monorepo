@@ -24,7 +24,11 @@ export function registerDashboardCommands(program: Command): void {
     .option('--json', 'Output dashboard metadata in JSON format')
     .option('--verbose', 'Show detailed adapter and methodology info')
     .option('--quiet', 'Suppress output except critical errors')
-    .action(async (options: DashboardCommandOptions) => {
+    .action(async (options: DashboardCommandOptions, command: Command) => {
+      // Handle --help flag when passed via pnpm start
+      if (process.argv.includes('--help') || process.argv.includes('-h')) {
+        command.help();
+      }
       await dashboardCommand.execute(options);
     });
 }

@@ -37,7 +37,12 @@ class DiagramCommand {
       .option('--task <taskId>', 'Filter to show only a specific task and its related entities')
       .option('--package <packageName>', 'Filter to show only entities related to a specific package')
       .option('--show-archived', 'Include archived entities in the diagram (excluded by default)')
-      .action(async (options: DiagramCommandOptions) => {
+      .action(async (options: DiagramCommandOptions, command: Command) => {
+        // Handle --help flag when passed via pnpm start
+        if (process.argv.includes('--help') || process.argv.includes('-h')) {
+          command.help();
+        }
+
         // NEW LOGIC:
         // - If --watch is specified: show TUI (with or without filters)
         // - If no --watch: generate diagram directly (with or without filters)
