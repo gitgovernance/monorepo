@@ -408,5 +408,32 @@ describe('Task Delete CLI Command - E2E Tests', () => {
       // expect(lastFrame()).toContain('Confirm Task Deletion');
     });
   });
+
+  describe('--help flag parsing', () => {
+    // Tests for --help flag parsing fix (works with both direct exec and pnpm start)
+    it('should show help when --help is passed to pause command', () => {
+      const result = runCliCommand(['task', 'pause', '--help']);
+      expect(result.output).toContain('Usage: gitgov task pause');
+      expect(result.output).toContain('Pause active TaskRecord');
+    });
+
+    it('should show help when --help is passed to resume command', () => {
+      const result = runCliCommand(['task', 'resume', '--help']);
+      expect(result.output).toContain('Usage: gitgov task resume');
+      expect(result.output).toContain('Resume paused TaskRecord');
+    });
+
+    it('should handle --help with pnpm start scenario (-- separator)', () => {
+      // Simulate: pnpm start -- task pause --help
+      const result = runCliCommand(['--', 'task', 'pause', '--help']);
+      expect(result.output).toContain('Usage: gitgov task pause');
+      expect(result.output).not.toContain('RecordNotFoundError');
+    });
+
+    it('should show help when -h short flag is used', () => {
+      const result = runCliCommand(['task', 'pause', '-h']);
+      expect(result.output).toContain('Usage: gitgov task pause');
+    });
+  });
 });
 

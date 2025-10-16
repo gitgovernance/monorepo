@@ -73,7 +73,10 @@ export function registerCycleCommands(program: Command): void {
     .option('--json', 'Output in structured JSON format')
     .option('-v, --verbose', 'Include all metadata and relationships')
     .option('-q, --quiet', 'Minimal output (core fields only)')
-    .action(async (cycleId: string, options: CycleShowOptions) => {
+    .action(async (cycleId: string, options: CycleShowOptions, command: Command) => {
+      if (cycleId === '--help' || cycleId === '-h') {
+        command.help();
+      }
       await cycleCommand.executeShow(cycleId, options);
     });
 
@@ -86,7 +89,10 @@ export function registerCycleCommands(program: Command): void {
     .option('--json', 'Output in JSON format')
     .option('-v, --verbose', 'Show activation process details')
     .option('-q, --quiet', 'Minimal output for scripting')
-    .action(async (cycleId: string, options: CycleActivateOptions) => {
+    .action(async (cycleId: string, options: CycleActivateOptions, command: Command) => {
+      if (cycleId === '--help' || cycleId === '-h') {
+        command.help();
+      }
       await cycleCommand.executeActivate(cycleId, options);
     });
 
@@ -100,7 +106,10 @@ export function registerCycleCommands(program: Command): void {
     .option('--json', 'Output in JSON format')
     .option('-v, --verbose', 'Show completion process details')
     .option('-q, --quiet', 'Minimal output for scripting')
-    .action(async (cycleId: string, options: CycleCompleteOptions) => {
+    .action(async (cycleId: string, options: CycleCompleteOptions, command: Command) => {
+      if (cycleId === '--help' || cycleId === '-h') {
+        command.help();
+      }
       await cycleCommand.executeComplete(cycleId, options);
     });
 
@@ -114,7 +123,10 @@ export function registerCycleCommands(program: Command): void {
     .option('--json', 'Output in JSON format')
     .option('-v, --verbose', 'Show linking process details')
     .option('-q, --quiet', 'Minimal output for scripting')
-    .action(async (cycleId: string, options: CycleAddTaskOptions) => {
+    .action(async (cycleId: string, options: CycleAddTaskOptions, command: Command) => {
+      if (cycleId === '--help' || cycleId === '-h') {
+        command.help();
+      }
       await cycleCommand.executeAddTask(cycleId, options);
     });
 
@@ -127,7 +139,10 @@ export function registerCycleCommands(program: Command): void {
     .option('--json', 'Output in JSON format')
     .option('-v, --verbose', 'Show unlinking process details')
     .option('-q, --quiet', 'Minimal output for scripting')
-    .action(async (cycleId: string, options: CycleRemoveTaskOptions) => {
+    .action(async (cycleId: string, options: CycleRemoveTaskOptions, command: Command) => {
+      if (cycleId === '--help' || cycleId === '-h') {
+        command.help();
+      }
       await cycleCommand.executeRemoveTask(cycleId, options);
     });
 
@@ -141,7 +156,10 @@ export function registerCycleCommands(program: Command): void {
     .option('--json', 'Output in JSON format')
     .option('-v, --verbose', 'Show move process details')
     .option('-q, --quiet', 'Minimal output for scripting')
-    .action(async (targetCycleId: string, options: CycleMoveTaskOptions) => {
+    .action(async (targetCycleId: string, options: CycleMoveTaskOptions, command: Command) => {
+      if (targetCycleId === '--help' || targetCycleId === '-h') {
+        command.help();
+      }
       await cycleCommand.executeMoveTask(targetCycleId, options);
     });
 
@@ -159,7 +177,10 @@ export function registerCycleCommands(program: Command): void {
     .option('--json', 'Output in JSON format')
     .option('-v, --verbose', 'Show validation and change details')
     .option('-q, --quiet', 'Minimal output for scripting')
-    .action(async (cycleId: string, options: CycleEditOptions) => {
+    .action(async (cycleId: string, options: CycleEditOptions, command: Command) => {
+      if (cycleId === '--help' || cycleId === '-h') {
+        command.help();
+      }
       await cycleCommand.executeEdit(cycleId, options);
     });
 
@@ -172,7 +193,10 @@ export function registerCycleCommands(program: Command): void {
     .option('--json', 'Output in JSON format')
     .option('-v, --verbose', 'Show hierarchy setup details')
     .option('-q, --quiet', 'Minimal output for scripting')
-    .action(async (parentCycleId: string, options: CycleAddChildOptions) => {
+    .action(async (parentCycleId: string, options: CycleAddChildOptions, command: Command) => {
+      if (parentCycleId === '--help' || parentCycleId === '-h') {
+        command.help();
+      }
       await cycleCommand.executeAddChild(parentCycleId, options);
     });
 }

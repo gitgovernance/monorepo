@@ -20,7 +20,11 @@ export function registerStatusCommands(program: Command): void {
     .option('--json', 'Output results in JSON format')
     .option('--verbose', 'Enable verbose output with detailed information')
     .option('--quiet', 'Suppress non-essential output')
-    .action(async (options: StatusCommandOptions) => {
+    .action(async (options: StatusCommandOptions, command: Command) => {
+      // Handle --help flag when passed via pnpm start
+      if (process.argv.includes('--help') || process.argv.includes('-h')) {
+        command.help();
+      }
       await statusCommand.execute(options);
     });
 }
