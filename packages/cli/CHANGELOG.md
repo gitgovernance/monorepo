@@ -1,3 +1,10 @@
+## [1.8.0](https://github.com/gitgovernance/monorepo/compare/cli-v1.7.2...cli-v1.8.0) (2025-10-17)
+
+
+### 🚀 Features
+
+* **cli:** filter completed tasks in priority view ([#40](https://github.com/gitgovernance/monorepo/issues/40)) ([d5fa301](https://github.com/gitgovernance/monorepo/commit/d5fa301375da3bd552e22644444a4b80a79ea554))
+
 ## [1.7.2](https://github.com/gitgovernance/monorepo/compare/cli-v1.7.1...cli-v1.7.2) (2025-10-16)
 
 
