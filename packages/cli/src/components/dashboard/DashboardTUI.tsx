@@ -205,13 +205,15 @@ export const DashboardTUI: React.FC<Props> = ({
         });
 
       case 'priority':
-        // Sort by priority (critical → high → medium → low)
+        // Sort by priority (critical → high → medium → low) and filter out completed tasks
         const priorityOrder = { 'critical': 4, 'high': 3, 'medium': 2, 'low': 1 };
-        return [...tasks].sort((a, b) => {
-          const priorityA = priorityOrder[a.priority as keyof typeof priorityOrder] || 0;
-          const priorityB = priorityOrder[b.priority as keyof typeof priorityOrder] || 0;
-          return priorityB - priorityA;
-        });
+        return [...tasks]
+          .filter(task => !['done', 'archived', 'discarded'].includes(task.status))
+          .sort((a, b) => {
+            const priorityA = priorityOrder[a.priority as keyof typeof priorityOrder] || 0;
+            const priorityB = priorityOrder[b.priority as keyof typeof priorityOrder] || 0;
+            return priorityB - priorityA;
+          });
 
       case 'status':
         // Sort by status (active → review → ready → draft → done → archived)
@@ -402,7 +404,8 @@ export const DashboardTUI: React.FC<Props> = ({
         break;
       case 'v':
         // CYCLING DE VISTAS: row-based → kanban-4col → kanban-7col → scrum-board → loop
-        const viewCycle = ['row-based', 'kanban-4col', 'kanban-7col', 'scrum-board'] as const;
+        // "kanban-7col" and "scrum-board" are commented for a while
+        const viewCycle = ['row-based', 'kanban-4col'] as const;
         const currentIndex = viewCycle.indexOf(currentView as any);
         const nextIndex = (currentIndex + 1) % viewCycle.length;
         const nextView = viewCycle[nextIndex];
