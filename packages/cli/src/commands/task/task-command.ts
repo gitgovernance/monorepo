@@ -23,6 +23,7 @@ export interface TaskListOptions {
   cycleIds?: string;
   tags?: string;
   limit?: number;
+  order?: 'asc' | 'desc';
   stalled?: boolean;
   atRisk?: boolean;
   fromSource?: boolean;
@@ -397,7 +398,8 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
       const backlogAdapter = await this.dependencyService.getBacklogAdapter();
       const indexerAdapter = await this.dependencyService.getIndexerAdapter();
 
-      let tasks: Records.TaskRecord[] = [];
+      // Use any[] to allow both TaskRecord and EnrichedTaskRecord
+      let tasks: any[] = [];
 
       // 2. Auto-indexation strategy (unless --from-source)
       if (!options.fromSource) {
@@ -413,7 +415,10 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
         // 3. Use cache for performance
         const indexData = await indexerAdapter.getIndexData();
         if (indexData) {
-          tasks = indexData.tasks;
+          // Use enrichedTasks when available (has lastUpdated for sorting)
+          tasks = indexData.enrichedTasks && indexData.enrichedTasks.length > 0
+            ? indexData.enrichedTasks
+            : indexData.tasks;
         } else {
           // Fallback to direct access
           tasks = await backlogAdapter.getAllTasks();
@@ -437,12 +442,21 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
         );
       }
 
-      // 6. Apply limit
+      // 6. Sort by lastUpdated (DESC by default, or ASC if --order asc)
+      // Fallback to task ID timestamp if lastUpdated not available (e.g., when using --from-source)
+      const sortOrder = options.order || 'desc';
+      tasks = tasks.sort((a, b) => {
+        const aTime = (a as any).lastUpdated || this.extractTimestampFromId(a.id);
+        const bTime = (b as any).lastUpdated || this.extractTimestampFromId(b.id);
+        return sortOrder === 'asc' ? aTime - bTime : bTime - aTime;
+      });
+
+      // 7. Apply limit AFTER sorting
       if (options.limit && options.limit > 0) {
         tasks = tasks.slice(0, options.limit);
       }
 
-      // 7. Output rendering
+      // 8. Output rendering
       if (options.json) {
         console.log(JSON.stringify({
           success: true,
@@ -1170,6 +1184,26 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
       'archived': '📦'
     };
     return icons[status] || '❓';
+  }
+
+  /**
+   * Extracts Unix timestamp (in milliseconds) from a task ID
+   * Task IDs follow format: {timestamp}-task-{name}
+   * Returns timestamp * 1000 to match lastUpdated field (which is in milliseconds)
+   */
+  private extractTimestampFromId(id: string): number {
+    try {
+      const parts = id.split('-');
+      const timestamp = parseInt(parts[0] || '0', 10);
+
+      if (isNaN(timestamp) || timestamp <= 0) {
+        return 0; // Return 0 for invalid timestamps
+      }
+
+      return timestamp * 1000; // Convert to milliseconds
+    } catch (error) {
+      return 0; // Fallback to 0 on error
+    }
   }
 
   /**

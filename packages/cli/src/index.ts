@@ -82,7 +82,17 @@ process.on('unhandledRejection', (reason) => {
 
 // Initialize commands and parse
 setupCommands().then(() => {
-  program.parse();
+  // Filter out the '--' argument that pnpm/npm add when using 'pnpm start -- args'
+  // This prevents Commander from treating all subsequent args as positional arguments
+  const args = process.argv.filter((arg, index) => {
+    // Keep first two args (node path and script path)
+    if (index < 2) return true;
+    // Remove standalone '--' separator
+    if (arg === '--' && index === 2) return false;
+    return true;
+  });
+  
+  program.parse(args);
 }).catch((error) => {
   console.error("❌ Fatal error:", error);
   process.exit(1);
