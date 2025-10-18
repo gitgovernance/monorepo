@@ -105,6 +105,7 @@ EXAMPLES:
     .option('-c, --cycle-ids <ids>', 'Filter by tasks in specific cycles (comma-separated)')
     .option('-t, --tags <tags>', 'Filter by specific tags (comma-separated)')
     .option('-l, --limit <number>', 'Limit number of results', parseInt)
+    .option('-o, --order <order>', 'Sort order: asc (oldest first) or desc (newest first, default)', 'desc')
     .option('--stalled', 'Filter stalled tasks (derived state)')
     .option('--at-risk', 'Filter at-risk tasks (derived state)')
     .option('--from-source', 'Read directly from Records (bypass cache)')
