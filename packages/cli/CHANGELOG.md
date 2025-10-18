@@ -1,3 +1,10 @@
+## [1.9.0](https://github.com/gitgovernance/monorepo/compare/cli-v1.8.0...cli-v1.9.0) (2025-10-18)
+
+
+### 🚀 Features
+
+* **cli:** add sorting and argument parsing for task list ([#41](https://github.com/gitgovernance/monorepo/issues/41)) ([1fb812d](https://github.com/gitgovernance/monorepo/commit/1fb812d6af4bd49ae9f8f5bd9c18ded328aefda1)), closes [#1759487394](https://github.com/gitgovernance/monorepo/issues/1759487394)
+
 ## [1.8.0](https://github.com/gitgovernance/monorepo/compare/cli-v1.7.2...cli-v1.8.0) (2025-10-17)
 
 
