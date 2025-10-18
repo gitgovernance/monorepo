@@ -7,7 +7,78 @@ jest.mock('../../services/dependency-injection', () => ({
 
 import { TaskCommand } from './task-command';
 import { DependencyInjectionService } from '../../services/dependency-injection';
-import type { Records } from '@gitgov/core';
+import type { Records, IndexerAdapter } from '@gitgov/core';
+
+// Test helper: Simple conversion to EnrichedTaskRecord for mocking
+// Note: This is NOT the real enrichment - the real one needs EmbeddedMetadata header
+// with signatures to calculate lastUpdated properly. This is just for unit tests.
+function enrichTaskForTest(task: Records.TaskRecord): IndexerAdapter.EnrichedTaskRecord {
+  // Extract timestamp from task ID (format: {timestamp}-{type}-{slug})
+  const idTimestamp = parseInt(task.id.split('-')[0] || '0', 10);
+  const defaultTimestamp = idTimestamp > 0 ? idTimestamp * 1000 : Date.now();
+
+  return {
+    ...task,
+    lastUpdated: defaultTimestamp,
+    lastActivityType: 'task_created'
+  };
+}
+
+// Helper function to create mock index data with proper typing
+function createMockIndexData(
+  tasks: Records.TaskRecord[],
+  options?: { enrichedTasks?: Records.TaskRecord[] }
+): IndexerAdapter.IndexData {
+  const enrichedTasks = options?.enrichedTasks
+    ? options.enrichedTasks.map(enrichTaskForTest)
+    : [];
+
+  return {
+    tasks,
+    enrichedTasks,
+    cycles: [],
+    actors: [],
+    activityHistory: [],
+    metrics: {
+      // SystemStatus
+      tasks: {
+        total: tasks.length,
+        byStatus: {},
+        byPriority: {}
+      },
+      cycles: {
+        total: 0,
+        active: 0,
+        completed: 0
+      },
+      health: {
+        overallScore: 100,
+        blockedTasks: 0,
+        staleTasks: 0
+      },
+      // ProductivityMetrics
+      throughput: 0,
+      leadTime: 0,
+      cycleTime: 0,
+      tasksCompleted7d: 0,
+      averageCompletionTime: 0,
+      // CollaborationMetrics
+      activeAgents: 0,
+      totalAgents: 0,
+      agentUtilization: 0,
+      humanAgentRatio: 0,
+      collaborationIndex: 0
+    },
+    metadata: {
+      generatedAt: new Date().toISOString(),
+      lastCommitHash: 'mock-hash',
+      integrityStatus: 'valid',
+      recordCounts: { tasks: tasks.length },
+      cacheStrategy: 'json',
+      generationTime: 0
+    }
+  };
+}
 
 // Mock console methods to capture output
 const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation();
@@ -33,7 +104,7 @@ describe('TaskCommand - Complete Unit Tests', () => {
   };
   let mockIndexerAdapter: {
     isIndexUpToDate: jest.MockedFunction<() => Promise<boolean>>;
-    getIndexData: jest.MockedFunction<() => Promise<{ tasks: Records.TaskRecord[]; metadata: { generatedAt: string } } | null>>;
+    getIndexData: jest.MockedFunction<() => Promise<IndexerAdapter.IndexData | null>>;
     generateIndex: jest.MockedFunction<() => Promise<void>>;
     invalidateCache: jest.MockedFunction<() => Promise<void>>;
   };
@@ -418,10 +489,9 @@ const test = "value";
 
     it('[EARS-2] should verify cache freshness and use IndexerAdapter for performance', async () => {
       mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(true);
-      mockIndexerAdapter.getIndexData.mockResolvedValue({
-        tasks: [sampleTask],
-        metadata: { generatedAt: new Date().toISOString() }
-      } as any);
+      mockIndexerAdapter.getIndexData.mockResolvedValue(
+        createMockIndexData([sampleTask])
+      );
 
       await taskCommand.executeList({});
 
@@ -433,10 +503,9 @@ const test = "value";
 
     it('[EARS-3] should show task from cache with derived states and metadata', async () => {
       mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(true);
-      mockIndexerAdapter.getIndexData.mockResolvedValue({
-        tasks: [sampleTask],
-        metadata: { generatedAt: new Date().toISOString() }
-      } as any);
+      mockIndexerAdapter.getIndexData.mockResolvedValue(
+        createMockIndexData([sampleTask])
+      );
 
       await taskCommand.executeShow('1757789000-task-test-task', {});
 
@@ -523,10 +592,9 @@ const test = "value";
     it('[EARS-9] should auto-regenerate cache when obsolete in read commands', async () => {
       mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(false);
       mockIndexerAdapter.generateIndex.mockResolvedValue({} as any);
-      mockIndexerAdapter.getIndexData.mockResolvedValue({
-        tasks: [sampleTask],
-        metadata: { generatedAt: new Date().toISOString() }
-      } as any);
+      mockIndexerAdapter.getIndexData.mockResolvedValue(
+        createMockIndexData([sampleTask])
+      );
 
       await taskCommand.executeList({});
 
@@ -566,10 +634,9 @@ const test = "value";
 
     it('[EARS-12] should show additional details with verbose flag', async () => {
       mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(true);
-      mockIndexerAdapter.getIndexData.mockResolvedValue({
-        tasks: [sampleTask],
-        metadata: { generatedAt: new Date().toISOString() }
-      } as any);
+      mockIndexerAdapter.getIndexData.mockResolvedValue(
+        createMockIndexData([sampleTask])
+      );
 
       await taskCommand.executeShow('1757789000-task-test-task', { verbose: true });
 
@@ -580,10 +647,9 @@ const test = "value";
     it('[EARS-13] should suppress output with quiet flag for scripting', async () => {
       mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(false);
       mockIndexerAdapter.generateIndex.mockResolvedValue({} as any);
-      mockIndexerAdapter.getIndexData.mockResolvedValue({
-        tasks: [sampleTask],
-        metadata: { generatedAt: new Date().toISOString() }
-      } as any);
+      mockIndexerAdapter.getIndexData.mockResolvedValue(
+        createMockIndexData([sampleTask])
+      );
 
       await taskCommand.executeList({ quiet: true });
 
@@ -594,10 +660,9 @@ const test = "value";
     it('[EARS-14] should detect conflicting flags and show clear error', async () => {
       // Test conflicting flags in list command
       mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(true);
-      mockIndexerAdapter.getIndexData.mockResolvedValue({
-        tasks: [],
-        metadata: { generatedAt: new Date().toISOString() }
-      } as any);
+      mockIndexerAdapter.getIndexData.mockResolvedValue(
+        createMockIndexData([])
+      );
 
       // For now, we don't have flag conflict detection implemented
       // This test documents the expected behavior
@@ -778,10 +843,9 @@ const test = "value";
 
     it('should handle task not found in show command', async () => {
       mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(true);
-      mockIndexerAdapter.getIndexData.mockResolvedValue({
-        tasks: [],
-        metadata: { generatedAt: new Date().toISOString() }
-      } as any);
+      mockIndexerAdapter.getIndexData.mockResolvedValue(
+        createMockIndexData([])
+      );
       mockBacklogAdapter.getTask.mockResolvedValue(null);
 
       await taskCommand.executeShow('non-existent', {});
@@ -830,10 +894,9 @@ const test = "value";
   describe('Auto-indexation and Cache Behavior', () => {
     it('should use cache when up to date', async () => {
       mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(true);
-      mockIndexerAdapter.getIndexData.mockResolvedValue({
-        tasks: [sampleTask],
-        metadata: { generatedAt: new Date().toISOString() }
-      } as any);
+      mockIndexerAdapter.getIndexData.mockResolvedValue(
+        createMockIndexData([sampleTask])
+      );
 
       await taskCommand.executeList({});
 
@@ -870,10 +933,9 @@ const test = "value";
       ];
 
       mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(true);
-      mockIndexerAdapter.getIndexData.mockResolvedValue({
-        tasks: tasks,
-        metadata: { generatedAt: new Date().toISOString() }
-      } as any);
+      mockIndexerAdapter.getIndexData.mockResolvedValue(
+        createMockIndexData(tasks)
+      );
 
       await taskCommand.executeList({});
 
@@ -908,6 +970,197 @@ const test = "value";
 
       // Note: The actual help handling happens in task.ts, not in task-command.ts
       // This test documents the expected behavior
+    });
+  });
+
+  describe('Argument Parsing & Sorting (EARS 36-37)', () => {
+    it('[EARS-36A] should parse options correctly when passed through executeList', async () => {
+      // This test validates that executeList receives options correctly
+      // The actual -- separator filtering happens in index.ts before calling executeList
+      // Here we verify that when options ARE passed correctly, executeList processes them
+
+      const task1 = { ...sampleTask, id: '1757789001-task-old', status: 'done' as const, lastUpdated: 1000 };
+      const task2 = { ...sampleTask, id: '1757789002-task-new', status: 'done' as const, lastUpdated: 2000 };
+
+      mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(true);
+      mockIndexerAdapter.getIndexData.mockResolvedValue(
+        createMockIndexData([task1, task2], { enrichedTasks: [task1, task2] })
+      );
+
+      // Simulate passing options that would come from Commander.js after -- filtering
+      await taskCommand.executeList({ status: 'done', limit: 1 });
+
+      expect(mockIndexerAdapter.getIndexData).toHaveBeenCalled();
+      // Should show only 1 task (limit applied)
+      expect(mockConsoleLog).toHaveBeenCalledWith('📋 Found 1 task(s):');
+    });
+
+    it('[EARS-36B] should handle status filter when options are parsed correctly', async () => {
+      const doneTask = { ...sampleTask, id: '1757789001-task-done', status: 'done' as const };
+      const activeTask = { ...sampleTask, id: '1757789002-task-active', status: 'active' as const };
+
+      mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(true);
+      mockIndexerAdapter.getIndexData.mockResolvedValue(
+        createMockIndexData([doneTask, activeTask])
+      );
+
+      await taskCommand.executeList({ status: 'done' });
+
+      // Should only show done tasks
+      const logs = mockConsoleLog.mock.calls.map(call => call[0]).join('\n');
+      expect(logs).toContain('1757789001-task-done');
+      expect(logs).not.toContain('1757789002-task-active');
+    });
+
+    it('[EARS-36C] should handle multiple filter options simultaneously', async () => {
+      const task1 = { ...sampleTask, id: '1757789001-task-1', status: 'done' as const, priority: 'high' as const };
+      const task2 = { ...sampleTask, id: '1757789002-task-2', status: 'done' as const, priority: 'low' as const };
+      const task3 = { ...sampleTask, id: '1757789003-task-3', status: 'active' as const, priority: 'high' as const };
+
+      mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(true);
+      mockIndexerAdapter.getIndexData.mockResolvedValue(
+        createMockIndexData([task1, task2, task3])
+      );
+
+      // Both status AND priority filters should work
+      await taskCommand.executeList({ status: 'done', priority: 'high' });
+
+      const logs = mockConsoleLog.mock.calls.map(call => call[0]).join('\n');
+      expect(logs).toContain('1757789001-task-1'); // done + high
+      expect(logs).not.toContain('1757789002-task-2'); // done + low
+      expect(logs).not.toContain('1757789003-task-3'); // active + high
+    });
+
+    it('[EARS-37A] should sort tasks by lastUpdated in descending order by default', async () => {
+      const task1 = { ...sampleTask, id: '1757789001-task-oldest', lastUpdated: 1000 };
+      const task2 = { ...sampleTask, id: '1757789002-task-middle', lastUpdated: 2000 };
+      const task3 = { ...sampleTask, id: '1757789003-task-newest', lastUpdated: 3000 };
+
+      mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(true);
+      mockIndexerAdapter.getIndexData.mockResolvedValue(
+        createMockIndexData([task1, task2, task3], { enrichedTasks: [task1, task2, task3] })
+      );
+
+      await taskCommand.executeList({});
+
+      const logs = mockConsoleLog.mock.calls.map(call => call[0] as string);
+      const taskLines = logs.filter(log => log.includes('1757789'));
+
+      // Should be sorted newest first (DESC)
+      expect(taskLines[0]).toContain('1757789003-task-newest');
+      expect(taskLines[1]).toContain('1757789002-task-middle');
+      expect(taskLines[2]).toContain('1757789001-task-oldest');
+    });
+
+    it('[EARS-37B] should apply limit AFTER sorting to get most recent tasks', async () => {
+      const task1 = { ...sampleTask, id: '1757789001-task-oldest', lastUpdated: 1000 };
+      const task2 = { ...sampleTask, id: '1757789002-task-middle', lastUpdated: 2000 };
+      const task3 = { ...sampleTask, id: '1757789003-task-newest', lastUpdated: 3000 };
+
+      mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(true);
+      mockIndexerAdapter.getIndexData.mockResolvedValue(
+        createMockIndexData([task1, task2, task3], { enrichedTasks: [task1, task2, task3] })
+      );
+
+      await taskCommand.executeList({ limit: 2 });
+
+      const logs = mockConsoleLog.mock.calls.map(call => call[0] as string);
+      const taskLines = logs.filter(log => log.includes('1757789'));
+
+      // Should show only 2 most recent tasks
+      expect(taskLines).toHaveLength(2);
+      expect(taskLines[0]).toContain('1757789003-task-newest');
+      expect(taskLines[1]).toContain('1757789002-task-middle');
+      expect(logs.join('\n')).not.toContain('1757789001-task-oldest');
+    });
+
+    it('[EARS-37C] should sort in ascending order when --order asc is specified', async () => {
+      const task1 = { ...sampleTask, id: '1757789001-task-oldest', lastUpdated: 1000 };
+      const task2 = { ...sampleTask, id: '1757789002-task-middle', lastUpdated: 2000 };
+      const task3 = { ...sampleTask, id: '1757789003-task-newest', lastUpdated: 3000 };
+
+      mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(true);
+      mockIndexerAdapter.getIndexData.mockResolvedValue(
+        createMockIndexData([task3, task1, task2], { enrichedTasks: [task3, task1, task2] })
+      );
+
+      await taskCommand.executeList({ order: 'asc' });
+
+      const logs = mockConsoleLog.mock.calls.map(call => call[0] as string);
+      const taskLines = logs.filter(log => log.includes('1757789'));
+
+      // Should be sorted oldest first (ASC)
+      expect(taskLines[0]).toContain('1757789001-task-oldest');
+      expect(taskLines[1]).toContain('1757789002-task-middle');
+      expect(taskLines[2]).toContain('1757789003-task-newest');
+    });
+
+    it('[EARS-37D] should fallback to ID timestamp when lastUpdated is not available', async () => {
+      // Tasks without lastUpdated field (e.g., from --from-source)
+      const task1 = { ...sampleTask, id: '1757789001-task-old' }; // No lastUpdated
+      const task2 = { ...sampleTask, id: '1757789003-task-new' }; // No lastUpdated
+      const task3 = { ...sampleTask, id: '1757789002-task-mid' }; // No lastUpdated
+
+      mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(true);
+      mockIndexerAdapter.getIndexData.mockResolvedValue(
+        createMockIndexData([task1, task2, task3])
+      );
+
+      await taskCommand.executeList({});
+
+      const logs = mockConsoleLog.mock.calls.map(call => call[0] as string);
+      const taskLines = logs.filter(log => log.includes('1757789'));
+
+      // Should be sorted by ID timestamp (DESC)
+      // 1757789003 > 1757789002 > 1757789001
+      expect(taskLines[0]).toContain('1757789003-task-new');
+      expect(taskLines[1]).toContain('1757789002-task-mid');
+      expect(taskLines[2]).toContain('1757789001-task-old');
+    });
+
+    it('[EARS-37E] should combine sorting, filtering, and limit correctly', async () => {
+      const task1 = { ...sampleTask, id: '1757789001-task-1', status: 'done' as const, lastUpdated: 1000 };
+      const task2 = { ...sampleTask, id: '1757789002-task-2', status: 'active' as const, lastUpdated: 2000 };
+      const task3 = { ...sampleTask, id: '1757789003-task-3', status: 'done' as const, lastUpdated: 3000 };
+      const task4 = { ...sampleTask, id: '1757789004-task-4', status: 'done' as const, lastUpdated: 4000 };
+
+      mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(true);
+      mockIndexerAdapter.getIndexData.mockResolvedValue(
+        createMockIndexData([task1, task2, task3, task4], { enrichedTasks: [task1, task2, task3, task4] })
+      );
+
+      // Filter done tasks, sort by lastUpdated DESC, then limit to 2
+      await taskCommand.executeList({ status: 'done', limit: 2 });
+
+      const logs = mockConsoleLog.mock.calls.map(call => call[0] as string);
+      const taskLines = logs.filter(log => log.includes('1757789'));
+
+      // Should show 2 most recent 'done' tasks
+      expect(taskLines).toHaveLength(2);
+      expect(mockConsoleLog).toHaveBeenCalledWith('📋 Found 2 task(s):');
+      expect(taskLines[0]).toContain('1757789004-task-4'); // Most recent done
+      expect(taskLines[1]).toContain('1757789003-task-3'); // Second most recent done
+      expect(logs.join('\n')).not.toContain('1757789002-task-2'); // active (filtered out)
+      expect(logs.join('\n')).not.toContain('1757789001-task-1'); // older done (limited out)
+    });
+
+    it('[EARS-37F] should handle --order desc explicitly (same as default)', async () => {
+      const task1 = { ...sampleTask, id: '1757789001-task-old', lastUpdated: 1000 };
+      const task2 = { ...sampleTask, id: '1757789002-task-new', lastUpdated: 2000 };
+
+      mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(true);
+      mockIndexerAdapter.getIndexData.mockResolvedValue(
+        createMockIndexData([task1, task2], { enrichedTasks: [task1, task2] })
+      );
+
+      await taskCommand.executeList({ order: 'desc' });
+
+      const logs = mockConsoleLog.mock.calls.map(call => call[0] as string);
+      const taskLines = logs.filter(log => log.includes('1757789'));
+
+      // DESC: newest first
+      expect(taskLines[0]).toContain('1757789002-task-new');
+      expect(taskLines[1]).toContain('1757789001-task-old');
     });
   });
 });
