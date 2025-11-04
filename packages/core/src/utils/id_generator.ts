@@ -43,21 +43,17 @@ export function generateExecutionId(title: string, timestamp: number): string {
 }
 
 /**
- * Generates a Changelog ID with entity type and slug (e.g., '12345-changelog-task-implement-auth').
+ * Generates a Changelog ID from title (Protocol v2.0.0).
+ * 
+ * Pattern: {timestamp}-changelog-{slug}
+ * Example: '1752707800-changelog-sistema-autenticacion-v1'
+ * 
+ * This follows the official changelog_record_schema.yaml pattern for
+ * Release Notes System that aggregates N tasks into 1 deliverable.
  */
-export function generateChangelogId(entityType: 'task' | 'cycle' | 'agent' | 'system' | 'configuration', entityId: string, timestamp: number): string {
-  let entitySlug: string;
-
-  // For system and configuration, use the entityId directly as slug
-  if (entityType === 'system' || entityType === 'configuration') {
-    entitySlug = sanitizeForId(entityId);
-  } else {
-    // For task, cycle, exec - extract slug from timestamped ID
-    const parsed = parseTimestampedId(entityId);
-    entitySlug = parsed ? parsed.slug : sanitizeForId(entityId);
-  }
-
-  return `${timestamp}-changelog-${entityType}-${entitySlug}`;
+export function generateChangelogId(title: string, timestamp: number): string {
+  const slug = sanitizeForId(title);
+  return `${timestamp}-changelog-${slug}`;
 }
 
 /**

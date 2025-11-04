@@ -61,9 +61,9 @@ const createMockDirent = (name: string, isFile = true) => ({
 const createMockSignature = (keyId = 'human:test-user'): Signature => ({
   keyId,
   role: 'author',
+  notes: 'RecordStore test signature',
   signature: 'mock-signature-hash',
-  timestamp: 1704067200000,
-  timestamp_iso: '2024-01-01T00:00:00.000Z'
+  timestamp: 1704067200000
 });
 
 
@@ -95,7 +95,7 @@ describe('RecordStore<ActorRecord>', () => {
     type: 'actor' as const,
     payloadChecksum: 'valid-checksum',
     // Provide a valid signature object to satisfy the type
-    signatures: [{ keyId: 'a', role: 'b', signature: 'c', timestamp: 1, timestamp_iso: 'd' }] as [Signature, ...Signature[]],
+    signatures: [{ keyId: 'a', role: 'b', notes: '', signature: 'c', timestamp: 1 }] as [Signature, ...Signature[]],
   };
 
   const actorRecord: GitGovRecord & { payload: ActorRecord } = {
@@ -190,7 +190,7 @@ describe('RecordStore<AgentRecord>', () => {
   });
 
   const agentPayload: AgentRecord = {
-    id: 'agent:test-agent', guild: 'design', status: 'active',
+    id: 'agent:test-agent', status: 'active',
     engine: { type: 'local', runtime: 'typescript', entrypoint: 'test.ts', function: 'run' },
     triggers: [], knowledge_dependencies: [], prompt_engine_requirements: {}
   };
@@ -199,7 +199,7 @@ describe('RecordStore<AgentRecord>', () => {
     version: '1.0' as const,
     type: 'agent' as const,
     payloadChecksum: 'valid-agent-checksum',
-    signatures: [{ keyId: 'agent:test-agent', role: 'author', signature: 'sig', timestamp: 1, timestamp_iso: 'd' }] as [Signature, ...Signature[]],
+    signatures: [{ keyId: 'agent:test-agent', role: 'author', notes: '', signature: 'sig', timestamp: 1 }] as [Signature, ...Signature[]],
   };
 
   const agentRecord: GitGovRecord & { payload: AgentRecord } = {
@@ -299,7 +299,7 @@ describe('RecordStore<TaskRecord>', () => {
     version: '1.0' as const,
     type: 'task' as const,
     payloadChecksum: 'valid-task-checksum',
-    signatures: [{ keyId: 'human:test-user', role: 'author', signature: 'sig', timestamp: 1, timestamp_iso: 'd' }] as [Signature, ...Signature[]],
+    signatures: [{ keyId: 'human:test-user', role: 'author', notes: '', signature: 'sig', timestamp: 1 }] as [Signature, ...Signature[]],
   };
 
   const taskRecord: GitGovRecord & { payload: TaskRecord } = {
@@ -391,7 +391,7 @@ describe('RecordStore<CycleRecord>', () => {
     version: '1.0' as const,
     type: 'cycle' as const,
     payloadChecksum: 'valid-cycle-checksum',
-    signatures: [{ keyId: 'human:test-user', role: 'author', signature: 'sig', timestamp: 1, timestamp_iso: 'd' }] as [Signature, ...Signature[]],
+    signatures: [{ keyId: 'human:test-user', role: 'author', notes: '', signature: 'sig', timestamp: 1 }] as [Signature, ...Signature[]],
   };
 
   const cycleRecord: GitGovRecord & { payload: CycleRecord } = {
@@ -490,7 +490,7 @@ describe('RecordStore Validation Methods', () => {
       version: '1.0' as const,
       type: 'actor' as const,
       payloadChecksum: 'valid-checksum',
-      signatures: [{ keyId: 'human:test-user', role: 'author', signature: 'sig', timestamp: 1, timestamp_iso: 'd' }] as [Signature, ...Signature[]],
+      signatures: [{ keyId: 'human:test-user', role: 'author', notes: '', signature: 'sig', timestamp: 1 }] as [Signature, ...Signature[]],
     },
     payload: {
       id: 'human:test-user', type: 'human', displayName: 'Test User',
@@ -587,6 +587,7 @@ describe('RecordStore<ExecutionRecord>', () => {
       },
       payload: await createExecutionRecord({
         id: '1757460000-exec-test-execution',
+        type: 'progress',
         title: 'Test Execution',
         taskId: '1757452191-task-implement-workflow-methodology-adapter',
         result: 'Completed successfully.',
@@ -660,13 +661,10 @@ describe('RecordStore<ChangelogRecord>', () => {
       },
       payload: await createChangelogRecord({
         id: '1757460001-changelog-task-implement-workflow-methodology-adapter',
-        entityType: 'task',
-        entityId: '1757452191-task-implement-workflow-methodology-adapter',
-        changeType: 'completion',
         title: 'Workflow Methodology Adapter Completed',
         description: 'Successfully completed the implementation of workflow methodology adapter with all requirements',
-        triggeredBy: 'human:developer',
-        reason: 'All acceptance criteria met and code review passed'
+        relatedTasks: ['1757452191-task-implement-workflow-methodology-adapter'],
+        completedAt: 1757460001
       }),
     };
   });

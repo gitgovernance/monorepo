@@ -421,4 +421,104 @@ describe('EventBus Module', () => {
     expect(handler2).toHaveBeenCalledWith(event2);
     expect(handler3).toHaveBeenCalledWith(event1);
   });
+
+  // ==========================================
+  // EARS-21 to EARS-24: Testing Support - waitForIdle()
+  // ==========================================
+
+  it('[EARS-21] should wait for all async handlers to complete', async () => {
+    const handler1 = jest.fn().mockImplementation(async () => {
+      await new Promise(resolve => setTimeout(resolve, 50));
+    });
+    const handler2 = jest.fn().mockImplementation(async () => {
+      await new Promise(resolve => setTimeout(resolve, 30));
+    });
+
+    testEventBus.subscribe('test.waitforidle', handler1);
+    testEventBus.subscribe('test.waitforidle', handler2);
+
+    const event: BaseEvent = {
+      type: 'test.waitforidle',
+      timestamp: Date.now(),
+      payload: { test: 'data' },
+      source: 'test'
+    };
+
+    testEventBus.publish(event);
+
+    // Handlers should NOT have completed yet (without waitForIdle)
+    await new Promise(resolve => setTimeout(resolve, 5));
+
+    // Now wait for all handlers to complete
+    await testEventBus.waitForIdle();
+
+    expect(handler1).toHaveBeenCalledWith(event);
+    expect(handler2).toHaveBeenCalledWith(event);
+  });
+
+  it('[EARS-22] should handle timeout when handlers take too long', async () => {
+    const slowHandler = jest.fn().mockImplementation(async () => {
+      await new Promise(resolve => setTimeout(resolve, 200)); // 200ms
+    });
+
+    testEventBus.subscribe('test.timeout', slowHandler);
+
+    const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
+
+    const event: BaseEvent = {
+      type: 'test.timeout',
+      timestamp: Date.now(),
+      payload: {},
+      source: 'test'
+    };
+
+    testEventBus.publish(event);
+
+    // Wait with 50ms timeout (handler takes 200ms)
+    await testEventBus.waitForIdle({ timeout: 50 });
+
+    expect(consoleWarnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('EventBus.waitForIdle() timeout')
+    );
+
+    consoleWarnSpy.mockRestore();
+  });
+
+  it('[EARS-23] should return immediately when no handlers are pending', async () => {
+    const startTime = Date.now();
+
+    await testEventBus.waitForIdle();
+
+    const duration = Date.now() - startTime;
+    expect(duration).toBeLessThan(50); // Should be nearly instant
+  });
+
+  it('[EARS-24] should handle multiple waitForIdle calls concurrently', async () => {
+    const handler = jest.fn().mockImplementation(async () => {
+      await new Promise(resolve => setTimeout(resolve, 50));
+    });
+
+    testEventBus.subscribe('test.concurrent', handler);
+
+    const event: BaseEvent = {
+      type: 'test.concurrent',
+      timestamp: Date.now(),
+      payload: {},
+      source: 'test'
+    };
+
+    testEventBus.publish(event);
+
+    // Multiple concurrent waitForIdle calls
+    const [result1, result2, result3] = await Promise.all([
+      testEventBus.waitForIdle(),
+      testEventBus.waitForIdle(),
+      testEventBus.waitForIdle()
+    ]);
+
+    expect(handler).toHaveBeenCalledWith(event);
+    expect(result1).toBeUndefined();
+    expect(result2).toBeUndefined();
+    expect(result3).toBeUndefined();
+  });
 });
