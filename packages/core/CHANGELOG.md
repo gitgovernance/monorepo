@@ -1,3 +1,10 @@
+## [1.6.3](https://github.com/gitgovernance/monorepo/compare/core-v1.6.2...core-v1.6.3) (2025-11-04)
+
+
+### 🐛 Bug Fixes
+
+* **core:** use require.resolve for agent prompt copy ([#50](https://github.com/gitgovernance/monorepo/issues/50)) ([935a1ab](https://github.com/gitgovernance/monorepo/commit/935a1ab601bedf3f53fa68c7e2fec11d4bd60b31))
+
 ## [1.6.2](https://github.com/gitgovernance/monorepo/compare/core-v1.6.1...core-v1.6.2) (2025-11-04)
 
 
