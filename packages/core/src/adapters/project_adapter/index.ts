@@ -1,6 +1,5 @@
 import { promises as fs, existsSync } from 'fs';
 import * as pathUtils from 'path';
-import { fileURLToPath } from 'url';
 import { RecordStore } from '../../store';
 import type { TaskRecord } from '../../types';
 import type { CycleRecord } from '../../types';
@@ -13,10 +12,6 @@ import type { WorkflowMethodologyAdapter } from '../workflow_methodology_adapter
 import type { IEventStream } from '../../event_bus';
 import { createTaskRecord } from '../../factories/task_factory';
 import { createCycleRecord } from '../../factories/cycle_factory';
-
-// ESM compatibility: __dirname equivalent
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = pathUtils.dirname(__filename);
 
 /**
  * ProjectAdapter Dependencies - Facade + Dependency Injection Pattern
@@ -533,8 +528,20 @@ export class ProjectAdapter implements IProjectAdapter {
 
     const potentialSources = [
       pathUtils.join(ConfigManager.findProjectRoot() || process.cwd(), 'docs/gitgov_agent_prompt.md'),
-      pathUtils.join(__dirname, '../../prompts/gitgov_agent_prompt.md'),
     ];
+
+    // Add package-relative path (works in both Jest and production npm package)
+    // __dirname is available when transpiled to CommonJS or in Jest environment
+    // In npm package after build: dist/src/adapters/project_adapter/index.js
+    // Target: prompts/gitgov_agent_prompt.md (from dist/)
+    // Path: ../../prompts from dist/src/adapters/project_adapter/
+    try {
+      if (typeof __dirname !== 'undefined') {
+        potentialSources.push(pathUtils.join(__dirname, '../../prompts/gitgov_agent_prompt.md'));
+      }
+    } catch {
+      // __dirname not available (pure ESM), skip this source
+    }
 
     for (const sourcePrompt of potentialSources) {
       try {
