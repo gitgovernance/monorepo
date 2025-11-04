@@ -191,14 +191,18 @@ export class MetricsAdapter implements IMetricsAdapter {
 
     // Read related data for analysis
     let feedbacks: FeedbackRecord[] = [];
+    let allFeedbacks: FeedbackRecord[] = []; // For checking resolutions (immutable pattern)
     let executions: ExecutionRecord[] = [];
 
     if (this.feedbackStore) {
       const feedbackIds = await this.feedbackStore.list();
       for (const id of feedbackIds) {
         const record = await this.feedbackStore.read(id);
-        if (record && record.payload.entityId === taskId) {
-          feedbacks.push(record.payload);
+        if (record) {
+          allFeedbacks.push(record.payload);
+          if (record.payload.entityId === taskId) {
+            feedbacks.push(record.payload);
+          }
         }
       }
     }
@@ -216,7 +220,21 @@ export class MetricsAdapter implements IMetricsAdapter {
     // Calculate Tier 1 metrics
     const timeInCurrentStage = this.calculateTimeInCurrentStage(task);
     const stalenessIndex = this.calculateStalenessIndex([task]);
-    const blockingFeedbacks = feedbacks.filter(f => f.type === 'blocking' && f.status === 'open').length;
+
+    // [EARS-32/33] Count only UNRESOLVED blocking feedbacks (immutable pattern)
+    // A blocking feedback is unresolved if no resolution feedback exists for it
+    const blockingFeedbacks = feedbacks.filter(f => {
+      if (f.type !== 'blocking' || f.status !== 'open') return false;
+
+      // Check if this blocking feedback has been resolved (via another feedback)
+      const hasResolution = allFeedbacks.some(resolution =>
+        resolution.entityType === 'feedback' &&
+        resolution.resolvesFeedbackId === f.id &&
+        resolution.status === 'resolved'
+      );
+
+      return !hasResolution; // Only count if NOT resolved
+    }).length;
     const lastActivity = executions.length > 0 ? Math.max(...executions.map(e => this.getTimestampFromId(e.id))) : this.getTimestampFromId(task.id);
 
     // Generate recommendations

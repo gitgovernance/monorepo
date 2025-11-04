@@ -217,7 +217,6 @@
     "required_agents": [
       {
         "id": "agent:scrum-master",
-        "gremio": "operations",
         "engine": {
           "type": "local",
           "entrypoint": "@gitgov/agent-scrum-master"
@@ -243,7 +242,6 @@
       },
       {
         "id": "agent:product-owner-assistant",
-        "gremio": "strategy",
         "engine": {
           "type": "mcp",
           "url": "http://localhost:8080/product-owner-mcp"

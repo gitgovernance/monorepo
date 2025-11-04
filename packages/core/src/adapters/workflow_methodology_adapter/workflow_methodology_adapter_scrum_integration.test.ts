@@ -14,6 +14,7 @@ describe('WorkflowMethodologyAdapter - SCRUM Methodology Integration Tests', () 
     getFeedback: jest.fn(),
     getFeedbackByEntity: jest.fn(),
     getAllFeedback: jest.fn(),
+    getFeedbackThread: jest.fn(),
   };
   const createMockTask = (tags: string[] = [], status: TaskRecord['status'] = 'draft'): TaskRecord => ({
     id: '1752274500-task-test-task',
@@ -137,9 +138,9 @@ describe('WorkflowMethodologyAdapter - SCRUM Methodology Integration Tests', () 
         const signature = {
           keyId: scrumMaster.id,
           role: 'scrum_master',
+          notes: '',
           signature: 'mock-signature',
-          timestamp: Date.now(),
-          timestamp_iso: new Date().toISOString()
+          timestamp: Date.now()
         };
         const signatureResult = await scrumAdapter.validateSignature(signature, context);
         expect(signatureResult).toBe(true);
@@ -176,9 +177,9 @@ describe('WorkflowMethodologyAdapter - SCRUM Methodology Integration Tests', () 
         const signature = {
           keyId: productOwner.id,
           role: 'product_owner',
+          notes: '',
           signature: 'mock-signature',
-          timestamp: Date.now(),
-          timestamp_iso: new Date().toISOString()
+          timestamp: Date.now()
         };
         const signatureResult = await scrumAdapter.validateSignature(signature, context);
         expect(signatureResult).toBe(true);
@@ -202,9 +203,9 @@ describe('WorkflowMethodologyAdapter - SCRUM Methodology Integration Tests', () 
         const signature = {
           keyId: scrumMaster.id,
           role: 'scrum_master',
+          notes: '',
           signature: 'mock-signature',
-          timestamp: Date.now(),
-          timestamp_iso: new Date().toISOString()
+          timestamp: Date.now()
         };
         const signatureResult = await scrumAdapter.validateSignature(signature, context);
         expect(signatureResult).toBe(true);

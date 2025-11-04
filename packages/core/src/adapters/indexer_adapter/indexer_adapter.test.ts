@@ -39,9 +39,9 @@ function createMockTaskRecord(overrides: Partial<TaskRecord> = {}): GitGovRecord
       signatures: [{
         keyId: 'human:developer',
         role: 'author',
+        notes: '',
         signature: 'mock-sig',
-        timestamp,
-        timestamp_iso: new Date(timestamp * 1000).toISOString()
+        timestamp
       }] as [Signature, ...Signature[]]
     },
     payload: {
@@ -69,9 +69,9 @@ function createMockCycleRecord(overrides: Partial<CycleRecord> = {}): GitGovReco
       signatures: [{
         keyId: 'human:scrum-master',
         role: 'author',
+        notes: '',
         signature: 'mock-sig',
-        timestamp,
-        timestamp_iso: new Date(timestamp * 1000).toISOString()
+        timestamp
       }] as [Signature, ...Signature[]]
     },
     payload: {
@@ -98,9 +98,9 @@ function createMockActorRecord(overrides: Partial<ActorRecord> = {}): GitGovReco
       signatures: [{
         keyId: 'system',
         role: 'author',
+        notes: '',
         signature: 'mock-sig',
-        timestamp,
-        timestamp_iso: new Date(timestamp * 1000).toISOString()
+        timestamp
       }] as [Signature, ...Signature[]]
     },
     payload: {
@@ -437,7 +437,7 @@ describe('FileIndexerAdapter', () => {
         status: 'active',
         priority: 'high',
         description: 'Task created by BacklogAdapter.createTask()',
-        tags: ['guild:backend', 'epic:auth']
+        tags: ['category:design', 'epic:auth']
       });
 
       const realisticCycle = createMockCycleRecord({

@@ -117,7 +117,7 @@ export class IdentityAdapter implements IIdentityAdapter {
     const payloadChecksum = calculatePayloadChecksum(validatedPayload);
 
     // Create signature for the record
-    const signature = await signPayload(validatedPayload, privateKey, actorId, 'author');
+    const signature = await signPayload(validatedPayload, privateKey, actorId, 'author', 'Actor registration');
 
     // Create the complete GitGovRecord structure
     const record: GitGovRecord & { payload: ActorRecord } = {
@@ -210,9 +210,9 @@ export class IdentityAdapter implements IIdentityAdapter {
     const mockSignature: Signature = {
       keyId: actorId,
       role: role,
+      notes: 'Record signed',
       signature: `mock-signature-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      timestamp: Math.floor(Date.now() / 1000),
-      timestamp_iso: new Date().toISOString()
+      timestamp: Math.floor(Date.now() / 1000)
     };
 
     // Create signed record with real checksum + mock signature
@@ -358,8 +358,8 @@ export class IdentityAdapter implements IIdentityAdapter {
 
   async createAgentRecord(payload: Partial<AgentPayload>): Promise<AgentRecord> {
     // Validate required fields
-    if (!payload.id || !payload.guild || !payload.engine) {
-      throw new Error('AgentRecord requires id, guild and engine');
+    if (!payload.id || !payload.engine) {
+      throw new Error('AgentRecord requires id and engine');
     }
 
     // Verify that corresponding ActorRecord exists and is of type 'agent'
@@ -374,7 +374,6 @@ export class IdentityAdapter implements IIdentityAdapter {
     // Create complete AgentRecord payload
     const completePayload: AgentRecord = {
       id: payload.id,
-      guild: payload.guild,
       engine: payload.engine,
       status: payload.status || 'active',
       triggers: payload.triggers || [],
@@ -392,7 +391,7 @@ export class IdentityAdapter implements IIdentityAdapter {
     // Create signature for the record using the corresponding actor's key
     // Note: In a real implementation, we would need access to the actor's private key
     // For now, we'll create a placeholder signature structure
-    const signature = signPayload(validatedPayload, 'placeholder-private-key', payload.id, 'author');
+    const signature = signPayload(validatedPayload, 'placeholder-private-key', payload.id, 'author', 'Agent registration');
 
     // Create the complete GitGovRecord structure
     const record: GitGovRecord & { payload: AgentRecord } = {
@@ -425,7 +424,6 @@ export class IdentityAdapter implements IIdentityAdapter {
         source: "identity_adapter",
         payload: {
           agentId: validatedPayload.id,
-          guild: validatedPayload.guild,
           engine: validatedPayload.engine,
           correspondingActorId: correspondingActor.id,
         },

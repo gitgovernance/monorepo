@@ -106,9 +106,9 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       signatures: [{
         keyId: 'human:test-user',
         role: 'author',
+        notes: 'Sample actor record for testing',
         signature: 'sample-signature',
-        timestamp: 1234567890,
-        timestamp_iso: '2023-01-01T00:00:00Z'
+        timestamp: 1234567890
       }]
     },
     payload: sampleActorPayload
@@ -183,9 +183,9 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       mockedSignPayload.mockReturnValue({
         keyId: 'human:test-user',
         role: 'author',
+        notes: '',
         signature: 'generated-signature',
-        timestamp: 1234567890,
-        timestamp_iso: '2023-01-01T00:00:00Z'
+        timestamp: 1234567890
       });
       mockedValidateFullActorRecord.mockResolvedValue(undefined);
       mockActorStore.write.mockResolvedValue(undefined);
@@ -252,9 +252,9 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
           signatures: [{
             keyId: 'initial-signer',
             role: 'author',
+            notes: 'Initial signature for test',
             signature: 'initial-signature',
-            timestamp: 1234567890,
-            timestamp_iso: '2023-01-01T00:00:00Z'
+            timestamp: 1234567890
           }]
         },
         payload: sampleActorPayload // Use valid ActorRecord payload
@@ -275,7 +275,6 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       expect(newSignature!.role).toBe('author');
       expect(newSignature!.signature).toContain('mock-signature-');
       expect(newSignature!.timestamp).toBeGreaterThan(0);
-      expect(newSignature!.timestamp_iso).toMatch(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
 
       // Check that payload checksum was updated
       expect(signedRecord.header.payloadChecksum).toBeDefined();
@@ -290,9 +289,9 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
           signatures: [{
             keyId: 'initial-signer',
             role: 'author',
+            notes: 'Initial signature for test',
             signature: 'initial-signature',
-            timestamp: 1234567890,
-            timestamp_iso: '2023-01-01T00:00:00Z'
+            timestamp: 1234567890
           }]
         },
         payload: sampleActorPayload
@@ -327,7 +326,6 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
   describe('AgentRecord operations', () => {
     const sampleAgentPayload: AgentRecord = {
       id: 'agent:test-agent',
-      guild: 'design',
       status: 'active',
       engine: { type: 'local', runtime: 'typescript', entrypoint: 'test.ts', function: 'run' },
       triggers: [{ type: 'manual' }],
@@ -343,9 +341,9 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
         signatures: [{
           keyId: 'agent:test-agent',
           role: 'author',
+          notes: 'Sample agent signature',
           signature: 'sample-agent-signature',
-          timestamp: 1234567890,
-          timestamp_iso: '2023-01-01T00:00:00Z'
+          timestamp: 1234567890
         }]
       },
       payload: sampleAgentPayload
@@ -365,7 +363,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
         version: '1.0',
         type: 'actor',
         payloadChecksum: 'actor-checksum',
-        signatures: [{ keyId: 'agent:test-agent', role: 'author', signature: 'sig', timestamp: 123, timestamp_iso: '' }]
+        signatures: [{ keyId: 'agent:test-agent', role: 'author', notes: 'Agent test signature', signature: 'sig', timestamp: 123 }]
       },
       payload: correspondingActorPayload
     };
@@ -424,7 +422,6 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       it('[EARS-16] should create a new AgentRecord when corresponding ActorRecord exists', async () => {
         const inputPayload = {
           id: 'agent:test-agent',
-          guild: 'design' as const,
           engine: { type: 'local' as const, runtime: 'typescript', entrypoint: 'test.ts', function: 'run' }
         };
 
@@ -435,9 +432,9 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
         mockedSignPayload.mockReturnValue({
           keyId: 'agent:test-agent',
           role: 'author',
+          notes: '',
           signature: 'generated-agent-signature',
-          timestamp: 1234567890,
-          timestamp_iso: '2023-01-01T00:00:00Z'
+          timestamp: 1234567890
         });
         mockedValidateFullAgentRecord.mockResolvedValue(undefined);
         mockAgentStore.write.mockResolvedValue(undefined);
@@ -456,17 +453,16 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       it('[EARS-17] should throw error when required fields are missing', async () => {
         const invalidPayload = {
           id: 'agent:test-agent',
-          // Missing guild and engine
+          // Missing engine
         };
 
         await expect(identityAdapter.createAgentRecord(invalidPayload))
-          .rejects.toThrow('AgentRecord requires id, guild and engine');
+          .rejects.toThrow('AgentRecord requires id and engine');
       });
 
       it('[EARS-18] should throw error when corresponding ActorRecord does not exist', async () => {
         const inputPayload = {
           id: 'agent:non-existent',
-          guild: 'design' as const,
           engine: { type: 'local' as const }
         };
 
@@ -479,7 +475,6 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       it('[EARS-19] should throw error when ActorRecord is not of type agent', async () => {
         const inputPayload = {
           id: 'human:test-user',
-          guild: 'design' as const,
           engine: { type: 'local' as const }
         };
 
@@ -666,9 +661,9 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       mockedSignPayload.mockReturnValue({
         keyId: 'human:test-user',
         role: 'author',
+        notes: '',
         signature: 'generated-signature',
-        timestamp: 1234567890,
-        timestamp_iso: '2023-01-01T00:00:00Z'
+        timestamp: 1234567890
       });
       mockedValidateFullActorRecord.mockResolvedValue(undefined);
       mockActorStore.write.mockResolvedValue(undefined);
@@ -737,9 +732,9 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       mockedSignPayload.mockReturnValue({
         keyId: 'human:test-user',
         role: 'author',
+        notes: '',
         signature: 'generated-signature',
-        timestamp: 1234567890,
-        timestamp_iso: '2023-01-01T00:00:00Z'
+        timestamp: 1234567890
       });
       mockedValidateFullActorRecord.mockResolvedValue(undefined);
       mockActorStore.write.mockResolvedValue(undefined);

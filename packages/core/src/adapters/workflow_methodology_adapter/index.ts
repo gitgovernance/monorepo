@@ -96,11 +96,23 @@ export class WorkflowMethodologyAdapter implements IWorkflowMethodology {
   }
 
   /**
-   * Gets the guild tag from a task's tags array
+   * Determines which signature group to use for validation.
+   * Checks all available signature groups and returns the first one where
+   * the actor has matching capability roles.
    */
-  private getTaskGuild(context: ValidationContext): string {
-    const guildTag = context.task.tags?.find(tag => tag.startsWith('guild:'));
-    return guildTag ? guildTag.replace('guild:', '') : '__default__';
+  private getApplicableSignatureGroup(signatureRules: Record<string, any>, actor: ActorRecord): string {
+    // Try to find a signature group where the actor has matching roles
+    for (const [groupName, ruleSet] of Object.entries(signatureRules)) {
+      if (groupName === '__default__') continue; // Check __default__ last
+
+      const hasMatchingRole = actor.roles?.some(role => ruleSet.capability_roles?.includes(role));
+      if (hasMatchingRole) {
+        return groupName;
+      }
+    }
+
+    // Fallback to __default__
+    return '__default__';
   }
 
   /**
@@ -132,7 +144,6 @@ export class WorkflowMethodologyAdapter implements IWorkflowMethodology {
    */
   async validateSignature(signature: Signature, context: ValidationContext): Promise<boolean> {
     const config = this.getConfig();
-    const guild = this.getTaskGuild(context);
 
     if (!context.transitionTo) {
       throw new Error('ValidationContext must include "transitionTo" for signature validation.');
@@ -155,7 +166,9 @@ export class WorkflowMethodologyAdapter implements IWorkflowMethodology {
     const signatureRules = transitionConfig.requires.signatures;
     if (!signatureRules) return true; // No signature required for this transition
 
-    const ruleSet = signatureRules[guild] || signatureRules['__default__'];
+    // Determine which signature group applies based on actor's roles
+    const signatureGroup = this.getApplicableSignatureGroup(signatureRules, actor);
+    const ruleSet = signatureRules[signatureGroup];
     if (!ruleSet) return false;
 
     // 1. Check if the signature role matches the required role
