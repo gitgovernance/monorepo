@@ -1,5 +1,6 @@
 import { promises as fs, existsSync } from 'fs';
 import * as pathUtils from 'path';
+import { fileURLToPath } from 'url';
 import { RecordStore } from '../../store';
 import type { TaskRecord } from '../../types';
 import type { CycleRecord } from '../../types';
@@ -12,6 +13,10 @@ import type { WorkflowMethodologyAdapter } from '../workflow_methodology_adapter
 import type { IEventStream } from '../../event_bus';
 import { createTaskRecord } from '../../factories/task_factory';
 import { createCycleRecord } from '../../factories/cycle_factory';
+
+// ESM compatibility: __dirname equivalent
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = pathUtils.dirname(__filename);
 
 /**
  * ProjectAdapter Dependencies - Facade + Dependency Injection Pattern
