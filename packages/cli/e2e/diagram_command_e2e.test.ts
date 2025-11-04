@@ -81,6 +81,7 @@ describe('CLI Diagram Command - Functional Tests', () => {
         signatures: [{
           keyId: 'test-key',
           role: 'creator',
+          notes: 'E2E diagram generation test',
           timestamp: new Date().toISOString(),
           signature: 'test-signature'
         }]
@@ -106,6 +107,7 @@ describe('CLI Diagram Command - Functional Tests', () => {
         signatures: [{
           keyId: 'test-key',
           role: 'creator',
+          notes: 'E2E diagram generation test',
           timestamp: new Date().toISOString(),
           signature: 'test-signature'
         }]
