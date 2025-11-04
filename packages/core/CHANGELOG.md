@@ -1,3 +1,20 @@
+## [1.5.0](https://github.com/gitgovernance/monorepo/compare/core-v1.4.0...core-v1.5.0) (2025-11-04)
+
+
+### ✨ Features
+
+* **core:** add [@gitgov](https://github.com/gitgov) agent prompt copy during initialization ([62de70f](https://github.com/gitgovernance/monorepo/commit/62de70fac3d0f56d9076ac7c1a70ba65cf213d69))
+
+
+### 🐛 Bug Fixes
+
+* **core:** generate 44-char Ed25519 public keys for schema compliance ([8a9ef24](https://github.com/gitgovernance/monorepo/commit/8a9ef24416d3d5137c20a796d86b001c61f8dd0e))
+
+
+### ♻️ Refactoring
+
+* **core:** remove Kiro IDE integration from ProjectAdapter ([6d23c24](https://github.com/gitgovernance/monorepo/commit/6d23c24913d8c21c7fb8f4ecd11b184465256e3f))
+
 ## [1.4.0](https://github.com/gitgovernance/monorepo/compare/core-v1.3.0...core-v1.4.0) (2025-11-04)
 
 
