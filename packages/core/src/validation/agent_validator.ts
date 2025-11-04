@@ -1,7 +1,7 @@
-import type { ValidateFunction } from "ajv";
+import type { ValidateFunction, ErrorObject } from "ajv";
 import type { AgentRecord } from "../types";
 import type { GitGovRecord } from "../types";
-import { SchemaValidationError } from "./common";
+import { DetailedValidationError, SchemaValidationError } from "./common";
 import { validateFullEmbeddedMetadataRecord } from './embedded_metadata_validator';
 import type { ValidationResult } from './errors';
 import { SchemaValidationCache } from "../schemas/schema_cache";
@@ -29,9 +29,9 @@ export function isAgentRecord(data: unknown): data is AgentRecord {
 export function validateAgentRecordDetailed(data: unknown): ValidationResult {
   const [isValid, ajvErrors] = validateAgentRecordSchema(data);
 
-  const formattedErrors = ajvErrors ? ajvErrors.map(error => ({
-    field: error.instancePath || error.schemaPath || 'root',
-    message: error.message || 'Validation failed',
+  const formattedErrors = ajvErrors ? ajvErrors.map((error: ErrorObject) => ({
+    field: error.instancePath?.replace('/', '') || error.params?.['missingProperty'] || 'root',
+    message: error.message || 'Unknown validation error',
     value: error.data
   })) : [];
 
@@ -55,9 +55,12 @@ export async function validateFullAgentRecord(
   // 1. Schema Validation
   const [isValidSchema, errors] = validateAgentRecordSchema(record.payload);
   if (!isValidSchema) {
-    throw new SchemaValidationError(
-      `AgentRecord payload failed schema validation: ${JSON.stringify(errors)}`
-    );
+    const formattedErrors = (errors || []).map((error: ErrorObject) => ({
+      field: error.instancePath?.replace('/', '') || error.params?.['missingProperty'] || 'root',
+      message: error.message || 'Unknown validation error',
+      value: error.data
+    }));
+    throw new DetailedValidationError('AgentRecord', formattedErrors);
   }
 
   // 2. Embedded Metadata Validation (header + wrapper)
