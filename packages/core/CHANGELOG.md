@@ -1,3 +1,10 @@
+## [1.5.1](https://github.com/gitgovernance/monorepo/compare/core-v1.5.0...core-v1.5.1) (2025-11-04)
+
+
+### 🐛 Bug Fixes
+
+* **core:** include docs/ folder in npm package ([4ac246d](https://github.com/gitgovernance/monorepo/commit/4ac246d038df809e119abd59471c7d7ca8d3f10f))
+
 ## [1.5.0](https://github.com/gitgovernance/monorepo/compare/core-v1.4.0...core-v1.5.0) (2025-11-04)
 
 
