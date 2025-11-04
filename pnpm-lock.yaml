@@ -28,21 +28,14 @@ importers:
   packages/cli:
     dependencies:
       '@gitgov/core':
-        specifier: ^1.3.0
-        version: 1.3.0
+        specifier: ^1.5.0
+        version: 1.5.0
       clipboardy:
         specifier: ^5.0.0
         version: 5.0.0
       commander:
         specifier: ^11.1.0
         version: 11.1.0
-    optionalDependencies:
-      ink:
-        specifier: ^4.4.1
-        version: 4.4.1(@types/react@18.3.24)(react-devtools-core@4.28.5)(react@18.3.1)
-      react:
-        specifier: ^18.3.1
-        version: 18.3.1
     devDependencies:
       '@semantic-release/changelog':
         specifier: ^6.0.3
@@ -89,6 +82,13 @@ importers:
       typescript:
         specifier: ^5.0.0
         version: 5.9.2
+    optionalDependencies:
+      ink:
+        specifier: ^4.4.1
+        version: 4.4.1(@types/react@18.3.24)(react-devtools-core@4.28.5)(react@18.3.1)
+      react:
+        specifier: ^18.3.1
+        version: 18.3.1
 
   packages/core:
     dependencies:
@@ -616,8 +616,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@gitgov/core@1.3.0':
-    resolution: {integrity: sha512-gh0nZPAjw3p9pxs6ljegQfRh7z4QYoNpFbTy0brybZ6D0UsZBok1MdWH79fOU8AbzmCKGNs6yTf9bNXwvtQnOQ==}
+  '@gitgov/core@1.5.0':
+    resolution: {integrity: sha512-uX0Jn2LiqCZhA/X9vAih1AIsmlCCY5cswQvd99jqpPpqPQwHWLhjmziOTZ1TmbgulkuvrLsZhARoN4hJA+GJgQ==}
 
   '@isaacs/cliui@8.0.2':
     resolution: {integrity: sha512-O8jcjabXaleOG9DQ0+ARXWZBTfnP4WNAqzuiJK7ll44AmxGKv/J2M4TPjxjY3znBCfvBXFzucm1twdyFybFqEA==}
@@ -3703,7 +3703,7 @@ snapshots:
   '@esbuild/win32-x64@0.25.5':
     optional: true
 
-  '@gitgov/core@1.3.0':
+  '@gitgov/core@1.5.0':
     dependencies:
       ajv: 8.17.1
       ajv-formats: 3.0.1(ajv@8.17.1)
