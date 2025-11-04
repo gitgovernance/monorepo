@@ -1,3 +1,25 @@
+## [1.10.0](https://github.com/gitgovernance/monorepo/compare/cli-v1.9.0...cli-v1.10.0) (2025-11-04)
+
+
+### 🚀 Features
+
+* **core:** add [@gitgov](https://github.com/gitgov) agent prompt copy during initialization ([62de70f](https://github.com/gitgovernance/monorepo/commit/62de70fac3d0f56d9076ac7c1a70ba65cf213d69))
+* **core:** add EmbeddedMetadata factory with validation ([5d0236d](https://github.com/gitgovernance/monorepo/commit/5d0236d7000ad5dea01fe68e3b32a1489754541b)), closes [#1761736263](https://github.com/gitgovernance/monorepo/issues/1761736263)
+
+
+### 🐛 Bug Fixes
+
+* **core:** generate 44-char Ed25519 public keys for schema compliance ([8a9ef24](https://github.com/gitgovernance/monorepo/commit/8a9ef24416d3d5137c20a796d86b001c61f8dd0e))
+
+
+### ♻️ Refactoring
+
+* **core:** enhance validators and schema module ([d56ab24](https://github.com/gitgovernance/monorepo/commit/d56ab248facd97690a05805198160fc37c0979cd)), closes [#1761736263](https://github.com/gitgovernance/monorepo/issues/1761736263)
+* **core:** remove Kiro IDE integration from ProjectAdapter ([6d23c24](https://github.com/gitgovernance/monorepo/commit/6d23c24913d8c21c7fb8f4ecd11b184465256e3f))
+* **core:** update adapters and factories for schema compliance ([b7cecc9](https://github.com/gitgovernance/monorepo/commit/b7cecc9530e46d2c5b2c1ca30255fb54cdf26610)), closes [#1761736263](https://github.com/gitgovernance/monorepo/issues/1761736263)
+* **core:** update generated schemas and types from YAML sources ([ed4981b](https://github.com/gitgovernance/monorepo/commit/ed4981b938813755529dbbd06086a61fa87c3ecd)), closes [#1761736263](https://github.com/gitgovernance/monorepo/issues/1761736263)
+* **core:** update supporting modules and documentation ([574c334](https://github.com/gitgovernance/monorepo/commit/574c334f39986bf5866fa5ac9e86ecbcbdd9f94c)), closes [#1761736263](https://github.com/gitgovernance/monorepo/issues/1761736263)
+
 ## [1.9.0](https://github.com/gitgovernance/monorepo/compare/cli-v1.8.0...cli-v1.9.0) (2025-10-18)
 
 
