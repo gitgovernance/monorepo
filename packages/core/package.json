@@ -7,7 +7,7 @@
   "types": "dist/src/index.d.ts",
   "files": [
     "dist",
-    "docs"
+    "prompts"
   ],
   "exports": {
     ".": {
@@ -17,13 +17,14 @@
   },
   "scripts": {
     "clean": "rm -rf dist",
-    "clean:generated": "rm -rf src/schemas/generated/* src/types/generated/*",
+    "clean:generated": "rm -rf src/schemas/generated/* src/types/generated/* prompts/*",
     "sync:schemas": "tsx scripts/sync-schemas.ts",
     "sync:workflow-configs": "tsx scripts/sync-workflow-configs.ts",
+    "sync:prompts": "tsx scripts/sync-prompts.ts",
     "compile:types": "tsx scripts/compile-json-to-types.ts",
     "generate:indexes": "tsx scripts/generate-indexes.ts",
     "validate:schemas": "tsx scripts/validate-schemas.ts",
-    "prebuild": "pnpm compile:types && pnpm generate:indexes",
+    "prebuild": "pnpm sync:prompts && pnpm compile:types && pnpm generate:indexes",
     "build": "pnpm clean && tsup",
     "test": "jest",
     "test:coverage": "jest --coverage",
