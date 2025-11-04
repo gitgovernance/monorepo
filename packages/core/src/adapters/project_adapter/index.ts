@@ -12,6 +12,8 @@ import type { WorkflowMethodologyAdapter } from '../workflow_methodology_adapter
 import type { IEventStream } from '../../event_bus';
 import { createTaskRecord } from '../../factories/task_factory';
 import { createCycleRecord } from '../../factories/cycle_factory';
+import { createRequire } from 'module';
+import { fileURLToPath } from 'url';
 
 /**
  * ProjectAdapter Dependencies - Facade + Dependency Injection Pattern
@@ -519,38 +521,65 @@ export class ProjectAdapter implements IProjectAdapter {
   }
 
   private async copyAgentPrompt(gitgovPath: string): Promise<void> {
-    // Copy the official @gitgov agent prompt to the project
-    // Try multiple source locations for robustness:
-    // 1. From monorepo root (development scenario)
-    // 2. From installed package location (npm scenario)
-
-    const targetPrompt = pathUtils.join(gitgovPath, 'gitgov');
-
-    const potentialSources = [
-      pathUtils.join(ConfigManager.findProjectRoot() || process.cwd(), 'docs/gitgov_agent_prompt.md'),
-    ];
-
-    // Add package-relative path (works in both Jest and production npm package)
-    // __dirname is available when transpiled to CommonJS or in Jest environment
-    // In npm package after build: dist/src/adapters/project_adapter/index.js
-    // Target: prompts/gitgov_agent_prompt.md (from dist/)
-    // Path: ../../prompts from dist/src/adapters/project_adapter/
-    try {
-      if (typeof __dirname !== 'undefined') {
-        potentialSources.push(pathUtils.join(__dirname, '../../prompts/gitgov_agent_prompt.md'));
+    // Helper function to safely get import.meta.url without triggering Jest parse errors
+    function getImportMetaUrl(): string | null {
+      try {
+        // Use Function constructor to avoid Jest parsing import.meta at compile time
+        // eslint-disable-next-line @typescript-eslint/no-implied-eval
+        const getUrl = new Function('return import.meta.url');
+        return getUrl() as string;
+      } catch {
+        return null;
       }
-    } catch {
-      // __dirname not available (pure ESM), skip this source
     }
 
-    for (const sourcePrompt of potentialSources) {
+    const targetPrompt = pathUtils.join(gitgovPath, 'gitgov');
+    const potentialSources: string[] = [];
+
+    // 1️⃣ Development scenario: search in monorepo prompts/ (package root)
+    // In development, we're in packages/core, so prompts/ is at the root
+    potentialSources.push(
+      pathUtils.join(process.cwd(), 'prompts/gitgov_agent_prompt.md'),
+    );
+
+    // 2️⃣ NPM installation: use require.resolve to find @gitgov/core package
+    try {
+      const metaUrl = getImportMetaUrl();
+      if (metaUrl) {
+        const require = createRequire(metaUrl);
+        const pkgJsonPath = require.resolve('@gitgov/core/package.json');
+        const pkgRoot = pathUtils.dirname(pkgJsonPath);
+        potentialSources.push(
+          pathUtils.join(pkgRoot, 'prompts/gitgov_agent_prompt.md'),
+        );
+      }
+    } catch {
+      // require.resolve failed or @gitgov/core not installed - continue
+    }
+
+    // 3️⃣ Build fallback: relative to compiled __dirname
+    try {
+      const metaUrl = getImportMetaUrl();
+      if (metaUrl) {
+        const __filename = fileURLToPath(metaUrl);
+        const __dirname = pathUtils.dirname(__filename);
+        potentialSources.push(
+          pathUtils.resolve(__dirname, '../../prompts/gitgov_agent_prompt.md'),
+        );
+      }
+    } catch {
+      // import.meta unavailable or error - continue with other sources
+    }
+
+    // 🔍 Find and copy the first accessible file
+    for (const source of potentialSources) {
       try {
-        await fs.access(sourcePrompt);
-        await fs.copyFile(sourcePrompt, targetPrompt);
+        await fs.access(source);
+        await fs.copyFile(source, targetPrompt);
         console.log(`📋 @gitgov agent prompt copied to .gitgov/gitgov`);
         return;
       } catch {
-        // Try next source location
+        // Source not accessible, try next one
         continue;
       }
     }
