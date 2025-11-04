@@ -1,3 +1,10 @@
+## [1.6.1](https://github.com/gitgovernance/monorepo/compare/core-v1.6.0...core-v1.6.1) (2025-11-04)
+
+
+### 🐛 Bug Fixes
+
+* **core:** add ESM __dirname compatibility for project adapter ([#47](https://github.com/gitgovernance/monorepo/issues/47)) ([7795e05](https://github.com/gitgovernance/monorepo/commit/7795e05e5441f4310e1c74522fafcc114f4202d3)), closes [#45](https://github.com/gitgovernance/monorepo/issues/45)
+
 ## [1.6.0](https://github.com/gitgovernance/monorepo/compare/core-v1.5.1...core-v1.6.0) (2025-11-04)
 
 
