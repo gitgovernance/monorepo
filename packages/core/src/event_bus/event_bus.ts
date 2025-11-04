@@ -43,6 +43,11 @@ export interface IEventStream {
    * Clear all subscriptions (for testing/cleanup)
    */
   clearSubscriptions(): void;
+
+  /**
+   * Wait for all pending event handlers to complete (for testing)
+   */
+  waitForIdle(options?: { timeout?: number }): Promise<void>;
 }
 
 /**
@@ -60,10 +65,12 @@ export interface IEventStream {
 export class EventBus implements IEventStream {
   private emitter: EventEmitter;
   private subscriptions: Map<string, EventSubscription>;
+  private pendingHandlers: Set<Promise<void>>;
 
   constructor() {
     this.emitter = new EventEmitter();
     this.subscriptions = new Map();
+    this.pendingHandlers = new Set();
 
     // Increase max listeners for high-throughput scenarios
     this.emitter.setMaxListeners(100);
@@ -109,14 +116,28 @@ export class EventBus implements IEventStream {
     // Generate unique subscription ID
     const subscriptionId = generateSubscriptionId();
 
-    // Wrap handler to catch errors and provide context
+    // Wrap handler to catch errors, provide context, AND track pending handlers
     const wrappedHandler = async (event: T) => {
-      try {
-        await handler(event);
-      } catch (error) {
-        console.error(`Error in event handler for ${eventType}:`, error);
-        // In production, this could emit an error event or log to monitoring
-      }
+      // Create promise that tracks this handler execution
+      const handlerPromise = (async () => {
+        try {
+          await handler(event);
+        } catch (error) {
+          console.error(`Error in event handler for ${eventType}:`, error);
+          // In production, this could emit an error event or log to monitoring
+        }
+      })();
+
+      // Track this promise
+      this.pendingHandlers.add(handlerPromise);
+
+      // Remove from tracking when done
+      handlerPromise.finally(() => {
+        this.pendingHandlers.delete(handlerPromise);
+      });
+
+      // Don't await - let it run in background (fire-and-forget for publish())
+      // But tests can call waitForIdle() to wait for all handlers
     };
 
     // Create subscription object (store wrapped handler for unsubscribing)
@@ -204,6 +225,47 @@ export class EventBus implements IEventStream {
    */
   subscribeToAll(handler: EventHandler<BaseEvent>): EventSubscription {
     return this.subscribe('*', handler);
+  }
+
+  /**
+   * Wait for all pending event handlers to complete.
+   * This is primarily useful for testing to ensure event handlers finish before assertions.
+   * 
+   * In production, events are fire-and-forget for performance.
+   * In tests, use this to synchronize and avoid race conditions.
+   * 
+   * @param options - Optional configuration
+   * @param options.timeout - Maximum time to wait in ms (default: 5000)
+   * @returns Promise that resolves when all handlers complete or timeout occurs
+   * 
+   * @example
+   * ```typescript
+   * await feedbackAdapter.create(...);  // publishes event
+   * await eventBus.waitForIdle();       // wait for BacklogAdapter.handleFeedbackCreated()
+   * const task = await backlogAdapter.getTask(taskId);
+   * expect(task.status).toBe('paused'); // now safe to assert
+   * ```
+   */
+  async waitForIdle(options: { timeout?: number } = {}): Promise<void> {
+    const timeout = options.timeout ?? 5000;
+    const startTime = Date.now();
+
+    while (this.pendingHandlers.size > 0) {
+      // Check timeout
+      if (Date.now() - startTime > timeout) {
+        const pendingCount = this.pendingHandlers.size;
+        console.warn(`EventBus.waitForIdle() timeout after ${timeout}ms with ${pendingCount} handlers still pending`);
+        break;
+      }
+
+      // Wait for current batch of handlers
+      if (this.pendingHandlers.size > 0) {
+        await Promise.race([
+          Promise.all(Array.from(this.pendingHandlers)),
+          new Promise(resolve => setTimeout(resolve, 10)) // Re-check every 10ms
+        ]);
+      }
+    }
   }
 }
 

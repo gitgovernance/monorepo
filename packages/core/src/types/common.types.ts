@@ -46,6 +46,22 @@ export type GitGovRecordPayload =
  */
 export type GitGovRecord = EmbeddedMetadataRecord<GitGovRecordPayload>;
 
+/**
+ * Specific GitGov record types with full metadata (header + payload).
+ * These types provide clean, type-safe access to records with their signatures and checksums.
+ * 
+ * @example
+ * const taskRecord: GitGovTaskRecord = await taskStore.read(taskId);
+ * const authorId = taskRecord.header.signatures[0].keyId;
+ */
+export type GitGovTaskRecord = EmbeddedMetadataRecord<TaskRecord>;
+export type GitGovCycleRecord = EmbeddedMetadataRecord<CycleRecord>;
+export type GitGovFeedbackRecord = EmbeddedMetadataRecord<FeedbackRecord>;
+export type GitGovExecutionRecord = EmbeddedMetadataRecord<ExecutionRecord>;
+export type GitGovChangelogRecord = EmbeddedMetadataRecord<ChangelogRecord>;
+export type GitGovActorRecord = EmbeddedMetadataRecord<ActorRecord>;
+export type GitGovAgentRecord = EmbeddedMetadataRecord<AgentRecord>;
+
 // Payloads for creating new records
 export type ActorPayload = Partial<ActorRecord>;
 export type AgentPayload = Partial<AgentRecord>;

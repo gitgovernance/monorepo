@@ -41,7 +41,7 @@ describe('Crypto Module (Signatures)', () => {
       name: 'AgentRecord',
       type: 'agent',
       payload: {
-        id: 'agent:test-agent', guild: 'design', status: 'active',
+        id: 'agent:test-agent', status: 'active',
         engine: { type: 'local', runtime: 'typescript', entrypoint: 'test.ts', function: 'run' },
         triggers: [], knowledge_dependencies: [], prompt_engine_requirements: {}
       } as AgentRecord
@@ -75,16 +75,11 @@ describe('Crypto Module (Signatures)', () => {
       type: 'changelog',
       payload: {
         id: '1752707800-changelog-task-test-task',
-        entityType: 'task',
-        entityId: '1752274500-task-test-task',
-        changeType: 'completion',
         title: 'Test Task Completion',
         description: 'Successfully completed the test task with all requirements',
-        timestamp: 1752707800,
-        trigger: 'manual',
-        triggeredBy: 'human:developer',
-        reason: 'All acceptance criteria met and code review passed',
-        riskLevel: 'low'
+        relatedTasks: ['1752274500-task-test-task'],
+        completedAt: 1752707800,
+        version: 'v1.0.0'
       } as ChangelogRecord
     },
     {
@@ -100,7 +95,7 @@ describe('Crypto Module (Signatures)', () => {
   describe('Happy Path (Parametrized)', () => {
     for (const tc of recordTestCases) {
       it(`[EARS-2, EARS-5] should create a valid signature for a ${tc.name} that can be verified`, async () => {
-        const signature = signPayload(tc.payload, mainActorKeys.privateKey, mainActor.id, 'author');
+        const signature = signPayload(tc.payload, mainActorKeys.privateKey, mainActor.id, 'author', 'Test signature');
         const record = {
           header: {
             version: '1.0', type: tc.type,
@@ -121,7 +116,7 @@ describe('Crypto Module (Signatures)', () => {
     };
 
     it('[EARS-4] should FAIL verification if an ActorRecord payload is tampered with', async () => {
-      const signature = signPayload(actorPayload, mainActorKeys.privateKey, mainActor.id, 'author');
+      const signature = signPayload(actorPayload, mainActorKeys.privateKey, mainActor.id, 'author', 'Actor record signature');
       const tamperedPayload = { ...actorPayload, displayName: 'TAMPERED' };
       const record = {
         header: {
@@ -134,7 +129,7 @@ describe('Crypto Module (Signatures)', () => {
     });
 
     it('[EARS-3] should FAIL verification if the signature role is tampered with', async () => {
-      const signature = signPayload(actorPayload, mainActorKeys.privateKey, mainActor.id, 'author');
+      const signature = signPayload(actorPayload, mainActorKeys.privateKey, mainActor.id, 'author', 'Actor record signature');
       signature.role = 'approver'; // Tamper
       const record = {
         header: {
@@ -147,7 +142,7 @@ describe('Crypto Module (Signatures)', () => {
     });
 
     it('[EARS-3] should FAIL verification if the signature itself is invalid', async () => {
-      const signature = signPayload(actorPayload, mainActorKeys.privateKey, mainActor.id, 'author');
+      const signature = signPayload(actorPayload, mainActorKeys.privateKey, mainActor.id, 'author', 'Actor record signature');
       signature.role = 'approver'; // Tamper
       const record = {
         header: {
@@ -160,7 +155,7 @@ describe('Crypto Module (Signatures)', () => {
     });
 
     it('[EARS-6] should FAIL verification if the signature is from a malicious (unknown) actor', async () => {
-      const signature = signPayload(actorPayload, maliciousActorKeys.privateKey, 'actor:malicious', 'author');
+      const signature = signPayload(actorPayload, maliciousActorKeys.privateKey, 'actor:malicious', 'author', 'Malicious signature attempt');
       const record = {
         header: {
           version: '1.0', type: 'actor', payloadChecksum: calculatePayloadChecksum(actorPayload),
@@ -174,14 +169,14 @@ describe('Crypto Module (Signatures)', () => {
 
   describe('Security Failure Cases (AgentRecord)', () => {
     const agentPayload: AgentRecord = {
-      id: 'agent:test-agent', guild: 'design', status: 'active',
+      id: 'agent:test-agent', status: 'active',
       engine: { type: 'local', runtime: 'typescript', entrypoint: 'test.ts', function: 'run' },
       triggers: [], knowledge_dependencies: [], prompt_engine_requirements: {}
     };
 
     it('[EARS-4] should FAIL verification if an AgentRecord payload is tampered with', async () => {
-      const signature = signPayload(agentPayload, mainActorKeys.privateKey, mainActor.id, 'author');
-      const tamperedPayload = { ...agentPayload, guild: 'intelligence' as const }; // Tamper guild
+      const signature = signPayload(agentPayload, mainActorKeys.privateKey, mainActor.id, 'author', 'Agent record signature');
+      const tamperedPayload = { ...agentPayload, status: 'archived' as const }; // Tamper status
       const record = {
         header: {
           version: '1.0', type: 'agent', payloadChecksum: calculatePayloadChecksum(tamperedPayload),
@@ -193,7 +188,7 @@ describe('Crypto Module (Signatures)', () => {
     });
 
     it('[EARS-3] should FAIL verification if the signature role is tampered with', async () => {
-      const signature = signPayload(agentPayload, mainActorKeys.privateKey, mainActor.id, 'author');
+      const signature = signPayload(agentPayload, mainActorKeys.privateKey, mainActor.id, 'author', 'Agent record signature');
       signature.role = 'approver'; // Tamper
       const record = {
         header: {
@@ -206,7 +201,7 @@ describe('Crypto Module (Signatures)', () => {
     });
 
     it('[EARS-6] should FAIL verification if the signature is from a malicious (unknown) actor', async () => {
-      const signature = signPayload(agentPayload, maliciousActorKeys.privateKey, 'agent:malicious', 'author');
+      const signature = signPayload(agentPayload, maliciousActorKeys.privateKey, 'agent:malicious', 'author', 'Malicious signature attempt');
       const record = {
         header: {
           version: '1.0', type: 'agent', payloadChecksum: calculatePayloadChecksum(agentPayload),
@@ -225,7 +220,7 @@ describe('Crypto Module (Signatures)', () => {
     };
 
     it('[EARS-4] should FAIL verification if a TaskRecord payload is tampered with', async () => {
-      const signature = signPayload(taskPayload, mainActorKeys.privateKey, mainActor.id, 'author');
+      const signature = signPayload(taskPayload, mainActorKeys.privateKey, mainActor.id, 'author', 'Task record signature');
       const tamperedPayload = { ...taskPayload, title: 'TAMPERED TASK' }; // Tamper title
       const record = {
         header: {
@@ -238,7 +233,7 @@ describe('Crypto Module (Signatures)', () => {
     });
 
     it('[EARS-3] should FAIL verification if the signature role is tampered with', async () => {
-      const signature = signPayload(taskPayload, mainActorKeys.privateKey, mainActor.id, 'author');
+      const signature = signPayload(taskPayload, mainActorKeys.privateKey, mainActor.id, 'author', 'Task record signature');
       signature.role = 'approver'; // Tamper
       const record = {
         header: {
@@ -251,7 +246,7 @@ describe('Crypto Module (Signatures)', () => {
     });
 
     it('[EARS-6] should FAIL verification if the signature is from a malicious (unknown) actor', async () => {
-      const signature = signPayload(taskPayload, maliciousActorKeys.privateKey, 'actor:malicious', 'author');
+      const signature = signPayload(taskPayload, maliciousActorKeys.privateKey, 'actor:malicious', 'author', 'Malicious signature attempt');
       const record = {
         header: {
           version: '1.0', type: 'task', payloadChecksum: calculatePayloadChecksum(taskPayload),
@@ -270,7 +265,7 @@ describe('Crypto Module (Signatures)', () => {
     };
 
     it('[EARS-4] should FAIL verification if a CycleRecord payload is tampered with', async () => {
-      const signature = signPayload(cyclePayload, mainActorKeys.privateKey, mainActor.id, 'author');
+      const signature = signPayload(cyclePayload, mainActorKeys.privateKey, mainActor.id, 'author', 'Cycle record signature');
       const tamperedPayload = { ...cyclePayload, title: 'TAMPERED CYCLE' }; // Tamper title
       const record = {
         header: {
@@ -283,7 +278,7 @@ describe('Crypto Module (Signatures)', () => {
     });
 
     it('[EARS-3] should FAIL verification if the signature role is tampered with', async () => {
-      const signature = signPayload(cyclePayload, mainActorKeys.privateKey, mainActor.id, 'author');
+      const signature = signPayload(cyclePayload, mainActorKeys.privateKey, mainActor.id, 'author', 'Cycle record signature');
       signature.role = 'approver'; // Tamper
       const record = {
         header: {
@@ -296,7 +291,7 @@ describe('Crypto Module (Signatures)', () => {
     });
 
     it('[EARS-6] should FAIL verification if the signature is from a malicious (unknown) actor', async () => {
-      const signature = signPayload(cyclePayload, maliciousActorKeys.privateKey, 'actor:malicious', 'author');
+      const signature = signPayload(cyclePayload, maliciousActorKeys.privateKey, 'actor:malicious', 'author', 'Malicious signature attempt');
       const record = {
         header: {
           version: '1.0', type: 'cycle', payloadChecksum: calculatePayloadChecksum(cyclePayload),
@@ -311,11 +306,12 @@ describe('Crypto Module (Signatures)', () => {
   describe('Security Failure Cases (ExecutionRecord)', () => {
     const executionPayload: ExecutionRecord = {
       id: '1752275500-exec-test-execution', taskId: '1752274500-task-test-task',
-      result: 'Successfully implemented the feature', type: 'progress'
+      type: 'progress', title: 'Test Execution',
+      result: 'Successfully implemented the feature'
     };
 
     it('[EARS-4] should FAIL verification if an ExecutionRecord payload is tampered with', async () => {
-      const signature = signPayload(executionPayload, mainActorKeys.privateKey, mainActor.id, 'author');
+      const signature = signPayload(executionPayload, mainActorKeys.privateKey, mainActor.id, 'author', 'Execution record signature');
       const tamperedPayload = { ...executionPayload, result: 'TAMPERED RESULT' }; // Tamper result
       const record = {
         header: {
@@ -328,7 +324,7 @@ describe('Crypto Module (Signatures)', () => {
     });
 
     it('[EARS-6] should FAIL verification if the signature is from a malicious (unknown) actor', async () => {
-      const signature = signPayload(executionPayload, maliciousActorKeys.privateKey, 'actor:malicious', 'author');
+      const signature = signPayload(executionPayload, maliciousActorKeys.privateKey, 'actor:malicious', 'author', 'Malicious signature attempt');
       const record = {
         header: {
           version: '1.0', type: 'execution', payloadChecksum: calculatePayloadChecksum(executionPayload),
@@ -343,20 +339,15 @@ describe('Crypto Module (Signatures)', () => {
   describe('Security Failure Cases (ChangelogRecord)', () => {
     const changelogPayload: ChangelogRecord = {
       id: '1752707800-changelog-task-test-task',
-      entityType: 'task',
-      entityId: '1752274500-task-test-task',
-      changeType: 'completion',
       title: 'Test Task Completion',
       description: 'Successfully completed the test task with all requirements',
-      timestamp: 1752707800,
-      trigger: 'manual',
-      triggeredBy: 'human:developer',
-      reason: 'All acceptance criteria met and code review passed',
-      riskLevel: 'low'
+      relatedTasks: ['1752274500-task-test-task'],
+      completedAt: 1752707800,
+      version: 'v1.0.0'
     };
 
     it('[EARS-4] should FAIL verification if a ChangelogRecord payload is tampered with', async () => {
-      const signature = signPayload(changelogPayload, mainActorKeys.privateKey, mainActor.id, 'author');
+      const signature = signPayload(changelogPayload, mainActorKeys.privateKey, mainActor.id, 'author', 'Changelog record signature');
       const tamperedPayload = { ...changelogPayload, description: 'TAMPERED DESCRIPTION' }; // Tamper description
       const record = {
         header: {
@@ -369,7 +360,7 @@ describe('Crypto Module (Signatures)', () => {
     });
 
     it('[EARS-6] should FAIL verification if the signature is from a malicious (unknown) actor', async () => {
-      const signature = signPayload(changelogPayload, maliciousActorKeys.privateKey, 'actor:malicious', 'author');
+      const signature = signPayload(changelogPayload, maliciousActorKeys.privateKey, 'actor:malicious', 'author', 'Malicious signature attempt');
       const record = {
         header: {
           version: '1.0', type: 'changelog', payloadChecksum: calculatePayloadChecksum(changelogPayload),
@@ -388,7 +379,7 @@ describe('Crypto Module (Signatures)', () => {
     };
 
     it('[EARS-4] should FAIL verification if a FeedbackRecord payload is tampered with', async () => {
-      const signature = signPayload(feedbackPayload, mainActorKeys.privateKey, mainActor.id, 'author');
+      const signature = signPayload(feedbackPayload, mainActorKeys.privateKey, mainActor.id, 'author', 'Feedback record signature');
       const tamperedPayload = { ...feedbackPayload, content: 'TAMPERED CONTENT' }; // Tamper content
       const record = {
         header: {
@@ -401,7 +392,7 @@ describe('Crypto Module (Signatures)', () => {
     });
 
     it('[EARS-6] should FAIL verification if the signature is from a malicious (unknown) actor', async () => {
-      const signature = signPayload(feedbackPayload, maliciousActorKeys.privateKey, 'actor:malicious', 'author');
+      const signature = signPayload(feedbackPayload, maliciousActorKeys.privateKey, 'actor:malicious', 'author', 'Malicious signature attempt');
       const record = {
         header: {
           version: '1.0', type: 'feedback', payloadChecksum: calculatePayloadChecksum(feedbackPayload),

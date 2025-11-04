@@ -28,11 +28,12 @@ export function signPayload(
   payload: GitGovRecordPayload,
   privateKey: string,
   keyId: string,
-  role: string
+  role: string,
+  notes: string,
 ): Signature {
   const payloadChecksum = calculatePayloadChecksum(payload);
   const timestamp = Math.floor(Date.now() / 1000);
-  const digest = `${payloadChecksum}:${keyId}:${role}:${timestamp}`;
+  const digest = `${payloadChecksum}:${keyId}:${role}:${notes}:${timestamp}`;
 
   // Per the blueprint, sign the SHA-256 hash of the digest
   const digestHash = createHash('sha256').update(digest).digest();
@@ -46,9 +47,9 @@ export function signPayload(
   return {
     keyId,
     role,
+    notes,
     signature: signature.toString('base64'),
     timestamp,
-    timestamp_iso: new Date(timestamp * 1000).toISOString(),
   };
 }
 
@@ -66,7 +67,7 @@ export async function verifySignatures(
       return false;
     }
 
-    const digest = `${record.header.payloadChecksum}:${signature.keyId}:${signature.role}:${signature.timestamp}`;
+    const digest = `${record.header.payloadChecksum}:${signature.keyId}:${signature.role}:${signature.notes}:${signature.timestamp}`;
 
     // Per the blueprint, verify against the SHA-256 hash of the digest
     const digestHash = createHash('sha256').update(digest).digest();

@@ -139,14 +139,17 @@ export class RelationshipAnalyzer {
       // Use title field for task display
       const title = task.title || 'Untitled Task';
 
-      nodes.push({
+      const node: DiagramNode = {
         id: this.generateNodeId(task),
         type: isEpic ? 'epic-task' : 'task',
         title,
         status: task.status,
-        tags: task.tags,
         originalId: task.id,
-      });
+      };
+      if (task.tags) {
+        node.tags = task.tags;
+      }
+      nodes.push(node);
     }
 
     return nodes;

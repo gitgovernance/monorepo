@@ -20,7 +20,7 @@ describe("calculatePayloadChecksum", () => {
     {
       name: 'agent',
       payload: {
-        id: 'agent:test-agent', guild: 'design', status: 'active',
+        id: 'agent:test-agent', status: 'active',
         engine: { type: 'local', runtime: 'typescript', entrypoint: 'test.ts', function: 'run' },
         triggers: [], knowledge_dependencies: [], prompt_engine_requirements: {}
       } as AgentRecord
@@ -49,17 +49,12 @@ describe("calculatePayloadChecksum", () => {
     {
       name: 'changelog',
       payload: {
-        id: '1752707800-changelog-task-test-task',
-        entityType: 'task',
-        entityId: '1752274500-task-test-task',
-        changeType: 'completion',
-        title: 'Test Task Completion',
+        id: '1752707800-changelog-test-deliverable',
+        title: 'Test Deliverable Completion',
         description: 'Successfully completed the test task with all requirements',
-        timestamp: 1752707800,
-        trigger: 'manual',
-        triggeredBy: 'human:developer',
-        reason: 'All acceptance criteria met and code review passed',
-        riskLevel: 'low'
+        relatedTasks: ['1752274500-task-test-task'],
+        completedAt: 1752707800,
+        version: 'v1.0.0'
       } as ChangelogRecord
     },
     {
@@ -85,58 +80,37 @@ describe("calculatePayloadChecksum", () => {
   }
 
   describe('ChangelogRecord v2 Enhanced Determinism Tests', () => {
-    it('[EARS-1] should produce deterministic checksum for complex ChangelogRecord with nested objects and arrays', () => {
+    it('[EARS-1] should produce deterministic checksum for complex ChangelogRecord with nested arrays', () => {
       // Create complex changelog v2 with all optional fields
       const complexChangelog1: ChangelogRecord = {
-        id: '1752707800-changelog-system-payment-gateway',
-        entityType: 'system',
-        entityId: 'payment-gateway',
-        changeType: 'hotfix',
-        title: 'Critical Payment Gateway Fix',
-        description: 'Fixed critical payment processing issue affecting 15% of transactions',
-        timestamp: 1752707800,
-        trigger: 'emergency',
-        triggeredBy: 'human:on-call-engineer',
-        reason: 'Payment failures spiked to 15% due to third-party API latency',
-        riskLevel: 'critical',
-        // Complex nested structures
-        affectedSystems: ['payment-gateway', 'order-service', 'notification-service'],
-        usersAffected: 25000,
-        downtime: 300,
+        id: '1752707800-changelog-payment-gateway-hotfix',
+        title: 'Critical Payment Gateway Hotfix v2.1.5',
+        description: 'Fixed critical payment processing issue affecting 15% of transactions due to third-party API latency',
+        relatedTasks: ['1752274500-task-payment-fix', '1752274600-task-monitoring-improvement'],
+        completedAt: 1752707800,
+        relatedCycles: ['1752600000-cycle-payment-stability'],
+        relatedExecutions: ['1752707750-exec-hotfix-implementation'],
+        version: 'v2.1.5',
+        tags: ['hotfix', 'critical', 'payment'],
         files: ['src/payment/gateway.ts', 'src/payment/processor.ts'],
         commits: ['abc123def', 'def456ghi'],
-        rollbackInstructions: 'Revert to payment-gateway:v2.1.4 and restart services',
-        references: {
-          tasks: ['1752274500-task-payment-fix'],
-          executions: ['1752707750-exec-hotfix-implementation'],
-          cycles: ['1752600000-cycle-payment-stability']
-        }
+        notes: 'Emergency hotfix deployed. Payment failures spiked to 15%. Affected services: payment-gateway, order-service, notification-service. Downtime: 5 minutes. Users affected: ~25000.'
       };
 
       // Create same object with keys in different order
       const complexChangelog2: ChangelogRecord = {
-        riskLevel: 'critical',
-        references: {
-          cycles: ['1752600000-cycle-payment-stability'],
-          tasks: ['1752274500-task-payment-fix'],
-          executions: ['1752707750-exec-hotfix-implementation']
-        },
-        rollbackInstructions: 'Revert to payment-gateway:v2.1.4 and restart services',
+        notes: 'Emergency hotfix deployed. Payment failures spiked to 15%. Affected services: payment-gateway, order-service, notification-service. Downtime: 5 minutes. Users affected: ~25000.',
         commits: ['abc123def', 'def456ghi'],
         files: ['src/payment/gateway.ts', 'src/payment/processor.ts'],
-        downtime: 300,
-        usersAffected: 25000,
-        affectedSystems: ['payment-gateway', 'order-service', 'notification-service'],
-        reason: 'Payment failures spiked to 15% due to third-party API latency',
-        triggeredBy: 'human:on-call-engineer',
-        trigger: 'emergency',
-        timestamp: 1752707800,
-        description: 'Fixed critical payment processing issue affecting 15% of transactions',
-        title: 'Critical Payment Gateway Fix',
-        changeType: 'hotfix',
-        entityId: 'payment-gateway',
-        entityType: 'system',
-        id: '1752707800-changelog-system-payment-gateway'
+        tags: ['hotfix', 'critical', 'payment'],
+        version: 'v2.1.5',
+        relatedExecutions: ['1752707750-exec-hotfix-implementation'],
+        relatedCycles: ['1752600000-cycle-payment-stability'],
+        completedAt: 1752707800,
+        relatedTasks: ['1752274500-task-payment-fix', '1752274600-task-monitoring-improvement'],
+        description: 'Fixed critical payment processing issue affecting 15% of transactions due to third-party API latency',
+        title: 'Critical Payment Gateway Hotfix v2.1.5',
+        id: '1752707800-changelog-payment-gateway-hotfix'
       };
 
       const checksum1 = calculatePayloadChecksum(complexChangelog1);
@@ -149,30 +123,20 @@ describe("calculatePayloadChecksum", () => {
     it('[EARS-1] should produce different checksums for different ChangelogRecord v2 content', () => {
       const changelog1: ChangelogRecord = {
         id: '1752707800-changelog-task-feature-a',
-        entityType: 'task',
-        entityId: '1752274500-task-feature-a',
-        changeType: 'completion',
         title: 'Feature A Completed',
-        description: 'Successfully implemented feature A',
-        timestamp: 1752707800,
-        trigger: 'manual',
-        triggeredBy: 'human:developer',
-        reason: 'All requirements met',
-        riskLevel: 'low'
+        description: 'Successfully implemented feature A with all requirements',
+        relatedTasks: ['1752274500-task-feature-a'],
+        completedAt: 1752707800,
+        version: 'v1.0.0'
       };
 
       const changelog2: ChangelogRecord = {
         id: '1752707800-changelog-task-feature-b',
-        entityType: 'task',
-        entityId: '1752274500-task-feature-b',
-        changeType: 'completion',
         title: 'Feature B Completed',
-        description: 'Successfully implemented feature B',
-        timestamp: 1752707800,
-        trigger: 'manual',
-        triggeredBy: 'human:developer',
-        reason: 'All requirements met',
-        riskLevel: 'low'
+        description: 'Successfully implemented feature B with all requirements',
+        relatedTasks: ['1752274500-task-feature-b'],
+        completedAt: 1752707800,
+        version: 'v1.0.0'
       };
 
       const checksum1 = calculatePayloadChecksum(changelog1);
