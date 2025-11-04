@@ -181,6 +181,9 @@ export class ProjectAdapter implements IProjectAdapter {
 
       await this.createDirectoryStructure(gitgovPath);
 
+      // 2.5. Copy Agent Prompt (@gitgov instructions for AI assistants)
+      await this.copyAgentPrompt(gitgovPath);
+
       // 3. Trust Root Creation via IdentityAdapter
       const actor = await this.identityAdapter.createActor(
         {
@@ -240,9 +243,6 @@ export class ProjectAdapter implements IProjectAdapter {
 
       // 8. Git Integration
       await this.setupGitIntegration(projectRoot);
-
-      // 9. Kiro IDE Integration (always setup hooks)
-      await this.setupKiroIntegration(projectRoot);
 
       const initializationTime = Date.now() - startTime;
 
@@ -422,72 +422,6 @@ export class ProjectAdapter implements IProjectAdapter {
   }
 
   /**
-   * Sets up Kiro IDE integration by always copying GitGovernance hooks
-   */
-  private async setupKiroIntegration(projectRoot: string): Promise<void> {
-    const kiroDir = pathUtils.join(projectRoot, '.kiro');
-    const kiroHooksDir = pathUtils.join(kiroDir, 'hooks');
-
-    // Always create .kiro/hooks directory
-    try {
-      await fs.mkdir(kiroHooksDir, { recursive: true });
-    } catch {
-      // Directory might already exist
-    }
-
-    // Copy GitGovernance hooks from our project
-    const sourceHooksDir = pathUtils.join(ConfigManager.findProjectRoot() || process.cwd(), '.kiro/hooks');
-
-    try {
-      await fs.access(sourceHooksDir);
-
-      // Copy all GitGovernance hooks
-      const essentialHooks = [
-        'gitgov-auto-indexer.kiro.hook',
-        'git-diagnostics-commit.kiro.hook',
-        'gitgov-file-analyzer.kiro.hook',
-        'code-quality-analyzer.kiro.hook',
-        'gitgov-quick-status.kiro.hook',
-        'gitgov-task-creator.kiro.hook',
-        'gitgov-work-session.kiro.hook'
-      ];
-
-      let copiedHooks = 0;
-      for (const hookFile of essentialHooks) {
-        try {
-          const sourcePath = pathUtils.join(sourceHooksDir, hookFile);
-          const targetPath = pathUtils.join(kiroHooksDir, hookFile);
-
-          await fs.copyFile(sourcePath, targetPath);
-          copiedHooks++;
-        } catch {
-          // Hook file might not exist, continue with others
-        }
-      }
-
-      // Copy main gitgov executable to project
-      try {
-        const sourceGitgovPath = pathUtils.join(ConfigManager.findProjectRoot() || process.cwd(), '.gitgov/gitgov');
-        const targetGitgovPath = pathUtils.join(projectRoot, '.gitgov/gitgov');
-
-        await fs.copyFile(sourceGitgovPath, targetGitgovPath);
-        await fs.chmod(targetGitgovPath, 0o755); // Make executable
-
-        console.log(`📋 GitGovernance executable copied to .gitgov/gitgov`);
-      } catch {
-        // Gitgov executable not available, skip
-      }
-
-      // Only log if we actually copied hooks
-      if (copiedHooks > 0) {
-        console.log(`🔧 Kiro IDE Integration: ${copiedHooks} GitGovernance hooks installed`);
-      }
-    } catch {
-      // Source hooks not available, skip silently
-    }
-  }
-
-  /**
    * [EARS-4] Cleans up partial setup artifacts if initialization fails
    */
   async rollbackPartialSetup(setupId: string): Promise<void> {
@@ -581,6 +515,22 @@ export class ProjectAdapter implements IProjectAdapter {
 
     for (const dir of directories) {
       await fs.mkdir(pathUtils.join(gitgovPath, dir), { recursive: true });
+    }
+  }
+
+  private async copyAgentPrompt(gitgovPath: string): Promise<void> {
+    // Copy the official @gitgov agent prompt to the project
+    // Source: docs/gitgov_agent_prompt.md (from GitGovernance monorepo root)
+    // Target: .gitgov/gitgov (without extension, for easy @-mention access)
+    try {
+      const sourcePrompt = pathUtils.join(ConfigManager.findProjectRoot() || process.cwd(), 'docs/gitgov_agent_prompt.md');
+      const targetPrompt = pathUtils.join(gitgovPath, 'gitgov');
+
+      await fs.copyFile(sourcePrompt, targetPrompt);
+      console.log(`📋 @gitgov agent prompt copied to .gitgov/gitgov`);
+    } catch {
+      // Graceful degradation: if prompt file doesn't exist, continue without it
+      console.warn('Warning: Could not copy @gitgov agent prompt. Project will work but AI assistant may not have local instructions.');
     }
   }
 
