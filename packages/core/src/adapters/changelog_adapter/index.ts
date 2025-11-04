@@ -1,11 +1,23 @@
 import { createChangelogRecord } from '../../factories/changelog_factory';
 import { RecordStore } from '../../store';
 import { IdentityAdapter } from '../identity_adapter';
+import { generateChangelogId } from '../../utils/id_generator';
 import type { ChangelogRecord } from '../../types';
 import type { TaskRecord } from '../../types';
 import type { CycleRecord } from '../../types';
 import type { IEventStream, ChangelogCreatedEvent } from '../../event_bus';
 import type { GitGovRecord } from '../../types';
+
+/**
+ * Options for filtering and sorting changelog lists
+ */
+export interface ChangelogListOptions {
+  tags?: string[]; // Filter by tags (changelogs with ANY of these tags)
+  version?: string; // Filter by exact version
+  limit?: number; // Limit number of results
+  sortBy?: 'completedAt' | 'title'; // Sort field
+  sortOrder?: 'asc' | 'desc'; // Sort direction
+}
 
 /**
  * ChangelogAdapter Dependencies - Facade + Dependency Injection Pattern
@@ -17,15 +29,14 @@ export interface ChangelogAdapterDependencies {
   // Optional: Multi-entity validation (graceful degradation)
   taskStore?: RecordStore<TaskRecord>; // For validating task entities
   cycleStore?: RecordStore<CycleRecord>; // For validating cycle entities
-  // Note: system and configuration entities don't require validation (direct IDs)
 }
 
 /**
- * ChangelogAdapter Interface - The Enterprise Historian
+ * ChangelogAdapter Interface - Release Notes & Deliverables Historian
  */
 export interface IChangelogAdapter {
   /**
-   * Records a significant change in any system entity.
+   * Records a deliverable/release note aggregating multiple tasks.
    */
   create(payload: Partial<ChangelogRecord>, actorId: string): Promise<ChangelogRecord>;
 
@@ -35,26 +46,26 @@ export interface IChangelogAdapter {
   getChangelog(changelogId: string): Promise<ChangelogRecord | null>;
 
   /**
-   * Gets all ChangelogRecords for a specific entity.
+   * Gets all ChangelogRecords for a specific task.
    */
-  getChangelogsByEntity(entityId: string, entityType?: string): Promise<ChangelogRecord[]>;
+  getChangelogsByTask(taskId: string): Promise<ChangelogRecord[]>;
 
   /**
-   * Gets all ChangelogRecords in the system.
+   * Gets all ChangelogRecords in the system with optional filtering.
    */
-  getAllChangelogs(): Promise<ChangelogRecord[]>;
+  getAllChangelogs(options?: ChangelogListOptions): Promise<ChangelogRecord[]>;
 
   /**
-   * Gets recent ChangelogRecords ordered by timestamp.
+   * Gets recent ChangelogRecords ordered by completedAt.
    */
   getRecentChangelogs(limit: number): Promise<ChangelogRecord[]>;
 }
 
 /**
- * ChangelogAdapter - The Enterprise Historian
+ * ChangelogAdapter - Release Notes & Deliverables Historian
  * 
- * Implements Facade + Dependency Injection Pattern for testeable and configurable orchestration.
- * Acts as Mediator between enterprise changelog system and multi-entity data stores.
+ * Protocol v2: Aggregates N tasks into 1 release note/deliverable.
+ * Focus: Executive communication of delivered value.
  */
 export class ChangelogAdapter implements IChangelogAdapter {
   private changelogStore: RecordStore<ChangelogRecord>;
@@ -72,78 +83,58 @@ export class ChangelogAdapter implements IChangelogAdapter {
   }
 
   /**
-   * [EARS-1] Records a significant change in any entity with complete context and conditional validation.
+   * [EARS-1] Records a deliverable/release note.
    * 
-   * Description: Records a significant change in any entity of the ecosystem with complete context and conditional validation.
-   * Implementation: Validates entity existence (optional), builds record with factory, validates conditional fields, signs with actorId, persists and emits event.
-   * Usage: Invoked by `gitgov changelog add` to document changes in tasks, cycles, agents, systems, configurations.
-   * Returns: Complete and signed ChangelogRecord with 19 fields.
+   * Description: Aggregates multiple tasks into a single deliverable/release note.
+   * Implementation: Validates required fields, builds record with factory, signs, persists and emits event.
+   * Usage: Invoked by `gitgov changelog add` to document deliverables.
+   * Returns: Complete and signed ChangelogRecord.
    */
   async create(payload: Partial<ChangelogRecord>, actorId: string): Promise<ChangelogRecord> {
     // Input validation
-    if (!payload.entityType) {
-      throw new Error('DetailedValidationError: entityType is required');
+    if (!payload.title || payload.title.length < 10) {
+      throw new Error('DetailedValidationError: title is required and must be at least 10 characters');
     }
 
-    if (!payload.entityId) {
-      throw new Error('DetailedValidationError: entityId is required');
+    if (!payload.description || payload.description.length < 20) {
+      throw new Error('DetailedValidationError: description is required and must be at least 20 characters');
     }
 
-    // EARS-4: Validate entityType
-    if (!['task', 'cycle', 'agent', 'system', 'configuration'].includes(payload.entityType)) {
-      throw new Error('DetailedValidationError: entityType must be task, cycle, agent, system, or configuration');
+    if (!payload.relatedTasks || payload.relatedTasks.length === 0) {
+      throw new Error('DetailedValidationError: relatedTasks is required and must contain at least one task ID');
     }
 
-    // EARS-5: Validate changeType
-    if (payload.changeType && !['creation', 'completion', 'update', 'deletion', 'hotfix'].includes(payload.changeType)) {
-      throw new Error('DetailedValidationError: changeType must be creation, completion, update, deletion, or hotfix');
-    }
-
-    // EARS-14: Validate title length
-    if (payload.title && payload.title.length < 10) {
-      throw new Error('DetailedValidationError: title must be at least 10 characters');
-    }
-
-    // EARS-15: Validate description length
-    if (payload.description && payload.description.length < 20) {
-      throw new Error('DetailedValidationError: description must be at least 20 characters');
-    }
-
-    // EARS-6: Validate rollbackInstructions for high risk
-    if (payload.riskLevel === 'high' && !payload.rollbackInstructions) {
-      throw new Error('DetailedValidationError: rollbackInstructions is required when riskLevel is high');
-    }
-
-    // EARS-7: Validate rollbackInstructions for critical risk
-    if (payload.riskLevel === 'critical' && !payload.rollbackInstructions) {
-      throw new Error('DetailedValidationError: rollbackInstructions is required when riskLevel is critical');
-    }
-
-    // EARS-8: Validate references.tasks for completion
-    if (payload.changeType === 'completion' && (!payload.references?.tasks || payload.references.tasks.length === 0)) {
-      throw new Error('DetailedValidationError: references.tasks is required when changeType is completion');
-    }
-
-    // Optional: Validate entityId exists (graceful degradation) - EARS-3
-    if (payload.entityType === 'task' && this.taskStore) {
-      const taskExists = await this.taskStore.read(payload.entityId);
-      if (!taskExists) {
-        throw new Error(`RecordNotFoundError: Task not found: ${payload.entityId}`);
+    // Optional: Validate that related tasks exist (graceful degradation)
+    if (this.taskStore && payload.relatedTasks) {
+      for (const taskId of payload.relatedTasks) {
+        const taskExists = await this.taskStore.read(taskId);
+        if (!taskExists) {
+          throw new Error(`RecordNotFoundError: Task not found: ${taskId}`);
+        }
       }
     }
 
-    if (payload.entityType === 'cycle' && this.cycleStore) {
-      const cycleExists = await this.cycleStore.read(payload.entityId);
-      if (!cycleExists) {
-        throw new Error(`RecordNotFoundError: Cycle not found: ${payload.entityId}`);
+    // Optional: Validate that related cycles exist (graceful degradation)
+    if (this.cycleStore && payload.relatedCycles) {
+      for (const cycleId of payload.relatedCycles) {
+        const cycleExists = await this.cycleStore.read(cycleId);
+        if (!cycleExists) {
+          throw new Error(`RecordNotFoundError: Cycle not found: ${cycleId}`);
+        }
       }
     }
 
     try {
-      // 1. Build the record with factory (handles all conditional validation)
+      // 1. Generate ID if not provided (EARS-14)
+      const timestamp = payload.completedAt || Math.floor(Date.now() / 1000);
+      if (!payload.id) {
+        payload.id = generateChangelogId(payload.title!, timestamp);
+      }
+
+      // 2. Build the record with factory
       const validatedPayload = await createChangelogRecord(payload);
 
-      // 2. Create unsigned record structure
+      // 3. Create unsigned record structure
       const unsignedRecord: GitGovRecord & { payload: ChangelogRecord } = {
         header: {
           version: '1.0',
@@ -152,9 +143,9 @@ export class ChangelogAdapter implements IChangelogAdapter {
           signatures: [{
             keyId: actorId,
             role: 'author',
+            notes: 'Changelog entry created',
             signature: 'placeholder',
-            timestamp: Date.now(),
-            timestamp_iso: new Date().toISOString()
+            timestamp: Date.now()
           }]
         },
         payload: validatedPayload,
@@ -166,20 +157,16 @@ export class ChangelogAdapter implements IChangelogAdapter {
       // 4. Persist the record
       await this.changelogStore.write(signedRecord as GitGovRecord & { payload: ChangelogRecord });
 
-      // 5. Emit event - responsibility ends here
+      // 5. Emit event
       this.eventBus.publish({
         type: 'changelog.created',
         timestamp: Date.now(),
         source: 'changelog_adapter',
         payload: {
           changelogId: validatedPayload.id,
-          entityId: validatedPayload.entityId,
-          entityType: validatedPayload.entityType,
-          changeType: validatedPayload.changeType,
-          triggeredBy: actorId,
-          riskLevel: validatedPayload.riskLevel,
+          relatedTasks: validatedPayload.relatedTasks,
           title: validatedPayload.title,
-          trigger: validatedPayload.trigger
+          version: validatedPayload.version
         },
       } as ChangelogCreatedEvent);
 
@@ -193,12 +180,7 @@ export class ChangelogAdapter implements IChangelogAdapter {
   }
 
   /**
-   * [EARS-9] Gets a specific ChangelogRecord by its ID for historical query.
-   * 
-   * Description: Gets a specific ChangelogRecord by its ID for historical query.
-   * Implementation: Direct read from record store without modifications.
-   * Usage: Invoked by `gitgov changelog show` to display change details.
-   * Returns: ChangelogRecord found or null if it doesn't exist.
+   * [EARS-9] Gets a specific ChangelogRecord by its ID.
    */
   async getChangelog(changelogId: string): Promise<ChangelogRecord | null> {
     const record = await this.changelogStore.read(changelogId);
@@ -206,45 +188,15 @@ export class ChangelogAdapter implements IChangelogAdapter {
   }
 
   /**
-   * [EARS-11] Gets all ChangelogRecords associated with a specific entity.
-   * 
-   * Description: Gets all ChangelogRecords associated with a specific entity with optional type filtering.
-   * Implementation: Reads all records and filters by matching entityId, optionally by entityType.
-   * Usage: Invoked by `gitgov changelog list` to display history for any system entity.
-   * Returns: Array of ChangelogRecords filtered for the entity.
+   * [EARS-11] Gets all ChangelogRecords that include a specific task.
    */
-  async getChangelogsByEntity(entityId: string, entityType?: string): Promise<ChangelogRecord[]> {
+  async getChangelogsByTask(taskId: string): Promise<ChangelogRecord[]> {
     const ids = await this.changelogStore.list();
     const changelogs: ChangelogRecord[] = [];
 
     for (const id of ids) {
       const record = await this.changelogStore.read(id);
-      if (record && record.payload.entityId === entityId) {
-        // Optional entityType filter
-        if (!entityType || record.payload.entityType === entityType) {
-          changelogs.push(record.payload);
-        }
-      }
-    }
-
-    return changelogs;
-  }
-
-  /**
-   * [EARS-12] Gets all ChangelogRecords in the system for complete indexation.
-   * 
-   * Description: Gets all ChangelogRecords in the system for complete indexation.
-   * Implementation: Complete read from record store without filters.
-   * Usage: Invoked by `gitgov changelog list --all` and MetricsAdapter for activity analysis.
-   * Returns: Complete array of all ChangelogRecords.
-   */
-  async getAllChangelogs(): Promise<ChangelogRecord[]> {
-    const ids = await this.changelogStore.list();
-    const changelogs: ChangelogRecord[] = [];
-
-    for (const id of ids) {
-      const record = await this.changelogStore.read(id);
-      if (record) {
+      if (record && record.payload.relatedTasks.includes(taskId)) {
         changelogs.push(record.payload);
       }
     }
@@ -253,20 +205,76 @@ export class ChangelogAdapter implements IChangelogAdapter {
   }
 
   /**
-   * [EARS-13] Gets recent ChangelogRecords ordered by timestamp for dashboard and monitoring.
-   * 
-   * Description: Gets recent ChangelogRecords ordered by timestamp for dashboard and monitoring.
-   * Implementation: Reads all records, sorts by timestamp descending and applies limit.
-   * Usage: Invoked by `gitgov changelog list --recent` and dashboard for activity monitoring.
-   * Returns: Array of ChangelogRecords limited and ordered by timestamp.
+   * [EARS-11, EARS-12, EARS-13] Gets all ChangelogRecords with optional filtering and sorting.
+   */
+  async getAllChangelogs(options?: ChangelogListOptions): Promise<ChangelogRecord[]> {
+    const ids = await this.changelogStore.list();
+    let changelogs: ChangelogRecord[] = [];
+
+    // Read all changelogs
+    for (const id of ids) {
+      const record = await this.changelogStore.read(id);
+      if (record) {
+        changelogs.push(record.payload);
+      }
+    }
+
+    // [EARS-12] Filter by tags if provided
+    if (options?.tags && options.tags.length > 0) {
+      changelogs = changelogs.filter(changelog => {
+        if (!changelog.tags) return false;
+        // Return true if changelog has ANY of the requested tags
+        return options.tags!.some(tag => changelog.tags!.includes(tag));
+      });
+    }
+
+    // Filter by version if provided
+    if (options?.version) {
+      changelogs = changelogs.filter(changelog => changelog.version === options.version);
+    }
+
+    // [EARS-11] Sort by specified field (default: completedAt desc)
+    const sortBy = options?.sortBy || 'completedAt';
+    const sortOrder = options?.sortOrder || 'desc';
+
+    changelogs.sort((a, b) => {
+      let compareValue = 0;
+
+      if (sortBy === 'completedAt') {
+        compareValue = a.completedAt - b.completedAt;
+      } else if (sortBy === 'title') {
+        compareValue = a.title.localeCompare(b.title);
+      }
+
+      return sortOrder === 'asc' ? compareValue : -compareValue;
+    });
+
+    // [EARS-13] Apply limit if provided
+    if (options?.limit && options.limit > 0) {
+      changelogs = changelogs.slice(0, options.limit);
+    }
+
+    return changelogs;
+  }
+
+  /**
+   * [EARS-13] Gets recent ChangelogRecords ordered by completedAt.
    */
   async getRecentChangelogs(limit: number): Promise<ChangelogRecord[]> {
     const allChangelogs = await this.getAllChangelogs();
 
-    // Sort by timestamp descending (most recent first)
-    const sortedChangelogs = allChangelogs.sort((a, b) => b.timestamp - a.timestamp);
+    // Sort by completedAt descending (most recent first)
+    const sortedChangelogs = allChangelogs.sort((a, b) => b.completedAt - a.completedAt);
 
     // Apply limit
     return sortedChangelogs.slice(0, limit);
+  }
+
+  /**
+   * Legacy method for backwards compatibility - maps to getChangelogsByTask
+   * @deprecated Use getChangelogsByTask instead
+   */
+  async getChangelogsByEntity(entityId: string, _entityType?: string): Promise<ChangelogRecord[]> {
+    return this.getChangelogsByTask(entityId);
   }
 }

@@ -11,7 +11,6 @@ export async function createAgentRecord(
   // Build agent with defaults for optional fields
   const agent: AgentRecord = {
     id: payload.id || '',
-    guild: payload.guild || 'design' as const,
     engine: payload.engine || { type: 'local' as const },
     status: payload.status || 'active',
     triggers: payload.triggers || [],

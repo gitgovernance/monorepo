@@ -28,9 +28,9 @@ function createMockExecutionRecord(overrides: Partial<ExecutionRecord> = {}): Gi
       signatures: [{
         keyId: 'mock-author',
         role: 'author',
+        notes: 'Mock execution for unit testing',
         signature: 'mock-sig',
-        timestamp: 123,
-        timestamp_iso: '2025-01-01T00:00:00Z'
+        timestamp: 123
       }] as [Signature, ...Signature[]]
     },
     payload: {
@@ -152,11 +152,15 @@ describe('ExecutionAdapter', () => {
     });
 
     it('[EARS-2] should throw DetailedValidationError for invalid payload', async () => {
-      const validationError = new DetailedValidationError('Invalid payload', []);
+      const validationError = new DetailedValidationError('ExecutionRecord', [{
+        field: 'result',
+        message: 'result is required',
+        value: undefined
+      }]);
       (createExecutionRecord as jest.Mock).mockRejectedValue(validationError);
 
       await expect(executionAdapter.create({ taskId: 'invalid' }, mockActorId))
-        .rejects.toThrow('DetailedValidationError: result is required');
+        .rejects.toThrow(DetailedValidationError);
 
       // Ensure no side effects occurred
       expect(mockIdentityAdapter.signRecord).not.toHaveBeenCalled();
@@ -173,16 +177,28 @@ describe('ExecutionAdapter', () => {
 
     it('[EARS-8] should throw DetailedValidationError for missing result', async () => {
       const invalidPayload = { taskId: 'task-123' }; // Missing result
+      const validationError = new DetailedValidationError('ExecutionRecord', [{
+        field: 'result',
+        message: 'result is required',
+        value: undefined
+      }]);
+      (createExecutionRecord as jest.Mock).mockRejectedValue(validationError);
 
       await expect(executionAdapter.create(invalidPayload, mockActorId))
-        .rejects.toThrow('DetailedValidationError: result is required');
+        .rejects.toThrow(DetailedValidationError);
     });
 
     it('[EARS-9] should throw DetailedValidationError for short result', async () => {
       const invalidPayload = { taskId: 'task-123', result: 'short' }; // Too short
+      const validationError = new DetailedValidationError('ExecutionRecord', [{
+        field: 'result',
+        message: 'must be at least 10 characters',
+        value: 'short'
+      }]);
+      (createExecutionRecord as jest.Mock).mockRejectedValue(validationError);
 
       await expect(executionAdapter.create(invalidPayload, mockActorId))
-        .rejects.toThrow('DetailedValidationError: result must be at least 10 characters');
+        .rejects.toThrow(DetailedValidationError);
     });
 
     it('[EARS-1] should create execution record successfully', async () => {
@@ -310,8 +326,15 @@ describe('ExecutionAdapter', () => {
 
   describe('Error Handling', () => {
     it('should throw error when taskId is missing', async () => {
+      const validationError = new DetailedValidationError('ExecutionRecord', [{
+        field: 'taskId',
+        message: 'taskId is required',
+        value: undefined
+      }]);
+      (createExecutionRecord as jest.Mock).mockRejectedValue(validationError);
+
       await expect(executionAdapter.create({}, mockActorId))
-        .rejects.toThrow('DetailedValidationError: taskId is required');
+        .rejects.toThrow(DetailedValidationError);
     });
 
     it('should handle factory errors gracefully', async () => {

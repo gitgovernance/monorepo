@@ -1,11 +1,9 @@
 import { BacklogAdapter, type BacklogAdapterDependencies } from './index';
 import type {
   FeedbackCreatedEvent,
-  FeedbackStatusChangedEvent,
   ExecutionCreatedEvent,
   ChangelogCreatedEvent,
   SystemDailyTickEvent,
-
   CycleStatusChangedEvent
 } from '../../event_bus';
 import type { TaskRecord } from '../../types';
@@ -56,6 +54,11 @@ type MockBacklogAdapterDependencies = {
   };
   feedbackAdapter: {
     create: jest.MockedFunction<(payload: Partial<FeedbackRecord>, actorId: string) => Promise<FeedbackRecord>>;
+    getFeedback: jest.MockedFunction<(feedbackId: string) => Promise<FeedbackRecord | null>>;
+    resolve: jest.MockedFunction<(feedbackId: string, actorId: string, content?: string) => Promise<FeedbackRecord>>;
+    getFeedbackByEntity: jest.MockedFunction<(entityId: string) => Promise<FeedbackRecord[]>>;
+    getAllFeedback: jest.MockedFunction<() => Promise<FeedbackRecord[]>>;
+    getFeedbackThread: jest.MockedFunction<(feedbackId: string, maxDepth?: number) => Promise<any>>;
   };
   executionAdapter: {
     isFirstExecution: jest.MockedFunction<(taskId: string) => Promise<boolean>>;
@@ -103,7 +106,7 @@ function createMockTaskRecord(payload: Partial<TaskRecord>): GitGovRecord & { pa
       version: '1.0',
       type: 'task',
       payloadChecksum: 'mock-checksum',
-      signatures: [{ keyId: 'mock-author', role: 'author', signature: 'mock-sig', timestamp: 123, timestamp_iso: '2025-01-01T00:00:00Z' }] as [Signature, ...Signature[]]
+      signatures: [{ keyId: 'mock-author', role: 'author', notes: 'Mock signature for backlog tests', signature: 'mock-sig', timestamp: 123 }] as [Signature, ...Signature[]]
     },
     payload: {
       id: baseId,
@@ -125,7 +128,7 @@ function createMockCycleRecord(payload: Partial<CycleRecord>): GitGovRecord & { 
       version: '1.0',
       type: 'cycle',
       payloadChecksum: 'mock-checksum',
-      signatures: [{ keyId: 'mock-author', role: 'author', signature: 'mock-sig', timestamp: 123, timestamp_iso: '2025-01-01T00:00:00Z' }] as [Signature, ...Signature[]]
+      signatures: [{ keyId: 'mock-author', role: 'author', notes: 'Mock signature for backlog tests', signature: 'mock-sig', timestamp: 123 }] as [Signature, ...Signature[]]
     },
     payload: {
       id: baseId,
@@ -145,7 +148,7 @@ function createMockFeedbackRecord(payload: Partial<FeedbackRecord>): GitGovRecor
       version: '1.0',
       type: 'feedback',
       payloadChecksum: 'mock-checksum',
-      signatures: [{ keyId: 'mock-author', role: 'author', signature: 'mock-sig', timestamp: 123, timestamp_iso: '2025-01-01T00:00:00Z' }] as [Signature, ...Signature[]]
+      signatures: [{ keyId: 'mock-author', role: 'author', notes: 'Mock signature for backlog tests', signature: 'mock-sig', timestamp: 123 }] as [Signature, ...Signature[]]
     },
     payload: {
       id: baseId,
@@ -196,7 +199,12 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         write: jest.fn()
       },
       feedbackAdapter: {
-        create: jest.fn()
+        create: jest.fn(),
+        getFeedback: jest.fn(),
+        resolve: jest.fn(),
+        getFeedbackByEntity: jest.fn(),
+        getAllFeedback: jest.fn(),
+        getFeedbackThread: jest.fn()
       },
       executionAdapter: {
         isFirstExecution: jest.fn()
@@ -1598,46 +1606,55 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       );
     });
 
-    it('[EARS-33] should resume task when last blocking feedback resolved', async () => {
+    it('[EARS-33] should resume task when last blocking feedback resolved (immutable pattern)', async () => {
       const taskId = '1757687335-task-paused-task';
+      const originalBlockingFeedbackId = '1757687335-feedback-blocking';
+
       const mockTask = createMockTaskRecord({
         id: taskId,
         status: 'paused'
       });
-      const mockFeedback = {
-        id: '1757687335-feedback-resolved',
-        payload: {
-          entityId: taskId,
-          type: 'blocking'
-        }
-      };
 
-      mockDependencies.feedbackStore.read.mockResolvedValue(mockFeedback as unknown as FeedbackRecord);
+      // Original blocking feedback (still with status: 'open')
+      const mockOriginalFeedback = createMockFeedbackRecord({
+        id: originalBlockingFeedbackId,
+        entityType: 'task',
+        entityId: taskId,
+        type: 'blocking',
+        status: 'open'
+      });
+
+      mockDependencies.feedbackAdapter.getFeedback.mockResolvedValue(mockOriginalFeedback.payload);
       mockDependencies.taskStore.read.mockResolvedValue(mockTask as unknown as TaskRecord);
       mockDependencies.taskStore.write.mockResolvedValue(undefined);
       mockDependencies.metricsAdapter.getTaskHealth.mockResolvedValue({
-        taskId: 'task-123',
+        taskId: taskId,
         healthScore: 100,
         timeInCurrentStage: 0,
         stalenessIndex: 0,
-        blockingFeedbacks: 0,
+        blockingFeedbacks: 0, // No more blocking feedbacks
         lastActivity: Date.now(),
         recommendations: []
       });
 
-      const event: FeedbackStatusChangedEvent = {
-        type: 'feedback.status.changed',
+      // NEW feedback created that RESOLVES the blocking feedback (immutable pattern)
+      const event: FeedbackCreatedEvent = {
+        type: 'feedback.created',
         timestamp: Date.now(),
         source: 'feedback_adapter',
         payload: {
-          feedbackId: '1757687335-feedback-resolved',
-          oldStatus: 'open',
-          newStatus: 'resolved',
-          triggeredBy: 'human:resolver'
+          feedbackId: '1757687335-feedback-resolution',
+          entityType: 'feedback', // Points to another feedback
+          entityId: originalBlockingFeedbackId, // Points to the original blocking feedback
+          type: 'clarification',
+          status: 'resolved',
+          content: 'Blocking issue resolved',
+          triggeredBy: 'human:resolver',
+          resolvesFeedbackId: originalBlockingFeedbackId // Marks this as a resolution
         }
       };
 
-      await backlogAdapter.handleFeedbackResolved(event);
+      await backlogAdapter.handleFeedbackCreated(event);
 
       expect(mockDependencies.taskStore.write).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -1648,47 +1665,56 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       );
     });
 
-    it('[EARS-34] should not resume task if other blocking feedbacks remain', async () => {
+    it('[EARS-34] should not resume task if other blocking feedbacks remain (immutable pattern)', async () => {
       const taskId = '1757687335-task-still-blocked';
+      const originalBlockingFeedbackId = '1757687335-feedback-blocking-1';
+
       const mockTask = createMockTaskRecord({
         id: taskId,
         status: 'paused'
       });
-      const mockFeedback = {
-        id: '1757687335-feedback-resolved',
-        payload: {
-          entityId: taskId,
-          type: 'blocking'
-        }
-      };
 
-      mockDependencies.feedbackStore.read.mockResolvedValue(mockFeedback as unknown as FeedbackRecord);
+      // Original blocking feedback being resolved
+      const mockOriginalFeedback = createMockFeedbackRecord({
+        id: originalBlockingFeedbackId,
+        entityType: 'task',
+        entityId: taskId,
+        type: 'blocking',
+        status: 'open'
+      });
+
+      mockDependencies.feedbackAdapter.getFeedback.mockResolvedValue(mockOriginalFeedback.payload);
       mockDependencies.taskStore.read.mockResolvedValue(mockTask as unknown as TaskRecord);
       mockDependencies.metricsAdapter.getTaskHealth.mockResolvedValue({
-        taskId: 'task-123',
+        taskId: taskId,
         healthScore: 80,
         timeInCurrentStage: 0,
         stalenessIndex: 0,
-        blockingFeedbacks: 1,
+        blockingFeedbacks: 1, // Still 1 blocking feedback remaining!
         lastActivity: Date.now(),
         recommendations: []
       });
 
-      const event: FeedbackStatusChangedEvent = {
-        type: 'feedback.status.changed',
+      // NEW feedback created that RESOLVES ONE blocking feedback
+      const event: FeedbackCreatedEvent = {
+        type: 'feedback.created',
         timestamp: Date.now(),
         source: 'feedback_adapter',
         payload: {
-          feedbackId: '1757687335-feedback-resolved',
-          oldStatus: 'open',
-          newStatus: 'resolved',
-          triggeredBy: 'human:resolver'
+          feedbackId: '1757687335-feedback-resolution',
+          entityType: 'feedback',
+          entityId: originalBlockingFeedbackId,
+          type: 'clarification',
+          status: 'resolved',
+          content: 'One blocking issue resolved',
+          triggeredBy: 'human:resolver',
+          resolvesFeedbackId: originalBlockingFeedbackId
         }
       };
 
-      await backlogAdapter.handleFeedbackResolved(event);
+      await backlogAdapter.handleFeedbackCreated(event);
 
-      // Should not write to taskStore (no status change)
+      // Should NOT write to taskStore (task stays paused due to remaining blocks)
       expect(mockDependencies.taskStore.write).not.toHaveBeenCalled();
     });
 
@@ -1721,6 +1747,8 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         payload: {
           executionId: '1757687335-exec-first',
           taskId,
+          type: 'progress',
+          title: 'First Execution',
           triggeredBy: 'human:executor',
           isFirstExecution: true
         }
@@ -1745,6 +1773,8 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         payload: {
           executionId: '1757687335-exec-second',
           taskId: '1757687335-task-active-task',
+          type: 'progress',
+          title: 'Subsequent Execution',
           triggeredBy: 'human:executor',
           isFirstExecution: false
         }
@@ -1765,8 +1795,12 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       const mockChangelog = {
         id: '1757687335-changelog-task-done',
         payload: {
-          entityType: 'task',
-          entityId: taskId
+          id: '1757687335-changelog-task-done',
+          title: 'Task completed',
+          description: 'Successfully completed the task with all requirements met',
+          relatedTasks: [taskId],
+          completedAt: 1757687335,
+          version: 'v1.0.0'
         }
       };
 
@@ -1780,13 +1814,9 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         source: 'changelog_adapter',
         payload: {
           changelogId: '1757687335-changelog-task-done',
-          entityId: taskId,
-          entityType: 'task',
-          changeType: 'completion',
-          riskLevel: 'low',
-          triggeredBy: 'system',
+          relatedTasks: [taskId],
           title: 'Task completed',
-          trigger: 'manual'
+          version: 'v1.0.0'
         }
       };
 

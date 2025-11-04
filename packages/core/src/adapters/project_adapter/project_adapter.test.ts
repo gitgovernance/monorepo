@@ -608,8 +608,8 @@ describe('ProjectAdapter', () => {
       } catch (error) {
         expect(error).toBeInstanceOf(DetailedValidationError);
         if (error instanceof DetailedValidationError) {
-          expect(error.ajvErrors).toBeDefined();
-          expect(error.ajvErrors[0]).toEqual({
+          expect(error.errors).toBeDefined();
+          expect(error.errors[0]).toEqual({
             field: 'template',
             message: expect.any(String),
             value: './invalid.json',

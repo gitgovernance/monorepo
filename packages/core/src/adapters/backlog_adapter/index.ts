@@ -20,7 +20,6 @@ import type {
   CycleCreatedEvent,
   CycleStatusChangedEvent,
   FeedbackCreatedEvent,
-  FeedbackStatusChangedEvent,
   ExecutionCreatedEvent,
   ChangelogCreatedEvent,
   SystemDailyTickEvent,
@@ -90,7 +89,6 @@ export interface IBacklogAdapter {
 
   // Phase 3: Event Handlers (NEW)
   handleFeedbackCreated(event: FeedbackCreatedEvent): Promise<void>;
-  handleFeedbackResolved(event: FeedbackStatusChangedEvent): Promise<void>;
   handleExecutionCreated(event: ExecutionCreatedEvent): Promise<void>;
   handleChangelogCreated(event: ChangelogCreatedEvent): Promise<void>;
   handleCycleStatusChanged(event: CycleStatusChangedEvent): Promise<void>;
@@ -180,9 +178,6 @@ export class BacklogAdapter implements IBacklogAdapter {
     this.eventBus.subscribe<FeedbackCreatedEvent>("feedback.created", (event) =>
       this.handleFeedbackCreated(event)
     );
-    this.eventBus.subscribe<FeedbackStatusChangedEvent>("feedback.status.changed", (event) =>
-      this.handleFeedbackResolved(event)
-    );
     this.eventBus.subscribe<ExecutionCreatedEvent>("execution.created", (event) =>
       this.handleExecutionCreated(event)
     );
@@ -215,9 +210,9 @@ export class BacklogAdapter implements IBacklogAdapter {
         signatures: [{
           keyId: actorId,
           role: 'author',
+          notes: 'Task created',
           signature: 'placeholder',
-          timestamp: Date.now(),
-          timestamp_iso: new Date().toISOString()
+          timestamp: Date.now()
         }]
       },
       payload: validatedPayload,
@@ -357,9 +352,9 @@ export class BacklogAdapter implements IBacklogAdapter {
     const tempSignature = {
       keyId: actorId,
       role: 'approver',
+      notes: 'Task approval',
       signature: 'temp-signature',
-      timestamp: Date.now(),
-      timestamp_iso: new Date().toISOString()
+      timestamp: Date.now()
     };
 
     // 4. Build complete validation context
@@ -808,7 +803,16 @@ export class BacklogAdapter implements IBacklogAdapter {
   // ===== PHASE 3: EVENT HANDLERS (NEW IMPLEMENTATION) =====
 
   /**
-   * [EARS-31] Handles feedback created events - pauses task if blocking
+   * [EARS-31, EARS-33, EARS-34] Handles feedback created events (Immutable Pattern)
+   * 
+   * This handler respects the immutable feedback pattern:
+   * - Case 1: Blocking feedback created → pause task if active/ready
+   * - Case 2: Feedback resolving another feedback → resume task if no more blocks
+   * 
+   * The immutable pattern means:
+   * - Original feedbacks NEVER change status
+   * - Resolution is expressed by creating a NEW feedback pointing to the original
+   * - We detect resolution via: entityType='feedback' + status='resolved' + resolvesFeedbackId
    */
   async handleFeedbackCreated(event: FeedbackCreatedEvent): Promise<void> {
     try {
@@ -819,107 +823,98 @@ export class BacklogAdapter implements IBacklogAdapter {
         sourceAdapter: 'backlog_adapter'
       };
 
-      // Only handle blocking feedbacks
-      if (event.payload.type !== 'blocking') {
-        return; // EARS-32: Do nothing for non-blocking feedback
-      }
+      // === CASE 1: Blocking Feedback Created on Task ===
+      if (event.payload.type === 'blocking' && event.payload.entityType === 'task') {
+        // Read the associated task
+        const task = await this.getTask(event.payload.entityId);
+        if (!task) {
+          console.warn(`Task not found for feedback: ${event.payload.entityId}`);
+          return;
+        }
 
-      // Read the associated task through feedback record
-      const feedbackRecord = await this.feedbackStore.read(event.payload.feedbackId);
-      if (!feedbackRecord) {
-        console.warn(`Feedback not found: ${event.payload.feedbackId}`);
+        // Only pause if task is in a pausable state
+        if (!['active', 'ready'].includes(task.status)) {
+          return; // EARS-32: Do nothing if task not pausable
+        }
+
+        // Update task to paused
+        const updatedTask = { ...task, status: 'paused' as const };
+        const taskRecord = await this.taskStore.read(task.id);
+        if (taskRecord) {
+          const updatedRecord = { ...taskRecord, payload: updatedTask };
+          await this.taskStore.write(updatedRecord);
+
+          // Emit status change event
+          this.eventBus.publish({
+            type: 'task.status.changed',
+            timestamp: Date.now(),
+            source: 'backlog_adapter',
+            payload: {
+              taskId: task.id,
+              oldStatus: task.status,
+              newStatus: 'paused',
+              actorId: 'system'
+            },
+            metadata
+          } as TaskStatusChangedEvent);
+        }
         return;
       }
 
-      const task = await this.getTask(feedbackRecord.payload.entityId);
-      if (!task) {
-        console.warn(`Task not found for feedback: ${feedbackRecord.payload.entityId}`);
+      // === CASE 2: Feedback Resolving Another Feedback (Immutable Pattern) ===
+      // Detect: entityType='feedback' + status='resolved' + resolvesFeedbackId present
+      if (
+        event.payload.entityType === 'feedback' &&
+        event.payload.status === 'resolved' &&
+        event.payload.resolvesFeedbackId
+      ) {
+        // 1. Get the ORIGINAL feedback that was resolved
+        const originalFeedback = await this.feedbackAdapter.getFeedback(event.payload.resolvesFeedbackId);
+        if (!originalFeedback || originalFeedback.type !== 'blocking') {
+          return; // Only care about blocking feedbacks
+        }
+
+        // 2. Get the task associated with the original blocking feedback
+        const task = await this.getTask(originalFeedback.entityId);
+        if (!task || task.status !== 'paused') {
+          return; // Only resume if task is paused
+        }
+
+        // 3. Check if other blocking feedbacks remain open (EARS-34)
+        const taskHealth = await this.metricsAdapter.getTaskHealth(task.id);
+        if (taskHealth.blockingFeedbacks > 0) {
+          return; // Don't resume if other blocks remain
+        }
+
+        // 4. Resume task automatically
+        const updatedTask = { ...task, status: 'active' as const };
+        const taskRecord = await this.taskStore.read(task.id);
+        if (taskRecord) {
+          const updatedRecord = { ...taskRecord, payload: updatedTask };
+          await this.taskStore.write(updatedRecord);
+
+          this.eventBus.publish({
+            type: 'task.status.changed',
+            timestamp: Date.now(),
+            source: 'backlog_adapter',
+            payload: {
+              taskId: task.id,
+              oldStatus: 'paused',
+              newStatus: 'active',
+              actorId: 'system'
+            },
+            metadata
+          } as TaskStatusChangedEvent);
+        }
         return;
       }
 
-      // Only pause if task is in a pausable state
-      if (!['active', 'ready'].includes(task.status)) {
-        return;
-      }
-
-      // Update task to paused
-      const updatedTask = { ...task, status: 'paused' as const };
-      const taskRecord = await this.taskStore.read(task.id);
-      if (taskRecord) {
-        const updatedRecord = { ...taskRecord, payload: updatedTask };
-        await this.taskStore.write(updatedRecord);
-
-        // Emit status change event
-        this.eventBus.publish({
-          type: 'task.status.changed',
-          timestamp: Date.now(),
-          source: 'backlog_adapter',
-          payload: {
-            taskId: task.id,
-            oldStatus: task.status,
-            newStatus: 'paused',
-            actorId: 'system'
-          },
-          metadata
-        } as TaskStatusChangedEvent);
-      }
+      // Other feedback types: do nothing
     } catch (error) {
       console.error('Error in handleFeedbackCreated:', error);
     }
   }
 
-  /**
-   * [EARS-33] Handles feedback resolved events - resumes task if no more blocks
-   */
-  async handleFeedbackResolved(event: FeedbackStatusChangedEvent): Promise<void> {
-    try {
-      // Only handle resolution of blocking feedbacks
-      if (event.payload.oldStatus !== 'open' || event.payload.newStatus !== 'resolved') {
-        return;
-      }
-
-      // Get the task through feedback record
-      const feedbackRecord = await this.feedbackStore.read(event.payload.feedbackId);
-      if (!feedbackRecord) {
-        return;
-      }
-
-      const task = await this.getTask(feedbackRecord.payload.entityId);
-      if (!task || task.status !== 'paused') {
-        return;
-      }
-
-      // EARS-33: Use MetricsAdapter to check for remaining blocks
-      const taskHealth = await this.metricsAdapter.getTaskHealth(task.id);
-
-      // EARS-34: Don't resume if other blocking feedbacks remain
-      if (taskHealth.blockingFeedbacks > 0) {
-        return;
-      }
-
-      // Resume task to active (assuming it was active before being paused)
-      const updatedTask = { ...task, status: 'active' as const };
-      const taskRecord = await this.taskStore.read(task.id);
-      if (taskRecord) {
-        const updatedRecord = { ...taskRecord, payload: updatedTask };
-        await this.taskStore.write(updatedRecord);
-
-        this.eventBus.publish({
-          type: 'task.status.changed',
-          timestamp: Date.now(),
-          source: 'backlog_adapter',
-          payload: {
-            taskId: task.id,
-            oldStatus: 'paused',
-            newStatus: 'active',
-            actorId: 'system'
-          }
-        } as TaskStatusChangedEvent);
-      }
-    } catch (error) {
-      console.error('Error in handleFeedbackResolved:', error);
-    }
-  }
 
   /**
    * [EARS-35] Handles execution created events - transitions ready→active on first execution
@@ -985,35 +980,38 @@ export class BacklogAdapter implements IBacklogAdapter {
         return;
       }
 
-      // EARS-37: Only handle task-related changelogs
-      if (changelogRecord.payload.entityType !== 'task') {
+      // EARS-37: Handle changelogs with relatedTasks
+      if (!changelogRecord.payload.relatedTasks || changelogRecord.payload.relatedTasks.length === 0) {
         return;
       }
 
-      const task = await this.getTask(changelogRecord.payload.entityId);
-      if (!task || task.status !== 'done') {
-        return;
-      }
+      // Archive all related tasks that are in 'done' status
+      for (const taskId of changelogRecord.payload.relatedTasks) {
+        const task = await this.getTask(taskId);
+        if (!task || task.status !== 'done') {
+          continue;
+        }
 
-      // Transition to archived
-      const updatedTask = { ...task, status: 'archived' as const };
-      const taskRecord = await this.taskStore.read(task.id);
-      if (taskRecord) {
-        const updatedRecord = { ...taskRecord, payload: updatedTask };
-        await this.taskStore.write(updatedRecord);
+        // Transition to archived
+        const updatedTask = { ...task, status: 'archived' as const };
+        const taskRecord = await this.taskStore.read(task.id);
+        if (taskRecord) {
+          const updatedRecord = { ...taskRecord, payload: updatedTask };
+          await this.taskStore.write(updatedRecord);
 
-        this.eventBus.publish({
-          type: 'task.status.changed',
-          timestamp: Date.now(),
-          source: 'backlog_adapter',
-          payload: {
-            taskId: task.id,
-            oldStatus: 'done',
-            newStatus: 'archived',
-            actorId: 'system'
-          }
-        } as TaskStatusChangedEvent);
-      }
+          this.eventBus.publish({
+            type: 'task.status.changed',
+            timestamp: Date.now(),
+            source: 'backlog_adapter',
+            payload: {
+              taskId: task.id,
+              oldStatus: 'done',
+              newStatus: 'archived',
+              actorId: 'system'
+            }
+          } as TaskStatusChangedEvent);
+        }
+      } // Close for loop
     } catch (error) {
       console.error('Error in handleChangelogCreated:', error);
     }
@@ -1178,9 +1176,9 @@ export class BacklogAdapter implements IBacklogAdapter {
         signatures: [{
           keyId: actorId,
           role: 'author',
+          notes: 'Cycle created',
           signature: 'placeholder',
-          timestamp: Date.now(),
-          timestamp_iso: new Date().toISOString()
+          timestamp: Date.now()
         }]
       },
       payload: validatedPayload,
