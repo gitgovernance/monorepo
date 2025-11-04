@@ -37,6 +37,7 @@ jest.mock('fs', () => ({
     mkdir: jest.fn(),
     rm: jest.fn(),
     appendFile: jest.fn(),
+    copyFile: jest.fn(),
   },
   existsSync: jest.fn(),
 }));
@@ -532,14 +533,31 @@ describe('ProjectAdapter', () => {
       // Setup environment validation to pass
       mockFs.writeFile.mockResolvedValue(undefined);
       mockFs.unlink.mockResolvedValue(undefined);
-      mockFs.access.mockRejectedValueOnce(new Error('Directory does not exist')); // .gitgov doesn't exist (validation)
       mockFs.mkdir.mockResolvedValue(undefined);
+
+      // Mock access: validation passes (.gitgov doesn't exist), then agent prompt not found, then rollback finds .gitgov
+      let accessCallCount = 0;
+      mockFs.access.mockImplementation(async (path: string) => {
+        accessCallCount++;
+        // First call: .gitgov doesn't exist (validation passes)
+        if (accessCallCount === 1) {
+          throw new Error('Directory does not exist');
+        }
+        // Second call: agent prompt doesn't exist
+        if (path.includes('gitgov_agent_prompt.md')) {
+          throw new Error('File not found');
+        }
+        // Third+ calls: .gitgov exists for rollback
+        if (path.includes('.gitgov')) {
+          return; // Success - exists
+        }
+        throw new Error('File not found');
+      });
 
       // Setup identity creation to fail
       mockIdentityAdapter.createActor.mockRejectedValueOnce(new Error('Identity creation failed'));
 
       // Setup rollback mocks
-      mockFs.access.mockResolvedValueOnce(undefined); // .gitgov exists for rollback
       mockFs.rm.mockResolvedValue(undefined);
 
       await expect(
@@ -771,6 +789,98 @@ describe('ProjectAdapter', () => {
 
       // Should complete within reasonable time (mocked, so should be very fast)
       expect(endTime - startTime).toBeLessThan(1000);
+    });
+  });
+
+  describe('Agent Prompt Copy (Functional Test)', () => {
+    it('should copy agent prompt from docs/ when available (simulated test)', async () => {
+      // Simulate successful agent prompt copy
+      jest.spyOn(ConfigManager, 'findProjectRoot').mockReturnValue('/test/project');
+
+      mockFs.writeFile.mockResolvedValue(undefined);
+      mockFs.unlink.mockResolvedValue(undefined);
+      mockFs.mkdir.mockResolvedValue(undefined);
+      mockFs.appendFile.mockResolvedValue(undefined);
+
+      // Mock successful agent prompt copy: access succeeds for source, copyFile succeeds
+      let accessCallCount = 0;
+      mockFs.access.mockImplementation(async (path: string) => {
+        accessCallCount++;
+        // First call: .gitgov doesn't exist (validation passes)
+        if (accessCallCount === 1) {
+          throw new Error('Directory does not exist');
+        }
+        // Second call: agent prompt source exists
+        if (path.includes('docs/gitgov_agent_prompt.md')) {
+          return; // Success - file exists
+        }
+        throw new Error('File not found');
+      });
+
+      mockFs.copyFile.mockResolvedValue(undefined);
+
+      mockIdentityAdapter.createActor.mockResolvedValueOnce(createMockActorRecord());
+      mockBacklogAdapter.createCycle.mockResolvedValueOnce(createMockCycleRecord());
+
+      // Capture console.log to verify success message
+      const logSpy = jest.spyOn(console, 'log').mockImplementation();
+
+      const result = await projectAdapter.initializeProject({
+        name: 'Test Agent Prompt Copy',
+        actorName: 'Test User',
+      });
+
+      // Verify success and that copyFile was called
+      expect(result.success).toBe(true);
+      expect(mockFs.copyFile).toHaveBeenCalledWith(
+        expect.stringContaining('docs/gitgov_agent_prompt.md'),
+        expect.stringContaining('.gitgov/gitgov')
+      );
+      expect(logSpy).toHaveBeenCalledWith(
+        expect.stringContaining('@gitgov agent prompt copied')
+      );
+
+      // Verify the path structure matches npm package layout (../../prompts from dist/src/)
+      const copyFileCall = mockFs.copyFile.mock.calls[0];
+      if (copyFileCall) {
+        const sourcePath = copyFileCall[0] as string;
+        // Should use either monorepo root or npm package structure
+        expect(
+          sourcePath.includes('docs/gitgov_agent_prompt.md') || sourcePath.includes('prompts/gitgov_agent_prompt.md')
+        ).toBe(true);
+      }
+
+      logSpy.mockRestore();
+    });
+
+    it('should gracefully degrade when agent prompt is not available', async () => {
+      // Mock ConfigManager to return path where agent prompt doesn't exist
+      jest.spyOn(ConfigManager, 'findProjectRoot').mockReturnValue('/nonexistent/path');
+
+      mockFs.writeFile.mockResolvedValue(undefined);
+      mockFs.unlink.mockResolvedValue(undefined);
+      mockFs.access.mockRejectedValue(new Error('File not found')); // Agent prompt doesn't exist
+      mockFs.mkdir.mockResolvedValue(undefined);
+      mockFs.appendFile.mockResolvedValue(undefined);
+
+      mockIdentityAdapter.createActor.mockResolvedValueOnce(createMockActorRecord());
+      mockBacklogAdapter.createCycle.mockResolvedValueOnce(createMockCycleRecord());
+
+      // Capture console.warn
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation();
+
+      const result = await projectAdapter.initializeProject({
+        name: 'Test Graceful Degradation',
+        actorName: 'Test User',
+      });
+
+      // Should still succeed with warning
+      expect(result.success).toBe(true);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Warning: Could not copy @gitgov agent prompt')
+      );
+
+      warnSpy.mockRestore();
     });
   });
 });
