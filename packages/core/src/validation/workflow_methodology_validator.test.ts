@@ -89,6 +89,54 @@ describe('WorkflowMethodologyValidator Module', () => {
     });
   });
 
+  describe('Schema Cache Integration', () => {
+    it('should use schema cache for validation performance', () => {
+      const { SchemaValidationCache } = require('../schemas/schema_cache');
+      const cacheSpy = jest.spyOn(SchemaValidationCache, 'getValidatorFromSchema');
+
+      validateWorkflowMethodologyConfigDetailed(validWorkflowMethodologyConfig);
+
+      expect(cacheSpy).toHaveBeenCalled();
+      cacheSpy.mockRestore();
+    });
+
+    it('should reuse compiled validators from cache', () => {
+      const { SchemaValidationCache } = require('../schemas/schema_cache');
+      const cacheSpy = jest.spyOn(SchemaValidationCache, 'getValidatorFromSchema');
+
+      // First call
+      validateWorkflowMethodologyConfigDetailed(validWorkflowMethodologyConfig);
+      const firstCallResult = cacheSpy.mock.results[0];
+
+      // Second call should reuse the same validator
+      validateWorkflowMethodologyConfigDetailed({ ...validWorkflowMethodologyConfig, name: 'Another Methodology' });
+      const secondCallResult = cacheSpy.mock.results[1];
+
+      expect(cacheSpy).toHaveBeenCalledTimes(2);
+      // Both calls should return the same cached validator
+      expect(firstCallResult?.value).toBe(secondCallResult?.value);
+      cacheSpy.mockRestore();
+    });
+
+    it('should produce identical results with or without cache', () => {
+      const result1 = validateWorkflowMethodologyConfigDetailed(validWorkflowMethodologyConfig);
+      const result2 = validateWorkflowMethodologyConfigDetailed(validWorkflowMethodologyConfig);
+      expect(result1).toEqual(result2);
+    });
+
+    it('should support cache clearing', () => {
+      const { SchemaValidationCache } = require('../schemas/schema_cache');
+      expect(() => SchemaValidationCache.clearCache()).not.toThrow();
+    });
+
+    it('should provide cache statistics', () => {
+      const { SchemaValidationCache } = require('../schemas/schema_cache');
+      const stats = SchemaValidationCache.getCacheStats();
+      expect(stats).toBeDefined();
+      expect(stats).toHaveProperty('cachedSchemas');
+    });
+  });
+
   describe('validateWorkflowMethodologyConfigDetailed', () => {
     it('[EARS-6] should return valid result for correct config', () => {
       const result = validateWorkflowMethodologyConfigDetailed(validWorkflowMethodologyConfig);

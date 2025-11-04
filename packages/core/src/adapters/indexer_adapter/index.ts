@@ -9,17 +9,30 @@ import type { FeedbackRecord } from '../../types';
 import type { ExecutionRecord } from '../../types';
 import type { ChangelogRecord } from '../../types';
 import type { ActorRecord } from '../../types';
+import type {
+  GitGovTaskRecord,
+  GitGovCycleRecord,
+  GitGovFeedbackRecord,
+  GitGovExecutionRecord,
+  GitGovChangelogRecord,
+  GitGovActorRecord
+} from '../../types';
 import type { SystemStatus, ProductivityMetrics, CollaborationMetrics } from '../metrics_adapter';
 import type { ActivityEvent } from '../../event_bus';
 
-// Type for all records collection
+/**
+ * Collection of all records with full GitGov metadata (headers + payloads).
+ * This allows access to signatures, checksums, and other metadata for enrichment.
+ * 
+ * @see GitGovTaskRecord - Full record type with header.signatures for author/lastModifier extraction
+ */
 export type AllRecords = {
-  tasks: TaskRecord[];
-  cycles: CycleRecord[];
-  feedback: FeedbackRecord[];
-  executions: ExecutionRecord[];
-  changelogs: ChangelogRecord[];
-  actors: ActorRecord[];
+  tasks: GitGovTaskRecord[];
+  cycles: GitGovCycleRecord[];
+  feedback: GitGovFeedbackRecord[];
+  executions: GitGovExecutionRecord[];
+  changelogs: GitGovChangelogRecord[];
+  actors: GitGovActorRecord[];
 };
 
 /**
@@ -118,7 +131,7 @@ export interface IIndexerAdapter {
   validateIntegrity(): Promise<IntegrityReport>;
   calculateActivityHistory(allRecords: AllRecords): Promise<ActivityEvent[]>; // NUEVO
   calculateLastUpdated(task: TaskRecord, relatedRecords: AllRecords): Promise<{ lastUpdated: number; lastActivityType: EnrichedTaskRecord['lastActivityType']; recentActivity: string }>; // NUEVO
-  enrichTaskRecord(task: TaskRecord, relatedRecords: AllRecords): Promise<EnrichedTaskRecord>; // NUEVO
+  enrichTaskRecord(task: GitGovTaskRecord, relatedRecords: AllRecords): Promise<EnrichedTaskRecord>; // UPDATED: Now accepts GitGovTaskRecord with headers
   isIndexUpToDate(): Promise<boolean>;
   invalidateCache(): Promise<void>;
 }
@@ -231,10 +244,10 @@ export class FileIndexerAdapter implements IIndexerAdapter {
         },
         metrics: { ...systemStatus, ...productivityMetrics, ...collaborationMetrics },
         activityHistory, // NUEVO
-        tasks,
+        tasks: tasks.map(t => t.payload), // Extract payloads for IndexData
         enrichedTasks, // NUEVO - Tasks with activity metadata
-        cycles,
-        actors
+        cycles: cycles.map(c => c.payload), // Extract payloads for IndexData
+        actors: actors.map(a => a.payload) // Extract payloads for IndexData
       };
 
       // 4. Write cache (Phase 1: JSON file)
@@ -321,20 +334,20 @@ export class FileIndexerAdapter implements IIndexerAdapter {
 
       // Basic validation (schema validation would need ValidatorModule)
       for (const task of tasks) {
-        if (!task.id || !task.description) {
+        if (!task.payload.id || !task.payload.description) {
           errors.push({
             type: 'schema_violation',
-            recordId: task.id || 'unknown',
+            recordId: task.payload.id || 'unknown',
             message: 'Task missing required fields'
           });
         }
       }
 
       for (const cycle of cycles) {
-        if (!cycle.id || !cycle.title) {
+        if (!cycle.payload.id || !cycle.payload.title) {
           errors.push({
             type: 'schema_violation',
-            recordId: cycle.id || 'unknown',
+            recordId: cycle.payload.id || 'unknown',
             message: 'Cycle missing required fields'
           });
         }
@@ -420,16 +433,17 @@ export class FileIndexerAdapter implements IIndexerAdapter {
   // ===== HELPER METHODS =====
 
   /**
-   * Reads all tasks from taskStore
+   * Reads all tasks from taskStore with full metadata (headers + payloads).
+   * Returns complete GitGovTaskRecord objects including signatures for author/lastModifier extraction.
    */
-  private async readAllTasks(): Promise<TaskRecord[]> {
+  private async readAllTasks(): Promise<GitGovTaskRecord[]> {
     const taskIds = await this.taskStore.list();
-    const tasks: TaskRecord[] = [];
+    const tasks: GitGovTaskRecord[] = [];
 
     for (const id of taskIds) {
       const record = await this.taskStore.read(id);
       if (record) {
-        tasks.push(record.payload);
+        tasks.push(record); // Push full record, not just payload
       }
     }
 
@@ -437,16 +451,16 @@ export class FileIndexerAdapter implements IIndexerAdapter {
   }
 
   /**
-   * Reads all cycles from cycleStore
+   * Reads all cycles from cycleStore with full metadata.
    */
-  private async readAllCycles(): Promise<CycleRecord[]> {
+  private async readAllCycles(): Promise<GitGovCycleRecord[]> {
     const cycleIds = await this.cycleStore.list();
-    const cycles: CycleRecord[] = [];
+    const cycles: GitGovCycleRecord[] = [];
 
     for (const id of cycleIds) {
       const record = await this.cycleStore.read(id);
       if (record) {
-        cycles.push(record.payload);
+        cycles.push(record);
       }
     }
 
@@ -454,20 +468,20 @@ export class FileIndexerAdapter implements IIndexerAdapter {
   }
 
   /**
-   * Reads all actors from actorStore (graceful degradation)
+   * Reads all actors from actorStore (graceful degradation) with full metadata.
    */
-  private async readAllActors(): Promise<ActorRecord[]> {
+  private async readAllActors(): Promise<GitGovActorRecord[]> {
     if (!this.actorStore) {
       return [];
     }
 
     const actorIds = await this.actorStore.list();
-    const actors: ActorRecord[] = [];
+    const actors: GitGovActorRecord[] = [];
 
     for (const id of actorIds) {
       const record = await this.actorStore.read(id);
       if (record) {
-        actors.push(record.payload);
+        actors.push(record);
       }
     }
 
@@ -475,20 +489,20 @@ export class FileIndexerAdapter implements IIndexerAdapter {
   }
 
   /**
-   * Reads all feedback from feedbackStore (graceful degradation)
+   * Reads all feedback from feedbackStore (graceful degradation) with full metadata.
    */
-  private async readAllFeedback(): Promise<FeedbackRecord[]> {
+  private async readAllFeedback(): Promise<GitGovFeedbackRecord[]> {
     if (!this.feedbackStore) {
       return [];
     }
 
     const feedbackIds = await this.feedbackStore.list();
-    const feedback: FeedbackRecord[] = [];
+    const feedback: GitGovFeedbackRecord[] = [];
 
     for (const id of feedbackIds) {
       const record = await this.feedbackStore.read(id);
       if (record) {
-        feedback.push(record.payload);
+        feedback.push(record);
       }
     }
 
@@ -496,20 +510,20 @@ export class FileIndexerAdapter implements IIndexerAdapter {
   }
 
   /**
-   * Reads all executions from executionStore (graceful degradation)
+   * Reads all executions from executionStore (graceful degradation) with full metadata.
    */
-  private async readAllExecutions(): Promise<ExecutionRecord[]> {
+  private async readAllExecutions(): Promise<GitGovExecutionRecord[]> {
     if (!this.executionStore) {
       return [];
     }
 
     const executionIds = await this.executionStore.list();
-    const executions: ExecutionRecord[] = [];
+    const executions: GitGovExecutionRecord[] = [];
 
     for (const id of executionIds) {
       const record = await this.executionStore.read(id);
       if (record) {
-        executions.push(record.payload);
+        executions.push(record);
       }
     }
 
@@ -517,20 +531,20 @@ export class FileIndexerAdapter implements IIndexerAdapter {
   }
 
   /**
-   * Reads all changelogs from changelogStore (graceful degradation)
+   * Reads all changelogs from changelogStore (graceful degradation) with full metadata.
    */
-  private async readAllChangelogs(): Promise<ChangelogRecord[]> {
+  private async readAllChangelogs(): Promise<GitGovChangelogRecord[]> {
     if (!this.changelogStore) {
       return [];
     }
 
     const changelogIds = await this.changelogStore.list();
-    const changelogs: ChangelogRecord[] = [];
+    const changelogs: GitGovChangelogRecord[] = [];
 
     for (const id of changelogIds) {
       const record = await this.changelogStore.read(id);
       if (record) {
-        changelogs.push(record.payload);
+        changelogs.push(record);
       }
     }
 
@@ -595,56 +609,54 @@ export class FileIndexerAdapter implements IIndexerAdapter {
     try {
       // Tasks creadas (basado en ID timestamp)
       allRecords.tasks.forEach(task => {
-        const timestampPart = task.id.split('-')[0];
+        const timestampPart = task.payload.id.split('-')[0];
         if (timestampPart) {
           events.push({
             timestamp: parseInt(timestampPart),
             type: 'task_created',
-            entityId: task.id,
-            entityTitle: task.title,
-            actorId: 'human:camilo', // TODO: Extraer del primer signature
-            metadata: { priority: task.priority, status: task.status }
+            entityId: task.payload.id,
+            entityTitle: task.payload.title,
+            actorId: task.header.signatures[0]?.keyId || 'unknown', // Extract from first signature
+            metadata: { priority: task.payload.priority, status: task.payload.status }
           });
         }
       });
 
       // Cycles creados (basado en ID timestamp)
       allRecords.cycles.forEach(cycle => {
-        const timestampPart = cycle.id.split('-')[0];
+        const timestampPart = cycle.payload.id.split('-')[0];
         if (timestampPart) {
           events.push({
             timestamp: parseInt(timestampPart),
             type: 'cycle_created',
-            entityId: cycle.id,
-            entityTitle: cycle.title,
-            actorId: 'human:scrum-master', // TODO: Extraer del primer signature
-            metadata: { status: cycle.status }
+            entityId: cycle.payload.id,
+            entityTitle: cycle.payload.title,
+            actorId: cycle.header.signatures[0]?.keyId || 'unknown', // Extract from first signature
+            metadata: { status: cycle.payload.status }
           });
         }
       });
 
       // Feedback creado (basado en ID timestamp)
       allRecords.feedback.forEach(feedback => {
-        const timestampPart = feedback.id.split('-')[0];
+        const timestampPart = feedback.payload.id.split('-')[0];
         if (timestampPart) {
           const metadata: { type: string; assignee?: string; resolution: string } = {
-            type: feedback.type,
-            resolution: feedback.status
+            type: feedback.payload.type,
+            resolution: feedback.payload.status
           };
-          if (feedback.assignee) {
-            metadata.assignee = feedback.assignee;
+          if (feedback.payload.assignee) {
+            metadata.assignee = feedback.payload.assignee;
           }
 
           const event: ActivityEvent = {
             timestamp: parseInt(timestampPart),
             type: 'feedback_created',
-            entityId: feedback.id,
-            entityTitle: `${feedback.type}: ${feedback.content.slice(0, 40)}...`,
+            entityId: feedback.payload.id,
+            entityTitle: `${feedback.payload.type}: ${feedback.payload.content.slice(0, 40)}...`,
+            actorId: feedback.header.signatures[0]?.keyId || feedback.payload.assignee || 'unknown',
             metadata
           };
-          if (feedback.assignee) {
-            event.actorId = feedback.assignee;
-          }
 
           events.push(event);
         }
@@ -652,32 +664,35 @@ export class FileIndexerAdapter implements IIndexerAdapter {
 
       // Changelogs creados (basado en ID timestamp) 
       allRecords.changelogs.forEach(changelog => {
-        const timestampPart = changelog.id.split('-')[0];
+        const timestampPart = changelog.payload.id.split('-')[0];
         if (timestampPart) {
-          events.push({
+          const event: ActivityEvent = {
             timestamp: parseInt(timestampPart),
             type: 'changelog_created',
-            entityId: changelog.id,
-            entityTitle: changelog.title || 'Release notes',
-            actorId: 'agent:api-dev', // TODO: Extraer del primer signature
-            metadata: { type: changelog.changeType }
-          });
+            entityId: changelog.payload.id,
+            entityTitle: changelog.payload.title || 'Release notes',
+            actorId: changelog.header.signatures[0]?.keyId || 'unknown'
+          };
+          if (changelog.payload.version) {
+            event.metadata = { version: changelog.payload.version };
+          }
+          events.push(event);
         }
       });
 
       // Executions creadas (basado en ID timestamp)
       allRecords.executions.forEach(execution => {
-        const timestampPart = execution.id.split('-')[0];
+        const timestampPart = execution.payload.id.split('-')[0];
         if (timestampPart) {
           events.push({
             timestamp: parseInt(timestampPart),
             type: 'execution_created',
-            entityId: execution.id,
-            entityTitle: execution.title || `Working on ${execution.taskId.slice(-8)}`,
-            actorId: 'human:developer', // TODO: Extraer del primer signature
+            entityId: execution.payload.id,
+            entityTitle: execution.payload.title || `Working on ${execution.payload.taskId.slice(-8)}`,
+            actorId: execution.header.signatures[0]?.keyId || 'unknown', // Extract from first signature
             metadata: {
-              executionType: execution.type || 'development',
-              taskId: execution.taskId
+              executionType: execution.payload.type || 'development',
+              taskId: execution.payload.taskId
             }
           });
         }
@@ -685,14 +700,14 @@ export class FileIndexerAdapter implements IIndexerAdapter {
 
       // Actors creados (basado en ID timestamp)
       allRecords.actors.forEach(actor => {
-        const timestampPart = actor.id.split('-')[0];
+        const timestampPart = actor.payload.id.split('-')[0];
         if (timestampPart) {
           events.push({
             timestamp: parseInt(timestampPart),
             type: 'actor_created',
-            entityId: actor.id,
-            entityTitle: `${actor.displayName} joined (${actor.type})`,
-            metadata: { type: actor.type }
+            entityId: actor.payload.id,
+            entityTitle: `${actor.payload.displayName} joined (${actor.payload.type})`,
+            metadata: { type: actor.payload.type }
           });
         }
       });
@@ -751,43 +766,42 @@ export class FileIndexerAdapter implements IIndexerAdapter {
 
       // 2. Check related feedback records
       const relatedFeedback = relatedRecords.feedback.filter(f =>
-        f.entityId === task.id || f.content.includes(task.id)
+        f.payload.entityId === task.id || f.payload.content.includes(task.id)
       );
 
       for (const feedback of relatedFeedback) {
-        const feedbackTime = this.getTimestampFromId(feedback.id) * 1000; // Convert to milliseconds
+        const feedbackTime = this.getTimestampFromId(feedback.payload.id) * 1000; // Convert to milliseconds
         if (feedbackTime > lastUpdated) {
           lastUpdated = feedbackTime;
           lastActivityType = 'feedback_received';
-          recentActivity = `${feedback.type} feedback: ${feedback.content.slice(0, 30)}...`;
+          recentActivity = `${feedback.payload.type} feedback: ${feedback.payload.content.slice(0, 30)}...`;
         }
       }
 
       // 3. Check related execution records
-      const relatedExecutions = relatedRecords.executions.filter(e => e.taskId === task.id);
+      const relatedExecutions = relatedRecords.executions.filter(e => e.payload.taskId === task.id);
 
       for (const execution of relatedExecutions) {
-        const executionTime = this.getTimestampFromId(execution.id) * 1000; // Convert to milliseconds
+        const executionTime = this.getTimestampFromId(execution.payload.id) * 1000; // Convert to milliseconds
         if (executionTime > lastUpdated) {
           lastUpdated = executionTime;
           lastActivityType = 'execution_added';
-          recentActivity = `Execution: ${execution.title || 'Work logged'}`;
+          recentActivity = `Execution: ${execution.payload.title || 'Work logged'}`;
         }
       }
 
       // 4. Check related changelog records
       const relatedChangelogs = relatedRecords.changelogs.filter(c =>
-        c.entityId === task.id ||
-        c.references?.tasks?.includes(task.id) ||
-        c.description?.includes(task.id)
+        c.payload.relatedTasks.includes(task.id) ||
+        c.payload.description?.includes(task.id)
       );
 
       for (const changelog of relatedChangelogs) {
-        const changelogTime = this.getTimestampFromId(changelog.id) * 1000; // Convert to milliseconds
+        const changelogTime = this.getTimestampFromId(changelog.payload.id) * 1000; // Convert to milliseconds
         if (changelogTime > lastUpdated) {
           lastUpdated = changelogTime;
           lastActivityType = 'changelog_created';
-          recentActivity = `Changelog: ${changelog.title}`;
+          recentActivity = `Changelog: ${changelog.payload.title}`;
         }
       }
 
@@ -806,12 +820,14 @@ export class FileIndexerAdapter implements IIndexerAdapter {
 
   /**
    * [EARS-22] Enrich a TaskRecord with activity metadata
+   * @param task - Full GitGovTaskRecord with header.signatures for author/lastModifier extraction
+   * @param relatedRecords - All related records with full metadata
    */
-  async enrichTaskRecord(task: TaskRecord, relatedRecords: AllRecords): Promise<EnrichedTaskRecord> {
-    const { lastUpdated, lastActivityType, recentActivity } = await this.calculateLastUpdated(task, relatedRecords);
+  async enrichTaskRecord(task: GitGovTaskRecord, relatedRecords: AllRecords): Promise<EnrichedTaskRecord> {
+    const { lastUpdated, lastActivityType, recentActivity } = await this.calculateLastUpdated(task.payload, relatedRecords);
 
     return {
-      ...task,
+      ...task.payload,
       lastUpdated,
       lastActivityType,
       recentActivity

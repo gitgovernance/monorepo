@@ -2,13 +2,11 @@ import { ChangelogAdapter } from './index';
 import { createChangelogRecord } from '../../factories/changelog_factory';
 import { RecordStore } from '../../store';
 import { IdentityAdapter } from '../identity_adapter';
-import { publishEvent } from '../../event_bus';
 import type { ChangelogRecord } from '../../types';
 import type { TaskRecord } from '../../types';
 import type { CycleRecord } from '../../types';
 import type { IEventStream } from '../../event_bus';
 import type { GitGovRecord, Signature } from '../../types';
-import { DetailedValidationError } from '../../validation/common';
 
 // Mock dependencies
 jest.mock('../../factories/changelog_factory');
@@ -29,23 +27,17 @@ function createMockChangelogRecord(overrides: Partial<ChangelogRecord> = {}): Gi
       signatures: [{
         keyId: 'mock-author',
         role: 'author',
+        notes: 'Mock changelog for unit testing',
         signature: 'mock-sig',
-        timestamp: 123,
-        timestamp_iso: '2025-01-01T00:00:00Z'
+        timestamp: 123
       }] as [Signature, ...Signature[]]
     },
     payload: {
-      id: 'mock-changelog',
-      entityType: 'task' as const,
-      entityId: 'task-123',
-      changeType: 'completion' as const,
-      title: 'Mock Task Completion',
-      description: 'Mock changelog description with sufficient length for validation requirements',
-      timestamp: 1752707800,
-      trigger: 'manual' as const,
-      triggeredBy: 'human:developer',
-      reason: 'Mock reason for testing purposes',
-      riskLevel: 'low' as const,
+      id: '1752707800-changelog-test-deliverable',
+      title: 'Test Deliverable v1.0',
+      description: 'Successfully delivered multiple features in this release',
+      relatedTasks: ['1752274500-task-test-task'],
+      completedAt: 1752707800,
       ...overrides
     }
   };
@@ -57,342 +49,142 @@ describe('ChangelogAdapter', () => {
   let mockTaskStore: jest.Mocked<RecordStore<TaskRecord>>;
   let mockCycleStore: jest.Mocked<RecordStore<CycleRecord>>;
   let mockIdentityAdapter: jest.Mocked<IdentityAdapter>;
-  let mockPublishEvent: jest.Mock;
-
-  const mockPayload = {
-    entityType: 'task' as const,
-    entityId: 'task-123',
-    changeType: 'update' as const, // Use 'update' to avoid references.tasks requirement
-    title: 'Test Task Update',
-    description: 'Successfully updated the test task with new requirements',
-    triggeredBy: 'human:developer',
-    reason: 'Task requirements updated'
-  };
-  const mockActorId = 'human:developer';
-  const mockCreatedChangelogPayload = {
-    id: '123-changelog-test',
-    entityType: 'task' as const,
-    entityId: 'task-123',
-    changeType: 'update' as const, // Match mockPayload
-    title: 'Test Task Update',
-    description: 'Successfully updated the test task with new requirements',
-    timestamp: 1752707800,
-    trigger: 'manual' as const,
-    triggeredBy: 'human:developer',
-    reason: 'Task requirements updated',
-    riskLevel: 'low' as const
-  };
-  const mockSignedRecord = createMockChangelogRecord(mockCreatedChangelogPayload);
+  let mockEventBus: jest.Mocked<IEventStream>;
 
   beforeEach(() => {
-    jest.clearAllMocks();
-
-    // Mock changelog store with proper typing
+    // Mock RecordStore for changelog
     mockChangelogStore = {
-      write: jest.fn().mockResolvedValue(undefined),
-      read: jest.fn().mockResolvedValue(null),
-      list: jest.fn().mockResolvedValue([]),
-      delete: jest.fn().mockResolvedValue(undefined),
-      exists: jest.fn().mockResolvedValue(false),
-    } as unknown as jest.Mocked<RecordStore<ChangelogRecord>>;
+      write: jest.fn(),
+      read: jest.fn(),
+      list: jest.fn(),
+      delete: jest.fn(),
+    } as any;
 
-    // Mock task store
+    // Mock RecordStore for tasks
     mockTaskStore = {
-      read: jest.fn().mockResolvedValue({ payload: { id: 'task-123' } }), // Default: task exists
-      write: jest.fn().mockResolvedValue(undefined),
-      list: jest.fn().mockResolvedValue([]),
-      delete: jest.fn().mockResolvedValue(undefined),
-      exists: jest.fn().mockResolvedValue(false),
-    } as unknown as jest.Mocked<RecordStore<TaskRecord>>;
+      read: jest.fn(),
+      list: jest.fn(),
+      write: jest.fn(),
+      delete: jest.fn(),
+    } as any;
 
-    // Mock cycle store
+    // Mock RecordStore for cycles
     mockCycleStore = {
-      read: jest.fn().mockResolvedValue({ payload: { id: 'cycle-123' } }), // Default: cycle exists
-      write: jest.fn().mockResolvedValue(undefined),
-      list: jest.fn().mockResolvedValue([]),
-      delete: jest.fn().mockResolvedValue(undefined),
-      exists: jest.fn().mockResolvedValue(false),
-    } as unknown as jest.Mocked<RecordStore<CycleRecord>>;
+      read: jest.fn(),
+      list: jest.fn(),
+      write: jest.fn(),
+      delete: jest.fn(),
+    } as any;
 
-    // Mock identity adapter
+    // Mock IdentityAdapter
     mockIdentityAdapter = {
       signRecord: jest.fn(),
-      createActor: jest.fn(),
       getActor: jest.fn(),
-      getAllActors: jest.fn(),
-      createAgent: jest.fn(),
-      getAgent: jest.fn(),
-      getAllAgents: jest.fn()
-    } as unknown as jest.Mocked<IdentityAdapter>;
+      getCurrentActor: jest.fn(),
+    } as any;
 
-    // Mock publish event
-    mockPublishEvent = publishEvent as jest.Mock;
+    // Mock EventBus
+    mockEventBus = {
+      publish: jest.fn(),
+      subscribe: jest.fn(),
+    } as any;
 
-    // Mock factory - return the input payload with defaults applied
-    (createChangelogRecord as jest.Mock).mockImplementation(async (payload: Partial<ChangelogRecord>) => ({
-      id: '123-changelog-test',
-      timestamp: 1752707800,
-      trigger: 'manual' as const,
-      riskLevel: 'low' as const,
-      ...payload
-    }));
-    mockIdentityAdapter.signRecord.mockResolvedValue(mockSignedRecord);
-
-    // Create adapter with mocked dependencies
+    // Instantiate ChangelogAdapter with mocked dependencies
     changelogAdapter = new ChangelogAdapter({
       changelogStore: mockChangelogStore,
       identity: mockIdentityAdapter,
-      eventBus: {
-        publish: jest.fn(),
-        subscribe: jest.fn(),
-        unsubscribe: jest.fn(),
-        getSubscriptions: jest.fn(),
-        clearSubscriptions: jest.fn()
-      } as IEventStream,
+      eventBus: mockEventBus,
       taskStore: mockTaskStore,
-      cycleStore: mockCycleStore
+      cycleStore: mockCycleStore,
     });
+
+    // Reset mocks
+    jest.clearAllMocks();
   });
 
   describe('create', () => {
-    it('[EARS-1] should create, sign, write, and emit event for valid changelog', async () => {
-      const result = await changelogAdapter.create(mockPayload, mockActorId);
+    it('[EARS-1] should create a changelog record with all required fields', async () => {
+      const mockPayload: Partial<ChangelogRecord> = {
+        id: '1752707800-changelog-test-deliverable',
+        title: 'Test Deliverable v1.0',
+        description: 'Successfully delivered multiple features in this release',
+        relatedTasks: ['1752274500-task-test-task'],
+        completedAt: 1752707800
+      };
+
+      const mockRecord = createMockChangelogRecord(mockPayload);
+      (createChangelogRecord as jest.Mock).mockResolvedValue(mockPayload);
+      mockIdentityAdapter.signRecord.mockResolvedValue(mockRecord);
+      mockTaskStore.read.mockResolvedValue({ payload: { id: '1752274500-task-test-task' } } as any); // Mock task exists
+
+      const result = await changelogAdapter.create(mockPayload, 'human:developer');
 
       expect(createChangelogRecord).toHaveBeenCalledWith(mockPayload);
-      expect(mockIdentityAdapter.signRecord).toHaveBeenCalledWith(
-        expect.objectContaining({
-          payload: mockCreatedChangelogPayload
-        }),
-        mockActorId,
-        'author'
-      );
-      expect(mockChangelogStore.write).toHaveBeenCalledWith(mockSignedRecord);
-      // Note: Now using this.eventBus.publish instead of publishEvent
-      // The mock eventBus.publish should have been called
-      expect(result).toEqual(mockCreatedChangelogPayload);
+      expect(mockIdentityAdapter.signRecord).toHaveBeenCalled();
+      expect(mockChangelogStore.write).toHaveBeenCalled();
+      expect(mockEventBus.publish).toHaveBeenCalled();
+      expect(result).toEqual(mockPayload);
     });
 
-    it('[EARS-2] should throw DetailedValidationError for invalid payload', async () => {
-      const validationError = new DetailedValidationError('Invalid payload', []);
-      (createChangelogRecord as jest.Mock).mockRejectedValue(validationError);
+    it('[EARS-2] should throw error when title is missing', async () => {
+      const invalidPayload: Partial<ChangelogRecord> = {
+        description: 'Test description with sufficient length',
+        relatedTasks: ['task-1'],
+      };
 
-      await expect(changelogAdapter.create({ entityType: 'task', entityId: 'invalid' }, mockActorId))
-        .rejects.toThrow('Invalid payload');
-
-      // Ensure no side effects occurred
-      expect(mockIdentityAdapter.signRecord).not.toHaveBeenCalled();
-      expect(mockChangelogStore.write).not.toHaveBeenCalled();
-      expect(mockPublishEvent).not.toHaveBeenCalled();
+      await expect(changelogAdapter.create(invalidPayload, 'human:developer'))
+        .rejects.toThrow('title is required');
     });
 
-    it('[EARS-3] should throw RecordNotFoundError for non-existent task entityId', async () => {
+    it('[EARS-3] should throw error when description is too short', async () => {
+      const invalidPayload: Partial<ChangelogRecord> = {
+        title: 'Test Title Here',
+        description: 'Too short',
+        relatedTasks: ['task-1'],
+      };
+
+      await expect(changelogAdapter.create(invalidPayload, 'human:developer'))
+        .rejects.toThrow('description is required and must be at least 20 characters');
+    });
+
+    it('[EARS-4] should throw error when relatedTasks is empty', async () => {
+      // Test runtime validation of empty array - cast through unknown for type safety
+      const invalidPayload = {
+        title: 'Test Title Here',
+        description: 'Valid description with sufficient length for validation',
+        relatedTasks: [], // Runtime should reject empty array
+      } as unknown as Partial<ChangelogRecord>;
+
+      await expect(changelogAdapter.create(invalidPayload, 'human:developer'))
+        .rejects.toThrow('relatedTasks is required and must contain at least one task ID');
+    });
+
+    it('[EARS-5] should validate task existence when taskStore is provided', async () => {
+      const mockPayload: Partial<ChangelogRecord> = {
+        title: 'Test Deliverable',
+        description: 'Test description with sufficient length for validation',
+        relatedTasks: ['non-existent-task'],
+      };
+
       mockTaskStore.read.mockResolvedValue(null);
 
-      await expect(changelogAdapter.create({
-        entityType: 'task',
-        entityId: 'non-existent-task',
-        changeType: 'update', // Use 'update' instead of 'completion'
-        title: 'Valid Title',
-        description: 'Valid description with sufficient length',
-        triggeredBy: 'human:developer',
-        reason: 'Valid reason'
-      }, mockActorId))
-        .rejects.toThrow('RecordNotFoundError: Task not found: non-existent-task');
-    });
-
-    it('[EARS-3] should throw RecordNotFoundError for non-existent cycle entityId', async () => {
-      mockCycleStore.read.mockResolvedValue(null);
-
-      await expect(changelogAdapter.create({
-        entityType: 'cycle',
-        entityId: 'non-existent-cycle',
-        changeType: 'update', // Use 'update' instead of 'completion'
-        title: 'Valid Title',
-        description: 'Valid description with sufficient length',
-        triggeredBy: 'human:developer',
-        reason: 'Valid reason'
-      }, mockActorId))
-        .rejects.toThrow('RecordNotFoundError: Cycle not found: non-existent-cycle');
-    });
-
-    it('[EARS-4] should throw DetailedValidationError for invalid entityType', async () => {
-      const invalidPayload = {
-        entityType: 'invalid',
-        entityId: 'entity-123',
-        changeType: 'completion',
-        title: 'Valid Title',
-        description: 'Valid description',
-        triggeredBy: 'human:developer',
-        reason: 'Valid reason'
-      } as unknown as Partial<ChangelogRecord>;
-
-      await expect(changelogAdapter.create(invalidPayload, mockActorId))
-        .rejects.toThrow('DetailedValidationError: entityType must be task, cycle, agent, system, or configuration');
-    });
-
-    it('[EARS-5] should throw DetailedValidationError for invalid changeType', async () => {
-      const invalidPayload = {
-        entityType: 'task',
-        entityId: 'task-123',
-        changeType: 'invalid',
-        title: 'Valid Title',
-        description: 'Valid description',
-        triggeredBy: 'human:developer',
-        reason: 'Valid reason'
-      } as unknown as Partial<ChangelogRecord>;
-
-      await expect(changelogAdapter.create(invalidPayload, mockActorId))
-        .rejects.toThrow('DetailedValidationError: changeType must be creation, completion, update, deletion, or hotfix');
-    });
-
-    it('[EARS-6] should throw DetailedValidationError for high riskLevel without rollbackInstructions', async () => {
-      await expect(changelogAdapter.create({
-        entityType: 'task',
-        entityId: 'task-123',
-        changeType: 'update',
-        title: 'High Risk Update',
-        description: 'Major system update with high risk level',
-        triggeredBy: 'human:developer',
-        reason: 'System upgrade',
-        riskLevel: 'high'
-        // rollbackInstructions missing
-      }, mockActorId))
-        .rejects.toThrow('DetailedValidationError: rollbackInstructions is required when riskLevel is high');
-    });
-
-    it('[EARS-7] should throw DetailedValidationError for critical riskLevel without rollbackInstructions', async () => {
-      await expect(changelogAdapter.create({
-        entityType: 'system',
-        entityId: 'payment-gateway',
-        changeType: 'hotfix',
-        title: 'Critical System Fix',
-        description: 'Emergency fix for critical system failure',
-        triggeredBy: 'human:on-call',
-        reason: 'System down',
-        riskLevel: 'critical'
-        // rollbackInstructions missing
-      }, mockActorId))
-        .rejects.toThrow('DetailedValidationError: rollbackInstructions is required when riskLevel is critical');
-    });
-
-    it('[EARS-8] should throw DetailedValidationError for completion changeType without references.tasks', async () => {
-      await expect(changelogAdapter.create({
-        entityType: 'task',
-        entityId: 'task-123',
-        changeType: 'completion',
-        title: 'Task Completion',
-        description: 'Task has been completed successfully',
-        triggeredBy: 'human:developer',
-        reason: 'All work finished'
-        // references.tasks missing for completion
-      }, mockActorId))
-        .rejects.toThrow('DetailedValidationError: references.tasks is required when changeType is completion');
-    });
-
-    it('[EARS-14] should throw DetailedValidationError for short title', async () => {
-      await expect(changelogAdapter.create({
-        entityType: 'task',
-        entityId: 'task-123',
-        changeType: 'completion',
-        title: 'Short', // Less than 10 characters
-        description: 'Valid description with sufficient length',
-        triggeredBy: 'human:developer',
-        reason: 'Valid reason'
-      }, mockActorId))
-        .rejects.toThrow('DetailedValidationError: title must be at least 10 characters');
-    });
-
-    it('[EARS-15] should throw DetailedValidationError for short description', async () => {
-      await expect(changelogAdapter.create({
-        entityType: 'task',
-        entityId: 'task-123',
-        changeType: 'completion',
-        title: 'Valid Title',
-        description: 'Short desc', // Less than 20 characters
-        triggeredBy: 'human:developer',
-        reason: 'Valid reason'
-      }, mockActorId))
-        .rejects.toThrow('DetailedValidationError: description must be at least 20 characters');
-    });
-
-    it('should work with graceful degradation when entity stores are not provided', async () => {
-      const changelogAdapterNoEntityStores = new ChangelogAdapter({
-        changelogStore: mockChangelogStore,
-        identity: mockIdentityAdapter,
-        eventBus: {
-          publish: jest.fn(),
-          subscribe: jest.fn(),
-          unsubscribe: jest.fn(),
-          getSubscriptions: jest.fn(),
-          clearSubscriptions: jest.fn()
-        } as IEventStream,
-        // No taskStore or cycleStore provided
-      });
-
-      const result = await changelogAdapterNoEntityStores.create(mockPayload, mockActorId);
-
-      expect(result).toEqual(mockCreatedChangelogPayload);
-      expect(mockTaskStore.read).not.toHaveBeenCalled();
-      expect(mockCycleStore.read).not.toHaveBeenCalled();
-    });
-
-    it('should accept valid entityType values', async () => {
-      const validEntityTypes = ['task', 'cycle', 'agent', 'system', 'configuration'];
-
-      for (const entityType of validEntityTypes) {
-        const payload = {
-          entityType,
-          entityId: `${entityType}-123`,
-          changeType: 'update' as const,
-          title: `${entityType} Update`,
-          description: `Updated ${entityType} with new configuration settings`,
-          triggeredBy: 'human:developer',
-          reason: 'Regular update'
-        } as Partial<ChangelogRecord>;
-
-        const result = await changelogAdapter.create(payload, mockActorId);
-        expect(result.entityType).toBe(entityType);
-      }
-    });
-
-    it('should accept valid changeType values', async () => {
-      const validChangeTypes = ['creation', 'completion', 'update', 'deletion', 'hotfix'];
-
-      for (const changeType of validChangeTypes) {
-        const payload = {
-          entityType: 'task' as const,
-          entityId: 'task-123',
-          changeType,
-          title: `Task ${changeType}`,
-          description: `Task ${changeType} with all requirements`,
-          triggeredBy: 'human:developer',
-          reason: `${changeType} reason`,
-          // Add references.tasks for completion changeType
-          ...(changeType === 'completion' && {
-            references: {
-              tasks: ['task-123']
-            }
-          })
-        } as Partial<ChangelogRecord>;
-
-        const result = await changelogAdapter.create(payload, mockActorId);
-        expect(result.changeType).toBe(changeType);
-      }
+      await expect(changelogAdapter.create(mockPayload, 'human:developer'))
+        .rejects.toThrow('Task not found: non-existent-task');
     });
   });
 
   describe('getChangelog', () => {
-    it('[EARS-9] should return existing changelog record', async () => {
-      const mockRecord = createMockChangelogRecord({ id: 'changelog-123' });
+    it('[EARS-6] should return a changelog by ID', async () => {
+      const mockRecord = createMockChangelogRecord();
       mockChangelogStore.read.mockResolvedValue(mockRecord);
 
-      const result = await changelogAdapter.getChangelog('changelog-123');
+      const result = await changelogAdapter.getChangelog('1752707800-changelog-test-deliverable');
 
-      expect(mockChangelogStore.read).toHaveBeenCalledWith('changelog-123');
       expect(result).toEqual(mockRecord.payload);
+      expect(mockChangelogStore.read).toHaveBeenCalledWith('1752707800-changelog-test-deliverable');
     });
 
-    it('[EARS-10] should return null for non-existent changelog', async () => {
+    it('[EARS-7] should return null when changelog not found', async () => {
       mockChangelogStore.read.mockResolvedValue(null);
 
       const result = await changelogAdapter.getChangelog('non-existent');
@@ -401,204 +193,202 @@ describe('ChangelogAdapter', () => {
     });
   });
 
-  describe('getChangelogsByEntity', () => {
-    it('[EARS-11] should filter changelogs by entity ID', async () => {
-      const changelog1 = createMockChangelogRecord({ id: 'changelog-1', entityId: 'task-123' });
-      const changelog2 = createMockChangelogRecord({ id: 'changelog-2', entityId: 'task-456' });
-      const changelog3 = createMockChangelogRecord({ id: 'changelog-3', entityId: 'task-123' });
-
-      mockChangelogStore.list.mockResolvedValue(['changelog-1', 'changelog-2', 'changelog-3']);
-      mockChangelogStore.read
-        .mockResolvedValueOnce(changelog1)
-        .mockResolvedValueOnce(changelog2)
-        .mockResolvedValueOnce(changelog3);
-
-      const result = await changelogAdapter.getChangelogsByEntity('task-123');
-
-      expect(result).toHaveLength(2);
-      expect(result[0]).toEqual(changelog1.payload);
-      expect(result[1]).toEqual(changelog3.payload);
-    });
-
-    it('[EARS-11] should filter changelogs by entity ID and entityType', async () => {
-      const taskChangelog = createMockChangelogRecord({ id: 'changelog-1', entityId: 'entity-123', entityType: 'task' });
-      const systemChangelog = createMockChangelogRecord({ id: 'changelog-2', entityId: 'entity-123', entityType: 'system' });
+  describe('getChangelogsByTask', () => {
+    it('[EARS-8] should return changelogs that include specific task', async () => {
+      const mockRecord1 = createMockChangelogRecord({
+        id: 'changelog-1',
+        relatedTasks: ['task-1', 'task-2']
+      });
+      const mockRecord2 = createMockChangelogRecord({
+        id: 'changelog-2',
+        relatedTasks: ['task-3']
+      });
 
       mockChangelogStore.list.mockResolvedValue(['changelog-1', 'changelog-2']);
       mockChangelogStore.read
-        .mockResolvedValueOnce(taskChangelog)
-        .mockResolvedValueOnce(systemChangelog);
+        .mockResolvedValueOnce(mockRecord1)
+        .mockResolvedValueOnce(mockRecord2);
 
-      const result = await changelogAdapter.getChangelogsByEntity('entity-123', 'task');
+      const result = await changelogAdapter.getChangelogsByTask('task-1');
 
       expect(result).toHaveLength(1);
-      expect(result[0]).toEqual(taskChangelog.payload);
-    });
-
-    it('should return empty array when no changelogs found for entity', async () => {
-      mockChangelogStore.list.mockResolvedValue([]);
-
-      const result = await changelogAdapter.getChangelogsByEntity('entity-nonexistent');
-
-      expect(result).toEqual([]);
+      expect(result[0]!.id).toBe('changelog-1');
     });
   });
 
   describe('getAllChangelogs', () => {
-    it('[EARS-12] should return all changelog records in the system', async () => {
-      const changelog1 = createMockChangelogRecord({ id: 'changelog-1' });
-      const changelog2 = createMockChangelogRecord({ id: 'changelog-2' });
+    it('[EARS-9] should return all changelogs', async () => {
+      const mockRecord1 = createMockChangelogRecord({ id: 'changelog-1' });
+      const mockRecord2 = createMockChangelogRecord({ id: 'changelog-2' });
 
       mockChangelogStore.list.mockResolvedValue(['changelog-1', 'changelog-2']);
       mockChangelogStore.read
-        .mockResolvedValueOnce(changelog1)
-        .mockResolvedValueOnce(changelog2);
+        .mockResolvedValueOnce(mockRecord1)
+        .mockResolvedValueOnce(mockRecord2);
 
       const result = await changelogAdapter.getAllChangelogs();
 
       expect(result).toHaveLength(2);
-      expect(result[0]).toEqual(changelog1.payload);
-      expect(result[1]).toEqual(changelog2.payload);
-    });
-
-    it('should return empty array when no changelogs exist', async () => {
-      mockChangelogStore.list.mockResolvedValue([]);
-
-      const result = await changelogAdapter.getAllChangelogs();
-
-      expect(result).toEqual([]);
     });
   });
 
   describe('getRecentChangelogs', () => {
-    it('[EARS-13] should return changelogs ordered by timestamp descending with limit', async () => {
-      const changelog1 = createMockChangelogRecord({ id: 'changelog-1', timestamp: 1752707800 }); // Older
-      const changelog2 = createMockChangelogRecord({ id: 'changelog-2', timestamp: 1752707900 }); // Newer
-      const changelog3 = createMockChangelogRecord({ id: 'changelog-3', timestamp: 1752707850 }); // Middle
+    it('[EARS-10] should return recent changelogs sorted by completedAt', async () => {
+      const mockRecord1 = createMockChangelogRecord({
+        id: 'changelog-1',
+        completedAt: 1752707900
+      });
+      const mockRecord2 = createMockChangelogRecord({
+        id: 'changelog-2',
+        completedAt: 1752707800
+      });
+
+      mockChangelogStore.list.mockResolvedValue(['changelog-1', 'changelog-2']);
+      mockChangelogStore.read
+        .mockResolvedValueOnce(mockRecord1)
+        .mockResolvedValueOnce(mockRecord2);
+
+      const result = await changelogAdapter.getRecentChangelogs(1);
+
+      expect(result).toHaveLength(1);
+      expect(result[0]!.id).toBe('changelog-1'); // Most recent
+    });
+  });
+
+  describe('getAllChangelogs with options', () => {
+    it('[EARS-11] should return all changelogs sorted by completedAt desc by default', async () => {
+      const mockRecord1 = createMockChangelogRecord({
+        id: 'changelog-1',
+        completedAt: 1752707800 // Older
+      });
+      const mockRecord2 = createMockChangelogRecord({
+        id: 'changelog-2',
+        completedAt: 1752707900 // Newer
+      });
+      const mockRecord3 = createMockChangelogRecord({
+        id: 'changelog-3',
+        completedAt: 1752707850 // Middle
+      });
 
       mockChangelogStore.list.mockResolvedValue(['changelog-1', 'changelog-2', 'changelog-3']);
       mockChangelogStore.read
-        .mockResolvedValueOnce(changelog1)
-        .mockResolvedValueOnce(changelog2)
-        .mockResolvedValueOnce(changelog3);
+        .mockResolvedValueOnce(mockRecord1)
+        .mockResolvedValueOnce(mockRecord2)
+        .mockResolvedValueOnce(mockRecord3);
 
-      const result = await changelogAdapter.getRecentChangelogs(2);
+      const result = await changelogAdapter.getAllChangelogs();
 
-      expect(result).toHaveLength(2);
-      expect(result[0]).toEqual(changelog2.payload); // Most recent first
-      expect(result[1]).toEqual(changelog3.payload); // Second most recent
+      expect(result).toHaveLength(3);
+      expect(result[0]!.id).toBe('changelog-2'); // Most recent first
+      expect(result[1]!.id).toBe('changelog-3'); // Middle
+      expect(result[2]!.id).toBe('changelog-1'); // Oldest last
     });
 
-    it('should return all changelogs when limit exceeds total', async () => {
-      const changelog1 = createMockChangelogRecord({ id: 'changelog-1' });
-
-      mockChangelogStore.list.mockResolvedValue(['changelog-1']);
-      mockChangelogStore.read.mockResolvedValueOnce(changelog1);
-
-      const result = await changelogAdapter.getRecentChangelogs(10);
-
-      expect(result).toHaveLength(1);
-      expect(result[0]).toEqual(changelog1.payload);
-    });
-  });
-
-  describe('Performance Tests', () => {
-    it('[EARS-16] should execute in under 40ms for typical datasets', async () => {
-      // Create mock data for performance test
-      const changelogIds = Array.from({ length: 100 }, (_, i) => `changelog-${i}`);
-      const mockChangelogs = changelogIds.map(id =>
-        createMockChangelogRecord({ id, entityId: `entity-${id}` })
-      );
-
-      mockChangelogStore.list.mockResolvedValue(changelogIds);
-      mockChangelogs.forEach(changelog => {
-        mockChangelogStore.read.mockResolvedValueOnce(changelog);
+    it('[EARS-12] should filter changelogs by tags', async () => {
+      const mockRecord1 = createMockChangelogRecord({
+        id: 'changelog-1',
+        tags: ['feature', 'ui']
+      });
+      const mockRecord2 = createMockChangelogRecord({
+        id: 'changelog-2',
+        tags: ['bugfix', 'backend']
+      });
+      const mockRecord3 = createMockChangelogRecord({
+        id: 'changelog-3',
+        tags: ['feature', 'api']
       });
 
+      mockChangelogStore.list.mockResolvedValue(['changelog-1', 'changelog-2', 'changelog-3']);
+      mockChangelogStore.read
+        .mockResolvedValueOnce(mockRecord1)
+        .mockResolvedValueOnce(mockRecord2)
+        .mockResolvedValueOnce(mockRecord3);
+
+      const result = await changelogAdapter.getAllChangelogs({ tags: ['feature'] });
+
+      expect(result).toHaveLength(2);
+      expect(result.map(r => r.id)).toContain('changelog-1');
+      expect(result.map(r => r.id)).toContain('changelog-3');
+      expect(result.map(r => r.id)).not.toContain('changelog-2');
+    });
+
+    it('[EARS-13] should apply limit to results', async () => {
+      const mockRecord1 = createMockChangelogRecord({
+        id: 'changelog-1',
+        completedAt: 1752707800
+      });
+      const mockRecord2 = createMockChangelogRecord({
+        id: 'changelog-2',
+        completedAt: 1752707900
+      });
+      const mockRecord3 = createMockChangelogRecord({
+        id: 'changelog-3',
+        completedAt: 1752707850
+      });
+
+      mockChangelogStore.list.mockResolvedValue(['changelog-1', 'changelog-2', 'changelog-3']);
+      mockChangelogStore.read
+        .mockResolvedValueOnce(mockRecord1)
+        .mockResolvedValueOnce(mockRecord2)
+        .mockResolvedValueOnce(mockRecord3);
+
+      const result = await changelogAdapter.getAllChangelogs({ limit: 2 });
+
+      expect(result).toHaveLength(2);
+      // Should return the 2 most recent
+      expect(result[0]!.id).toBe('changelog-2');
+      expect(result[1]!.id).toBe('changelog-3');
+    });
+  });
+
+  describe('ID generation', () => {
+    it('[EARS-14] should generate correct ID from title using slug pattern', async () => {
+      const mockPayload: Partial<ChangelogRecord> = {
+        title: 'Test Deliverable v1.0',
+        description: 'Successfully delivered multiple features in this release',
+        relatedTasks: ['1752274500-task-test-task'],
+        completedAt: 1752707800
+      };
+
+      const mockRecord = createMockChangelogRecord(mockPayload);
+      (createChangelogRecord as jest.Mock).mockImplementation(async (payload) => payload);
+      mockIdentityAdapter.signRecord.mockResolvedValue(mockRecord);
+      mockTaskStore.read.mockResolvedValue({ payload: { id: '1752274500-task-test-task' } } as any);
+
+      const result = await changelogAdapter.create(mockPayload, 'human:developer');
+
+      // Verify ID follows pattern: {timestamp}-changelog-{slug}
+      expect(result.id).toMatch(/^\d+-changelog-[\w-]+$/);
+      expect(result.id).toContain('test-deliverable-v10');
+      expect(result.id.split('-changelog-')[1]!.length).toBeLessThanOrEqual(50);
+    });
+  });
+
+  describe('Performance', () => {
+    it('[EARS-15] should execute in under 40ms for typical datasets', async () => {
+      // Create 100 mock records (typical dataset)
+      const mockRecords = Array.from({ length: 100 }, (_, i) =>
+        createMockChangelogRecord({
+          id: `changelog-${i}`,
+          completedAt: 1752707800 + i,
+          tags: i % 2 === 0 ? ['feature'] : ['bugfix']
+        })
+      );
+
+      const ids = mockRecords.map(r => r.payload.id);
+      mockChangelogStore.list.mockResolvedValue(ids);
+
+      // Mock read calls
+      for (const record of mockRecords) {
+        mockChangelogStore.read.mockResolvedValueOnce(record);
+      }
+
       const startTime = Date.now();
-      await changelogAdapter.getAllChangelogs();
+      await changelogAdapter.getAllChangelogs({ tags: ['feature'], limit: 10 });
       const endTime = Date.now();
 
-      expect(endTime - startTime).toBeLessThan(40);
-    });
-  });
-
-  describe('Error Handling', () => {
-    it('should throw error when entityType is missing', async () => {
-      await expect(changelogAdapter.create({
-        entityId: 'entity-123'
-      }, mockActorId))
-        .rejects.toThrow('DetailedValidationError: entityType is required');
-    });
-
-    it('should throw error when entityId is missing', async () => {
-      await expect(changelogAdapter.create({
-        entityType: 'task'
-      }, mockActorId))
-        .rejects.toThrow('DetailedValidationError: entityId is required');
-    });
-
-    it('should handle factory errors gracefully', async () => {
-      (createChangelogRecord as jest.Mock).mockRejectedValue(new Error('Factory error'));
-
-      await expect(changelogAdapter.create(mockPayload, mockActorId))
-        .rejects.toThrow('Factory error');
-    });
-
-    it('should handle identity errors gracefully', async () => {
-      mockIdentityAdapter.signRecord.mockRejectedValue(new Error('Signing failed'));
-
-      await expect(changelogAdapter.create(mockPayload, mockActorId))
-        .rejects.toThrow('Signing failed');
-    });
-
-    it('should handle store errors gracefully', async () => {
-      mockChangelogStore.write.mockRejectedValue(new Error('Store error'));
-
-      await expect(changelogAdapter.create(mockPayload, mockActorId))
-        .rejects.toThrow('Store error');
-    });
-  });
-
-  describe('Multi-Entity Support', () => {
-    it('should handle system entity without store validation', async () => {
-      const systemPayload = {
-        entityType: 'system' as const,
-        entityId: 'payment-gateway',
-        changeType: 'hotfix' as const,
-        title: 'Payment Gateway Hotfix',
-        description: 'Fixed critical payment processing issue',
-        triggeredBy: 'human:on-call',
-        reason: 'Critical production issue'
-      };
-
-      const result = await changelogAdapter.create(systemPayload, mockActorId);
-
-      expect(result.entityType).toBe('system');
-      expect(result.entityId).toBe('payment-gateway');
-      // No store validation for system entities
-      expect(mockTaskStore.read).not.toHaveBeenCalled();
-      expect(mockCycleStore.read).not.toHaveBeenCalled();
-    });
-
-    it('should handle configuration entity without store validation', async () => {
-      const configPayload = {
-        entityType: 'configuration' as const,
-        entityId: 'database-config',
-        changeType: 'update' as const,
-        title: 'Database Configuration Update',
-        description: 'Updated connection pool settings for better performance',
-        triggeredBy: 'human:devops',
-        reason: 'Performance optimization'
-      };
-
-      const result = await changelogAdapter.create(configPayload, mockActorId);
-
-      expect(result.entityType).toBe('configuration');
-      expect(result.entityId).toBe('database-config');
-      // No store validation for configuration entities
-      expect(mockTaskStore.read).not.toHaveBeenCalled();
-      expect(mockCycleStore.read).not.toHaveBeenCalled();
+      const executionTime = endTime - startTime;
+      expect(executionTime).toBeLessThan(40);
     });
   });
 });

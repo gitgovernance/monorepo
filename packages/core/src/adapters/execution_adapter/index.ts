@@ -74,21 +74,8 @@ export class ExecutionAdapter implements IExecutionAdapter {
    * Returns: Complete and signed ExecutionRecord.
    */
   async create(payload: Partial<ExecutionRecord>, actorId: string): Promise<ExecutionRecord> {
-    // Input validation
-    if (!payload.taskId) {
-      throw new Error('DetailedValidationError: taskId is required');
-    }
-
-    if (!payload.result) {
-      throw new Error('DetailedValidationError: result is required');
-    }
-
-    if (payload.result && payload.result.length < 10) {
-      throw new Error('DetailedValidationError: result must be at least 10 characters');
-    }
-
     // Optional: Validate taskId exists (graceful degradation)
-    if (this.taskStore) {
+    if (this.taskStore && payload.taskId) {
       const taskExists = await this.taskStore.read(payload.taskId);
       if (!taskExists) {
         throw new Error(`RecordNotFoundError: Task not found: ${payload.taskId}`);
@@ -96,7 +83,7 @@ export class ExecutionAdapter implements IExecutionAdapter {
     }
 
     try {
-      // 1. Build the record with factory
+      // 1. Build the record with factory (factory validates all required fields)
       const validatedPayload = await createExecutionRecord(payload);
 
       // 2. Create unsigned record structure
@@ -108,9 +95,9 @@ export class ExecutionAdapter implements IExecutionAdapter {
           signatures: [{
             keyId: actorId,
             role: 'author',
+            notes: 'Execution recorded',
             signature: 'placeholder',
-            timestamp: Date.now(),
-            timestamp_iso: new Date().toISOString()
+            timestamp: Date.now()
           }]
         },
         payload: validatedPayload,
@@ -137,9 +124,8 @@ export class ExecutionAdapter implements IExecutionAdapter {
 
       return validatedPayload;
     } catch (error) {
-      if (error instanceof Error && error.message.includes('DetailedValidationError')) {
-        throw error;
-      }
+      // Factory will throw DetailedValidationError for schema violations
+      // Re-throw as-is to preserve error type and details
       throw error;
     }
   }

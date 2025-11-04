@@ -6,7 +6,6 @@
   "type": "object",
   "required": [
     "id",
-    "guild",
     "engine"
   ],
   "properties": {
@@ -23,18 +22,10 @@
       ],
       "default": "active"
     },
-    "guild": {
-      "type": "string",
-      "enum": [
-        "design",
-        "intelligence",
-        "strategy",
-        "operations",
-        "quality"
-      ]
-    },
     "triggers": {
       "type": "array",
+      "default": [],
+      "description": "Optional list of triggers that activate the agent.\nAdditional fields are allowed and depend on trigger type:\n- webhook triggers: 'event' (event identifier), 'filter' (condition)\n- scheduled triggers: 'cron' (cron expression)\n- manual triggers: 'command' (example CLI command)\n",
       "items": {
         "type": "object",
         "properties": {
@@ -44,18 +35,22 @@
               "manual",
               "webhook",
               "scheduled"
-            ]
+            ],
+            "description": "Type of trigger that activates the agent"
           }
         },
         "required": [
           "type"
-        ]
+        ],
+        "additionalProperties": true
       }
     },
     "knowledge_dependencies": {
       "type": "array",
+      "default": [],
       "items": {
-        "type": "string"
+        "type": "string",
+        "description": "Glob patterns for blueprint files this agent needs access to"
       }
     },
     "prompt_engine_requirements": {
@@ -75,6 +70,11 @@
         }
       }
     },
+    "metadata": {
+      "type": "object",
+      "description": "Optional framework-specific or deployment-specific metadata for agent extensions.\nCommon use cases: framework identification (langchain, google-adk), deployment info (provider, image, region),\ncost tracking (cost_per_invocation, currency), tool capabilities, maintainer info.\nThis field does NOT affect agent execution - it is purely informational.\n",
+      "additionalProperties": true
+    },
     "engine": {
       "type": "object",
       "oneOf": [
@@ -82,41 +82,114 @@
           "required": [
             "type"
           ],
+          "additionalProperties": false,
           "properties": {
             "type": {
               "const": "local"
             },
             "runtime": {
-              "type": "string"
+              "type": "string",
+              "description": "Runtime environment (typescript, python, etc.)"
             },
             "entrypoint": {
-              "type": "string"
+              "type": "string",
+              "description": "Path to the agent entry file"
             },
             "function": {
-              "type": "string"
+              "type": "string",
+              "description": "Function name to invoke"
             }
           }
         },
         {
           "required": [
-            "type"
+            "type",
+            "url"
           ],
+          "additionalProperties": false,
           "properties": {
             "type": {
               "const": "api"
             },
             "url": {
-              "type": "string"
+              "type": "string",
+              "format": "uri",
+              "description": "HTTP endpoint for the agent"
             },
             "method": {
               "type": "string",
               "enum": [
                 "POST",
                 "GET"
-              ]
+              ],
+              "default": "POST"
             },
             "auth": {
-              "type": "object"
+              "type": "object",
+              "description": "Authentication configuration for API requests",
+              "additionalProperties": true,
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "bearer",
+                    "oauth",
+                    "api-key",
+                    "actor-signature"
+                  ],
+                  "description": "Authentication type. 'actor-signature' uses the agent's ActorRecord keypair to sign requests."
+                },
+                "secret_key": {
+                  "type": "string",
+                  "description": "Reference to secret in Secret Manager (for bearer/api-key/oauth auth types)"
+                },
+                "token": {
+                  "type": "string",
+                  "description": "Direct token value (not recommended for production, use secret_key instead)"
+                }
+              }
+            }
+          }
+        },
+        {
+          "required": [
+            "type",
+            "url"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "mcp"
+            },
+            "url": {
+              "type": "string",
+              "format": "uri",
+              "description": "MCP server endpoint"
+            },
+            "auth": {
+              "type": "object",
+              "description": "Authentication configuration for MCP server",
+              "additionalProperties": true,
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "bearer",
+                    "oauth",
+                    "api-key",
+                    "actor-signature"
+                  ],
+                  "description": "Authentication type. 'actor-signature' uses the agent's ActorRecord keypair to sign requests."
+                },
+                "secret_key": {
+                  "type": "string",
+                  "description": "Reference to secret in Secret Manager (for bearer/api-key/oauth auth types)"
+                },
+                "token": {
+                  "type": "string",
+                  "description": "Direct token value (not recommended for production, use secret_key instead)"
+                }
+              }
             }
           }
         },
@@ -124,19 +197,248 @@
           "required": [
             "type"
           ],
+          "additionalProperties": false,
           "properties": {
             "type": {
-              "const": "mcp"
+              "const": "custom"
             },
-            "url": {
-              "type": "string"
+            "protocol": {
+              "type": "string",
+              "description": "Custom protocol identifier (e.g., 'a2a', 'grpc')"
             },
-            "auth": {
-              "type": "object"
+            "config": {
+              "type": "object",
+              "description": "Protocol-specific configuration"
             }
           }
         }
       ]
     }
-  }
+  },
+  "examples": [
+    {
+      "id": "agent:scribe",
+      "status": "active",
+      "engine": {
+        "type": "local",
+        "runtime": "typescript",
+        "entrypoint": "packages/agents/scribe/index.ts",
+        "function": "runScribe"
+      },
+      "metadata": {
+        "purpose": "documentation-generation",
+        "maintainer": "team:platform"
+      },
+      "triggers": [
+        {
+          "type": "manual"
+        }
+      ],
+      "knowledge_dependencies": [
+        "packages/blueprints/**/*.md"
+      ]
+    },
+    {
+      "id": "agent:langchain-analyzer",
+      "status": "active",
+      "engine": {
+        "type": "api",
+        "url": "https://langchain-service-xyz.a.run.app/analyze",
+        "method": "POST",
+        "auth": {
+          "type": "actor-signature"
+        }
+      },
+      "metadata": {
+        "framework": "langchain",
+        "version": "0.2.0",
+        "model": "gpt-4-turbo",
+        "deployment": {
+          "provider": "gcp",
+          "service": "cloud-run",
+          "region": "us-central1"
+        },
+        "cost_per_invocation": 0.03,
+        "currency": "USD"
+      },
+      "triggers": [
+        {
+          "type": "webhook",
+          "event": "task.ready"
+        }
+      ],
+      "knowledge_dependencies": [
+        "docs/architecture/**/*.md"
+      ]
+    },
+    {
+      "id": "agent:sentiment-analyzer",
+      "status": "active",
+      "engine": {
+        "type": "api",
+        "url": "http://sentiment-analyzer:8082/analyze",
+        "method": "POST",
+        "auth": {
+          "type": "actor-signature"
+        }
+      },
+      "metadata": {
+        "framework": "google-adk",
+        "version": "1.0.0",
+        "model": "gemini-pro",
+        "deployment": {
+          "runtime": "docker",
+          "image": "gitgov/sentiment-analyzer:v1.2.0",
+          "port": 8082
+        },
+        "max_tokens": 1024
+      },
+      "triggers": [
+        {
+          "type": "webhook",
+          "event": "feedback.created"
+        }
+      ]
+    },
+    {
+      "id": "agent:cursor-reviewer",
+      "status": "active",
+      "engine": {
+        "type": "mcp",
+        "url": "http://localhost:8083/mcp",
+        "auth": {
+          "type": "actor-signature"
+        }
+      },
+      "metadata": {
+        "ide": "cursor",
+        "tool": "code-review",
+        "accepts_tools": [
+          "review",
+          "refactor",
+          "test"
+        ]
+      },
+      "knowledge_dependencies": [
+        "packages/**/*.ts",
+        "packages/**/*.tsx"
+      ],
+      "triggers": [
+        {
+          "type": "webhook",
+          "event": "task.status.ready"
+        }
+      ]
+    },
+    {
+      "id": "agent:deepl-translator",
+      "status": "active",
+      "engine": {
+        "type": "api",
+        "url": "https://api.deepl.com/v2/translate",
+        "method": "POST",
+        "auth": {
+          "type": "bearer",
+          "secret_key": "DEEPL_API_KEY"
+        }
+      },
+      "metadata": {
+        "provider": "deepl",
+        "supported_languages": [
+          "EN",
+          "ES",
+          "FR",
+          "DE",
+          "PT"
+        ],
+        "max_chars_per_request": 5000
+      },
+      "triggers": [
+        {
+          "type": "manual"
+        }
+      ]
+    },
+    {
+      "id": "agent:coordinator",
+      "status": "active",
+      "engine": {
+        "type": "custom",
+        "protocol": "a2a",
+        "config": {
+          "endpoint": "https://agent-hub.gitgov.io/a2a",
+          "version": "draft-2025-01",
+          "capabilities": [
+            "task-delegation",
+            "status-sync",
+            "feedback-loop"
+          ]
+        }
+      },
+      "metadata": {
+        "purpose": "multi-agent-orchestration",
+        "experimental": true
+      },
+      "triggers": [
+        {
+          "type": "scheduled",
+          "cron": "0 */4 * * *"
+        }
+      ]
+    },
+    {
+      "id": "agent:minimal-watcher",
+      "engine": {
+        "type": "local"
+      }
+    },
+    {
+      "id": "agent:local-mcp-server",
+      "status": "active",
+      "engine": {
+        "type": "mcp",
+        "url": "http://localhost:9000/mcp"
+      },
+      "knowledge_dependencies": [
+        "packages/blueprints/**/*.md"
+      ],
+      "triggers": [
+        {
+          "type": "manual"
+        }
+      ]
+    },
+    {
+      "id": "agent:code-reviewer",
+      "status": "active",
+      "engine": {
+        "type": "local",
+        "runtime": "typescript",
+        "entrypoint": "packages/agents/code-reviewer/index.ts",
+        "function": "reviewCode"
+      },
+      "prompt_engine_requirements": {
+        "roles": [
+          "code-reviewer",
+          "security-auditor"
+        ],
+        "skills": [
+          "typescript",
+          "security-best-practices",
+          "code-quality-analysis"
+        ]
+      },
+      "knowledge_dependencies": [
+        "packages/**/*.ts",
+        "packages/**/*.tsx"
+      ],
+      "triggers": [
+        {
+          "type": "webhook",
+          "event": "pull-request.opened",
+          "filter": "branch:main"
+        }
+      ]
+    }
+  ]
 }

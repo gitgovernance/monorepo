@@ -37,53 +37,49 @@ export type EmbeddedMetadataRecord = {
     signatures: [
       {
         /**
-         * The Actor ID of the signer.
+         * The Actor ID of the signer (must match ActorRecord.id pattern).
          */
         keyId: string;
         /**
-         * The context role of the signature (e.g., 'author').
+         * The context role of the signature (e.g., 'author', 'reviewer', 'auditor', or 'custom:*').
          */
         role: string;
         /**
-         * The Ed25519 signature (base64 encoded) of the signature digest.
+         * Human-readable note from the signer. Part of the signature digest.
+         */
+        notes: string;
+        /**
+         * The Ed25519 signature (base64 encoded, 88 chars with padding) of the signature digest.
          */
         signature: string;
         /**
          * Unix timestamp of the signature.
          */
         timestamp: number;
-        /**
-         * ISO 8601 timestamp of the signature.
-         */
-        timestamp_iso: string;
       },
       ...{
         /**
-         * The Actor ID of the signer.
+         * The Actor ID of the signer (must match ActorRecord.id pattern).
          */
         keyId: string;
         /**
-         * The context role of the signature (e.g., 'author').
+         * The context role of the signature (e.g., 'author', 'reviewer', 'auditor', or 'custom:*').
          */
         role: string;
         /**
-         * The Ed25519 signature (base64 encoded) of the signature digest.
+         * Human-readable note from the signer. Part of the signature digest.
+         */
+        notes: string;
+        /**
+         * The Ed25519 signature (base64 encoded, 88 chars with padding) of the signature digest.
          */
         signature: string;
         /**
          * Unix timestamp of the signature.
          */
         timestamp: number;
-        /**
-         * ISO 8601 timestamp of the signature.
-         */
-        timestamp_iso: string;
       }[]
     ];
-    /**
-     * A human-readable audit stamp (e.g., from gitgov audit).
-     */
-    audit?: string;
   };
   /**
    * The specific record data, validated against the schema defined by header.type.

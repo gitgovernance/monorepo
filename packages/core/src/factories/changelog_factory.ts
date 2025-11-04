@@ -1,5 +1,4 @@
 import type { ChangelogRecord } from '../types';
-import { generateChangelogId } from '../utils/id_generator';
 import { validateChangelogRecordDetailed } from '../validation/changelog_validator';
 import { DetailedValidationError } from '../validation/common';
 
@@ -12,34 +11,23 @@ import { DetailedValidationError } from '../validation/common';
 export async function createChangelogRecord(payload: Partial<ChangelogRecord>): Promise<ChangelogRecord> {
   const timestamp = Math.floor(Date.now() / 1000);
 
-  // Generate ID if not provided
-  let id = payload.id;
-  if (!id && payload.entityType && payload.entityId) {
-    id = generateChangelogId(payload.entityType, payload.entityId, timestamp);
-  }
-
+  // Build changelog with required fields
   const changelog: ChangelogRecord = {
     // Required fields
-    id: id || '',
-    entityType: payload.entityType || 'task',
-    entityId: payload.entityId || '',
-    changeType: payload.changeType || 'completion',
+    id: payload.id || '',
     title: payload.title || '',
     description: payload.description || '',
-    timestamp: payload.timestamp || timestamp,
-    trigger: payload.trigger || 'manual',
-    triggeredBy: payload.triggeredBy || '',
-    reason: payload.reason || '',
-    riskLevel: payload.riskLevel || 'low',
+    relatedTasks: (payload.relatedTasks || []) as [string, ...string[]],
+    completedAt: payload.completedAt || timestamp,
 
-    // Optional fields (preserve if provided)
-    ...(payload.affectedSystems && { affectedSystems: payload.affectedSystems }),
-    ...(payload.usersAffected !== undefined && { usersAffected: payload.usersAffected }),
-    ...(payload.downtime !== undefined && { downtime: payload.downtime }),
-    ...(payload.files && { files: payload.files }),
+    // Optional fields (only include if provided)
+    ...(payload.relatedCycles && { relatedCycles: payload.relatedCycles }),
+    ...(payload.relatedExecutions && { relatedExecutions: payload.relatedExecutions }),
+    ...(payload.version && { version: payload.version }),
+    ...(payload.tags && { tags: payload.tags }),
     ...(payload.commits && { commits: payload.commits }),
-    ...(payload.rollbackInstructions && { rollbackInstructions: payload.rollbackInstructions }),
-    ...(payload.references && { references: payload.references })
+    ...(payload.files && { files: payload.files }),
+    ...(payload.notes && { notes: payload.notes })
   };
 
   // Validate the complete changelog record

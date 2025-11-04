@@ -56,6 +56,8 @@ describe('EventBus Integration Tests', () => {
       payload: {
         executionId: 'execution:integration-test-456',
         taskId: 'task:integration-test-123',
+        type: 'progress',
+        title: 'Integration Test Execution',
         triggeredBy: 'human:test-user',
         isFirstExecution: true
       }
@@ -86,13 +88,9 @@ describe('EventBus Integration Tests', () => {
       source: 'changelog_adapter',
       payload: {
         changelogId: 'changelog:integration-test-abc',
-        entityId: 'task:integration-test-123',
-        entityType: 'task',
-        changeType: 'creation',
-        riskLevel: 'low',
-        triggeredBy: 'human:test-user',
+        relatedTasks: ['task:integration-test-123'],
         title: 'Integration test changelog',
-        trigger: 'manual'
+        version: 'v1.0.0'
       }
     };
     eventBus.publish(changelogCreatedEvent);
@@ -139,6 +137,8 @@ describe('EventBus Integration Tests', () => {
       payload: {
         executionId: 'execution:status-workflow-456',
         taskId: 'task:status-workflow-123',
+        type: 'progress',
+        title: 'Status Workflow Execution',
         triggeredBy: 'human:test-user',
         isFirstExecution: true
       }
@@ -166,13 +166,9 @@ describe('EventBus Integration Tests', () => {
       source: 'changelog_adapter',
       payload: {
         changelogId: 'changelog:status-workflow-789',
-        entityId: 'task:status-workflow-123',
-        entityType: 'task',
-        changeType: 'completion',
-        riskLevel: 'low',
-        triggeredBy: 'human:test-user',
+        relatedTasks: ['task:status-workflow-123'],
         title: 'Task status workflow completed',
-        trigger: 'manual'
+        version: 'v1.0.0'
       }
     };
     eventBus.publish(changelogEvent);
@@ -306,6 +302,8 @@ describe('EventBus Integration Tests', () => {
         payload: {
           executionId: `execution:perf-test-${i}`,
           taskId: `task:perf-test-${Math.floor(i / 10)}`,
+          type: 'progress',
+          title: `Performance Test Execution ${i}`,
           triggeredBy: 'human:test-user',
           isFirstExecution: i % 10 === 0
         }
@@ -408,8 +406,8 @@ describe('EventBus Integration Tests', () => {
 
     eventBus.publish(taskEvent);
 
-    // Wait for async handlers
-    await new Promise(resolve => setTimeout(resolve, 10));
+    // Wait for async handlers to complete
+    await eventBus.waitForIdle();
 
     expect(successfulHandler).toHaveBeenCalledWith(taskEvent);
     expect(failingHandler).toHaveBeenCalledWith(taskEvent);
@@ -563,5 +561,77 @@ describe('EventBus Integration Tests', () => {
     // Verify all coordination happened correctly
     expect(metricsHandler).toHaveBeenCalledTimes(1); // task.created
     expect(backlogHandler).toHaveBeenCalledTimes(5); // 3 executions + 1 feedback + 1 changelog
+  });
+
+  it('[EARS-13] should handle async cross-adapter coordination with waitForIdle', async () => {
+    let taskStatusAfterFeedback = 'unknown';
+    let executionCountAfterStatusChange = 0;
+
+    // BacklogAdapter handler that updates task status asynchronously
+    const backlogHandler = jest.fn().mockImplementation(async (event: FeedbackCreatedEvent) => {
+      // Simulate async database write
+      await new Promise(resolve => setTimeout(resolve, 50));
+      if (event.payload.type === 'blocking') {
+        taskStatusAfterFeedback = 'paused';
+      }
+    });
+
+    // ExecutionAdapter handler that counts executions after status change
+    const executionHandler = jest.fn().mockImplementation(async (event: TaskStatusChangedEvent) => {
+      await new Promise(resolve => setTimeout(resolve, 30));
+      if (event.payload.newStatus === 'active') {
+        executionCountAfterStatusChange = 5; // Simulated execution count
+      }
+    });
+
+    eventBus.subscribe<FeedbackCreatedEvent>('feedback.created', backlogHandler);
+    eventBus.subscribe<TaskStatusChangedEvent>('task.status.changed', executionHandler);
+
+    // 1. Blocking feedback created
+    const feedbackEvent: FeedbackCreatedEvent = {
+      type: 'feedback.created',
+      timestamp: Date.now(),
+      source: 'feedback_adapter',
+      payload: {
+        feedbackId: 'feedback:async-coordination-123',
+        entityType: 'task',
+        entityId: 'task:async-coordination-456',
+        type: 'blocking',
+        status: 'open',
+        content: 'Blocking feedback requiring async handling',
+        triggeredBy: 'human:test-user'
+      }
+    };
+
+    eventBus.publish(feedbackEvent);
+
+    // ❌ Without waitForIdle: taskStatusAfterFeedback would still be 'unknown'
+
+    // ✅ With waitForIdle: ensure async handler completes
+    await eventBus.waitForIdle();
+
+    expect(backlogHandler).toHaveBeenCalledWith(feedbackEvent);
+    expect(taskStatusAfterFeedback).toBe('paused'); // ✅ Handler completed
+
+    // 2. Task status changes to active (feedback resolved)
+    const statusChangeEvent: TaskStatusChangedEvent = {
+      type: 'task.status.changed',
+      timestamp: Date.now(),
+      source: 'backlog_adapter',
+      payload: {
+        taskId: 'task:async-coordination-456',
+        oldStatus: 'paused',
+        newStatus: 'active',
+        triggeredBy: 'human:test-user'
+      }
+    };
+
+    eventBus.publish(statusChangeEvent);
+
+    // Wait for execution handler to complete
+    await eventBus.waitForIdle();
+
+    expect(executionHandler).toHaveBeenCalledWith(statusChangeEvent);
+    expect(executionCountAfterStatusChange).toBe(5); // ✅ Handler completed
   });
 });

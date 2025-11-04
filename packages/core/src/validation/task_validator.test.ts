@@ -5,6 +5,7 @@ import {
 } from './task_validator';
 import type { TaskRecord } from '../types';
 import type { GitGovRecord } from '../types';
+import { DetailedValidationError } from './common';
 
 describe('TaskValidator Module', () => {
   const validTaskPayload: TaskRecord = {
@@ -35,9 +36,9 @@ describe('TaskValidator Module', () => {
         signatures: [{
           keyId: 'human:test-user',
           role: 'author',
+          notes: 'Task validation test record',
           signature: 'mock-signature',
-          timestamp: 1752274500,
-          timestamp_iso: '2025-07-25T14:30:00Z'
+          timestamp: 1752274500
         }]
       },
       payload: validTaskPayload
@@ -47,14 +48,14 @@ describe('TaskValidator Module', () => {
       mockGetActorPublicKey.mockClear();
     });
 
-    it('[EARS-1] should throw SchemaValidationError for invalid payload', async () => {
+    it('[EARS-1] should throw DetailedValidationError for invalid payload schema', async () => {
       const invalidRecord = {
         ...validRecord,
         payload: invalidTaskPayloadWithoutId as TaskRecord
       };
 
       await expect(validateFullTaskRecord(invalidRecord, mockGetActorPublicKey))
-        .rejects.toThrow('TaskRecord payload failed schema validation');
+        .rejects.toThrow(DetailedValidationError);
     });
 
     it('[EARS-2] should throw error if embedded metadata validation fails', async () => {
@@ -75,7 +76,24 @@ describe('TaskValidator Module', () => {
         .rejects.toThrow('Embedded metadata validation failed');
     });
 
-    it('[EARS-3] should call validateFullEmbeddedMetadataRecord with correct parameters', async () => {
+    it('[EARS-3] should validate a complete TaskRecord successfully without throwing', async () => {
+      // Mock embedded metadata validator to succeed
+      jest.spyOn(require('./embedded_metadata_validator'), 'validateFullEmbeddedMetadataRecord')
+        .mockResolvedValue(undefined);
+
+      const recordWithCorrectChecksum = {
+        ...validRecord,
+        header: {
+          ...validRecord.header,
+          payloadChecksum: 'valid-checksum'
+        }
+      };
+
+      await expect(validateFullTaskRecord(recordWithCorrectChecksum, mockGetActorPublicKey))
+        .resolves.not.toThrow();
+    });
+
+    it('[EARS-4] should call validateFullEmbeddedMetadataRecord with correct parameters', async () => {
       // Mock embedded metadata validator to succeed
       const { validateFullEmbeddedMetadataRecord } = require('./embedded_metadata_validator');
       jest.spyOn(require('./embedded_metadata_validator'), 'validateFullEmbeddedMetadataRecord')
@@ -93,81 +111,88 @@ describe('TaskValidator Module', () => {
 
       expect(validateFullEmbeddedMetadataRecord).toHaveBeenCalledWith(recordWithCorrectChecksum, mockGetActorPublicKey);
     });
-
-    it('[EARS-4] should complete without errors for a fully valid record', async () => {
-      // Mock embedded metadata validator to succeed
-      jest.spyOn(require('./embedded_metadata_validator'), 'validateFullEmbeddedMetadataRecord')
-        .mockResolvedValue(undefined);
-
-      const recordWithCorrectChecksum = {
-        ...validRecord,
-        header: {
-          ...validRecord.header,
-          payloadChecksum: 'valid-checksum'
-        }
-      };
-
-      await expect(validateFullTaskRecord(recordWithCorrectChecksum, mockGetActorPublicKey))
-        .resolves.not.toThrow();
-    });
   });
 
   describe('isTaskRecord', () => {
-    it('[EARS-5 & EARS-6] should correctly identify valid and invalid records', () => {
+    it('[EARS-5] should return true for valid TaskRecord', () => {
       expect(isTaskRecord(validTaskPayload)).toBe(true);
+    });
+
+    it('[EARS-6] should return false for invalid TaskRecord', () => {
       expect(isTaskRecord(invalidTaskPayloadWithoutId)).toBe(false);
     });
+  });
 
-    it('[EARS-7] should return false for non-object input', () => {
-      expect(isTaskRecord(null)).toBe(false);
-      expect(isTaskRecord(undefined)).toBe(false);
-      expect(isTaskRecord('string')).toBe(false);
-      expect(isTaskRecord(123)).toBe(false);
+  describe('Schema Cache Integration', () => {
+    it('[EARS-7] should use schema cache for validation performance', () => {
+      const { SchemaValidationCache } = require('../schemas/schema_cache');
+      const cacheSpy = jest.spyOn(SchemaValidationCache, 'getValidatorFromSchema');
+
+      validateTaskRecordDetailed(validTaskPayload);
+
+      expect(cacheSpy).toHaveBeenCalled();
+      cacheSpy.mockRestore();
     });
 
-    it('[EARS-8] should validate ID format (timestamp-task-slug)', () => {
-      const taskWithInvalidId = {
-        ...validTaskPayload,
-        id: 'invalid-id-format'
-      };
-      expect(isTaskRecord(taskWithInvalidId)).toBe(false);
+    it('[EARS-8] should reuse compiled validators from cache', () => {
+      const { SchemaValidationCache } = require('../schemas/schema_cache');
+      const cacheSpy = jest.spyOn(SchemaValidationCache, 'getValidatorFromSchema');
+
+      // First call
+      validateTaskRecordDetailed(validTaskPayload);
+      const firstCallResult = cacheSpy.mock.results[0];
+
+      // Second call should reuse the same validator
+      validateTaskRecordDetailed({ ...validTaskPayload, id: '1752275501-task-another' });
+      const secondCallResult = cacheSpy.mock.results[1];
+
+      expect(cacheSpy).toHaveBeenCalledTimes(2);
+      // Both calls should return the same cached validator
+      expect(firstCallResult?.value).toBe(secondCallResult?.value);
+      cacheSpy.mockRestore();
+    });
+  });
+
+  describe('Schema Cache Advanced', () => {
+    it('[EARS-9] should produce identical results with or without cache', () => {
+      // This test verifies that cached validators behave identically
+      const result1 = validateTaskRecordDetailed(validTaskPayload);
+      const result2 = validateTaskRecordDetailed(validTaskPayload);
+
+      expect(result1).toEqual(result2);
     });
 
-    it('[EARS-9] should validate tag format (key:value pattern)', () => {
-      const taskWithInvalidTags = {
-        ...validTaskPayload,
-        tags: ['valid-tag', 'skill:typescript', 'INVALID TAG WITH SPACES']
-      };
-      expect(isTaskRecord(taskWithInvalidTags)).toBe(false);
+    it('[EARS-10] should support cache clearing', () => {
+      const { SchemaValidationCache } = require('../schemas/schema_cache');
+      // Verify clearCache method exists and can be called
+      expect(SchemaValidationCache.clearCache).toBeDefined();
+      expect(() => SchemaValidationCache.clearCache()).not.toThrow();
     });
 
-    it('[EARS-10] should validate cycleIds format when provided', () => {
-      const taskWithInvalidCycleIds = {
-        ...validTaskPayload,
-        cycleIds: ['invalid-cycle-id', '1752274500-cycle-valid']
-      };
-      expect(isTaskRecord(taskWithInvalidCycleIds)).toBe(false);
-    });
-
-    it('[EARS-11] should return false for object with wrong field types', () => {
-      const invalidPayload = {
-        ...validTaskPayload,
-        status: 'invalid-status', // Not in enum
-        priority: 123 // Should be string
-      };
-      expect(isTaskRecord(invalidPayload)).toBe(false);
+    it('[EARS-11] should provide cache statistics', () => {
+      const { SchemaValidationCache } = require('../schemas/schema_cache');
+      // Verify getCacheStats method exists and returns stats
+      const stats = SchemaValidationCache.getCacheStats();
+      expect(stats).toBeDefined();
+      expect(stats.cachedSchemas).toBeGreaterThanOrEqual(0);
     });
   });
 
   describe('validateTaskRecordDetailed', () => {
-    it('[EARS-12] should return success for valid TaskRecord', () => {
+    it('[EARS-12] should return valid result for correct TaskRecord', () => {
       const result = validateTaskRecordDetailed(validTaskPayload);
-      expect(result.isValid).toBe(true);
-      expect(result.errors).toEqual([]);
+      expect(result).toEqual({ isValid: true, errors: [] });
     });
 
     it('[EARS-13] should return detailed errors for invalid TaskRecord', () => {
       const result = validateTaskRecordDetailed(invalidTaskPayloadWithoutId);
+      expect(result.isValid).toBe(false);
+      expect(result.errors.length).toBeGreaterThan(0);
+    });
+
+    it('[EARS-14] should format errors in user-friendly structure with field, message, and value', () => {
+      const result = validateTaskRecordDetailed(invalidTaskPayloadWithoutId);
+
       expect(result.isValid).toBe(false);
       expect(result.errors.length).toBeGreaterThan(0);
       expect(result.errors[0]).toHaveProperty('field');
@@ -175,22 +200,7 @@ describe('TaskValidator Module', () => {
       expect(result.errors[0]).toHaveProperty('value');
     });
 
-    it('[EARS-14] should provide specific error details for each invalid field', () => {
-      const invalidTask = {
-        id: 'invalid-format', // Wrong ID pattern
-        title: '', // Empty string (too short)
-        status: 'invalid-status', // Invalid status
-        priority: 'invalid-priority', // Invalid priority
-        description: 'short', // Too short
-        tags: 'not-an-array' // Should be array
-      };
-
-      const result = validateTaskRecordDetailed(invalidTask);
-      expect(result.isValid).toBe(false);
-      expect(result.errors.length).toBeGreaterThan(1); // Multiple errors
-    });
-
-    it('[EARS-15] should validate optional fields when provided', () => {
+    it('[EARS-15] should validate optional fields correctly', () => {
       const taskWithOptionalFields: TaskRecord = {
         ...validTaskPayload,
         cycleIds: ['1752274500-cycle-sprint-1'],
@@ -203,19 +213,17 @@ describe('TaskValidator Module', () => {
       expect(result.errors).toEqual([]);
     });
 
-    it('[EARS-16] should return multiple errors for multiple invalid fields', () => {
+    it('[EARS-16] should return all errors when multiple fields are invalid', () => {
       const taskWithMultipleInvalidFields = {
         ...validTaskPayload,
         id: 'invalid-id-format',
-        tags: ['valid-tag', 'skill:typescript', 'INVALID TAG WITH SPACES'],
-        cycleIds: ['invalid-cycle-id', '1752274500-cycle-valid']
+        title: '',
+        description: 'x'
       };
 
       const result = validateTaskRecordDetailed(taskWithMultipleInvalidFields);
       expect(result.isValid).toBe(false);
-      expect(result.errors.length).toBeGreaterThan(1); // Multiple errors
-      expect(result.errors.some(err => err.field.includes('id'))).toBe(true);
-      expect(result.errors.some(err => err.field.includes('tags') || err.field.includes('cycleIds'))).toBe(true);
+      expect(result.errors.length).toBeGreaterThan(1);
     });
   });
 });

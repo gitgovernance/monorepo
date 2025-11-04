@@ -40,26 +40,32 @@ describe('ID Generators', () => {
   });
 
   describe('generateChangelogId', () => {
-    it('[EARS-5] should create a valid changelog ID for task entity', () => {
-      const entityId = '12345-task-implement-auth-flow';
-      expect(generateChangelogId('task', entityId, 88888)).toBe('88888-changelog-task-implement-auth-flow');
+    it('[EARS-5] should create a valid changelog ID from title (Protocol v2.0.0)', () => {
+      expect(generateChangelogId('Authentication System v1.0', 1752707800))
+        .toBe('1752707800-changelog-authentication-system-v10');
     });
 
-    it('[EARS-5] should create a valid changelog ID for system entity', () => {
-      expect(generateChangelogId('system', 'payment-gateway', 88888)).toBe('88888-changelog-system-payment-gateway');
+    it('[EARS-5] should create changelog ID following official pattern', () => {
+      expect(generateChangelogId('Sprint 24 API Performance', 1752707900))
+        .toBe('1752707900-changelog-sprint-24-api-performance');
     });
 
-    it('[EARS-5] should create a valid changelog ID for configuration entity', () => {
-      expect(generateChangelogId('configuration', 'database-config', 88888)).toBe('88888-changelog-configuration-database-config');
+    it('[EARS-5] should sanitize special characters in changelog ID', () => {
+      expect(generateChangelogId('Hotfix: Critical Payment Timeout!', 1752708000))
+        .toBe('1752708000-changelog-hotfix-critical-payment-timeout');
     });
 
-    it('[EARS-5] should create a valid changelog ID for cycle entity', () => {
-      const entityId = '54321-cycle-sprint-1';
-      expect(generateChangelogId('cycle', entityId, 88888)).toBe('88888-changelog-cycle-sprint-1');
+    it('[EARS-5] should limit slug length to 50 characters', () => {
+      const longTitle = 'This is an extremely long changelog title that should be truncated to fit within the maximum allowed length';
+      const result = generateChangelogId(longTitle, 88888);
+      const slug = result.split('-changelog-')[1];
+      expect(slug!.length).toBeLessThanOrEqual(50);
     });
 
-    it('[EARS-5] should create a valid changelog ID for agent entity', () => {
-      expect(generateChangelogId('agent', 'cursor-assistant', 88888)).toBe('88888-changelog-agent-cursor-assistant');
+    it('[EARS-5] should match official schema pattern', () => {
+      const result = generateChangelogId('Test Deliverable', 1752707800);
+      // Pattern from schema: "^\d{10}-changelog-[a-z0-9-]{1,50}$"
+      expect(result).toMatch(/^\d{10}-changelog-[a-z0-9-]{1,50}$/);
     });
   });
 

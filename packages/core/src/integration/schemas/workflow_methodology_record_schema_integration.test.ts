@@ -1,0 +1,5744 @@
+import { validateWorkflowMethodologyConfigDetailed } from '../../validation/workflow_methodology_validator';
+import type { WorkflowMethodologyRecord } from '../../types';
+
+describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
+  /**
+   * Helper function to create a minimal valid WorkflowMethodologyRecord for integration tests.
+   * This is a plain object creation (not using the factory) to test the validator directly.
+   */
+  const createValidWorkflowMethodologyRecord = (): WorkflowMethodologyRecord => ({
+    version: '1.0.0',
+    name: 'Test Methodology',
+    state_transitions: {
+      review: {
+        from: ['draft'],
+        requires: {}
+      }
+    }
+  });
+
+  describe('Root Level & Required Fields (EARS 708-711)', () => {
+    it('[EARS-708] should reject additional properties at root level', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        customField: 'not-allowed-because-additionalProperties-false'
+      } as WorkflowMethodologyRecord & { customField: string };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('additional') || e.message.includes('should NOT have additional properties')
+      )).toBe(true);
+    });
+
+    it('[EARS-709] should reject missing required field: version', () => {
+      const invalid = createValidWorkflowMethodologyRecord();
+      delete (invalid as Partial<WorkflowMethodologyRecord>).version;
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid as WorkflowMethodologyRecord);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('version') || e.field.includes('version')
+      )).toBe(true);
+    });
+
+    it('[EARS-710] should reject missing required field: name', () => {
+      const invalid = createValidWorkflowMethodologyRecord();
+      delete (invalid as Partial<WorkflowMethodologyRecord>).name;
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid as WorkflowMethodologyRecord);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('name') || e.field.includes('name')
+      )).toBe(true);
+    });
+
+    it('[EARS-711] should reject missing required field: state_transitions', () => {
+      const invalid = createValidWorkflowMethodologyRecord();
+      delete (invalid as Partial<WorkflowMethodologyRecord>).state_transitions;
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid as WorkflowMethodologyRecord);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('state_transitions') || e.field.includes('state_transitions')
+      )).toBe(true);
+    });
+  });
+
+  describe('Version Field Validations (EARS 712-722)', () => {
+    it('[EARS-712] should reject version with invalid semver pattern', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        version: 'invalid-version'
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('pattern') || e.field.includes('version')
+      )).toBe(true);
+    });
+
+    it('[EARS-713] should accept version "1.0.0"', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        version: '1.0.0'
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-714] should accept version "10.25.100"', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        version: '10.25.100'
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-715] should reject non-string version', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        version: 123
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('string')
+      )).toBe(true);
+    });
+
+    it('[EARS-716] should reject version without patch "1.0"', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        version: '1.0'
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('pattern')
+      )).toBe(true);
+    });
+
+    it('[EARS-717] should reject version with \'v\' prefix "v1.0.0"', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        version: 'v1.0.0'
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('pattern')
+      )).toBe(true);
+    });
+
+    it('[EARS-718] should reject empty version', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        version: ''
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('pattern')
+      )).toBe(true);
+    });
+
+    it('[EARS-719] should reject version with non-numeric chars "1.0.0-alpha"', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        version: '1.0.0-alpha'
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('pattern')
+      )).toBe(true);
+    });
+
+    it('[EARS-720] should reject null version', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        version: null
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('string')
+      )).toBe(true);
+    });
+
+    it('[EARS-721] should accept version "0.0.0"', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        version: '0.0.0'
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-722] should accept version "1.2.3"', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        version: '1.2.3'
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+  });
+
+  describe('Name Field Validations (EARS 723-733)', () => {
+    it('[EARS-723] should reject name with less than 1 char', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        name: ''
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('fewer than') || e.message.includes('minLength') || e.message.includes('minimum')
+      )).toBe(true);
+    });
+
+    it('[EARS-724] should accept name with 1 or more chars', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        name: 'Test'
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-725] should reject name exceeding maxLength 100', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        name: 'a'.repeat(101)
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('more than') || e.message.includes('maxLength') || e.message.includes('maximum')
+      )).toBe(true);
+    });
+
+    it('[EARS-726] should reject non-string name', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        name: 123
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('string')
+      )).toBe(true);
+    });
+
+    it('[EARS-727] should accept name with exactly 1 char', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        name: 'A'
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-728] should accept name with exactly 100 chars', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        name: 'a'.repeat(100)
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-729] should reject empty name', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        name: ''
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('fewer than') || e.message.includes('minLength') || e.message.includes('minimum')
+      )).toBe(true);
+    });
+
+    it('[EARS-730] should reject name with 101 chars', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        name: 'a'.repeat(101)
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('more than') || e.message.includes('maxLength') || e.message.includes('maximum')
+      )).toBe(true);
+    });
+
+    it('[EARS-731] should accept name with special chars and spaces', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        name: 'My-Methodology_2024 (v2)'
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-732] should reject null name', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        name: null
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('string')
+      )).toBe(true);
+    });
+
+    it('[EARS-733] should accept name with 50 chars', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        name: 'a'.repeat(50)
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+  });
+
+  describe('Description Field Validations (EARS 734-742)', () => {
+    it('[EARS-734] should accept missing description', () => {
+      const valid = createValidWorkflowMethodologyRecord();
+      // description is optional, so not including it should be valid
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-735] should reject description exceeding maxLength 500', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        description: 'a'.repeat(501)
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('more than') || e.message.includes('maxLength') || e.message.includes('maximum')
+      )).toBe(true);
+    });
+
+    it('[EARS-736] should reject non-string description', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        description: 123
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('string')
+      )).toBe(true);
+    });
+
+    it('[EARS-737] should accept description with exactly 500 chars', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        description: 'a'.repeat(500)
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-738] should reject description with 501 chars', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        description: 'a'.repeat(501)
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('more than') || e.message.includes('maxLength') || e.message.includes('maximum')
+      )).toBe(true);
+    });
+
+    it('[EARS-739] should accept empty description', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        description: ''
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-740] should accept description with 250 chars', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        description: 'a'.repeat(250)
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-741] should reject null description', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        description: null
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('string')
+      )).toBe(true);
+    });
+
+    it('[EARS-742] should accept description with special chars and multiline', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        description: 'Line 1\nLine 2\nSpecial chars: !@#$%^&*()'
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+  });
+
+  describe('State Transitions Structure (EARS 743-755)', () => {
+    it('[EARS-743] should reject state_transitions not being an object', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: 'not-an-object'
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('object')
+      )).toBe(true);
+    });
+
+    it('[EARS-744] should accept state_transitions as empty object', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {}
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-745] should reject transition missing required field: from', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            requires: {}
+          } as any
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('from') || e.message.includes('required')
+      )).toBe(true);
+    });
+
+    it('[EARS-746] should reject transition missing required field: requires', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: ['draft']
+          } as any
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('requires') || e.message.includes('required')
+      )).toBe(true);
+    });
+
+    it('[EARS-747] should reject transition with additional properties', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: ['draft'] as ['draft'],
+            requires: {},
+            customField: 'not-allowed'
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('additional') || e.message.includes('should NOT have additional properties')
+      )).toBe(true);
+    });
+
+    it('[EARS-748] should reject from not being an array', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: 'draft' as unknown as ['draft'],
+            requires: {}
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('array')
+      )).toBe(true);
+    });
+
+    it('[EARS-749] should reject from as empty array', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: [],
+            requires: {}
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('fewer than') || e.message.includes('minItems') || e.message.includes('minimum')
+      )).toBe(true);
+    });
+
+    it('[EARS-750] should accept from with valid state "draft"', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: ['draft'],
+            requires: {}
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-751] should reject from with invalid state enum value', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: ['invalid-state'],
+            requires: {}
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('enum') || e.message.includes('allowed')
+      )).toBe(true);
+    });
+
+    it('[EARS-752] should accept from with multiple valid states', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          active: {
+            from: ['ready', 'paused'],
+            requires: {}
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-753] should reject requires not being an object', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: ['draft'] as ['draft'],
+            requires: 'not-an-object' as unknown as {}
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('object')
+      )).toBe(true);
+    });
+
+    it('[EARS-754] should reject requires with additional properties', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: ['draft'] as ['draft'],
+            requires: {
+              customField: 'not-allowed'
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('additional') || e.message.includes('should NOT have additional properties')
+      )).toBe(true);
+    });
+
+    it('[EARS-755] should accept requires as empty object', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: ['draft'],
+            requires: {}
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+  });
+
+  // Note: This file is getting very large. I'll continue with the remaining test groups.
+  // For brevity in this response, I'll implement the structure and a representative sample of tests.
+  // The full implementation would follow the same pattern for all 293 EARS tests.
+
+  describe('Requires Field - Command & Event (EARS 756-763)', () => {
+    it('[EARS-756] should accept requires.command as string', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: ['draft'],
+            requires: {
+              command: 'gitgov task submit'
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-757] should reject non-string requires.command', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: ['draft'] as ['draft'],
+            requires: {
+              command: 123 as unknown as string
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('string')
+      )).toBe(true);
+    });
+
+    it('[EARS-758] should reject null requires.command', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: ['draft'] as ['draft'],
+            requires: {
+              command: null as unknown as string
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('string')
+      )).toBe(true);
+    });
+
+    it('[EARS-759] should accept requires.event as string', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          active: {
+            from: ['ready'],
+            requires: {
+              event: 'first_execution_record_created'
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-760] should reject non-string requires.event', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          active: {
+            from: ['ready'] as ['ready'],
+            requires: {
+              event: 123 as unknown as string
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('string')
+      )).toBe(true);
+    });
+
+    it('[EARS-761] should reject null requires.event', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          active: {
+            from: ['ready'] as ['ready'],
+            requires: {
+              event: null as unknown as string
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('string')
+      )).toBe(true);
+    });
+
+    it('[EARS-762] should accept requires with both command and event', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: ['draft'],
+            requires: {
+              command: 'gitgov task submit',
+              event: 'task_submitted'
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-763] should accept empty requires object', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: ['draft'],
+            requires: {}
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+  });
+
+  describe('Requires Field - Custom Rules Array (EARS 764-773)', () => {
+    it('[EARS-764] should accept missing requires.custom_rules', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: ['draft'],
+            requires: {}
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-765] should reject non-array requires.custom_rules', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: ['draft'] as ['draft'],
+            requires: {
+              custom_rules: 'not-an-array' as unknown as string[]
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('array')
+      )).toBe(true);
+    });
+
+    it('[EARS-766] should accept empty requires.custom_rules array', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: ['draft'],
+            requires: {
+              custom_rules: []
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-767] should accept requires.custom_rules with string items', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: ['draft'],
+            requires: {
+              custom_rules: ['rule_one']
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-768] should reject requires.custom_rules with non-string item', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: ['draft'] as ['draft'],
+            requires: {
+              custom_rules: [123] as unknown as string[]
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('string')
+      )).toBe(true);
+    });
+
+    it('[EARS-769] should reject null requires.custom_rules', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: ['draft'] as ['draft'],
+            requires: {
+              custom_rules: null as unknown as string[]
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('array')
+      )).toBe(true);
+    });
+
+    it('[EARS-770] should accept requires.custom_rules with multiple items', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: ['draft'],
+            requires: {
+              custom_rules: ['rule_one', 'rule_two', 'rule_three']
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-771] should accept requires.custom_rules with empty string item', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: ['draft'],
+            requires: {
+              custom_rules: ['']
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-772] should accept requires.custom_rules with 1 item', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: ['draft'],
+            requires: {
+              custom_rules: ['single_rule']
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-773] should accept requires.custom_rules with 5 items', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: ['draft'],
+            requires: {
+              custom_rules: ['rule1', 'rule2', 'rule3', 'rule4', 'rule5']
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+  });
+
+  describe('Signatures Structure (EARS 774-810)', () => {
+    it('[EARS-774] should reject requires.signatures not being an object', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: ['draft'] as ['draft'],
+            requires: {
+              signatures: 'not-an-object' as unknown as {}
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('object')
+      )).toBe(true);
+    });
+
+    it('[EARS-775] should accept requires.signatures as empty object', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: ['draft'] as ['draft'],
+            requires: {
+              signatures: {}
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-776] should reject requires.signatures as null', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: ['draft'] as ['draft'],
+            requires: {
+              signatures: null as unknown as {}
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('object')
+      )).toBe(true);
+    });
+
+    it('[EARS-777] should reject signature group missing required field: role', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: ['draft'] as ['draft'],
+            requires: {
+              signatures: {
+                default: {
+                  capability_roles: ['reviewer'],
+                  min_approvals: 1
+                }
+              }
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('role') || e.message.includes('required')
+      )).toBe(true);
+    });
+
+    it('[EARS-778] should reject signature group missing required field: capability_roles', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: ['draft'] as ['draft'],
+            requires: {
+              signatures: {
+                default: {
+                  role: 'reviewer',
+                  min_approvals: 1
+                }
+              }
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('capability_roles') || e.message.includes('required')
+      )).toBe(true);
+    });
+
+    it('[EARS-779] should reject signature group missing required field: min_approvals', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: ['draft'] as ['draft'],
+            requires: {
+              signatures: {
+                default: {
+                  role: 'reviewer',
+                  capability_roles: ['reviewer']
+                }
+              }
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('min_approvals') || e.message.includes('required')
+      )).toBe(true);
+    });
+
+    it('[EARS-780] should reject signature group with additional properties', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: ['draft'] as ['draft'],
+            requires: {
+              signatures: {
+                default: {
+                  role: 'reviewer',
+                  capability_roles: ['reviewer'] as [string, ...string[]],
+                  min_approvals: 1,
+                  customField: 'not-allowed'
+                }
+              }
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('additional') || e.message.includes('should NOT have additional properties')
+      )).toBe(true);
+    });
+
+    it('[EARS-781] should accept role as string in signatures', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: ['draft'] as ['draft'],
+            requires: {
+              signatures: {
+                default: {
+                  role: 'reviewer',
+                  capability_roles: ['reviewer'] as [string, ...string[]],
+                  min_approvals: 1
+                }
+              }
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-782] should reject role as non-string', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: ['draft'] as ['draft'],
+            requires: {
+              signatures: {
+                default: {
+                  role: 123 as unknown as string,
+                  capability_roles: ['reviewer'] as [string, ...string[]],
+                  min_approvals: 1
+                }
+              }
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('string')
+      )).toBe(true);
+    });
+
+    it('[EARS-783] should reject role as null', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: ['draft'] as ['draft'],
+            requires: {
+              signatures: {
+                default: {
+                  role: null as unknown as string,
+                  capability_roles: ['reviewer'] as [string, ...string[]],
+                  min_approvals: 1
+                }
+              }
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('string')
+      )).toBe(true);
+    });
+
+    it('[EARS-784] should accept role as empty string', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: ['draft'] as ['draft'],
+            requires: {
+              signatures: {
+                default: {
+                  role: '',
+                  capability_roles: ['reviewer'] as [string, ...string[]],
+                  min_approvals: 1
+                }
+              }
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-785] should reject capability_roles not being an array', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: ['draft'] as ['draft'],
+            requires: {
+              signatures: {
+                default: {
+                  role: 'reviewer',
+                  capability_roles: 'not-an-array' as unknown as [string, ...string[]],
+                  min_approvals: 1
+                }
+              }
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('array')
+      )).toBe(true);
+    });
+
+    it('[EARS-786] should reject capability_roles as empty array', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: ['draft'] as ['draft'],
+            requires: {
+              signatures: {
+                default: {
+                  role: 'reviewer',
+                  capability_roles: [] as unknown as [string, ...string[]],
+                  min_approvals: 1
+                }
+              }
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('fewer than') || e.message.includes('minItems') || e.message.includes('minimum')
+      )).toBe(true);
+    });
+
+    it('[EARS-787] should accept capability_roles with string items', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: ['draft'] as ['draft'],
+            requires: {
+              signatures: {
+                default: {
+                  role: 'reviewer',
+                  capability_roles: ['reviewer', 'tech-lead'] as [string, ...string[]],
+                  min_approvals: 1
+                }
+              }
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-788] should reject capability_roles with non-string item', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: ['draft'] as ['draft'],
+            requires: {
+              signatures: {
+                default: {
+                  role: 'reviewer',
+                  capability_roles: [123] as unknown as [string, ...string[]],
+                  min_approvals: 1
+                }
+              }
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('string')
+      )).toBe(true);
+    });
+
+    it('[EARS-789] should reject capability_roles as null', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: ['draft'] as ['draft'],
+            requires: {
+              signatures: {
+                default: {
+                  role: 'reviewer',
+                  capability_roles: null as unknown as [string, ...string[]],
+                  min_approvals: 1
+                }
+              }
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('array')
+      )).toBe(true);
+    });
+
+    it('[EARS-790] should accept capability_roles with 1 item', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: ['draft'] as ['draft'],
+            requires: {
+              signatures: {
+                default: {
+                  role: 'reviewer',
+                  capability_roles: ['reviewer'] as [string, ...string[]],
+                  min_approvals: 1
+                }
+              }
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-791] should accept capability_roles with multiple items', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: ['draft'] as ['draft'],
+            requires: {
+              signatures: {
+                default: {
+                  role: 'reviewer',
+                  capability_roles: ['reviewer', 'tech-lead', 'architect'] as [string, ...string[]],
+                  min_approvals: 1
+                }
+              }
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-792] should accept min_approvals as integer >= 1', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: ['draft'] as ['draft'],
+            requires: {
+              signatures: {
+                default: {
+                  role: 'reviewer',
+                  capability_roles: ['reviewer'] as [string, ...string[]],
+                  min_approvals: 2
+                }
+              }
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-793] should reject min_approvals less than 1', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: ['draft'] as ['draft'],
+            requires: {
+              signatures: {
+                default: {
+                  role: 'reviewer',
+                  capability_roles: ['reviewer'] as [string, ...string[]],
+                  min_approvals: 0
+                }
+              }
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('>=') || e.message.includes('minimum') || e.message.includes('greater')
+      )).toBe(true);
+    });
+
+    it('[EARS-794] should reject min_approvals as non-integer', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: ['draft'] as ['draft'],
+            requires: {
+              signatures: {
+                default: {
+                  role: 'reviewer',
+                  capability_roles: ['reviewer'] as [string, ...string[]],
+                  min_approvals: '1' as unknown as number
+                }
+              }
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('integer') || e.message.includes('number')
+      )).toBe(true);
+    });
+
+    it('[EARS-795] should reject min_approvals as null', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: ['draft'] as ['draft'],
+            requires: {
+              signatures: {
+                default: {
+                  role: 'reviewer',
+                  capability_roles: ['reviewer'] as [string, ...string[]],
+                  min_approvals: null as unknown as number
+                }
+              }
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('integer') || e.message.includes('number')
+      )).toBe(true);
+    });
+
+    it('[EARS-796] should reject min_approvals as decimal', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: ['draft'] as ['draft'],
+            requires: {
+              signatures: {
+                default: {
+                  role: 'reviewer',
+                  capability_roles: ['reviewer'] as [string, ...string[]],
+                  min_approvals: 1.5
+                }
+              }
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('integer')
+      )).toBe(true);
+    });
+
+    it('[EARS-797] should accept min_approvals with value 1', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: ['draft'] as ['draft'],
+            requires: {
+              signatures: {
+                default: {
+                  role: 'reviewer',
+                  capability_roles: ['reviewer'] as [string, ...string[]],
+                  min_approvals: 1
+                }
+              }
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-798] should accept min_approvals with value 10', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: ['draft'] as ['draft'],
+            requires: {
+              signatures: {
+                default: {
+                  role: 'reviewer',
+                  capability_roles: ['reviewer'] as [string, ...string[]],
+                  min_approvals: 10
+                }
+              }
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-799] should accept missing actor_type', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: ['draft'] as ['draft'],
+            requires: {
+              signatures: {
+                default: {
+                  role: 'reviewer',
+                  capability_roles: ['reviewer'] as [string, ...string[]],
+                  min_approvals: 1
+                }
+              }
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-800] should accept actor_type as "human"', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: ['draft'] as ['draft'],
+            requires: {
+              signatures: {
+                default: {
+                  role: 'reviewer',
+                  capability_roles: ['reviewer'] as [string, ...string[]],
+                  min_approvals: 1,
+                  actor_type: 'human' as 'human' | 'agent'
+                }
+              }
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-801] should accept actor_type as "agent"', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: ['draft'] as ['draft'],
+            requires: {
+              signatures: {
+                default: {
+                  role: 'reviewer',
+                  capability_roles: ['reviewer'] as [string, ...string[]],
+                  min_approvals: 1,
+                  actor_type: 'agent' as 'human' | 'agent'
+                }
+              }
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-802] should reject actor_type with invalid enum value', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: ['draft'] as ['draft'],
+            requires: {
+              signatures: {
+                default: {
+                  role: 'reviewer',
+                  capability_roles: ['reviewer'] as [string, ...string[]],
+                  min_approvals: 1,
+                  actor_type: 'invalid' as unknown as 'human' | 'agent'
+                }
+              }
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('enum') || e.message.includes('allowed')
+      )).toBe(true);
+    });
+
+    it('[EARS-803] should reject actor_type as non-string', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: ['draft'] as ['draft'],
+            requires: {
+              signatures: {
+                default: {
+                  role: 'reviewer',
+                  capability_roles: ['reviewer'] as [string, ...string[]],
+                  min_approvals: 1,
+                  actor_type: 123 as unknown as 'human' | 'agent'
+                }
+              }
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('string')
+      )).toBe(true);
+    });
+
+    it('[EARS-804] should accept missing specific_actors', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: ['draft'] as ['draft'],
+            requires: {
+              signatures: {
+                default: {
+                  role: 'reviewer',
+                  capability_roles: ['reviewer'] as [string, ...string[]],
+                  min_approvals: 1
+                }
+              }
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-805] should reject specific_actors as non-array', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: ['draft'] as ['draft'],
+            requires: {
+              signatures: {
+                default: {
+                  role: 'reviewer',
+                  capability_roles: ['reviewer'] as [string, ...string[]],
+                  min_approvals: 1,
+                  specific_actors: 'not-an-array' as unknown as string[]
+                }
+              }
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('array')
+      )).toBe(true);
+    });
+
+    it('[EARS-806] should accept specific_actors as empty array', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: ['draft'] as ['draft'],
+            requires: {
+              signatures: {
+                default: {
+                  role: 'reviewer',
+                  capability_roles: ['reviewer'] as [string, ...string[]],
+                  min_approvals: 1,
+                  specific_actors: []
+                }
+              }
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-807] should accept specific_actors with string items', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: ['draft'] as ['draft'],
+            requires: {
+              signatures: {
+                default: {
+                  role: 'reviewer',
+                  capability_roles: ['reviewer'] as [string, ...string[]],
+                  min_approvals: 1,
+                  specific_actors: ['actor1', 'actor2']
+                }
+              }
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-808] should reject specific_actors with non-string item', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: ['draft'] as ['draft'],
+            requires: {
+              signatures: {
+                default: {
+                  role: 'reviewer',
+                  capability_roles: ['reviewer'] as [string, ...string[]],
+                  min_approvals: 1,
+                  specific_actors: [123] as unknown as string[]
+                }
+              }
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('string')
+      )).toBe(true);
+    });
+
+    it('[EARS-809] should reject specific_actors as null', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: ['draft'] as ['draft'],
+            requires: {
+              signatures: {
+                default: {
+                  role: 'reviewer',
+                  capability_roles: ['reviewer'] as [string, ...string[]],
+                  min_approvals: 1,
+                  specific_actors: null as unknown as string[]
+                }
+              }
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('array')
+      )).toBe(true);
+    });
+
+    it('[EARS-810] should accept signatures with multiple signature groups', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: {
+            from: ['draft'] as ['draft'],
+            requires: {
+              signatures: {
+                default: {
+                  role: 'reviewer',
+                  capability_roles: ['reviewer'] as [string, ...string[]],
+                  min_approvals: 1
+                },
+                design: {
+                  role: 'designer',
+                  capability_roles: ['design-lead'] as [string, ...string[]],
+                  min_approvals: 1
+                },
+                quality: {
+                  role: 'qa',
+                  capability_roles: ['qa-lead'] as [string, ...string[]],
+                  min_approvals: 2
+                }
+              }
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+  });
+
+  describe('Custom Rules Structure (EARS 811-853)', () => {
+    it('[EARS-811] should accept missing custom_rules', () => {
+      const valid = createValidWorkflowMethodologyRecord();
+      // custom_rules is optional
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-812] should reject custom_rules not being an object', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        custom_rules: 'not-an-object' as unknown as {}
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('object')
+      )).toBe(true);
+    });
+
+    it('[EARS-813] should reject custom_rules as null', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        custom_rules: null as unknown as {}
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('object')
+      )).toBe(true);
+    });
+
+    it('[EARS-814] should accept custom_rules as empty object', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        custom_rules: {}
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-815] should reject custom rule missing required field: description', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        custom_rules: {
+          rule1: {
+            validation: 'assignment_required' as 'assignment_required'
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('description') || e.message.includes('required')
+      )).toBe(true);
+    });
+
+    it('[EARS-816] should reject custom rule missing required field: validation', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        custom_rules: {
+          rule1: {
+            description: 'Test rule'
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('validation') || e.message.includes('required')
+      )).toBe(true);
+    });
+
+    it('[EARS-817] should reject custom rule with additional properties', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        custom_rules: {
+          rule1: {
+            description: 'Test rule',
+            validation: 'assignment_required' as 'assignment_required',
+            customField: 'not-allowed'
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('additional') || e.message.includes('should NOT have additional properties')
+      )).toBe(true);
+    });
+
+    it('[EARS-818] should accept description as string', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        custom_rules: {
+          rule1: {
+            description: 'Test rule description',
+            validation: 'assignment_required' as 'assignment_required'
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-819] should reject description as non-string', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        custom_rules: {
+          rule1: {
+            description: 123 as unknown as string,
+            validation: 'assignment_required' as 'assignment_required'
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('string')
+      )).toBe(true);
+    });
+
+    it('[EARS-820] should reject description exceeding maxLength 200', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        custom_rules: {
+          rule1: {
+            description: 'a'.repeat(201),
+            validation: 'assignment_required' as 'assignment_required'
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('more than') || e.message.includes('maxLength') || e.message.includes('maximum')
+      )).toBe(true);
+    });
+
+    it('[EARS-821] should accept description with exactly 200 chars', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        custom_rules: {
+          rule1: {
+            description: 'a'.repeat(200),
+            validation: 'assignment_required' as 'assignment_required'
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-822] should accept description as empty string', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        custom_rules: {
+          rule1: {
+            description: '',
+            validation: 'assignment_required' as 'assignment_required'
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-823] should reject description as null', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        custom_rules: {
+          rule1: {
+            description: null as unknown as string,
+            validation: 'assignment_required' as 'assignment_required'
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('string')
+      )).toBe(true);
+    });
+
+    it('[EARS-824] should accept validation "assignment_required"', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        custom_rules: {
+          rule1: {
+            description: 'Test',
+            validation: 'assignment_required' as 'assignment_required'
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-825] should accept validation "sprint_capacity"', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        custom_rules: {
+          rule1: {
+            description: 'Test',
+            validation: 'sprint_capacity' as 'sprint_capacity'
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-826] should accept validation "epic_complexity"', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        custom_rules: {
+          rule1: {
+            description: 'Test',
+            validation: 'epic_complexity' as 'epic_complexity'
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-827] should accept validation "custom"', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        custom_rules: {
+          rule1: {
+            description: 'Test',
+            validation: 'custom' as 'custom'
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-828] should accept validation "javascript"', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        custom_rules: {
+          rule1: {
+            description: 'Test',
+            validation: 'javascript' as 'javascript'
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-829] should reject validation with invalid enum value', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        custom_rules: {
+          rule1: {
+            description: 'Test',
+            validation: 'invalid' as unknown as 'custom'
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('enum') || e.message.includes('allowed')
+      )).toBe(true);
+    });
+
+    it('[EARS-830] should reject validation as non-string', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        custom_rules: {
+          rule1: {
+            description: 'Test',
+            validation: 123 as unknown as 'custom'
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('string')
+      )).toBe(true);
+    });
+
+    it('[EARS-831] should reject validation as null', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        custom_rules: {
+          rule1: {
+            description: 'Test',
+            validation: null as unknown as 'custom'
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('string')
+      )).toBe(true);
+    });
+
+    it('[EARS-832] should accept missing parameters', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        custom_rules: {
+          rule1: {
+            description: 'Test',
+            validation: 'custom' as 'custom'
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-833] should accept parameters as object', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        custom_rules: {
+          rule1: {
+            description: 'Test',
+            validation: 'custom' as 'custom',
+            parameters: { key: 'value' }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-834] should reject parameters as non-object', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        custom_rules: {
+          rule1: {
+            description: 'Test',
+            validation: 'custom' as 'custom',
+            parameters: 'not-an-object' as unknown as {}
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('object')
+      )).toBe(true);
+    });
+
+    it('[EARS-835] should reject parameters as null', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        custom_rules: {
+          rule1: {
+            description: 'Test',
+            validation: 'custom' as 'custom',
+            parameters: null as unknown as {}
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('object')
+      )).toBe(true);
+    });
+
+    it('[EARS-836] should accept parameters as empty object', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        custom_rules: {
+          rule1: {
+            description: 'Test',
+            validation: 'custom' as 'custom',
+            parameters: {}
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-837] should accept parameters with arbitrary properties', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        custom_rules: {
+          rule1: {
+            description: 'Test',
+            validation: 'custom' as 'custom',
+            parameters: {
+              foo: 'bar',
+              nested: { key: 'value' },
+              array: [1, 2, 3]
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-838] should accept missing javascript_function', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        custom_rules: {
+          rule1: {
+            description: 'Test',
+            validation: 'javascript' as 'javascript'
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-839] should accept javascript_function as string', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        custom_rules: {
+          rule1: {
+            description: 'Test',
+            validation: 'javascript' as 'javascript',
+            javascript_function: 'return true;'
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-840] should reject javascript_function as non-string', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        custom_rules: {
+          rule1: {
+            description: 'Test',
+            validation: 'javascript' as 'javascript',
+            javascript_function: 123 as unknown as string
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('string')
+      )).toBe(true);
+    });
+
+    it('[EARS-841] should reject javascript_function as null', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        custom_rules: {
+          rule1: {
+            description: 'Test',
+            validation: 'javascript' as 'javascript',
+            javascript_function: null as unknown as string
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('string')
+      )).toBe(true);
+    });
+
+    it('[EARS-842] should accept javascript_function as empty string', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        custom_rules: {
+          rule1: {
+            description: 'Test',
+            validation: 'javascript' as 'javascript',
+            javascript_function: ''
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-843] should accept javascript_function with valid code', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        custom_rules: {
+          rule1: {
+            description: 'Test',
+            validation: 'javascript' as 'javascript',
+            javascript_function: 'async (task) => { return task.assignee !== null; }'
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-844] should accept missing module_path', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        custom_rules: {
+          rule1: {
+            description: 'Test',
+            validation: 'custom' as 'custom'
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-845] should accept module_path as string', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        custom_rules: {
+          rule1: {
+            description: 'Test',
+            validation: 'custom' as 'custom',
+            module_path: './rules/custom-rule.js'
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-846] should reject module_path as non-string', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        custom_rules: {
+          rule1: {
+            description: 'Test',
+            validation: 'custom' as 'custom',
+            module_path: 123 as unknown as string
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('string')
+      )).toBe(true);
+    });
+
+    it('[EARS-847] should reject module_path as null', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        custom_rules: {
+          rule1: {
+            description: 'Test',
+            validation: 'custom' as 'custom',
+            module_path: null as unknown as string
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('string')
+      )).toBe(true);
+    });
+
+    it('[EARS-848] should accept module_path as empty string', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        custom_rules: {
+          rule1: {
+            description: 'Test',
+            validation: 'custom' as 'custom',
+            module_path: ''
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-849] should accept module_path with relative path', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        custom_rules: {
+          rule1: {
+            description: 'Test',
+            validation: 'custom' as 'custom',
+            module_path: './rules/my-rule.js'
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-850] should accept module_path with absolute path', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        custom_rules: {
+          rule1: {
+            description: 'Test',
+            validation: 'custom' as 'custom',
+            module_path: '/usr/local/lib/rules/my-rule.js'
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-851] should accept custom_rules with multiple rules', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        custom_rules: {
+          rule1: {
+            description: 'Rule 1',
+            validation: 'assignment_required' as 'assignment_required'
+          },
+          rule2: {
+            description: 'Rule 2',
+            validation: 'sprint_capacity' as 'sprint_capacity'
+          },
+          rule3: {
+            description: 'Rule 3',
+            validation: 'javascript' as 'javascript',
+            javascript_function: 'return true;'
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-852] should accept rule with both javascript_function and module_path', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        custom_rules: {
+          rule1: {
+            description: 'Test',
+            validation: 'javascript' as 'javascript',
+            javascript_function: 'return true;',
+            module_path: './rules/backup.js'
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-853] should accept validation=javascript with javascript_function', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        custom_rules: {
+          rule1: {
+            description: 'JavaScript validation rule',
+            validation: 'javascript' as 'javascript',
+            javascript_function: 'async (task) => { return task.status === "active"; }'
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+  });
+
+  describe('View Configs Structure (EARS 854-888)', () => {
+    it('[EARS-854] should accept missing view_configs', () => {
+      const valid = createValidWorkflowMethodologyRecord();
+      // view_configs is optional
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-855] should reject view_configs not being an object', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        view_configs: 'not-an-object' as unknown as {}
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('object')
+      )).toBe(true);
+    });
+
+    it('[EARS-856] should reject view_configs as null', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        view_configs: null as unknown as {}
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('object')
+      )).toBe(true);
+    });
+
+    it('[EARS-857] should accept view_configs as empty object', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        view_configs: {}
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-858] should reject view config missing required field: columns', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        view_configs: {
+          kanban: {
+            theme: 'default' as 'default'
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('columns') || e.message.includes('required')
+      )).toBe(true);
+    });
+
+    it('[EARS-859] should reject view config with additional properties', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        view_configs: {
+          kanban: {
+            columns: {},
+            customField: 'not-allowed'
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('additional') || e.message.includes('should NOT have additional properties')
+      )).toBe(true);
+    });
+
+    it('[EARS-860] should reject columns not being an object', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        view_configs: {
+          kanban: {
+            columns: 'not-an-object' as unknown as {}
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('object')
+      )).toBe(true);
+    });
+
+    it('[EARS-861] should reject columns as null', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        view_configs: {
+          kanban: {
+            columns: null as unknown as {}
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('object')
+      )).toBe(true);
+    });
+
+    it('[EARS-862] should accept columns as empty object', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        view_configs: {
+          kanban: {
+            columns: {}
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-863] should reject column state array as empty', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        view_configs: {
+          kanban: {
+            columns: {
+              'To Do': [] as unknown as ['draft']
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('fewer than') || e.message.includes('minItems') || e.message.includes('minimum')
+      )).toBe(true);
+    });
+
+    it('[EARS-864] should reject column state not being an array', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        view_configs: {
+          kanban: {
+            columns: {
+              'To Do': 'draft' as unknown as ['draft']
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('array')
+      )).toBe(true);
+    });
+
+    it('[EARS-865] should accept column states with valid enum values', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        view_configs: {
+          kanban: {
+            columns: {
+              'To Do': ['draft'] as ['draft']
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-866] should reject column state with invalid enum value', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        view_configs: {
+          kanban: {
+            columns: {
+              'To Do': ['invalid-state'] as unknown as ['draft']
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('enum') || e.message.includes('allowed')
+      )).toBe(true);
+    });
+
+    it('[EARS-867] should accept column states with multiple valid values', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        view_configs: {
+          kanban: {
+            columns: {
+              'To Do': ['draft', 'review'] as ['draft', 'review']
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-868] should accept columns mapping "To Do" to ["draft", "review"]', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        view_configs: {
+          kanban: {
+            columns: {
+              'To Do': ['draft', 'review'] as ['draft', 'review']
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-869] should accept columns mapping "Done" to ["done"]', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        view_configs: {
+          kanban: {
+            columns: {
+              'Done': ['done'] as ['done']
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-870] should accept missing theme', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        view_configs: {
+          kanban: {
+            columns: {
+              'To Do': ['draft'] as ['draft']
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-871] should accept theme "default"', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        view_configs: {
+          kanban: {
+            columns: {
+              'To Do': ['draft'] as ['draft']
+            },
+            theme: 'default' as 'default'
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-872] should accept theme "dark"', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        view_configs: {
+          kanban: {
+            columns: {
+              'To Do': ['draft'] as ['draft']
+            },
+            theme: 'dark' as 'dark'
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-873] should accept theme "minimal"', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        view_configs: {
+          kanban: {
+            columns: {
+              'To Do': ['draft'] as ['draft']
+            },
+            theme: 'minimal' as 'minimal'
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-874] should accept theme "corporate"', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        view_configs: {
+          kanban: {
+            columns: {
+              'To Do': ['draft'] as ['draft']
+            },
+            theme: 'corporate' as 'corporate'
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-875] should reject theme with invalid enum value', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        view_configs: {
+          kanban: {
+            columns: {
+              'To Do': ['draft'] as ['draft']
+            },
+            theme: 'invalid' as unknown as 'default'
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('enum') || e.message.includes('allowed')
+      )).toBe(true);
+    });
+
+    it('[EARS-876] should reject theme as non-string', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        view_configs: {
+          kanban: {
+            columns: {
+              'To Do': ['draft'] as ['draft']
+            },
+            theme: 123 as unknown as 'default'
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('string')
+      )).toBe(true);
+    });
+
+    it('[EARS-877] should reject theme as null', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        view_configs: {
+          kanban: {
+            columns: {
+              'To Do': ['draft'] as ['draft']
+            },
+            theme: null as unknown as 'default'
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('string')
+      )).toBe(true);
+    });
+
+    it('[EARS-878] should accept missing layout', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        view_configs: {
+          kanban: {
+            columns: {
+              'To Do': ['draft'] as ['draft']
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-879] should accept layout "horizontal"', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        view_configs: {
+          kanban: {
+            columns: {
+              'To Do': ['draft'] as ['draft']
+            },
+            layout: 'horizontal' as 'horizontal'
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-880] should accept layout "vertical"', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        view_configs: {
+          kanban: {
+            columns: {
+              'To Do': ['draft'] as ['draft']
+            },
+            layout: 'vertical' as 'vertical'
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-881] should accept layout "grid"', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        view_configs: {
+          kanban: {
+            columns: {
+              'To Do': ['draft'] as ['draft']
+            },
+            layout: 'grid' as 'grid'
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-882] should reject layout with invalid enum value', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        view_configs: {
+          kanban: {
+            columns: {
+              'To Do': ['draft'] as ['draft']
+            },
+            layout: 'invalid' as unknown as 'horizontal'
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('enum') || e.message.includes('allowed')
+      )).toBe(true);
+    });
+
+    it('[EARS-883] should reject layout as non-string', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        view_configs: {
+          kanban: {
+            columns: {
+              'To Do': ['draft'] as ['draft']
+            },
+            layout: 123 as unknown as 'horizontal'
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('string')
+      )).toBe(true);
+    });
+
+    it('[EARS-884] should reject layout as null', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        view_configs: {
+          kanban: {
+            columns: {
+              'To Do': ['draft'] as ['draft']
+            },
+            layout: null as unknown as 'horizontal'
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('string')
+      )).toBe(true);
+    });
+
+    it('[EARS-885] should accept view_configs with multiple views', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        view_configs: {
+          'kanban-3col': {
+            columns: {
+              'To Do': ['draft', 'review'] as ['draft', 'review'],
+              'In Progress': ['active'] as ['active'],
+              'Done': ['done'] as ['done']
+            }
+          },
+          'kanban-7col': {
+            columns: {
+              'Draft': ['draft'] as ['draft'],
+              'Review': ['review'] as ['review'],
+              'Ready': ['ready'] as ['ready'],
+              'Active': ['active'] as ['active'],
+              'Done': ['done'] as ['done'],
+              'Archived': ['archived'] as ['archived'],
+              'Paused': ['paused'] as ['paused']
+            },
+            theme: 'dark' as 'dark',
+            layout: 'horizontal' as 'horizontal'
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-886] should accept view config with theme and layout', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        view_configs: {
+          kanban: {
+            columns: {
+              'To Do': ['draft'] as ['draft']
+            },
+            theme: 'minimal' as 'minimal',
+            layout: 'grid' as 'grid'
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-887] should accept complex view config with multiple columns', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        view_configs: {
+          kanban: {
+            columns: {
+              'To Do': ['draft', 'review', 'ready'] as ['draft', 'review', 'ready'],
+              'In Progress': ['active', 'paused'] as ['active', 'paused'],
+              'Done': ['done', 'archived'] as ['done', 'archived'],
+              'Discarded': ['discarded'] as ['discarded']
+            },
+            theme: 'corporate' as 'corporate',
+            layout: 'horizontal' as 'horizontal'
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-888] should accept view config with all valid state enum values', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        view_configs: {
+          kanban: {
+            columns: {
+              'All States': ['draft', 'review', 'ready', 'active', 'done', 'archived', 'paused', 'discarded'] as ['draft', 'review', 'ready', 'active', 'done', 'archived', 'paused', 'discarded']
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+  });
+
+  describe('Agent Integration - Root Structure (EARS 889-899)', () => {
+    it('[EARS-889] should accept missing agent_integration', () => {
+      const valid = createValidWorkflowMethodologyRecord();
+      // agent_integration is optional
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-890] should reject agent_integration not being an object', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: 'not-an-object' as unknown as {}
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('object')
+      )).toBe(true);
+    });
+
+    it('[EARS-891] should reject agent_integration as null', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: null as unknown as {}
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('object')
+      )).toBe(true);
+    });
+
+    it('[EARS-892] should accept agent_integration as empty object', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {}
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-893] should reject agent_integration with additional properties', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          customField: 'not-allowed'
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('additional') || e.message.includes('should NOT have additional properties')
+      )).toBe(true);
+    });
+
+    it('[EARS-894] should accept missing description', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {}
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-895] should accept description as string', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          description: 'Agent integration description'
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-896] should reject description as non-string', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          description: 123 as unknown as string
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('string')
+      )).toBe(true);
+    });
+
+    it('[EARS-897] should reject description exceeding maxLength 200', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          description: 'a'.repeat(201)
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('more than') || e.message.includes('maxLength') || e.message.includes('maximum')
+      )).toBe(true);
+    });
+
+    it('[EARS-898] should accept description with exactly 200 chars', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          description: 'a'.repeat(200)
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-899] should reject description as null', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          description: null as unknown as string
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('string')
+      )).toBe(true);
+    });
+  });
+
+  describe('Agent Integration - Required Agents Array (EARS 900-933)', () => {
+    it('[EARS-900] should accept missing required_agents', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {}
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-901] should reject required_agents as non-array', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: 'not-an-array' as unknown as []
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('array')
+      )).toBe(true);
+    });
+
+    it('[EARS-902] should reject required_agents as null', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: null as unknown as []
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('array')
+      )).toBe(true);
+    });
+
+    it('[EARS-903] should accept required_agents as empty array', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: []
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-904] should reject agent missing required field: id', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            engine: { type: 'local' as 'local' }
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('id') || e.message.includes('required')
+      )).toBe(true);
+    });
+
+    it('[EARS-905] should reject agent missing required field: engine', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: 'agent:test'
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('engine') || e.message.includes('required')
+      )).toBe(true);
+    });
+
+    it('[EARS-906] should reject agent with additional properties', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: 'agent:test',
+            engine: { type: 'local' as 'local' },
+            customField: 'not-allowed'
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('additional') || e.message.includes('should NOT have additional properties')
+      )).toBe(true);
+    });
+
+    it('[EARS-907] should reject agent without id AND without required_roles', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            engine: { type: 'local' as 'local' }
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('anyOf') || e.message.includes('id') || e.message.includes('required_roles')
+      )).toBe(true);
+    });
+
+    it('[EARS-908] should accept agent with only id', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: 'agent:test',
+            engine: { type: 'local' as 'local' }
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-909] should accept agent with only required_roles', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            required_roles: ['quality:reviewer'],
+            engine: { type: 'local' as 'local' }
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-910] should accept agent with both id and required_roles', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: 'agent:test',
+            required_roles: ['quality:reviewer'],
+            engine: { type: 'local' as 'local' }
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-911] should reject required_roles as non-array', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            required_roles: 'not-an-array' as unknown as string[],
+            engine: { type: 'local' as 'local' }
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('array')
+      )).toBe(true);
+    });
+
+    it('[EARS-912] should reject required_roles as empty array', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            required_roles: [] as unknown as [string, ...string[]],
+            engine: { type: 'local' as 'local' }
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('fewer than') || e.message.includes('minItems')
+      )).toBe(true);
+    });
+
+    it('[EARS-913] should accept required_roles with multiple roles', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            required_roles: ['quality:reviewer', 'approver:quality'],
+            engine: { type: 'local' as 'local' }
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-914] should reject required_roles with invalid pattern', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            required_roles: ['Invalid_Role'] as string[],
+            engine: { type: 'local' as 'local' }
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('pattern')
+      )).toBe(true);
+    });
+
+    it('[EARS-915] should reject id not matching pattern', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: 'invalid-id-without-agent-prefix',
+            engine: { type: 'local' as 'local' }
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('pattern')
+      )).toBe(true);
+    });
+
+    it('[EARS-916] should accept id with valid pattern "agent:quality-reviewer"', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: 'agent:quality-reviewer',
+            engine: { type: 'local' as 'local' }
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-917] should accept id with multiple levels "agent:camilo:cursor"', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: 'agent:camilo:cursor',
+            engine: { type: 'local' as 'local' }
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-918] should reject id as non-string', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: 123 as unknown as string,
+            engine: { type: 'local' as 'local' }
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('string')
+      )).toBe(true);
+    });
+
+    it('[EARS-919] should reject id as null', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: null as unknown as string,
+            engine: { type: 'local' as 'local' }
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('string')
+      )).toBe(true);
+    });
+
+    it('[EARS-920] should reject id without "agent:" prefix', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: 'quality-reviewer',
+            engine: { type: 'local' as 'local' }
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('pattern')
+      )).toBe(true);
+    });
+
+    it('[EARS-921] should reject id with uppercase letters', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: 'agent:QualityReviewer',
+            engine: { type: 'local' as 'local' }
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('pattern')
+      )).toBe(true);
+    });
+
+    it('[EARS-922] should reject id with underscores', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: 'agent:quality_reviewer',
+            engine: { type: 'local' as 'local' }
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('pattern')
+      )).toBe(true);
+    });
+
+    it('[EARS-923] should accept multiple valid agent objects', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [
+            {
+              id: 'agent:quality-reviewer',
+              engine: { type: 'local' as 'local' }
+            },
+            {
+              id: 'agent:design-assistant',
+              engine: { type: 'api' as 'api', url: 'https://api.example.com' }
+            }
+          ]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-924] should accept required_roles with valid pattern', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            required_roles: ['quality:reviewer'],
+            engine: { type: 'local' as 'local' }
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+  });
+
+  describe('Agent Integration - Engine oneOf Structure (EARS 925-945)', () => {
+    it('[EARS-925] should reject engine not being an object', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: 'agent:test',
+            engine: 'not-an-object' as unknown as { type: 'local' }
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('object')
+      )).toBe(true);
+    });
+
+    it('[EARS-926] should reject engine as null', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: 'agent:test',
+            engine: null as unknown as { type: 'local' }
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('object')
+      )).toBe(true);
+    });
+
+    it('[EARS-927] should reject engine missing type field', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: 'agent:test',
+            engine: {} as unknown as { type: 'local' }
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('required')
+      )).toBe(true);
+    });
+
+    it('[EARS-928] should validate engine type "local"', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: 'agent:test',
+            engine: {
+              type: 'local' as 'local'
+            }
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-929] should validate engine type "api"', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: 'agent:test',
+            engine: {
+              type: 'api' as 'api',
+              url: 'https://api.example.com'
+            }
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-930] should validate engine type "mcp"', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: 'agent:test',
+            engine: {
+              type: 'mcp' as 'mcp',
+              url: 'mcp://server.example.com'
+            }
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-931] should accept engine type local without runtime', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: 'agent:test',
+            engine: {
+              type: 'local' as 'local'
+            }
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-932] should accept engine type local with valid fields', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: 'agent:test',
+            engine: {
+              type: 'local' as 'local',
+              runtime: 'node',
+              entrypoint: './agents/quality.js',
+              function: 'reviewCode'
+            }
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-933] should accept engine type local with additional properties (oneOf does not validate additionalProperties strictly)', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: 'agent:test',
+            engine: {
+              type: 'local' as 'local',
+              customField: 'allowed-in-oneof'
+            }
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      // Note: oneOf schemas typically don't enforce additionalProperties across variants
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-934] should reject engine.runtime as non-string', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: 'agent:test',
+            engine: {
+              type: 'local' as 'local',
+              runtime: 123 as unknown as string
+            }
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('string')
+      )).toBe(true);
+    });
+
+    it('[EARS-935] should reject engine.entrypoint as non-string', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: 'agent:test',
+            engine: {
+              type: 'local' as 'local',
+              entrypoint: 123 as unknown as string
+            }
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('string')
+      )).toBe(true);
+    });
+
+    it('[EARS-936] should reject engine.function as non-string', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: 'agent:test',
+            engine: {
+              type: 'local' as 'local',
+              function: 123 as unknown as string
+            }
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('string')
+      )).toBe(true);
+    });
+
+    it('[EARS-937] should accept engine type api without url (oneOf matches on type, url is optional)', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: 'agent:test',
+            engine: {
+              type: 'api' as 'api'
+            }
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      // Note: url is actually optional in api variant
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-938] should accept engine type api with url and method', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: 'agent:test',
+            engine: {
+              type: 'api' as 'api',
+              url: 'https://api.example.com',
+              method: 'POST' as 'POST'
+            }
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-939] should accept engine type api with only url', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: 'agent:test',
+            engine: {
+              type: 'api' as 'api',
+              url: 'https://api.example.com'
+            }
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-940] should accept engine type api with additional properties (oneOf does not validate additionalProperties strictly)', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: 'agent:test',
+            engine: {
+              type: 'api' as 'api',
+              url: 'https://api.example.com',
+              customField: 'allowed-in-oneof'
+            }
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      // Note: oneOf schemas typically don't enforce additionalProperties across variants
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-941] should reject engine.url as non-string', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: 'agent:test',
+            engine: {
+              type: 'api' as 'api',
+              url: 123 as unknown as string
+            }
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('string')
+      )).toBe(true);
+    });
+
+    it('[EARS-942] should accept engine.method as "POST"', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: 'agent:test',
+            engine: {
+              type: 'api' as 'api',
+              url: 'https://api.example.com',
+              method: 'POST' as 'POST'
+            }
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-943] should accept engine.method as "GET"', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: 'agent:test',
+            engine: {
+              type: 'api' as 'api',
+              url: 'https://api.example.com',
+              method: 'GET' as 'GET'
+            }
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-944] should reject engine.method with invalid enum value', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: 'agent:test',
+            engine: {
+              type: 'api' as 'api',
+              url: 'https://api.example.com',
+              method: 'PUT' as unknown as 'POST'
+            }
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('enum') || e.message.includes('allowed')
+      )).toBe(true);
+    });
+
+    it('[EARS-945] should reject engine.method as non-string', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: 'agent:test',
+            engine: {
+              type: 'api' as 'api',
+              url: 'https://api.example.com',
+              method: 123 as unknown as 'POST'
+            }
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('string')
+      )).toBe(true);
+    });
+  });
+
+  describe('Agent Integration - Engine MCP Variant (EARS 953-961)', () => {
+    it('[EARS-946] should accept engine type mcp without url (oneOf matches on type, url is optional)', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: 'agent:test',
+            engine: {
+              type: 'mcp' as 'mcp'
+            }
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      // Note: url is actually optional in mcp variant
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-947] should accept engine type mcp with url', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: 'agent:test',
+            engine: {
+              type: 'mcp' as 'mcp',
+              url: 'mcp://server.example.com'
+            }
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-948] should accept engine type mcp with additional properties (oneOf does not validate additionalProperties strictly)', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: 'agent:test',
+            engine: {
+              type: 'mcp' as 'mcp',
+              url: 'mcp://server.example.com',
+              customField: 'allowed-in-oneof'
+            }
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      // Note: oneOf schemas typically don't enforce additionalProperties across variants
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-949] should accept engine type mcp with auth object', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: 'agent:test',
+            engine: {
+              type: 'mcp' as 'mcp',
+              url: 'mcp://server.example.com',
+              auth: { token: 'abc123' }
+            }
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-950] should accept engine type api with auth object', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: 'agent:test',
+            engine: {
+              type: 'api' as 'api',
+              url: 'https://api.example.com',
+              auth: { apiKey: 'secret' }
+            }
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-951] should reject engine.auth as non-object', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: 'agent:test',
+            engine: {
+              type: 'mcp' as 'mcp',
+              url: 'mcp://server.example.com',
+              auth: 'not-an-object' as unknown as {}
+            }
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('object')
+      )).toBe(true);
+    });
+
+    it('[EARS-952] should reject engine.auth as null', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: 'agent:test',
+            engine: {
+              type: 'mcp' as 'mcp',
+              url: 'mcp://server.example.com',
+              auth: null as unknown as {}
+            }
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('object')
+      )).toBe(true);
+    });
+  });
+
+  describe('Agent Integration - Triggers & Knowledge Dependencies (EARS 962-979)', () => {
+    it('[EARS-953] should accept missing triggers', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: 'agent:test',
+            engine: { type: 'local' as 'local' }
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-954] should reject triggers as non-array', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: 'agent:test',
+            engine: { type: 'local' as 'local' },
+            triggers: 'not-an-array' as unknown as []
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('array')
+      )).toBe(true);
+    });
+
+    it('[EARS-955] should reject triggers as null', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: 'agent:test',
+            engine: { type: 'local' as 'local' },
+            triggers: null as unknown as []
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('array')
+      )).toBe(true);
+    });
+
+    it('[EARS-956] should accept triggers as empty array', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: 'agent:test',
+            engine: { type: 'local' as 'local' },
+            triggers: []
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-957] should reject trigger missing field: event', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: 'agent:test',
+            engine: { type: 'local' as 'local' },
+            triggers: [{
+              action: 'review'
+            }]
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('event') || e.message.includes('required')
+      )).toBe(true);
+    });
+
+    it('[EARS-958] should reject trigger missing field: action', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: 'agent:test',
+            engine: { type: 'local' as 'local' },
+            triggers: [{
+              event: 'task.created'
+            }]
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('action') || e.message.includes('required')
+      )).toBe(true);
+    });
+
+    it('[EARS-959] should reject trigger with additional properties', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: 'agent:test',
+            engine: { type: 'local' as 'local' },
+            triggers: [{
+              event: 'task.created',
+              action: 'review',
+              customField: 'not-allowed'
+            }]
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('additional') || e.message.includes('should NOT have additional properties')
+      )).toBe(true);
+    });
+
+    it('[EARS-960] should accept event as string', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: 'agent:test',
+            engine: { type: 'local' as 'local' },
+            triggers: [{
+              event: 'task.created',
+              action: 'review'
+            }]
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-961] should accept action as string', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: 'agent:test',
+            engine: { type: 'local' as 'local' },
+            triggers: [{
+              event: 'task.created',
+              action: 'review'
+            }]
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-962] should accept multiple trigger objects', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: 'agent:test',
+            engine: { type: 'local' as 'local' },
+            triggers: [
+              { event: 'task.created', action: 'review' },
+              { event: 'execution.completed', action: 'verify' }
+            ]
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-963] should accept missing knowledge_dependencies', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: 'agent:test',
+            engine: { type: 'local' as 'local' }
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-964] should reject knowledge_dependencies as non-array', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: 'agent:test',
+            engine: { type: 'local' as 'local' },
+            knowledge_dependencies: 'not-an-array' as unknown as []
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('array')
+      )).toBe(true);
+    });
+
+    it('[EARS-965] should reject knowledge_dependencies as null', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: 'agent:test',
+            engine: { type: 'local' as 'local' },
+            knowledge_dependencies: null as unknown as []
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('array')
+      )).toBe(true);
+    });
+
+    it('[EARS-966] should accept knowledge_dependencies as empty array', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: 'agent:test',
+            engine: { type: 'local' as 'local' },
+            knowledge_dependencies: []
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-967] should accept knowledge_dependencies with string items', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: 'agent:test',
+            engine: { type: 'local' as 'local' },
+            knowledge_dependencies: ['./docs/coding-standards.md']
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-968] should reject knowledge_dependencies with non-string item', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: 'agent:test',
+            engine: { type: 'local' as 'local' },
+            knowledge_dependencies: [123] as unknown as string[]
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('string')
+      )).toBe(true);
+    });
+
+    it('[EARS-969] should accept knowledge_dependencies with multiple paths', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: 'agent:test',
+            engine: { type: 'local' as 'local' },
+            knowledge_dependencies: [
+              './docs/coding-standards.md',
+              './docs/architecture.md',
+              './docs/api-guide.md'
+            ]
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-970] should accept agent with all optional fields', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: 'agent:test',
+            engine: { type: 'local' as 'local' },
+            triggers: [{ event: 'task.created', action: 'review' }],
+            knowledge_dependencies: ['./docs/standards.md']
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+  });
+
+  describe('Agent Integration - Automation Rules (EARS 980-992)', () => {
+    it('[EARS-971] should accept missing automation_rules', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {}
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-972] should reject automation_rules as non-array', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          automation_rules: 'not-an-array' as unknown as []
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('array')
+      )).toBe(true);
+    });
+
+    it('[EARS-973] should reject automation_rules as null', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          automation_rules: null as unknown as []
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('array')
+      )).toBe(true);
+    });
+
+    it('[EARS-974] should accept automation_rules as empty array', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          automation_rules: []
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-975] should reject rule missing field: trigger', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          automation_rules: [{
+            agent: 'agent:test',
+            action: 'review'
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('trigger') || e.message.includes('required')
+      )).toBe(true);
+    });
+
+    it('[EARS-976] should reject rule missing field: agent', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          automation_rules: [{
+            trigger: 'task.created',
+            action: 'review'
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('agent') || e.message.includes('required')
+      )).toBe(true);
+    });
+
+    it('[EARS-977] should reject rule missing field: action', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          automation_rules: [{
+            trigger: 'task.created',
+            agent: 'agent:test'
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('action') || e.message.includes('required')
+      )).toBe(true);
+    });
+
+    it('[EARS-978] should reject rule with additional properties', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          automation_rules: [{
+            trigger: 'task.created',
+            agent: 'agent:test',
+            action: 'review',
+            customField: 'not-allowed'
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('additional') || e.message.includes('should NOT have additional properties')
+      )).toBe(true);
+    });
+
+    it('[EARS-979] should accept trigger as string', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          automation_rules: [{
+            trigger: 'task.created',
+            agent: 'agent:test',
+            action: 'review'
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-980] should reject trigger as non-string', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          automation_rules: [{
+            trigger: 123 as unknown as string,
+            agent: 'agent:test',
+            action: 'review'
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('string')
+      )).toBe(true);
+    });
+
+    it('[EARS-981] should reject trigger as null', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          automation_rules: [{
+            trigger: null as unknown as string,
+            agent: 'agent:test',
+            action: 'review'
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('string')
+      )).toBe(true);
+    });
+
+    it('[EARS-982] should reject agent not matching pattern', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          automation_rules: [{
+            trigger: 'task.created',
+            agent: 'invalid-without-prefix',
+            action: 'review'
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('pattern')
+      )).toBe(true);
+    });
+
+    it('[EARS-983] should accept agent with valid pattern', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          automation_rules: [{
+            trigger: 'task.created',
+            agent: 'agent:quality-reviewer',
+            action: 'review'
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-984] should reject agent as non-string', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          automation_rules: [{
+            trigger: 'task.created',
+            agent: 123 as unknown as string,
+            action: 'review'
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('string')
+      )).toBe(true);
+    });
+
+    it('[EARS-985] should reject agent as null', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          automation_rules: [{
+            trigger: 'task.created',
+            agent: null as unknown as string,
+            action: 'review'
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('string')
+      )).toBe(true);
+    });
+
+    it('[EARS-986] should accept action as string', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          automation_rules: [{
+            trigger: 'task.created',
+            agent: 'agent:test',
+            action: 'review'
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-987] should reject action as non-string', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          automation_rules: [{
+            trigger: 'task.created',
+            agent: 'agent:test',
+            action: 123 as unknown as string
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('string')
+      )).toBe(true);
+    });
+
+    it('[EARS-988] should reject action as null', () => {
+      const invalid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          automation_rules: [{
+            trigger: 'task.created',
+            agent: 'agent:test',
+            action: null as unknown as string
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('type') || e.message.includes('string')
+      )).toBe(true);
+    });
+
+    it('[EARS-989] should accept multiple rule objects', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          automation_rules: [
+            { trigger: 'task.created', agent: 'agent:reviewer', action: 'review' },
+            { trigger: 'task.completed', agent: 'agent:quality', action: 'verify' }
+          ]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-990] should accept 1 valid rule', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          automation_rules: [{
+            trigger: 'task.created',
+            agent: 'agent:test',
+            action: 'review'
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-991] should accept agent_integration with required_agents and automation_rules', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: 'agent:quality-reviewer',
+            engine: { type: 'local' as 'local' }
+          }],
+          automation_rules: [{
+            trigger: 'task.created',
+            agent: 'agent:quality-reviewer',
+            action: 'review'
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-992] should accept agent_integration with only description', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          description: 'Agent integration for quality assurance'
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+  });
+
+  describe('Happy Path - Complete Valid Records (EARS 993-1001)', () => {
+    it('[EARS-993] should accept minimal record with only required fields', () => {
+      const minimal = {
+        version: '1.0.0',
+        name: 'Minimal Methodology',
+        state_transitions: {}
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(minimal);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-994] should accept full record with all optional fields', () => {
+      const full = {
+        version: '1.0.0',
+        name: 'Complete Methodology',
+        description: 'A methodology with all fields populated',
+        state_transitions: {
+          review: {
+            from: ['draft'] as ['draft'],
+            requires: {
+              command: 'gitgov task submit',
+              signatures: {
+                default: {
+                  role: 'reviewer',
+                  capability_roles: ['reviewer'] as [string, ...string[]],
+                  min_approvals: 1
+                }
+              }
+            }
+          }
+        },
+        custom_rules: {
+          rule1: {
+            description: 'Assignment required',
+            validation: 'assignment_required' as 'assignment_required'
+          }
+        },
+        view_configs: {
+          kanban: {
+            columns: {
+              'To Do': ['draft'] as ['draft'],
+              'Done': ['done'] as ['done']
+            },
+            theme: 'default' as 'default',
+            layout: 'horizontal' as 'horizontal'
+          }
+        },
+        agent_integration: {
+          description: 'Quality agents',
+          required_agents: [{
+            id: 'agent:quality',
+            engine: { type: 'local' as 'local' }
+          }],
+          automation_rules: [{
+            trigger: 'task.created',
+            agent: 'agent:quality',
+            action: 'review'
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(full);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-995] should accept multiple state transitions', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        state_transitions: {
+          review: { from: ['draft'] as ['draft'], requires: {} },
+          ready: { from: ['review'] as ['review'], requires: {} },
+          active: { from: ['ready'] as ['ready'], requires: {} },
+          done: { from: ['active'] as ['active'], requires: {} }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-996] should accept custom_rules referenced in requires', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        custom_rules: {
+          'assignment-check': {
+            description: 'Verify task has assignee',
+            validation: 'assignment_required' as 'assignment_required'
+          }
+        },
+        state_transitions: {
+          active: {
+            from: ['ready'] as ['ready'],
+            requires: {
+              custom_rules: ['assignment-check']
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-997] should accept agent_integration with engine type local', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: 'agent:local-reviewer',
+            engine: {
+              type: 'local' as 'local',
+              runtime: 'node',
+              entrypoint: './agents/reviewer.js',
+              function: 'review'
+            }
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-998] should accept agent_integration with engine type api', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        agent_integration: {
+          required_agents: [{
+            id: 'agent:api-reviewer',
+            engine: {
+              type: 'api' as 'api',
+              url: 'https://api.example.com/review',
+              method: 'POST' as 'POST',
+              auth: { apiKey: 'secret' }
+            }
+          }]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-999] should accept view_configs with multiple views and all states', () => {
+      const valid = {
+        ...createValidWorkflowMethodologyRecord(),
+        view_configs: {
+          'kanban-full': {
+            columns: {
+              'Draft': ['draft'] as ['draft'],
+              'Review': ['review'] as ['review'],
+              'Ready': ['ready'] as ['ready'],
+              'Active': ['active'] as ['active'],
+              'Done': ['done'] as ['done'],
+              'Archived': ['archived'] as ['archived'],
+              'Paused': ['paused'] as ['paused'],
+              'Discarded': ['discarded'] as ['discarded']
+            },
+            theme: 'corporate' as 'corporate',
+            layout: 'grid' as 'grid'
+          },
+          'kanban-simple': {
+            columns: {
+              'To Do': ['draft', 'review', 'ready'] as ['draft', 'review', 'ready'],
+              'In Progress': ['active', 'paused'] as ['active', 'paused'],
+              'Done': ['done', 'archived'] as ['done', 'archived']
+            }
+          }
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-1000] should accept complete GitGovernance Default Methodology example', () => {
+      const gitgovExample = {
+        version: '1.0.0',
+        name: 'GitGovernance Default Methodology',
+        description: 'Default task workflow methodology for GitGovernance projects',
+        state_transitions: {
+          review: {
+            from: ['draft'] as ['draft'],
+            requires: {
+              command: 'gitgov task submit',
+              signatures: {
+                default: {
+                  role: 'reviewer',
+                  capability_roles: ['reviewer', 'tech-lead'] as [string, ...string[]],
+                  min_approvals: 1,
+                  actor_type: 'human' as 'human'
+                }
+              }
+            }
+          },
+          active: {
+            from: ['ready'] as ['ready'],
+            requires: {
+              event: 'first_execution_record_created',
+              custom_rules: ['assignment-required']
+            }
+          },
+          done: {
+            from: ['active'] as ['active'],
+            requires: {
+              signatures: {
+                quality: {
+                  role: 'qa-approver',
+                  capability_roles: ['qa-lead'] as [string, ...string[]],
+                  min_approvals: 1
+                }
+              }
+            }
+          }
+        },
+        custom_rules: {
+          'assignment-required': {
+            description: 'Task must have an assignee before activation',
+            validation: 'assignment_required' as 'assignment_required'
+          }
+        },
+        view_configs: {
+          'kanban-3col': {
+            columns: {
+              'To Do': ['draft', 'review', 'ready'] as ['draft', 'review', 'ready'],
+              'In Progress': ['active', 'paused'] as ['active', 'paused'],
+              'Done': ['done', 'archived'] as ['done', 'archived']
+            },
+            theme: 'default' as 'default',
+            layout: 'horizontal' as 'horizontal'
+          }
+        },
+        agent_integration: {
+          description: 'Quality assurance and review automation',
+          required_agents: [
+            {
+              id: 'agent:quality-reviewer',
+              engine: {
+                type: 'local' as 'local',
+                runtime: 'node',
+                entrypoint: './agents/quality_reviewer.js',
+                function: 'reviewTask'
+              },
+              triggers: [
+                { event: 'task.created', action: 'initial-review' },
+                { event: 'execution.completed', action: 'verify-execution' }
+              ],
+              knowledge_dependencies: [
+                './docs/quality-standards.md',
+                './docs/review-checklist.md'
+              ]
+            }
+          ],
+          automation_rules: [
+            {
+              trigger: 'task.submitted',
+              agent: 'agent:quality-reviewer',
+              action: 'automated-review'
+            }
+          ]
+        }
+      };
+
+      const result = validateWorkflowMethodologyConfigDetailed(gitgovExample);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-1001] should validate real workflow_methodology_default.json file', () => {
+      // This is a critical sanity test: ensure the actual config file used in production is valid
+      const fs = require('fs');
+      const path = require('path');
+
+      const configPath = path.join(__dirname, '../../adapters/workflow_methodology_adapter/workflow_methodology_default.json');
+      const configContent = fs.readFileSync(configPath, 'utf8');
+      const realConfig = JSON.parse(configContent);
+
+      const result = validateWorkflowMethodologyConfigDetailed(realConfig);
+
+      expect(result.isValid).toBe(true);
+      if (!result.isValid) {
+        console.error('workflow_methodology_default.json validation errors:', result.errors);
+      }
+      expect(result.errors).toHaveLength(0);
+    });
+  });
+});
+

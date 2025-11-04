@@ -135,15 +135,6 @@ export function validateEmbeddedMetadataBusinessRules<T extends GitGovRecordPayl
     });
   }
 
-  // Rule 5: Validate audit field length if present
-  if (data.header.audit && (data.header.audit.length < 1 || data.header.audit.length > 3000)) {
-    errors.push({
-      field: 'header.audit',
-      message: 'audit field must be between 1 and 3000 characters',
-      value: data.header.audit
-    });
-  }
-
   return {
     isValid: errors.length === 0,
     errors

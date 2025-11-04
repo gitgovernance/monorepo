@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "feedback_record_schema.json",
   "title": "FeedbackRecord",
-  "description": "Canonical schema for feedback records",
+  "description": "Canonical schema for feedback records - structured conversation about work",
   "additionalProperties": false,
   "type": "object",
   "required": [
@@ -17,7 +17,12 @@
     "id": {
       "type": "string",
       "pattern": "^\\d{10}-feedback-[a-z0-9-]{1,50}$",
-      "description": "Unique identifier for the feedback entry"
+      "maxLength": 70,
+      "description": "Unique identifier for the feedback entry",
+      "examples": [
+        "1752788100-feedback-blocking-rest-api",
+        "1752788200-feedback-question-test-coverage"
+      ]
     },
     "entityType": {
       "type": "string",
@@ -25,13 +30,21 @@
         "task",
         "execution",
         "changelog",
-        "feedback"
+        "feedback",
+        "cycle"
       ],
       "description": "The type of entity this feedback refers to"
     },
     "entityId": {
       "type": "string",
-      "description": "The ID of the entity this feedback refers to"
+      "minLength": 1,
+      "maxLength": 256,
+      "description": "The ID of the entity this feedback refers to.\nMust match the pattern for its entityType:\n- task: ^\\d{10}-task-[a-z0-9-]{1,50}$\n- execution: ^\\d{10}-exec-[a-z0-9-]{1,50}$\n- changelog: ^\\d{10}-changelog-[a-z0-9-]{1,50}$\n- feedback: ^\\d{10}-feedback-[a-z0-9-]{1,50}$\n- cycle: ^\\d{10}-cycle-[a-z0-9-]{1,50}$\n",
+      "examples": [
+        "1752274500-task-implementar-oauth",
+        "1752642000-exec-subtarea-9-4",
+        "1752788100-feedback-blocking-rest-api"
+      ]
     },
     "type": {
       "type": "string",
@@ -43,7 +56,12 @@
         "clarification",
         "assignment"
       ],
-      "description": "The semantic intent of the feedback"
+      "description": "The semantic intent of the feedback",
+      "examples": [
+        "blocking",
+        "question",
+        "approval"
+      ]
     },
     "status": {
       "type": "string",
@@ -53,31 +71,69 @@
         "resolved",
         "wontfix"
       ],
-      "description": "The lifecycle status of the feedback"
+      "description": "The lifecycle status of the feedback. \nNote: FeedbackRecords are immutable. To change status, create a new feedback \nthat references this one using entityType: \"feedback\" and resolvesFeedbackId.\n"
     },
     "content": {
       "type": "string",
       "minLength": 1,
-      "maxLength": 10000,
-      "description": "The content of the feedback"
+      "maxLength": 5000,
+      "description": "The content of the feedback. Reduced from 10000 to 5000 chars for practical use."
     },
     "assignee": {
       "type": "string",
-      "description": "The Actor ID of the agent responsible for addressing the feedback"
+      "pattern": "^(human|agent)(:[a-z0-9-]+)+$",
+      "maxLength": 256,
+      "description": "Optional. The Actor ID responsible for addressing the feedback (e.g., 'human:maria', 'agent:camilo:cursor')",
+      "examples": [
+        "human:maria",
+        "agent:code-reviewer",
+        "agent:camilo:cursor"
+      ]
     },
     "resolvesFeedbackId": {
       "type": "string",
-      "description": "The ID of another feedback record that this one resolves or responds to"
+      "pattern": "^\\d{10}-feedback-[a-z0-9-]{1,50}$",
+      "maxLength": 70,
+      "description": "Optional. The ID of another feedback record that this one resolves or responds to",
+      "examples": [
+        "1752788100-feedback-blocking-rest-api"
+      ]
     }
   },
   "examples": [
     {
-      "id": "1752788100-feedback-blocking-comment",
+      "id": "1752788100-feedback-blocking-rest-api",
       "entityType": "execution",
       "entityId": "1752642000-exec-subtarea-9-4",
       "type": "blocking",
       "status": "open",
-      "content": "Esta implementación no cumple el estándar de rutas REST. Sugiero revisar el spec."
+      "content": "Esta implementación no cumple el estándar de rutas REST. Los endpoints deben seguir el patrón /api/v1/{resource}/{id}. Actualmente usa /get-user?id=X que no es RESTful."
+    },
+    {
+      "id": "1752788200-feedback-rest-api-fixed",
+      "entityType": "feedback",
+      "entityId": "1752788100-feedback-blocking-rest-api",
+      "type": "clarification",
+      "status": "resolved",
+      "content": "Implementada la corrección. Ahora todos los endpoints siguen el estándar REST: GET /api/v1/users/:id, POST /api/v1/users, etc. Tests actualizados y passing.",
+      "resolvesFeedbackId": "1752788100-feedback-blocking-rest-api"
+    },
+    {
+      "id": "1752788300-feedback-assign-auth-task",
+      "entityType": "task",
+      "entityId": "1752274500-task-implementar-oauth",
+      "type": "assignment",
+      "status": "open",
+      "content": "Asignando esta tarea a María por su experiencia con OAuth2. Prioridad alta para el sprint actual.",
+      "assignee": "human:maria"
+    },
+    {
+      "id": "1752788400-feedback-question-test-coverage",
+      "entityType": "task",
+      "entityId": "1752274500-task-implementar-oauth",
+      "type": "question",
+      "status": "open",
+      "content": "¿Cuál es el nivel de test coverage esperado para esta feature? El spec no lo menciona explícitamente. ¿Debemos apuntar a 80% como el resto del proyecto?"
     }
   ]
 }
