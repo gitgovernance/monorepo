@@ -244,9 +244,6 @@ export class ProjectAdapter implements IProjectAdapter {
       // 8. Git Integration
       await this.setupGitIntegration(projectRoot);
 
-      // 9. Kiro IDE Integration (always setup hooks)
-      await this.setupKiroIntegration(projectRoot);
-
       const initializationTime = Date.now() - startTime;
 
       return {
@@ -421,72 +418,6 @@ export class ProjectAdapter implements IProjectAdapter {
       throw new DetailedValidationError('Template processing failed', [
         { field: 'template', message: error instanceof Error ? error.message : 'Unknown error', value: templatePath }
       ]);
-    }
-  }
-
-  /**
-   * Sets up Kiro IDE integration by always copying GitGovernance hooks
-   */
-  private async setupKiroIntegration(projectRoot: string): Promise<void> {
-    const kiroDir = pathUtils.join(projectRoot, '.kiro');
-    const kiroHooksDir = pathUtils.join(kiroDir, 'hooks');
-
-    // Always create .kiro/hooks directory
-    try {
-      await fs.mkdir(kiroHooksDir, { recursive: true });
-    } catch {
-      // Directory might already exist
-    }
-
-    // Copy GitGovernance hooks from our project
-    const sourceHooksDir = pathUtils.join(ConfigManager.findProjectRoot() || process.cwd(), '.kiro/hooks');
-
-    try {
-      await fs.access(sourceHooksDir);
-
-      // Copy all GitGovernance hooks
-      const essentialHooks = [
-        'gitgov-auto-indexer.kiro.hook',
-        'git-diagnostics-commit.kiro.hook',
-        'gitgov-file-analyzer.kiro.hook',
-        'code-quality-analyzer.kiro.hook',
-        'gitgov-quick-status.kiro.hook',
-        'gitgov-task-creator.kiro.hook',
-        'gitgov-work-session.kiro.hook'
-      ];
-
-      let copiedHooks = 0;
-      for (const hookFile of essentialHooks) {
-        try {
-          const sourcePath = pathUtils.join(sourceHooksDir, hookFile);
-          const targetPath = pathUtils.join(kiroHooksDir, hookFile);
-
-          await fs.copyFile(sourcePath, targetPath);
-          copiedHooks++;
-        } catch {
-          // Hook file might not exist, continue with others
-        }
-      }
-
-      // Copy main gitgov executable to project
-      try {
-        const sourceGitgovPath = pathUtils.join(ConfigManager.findProjectRoot() || process.cwd(), '.gitgov/gitgov');
-        const targetGitgovPath = pathUtils.join(projectRoot, '.gitgov/gitgov');
-
-        await fs.copyFile(sourceGitgovPath, targetGitgovPath);
-        await fs.chmod(targetGitgovPath, 0o755); // Make executable
-
-        console.log(`📋 GitGovernance executable copied to .gitgov/gitgov`);
-      } catch {
-        // Gitgov executable not available, skip
-      }
-
-      // Only log if we actually copied hooks
-      if (copiedHooks > 0) {
-        console.log(`🔧 Kiro IDE Integration: ${copiedHooks} GitGovernance hooks installed`);
-      }
-    } catch {
-      // Source hooks not available, skip silently
     }
   }
 
