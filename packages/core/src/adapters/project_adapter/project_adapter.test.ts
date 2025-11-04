@@ -8,7 +8,7 @@ import type { IdentityAdapter } from '../identity_adapter';
 import type { BacklogAdapter } from '../backlog_adapter';
 import type { WorkflowMethodologyAdapter } from '../workflow_methodology_adapter';
 import { DetailedValidationError } from '../../validation/common';
-import { promises as fs, existsSync } from 'fs';
+import { promises as fs, existsSync, type PathLike } from 'fs';
 import { createTaskRecord } from '../../factories/task_factory';
 import { createCycleRecord } from '../../factories/cycle_factory';
 
@@ -537,18 +537,19 @@ describe('ProjectAdapter', () => {
 
       // Mock access: validation passes (.gitgov doesn't exist), then agent prompt not found, then rollback finds .gitgov
       let accessCallCount = 0;
-      mockFs.access.mockImplementation(async (path: string) => {
+      mockFs.access.mockImplementation(async (path: PathLike) => {
         accessCallCount++;
+        const pathStr = typeof path === 'string' ? path : path.toString();
         // First call: .gitgov doesn't exist (validation passes)
         if (accessCallCount === 1) {
           throw new Error('Directory does not exist');
         }
         // Second call: agent prompt doesn't exist
-        if (path.includes('gitgov_agent_prompt.md')) {
+        if (pathStr.includes('gitgov_agent_prompt.md')) {
           throw new Error('File not found');
         }
         // Third+ calls: .gitgov exists for rollback
-        if (path.includes('.gitgov')) {
+        if (pathStr.includes('.gitgov')) {
           return; // Success - exists
         }
         throw new Error('File not found');
@@ -804,14 +805,15 @@ describe('ProjectAdapter', () => {
 
       // Mock successful agent prompt copy: access succeeds for source, copyFile succeeds
       let accessCallCount = 0;
-      mockFs.access.mockImplementation(async (path: string) => {
+      mockFs.access.mockImplementation(async (path: PathLike) => {
         accessCallCount++;
+        const pathStr = typeof path === 'string' ? path : path.toString();
         // First call: .gitgov doesn't exist (validation passes)
         if (accessCallCount === 1) {
           throw new Error('Directory does not exist');
         }
         // Second call: agent prompt source exists
-        if (path.includes('docs/gitgov_agent_prompt.md')) {
+        if (pathStr.includes('docs/gitgov_agent_prompt.md')) {
           return; // Success - file exists
         }
         throw new Error('File not found');
