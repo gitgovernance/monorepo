@@ -522,7 +522,7 @@ export class ProjectAdapter implements IProjectAdapter {
     // Copy the official @gitgov agent prompt to the project
     // Try multiple source locations for robustness:
     // 1. From monorepo root (development scenario)
-    // 2. From installed package location (npm scenario)
+    // 2. From installed package location (npm scenario - multiple path attempts)
 
     const targetPrompt = pathUtils.join(gitgovPath, 'gitgov');
 
@@ -530,17 +530,22 @@ export class ProjectAdapter implements IProjectAdapter {
       pathUtils.join(ConfigManager.findProjectRoot() || process.cwd(), 'docs/gitgov_agent_prompt.md'),
     ];
 
-    // Add package-relative path (works in both Jest and production npm package)
+    // Add package-relative paths (tsup bundles to dist/src/index.js OR dist/src/adapters/project_adapter/index.js)
     // __dirname is available when transpiled to CommonJS or in Jest environment
-    // In npm package after build: dist/src/adapters/project_adapter/index.js
-    // Target: prompts/gitgov_agent_prompt.md (from dist/)
-    // Path: ../../prompts from dist/src/adapters/project_adapter/
+    // Try multiple relative paths to handle different build outputs
     try {
       if (typeof __dirname !== 'undefined') {
+        // Path 1: From dist/src/index.js (tsup bundle) → ../../prompts/
         potentialSources.push(pathUtils.join(__dirname, '../../prompts/gitgov_agent_prompt.md'));
+        
+        // Path 2: From dist/src/adapters/project_adapter/index.js (unbundled) → ../../../../prompts/
+        potentialSources.push(pathUtils.join(__dirname, '../../../../prompts/gitgov_agent_prompt.md'));
+        
+        // Path 3: From src/adapters/project_adapter/index.ts (dev/test) → ../../../prompts/
+        potentialSources.push(pathUtils.join(__dirname, '../../../prompts/gitgov_agent_prompt.md'));
       }
     } catch {
-      // __dirname not available (pure ESM), skip this source
+      // __dirname not available (pure ESM), skip these sources
     }
 
     for (const sourcePrompt of potentialSources) {
