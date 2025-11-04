@@ -28,8 +28,8 @@ importers:
   packages/cli:
     dependencies:
       '@gitgov/core':
-        specifier: ^1.5.0
-        version: 1.5.0
+        specifier: ^1.6.2
+        version: 1.6.2
       clipboardy:
         specifier: ^5.0.0
         version: 5.0.0
@@ -616,8 +616,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@gitgov/core@1.5.0':
-    resolution: {integrity: sha512-uX0Jn2LiqCZhA/X9vAih1AIsmlCCY5cswQvd99jqpPpqPQwHWLhjmziOTZ1TmbgulkuvrLsZhARoN4hJA+GJgQ==}
+  '@gitgov/core@1.6.2':
+    resolution: {integrity: sha512-AcKPNk4UP3HiKVNP7e+JNgD8JJdqdpqqt+1dOo2dQ1HK7ACKaK0Ef2EWEjtpfFD06TzyhbSqjBPI2bUGswEbfA==}
 
   '@isaacs/cliui@8.0.2':
     resolution: {integrity: sha512-O8jcjabXaleOG9DQ0+ARXWZBTfnP4WNAqzuiJK7ll44AmxGKv/J2M4TPjxjY3znBCfvBXFzucm1twdyFybFqEA==}
@@ -3703,7 +3703,7 @@ snapshots:
   '@esbuild/win32-x64@0.25.5':
     optional: true
 
-  '@gitgov/core@1.5.0':
+  '@gitgov/core@1.6.2':
     dependencies:
       ajv: 8.17.1
       ajv-formats: 3.0.1(ajv@8.17.1)
