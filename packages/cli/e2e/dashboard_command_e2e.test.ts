@@ -72,6 +72,7 @@ describe('Dashboard TUI - Interactive Testing with ink-testing-library', () => {
         signatures: [{
           keyId: 'human:test-user',
           role: 'creator',
+          notes: 'E2E dashboard test data',
           timestamp: new Date().toISOString(),
           signature: 'test-signature'
         }]
@@ -100,6 +101,7 @@ describe('Dashboard TUI - Interactive Testing with ink-testing-library', () => {
         signatures: [{
           keyId: 'human:test-user',
           role: 'creator',
+          notes: 'E2E dashboard test data',
           timestamp: new Date().toISOString(),
           signature: 'test-signature'
         }]

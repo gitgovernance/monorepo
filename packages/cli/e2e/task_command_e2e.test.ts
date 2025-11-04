@@ -126,6 +126,7 @@ describe('Task Delete CLI Command - E2E Tests', () => {
         signatures: [{
           keyId: 'human:test-user',
           role: 'creator',
+          notes: 'E2E test task creation',
           timestamp: new Date().toISOString(),
           signature: 'test-signature'
         }]
@@ -154,6 +155,7 @@ describe('Task Delete CLI Command - E2E Tests', () => {
         signatures: [{
           keyId: 'human:test-user',
           role: 'creator',
+          notes: 'E2E test task creation',
           timestamp: new Date().toISOString(),
           signature: 'test-signature'
         }]
@@ -182,6 +184,7 @@ describe('Task Delete CLI Command - E2E Tests', () => {
         signatures: [{
           keyId: 'human:test-user',
           role: 'creator',
+          notes: 'E2E test task creation',
           timestamp: new Date().toISOString(),
           signature: 'test-signature'
         }]
