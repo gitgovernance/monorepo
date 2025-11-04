@@ -36,7 +36,7 @@ export interface TaskShowOptions {
   fromSource?: boolean;
   health?: boolean;
   history?: boolean;
-  format?: 'cursor' | 'kiro' | 'json' | 'text';
+  format?: 'json' | 'text';
   json?: boolean;
   verbose?: boolean;
   quiet?: boolean;

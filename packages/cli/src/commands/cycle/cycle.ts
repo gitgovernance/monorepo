@@ -69,7 +69,7 @@ export function registerCycleCommands(program: Command): void {
     .option('-c, --children', 'Include detailed list of child cycles')
     .option('-h, --hierarchy', 'Show complete hierarchy (parent + children)')
     .option('--health', 'Include health analysis of cycle tasks')
-    .option('-f, --format <format>', 'Output format (cursor, kiro, json, text)', 'text')
+    .option('-f, --format <format>', 'Output format (json, text)', 'text')
     .option('--json', 'Output in structured JSON format')
     .option('-v, --verbose', 'Include all metadata and relationships')
     .option('-q, --quiet', 'Minimal output (core fields only)')
