@@ -1,3 +1,10 @@
+## [1.6.2](https://github.com/gitgovernance/monorepo/compare/core-v1.6.1...core-v1.6.2) (2025-11-04)
+
+
+### 🐛 Bug Fixes
+
+* **core:** use __dirname instead of import.meta.url for Jest compatibility ([4d520aa](https://github.com/gitgovernance/monorepo/commit/4d520aa1ac6b821c1c748d38e6cbaf0b455f674d)), closes [#47](https://github.com/gitgovernance/monorepo/issues/47)
+
 ## [1.6.1](https://github.com/gitgovernance/monorepo/compare/core-v1.6.0...core-v1.6.1) (2025-11-04)
 
 
