@@ -124,7 +124,7 @@ EXAMPLES:
     .option('--from-source', 'Read directly from Record (includes signatures)')
     .option('-h, --health', 'Include health analysis using MetricsAdapter')
     .option('--history', 'Include history of executions and feedback')
-    .option('-f, --format <format>', 'Output format (cursor, kiro, json, text)', 'text')
+    .option('-f, --format <format>', 'Output format (json, text)', 'text')
     .option('--json', 'Output in structured JSON format')
     .option('-v, --verbose', 'Include all metadata and derived states')
     .option('-q, --quiet', 'Minimal output (core fields only)')
