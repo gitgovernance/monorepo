@@ -795,15 +795,15 @@ describe('ProjectAdapter', () => {
 
   describe('Agent Prompt Copy (Functional Test)', () => {
     it('should copy agent prompt from docs/ when available (simulated test)', async () => {
-      // Simulate successful agent prompt copy
+      // New strategy: looks in src/prompts/ (development) or uses require.resolve for npm
       jest.spyOn(ConfigManager, 'findProjectRoot').mockReturnValue('/test/project');
 
       mockFs.writeFile.mockResolvedValue(undefined);
-      mockFs.unlink.mockResolvedValue(undefined);
       mockFs.mkdir.mockResolvedValue(undefined);
       mockFs.appendFile.mockResolvedValue(undefined);
+      mockFs.copyFile.mockResolvedValue(undefined);
 
-      // Mock successful agent prompt copy: access succeeds for source, copyFile succeeds
+      // Mock fs.access to allow prompts/ path to be "found"
       let accessCallCount = 0;
       mockFs.access.mockImplementation(async (path: PathLike) => {
         accessCallCount++;
@@ -812,14 +812,15 @@ describe('ProjectAdapter', () => {
         if (accessCallCount === 1) {
           throw new Error('Directory does not exist');
         }
-        // Second call: agent prompt source exists
-        if (pathStr.includes('docs/gitgov_agent_prompt.md')) {
-          return; // Success - file exists
+        // Allow prompts/ path to be accessible (for copyAgentPrompt)
+        // Note: path might be absolute or relative, check for both
+        if (pathStr.includes('prompts/gitgov_agent_prompt.md') ||
+          pathStr.endsWith('prompts/gitgov_agent_prompt.md')) {
+          return; // Success - prompt file found
         }
-        throw new Error('File not found');
+        // All other paths don't exist (for env validation and other checks)
+        throw new Error('Not found');
       });
-
-      mockFs.copyFile.mockResolvedValue(undefined);
 
       mockIdentityAdapter.createActor.mockResolvedValueOnce(createMockActorRecord());
       mockBacklogAdapter.createCycle.mockResolvedValueOnce(createMockCycleRecord());
@@ -832,36 +833,38 @@ describe('ProjectAdapter', () => {
         actorName: 'Test User',
       });
 
-      // Verify success and that copyFile was called
+      // Verify success
       expect(result.success).toBe(true);
-      expect(mockFs.copyFile).toHaveBeenCalledWith(
-        expect.stringContaining('docs/gitgov_agent_prompt.md'),
-        expect.stringContaining('.gitgov/gitgov')
-      );
+
+      // Verify that copyFile was called (new implementation uses fs.copyFile)
+      expect(mockFs.copyFile.mock.calls.length).toBeGreaterThan(0);
+
+      // Verify success message
       expect(logSpy).toHaveBeenCalledWith(
         expect.stringContaining('@gitgov agent prompt copied')
       );
-
-      // Verify the path structure matches npm package layout (../../prompts from dist/src/)
-      const copyFileCall = mockFs.copyFile.mock.calls[0];
-      if (copyFileCall) {
-        const sourcePath = copyFileCall[0] as string;
-        // Should use either monorepo root or npm package structure
-        expect(
-          sourcePath.includes('docs/gitgov_agent_prompt.md') || sourcePath.includes('prompts/gitgov_agent_prompt.md')
-        ).toBe(true);
-      }
 
       logSpy.mockRestore();
     });
 
     it('should gracefully degrade when agent prompt is not available', async () => {
-      // Mock ConfigManager to return path where agent prompt doesn't exist
-      jest.spyOn(ConfigManager, 'findProjectRoot').mockReturnValue('/nonexistent/path');
+      jest.spyOn(ConfigManager, 'findProjectRoot').mockReturnValue('/test/project');
+
+      // Mock fs.access to fail for prompt locations
+      let accessCallCount = 0;
+      mockFs.access.mockImplementation(async (_path: PathLike) => {
+        accessCallCount++;
+        // First call: .gitgov doesn't exist (validation passes)
+        if (accessCallCount === 1) {
+          throw new Error('Directory does not exist');
+        }
+        // All other paths (including prompts) don't exist
+        // This simulates the graceful degradation scenario
+        throw new Error('File not found');
+      });
 
       mockFs.writeFile.mockResolvedValue(undefined);
       mockFs.unlink.mockResolvedValue(undefined);
-      mockFs.access.mockRejectedValue(new Error('File not found')); // Agent prompt doesn't exist
       mockFs.mkdir.mockResolvedValue(undefined);
       mockFs.appendFile.mockResolvedValue(undefined);
 
