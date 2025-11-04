@@ -1,3 +1,17 @@
+## [1.11.0](https://github.com/gitgovernance/monorepo/compare/cli-v1.10.0...cli-v1.11.0) (2025-11-04)
+
+
+### 🚀 Features
+
+* **core:** add agent prompt sync for npm package ([#45](https://github.com/gitgovernance/monorepo/issues/45)) ([7eb7ea9](https://github.com/gitgovernance/monorepo/commit/7eb7ea9bdd7c64690b2fe171a9c525fa0d7b0b85)), closes [#1762268208](https://github.com/gitgovernance/monorepo/issues/1762268208)
+
+
+### 🐛 Bug Fixes
+
+* **core:** add ESM __dirname compatibility for project adapter ([#47](https://github.com/gitgovernance/monorepo/issues/47)) ([7795e05](https://github.com/gitgovernance/monorepo/commit/7795e05e5441f4310e1c74522fafcc114f4202d3)), closes [#45](https://github.com/gitgovernance/monorepo/issues/45)
+* **core:** include docs/ folder in npm package ([4ac246d](https://github.com/gitgovernance/monorepo/commit/4ac246d038df809e119abd59471c7d7ca8d3f10f))
+* **core:** use __dirname instead of import.meta.url for Jest compatibility ([4d520aa](https://github.com/gitgovernance/monorepo/commit/4d520aa1ac6b821c1c748d38e6cbaf0b455f674d)), closes [#47](https://github.com/gitgovernance/monorepo/issues/47)
+
 ## [1.10.0](https://github.com/gitgovernance/monorepo/compare/cli-v1.9.0...cli-v1.10.0) (2025-11-04)
 
 
