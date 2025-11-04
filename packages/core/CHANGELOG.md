@@ -1,3 +1,25 @@
+## [1.4.0](https://github.com/gitgovernance/monorepo/compare/core-v1.3.0...core-v1.4.0) (2025-11-04)
+
+
+### ✨ Features
+
+* **cli:** add sorting and argument parsing for task list ([#41](https://github.com/gitgovernance/monorepo/issues/41)) ([1fb812d](https://github.com/gitgovernance/monorepo/commit/1fb812d6af4bd49ae9f8f5bd9c18ded328aefda1)), closes [#1759487394](https://github.com/gitgovernance/monorepo/issues/1759487394)
+* **cli:** filter completed tasks in priority view ([#40](https://github.com/gitgovernance/monorepo/issues/40)) ([d5fa301](https://github.com/gitgovernance/monorepo/commit/d5fa301375da3bd552e22644444a4b80a79ea554))
+* **core:** add EmbeddedMetadata factory with validation ([5d0236d](https://github.com/gitgovernance/monorepo/commit/5d0236d7000ad5dea01fe68e3b32a1489754541b)), closes [#1761736263](https://github.com/gitgovernance/monorepo/issues/1761736263)
+
+
+### 🐛 Bug Fixes
+
+* **cli:** handle --help flag with pnpm start -- separator ([#39](https://github.com/gitgovernance/monorepo/issues/39)) ([16b1670](https://github.com/gitgovernance/monorepo/commit/16b16703a3cc9b0605c629942f391e3210f3e077)), closes [#1759984817](https://github.com/gitgovernance/monorepo/issues/1759984817)
+
+
+### ♻️ Refactoring
+
+* **core:** enhance validators and schema module ([d56ab24](https://github.com/gitgovernance/monorepo/commit/d56ab248facd97690a05805198160fc37c0979cd)), closes [#1761736263](https://github.com/gitgovernance/monorepo/issues/1761736263)
+* **core:** update adapters and factories for schema compliance ([b7cecc9](https://github.com/gitgovernance/monorepo/commit/b7cecc9530e46d2c5b2c1ca30255fb54cdf26610)), closes [#1761736263](https://github.com/gitgovernance/monorepo/issues/1761736263)
+* **core:** update generated schemas and types from YAML sources ([ed4981b](https://github.com/gitgovernance/monorepo/commit/ed4981b938813755529dbbd06086a61fa87c3ecd)), closes [#1761736263](https://github.com/gitgovernance/monorepo/issues/1761736263)
+* **core:** update supporting modules and documentation ([574c334](https://github.com/gitgovernance/monorepo/commit/574c334f39986bf5866fa5ac9e86ecbcbdd9f94c)), closes [#1761736263](https://github.com/gitgovernance/monorepo/issues/1761736263)
+
 ## [1.3.0](https://github.com/gitgovernance/monorepo/compare/core-v1.2.0...core-v1.3.0) (2025-10-15)
 
 
