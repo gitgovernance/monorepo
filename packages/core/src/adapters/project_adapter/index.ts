@@ -520,18 +520,31 @@ export class ProjectAdapter implements IProjectAdapter {
 
   private async copyAgentPrompt(gitgovPath: string): Promise<void> {
     // Copy the official @gitgov agent prompt to the project
-    // Source: docs/gitgov_agent_prompt.md (from GitGovernance monorepo root)
-    // Target: .gitgov/gitgov (without extension, for easy @-mention access)
-    try {
-      const sourcePrompt = pathUtils.join(ConfigManager.findProjectRoot() || process.cwd(), 'docs/gitgov_agent_prompt.md');
-      const targetPrompt = pathUtils.join(gitgovPath, 'gitgov');
+    // Try multiple source locations for robustness:
+    // 1. From monorepo root (development scenario)
+    // 2. From installed package location (npm scenario)
 
-      await fs.copyFile(sourcePrompt, targetPrompt);
-      console.log(`📋 @gitgov agent prompt copied to .gitgov/gitgov`);
-    } catch {
-      // Graceful degradation: if prompt file doesn't exist, continue without it
-      console.warn('Warning: Could not copy @gitgov agent prompt. Project will work but AI assistant may not have local instructions.');
+    const targetPrompt = pathUtils.join(gitgovPath, 'gitgov');
+
+    const potentialSources = [
+      pathUtils.join(ConfigManager.findProjectRoot() || process.cwd(), 'docs/gitgov_agent_prompt.md'),
+      pathUtils.join(__dirname, '../../prompts/gitgov_agent_prompt.md'),
+    ];
+
+    for (const sourcePrompt of potentialSources) {
+      try {
+        await fs.access(sourcePrompt);
+        await fs.copyFile(sourcePrompt, targetPrompt);
+        console.log(`📋 @gitgov agent prompt copied to .gitgov/gitgov`);
+        return;
+      } catch {
+        // Try next source location
+        continue;
+      }
     }
+
+    // Graceful degradation: if prompt file doesn't exist in any location
+    console.warn('Warning: Could not copy @gitgov agent prompt. Project will work but AI assistant may not have local instructions.');
   }
 
   private generateProjectId(name: string): string {

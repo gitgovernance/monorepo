@@ -251,6 +251,7 @@ npm test
 npm run test:coverage    # Run tests with coverage report
 
 # Build-time schema and type generation
+npm run sync:prompts           # Sync agent prompts for npm packaging
 npm run sync:schemas           # Generate JSON schemas from YAML protocols
 npm run sync:workflow-configs  # Sync workflow methodology configurations
 npm run compile:types          # Generate TypeScript types from JSON schemas
@@ -258,7 +259,7 @@ npm run generate:indexes       # Generate organized export indexes
 npm run validate:schemas       # Validate all generated schemas
 
 # Development workflow
-npm run prebuild         # Pipeline: sync → compile → generate
+npm run prebuild         # Pipeline: sync:prompts → compile:types → generate:indexes
 npm run build           # Clean build with TypeScript compilation
 npm run clean           # Remove dist directory
 npm run clean:generated # Remove all generated schemas and types
