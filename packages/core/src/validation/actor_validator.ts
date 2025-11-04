@@ -1,7 +1,7 @@
-import type { ValidateFunction } from "ajv";
+import type { ValidateFunction, ErrorObject } from "ajv";
 import type { ActorRecord } from "../types";
 import type { GitGovRecord } from "../types";
-import { SchemaValidationError } from "./common";
+import { DetailedValidationError } from "./common";
 import type { ValidationResult } from './errors';
 import { SchemaValidationCache } from "../schemas/schema_cache";
 import { Schemas } from "../schemas";
@@ -30,9 +30,9 @@ export function isActorRecord(data: unknown): data is ActorRecord {
 export function validateActorRecordDetailed(data: unknown): ValidationResult {
   const [isValid, ajvErrors] = validateActorRecordSchema(data);
 
-  const formattedErrors = ajvErrors ? ajvErrors.map(error => ({
-    field: error.instancePath || error.schemaPath || 'root',
-    message: error.message || 'Validation failed',
+  const formattedErrors = ajvErrors ? ajvErrors.map((error: ErrorObject) => ({
+    field: error.instancePath?.replace('/', '') || error.params?.['missingProperty'] || 'root',
+    message: error.message || 'Unknown validation error',
     value: error.data
   })) : [];
 
@@ -56,9 +56,12 @@ export async function validateFullActorRecord(
   // 1. Schema Validation
   const [isValidSchema, errors] = validateActorRecordSchema(record.payload);
   if (!isValidSchema) {
-    throw new SchemaValidationError(
-      `ActorRecord payload failed schema validation: ${JSON.stringify(errors)}`
-    );
+    const formattedErrors = (errors || []).map((error: ErrorObject) => ({
+      field: error.instancePath?.replace('/', '') || error.params?.['missingProperty'] || 'root',
+      message: error.message || 'Unknown validation error',
+      value: error.data
+    }));
+    throw new DetailedValidationError('ActorRecord', formattedErrors);
   }
 
   // 2. Embedded Metadata Validation (header + wrapper)

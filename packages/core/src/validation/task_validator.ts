@@ -1,10 +1,10 @@
-import type { ValidateFunction } from "ajv";
+import type { ValidateFunction, ErrorObject } from "ajv";
 import type { TaskRecord } from "../types";
 import type { GitGovRecord } from "../types";
 import { SchemaValidationCache } from "../schemas/schema_cache";
 import { Schemas } from '../schemas';
 import {
-  SchemaValidationError
+  DetailedValidationError
 } from "./common";
 import type { ValidationResult } from './errors';
 import { validateFullEmbeddedMetadataRecord } from './embedded_metadata_validator';
@@ -33,9 +33,9 @@ export function isTaskRecord(data: unknown): data is TaskRecord {
 export function validateTaskRecordDetailed(data: unknown): ValidationResult {
   const [isValid, ajvErrors] = validateTaskRecordSchema(data);
 
-  const formattedErrors = ajvErrors ? ajvErrors.map(error => ({
-    field: error.instancePath || error.schemaPath || 'root',
-    message: error.message || 'Validation failed',
+  const formattedErrors = ajvErrors ? ajvErrors.map((error: ErrorObject) => ({
+    field: error.instancePath?.replace('/', '') || error.params?.['missingProperty'] || 'root',
+    message: error.message || 'Unknown validation error',
     value: error.data
   })) : [];
 
@@ -59,9 +59,12 @@ export async function validateFullTaskRecord(
   // 1. Schema Validation
   const [isValidSchema, errors] = validateTaskRecordSchema(record.payload);
   if (!isValidSchema) {
-    throw new SchemaValidationError(
-      `TaskRecord payload failed schema validation: ${JSON.stringify(errors)}`
-    );
+    const formattedErrors = (errors || []).map((error: ErrorObject) => ({
+      field: error.instancePath?.replace('/', '') || error.params?.['missingProperty'] || 'root',
+      message: error.message || 'Unknown validation error',
+      value: error.data
+    }));
+    throw new DetailedValidationError('TaskRecord', formattedErrors);
   }
 
   // 2. Embedded Metadata Validation (header + wrapper)
