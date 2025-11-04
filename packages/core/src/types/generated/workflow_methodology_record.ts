@@ -49,7 +49,7 @@ export interface WorkflowMethodologyRecord {
              */
             event?: string;
             /**
-             * Signature requirements keyed by guild
+             * Signature requirements keyed by role (e.g., 'approver:quality', 'developer:backend')
              */
             signatures?: {
               [k: string]:
@@ -159,49 +159,7 @@ export interface WorkflowMethodologyRecord {
      * List of agents required for this methodology
      */
     required_agents?: {
-      /**
-       * Unique agent identifier
-       */
-      id: string;
-      /**
-       * Agent guild classification
-       */
-      gremio: 'design' | 'intelligence' | 'strategy' | 'operations' | 'quality';
-      engine:
-        | {
-            type: 'local';
-            runtime?: string;
-            entrypoint?: string;
-            function?: string;
-          }
-        | {
-            type: 'api';
-            url?: string;
-            method?: 'POST' | 'GET';
-            auth?: {};
-          }
-        | {
-            type: 'mcp';
-            url?: string;
-            auth?: {};
-          };
-      /**
-       * Event triggers for this agent
-       */
-      triggers?: {
-        /**
-         * Event that triggers the agent
-         */
-        event: string;
-        /**
-         * Action the agent should perform
-         */
-        action: string;
-      }[];
-      /**
-       * Knowledge files this agent depends on
-       */
-      knowledge_dependencies?: string[];
+      [k: string]: unknown | undefined;
     }[];
     /**
      * Automation rules linking triggers to agents

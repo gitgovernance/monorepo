@@ -9,7 +9,7 @@
  */
 export interface TaskRecord {
   /**
-   * Unique identifier for the task
+   * Unique identifier for the task (10 timestamp + 1 dash + 4 'task' + 1 dash + max 50 slug = 66 max)
    */
   id: string;
   /**
@@ -17,7 +17,7 @@ export interface TaskRecord {
    */
   title: string;
   /**
-   * Optional. The IDs of the strategic cycles this task belongs to.
+   * Optional. The IDs of the strategic cycles this task belongs to. (10 timestamp + 1 dash + 5 'cycle' + 1 dash + max 50 slug = 67 max)
    */
   cycleIds?: string[];
   /**
@@ -33,9 +33,9 @@ export interface TaskRecord {
    */
   description: string;
   /**
-   * List of key:value tags for categorization and role suggestion (e.g., 'skill:react', 'role:agent:developer'). Can be an empty array.
+   * Optional. List of key:value tags for categorization and role suggestion (e.g., 'skill:react', 'role:agent:developer').
    */
-  tags: string[];
+  tags?: string[];
   /**
    * Valid links or files, when mentioned
    */

@@ -21,17 +21,17 @@ export interface ActorRecord {
    */
   displayName: string;
   /**
-   * The Ed25519 public key (base64 encoded) for verifying the actor's signatures.
+   * The Ed25519 public key (base64 encoded, 44 characters) for verifying the actor's signatures.
    */
   publicKey: string;
   /**
-   * List of capacity roles defining the actor's skills and permissions.
+   * List of capacity roles defining the actor's skills and permissions. Uses hierarchical format with colons.
    *
    * @minItems 1
    */
   roles: [string, ...string[]];
   /**
-   * The lifecycle status of the actor.
+   * Optional. The lifecycle status of the actor. Defaults to 'active' if not specified.
    */
   status?: 'active' | 'revoked';
   /**
