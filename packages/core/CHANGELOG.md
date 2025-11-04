@@ -1,3 +1,10 @@
+## [1.6.0](https://github.com/gitgovernance/monorepo/compare/core-v1.5.1...core-v1.6.0) (2025-11-04)
+
+
+### ✨ Features
+
+* **core:** add agent prompt sync for npm package ([#45](https://github.com/gitgovernance/monorepo/issues/45)) ([7eb7ea9](https://github.com/gitgovernance/monorepo/commit/7eb7ea9bdd7c64690b2fe171a9c525fa0d7b0b85)), closes [#1762268208](https://github.com/gitgovernance/monorepo/issues/1762268208)
+
 ## [1.5.1](https://github.com/gitgovernance/monorepo/compare/core-v1.5.0...core-v1.5.1) (2025-11-04)
 
 
