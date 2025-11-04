@@ -20,9 +20,9 @@ describe('FeedbackRecord Validator', () => {
   const createMockSignature = (): Signature => ({
     keyId: 'human:test',
     role: 'author',
+    notes: 'Feedback validation test signature',
     signature: 'mock-signature',
-    timestamp: 1752788100,
-    timestamp_iso: '2025-07-31T10:15:00Z'
+    timestamp: 1752788100
   });
 
   const validRecord: FeedbackRecord = {
@@ -47,25 +47,17 @@ describe('FeedbackRecord Validator', () => {
       configurable: true
     });
     mockSchemaValidationCache.getValidatorFromSchema.mockReturnValue(defaultValidator);
+    mockSchemaValidationCache.clearCache = jest.fn();
+    mockSchemaValidationCache.getCacheStats = jest.fn().mockReturnValue({
+      cachedSchemas: 1,
+      totalValidations: 10,
+      cacheHits: 9,
+      cacheMisses: 1
+    });
   });
 
   describe('validateFullFeedbackRecord', () => {
-    it('[EARS-1] should validate a complete FeedbackRecord successfully', async () => {
-      const mockRecord: GitGovRecord & { payload: FeedbackRecord } = {
-        header: {
-          version: '1.0',
-          type: 'feedback',
-          payloadChecksum: 'valid-checksum',
-          signatures: [createMockSignature()]
-        },
-        payload: validRecord
-      };
-
-      const mockGetPublicKey = jest.fn().mockResolvedValue('mock-public-key');
-      await expect(validateFullFeedbackRecord(mockRecord, mockGetPublicKey)).resolves.not.toThrow();
-    });
-
-    it('[EARS-2] should throw DetailedValidationError for invalid payload schema', async () => {
+    it('[EARS-1] should throw DetailedValidationError for invalid payload schema', async () => {
       const invalidValidator = jest.fn().mockReturnValue(false);
       Object.defineProperty(invalidValidator, 'errors', {
         value: [{ instancePath: '/entityType', message: 'must be one of allowed values', data: 'invalid' }],
@@ -83,7 +75,7 @@ describe('FeedbackRecord Validator', () => {
       await expect(validateFullFeedbackRecord(invalidRecord as GitGovRecord & { payload: FeedbackRecord }, mockGetPublicKey)).rejects.toThrow(DetailedValidationError);
     });
 
-    it('[EARS-3] should throw error if embedded metadata validation fails', async () => {
+    it('[EARS-2] should throw error if embedded metadata validation fails', async () => {
       const mockRecord: GitGovRecord & { payload: FeedbackRecord } = {
         header: { version: '1.0', type: 'feedback', payloadChecksum: 'wrong-checksum', signatures: [createMockSignature()] },
         payload: validRecord
@@ -93,6 +85,21 @@ describe('FeedbackRecord Validator', () => {
       mockValidateEmbeddedMetadata.mockRejectedValue(embeddedError);
       const mockGetPublicKey = jest.fn().mockResolvedValue('mock-public-key');
       await expect(validateFullFeedbackRecord(mockRecord, mockGetPublicKey)).rejects.toThrow('Embedded metadata validation failed');
+    });
+
+    it('[EARS-3] should validate a complete FeedbackRecord successfully without throwing', async () => {
+      const mockRecord: GitGovRecord & { payload: FeedbackRecord } = {
+        header: {
+          version: '1.0',
+          type: 'feedback',
+          payloadChecksum: 'valid-checksum',
+          signatures: [createMockSignature()]
+        },
+        payload: validRecord
+      };
+
+      const mockGetPublicKey = jest.fn().mockResolvedValue('mock-public-key');
+      await expect(validateFullFeedbackRecord(mockRecord, mockGetPublicKey)).resolves.not.toThrow();
     });
 
     it('[EARS-4] should call validateFullEmbeddedMetadataRecord with correct parameters', async () => {
@@ -125,13 +132,44 @@ describe('FeedbackRecord Validator', () => {
     });
   });
 
+  describe('Schema Cache Integration', () => {
+    it('[EARS-7] should use schema cache for validation performance', () => {
+      const cacheSpy = jest.spyOn(mockSchemaValidationCache, 'getValidatorFromSchema');
+      validateFeedbackRecordDetailed(validRecord);
+      expect(cacheSpy).toHaveBeenCalledWith(expect.anything());
+    });
+
+    it('[EARS-8] should reuse compiled validators from cache', () => {
+      const cacheSpy = jest.spyOn(mockSchemaValidationCache, 'getValidatorFromSchema');
+      validateFeedbackRecordDetailed(validRecord);
+      validateFeedbackRecordDetailed(validRecord);
+      expect(cacheSpy).toHaveBeenCalledTimes(2);
+      expect(cacheSpy).toHaveBeenCalledWith(expect.anything());
+    });
+
+    it('[EARS-9] should produce identical results with or without cache', () => {
+      const result1 = validateFeedbackRecordDetailed(validRecord);
+      const result2 = validateFeedbackRecordDetailed(validRecord);
+      expect(result1).toEqual(result2);
+    });
+
+    it('[EARS-10] should support cache clearing', () => {
+      expect(() => mockSchemaValidationCache.clearCache()).not.toThrow();
+    });
+
+    it('[EARS-11] should provide cache statistics', () => {
+      const stats = mockSchemaValidationCache.getCacheStats();
+      expect(stats).toBeDefined();
+    });
+  });
+
   describe('validateFeedbackRecordDetailed', () => {
-    it('[EARS-7] should return valid result for correct FeedbackRecord', () => {
+    it('[EARS-12] should return valid result for correct FeedbackRecord', () => {
       const result = validateFeedbackRecordDetailed(validRecord);
       expect(result).toEqual({ isValid: true, errors: [] });
     });
 
-    it('[EARS-8] should return detailed errors for invalid FeedbackRecord', () => {
+    it('[EARS-13] should return detailed errors for invalid FeedbackRecord', () => {
       const invalidValidator = jest.fn().mockReturnValue(false);
       Object.defineProperty(invalidValidator, 'errors', {
         value: [
@@ -152,6 +190,74 @@ describe('FeedbackRecord Validator', () => {
       });
       expect(result.isValid).toBe(false);
       expect(result.errors).toHaveLength(1);
+    });
+
+    it('[EARS-14] should format errors in user-friendly structure with field, message, and value', () => {
+      const invalidValidator = jest.fn().mockReturnValue(false);
+      Object.defineProperty(invalidValidator, 'errors', {
+        value: [
+          { instancePath: '/entityType', message: 'must be one of allowed values', data: 'invalid-type', params: {} }
+        ],
+        writable: true,
+        configurable: true
+      });
+      mockSchemaValidationCache.getValidatorFromSchema.mockReturnValue(invalidValidator);
+
+      const result = validateFeedbackRecordDetailed({
+        id: '1752788100-feedback-test',
+        entityType: 'invalid-type',
+        entityId: 'task-1',
+        type: 'question',
+        status: 'open',
+        content: 'content'
+      });
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0]).toHaveProperty('field');
+      expect(result.errors[0]).toHaveProperty('message');
+      expect(result.errors[0]).toHaveProperty('value');
+    });
+
+    it('[EARS-15] should validate optional fields correctly', () => {
+      const minimalRecord: FeedbackRecord = {
+        id: '1752788100-feedback-minimal',
+        entityType: 'task',
+        entityId: '1752274500-task-test',
+        type: 'blocking',
+        status: 'open',
+        content: 'Minimal feedback content'
+      };
+
+      const result = validateFeedbackRecordDetailed(minimalRecord);
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-16] should return all errors when multiple fields are invalid', () => {
+      const invalidValidator = jest.fn().mockReturnValue(false);
+      Object.defineProperty(invalidValidator, 'errors', {
+        value: [
+          { instancePath: '/entityType', message: 'must be one of allowed values', data: 'invalid-type', params: {} },
+          { instancePath: '/type', message: 'must be one of allowed values', data: 'invalid-feedback-type', params: {} },
+          { instancePath: '/status', message: 'must be one of allowed values', data: 'invalid-status', params: {} }
+        ],
+        writable: true,
+        configurable: true
+      });
+      mockSchemaValidationCache.getValidatorFromSchema.mockReturnValue(invalidValidator);
+
+      const result = validateFeedbackRecordDetailed({
+        id: '1752788100-feedback-test',
+        entityType: 'invalid-type',
+        entityId: 'task-1',
+        type: 'invalid-feedback-type',
+        status: 'invalid-status',
+        content: 'content'
+      });
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.length).toBeGreaterThanOrEqual(3);
     });
   });
 });

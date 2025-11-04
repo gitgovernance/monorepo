@@ -246,8 +246,8 @@ describe('Cycles ↔ Tasks Integration', () => {
       // Verify epic promotion structure
       expect(epicCycle.taskIds).toContain(epicTask.id);
       expect(atomicTask1.cycleIds).toContain(epicCycle.id);
-      expect(atomicTask1.tags.some(tag => tag.startsWith('derived-from:'))).toBe(true);
-      expect(atomicTask2.tags.some(tag => tag.startsWith('derived-from:'))).toBe(true);
+      expect(atomicTask1.tags?.some(tag => tag.startsWith('derived-from:'))).toBe(true);
+      expect(atomicTask2.tags?.some(tag => tag.startsWith('derived-from:'))).toBe(true);
     });
   });
 

@@ -106,19 +106,9 @@ import type { FeedbackRecord } from '../types/generated/feedback_record';
 
 export type FeedbackCreatedEvent = BaseEvent & {
   type: 'feedback.created';
-  payload: Pick<FeedbackRecord, 'entityType' | 'entityId' | 'type' | 'status' | 'content' | 'assignee'> & {
+  payload: Pick<FeedbackRecord, 'entityType' | 'entityId' | 'type' | 'status' | 'content' | 'assignee' | 'resolvesFeedbackId'> & {
     feedbackId: string; // Alias for FeedbackRecord id
     triggeredBy: string; // Actor ID who created the feedback
-  };
-}
-
-export type FeedbackStatusChangedEvent = BaseEvent & {
-  type: 'feedback.status.changed';
-  payload: Pick<FeedbackRecord, 'assignee'> & {
-    feedbackId: string;
-    oldStatus: FeedbackRecord['status'];
-    newStatus: FeedbackRecord['status'];
-    triggeredBy: string; // Actor ID who changed the status
   };
 }
 
@@ -130,9 +120,8 @@ import type { ChangelogRecord } from '../types/generated/changelog_record';
 
 export type ChangelogCreatedEvent = BaseEvent & {
   type: 'changelog.created';
-  payload: Pick<ChangelogRecord, 'entityType' | 'entityId' | 'changeType' | 'riskLevel' | 'title' | 'trigger'> & {
+  payload: Pick<ChangelogRecord, 'relatedTasks' | 'title' | 'version'> & {
     changelogId: string; // Alias for ChangelogRecord id
-    triggeredBy: string; // Actor ID who created the changelog
   };
 }
 
@@ -162,7 +151,7 @@ export type ActorRevokedEvent = BaseEvent & {
 
 export type AgentRegisteredEvent = BaseEvent & {
   type: 'identity.agent.registered';
-  payload: Pick<AgentRecord, 'guild' | 'engine'> & {
+  payload: Pick<AgentRecord, 'engine'> & {
     agentId: string; // Alias for AgentRecord id
     correspondingActorId: string; // Actor ID linked to this agent
   };
@@ -188,7 +177,6 @@ export type GitGovEvent =
   | CycleStatusChangedEvent
   | ExecutionCreatedEvent
   | FeedbackCreatedEvent
-  | FeedbackStatusChangedEvent
   | ChangelogCreatedEvent
   | ActorCreatedEvent
   | ActorRevokedEvent
@@ -219,28 +207,79 @@ export type EventSubscription = {
 
 /**
  * Activity Event for IndexerAdapter activity tracking
+ * Uses discriminated unions for type-safe metadata per event type
  */
-export type ActivityEvent = {
-  timestamp: number;
-  type:
-  | "task_created"
-  | "cycle_created"
-  | "feedback_created"
-  | "changelog_created"
-  | "execution_created"
-  | "actor_created"
-  | "agent_registered";
-  entityId: string;
-  entityTitle: string;
-  actorId?: string;
-  metadata?: {
-    priority?: string;
-    status?: string;
-    type?: string;
-    assignee?: string;
-    resolution?: string;
-    executionType?: string;
-    taskId?: string;
+export type ActivityEvent =
+  | {
+    timestamp: number;
+    type: "task_created";
+    entityId: string;
+    entityTitle: string;
+    actorId?: string;
+    metadata?: {
+      priority?: string;
+      status?: string;
+    };
+  }
+  | {
+    timestamp: number;
+    type: "cycle_created";
+    entityId: string;
+    entityTitle: string;
+    actorId?: string;
+    metadata?: {
+      status?: string;
+    };
+  }
+  | {
+    timestamp: number;
+    type: "feedback_created";
+    entityId: string;
+    entityTitle: string;
+    actorId?: string;
+    metadata?: {
+      type?: string;
+      assignee?: string;
+      resolution?: string;
+    };
+  }
+  | {
+    timestamp: number;
+    type: "changelog_created";
+    entityId: string;
+    entityTitle: string;
+    actorId?: string;
+    metadata?: {
+      version?: string;
+    };
+  }
+  | {
+    timestamp: number;
+    type: "execution_created";
+    entityId: string;
+    entityTitle: string;
+    actorId?: string;
+    metadata?: {
+      executionType?: string;
+      taskId?: string;
+    };
+  }
+  | {
+    timestamp: number;
+    type: "actor_created";
+    entityId: string;
+    entityTitle: string;
+    actorId?: string;
+    metadata?: {
+      type?: string; // "human" | "agent"
+    };
+  }
+  | {
+    timestamp: number;
+    type: "agent_registered";
+    entityId: string;
+    entityTitle: string;
+    actorId?: string;
+    metadata?: Record<string, never>; // No metadata for agent_registered
   };
-};
 

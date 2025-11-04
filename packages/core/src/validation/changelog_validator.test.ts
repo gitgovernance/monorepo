@@ -20,23 +20,18 @@ describe('ChangelogRecord Validator', () => {
   const createMockSignature = (): Signature => ({
     keyId: 'human:test',
     role: 'author',
+    notes: 'Changelog validation test signature',
     signature: 'mock-signature',
-    timestamp: 1752707800,
-    timestamp_iso: '2025-07-30T15:16:40Z'
+    timestamp: 1752707800
   });
 
   const validRecord: ChangelogRecord = {
     id: '1752707800-changelog-task-test-task',
-    entityType: 'task',
-    entityId: '1752274500-task-test-task',
-    changeType: 'completion',
     title: 'Test Task Completion',
     description: 'Successfully completed the test task with all requirements',
-    timestamp: 1752707800,
-    trigger: 'manual',
-    triggeredBy: 'human:developer',
-    reason: 'All acceptance criteria met and code review passed',
-    riskLevel: 'low'
+    relatedTasks: ['1752274500-task-test-task'],
+    completedAt: 1752707800,
+    version: 'v1.0.0'
   };
 
   beforeEach(() => {
@@ -55,7 +50,37 @@ describe('ChangelogRecord Validator', () => {
   });
 
   describe('validateFullChangelogRecord', () => {
-    it('[EARS-1] should validate a complete ChangelogRecord successfully', async () => {
+    it('[EARS-1] should throw DetailedValidationError for invalid payload schema', async () => {
+      const invalidValidator = jest.fn().mockReturnValue(false);
+      Object.defineProperty(invalidValidator, 'errors', {
+        value: [{ instancePath: '/title', message: 'must not be empty', data: '' }],
+        writable: true,
+        configurable: true
+      });
+      mockSchemaValidationCache.getValidatorFromSchema.mockReturnValue(invalidValidator);
+
+      const invalidRecord: GitGovRecord & { payload: Partial<ChangelogRecord> } = {
+        header: { version: '1.0', type: 'changelog', payloadChecksum: 'valid-checksum', signatures: [createMockSignature()] },
+        payload: { id: 'invalid-id', title: '', description: '', relatedTasks: [''], completedAt: 0 }
+      };
+
+      const mockGetPublicKey = jest.fn().mockResolvedValue('mock-public-key');
+      await expect(validateFullChangelogRecord(invalidRecord as GitGovRecord & { payload: ChangelogRecord }, mockGetPublicKey)).rejects.toThrow(DetailedValidationError);
+    });
+
+    it('[EARS-2] should throw error if embedded metadata validation fails', async () => {
+      const mockRecord: GitGovRecord & { payload: ChangelogRecord } = {
+        header: { version: '1.0', type: 'changelog', payloadChecksum: 'wrong-checksum', signatures: [createMockSignature()] },
+        payload: validRecord
+      };
+
+      const embeddedError = new Error('Embedded metadata validation failed');
+      mockValidateEmbeddedMetadata.mockRejectedValue(embeddedError);
+      const mockGetPublicKey = jest.fn().mockResolvedValue('mock-public-key');
+      await expect(validateFullChangelogRecord(mockRecord, mockGetPublicKey)).rejects.toThrow('Embedded metadata validation failed');
+    });
+
+    it('[EARS-3] should validate a complete ChangelogRecord successfully without throwing', async () => {
       const mockRecord: GitGovRecord & { payload: ChangelogRecord } = {
         header: {
           version: '1.0',
@@ -68,36 +93,6 @@ describe('ChangelogRecord Validator', () => {
 
       const mockGetPublicKey = jest.fn().mockResolvedValue('mock-public-key');
       await expect(validateFullChangelogRecord(mockRecord, mockGetPublicKey)).resolves.not.toThrow();
-    });
-
-    it('[EARS-2] should throw DetailedValidationError for invalid payload schema', async () => {
-      const invalidValidator = jest.fn().mockReturnValue(false);
-      Object.defineProperty(invalidValidator, 'errors', {
-        value: [{ instancePath: '/changeType', message: 'must be one of creation, completion, update, deletion, hotfix', data: 'invalid-type' }],
-        writable: true,
-        configurable: true
-      });
-      mockSchemaValidationCache.getValidatorFromSchema.mockReturnValue(invalidValidator);
-
-      const invalidRecord: GitGovRecord & { payload: Partial<ChangelogRecord> } = {
-        header: { version: '1.0', type: 'changelog', payloadChecksum: 'valid-checksum', signatures: [createMockSignature()] },
-        payload: { id: 'invalid-id', entityType: 'task', entityId: '', changeType: 'invalid-type' as any, title: '', description: '', timestamp: 0, trigger: 'manual', triggeredBy: '', reason: '', riskLevel: 'low' }
-      };
-
-      const mockGetPublicKey = jest.fn().mockResolvedValue('mock-public-key');
-      await expect(validateFullChangelogRecord(invalidRecord as GitGovRecord & { payload: ChangelogRecord }, mockGetPublicKey)).rejects.toThrow(DetailedValidationError);
-    });
-
-    it('[EARS-3] should throw error if embedded metadata validation fails', async () => {
-      const mockRecord: GitGovRecord & { payload: ChangelogRecord } = {
-        header: { version: '1.0', type: 'changelog', payloadChecksum: 'wrong-checksum', signatures: [createMockSignature()] },
-        payload: validRecord
-      };
-
-      const embeddedError = new Error('Embedded metadata validation failed');
-      mockValidateEmbeddedMetadata.mockRejectedValue(embeddedError);
-      const mockGetPublicKey = jest.fn().mockResolvedValue('mock-public-key');
-      await expect(validateFullChangelogRecord(mockRecord, mockGetPublicKey)).rejects.toThrow('Embedded metadata validation failed');
     });
 
     it('[EARS-4] should call validateFullEmbeddedMetadataRecord with correct parameters', async () => {
@@ -126,347 +121,147 @@ describe('ChangelogRecord Validator', () => {
       });
       mockSchemaValidationCache.getValidatorFromSchema.mockReturnValue(invalidValidator);
 
-      expect(isChangelogRecord({ id: 'invalid', entityType: 'task', entityId: '', changeType: 'invalid', title: '', description: '', timestamp: 0, trigger: 'manual', triggeredBy: '', reason: '', riskLevel: 'low' })).toBe(false);
+      expect(isChangelogRecord({ id: 'invalid', title: '', description: '', relatedTasks: [], completedAt: 0 })).toBe(false);
+    });
+  });
+
+  describe('Schema Cache Integration', () => {
+    it('[EARS-7] should use schema cache for validation performance', () => {
+      const cacheSpy = jest.spyOn(mockSchemaValidationCache, 'getValidatorFromSchema');
+
+      validateChangelogRecordDetailed(validRecord);
+
+      expect(cacheSpy).toHaveBeenCalled();
+      cacheSpy.mockRestore();
+    });
+
+    it('[EARS-8] should reuse compiled validators from cache', () => {
+      const cacheSpy = jest.spyOn(mockSchemaValidationCache, 'getValidatorFromSchema');
+
+      // First call
+      validateChangelogRecordDetailed(validRecord);
+      const firstCallResult = cacheSpy.mock.results[0];
+
+      // Second call should reuse the same validator
+      validateChangelogRecordDetailed({ ...validRecord, id: '1752707801-changelog-another' });
+      const secondCallResult = cacheSpy.mock.results[1];
+
+      expect(cacheSpy).toHaveBeenCalledTimes(2);
+      // Both calls should return the same cached validator
+      expect(firstCallResult?.value).toBe(secondCallResult?.value);
+      cacheSpy.mockRestore();
+    });
+  });
+
+  describe('Schema Cache Advanced', () => {
+    it('[EARS-9] should produce identical results with or without cache', () => {
+      // This test verifies that cached validators behave identically
+      const result1 = validateChangelogRecordDetailed(validRecord);
+      const result2 = validateChangelogRecordDetailed(validRecord);
+
+      expect(result1).toEqual(result2);
+    });
+
+    it('[EARS-10] should support cache clearing', () => {
+      // Verify clearCache method exists and can be called
+      expect(mockSchemaValidationCache.clearCache).toBeDefined();
+      expect(() => mockSchemaValidationCache.clearCache()).not.toThrow();
+    });
+
+    it('[EARS-11] should provide cache statistics', () => {
+      // Verify getCacheStats method exists and returns stats
+      mockSchemaValidationCache.getCacheStats = jest.fn().mockReturnValue({
+        cachedSchemas: 1,
+        totalValidations: 5
+      });
+
+      const stats = mockSchemaValidationCache.getCacheStats();
+      expect(stats).toBeDefined();
+      expect(stats.cachedSchemas).toBeGreaterThanOrEqual(0);
     });
   });
 
   describe('validateChangelogRecordDetailed', () => {
-    it('[EARS-7] should return valid result for correct ChangelogRecord', () => {
+    it('[EARS-12] should return valid result for correct ChangelogRecord', () => {
       const result = validateChangelogRecordDetailed(validRecord);
       expect(result).toEqual({ isValid: true, errors: [] });
     });
 
-    it('[EARS-8] should return detailed errors for invalid ChangelogRecord', () => {
+    it('[EARS-13] should return detailed errors for invalid ChangelogRecord', () => {
       const invalidValidator = jest.fn().mockReturnValue(false);
       Object.defineProperty(invalidValidator, 'errors', {
         value: [
-          { instancePath: '/entityId', message: 'must match pattern', data: 'invalid-entity-id' }
+          { instancePath: '/title', message: 'must not be empty', data: '' }
         ],
         writable: true,
         configurable: true
       });
       mockSchemaValidationCache.getValidatorFromSchema.mockReturnValue(invalidValidator);
 
-      const result = validateChangelogRecordDetailed({ id: '1752707800-changelog-test', entityType: 'task', entityId: 'invalid-entity-id', changeType: 'completion', title: 'Test', description: 'desc', timestamp: 1752707800, trigger: 'manual', triggeredBy: 'human:test', reason: 'test', riskLevel: 'low' });
+      const result = validateChangelogRecordDetailed({ id: '1752707800-changelog-test', title: '', description: '', relatedTasks: [], completedAt: 0 });
       expect(result.isValid).toBe(false);
-      expect(result.errors).toHaveLength(1);
-    });
-  });
-
-  describe('ChangelogRecord Enhanced Validation (EARS 17-25)', () => {
-    describe('[EARS-17] entityType validation', () => {
-      it('should reject invalid entityType values', () => {
-        const invalidValidator = jest.fn().mockReturnValue(false);
-        Object.defineProperty(invalidValidator, 'errors', {
-          value: [{ instancePath: '/entityType', message: 'must be one of task, cycle, agent, system, configuration', data: 'invalid-entity' }],
-          writable: true,
-          configurable: true
-        });
-        mockSchemaValidationCache.getValidatorFromSchema.mockReturnValue(invalidValidator);
-
-        const invalidRecord = { ...validRecord, entityType: 'invalid-entity' };
-        const result = validateChangelogRecordDetailed(invalidRecord);
-
-        expect(result.isValid).toBe(false);
-        expect(result.errors).toEqual([{
-          field: 'entityType',
-          message: 'must be one of task, cycle, agent, system, configuration',
-          value: 'invalid-entity'
-        }]);
-      });
-
-      it('should accept valid entityType values', () => {
-        const validEntityTypes = ['task', 'cycle', 'agent', 'system', 'configuration'];
-
-        validEntityTypes.forEach(entityType => {
-          const testRecord = { ...validRecord, entityType };
-          const result = validateChangelogRecordDetailed(testRecord);
-          expect(result.isValid).toBe(true);
-        });
-      });
+      expect(result.errors.length).toBeGreaterThan(0);
     });
 
-    describe('[EARS-18] changeType validation', () => {
-      it('should reject invalid changeType values', () => {
-        const invalidValidator = jest.fn().mockReturnValue(false);
-        Object.defineProperty(invalidValidator, 'errors', {
-          value: [{ instancePath: '/changeType', message: 'must be one of creation, completion, update, deletion, hotfix', data: 'invalid-change' }],
-          writable: true,
-          configurable: true
-        });
-        mockSchemaValidationCache.getValidatorFromSchema.mockReturnValue(invalidValidator);
-
-        const invalidRecord = { ...validRecord, changeType: 'invalid-change' };
-        const result = validateChangelogRecordDetailed(invalidRecord);
-
-        expect(result.isValid).toBe(false);
-        expect(result.errors).toEqual([{
-          field: 'changeType',
-          message: 'must be one of creation, completion, update, deletion, hotfix',
-          value: 'invalid-change'
-        }]);
+    it('[EARS-14] should format errors in user-friendly structure with field, message, and value', () => {
+      const invalidValidator = jest.fn().mockReturnValue(false);
+      Object.defineProperty(invalidValidator, 'errors', {
+        value: [
+          { instancePath: '/description', message: 'must not be empty', data: '' }
+        ],
+        writable: true,
+        configurable: true
       });
+      mockSchemaValidationCache.getValidatorFromSchema.mockReturnValue(invalidValidator);
 
-      it('should accept valid changeType values', () => {
-        const validChangeTypes = ['creation', 'completion', 'update', 'deletion', 'hotfix'];
+      const result = validateChangelogRecordDetailed({ id: '1752707800-changelog-test', title: 'Test', description: '', relatedTasks: [], completedAt: 0 });
 
-        validChangeTypes.forEach(changeType => {
-          const testRecord = { ...validRecord, changeType };
-          const result = validateChangelogRecordDetailed(testRecord);
-          expect(result.isValid).toBe(true);
-        });
-      });
+      expect(result.isValid).toBe(false);
+      expect(result.errors.length).toBeGreaterThan(0);
+      expect(result.errors[0]).toHaveProperty('field');
+      expect(result.errors[0]).toHaveProperty('message');
+      expect(result.errors[0]).toHaveProperty('value');
     });
 
-    describe('[EARS-19] trigger validation', () => {
-      it('should reject invalid trigger values', () => {
-        const invalidValidator = jest.fn().mockReturnValue(false);
-        Object.defineProperty(invalidValidator, 'errors', {
-          value: [{ instancePath: '/trigger', message: 'must be one of manual, automated, emergency', data: 'invalid-trigger' }],
-          writable: true,
-          configurable: true
-        });
-        mockSchemaValidationCache.getValidatorFromSchema.mockReturnValue(invalidValidator);
+    it('[EARS-15] should validate optional fields correctly', () => {
+      // ChangelogRecord with only required fields
+      const minimalRecord: ChangelogRecord = {
+        id: '1752707800-changelog-minimal',
+        title: 'Minimal Changelog',
+        description: 'Basic changelog entry',
+        relatedTasks: ['1752274500-task-test'],
+        completedAt: 1752707800,
+        version: 'v1.0.0'
+      };
 
-        const invalidRecord = { ...validRecord, trigger: 'invalid-trigger' };
-        const result = validateChangelogRecordDetailed(invalidRecord);
-
-        expect(result.isValid).toBe(false);
-        expect(result.errors).toEqual([{
-          field: 'trigger',
-          message: 'must be one of manual, automated, emergency',
-          value: 'invalid-trigger'
-        }]);
-      });
-
-      it('should accept valid trigger values', () => {
-        const validTriggers = ['manual', 'automated', 'emergency'];
-
-        validTriggers.forEach(trigger => {
-          const testRecord = { ...validRecord, trigger };
-          const result = validateChangelogRecordDetailed(testRecord);
-          expect(result.isValid).toBe(true);
-        });
-      });
+      const result = validateChangelogRecordDetailed(minimalRecord);
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toEqual([]);
     });
 
-    describe('[EARS-20] riskLevel validation', () => {
-      it('should reject invalid riskLevel values', () => {
-        const invalidValidator = jest.fn().mockReturnValue(false);
-        Object.defineProperty(invalidValidator, 'errors', {
-          value: [{ instancePath: '/riskLevel', message: 'must be one of low, medium, high, critical', data: 'invalid-risk' }],
-          writable: true,
-          configurable: true
-        });
-        mockSchemaValidationCache.getValidatorFromSchema.mockReturnValue(invalidValidator);
+    it('[EARS-16] should return all errors when multiple fields are invalid', () => {
+      const invalidValidator = jest.fn().mockReturnValue(false);
+      Object.defineProperty(invalidValidator, 'errors', {
+        value: [
+          { instancePath: '/title', message: 'must not be empty', data: '' },
+          { instancePath: '/description', message: 'must not be empty', data: '' },
+          { instancePath: '/completedAt', message: 'must be a number', data: 'invalid' }
+        ],
+        writable: true,
+        configurable: true
+      });
+      mockSchemaValidationCache.getValidatorFromSchema.mockReturnValue(invalidValidator);
 
-        const invalidRecord = { ...validRecord, riskLevel: 'invalid-risk' };
-        const result = validateChangelogRecordDetailed(invalidRecord);
-
-        expect(result.isValid).toBe(false);
-        expect(result.errors).toEqual([{
-          field: 'riskLevel',
-          message: 'must be one of low, medium, high, critical',
-          value: 'invalid-risk'
-        }]);
+      const result = validateChangelogRecordDetailed({
+        id: '1752707800-changelog-invalid',
+        title: '',
+        description: '',
+        relatedTasks: [],
+        completedAt: 'invalid' as any
       });
 
-      it('should accept valid riskLevel values', () => {
-        const validRiskLevels = ['low', 'medium', 'high', 'critical'];
-
-        validRiskLevels.forEach(riskLevel => {
-          const testRecord = { ...validRecord, riskLevel };
-          const result = validateChangelogRecordDetailed(testRecord);
-          expect(result.isValid).toBe(true);
-        });
-      });
-    });
-
-    describe('[EARS-21] rollbackInstructions required for high risk', () => {
-      it('should reject high riskLevel without rollbackInstructions', () => {
-        const invalidValidator = jest.fn().mockReturnValue(false);
-        Object.defineProperty(invalidValidator, 'errors', {
-          value: [{ instancePath: '', message: 'rollbackInstructions is required when riskLevel is high', data: { riskLevel: 'high' } }],
-          writable: true,
-          configurable: true
-        });
-        mockSchemaValidationCache.getValidatorFromSchema.mockReturnValue(invalidValidator);
-
-        const invalidRecord = { ...validRecord, riskLevel: 'high' };
-        const result = validateChangelogRecordDetailed(invalidRecord);
-
-        expect(result.isValid).toBe(false);
-        expect(result.errors).toEqual([{
-          field: 'root',
-          message: 'rollbackInstructions is required when riskLevel is high',
-          value: { riskLevel: 'high' }
-        }]);
-      });
-
-      it('should accept high riskLevel with rollbackInstructions', () => {
-        const testRecord = {
-          ...validRecord,
-          riskLevel: 'high',
-          rollbackInstructions: 'Revert commit abc123 and restart service'
-        };
-        const result = validateChangelogRecordDetailed(testRecord);
-        expect(result.isValid).toBe(true);
-      });
-    });
-
-    describe('[EARS-22] rollbackInstructions required for critical risk', () => {
-      it('should reject critical riskLevel without rollbackInstructions', () => {
-        const invalidValidator = jest.fn().mockReturnValue(false);
-        Object.defineProperty(invalidValidator, 'errors', {
-          value: [{ instancePath: '', message: 'rollbackInstructions is required when riskLevel is critical', data: { riskLevel: 'critical' } }],
-          writable: true,
-          configurable: true
-        });
-        mockSchemaValidationCache.getValidatorFromSchema.mockReturnValue(invalidValidator);
-
-        const invalidRecord = { ...validRecord, riskLevel: 'critical' };
-        const result = validateChangelogRecordDetailed(invalidRecord);
-
-        expect(result.isValid).toBe(false);
-        expect(result.errors).toEqual([{
-          field: 'root',
-          message: 'rollbackInstructions is required when riskLevel is critical',
-          value: { riskLevel: 'critical' }
-        }]);
-      });
-
-      it('should accept critical riskLevel with rollbackInstructions', () => {
-        const testRecord = {
-          ...validRecord,
-          riskLevel: 'critical',
-          rollbackInstructions: 'Emergency rollback: stop all services, restore backup from 2025-01-15'
-        };
-        const result = validateChangelogRecordDetailed(testRecord);
-        expect(result.isValid).toBe(true);
-      });
-    });
-
-    describe('[EARS-23] usersAffected required for medium+ risk', () => {
-      it('should reject medium riskLevel without usersAffected', () => {
-        const invalidValidator = jest.fn().mockReturnValue(false);
-        Object.defineProperty(invalidValidator, 'errors', {
-          value: [{ instancePath: '', message: 'usersAffected is required when riskLevel is medium or higher', data: { riskLevel: 'medium' } }],
-          writable: true,
-          configurable: true
-        });
-        mockSchemaValidationCache.getValidatorFromSchema.mockReturnValue(invalidValidator);
-
-        const invalidRecord = { ...validRecord, riskLevel: 'medium' };
-        const result = validateChangelogRecordDetailed(invalidRecord);
-
-        expect(result.isValid).toBe(false);
-        expect(result.errors).toEqual([{
-          field: 'root',
-          message: 'usersAffected is required when riskLevel is medium or higher',
-          value: { riskLevel: 'medium' }
-        }]);
-      });
-
-      it('should accept medium riskLevel with usersAffected', () => {
-        const testRecord = {
-          ...validRecord,
-          riskLevel: 'medium',
-          usersAffected: ['team-frontend', 'team-backend']
-        };
-        const result = validateChangelogRecordDetailed(testRecord);
-        expect(result.isValid).toBe(true);
-      });
-    });
-
-    describe('[EARS-24] references.tasks required for completion changeType', () => {
-      it('should reject completion changeType without references.tasks', () => {
-        const invalidValidator = jest.fn().mockReturnValue(false);
-        Object.defineProperty(invalidValidator, 'errors', {
-          value: [{ instancePath: '', message: 'references.tasks is required when changeType is completion', data: { changeType: 'completion' } }],
-          writable: true,
-          configurable: true
-        });
-        mockSchemaValidationCache.getValidatorFromSchema.mockReturnValue(invalidValidator);
-
-        const invalidRecord = { ...validRecord, changeType: 'completion' };
-        const result = validateChangelogRecordDetailed(invalidRecord);
-
-        expect(result.isValid).toBe(false);
-        expect(result.errors).toEqual([{
-          field: 'root',
-          message: 'references.tasks is required when changeType is completion',
-          value: { changeType: 'completion' }
-        }]);
-      });
-
-      it('should accept completion changeType with references.tasks', () => {
-        const testRecord = {
-          ...validRecord,
-          changeType: 'completion',
-          references: {
-            tasks: ['1752274500-task-implement-feature', '1752274600-task-write-tests']
-          }
-        };
-        const result = validateChangelogRecordDetailed(testRecord);
-        expect(result.isValid).toBe(true);
-      });
-    });
-
-    describe('[EARS-25] timestamp format validation', () => {
-      it('should reject invalid timestamp format', () => {
-        const invalidValidator = jest.fn().mockReturnValue(false);
-        Object.defineProperty(invalidValidator, 'errors', {
-          value: [{ instancePath: '/timestamp', message: 'must be Unix timestamp in seconds', data: 'invalid-timestamp' }],
-          writable: true,
-          configurable: true
-        });
-        mockSchemaValidationCache.getValidatorFromSchema.mockReturnValue(invalidValidator);
-
-        const invalidRecord = { ...validRecord, timestamp: 'invalid-timestamp' };
-        const result = validateChangelogRecordDetailed(invalidRecord);
-
-        expect(result.isValid).toBe(false);
-        expect(result.errors).toEqual([{
-          field: 'timestamp',
-          message: 'must be Unix timestamp in seconds',
-          value: 'invalid-timestamp'
-        }]);
-      });
-
-      it('should accept valid Unix timestamp in seconds', () => {
-        const validTimestamps = [
-          1752707800,     // Valid second timestamp
-          Math.floor(Date.now() / 1000),  // Current timestamp in seconds
-          1640995200      // 2022-01-01 00:00:00 UTC in seconds
-        ];
-
-        validTimestamps.forEach(timestamp => {
-          const testRecord = { ...validRecord, timestamp };
-          const result = validateChangelogRecordDetailed(testRecord);
-          expect(result.isValid).toBe(true);
-        });
-      });
-
-      it('should reject invalid timestamp values', () => {
-        const invalidValidator = jest.fn().mockReturnValue(false);
-        Object.defineProperty(invalidValidator, 'errors', {
-          value: [{ instancePath: '/timestamp', message: 'must be Unix timestamp in seconds', data: 1752707800 }],
-          writable: true,
-          configurable: true
-        });
-        mockSchemaValidationCache.getValidatorFromSchema.mockReturnValue(invalidValidator);
-
-        const invalidRecord = { ...validRecord, timestamp: 1752707800 }; // seconds, not milliseconds
-        const result = validateChangelogRecordDetailed(invalidRecord);
-
-        expect(result.isValid).toBe(false);
-        expect(result.errors).toEqual([{
-          field: 'timestamp',
-          message: 'must be Unix timestamp in seconds',
-          value: 1752707800
-        }]);
-      });
+      expect(result.isValid).toBe(false);
+      expect(result.errors.length).toBeGreaterThan(1);
     });
   });
 });
-

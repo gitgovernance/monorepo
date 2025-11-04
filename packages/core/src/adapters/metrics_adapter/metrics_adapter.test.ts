@@ -21,9 +21,9 @@ function createMockTaskRecord(overrides: Partial<TaskRecord> = {}): GitGovRecord
       signatures: [{
         keyId: 'human:developer',
         role: 'author',
+        notes: '',
         signature: 'mock-sig',
-        timestamp,
-        timestamp_iso: new Date(timestamp * 1000).toISOString()
+        timestamp
       }] as [Signature, ...Signature[]]
     },
     payload: {
@@ -49,9 +49,9 @@ function createMockFeedbackRecord(overrides: Partial<FeedbackRecord> = {}): GitG
       signatures: [{
         keyId: 'human:reviewer',
         role: 'author',
+        notes: '',
         signature: 'mock-sig',
-        timestamp,
-        timestamp_iso: new Date(timestamp * 1000).toISOString()
+        timestamp
       }] as [Signature, ...Signature[]]
     },
     payload: {
@@ -77,16 +77,17 @@ function createMockExecutionRecord(overrides: Partial<ExecutionRecord> = {}): Gi
       signatures: [{
         keyId: 'human:developer',
         role: 'author',
+        notes: '',
         signature: 'mock-sig',
-        timestamp,
-        timestamp_iso: new Date(timestamp * 1000).toISOString()
+        timestamp
       }] as [Signature, ...Signature[]]
     },
     payload: {
       id: `${timestamp}-exec-test-execution`,
       taskId: 'task-123',
-      result: 'Test execution result with sufficient length for validation',
       type: 'progress',
+      title: 'Test Execution',
+      result: 'Test execution result with sufficient length for validation',
       ...overrides
     }
   };
@@ -103,9 +104,9 @@ function createMockCycleRecord(overrides: Partial<CycleRecord> = {}): GitGovReco
       signatures: [{
         keyId: 'human:developer',
         role: 'author',
+        notes: '',
         signature: 'mock-sig',
-        timestamp,
-        timestamp_iso: new Date(timestamp * 1000).toISOString()
+        timestamp
       }] as [Signature, ...Signature[]]
     },
     payload: {
@@ -128,9 +129,9 @@ function createMockActorRecord(overrides: Partial<ActorRecord> = {}): GitGovReco
       signatures: [{
         keyId: 'human:admin',
         role: 'author',
+        notes: '',
         signature: 'mock-sig',
-        timestamp: 123,
-        timestamp_iso: '2025-01-01T00:00:00Z'
+        timestamp: 123
       }] as [Signature, ...Signature[]]
     },
     payload: {

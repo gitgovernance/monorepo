@@ -38,7 +38,6 @@ import { MetricsAdapter } from '../metrics_adapter';
 import { eventBus } from '../../event_bus';
 import type {
   FeedbackCreatedEvent,
-  FeedbackStatusChangedEvent,
   ChangelogCreatedEvent,
   SystemDailyTickEvent
 } from '../../event_bus';
@@ -77,9 +76,9 @@ function createMockTaskRecord(payload: Partial<TaskRecord>): GitGovRecord & { pa
   const mockSignature: Signature = {
     keyId: 'human:mock-author',
     role: 'author',
+    notes: 'Mock task for integration test',
     signature: 'mock-signature-base64',
-    timestamp: Math.floor(timestamp / 1000),
-    timestamp_iso: new Date(timestamp).toISOString()
+    timestamp: Math.floor(timestamp / 1000)
   };
 
   return {
@@ -114,9 +113,9 @@ function createMockCycleRecord(payload: Partial<CycleRecord>): GitGovRecord & { 
   const mockSignature: Signature = {
     keyId: 'human:mock-author',
     role: 'author',
+    notes: 'Mock cycle for integration test',
     signature: 'mock-signature-base64',
-    timestamp: Math.floor(timestamp / 1000),
-    timestamp_iso: new Date(timestamp).toISOString()
+    timestamp: Math.floor(timestamp / 1000)
   };
 
   return {
@@ -141,9 +140,12 @@ describe('BacklogAdapter Integration Tests', () => {
   beforeEach(async () => {
     // Use real WorkflowMethodologyAdapter with default configuration
 
+    // Create stores in /tmp/ to avoid polluting .gitgov/
+    const testRoot = `/tmp/gitgov-test-${Date.now()}`;
+
     // Create mock stores for IdentityAdapter constructor
-    const mockActorStore = new RecordStore<ActorRecord>('actors');
-    const mockAgentStore = new RecordStore<AgentRecord>('agents');
+    const mockActorStore = new RecordStore<ActorRecord>('actors', testRoot);
+    const mockAgentStore = new RecordStore<AgentRecord>('agents', testRoot);
 
     // Create identity adapter - will be mocked by jest.doMock
     identityAdapter = new IdentityAdapter({
@@ -152,8 +154,8 @@ describe('BacklogAdapter Integration Tests', () => {
     });
 
     // Create stores with identity for validation
-    taskStore = new RecordStore<TaskRecord>('tasks');
-    cycleStore = new RecordStore<CycleRecord>('cycles');
+    taskStore = new RecordStore<TaskRecord>('tasks', testRoot);
+    cycleStore = new RecordStore<CycleRecord>('cycles', testRoot);
 
     // Create mock feedback adapter for methodology adapter
     feedbackAdapter = {
@@ -162,6 +164,7 @@ describe('BacklogAdapter Integration Tests', () => {
       getFeedback: jest.fn(),
       getFeedbackByEntity: jest.fn(),
       getAllFeedback: jest.fn(),
+      getFeedbackThread: jest.fn(),
     };
 
     methodologyAdapter = WorkflowMethodologyAdapter.createDefault(feedbackAdapter);
@@ -225,12 +228,13 @@ describe('BacklogAdapter Integration Tests', () => {
     });
   });
 
-  describe('Guild-based Workflow Validation', () => {
-    it('[EARS-24] should validate signature for design guild with real methodology', async () => {
-      const designTask = createMockTaskRecord({
+  describe('Role-based Workflow Validation', () => {
+    // The signature group is determined by the actor's roles, not the task's tags
+    it('[EARS-24] should validate signature for design role with real methodology', async () => {
+      const task = createMockTaskRecord({
         id: 'task-design',
         status: 'review',
-        tags: ['guild:design'],
+        tags: [],
         title: 'Design Task'
       });
 
@@ -243,7 +247,7 @@ describe('BacklogAdapter Integration Tests', () => {
         roles: ['approver:design'] as [string, ...string[]]
       };
 
-      const wrongApprover = {
+      const productApprover = {
         id: 'human:product-manager',
         type: 'human' as const,
         displayName: 'Product Manager',
@@ -253,21 +257,19 @@ describe('BacklogAdapter Integration Tests', () => {
       };
 
       // Mock the stores and identity adapter
-      jest.spyOn(taskStore, 'read').mockResolvedValue(designTask);
+      jest.spyOn(taskStore, 'read').mockResolvedValue(task);
       jest.spyOn(identityAdapter, 'signRecord').mockImplementation(async (record) => record);
       jest.spyOn(taskStore, 'write').mockResolvedValue(undefined);
 
-      // Test 1: Correct approver should succeed
+      // Both design and product approvers can approve (using their respective signature groups)
       jest.spyOn(identityAdapter, 'getActor').mockResolvedValue(designApprover);
+      const result1 = await backlogAdapter.approveTask('task-design', 'human:designer');
+      expect(result1.status).toBe('ready');
 
-      const result = await backlogAdapter.approveTask('task-design', 'human:designer');
-      expect(result.status).toBe('ready');
-
-      // Test 2: Wrong approver should fail
-      jest.spyOn(identityAdapter, 'getActor').mockResolvedValue(wrongApprover);
-
-      await expect(backlogAdapter.approveTask('task-design', 'human:product-manager'))
-        .rejects.toThrow('Signature is not valid for this approval');
+      // Product approver also succeeds (uses __default__ signature group)
+      jest.spyOn(identityAdapter, 'getActor').mockResolvedValue(productApprover);
+      const result2 = await backlogAdapter.approveTask('task-design', 'human:product-manager');
+      expect(result2.status).toBe('ready');
     });
   });
 
@@ -447,20 +449,35 @@ describe('BacklogAdapter Integration Tests', () => {
       });
       jest.spyOn(mockTaskStore, 'read').mockResolvedValue(pausedTask);
 
-      // Resolution: Feedback resolved
+      // Resolution: New feedback created that resolves the blocking feedback (immutable pattern)
+      const resolutionFeedbackId = `${Date.now()}-feedback-resolution`;
       const resolutionEvent = {
-        type: 'feedback.status.changed',
+        type: 'feedback.created',
         timestamp: Date.now(),
         source: 'feedback_adapter',
         payload: {
-          feedbackId,
-          oldStatus: 'open',
-          newStatus: 'resolved',
-          actorId: 'human:resolver'
+          feedbackId: resolutionFeedbackId,
+          entityType: 'feedback', // Points to another feedback
+          entityId: feedbackId, // Points to the blocking feedback
+          type: 'clarification',
+          status: 'resolved',
+          content: 'Blocking issue resolved',
+          triggeredBy: 'human:resolver',
+          resolvesFeedbackId: feedbackId // Marks this as a resolution
         }
-      } as FeedbackStatusChangedEvent;
+      } as FeedbackCreatedEvent;
 
-      await backlogAdapter.handleFeedbackResolved(resolutionEvent);
+      // Mock getFeedback to return the original blocking feedback
+      jest.spyOn(feedbackAdapter as any, 'getFeedback').mockResolvedValue({
+        id: feedbackId,
+        entityType: 'task',
+        entityId: taskId,
+        type: 'blocking',
+        status: 'open',
+        content: 'Blocking issue'
+      });
+
+      await backlogAdapter.handleFeedbackCreated(resolutionEvent);
 
       console.log('✅ Blocking Crisis handled successfully');
     });
@@ -476,8 +493,12 @@ describe('BacklogAdapter Integration Tests', () => {
       const mockChangelog = {
         id: changelogId,
         payload: {
-          entityType: 'task',
-          entityId: taskId
+          id: changelogId,
+          title: 'Task Archival Completed',
+          description: 'Successfully archived task with full changelog',
+          relatedTasks: [taskId],
+          completedAt: 1757687335,
+          version: 'v1.0.0'
         }
       };
 
@@ -495,8 +516,9 @@ describe('BacklogAdapter Integration Tests', () => {
         source: 'changelog_adapter',
         payload: {
           changelogId,
-          taskId,
-          actorId: 'system'
+          relatedTasks: [taskId],
+          title: 'Task Archival Completed',
+          version: 'v1.0.0'
         }
       } as ChangelogCreatedEvent;
 

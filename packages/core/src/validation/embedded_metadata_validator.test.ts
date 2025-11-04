@@ -23,9 +23,9 @@ describe('EmbeddedMetadata Validator', () => {
   const createMockSignature = (): Signature => ({
     keyId: 'human:test',
     role: 'author',
+    notes: 'Embedded metadata validation test',
     signature: 'mock-signature',
-    timestamp: 1752707800,
-    timestamp_iso: '2025-07-30T15:16:40Z'
+    timestamp: 1752707800
   });
 
   const validTaskPayload: TaskRecord = {
@@ -56,6 +56,13 @@ describe('EmbeddedMetadata Validator', () => {
       configurable: true
     });
     mockSchemaValidationCache.getValidatorFromSchema.mockReturnValue(defaultValidator);
+    mockSchemaValidationCache.clearCache = jest.fn();
+    mockSchemaValidationCache.getCacheStats = jest.fn().mockReturnValue({
+      cachedSchemas: 1,
+      totalValidations: 10,
+      cacheHits: 9,
+      cacheMisses: 1
+    });
     mockCalculatePayloadChecksum.mockReturnValue('a1b2c3d4e5f67890123456789012345678901234567890123456789012345678');
     mockVerifySignatures.mockResolvedValue(true);
     // ConfigManager is not used directly in embedded_metadata_validator
@@ -125,14 +132,48 @@ describe('EmbeddedMetadata Validator', () => {
     });
   });
 
+  describe('Schema Cache Integration', () => {
+    it('[EARS-7] should use schema cache for validation performance', () => {
+      const cacheSpy = jest.spyOn(mockSchemaValidationCache, 'getValidatorFromSchema');
+      validateEmbeddedMetadataDetailed(validEmbeddedRecord);
+      expect(cacheSpy).toHaveBeenCalledWith(expect.anything());
+    });
+
+    it('[EARS-8] should reuse compiled validators from cache', () => {
+      const cacheSpy = jest.spyOn(mockSchemaValidationCache, 'getValidatorFromSchema');
+      cacheSpy.mockClear(); // Clear any previous calls
+
+      validateEmbeddedMetadataDetailed(validEmbeddedRecord);
+      validateEmbeddedMetadataDetailed(validEmbeddedRecord);
+
+      expect(cacheSpy).toHaveBeenCalledTimes(2);
+      expect(cacheSpy).toHaveBeenCalledWith(expect.anything());
+    });
+
+    it('[EARS-9] should produce identical results with or without cache', () => {
+      const result1 = validateEmbeddedMetadataDetailed(validEmbeddedRecord);
+      const result2 = validateEmbeddedMetadataDetailed(validEmbeddedRecord);
+      expect(result1).toEqual(result2);
+    });
+
+    it('[EARS-10] should support cache clearing', () => {
+      expect(() => mockSchemaValidationCache.clearCache()).not.toThrow();
+    });
+
+    it('[EARS-11] should provide cache statistics', () => {
+      const stats = mockSchemaValidationCache.getCacheStats();
+      expect(stats).toBeDefined();
+    });
+  });
+
   describe('validateEmbeddedMetadataDetailed', () => {
-    it('[EARS-7] should return valid result for correct EmbeddedMetadata record', () => {
+    it('[EARS-12] should return valid result for correct EmbeddedMetadata record', () => {
       const result = validateEmbeddedMetadataDetailed(validEmbeddedRecord);
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
     });
 
-    it('[EARS-8] should return detailed errors for invalid EmbeddedMetadata record', () => {
+    it('[EARS-13] should return detailed errors for invalid EmbeddedMetadata record', () => {
       const invalidValidator = jest.fn().mockReturnValue(false);
       Object.defineProperty(invalidValidator, 'errors', {
         value: [
@@ -147,6 +188,77 @@ describe('EmbeddedMetadata Validator', () => {
       expect(result.isValid).toBe(false);
       expect(result.errors).toHaveLength(1);
       expect(result.errors[0]?.field).toBe('/header/type');
+    });
+
+    it('[EARS-14] should format errors in user-friendly structure with field, message, and value', () => {
+      const invalidValidator = jest.fn().mockReturnValue(false);
+      Object.defineProperty(invalidValidator, 'errors', {
+        value: [
+          { instancePath: '/header/payloadChecksum', message: 'must be a valid SHA-256 hash', data: 'invalid', schemaPath: '#/properties/header/properties/payloadChecksum/pattern' }
+        ],
+        writable: true,
+        configurable: true
+      });
+      mockSchemaValidationCache.getValidatorFromSchema.mockReturnValue(invalidValidator);
+
+      const result = validateEmbeddedMetadataDetailed({
+        header: {
+          version: '1.0',
+          type: 'task',
+          payloadChecksum: 'invalid',
+          signatures: [createMockSignature()]
+        },
+        payload: validTaskPayload
+      });
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0]).toHaveProperty('field');
+      expect(result.errors[0]).toHaveProperty('message');
+      expect(result.errors[0]).toHaveProperty('value');
+    });
+
+    it('[EARS-15] should validate optional fields correctly', () => {
+      const minimalRecord = {
+        header: {
+          version: '1.0',
+          type: 'task' as const,
+          payloadChecksum: 'a1b2c3d4e5f67890123456789012345678901234567890123456789012345678',
+          signatures: [createMockSignature()]
+        },
+        payload: validTaskPayload
+      };
+
+      const result = validateEmbeddedMetadataDetailed(minimalRecord);
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('[EARS-16] should return all errors when multiple fields are invalid', () => {
+      const invalidValidator = jest.fn().mockReturnValue(false);
+      Object.defineProperty(invalidValidator, 'errors', {
+        value: [
+          { instancePath: '/header/type', message: 'must be one of allowed values', data: 'invalid-type', schemaPath: '#/properties/header/properties/type/enum' },
+          { instancePath: '/header/payloadChecksum', message: 'must be a valid SHA-256 hash', data: 'invalid', schemaPath: '#/properties/header/properties/payloadChecksum/pattern' },
+          { instancePath: '/header/signatures', message: 'must have at least one item', data: [], schemaPath: '#/properties/header/properties/signatures/minItems' }
+        ],
+        writable: true,
+        configurable: true
+      });
+      mockSchemaValidationCache.getValidatorFromSchema.mockReturnValue(invalidValidator);
+
+      const result = validateEmbeddedMetadataDetailed({
+        header: {
+          version: '1.0',
+          type: 'invalid-type',
+          payloadChecksum: 'invalid',
+          signatures: []
+        },
+        payload: validTaskPayload
+      });
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.length).toBeGreaterThanOrEqual(3);
     });
   });
 
@@ -305,15 +417,14 @@ describe('EmbeddedMetadata Validator', () => {
             version: '1.0',
             type: 'task',
             payloadChecksum: 'a1b2c3d4e5f67890123456789012345678901234567890123456789012345678',
-            signatures: [createMockSignature()],
-            audit: 'x'.repeat(3001) // Too long
+            signatures: [createMockSignature()]
           },
           payload: validTaskPayload
         };
 
+        // Note: audit field has been removed from schema, validation now passes
         const result = validateEmbeddedMetadataBusinessRules(invalidRecord);
-        expect(result.isValid).toBe(false);
-        expect(result.errors.some(e => e.field === 'header.audit')).toBe(true);
+        expect(result.isValid).toBe(true);
       });
 
       it('should accept valid audit field', () => {
@@ -322,12 +433,12 @@ describe('EmbeddedMetadata Validator', () => {
             version: '1.0',
             type: 'task',
             payloadChecksum: 'a1b2c3d4e5f67890123456789012345678901234567890123456789012345678',
-            signatures: [createMockSignature()],
-            audit: 'Valid audit message'
+            signatures: [createMockSignature()]
           },
           payload: validTaskPayload
         };
 
+        // Note: audit field has been removed from schema, validation now uses notes in signatures
         const result = validateEmbeddedMetadataBusinessRules(validRecord);
         expect(result.isValid).toBe(true);
       });

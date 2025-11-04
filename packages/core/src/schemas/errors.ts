@@ -25,13 +25,13 @@ export class SchemaValidationError extends Error {
 export class DetailedValidationError extends GitGovError {
   constructor(
     recordType: string,
-    public readonly ajvErrors: Array<{
+    public readonly errors: Array<{
       field: string;
       message: string;
       value: unknown;
     }>
   ) {
-    const errorSummary = ajvErrors
+    const errorSummary = errors
       .map(err => `${err.field}: ${err.message}`)
       .join(', ');
 

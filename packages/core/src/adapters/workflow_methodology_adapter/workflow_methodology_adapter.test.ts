@@ -23,14 +23,15 @@ describe('WorkflowMethodologyAdapter', () => {
     getFeedback: jest.fn(),
     getFeedbackByEntity: jest.fn(),
     getAllFeedback: jest.fn(),
+    getFeedbackThread: jest.fn(),
   };
 
   const createMockSignature = (role: string = 'author', keyId: string = 'human:test'): Signature => ({
     keyId,
     role,
+    notes: '',
     signature: 'mock-signature',
-    timestamp: 1752788100,
-    timestamp_iso: '2025-07-31T10:15:00Z'
+    timestamp: 1752788100
   });
 
   const createMockActor = (roles: [string, ...string[]] = ['author']): ActorRecord => ({

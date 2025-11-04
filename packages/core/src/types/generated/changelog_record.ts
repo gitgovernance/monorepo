@@ -5,7 +5,7 @@
  */
 
 /**
- * Canonical schema for changelog records - Enterprise Grade System Historian
+ * Canonical schema for changelog records - aggregates N tasks into 1 release note
  */
 export interface ChangelogRecord {
   /**
@@ -13,88 +13,49 @@ export interface ChangelogRecord {
    */
   id: string;
   /**
-   * Type of the primary entity that changed
-   */
-  entityType: 'task' | 'cycle' | 'agent' | 'system' | 'configuration';
-  /**
-   * ID of the primary entity that changed
-   */
-  entityId: string;
-  /**
-   * The nature of the change
-   */
-  changeType: 'creation' | 'completion' | 'update' | 'deletion' | 'hotfix';
-  /**
-   * Executive title of the change
+   * Executive title of the deliverable
    */
   title: string;
   /**
-   * Detailed description of the change and its impact
+   * Detailed description of the value delivered, including key decisions and impact
    */
   description: string;
   /**
-   * Unix timestamp in seconds when the change occurred
+   * IDs of tasks that compose this deliverable (minimum 1 required)
+   *
+   * @minItems 1
    */
-  timestamp: number;
+  relatedTasks: [string, ...string[]];
   /**
-   * How the change was initiated
+   * Unix timestamp in seconds when the deliverable was completed
    */
-  trigger: 'manual' | 'automated' | 'emergency';
+  completedAt: number;
   /**
-   * Actor or agent ID that initiated the change
+   * Optional IDs of cycles related to this deliverable
    */
-  triggeredBy: string;
+  relatedCycles?: string[];
   /**
-   * Why the change was made
+   * Optional IDs of key execution records related to this work
    */
-  reason: string;
+  relatedExecutions?: string[];
   /**
-   * Risk level of the change
+   * Optional version or release identifier (e.g., 'v1.0.0', 'sprint-24')
    */
-  riskLevel: 'low' | 'medium' | 'high' | 'critical';
+  version?: string;
   /**
-   * IDs of systems impacted by this change
+   * Optional tags for categorization (e.g., 'feature:auth', 'bugfix', 'security')
    */
-  affectedSystems?: string[];
+  tags?: string[];
   /**
-   * Number of users impacted by this change
-   */
-  usersAffected?: number;
-  /**
-   * Downtime in seconds caused by this change
-   */
-  downtime?: number;
-  /**
-   * List of main files that were created or modified
-   */
-  files?: string[];
-  /**
-   * List of git commit hashes related to this change
+   * Optional list of git commit hashes related to this deliverable
    */
   commits?: string[];
   /**
-   * Step-by-step instructions to rollback this change
+   * Optional list of main files that were created or modified
    */
-  rollbackInstructions?: string;
+  files?: string[];
   /**
-   * Cross-references to other GitGovernance records
+   * Optional additional context, decisions, or learnings
    */
-  references?: {
-    /**
-     * IDs of related TaskRecords
-     */
-    tasks?: string[];
-    /**
-     * IDs of related CycleRecords
-     */
-    cycles?: string[];
-    /**
-     * IDs of related ExecutionRecords
-     */
-    executions?: string[];
-    /**
-     * IDs of related ChangelogRecords
-     */
-    changelogs?: string[];
-  };
+  notes?: string;
 }

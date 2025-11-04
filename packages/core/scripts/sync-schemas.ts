@@ -25,10 +25,10 @@ const SCHEMA_MAPPINGS = {
   '02_actor': 'actor_record_schema',
   '03_agent': 'agent_record_schema',
   '04_task': 'task_record_schema',
-  '05_execution': 'execution_record_schema',
-  '06_changelog': 'changelog_record_schema',
-  '07_feedback': 'feedback_record_schema',
-  '08_cycle': 'cycle_record_schema',
+  '06_execution': 'execution_record_schema',
+  '07_changelog': 'changelog_record_schema',
+  '08_feedback': 'feedback_record_schema',
+  '05_cycle': 'cycle_record_schema',
   '09_workflow_methodology': 'workflow_methodology_record_schema',
 };
 

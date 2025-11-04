@@ -14,6 +14,7 @@ describe('WorkflowMethodologyAdapter - DEFAULT Methodology Integration Tests', (
     getFeedback: jest.fn(),
     getFeedbackByEntity: jest.fn(),
     getAllFeedback: jest.fn(),
+    getFeedbackThread: jest.fn(),
   };
   const createMockTask = (tags: string[] = [], status: TaskRecord['status'] = 'draft'): TaskRecord => ({
     id: '1752274500-task-test-task',
@@ -86,21 +87,21 @@ describe('WorkflowMethodologyAdapter - DEFAULT Methodology Integration Tests', (
       expect(result).toBe(true);
     });
 
-    it('[EARS-27] should validate guild-specific signatures from real config', async () => {
-      const designTask = createMockTask(['guild:design'], 'review');
+    it('[EARS-27] should validate role-specific signatures from real config', async () => {
+      const task = createMockTask([], 'review');
       const designActor = createMockActor(['approver:design']);
       const context: ValidationContext = {
-        task: designTask,
+        task,
         actor: designActor,
         transitionTo: 'ready'
       };
 
       const signature = {
-        keyId: 'human:designer',
+        keyId: designActor.id,
         role: 'approver',
+        notes: '',
         signature: 'mock-signature',
-        timestamp: 1752788100,
-        timestamp_iso: '2025-07-31T10:15:00Z'
+        timestamp: 1752788100
       };
 
       const result = await adapter.validateSignature(signature, context);
@@ -155,9 +156,9 @@ describe('WorkflowMethodologyAdapter - DEFAULT Methodology Integration Tests', (
         const signature = {
           keyId: approver.id,
           role: 'approver',
+          notes: '',
           signature: 'mock-signature',
-          timestamp: Date.now(),
-          timestamp_iso: new Date().toISOString()
+          timestamp: Date.now()
         };
         const signatureResult = await adapter.validateSignature(signature, context);
         expect(signatureResult).toBe(true);
@@ -213,9 +214,9 @@ describe('WorkflowMethodologyAdapter - DEFAULT Methodology Integration Tests', (
         const signature = {
           keyId: qualityApprover.id,
           role: 'approver',
+          notes: '',
           signature: 'mock-signature',
-          timestamp: Date.now(),
-          timestamp_iso: new Date().toISOString()
+          timestamp: Date.now()
         };
         const signatureResult = await adapter.validateSignature(signature, context);
         expect(signatureResult).toBe(true);
@@ -256,12 +257,12 @@ describe('WorkflowMethodologyAdapter - DEFAULT Methodology Integration Tests', (
       });
     });
 
-    describe('Guild-Specific Workflows', () => {
-      it('[EARS-55] should handle guild:design workflow with default methodology', async () => {
-        const designTask = createMockTask(['guild:design'], 'review');
+    describe('Role-Specific Workflows', () => {
+      it('[EARS-55] should handle design signature validation with default methodology', async () => {
+        const task = createMockTask([], 'review');
         const designApprover = createMockActor(['approver:design']);
         const context: ValidationContext = {
-          task: designTask,
+          task,
           actor: designApprover,
           transitionTo: 'ready'
         };
@@ -270,23 +271,23 @@ describe('WorkflowMethodologyAdapter - DEFAULT Methodology Integration Tests', (
         expect(rule).toBeDefined();
         expect(rule?.conditions?.signatures?.['design']?.capability_roles).toContain('approver:design');
 
-        // Validate design guild signature
+        // Validate design signature
         const signature = {
           keyId: designApprover.id,
           role: 'approver',
+          notes: '',
           signature: 'mock-signature',
-          timestamp: Date.now(),
-          timestamp_iso: new Date().toISOString()
+          timestamp: Date.now()
         };
         const signatureResult = await adapter.validateSignature(signature, context);
         expect(signatureResult).toBe(true);
       });
 
-      it('[EARS-56] should handle guild:quality workflow with default methodology', async () => {
-        const qualityTask = createMockTask(['guild:quality'], 'review');
+      it('[EARS-56] should handle quality signature validation with default methodology', async () => {
+        const task = createMockTask([], 'review');
         const qualityApprover = createMockActor(['approver:quality']);
         const context: ValidationContext = {
-          task: qualityTask,
+          task,
           actor: qualityApprover,
           transitionTo: 'ready'
         };
@@ -296,11 +297,11 @@ describe('WorkflowMethodologyAdapter - DEFAULT Methodology Integration Tests', (
         expect(rule?.conditions?.signatures?.['quality']?.capability_roles).toContain('approver:quality');
       });
 
-      it('[EARS-57] should handle default guild workflow with default methodology', async () => {
-        const defaultTask = createMockTask([], 'review'); // No guild tag
+      it('[EARS-57] should handle default signature validation with default methodology', async () => {
+        const task = createMockTask([], 'review');
         const productApprover = createMockActor(['approver:product']);
         const context: ValidationContext = {
-          task: defaultTask,
+          task,
           actor: productApprover,
           transitionTo: 'ready'
         };

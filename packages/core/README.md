@@ -202,7 +202,7 @@ import {
 
 function handleCoreErrors(error: unknown) {
   if (error instanceof DetailedValidationError) {
-    return { type: "validation", fields: error.ajvErrors };
+    return { type: "validation", fields: error.errors };
   } else if (error instanceof RecordNotFoundError) {
     return { type: "not_found", code: error.code };
   } else if (error instanceof ProjectRootError) {

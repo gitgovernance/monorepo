@@ -1,13 +1,5 @@
 import { SchemaValidationCache } from './schema_cache';
 import { Schemas } from './index';
-import type { ActorRecord } from '../types';
-import type { AgentRecord } from '../types';
-import type { TaskRecord } from '../types';
-import type { ExecutionRecord } from '../types';
-import type { ChangelogRecord } from '../types';
-import type { FeedbackRecord } from '../types';
-import type { CycleRecord } from '../types';
-import type { WorkflowMethodologyRecord } from '../types';
 
 describe('SchemaValidationCache', () => {
 
@@ -21,195 +13,249 @@ describe('SchemaValidationCache', () => {
     SchemaValidationCache.clearCache();
   });
 
-  it('[EARS-1] should cache validators and avoid recompilation', () => {
-    // First call should compile and cache
-    const validator1 = SchemaValidationCache.getValidatorFromSchema(Schemas.ActorRecord);
-    expect(validator1).toBeDefined();
-    expect(typeof validator1).toBe('function');
+  // Schema Access API Tests (EARS 1-6)
+  describe('Schema Access API', () => {
+    it('[EARS-1] should return JSON schema for valid schema name', () => {
+      // Test with Schemas object (direct access)
+      expect(Schemas.ActorRecord).toBeDefined();
+      expect(Schemas.ActorRecord.$schema).toBe('http://json-schema.org/draft-07/schema#');
+      expect(Schemas.ActorRecord.type).toBe('object');
 
-    // Second call should return cached validator (same reference)
-    const validator2 = SchemaValidationCache.getValidatorFromSchema(Schemas.ActorRecord);
-    expect(validator2).toBe(validator1); // Same reference = cached
+      expect(Schemas.ExecutionRecord).toBeDefined();
+      expect(Schemas.ExecutionRecord.$schema).toBe('http://json-schema.org/draft-07/schema#');
+      expect(Schemas.ExecutionRecord.type).toBe('object');
+    });
+
+    it('[EARS-2] should handle invalid schema access gracefully', () => {
+      // TypeScript prevents invalid access at compile time
+      // This test verifies runtime behavior for dynamic access
+      const invalidSchemaName = 'NonExistentSchema' as keyof typeof Schemas;
+      expect((Schemas as any)[invalidSchemaName]).toBeUndefined();
+    });
+
+    it('[EARS-3] should provide access to all available schema names', () => {
+      const schemaNames = Object.keys(Schemas);
+
+      // Verify all expected schemas are present
+      expect(schemaNames).toContain('ActorRecord');
+      expect(schemaNames).toContain('AgentRecord');
+      expect(schemaNames).toContain('TaskRecord');
+      expect(schemaNames).toContain('ExecutionRecord');
+      expect(schemaNames).toContain('ChangelogRecord');
+      expect(schemaNames).toContain('FeedbackRecord');
+      expect(schemaNames).toContain('CycleRecord');
+      expect(schemaNames).toContain('WorkflowMethodologyRecord');
+      expect(schemaNames).toContain('EmbeddedMetadata');
+
+      // Verify minimum number of schemas
+      expect(schemaNames.length).toBeGreaterThanOrEqual(9);
+    });
+
+    it('[EARS-4] should verify schema existence with type safety', () => {
+      // Verify schemas exist and are objects
+      expect(typeof Schemas.ActorRecord).toBe('object');
+      expect(typeof Schemas.AgentRecord).toBe('object');
+      expect(typeof Schemas.TaskRecord).toBe('object');
+      expect(typeof Schemas.ExecutionRecord).toBe('object');
+
+      // Verify each schema has required JSON Schema properties
+      expect(Schemas.ActorRecord).toHaveProperty('$schema');
+      expect(Schemas.ActorRecord).toHaveProperty('type');
+      expect(Schemas.ActorRecord).toHaveProperty('properties');
+    });
+
+    it('[EARS-5] should return false for non-existent schema names', () => {
+      // Test dynamic access for non-existent schemas
+      const nonExistentSchemas = ['InvalidSchema', 'FakeRecord', 'NotARealSchema'];
+
+      nonExistentSchemas.forEach(name => {
+        expect((Schemas as any)[name]).toBeUndefined();
+      });
+    });
+
+    it('[EARS-6] should provide direct access to all schemas as JSON objects', () => {
+      // Verify Schemas object provides direct access
+      expect(Schemas).toBeDefined();
+      expect(typeof Schemas).toBe('object');
+
+      // Verify each schema is a valid JSON Schema object
+      const schemaKeys = Object.keys(Schemas);
+      schemaKeys.forEach(key => {
+        const schema = (Schemas as any)[key];
+        expect(schema).toBeDefined();
+        expect(typeof schema).toBe('object');
+        expect(schema.$schema).toBeDefined();
+      });
+    });
   });
 
-  it('[EARS-2] should handle multiple different schemas', () => {
-    const actorValidator = SchemaValidationCache.getValidatorFromSchema(Schemas.ActorRecord);
-    const agentValidator = SchemaValidationCache.getValidatorFromSchema(Schemas.AgentRecord);
+  // Schema Validation Cache Tests (EARS 7-11)
+  describe('Schema Validation Cache', () => {
+    it('[EARS-7] should cache validators and avoid recompilation', () => {
+      // First call should compile and cache
+      const validator1 = SchemaValidationCache.getValidatorFromSchema(Schemas.ActorRecord);
+      expect(validator1).toBeDefined();
+      expect(typeof validator1).toBe('function');
 
-    expect(actorValidator).toBeDefined();
-    expect(agentValidator).toBeDefined();
-    expect(actorValidator).not.toBe(agentValidator); // Different validators
+      // Second call should return cached validator (same reference)
+      const validator2 = SchemaValidationCache.getValidatorFromSchema(Schemas.ActorRecord);
+      expect(validator2).toBe(validator1); // Same reference = cached
+    });
 
-    // Note: getCacheStats() needs to be updated for schema objects
-    const stats = SchemaValidationCache.getCacheStats();
-    expect(stats.cachedSchemas).toBe(2);
-  });
+    it('[EARS-8] should handle multiple different schemas', () => {
+      const actorValidator = SchemaValidationCache.getValidatorFromSchema(Schemas.ActorRecord);
+      const agentValidator = SchemaValidationCache.getValidatorFromSchema(Schemas.AgentRecord);
 
-  it('[EARS-3] should validate ActorRecord correctly using cached validator', () => {
-    const validator = SchemaValidationCache.getValidatorFromSchema<ActorRecord>(Schemas.ActorRecord);
+      expect(actorValidator).toBeDefined();
+      expect(agentValidator).toBeDefined();
+      expect(actorValidator).not.toBe(agentValidator); // Different validators
 
-    const validActor = {
-      id: 'human:test-user',
-      type: 'human',
-      displayName: 'Test User',
-      publicKey: 'test-public-key-base64',
-      roles: ['developer:backend']
-    };
+      // Verify cache maintains separate validators
+      const stats = SchemaValidationCache.getCacheStats();
+      expect(stats.cachedSchemas).toBe(2);
+    });
 
-    const invalidActor = { id: 'invalid' }; // Missing required fields
-
-    expect(validator(validActor)).toBe(true);
-    expect(validator(invalidActor)).toBe(false);
-  });
-
-  it('[EARS-4] should validate AgentRecord correctly using cached validator', () => {
-    const validator = SchemaValidationCache.getValidatorFromSchema<AgentRecord>(Schemas.AgentRecord);
-
-    const validAgent = {
-      id: 'agent:test-agent',
-      guild: 'design',
-      engine: {
-        type: 'api',
-        model: 'gpt-4',
-        version: '1.0.0'
-      },
-      status: 'active',
-      triggers: []
-    };
-
-    const invalidAgent = { id: 'invalid' }; // Missing required fields
-
-    expect(validator(validAgent)).toBe(true);
-    expect(validator(invalidAgent)).toBe(false);
-  });
-
-  it('[EARS-6] should validate TaskRecord correctly using cached validator', () => {
-    const validator = SchemaValidationCache.getValidatorFromSchema<TaskRecord>(Schemas.TaskRecord);
-
-    const validTask = {
-      id: '1234567890-task-test-implementation',
-      title: 'Test Implementation Task',
-      status: 'draft',
-      priority: 'medium',
-      description: 'This is a test task for integration testing purposes.',
-      tags: ['test', 'integration']
-    };
-
-    const invalidTask = { id: 'invalid' }; // Missing required fields
-
-    expect(validator(validTask)).toBe(true);
-    expect(validator(invalidTask)).toBe(false);
-  });
-
-  it('[EARS-7] should validate ExecutionRecord correctly using cached validator', () => {
-    const validator = SchemaValidationCache.getValidatorFromSchema<ExecutionRecord>(Schemas.ExecutionRecord);
-
-    const validExecution = {
-      id: '1234567890-exec-test-execution',
-      taskId: '1234567890-task-test-implementation',
-      result: 'Test execution completed successfully with all requirements met.'
-    };
-
-    const invalidExecution = { id: 'invalid' }; // Missing required fields
-
-    expect(validator(validExecution)).toBe(true);
-    expect(validator(invalidExecution)).toBe(false);
-  });
-
-  it('[EARS-8] should validate ChangelogRecord correctly using cached validator', () => {
-    const validator = SchemaValidationCache.getValidatorFromSchema<ChangelogRecord>(Schemas.ChangelogRecord);
-
-    const validChangelog = {
-      id: '1234567890-changelog-test-entry',
-      entityType: 'task',
-      entityId: '1234567890-task-test-implementation',
-      changeType: 'completion',
-      title: 'Task Completion',
-      description: 'Task status changed from draft to review',
-      timestamp: 1234567890,
-      trigger: 'manual',
-      triggeredBy: 'human:test-user',
-      reason: 'Task completed successfully',
-      riskLevel: 'low'
-    };
-
-    const invalidChangelog = { id: 'invalid' }; // Missing required fields
-
-    expect(validator(validChangelog)).toBe(true);
-    expect(validator(invalidChangelog)).toBe(false);
-  });
-
-  it('[EARS-9] should validate FeedbackRecord correctly using cached validator', () => {
-    const validator = SchemaValidationCache.getValidatorFromSchema<FeedbackRecord>(Schemas.FeedbackRecord);
-
-    const validFeedback = {
-      id: '1234567890-feedback-test-comment',
-      entityType: 'task',
-      entityId: '1234567890-task-test-implementation',
-      type: 'suggestion',
-      status: 'open',
-      content: 'This is a test feedback comment for integration testing.'
-    };
-
-    const invalidFeedback = { id: 'invalid' }; // Missing required fields
-
-    expect(validator(validFeedback)).toBe(true);
-    expect(validator(invalidFeedback)).toBe(false);
-  });
-
-  it('[EARS-10] should validate CycleRecord correctly using cached validator', () => {
-    const validator = SchemaValidationCache.getValidatorFromSchema<CycleRecord>(Schemas.CycleRecord);
-
-    const validCycle = {
-      id: '1234567890-cycle-test-sprint',
-      status: 'active',
-      title: 'Test Sprint Cycle',
-      taskIds: []
-    };
-
-    const invalidCycle = { id: 'invalid' }; // Missing required fields
-
-    expect(validator(validCycle)).toBe(true);
-    expect(validator(invalidCycle)).toBe(false);
-  });
-
-  it('[EARS-11] should validate WorkflowMethodology correctly using cached validator', () => {
-    const validator = SchemaValidationCache.getValidatorFromSchema<WorkflowMethodologyRecord>(Schemas.WorkflowMethodologyRecord);
-
-    const validWorkflow = {
-      version: '1.0.0',
-      name: 'Test Workflow',
-      state_transitions: {
-        'draft': {
-          from: ['draft'],
-          requires: {
-            command: 'gitgov task submit'
-          }
+    it('[EARS-9] should validate all record types correctly using cached validators', () => {
+      const testCases = [
+        {
+          schema: Schemas.ActorRecord,
+          valid: {
+            id: 'human:test-user',
+            type: 'human',
+            displayName: 'Test User',
+            publicKey: 'abcdefghijklmnopqrstuvwxyz0123456789ABCDEF==',
+            roles: ['developer:backend']
+          },
+          invalid: { id: 'invalid' }
+        },
+        {
+          schema: Schemas.AgentRecord,
+          valid: {
+            id: 'agent:test-agent',
+            engine: { type: 'api', url: 'https://api.example.com/agent' },
+            status: 'active',
+            triggers: []
+          },
+          invalid: { id: 'invalid' }
+        },
+        {
+          schema: Schemas.TaskRecord,
+          valid: {
+            id: '1234567890-task-test-implementation',
+            title: 'Test Implementation Task',
+            status: 'draft',
+            priority: 'medium',
+            description: 'This is a test task for integration testing purposes.',
+            tags: ['test', 'integration']
+          },
+          invalid: { id: 'invalid' }
+        },
+        {
+          schema: Schemas.ExecutionRecord,
+          valid: {
+            id: '1234567890-exec-test-execution',
+            taskId: '1234567890-task-test-implementation',
+            type: 'progress',
+            title: 'Test Execution',
+            result: 'Test execution completed successfully with all requirements met.'
+          },
+          invalid: { id: 'invalid' }
+        },
+        {
+          schema: Schemas.ChangelogRecord,
+          valid: {
+            id: '1234567890-changelog-test-entry',
+            title: 'Task Completion',
+            description: 'Successfully completed task implementation with all requirements',
+            relatedTasks: ['1234567890-task-test-implementation'],
+            completedAt: 1234567890,
+            version: 'v1.0.0'
+          },
+          invalid: { id: 'invalid' }
+        },
+        {
+          schema: Schemas.FeedbackRecord,
+          valid: {
+            id: '1234567890-feedback-test-comment',
+            entityType: 'task',
+            entityId: '1234567890-task-test-implementation',
+            type: 'suggestion',
+            status: 'open',
+            content: 'This is a test feedback comment for integration testing.'
+          },
+          invalid: { id: 'invalid' }
+        },
+        {
+          schema: Schemas.CycleRecord,
+          valid: {
+            id: '1234567890-cycle-test-sprint',
+            status: 'active',
+            title: 'Test Sprint Cycle',
+            taskIds: []
+          },
+          invalid: { id: 'invalid' }
+        },
+        {
+          schema: Schemas.WorkflowMethodologyRecord,
+          valid: {
+            version: '1.0.0',
+            name: 'Test Workflow',
+            state_transitions: {
+              'draft': {
+                from: ['draft'],
+                requires: { command: 'gitgov task submit' }
+              }
+            }
+          },
+          invalid: { version: 'invalid' }
         }
-      }
-    };
+      ];
 
-    const invalidWorkflow = { version: 'invalid' }; // Missing required fields
+      testCases.forEach(({ schema, valid, invalid }) => {
+        const validator = SchemaValidationCache.getValidatorFromSchema(schema);
+        expect(validator(valid)).toBe(true);
+        expect(validator(invalid)).toBe(false);
+      });
+    });
 
-    expect(validator(validWorkflow)).toBe(true);
-    expect(validator(invalidWorkflow)).toBe(false);
-  });
+    // NOTE: EmbeddedMetadata test skipped due to unresolved $ref dependencies
+    // This will be handled when we create embedded_metadata_validator.ts
 
-  // NOTE: EmbeddedMetadata test skipped due to unresolved $ref dependencies
-  // This will be handled when we create embedded_metadata_validator.ts
+    it('[EARS-10] should clear cache completely', () => {
+      // Load some validators
+      SchemaValidationCache.getValidatorFromSchema(Schemas.ActorRecord);
+      SchemaValidationCache.getValidatorFromSchema(Schemas.AgentRecord);
 
-  it('[EARS-5] should clear cache completely', () => {
-    // Load some validators
-    SchemaValidationCache.getValidatorFromSchema(Schemas.ActorRecord);
-    SchemaValidationCache.getValidatorFromSchema(Schemas.AgentRecord);
+      expect(SchemaValidationCache.getCacheStats().cachedSchemas).toBe(2);
 
-    expect(SchemaValidationCache.getCacheStats().cachedSchemas).toBe(2);
+      // Clear cache
+      SchemaValidationCache.clearCache();
 
-    // Clear cache
-    SchemaValidationCache.clearCache();
+      const stats = SchemaValidationCache.getCacheStats();
+      expect(stats.cachedSchemas).toBe(0);
+      expect(stats.schemasLoaded).toEqual([]);
+    });
 
-    const stats = SchemaValidationCache.getCacheStats();
-    expect(stats.cachedSchemas).toBe(0);
-    expect(stats.schemasLoaded).toEqual([]);
+    it('[EARS-11] should return accurate cache statistics', () => {
+      // Initial state: empty cache
+      let stats = SchemaValidationCache.getCacheStats();
+      expect(stats.cachedSchemas).toBe(0);
+      expect(stats.schemasLoaded).toEqual([]);
+
+      // Load 3 validators
+      SchemaValidationCache.getValidatorFromSchema(Schemas.ActorRecord);
+      SchemaValidationCache.getValidatorFromSchema(Schemas.TaskRecord);
+      SchemaValidationCache.getValidatorFromSchema(Schemas.ExecutionRecord);
+
+      // Verify stats reflect all 3 cached schemas
+      stats = SchemaValidationCache.getCacheStats();
+      expect(stats.cachedSchemas).toBe(3);
+      expect(stats.schemasLoaded).toHaveLength(0); // schemasLoaded tracks file paths, not schema objects
+
+      // Load same schema again - should not increase count
+      SchemaValidationCache.getValidatorFromSchema(Schemas.ActorRecord);
+      stats = SchemaValidationCache.getCacheStats();
+      expect(stats.cachedSchemas).toBe(3); // Still 3, not 4
+    });
   });
 });

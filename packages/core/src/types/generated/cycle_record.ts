@@ -5,32 +5,35 @@
  */
 
 /**
- * Canonical schema for cycle records (sprints, milestones)
+ * Canonical schema for cycle records - strategic grouping of work
  */
 export interface CycleRecord {
   /**
-   * Unique identifier for the cycle
+   * Unique identifier for the cycle (10 timestamp + 1 dash + 5 'cycle' + 1 dash + max 50 slug = 67 max)
    */
   id: string;
   /**
-   * Human-readable title for the cycle (e.g., 'Sprint 24.08')
+   * Human-readable title for the cycle (e.g., 'Sprint 24', 'Auth v2.0', 'Q4 2025')
    */
   title: string;
   /**
    * The lifecycle status of the cycle
    */
   status: 'planning' | 'active' | 'completed' | 'archived';
+  /**
+   * Optional array of Task IDs that belong to this cycle. Can be empty for cycles that only contain child cycles. (10 timestamp + 1 dash + 4 'task' + 1 dash + max 50 slug = 66 max)
+   */
   taskIds?: string[];
   /**
-   * An optional array of Cycle IDs that are children of this cycle, allowing for hierarchies.
+   * Optional array of Cycle IDs that are children of this cycle, allowing for hierarchies (e.g., Q1 containing Sprint 1, Sprint 2, Sprint 3). (10 timestamp + 1 dash + 5 'cycle' + 1 dash + max 50 slug = 67 max)
    */
   childCycleIds?: string[];
   /**
-   * Optional list of key:value tags for categorization (e.g., 'roadmap:q4', 'team:alpha').
+   * Optional list of key:value tags for categorization (e.g., 'roadmap:q4', 'team:alpha', 'okr:growth').
    */
   tags?: string[];
   /**
-   * An optional description of the cycle's goals and objectives
+   * Optional description of the cycle's goals, objectives, and context
    */
   notes?: string;
 }

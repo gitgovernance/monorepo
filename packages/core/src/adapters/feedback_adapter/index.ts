@@ -2,7 +2,7 @@ import { createFeedbackRecord } from '../../factories/feedback_factory';
 import { RecordStore } from '../../store';
 import { IdentityAdapter } from '../identity_adapter';
 import type { FeedbackRecord } from '../../types';
-import type { IEventStream, FeedbackCreatedEvent, FeedbackStatusChangedEvent } from '../../event_bus';
+import type { IEventStream, FeedbackCreatedEvent } from '../../event_bus';
 import type { GitGovRecord } from '../../types';
 
 /**
@@ -20,6 +20,14 @@ export interface FeedbackAdapterDependencies {
 /**
  * FeedbackAdapter Interface - The Communication Facilitator
  */
+/**
+ * FeedbackThread structure for conversation trees
+ */
+export interface FeedbackThread {
+  feedback: FeedbackRecord;
+  responses: FeedbackThread[];
+}
+
 export interface IFeedbackAdapter {
   /**
    * Creates a new FeedbackRecord.
@@ -27,9 +35,9 @@ export interface IFeedbackAdapter {
   create(payload: Partial<FeedbackRecord>, actorId: string): Promise<FeedbackRecord>;
 
   /**
-   * Resolves an existing FeedbackRecord.
+   * Helper: Creates a new feedback that "resolves" another (immutable pattern).
    */
-  resolve(feedbackId: string, actorId: string): Promise<FeedbackRecord>;
+  resolve(feedbackId: string, actorId: string, content?: string): Promise<FeedbackRecord>;
 
   /**
    * Gets a specific FeedbackRecord by its ID.
@@ -45,6 +53,11 @@ export interface IFeedbackAdapter {
    * Gets all FeedbackRecords in the system.
    */
   getAllFeedback(): Promise<FeedbackRecord[]>;
+
+  /**
+   * Builds the complete conversation tree for a feedback.
+   */
+  getFeedbackThread(feedbackId: string, maxDepth?: number): Promise<FeedbackThread>;
 }
 
 /**
@@ -65,11 +78,11 @@ export class FeedbackAdapter implements IFeedbackAdapter {
   }
 
   /**
-   * [EARS-1] Creates a new FeedbackRecord for structured communication between actors.
+   * [EARS-1, EARS-2, EARS-3, EARS-4, EARS-5, EARS-6, EARS-7, EARS-8] Creates a new FeedbackRecord for structured communication between actors.
    * 
    * Description: Creates a new FeedbackRecord for structured communication between actors.
    * Implementation: Builds record with status: "open", signs with actorId, persists and emits event.
-   * Usage: Invoked by `gitgov feedback add` to create feedback, assignments, blocks.
+   * Usage: Invoked by `gitgov feedback create` to create feedback, assignments, blocks, responses.
    * Returns: Complete and signed FeedbackRecord.
    */
   async create(payload: Partial<FeedbackRecord>, actorId: string): Promise<FeedbackRecord> {
@@ -79,29 +92,48 @@ export class FeedbackAdapter implements IFeedbackAdapter {
       throw new Error('RecordNotFoundError: entityId is required');
     }
 
-    if (payloadWithEntityId.entityType && !['task', 'execution', 'changelog', 'feedback'].includes(payloadWithEntityId.entityType)) {
-      throw new Error('InvalidEntityTypeError: entityType must be task, execution, changelog, or feedback');
+    if (payloadWithEntityId.entityType && !['task', 'execution', 'changelog', 'feedback', 'cycle'].includes(payloadWithEntityId.entityType)) {
+      throw new Error('InvalidEntityTypeError: entityType must be task, execution, changelog, feedback, or cycle');
     }
 
     // Validate no duplicate assignments: a task can be assigned to multiple actors,
     // but the same task cannot have multiple open assignments to the same actor
+    // EARS-36: In immutable pattern, assignments stay 'open' forever. Check for resolution via resolvesFeedbackId
     if (payload.type === 'assignment' && payload.assignee) {
       const existingFeedbacks = await this.getFeedbackByEntity(payloadWithEntityId.entityId);
-      const duplicateAssignment = existingFeedbacks.find(feedback =>
+
+      // Find all open assignments for this actor
+      const openAssignments = existingFeedbacks.filter(feedback =>
         feedback.type === 'assignment' &&
         feedback.assignee === payload.assignee &&
         feedback.status === 'open'
       );
 
-      if (duplicateAssignment) {
-        throw new Error(`DuplicateAssignmentError: Task ${payloadWithEntityId.entityId} is already assigned to ${payload.assignee} (feedback: ${duplicateAssignment.id})`);
+      if (openAssignments.length > 0) {
+        // For each open assignment, check if it has been resolved
+        // Resolution feedbacks have entityType='feedback' and resolvesFeedbackId pointing to the assignment
+        // They are NOT in the same entity list, so we need to search all feedbacks
+        const allFeedbacks = await this.getAllFeedback();
+
+        for (const assignment of openAssignments) {
+          const hasResolution = allFeedbacks.some(feedback =>
+            feedback.entityType === 'feedback' &&
+            feedback.resolvesFeedbackId === assignment.id &&
+            feedback.status === 'resolved'
+          );
+
+          if (!hasResolution) {
+            // Open assignment WITHOUT resolution = duplicate
+            throw new Error(`DuplicateAssignmentError: Task ${payloadWithEntityId.entityId} is already assigned to ${payload.assignee} (feedback: ${assignment.id})`);
+          }
+        }
       }
     }
 
-    // Set default status to "open"
+    // Set default status to "open" (can be overridden by payload.status)
     const enrichedPayload = {
-      ...payload,
-      status: 'open' as const
+      status: 'open' as const,
+      ...payload  // Allows payload.status to override default
     };
 
     try {
@@ -117,9 +149,9 @@ export class FeedbackAdapter implements IFeedbackAdapter {
           signatures: [{
             keyId: actorId,
             role: 'author',
+            notes: 'Feedback created',
             signature: 'placeholder',
-            timestamp: Date.now(),
-            timestamp_iso: new Date().toISOString()
+            timestamp: Date.now()
           }]
         },
         payload: validatedPayload,
@@ -144,7 +176,8 @@ export class FeedbackAdapter implements IFeedbackAdapter {
           status: validatedPayload.status,
           content: validatedPayload.content,
           triggeredBy: actorId,
-          assignee: validatedPayload.assignee
+          assignee: validatedPayload.assignee,
+          resolvesFeedbackId: validatedPayload.resolvesFeedbackId
         },
       } as FeedbackCreatedEvent);
 
@@ -158,66 +191,37 @@ export class FeedbackAdapter implements IFeedbackAdapter {
   }
 
   /**
-   * [EARS-4] Resolves an existing feedback changing its status to resolved.
+   * [EARS-9, EARS-10, EARS-11, EARS-12] Helper: Creates a new feedback that "resolves" another (immutable).
    * 
-   * Description: Resolves an existing feedback changing its status to resolved.
-   * Implementation: Reads feedback, validates permissions (future), transitions state, signs and emits event.
-   * Usage: Invoked by `gitgov feedback resolve` to close conversations and blocks.
-   * Returns: Updated FeedbackRecord with new signature.
+   * Description: Helper method that creates a new feedback documenting resolution of another feedback.
+   * Implementation: Verifies original exists, then delegates to create() with immutable pattern.
+   * Usage: Ergonomic helper for common case. For advanced cases (wontfix, approval), use create() directly.
+   * Returns: New FeedbackRecord that points to the original with resolvesFeedbackId.
    */
-  async resolve(feedbackId: string, actorId: string): Promise<FeedbackRecord> {
-    // 1. Read the existing feedback
-    const existingRecord = await this.feedbackStore.read(feedbackId);
-    if (!existingRecord) {
+  async resolve(feedbackId: string, actorId: string, content?: string): Promise<FeedbackRecord> {
+    // 1. Verify the original feedback exists
+    const originalFeedback = await this.getFeedback(feedbackId);
+    if (!originalFeedback) {
       throw new Error(`RecordNotFoundError: Feedback not found: ${feedbackId}`);
     }
 
-    // 2. Check if already resolved
-    if (existingRecord.payload.status === 'resolved') {
-      throw new Error(`ProtocolViolationError: Feedback ${feedbackId} is already resolved`);
-    }
+    // 2. Generate default content if not provided
+    const resolveContent = content || `Feedback resolved by ${actorId}`;
 
-    // 3. Update status to resolved
-    const updatedPayload = {
-      ...existingRecord.payload,
-      status: 'resolved' as const
-    };
-
-    try {
-      // 4. Create updated record structure
-      const updatedRecord: GitGovRecord & { payload: FeedbackRecord } = {
-        ...existingRecord,
-        payload: updatedPayload,
-      };
-
-      // 5. Sign the updated record
-      const signedRecord = await this.identity.signRecord(updatedRecord, actorId, 'resolver');
-
-      // 6. Persist the updated record
-      await this.feedbackStore.write(signedRecord as GitGovRecord & { payload: FeedbackRecord });
-
-      // 7. Emit status changed event
-      this.eventBus.publish({
-        type: 'feedback.status.changed',
-        timestamp: Date.now(),
-        source: 'feedback_adapter',
-        payload: {
-          feedbackId: updatedPayload.id,
-          oldStatus: existingRecord.payload.status,
-          newStatus: updatedPayload.status,
-          triggeredBy: actorId,
-          assignee: updatedPayload.assignee
-        },
-      } as FeedbackStatusChangedEvent);
-
-      return updatedPayload;
-    } catch (error) {
-      throw error;
-    }
+    // 3. Create NEW feedback that points to the original (immutable pattern)
+    // This maintains full immutability - original feedback is never modified
+    return await this.create({
+      entityType: 'feedback',
+      entityId: feedbackId,
+      type: 'clarification',
+      status: 'resolved',
+      content: resolveContent,
+      resolvesFeedbackId: feedbackId
+    }, actorId);
   }
 
   /**
-   * [EARS-7] Gets a specific FeedbackRecord by its ID for query.
+   * [EARS-13, EARS-14] Gets a specific FeedbackRecord by its ID for query.
    * 
    * Description: Gets a specific FeedbackRecord by its ID for query.
    * Implementation: Direct read from record store without modifications.
@@ -230,11 +234,11 @@ export class FeedbackAdapter implements IFeedbackAdapter {
   }
 
   /**
-   * [EARS-9] Gets all FeedbackRecords associated with a specific entity.
+   * [EARS-15] Gets all FeedbackRecords associated with a specific entity.
    * 
    * Description: Gets all FeedbackRecords associated with a specific entity.
    * Implementation: Reads all records and filters by matching entityId.
-   * Usage: Invoked by `gitgov feedback list` to display feedback for a task/cycle.
+   * Usage: Invoked by `gitgov feedback list` to display feedback for a task/cycle/execution.
    * Returns: Array of FeedbackRecords filtered for the entity.
    */
   async getFeedbackByEntity(entityId: string): Promise<FeedbackRecord[]> {
@@ -252,11 +256,11 @@ export class FeedbackAdapter implements IFeedbackAdapter {
   }
 
   /**
-   * [EARS-10] Gets all FeedbackRecords in the system for indexation.
+   * [EARS-16] Gets all FeedbackRecords in the system for indexation.
    * 
    * Description: Gets all FeedbackRecords in the system for complete indexation.
    * Implementation: Complete read from record store without filters.
-   * Usage: Invoked by `gitgov feedback list --all` and by MetricsAdapter for calculations.
+   * Usage: Invoked by `gitgov feedback list` and by MetricsAdapter for calculations.
    * Returns: Complete array of all FeedbackRecords.
    */
   async getAllFeedback(): Promise<FeedbackRecord[]> {
@@ -271,5 +275,63 @@ export class FeedbackAdapter implements IFeedbackAdapter {
     }
 
     return feedbacks;
+  }
+
+  /**
+   * [EARS-17, EARS-18, EARS-19, EARS-20] Builds the complete conversation tree for a feedback.
+   * 
+   * Description: Recursively constructs the conversation tree for a feedback.
+   * Implementation: Reads root feedback, finds all responses, builds tree recursively until maxDepth.
+   * Usage: Invoked by `gitgov feedback thread` and `gitgov feedback show --thread`.
+   * Returns: FeedbackThread object with tree structure.
+   */
+  async getFeedbackThread(feedbackId: string, maxDepth: number = Infinity): Promise<FeedbackThread> {
+    return await this.buildThread(feedbackId, maxDepth, 0);
+  }
+
+  /**
+   * Private helper: Recursively builds conversation thread.
+   */
+  private async buildThread(
+    feedbackId: string,
+    maxDepth: number,
+    currentDepth: number
+  ): Promise<FeedbackThread> {
+    // 1. Depth limit reached
+    if (currentDepth >= maxDepth) {
+      throw new Error(`Max depth ${maxDepth} reached for feedback thread`);
+    }
+
+    // 2. Get root feedback
+    const feedback = await this.getFeedback(feedbackId);
+    if (!feedback) {
+      throw new Error(`RecordNotFoundError: Feedback not found: ${feedbackId}`);
+    }
+
+    // 3. Find all responses (feedbacks pointing to this one)
+    const allFeedbacks = await this.getAllFeedback();
+    const responses = allFeedbacks.filter(
+      f => f.entityType === 'feedback' && f.entityId === feedbackId
+    );
+
+    // 4. Build tree recursively
+    const responseThreads: FeedbackThread[] = [];
+    for (const response of responses) {
+      try {
+        const thread = await this.buildThread(response.id, maxDepth, currentDepth + 1);
+        responseThreads.push(thread);
+      } catch (error) {
+        // If depth limit reached, just skip this branch
+        if (error instanceof Error && error.message.includes('Max depth')) {
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    return {
+      feedback,
+      responses: responseThreads
+    };
   }
 }
