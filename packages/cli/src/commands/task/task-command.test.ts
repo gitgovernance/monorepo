@@ -579,7 +579,7 @@ const test = "value";
     });
 
     it('[EARS-8] should show educational message for epic promotion', async () => {
-      const epicTask = { ...sampleTask, tags: ['epic:auth', 'guild:backend'] };
+      const epicTask = { ...sampleTask, tags: ['epic:auth', 'category:design'] };
       mockBacklogAdapter.getTask.mockResolvedValue(epicTask);
 
       await taskCommand.executePromote('1757789000-task-test-task', {});
