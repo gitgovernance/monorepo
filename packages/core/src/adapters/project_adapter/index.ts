@@ -521,28 +521,6 @@ export class ProjectAdapter implements IProjectAdapter {
   }
 
   private async copyAgentPrompt(gitgovPath: string): Promise<void> {
-    // Copy the official @gitgov agent prompt to the project
-    // 
-    // Solution A: Use require.resolve() with multiple fallback strategies
-    // This works reliably in ALL environments:
-    // - Development (monorepo with pnpm)
-    // - npm global install
-    // - npm local install
-    // - Different package managers (npm, pnpm, yarn)
-    // - Jest tests
-    //
-    // Strategy:
-    // 1️⃣ Monorepo development: src/prompts/ relative to cwd
-    // 2️⃣ NPM installation: use require.resolve() to find @gitgov/core package
-    // 3️⃣ Build fallback: relative to __dirname (for compiled distributable)
-    //
-    // Why this approach?
-    // - ✅ Node.js knows EXACTLY where packages are installed (require.resolve)
-    // - ✅ Handles monorepo development workflow
-    // - ✅ Works with all package managers
-    // - ✅ Graceful degradation with fallbacks
-    // - ✅ Jest compatible (import.meta resolved dynamically at runtime)
-
     // Helper function to safely get import.meta.url without triggering Jest parse errors
     function getImportMetaUrl(): string | null {
       try {
