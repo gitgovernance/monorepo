@@ -32,7 +32,7 @@ export interface CycleShowOptions {
   children?: boolean;
   hierarchy?: boolean;
   health?: boolean;
-  format?: 'cursor' | 'kiro' | 'json' | 'text';
+  format?: 'json' | 'text';
   json?: boolean;
   verbose?: boolean;
   quiet?: boolean;
