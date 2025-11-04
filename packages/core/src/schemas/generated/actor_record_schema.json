@@ -39,17 +39,19 @@
     },
     "publicKey": {
       "type": "string",
-      "description": "The Ed25519 public key (base64 encoded) for verifying the actor's signatures."
+      "minLength": 44,
+      "maxLength": 44,
+      "description": "The Ed25519 public key (base64 encoded, 44 characters) for verifying the actor's signatures."
     },
     "roles": {
       "type": "array",
       "items": {
         "type": "string",
-        "pattern": "^[a-z0-9:]+$"
+        "pattern": "^[a-z0-9-]+(:[a-z0-9-]+)*$"
       },
       "minItems": 1,
       "uniqueItems": true,
-      "description": "List of capacity roles defining the actor's skills and permissions.",
+      "description": "List of capacity roles defining the actor's skills and permissions. Uses hierarchical format with colons.",
       "examples": [
         [
           "developer:backend:go",
@@ -67,7 +69,7 @@
         "revoked"
       ],
       "default": "active",
-      "description": "The lifecycle status of the actor."
+      "description": "Optional. The lifecycle status of the actor. Defaults to 'active' if not specified."
     },
     "supersededBy": {
       "type": "string",
