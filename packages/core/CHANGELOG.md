@@ -1,3 +1,10 @@
+## [1.6.4](https://github.com/gitgovernance/monorepo/compare/core-v1.6.3...core-v1.6.4) (2025-11-05)
+
+
+### 🐛 Bug Fixes
+
+* **core:** resolve agent prompt copy with ESM helper ([#51](https://github.com/gitgovernance/monorepo/issues/51)) ([7b4fb87](https://github.com/gitgovernance/monorepo/commit/7b4fb87a27cacd404d6a7fe7b861fb20e5a99219))
+
 ## [1.6.3](https://github.com/gitgovernance/monorepo/compare/core-v1.6.2...core-v1.6.3) (2025-11-04)
 
 
