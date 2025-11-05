@@ -12,6 +12,7 @@ import type { WorkflowMethodologyAdapter } from '../workflow_methodology_adapter
 import type { IEventStream } from '../../event_bus';
 import { createTaskRecord } from '../../factories/task_factory';
 import { createCycleRecord } from '../../factories/cycle_factory';
+import { getImportMetaUrl } from '../../utils/esm_helper';
 import { createRequire } from 'module';
 import { fileURLToPath } from 'url';
 
@@ -521,54 +522,43 @@ export class ProjectAdapter implements IProjectAdapter {
   }
 
   private async copyAgentPrompt(gitgovPath: string): Promise<void> {
-    // Helper function to safely get import.meta.url without triggering Jest parse errors
-    function getImportMetaUrl(): string | null {
-      try {
-        // Use Function constructor to avoid Jest parsing import.meta at compile time
-        // eslint-disable-next-line @typescript-eslint/no-implied-eval
-        const getUrl = new Function('return import.meta.url');
-        return getUrl() as string;
-      } catch {
-        return null;
-      }
-    }
-
     const targetPrompt = pathUtils.join(gitgovPath, 'gitgov');
     const potentialSources: string[] = [];
 
     // 1️⃣ Development scenario: search in monorepo prompts/ (package root)
-    // In development, we're in packages/core, so prompts/ is at the root
     potentialSources.push(
       pathUtils.join(process.cwd(), 'prompts/gitgov_agent_prompt.md'),
     );
 
     // 2️⃣ NPM installation: use require.resolve to find @gitgov/core package
     try {
+      // Get import.meta.url via helper (separated to avoid Jest parse errors)
       const metaUrl = getImportMetaUrl();
+
       if (metaUrl) {
         const require = createRequire(metaUrl);
         const pkgJsonPath = require.resolve('@gitgov/core/package.json');
         const pkgRoot = pathUtils.dirname(pkgJsonPath);
-        potentialSources.push(
-          pathUtils.join(pkgRoot, 'prompts/gitgov_agent_prompt.md'),
-        );
+        const promptPath = pathUtils.join(pkgRoot, 'prompts/gitgov_agent_prompt.md');
+        potentialSources.push(promptPath);
       }
     } catch {
-      // require.resolve failed or @gitgov/core not installed - continue
+      // require.resolve failed - continue with other sources
     }
 
     // 3️⃣ Build fallback: relative to compiled __dirname
     try {
+      // Get import.meta.url via helper (separated to avoid Jest parse errors)
       const metaUrl = getImportMetaUrl();
+
       if (metaUrl) {
         const __filename = fileURLToPath(metaUrl);
         const __dirname = pathUtils.dirname(__filename);
-        potentialSources.push(
-          pathUtils.resolve(__dirname, '../../prompts/gitgov_agent_prompt.md'),
-        );
+        const promptPath = pathUtils.resolve(__dirname, '../../prompts/gitgov_agent_prompt.md');
+        potentialSources.push(promptPath);
       }
     } catch {
-      // import.meta unavailable or error - continue with other sources
+      // import.meta not available - continue with other sources
     }
 
     // 🔍 Find and copy the first accessible file
