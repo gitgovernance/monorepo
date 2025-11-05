@@ -170,16 +170,6 @@ packages/
 
 - **Changes to Open Source Packages (`core`, `cli`):** Must be made in the corresponding `upstream` submodule repository. Once merged, the submodule pointer is updated in this monorepo.
 
-## 🔧 IDE Integration
-
-### Kiro IDE Integration
-
-GitGovernance includes native integration with [Kiro IDE](https://kiro.dev), a next-generation development environment designed for AI-human collaboration, for an optimized development experience:
-
-- **Agent Hooks:** Automatic hooks for creating tasks, analyzing files, and managing commits
-- **Git Diagnostics:** Automatic correlation between commits and TaskRecords
-- **Spec-Driven Development:** Task export to Kiro Spec format
-
 ## 🎯 Current Implementation Status
 
 ### ✅ **Core Ecosystem (Complete)**
