@@ -1,6 +1,6 @@
 ![License: MPL-2.0](https://img.shields.io/badge/Core_License-MPL--2.0-brightgreen.svg)
 ![License: Apache-2.0](https://img.shields.io/badge/CLI_License-Apache--2.0-blue.svg)
-![Tests](https://img.shields.io/badge/tests-704%20core%20+%20167%20cli-success)
+![Tests](https://img.shields.io/badge/tests-1770%20core%20+%20219%20cli-success)
 ![core npm version](https://img.shields.io/npm/v/@gitgov/core)
 ![cli npm version](https://img.shields.io/npm/v/@gitgov/cli)
 
