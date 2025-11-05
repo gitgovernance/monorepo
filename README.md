@@ -1,8 +1,9 @@
-![License: MPL-2.0](https://img.shields.io/badge/Core_License-MPL--2.0-brightgreen.svg)
+![License: MPL-2.0](https://img.shields.io/badge/Core_License-MPL--2.0-blue.svg)
+![core npm version](https://img.shields.io/npm/v/@gitgov/core?color=orange&label=Core%20npm)
+![Tests](https://img.shields.io/badge/tests-1770%20Core%20-success?label=Core%20tests)
 ![License: Apache-2.0](https://img.shields.io/badge/CLI_License-Apache--2.0-blue.svg)
-![Tests](https://img.shields.io/badge/tests-1770%20core%20+%20219%20cli-success)
-![core npm version](https://img.shields.io/npm/v/@gitgov/core)
-![cli npm version](https://img.shields.io/npm/v/@gitgov/cli)
+![cli npm version](https://img.shields.io/npm/v/@gitgov/cli?color=orange&label=CLI%20npm)
+![Tests](https://img.shields.io/badge/tests-219%20CLI-success?label=CLI%20tests)
 
 # GitGovernance
 
