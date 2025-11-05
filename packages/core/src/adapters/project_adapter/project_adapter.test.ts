@@ -25,6 +25,11 @@ jest.mock('../../factories/actor_factory', () => ({
   createActorRecord: jest.fn()
 }));
 
+// Mock ESM helper to avoid import.meta issues in Jest
+jest.mock('../../utils/esm_helper', () => ({
+  getImportMetaUrl: jest.fn(() => null) // Return null in Jest environment
+}));
+
 // Mock dependencies
 jest.mock('../../store');
 jest.mock('../../config_manager');
