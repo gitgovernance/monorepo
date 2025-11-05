@@ -1,3 +1,11 @@
+## [1.11.1](https://github.com/gitgovernance/monorepo/compare/cli-v1.11.0...cli-v1.11.1) (2025-11-05)
+
+
+### 🐛 Bug Fixes
+
+* **core:** resolve agent prompt copy with ESM helper ([#51](https://github.com/gitgovernance/monorepo/issues/51)) ([7b4fb87](https://github.com/gitgovernance/monorepo/commit/7b4fb87a27cacd404d6a7fe7b861fb20e5a99219))
+* **core:** use require.resolve for agent prompt copy ([#50](https://github.com/gitgovernance/monorepo/issues/50)) ([935a1ab](https://github.com/gitgovernance/monorepo/commit/935a1ab601bedf3f53fa68c7e2fec11d4bd60b31))
+
 ## [1.11.0](https://github.com/gitgovernance/monorepo/compare/cli-v1.10.0...cli-v1.11.0) (2025-11-04)
 
 
