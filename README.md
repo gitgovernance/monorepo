@@ -11,6 +11,8 @@
 
 GitGovernance provides the infrastructure of trust to orchestrate collaboration between human and AI agents, bringing engineering discipline to hybrid teams.
 
+> 🏆 **Recognized Winner at the Code with Kiro Hackathon (October 2025)**
+
 ## The Vision: Why GitGovernance?
 
 Modern software teams combine humans and AI agents, but face coordination challenges: operational gaps between where developers work, managers track, and agents execute. The result is coordination silos and leaders operating without unified, verifiable truth.
