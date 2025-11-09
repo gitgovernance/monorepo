@@ -123,13 +123,15 @@ export class InitCommand {
       const projectRoot = process.env['GITGOV_ORIGINAL_DIR'] || process.cwd();
       const eventBus = new EventBus.EventBus();
 
-      const taskStore = new Store.RecordStore<Records.TaskRecord>('tasks', projectRoot);
-      const cycleStore = new Store.RecordStore<Records.CycleRecord>('cycles', projectRoot);
-      const actorStore = new Store.RecordStore<Records.ActorRecord>('actors', projectRoot);
-      const agentStore = new Store.RecordStore<Records.AgentRecord>('agents', projectRoot);
-      const feedbackStore = new Store.RecordStore<Records.FeedbackRecord>('feedback', projectRoot);
-      const executionStore = new Store.RecordStore<Records.ExecutionRecord>('executions', projectRoot);
-      const changelogStore = new Store.RecordStore<Records.ChangelogRecord>('changelogs', projectRoot);
+      const { Factories } = await import('@gitgov/core');
+
+      const taskStore = new Store.RecordStore<Records.TaskRecord>('tasks', Factories.loadTaskRecord, projectRoot);
+      const cycleStore = new Store.RecordStore<Records.CycleRecord>('cycles', Factories.loadCycleRecord, projectRoot);
+      const actorStore = new Store.RecordStore<Records.ActorRecord>('actors', Factories.loadActorRecord, projectRoot);
+      const agentStore = new Store.RecordStore<Records.AgentRecord>('agents', Factories.loadAgentRecord, projectRoot);
+      const feedbackStore = new Store.RecordStore<Records.FeedbackRecord>('feedback', Factories.loadFeedbackRecord, projectRoot);
+      const executionStore = new Store.RecordStore<Records.ExecutionRecord>('executions', Factories.loadExecutionRecord, projectRoot);
+      const changelogStore = new Store.RecordStore<Records.ChangelogRecord>('changelogs', Factories.loadChangelogRecord, projectRoot);
 
       // Create adapters
       const identityAdapter = new Adapters.IdentityAdapter({
