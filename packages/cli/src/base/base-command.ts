@@ -16,6 +16,8 @@ export abstract class BaseCommand<TOptions extends BaseCommandOptions = BaseComm
   implements ICompleteCommand<TOptions> {
 
   protected readonly dependencyService = DependencyInjectionService.getInstance();
+  protected readonly container = DependencyInjectionService.getInstance();
+  protected readonly logger = console;
 
   /**
    * Register the command with Commander.js

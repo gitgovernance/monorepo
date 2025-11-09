@@ -1,3 +1,35 @@
+// Mock @gitgov/core FIRST to avoid import.meta issues in Jest
+// This prevents Jest from executing project_adapter which uses import.meta.url
+// Must be before any other mocks or imports
+jest.mock('@gitgov/core', () => ({
+  Records: {},
+  Factories: {
+    createTaskRecord: jest.fn((data) => data),
+    createCycleRecord: jest.fn((data) => data),
+    createActorRecord: jest.fn((data) => data),
+    createAgentRecord: jest.fn((data) => data),
+    createFeedbackRecord: jest.fn((data) => data),
+    createExecutionRecord: jest.fn((data) => data),
+    createChangelogRecord: jest.fn((data) => data),
+    createTestSignature: jest.fn((keyId, role, notes) => ({
+      keyId,
+      role,
+      notes,
+      timestamp: Date.now(),
+      signature: 'A'.repeat(86) + '=='
+    })),
+    createEmbeddedMetadataRecord: jest.fn((payload, options) => ({
+      header: {
+        version: '1.0',
+        type: 'task',
+        payloadChecksum: 'a'.repeat(64),
+        signatures: options?.signatures || []
+      },
+      payload
+    }))
+  }
+}));
+
 // Mock DependencyInjectionService before importing
 jest.mock('../../services/dependency-injection', () => ({
   DependencyInjectionService: {
@@ -8,6 +40,7 @@ jest.mock('../../services/dependency-injection', () => ({
 import { TaskCommand } from './task-command';
 import { DependencyInjectionService } from '../../services/dependency-injection';
 import type { Records, IndexerAdapter } from '@gitgov/core';
+import { Factories } from '@gitgov/core';
 
 // Test helper: Simple conversion to EnrichedTaskRecord for mocking
 // Note: This is NOT the real enrichment - the real one needs EmbeddedMetadata header
@@ -19,9 +52,67 @@ function enrichTaskForTest(task: Records.TaskRecord): IndexerAdapter.EnrichedTas
 
   return {
     ...task,
+    derivedState: {
+      isStalled: false,
+      isAtRisk: false,
+      needsClarification: false,
+      isBlockedByDependency: false,
+      healthScore: 100,
+      timeInCurrentStage: 0
+    },
+    relationships: {
+      assignedTo: [],
+      dependsOn: [],
+      blockedBy: [],
+      cycles: []
+    },
+    metrics: {
+      executionCount: 0,
+      blockingFeedbackCount: 0,
+      openQuestionCount: 0
+    },
+    release: {
+      isReleased: false
+    },
     lastUpdated: defaultTimestamp,
     lastActivityType: 'task_created'
   };
+}
+
+/**
+ * Helper to create VALIDATED task records using production factories.
+ * This ensures tests use 100% valid records matching real production data.
+ * 
+ * Uses factories for validation:
+ * - createTaskRecord() validates payload structure
+ * - createTestSignature() generates valid Ed25519-format signatures (88-char base64)
+ * - createEmbeddedMetadataRecord() builds complete record with validation
+ * 
+ * @param overrides - Partial TaskRecord to override defaults
+ * @param keyId - Optional keyId for signature (default: 'human:test-user')
+ * @returns GitGovTaskRecord - Fully validated task record
+ */
+function createMockTaskRecord(
+  overrides: Partial<Records.TaskRecord> = {},
+  keyId: string = 'human:test-user'
+): Records.GitGovTaskRecord {
+  // Use factory to create validated payload
+  const payload = Factories.createTaskRecord({
+    title: 'Test Task',
+    status: 'draft',
+    priority: 'medium',
+    description: 'Test task description',
+    tags: ['test'],
+    cycleIds: [],
+    references: [],
+    ...overrides
+  });
+
+  // Create valid signature using factory (generates real 88-char base64 Ed25519 format)
+  const signature = Factories.createTestSignature(keyId, 'author', 'Task created');
+
+  // Build complete record with validation
+  return Factories.createEmbeddedMetadataRecord(payload, { signatures: [signature] }) as Records.GitGovTaskRecord;
 }
 
 // Helper function to create mock index data with proper typing
@@ -29,15 +120,27 @@ function createMockIndexData(
   tasks: Records.TaskRecord[],
   options?: { enrichedTasks?: Records.TaskRecord[] }
 ): IndexerAdapter.IndexData {
+  // Always create enrichedTasks from tasks if not explicitly provided
+  // This ensures the code can access task.status, task.priority, etc. directly
   const enrichedTasks = options?.enrichedTasks
     ? options.enrichedTasks.map(enrichTaskForTest)
-    : [];
+    : tasks.map(enrichTaskForTest);
+
+  // Convert TaskRecord[] to GitGovTaskRecord[] using factory
+  const gitGovTasks = tasks.map(task => createMockTaskRecord(task));
 
   return {
-    tasks,
+    tasks: gitGovTasks,
     enrichedTasks,
     cycles: [],
     actors: [],
+    feedback: [],
+    derivedStates: {
+      stalledTasks: [],
+      atRiskTasks: [],
+      needsClarificationTasks: [],
+      blockedByDependencyTasks: []
+    },
     activityHistory: [],
     metrics: {
       // SystemStatus
