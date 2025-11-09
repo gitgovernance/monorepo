@@ -1,3 +1,21 @@
+## [1.12.0](https://github.com/gitgovernance/monorepo/compare/cli-v1.11.1...cli-v1.12.0) (2025-11-09)
+
+
+### 🚀 Features
+
+* **cli:** implement lint command and update core dependency ([7497d0b](https://github.com/gitgovernance/monorepo/commit/7497d0bc1eab20b8d2167bd19d992caf95c04dbb)), closes [#1762488681](https://github.com/gitgovernance/monorepo/issues/1762488681)
+* **core:** implement author/lastModifier enrichment, validation methods, and lint module ([#54](https://github.com/gitgovernance/monorepo/issues/54)) ([e3b8160](https://github.com/gitgovernance/monorepo/commit/e3b8160f907e56db416ca84b47020b5e7544e05d)), closes [#1758522352](https://github.com/gitgovernance/monorepo/issues/1758522352) [#1762449462](https://github.com/gitgovernance/monorepo/issues/1762449462) [#1762488681](https://github.com/gitgovernance/monorepo/issues/1762488681) [#1762449462](https://github.com/gitgovernance/monorepo/issues/1762449462)
+
+
+### 🐛 Bug Fixes
+
+* **cli:** add loader functions to RecordStore initialization ([dcd0b38](https://github.com/gitgovernance/monorepo/commit/dcd0b380a6e74aade972dcc93505c63fc77905c4))
+
+
+### ♻️ Refactoring
+
+* **cli:** restore factory-based record loading and dashboard enhancements ([ef00365](https://github.com/gitgovernance/monorepo/commit/ef00365a8aaa2871e79ed82874b06a768777ee27))
+
 ## [1.11.1](https://github.com/gitgovernance/monorepo/compare/cli-v1.11.0...cli-v1.11.1) (2025-11-05)
 
 
