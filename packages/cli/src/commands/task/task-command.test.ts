@@ -1,3 +1,35 @@
+// Mock @gitgov/core FIRST to avoid import.meta issues in Jest
+// This prevents Jest from executing project_adapter which uses import.meta.url
+// Must be before any other mocks or imports
+jest.mock('@gitgov/core', () => ({
+  Records: {},
+  Factories: {
+    createTaskRecord: jest.fn((data) => data),
+    createCycleRecord: jest.fn((data) => data),
+    createActorRecord: jest.fn((data) => data),
+    createAgentRecord: jest.fn((data) => data),
+    createFeedbackRecord: jest.fn((data) => data),
+    createExecutionRecord: jest.fn((data) => data),
+    createChangelogRecord: jest.fn((data) => data),
+    createTestSignature: jest.fn((keyId, role, notes) => ({
+      keyId,
+      role,
+      notes,
+      timestamp: Date.now(),
+      signature: 'A'.repeat(86) + '=='
+    })),
+    createEmbeddedMetadataRecord: jest.fn((payload, options) => ({
+      header: {
+        version: '1.0',
+        type: 'task',
+        payloadChecksum: 'a'.repeat(64),
+        signatures: options?.signatures || []
+      },
+      payload
+    }))
+  }
+}));
+
 // Mock DependencyInjectionService before importing
 jest.mock('../../services/dependency-injection', () => ({
   DependencyInjectionService: {
@@ -88,9 +120,11 @@ function createMockIndexData(
   tasks: Records.TaskRecord[],
   options?: { enrichedTasks?: Records.TaskRecord[] }
 ): IndexerAdapter.IndexData {
+  // Always create enrichedTasks from tasks if not explicitly provided
+  // This ensures the code can access task.status, task.priority, etc. directly
   const enrichedTasks = options?.enrichedTasks
     ? options.enrichedTasks.map(enrichTaskForTest)
-    : [];
+    : tasks.map(enrichTaskForTest);
 
   // Convert TaskRecord[] to GitGovTaskRecord[] using factory
   const gitGovTasks = tasks.map(task => createMockTaskRecord(task));
