@@ -75,7 +75,16 @@ jest.doMock('@gitgov/core', () => ({
       getRootCycle: jest.fn()
     }))
   },
-  Records: {}
+  Records: {},
+  Factories: {
+    loadTaskRecord: jest.fn((data) => data),
+    loadCycleRecord: jest.fn((data) => data),
+    loadActorRecord: jest.fn((data) => data),
+    loadAgentRecord: jest.fn((data) => data),
+    loadFeedbackRecord: jest.fn((data) => data),
+    loadExecutionRecord: jest.fn((data) => data),
+    loadChangelogRecord: jest.fn((data) => data)
+  }
 }));
 
 // Mock child_process for git config

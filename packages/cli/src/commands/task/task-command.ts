@@ -501,7 +501,8 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
         // Use cache first
         const indexData = await indexerAdapter.getIndexData();
         if (indexData) {
-          task = indexData.tasks.find((t: Records.TaskRecord) => t.id === taskId) || null;
+          const foundTask = indexData.tasks.find((t) => t.payload.id === taskId);
+          task = foundTask ? foundTask.payload : null;
         }
       }
 

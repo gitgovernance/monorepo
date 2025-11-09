@@ -693,6 +693,26 @@ const RowView: React.FC<{
     return flags[priority] || '⚪';
   };
 
+  /**
+   * Get the appropriate actor to display based on sort mode
+   * - 'recent': Shows lastModifier (most recent activity)
+   * - 'creation': Shows author (who created the task)
+   * - 'priority'/'status': Shows lastModifier (most recent activity)
+   */
+  const getActorForSortMode = (task: IndexerAdapter.EnrichedTaskRecord, mode: SortMode): string => {
+    switch (mode) {
+      case 'creation':
+        // For creation date sort, show the author (creator)
+        return task.relationships?.author?.actorId || task.relationships?.lastModifier?.actorId || '';
+      case 'recent':
+      case 'priority':
+      case 'status':
+      default:
+        // For recent activity, priority, and status sorts, show lastModifier (most recent activity)
+        return task.relationships?.lastModifier?.actorId || task.relationships?.author?.actorId || '';
+    }
+  };
+
   const columnWidths = {
     title: 0.40,
     status: 0.10,
@@ -758,7 +778,9 @@ const RowView: React.FC<{
               }
 
               const statusDisplay = task.status;
-              const actorInfo = '—'; // TODO: Implement actor assignment tracking
+              // Get actor based on current sort mode (author for creation, lastModifier for recent/priority/status)
+              const actorId = getActorForSortMode(task, sortMode);
+              const actorInfo = actorId ? actorId.replace('human:', '').replace('agent:', '') : '—';
               const pct = task.status === 'done' ? '100' : task.status === 'paused' ? '45' : '95';
               const globalIndex = startIndex + index;
               const isSelected = selectedIndex !== -1 && globalIndex === selectedIndex;
@@ -766,7 +788,7 @@ const RowView: React.FC<{
               // Create a single continuous text line for the entire row
               const titleText = `${getStatusIcon(task.status)} ${task.title}`;
               const priorityText = `${getPriorityFlag(task.priority)} ${task.priority}`;
-              const cycleText = task.cycleIds?.[0]?.slice(-8) || "Build MVP";
+              const cycleText = task.cycleIds?.[0]?.slice(-8) || "—";
               const progressText = `🟢 ${pct}%`;
               const activityText = task.lastUpdated ? getRelativeTime(task.lastUpdated) : '—';
 
@@ -835,7 +857,8 @@ const RowView: React.FC<{
                       activity.type === 'actor_created' ? '👤' : '📋';
 
             const actorDisplay = activity.actorId ? ` by ${activity.actorId.replace('human:', '').replace('agent:', '')}` : '';
-            const priorityDisplay = activity.metadata?.priority ? ` (${activity.metadata.priority})` : '';
+            // Only task_created events have priority in metadata
+            const priorityDisplay = activity.type === 'task_created' && activity.metadata?.priority ? ` (${activity.metadata.priority})` : '';
 
             return (
               <Text key={index}>
@@ -1344,6 +1367,30 @@ const TaskDetailModal: React.FC<{
   contentLines.push(<Text key="cycles-label" color={colors.headerSecondary}>Cycles:</Text>);
   contentLines.push(<Text key="cycles-value" color={colors.muted}>{cycleDisplay}</Text>);
   contentLines.push(<Text key="space-5">{' '}</Text>);
+
+  // Show author and lastModifier if available
+  if (task.relationships?.author || task.relationships?.lastModifier) {
+    contentLines.push(<Text key="authors-label" color={colors.headerSecondary}>Authors:</Text>);
+    const authorInfo: string[] = [];
+    if (task.relationships?.author) {
+      const authorName = task.relationships.author.actorId.replace('human:', '').replace('agent:', '');
+      const authorDate = new Date(task.relationships.author.timestamp * 1000).toLocaleDateString();
+      authorInfo.push(`Created by ${authorName} on ${authorDate}`);
+    }
+    if (task.relationships?.lastModifier && task.relationships.lastModifier.actorId !== task.relationships?.author?.actorId) {
+      const modifierName = task.relationships.lastModifier.actorId.replace('human:', '').replace('agent:', '');
+      const modifierDate = new Date(task.relationships.lastModifier.timestamp * 1000).toLocaleDateString();
+      authorInfo.push(`Last modified by ${modifierName} on ${modifierDate}`);
+    } else if (task.relationships?.lastModifier) {
+      const modifierName = task.relationships.lastModifier.actorId.replace('human:', '').replace('agent:', '');
+      const modifierDate = new Date(task.relationships.lastModifier.timestamp * 1000).toLocaleDateString();
+      authorInfo.push(`Last modified by ${modifierName} on ${modifierDate}`);
+    }
+    authorInfo.forEach((info, i) => {
+      contentLines.push(<Text key={`author-${i}`} color={colors.muted}>  {info}</Text>);
+    });
+    contentLines.push(<Text key="space-authors">{' '}</Text>);
+  }
 
   contentLines.push(<Text key="desc-label" color={colors.headerSecondary}>Description:</Text>);
   // Render description as formatted markdown
