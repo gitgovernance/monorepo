@@ -339,7 +339,7 @@ export class StatusCommand {
     if (personalWork.assignedTasks.length > 0) {
       personalWork.assignedTasks.forEach(task => {
         const statusIcon = this.getStatusIcon(task.status);
-        const priorityFlag = task.priority === 'critical' ? '🔴' : task.priority === 'high' ? '🟡' : '';
+        const priorityFlag = task.priority === 'critical' ? '🔴' : task.priority === 'high' ? '🟠' : '';
         console.log(`  ${statusIcon} [${task.status}] ${task.id} - ${task.title} ${priorityFlag}`);
         if (options.verbose) {
           console.log(`    Priority: ${task.priority}, Tags: ${task.tags?.join(', ') || 'none'}`);
@@ -377,7 +377,7 @@ export class StatusCommand {
     if (systemHealth.alerts.length > 0) {
       console.log('🚨 Alerts:');
       systemHealth.alerts.forEach(alert => {
-        const alertIcon = alert.severity === 'critical' ? '🔴' : alert.severity === 'high' ? '🟡' : '🔵';
+        const alertIcon = alert.severity === 'critical' ? '🔴' : alert.severity === 'high' ? '🟠' : '🔵';
         console.log(`  ${alertIcon} ${alert.message}`);
       });
     }
@@ -447,7 +447,7 @@ export class StatusCommand {
       console.log('');
       console.log('🚨 Alerts & Warnings');
       overview.alerts.forEach(alert => {
-        const alertIcon = alert.severity === 'critical' ? '🔴' : alert.severity === 'high' ? '🟡' : '🔵';
+        const alertIcon = alert.severity === 'critical' ? '🔴' : alert.severity === 'high' ? '🟠' : '🔵';
         console.log(`  ${alertIcon} ${alert.message}`);
       });
     }

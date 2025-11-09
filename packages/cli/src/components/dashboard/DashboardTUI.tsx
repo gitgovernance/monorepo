@@ -688,7 +688,7 @@ const RowView: React.FC<{
 
   const getPriorityFlag = (priority: string): string => {
     const flags: Record<string, string> = {
-      'critical': '🔴', 'high': '🟡', 'medium': '🔵', 'low': '⚪'
+      'critical': '🔴', 'high': '🟠', 'medium': '🔵', 'low': '⚪'
     };
     return flags[priority] || '⚪';
   };
@@ -1051,7 +1051,7 @@ const ScrumView: React.FC<{
 
   const getPriorityFlag = (priority: string): string => {
     const flags: Record<string, string> = {
-      'critical': '🔴', 'high': '🟡', 'medium': '🔵', 'low': '⚪'
+      'critical': '🔴', 'high': '🟠', 'medium': '🔵', 'low': '⚪'
     };
     return flags[priority] || '⚪';
   };
