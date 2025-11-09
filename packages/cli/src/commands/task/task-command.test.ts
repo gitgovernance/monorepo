@@ -8,6 +8,7 @@ jest.mock('../../services/dependency-injection', () => ({
 import { TaskCommand } from './task-command';
 import { DependencyInjectionService } from '../../services/dependency-injection';
 import type { Records, IndexerAdapter } from '@gitgov/core';
+import { Factories } from '@gitgov/core';
 
 // Test helper: Simple conversion to EnrichedTaskRecord for mocking
 // Note: This is NOT the real enrichment - the real one needs EmbeddedMetadata header
@@ -19,9 +20,67 @@ function enrichTaskForTest(task: Records.TaskRecord): IndexerAdapter.EnrichedTas
 
   return {
     ...task,
+    derivedState: {
+      isStalled: false,
+      isAtRisk: false,
+      needsClarification: false,
+      isBlockedByDependency: false,
+      healthScore: 100,
+      timeInCurrentStage: 0
+    },
+    relationships: {
+      assignedTo: [],
+      dependsOn: [],
+      blockedBy: [],
+      cycles: []
+    },
+    metrics: {
+      executionCount: 0,
+      blockingFeedbackCount: 0,
+      openQuestionCount: 0
+    },
+    release: {
+      isReleased: false
+    },
     lastUpdated: defaultTimestamp,
     lastActivityType: 'task_created'
   };
+}
+
+/**
+ * Helper to create VALIDATED task records using production factories.
+ * This ensures tests use 100% valid records matching real production data.
+ * 
+ * Uses factories for validation:
+ * - createTaskRecord() validates payload structure
+ * - createTestSignature() generates valid Ed25519-format signatures (88-char base64)
+ * - createEmbeddedMetadataRecord() builds complete record with validation
+ * 
+ * @param overrides - Partial TaskRecord to override defaults
+ * @param keyId - Optional keyId for signature (default: 'human:test-user')
+ * @returns GitGovTaskRecord - Fully validated task record
+ */
+function createMockTaskRecord(
+  overrides: Partial<Records.TaskRecord> = {},
+  keyId: string = 'human:test-user'
+): Records.GitGovTaskRecord {
+  // Use factory to create validated payload
+  const payload = Factories.createTaskRecord({
+    title: 'Test Task',
+    status: 'draft',
+    priority: 'medium',
+    description: 'Test task description',
+    tags: ['test'],
+    cycleIds: [],
+    references: [],
+    ...overrides
+  });
+
+  // Create valid signature using factory (generates real 88-char base64 Ed25519 format)
+  const signature = Factories.createTestSignature(keyId, 'author', 'Task created');
+
+  // Build complete record with validation
+  return Factories.createEmbeddedMetadataRecord(payload, { signatures: [signature] }) as Records.GitGovTaskRecord;
 }
 
 // Helper function to create mock index data with proper typing
@@ -33,11 +92,21 @@ function createMockIndexData(
     ? options.enrichedTasks.map(enrichTaskForTest)
     : [];
 
+  // Convert TaskRecord[] to GitGovTaskRecord[] using factory
+  const gitGovTasks = tasks.map(task => createMockTaskRecord(task));
+
   return {
-    tasks,
+    tasks: gitGovTasks,
     enrichedTasks,
     cycles: [],
     actors: [],
+    feedback: [],
+    derivedStates: {
+      stalledTasks: [],
+      atRiskTasks: [],
+      needsClarificationTasks: [],
+      blockedByDependencyTasks: []
+    },
     activityHistory: [],
     metrics: {
       // SystemStatus
