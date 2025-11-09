@@ -40,7 +40,7 @@ describe('ExecutionRecord Factory', () => {
         references: ['commit:abc123']
       };
 
-      const result = await createExecutionRecord(payload);
+      const result = createExecutionRecord(payload);
 
       expect(result).toEqual({
         id: '1752275500-exec-test-execution',
@@ -61,7 +61,7 @@ describe('ExecutionRecord Factory', () => {
         result: 'Successfully implemented the feature'
       };
 
-      const result = await createExecutionRecord(payload);
+      const result = createExecutionRecord(payload);
 
       expect(result).toEqual({
         id: '1752275500-exec-test-execution',
@@ -83,7 +83,7 @@ describe('ExecutionRecord Factory', () => {
         result: 'Successfully implemented the feature'
       };
 
-      const result = await createExecutionRecord(payload);
+      const result = createExecutionRecord(payload);
 
       expect(result.id).toBe('1752275600-exec-custom-id');
       expect(mockGenerateExecutionId).not.toHaveBeenCalled();
@@ -98,7 +98,7 @@ describe('ExecutionRecord Factory', () => {
 
       mockGenerateExecutionId.mockReturnValue('1752275500-exec-custom-title-execution');
 
-      const result = await createExecutionRecord(payload);
+      const result = createExecutionRecord(payload);
 
       expect(result.id).toBe('1752275500-exec-custom-title-execution');
       expect(mockGenerateExecutionId).toHaveBeenCalledWith('Custom Title Execution', expect.any(Number));
@@ -119,8 +119,8 @@ describe('ExecutionRecord Factory', () => {
         errors: validationErrors
       });
 
-      await expect(createExecutionRecord(payload)).rejects.toThrow(DetailedValidationError);
-      await expect(createExecutionRecord(payload)).rejects.toThrow('ExecutionRecord');
+      expect(() => createExecutionRecord(payload)).toThrow(DetailedValidationError);
+      expect(() => createExecutionRecord(payload)).toThrow('ExecutionRecord');
     });
 
     it('[EARS-6] should preserve all provided fields in the output', async () => {
@@ -134,7 +134,7 @@ describe('ExecutionRecord Factory', () => {
         references: ['commit:def456', 'file:test.ts']
       };
 
-      const result = await createExecutionRecord(payload);
+      const result = createExecutionRecord(payload);
 
       expect(result).toEqual(payload);
       expect(mockValidateExecutionRecordDetailed).toHaveBeenCalledWith(payload);
@@ -147,7 +147,7 @@ describe('ExecutionRecord Factory', () => {
         references: []
       };
 
-      const result = await createExecutionRecord(payload);
+      const result = createExecutionRecord(payload);
 
       expect(result.references).toEqual([]);
     });
@@ -160,7 +160,7 @@ describe('ExecutionRecord Factory', () => {
       };
 
       const beforeTime = Math.floor(Date.now() / 1000);
-      await createExecutionRecord(payload);
+      createExecutionRecord(payload);
       const afterTime = Math.floor(Date.now() / 1000);
 
       expect(mockGenerateExecutionId).toHaveBeenCalledWith(
@@ -189,7 +189,7 @@ describe('ExecutionRecord Factory', () => {
           // taskId missing - should trigger validation error
         };
 
-        await expect(createExecutionRecord(payload)).rejects.toThrow(DetailedValidationError);
+        expect(() => createExecutionRecord(payload)).toThrow(DetailedValidationError);
       });
 
       it('[EARS-23] should throw DetailedValidationError for invalid taskId pattern', async () => {
@@ -207,7 +207,7 @@ describe('ExecutionRecord Factory', () => {
           result: 'Test execution result'
         };
 
-        await expect(createExecutionRecord(payload)).rejects.toThrow(DetailedValidationError);
+        expect(() => createExecutionRecord(payload)).toThrow(DetailedValidationError);
       });
 
       it('[EARS-24] should throw DetailedValidationError for result shorter than 10 characters', async () => {
@@ -225,7 +225,7 @@ describe('ExecutionRecord Factory', () => {
           result: 'short' // Too short
         };
 
-        await expect(createExecutionRecord(payload)).rejects.toThrow(DetailedValidationError);
+        expect(() => createExecutionRecord(payload)).toThrow(DetailedValidationError);
       });
 
       it('[EARS-22] should accept valid taskId', async () => {
@@ -234,7 +234,7 @@ describe('ExecutionRecord Factory', () => {
           result: 'Successfully completed execution with valid taskId'
         };
 
-        const result = await createExecutionRecord(payload);
+        const result = createExecutionRecord(payload);
 
         expect(result.taskId).toBe('1752274500-task-valid-test-task');
         expect(result.result).toBe('Successfully completed execution with valid taskId');
@@ -253,7 +253,7 @@ describe('ExecutionRecord Factory', () => {
             result: result
           };
 
-          const execution = await createExecutionRecord(payload);
+          const execution = createExecutionRecord(payload);
           expect(execution.result).toBe(result);
         }
       });

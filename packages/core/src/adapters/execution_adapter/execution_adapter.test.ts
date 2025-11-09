@@ -115,7 +115,7 @@ describe('ExecutionAdapter', () => {
     mockPublishEvent = publishEvent as jest.Mock;
 
     // Mock factory
-    (createExecutionRecord as jest.Mock).mockResolvedValue(mockCreatedExecutionPayload);
+    (createExecutionRecord as jest.Mock).mockReturnValue(mockCreatedExecutionPayload);
     mockIdentityAdapter.signRecord.mockResolvedValue(mockSignedRecord);
 
     // Create adapter with mocked dependencies
@@ -127,7 +127,8 @@ describe('ExecutionAdapter', () => {
         subscribe: jest.fn(),
         unsubscribe: jest.fn(),
         getSubscriptions: jest.fn(),
-        clearSubscriptions: jest.fn()
+        clearSubscriptions: jest.fn(),
+        waitForIdle: jest.fn().mockResolvedValue(undefined)
       } as IEventStream,
       taskStore: mockTaskStore
     });
@@ -157,7 +158,7 @@ describe('ExecutionAdapter', () => {
         message: 'result is required',
         value: undefined
       }]);
-      (createExecutionRecord as jest.Mock).mockRejectedValue(validationError);
+      (createExecutionRecord as jest.Mock).mockImplementation(() => { throw validationError; });
 
       await expect(executionAdapter.create({ taskId: 'invalid' }, mockActorId))
         .rejects.toThrow(DetailedValidationError);
@@ -182,7 +183,7 @@ describe('ExecutionAdapter', () => {
         message: 'result is required',
         value: undefined
       }]);
-      (createExecutionRecord as jest.Mock).mockRejectedValue(validationError);
+      (createExecutionRecord as jest.Mock).mockImplementation(() => { throw validationError; });
 
       await expect(executionAdapter.create(invalidPayload, mockActorId))
         .rejects.toThrow(DetailedValidationError);
@@ -195,7 +196,7 @@ describe('ExecutionAdapter', () => {
         message: 'must be at least 10 characters',
         value: 'short'
       }]);
-      (createExecutionRecord as jest.Mock).mockRejectedValue(validationError);
+      (createExecutionRecord as jest.Mock).mockImplementation(() => { throw validationError; });
 
       await expect(executionAdapter.create(invalidPayload, mockActorId))
         .rejects.toThrow(DetailedValidationError);
@@ -217,7 +218,8 @@ describe('ExecutionAdapter', () => {
           subscribe: jest.fn(),
           unsubscribe: jest.fn(),
           getSubscriptions: jest.fn(),
-          clearSubscriptions: jest.fn()
+          clearSubscriptions: jest.fn(),
+          waitForIdle: jest.fn().mockResolvedValue(undefined)
         } as IEventStream,
         // No taskStore provided
       });
@@ -331,14 +333,14 @@ describe('ExecutionAdapter', () => {
         message: 'taskId is required',
         value: undefined
       }]);
-      (createExecutionRecord as jest.Mock).mockRejectedValue(validationError);
+      (createExecutionRecord as jest.Mock).mockImplementation(() => { throw validationError; });
 
       await expect(executionAdapter.create({}, mockActorId))
         .rejects.toThrow(DetailedValidationError);
     });
 
     it('should handle factory errors gracefully', async () => {
-      (createExecutionRecord as jest.Mock).mockRejectedValue(new Error('Factory error'));
+      (createExecutionRecord as jest.Mock).mockImplementation(() => { throw new Error('Factory error'); });
 
       await expect(executionAdapter.create(mockPayload, mockActorId))
         .rejects.toThrow('Factory error');

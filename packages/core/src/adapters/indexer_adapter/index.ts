@@ -3,6 +3,8 @@ import * as fsSync from 'fs';
 import * as path from 'path';
 import { RecordStore } from '../../store';
 import { MetricsAdapter } from '../metrics_adapter';
+import { extractAuthor, extractLastModifier } from '../../utils/signature_utils';
+import { calculatePayloadChecksum, verifySignatures } from '../../crypto';
 import type { TaskRecord } from '../../types';
 import type { CycleRecord } from '../../types';
 import type { FeedbackRecord } from '../../types';
@@ -36,13 +38,41 @@ export type AllRecords = {
 };
 
 /**
- * Enhanced Task Record with calculated activity metadata
- * Used by Dashboard for intelligent sorting and display
+ * Enhanced Task Record with complete intelligence layer
+ * Calculated by enrichTaskRecord() with relationships, metrics, and derived states
+ * 
+ * @see indexer_adapter.md Section 3.6 - EnrichedTaskRecord Specification (EARS 25-48)
  */
 export type EnrichedTaskRecord = TaskRecord & {
-  lastUpdated: number; // Unix timestamp of most recent activity
+  derivedState: {
+    isStalled: boolean;
+    isAtRisk: boolean;
+    needsClarification: boolean;
+    isBlockedByDependency: boolean;
+    healthScore: number; // 0-100
+    timeInCurrentStage: number; // días
+  };
+  relationships: {
+    author?: { actorId: string; timestamp: number };
+    lastModifier?: { actorId: string; timestamp: number };
+    assignedTo: Array<{ actorId: string; assignedAt?: number }>;
+    dependsOn: string[]; // Typed references: task:, pr:, issue:, file:, url:
+    blockedBy: string[]; // Reverse dependencies (not completed)
+    cycles: Array<{ id: string; title: string }>;
+  };
+  metrics: {
+    executionCount: number;
+    blockingFeedbackCount: number;
+    openQuestionCount: number;
+    timeToResolution?: number; // horas (solo para done tasks)
+  };
+  release: {
+    isReleased: boolean;
+    lastReleaseVersion?: string;
+  };
+  lastUpdated: number; // Unix timestamp ms
   lastActivityType: 'task_modified' | 'feedback_received' | 'execution_added' | 'changelog_created' | 'task_created';
-  recentActivity?: string; // Human-readable description of recent activity
+  recentActivity?: string;
 };
 
 /**
@@ -78,11 +108,57 @@ export type IndexData = {
     generationTime: number; // ms
   };
   metrics: SystemStatus & ProductivityMetrics & CollaborationMetrics;
+  derivedStates: DerivedStates; // Global derived states for system-wide queries
   activityHistory: ActivityEvent[]; // Para dashboard activity streams
-  tasks: TaskRecord[];
+
+  /**
+   * Raw task records with FULL headers (source of truth for signatures/checksums).
+   * Mantener por backward compatibility - deprecar gradualmente en favor de enrichedTasks.
+   */
+  tasks: GitGovTaskRecord[]; // Full records with headers
+
+  /**
+   * Enriched tasks with intelligence layer (NEW - Phase 1A).
+   * Payload + campos calculados (relationships, metrics, derivedState, release).
+   * NO incluye headers (author/lastModifier ya extraídos en relationships).
+   */
   enrichedTasks: EnrichedTaskRecord[]; // Tasks with activity metadata for Dashboard
-  cycles: CycleRecord[];
-  actors: ActorRecord[];
+
+  /** Raw cycle records with FULL headers */
+  cycles: GitGovCycleRecord[]; // Full records with headers
+
+  /** Raw actor records with FULL headers */
+  actors: GitGovActorRecord[]; // Full records with headers
+
+  /** Raw feedback records with FULL headers (optional - Phase 1B+) */
+  feedback: GitGovFeedbackRecord[]; // Full records with headers
+};
+
+/**
+ * System-wide derived states for dashboard analytics and filtering.
+ * Calculated by calculateDerivedStates() during index generation.
+ * 
+ * @see derived_data_protocol.md for calculation algorithms
+ */
+export type DerivedStates = {
+  stalledTasks: string[]; // Task IDs con >7 días sin activity en estado 'active'
+  atRiskTasks: string[]; // Task IDs con prioridad 'critical' + 'paused' O 2+ blocking feedbacks
+  needsClarificationTasks: string[]; // Task IDs con feedback tipo 'question' abierto
+  blockedByDependencyTasks: string[]; // Task IDs con dependencias a tasks no completadas
+};
+
+/**
+ * Optimized version of DerivedStates using Sets for O(1) lookup performance.
+ * Used internally by enrichTaskRecord() to efficiently check task membership.
+ * 
+ * Conversion from DerivedStates (arrays) to DerivedStateSets (Sets) happens once
+ * in generateIndex() before processing multiple tasks, avoiding repeated O(n) lookups.
+ */
+export type DerivedStateSets = {
+  stalledTasks: Set<string>;
+  atRiskTasks: Set<string>;
+  needsClarificationTasks: Set<string>;
+  blockedByDependencyTasks: Set<string>;
 };
 
 export type IntegrityReport = {
@@ -99,6 +175,7 @@ export type IndexGenerationReport = {
   success: boolean;
   recordsProcessed: number;
   metricsCalculated: number;
+  derivedStatesApplied: number; // Number of tasks with derived states calculated
   generationTime: number; // ms
   cacheSize: number; // bytes
   cacheStrategy: "json" | "sqlite" | "dual";
@@ -129,9 +206,10 @@ export interface IIndexerAdapter {
   generateIndex(): Promise<IndexGenerationReport>;
   getIndexData(): Promise<IndexData | null>;
   validateIntegrity(): Promise<IntegrityReport>;
+  calculateDerivedStates(allRecords: AllRecords): Promise<DerivedStates>; // NUEVO - System-wide derived states
   calculateActivityHistory(allRecords: AllRecords): Promise<ActivityEvent[]>; // NUEVO
-  calculateLastUpdated(task: TaskRecord, relatedRecords: AllRecords): Promise<{ lastUpdated: number; lastActivityType: EnrichedTaskRecord['lastActivityType']; recentActivity: string }>; // NUEVO
-  enrichTaskRecord(task: GitGovTaskRecord, relatedRecords: AllRecords): Promise<EnrichedTaskRecord>; // UPDATED: Now accepts GitGovTaskRecord with headers
+  calculateLastUpdated(taskPayload: TaskRecord, relatedRecords: AllRecords): Promise<{ lastUpdated: number; lastActivityType: EnrichedTaskRecord['lastActivityType']; recentActivity: string }>; // NUEVO
+  enrichTaskRecord(task: GitGovTaskRecord, relatedRecords: AllRecords, derivedStateSets: DerivedStateSets): Promise<EnrichedTaskRecord>; // UPDATED: Uses DerivedStateSets (Sets) for O(1) lookup (EARS-43)
   isIndexUpToDate(): Promise<boolean>;
   invalidateCache(): Promise<void>;
 }
@@ -218,19 +296,31 @@ export class FileIndexerAdapter implements IIndexerAdapter {
 
       const activityHistory = await this.calculateActivityHistory(allRecords);
 
-      // 3.5. Enrich tasks with activity metadata
-      const enrichedTasks: EnrichedTaskRecord[] = [];
-      for (const task of tasks) {
-        const enrichedTask = await this.enrichTaskRecord(task, allRecords);
-        enrichedTasks.push(enrichedTask);
-      }
+      // 3.5. Calculate system-wide derived states (EARS 7-10)
+      const derivedStates = await this.calculateDerivedStates(allRecords);
+
+      // 3.6. Convert DerivedStates arrays to DerivedStateSets for O(1) lookup performance
+      const derivedStateSets: DerivedStateSets = {
+        stalledTasks: new Set(derivedStates.stalledTasks),
+        atRiskTasks: new Set(derivedStates.atRiskTasks),
+        needsClarificationTasks: new Set(derivedStates.needsClarificationTasks),
+        blockedByDependencyTasks: new Set(derivedStates.blockedByDependencyTasks)
+      };
+
+      // 3.7. Enrich tasks with complete intelligence layer (EARS-43: pass pre-calculated derivedStates)
+      const enrichedTasks = await Promise.all(
+        tasks.map(task => this.enrichTaskRecord(task, allRecords, derivedStateSets))
+      );
+
+      // 3.8. Validate integrity to populate integrityStatus (EARS-4 integration)
+      const integrityReport = await this.validateIntegrity();
 
       // 4. Build IndexData structure
       const indexData: IndexData = {
         metadata: {
           generatedAt: new Date().toISOString(),
           lastCommitHash: await this.getGitCommitHash(),
-          integrityStatus: "valid", // TODO: Implement integrity check
+          integrityStatus: integrityReport.status, // Populated from validateIntegrity() (EARS-4)
           recordCounts: {
             tasks: tasks.length,
             cycles: cycles.length,
@@ -243,11 +333,13 @@ export class FileIndexerAdapter implements IIndexerAdapter {
           generationTime: 0 // Will be set below
         },
         metrics: { ...systemStatus, ...productivityMetrics, ...collaborationMetrics },
-        activityHistory, // NUEVO
-        tasks: tasks.map(t => t.payload), // Extract payloads for IndexData
-        enrichedTasks, // NUEVO - Tasks with activity metadata
-        cycles: cycles.map(c => c.payload), // Extract payloads for IndexData
-        actors: actors.map(a => a.payload) // Extract payloads for IndexData
+        derivedStates, // System-wide derived states for analytics
+        activityHistory, // Activity stream for dashboard
+        tasks, // Keep full records with headers (source of truth)
+        enrichedTasks, // Tasks with intelligence layer
+        cycles, // Keep full records with headers
+        actors, // Keep full records with headers
+        feedback: allRecords.feedback // Optional - Phase 1B+ raw feedback records
       };
 
       // 4. Write cache (Phase 1: JSON file)
@@ -265,6 +357,7 @@ export class FileIndexerAdapter implements IIndexerAdapter {
         success: true,
         recordsProcessed: tasks.length + cycles.length + actors.length,
         metricsCalculated: 3, // systemStatus + productivity + collaboration
+        derivedStatesApplied: Object.values(derivedStates).reduce((sum, arr) => sum + arr.length, 0), // Total tasks with derived states
         generationTime: totalTime,
         cacheSize,
         cacheStrategy: this.cacheStrategy,
@@ -277,6 +370,7 @@ export class FileIndexerAdapter implements IIndexerAdapter {
         success: false,
         recordsProcessed: 0,
         metricsCalculated: 0,
+        derivedStatesApplied: 0,
         generationTime: performance.now() - startTime,
         cacheSize: 0,
         cacheStrategy: this.cacheStrategy,
@@ -288,6 +382,7 @@ export class FileIndexerAdapter implements IIndexerAdapter {
 
   /**
    * [EARS-2] Gets data from local cache for fast CLI queries
+   * [EARS-13] Returns null and logs warning if cache is corrupted
    */
   async getIndexData(): Promise<IndexData | null> {
     try {
@@ -309,19 +404,31 @@ export class FileIndexerAdapter implements IIndexerAdapter {
 
       return indexData;
     } catch (error) {
-      console.warn(`Cache read error: ${error instanceof Error ? error.message : String(error)}`);
+      // [EARS-13] Cache is corrupted or invalid - log warning and suggest regeneration
+      console.warn(`Warning: Cache is corrupted or invalid. Please regenerate with 'gitgov index'.`);
+      console.warn(`Details: ${error instanceof Error ? error.message : String(error)}`);
       return null;
     }
   }
 
   /**
-   * [EARS-4] Validates integrity of Records without regenerating cache
+   * [EARS-4, EARS-70 to EARS-76] Validates integrity of Records without regenerating cache
+   * 
+   * PHASE 1A (IMPLEMENTED): Basic schema validation (required fields)
+   * PHASE 1B (IMPLEMENTED): Cryptographic validation (checksums + signatures)
+   * TODO FUTURE:
+   * - Integrate ValidatorModule for comprehensive schema validation
+   * - Compare cache consistency with Records
+   * - Detect broken references between records
+   * - Validate timestamp consistency
    */
   async validateIntegrity(): Promise<IntegrityReport> {
     const startTime = performance.now();
     const errors: IntegrityError[] = [];
     const warnings: IntegrityWarning[] = [];
     let recordsScanned = 0;
+    let checksumFailures = 0;
+    let signatureFailures = 0;
 
     try {
       // Read all records for validation
@@ -332,7 +439,7 @@ export class FileIndexerAdapter implements IIndexerAdapter {
 
       recordsScanned = tasks.length + cycles.length;
 
-      // Basic validation (schema validation would need ValidatorModule)
+      // PHASE 1A: Schema validation - verify required fields
       for (const task of tasks) {
         if (!task.payload.id || !task.payload.description) {
           errors.push({
@@ -353,6 +460,68 @@ export class FileIndexerAdapter implements IIndexerAdapter {
         }
       }
 
+      // PHASE 1B: Checksum verification (EARS-70 to EARS-72)
+      for (const task of tasks) {
+        const calculatedChecksum = calculatePayloadChecksum(task.payload);
+        if (calculatedChecksum !== task.header.payloadChecksum) {
+          checksumFailures++;
+          errors.push({
+            type: 'checksum_failure',
+            recordId: task.payload.id,
+            message: `Checksum mismatch: expected ${task.header.payloadChecksum}, got ${calculatedChecksum}`
+          });
+        }
+      }
+
+      for (const cycle of cycles) {
+        const calculatedChecksum = calculatePayloadChecksum(cycle.payload);
+        if (calculatedChecksum !== cycle.header.payloadChecksum) {
+          checksumFailures++;
+          errors.push({
+            type: 'checksum_failure',
+            recordId: cycle.payload.id,
+            message: `Checksum mismatch: expected ${cycle.header.payloadChecksum}, got ${calculatedChecksum}`
+          });
+        }
+      }
+
+      // PHASE 1B: Signature verification (EARS-73 to EARS-76)
+      // Create actor public key lookup function for signature verification
+      const getActorPublicKey = async (keyId: string): Promise<string | null> => {
+        // EARS-76: Graceful degradation if actorStore not available
+        if (!this.actorStore) {
+          return null;
+        }
+        const actor = await this.actorStore.read(keyId);
+        return actor?.payload.publicKey || null;
+      };
+
+      // Verify signatures for all tasks
+      for (const task of tasks) {
+        const isValid = await verifySignatures(task, getActorPublicKey);
+        if (!isValid) {
+          signatureFailures++;
+          errors.push({
+            type: 'signature_invalid',
+            recordId: task.payload.id,
+            message: 'One or more signatures failed verification'
+          });
+        }
+      }
+
+      // Verify signatures for all cycles
+      for (const cycle of cycles) {
+        const isValid = await verifySignatures(cycle, getActorPublicKey);
+        if (!isValid) {
+          signatureFailures++;
+          errors.push({
+            type: 'signature_invalid',
+            recordId: cycle.payload.id,
+            message: 'One or more signatures failed verification'
+          });
+        }
+      }
+
       const status = errors.length > 0 ? "errors" : warnings.length > 0 ? "warnings" : "valid";
 
       return {
@@ -361,8 +530,8 @@ export class FileIndexerAdapter implements IIndexerAdapter {
         errorsFound: errors,
         warningsFound: warnings,
         validationTime: performance.now() - startTime,
-        checksumFailures: 0, // TODO: Implement checksum validation
-        signatureFailures: 0  // TODO: Implement signature validation
+        checksumFailures,
+        signatureFailures
       };
 
     } catch (error) {
@@ -376,8 +545,8 @@ export class FileIndexerAdapter implements IIndexerAdapter {
         }],
         warningsFound: warnings,
         validationTime: performance.now() - startTime,
-        checksumFailures: 0,
-        signatureFailures: 0
+        checksumFailures,
+        signatureFailures
       };
     }
   }
@@ -532,6 +701,7 @@ export class FileIndexerAdapter implements IIndexerAdapter {
 
   /**
    * Reads all changelogs from changelogStore (graceful degradation) with full metadata.
+   * Validates schema and filters out invalid records with warnings.
    */
   private async readAllChangelogs(): Promise<GitGovChangelogRecord[]> {
     if (!this.changelogStore) {
@@ -544,6 +714,7 @@ export class FileIndexerAdapter implements IIndexerAdapter {
     for (const id of changelogIds) {
       const record = await this.changelogStore.read(id);
       if (record) {
+        // Loader validates automatically - invalid records return null
         changelogs.push(record);
       }
     }
@@ -553,15 +724,84 @@ export class FileIndexerAdapter implements IIndexerAdapter {
 
   /**
    * Writes cache data to file (Phase 1: JSON)
+   * 
+   * [EARS-14] Creates automatic backup of existing cache before writing.
+   * If write fails, backup can be restored to preserve previous cache state.
    */
   private async writeCacheFile(indexData: IndexData): Promise<void> {
     // Ensure .gitgov directory exists
     const cacheDir = path.dirname(this.cachePath);
     await fs.mkdir(cacheDir, { recursive: true });
 
-    // Write JSON cache file
-    const jsonContent = JSON.stringify(indexData, null, 2);
-    await fs.writeFile(this.cachePath, jsonContent, 'utf-8');
+    // [EARS-14] Create backup of existing cache before writing new one
+    await this.createCacheBackup();
+
+    try {
+      // Write JSON cache file
+      const jsonContent = JSON.stringify(indexData, null, 2);
+      await fs.writeFile(this.cachePath, jsonContent, 'utf-8');
+
+      // [EARS-14] Successfully written - delete backup
+      await this.deleteCacheBackup();
+    } catch (error) {
+      // [EARS-14] Write failed - restore backup
+      await this.restoreCacheFromBackup();
+      throw error; // Re-throw to propagate error to caller
+    }
+  }
+
+  /**
+   * [EARS-14] Creates a backup of the current cache file.
+   * If cache doesn't exist, this is a no-op (nothing to backup).
+   */
+  private async createCacheBackup(): Promise<void> {
+    const backupPath = `${this.cachePath}.backup`;
+
+    try {
+      const cacheExists = await this.cacheFileExists();
+      if (cacheExists) {
+        await fs.copyFile(this.cachePath, backupPath);
+      }
+    } catch (error) {
+      // If backup creation fails, log warning but don't block write
+      console.warn(`Warning: Could not create cache backup: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * [EARS-14] Restores cache from backup file.
+   * Used when cache write operation fails to preserve previous state.
+   */
+  private async restoreCacheFromBackup(): Promise<void> {
+    const backupPath = `${this.cachePath}.backup`;
+
+    try {
+      // Check if backup exists
+      await fs.access(backupPath);
+
+      // Restore backup to original cache location
+      await fs.copyFile(backupPath, this.cachePath);
+
+      // Clean up backup after restoration
+      await fs.unlink(backupPath);
+    } catch (error) {
+      // If no backup exists or restoration fails, log but don't throw
+      // (original cache is already gone at this point)
+      console.warn(`Warning: Could not restore cache from backup: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * [EARS-14] Deletes backup file after successful cache write.
+   */
+  private async deleteCacheBackup(): Promise<void> {
+    const backupPath = `${this.cachePath}.backup`;
+
+    try {
+      await fs.unlink(backupPath);
+    } catch {
+      // Backup might not exist or already deleted - this is fine
+    }
   }
 
   /**
@@ -597,6 +837,111 @@ export class FileIndexerAdapter implements IIndexerAdapter {
       return "mock-commit-hash";
     } catch {
       return "unknown";
+    }
+  }
+
+  /**
+   * [EARS-7 to EARS-10] Calculates system-wide derived states for analytics and filtering.
+   * 
+   * Applies DerivedDataProtocol algorithms to categorize tasks:
+   * - isStalled: Tasks en 'active' sin executions >7 días O en 'review' sin approval >3 días
+   * - isAtRisk: Tasks con prioridad 'critical' + 'paused' O 2+ blocking feedbacks
+   * - needsClarification: Tasks con feedback tipo 'question' abierto
+   * - isBlockedByDependency: Tasks con referencias a tasks no completadas
+   * 
+   * @see derived_data_protocol.md for detailed algorithms
+   * @see EARS-7, EARS-8, EARS-9, EARS-10 for requirements
+   */
+  async calculateDerivedStates(allRecords: AllRecords): Promise<DerivedStates> {
+    const derivedStates: DerivedStates = {
+      stalledTasks: [],
+      atRiskTasks: [],
+      needsClarificationTasks: [],
+      blockedByDependencyTasks: []
+    };
+
+    const now = Date.now();
+    const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+
+    try {
+      for (const task of allRecords.tasks) {
+        const taskId = task.payload.id;
+        const taskPayload = task.payload;
+
+        // [EARS-8] Calculate isStalled
+        // Tasks en 'active' sin executions por >7 días O en 'review' sin approval por >3 días
+        if (taskPayload.status === 'active' || taskPayload.status === 'review') {
+          const taskTimestamp = this.getTimestampFromId(taskId) * 1000; // Convert to milliseconds
+          const daysSinceCreation = (now - taskTimestamp) / (24 * 60 * 60 * 1000);
+
+          // Check executions para tasks activas
+          const hasRecentExecution = allRecords.executions.some(exec => {
+            if (exec.payload.taskId === taskId) {
+              const execTimestamp = this.getTimestampFromId(exec.payload.id) * 1000; // Convert to milliseconds
+              return (now - execTimestamp) < SEVEN_DAYS_MS;
+            }
+            return false;
+          });
+
+          const isStalled =
+            (taskPayload.status === 'active' && daysSinceCreation > 7 && !hasRecentExecution) ||
+            (taskPayload.status === 'review' && daysSinceCreation > 3);
+
+          if (isStalled) {
+            derivedStates.stalledTasks.push(taskId);
+          }
+        }
+
+        // [EARS-9] Calculate isAtRisk
+        // Tasks con prioridad 'critical' + 'paused' O 2+ blocking feedbacks abiertos
+        const isCriticalPaused = taskPayload.priority === 'critical' && taskPayload.status === 'paused';
+        const blockingFeedbackCount = allRecords.feedback.filter(feedback => {
+          return feedback.payload.type === 'blocking' &&
+            feedback.payload.status === 'open' &&
+            feedback.payload.entityId === taskId;
+        }).length;
+
+        if (isCriticalPaused || blockingFeedbackCount >= 2) {
+          derivedStates.atRiskTasks.push(taskId);
+        }
+
+        // [EARS-9] Calculate needsClarification
+        // Tasks con feedback tipo 'question' abierto
+        const hasOpenQuestion = allRecords.feedback.some(feedback => {
+          return feedback.payload.type === 'question' &&
+            feedback.payload.status === 'open' &&
+            feedback.payload.entityId === taskId;
+        });
+
+        if (hasOpenQuestion) {
+          derivedStates.needsClarificationTasks.push(taskId);
+        }
+
+        // [EARS-10] Calculate isBlockedByDependency
+        // Tasks con referencias a otras tasks no completadas
+        if (taskPayload.references && taskPayload.references.length > 0) {
+          const hasBlockingDependency = taskPayload.references.some(ref => {
+            if (ref.startsWith('task:')) {
+              const dependencyId = ref.replace('task:', '');
+              const dependencyTask = allRecords.tasks.find(t => t.payload.id === dependencyId);
+              return dependencyTask &&
+                dependencyTask.payload.status !== 'done' &&
+                dependencyTask.payload.status !== 'archived';
+            }
+            return false;
+          });
+
+          if (hasBlockingDependency) {
+            derivedStates.blockedByDependencyTasks.push(taskId);
+          }
+        }
+      }
+
+      return derivedStates;
+    } catch (error) {
+      console.warn(`calculateDerivedStates error: ${error instanceof Error ? error.message : String(error)}`);
+      // Return empty derived states on error (graceful degradation)
+      return derivedStates;
     }
   }
 
@@ -727,13 +1072,14 @@ export class FileIndexerAdapter implements IIndexerAdapter {
   /**
    * [EARS-21] Calculate lastUpdated timestamp and activity type for a task
    * Considers task file modification time and related records timestamps
+   * @param taskPayload - Task payload (not full record with headers)
    */
   async calculateLastUpdated(
-    task: TaskRecord,
+    taskPayload: TaskRecord,
     relatedRecords: AllRecords
   ): Promise<{ lastUpdated: number; lastActivityType: EnrichedTaskRecord['lastActivityType']; recentActivity: string }> {
     try {
-      let lastUpdated = this.getTimestampFromId(task.id) * 1000; // Convert to milliseconds for consistency
+      let lastUpdated = this.getTimestampFromId(taskPayload.id) * 1000; // Convert to milliseconds for consistency
       let lastActivityType: EnrichedTaskRecord['lastActivityType'] = 'task_created';
       let recentActivity = 'Task created';
 
@@ -745,13 +1091,13 @@ export class FileIndexerAdapter implements IIndexerAdapter {
         while (!fsSync.existsSync(path.join(projectRoot, '.gitgov')) && projectRoot !== '/') {
           projectRoot = path.dirname(projectRoot);
         }
-        const taskFilePath = path.join(projectRoot, '.gitgov', 'tasks', `${task.id}.json`);
+        const taskFilePath = path.join(projectRoot, '.gitgov', 'tasks', `${taskPayload.id}.json`);
         const stats = await fs.stat(taskFilePath);
         const fileModTime = stats.mtime.getTime();
 
         // Only consider file modification if it's more than 60 seconds after creation
         // This avoids counting initial file creation as "modification"
-        const creationTime = this.getTimestampFromId(task.id) * 1000;
+        const creationTime = this.getTimestampFromId(taskPayload.id) * 1000;
         const timeDifference = fileModTime - creationTime;
 
         if (timeDifference > 60000 && fileModTime > lastUpdated) { // 60 seconds threshold
@@ -766,7 +1112,7 @@ export class FileIndexerAdapter implements IIndexerAdapter {
 
       // 2. Check related feedback records
       const relatedFeedback = relatedRecords.feedback.filter(f =>
-        f.payload.entityId === task.id || f.payload.content.includes(task.id)
+        f.payload.entityId === taskPayload.id || (f.payload.content && f.payload.content.includes(taskPayload.id))
       );
 
       for (const feedback of relatedFeedback) {
@@ -779,7 +1125,7 @@ export class FileIndexerAdapter implements IIndexerAdapter {
       }
 
       // 3. Check related execution records
-      const relatedExecutions = relatedRecords.executions.filter(e => e.payload.taskId === task.id);
+      const relatedExecutions = relatedRecords.executions.filter(e => e.payload.taskId === taskPayload.id);
 
       for (const execution of relatedExecutions) {
         const executionTime = this.getTimestampFromId(execution.payload.id) * 1000; // Convert to milliseconds
@@ -792,8 +1138,8 @@ export class FileIndexerAdapter implements IIndexerAdapter {
 
       // 4. Check related changelog records
       const relatedChangelogs = relatedRecords.changelogs.filter(c =>
-        c.payload.relatedTasks.includes(task.id) ||
-        c.payload.description?.includes(task.id)
+        (c.payload.relatedTasks && c.payload.relatedTasks.includes(taskPayload.id)) ||
+        c.payload.description?.includes(taskPayload.id)
       );
 
       for (const changelog of relatedChangelogs) {
@@ -809,7 +1155,7 @@ export class FileIndexerAdapter implements IIndexerAdapter {
 
     } catch (error) {
       // Graceful fallback
-      const fallbackTime = this.getTimestampFromId(task.id) * 1000; // Convert to milliseconds
+      const fallbackTime = this.getTimestampFromId(taskPayload.id) * 1000; // Convert to milliseconds
       return {
         lastUpdated: fallbackTime,
         lastActivityType: 'task_created',
@@ -823,15 +1169,181 @@ export class FileIndexerAdapter implements IIndexerAdapter {
    * @param task - Full GitGovTaskRecord with header.signatures for author/lastModifier extraction
    * @param relatedRecords - All related records with full metadata
    */
-  async enrichTaskRecord(task: GitGovTaskRecord, relatedRecords: AllRecords): Promise<EnrichedTaskRecord> {
+  /**
+   * Enriches a task with complete intelligence layer (EARS 25-48)
+   * 
+   * 11-step algorithm:
+   * 1. Activity metadata (lastUpdated, lastActivityType, recentActivity)
+   * 2. Signatures (author, lastModifier with timestamps)
+   * 3. Assignments (assignedTo from feedback)
+   * 4. Dependencies (dependsOn, blockedBy with typed references)
+   * 5. Cycles (all cycles as array with id+title)
+   * 6. Metrics (executionCount, blockingFeedbackCount, openQuestionCount)
+   * 7. Time to resolution (for done tasks)
+   * 8. Release info (isReleased, lastReleaseVersion from changelogs)
+   * 9. Derived states (EARS-43: REUTILIZA pre-calculated derivedStates con O(1) lookup)
+   * 10. Health score (0-100 using multi-factor algorithm)
+   * 11. Time in current stage (days)
+   * 
+   * @param task - Full GitGovTaskRecord with header.signatures
+   * @param relatedRecords - All records for cross-referencing
+   * @param derivedStateSets - Pre-calculated system-wide derived states as Sets for O(1) lookup (EARS-43)
+   * @returns Promise<EnrichedTaskRecord> - Task with complete intelligence layer
+   */
+  async enrichTaskRecord(
+    task: GitGovTaskRecord,
+    relatedRecords: AllRecords,
+    derivedStateSets: DerivedStateSets
+  ): Promise<EnrichedTaskRecord> {
+    // Step 1: Activity metadata
     const { lastUpdated, lastActivityType, recentActivity } = await this.calculateLastUpdated(task.payload, relatedRecords);
 
-    return {
+    // Step 2: Signatures (author, lastModifier) using signature_utils helpers
+    const author = extractAuthor(task);
+    const lastModifier = extractLastModifier(task);
+
+    // Step 3: Assignments (assignedTo from feedback)
+    const assignments = relatedRecords.feedback
+      .filter(f => f.payload.entityId === task.payload.id && f.payload.type === 'assignment')
+      .map(f => ({
+        actorId: f.payload.assignee || 'unknown',
+        assignedAt: this.getTimestampFromId(f.payload.id) * 1000 // ms
+      }));
+
+    // Step 4: Dependencies (dependsOn, blockedBy with typed references)
+    // [EARS-37] Include ALL typed references (task:, pr:, issue:, file:, url:)
+    // Filter out completed tasks, but preserve external references always
+    const completedStatuses = ['done', 'archived', 'discarded'];
+    const dependsOn = (task.payload.references || [])
+      .filter(ref => {
+        // Include all typed references (task:, pr:, issue:, file:, url:)
+        const hasValidPrefix = ref.startsWith('task:') || ref.startsWith('pr:') ||
+          ref.startsWith('issue:') || ref.startsWith('file:') ||
+          ref.startsWith('url:');
+
+        if (!hasValidPrefix) return false;
+
+        // For task: references, filter out completed tasks
+        if (ref.startsWith('task:')) {
+          const refTaskId = ref.replace('task:', '');
+          const refTask = relatedRecords.tasks.find(t => t.payload.id === refTaskId);
+          return !refTask || !refTask.payload.status || !completedStatuses.includes(refTask.payload.status);
+        }
+
+        // For external references (pr:, issue:, file:, url:), always include
+        return true;
+      });
+
+    const blockedBy = relatedRecords.tasks
+      .filter(t => !completedStatuses.includes(t.payload.status))
+      .filter(t => (t.payload.references || []).includes(`task:${task.payload.id}`))
+      .map(t => `task:${t.payload.id}`);
+
+    // Step 5: Cycles (all cycles as array with id+title)
+    const cycles = (task.payload.cycleIds || [])
+      .map(cycleId => {
+        const cycle = relatedRecords.cycles.find(c => c.payload.id === cycleId);
+        return cycle ? { id: cycleId, title: cycle.payload.title } : null;
+      })
+      .filter((c): c is { id: string; title: string } => c !== null);
+
+    // Step 6: Metrics
+    const executionCount = relatedRecords.executions.filter(e => e.payload.taskId === task.payload.id).length;
+    const blockingFeedbackCount = relatedRecords.feedback.filter(
+      f => f.payload.entityId === task.payload.id && f.payload.type === 'blocking' && f.payload.status === 'open'
+    ).length;
+    const openQuestionCount = relatedRecords.feedback.filter(
+      f => f.payload.entityId === task.payload.id && f.payload.type === 'question' && f.payload.status === 'open'
+    ).length;
+
+    // Step 7: Time to resolution (for done tasks)
+    const timeToResolution: number | undefined = task.payload.status === 'done'
+      ? (lastUpdated - this.getTimestampFromId(task.payload.id) * 1000) / (1000 * 60 * 60) // horas
+      : undefined;
+
+    // Step 8: Release info (from changelogs)
+    const releaseChangelogs = relatedRecords.changelogs.filter(cl =>
+      cl.payload.relatedTasks.includes(task.payload.id)
+    );
+    const isReleased = releaseChangelogs.length > 0;
+    const lastReleaseVersion: string | undefined = isReleased
+      ? (releaseChangelogs[releaseChangelogs.length - 1]?.payload.version || undefined)
+      : undefined;
+
+    // Step 9: Derived states (EARS-43: Usar pre-calculated derivedStates con O(1) lookup)
+    // NO recalcular - buscar en los Sets de derivedStateSets pre-calculados
+    const taskId = task.payload.id;
+    const isStalled = derivedStateSets.stalledTasks.has(taskId);
+    const isAtRisk = derivedStateSets.atRiskTasks.has(taskId);
+    const needsClarification = derivedStateSets.needsClarificationTasks.has(taskId);
+    const isBlockedByDependency = derivedStateSets.blockedByDependencyTasks.has(taskId);
+
+    // Calculate daysSinceLastUpdate for health score and timeInCurrentStage
+    const daysSinceLastUpdate = (Date.now() - lastUpdated) / (1000 * 60 * 60 * 24);
+
+    // Step 10: Health score (0-100)
+    let healthScore = 100;
+
+    // Status health (30 points)
+    if (task.payload.status === 'done') healthScore -= 0; // Perfect
+    else if (task.payload.status === 'active') healthScore -= 5;
+    else if (task.payload.status === 'ready') healthScore -= 10;
+    else if (task.payload.status === 'review') healthScore -= 15;
+    else if (task.payload.status === 'paused') healthScore -= 25;
+    else healthScore -= 30; // draft, archived, discarded
+
+    // Feedback health (30 points)
+    healthScore -= Math.min(blockingFeedbackCount * 10, 30);
+
+    // Executions health (20 points)
+    if (executionCount === 0 && task.payload.status === 'active') healthScore -= 20;
+    else if (executionCount < 2) healthScore -= 10;
+
+    // Time health (20 points)
+    if (daysSinceLastUpdate > 30) healthScore -= 20;
+    else if (daysSinceLastUpdate > 14) healthScore -= 15;
+    else if (daysSinceLastUpdate > 7) healthScore -= 10;
+
+    healthScore = Math.max(0, Math.min(100, healthScore));
+
+    // Step 11: Time in current stage (days)
+    const timeInCurrentStage = daysSinceLastUpdate;
+
+    // Build enriched record with conditional optional properties
+    const enrichedRecord: EnrichedTaskRecord = {
       ...task.payload,
+      derivedState: {
+        isStalled,
+        isAtRisk,
+        needsClarification,
+        isBlockedByDependency,
+        healthScore,
+        timeInCurrentStage
+      },
+      relationships: {
+        ...(author && { author }),
+        ...(lastModifier && { lastModifier }),
+        assignedTo: assignments,
+        dependsOn,
+        blockedBy,
+        cycles
+      },
+      metrics: {
+        executionCount,
+        blockingFeedbackCount,
+        openQuestionCount,
+        ...(timeToResolution !== undefined && { timeToResolution })
+      },
+      release: {
+        isReleased,
+        ...(lastReleaseVersion !== undefined && { lastReleaseVersion })
+      },
       lastUpdated,
       lastActivityType,
-      recentActivity
+      ...(recentActivity && { recentActivity })
     };
+
+    return enrichedRecord;
   }
 
   /**

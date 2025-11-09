@@ -199,7 +199,7 @@ export class BacklogAdapter implements IBacklogAdapter {
    */
   async createTask(payload: Partial<TaskRecord>, actorId: string): Promise<TaskRecord> {
     // 1. Build the record with factory
-    const validatedPayload = await createTaskRecord(payload);
+    const validatedPayload = createTaskRecord(payload);
 
     // 2. Create unsigned record structure
     const unsignedRecord: GitGovRecord & { payload: TaskRecord } = {
@@ -759,7 +759,7 @@ export class BacklogAdapter implements IBacklogAdapter {
     }
 
     // Merge and validate with factory
-    const updatedPayload = await createTaskRecord({ ...taskRecord.payload, ...payload });
+    const updatedPayload = createTaskRecord({ ...taskRecord.payload, ...payload });
     const updatedRecord = { ...taskRecord, payload: updatedPayload };
 
     await this.taskStore.write(updatedRecord);
@@ -1165,7 +1165,7 @@ export class BacklogAdapter implements IBacklogAdapter {
    */
   async createCycle(payload: Partial<CycleRecord>, actorId: string): Promise<CycleRecord> {
     // 1. Build the record with factory
-    const validatedPayload = await createCycleRecord(payload);
+    const validatedPayload = createCycleRecord(payload);
 
     // 2. Create unsigned record structure
     const unsignedRecord: GitGovRecord & { payload: CycleRecord } = {
@@ -1249,7 +1249,7 @@ export class BacklogAdapter implements IBacklogAdapter {
     }
 
     // Merge and validate with factory
-    const updatedPayload = await createCycleRecord({ ...cycleRecord.payload, ...payload });
+    const updatedPayload = createCycleRecord({ ...cycleRecord.payload, ...payload });
     const updatedRecord = { ...cycleRecord, payload: updatedPayload };
 
     // Emit event if status changed

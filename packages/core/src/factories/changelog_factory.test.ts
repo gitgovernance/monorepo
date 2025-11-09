@@ -32,7 +32,7 @@ describe('ChangelogRecord Factory', () => {
         commits: ['abc123', 'def456']
       };
 
-      const result = await createChangelogRecord(payload);
+      const result = createChangelogRecord(payload);
 
       expect(result).toEqual({
         id: '1752707800-changelog-test-deliverable',
@@ -56,7 +56,7 @@ describe('ChangelogRecord Factory', () => {
       };
 
       const beforeTime = Math.floor(Date.now() / 1000);
-      const result = await createChangelogRecord(payload);
+      const result = createChangelogRecord(payload);
       const afterTime = Math.floor(Date.now() / 1000);
 
       expect(result.completedAt).toBeGreaterThanOrEqual(beforeTime);
@@ -81,8 +81,8 @@ describe('ChangelogRecord Factory', () => {
         errors: validationErrors
       });
 
-      await expect(createChangelogRecord(payload)).rejects.toThrow(DetailedValidationError);
-      await expect(createChangelogRecord(payload)).rejects.toThrow('ChangelogRecord');
+      expect(() => createChangelogRecord(payload)).toThrow(DetailedValidationError);
+      expect(() => createChangelogRecord(payload)).toThrow('ChangelogRecord');
     });
 
     it('[EARS-4] should preserve all optional fields', async () => {
@@ -101,7 +101,7 @@ describe('ChangelogRecord Factory', () => {
         notes: 'Important release with breaking changes'
       };
 
-      const result = await createChangelogRecord(payload);
+      const result = createChangelogRecord(payload);
 
       expect(result).toEqual(payload);
       expect(mockValidateChangelogRecordDetailed).toHaveBeenCalledWith(payload);
@@ -117,7 +117,7 @@ describe('ChangelogRecord Factory', () => {
         completedAt: 1752707900
       };
 
-      const result = await createChangelogRecord(payload);
+      const result = createChangelogRecord(payload);
 
       expect(result.relatedTasks).toEqual([]);
     });
@@ -131,7 +131,7 @@ describe('ChangelogRecord Factory', () => {
         completedAt: 1752707900
       };
 
-      const result = await createChangelogRecord(payload);
+      const result = createChangelogRecord(payload);
 
       // Should only have required fields
       expect(Object.keys(result)).toEqual(['id', 'title', 'description', 'relatedTasks', 'completedAt']);

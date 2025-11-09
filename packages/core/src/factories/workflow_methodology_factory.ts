@@ -9,9 +9,9 @@ import { DetailedValidationError } from "../validation/common";
  * Creates a new, fully-formed WorkflowMethodologyConfig with validation.
  * Follows the same pattern as createTaskRecord, createActorRecord, etc.
  */
-export async function createWorkflowMethodologyConfig(
+export function createWorkflowMethodologyConfig(
   payload: Partial<WorkflowMethodologyRecord>
-): Promise<WorkflowMethodologyRecord> {
+): WorkflowMethodologyRecord {
 
   // Build config with defaults for optional fields
   const config: WorkflowMethodologyRecord = {

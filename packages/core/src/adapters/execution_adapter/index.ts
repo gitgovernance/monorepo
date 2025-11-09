@@ -84,7 +84,7 @@ export class ExecutionAdapter implements IExecutionAdapter {
 
     try {
       // 1. Build the record with factory (factory validates all required fields)
-      const validatedPayload = await createExecutionRecord(payload);
+      const validatedPayload = createExecutionRecord(payload);
 
       // 2. Create unsigned record structure
       const unsignedRecord: GitGovRecord & { payload: ExecutionRecord } = {

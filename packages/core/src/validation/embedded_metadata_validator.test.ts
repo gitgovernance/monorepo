@@ -1,8 +1,7 @@
 import {
   validateFullEmbeddedMetadataRecord,
   isEmbeddedMetadataRecord,
-  validateEmbeddedMetadataDetailed,
-  validateEmbeddedMetadataBusinessRules
+  validateEmbeddedMetadataDetailed
 } from './embedded_metadata_validator';
 import type { EmbeddedMetadataRecord } from '../types/embedded.types';
 import type { TaskRecord } from '../types';
@@ -307,178 +306,13 @@ describe('EmbeddedMetadata Validator', () => {
       });
     });
 
-    describe('[EARS-25] custom type requirements', () => {
-      it('should require schemaUrl for header.type custom', () => {
-        const customRecord: EmbeddedMetadataRecord<TaskRecord> = {
-          header: {
-            version: '1.0',
-            type: 'custom',
-            payloadChecksum: 'a1b2c3d4e5f67890123456789012345678901234567890123456789012345678',
-            signatures: [createMockSignature()]
-            // Missing schemaUrl and schemaChecksum
-          },
-          payload: validTaskPayload
-        };
-
-        const result = validateEmbeddedMetadataBusinessRules(customRecord);
-        expect(result.isValid).toBe(false);
-        expect(result.errors.some(e => e.field === 'header.schemaUrl')).toBe(true);
-        expect(result.errors.some(e => e.field === 'header.schemaChecksum')).toBe(true);
-      });
-
-      it('should accept custom type with schemaUrl and schemaChecksum', () => {
-        const customRecord: EmbeddedMetadataRecord<TaskRecord> = {
-          header: {
-            version: '1.0',
-            type: 'custom',
-            schemaUrl: 'https://example.com/schema.json',
-            schemaChecksum: 'b2c3d4e5f67890123456789012345678901234567890123456789012345678ab',
-            payloadChecksum: 'a1b2c3d4e5f67890123456789012345678901234567890123456789012345678',
-            signatures: [createMockSignature()]
-          },
-          payload: validTaskPayload
-        };
-
-        const result = validateEmbeddedMetadataBusinessRules(customRecord);
-        expect(result.isValid).toBe(true);
-      });
-    });
-
-    describe('[EARS-26] payloadChecksum format validation', () => {
-      it('should reject invalid payloadChecksum format', () => {
-        const invalidRecord: EmbeddedMetadataRecord<TaskRecord> = {
-          header: {
-            version: '1.0',
-            type: 'task',
-            payloadChecksum: 'invalid-checksum', // Not SHA-256 format
-            signatures: [createMockSignature()]
-          },
-          payload: validTaskPayload
-        };
-
-        const result = validateEmbeddedMetadataBusinessRules(invalidRecord);
-        expect(result.isValid).toBe(false);
-        expect(result.errors.some(e => e.field === 'header.payloadChecksum')).toBe(true);
-      });
-
-      it('should accept valid SHA-256 payloadChecksum', () => {
-        const validRecord: EmbeddedMetadataRecord<TaskRecord> = {
-          header: {
-            version: '1.0',
-            type: 'task',
-            payloadChecksum: 'a1b2c3d4e5f67890123456789012345678901234567890123456789012345678',
-            signatures: [createMockSignature()]
-          },
-          payload: validTaskPayload
-        };
-
-        const result = validateEmbeddedMetadataBusinessRules(validRecord);
-        expect(result.isValid).toBe(true);
-      });
-    });
-
-    describe('[EARS-27] signatures validation', () => {
-      it('should reject empty signatures array', () => {
-        const invalidRecord: EmbeddedMetadataRecord<TaskRecord> = {
-          header: {
-            version: '1.0',
-            type: 'task',
-            payloadChecksum: 'a1b2c3d4e5f67890123456789012345678901234567890123456789012345678',
-            signatures: [] as any // Empty signatures
-          },
-          payload: validTaskPayload
-        };
-
-        const result = validateEmbeddedMetadataBusinessRules(invalidRecord);
-        expect(result.isValid).toBe(false);
-        expect(result.errors.some(e => e.field === 'header.signatures')).toBe(true);
-      });
-
-      it('should accept valid signatures array', () => {
-        const validRecord: EmbeddedMetadataRecord<TaskRecord> = {
-          header: {
-            version: '1.0',
-            type: 'task',
-            payloadChecksum: 'a1b2c3d4e5f67890123456789012345678901234567890123456789012345678',
-            signatures: [createMockSignature()]
-          },
-          payload: validTaskPayload
-        };
-
-        const result = validateEmbeddedMetadataBusinessRules(validRecord);
-        expect(result.isValid).toBe(true);
-      });
-    });
-
-    describe('[EARS-28] audit field validation', () => {
-      it('should reject audit field that is too long', () => {
-        const invalidRecord: EmbeddedMetadataRecord<TaskRecord> = {
-          header: {
-            version: '1.0',
-            type: 'task',
-            payloadChecksum: 'a1b2c3d4e5f67890123456789012345678901234567890123456789012345678',
-            signatures: [createMockSignature()]
-          },
-          payload: validTaskPayload
-        };
-
-        // Note: audit field has been removed from schema, validation now passes
-        const result = validateEmbeddedMetadataBusinessRules(invalidRecord);
-        expect(result.isValid).toBe(true);
-      });
-
-      it('should accept valid audit field', () => {
-        const validRecord: EmbeddedMetadataRecord<TaskRecord> = {
-          header: {
-            version: '1.0',
-            type: 'task',
-            payloadChecksum: 'a1b2c3d4e5f67890123456789012345678901234567890123456789012345678',
-            signatures: [createMockSignature()]
-          },
-          payload: validTaskPayload
-        };
-
-        // Note: audit field has been removed from schema, validation now uses notes in signatures
-        const result = validateEmbeddedMetadataBusinessRules(validRecord);
-        expect(result.isValid).toBe(true);
-      });
-    });
-
-    describe('[EARS-29] schemaChecksum format validation', () => {
-      it('should reject invalid schemaChecksum format', () => {
-        const invalidRecord: EmbeddedMetadataRecord<TaskRecord> = {
-          header: {
-            version: '1.0',
-            type: 'custom',
-            schemaUrl: 'https://example.com/schema.json',
-            schemaChecksum: 'invalid-checksum', // Not SHA-256 format
-            payloadChecksum: 'a1b2c3d4e5f67890123456789012345678901234567890123456789012345678',
-            signatures: [createMockSignature()]
-          },
-          payload: validTaskPayload
-        };
-
-        const result = validateEmbeddedMetadataBusinessRules(invalidRecord);
-        expect(result.isValid).toBe(false);
-        expect(result.errors.some(e => e.field === 'header.schemaChecksum')).toBe(true);
-      });
-
-      it('should accept valid SHA-256 schemaChecksum', () => {
-        const validRecord: EmbeddedMetadataRecord<TaskRecord> = {
-          header: {
-            version: '1.0',
-            type: 'custom',
-            schemaUrl: 'https://example.com/schema.json',
-            schemaChecksum: 'b2c3d4e5f67890123456789012345678901234567890123456789012345678ab',
-            payloadChecksum: 'a1b2c3d4e5f67890123456789012345678901234567890123456789012345678',
-            signatures: [createMockSignature()]
-          },
-          payload: validTaskPayload
-        };
-
-        const result = validateEmbeddedMetadataBusinessRules(validRecord);
-        expect(result.isValid).toBe(true);
-      });
-    });
+    // NOTE: Tests EARS-25 through EARS-29 were removed because they tested
+    // validateEmbeddedMetadataBusinessRules which was redundant with the JSON Schema validation.
+    // The JSON Schema already validates:
+    // - payloadChecksum format (pattern: ^[a-fA-F0-9]{64}$)
+    // - schemaChecksum format (pattern: ^[a-fA-F0-9]{64}$)
+    // - signatures minItems: 1
+    // - custom type requirements (oneOf logic)
+    // See: packages/core/src/schemas/generated/embedded_metadata_schema.json
   });
 });

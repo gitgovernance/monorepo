@@ -28,7 +28,17 @@ jest.doMock('../adapters/identity_adapter', () => ({
       status: 'active'
     }),
     listActors: jest.fn(),
-    signRecord: jest.fn().mockImplementation(async (record) => record),
+    signRecord: jest.fn().mockImplementation(async (unsignedRecord, actorId, role = 'author') => {
+      // signRecord receives a record with placeholder header and returns it properly signed
+      return {
+        header: {
+          ...unsignedRecord.header,
+          payloadChecksum: 'a'.repeat(64), // Mock checksum
+          signatures: [createTestSignature(actorId || 'human:test-dev', role)]
+        },
+        payload: unsignedRecord.payload
+      };
+    }),
     rotateActorKey: jest.fn(),
     revokeActor: jest.fn(),
     resolveCurrentActorId: jest.fn(),
@@ -57,6 +67,7 @@ import { RecordStore } from '../store';
 import { EventBus } from '../event_bus/event_bus';
 import type { TaskRecord, FeedbackRecord, CycleRecord, ExecutionRecord, ChangelogRecord, ActorRecord, AgentRecord } from '../types';
 import type { IEventStream } from '../event_bus';
+import { loadTaskRecord, loadFeedbackRecord, loadCycleRecord, loadExecutionRecord, loadChangelogRecord, loadActorRecord, loadAgentRecord, createTestSignature } from '../factories';
 
 describe('FeedbackAdapter <-> BacklogAdapter Integration (Real Event Communication)', () => {
   let feedbackAdapter: FeedbackAdapter;
@@ -80,13 +91,13 @@ describe('FeedbackAdapter <-> BacklogAdapter Integration (Real Event Communicati
 
     // Create REAL stores with unique temp directories per test in /tmp/
     const testRoot = `/tmp/gitgov-test-${Date.now()}`;
-    taskStore = new RecordStore<TaskRecord>('tasks', testRoot);
-    feedbackStore = new RecordStore<FeedbackRecord>('feedback', testRoot);
-    cycleStore = new RecordStore<CycleRecord>('cycles', testRoot);
-    executionStore = new RecordStore<ExecutionRecord>('executions', testRoot);
-    changelogStore = new RecordStore<ChangelogRecord>('changelogs', testRoot);
-    actorStore = new RecordStore<ActorRecord>('actors', testRoot);
-    agentStore = new RecordStore<AgentRecord>('agents', testRoot);
+    taskStore = new RecordStore<TaskRecord>('tasks', loadTaskRecord, testRoot);
+    feedbackStore = new RecordStore<FeedbackRecord>('feedback', loadFeedbackRecord, testRoot);
+    cycleStore = new RecordStore<CycleRecord>('cycles', loadCycleRecord, testRoot);
+    executionStore = new RecordStore<ExecutionRecord>('executions', loadExecutionRecord, testRoot);
+    changelogStore = new RecordStore<ChangelogRecord>('changelogs', loadChangelogRecord, testRoot);
+    actorStore = new RecordStore<ActorRecord>('actors', loadActorRecord, testRoot);
+    agentStore = new RecordStore<AgentRecord>('agents', loadAgentRecord, testRoot);
 
     // Create REAL IdentityAdapter
     identityAdapter = new IdentityAdapter({

@@ -125,7 +125,8 @@ describe('BacklogAdapter - End-to-End Tests', () => {
           subscribe: jest.fn(),
           unsubscribe: jest.fn(),
           getSubscriptions: jest.fn(),
-          clearSubscriptions: jest.fn()
+          clearSubscriptions: jest.fn(),
+          waitForIdle: jest.fn().mockResolvedValue(undefined)
         } as IEventStream
       };
 
