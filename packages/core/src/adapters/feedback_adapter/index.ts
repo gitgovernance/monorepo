@@ -138,7 +138,7 @@ export class FeedbackAdapter implements IFeedbackAdapter {
 
     try {
       // 1. Build the record with factory
-      const validatedPayload = await createFeedbackRecord(enrichedPayload);
+      const validatedPayload = createFeedbackRecord(enrichedPayload);
 
       // 2. Create unsigned record structure
       const unsignedRecord: GitGovRecord & { payload: FeedbackRecord } = {

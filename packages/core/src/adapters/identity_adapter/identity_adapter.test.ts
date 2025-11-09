@@ -10,6 +10,7 @@ import { validateFullAgentRecord } from '../../validation/agent_validator';
 import { generateKeys, signPayload } from '../../crypto/signatures';
 import { calculatePayloadChecksum } from '../../crypto/checksum';
 import { generateActorId } from '../../utils/id_generator';
+import { ConfigManager } from '../../config_manager';
 
 // Mock all dependencies
 jest.mock('../../factories/actor_factory');
@@ -19,6 +20,15 @@ jest.mock('../../validation/agent_validator');
 jest.mock('../../crypto/signatures');
 jest.mock('../../crypto/checksum');
 jest.mock('../../utils/id_generator');
+jest.mock('../../config_manager');
+jest.mock('fs', () => ({
+  promises: {
+    mkdir: jest.fn(),
+    writeFile: jest.fn(),
+    chmod: jest.fn(),
+    readFile: jest.fn(),
+  }
+}));
 const mockedCreateActorRecord = createActorRecord as jest.MockedFunction<typeof createActorRecord>;
 const mockedValidateFullActorRecord = validateFullActorRecord as jest.MockedFunction<typeof validateFullActorRecord>;
 const mockedCreateAgentRecord = createAgentRecord as jest.MockedFunction<typeof createAgentRecord>;
@@ -54,7 +64,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       read: jest.fn(),
       write: jest.fn(),
       delete: jest.fn(),
-      list: jest.fn(),
+      list: jest.fn().mockResolvedValue([]), // Default to empty array to avoid "not iterable" errors
       exists: jest.fn(),
     } as unknown as jest.Mocked<RecordStore<ActorRecord>>;
 
@@ -62,7 +72,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       read: jest.fn(),
       write: jest.fn(),
       delete: jest.fn(),
-      list: jest.fn(),
+      list: jest.fn().mockResolvedValue([]), // Default to empty array to avoid "not iterable" errors
       exists: jest.fn(),
     } as unknown as jest.Mocked<RecordStore<AgentRecord>>;
 
@@ -73,7 +83,8 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       unsubscribe: jest.fn().mockReturnValue(true),
       getSubscriptions: jest.fn().mockReturnValue([]),
       clearSubscriptions: jest.fn(),
-    };
+      waitForIdle: jest.fn().mockResolvedValue(undefined),
+    } as unknown as jest.Mocked<IEventStream>;
 
     // Create IdentityAdapter without events (graceful degradation)
     identityAdapter = new IdentityAdapter({
@@ -178,7 +189,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
         privateKey: 'generated-private-key'
       });
       mockedGenerateActorId.mockReturnValue('human:test-user');
-      mockedCreateActorRecord.mockResolvedValue(sampleActorPayload);
+      mockedCreateActorRecord.mockReturnValue(sampleActorPayload);
       mockedCalculatePayloadChecksum.mockReturnValue('calculated-checksum');
       mockedSignPayload.mockReturnValue({
         keyId: 'human:test-user',
@@ -204,6 +215,72 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       expect(mockedValidateFullActorRecord).toHaveBeenCalled();
       expect(mockActorStore.write).toHaveBeenCalled();
       expect(result).toEqual(sampleActorPayload);
+
+      // Restore console.warn
+      console.warn = originalWarn;
+    });
+
+    it('[EARS-12] should persist private key to .gitgov/actors/{actorId}.key with secure permissions', async () => {
+      const inputPayload = {
+        type: 'human' as const,
+        displayName: 'Test User',
+        roles: ['author'] as [string, ...string[]]
+      };
+
+      const testPrivateKey = 'test-private-key-base64';
+      const testProjectRoot = '/test/project';
+
+      // Mock all dependencies
+      mockedGenerateKeys.mockResolvedValue({
+        publicKey: 'generated-public-key',
+        privateKey: testPrivateKey
+      });
+      mockedGenerateActorId.mockReturnValue('human:test-user');
+      mockedCreateActorRecord.mockReturnValue(sampleActorPayload);
+      mockedCalculatePayloadChecksum.mockReturnValue('calculated-checksum');
+      mockedSignPayload.mockReturnValue({
+        keyId: 'human:test-user',
+        role: 'author',
+        notes: '',
+        signature: 'generated-signature',
+        timestamp: 1234567890
+      });
+      mockedValidateFullActorRecord.mockResolvedValue(undefined);
+      mockActorStore.write.mockResolvedValue(undefined);
+      mockActorStore.list.mockResolvedValue(['human:test-user']);
+
+      // Mock ConfigManager and fs
+      jest.spyOn(ConfigManager, 'findProjectRoot').mockReturnValue(testProjectRoot);
+      const fs = await import('fs');
+      const mockMkdir = fs.promises.mkdir as jest.MockedFunction<typeof fs.promises.mkdir>;
+      const mockWriteFile = fs.promises.writeFile as jest.MockedFunction<typeof fs.promises.writeFile>;
+      const mockChmod = fs.promises.chmod as jest.MockedFunction<typeof fs.promises.chmod>;
+
+      mockMkdir.mockResolvedValue(undefined);
+      mockWriteFile.mockResolvedValue(undefined);
+      mockChmod.mockResolvedValue(undefined);
+
+      // Suppress console.warn for tests
+      const originalWarn = console.warn;
+      console.warn = jest.fn();
+
+      await identityAdapter.createActor(inputPayload, 'human:test-user');
+
+      // Verify private key was persisted
+      expect(ConfigManager.findProjectRoot).toHaveBeenCalled();
+      expect(mockMkdir).toHaveBeenCalledWith(
+        `${testProjectRoot}/.gitgov/actors`,
+        { recursive: true }
+      );
+      expect(mockWriteFile).toHaveBeenCalledWith(
+        `${testProjectRoot}/.gitgov/actors/human:test-user.key`,
+        testPrivateKey,
+        'utf-8'
+      );
+      expect(mockChmod).toHaveBeenCalledWith(
+        `${testProjectRoot}/.gitgov/actors/human:test-user.key`,
+        0o600
+      );
 
       // Restore console.warn
       console.warn = originalWarn;
@@ -243,7 +320,75 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
   });
 
   describe('signRecord', () => {
-    it('[EARS-9] should sign record with mock signature in MVP mode', async () => {
+    it('[EARS-9] should sign record with real cryptographic signature when private key is available', async () => {
+      const mockRecord: GitGovRecord = {
+        header: {
+          version: '1.0',
+          type: 'task',
+          payloadChecksum: 'test',
+          signatures: [{
+            keyId: 'initial-signer',
+            role: 'author',
+            notes: 'Initial signature for test',
+            signature: 'initial-signature',
+            timestamp: 1234567890
+          }]
+        },
+        payload: sampleActorPayload // Use valid ActorRecord payload
+      };
+
+      const testPrivateKey = 'test-private-key-base64';
+      const testProjectRoot = '/test/project';
+
+      // Mock actor exists
+      mockActorStore.read.mockResolvedValue(sampleRecord);
+
+      // Mock ConfigManager and fs to return private key
+      jest.spyOn(ConfigManager, 'findProjectRoot').mockReturnValue(testProjectRoot);
+      const fs = await import('fs');
+      const mockReadFile = fs.promises.readFile as jest.MockedFunction<typeof fs.promises.readFile>;
+      mockReadFile.mockResolvedValue(testPrivateKey);
+
+      // Mock signPayload to return real signature
+      mockedSignPayload.mockReturnValue({
+        keyId: 'human:test-user',
+        role: 'author',
+        notes: 'Record signed',
+        signature: 'real-cryptographic-signature',
+        timestamp: Math.floor(Date.now() / 1000)
+      });
+      mockedCalculatePayloadChecksum.mockReturnValue('calculated-checksum');
+
+      const signedRecord = await identityAdapter.signRecord(mockRecord, 'human:test-user', 'author');
+
+      // Should have 2 signatures: original + new real signature
+      expect(signedRecord.header.signatures).toHaveLength(2);
+
+      // Check the new signature (second one) - should be real, not mock
+      const newSignature = signedRecord.header.signatures[1];
+      expect(newSignature).toBeDefined();
+      expect(newSignature!.keyId).toBe('human:test-user');
+      expect(newSignature!.role).toBe('author');
+      expect(newSignature!.signature).toBe('real-cryptographic-signature');
+      expect(newSignature!.signature).not.toContain('mock-signature-');
+      expect(newSignature!.timestamp).toBeGreaterThan(0);
+
+      // Verify private key was loaded
+      expect(ConfigManager.findProjectRoot).toHaveBeenCalled();
+      expect(mockReadFile).toHaveBeenCalledWith(
+        `${testProjectRoot}/.gitgov/actors/human:test-user.key`,
+        'utf-8'
+      );
+      expect(mockedSignPayload).toHaveBeenCalledWith(
+        sampleActorPayload,
+        testPrivateKey,
+        'human:test-user',
+        'author',
+        'Record signed'
+      );
+    });
+
+    it('[EARS-10] should sign record with mock signature as fallback when private key is not available', async () => {
       const mockRecord: GitGovRecord = {
         header: {
           version: '1.0',
@@ -263,12 +408,22 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       // Mock actor exists
       mockActorStore.read.mockResolvedValue(sampleRecord);
 
+      // Mock ConfigManager to return null (no project root) or fs to throw error
+      jest.spyOn(ConfigManager, 'findProjectRoot').mockReturnValue(null);
+      const fs = await import('fs');
+      const mockReadFile = fs.promises.readFile as jest.MockedFunction<typeof fs.promises.readFile>;
+      mockReadFile.mockRejectedValue(new Error('File not found'));
+
+      // Suppress console.warn for tests
+      const originalWarn = console.warn;
+      console.warn = jest.fn();
+
       const signedRecord = await identityAdapter.signRecord(mockRecord, 'human:test-user', 'author');
 
       // Should have 2 signatures: original + new mock signature
       expect(signedRecord.header.signatures).toHaveLength(2);
 
-      // Check the new signature (second one)
+      // Check the new signature (second one) - should be mock
       const newSignature = signedRecord.header.signatures[1];
       expect(newSignature).toBeDefined();
       expect(newSignature!.keyId).toBe('human:test-user');
@@ -276,11 +431,11 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       expect(newSignature!.signature).toContain('mock-signature-');
       expect(newSignature!.timestamp).toBeGreaterThan(0);
 
-      // Check that payload checksum was updated
-      expect(signedRecord.header.payloadChecksum).toBeDefined();
+      // Restore console.warn
+      console.warn = originalWarn;
     });
 
-    it('[EARS-9] should throw error when actor not found', async () => {
+    it('[EARS-11] should throw error when actor not found', async () => {
       const mockRecord: GitGovRecord = {
         header: {
           version: '1.0',
@@ -302,17 +457,327 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       await expect(identityAdapter.signRecord(mockRecord, 'non-existent', 'author'))
         .rejects.toThrow('Actor not found: non-existent');
     });
+
+    it('[EARS-12] should replace placeholder signatures instead of adding new ones', async () => {
+      const mockRecord: GitGovRecord = {
+        header: {
+          version: '1.0',
+          type: 'task',
+          payloadChecksum: 'test',
+          signatures: [{
+            keyId: 'human:test-user',
+            role: 'author',
+            notes: 'Task created',
+            signature: 'placeholder',
+            timestamp: 1234567890
+          }]
+        },
+        payload: sampleActorPayload
+      };
+
+      // Mock actor exists
+      mockActorStore.read.mockResolvedValue(sampleRecord);
+
+      // Mock ConfigManager to return null (no project root) - will use mock signature
+      jest.spyOn(ConfigManager, 'findProjectRoot').mockReturnValue(null);
+      const fs = await import('fs');
+      const mockReadFile = fs.promises.readFile as jest.MockedFunction<typeof fs.promises.readFile>;
+      mockReadFile.mockRejectedValue(new Error('File not found'));
+
+      // Suppress console.warn for tests
+      const originalWarn = console.warn;
+      console.warn = jest.fn();
+
+      const signedRecord = await identityAdapter.signRecord(mockRecord, 'human:test-user', 'author');
+
+      // Should have only 1 signature (placeholder replaced, not added)
+      expect(signedRecord.header.signatures).toHaveLength(1);
+
+      // The signature should be replaced (not placeholder)
+      const finalSignature = signedRecord.header.signatures[0];
+      expect(finalSignature).toBeDefined();
+      expect(finalSignature!.keyId).toBe('human:test-user');
+      expect(finalSignature!.role).toBe('author');
+      expect(finalSignature!.signature).not.toBe('placeholder');
+      expect(finalSignature!.signature).toContain('mock-signature-');
+      expect(finalSignature!.timestamp).toBeGreaterThan(0);
+
+      // Restore console.warn
+      console.warn = originalWarn;
+    });
   });
 
   describe('rotateActorKey', () => {
-    it('[EARS-10] should throw error indicating complex operation not implemented', async () => {
+    it('[EARS-13] should rotate keys by creating new actor and revoking old one', async () => {
+      const existingActor = sampleActorPayload;
+      const baseActorId = 'human:new-test-user';
+      const newActorId = 'human:new-test-user-v2'; // rotateActorKey adds -v2 suffix
+      const newPublicKey = 'NEW_PUBLIC_KEY_BASE64_44_CHARS_LONG_AAAAAAAAAAA=';
+      const newPrivateKey = 'new-private-key-base64';
+
+      // Mock getActor to return existing actor
+      jest.spyOn(identityAdapter, 'getActor').mockResolvedValue(existingActor);
+
+      // Mock generateKeys to return new keys
+      mockedGenerateKeys.mockResolvedValueOnce({
+        publicKey: newPublicKey,
+        privateKey: newPrivateKey
+      });
+
+      // Mock generateActorId to return base ID (rotateActorKey will add -v2 suffix)
+      mockedGenerateActorId.mockReturnValueOnce(baseActorId);
+
+      // Mock createActorRecord for new actor
+      const newActorPayload: ActorRecord = {
+        ...existingActor,
+        id: newActorId,
+        publicKey: newPublicKey
+      };
+      mockedCreateActorRecord.mockReturnValueOnce(newActorPayload);
+
+      // Mock calculatePayloadChecksum
+      mockedCalculatePayloadChecksum.mockReturnValueOnce('new-checksum');
+
+      // Mock signPayload
+      mockedSignPayload.mockReturnValueOnce({
+        keyId: newActorId,
+        role: 'author',
+        notes: 'Key rotation',
+        signature: 'new-signature',
+        timestamp: Date.now()
+      });
+
+      // Mock validateFullActorRecord
+      mockedValidateFullActorRecord.mockResolvedValueOnce(undefined);
+
+      // Mock actorStore.write for new actor
+      mockActorStore.write.mockResolvedValue(undefined);
+      mockActorStore.list.mockResolvedValue(['human:test-user']); // For bootstrap check
+
+      // Mock revokeActor by mocking the internal calls
+      mockActorStore.read
+        .mockResolvedValueOnce(sampleRecord) // Read for revoke
+        .mockResolvedValueOnce(sampleRecord); // Read for revoke (second call)
+
+      // Mock ConfigManager and fs for key persistence
+      jest.spyOn(ConfigManager, 'findProjectRoot').mockReturnValue('/test/project');
+      const fs = await import('fs');
+      const mockWriteFile = fs.promises.writeFile as jest.MockedFunction<typeof fs.promises.writeFile>;
+      const mockChmod = fs.promises.chmod as jest.MockedFunction<typeof fs.promises.chmod>;
+      const mockMkdir = fs.promises.mkdir as jest.MockedFunction<typeof fs.promises.mkdir>;
+      mockMkdir.mockResolvedValue(undefined);
+      mockWriteFile.mockResolvedValue(undefined);
+      mockChmod.mockResolvedValue(undefined);
+
+      const result = await identityAdapter.rotateActorKey('human:test-user');
+
+      expect(result.oldActor.status).toBe('revoked');
+      expect(result.oldActor.supersededBy).toBe(newActorId);
+      expect(result.newActor.id).toBe(newActorId);
+      expect(result.newActor.publicKey).toBe(newPublicKey);
+      expect(mockActorStore.write).toHaveBeenCalled(); // New actor written
+      expect(mockWriteFile).toHaveBeenCalledWith(
+        '/test/project/.gitgov/actors/human:new-test-user-v2.key',
+        newPrivateKey,
+        'utf-8'
+      );
+      expect(mockChmod).toHaveBeenCalledWith(
+        '/test/project/.gitgov/actors/human:new-test-user-v2.key',
+        0o600
+      );
+    });
+
+    it('[EARS-14] should throw error if actor not found', async () => {
+      jest.spyOn(identityAdapter, 'getActor').mockResolvedValue(null);
+
+      await expect(identityAdapter.rotateActorKey('non-existent'))
+        .rejects.toThrow('ActorRecord with id non-existent not found');
+    });
+
+    it('[EARS-15] should throw error if actor already revoked', async () => {
+      const revokedActor = { ...sampleActorPayload, status: 'revoked' as const };
+      jest.spyOn(identityAdapter, 'getActor').mockResolvedValue(revokedActor);
+
       await expect(identityAdapter.rotateActorKey('human:test-user'))
-        .rejects.toThrow('rotateActorKey not implemented yet - complex operation');
+        .rejects.toThrow('Cannot rotate key for revoked actor: human:test-user');
+    });
+
+    it('[EARS-16] should throw error if validateFullActorRecord fails', async () => {
+      const existingActor = sampleActorPayload;
+      const newActorId = 'human:new-test-user';
+      const newPublicKey = 'NEW_PUBLIC_KEY_BASE64_44_CHARS_LONG_AAAAAAAAAAA=';
+      const newPrivateKey = 'new-private-key-base64';
+
+      jest.spyOn(identityAdapter, 'getActor').mockResolvedValue(existingActor);
+      mockedGenerateKeys.mockResolvedValueOnce({
+        publicKey: newPublicKey,
+        privateKey: newPrivateKey
+      });
+      mockedGenerateActorId.mockReturnValueOnce(newActorId);
+      mockedCreateActorRecord.mockReturnValueOnce({
+        ...existingActor,
+        id: newActorId,
+        publicKey: newPublicKey
+      });
+      mockedCalculatePayloadChecksum.mockReturnValueOnce('new-checksum');
+      mockedSignPayload.mockReturnValueOnce({
+        keyId: newActorId,
+        role: 'author',
+        notes: 'Key rotation',
+        signature: 'new-signature',
+        timestamp: Date.now()
+      });
+
+      // Mock validateFullActorRecord to throw error
+      mockedValidateFullActorRecord.mockRejectedValueOnce(
+        new Error('Validation failed: invalid public key format')
+      );
+
+      await expect(identityAdapter.rotateActorKey('human:test-user'))
+        .rejects.toThrow('Validation failed: invalid public key format');
+
+      // Verify new actor was NOT written
+      expect(mockActorStore.write).not.toHaveBeenCalled();
+    });
+
+    it('[EARS-17] should throw error if actorStore.write fails (rollback scenario)', async () => {
+      const existingActor = sampleActorPayload;
+      const newActorId = 'human:new-test-user';
+      const newPublicKey = 'NEW_PUBLIC_KEY_BASE64_44_CHARS_LONG_AAAAAAAAAAA=';
+      const newPrivateKey = 'new-private-key-base64';
+
+      jest.spyOn(identityAdapter, 'getActor').mockResolvedValue(existingActor);
+      mockedGenerateKeys.mockResolvedValueOnce({
+        publicKey: newPublicKey,
+        privateKey: newPrivateKey
+      });
+      mockedGenerateActorId.mockReturnValueOnce(newActorId);
+      mockedCreateActorRecord.mockReturnValueOnce({
+        ...existingActor,
+        id: newActorId,
+        publicKey: newPublicKey
+      });
+      mockedCalculatePayloadChecksum.mockReturnValueOnce('new-checksum');
+      mockedSignPayload.mockReturnValueOnce({
+        keyId: newActorId,
+        role: 'author',
+        notes: 'Key rotation',
+        signature: 'new-signature',
+        timestamp: Date.now()
+      });
+      mockedValidateFullActorRecord.mockResolvedValueOnce(undefined);
+
+      // Mock actorStore.write to fail
+      mockActorStore.write.mockRejectedValueOnce(new Error('Disk full: cannot write'));
+
+      await expect(identityAdapter.rotateActorKey('human:test-user'))
+        .rejects.toThrow('Disk full: cannot write');
+
+      // Verify revokeActor was NOT called (rollback)
+      expect(mockActorStore.read).not.toHaveBeenCalledWith('human:test-user');
+    });
+
+    it('[EARS-18] should handle failure when revokeActor fails after new actor is created', async () => {
+      const existingActor = sampleActorPayload;
+      const newActorId = 'human:new-test-user';
+      const newPublicKey = 'NEW_PUBLIC_KEY_BASE64_44_CHARS_LONG_AAAAAAAAAAA=';
+      const newPrivateKey = 'new-private-key-base64';
+
+      jest.spyOn(identityAdapter, 'getActor').mockResolvedValue(existingActor);
+      mockedGenerateKeys.mockResolvedValueOnce({
+        publicKey: newPublicKey,
+        privateKey: newPrivateKey
+      });
+      mockedGenerateActorId.mockReturnValueOnce(newActorId);
+      mockedCreateActorRecord.mockReturnValueOnce({
+        ...existingActor,
+        id: newActorId,
+        publicKey: newPublicKey
+      });
+      mockedCalculatePayloadChecksum.mockReturnValueOnce('new-checksum');
+      mockedSignPayload.mockReturnValueOnce({
+        keyId: newActorId,
+        role: 'author',
+        notes: 'Key rotation',
+        signature: 'new-signature',
+        timestamp: Date.now()
+      });
+      mockedValidateFullActorRecord.mockResolvedValueOnce(undefined);
+      mockActorStore.write.mockResolvedValue(undefined);
+      mockActorStore.list.mockResolvedValue(['human:test-user']);
+
+      // Mock revokeActor to fail directly
+      jest.spyOn(identityAdapter, 'revokeActor').mockRejectedValueOnce(
+        new Error('Cannot revoke actor: database error')
+      );
+
+      await expect(identityAdapter.rotateActorKey('human:test-user'))
+        .rejects.toThrow('Cannot revoke actor: database error');
+
+      // NOTE: This is a known limitation - if revokeActor fails, the new actor
+      // is already created. This could leave two active actors. In production,
+      // this should be handled with transactions or cleanup logic.
+      expect(mockActorStore.write).toHaveBeenCalled(); // New actor was written
+    });
+
+    it('[EARS-19] should handle private key persistence failure gracefully', async () => {
+      const existingActor = sampleActorPayload;
+      const newActorId = 'human:new-test-user';
+      const newPublicKey = 'NEW_PUBLIC_KEY_BASE64_44_CHARS_LONG_AAAAAAAAAAA=';
+      const newPrivateKey = 'new-private-key-base64';
+
+      jest.spyOn(identityAdapter, 'getActor').mockResolvedValue(existingActor);
+      mockedGenerateKeys.mockResolvedValueOnce({
+        publicKey: newPublicKey,
+        privateKey: newPrivateKey
+      });
+      mockedGenerateActorId.mockReturnValueOnce(newActorId);
+      mockedCreateActorRecord.mockReturnValueOnce({
+        ...existingActor,
+        id: newActorId,
+        publicKey: newPublicKey
+      });
+      mockedCalculatePayloadChecksum.mockReturnValueOnce('new-checksum');
+      mockedSignPayload.mockReturnValueOnce({
+        keyId: newActorId,
+        role: 'author',
+        notes: 'Key rotation',
+        signature: 'new-signature',
+        timestamp: Date.now()
+      });
+      mockedValidateFullActorRecord.mockResolvedValueOnce(undefined);
+      mockActorStore.write.mockResolvedValue(undefined);
+      mockActorStore.list.mockResolvedValue(['human:test-user']);
+      mockActorStore.read
+        .mockResolvedValueOnce(sampleRecord)
+        .mockResolvedValueOnce(sampleRecord);
+
+      // Mock private key persistence to fail
+      jest.spyOn(ConfigManager, 'findProjectRoot').mockReturnValue('/test/project');
+      const fs = await import('fs');
+      const mockWriteFile = fs.promises.writeFile as jest.MockedFunction<typeof fs.promises.writeFile>;
+      const mockMkdir = fs.promises.mkdir as jest.MockedFunction<typeof fs.promises.mkdir>;
+      mockMkdir.mockResolvedValue(undefined);
+      mockWriteFile.mockRejectedValue(new Error('Permission denied'));
+
+      const originalWarn = console.warn;
+      console.warn = jest.fn();
+
+      // Should NOT throw error - graceful degradation
+      const result = await identityAdapter.rotateActorKey('human:test-user');
+
+      expect(result.oldActor.status).toBe('revoked');
+      expect(result.newActor.id).toBe(newActorId);
+      expect(console.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Could not persist private key')
+      );
+
+      console.warn = originalWarn;
     });
   });
 
   describe('authenticate', () => {
-    it('[EARS-11] should log warning for unimplemented method', async () => {
+    it('[EARS-20] should log warning for unimplemented method', async () => {
       const originalWarn = console.warn;
       console.warn = jest.fn();
 
@@ -369,7 +834,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
     };
 
     describe('getAgentRecord', () => {
-      it('[EARS-12] should return AgentRecord when it exists', async () => {
+      it('[EARS-21] should return AgentRecord when it exists', async () => {
         mockAgentStore.read.mockResolvedValue(sampleAgentRecord);
 
         const result = await identityAdapter.getAgentRecord('agent:test-agent');
@@ -378,7 +843,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
         expect(result).toEqual(sampleAgentPayload);
       });
 
-      it('[EARS-13] should return null when AgentRecord does not exist', async () => {
+      it('[EARS-22] should return null when AgentRecord does not exist', async () => {
         mockAgentStore.read.mockResolvedValue(null);
 
         const result = await identityAdapter.getAgentRecord('agent:non-existent');
@@ -389,7 +854,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
     });
 
     describe('listAgentRecords', () => {
-      it('[EARS-14] should return all AgentRecords', async () => {
+      it('[EARS-23] should return all AgentRecords', async () => {
         const agentIds = ['agent:agent1', 'agent:agent2'];
         const record1 = { ...sampleAgentRecord, payload: { ...sampleAgentPayload, id: 'agent:agent1' } };
         const record2 = { ...sampleAgentRecord, payload: { ...sampleAgentPayload, id: 'agent:agent2' } };
@@ -408,7 +873,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
         expect(result[1]?.id).toBe('agent:agent2');
       });
 
-      it('[EARS-15] should return empty array when no agents exist', async () => {
+      it('[EARS-24] should return empty array when no agents exist', async () => {
         mockAgentStore.list.mockResolvedValue([]);
 
         const result = await identityAdapter.listAgentRecords();
@@ -419,21 +884,31 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
     });
 
     describe('createAgentRecord', () => {
-      it('[EARS-16] should create a new AgentRecord when corresponding ActorRecord exists', async () => {
+      it('[EARS-25, EARS-26] should create a new AgentRecord when corresponding ActorRecord exists with real signing', async () => {
         const inputPayload = {
           id: 'agent:test-agent',
           engine: { type: 'local' as const, runtime: 'typescript', entrypoint: 'test.ts', function: 'run' }
         };
 
+        const testPrivateKey = 'test-agent-private-key-base64';
+        const testProjectRoot = '/test/project';
+
         // Mock dependencies
         mockActorStore.read.mockResolvedValue(correspondingActorRecord);
-        mockedCreateAgentRecord.mockResolvedValue(sampleAgentPayload);
+        mockedCreateAgentRecord.mockReturnValue(sampleAgentPayload);
         mockedCalculatePayloadChecksum.mockReturnValue('calculated-agent-checksum');
+
+        // Mock ConfigManager and fs to return private key
+        jest.spyOn(ConfigManager, 'findProjectRoot').mockReturnValue(testProjectRoot);
+        const fs = await import('fs');
+        const mockReadFile = fs.promises.readFile as jest.MockedFunction<typeof fs.promises.readFile>;
+        mockReadFile.mockResolvedValue(testPrivateKey);
+
         mockedSignPayload.mockReturnValue({
           keyId: 'agent:test-agent',
           role: 'author',
-          notes: '',
-          signature: 'generated-agent-signature',
+          notes: 'Agent registration',
+          signature: 'real-agent-signature',
           timestamp: 1234567890
         });
         mockedValidateFullAgentRecord.mockResolvedValue(undefined);
@@ -444,13 +919,65 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
         expect(mockActorStore.read).toHaveBeenCalledWith('agent:test-agent');
         expect(mockedCreateAgentRecord).toHaveBeenCalled();
         expect(mockedCalculatePayloadChecksum).toHaveBeenCalled();
-        expect(mockedSignPayload).toHaveBeenCalled();
+
+        // Verify private key was loaded and used for real signing
+        expect(ConfigManager.findProjectRoot).toHaveBeenCalled();
+        expect(mockReadFile).toHaveBeenCalledWith(
+          `${testProjectRoot}/.gitgov/actors/agent:test-agent.key`,
+          'utf-8'
+        );
+        expect(mockedSignPayload).toHaveBeenCalledWith(
+          sampleAgentPayload,
+          testPrivateKey,
+          'agent:test-agent',
+          'author',
+          'Agent registration'
+        );
+
         expect(mockedValidateFullAgentRecord).toHaveBeenCalled();
         expect(mockAgentStore.write).toHaveBeenCalled();
         expect(result).toEqual(sampleAgentPayload);
       });
 
-      it('[EARS-17] should throw error when required fields are missing', async () => {
+      it('[EARS-27] should throw error when private key is not available', async () => {
+        const inputPayload = {
+          id: 'agent:test-agent',
+          engine: { type: 'local' as const, runtime: 'typescript', entrypoint: 'test.ts', function: 'run' }
+        };
+
+        const testProjectRoot = '/test/project';
+
+        // Mock dependencies
+        mockActorStore.read.mockResolvedValue(correspondingActorRecord);
+        mockedCreateAgentRecord.mockReturnValue(sampleAgentPayload);
+        mockedCalculatePayloadChecksum.mockReturnValue('calculated-agent-checksum');
+
+        // Mock ConfigManager to return project root but fs.readFile to fail (no private key)
+        jest.spyOn(ConfigManager, 'findProjectRoot').mockReturnValue(testProjectRoot);
+        const fs = await import('fs');
+        const mockReadFile = fs.promises.readFile as jest.MockedFunction<typeof fs.promises.readFile>;
+        mockReadFile.mockRejectedValue(new Error('File not found'));
+
+        await expect(identityAdapter.createAgentRecord(inputPayload))
+          .rejects.toThrow('Private key not found for actor agent:test-agent');
+
+        expect(mockActorStore.read).toHaveBeenCalledWith('agent:test-agent');
+        expect(mockedCreateAgentRecord).toHaveBeenCalled();
+        expect(mockedCalculatePayloadChecksum).toHaveBeenCalled();
+
+        // Verify private key was attempted to be loaded
+        expect(ConfigManager.findProjectRoot).toHaveBeenCalled();
+        expect(mockReadFile).toHaveBeenCalledWith(
+          `${testProjectRoot}/.gitgov/actors/agent:test-agent.key`,
+          'utf-8'
+        );
+
+        // Should NOT call signPayload or write (operation should fail)
+        expect(mockedSignPayload).not.toHaveBeenCalled();
+        expect(mockAgentStore.write).not.toHaveBeenCalled();
+      });
+
+      it('[EARS-28] should throw error when required fields are missing', async () => {
         const invalidPayload = {
           id: 'agent:test-agent',
           // Missing engine
@@ -460,7 +987,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
           .rejects.toThrow('AgentRecord requires id and engine');
       });
 
-      it('[EARS-18] should throw error when corresponding ActorRecord does not exist', async () => {
+      it('[EARS-29] should throw error when corresponding ActorRecord does not exist', async () => {
         const inputPayload = {
           id: 'agent:non-existent',
           engine: { type: 'local' as const }
@@ -472,7 +999,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
           .rejects.toThrow('ActorRecord with id agent:non-existent not found. AgentRecord can only be created for existing ActorRecord.');
       });
 
-      it('[EARS-19] should throw error when ActorRecord is not of type agent', async () => {
+      it('[EARS-30] should throw error when ActorRecord is not of type agent', async () => {
         const inputPayload = {
           id: 'human:test-user',
           engine: { type: 'local' as const }
@@ -492,7 +1019,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
   });
 
   describe('resolveCurrentActorId', () => {
-    it('[EARS-20] should return same ID for active actor', async () => {
+    it('[EARS-31] should return same ID for active actor', async () => {
       const activeActor = { ...sampleActorPayload, status: 'active' as const };
       mockActorStore.read.mockResolvedValue({
         ...sampleRecord,
@@ -505,7 +1032,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       expect(mockActorStore.read).toHaveBeenCalledWith('human:test-user');
     });
 
-    it('[EARS-21] should follow succession chain for revoked actor', async () => {
+    it('[EARS-32] should follow succession chain for revoked actor', async () => {
       const revokedActor = {
         ...sampleActorPayload,
         status: 'revoked' as const,
@@ -535,7 +1062,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       expect(mockActorStore.read).toHaveBeenNthCalledWith(2, 'human:test-user-v2');
     });
 
-    it('[EARS-22] should follow long succession chain', async () => {
+    it('[EARS-33] should follow long succession chain', async () => {
       const actor1 = { ...sampleActorPayload, status: 'revoked' as const, supersededBy: 'human:test-user-v2' };
       const actor2 = { ...sampleActorPayload, id: 'human:test-user-v2', status: 'revoked' as const, supersededBy: 'human:test-user-v3' };
       const actor3 = { ...sampleActorPayload, id: 'human:test-user-v3', status: 'active' as const };
@@ -553,7 +1080,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
   });
 
   describe('getEffectiveActorForAgent', () => {
-    it('[EARS-23] should return effective actor for agent with succession', async () => {
+    it('[EARS-34] should return effective actor for agent with succession', async () => {
       // Test the method by mocking resolveCurrentActorId and getActor separately
       const newActiveAgentActor = {
         ...sampleActorPayload,
@@ -582,9 +1109,15 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
   });
 
   describe('getCurrentActor', () => {
-    it('[EARS-24] should return actor from valid session resolving succession chain', async () => {
-      // Since the real ConfigManager is being used and returns 'human:camilo',
-      // we test with the actual session data
+    it('[EARS-35] should return actor from valid session resolving succession chain', async () => {
+      // Mock ConfigManager to simulate existing session (testing the primary path)
+      jest.spyOn(ConfigManager.prototype, 'loadSession').mockResolvedValue({
+        lastSession: {
+          actorId: 'human:camilo',
+          timestamp: '2025-09-15T17:21:00Z'
+        }
+      });
+
       jest.spyOn(identityAdapter, 'resolveCurrentActorId')
         .mockResolvedValue('human:camilo');
       jest.spyOn(identityAdapter, 'getActor')
@@ -597,15 +1130,9 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       expect(identityAdapter.getActor).toHaveBeenCalledWith('human:camilo');
     });
 
-    it('[EARS-25] should return first active actor when no valid session', async () => {
-      // Mock ConfigManager with no session
-      const mockConfigManager = {
-        loadSession: jest.fn().mockResolvedValue(null)
-      };
-
-      jest.doMock('../../config_manager', () => ({
-        ConfigManager: jest.fn().mockImplementation(() => mockConfigManager)
-      }));
+    it('[EARS-36] should return first active actor when no valid session', async () => {
+      // Mock ConfigManager to simulate no session (testing the fallback path)
+      jest.spyOn(ConfigManager.prototype, 'loadSession').mockResolvedValue(null);
 
       // Mock listActors to return active actor
       jest.spyOn(identityAdapter, 'listActors')
@@ -620,15 +1147,9 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       expect(result.status).toBe('active');
     });
 
-    it('[EARS-26] should throw error when no active actors exist', async () => {
-      // Mock ConfigManager with no session
-      const mockConfigManager = {
-        loadSession: jest.fn().mockResolvedValue(null)
-      };
-
-      jest.doMock('../../config_manager', () => ({
-        ConfigManager: jest.fn().mockImplementation(() => mockConfigManager)
-      }));
+    it('[EARS-37] should throw error when no active actors exist', async () => {
+      // Mock ConfigManager to simulate no session
+      jest.spyOn(ConfigManager.prototype, 'loadSession').mockResolvedValue(null);
 
       // Mock listActors to return only revoked actors
       jest.spyOn(identityAdapter, 'listActors')
@@ -656,7 +1177,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
         privateKey: 'generated-private-key'
       });
       mockedGenerateActorId.mockReturnValue('human:test-user');
-      mockedCreateActorRecord.mockResolvedValue(sampleActorPayload);
+      mockedCreateActorRecord.mockReturnValue(sampleActorPayload);
       mockedCalculatePayloadChecksum.mockReturnValue('calculated-checksum');
       mockedSignPayload.mockReturnValue({
         keyId: 'human:test-user',
@@ -727,7 +1248,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
         privateKey: 'generated-private-key'
       });
       mockedGenerateActorId.mockReturnValue('human:test-user');
-      mockedCreateActorRecord.mockResolvedValue(sampleActorPayload);
+      mockedCreateActorRecord.mockReturnValue(sampleActorPayload);
       mockedCalculatePayloadChecksum.mockReturnValue('calculated-checksum');
       mockedSignPayload.mockReturnValue({
         keyId: 'human:test-user',

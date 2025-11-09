@@ -132,7 +132,7 @@ export class ChangelogAdapter implements IChangelogAdapter {
       }
 
       // 2. Build the record with factory
-      const validatedPayload = await createChangelogRecord(payload);
+      const validatedPayload = createChangelogRecord(payload);
 
       // 3. Create unsigned record structure
       const unsignedRecord: GitGovRecord & { payload: ChangelogRecord } = {

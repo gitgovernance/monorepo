@@ -76,7 +76,9 @@ export async function verifySignatures(
   for (const signature of record.header.signatures) {
     const publicKeyBase64 = await getActorPublicKey(signature.keyId);
     if (!publicKeyBase64) {
-      logger.warn(`Public key not found for actor: ${signature.keyId}`);
+      // Use debug level instead of warn to reduce noise during indexer validation
+      // The indexer already captures these errors in its integrity report
+      logger.debug(`Public key not found for actor: ${signature.keyId}`);
       return false;
     }
 

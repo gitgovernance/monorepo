@@ -170,7 +170,7 @@ describe('ProjectAdapter', () => {
     mockCreateCycleRecord = createCycleRecord as jest.MockedFunction<typeof createCycleRecord>;
 
     // Setup factory mocks
-    mockCreateTaskRecord.mockImplementation(async (payload) => ({
+    mockCreateTaskRecord.mockImplementation((payload) => ({
       id: `${Date.now()}-task-${payload.title?.toLowerCase().replace(/\s+/g, '-') || 'test'}`,
       title: payload.title || 'Test Task',
       status: payload.status || 'draft',
@@ -180,7 +180,7 @@ describe('ProjectAdapter', () => {
       cycleIds: payload.cycleIds || [],
     }));
 
-    mockCreateCycleRecord.mockImplementation(async (payload) => ({
+    mockCreateCycleRecord.mockImplementation((payload) => ({
       id: `${Date.now()}-cycle-${payload.title?.toLowerCase().replace(/\s+/g, '-') || 'test'}`,
       title: payload.title || 'Test Cycle',
       status: payload.status || 'planning',

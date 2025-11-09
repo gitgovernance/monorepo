@@ -293,7 +293,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
 
       // Mock the factory functions
       const { createCycleRecord } = require('../../factories/cycle_factory');
-      createCycleRecord.mockResolvedValue(mockCycle.payload);
+      createCycleRecord.mockReturnValue(mockCycle.payload);
 
       mockDependencies.identity.signRecord.mockResolvedValue(mockCycle);
       mockDependencies.cycleStore.write.mockResolvedValue(undefined);
@@ -373,7 +373,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
 
       // Mock the factory function
       const { createCycleRecord } = require('../../factories/cycle_factory');
-      createCycleRecord.mockResolvedValue(updatedCycle.payload);
+      createCycleRecord.mockReturnValue(updatedCycle.payload);
 
       const result = await backlogAdapter.updateCycle('1757687335-cycle-test-cycle', { status: 'active' });
 
@@ -694,7 +694,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
 
       // Mock the factory function
       const { createTaskRecord } = require('../../factories/task_factory');
-      createTaskRecord.mockResolvedValue(updatedTask.payload);
+      createTaskRecord.mockReturnValue(updatedTask.payload);
 
       const result = await backlogAdapter.updateTask('1757687335-task-test-task', { title: 'Updated Title' });
 
@@ -1917,7 +1917,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       });
 
       const { createCycleRecord } = require('../../factories/cycle_factory');
-      createCycleRecord.mockResolvedValue(mockCycle.payload);
+      createCycleRecord.mockReturnValue(mockCycle.payload);
 
       mockDependencies.identity.signRecord.mockResolvedValue(mockCycle);
       mockDependencies.cycleStore.write.mockResolvedValue(undefined);
@@ -2432,7 +2432,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
 
       // Mock factory to validate the merged payload
       const { createTaskRecord } = require('../../factories/task_factory');
-      createTaskRecord.mockResolvedValue({
+      createTaskRecord.mockReturnValue({
         ...originalTask.payload,
         title: 'Updated Title'
       });

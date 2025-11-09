@@ -5,7 +5,17 @@ jest.doMock('../identity_adapter', () => ({
     getActor: jest.fn(),
     createActor: jest.fn(),
     listActors: jest.fn(),
-    signRecord: jest.fn().mockImplementation(async (record) => record),
+    signRecord: jest.fn().mockImplementation(async (unsignedRecord, actorId, role = 'author') => {
+      // signRecord receives a record with placeholder header and returns it properly signed
+      return {
+        header: {
+          ...unsignedRecord.header,
+          payloadChecksum: 'a'.repeat(64), // Mock checksum
+          signatures: [createTestSignature(actorId || 'human:test-user', role)]
+        },
+        payload: unsignedRecord.payload
+      };
+    }),
     rotateActorKey: jest.fn(),
     revokeActor: jest.fn(),
     resolveCurrentActorId: jest.fn(),
@@ -28,6 +38,7 @@ jest.doMock('../identity_adapter', () => ({
 
 import { BacklogAdapter } from './index';
 import { RecordStore } from '../../store';
+import { loadTaskRecord, loadCycleRecord, loadActorRecord, loadAgentRecord, createTestSignature } from '../../factories';
 import { IdentityAdapter } from '../identity_adapter';
 import { WorkflowMethodologyAdapter } from '../workflow_methodology_adapter';
 import { FeedbackAdapter } from '../feedback_adapter';
@@ -144,8 +155,8 @@ describe('BacklogAdapter Integration Tests', () => {
     const testRoot = `/tmp/gitgov-test-${Date.now()}`;
 
     // Create mock stores for IdentityAdapter constructor
-    const mockActorStore = new RecordStore<ActorRecord>('actors', testRoot);
-    const mockAgentStore = new RecordStore<AgentRecord>('agents', testRoot);
+    const mockActorStore = new RecordStore<ActorRecord>('actors', loadActorRecord, testRoot);
+    const mockAgentStore = new RecordStore<AgentRecord>('agents', loadAgentRecord, testRoot);
 
     // Create identity adapter - will be mocked by jest.doMock
     identityAdapter = new IdentityAdapter({
@@ -154,8 +165,8 @@ describe('BacklogAdapter Integration Tests', () => {
     });
 
     // Create stores with identity for validation
-    taskStore = new RecordStore<TaskRecord>('tasks', testRoot);
-    cycleStore = new RecordStore<CycleRecord>('cycles', testRoot);
+    taskStore = new RecordStore<TaskRecord>('tasks', loadTaskRecord, testRoot);
+    cycleStore = new RecordStore<CycleRecord>('cycles', loadCycleRecord, testRoot);
 
     // Create mock feedback adapter for methodology adapter
     feedbackAdapter = {

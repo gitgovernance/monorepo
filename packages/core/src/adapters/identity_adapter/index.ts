@@ -1,4 +1,4 @@
-import type { ActorRecord } from "../../types";
+import type { ActorRecord, GitGovActorRecord, GitGovAgentRecord } from "../../types";
 import type { AgentRecord } from "../../types";
 import type {
   GitGovRecord,
@@ -21,6 +21,8 @@ import type {
   AgentRegisteredEvent
 } from "../../event_bus";
 import { ConfigManager } from "../../config_manager";
+import { promises as fs } from "fs";
+import * as path from "path";
 
 /**
  * IdentityAdapter Interface - The Identity Management Contract
@@ -111,16 +113,16 @@ export class IdentityAdapter implements IIdentityAdapter {
     };
 
     // Validate the payload using the factory
-    const validatedPayload = await createActorRecord(completePayload);
+    const validatedPayload = createActorRecord(completePayload);
 
     // Calculate checksum for the payload
     const payloadChecksum = calculatePayloadChecksum(validatedPayload);
 
     // Create signature for the record
-    const signature = await signPayload(validatedPayload, privateKey, actorId, 'author', 'Actor registration');
+    const signature = signPayload(validatedPayload, privateKey, actorId, 'author', 'Actor registration');
 
     // Create the complete GitGovRecord structure
-    const record: GitGovRecord & { payload: ActorRecord } = {
+    const record: GitGovActorRecord = {
       header: {
         version: '1.0',
         type: 'actor',
@@ -142,6 +144,24 @@ export class IdentityAdapter implements IIdentityAdapter {
     // Store the record with validation
     await this.actorStore.write(record);
 
+    // Persist private key to .gitgov/actors/{actorId}.key
+    try {
+      const projectRoot = ConfigManager.findProjectRoot();
+      if (projectRoot) {
+        const actorsDir = path.join(projectRoot, '.gitgov', 'actors');
+        await fs.mkdir(actorsDir, { recursive: true });
+
+        const keyPath = path.join(actorsDir, `${actorId}.key`);
+        await fs.writeFile(keyPath, privateKey, 'utf-8');
+        // Set secure file permissions (0600 = owner read/write only)
+        await fs.chmod(keyPath, 0o600);
+      }
+    } catch (error) {
+      // Log warning but don't fail actor creation if key persistence fails
+      // This allows graceful degradation in environments where file permissions might be restricted
+      console.warn(`⚠️  Could not persist private key for ${actorId}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+
     // Emit actor created event (graceful degradation if no eventBus)
     if (this.eventBus) {
       // Check if this is the first actor (bootstrap)
@@ -162,10 +182,6 @@ export class IdentityAdapter implements IIdentityAdapter {
       };
       this.eventBus.publish(event);
     }
-
-    // TODO: Store private key securely (outside of this core module)
-    // For now, we'll just log it (NOT for production)
-    console.warn(`Private key for ${actorId}: ${privateKey} (STORE SECURELY)`);
 
     return validatedPayload;
   }
@@ -194,9 +210,6 @@ export class IdentityAdapter implements IIdentityAdapter {
     actorId: string,
     role: string
   ): Promise<GitGovRecord> {
-    // MVP MODE: Generate functionally valid mock signature
-    // TODO: Replace with real cryptographic signing when key management is implemented
-
     // Verify actor exists
     const actor = await this.getActor(actorId);
     if (!actor) {
@@ -206,22 +219,62 @@ export class IdentityAdapter implements IIdentityAdapter {
     // Calculate payload checksum (real)
     const payloadChecksum = calculatePayloadChecksum(record.payload);
 
-    // Generate mock signature that passes validation
-    const mockSignature: Signature = {
-      keyId: actorId,
-      role: role,
-      notes: 'Record signed',
-      signature: `mock-signature-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      timestamp: Math.floor(Date.now() / 1000)
-    };
+    // Try to load private key from .gitgov/actors/{actorId}.key for real signing
+    let privateKey: string | null = null;
+    try {
+      const projectRoot = ConfigManager.findProjectRoot();
+      if (projectRoot) {
+        const keyPath = path.join(projectRoot, '.gitgov', 'actors', `${actorId}.key`);
+        const keyContent = await fs.readFile(keyPath, 'utf-8');
+        privateKey = keyContent.trim();
+      }
+    } catch (error) {
+      // Private key not found - fallback to mock signature for backward compatibility
+      console.warn(`⚠️  Private key not found for ${actorId}, using mock signature`);
+    }
 
-    // Create signed record with real checksum + mock signature
+    // Create signature (real if private key available, mock otherwise)
+    let signature: Signature;
+    if (privateKey) {
+      // Real cryptographic signing
+      signature = signPayload(record.payload, privateKey, actorId, role, 'Record signed');
+    } else {
+      // Fallback to mock signature for backward compatibility
+      signature = {
+        keyId: actorId,
+        role: role,
+        notes: 'Record signed',
+        signature: `mock-signature-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        timestamp: Math.floor(Date.now() / 1000)
+      };
+    }
+
+    // Replace placeholder signatures or add new signature if no placeholders exist
+    const existingSignatures = record.header.signatures || [];
+    const hasPlaceholder = existingSignatures.some(sig => sig.signature === 'placeholder');
+    
+    let finalSignatures: [Signature, ...Signature[]];
+    if (hasPlaceholder) {
+      // Replace placeholder signatures with the real signature
+      const replaced = existingSignatures.map(sig => 
+        sig.signature === 'placeholder' ? signature : sig
+      );
+      // Ensure at least one signature (should always be true after replacement)
+      finalSignatures = replaced.length > 0 
+        ? replaced as [Signature, ...Signature[]]
+        : [signature];
+    } else {
+      // No placeholders: append new signature (multi-signature scenario)
+      finalSignatures = [...existingSignatures, signature] as [Signature, ...Signature[]];
+    }
+
+    // Create signed record with real checksum + signature
     const signedRecord: GitGovRecord = {
       ...record,
       header: {
         ...record.header,
         payloadChecksum,
-        signatures: [...(record.header.signatures || []), mockSignature]
+        signatures: finalSignatures
       }
     };
 
@@ -291,10 +344,143 @@ export class IdentityAdapter implements IIdentityAdapter {
   }
 
   async rotateActorKey(
-    _actorId: string
+    actorId: string
   ): Promise<{ oldActor: ActorRecord; newActor: ActorRecord }> {
-    // TODO: Implement key rotation workflow
-    throw new Error('rotateActorKey not implemented yet - complex operation');
+    // Read existing actor
+    const oldActor = await this.getActor(actorId);
+    if (!oldActor) {
+      throw new Error(`ActorRecord with id ${actorId} not found`);
+    }
+
+    if (oldActor.status === 'revoked') {
+      throw new Error(`Cannot rotate key for revoked actor: ${actorId}`);
+    }
+
+    // Generate new keys for the new actor
+    const { publicKey: newPublicKey, privateKey: newPrivateKey } = await generateKeys();
+
+    // Generate new actor ID following the pattern from actor_protocol_faq.md
+    // Pattern: {baseId}-v{N} where N is the version number (using hyphens to match schema pattern)
+    // Schema pattern: ^(human|agent)(:[a-z0-9-]+)+$ (only allows hyphens, not underscores)
+    const baseId = generateActorId(oldActor.type, oldActor.displayName);
+    let newActorId: string;
+
+    // Check if baseId already has a version suffix (e.g., human:camilo-v2)
+    const versionMatch = baseId.match(/^(.+)-v(\d+)$/);
+    if (versionMatch && versionMatch[1] && versionMatch[2]) {
+      const baseWithoutVersion = versionMatch[1];
+      const currentVersion = parseInt(versionMatch[2], 10);
+      newActorId = `${baseWithoutVersion}-v${currentVersion + 1}`;
+    } else {
+      // First rotation: add -v2
+      newActorId = `${baseId}-v2`;
+    }
+
+    // Create new actor with same metadata but new keys
+    const newActorPayload: ActorRecord = {
+      id: newActorId,
+      type: oldActor.type,
+      displayName: oldActor.displayName,
+      publicKey: newPublicKey,
+      roles: oldActor.roles,
+      status: 'active'
+    };
+
+    // Validate the new payload
+    const validatedNewPayload = createActorRecord(newActorPayload);
+
+    // Calculate checksum for the new payload
+    const payloadChecksum = calculatePayloadChecksum(validatedNewPayload);
+
+    // Create signature for the new record (self-signed for bootstrap)
+    const signature = signPayload(validatedNewPayload, newPrivateKey, newActorId, 'author', 'Key rotation');
+
+    // Create the complete GitGovRecord structure for new actor
+    const newRecord: GitGovActorRecord = {
+      header: {
+        version: '1.0',
+        type: 'actor',
+        payloadChecksum,
+        signatures: [signature]
+      },
+      payload: validatedNewPayload
+    };
+
+    // Validate the complete new record
+    await validateFullActorRecord(newRecord, async (keyId) => {
+      if (keyId === newActorId) {
+        return newPublicKey; // Self-referential for bootstrap
+      }
+      const signerActor = await this.getActor(keyId);
+      return signerActor?.publicKey || null;
+    });
+
+    // Store the new actor record
+    await this.actorStore.write(newRecord);
+
+    // Revoke old actor and mark succession
+    const revokedOldActor = await this.revokeActor(
+      actorId,
+      'system',
+      'rotation',
+      newActorId // Mark succession
+    );
+
+    // Update session to point to the new actor
+    try {
+      const configManager = new ConfigManager();
+      const session = await configManager.loadSession();
+
+      if (session) {
+        // Update lastSession to point to new actor
+        session.lastSession = {
+          actorId: newActorId,
+          timestamp: new Date().toISOString()
+        };
+
+        // Migrate actorState from old actor to new actor if it exists
+        if (session.actorState && session.actorState[actorId]) {
+          const oldState = session.actorState[actorId];
+          session.actorState[newActorId] = {
+            ...oldState,
+            lastSync: new Date().toISOString()
+          };
+          // Keep old actor state for history (don't delete it)
+        } else if (!session.actorState) {
+          session.actorState = {};
+        }
+
+        // Write updated session using ConfigManager's sessionPath
+        // Access private sessionPath via reflection or use the same pattern as updateActorState
+        const projectRoot = ConfigManager.findProjectRoot() || process.cwd();
+        const sessionPath = path.join(projectRoot, '.gitgov', '.session.json');
+        await fs.writeFile(sessionPath, JSON.stringify(session, null, 2), 'utf-8');
+      }
+    } catch (error) {
+      // Graceful degradation: session update is not critical
+      console.warn(`⚠️  Could not update session for ${newActorId}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+
+    // Persist new private key to .gitgov/actors/{newActorId}.key
+    try {
+      const projectRoot = ConfigManager.findProjectRoot();
+      if (projectRoot) {
+        const actorsDir = path.join(projectRoot, '.gitgov', 'actors');
+        await fs.mkdir(actorsDir, { recursive: true });
+
+        const keyPath = path.join(actorsDir, `${newActorId}.key`);
+        await fs.writeFile(keyPath, newPrivateKey, 'utf-8');
+        // Set secure file permissions (0600 = owner read/write only)
+        await fs.chmod(keyPath, 0o600);
+      }
+    } catch (error) {
+      console.warn(`⚠️  Could not persist private key for ${newActorId}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+
+    return {
+      oldActor: revokedOldActor,
+      newActor: validatedNewPayload
+    };
   }
 
   async revokeActor(actorId: string, revokedBy: string = "system", reason: "compromised" | "rotation" | "manual" = "manual", supersededBy?: string): Promise<ActorRecord> {
@@ -315,7 +501,7 @@ export class IdentityAdapter implements IIdentityAdapter {
     const payloadChecksum = calculatePayloadChecksum(revokedPayload);
 
     // Create updated record
-    const updatedRecord: GitGovRecord & { payload: ActorRecord } = {
+    const updatedRecord: GitGovActorRecord = {
       ...existingRecord,
       header: {
         ...existingRecord.header,
@@ -383,18 +569,40 @@ export class IdentityAdapter implements IIdentityAdapter {
     };
 
     // Validate the payload using the factory
-    const validatedPayload = await createAgentRecord(completePayload);
+    const validatedPayload = createAgentRecord(completePayload);
 
     // Calculate checksum for the payload
     const payloadChecksum = calculatePayloadChecksum(validatedPayload);
 
-    // Create signature for the record using the corresponding actor's key
-    // Note: In a real implementation, we would need access to the actor's private key
-    // For now, we'll create a placeholder signature structure
-    const signature = signPayload(validatedPayload, 'placeholder-private-key', payload.id, 'author', 'Agent registration');
+    // Load private key from .gitgov/actors/{actorId}.key for real signing
+    // Since createActor() always persists the private key, it should be available
+    // If not found, this indicates a problem (legacy actor, key deleted, or I/O error)
+    let privateKey: string;
+    try {
+      const projectRoot = ConfigManager.findProjectRoot();
+      if (!projectRoot) {
+        throw new Error('Project root not found. Cannot locate private key.');
+      }
+      const keyPath = path.join(projectRoot, '.gitgov', 'actors', `${payload.id}.key`);
+      const keyContent = await fs.readFile(keyPath, 'utf-8');
+      privateKey = keyContent.trim();
+      if (!privateKey) {
+        throw new Error(`Private key file is empty for ${payload.id}`);
+      }
+    } catch (error) {
+      throw new Error(
+        `Private key not found for actor ${payload.id}. ` +
+        `AgentRecord requires a valid private key for cryptographic signing. ` +
+        `If this is a legacy actor, you may need to regenerate the actor with 'gitgov actor new'. ` +
+        `Original error: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
+
+    // Create real cryptographic signature
+    const signature = signPayload(validatedPayload, privateKey, payload.id, 'author', 'Agent registration');
 
     // Create the complete GitGovRecord structure
-    const record: GitGovRecord & { payload: AgentRecord } = {
+    const record: GitGovAgentRecord = {
       header: {
         version: '1.0',
         type: 'agent',

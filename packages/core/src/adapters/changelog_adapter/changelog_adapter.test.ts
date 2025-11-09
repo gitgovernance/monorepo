@@ -87,6 +87,10 @@ describe('ChangelogAdapter', () => {
     mockEventBus = {
       publish: jest.fn(),
       subscribe: jest.fn(),
+      unsubscribe: jest.fn(),
+      getSubscriptions: jest.fn(),
+      clearSubscriptions: jest.fn(),
+      waitForIdle: jest.fn().mockResolvedValue(undefined)
     } as any;
 
     // Instantiate ChangelogAdapter with mocked dependencies
@@ -113,7 +117,7 @@ describe('ChangelogAdapter', () => {
       };
 
       const mockRecord = createMockChangelogRecord(mockPayload);
-      (createChangelogRecord as jest.Mock).mockResolvedValue(mockPayload);
+      (createChangelogRecord as jest.Mock).mockReturnValue(mockPayload);
       mockIdentityAdapter.signRecord.mockResolvedValue(mockRecord);
       mockTaskStore.read.mockResolvedValue({ payload: { id: '1752274500-task-test-task' } } as any); // Mock task exists
 
@@ -351,7 +355,7 @@ describe('ChangelogAdapter', () => {
       };
 
       const mockRecord = createMockChangelogRecord(mockPayload);
-      (createChangelogRecord as jest.Mock).mockImplementation(async (payload) => payload);
+      (createChangelogRecord as jest.Mock).mockImplementation((payload) => payload);
       mockIdentityAdapter.signRecord.mockResolvedValue(mockRecord);
       mockTaskStore.read.mockResolvedValue({ payload: { id: '1752274500-task-test-task' } } as any);
 
