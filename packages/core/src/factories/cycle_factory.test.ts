@@ -22,7 +22,7 @@ describe('createCycleRecord', () => {
       tags: ['roadmap:q4', 'team:backend'],
     };
 
-    const cycle = await createCycleRecord(payload);
+    const cycle = createCycleRecord(payload);
 
     expect(cycle.id).toMatch(/^\d{10}-cycle-sprint-q4-api-performance$/); // ID is generated
     expect(cycle.status).toBe('planning'); // Default status
@@ -46,7 +46,7 @@ describe('createCycleRecord', () => {
       status: 'invalid' as any,
     };
 
-    await expect(createCycleRecord(payload)).rejects.toThrow(DetailedValidationError);
+    expect(() => createCycleRecord(payload)).toThrow(DetailedValidationError);
   });
 
   it('[EARS-4] should use a provided ID instead of generating one', async () => {
@@ -57,7 +57,7 @@ describe('createCycleRecord', () => {
       tags: ['custom'],
     };
 
-    const cycle = await createCycleRecord(payload);
+    const cycle = createCycleRecord(payload);
     expect(cycle.id).toBe('1754400000-cycle-custom-cycle-id');
   });
 
@@ -76,7 +76,7 @@ describe('createCycleRecord', () => {
       taskIds: ['invalid-task-id'],
     };
 
-    await expect(createCycleRecord(payload)).rejects.toThrow(DetailedValidationError);
+    expect(() => createCycleRecord(payload)).toThrow(DetailedValidationError);
   });
 
   it('[EARS-6] should set default values for optional fields', async () => {
@@ -84,7 +84,7 @@ describe('createCycleRecord', () => {
       title: 'Minimal Cycle',
     };
 
-    const cycle = await createCycleRecord(payload);
+    const cycle = createCycleRecord(payload);
 
     expect(cycle.status).toBe('planning');
     expect(cycle.taskIds).toEqual([]); // EARS-21: Default empty array
@@ -103,7 +103,7 @@ describe('createCycleRecord', () => {
       notes: 'This cycle requires careful coordination between teams'
     };
 
-    const cycle = await createCycleRecord(payload);
+    const cycle = createCycleRecord(payload);
 
     expect(cycle.status).toBe('active');
     expect(cycle.taskIds).toEqual(['1752274500-task-task1', '1752360900-task-task2']);
@@ -119,7 +119,7 @@ describe('createCycleRecord', () => {
       title: 'Test Cycle for ID Generation',
     };
 
-    const cycle = await createCycleRecord(payload);
+    const cycle = createCycleRecord(payload);
     const afterTimestamp = Math.floor(Date.now() / 1000);
 
     // Extract timestamp from generated ID
@@ -146,7 +146,7 @@ describe('createCycleRecord', () => {
         status: 'invalid-status' as any
       };
 
-      await expect(createCycleRecord(payload)).rejects.toThrow(DetailedValidationError);
+      expect(() => createCycleRecord(payload)).toThrow(DetailedValidationError);
 
       // Restore mock
       (validateCycleRecordDetailed as jest.Mock).mockReturnValue({ isValid: true, errors: [] });
@@ -166,7 +166,7 @@ describe('createCycleRecord', () => {
         taskIds: ['invalid-task-id', '1752274500-task-valid']
       };
 
-      await expect(createCycleRecord(payload)).rejects.toThrow(DetailedValidationError);
+      expect(() => createCycleRecord(payload)).toThrow(DetailedValidationError);
 
       // Restore mock
       (validateCycleRecordDetailed as jest.Mock).mockReturnValue({ isValid: true, errors: [] });
@@ -178,7 +178,7 @@ describe('createCycleRecord', () => {
         // taskIds not provided - should default to []
       };
 
-      const cycle = await createCycleRecord(payload);
+      const cycle = createCycleRecord(payload);
 
       expect(cycle.taskIds).toEqual([]); // Default empty array
     });
@@ -192,7 +192,7 @@ describe('createCycleRecord', () => {
           status: status as any
         };
 
-        const cycle = await createCycleRecord(payload);
+        const cycle = createCycleRecord(payload);
         expect(cycle.status).toBe(status);
       }
     });
@@ -209,7 +209,7 @@ describe('createCycleRecord', () => {
         taskIds: validTaskIds
       };
 
-      const cycle = await createCycleRecord(payload);
+      const cycle = createCycleRecord(payload);
       expect(cycle.taskIds).toEqual(validTaskIds);
     });
   });

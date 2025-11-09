@@ -23,7 +23,7 @@ describe('createTaskRecord', () => {
       tags: ['skill:typescript', 'area:backend'],
     };
 
-    const task = await createTaskRecord(payload);
+    const task = createTaskRecord(payload);
 
     expect(task.id).toMatch(/^\d{10}-task-implement-user-authentication$/); // ID is generated
     expect(task.status).toBe('draft'); // Default status
@@ -48,7 +48,7 @@ describe('createTaskRecord', () => {
       description: 'short',
     };
 
-    await expect(createTaskRecord(payload)).rejects.toThrow(DetailedValidationError);
+    expect(() => createTaskRecord(payload)).toThrow(DetailedValidationError);
   });
 
   it('[EARS-4] should use a provided ID instead of generating one', async () => {
@@ -60,7 +60,7 @@ describe('createTaskRecord', () => {
       tags: ['custom'],
     };
 
-    const task = await createTaskRecord(payload);
+    const task = createTaskRecord(payload);
     expect(task.id).toBe('1752274500-task-custom-task-id');
   });
 
@@ -79,7 +79,7 @@ describe('createTaskRecord', () => {
       status: 'invalid-status' as any,
     };
 
-    await expect(createTaskRecord(payload)).rejects.toThrow(DetailedValidationError);
+    expect(() => createTaskRecord(payload)).toThrow(DetailedValidationError);
   });
 
   it('[EARS-6] should set default values for optional fields', async () => {
@@ -88,7 +88,7 @@ describe('createTaskRecord', () => {
       description: 'A task with minimal required fields',
     };
 
-    const task = await createTaskRecord(payload);
+    const task = createTaskRecord(payload);
 
     expect(task.status).toBe('draft');
     expect(task.priority).toBe('medium');
@@ -107,7 +107,7 @@ describe('createTaskRecord', () => {
       notes: 'This task requires careful attention to security',
     };
 
-    const task = await createTaskRecord(payload);
+    const task = createTaskRecord(payload);
 
     expect(task.cycleIds).toEqual(['1752274500-cycle-sprint-1']);
     expect(task.references).toEqual(['file:packages/core/src/auth.ts', 'url:https://jwt.io']);
@@ -122,7 +122,7 @@ describe('createTaskRecord', () => {
       description: 'Testing timestamp-based ID generation',
     };
 
-    const task = await createTaskRecord(payload);
+    const task = createTaskRecord(payload);
     const afterTimestamp = Math.floor(Date.now() / 1000);
 
     // Extract timestamp from generated ID
@@ -150,7 +150,7 @@ describe('createTaskRecord', () => {
         status: 'invalid-status' as any
       };
 
-      await expect(createTaskRecord(payload)).rejects.toThrow(DetailedValidationError);
+      expect(() => createTaskRecord(payload)).toThrow(DetailedValidationError);
 
       // Restore mock
       (validateTaskRecordDetailed as jest.Mock).mockReturnValue({ isValid: true, errors: [] });
@@ -171,7 +171,7 @@ describe('createTaskRecord', () => {
         priority: 'invalid-priority' as any
       };
 
-      await expect(createTaskRecord(payload)).rejects.toThrow(DetailedValidationError);
+      expect(() => createTaskRecord(payload)).toThrow(DetailedValidationError);
 
       // Restore mock
       (validateTaskRecordDetailed as jest.Mock).mockReturnValue({ isValid: true, errors: [] });
@@ -184,7 +184,7 @@ describe('createTaskRecord', () => {
         // tags not provided - should default to []
       };
 
-      const task = await createTaskRecord(payload);
+      const task = createTaskRecord(payload);
 
       expect(task.tags).toEqual([]); // Default empty array
     });
@@ -203,7 +203,7 @@ describe('createTaskRecord', () => {
         description: 'Test description for validation'
       };
 
-      await expect(createTaskRecord(payload)).rejects.toThrow(DetailedValidationError);
+      expect(() => createTaskRecord(payload)).toThrow(DetailedValidationError);
 
       // Restore mock
       (validateTaskRecordDetailed as jest.Mock).mockReturnValue({ isValid: true, errors: [] });
@@ -219,7 +219,7 @@ describe('createTaskRecord', () => {
           status: status as any
         };
 
-        const task = await createTaskRecord(payload);
+        const task = createTaskRecord(payload);
         expect(task.status).toBe(status);
       }
     });
@@ -234,7 +234,7 @@ describe('createTaskRecord', () => {
           priority: priority as any
         };
 
-        const task = await createTaskRecord(payload);
+        const task = createTaskRecord(payload);
         expect(task.priority).toBe(priority);
       }
     });

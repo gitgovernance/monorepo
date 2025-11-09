@@ -45,7 +45,7 @@ export function createTestSignature(
     keyId,
     role,
     notes,
-    signature: 'dGVzdHNpZ25hdHVyZWJhc2U2NGVuY29kZWRkdW1teWZvcnRlc3RpbmdwdXJwb3Nlc29ubHlub3RyZWFsY3J5cHRvZ3JhcGh5PT0=', // Dummy 88-char base64 for testing (matches Ed25519 signature length)
+    signature: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==', // Dummy 88-char base64 for testing (86 chars + ==, matches Ed25519 signature format)
     timestamp
   };
 }
@@ -87,13 +87,13 @@ function inferTypeFromPayload(payload: GitGovRecordPayload): string {
  *   roles: ['developer']
  * };
  * 
- * const embedded = await createEmbeddedMetadataRecord(actorPayload);
+ * const embedded = createEmbeddedMetadataRecord(actorPayload);
  * ```
  */
-export async function createEmbeddedMetadataRecord<T extends GitGovRecordPayload>(
+export function createEmbeddedMetadataRecord<T extends GitGovRecordPayload>(
   payload: T,
   options: CreateEmbeddedMetadataOptions = {}
-): Promise<EmbeddedMetadataRecord<T>> {
+): EmbeddedMetadataRecord<T> {
   const inferredType = inferTypeFromPayload(payload);
   const type = options.header?.type || inferredType;
 

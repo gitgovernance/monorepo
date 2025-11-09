@@ -24,7 +24,7 @@ describe('createAgentRecord', () => {
         function: 'runTestAgent'
       },
     };
-    const agent = await createAgentRecord(payload);
+    const agent = createAgentRecord(payload);
     expect(agent.id).toBe('agent:test-agent');
     expect(agent.status).toBe('active'); // Default status
     expect(agent.engine.type).toBe('local');
@@ -45,7 +45,7 @@ describe('createAgentRecord', () => {
     const payload: Partial<AgentRecord> = {
       engine: { type: 'local' },
     };
-    await expect(createAgentRecord(payload)).rejects.toThrow(DetailedValidationError);
+    expect(() => createAgentRecord(payload)).toThrow(DetailedValidationError);
   });
 
   it('[EARS-1] should throw DetailedValidationError for missing engine properties', async () => {
@@ -60,7 +60,7 @@ describe('createAgentRecord', () => {
     const payload: Partial<AgentRecord> = {
       id: 'agent:test-agent',
     };
-    await expect(createAgentRecord(payload)).rejects.toThrow(DetailedValidationError);
+    expect(() => createAgentRecord(payload)).toThrow(DetailedValidationError);
   });
 
 
@@ -78,7 +78,7 @@ describe('createAgentRecord', () => {
       id: 'agent:test-agent',
       engine: { type: 'local' },
     };
-    await expect(createAgentRecord(payload)).rejects.toThrow(DetailedValidationError);
+    expect(() => createAgentRecord(payload)).toThrow(DetailedValidationError);
 
     // Restore the mock
     (validateAgentRecordDetailed as jest.Mock).mockReturnValue({ isValid: true, errors: [] });
@@ -90,7 +90,7 @@ describe('createAgentRecord', () => {
       engine: { type: 'local' },
     };
 
-    const agent = await createAgentRecord(payload);
+    const agent = createAgentRecord(payload);
 
     expect(agent.status).toBe('active'); // Default status
     expect(agent.triggers).toEqual([]); // Default empty array
@@ -108,7 +108,7 @@ describe('createAgentRecord', () => {
       prompt_engine_requirements: { roles: ['analyst'], skills: ['research'] }
     };
 
-    const agent = await createAgentRecord(payload);
+    const agent = createAgentRecord(payload);
 
     expect(agent.status).toBe('archived'); // Custom status preserved
     expect(agent.triggers).toEqual([{ type: 'manual' }]);
@@ -121,7 +121,7 @@ describe('createAgentRecord', () => {
       engine: { type: 'local' },
     };
 
-    const agent = await createAgentRecord(payload);
+    const agent = createAgentRecord(payload);
 
     // AgentRecord uses empty string as default ID because it MUST correspond to an existing ActorRecord
     // According to agent_protocol.md: "AgentRecord ID debe corresponder 1:1 con un ActorRecord existente"
@@ -144,7 +144,7 @@ describe('createAgentRecord', () => {
         // engine missing - should trigger validation error
       };
 
-      await expect(createAgentRecord(payload)).rejects.toThrow(DetailedValidationError);
+      expect(() => createAgentRecord(payload)).toThrow(DetailedValidationError);
 
       // Restore mock
       (validateAgentRecordDetailed as jest.Mock).mockReturnValue({ isValid: true, errors: [] });

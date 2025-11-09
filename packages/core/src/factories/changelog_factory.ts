@@ -1,14 +1,15 @@
-import type { ChangelogRecord } from '../types';
+import type { ChangelogRecord, GitGovChangelogRecord } from '../types';
 import { validateChangelogRecordDetailed } from '../validation/changelog_validator';
+import { validateEmbeddedMetadataDetailed } from '../validation/embedded_metadata_validator';
 import { DetailedValidationError } from '../validation/common';
 
 /**
  * Creates a complete ChangelogRecord with validation (Protocol v2)
  * 
  * @param payload - Partial ChangelogRecord payload
- * @returns Promise<ChangelogRecord> - The validated ChangelogRecord
+ * @returns ChangelogRecord - The validated ChangelogRecord
  */
-export async function createChangelogRecord(payload: Partial<ChangelogRecord>): Promise<ChangelogRecord> {
+export function createChangelogRecord(payload: Partial<ChangelogRecord>): ChangelogRecord {
   const timestamp = Math.floor(Date.now() / 1000);
 
   // Build changelog with required fields
@@ -37,5 +38,31 @@ export async function createChangelogRecord(payload: Partial<ChangelogRecord>): 
   }
 
   return changelog;
+}
+
+/**
+ * Loads and validates an existing ChangelogRecord from untrusted data.
+ * Used by RecordStore to validate records when reading from disk.
+ * Validates both header (embedded metadata) and payload (ChangelogRecord).
+ * 
+ * @param data - Unknown data to validate as GitGovChangelogRecord
+ * @returns GitGovChangelogRecord - The validated complete record
+ * @throws DetailedValidationError if validation fails
+ */
+export function loadChangelogRecord(data: unknown): GitGovChangelogRecord {
+  // First validate complete record structure (header + payload)
+  const embeddedValidation = validateEmbeddedMetadataDetailed(data);
+  if (!embeddedValidation.isValid) {
+    throw new DetailedValidationError('GitGovRecord (ChangelogRecord)', embeddedValidation.errors);
+  }
+
+  // Then validate specific ChangelogRecord payload
+  const record = data as GitGovChangelogRecord;
+  const payloadValidation = validateChangelogRecordDetailed(record.payload);
+  if (!payloadValidation.isValid) {
+    throw new DetailedValidationError('ChangelogRecord payload', payloadValidation.errors);
+  }
+
+  return record;
 }
 

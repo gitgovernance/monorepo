@@ -40,7 +40,7 @@ describe('FeedbackRecord Factory', () => {
         resolvesFeedbackId: '1752788000-feedback-original'
       };
 
-      const result = await createFeedbackRecord(payload);
+      const result = createFeedbackRecord(payload);
 
       expect(result).toEqual({
         id: '1752788100-feedback-test-feedback',
@@ -63,7 +63,7 @@ describe('FeedbackRecord Factory', () => {
         content: 'Test feedback content'
       };
 
-      const result = await createFeedbackRecord(payload);
+      const result = createFeedbackRecord(payload);
 
       expect(result).toEqual({
         id: '1752788100-feedback-test-feedback',
@@ -88,7 +88,7 @@ describe('FeedbackRecord Factory', () => {
         content: 'Custom feedback with provided ID'
       };
 
-      const result = await createFeedbackRecord(payload);
+      const result = createFeedbackRecord(payload);
 
       expect(result.id).toBe('1752788200-feedback-custom-id');
       expect(mockGenerateFeedbackId).not.toHaveBeenCalled();
@@ -103,7 +103,7 @@ describe('FeedbackRecord Factory', () => {
         assignee: 'human:developer'
       };
 
-      const result = await createFeedbackRecord(payload);
+      const result = createFeedbackRecord(payload);
 
       expect(result.status).toBe('resolved');
       expect(result.type).toBe('assignment');
@@ -126,8 +126,8 @@ describe('FeedbackRecord Factory', () => {
         errors: validationErrors
       });
 
-      await expect(createFeedbackRecord(payload)).rejects.toThrow(DetailedValidationError);
-      await expect(createFeedbackRecord(payload)).rejects.toThrow('FeedbackRecord');
+      expect(() => createFeedbackRecord(payload)).toThrow(DetailedValidationError);
+      expect(() => createFeedbackRecord(payload)).toThrow('FeedbackRecord');
     });
 
     it('[EARS-6] should preserve all provided fields in the output', async () => {
@@ -142,7 +142,7 @@ describe('FeedbackRecord Factory', () => {
         resolvesFeedbackId: '1752788000-feedback-original'
       };
 
-      const result = await createFeedbackRecord(payload);
+      const result = createFeedbackRecord(payload);
 
       expect(result).toEqual(payload);
       expect(mockValidateFeedbackRecordDetailed).toHaveBeenCalledWith(payload);
@@ -158,7 +158,7 @@ describe('FeedbackRecord Factory', () => {
 
       mockGenerateFeedbackId.mockReturnValue('1752788100-feedback-this-is-a-specific-question-about');
 
-      const result = await createFeedbackRecord(payload);
+      const result = createFeedbackRecord(payload);
 
       expect(result.id).toBe('1752788100-feedback-this-is-a-specific-question-about');
       expect(mockGenerateFeedbackId).toHaveBeenCalledWith('This is a specific question about implementation', expect.any(Number));
@@ -173,7 +173,7 @@ describe('FeedbackRecord Factory', () => {
       };
 
       const beforeTime = Math.floor(Date.now() / 1000);
-      await createFeedbackRecord(payload);
+      createFeedbackRecord(payload);
       const afterTime = Math.floor(Date.now() / 1000);
 
       expect(mockGenerateFeedbackId).toHaveBeenCalledWith(
@@ -204,7 +204,7 @@ describe('FeedbackRecord Factory', () => {
           content: 'Test feedback'
         };
 
-        await expect(createFeedbackRecord(payload)).rejects.toThrow(DetailedValidationError);
+        expect(() => createFeedbackRecord(payload)).toThrow(DetailedValidationError);
       });
 
       it('[EARS-26] should throw DetailedValidationError for invalid type', async () => {
@@ -224,7 +224,7 @@ describe('FeedbackRecord Factory', () => {
           content: 'Test feedback'
         };
 
-        await expect(createFeedbackRecord(payload)).rejects.toThrow(DetailedValidationError);
+        expect(() => createFeedbackRecord(payload)).toThrow(DetailedValidationError);
       });
 
       it('[EARS-27] should throw DetailedValidationError for invalid status', async () => {
@@ -245,7 +245,7 @@ describe('FeedbackRecord Factory', () => {
           status: 'invalid-status' as any
         };
 
-        await expect(createFeedbackRecord(payload)).rejects.toThrow(DetailedValidationError);
+        expect(() => createFeedbackRecord(payload)).toThrow(DetailedValidationError);
       });
 
       it('[EARS-28] should apply status resolved for type assignment', async () => {
@@ -257,7 +257,7 @@ describe('FeedbackRecord Factory', () => {
           assignee: 'human:backend-lead'
         };
 
-        const result = await createFeedbackRecord(payload);
+        const result = createFeedbackRecord(payload);
 
         expect(result.type).toBe('assignment');
         expect(result.status).toBe('resolved'); // Special default for assignment
@@ -275,7 +275,7 @@ describe('FeedbackRecord Factory', () => {
             content: `Test feedback for ${entityType}`
           };
 
-          const feedback = await createFeedbackRecord(payload);
+          const feedback = createFeedbackRecord(payload);
           expect(feedback.entityType).toBe(entityType);
         }
       });
@@ -291,7 +291,7 @@ describe('FeedbackRecord Factory', () => {
             content: `Test ${type} feedback`
           };
 
-          const feedback = await createFeedbackRecord(payload);
+          const feedback = createFeedbackRecord(payload);
           expect(feedback.type).toBe(type);
         }
       });
@@ -308,7 +308,7 @@ describe('FeedbackRecord Factory', () => {
             status: status as any
           };
 
-          const feedback = await createFeedbackRecord(payload);
+          const feedback = createFeedbackRecord(payload);
           expect(feedback.status).toBe(status);
         }
       });

@@ -1,14 +1,15 @@
-import type { ActorRecord } from "../types";
+import type { ActorRecord, GitGovActorRecord } from "../types";
 import { validateActorRecordDetailed } from "../validation/actor_validator";
+import { validateEmbeddedMetadataDetailed } from "../validation/embedded_metadata_validator";
 import { generateActorId } from "../utils/id_generator";
 import { DetailedValidationError } from "../validation/common";
 
 /**
  * Creates a new, fully-formed ActorRecord with validation.
  */
-export async function createActorRecord(
+export function createActorRecord(
   payload: Partial<ActorRecord>
-): Promise<ActorRecord> {
+): ActorRecord {
   // Build actor with defaults for optional fields
   const actor: ActorRecord = {
     id: payload.id || generateActorId(payload.type || 'human', payload.displayName || ''),
@@ -28,3 +29,30 @@ export async function createActorRecord(
 
   return actor;
 }
+
+/**
+ * Loads and validates an existing ActorRecord from untrusted data.
+ * Used by RecordStore to validate records when reading from disk.
+ * Validates both header (embedded metadata) and payload (ActorRecord).
+ * 
+ * @param data - Unknown data to validate as GitGovActorRecord
+ * @returns GitGovActorRecord - The validated complete record
+ * @throws DetailedValidationError if validation fails
+ */
+export function loadActorRecord(data: unknown): GitGovActorRecord {
+  // First validate complete record structure (header + payload)
+  const embeddedValidation = validateEmbeddedMetadataDetailed(data);
+  if (!embeddedValidation.isValid) {
+    throw new DetailedValidationError('GitGovRecord (ActorRecord)', embeddedValidation.errors);
+  }
+  
+  // Then validate specific ActorRecord payload
+  const record = data as GitGovActorRecord;
+  const payloadValidation = validateActorRecordDetailed(record.payload);
+  if (!payloadValidation.isValid) {
+    throw new DetailedValidationError('ActorRecord payload', payloadValidation.errors);
+  }
+  
+  return record;
+}
+
