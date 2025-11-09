@@ -408,7 +408,7 @@ export class DashboardCommand {
   private getPriorityFlag(priority: string): string {
     const flags: Record<string, string> = {
       'critical': '🔴',
-      'high': '🟡',
+      'high': '🟠',
       'medium': '🔵',
       'low': '⚪'
     };
