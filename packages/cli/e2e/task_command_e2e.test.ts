@@ -122,13 +122,13 @@ describe('Task Delete CLI Command - E2E Tests', () => {
       header: {
         version: '1.0',
         type: 'task',
-        payloadChecksum: 'test-checksum',
+        payloadChecksum: 'a'.repeat(64), // Valid SHA-256 format (64 hex chars)
         signatures: [{
           keyId: 'human:test-user',
           role: 'creator',
           notes: 'E2E test task creation',
-          timestamp: new Date().toISOString(),
-          signature: 'test-signature'
+          timestamp: Date.now(), // Unix timestamp in ms
+          signature: 'A'.repeat(86) + '==' // Valid Ed25519 signature format (86 chars + ==)
         }]
       },
       payload: {
@@ -139,7 +139,6 @@ describe('Task Delete CLI Command - E2E Tests', () => {
         description: 'This task can be deleted',
         tags: ['test', 'draft'],
         cycleIds: [],
-        dependencies: [],
         references: [],
         notes: ''
       }
@@ -151,13 +150,13 @@ describe('Task Delete CLI Command - E2E Tests', () => {
       header: {
         version: '1.0',
         type: 'task',
-        payloadChecksum: 'test-checksum',
+        payloadChecksum: 'b'.repeat(64), // Valid SHA-256 format (64 hex chars)
         signatures: [{
           keyId: 'human:test-user',
           role: 'creator',
           notes: 'E2E test task creation',
-          timestamp: new Date().toISOString(),
-          signature: 'test-signature'
+          timestamp: Date.now(), // Unix timestamp in ms
+          signature: 'B'.repeat(86) + '==' // Valid Ed25519 signature format (86 chars + ==)
         }]
       },
       payload: {
@@ -168,7 +167,6 @@ describe('Task Delete CLI Command - E2E Tests', () => {
         description: 'This task cannot be deleted',
         tags: ['test', 'review'],
         cycleIds: [],
-        dependencies: [],
         references: [],
         notes: ''
       }
@@ -180,13 +178,13 @@ describe('Task Delete CLI Command - E2E Tests', () => {
       header: {
         version: '1.0',
         type: 'task',
-        payloadChecksum: 'test-checksum',
+        payloadChecksum: 'c'.repeat(64), // Valid SHA-256 format (64 hex chars)
         signatures: [{
           keyId: 'human:test-user',
           role: 'creator',
           notes: 'E2E test task creation',
-          timestamp: new Date().toISOString(),
-          signature: 'test-signature'
+          timestamp: Date.now(), // Unix timestamp in ms
+          signature: 'C'.repeat(86) + '==' // Valid Ed25519 signature format (86 chars + ==)
         }]
       },
       payload: {
@@ -197,7 +195,6 @@ describe('Task Delete CLI Command - E2E Tests', () => {
         description: 'This task cannot be deleted',
         tags: ['test', 'active'],
         cycleIds: [],
-        dependencies: [],
         references: [],
         notes: ''
       }
