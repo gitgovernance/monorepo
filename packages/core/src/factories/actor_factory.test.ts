@@ -21,14 +21,14 @@ describe('createActorRecord', () => {
       publicKey: 'some-key',
       roles: ['author'],
     };
-    const actor = await createActorRecord(payload);
+    const actor = createActorRecord(payload);
     expect(actor.id).toContain('human:test-user'); // ID is generated
     expect(actor.status).toBe('active');
     expect(actor.type).toBe('human');
     expect(actor.displayName).toBe('Test User');
   });
 
-  it('[EARS-1] should throw DetailedValidationError for missing/invalid fields', async () => {
+  it('[EARS-1] should throw DetailedValidationError for missing/invalid fields', () => {
     const { validateActorRecordDetailed } = require('../validation/actor_validator');
     (validateActorRecordDetailed as jest.Mock).mockReturnValue({
       isValid: false,
@@ -42,10 +42,10 @@ describe('createActorRecord', () => {
       displayName: 'Test User',
       publicKey: 'some-key',
     };
-    await expect(createActorRecord(payload)).rejects.toThrow(DetailedValidationError);
+    expect(() => createActorRecord(payload)).toThrow(DetailedValidationError);
   });
 
-  it('[EARS-4] should use a provided ID instead of generating one', async () => {
+  it('[EARS-4] should use a provided ID instead of generating one', () => {
     const payload: Partial<ActorRecord> = {
       id: 'human:custom-id',
       type: 'human',
@@ -53,11 +53,11 @@ describe('createActorRecord', () => {
       publicKey: 'some-key',
       roles: ['author'],
     };
-    const actor = await createActorRecord(payload);
+    const actor = createActorRecord(payload);
     expect(actor.id).toBe('human:custom-id');
   });
 
-  it('[EARS-5] should throw DetailedValidationError if the created record fails validation', async () => {
+  it('[EARS-5] should throw DetailedValidationError if the created record fails validation', () => {
     // Override the mock for this specific test
     const { validateActorRecordDetailed } = require('../validation/actor_validator');
     (validateActorRecordDetailed as jest.Mock).mockReturnValue({
@@ -73,7 +73,7 @@ describe('createActorRecord', () => {
       publicKey: 'some-key',
       roles: ['author'],
     };
-    await expect(createActorRecord(payload)).rejects.toThrow(DetailedValidationError);
+    expect(() => createActorRecord(payload)).toThrow(DetailedValidationError);
 
     // Restore the mock
     (validateActorRecordDetailed as jest.Mock).mockReturnValue({ isValid: true, errors: [] });
@@ -85,7 +85,7 @@ describe('createActorRecord', () => {
       displayName: 'Minimal User',
     };
 
-    const actor = await createActorRecord(payload);
+    const actor = createActorRecord(payload);
 
     expect(actor.status).toBe('active'); // Default status
     expect(actor.roles).toEqual(['author']); // Default roles
@@ -101,7 +101,7 @@ describe('createActorRecord', () => {
       status: 'revoked'
     };
 
-    const actor = await createActorRecord(payload);
+    const actor = createActorRecord(payload);
 
     expect(actor.status).toBe('revoked'); // Custom status preserved
     expect(actor.roles).toEqual(['author', 'reviewer', 'approver']);
@@ -116,7 +116,7 @@ describe('createActorRecord', () => {
       roles: ['author'],
     };
 
-    const actor = await createActorRecord(payload);
+    const actor = createActorRecord(payload);
 
     expect(actor.id).toBe('human:test-user-for-id-generation');
     expect(actor.type).toBe('human');
@@ -132,7 +132,7 @@ describe('createActorRecord', () => {
         roles: ['developer']
       };
 
-      const actor = await createActorRecord(payload);
+      const actor = createActorRecord(payload);
 
       expect(actor.type).toBe('human');
       expect(actor.status).toBe('active'); // Default for humans
@@ -146,13 +146,13 @@ describe('createActorRecord', () => {
         roles: ['assistant']
       };
 
-      const actor = await createActorRecord(payload);
+      const actor = createActorRecord(payload);
 
       expect(actor.type).toBe('agent');
       expect(actor.status).toBe('active'); // Default for agents
     });
 
-    it('[EARS-11] should throw DetailedValidationError when roles is missing', async () => {
+    it('[EARS-11] should throw DetailedValidationError when roles is missing', () => {
       const { validateActorRecordDetailed } = require('../validation/actor_validator');
       (validateActorRecordDetailed as jest.Mock).mockReturnValue({
         isValid: false,
@@ -168,13 +168,13 @@ describe('createActorRecord', () => {
         // roles missing - should trigger validation error
       };
 
-      await expect(createActorRecord(payload)).rejects.toThrow(DetailedValidationError);
+      expect(() => createActorRecord(payload)).toThrow(DetailedValidationError);
 
       // Restore mock
       (validateActorRecordDetailed as jest.Mock).mockReturnValue({ isValid: true, errors: [] });
     });
 
-    it('[EARS-11] should throw DetailedValidationError when roles is empty array', async () => {
+    it('[EARS-11] should throw DetailedValidationError when roles is empty array', () => {
       const { validateActorRecordDetailed } = require('../validation/actor_validator');
       (validateActorRecordDetailed as jest.Mock).mockReturnValue({
         isValid: false,
@@ -192,7 +192,7 @@ describe('createActorRecord', () => {
         roles: invalidRoles as [string, ...string[]] // Type assertion to match expected type
       };
 
-      await expect(createActorRecord(payload)).rejects.toThrow(DetailedValidationError);
+      expect(() => createActorRecord(payload)).toThrow(DetailedValidationError);
 
       // Restore mock
       (validateActorRecordDetailed as jest.Mock).mockReturnValue({ isValid: true, errors: [] });

@@ -2,6 +2,7 @@ import { promises as fs, constants } from 'fs';
 import * as path from 'path';
 import { ConfigManager } from '../config_manager';
 import type { GitGovRecord, GitGovRecordPayload, CustomRecord } from '../types';
+import { DetailedValidationError } from '../validation/common';
 
 type StorablePayload = Exclude<GitGovRecordPayload, CustomRecord>;
 
@@ -19,12 +20,15 @@ export class RecordStore<T extends StorablePayload> {
   private recordType: string;
   private recordsDir: string;
   private fs: FsDependencies;
+  private loader: (data: unknown) => GitGovRecord & { payload: T };
 
   constructor(
     recordType: string,
+    loader: (data: unknown) => GitGovRecord & { payload: T },
     rootPath?: string,
     fsDeps: FsDependencies = fs
   ) {
+    this.loader = loader;
     const foundRoot = rootPath || ConfigManager.findProjectRoot();
     if (!foundRoot) {
       throw new Error("Could not find project root. RecordStore requires a valid project root.");
@@ -55,14 +59,25 @@ export class RecordStore<T extends StorablePayload> {
     const filePath = this.getRecordPath(recordId);
     try {
       const content = await this.fs.readFile(filePath, 'utf-8');
-      const record = JSON.parse(content) as GitGovRecord & { payload: T };
+      const raw = JSON.parse(content);
 
-      return record;
+      // Validate complete record (header + payload) using loader
+      const validatedRecord = this.loader(raw);
+
+      return validatedRecord;
     } catch (e: unknown) {
+      // Handle validation errors gracefully
+      if (e instanceof DetailedValidationError) {
+        console.warn(`⚠️  Invalid ${this.recordType} record ${recordId}:`, e.message);
+        return null; // Skip invalid records, don't crash
+      }
+
+      // Handle file not found
       const error = e as NodeJS.ErrnoException;
       if (error.code === 'ENOENT') {
         return null;
       }
+
       throw error;
     }
   }

@@ -61,11 +61,10 @@ describe('createWorkflowMethodologyConfig', () => {
       // Missing state_transitions
     };
 
-    await expect(createWorkflowMethodologyConfig(payload))
-      .rejects.toThrow(DetailedValidationError);
+    expect(() => createWorkflowMethodologyConfig(payload)).toThrow(DetailedValidationError);
   });
 
-  it('[EARS-3] should throw DetailedValidationError for business rule violations', async () => {
+  it('[EARS-3] should throw DetailedValidationError for business rule violations', () => {
     const { validateWorkflowMethodologyConfigBusinessRules } = require('../validation/workflow_methodology_validator');
     (validateWorkflowMethodologyConfigBusinessRules as jest.Mock).mockReturnValue({
       isValid: false,
@@ -84,8 +83,7 @@ describe('createWorkflowMethodologyConfig', () => {
       } as any
     };
 
-    await expect(createWorkflowMethodologyConfig(payload))
-      .rejects.toThrow(DetailedValidationError);
+    expect(() => createWorkflowMethodologyConfig(payload)).toThrow(DetailedValidationError);
   });
 
   it('[EARS-4] should preserve all provided fields', async () => {

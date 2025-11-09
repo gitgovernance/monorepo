@@ -88,7 +88,7 @@ describe('FeedbackAdapter', () => {
     mockPublishEvent = publishEvent as jest.Mock;
 
     // Mock factory
-    (createFeedbackRecord as jest.Mock).mockResolvedValue(mockCreatedFeedbackPayload);
+    (createFeedbackRecord as jest.Mock).mockReturnValue(mockCreatedFeedbackPayload);
     mockIdentityAdapter.signRecord.mockResolvedValue(mockSignedRecord);
 
     // Create adapter with mocked dependencies
@@ -100,7 +100,8 @@ describe('FeedbackAdapter', () => {
         subscribe: jest.fn(),
         unsubscribe: jest.fn(),
         getSubscriptions: jest.fn(),
-        clearSubscriptions: jest.fn()
+        clearSubscriptions: jest.fn(),
+        waitForIdle: jest.fn().mockResolvedValue(undefined)
       } as IEventStream,
       // No workflowMethodology for graceful degradation
     });
@@ -129,7 +130,7 @@ describe('FeedbackAdapter', () => {
 
     it('[EARS-2] should throw DetailedValidationError for invalid payload', async () => {
       const validationError = new DetailedValidationError('Invalid payload', []);
-      (createFeedbackRecord as jest.Mock).mockRejectedValue(validationError);
+      (createFeedbackRecord as jest.Mock).mockImplementation(() => { throw validationError; });
 
       await expect(feedbackAdapter.create({ entityId: 'invalid' }, mockActorId))
         .rejects.toThrow('Invalid payload');
@@ -211,7 +212,7 @@ describe('FeedbackAdapter', () => {
         status: 'open' as const
       };
 
-      (createFeedbackRecord as jest.Mock).mockResolvedValue(newAssignment);
+      (createFeedbackRecord as jest.Mock).mockReturnValue(newAssignment);
       mockIdentityAdapter.signRecord.mockResolvedValue(createMockFeedbackRecord(newAssignment));
 
       const result = await feedbackAdapter.create(assignmentPayload, 'human:manager');
@@ -251,7 +252,7 @@ describe('FeedbackAdapter', () => {
         status: 'open' as const
       };
 
-      (createFeedbackRecord as jest.Mock).mockResolvedValue(newAssignment);
+      (createFeedbackRecord as jest.Mock).mockReturnValue(newAssignment);
       mockIdentityAdapter.signRecord.mockResolvedValue(createMockFeedbackRecord(newAssignment));
 
       const result = await feedbackAdapter.create(assignmentPayload, 'human:manager');
@@ -288,7 +289,7 @@ describe('FeedbackAdapter', () => {
         status: 'open' as const
       };
 
-      (createFeedbackRecord as jest.Mock).mockResolvedValue(newSuggestion);
+      (createFeedbackRecord as jest.Mock).mockReturnValue(newSuggestion);
       mockIdentityAdapter.signRecord.mockResolvedValue(createMockFeedbackRecord(newSuggestion));
 
       const result = await feedbackAdapter.create(suggestionPayload, 'human:reviewer');
@@ -317,7 +318,7 @@ describe('FeedbackAdapter', () => {
         resolvesFeedbackId: 'feedback-123'
       };
 
-      (createFeedbackRecord as jest.Mock).mockResolvedValue(newFeedback);
+      (createFeedbackRecord as jest.Mock).mockReturnValue(newFeedback);
       mockIdentityAdapter.signRecord.mockResolvedValue(createMockFeedbackRecord(newFeedback));
 
       const result = await feedbackAdapter.resolve('feedback-123', mockActorId);
@@ -355,7 +356,7 @@ describe('FeedbackAdapter', () => {
         resolvesFeedbackId: 'feedback-123'
       };
 
-      (createFeedbackRecord as jest.Mock).mockResolvedValue(newFeedback);
+      (createFeedbackRecord as jest.Mock).mockReturnValue(newFeedback);
       mockIdentityAdapter.signRecord.mockResolvedValue(createMockFeedbackRecord(newFeedback));
 
       await feedbackAdapter.resolve('feedback-123', mockActorId);
@@ -394,7 +395,7 @@ describe('FeedbackAdapter', () => {
         resolvesFeedbackId: 'feedback-123'
       };
 
-      (createFeedbackRecord as jest.Mock).mockResolvedValue(newFeedback);
+      (createFeedbackRecord as jest.Mock).mockReturnValue(newFeedback);
       mockIdentityAdapter.signRecord.mockResolvedValue(createMockFeedbackRecord(newFeedback));
 
       await feedbackAdapter.resolve('feedback-123', mockActorId, customContent);
@@ -547,7 +548,7 @@ describe('FeedbackAdapter', () => {
         resolvesFeedbackId: 'feedback-original'
       };
 
-      (createFeedbackRecord as jest.Mock).mockResolvedValue(newFeedback);
+      (createFeedbackRecord as jest.Mock).mockReturnValue(newFeedback);
       mockIdentityAdapter.signRecord.mockResolvedValue(createMockFeedbackRecord(newFeedback));
 
       const mockEventBus = feedbackAdapter['eventBus'];
@@ -574,7 +575,7 @@ describe('FeedbackAdapter', () => {
         content: 'Assigned to developer'
       };
 
-      (createFeedbackRecord as jest.Mock).mockResolvedValue({
+      (createFeedbackRecord as jest.Mock).mockReturnValue({
         ...assignmentPayload,
         id: 'feedback-assignment',
         status: 'open'
@@ -619,7 +620,7 @@ describe('FeedbackAdapter', () => {
         resolvesFeedbackId: 'feedback-123'
       };
 
-      (createFeedbackRecord as jest.Mock).mockResolvedValue(newFeedback);
+      (createFeedbackRecord as jest.Mock).mockReturnValue(newFeedback);
       mockIdentityAdapter.signRecord.mockResolvedValue(createMockFeedbackRecord(newFeedback));
 
       const mockEventBus = feedbackAdapter['eventBus'];
@@ -650,7 +651,7 @@ describe('FeedbackAdapter', () => {
         content: 'Cycle needs more planning tasks'
       };
 
-      (createFeedbackRecord as jest.Mock).mockResolvedValue({
+      (createFeedbackRecord as jest.Mock).mockReturnValue({
         ...cyclePayload,
         id: 'feedback-cycle-suggestion',
         status: 'open'
@@ -692,7 +693,7 @@ describe('FeedbackAdapter', () => {
         resolvesFeedbackId: 'feedback-question'
       };
 
-      (createFeedbackRecord as jest.Mock).mockResolvedValueOnce(resolution1);
+      (createFeedbackRecord as jest.Mock).mockReturnValueOnce(resolution1);
       mockIdentityAdapter.signRecord.mockResolvedValueOnce(createMockFeedbackRecord(resolution1));
 
       const result1 = await feedbackAdapter.resolve('feedback-question', mockActorId, 'First answer');
@@ -708,7 +709,7 @@ describe('FeedbackAdapter', () => {
         resolvesFeedbackId: 'feedback-question'
       };
 
-      (createFeedbackRecord as jest.Mock).mockResolvedValueOnce(resolution2);
+      (createFeedbackRecord as jest.Mock).mockReturnValueOnce(resolution2);
       mockIdentityAdapter.signRecord.mockResolvedValueOnce(createMockFeedbackRecord(resolution2));
 
       const result2 = await feedbackAdapter.resolve('feedback-question', mockActorId, 'Alternative answer');
@@ -728,7 +729,7 @@ describe('FeedbackAdapter', () => {
         content: 'LGTM - code approved for merge'
       };
 
-      (createFeedbackRecord as jest.Mock).mockResolvedValue({
+      (createFeedbackRecord as jest.Mock).mockReturnValue({
         ...approvalPayload,
         id: 'feedback-instant-approval'
       });
@@ -794,7 +795,7 @@ describe('FeedbackAdapter', () => {
         content: 'New assignment after previous completion'
       };
 
-      (createFeedbackRecord as jest.Mock).mockResolvedValue({
+      (createFeedbackRecord as jest.Mock).mockReturnValue({
         ...newAssignmentPayload,
         id: 'feedback-assignment-2',
         status: 'open'

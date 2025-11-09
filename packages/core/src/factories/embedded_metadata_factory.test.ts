@@ -28,7 +28,7 @@ describe('EmbeddedMetadata Factory', () => {
         keyId: 'human:test-user',
         role: 'author',
         notes: 'Test signature - unsigned',
-        signature: 'dGVzdHNpZ25hdHVyZWJhc2U2NGVuY29kZWRkdW1teWZvcnRlc3RpbmdwdXJwb3Nlc29ubHlub3RyZWFsY3J5cHRvZ3JhcGh5PT0='
+        signature: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=='
       });
       expect(signature.timestamp).toBeGreaterThan(0);
     });
@@ -50,7 +50,7 @@ describe('EmbeddedMetadata Factory', () => {
     };
 
     it('[EARS-3] should create a valid EmbeddedMetadataRecord with ActorRecord payload', async () => {
-      const result = await createEmbeddedMetadataRecord(validActorPayload);
+      const result = createEmbeddedMetadataRecord(validActorPayload);
 
       expect(result.header).toMatchObject({
         version: '1.0',
@@ -77,14 +77,14 @@ describe('EmbeddedMetadata Factory', () => {
         tags: []
       };
 
-      const result = await createEmbeddedMetadataRecord(taskPayload);
+      const result = createEmbeddedMetadataRecord(taskPayload);
 
       expect(result.header.type).toBe('task');
       expect(result.payload).toEqual(taskPayload);
     });
 
     it('[EARS-5] should allow overriding header type', async () => {
-      const result = await createEmbeddedMetadataRecord(validActorPayload, {
+      const result = createEmbeddedMetadataRecord(validActorPayload, {
         header: { type: 'custom' }
       });
 
@@ -92,7 +92,7 @@ describe('EmbeddedMetadata Factory', () => {
     });
 
     it('[EARS-6] should use default version 1.0', async () => {
-      const result = await createEmbeddedMetadataRecord(validActorPayload);
+      const result = createEmbeddedMetadataRecord(validActorPayload);
 
       expect(result.header.version).toBe('1.0');
     });
@@ -100,7 +100,7 @@ describe('EmbeddedMetadata Factory', () => {
     it('[EARS-7] should allow providing custom signatures', async () => {
       const customSignature = createTestSignature('human:custom-signer');
 
-      const result = await createEmbeddedMetadataRecord(validActorPayload, {
+      const result = createEmbeddedMetadataRecord(validActorPayload, {
         signatures: [customSignature]
       });
 
@@ -109,7 +109,7 @@ describe('EmbeddedMetadata Factory', () => {
     });
 
     it('[EARS-8] should use real SHA-256 checksum (not overridable)', async () => {
-      const result = await createEmbeddedMetadataRecord(validActorPayload);
+      const result = createEmbeddedMetadataRecord(validActorPayload);
 
       // Checksum is always calculated, not provided
       expect(result.header.payloadChecksum).toMatch(/^[a-f0-9]{64}$/);
@@ -117,7 +117,7 @@ describe('EmbeddedMetadata Factory', () => {
     });
 
     it('[EARS-9] should include schemaUrl and schemaChecksum for custom type', async () => {
-      const result = await createEmbeddedMetadataRecord(validActorPayload, {
+      const result = createEmbeddedMetadataRecord(validActorPayload, {
         header: {
           type: 'custom',
           schemaUrl: 'https://example.com/schema.json',
@@ -130,7 +130,7 @@ describe('EmbeddedMetadata Factory', () => {
       expect(result.header).toHaveProperty('schemaChecksum', 'abc123def456789012345678901234567890abcdef1234567890abcdef123456');
     });
 
-    it('[EARS-10] should throw DetailedValidationError when validation fails', async () => {
+    it('[EARS-10] should throw DetailedValidationError when validation fails', () => {
       const validationErrors = [
         { field: 'payload.displayName', message: 'must be string', value: 123 }
       ];
@@ -145,23 +145,23 @@ describe('EmbeddedMetadata Factory', () => {
         displayName: 123 as unknown as string
       };
 
-      await expect(
+      expect(() =>
         createEmbeddedMetadataRecord(invalidPayload)
-      ).rejects.toThrow(DetailedValidationError);
+      ).toThrow(DetailedValidationError);
 
-      await expect(
+      expect(() =>
         createEmbeddedMetadataRecord(invalidPayload)
-      ).rejects.toThrow('EmbeddedMetadataRecord');
+      ).toThrow('EmbeddedMetadataRecord');
     });
 
     it('[EARS-11] should calculate real SHA-256 checksum of payload', async () => {
-      const result = await createEmbeddedMetadataRecord(validActorPayload);
+      const result = createEmbeddedMetadataRecord(validActorPayload);
 
       // Checksum should be 64 hex characters (SHA-256)
       expect(result.header.payloadChecksum).toMatch(/^[a-f0-9]{64}$/);
 
       // Same payload should produce same checksum (deterministic)
-      const result2 = await createEmbeddedMetadataRecord(validActorPayload);
+      const result2 = createEmbeddedMetadataRecord(validActorPayload);
       expect(result2.header.payloadChecksum).toBe(result.header.payloadChecksum);
     });
 
@@ -178,7 +178,7 @@ describe('EmbeddedMetadata Factory', () => {
         }
       };
 
-      const result = await createEmbeddedMetadataRecord(complexPayload);
+      const result = createEmbeddedMetadataRecord(complexPayload);
 
       expect(result.payload).toEqual(complexPayload);
     });

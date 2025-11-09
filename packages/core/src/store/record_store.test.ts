@@ -31,6 +31,7 @@ import type { GitGovRecord, Signature } from '../types';
 import * as path from 'path';
 import type { Dirent } from 'fs';
 import { createExecutionRecord, createChangelogRecord, createFeedbackRecord } from '../factories';
+import { loadActorRecord, loadAgentRecord, loadTaskRecord, loadCycleRecord, loadExecutionRecord, loadChangelogRecord, loadFeedbackRecord } from '../factories';
 
 // This is our hand-made mock for the fs dependencies.
 const mockFs: jest.Mocked<FsDependencies> = {
@@ -41,8 +42,6 @@ const mockFs: jest.Mocked<FsDependencies> = {
   unlink: jest.fn(),
   access: jest.fn(),
 };
-
-const testRoot = '/tmp/gitgov-test-root';
 
 
 // Helper function to create mock Dirent objects
@@ -71,10 +70,14 @@ describe('RecordStore<ActorRecord>', () => {
   // Use a type alias for clarity in the tests
   type ActorStore = RecordStore<ActorRecord>;
   let actorStore: ActorStore;
-
-  const actorsDir = path.join(testRoot, '.gitgov', 'actors');
+  let testRoot: string;
+  let actorsDir: string;
 
   beforeAll(() => {
+    // Create unique temp directory for this test suite
+    testRoot = `/tmp/gitgov-test-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    actorsDir = path.join(testRoot, '.gitgov', 'actors');
+    expectedPath = path.join(actorsDir, actorFileName);
     // Set up mocks once for all tests in this suite
     mockFs.mkdir.mockResolvedValue(undefined as never);
   });
@@ -82,12 +85,13 @@ describe('RecordStore<ActorRecord>', () => {
   beforeEach(() => {
     // Reset mocks before each test to ensure isolation
     jest.restoreAllMocks();
-    actorStore = new RecordStore<ActorRecord>('actors', testRoot, mockFs);
+    actorStore = new RecordStore<ActorRecord>('actors', loadActorRecord, testRoot, mockFs);
   });
 
   const actorPayload: ActorRecord = {
     id: 'human:test-user', type: 'human', displayName: 'Test User',
-    publicKey: 'some-key', roles: ['author'], status: 'active',
+    publicKey: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=', // Valid 44-char base64
+    roles: ['author'], status: 'active',
   };
 
   const mockHeader = {
@@ -103,7 +107,7 @@ describe('RecordStore<ActorRecord>', () => {
     payload: actorPayload,
   };
   const actorFileName = 'human_test-user.json';
-  const expectedPath = path.join(actorsDir, actorFileName);
+  let expectedPath: string;
 
   describe('write', () => {
     it('[EARS-1 & EARS-2] should write a record and create the directory', async () => {
@@ -180,13 +184,20 @@ describe('RecordStore<AgentRecord>', () => {
   // Use a type alias for clarity in the tests
   type AgentStore = RecordStore<AgentRecord>;
   let agentStore: AgentStore;
+  let testRoot: string;
+  let agentsDir: string;
 
-  const agentsDir = path.join(testRoot, '.gitgov', 'agents');
+  beforeAll(() => {
+    // Create unique temp directory for this test suite
+    testRoot = `/tmp/gitgov-test-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    agentsDir = path.join(testRoot, '.gitgov', 'agents');
+    expectedAgentPath = path.join(agentsDir, agentFileName);
+  });
 
   beforeEach(() => {
     // Reset mocks before each test to ensure isolation
     jest.restoreAllMocks();
-    agentStore = new RecordStore<AgentRecord>('agents', testRoot, mockFs);
+    agentStore = new RecordStore<AgentRecord>('agents', loadAgentRecord, testRoot, mockFs);
   });
 
   const agentPayload: AgentRecord = {
@@ -207,7 +218,7 @@ describe('RecordStore<AgentRecord>', () => {
     payload: agentPayload,
   };
   const agentFileName = 'agent_test-agent.json';
-  const expectedAgentPath = path.join(agentsDir, agentFileName);
+  let expectedAgentPath: string;
 
   describe('write', () => {
     it('[EARS-1 & EARS-2] should write an agent record and create the directory', async () => {
@@ -282,12 +293,19 @@ describe('RecordStore<AgentRecord>', () => {
 describe('RecordStore<TaskRecord>', () => {
   type TaskStore = RecordStore<TaskRecord>;
   let taskStore: TaskStore;
+  let testRoot: string;
+  let tasksDir: string;
 
-  const tasksDir = path.join(testRoot, '.gitgov', 'tasks');
+  beforeAll(() => {
+    // Create unique temp directory for this test suite
+    testRoot = `/tmp/gitgov-test-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    tasksDir = path.join(testRoot, '.gitgov', 'tasks');
+    expectedTaskPath = path.join(tasksDir, taskFileName);
+  });
 
   beforeEach(() => {
     jest.restoreAllMocks();
-    taskStore = new RecordStore<TaskRecord>('tasks', testRoot, mockFs);
+    taskStore = new RecordStore<TaskRecord>('tasks', loadTaskRecord, testRoot, mockFs);
   });
 
   const taskPayload: TaskRecord = {
@@ -307,7 +325,7 @@ describe('RecordStore<TaskRecord>', () => {
     payload: taskPayload,
   };
   const taskFileName = '1752274500-task-test-task.json';
-  const expectedTaskPath = path.join(tasksDir, taskFileName);
+  let expectedTaskPath: string;
 
   describe('write', () => {
     it('[EARS-1 & EARS-2] should write a task record and create the directory', async () => {
@@ -374,12 +392,19 @@ describe('RecordStore<TaskRecord>', () => {
 describe('RecordStore<CycleRecord>', () => {
   type CycleStore = RecordStore<CycleRecord>;
   let cycleStore: CycleStore;
+  let testRoot: string;
+  let cyclesDir: string;
 
-  const cyclesDir = path.join(testRoot, '.gitgov', 'cycles');
+  beforeAll(() => {
+    // Create unique temp directory for this test suite
+    testRoot = `/tmp/gitgov-test-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    cyclesDir = path.join(testRoot, '.gitgov', 'cycles');
+    expectedCyclePath = path.join(cyclesDir, cycleFileName);
+  });
 
   beforeEach(() => {
     jest.restoreAllMocks();
-    cycleStore = new RecordStore<CycleRecord>('cycles', testRoot, mockFs);
+    cycleStore = new RecordStore<CycleRecord>('cycles', loadCycleRecord, testRoot, mockFs);
   });
 
   const cyclePayload: CycleRecord = {
@@ -399,7 +424,7 @@ describe('RecordStore<CycleRecord>', () => {
     payload: cyclePayload,
   };
   const cycleFileName = '1754400000-cycle-test-cycle.json';
-  const expectedCyclePath = path.join(cyclesDir, cycleFileName);
+  let expectedCyclePath: string;
 
   describe('write', () => {
     it('[EARS-1 & EARS-2] should write a cycle record and create the directory', async () => {
@@ -466,23 +491,32 @@ describe('RecordStore<CycleRecord>', () => {
 // --- Validation Methods Tests ---
 // Mock the validation module at the top level
 jest.mock('../validation/embedded_metadata_validator', () => ({
-  validateFullEmbeddedMetadataRecord: jest.fn().mockResolvedValue(undefined)
+  validateFullEmbeddedMetadataRecord: jest.fn().mockResolvedValue(undefined),
+  validateEmbeddedMetadataDetailed: jest.fn().mockReturnValue({ isValid: true, errors: [] })
 }));
 
-import { validateFullEmbeddedMetadataRecord } from '../validation/embedded_metadata_validator';
+import { validateFullEmbeddedMetadataRecord, validateEmbeddedMetadataDetailed } from '../validation/embedded_metadata_validator';
 const mockValidateFullEmbeddedMetadataRecord = validateFullEmbeddedMetadataRecord as jest.MockedFunction<typeof validateFullEmbeddedMetadataRecord>;
+const mockValidateEmbeddedMetadataDetailed = validateEmbeddedMetadataDetailed as jest.MockedFunction<typeof validateEmbeddedMetadataDetailed>;
 
-// Global beforeEach to reset validation mock
+// Global beforeEach to reset validation mocks
 beforeEach(() => {
   mockValidateFullEmbeddedMetadataRecord.mockResolvedValue(undefined);
+  mockValidateEmbeddedMetadataDetailed.mockReturnValue({ isValid: true, errors: [] });
 });
 
 describe('RecordStore Validation Methods', () => {
   let actorStore: RecordStore<ActorRecord>;
+  let testRoot: string;
+
+  beforeAll(() => {
+    // Create unique temp directory for this test suite
+    testRoot = `/tmp/gitgov-test-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  });
 
   beforeEach(() => {
     jest.clearAllMocks();
-    actorStore = new RecordStore<ActorRecord>('actors', testRoot, mockFs);
+    actorStore = new RecordStore<ActorRecord>('actors', loadActorRecord, testRoot, mockFs);
   });
 
   const validActorRecord: GitGovRecord & { payload: ActorRecord } = {
@@ -494,7 +528,8 @@ describe('RecordStore Validation Methods', () => {
     },
     payload: {
       id: 'human:test-user', type: 'human', displayName: 'Test User',
-      publicKey: 'some-key', roles: ['author'], status: 'active',
+      publicKey: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=', // Valid 44-char base64
+      roles: ['author'], status: 'active',
     }
   };
 
@@ -530,7 +565,7 @@ describe('RecordStore Validation Methods', () => {
   });
 
   describe('read (dumb storage)', () => {
-    it('[EARS-7] should return record without validation (validation is adapter responsibility)', async () => {
+    it('[EARS-7] should return record WITH validation using loader', async () => {
       mockFs.readFile.mockResolvedValue(JSON.stringify(validActorRecord));
 
       const result = await actorStore.read('human:test-user');
@@ -540,20 +575,26 @@ describe('RecordStore Validation Methods', () => {
         'utf-8'
       );
       expect(result).toEqual(validActorRecord);
-      // RecordStore should NOT call validation - that's adapter responsibility
-      expect(mockValidateFullEmbeddedMetadataRecord).not.toHaveBeenCalled();
+      // RecordStore NOW validates using the loader
     });
 
-    it('[EARS-8] should return any record without validation (even invalid ones)', async () => {
+    it('[EARS-8] should return null for invalid records (validation catches them)', async () => {
       const invalidRecord = { ...validActorRecord, payload: { ...validActorRecord.payload, id: '' } };
       mockFs.readFile.mockResolvedValue(JSON.stringify(invalidRecord));
+
+      // Spy on console.warn to verify it logs the warning
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation();
 
       const result = await actorStore.read('human:test-user');
 
       expect(mockFs.readFile).toHaveBeenCalled();
-      expect(result).toEqual(invalidRecord);
-      // RecordStore should NOT validate - it's "dumb storage"
-      expect(mockValidateFullEmbeddedMetadataRecord).not.toHaveBeenCalled();
+      expect(result).toBeNull(); // Invalid records return null
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Invalid actors record'),
+        expect.anything()
+      );
+
+      warnSpy.mockRestore();
     });
 
     it('[EARS-9] should return null when record does not exist', async () => {
@@ -575,9 +616,15 @@ describe('RecordStore Validation Methods', () => {
 describe('RecordStore<ExecutionRecord>', () => {
   let executionStore: RecordStore<ExecutionRecord>;
   let mockExecutionRecord: GitGovRecord & { payload: ExecutionRecord };
+  let testRoot: string;
+
+  beforeAll(() => {
+    // Create unique temp directory for this test suite
+    testRoot = `/tmp/gitgov-test-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  });
 
   beforeEach(async () => {
-    executionStore = new RecordStore('executions', testRoot, mockFs);
+    executionStore = new RecordStore('executions', loadExecutionRecord, testRoot, mockFs);
     mockExecutionRecord = {
       header: {
         type: 'execution',
@@ -597,7 +644,7 @@ describe('RecordStore<ExecutionRecord>', () => {
 
   it('[EARS-1 & EARS-2] should write an ExecutionRecord', async () => {
     await executionStore.write(mockExecutionRecord);
-    const expectedPath = path.join('/tmp/gitgov-test-root', '.gitgov', 'executions', '1757460000-exec-test-execution.json');
+    const expectedPath = path.join(testRoot, '.gitgov', 'executions', '1757460000-exec-test-execution.json');
     expect(mockFs.writeFile).toHaveBeenCalledWith(expectedPath, expect.any(String), 'utf-8');
   });
 
@@ -618,7 +665,7 @@ describe('RecordStore<ExecutionRecord>', () => {
   it('[EARS-10] should delete an ExecutionRecord', async () => {
     mockFs.unlink.mockResolvedValue(undefined);
     await executionStore.delete(mockExecutionRecord.payload.id);
-    const expectedPath = path.join('/tmp/gitgov-test-root', '.gitgov', 'executions', '1757460000-exec-test-execution.json');
+    const expectedPath = path.join(testRoot, '.gitgov', 'executions', '1757460000-exec-test-execution.json');
     expect(mockFs.unlink).toHaveBeenCalledWith(expectedPath);
   });
 
@@ -649,9 +696,15 @@ describe('RecordStore<ExecutionRecord>', () => {
 describe('RecordStore<ChangelogRecord>', () => {
   let changelogStore: RecordStore<ChangelogRecord>;
   let mockChangelogRecord: GitGovRecord & { payload: ChangelogRecord };
+  let testRoot: string;
+
+  beforeAll(() => {
+    // Create unique temp directory for this test suite
+    testRoot = `/tmp/gitgov-test-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  });
 
   beforeEach(async () => {
-    changelogStore = new RecordStore('changelogs', testRoot, mockFs);
+    changelogStore = new RecordStore('changelogs', loadChangelogRecord, testRoot, mockFs);
     mockChangelogRecord = {
       header: {
         type: 'changelog',
@@ -671,7 +724,7 @@ describe('RecordStore<ChangelogRecord>', () => {
 
   it('[EARS-1 & EARS-2] should write a ChangelogRecord', async () => {
     await changelogStore.write(mockChangelogRecord);
-    const expectedPath = path.join('/tmp/gitgov-test-root', '.gitgov', 'changelogs', '1757460001-changelog-task-implement-workflow-methodology-adapter.json');
+    const expectedPath = path.join(testRoot, '.gitgov', 'changelogs', '1757460001-changelog-task-implement-workflow-methodology-adapter.json');
     expect(mockFs.writeFile).toHaveBeenCalledWith(expectedPath, expect.any(String), 'utf-8');
   });
 
@@ -692,7 +745,7 @@ describe('RecordStore<ChangelogRecord>', () => {
   it('[EARS-10] should delete a ChangelogRecord', async () => {
     mockFs.unlink.mockResolvedValue(undefined);
     await changelogStore.delete(mockChangelogRecord.payload.id);
-    const expectedPath = path.join('/tmp/gitgov-test-root', '.gitgov', 'changelogs', '1757460001-changelog-task-implement-workflow-methodology-adapter.json');
+    const expectedPath = path.join(testRoot, '.gitgov', 'changelogs', '1757460001-changelog-task-implement-workflow-methodology-adapter.json');
     expect(mockFs.unlink).toHaveBeenCalledWith(expectedPath);
   });
 
@@ -723,9 +776,15 @@ describe('RecordStore<ChangelogRecord>', () => {
 describe('RecordStore<FeedbackRecord>', () => {
   let feedbackStore: RecordStore<FeedbackRecord>;
   let mockFeedbackRecord: GitGovRecord & { payload: FeedbackRecord };
+  let testRoot: string;
+
+  beforeAll(() => {
+    // Create unique temp directory for this test suite
+    testRoot = `/tmp/gitgov-test-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  });
 
   beforeEach(async () => {
-    feedbackStore = new RecordStore('feedback', testRoot, mockFs);
+    feedbackStore = new RecordStore('feedback', loadFeedbackRecord, testRoot, mockFs);
     mockFeedbackRecord = {
       header: {
         type: 'feedback',
@@ -743,7 +802,7 @@ describe('RecordStore<FeedbackRecord>', () => {
 
   it('[EARS-1 & EARS-2] should write a FeedbackRecord', async () => {
     await feedbackStore.write(mockFeedbackRecord);
-    const expectedPath = path.join('/tmp/gitgov-test-root', '.gitgov', 'feedback', '1757460002-feedback-test-feedback.json');
+    const expectedPath = path.join(testRoot, '.gitgov', 'feedback', '1757460002-feedback-test-feedback.json');
     expect(mockFs.writeFile).toHaveBeenCalledWith(expectedPath, expect.any(String), 'utf-8');
   });
 
@@ -764,7 +823,7 @@ describe('RecordStore<FeedbackRecord>', () => {
   it('[EARS-10] should delete a FeedbackRecord', async () => {
     mockFs.unlink.mockResolvedValue(undefined);
     await feedbackStore.delete(mockFeedbackRecord.payload.id);
-    const expectedPath = path.join('/tmp/gitgov-test-root', '.gitgov', 'feedback', '1757460002-feedback-test-feedback.json');
+    const expectedPath = path.join(testRoot, '.gitgov', 'feedback', '1757460002-feedback-test-feedback.json');
     expect(mockFs.unlink).toHaveBeenCalledWith(expectedPath);
   });
 
