@@ -1,3 +1,10 @@
+## [1.7.0](https://github.com/gitgovernance/monorepo/compare/core-v1.6.4...core-v1.7.0) (2025-11-09)
+
+
+### ✨ Features
+
+* **core:** implement author/lastModifier enrichment, validation methods, and lint module ([#54](https://github.com/gitgovernance/monorepo/issues/54)) ([e3b8160](https://github.com/gitgovernance/monorepo/commit/e3b8160f907e56db416ca84b47020b5e7544e05d)), closes [#1758522352](https://github.com/gitgovernance/monorepo/issues/1758522352) [#1762449462](https://github.com/gitgovernance/monorepo/issues/1762449462) [#1762488681](https://github.com/gitgovernance/monorepo/issues/1762488681) [#1762449462](https://github.com/gitgovernance/monorepo/issues/1762449462)
+
 ## [1.6.4](https://github.com/gitgovernance/monorepo/compare/core-v1.6.3...core-v1.6.4) (2025-11-05)
 
 
