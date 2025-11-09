@@ -58,6 +58,17 @@ jest.doMock('@gitgov/core', () => {
       }))
     },
 
+    // 🎭 MOCK FACTORIES: Mock record loaders
+    Factories: {
+      loadTaskRecord: jest.fn((data) => data),
+      loadCycleRecord: jest.fn((data) => data),
+      loadFeedbackRecord: jest.fn((data) => data),
+      loadExecutionRecord: jest.fn((data) => data),
+      loadChangelogRecord: jest.fn((data) => data),
+      loadActorRecord: jest.fn((data) => data),
+      loadAgentRecord: jest.fn((data) => data)
+    },
+
     // 🎭 MOCK ADAPTERS: Mock business logic behavior with valid data
     Adapters: {
       FileIndexerAdapter: jest.fn().mockImplementation(() => ({

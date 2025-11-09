@@ -51,14 +51,16 @@ export class DependencyInjectionService {
       throw new Error("❌ GitGovernance not initialized. Run 'gitgov init' first.");
     }
 
+    const { Factories } = await import('@gitgov/core');
+
     this.stores = {
-      taskStore: new Store.RecordStore<Records.TaskRecord>('tasks', projectRoot),
-      cycleStore: new Store.RecordStore<Records.CycleRecord>('cycles', projectRoot),
-      feedbackStore: new Store.RecordStore<Records.FeedbackRecord>('feedback', projectRoot),
-      executionStore: new Store.RecordStore<Records.ExecutionRecord>('executions', projectRoot),
-      changelogStore: new Store.RecordStore<Records.ChangelogRecord>('changelogs', projectRoot),
-      actorStore: new Store.RecordStore<Records.ActorRecord>('actors', projectRoot),
-      agentStore: new Store.RecordStore<Records.AgentRecord>('agents', projectRoot),
+      taskStore: new Store.RecordStore<Records.TaskRecord>('tasks', Factories.loadTaskRecord, projectRoot),
+      cycleStore: new Store.RecordStore<Records.CycleRecord>('cycles', Factories.loadCycleRecord, projectRoot),
+      feedbackStore: new Store.RecordStore<Records.FeedbackRecord>('feedback', Factories.loadFeedbackRecord, projectRoot),
+      executionStore: new Store.RecordStore<Records.ExecutionRecord>('executions', Factories.loadExecutionRecord, projectRoot),
+      changelogStore: new Store.RecordStore<Records.ChangelogRecord>('changelogs', Factories.loadChangelogRecord, projectRoot),
+      actorStore: new Store.RecordStore<Records.ActorRecord>('actors', Factories.loadActorRecord, projectRoot),
+      agentStore: new Store.RecordStore<Records.AgentRecord>('agents', Factories.loadAgentRecord, projectRoot),
     };
   }
 
