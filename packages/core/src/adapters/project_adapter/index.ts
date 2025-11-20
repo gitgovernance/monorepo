@@ -1,15 +1,11 @@
 import { promises as fs, existsSync } from 'fs';
 import * as pathUtils from 'path';
-import { RecordStore } from '../../store';
-import type { TaskRecord } from '../../types';
-import type { CycleRecord } from '../../types';
 import type { GitGovConfig } from '../../config_manager';
 import { ConfigManager } from '../../config_manager';
 import { DetailedValidationError } from '../../validation/common';
 import type { IdentityAdapter } from '../identity_adapter';
 import type { BacklogAdapter } from '../backlog_adapter';
-import type { WorkflowMethodologyAdapter } from '../workflow_methodology_adapter';
-import type { IEventStream } from '../../event_bus';
+import type { SyncModule } from '../../sync';
 import { createTaskRecord } from '../../factories/task_factory';
 import { createCycleRecord } from '../../factories/cycle_factory';
 import { getImportMetaUrl } from '../../utils/esm_helper';
@@ -23,26 +19,10 @@ export interface ProjectAdapterDependencies {
   // Core Adapters (REQUIRED - Fase 1)
   identityAdapter: IdentityAdapter;
   backlogAdapter: BacklogAdapter;
-  workflowMethodologyAdapter: WorkflowMethodologyAdapter;
+  syncModule: SyncModule;
 
   // Infrastructure Layer (REQUIRED)
   configManager: ConfigManager;
-  taskStore: RecordStore<TaskRecord>;
-  cycleStore: RecordStore<CycleRecord>;
-
-  // Optional: Graceful degradation (Fase 2)
-  eventBus?: IEventStream;
-  platformApi?: IPlatformApi;
-  userManagement?: IUserManagement;
-}
-
-// Platform API interface (Fase 2 - Future)
-interface IPlatformApi {
-  getProjectInfo(projectId: string): Promise<ProjectInfo>;
-}
-
-interface IUserManagement {
-  addUserToProject(projectId: string, userId: string, role: string): Promise<void>;
 }
 
 // Return types specific to the adapter
@@ -154,18 +134,20 @@ export interface IProjectAdapter {
 export class ProjectAdapter implements IProjectAdapter {
   private identityAdapter: IdentityAdapter;
   private backlogAdapter: BacklogAdapter;
+  private syncModule: SyncModule;
   private configManager: ConfigManager;
 
   constructor(dependencies: ProjectAdapterDependencies) {
     this.identityAdapter = dependencies.identityAdapter;
     this.backlogAdapter = dependencies.backlogAdapter;
+    this.syncModule = dependencies.syncModule;
     this.configManager = dependencies.configManager;
   }
 
   // ===== FASE 1: BOOTSTRAP CORE METHODS =====
 
   /**
-   * [EARS-1] Initializes complete GitGovernance project with 3-adapter orchestration and trust root Ed25519
+   * [EARS-1] Initializes complete GitGovernance project with 4-module orchestration (Identity, Backlog, WorkflowMethodology, SyncModule) and trust root Ed25519
    */
   async initializeProject(options: ProjectInitOptions): Promise<ProjectInitResult> {
     const startTime = Date.now();
@@ -231,15 +213,34 @@ export class ProjectAdapter implements IProjectAdapter {
         projectId,
         projectName: options.name,
         rootCycle: rootCycle.id,
-        blueprints: {
-          root: "./packages/blueprints"
-        },
         state: {
-          branch: "gitgov-state"
+          branch: "gitgov-state",
+          sync: {
+            strategy: "manual",
+            maxRetries: 3,
+            pushIntervalSeconds: 30,
+            batchIntervalSeconds: 60
+          },
+          defaults: {
+            pullScheduler: {
+              defaultIntervalSeconds: 30,
+              defaultEnabled: false,
+              defaultContinueOnNetworkError: true,
+              defaultStopOnConflict: false
+            },
+            fileWatcher: {
+              defaultDebounceMs: 300,
+              defaultIgnoredPatterns: ["*.tmp", ".DS_Store", "*.swp"]
+            }
+          }
         }
       };
 
       await this.persistConfiguration(config, gitgovPath);
+
+      // 6.5. State Branch Setup via SyncModule (EARS-4, EARS-13)
+      // Create gitgov-state orphan branch if it doesn't exist
+      await this.syncModule.ensureStateBranch();
 
       // 7. Session Initialization
       await this.initializeSession(actor.id, gitgovPath);
@@ -605,6 +606,9 @@ export class ProjectAdapter implements IProjectAdapter {
       actorState: {
         [actorId]: {
           lastSync: new Date().toISOString(),
+          syncStatus: {
+            status: 'synced' as const  // Initialize as synced (no pending changes at init)
+          }
         },
       },
     };

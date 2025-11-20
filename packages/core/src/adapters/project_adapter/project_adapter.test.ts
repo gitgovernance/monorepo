@@ -1,12 +1,11 @@
 import { ProjectAdapter } from './index';
-import { RecordStore } from '../../store';
 import { ConfigManager } from '../../config_manager';
 import type { TaskRecord } from '../../types';
 import type { CycleRecord } from '../../types';
 import type { ActorRecord } from '../../types';
 import type { IdentityAdapter } from '../identity_adapter';
 import type { BacklogAdapter } from '../backlog_adapter';
-import type { WorkflowMethodologyAdapter } from '../workflow_methodology_adapter';
+import type { SyncModule } from '../../sync';
 import { DetailedValidationError } from '../../validation/common';
 import { promises as fs, existsSync, type PathLike } from 'fs';
 import { createTaskRecord } from '../../factories/task_factory';
@@ -92,10 +91,8 @@ describe('ProjectAdapter', () => {
   let projectAdapter: ProjectAdapter;
   let mockIdentityAdapter: jest.Mocked<IdentityAdapter>;
   let mockBacklogAdapter: jest.Mocked<BacklogAdapter>;
-  let mockWorkflowMethodologyAdapter: jest.Mocked<WorkflowMethodologyAdapter>;
+  let mockSyncModule: jest.Mocked<SyncModule>;
   let mockConfigManager: jest.Mocked<ConfigManager>;
-  let mockTaskStore: jest.Mocked<RecordStore<TaskRecord>>;
-  let mockCycleStore: jest.Mocked<RecordStore<CycleRecord>>;
   let mockFs: jest.Mocked<typeof fs> & { existsSync: jest.MockedFunction<any> };
   let mockCreateTaskRecord: jest.MockedFunction<typeof createTaskRecord>;
   let mockCreateCycleRecord: jest.MockedFunction<typeof createCycleRecord>;
@@ -125,11 +122,19 @@ describe('ProjectAdapter', () => {
       getAllCycles: jest.fn(),
     } as unknown as jest.Mocked<BacklogAdapter>;
 
-    mockWorkflowMethodologyAdapter = {
-      getTransitionRule: jest.fn(),
-      validateSignature: jest.fn(),
-      validateCustomRules: jest.fn(),
-    } as unknown as jest.Mocked<WorkflowMethodologyAdapter>;
+    mockSyncModule = {
+      ensureStateBranch: jest.fn().mockResolvedValue(undefined),
+      pushState: jest.fn(),
+      pullState: jest.fn(),
+      resolveConflict: jest.fn(),
+      getStateBranchName: jest.fn().mockResolvedValue('gitgov-state'),
+      calculateStateDelta: jest.fn(),
+      isRebaseInProgress: jest.fn(),
+      checkConflictMarkers: jest.fn(),
+      getConflictDiff: jest.fn(),
+      verifyResolutionIntegrity: jest.fn(),
+      auditState: jest.fn(),
+    } as unknown as jest.Mocked<SyncModule>;
 
     mockConfigManager = {
       loadConfig: jest.fn(),
@@ -141,23 +146,6 @@ describe('ProjectAdapter', () => {
       getCloudSessionToken: jest.fn(),
       constructor: { name: 'ConfigManager' },
     } as unknown as jest.Mocked<ConfigManager>;
-
-    // Mock stores
-    mockTaskStore = {
-      write: jest.fn().mockResolvedValue(undefined),
-      read: jest.fn().mockResolvedValue(null),
-      list: jest.fn().mockResolvedValue([]),
-      delete: jest.fn().mockResolvedValue(undefined),
-      exists: jest.fn().mockResolvedValue(false),
-    } as unknown as jest.Mocked<RecordStore<TaskRecord>>;
-
-    mockCycleStore = {
-      write: jest.fn().mockResolvedValue(undefined),
-      read: jest.fn().mockResolvedValue(null),
-      list: jest.fn().mockResolvedValue([]),
-      delete: jest.fn().mockResolvedValue(undefined),
-      exists: jest.fn().mockResolvedValue(false),
-    } as unknown as jest.Mocked<RecordStore<CycleRecord>>;
 
     mockFs = fs as jest.Mocked<typeof fs> & { existsSync: jest.MockedFunction<any> };
     mockFs.existsSync = existsSync as jest.MockedFunction<any>;
@@ -194,15 +182,13 @@ describe('ProjectAdapter', () => {
     projectAdapter = new ProjectAdapter({
       identityAdapter: mockIdentityAdapter,
       backlogAdapter: mockBacklogAdapter,
-      workflowMethodologyAdapter: mockWorkflowMethodologyAdapter,
+      syncModule: mockSyncModule,
       configManager: mockConfigManager,
-      taskStore: mockTaskStore,
-      cycleStore: mockCycleStore,
     });
   });
 
-  describe('Environment Validation (EARS 2, 7, 8)', () => {
-    it('[EARS-21] should validate current directory, not search upward for init', async () => {
+  describe('Environment Validation (EARS 2, 8, 9)', () => {
+    it('[EARS-24] should validate current directory, not search upward for init', async () => {
       // This test prevents the critical bug where init modifies parent repositories
       // Simulate being in /packages/cli/ but wanting to init there, not in parent /solo-hub/
 
@@ -229,7 +215,7 @@ describe('ProjectAdapter', () => {
       expect(result.warnings).toContain('Not a Git repository in directory: /test/project/packages/cli');
     });
 
-    it('[EARS-22] should use GITGOV_ORIGINAL_DIR when provided (pnpm --filter case)', async () => {
+    it('[EARS-25] should use GITGOV_ORIGINAL_DIR when provided (pnpm --filter case)', async () => {
       // This test ensures pnpm --filter cli dev init validates the correct directory
 
       // Mock environment variables as they would be set by our wrapper
@@ -266,7 +252,7 @@ describe('ProjectAdapter', () => {
       }
     });
 
-    it('[EARS-23] should create .gitgov in correct directory during init', async () => {
+    it('[EARS-26] should create .gitgov in correct directory during init', async () => {
       // This test ensures init creates .gitgov in the target directory, not in parent repos
 
       const targetDirectory = '/tmp/new-project';
@@ -339,7 +325,7 @@ describe('ProjectAdapter', () => {
       expect(result.warnings).toHaveLength(0);
     });
 
-    it('[EARS-7] should return EnvironmentValidation with specific warnings', async () => {
+    it('[EARS-8] should return EnvironmentValidation with specific warnings', async () => {
       // Mock ConfigManager static method for this test
       jest.spyOn(ConfigManager, 'findProjectRoot').mockReturnValue(null);
 
@@ -358,7 +344,7 @@ describe('ProjectAdapter', () => {
       expect(result.suggestions).toContain("Run 'git init' to initialize a Git repository first");
     });
 
-    it('[EARS-8] should detect already initialized GitGovernance project', async () => {
+    it('[EARS-9] should detect already initialized GitGovernance project', async () => {
       // Mock already initialized project
       jest.spyOn(ConfigManager, 'findProjectRoot').mockReturnValue('/test/project');
       mockFs.writeFile.mockResolvedValueOnce(undefined);
@@ -374,7 +360,7 @@ describe('ProjectAdapter', () => {
     });
   });
 
-  describe('Project Initialization (EARS 1, 5)', () => {
+  describe('Project Initialization (EARS 1, 6)', () => {
     beforeEach(() => {
       // Setup successful mocks
       jest.spyOn(ConfigManager, 'findProjectRoot').mockReturnValue('/test/project');
@@ -423,9 +409,11 @@ describe('ProjectAdapter', () => {
         }),
         mockActor.id
       );
+      // Verify SyncModule integration (EARS-4, EARS-13)
+      expect(mockSyncModule.ensureStateBranch).toHaveBeenCalled();
     });
 
-    it('[EARS-5] should return ProjectInitResult with complete metadata', async () => {
+    it('[EARS-6] should return ProjectInitResult with complete metadata', async () => {
       const mockActor = createMockActorRecord();
       const mockCycle = createMockCycleRecord();
 
@@ -458,7 +446,7 @@ describe('ProjectAdapter', () => {
     });
   });
 
-  describe('Template Processing (EARS 3, 6)', () => {
+  describe('Template Processing (EARS 3, 7)', () => {
     beforeEach(() => {
       const mockTemplate = {
         cycles: [
@@ -510,7 +498,7 @@ describe('ProjectAdapter', () => {
       );
     });
 
-    it('[EARS-6] should throw DetailedValidationError for invalid template', async () => {
+    it('[EARS-7] should throw DetailedValidationError for invalid template', async () => {
       mockFs.readFile.mockResolvedValue(JSON.stringify({ invalid: 'template' }));
 
       const projectContext = {
@@ -530,8 +518,8 @@ describe('ProjectAdapter', () => {
     });
   });
 
-  describe('Error Handling & Rollback (EARS 4, 13, 15, 16, 17)', () => {
-    it('[EARS-4] should invoke rollback automatically when initialization fails', async () => {
+  describe('Error Handling & Rollback (EARS 5, 16, 17, 18, 19)', () => {
+    it('[EARS-5] should invoke rollback automatically when initialization fails', async () => {
       // Mock ConfigManager static method for this test
       jest.spyOn(ConfigManager, 'findProjectRoot').mockReturnValue('/test/project');
 
@@ -580,7 +568,7 @@ describe('ProjectAdapter', () => {
       );
     });
 
-    it('[EARS-13] should capture adapter errors with specific context', async () => {
+    it('[EARS-16] should capture adapter errors with specific context', async () => {
       jest.spyOn(ConfigManager, 'findProjectRoot').mockReturnValue('/test/project');
       mockFs.writeFile.mockResolvedValue(undefined);
       mockFs.unlink.mockResolvedValue(undefined);
@@ -599,7 +587,7 @@ describe('ProjectAdapter', () => {
       ).rejects.toThrow('BacklogAdapter connection failed');
     });
 
-    it('[EARS-15] should provide specific guidance for environment errors', async () => {
+    it('[EARS-17] should provide specific guidance for environment errors', async () => {
       // Mock ConfigManager static method for this test
       jest.spyOn(ConfigManager, 'findProjectRoot').mockReturnValue(null);
 
@@ -613,7 +601,7 @@ describe('ProjectAdapter', () => {
       expect(result.suggestions).toContain('Ensure you have write permissions in the target directory');
     });
 
-    it('[EARS-16] should provide field-level errors for DetailedValidationError', async () => {
+    it('[EARS-18] should provide field-level errors for DetailedValidationError', async () => {
       mockFs.readFile.mockResolvedValue('invalid json');
 
       const projectContext = {
@@ -642,7 +630,7 @@ describe('ProjectAdapter', () => {
       }
     });
 
-    it('[EARS-17] should handle file system errors gracefully', async () => {
+    it('[EARS-19] should handle file system errors gracefully', async () => {
       // Mock ConfigManager static method for this test
       jest.spyOn(ConfigManager, 'findProjectRoot').mockReturnValue('/test/project');
 
@@ -659,16 +647,14 @@ describe('ProjectAdapter', () => {
     });
   });
 
-  describe('Graceful Degradation (EARS 14)', () => {
-    it('[EARS-14] should continue without optional dependencies with warnings', async () => {
+  describe('Graceful Degradation (EARS 21)', () => {
+    it('[EARS-21] should continue without optional dependencies with warnings', async () => {
       // Create adapter without optional dependencies
       const minimalAdapter = new ProjectAdapter({
         identityAdapter: mockIdentityAdapter,
         backlogAdapter: mockBacklogAdapter,
-        workflowMethodologyAdapter: mockWorkflowMethodologyAdapter,
+        syncModule: mockSyncModule,
         configManager: mockConfigManager,
-        taskStore: mockTaskStore,
-        cycleStore: mockCycleStore,
         // No eventBus, platformApi, or userManagement
       });
 
@@ -696,14 +682,13 @@ describe('ProjectAdapter', () => {
     });
   });
 
-  describe('Future Platform Methods (EARS 19, 20)', () => {
-    it('[EARS-19] should return project metadata from ConfigManager', async () => {
+  describe('Future Platform Methods (EARS 22, 23)', () => {
+    it('[EARS-22] should return project metadata from ConfigManager', async () => {
       const mockConfig = {
         protocolVersion: '1.0.0',
         projectId: 'test-project',
         projectName: 'Test Project',
         rootCycle: 'cycle-123',
-        blueprints: { root: './blueprints' },
         state: { branch: 'gitgov-state' },
       };
 
@@ -719,7 +704,7 @@ describe('ProjectAdapter', () => {
       });
     });
 
-    it('[EARS-20] should handle missing configuration gracefully', async () => {
+    it('[EARS-23] should handle missing configuration gracefully', async () => {
       mockConfigManager.loadConfig.mockResolvedValueOnce(null);
 
       const result = await projectAdapter.getProjectInfo();
@@ -728,8 +713,8 @@ describe('ProjectAdapter', () => {
     });
   });
 
-  describe('Type Safety (EARS 18)', () => {
-    it('[EARS-18] should compile without any or unknown types unjustified', () => {
+  describe('Type Safety (EARS 20)', () => {
+    it('[EARS-20] should compile without any or unknown types unjustified', () => {
       // This test ensures TypeScript compilation is clean
       // The fact that this test file compiles without errors validates EARS-18
       expect(true).toBe(true);
