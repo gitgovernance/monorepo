@@ -1,0 +1,41 @@
+{
+  "header": {
+    "version": "1.0",
+    "type": "task",
+    "payloadChecksum": "e265580511ca1d03bb6aaf79f032af9bcdbc29cfb6816966f3e73bd1bafa72e5",
+    "signatures": [
+      {
+        "keyId": "human:camilo",
+        "role": "author",
+        "notes": "Task created",
+        "signature": "GYZK5qJJNuCn/g2pcwivmwx/RC08ffuOdgmY4cYUB+rPCuKUEud0XQeFTANb0/FDQIiuZkHO01vmQ8b9Sde6Cw==",
+        "timestamp": 1762658229
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "EBR0xCJBVK8SJEUiQ/qWyIl9vWgzVbhV3UwDLAJEEun7mn6iv0ZxMJIfWf85RjNWt65NQDLLiIxPoDYW1HJOBw==",
+        "timestamp": 1763344818
+      }
+    ]
+  },
+  "payload": {
+    "id": "1762308722-task-remove-kiro-related-files-and-references",
+    "title": "Remove Kiro-related files and references",
+    "status": "done",
+    "priority": "medium",
+    "description": "# Remove Kiro-related Files and References\n\n## Summary\nClean up the monorepo by removing all Kiro-related files, directories, and references that are no longer needed for the GitGovernance project.\n\n## Background\nKiro was a previous iteration or companion tool that is no longer part of the GitGovernance ecosystem. The `.kiro/` directory and various references throughout the codebase should be removed to:\n- Reduce repository clutter\n- Prevent confusion for new contributors\n- Maintain focus on GitGovernance core functionality\n- Clean up historical artifacts\n\n## Scope\n\n### Files to Remove\n1. **`.kiro/` directory** (entire directory tree)\n   - `.kiro/hooks/` - All hook files and documentation\n   - `.kiro/specs/` - All specification files\n   - `.kiro/steering/` - All steering documents\n\n2. **References in documentation/blueprints** (case-insensitive search)\n   - Files mentioning \"kiro\" in `packages/blueprints/`\n   - Files mentioning \"kiro\" in other documentation\n\n### What NOT to Remove\n- Any Kiro references that are purely historical context in changelogs\n- Any third-party dependencies or libraries that happen to contain \"kiro\" in their name\n\n## Acceptance Criteria\n- [ ] All `.kiro/` directories and files are deleted\n- [ ] `git status` shows no untracked Kiro-related files\n- [ ] Repository builds successfully after cleanup\n- [ ] No linter errors introduced by removal\n- [ ] `.gitignore` does not need Kiro-specific entries (or they are removed)\n\n## Implementation Steps\n\n### Step 1: Remove `.kiro/` directory\n```bash\ngit rm -rf .kiro/\n```\n\n### Step 2: Review blueprint references (optional)\n- Scan `packages/blueprints/` for Kiro references\n- Evaluate if blueprint files should be updated or archived\n- Note: Most blueprint references are likely historical and can remain\n\n### Step 3: Check for `.gitignore` entries\n```bash\ngrep -i kiro .gitignore\n# Remove any Kiro-specific ignore patterns if present\n```\n\n### Step 4: Verify build and tests\n```bash\npnpm build --workspaces\npnpm test --workspaces\n```\n\n### Step 5: Commit and push\n```bash\ngit add -A\ngit commit -m \"chore: remove Kiro-related files and directory\n\n- Remove .kiro/ directory (hooks, specs, steering)\n- Clean up legacy tooling artifacts\n- No functional changes to GitGovernance core\"\n```\n\n## Risks & Mitigations\n- **Risk**: Accidentally removing needed files\n  - **Mitigation**: Use `git rm` so changes are tracked and reversible\n- **Risk**: Breaking build due to missing dependencies\n  - **Mitigation**: Run full build and test suite before committing\n\n## Release Impact\n**Type**: chore → No version bump (cleanup only)\n**Scope**: repo → Changes at repository level, no package changes\n\n## Definition of Done\n- `.kiro/` directory completely removed from repository\n- No new linter errors or build failures\n- Changes committed and merged to `main`",
+    "tags": [
+      "cleanup",
+      "chore",
+      "kiro"
+    ],
+    "references": [
+      "pr:https://github.com/gitgovernance/monorepo/pull/53"
+    ],
+    "cycleIds": [
+      "1763344784-cycle-tareas-hurfanas-consolidadas"
+    ]
+  }
+}

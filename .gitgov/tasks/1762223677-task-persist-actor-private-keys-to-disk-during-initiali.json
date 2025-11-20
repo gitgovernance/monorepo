@@ -1,0 +1,67 @@
+{
+  "header": {
+    "version": "1.0",
+    "type": "task",
+    "payloadChecksum": "7fde7ef4868e204ce4c405894baa4302bf55ce9a83ab22cbf5a5663121fdcd05",
+    "signatures": [
+      {
+        "keyId": "human:camilo",
+        "role": "author",
+        "notes": "Task created",
+        "signature": "cdzVx+nrJR8qDXgqadFRRWXm+o17k1z4AqtKaGwg40OlhG0NfhYHKF4P+amE2LRVWuo9OWRhtMMBknjsCDcBAg==",
+        "timestamp": 1762658229
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "submitter",
+        "notes": "Record signed",
+        "signature": "kA50L70Nfmoysu+5sogUqafS6aPlAZwHGahFW8ea1pJSpb0eXlN+23/VXTD/YsNJic/J1W7QB1rKN3RbQDCECw==",
+        "timestamp": 1762950245
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "approver",
+        "notes": "Record signed",
+        "signature": "WIGpNOyDZrpNN5w6d1wQVuQ8LPbPY8GFuZu0QYLUlDff8iFiOvJqonCcz6yfaiC/RXhQ/RtZzTGtntoEGbCnBA==",
+        "timestamp": 1762950250
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "executor",
+        "notes": "Record signed",
+        "signature": "t4STsDe/Zi88as4z6lNjOw473cdT5yxac11lejIrIgDrwD7C/bER2QHu9D71Ez7kMV5A3bfkDKZ4VWyxUaAOBQ==",
+        "timestamp": 1762950253
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "approver",
+        "notes": "Record signed",
+        "signature": "FrYcjrDmkaqZVxKGvXwfGEYzbZ2UAnsUX8kQMe1cwUP1evkeld8jULb4bsAi75XpUZW+X3h2Q3aGsL2hOwEZAQ==",
+        "timestamp": 1762950255
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "zo+Z+2yF0UzpeRrQGIZKVYXWCPzbK3ZbbVfSDMwnW0mMmHXjoqEEYMEtXdia0O5LWZjfab8T+8FW2PsHiikBBw==",
+        "timestamp": 1763344818
+      }
+    ]
+  },
+  "payload": {
+    "id": "1762223677-task-persist-actor-private-keys-to-disk-during-initiali",
+    "title": "Persist actor private keys to disk during initialization",
+    "status": "done",
+    "priority": "medium",
+    "description": "# Persist Actor Private Keys to Disk\n\n## Problem\n\nCurrently, when creating an ActorRecord via `gitgov init`, the private key is generated but:\n- ❌ Only displayed once in the terminal (can be lost)\n- ❌ Not persisted to disk\n- ✅ `.gitignore` already configured for `.gitgov/actors/*.key`\n\nThis means users cannot sign records after initialization unless they saved the key manually.\n\n## Solution\n\nModify `IdentityAdapter.createActor()` to persist private keys:\n\n1. Save private key to `.gitgov/actors/{actorId}.key` (base64 format)\n2. Set file permissions to `0600` (owner read/write only)\n3. Load private key when needed for signing operations\n4. Update documentation about key management\n\n## Implementation Notes\n\n- File: `packages/core/src/adapters/identity_adapter/index.ts`\n- Already gitignored: `.gitgov/actors/*.key`\n- Format: Base64-encoded PKCS8 PEM (current privateKey format)\n- Security: File permissions `0600` (Node.js `fs.chmod`)\n\n## Acceptance Criteria\n\n- [ ] Private key saved to `.gitgov/actors/{actorId}.key` on actor creation\n- [ ] File has secure permissions (0600)\n- [ ] Key can be loaded for signing operations\n- [ ] Tests verify key persistence and loading\n- [ ] Documentation updated with key management guidelines",
+    "tags": [
+      "security",
+      "identity",
+      "init"
+    ],
+    "references": [],
+    "cycleIds": [
+      "1763344784-cycle-tareas-hurfanas-consolidadas"
+    ]
+  }
+}

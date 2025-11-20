@@ -1,0 +1,42 @@
+{
+  "header": {
+    "version": "1.0",
+    "type": "task",
+    "payloadChecksum": "0f61e429f50a4c1265c406a81b72f3da6f798c19cd763fed1643be00911efe00",
+    "signatures": [
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "tw8Qkt2vEf2/yNuflHbA8DETMhxDR+XquPi5FmoA2dsAQxd+WsVmyjxe6UHi3i8KTZJw2yvLBrW4XXRbQM7IAg==",
+        "timestamp": 1763344476
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "eRyZQiYixyK1vfgRBoKbXc4ptJdyOquRrFK2U6qBdWmqnnkKGUXYCLt8X1uwN5NmUftfq2tptRN5dD8ayRsbAQ==",
+        "timestamp": 1763344477
+      }
+    ]
+  },
+  "payload": {
+    "id": "1763344476-task-create-pullscheduler-service-tests",
+    "title": "Create PullScheduler service tests",
+    "status": "draft",
+    "priority": "high",
+    "description": "Tests para verificar pull periódico, manejo de errores de red, conflictos. EARS 33-40 Tests de PullScheduler. 8 tests unitarios. Mocks de network failures. Timing tests con fake timers.",
+    "tags": [
+      "category:testing",
+      "cycle:06",
+      "package:core",
+      "skill:jest"
+    ],
+    "cycleIds": [
+      "1763344334-cycle-cycle-6-pull-scheduler---auto-pull"
+    ],
+    "references": [
+      "file:packages/core/src/modules/sync/pull_scheduler.test.ts"
+    ]
+  }
+}

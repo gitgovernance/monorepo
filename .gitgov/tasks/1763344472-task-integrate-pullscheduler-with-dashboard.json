@@ -1,0 +1,41 @@
+{
+  "header": {
+    "version": "1.0",
+    "type": "task",
+    "payloadChecksum": "fa759a8ca00a28eda84b41f2adad800930919ac3edb2b133a411abdd149e4650",
+    "signatures": [
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "XXdcb75E+6wN6ddMyhARFj6Bb2sqevlYPRGjSKdk3CfLaXH4Fp8KRNKvY6szzbhCsUbQsO0H591Fxpki/fR/Bg==",
+        "timestamp": 1763344472
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "qrRZnMtQCyefo/Nnmetj3Mt8QGbOHb9IfVKlZspEf2xtB/R9xjIYrZGVYHyntrKDt2+cmrfhjlyUe/3FRvSsBA==",
+        "timestamp": 1763344472
+      }
+    ]
+  },
+  "payload": {
+    "id": "1763344472-task-integrate-pullscheduler-with-dashboard",
+    "title": "Integrate PullScheduler with Dashboard",
+    "status": "draft",
+    "priority": "high",
+    "description": "Dashboard inicia PullScheduler al arrancar si enabled true y lo detiene al cerrarse. Indicador visual cuando pull en progreso. Notificaciones de cambios externos. Lifecycle management.",
+    "tags": [
+      "category:feature",
+      "cycle:06",
+      "package:cli"
+    ],
+    "cycleIds": [
+      "1763344334-cycle-cycle-6-pull-scheduler---auto-pull"
+    ],
+    "references": [
+      "file:packages/cli/src/commands/dashboard.ts"
+    ]
+  }
+}

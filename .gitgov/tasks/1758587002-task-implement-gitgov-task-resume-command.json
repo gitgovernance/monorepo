@@ -1,0 +1,38 @@
+{
+  "header": {
+    "version": "1.0",
+    "type": "task",
+    "payloadChecksum": "9e1b9c9577a99ba79097b9b7d8e567a9c3aa258b189fd305a500194101326212",
+    "signatures": [
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Signature regenerated after removing additional properties",
+        "signature": "K6iRESZdl9gelJhFHdQ0kiyoJ6kAChcAVouWf44UcOJ5CV8liO3v0ItyEm4x2FQE+23hjl8fH3KNdDhA+IU3Ag==",
+        "timestamp": 1762658248
+      }
+    ]
+  },
+  "payload": {
+    "id": "1758587002-task-implement-gitgov-task-resume-command",
+    "title": "Implement gitgov task resume command",
+    "status": "done",
+    "priority": "high",
+    "description": "# Implement Manual Task Resume Command\n\n## 🎯 OBJECTIVE\nImplement `gitgov task resume <id>` command for manual task control (paused→active) with blocking validation.\n\n## 📚 REFERENCE DOCUMENTS\n**Complete specifications already defined in:**\n- `packages/blueprints/03_products/cli/specs/task_command.md` (Lines 31, 472-521, 676, 730-732, 752)\n- `packages/blueprints/03_products/core/specs/adapters/backlog_adapter.md` (Lines 127, 212-217, 894-898)\n\n## 🔧 IMPLEMENTATION TASKS\n\n### 1. BacklogAdapter Method\n**File**: `packages/core/src/adapters/backlog_adapter/backlog_adapter.ts`\n- Implement `resumeTask(taskId: string, actorId: string, force?: boolean): Promise<TaskRecord>`\n- Follow specification in backlog_adapter.md lines 212-217\n\n### 2. CLI Command\n**File**: `packages/cli/src/commands/task/task-command.ts`\n- Add resume subcommand with alias 'r'\n- Implement `executeResume(taskId, options)` method\n- Follow specification in task_command.md lines 472-521\n\n### 3. Testing\n- BacklogAdapter tests: 5 EARS (38A-42A)\n- TaskCommand tests: 3 EARS (20, 21, 22)\n- Follow EARS specifications in both .md files\n\n## ✅ SUCCESS CRITERIA\n- `gitgov task resume <id>` works with paused→active transition\n- `--force` flag ignores blocking feedbacks\n- Blocking validation through MetricsAdapter\n- All 8 tests passing\n- TypeScript compilation clean\n\n## 📊 ESTIMATED EFFORT: 10-14 hours",
+    "cycleIds": [
+      "1758522834-cycle-week-2-sep-29-30"
+    ],
+    "tags": [
+      "cli",
+      "backlog-adapter",
+      "task-management",
+      "resume",
+      "manual-control",
+      "blocking-validation"
+    ],
+    "references": [
+      "packages/blueprints/03_products/cli/specs/task_command.md",
+      "packages/blueprints/03_products/core/specs/adapters/backlog_adapter.md"
+    ]
+  }
+}

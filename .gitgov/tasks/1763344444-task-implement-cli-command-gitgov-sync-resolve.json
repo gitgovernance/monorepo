@@ -1,0 +1,41 @@
+{
+  "header": {
+    "version": "1.0",
+    "type": "task",
+    "payloadChecksum": "5d4ebf7d7ca1aa7550bdd72f09ac1439f0677ed02d15f50fb162fc72e7c6166a",
+    "signatures": [
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "Y3iPL/p2md9RpwJyugoqz2qXXffXOv405OURT5QCGhqLO1O5ZWL6qVQ7kTrNrv6GNj38BMCO9Ek+M0al6hzHCg==",
+        "timestamp": 1763344444
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "ryccCqQ3zylN1mk0eXlH4Kwkt752RWoK/yD3C+GTE0a8bIFhQQJln5caJPtR+UHHi6pQ54bWiABcr4herPgzBQ==",
+        "timestamp": 1763344444
+      }
+    ]
+  },
+  "payload": {
+    "id": "1763344444-task-implement-cli-command-gitgov-sync-resolve",
+    "title": "Implement CLI command gitgov sync resolve",
+    "status": "draft",
+    "priority": "high",
+    "description": "Crear comando CLI para ejecutar ceremonia de resolución.\\n\\n## Comando\\n\\ngitgov sync resolve --reason <justificacion>\\n\\n## Flags\\n\\n- --reason: OBLIGATORIO - Justificación de la resolución\\n- --actor: Opcional - Default: actor actual de sesión\\n- --json: Output en formato JSON\\n\\n## Validaciones\\n\\n- Verificar que hay conflictos pendientes\\n- Verificar que todos los markers fueron resueltos\\n- Verificar que reason no está vacío\\n\\n## Output\\n\\nText format:\\n  ✅ Conflict resolved successfully\\n  📝 Reason: Fixed merge conflict in task-123\\n  👤 Resolved by: human:camilo\\n  🔐 Resolution commit: abc123def\\n\\nJSON format:\\n  success, resolutionCommit, resolvedBy, reason\\n\\n## Referencias\\n\\nComando CLI en sync_resolve.ts\\n\\nTags: skill:cli, skill:typescript",
+    "tags": [
+      "category:feature",
+      "cycle:04",
+      "package:cli"
+    ],
+    "cycleIds": [
+      "1763344332-cycle-cycle-4-conflict-resolution"
+    ],
+    "references": [
+      "file:packages/cli/src/commands/sync/sync_resolve.ts"
+    ]
+  }
+}

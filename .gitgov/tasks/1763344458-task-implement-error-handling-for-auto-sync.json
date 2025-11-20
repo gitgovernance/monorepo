@@ -1,0 +1,39 @@
+{
+  "header": {
+    "version": "1.0",
+    "type": "task",
+    "payloadChecksum": "102e90eeb9d9add1e4de4a06197f26a6153b11a7067ed8993266a0781d5602f9",
+    "signatures": [
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "P1LSXxs48zJdTHI+z8fwIgC4HhLzIW4crh54fQDbVKDPgFczuyxJmt7GomiyXncuKt4sVJbhvYVcsGzyYkOaDw==",
+        "timestamp": 1763344458
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "c07ezdzPk7NZWd7WZo3TQ7aFxEnBlsFyyS0j7m1YRTT+QIXGdU6TRdpl0OApqOn3eWGq1um4+Ovfzwp3bD/ZBQ==",
+        "timestamp": 1763344458
+      }
+    ]
+  },
+  "payload": {
+    "id": "1763344458-task-implement-error-handling-for-auto-sync",
+    "title": "Implement error handling for auto-sync",
+    "status": "draft",
+    "priority": "high",
+    "description": "Asegurar que errores de auto-sync no bloquean operación principal. EARS 54: Errores no bloquean operación. Retry automático según maxRetries en config. Logger para debug. Error handling transparente.",
+    "tags": [
+      "category:feature",
+      "cycle:05",
+      "package:core"
+    ],
+    "cycleIds": [
+      "1763344333-cycle-cycle-5-auto-sync-immediate-strategy"
+    ],
+    "references": []
+  }
+}

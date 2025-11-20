@@ -1,0 +1,469 @@
+{
+  "header": {
+    "version": "1.0",
+    "type": "cycle",
+    "payloadChecksum": "8a7a7bbdf4c01c085d53a33da47b1bbeb54d5b25541c54b9dd0f8205ec1e1e9b",
+    "signatures": [
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "a+M9xNQn11lAt7i3X7NWF0aXoDw3epanOS3y+kYUpbupCCwUieIGHmu7aeOX0T7IscgzwpqfTKMP3Iz6CcsqBg==",
+        "timestamp": 1763344784
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "Cu5msBGKDFfD2w96CjH1enuViBXvQqrAYU9FNLRjNTM/2ZybcaSxQeLjNoYaPF7S2qxNp/8/5xyUcpd4O931BA==",
+        "timestamp": 1763344809
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "0MbBIjWhsc2Y5Apfl3fRkWdhYQkfRjlhWO0wAblNyeJfaYD+PCZnma4U2eTedYqREZ52ZWxfeL182tkF+3D+BA==",
+        "timestamp": 1763344809
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "cMhLL37GPbdzSYw2lVTbsffkXv6chZC2FVf7Fp9vl3+V/Iyl/odEyu35Tm88hXYBHKQdVdvkytuNldnz5IUODQ==",
+        "timestamp": 1763344809
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "AvCkVZgZ1sGz7UuOKrZMZsu3dYVb47EDuUPHpGulm8RV1cEBwNgvePOKWL8D56q2mLam8caVSV2NRPF87k7jDQ==",
+        "timestamp": 1763344809
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "5uCH1sFvMuBfiluefEEPhfyDhEG/5XcQ4Ww2uZezqmHdX65GRVkZL/gpb8t4k8+Oied2Oc3bCOZgGEx2lqIEBQ==",
+        "timestamp": 1763344809
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "Ah1bLP4z7+BinUbIsarIgag046UAJLE/pcIR4eTNRaqvRlSQsCEIS9UQ6fyvrnOjwVaM4LF9qRd54nTZoy/1DA==",
+        "timestamp": 1763344809
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "ck5+FjkVD9HopvI333KQq45ZsNckfhJmIlyWrqAio64Gbtbw2jEU0qhf3xV2LswyaZErNlY86vqjL5i1LPuhBg==",
+        "timestamp": 1763344809
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "nUIOBJJSfpPODJnyQecthAM3ZMsm+inMz5SEqLG7lVLPCmbs545CtG6MbPIqKnQgBC0I5hi6FaMSIE172fvEAA==",
+        "timestamp": 1763344809
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "oj+kNVjMZrTz0BbWOToIacR+TtlL7QWH7fu0WYKreEjazmqPkYU2TE+l52R1MN/vBzK2waEvFijBPFBPAriECw==",
+        "timestamp": 1763344809
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "3cC53FQKl+TVem3OoD71G1gtWaNwKa8UJzh3w0RHM6FsKlyM34I4OYXbQL+J3LsQPXdHjsclUwSTREqnPhnjBQ==",
+        "timestamp": 1763344809
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "om/JpzDSjIhZaIrWzVCjXGrYjd+PrWKxdREJaEyTLCOG7tKscRdS+j+exO5Tiv9DalxKNz5GOLiJGjC4Bp6xCg==",
+        "timestamp": 1763344809
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "Isve3TavL4RIjIMJOGaxnwNw3K6eowRZSRbpxzngC16ZdNKFhYAnjAShD9fZ2uEgx8Jt0hELKVudNyX2gbRpAQ==",
+        "timestamp": 1763344809
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "dFtvJ7LpgLcCPnRmtbkhaaMMsuMFMKMYRAMXiE9NxM1XdZHCSC+JXG1X6Soo+mhXtaJ/P/pz41wYvkj9V2pvCg==",
+        "timestamp": 1763344809
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "exO+wjtcvLL7Pb7Vt+IrByyMm6GmtU7VLIRgJVV+rpqbtGTgpn6/ezfGiSoDZ7bdYSN/JWPHL/xHttbUNjIBCA==",
+        "timestamp": 1763344809
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "8zeDk2MTLP9VY7EtdAWl1pQR8V0orAJI/UtHuXmfUumd5JMSGm9bLeLtstef2dHYkwuWbz4hXQcwbxp7cdEbCQ==",
+        "timestamp": 1763344809
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "0HPi8pLtedyFL+WdASMOo6cphHE2Ha7YkOh/5tzDB1HledcY0g3Ike3SaPxIYV9C1NlMDMRaIlnCh+J0IZCrBA==",
+        "timestamp": 1763344809
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "HHhAiWD2j1UhEM484oEsiXYeLpOBUz4pIUUcrX9nrGjO7rlB8fOtqqJw+3471JKkoTHE4Em0sXmLL2zx1VlRDA==",
+        "timestamp": 1763344809
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "fs7Vsy/Zab7nt8QLUpPvTMev4tvkP1onXgdHmZvBu9JGSzzkAcwp83RB4DownuuS9/8+2e6E6PTgEUCi+66vBw==",
+        "timestamp": 1763344809
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "KmfB00+6qNE+jccerrFpxEsfMSycJtmAqLCpgWMgR8fpmR/yFSaZWrXxCHSK6ajpjeE9QZC8IjSOgGfqFBVgAQ==",
+        "timestamp": 1763344809
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "VTYaqL4+khbdor72RtraqXQc2aimHZHL5IGEBjkks1Kmo+ATSIl19jj6J3bwbiwz/B7BypBPWASWX8fyJPiUDg==",
+        "timestamp": 1763344809
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "EXnUZZGUDRXKKX2g1z5uPM8oBgnHvycENUkkDw77KuW1+3Upa3Kunkeu6So4GbNMLxc0NfzgYiOH7sOjfhbYAg==",
+        "timestamp": 1763344809
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "ourpU7lcF1CeHRGlaH2veAz8mNs4F6NrNo/Yxl8BY3J5b6NDJ2oZ7vvtU/6GG26dALbiE7y10u3W1C8z82SDDw==",
+        "timestamp": 1763344809
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "rUbYmOcV2NWeGhf684An9fKaJwl61J8E7or3QYW+IlEtSKQRF7TA/xVz+3mOH/OM2mq9cT5DpDcPe61w6uLBCQ==",
+        "timestamp": 1763344809
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "zdpBKOdqwwsIHIOat22q6x7SDk+3hpRn0Z9CU52t1rsYXSJgC0vVch7HdDChi23vj2TB/Zi36M7i5vuoWqroCA==",
+        "timestamp": 1763344809
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "2XqLjg5NpDNNI1rmF8pOYerMK8s8V0vi5s/XQz5Mu4AhuRkq5V26uSdKxqRI163kiR+ncOLExPxz9/gn1nVmBQ==",
+        "timestamp": 1763344809
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "cYeCgb70sV9oz/GdySpEGaR6r5yNQcCmRJbLDBA5RgucCb/KWaXJ35BvMNxIfCcdhL7R7Lam8DuwTv8Gvo2qCw==",
+        "timestamp": 1763344809
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "ZYJQ8soT7KR+kU3Gravbew9IL3j5GZDgTfMpaSG4P+EPQWj3PkBpacC+OXIee+u6nZ4lpRwcGyJU6z1K+bbaDw==",
+        "timestamp": 1763344809
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "fR+mDSSEO9qJwIRh2v2ztezfoVXN7iZoehbqbf+rVLL5C/Pf1qGsPujUQeb0GehF3b3raaTm2N1HcsMrOjg+AA==",
+        "timestamp": 1763344809
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "mO5vOLMQSDO71Z8Ej4ySoGLuHMletfJXCY1WRsoQpjcuDE/Jl8gm80L73ncNavIZcU0q93MWPLH4w/Qjam2MBA==",
+        "timestamp": 1763344818
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "AfZXDrcgFIBJmvtzurk6G5e8Q1nmyaFkbxIJAMPUmS9O7o2RAGJYWSctCYth4z93rmLzUeKiRWbnHTE5d6b3DQ==",
+        "timestamp": 1763344818
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "pDo2+mH/dNF9E+mM/3eLK2kbziJPuW390GMoewJWMSXh9Qg4RMeXHeGlk2bs3MXfscOBzez2vpoXH1SUcFLPAA==",
+        "timestamp": 1763344818
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "12SC5r2sdfeCv7au4XHga9jcdQMZkKjThPUSTuLh5jz45odF8m92KSEGQs0Sl1hM9rBvFBFGs1IWZ0Yl+Q3UAw==",
+        "timestamp": 1763344818
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "IBImZhSZ6K00CJv5Li23LQeE4Ln/6QVJvi4rWA4Htq26bzasaFTbOD6CKEZmcGhRA9muNclH/VM0AAJs7dciBQ==",
+        "timestamp": 1763344818
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "e6d/WHogAAfdr+MVmhaOYx+uSH1RhEr8XeGAv5CtMfclXm5BnBOEJAdrGnqh991nk/NYhlpMj7KfYgBLbHBrBw==",
+        "timestamp": 1763344818
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "45d+IgL59nbVA+urPZRZMwep+k/zMOMtjf1yl+LVwdnV/j0u0NdA1WRogCwz7ptIptNo49+aUanwAYSLfK1aBA==",
+        "timestamp": 1763344818
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "I0vU1Sm2sCU4G3akgeZUzS8GYZHTrMttoGcMhDuDrwkPJLqtDllARumBD+N8KvNzAEQWWOpOIAWZsl+AoX0ICg==",
+        "timestamp": 1763344818
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "ShYDEoYsxrKF3qVPm12a+BhbWqmxIMYUxxjUHK8kdb6loYZe2QLQ7Cjlp+9vj/kW/aexXvIrDuVDZc7kfIByCA==",
+        "timestamp": 1763344818
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "z/6c4SEaWGt64QHbcmciTXQ1dXVqSmVMfW1+00uLhuzB8NvJAPsJTpx377ctqEmPHONxGZ0NetCqh5ihg0IbCw==",
+        "timestamp": 1763344818
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "gPb+W7X+w7ePbPNSxp8NuFXJ+eSQRCK21IqKzsPvFkfFF1nJHSOnLFzQorgItr9lakeTW+wKWvf5POEVkNutAg==",
+        "timestamp": 1763344818
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "gNXDx9kcMe8cOgxIMIw6v5oHHfCccyRR8+vZ1Vd7Hwwg+YqXc+m7NssTXcy4083ww1N5KLnu4Cc1byCE+dHZCA==",
+        "timestamp": 1763344818
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "x5SqVwByDyw6LW8Ksj/db2FgGZFBwjyZIS6l7hqDiIIRJBSf33oP2RN4U5zgYQKr6SImCQbJgLvihOxrH8rEDg==",
+        "timestamp": 1763344818
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "cR6O/zNfAhuoExt7Vzb+aSeDRH4f/GIh+l8keOFj3iMJ7NNLFI9tWtBXhBUU3wnzN0jZ4MqzAmepCP2nIrvAAA==",
+        "timestamp": 1763344818
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "g4PjLRgNJEsBTmucQVtO3z7AjUaTDNQJuS9leO7RdRcqrLa9+Dj66/dbArnmlq8JNvcse3UH64z0iaPgOpQxCg==",
+        "timestamp": 1763344818
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "8y/KawczXW0/rZeoBWd3wI52r6orZ0nXoBOhhCple+8/zguV03i6S95DmYV7Rta2lfp5p1pZmQfbae5WeyhVDQ==",
+        "timestamp": 1763344818
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "BxCUtmxX9llcG91Wpy9V9+aR5QHlY03hXHsnRPihMcMNPNcfnxBD3qIBzHrQxgH7LkmE4zaD/i7Gs95HrBdUBw==",
+        "timestamp": 1763344818
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "wbpZLzPBIMDeCw3FFBbMW+W3jHeCL98o+07q0fgWRQ/S0RxykO6uBttjiPuLUDTe9QzwzsLj4kAWPROXYPbrDQ==",
+        "timestamp": 1763344818
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "gFx0FOK3dOxXx/vMEE25mR1IsRMOlBJj+cqHIFWE6YCbajgFsAtxQFTEqwDAoroNaU1lbf8zWNU55vqE53udCQ==",
+        "timestamp": 1763344818
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "BlaheD0lACZACASIZ6nJJAUro3ZS6pkRX8dcwVaDIySgmyqVKKI97oz0LUhCGs2c5L+owF/06zCz33b/8Jl3Dw==",
+        "timestamp": 1763344818
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "S04nQ9aCxq/c4xfkBg2AUIrPBwXkZUa4KZHTTbtnta0l58b+8uaLd1r5DFID47ccrsF0CWYT2pKXHCY+0kghCQ==",
+        "timestamp": 1763344818
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "suqNTf1pDv3q/qjftYhbPnUAO3w93hDl1WonVpxANi0CG3iMikqSTFUG/lCKGTxZ6b2cg1ZNEwAj6ZLLpH1AAA==",
+        "timestamp": 1763344818
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "9eN2MXIwcYiqS9EIGYKpWWp//qB2Asv4EWLm0sEPGWmK1sinkMOlrea6qwKlPaMq8LgrVJJZztGVHHOyFg72DQ==",
+        "timestamp": 1763344818
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "8Mxwo7wmQz+THdnnahTvsWFApiCKkJaCYyn26dLwy9bRMurabUgQEjvDjD8mtbbv7fHUrFqekclOHW/2nRf+Cw==",
+        "timestamp": 1763344818
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "29anwT46ThCYva2ysE0Gbhog63t+Kw9XH+4pw5PL9qArFag7x7stSE+1o6SZOct/SAS4ahdAv5qBBQ1KmJGSDw==",
+        "timestamp": 1763345452
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "H1mYqjcglipLjWqV1HwscAANPhie5lHe3YgxDAiFQEH4lVOwfMOYydU/UqhOehHzL7r429BPd89UlYk5nR1MBQ==",
+        "timestamp": 1763345452
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "8Y1+Xq4HYcOKD9/Ydp/H7lKQXpip1VjyH2Y+rSxQiCH7FenvfBiHWKUnTm8Lf3efwjdADhPdwLXbpmCceT9FCQ==",
+        "timestamp": 1763381824
+      }
+    ]
+  },
+  "payload": {
+    "id": "1763344784-cycle-tareas-hurfanas-consolidadas",
+    "title": "Orphan Tasks Consolidation",
+    "status": "planning",
+    "taskIds": [
+      "1762699192-task-update-dashboard-priority-colors-high-to-orange",
+      "1761840236-task-fix-performance-bug-ears-29-feedbackadapter-test-f",
+      "1761603579-task-implementar-cli-commands-del-feedback-protocol-5-c",
+      "1761605049-task-verify-complete-coherence-of-workflowmethodology-p",
+      "1762364637-task-rename-types-directory-to-models-for-improved-sema",
+      "1757452186-task-create-workflow-methodology-schema",
+      "1759983620-task-implement-proper-long-description-support-in-task-",
+      "1759983132-task-fix-init-actor-roles---add-required-workflow-capab",
+      "1761604968-task-review-absolute-coherence-of-all-protocols-and-rea",
+      "1760969762-task-reorganize-protocol-folder-numbering-to-reflect-lo",
+      "1761603296-task-implementar-ears-36-y-testing-avanzado-del-feedbac",
+      "1759918556-task-fix-dashboard-tui-fails-with-dynamic-require-of-ch",
+      "1763336054-task-implementar-json-schemas-y-validators-para-configs",
+      "1759984817-task-fix-pnpm-start-argument-parsing-for---help-flag",
+      "1761606731-task-fix-missing-notes-field-in-signature-objects-acros",
+      "1760430745-task-enhance-e2e-test-agent-prompt-with-failure-handlin",
+      "1757452185-task-define-workflow-methodology-protocol-spec",
+      "1761605065-task-verify-complete-coherence-of-planningmethodology-p",
+      "1759460529-task-fix-core-package-es-modules-resolution-error",
+      "1762268208-task-fix-agent-prompt-copy-during-project-initializatio",
+      "1761608338-task-eliminar-referencias-al-atributo-guild-obsoleto-de",
+      "1761604701-task-verificar-coherencia-completa-de-workflowmethodolo",
+      "1757452193-task-document-core-module-and-architecture",
+      "1759980157-task-refactor-task-command-documentation---manual-contr",
+      "1760017977-task-implement-task-delete-command-and-improve-discard-",
+      "1762488681-task-implement-lint-module--command-for-structural-vali",
+      "1759981434-task-implement-gitgov-task-pauseresume-with-full-workfl",
+      "1757452188-task-document-scrum-and-agent-integration-examples",
+      "1762488663-task-agent-platform-event-driven-blueprint-auditing-sys",
+      "1760357920-task-refactor-dashboardtui-for-testability-with-depende",
+      "1762223677-task-persist-actor-private-keys-to-disk-during-initiali",
+      "1760340495-task-implement-universe-view-interactive-knowledge-grap",
+      "1762225105-task-translate-spanish-task-titles-to-english",
+      "1762307506-task-establish-pr-ci-pipeline-and-required-checks-for-m",
+      "1757452189-task-implement-workflow-methodology-validator",
+      "1757452190-task-implement-workflow-methodology-factory",
+      "1761736263-task-validate-and-refactor-schema-module--integration-t",
+      "1761604995-task-translate-protocol-documentation-design-i18n-struc",
+      "1762276940-task-fix-agent-prompt-copy-failing-in-production-npm-in",
+      "1762220617-task-agregar-dependencia-faltante-dotenv-a-gitgovcore",
+      "1761604438-task-verificar-coherencia-de-cdigotests-de-executionada",
+      "1761736262-task-review-and-refactor-validator-module",
+      "1762669144-task-add-integration-tests-for-recordstore-load-validat",
+      "1757452192-task-develop-unit-and-integration-tests",
+      "1761604451-task-verificar-coherencia-de-cdigotests-de-changelogada",
+      "1761608344-task-actualizar-cdigo-para-nuevo-schema-de-changelogrec",
+      "1761604714-task-verificar-coherencia-completa-de-planningmethodolo",
+      "1757452191-task-implement-workflow-methodology-adapter",
+      "1762308722-task-remove-kiro-related-files-and-references",
+      "1762449462-task-add-load-validation-methods-to-record-factories",
+      "1761740113-task-wrap-workflowmethodologyrecord-in-embeddedmetadata",
+      "1757452187-task-refactor-backlog-protocol-and-remove-legacy-logic",
+      "1759028791-task-fix-critical-cli-command-registration-bug-in-produ",
+      "1759020825-task-strategic-decision-focus-cli-distribution-on-npm-c",
+      "1763380969-task-implement-notes-field-support-in-task-cli-commands"
+    ],
+    "tags": [
+      "orphan-tasks",
+      "consolidation",
+      "backlog-cleanup"
+    ],
+    "notes": "Consolidation of all unassigned tasks for better organization and traceability"
+  }
+}

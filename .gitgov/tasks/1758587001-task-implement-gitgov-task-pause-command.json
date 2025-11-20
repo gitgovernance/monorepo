@@ -1,0 +1,37 @@
+{
+  "header": {
+    "version": "1.0",
+    "type": "task",
+    "payloadChecksum": "1eeea79c924466bec97dfc728e65834f12e97217e0d1627c5b92155a016ac116",
+    "signatures": [
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Signature regenerated after removing additional properties",
+        "signature": "Yws6kBh7/TC1cvvnNCe0l/Ja3UTtpAOUiUhVJRJHyZD0zg9d2BSr/D2JxqwsqqgK02yz1aTBUZHTChFycG5HBw==",
+        "timestamp": 1762658248
+      }
+    ]
+  },
+  "payload": {
+    "id": "1758587001-task-implement-gitgov-task-pause-command",
+    "title": "Implement gitgov task pause command",
+    "status": "done",
+    "priority": "high",
+    "description": "# Implement Manual Task Pause Command\n\n## 🎯 OBJECTIVE\nImplement `gitgov task pause <id>` command for manual task control (active→paused).\n\n## 📚 REFERENCE DOCUMENTS\n**Complete specifications already defined in:**\n- `packages/blueprints/03_products/cli/specs/task_command.md` (Lines 30, 423-470, 675, 728-729, 750)\n- `packages/blueprints/03_products/core/specs/adapters/backlog_adapter.md` (Lines 126, 205-210, 890-893)\n\n## 🔧 IMPLEMENTATION TASKS\n\n### 1. BacklogAdapter Method\n**File**: `packages/core/src/adapters/backlog_adapter/backlog_adapter.ts`\n- Implement `pauseTask(taskId: string, actorId: string, reason?: string): Promise<TaskRecord>`\n- Follow specification in backlog_adapter.md lines 205-210\n\n### 2. CLI Command\n**File**: `packages/cli/src/commands/task/task-command.ts`\n- Add pause subcommand with alias 'p'\n- Implement `executePause(taskId, options)` method\n- Follow specification in task_command.md lines 423-470\n\n### 3. Testing\n- BacklogAdapter tests: 4 EARS (34A-37A)\n- TaskCommand tests: 3 EARS (18, 19, 23)\n- Follow EARS specifications in both .md files\n\n## ✅ SUCCESS CRITERIA\n- `gitgov task pause <id>` works with active→paused transition\n- `--reason` flag adds [PAUSED] prefix to notes\n- All 7 tests passing\n- TypeScript compilation clean\n\n## 📊 ESTIMATED EFFORT: 8-12 hours",
+    "cycleIds": [
+      "1758522834-cycle-week-2-sep-29-30"
+    ],
+    "tags": [
+      "cli",
+      "backlog-adapter",
+      "task-management",
+      "pause",
+      "manual-control"
+    ],
+    "references": [
+      "packages/blueprints/03_products/cli/specs/task_command.md",
+      "packages/blueprints/03_products/core/specs/adapters/backlog_adapter.md"
+    ]
+  }
+}

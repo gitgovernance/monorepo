@@ -1,0 +1,39 @@
+{
+  "header": {
+    "version": "1.0",
+    "type": "task",
+    "payloadChecksum": "47378799af9e30bca3cc0680a067a481ca0b770958658cc21139cb33c8d2ae0c",
+    "signatures": [
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "Dxo/dqQNAgkDZHjguMbEDi41RP1oLzxdGlMnvwy433TQgJs1pzO4vxwsoNNoVQMKpZOfs8mHinIWInpyjp1+Aw==",
+        "timestamp": 1763344445
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "CDKAF1M/qzB2UOIAos3wnRW3Isj2igiSjlWEwwNlJxCtD6S9g/xtEgrlvVOPG6MmiHAuYIsu/OAxjQgeBVFcBw==",
+        "timestamp": 1763344445
+      }
+    ]
+  },
+  "payload": {
+    "id": "1763344445-task-integrate-verifyintegrity-in-pushstate",
+    "title": "Integrate verifyIntegrity() in pushState",
+    "status": "draft",
+    "priority": "high",
+    "description": "Detectar rebases antiguos sin commit de resolución y bloquear push.\\n\\n## Problema a Resolver\\n\\nUsuario hace rebase manual (fuera de gitgov sync) y no ejecuta la ceremonia de resolución. Esto rompe el audit trail.\\n\\n## Solución: verifyIntegrity()\\n\\nEjecutar ANTES de permitir push:\\n1. Escanear git log buscando rebase commits\\n2. Verificar que cada rebase tiene su commit de resolución\\n3. Si falta alguno: BLOQUEAR push y mostrar error\\n\\n## Error Message\\n\\n❌ Push blocked: Unresolved rebase detected\\n📝 Rebase commit found without resolution ceremony\\n🔧 Please run: gitgov sync resolve --reason <justification>\\n\\n## EARS Cubiertos\\n\\n24-26: verifyResolutionIntegrity\\n\\n## Criterios de Aceptación\\n\\n- [ ] Detecta rebases sin resolución\\n- [ ] Bloquea push si hay violaciones\\n- [ ] Mensaje de error claro\\n- [ ] No afecta rebases válidos\\n- [ ] Performance <500ms\\n\\nTags: skill:git, skill:validation",
+    "tags": [
+      "category:feature",
+      "cycle:04",
+      "package:core"
+    ],
+    "cycleIds": [
+      "1763344332-cycle-cycle-4-conflict-resolution"
+    ],
+    "references": []
+  }
+}

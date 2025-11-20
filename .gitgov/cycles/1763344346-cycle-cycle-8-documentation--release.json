@@ -1,0 +1,65 @@
+{
+  "header": {
+    "version": "1.0",
+    "type": "cycle",
+    "payloadChecksum": "48b627aeb42d69b21738bb9cfc0e3cfbfb09eb759c621bdbb99c1b5ef5f31de8",
+    "signatures": [
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "cWHM6cJAu2usrTaQeE++NcMTFG0ZVLMAcASXCJcxHn1ZcRLhA9RYWzAlsIdvKObkSg6UMyILzTTTZAI/6b/5BQ==",
+        "timestamp": 1763344346
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "lefjoSXlMCM1z8tyb88kXxsWPkFhoANlC9v8D8sKaIK6Vx8dVqhZlDI2+a/RLiZiqTyPQO7ka0nNcaIX/7AwCg==",
+        "timestamp": 1763344503
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "AS1sC71P1c3tJxDZ0lNcYrBPQXAXM/25GGIzJyaz6k20vmeJ7acOo6Ri5dkrglsA8IRjZIDrp/if3W6c1ZPNDQ==",
+        "timestamp": 1763344503
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "R9QeDssxTyIutxiNCl+U7l14ffu6WQ+Yo8Q+UYjynZ+L9zTXlcvB8WTH4ApljXOMC+CYcK0BZK7M0ekM1817AQ==",
+        "timestamp": 1763344504
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "8HiiHD8L3M0K72l6etChxAemvMn1MCJk9KGqJ7664+E3tkTgmQnYwK5SYQ2HKyLTfRzezpLEZMaviQnTzH9NDQ==",
+        "timestamp": 1763344505
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "+e9mqr41ieO779GnbiXvWkm+SK4d/essa27+e4B6WPb9g1mH9faKZMPpvR5Nf/NvdZ7RPgRhtQCR+Lw3FvY/Ag==",
+        "timestamp": 1763344506
+      }
+    ]
+  },
+  "payload": {
+    "id": "1763344346-cycle-cycle-8-documentation--release",
+    "title": "Cycle 8: Documentation & Release",
+    "status": "planning",
+    "taskIds": [
+      "1763344503-task-update-all-documentation-with-final-implementation",
+      "1763344503-task-document-all-changes-since-v100",
+      "1763344504-task-create-configuration-and-usage-guide",
+      "1763344505-task-create-release-notes-v110",
+      "1763344506-task-publish-release-v110"
+    ],
+    "tags": [],
+    "notes": "Planning description for: Cycle 8: Documentation & Release"
+  }
+}

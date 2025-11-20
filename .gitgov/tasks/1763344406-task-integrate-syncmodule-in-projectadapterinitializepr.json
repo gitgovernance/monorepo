@@ -1,0 +1,45 @@
+{
+  "header": {
+    "version": "1.0",
+    "type": "task",
+    "payloadChecksum": "878a54fe75a72b8255318413e3ef700888450a12d74dbe4fdadfdbcaacd604a1",
+    "signatures": [
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "4c6YyRrhedvkoDIOGoIzHzE12aVKKjhwWUMMl5QeKSuDwDVRyz1WCgSdN7Hbg4/G18LJ3HIyUHCvZW9bL4DyAA==",
+        "timestamp": 1763344406
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "iS+eJwubPB/qSrJ4yoAmwxyjpqCt49lmIL5DChVZePPqDMaXDsrwAIA4zrmniHzRDvrcA/4h1hK4SMSNsdjyBg==",
+        "timestamp": 1763344406
+      }
+    ]
+  },
+  "payload": {
+    "id": "1763344406-task-integrate-syncmodule-in-projectadapterinitializepr",
+    "title": "Integrate SyncModule in ProjectAdapter.initializeProject()",
+    "status": "draft",
+    "priority": "critical",
+    "description": "Una vez SyncModule esté implementado, integrarlo en ProjectAdapter para que \\n💡 Suggestions:\\n  • Use 'gitgov status' to check current state or choose a different directory cree rama  automáticamente durante project initialization.\\n\\n## 🔴 CRÍTICO: SIN ESTA TASK, GITGOV INIT NO FUNCIONARÁ COMPLETO\\n\\nEsta es la task que CIERRA EL LOOP:\\n- Epic (collaboration_system) → ProjectAdapter → CLI init\\n\\nSin esta integración, \\n💡 Suggestions:\\n  • Use 'gitgov status' to check current state or choose a different directory nunca creará la rama  automáticamente y los usuarios tendrán que crearla manualmente.\\n\\n## ⚠️ DEPENDENCIAS CRÍTICAS\\n\\n**BLOQUEADA** - Requiere:\\n- Task 1.1 (SyncModule) completado\\n- SyncModule.ensureStateBranch() implementado y testeado\\n\\n## Implementation Steps\\n\\n1. **Agregar SyncModule como dependency opcional** en ProjectAdapter constructor\\n   - No obligatorio (backward compatibility)\\n   - Graceful degradation si no está disponible\\n\\n2. **Invocar ensureStateBranch() en initializeProject()**\\n   - Paso 5 del flujo de init\\n   - Ejecutar DESPUÉS de validaciones pero ANTES de crear primer actor\\n\\n3. **Implementar graceful degradation**\\n   - Si SyncModule no disponible: log warning, continuar\\n   - Si SyncModule falla: log error, continuar (no bloquear init)\\n\\n4. **Actualizar tests de ProjectAdapter**\\n   - Mock SyncModule\\n   - Verificar que ensureStateBranch() es invocado\\n   - Verificar que init funciona sin SyncModule (backward compat)\\n\\n5. **Actualizar EARS status**\\n   - EARS-4: 🔴 PENDIENTE → ✅ COMPLETADO\\n   - EARS-12: 🔴 PENDIENTE → ✅ COMPLETADO\\n\\n## Referencias\\n\\n- project_adapter/index.ts - Modificar initializeProject()\\n- project_adapter.md - EARS-4, EARS-12\\n- init_command.md § 6.1.1 - Dependencia Temporal\\n- roadmap.md § Integration Points - ProjectAdapter Integration\\n\\n## 💡 Código de Referencia\\n\\n\\n\\n## ✅ Criterios de Aceptación\\n\\n- [ ] SyncModule integrado como dependency opcional\\n- [ ] ensureStateBranch() invocado en initializeProject()\\n- [ ] Graceful degradation implementado\\n- [ ] Tests de ProjectAdapter actualizados\\n- [ ] Tests pasan con y sin SyncModule\\n- [ ] gitgov init crea rama gitgov-state automáticamente\\n- [ ] EARS-4 y EARS-12 actualizados\\n\\n## Duración Estimada\\n\\n1 día\\n\\n## Tags\\n\\nskill:typescript, critical:true, integration:true",
+    "tags": [
+      "category:integration",
+      "cycle:01",
+      "package:core",
+      "skill:typescript"
+    ],
+    "cycleIds": [
+      "1763344330-cycle-cycle-1-syncmodule-basic---manual-sync"
+    ],
+    "references": [
+      "file:packages/core/src/adapters/project_adapter/index.ts",
+      "file:packages/blueprints/03_products/core/specs/adapters/project_adapter.md",
+      "file:packages/blueprints/03_products/cli/specs/init_command.md",
+      "file:packages/blueprints/03_products/epics/collaboration_system/roadmap.md"
+    ]
+  }
+}

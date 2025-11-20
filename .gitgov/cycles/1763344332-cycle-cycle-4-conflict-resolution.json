@@ -1,0 +1,65 @@
+{
+  "header": {
+    "version": "1.0",
+    "type": "cycle",
+    "payloadChecksum": "58865a4fe0ed29053779ee0181ec5f611acd8250b38885823806cddfa375d3ca",
+    "signatures": [
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "Oo7vlHR4FkFNpWemza3TGlAG8DYtOmYxGeXnW/abwvwZ/wK1erAiOOp5PyUFu9HTgyctzApwcUFMcfYfnRK6DA==",
+        "timestamp": 1763344332
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "BeCOvRodZ2uKPoPAxVsOc699G1bRuCXPcsIPUqkG+vz5xNT6YCQkIK5U60G2D3N38aqmr87QuuSKLfRLRMkmAQ==",
+        "timestamp": 1763344443
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "SH34wlc454UciMw+Z7gBBR0CBHffprLTbQorvzDOue/GYrstXxsr5hIiosFqyo1Q/BAecp1j8+boE6pWREFaAA==",
+        "timestamp": 1763344444
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "ba63CdxvbNmLCyChIR5Ev1sGI5ZL9lPHaSq67MtJIgCsxIfEPmCfU35RWZi/L/U9mViM/iFN0iSD5Vv9aKubDA==",
+        "timestamp": 1763344445
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "koJLu3nA41JaDQWFhqAL8MAHBf3Z/WgWsRnvBntWeVJF+TQT1CscyMDG8Sy0nU8ysm+lNm5Lau/FWN9fyrV8AQ==",
+        "timestamp": 1763344446
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "J3iBWCnU/bflABHPah8Ag8sqxl/11VYSd1MANq4ADMbshP+gvQqUrzbCVcCJkv7llIu7uD7eHSpcdSeRiz9jDA==",
+        "timestamp": 1763344446
+      }
+    ]
+  },
+  "payload": {
+    "id": "1763344332-cycle-cycle-4-conflict-resolution",
+    "title": "Cycle 4: Conflict Resolution",
+    "status": "planning",
+    "taskIds": [
+      "1763344443-task-implement-resolveconflict-with-governed-ceremony",
+      "1763344444-task-implement-cli-command-gitgov-sync-resolve",
+      "1763344445-task-integrate-verifyintegrity-in-pushstate",
+      "1763344446-task-implement-cli-command-gitgov-sync-audit",
+      "1763344446-task-create-conflict-resolution-tests"
+    ],
+    "tags": [],
+    "notes": "Planning description for: Cycle 4: Conflict Resolution"
+  }
+}

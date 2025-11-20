@@ -1,0 +1,38 @@
+{
+  "header": {
+    "version": "1.0",
+    "type": "task",
+    "payloadChecksum": "b84da836bdda1a82803bb9893ef68c34e0ec35e536b176050559e788532a51d2",
+    "signatures": [
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "a2uqYxHPYwFAKRrsHxAUWn7ENKsLPRAZqK9i1DaODfWU0ZFCiJk924hbJragCvpU5cHGnK2zN97ShOIx4RUjAw==",
+        "timestamp": 1763344504
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "L11wnqy/xpguhm4VirCye8g6aup8YVI35VekzRyLNjBc+HtBkLd/Q8z1Q7BmGr8q5aJfKCZD9jjRg9IxV2WvDg==",
+        "timestamp": 1763344504
+      }
+    ]
+  },
+  "payload": {
+    "id": "1763344504-task-create-configuration-and-usage-guide",
+    "title": "Create configuration and usage guide",
+    "status": "draft",
+    "priority": "medium",
+    "description": "Documentar configuración auto-sync, pull scheduler, estrategias. NO hay legacy commands. Strategy manual/immediate. Ejemplos: push, pull, resolve, audit. User guide. Config examples.",
+    "tags": [
+      "category:documentation",
+      "cycle:08"
+    ],
+    "cycleIds": [
+      "1763344346-cycle-cycle-8-documentation--release"
+    ],
+    "references": []
+  }
+}

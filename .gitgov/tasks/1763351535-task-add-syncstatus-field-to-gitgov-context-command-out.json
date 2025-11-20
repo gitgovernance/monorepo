@@ -1,0 +1,33 @@
+{
+  "header": {
+    "version": "1.0",
+    "type": "task",
+    "payloadChecksum": "a0c5e2c199d9fddc8a3d01e11267dd96604135180c83b9dbf15555d13486d21a",
+    "signatures": [
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "vfsHMdnJl1W6i3Ub3hEErFTsRTiavoIChN2PHPGyG6twpmQpvx+S6Qt053BrgdYqU3T0xtAM2v++u0zsK03vDw==",
+        "timestamp": 1763351535
+      }
+    ]
+  },
+  "payload": {
+    "id": "1763351535-task-add-syncstatus-field-to-gitgov-context-command-out",
+    "title": "Add syncStatus field to gitgov context command output",
+    "status": "draft",
+    "priority": "medium",
+    "description": "Enrich 'gitgov context' command to include syncStatus field from .session.json\n\n## Context\nThe 'gitgov context' command currently shows working context (cycle, task, actor, branch, session) but doesn't include sync status information.\n\n## Goal\nAdd syncStatus field to context output for easier access to sync state without needing to manually parse .session.json.\n\n## Implementation\n1. Update ContextCommand.execute() to read actorState.syncStatus from session\n2. Add syncStatus to output object (both text and JSON formats)\n3. Optionally add dashboardActive flag (check if Dashboard process is running)\n\n## Expected Output\n```\n$ gitgov context\n\nCurrent Cycle: 1763344302-cycle-epic\nCurrent Task: 1763344387-task-update-protocol\nCurrent Actor: human:camilo\nCurrent Branch: feature/task-1763344387\nSession: active\n\nSync Status:\n  • Last push: 2h ago\n  • Last pull: 4h ago\n  • Status: pending\n  • Watchers: active\n```\n\n## References\n- packages/cli/src/commands/context/context-command.ts\n- packages/blueprints/03_products/protocol/99_appendices/session_state.md (syncStatus definition)\n- packages/blueprints/03_products/epics/collaboration_system/roadmap.md § 3 (Actor-Specific Sync Status)",
+    "tags": [
+      "cli",
+      "context",
+      "sync",
+      "cycle-00"
+    ],
+    "references": [
+      "packages/cli/src/commands/context/context-command.ts",
+      "packages/blueprints/03_products/protocol/99_appendices/session_state.md"
+    ]
+  }
+}

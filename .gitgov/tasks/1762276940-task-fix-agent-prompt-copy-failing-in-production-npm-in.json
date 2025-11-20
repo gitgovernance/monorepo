@@ -1,0 +1,45 @@
+{
+  "header": {
+    "version": "1.0",
+    "type": "task",
+    "payloadChecksum": "9556a2d4dc657aaa9d6695191c4e72dba6dfe95d60ce7106d439b3899d04c928",
+    "signatures": [
+      {
+        "keyId": "human:camilo",
+        "role": "author",
+        "notes": "Task created",
+        "signature": "PLlZWi3Qn1O+93ttwe0mjWqbdfecgNOi46QTwKZ4eJ+oM99KHU+856O/DgJ86gzwijWELLxuFm8+lhDm++tVAQ==",
+        "timestamp": 1762658229
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "uo6w6OkYxahB9gwHDeQCLMkYfobJ8Hv68yWCvBfnJV7Rml8ZgiFkFO8CvdyIIzCAp1VJLTJPK3oxiS66h0E+Cw==",
+        "timestamp": 1763344818
+      }
+    ]
+  },
+  "payload": {
+    "id": "1762276940-task-fix-agent-prompt-copy-failing-in-production-npm-in",
+    "title": "Fix agent prompt copy failing in production npm install",
+    "status": "done",
+    "priority": "critical",
+    "description": "# Bug: Agent Prompt Copy Fails in Production NPM Install\n\n## 🚨 Severity: CRITICAL\n\n**Status**: Production users report warning during `gitgov init`:\n```\nWarning: Could not copy @gitgov agent prompt. Project will work but AI assistant may not have local instructions.\n```\n\n## Problem Description\n\nThe `copyAgentPrompt()` method in `ProjectAdapter` fails to locate and copy `gitgov_agent_prompt.md` when `@gitgov/cli` is installed via npm globally.\n\n### Verified Facts\n\n1. ✅ File EXISTS in npm package: `/node_modules/@gitgov/core/prompts/gitgov_agent_prompt.md`\n2. ✅ File is included in `package.json` → `\"files\": [\"dist\", \"prompts\"]`\n3. ❌ File is NOT being copied during `gitgov init`\n4. ❌ All path resolution attempts have FAILED\n\n### Environment\n\n- Node.js: v20.12.2\n- Package: `@gitgov/cli@1.11.0` (depends on `@gitgov/core@1.6.2`)\n- Installation: Global (`npm install -g @gitgov/cli`)\n\n## Root Cause Analysis\n\n### Build Structure Issue\n\n**tsup bundling behavior**:\n- Source: `packages/core/src/adapters/project_adapter/index.ts`\n- Output: `dist/src/index.js` (SINGLE BUNDLE FILE)\n- Expected: `dist/src/adapters/project_adapter/index.js` (NOT created)\n\n**The problem**: Code assumes `__dirname` points to `dist/src/adapters/project_adapter/` but tsup bundles EVERYTHING into `dist/src/index.js`, so `__dirname` = `dist/src/`.\n\n### Failed Attempts (Chronological)\n\n#### Attempt 1: Use `import.meta.url` (PR #47)\n```typescript\nconst __filename = fileURLToPath(import.meta.url);\nconst __dirname = pathUtils.dirname(__filename);\npotentialSources.push(pathUtils.join(__dirname, '../../prompts/gitgov_agent_prompt.md'));\n```\n**Result**: ❌ `__dirname is not defined` in production\n**Reason**: ESM compatibility issue\n\n#### Attempt 2: Runtime `import.meta.url` check\n```typescript\ntry {\n  const moduleDir = pathUtils.dirname(fileURLToPath(import.meta.url));\n  potentialSources.push(pathUtils.join(moduleDir, '../../prompts/gitgov_agent_prompt.md'));\n} catch { /* ... */ }\n```\n**Result**: ❌ Jest error: `Cannot use 'import.meta' outside a module`\n**Reason**: Jest parses file before execution, fails on `import.meta`\n\n#### Attempt 3: Use `__dirname` with typeof check\n```typescript\ntry {\n  if (typeof __dirname !== 'undefined') {\n    potentialSources.push(pathUtils.join(__dirname, '../../prompts/gitgov_agent_prompt.md'));\n  }\n} catch { /* ... */ }\n```\n**Result**: ❌ Still fails in production (wrong path)\n**Reason**: Assumed `__dirname` = `dist/src/adapters/project_adapter/`, but actually `dist/src/`\n\n#### Attempt 4: Multiple relative paths (current hotfix branch)\n```typescript\npotentialSources.push(pathUtils.join(__dirname, '../../prompts/gitgov_agent_prompt.md'));\npotentialSources.push(pathUtils.join(__dirname, '../../../../prompts/gitgov_agent_prompt.md'));\npotentialSources.push(pathUtils.join(__dirname, '../../../prompts/gitgov_agent_prompt.md'));\n```\n**Result**: ❓ NOT TESTED (branch created but user lost trust)\n**Reason**: Too many guesses, brittle, unclear if it works\n\n## Proposed Solutions\n\n### Solution A: Use `require.resolve()` (RECOMMENDED)\n\n**Pros**:\n- ✅ Node.js knows EXACTLY where npm packages are installed\n- ✅ Works in development, production, global install, local install\n- ✅ No path guessing\n- ✅ Standard Node.js API\n\n**Cons**:\n- ⚠️ Requires CommonJS interop in ESM (`createRequire`)\n\n**Implementation**:\n```typescript\nimport { createRequire } from 'module';\n\nprivate async copyAgentPrompt(gitgovPath: string): Promise<void> {\n  const targetPrompt = pathUtils.join(gitgovPath, 'gitgov');\n  \n  try {\n    const require = createRequire(import.meta.url);\n    const corePackageJson = require.resolve('@gitgov/core/package.json');\n    const coreRoot = pathUtils.dirname(corePackageJson);\n    const sourcePrompt = pathUtils.join(coreRoot, 'prompts/gitgov_agent_prompt.md');\n    \n    await fs.copyFile(sourcePrompt, targetPrompt);\n    console.log(`📋 @gitgov agent prompt copied to .gitgov/gitgov`);\n  } catch (error) {\n    console.warn('Warning: Could not copy @gitgov agent prompt. Project will work but AI assistant may not have local instructions.');\n  }\n}\n```\n\n### Solution B: Export prompt as string constant\n\n**Pros**:\n- ✅ Zero path resolution issues\n- ✅ Prompt is always available (bundled in code)\n- ✅ Simpler, more reliable\n\n**Cons**:\n- ⚠️ Prompt content embedded in bundle (larger size)\n- ⚠️ Requires build-time file reading\n\n**Implementation**:\n```typescript\n// In packages/core/src/prompts/index.ts\nimport { readFileSync } from 'fs';\nimport { join, dirname } from 'path';\nimport { fileURLToPath } from 'url';\n\nconst __dirname = dirname(fileURLToPath(import.meta.url));\nexport const GITGOV_AGENT_PROMPT = readFileSync(\n  join(__dirname, '../../prompts/gitgov_agent_prompt.md'),\n  'utf-8'\n);\n\n// In ProjectAdapter\nimport { GITGOV_AGENT_PROMPT } from '../../prompts';\n\nprivate async copyAgentPrompt(gitgovPath: string): Promise<void> {\n  const targetPrompt = pathUtils.join(gitgovPath, 'gitgov');\n  await fs.writeFile(targetPrompt, GITGOV_AGENT_PROMPT, 'utf-8');\n  console.log(`📋 @gitgov agent prompt copied to .gitgov/gitgov`);\n}\n```\n\n### Solution C: Use package.json \"exports\" field\n\n**Pros**:\n- ✅ Modern ESM approach\n- ✅ Explicit subpath exports\n\n**Cons**:\n- ⚠️ Requires package.json changes\n- ⚠️ Still needs runtime file copy\n\n**Implementation**:\n```json\n// In packages/core/package.json\n{\n  \"exports\": {\n    \".\": \"./dist/src/index.js\",\n    \"./prompts/*\": \"./prompts/*\"\n  }\n}\n```\n\nThen:\n```typescript\nimport { resolve } from 'import-meta-resolve';\n\nconst promptUrl = await resolve('@gitgov/core/prompts/gitgov_agent_prompt.md', import.meta.url);\nconst promptPath = fileURLToPath(promptUrl);\nawait fs.copyFile(promptPath, targetPrompt);\n```\n\n## Recommendation\n\n**Use Solution A (`require.resolve`)** because:\n1. Standard Node.js API (battle-tested)\n2. Works in ALL environments (dev, prod, npm, pnpm, yarn)\n3. No build changes needed\n4. Simple and reliable\n\n**Fallback**: If Solution A has issues, use Solution B (export as string).\n\n## Testing Requirements\n\n1. ✅ Test in monorepo development (`pnpm dev`)\n2. ✅ Test with local npm install (`npm install -g ./packages/cli`)\n3. ✅ Test with published npm package (`npm install -g @gitgov/cli`)\n4. ✅ Verify E2E tests pass\n5. ✅ Verify prompt file is copied to `.gitgov/gitgov`\n6. ✅ Verify no warning message during `gitgov init`\n\n## Impact\n\n- **Users affected**: ALL new users running `gitgov init`\n- **Workaround**: Manual copy of agent prompt (not sustainable)\n- **Priority**: HIGH (blocks AI assistant onboarding)\n\n## Related Files\n\n- `packages/core/src/adapters/project_adapter/index.ts` (copyAgentPrompt method)\n- `packages/core/package.json` (files array)\n- `packages/core/prompts/gitgov_agent_prompt.md` (source file)\n- `docs/gitgov_agent_prompt.md` (monorepo master copy)\n\n## Git Branches Involved\n\n- ❌ PR #45: Initial implementation (broke production)\n- ❌ PR #47: ESM fix (broke Jest)\n- ⚠️ `hotfix/agent-prompt-copy-multiple-paths`: Multiple paths attempt (not tested)\n- 🔄 `feature/update-core-1.6.2`: CLI dependency update (pending)\n\n## Timeline\n\n- 2025-11-04 18:00: Bug reported by user after npm install\n- 2025-11-04 18:15: Multiple fix attempts failed\n- 2025-11-04 18:30: Task created for proper resolution\n\n---\n\n**Note to resolver**: This bug has consumed significant time and tokens. Please implement Solution A with proper testing before merging. User has lost trust in quick fixes.",
+    "tags": [
+      "bug",
+      "production",
+      "agent-prompt",
+      "core"
+    ],
+    "references": [
+      "pr:https://github.com/gitgovernance/monorepo/pull/51",
+      "pr:https://github.com/gitgovernance/monorepo/pull/52",
+      "release:@gitgov/core@1.6.4",
+      "release:@gitgov/cli@1.11.1"
+    ],
+    "cycleIds": [
+      "1763344784-cycle-tareas-hurfanas-consolidadas"
+    ]
+  }
+}

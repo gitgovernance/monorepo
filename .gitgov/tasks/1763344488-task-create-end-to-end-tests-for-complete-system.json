@@ -1,0 +1,42 @@
+{
+  "header": {
+    "version": "1.0",
+    "type": "task",
+    "payloadChecksum": "78325ae88da6b40568ad6c0371ccee85a5d0cb8ecf0d281a062ac912ecdb01a8",
+    "signatures": [
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "6jv04jXUqwRO/GEkQr18E0olyUWvYMRBRy0GP7T6PTYRg5FYOYOlstLPBw157jvo15NFqNiLqWLYwEYc9kIuAA==",
+        "timestamp": 1763344488
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "QlBL/SCR0ixPf+eZenrUUhS8V2iYUiGXrx5bH5JngEB3x1s4aXXSnP3ZmuYBhzVQ1XZ7rLCtirzqEOprWeGbBQ==",
+        "timestamp": 1763344488
+      }
+    ]
+  },
+  "payload": {
+    "id": "1763344488-task-create-end-to-end-tests-for-complete-system",
+    "title": "Create end-to-end tests for complete system",
+    "status": "draft",
+    "priority": "critical",
+    "description": "Escenarios completos: DevA push → DevB pull, Conflicto + resolución, Offline → retry. 6 E2E tests obligatorios. Tests con repos Git reales en /tmp. Multi-user scenarios. Performance: <5s push, <3s pull.",
+    "tags": [
+      "category:testing",
+      "cycle:07",
+      "package:core",
+      "skill:jest"
+    ],
+    "cycleIds": [
+      "1763344335-cycle-cycle-7-quality--polish"
+    ],
+    "references": [
+      "file:packages/core/src/modules/sync/sync_e2e.test.ts"
+    ]
+  }
+}

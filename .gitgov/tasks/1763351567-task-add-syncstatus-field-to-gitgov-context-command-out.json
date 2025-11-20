@@ -1,0 +1,71 @@
+{
+  "header": {
+    "version": "1.0",
+    "type": "task",
+    "payloadChecksum": "29b3874421c0d486e43234536cca39e55c5212b62eab4c80955b7695da4ef1c4",
+    "signatures": [
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "utwWS3ZvryS6cJ/CBIZK5tH5Pm2g2K4Wn+OIrv2KE1i1a9OCt6liXbd2z5o9+9MWsQvSVSDpl2x7dIfHcYgnDw==",
+        "timestamp": 1763351567
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "BM5/Hg9NCdvqtzfMmz7JQoQuYjk2WFEYun1UNu+Y7rTkl/YBMwTWZW0XDuwKqx7GGfWW0NndtIjNG5t+EXsRAg==",
+        "timestamp": 1763351567
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "submitter",
+        "notes": "Record signed",
+        "signature": "ITCWynddAEibHGzJo95WeFrThBzTsesCsB0233okgubKHFXlMZGEiyTXgOPCfgOkyYB/ZAPLqd6Z2TFYsYBvDw==",
+        "timestamp": 1763351943
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "approver",
+        "notes": "Record signed",
+        "signature": "8CEVqv+xpZiI7pt09G7MmpUAdhsgYX+mQmL4Xw2lmUOIwuA/8pj1GRADaqm9a9nxYeiX1ot1IZdW6RTNBWgqBQ==",
+        "timestamp": 1763351950
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "executor",
+        "notes": "Record signed",
+        "signature": "1KWuX+4OwlikXw6mPw9ljk4i2hRFlirhVykGxSQp2t7+5Q9KmtlPqJxyfJrk0AdmuuspFcZY+Pc5aGDDRdwvBQ==",
+        "timestamp": 1763351957
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "approver",
+        "notes": "Record signed",
+        "signature": "Nfs8UU/7rxk4uiH1DVJi6/YuytpK9SdlSt2RLEb5Q9wtoxiiGaHsvVUHwyHYNUz8IcucJZQBexqUqpR99jG6Ag==",
+        "timestamp": 1763352110
+      }
+    ]
+  },
+  "payload": {
+    "id": "1763351567-task-add-syncstatus-field-to-gitgov-context-command-out",
+    "title": "Add syncStatus field to gitgov context command output",
+    "status": "done",
+    "priority": "medium",
+    "description": "Enrich 'gitgov context' command to include syncStatus field from .session.json\n\n## Context\nThe 'gitgov context' command currently shows working context (cycle, task, actor, branch, session) but doesn't include sync status information.\n\n## Goal\nAdd syncStatus field to context output for easier access to sync state without needing to manually parse .session.json.\n\n## Implementation\n1. Update ContextCommand.execute() to read actorState.syncStatus from session\n2. Add syncStatus to output object (both text and JSON formats)\n3. Optionally add dashboardActive flag (check if Dashboard process is running)\n\n## Expected Output\n```\n$ gitgov context\n\nCurrent Cycle: 1763344302-cycle-epic\nCurrent Task: 1763344387-task-update-protocol\nCurrent Actor: human:camilo\nCurrent Branch: feature/task-1763344387\nSession: active\n\nSync Status:\n  • Last push: 2h ago\n  • Last pull: 4h ago\n  • Status: pending\n  • Watchers: active\n```\n\n## References\n- packages/cli/src/commands/context/context-command.ts\n- packages/blueprints/03_products/protocol/99_appendices/session_state.md (syncStatus definition)\n- packages/blueprints/03_products/epics/collaboration_system/roadmap.md § 3 (Actor-Specific Sync Status)",
+    "tags": [
+      "cli",
+      "context",
+      "sync",
+      "cycle-00"
+    ],
+    "references": [
+      "packages/cli/src/commands/context/context-command.ts",
+      "packages/blueprints/03_products/protocol/99_appendices/session_state.md"
+    ],
+    "cycleIds": [
+      "1763344317-cycle-cycle-00-setup--documentation"
+    ]
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "header": {
+    "version": "1.0",
+    "type": "task",
+    "payloadChecksum": "e6ec7906c64a6e953034489d965f849223d2795eab147835177bfeadfab5a407",
+    "signatures": [
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "HE8zD0lZQ+2iUgxxEtpDHRrqBxctScSqBoDVbXv+23CxlEnzSCyewQ7sTrqhpWdMtuIpm1aIM87WGXDH6KXnBQ==",
+        "timestamp": 1763344446
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "sFF66IyJqIm7Gi4cbTg3GXZrLco/ZIxXB8UkXHPW1FEPVlfldr8jolmxTud1bTG+MMv0s/8cXGpinLpagIJoBg==",
+        "timestamp": 1763344446
+      }
+    ]
+  },
+  "payload": {
+    "id": "1763344446-task-create-conflict-resolution-tests",
+    "title": "Create conflict resolution tests",
+    "status": "draft",
+    "priority": "high",
+    "description": "Tests completos para escenarios de conflicto real.\\n\\n## Test Scenarios\\n\\n### Escenario 1: Conflict Simple\\n- User A modifica task-123\\n- User B modifica task-123  \\n- Push A exitoso\\n- Push B genera conflicto\\n- Resolución manual + ceremonia\\n- Verificar audit trail\\n\\n### Escenario 2: Multiple Conflicts\\n- 3 users modifican mismo record\\n- Resolución en cascada\\n- Verificar orden de resoluciones\\n\\n### Escenario 3: Rebase Manual (sin ceremonia)\\n- Usuario hace git rebase manual\\n- Intenta push\\n- Debe ser bloqueado por verifyIntegrity()\\n\\n### Escenario 4: Invalid Resolution\\n- Ceremonia incompleta\\n- Checksum incorrecto\\n- Firma inválida\\n- Debe ser rechazado\\n\\n## Target Coverage\\n\\n>85% en módulo de conflict resolution\\n\\n## Referencias\\n\\nTests en git_sync_conflicts.test.ts\\n\\nTags: skill:jest, skill:testing, skill:git",
+    "tags": [
+      "category:testing",
+      "cycle:04",
+      "package:core",
+      "skill:jest"
+    ],
+    "cycleIds": [
+      "1763344332-cycle-cycle-4-conflict-resolution"
+    ],
+    "references": [
+      "file:packages/core/src/modules/sync/git_sync_conflicts.test.ts"
+    ]
+  }
+}

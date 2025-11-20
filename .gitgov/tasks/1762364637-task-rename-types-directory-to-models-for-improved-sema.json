@@ -1,0 +1,41 @@
+{
+  "header": {
+    "version": "1.0",
+    "type": "task",
+    "payloadChecksum": "867a43b30bf86c13f8a6efa9fd23a6def79f231821e45eb6430030bb3083bd2e",
+    "signatures": [
+      {
+        "keyId": "human:camilo",
+        "role": "author",
+        "notes": "Task created",
+        "signature": "RCh/pMGmWeix8bz6OStuzQH1F9V0/6e7dw5jhSKyYp4jiNxCcUPCStmaVYgPJ3KUi/vOVnXRPcZbQ050Sn98Cg==",
+        "timestamp": 1762658229
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "etIIHYrwjzN88cDDn2VShMkoWH/De9UMZUu0XbXtadNGlSNxKRB01Xe8w/ndL8rnqm3FFEqSiCpNucjDi5rsCA==",
+        "timestamp": 1763344809
+      }
+    ]
+  },
+  "payload": {
+    "id": "1762364637-task-rename-types-directory-to-models-for-improved-sema",
+    "title": "Rename types/ directory to models/ for improved semantic clarity",
+    "status": "draft",
+    "priority": "medium",
+    "description": "# Rename types/ Directory to models/ for Improved Semantic Clarity\n\n## Context\n\nThe `packages/core/src/types/` directory contains TypeScript type definitions and data models for GitGovernance records (TaskRecord, ActorRecord, CycleRecord, etc.). While functional, the name \"types\" is ambiguous and doesn't clearly convey that these are **domain data models**.\n\n## Problem\n\n1. **Semantic Ambiguity**: \"types\" could mean generic TypeScript utility types vs. domain models\n2. **Industry Convention**: Most frameworks use \"models\" (Django, Rails, NestJS, Laravel)\n3. **Confusion with schemas/**: Not immediately clear that `types/` = compile-time, `schemas/` = runtime\n4. **Onboarding Friction**: New developers need extra context to understand the distinction\n\n## Solution\n\nRename `packages/core/src/types/` → `packages/core/src/models/` with cascading import updates.\n\n### Files to Rename\n- `types/` → `models/`\n- `types/index.ts` → `models/index.ts`\n- `types/common.types.ts` → `models/common.models.ts`\n- `types/embedded.types.ts` → `models/embedded.models.ts`\n- `types/generated/` → `models/generated/` (keep filenames: `*_record.ts`)\n\n### Import Updates Required\n\nUpdate all imports across codebase:\n```typescript\n// Before\nimport { TaskRecord } from '../types';\nimport type { EmbeddedMetadataRecord } from '../types/embedded.types';\n\n// After\nimport { TaskRecord } from '../models';\nimport type { EmbeddedMetadataRecord } from '../models/embedded.models';\n```\n\n**Affected Directories:**\n- `packages/core/src/adapters/`\n- `packages/core/src/validation/`\n- `packages/core/src/schemas/`\n- `packages/core/src/store/`\n- `packages/core/src/factories/`\n- `packages/core/src/utils/` (when signature_utils.ts is added)\n- Any tests importing from types/\n\n### Export Updates\n\nUpdate main export in `packages/core/src/index.ts`:\n```typescript\n// Before\nexport * from './types';\n\n// After\nexport * from './models';\n```\n\n## Acceptance Criteria\n\n- [ ] Directory renamed: `types/` → `models/`\n- [ ] Files renamed: `*.types.ts` → `*.models.ts`\n- [ ] All imports updated across entire `packages/core/`\n- [ ] All tests pass (no broken imports)\n- [ ] Build succeeds (`pnpm build` in core/)\n- [ ] Type checking passes (`pnpm typecheck`)\n- [ ] No references to old \"types/\" path remain\n\n## Testing Strategy\n\n1. **Static Analysis**: `grep -r \"from.*types\" packages/core/src/` should return 0 results\n2. **Build Test**: `cd packages/core && pnpm build` must succeed\n3. **Type Check**: `pnpm typecheck` must pass\n4. **Unit Tests**: `pnpm test` must pass all existing tests\n\n## Impact Assessment\n\n**Pros:**\n- ✅ Improved semantic clarity (models = domain data structures)\n- ✅ Aligns with industry conventions\n- ✅ Easier onboarding for new developers\n- ✅ Clearer separation from schemas/ and validation/\n\n**Cons:**\n- ⚠️  30 minutes of refactoring work\n- ⚠️  Git history shows rename (but trackable with `git log --follow`)\n\n**Risk: LOW** - Pure refactoring, no logic changes\n\n## Technical Notes\n\n- Use IDE refactoring tools for bulk rename (VS Code: F2 on folder)\n- Verify no external packages depend on `@gitgov/core/types` path\n- Consider adding deprecation notice if external consumers exist\n- This is a good time to do this BEFORE adding signature_utils.ts (task 1758522352)\n\n## Related Work\n\nThis refactoring should be completed BEFORE implementing task 1758522352 (EnrichedTaskRecord) to avoid having to update imports for new files.\n\n**Suggested Order:**\n1. Complete this rename first\n2. Then proceed with signature_utils.ts implementation\n\n## Estimated Time\n\n**30 minutes** total:\n- 10 min: Directory rename + file renames\n- 15 min: Update all imports (search/replace)\n- 5 min: Verify build + tests pass",
+    "tags": [
+      "refactor",
+      "types",
+      "models",
+      "clarity",
+      "dx"
+    ],
+    "references": [],
+    "cycleIds": [
+      "1763344784-cycle-tareas-hurfanas-consolidadas"
+    ]
+  }
+}

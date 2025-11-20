@@ -1,0 +1,45 @@
+{
+  "header": {
+    "version": "1.0",
+    "type": "task",
+    "payloadChecksum": "a6b87259f28bfbbbee6cf9c6e2542aebb62d02f125fe9ed382f57a6d88038a46",
+    "signatures": [
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "BQc+kYL62QRCHlbaLN8n+CyWaRX85xHP7pQMO9hkW3+9L2qFSZ/27rrxUKuRhd7gSwUDQyhcBR+QKKca3ljjBg==",
+        "timestamp": 1763344417
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "chsvJ/GZuRrUw0uxEa82kZbCsYShXEVt3Nrh5NGaBGUx4AZiQVvnemT7w6bkBjwk/c4z7vSeYnudfHKXfCPKDQ==",
+        "timestamp": 1763344417
+      }
+    ]
+  },
+  "payload": {
+    "id": "1763344417-task-implement-localsync-with-file-watchers-chokidar",
+    "title": "Implement LocalSync with file watchers (chokidar)",
+    "status": "draft",
+    "priority": "high",
+    "description": "Implementar módulo de sincronización local usando chokidar para detectar cambios en .gitgov/ y emitir eventos.\\n\\n## Arquitectura\\n\\nLocalSyncModule monitorea directorios específicos de .gitgov/ y emite eventos al EventBus cuando detecta cambios en archivos JSON (Records).\\n\\n**Directorios monitoreados:**\\n- .gitgov/tasks/\\n- .gitgov/feedback/\\n- .gitgov/cycles/\\n- .gitgov/executions/\\n- .gitgov/actors/\\n- .gitgov/agents/\\n\\n## Referencias\\n\\n- local_sync.ts - LocalSyncModule\\n- file_watcher_service.ts - FileWatcherService\\n- local_sync_module.md - Especificación completa\\n\\n## 💡 Features Principales\\n\\n### 1. File Watching con Chokidar\\n\\n- Monitorear add, change, unlink events\\n- awaitWriteFinish: stabilityThreshold 100ms\\n- ignoredPatterns: *.tmp, .DS_Store, *.swp\\n\\n### 2. Debouncing (300ms)\\n\\nSi archivo cambia múltiples veces en 300ms, emitir UN SOLO evento al final.\\n\\n**Razón**: Evitar flood de eventos cuando editor guarda múltiples veces\\n\\n### 3. Record → Event Conversion\\n\\nLeer JSON file → Parse → Validar checksum → Detectar tipo → Crear evento tipado\\n\\n**Tipos de eventos detectados:**\\n- task.created / task.updated / task.status.changed\\n- feedback.created / feedback.updated\\n- cycle.created / cycle.updated\\n- execution.created / execution.updated\\n\\n### 4. Event Source Tagging\\n\\nTodos los eventos emitidos tienen  para distinguirlos de eventos de adapters ().\\n\\n## ✅ Criterios de Aceptación\\n\\n- [ ] Watcher detecta cambios en .gitgov/\\n- [ ] Debouncing 300ms funciona\\n- [ ] Eventos emitidos correctamente\\n- [ ] Checksum validation antes de emitir\\n- [ ] source: 'watcher' en todos los eventos\\n- [ ] Ignored patterns funcionan\\n- [ ] Performance: <500ms desde cambio a evento\\n\\n## EARS Cubiertos\\n\\n41-47 (7 EARS de LocalSyncModule)\\n\\n## Tags\\n\\nskill:chokidar, skill:typescript, skill:file-watching",
+    "tags": [
+      "category:feature",
+      "cycle:02",
+      "package:core",
+      "skill:typescript",
+      "skill:chokidar"
+    ],
+    "cycleIds": [
+      "1763344331-cycle-cycle-2-local-sync---file-watchers"
+    ],
+    "references": [
+      "file:packages/core/src/modules/sync/local_sync.ts",
+      "file:packages/core/src/modules/sync/file_watcher_service.ts",
+      "file:packages/blueprints/03_products/core/specs/modules/sync_module/local_sync_module.md"
+    ]
+  }
+}

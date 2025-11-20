@@ -1,0 +1,33 @@
+{
+  "header": {
+    "version": "1.0",
+    "type": "task",
+    "payloadChecksum": "ccbff58629c6d4fbeb6947aaa837efc8d64910707a3296b0dea302e691713b84",
+    "signatures": [
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Signature regenerated after removing additional properties",
+        "signature": "CNGNvCA/5QmuZGvxxmewfsUbm7edT56PYlxmguihBCiJa2AYTgLyz2M7KtsMFjMqXJTv5eL+lfOq/+2+QJGKDQ==",
+        "timestamp": 1762670303
+      }
+    ]
+  },
+  "payload": {
+    "id": "1715858002-task-core-refactor-types",
+    "title": "Sanitize and Fix Type System",
+    "status": "archived",
+    "priority": "high",
+    "description": "Fixed the type generation system and established a robust type architecture. This involved correcting build scripts, creating a manual type definition layer in `src/models` for complex types, and ensuring all auto-generated types in `src/types` are correct.",
+    "cycleIds": [
+      "1715860000-cycle-core-refactor"
+    ],
+    "tags": [
+      "refactor",
+      "core",
+      "types",
+      "tech-debt"
+    ],
+    "notes": "This was a critical step to eliminate over 50 TypeScript compilation errors and enable type-safe development."
+  }
+}

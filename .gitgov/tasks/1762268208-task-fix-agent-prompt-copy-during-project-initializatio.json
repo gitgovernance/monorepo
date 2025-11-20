@@ -1,0 +1,42 @@
+{
+  "header": {
+    "version": "1.0",
+    "type": "task",
+    "payloadChecksum": "cbcb476a31802050a26fabc5f3ce0fdf341c97292157b4abfbd6e91bd64c6352",
+    "signatures": [
+      {
+        "keyId": "human:camilo",
+        "role": "author",
+        "notes": "Task created",
+        "signature": "lqv+lqBQOHWwtNPwczmoIAxBcrPwaSsGXwg3xxnORao3KAljaaqFej0lVILmWmhNJt4tBkKYAXExjejB54c3BQ==",
+        "timestamp": 1762658229
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "APH1cbtM1/Mi2iwUqAhO3HKEXRpXzUIx8Z2KsRHD+qyBG2mxEeOvstk2UmPlg7oLr+9IDjkYLoL/9P86HIw5Cg==",
+        "timestamp": 1763344809
+      }
+    ]
+  },
+  "payload": {
+    "id": "1762268208-task-fix-agent-prompt-copy-during-project-initializatio",
+    "title": "Fix agent prompt copy during project initialization",
+    "status": "done",
+    "priority": "high",
+    "description": "Resolve 'Warning: Could not copy @gitgov agent prompt' when gitgov init is run with npm-installed @gitgov/cli. \n\nImplementation:\n1. Create packages/core/prompts/ directory with synced agent prompts\n2. Implement sync-prompts.ts script for automatic synchronization\n3. Update package.json to include prompts/ in npm package\n4. Update ProjectAdapter to use correct path for npm package structure\n5. Add functional tests for agent prompt copy\n6. Update documentation (scripts_module.md, README.md)\n\nTechnical details:\n- Agent prompt source: docs/gitgov_agent_prompt.md (monorepo root)\n- Package location: packages/core/prompts/ (synced via script)\n- NPM path resolution: __dirname + ../../prompts/ (from dist/src/)\n- Automatic sync: Runs in prebuild pipeline\n\nVerification:\n- Tests: 23/23 passing in ProjectAdapter\n- NPM package: prompts/ included (16.6KB)\n- Build: Automatic sync in prebuild working\n- Clean: prompts/* cleaned with clean:generated",
+    "tags": [
+      "infrastructure",
+      "npm",
+      "initialization",
+      "prompts"
+    ],
+    "references": [
+      "pr:https://github.com/gitgovernance/monorepo/pull/45"
+    ],
+    "cycleIds": [
+      "1763344784-cycle-tareas-hurfanas-consolidadas"
+    ]
+  }
+}
