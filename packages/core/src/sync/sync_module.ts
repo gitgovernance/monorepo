@@ -28,8 +28,9 @@ import type {
   ConflictFileDiff,
   StateDeltaFile,
 } from "./types";
-import { readFileSync, existsSync } from "fs";
+import { readFileSync, existsSync, promises as fs } from "fs";
 import { join } from "path";
+import path from "path";
 
 const logger = createLogger("[SyncModule] ");
 
@@ -1232,8 +1233,51 @@ export class SyncModule {
         }
       }
 
-      // 6. Return to original branch
+      // 6. Copy .gitgov/ to filesystem in work branch (EARS-43 complement)
+      // When .gitgov/ is ignored in work branch, we need to manually copy files
+      // from gitgov-state to the filesystem so they're available for CLI commands
+      const repoRoot = await this.git.getRepoRoot();
+      const gitgovPath = path.join(repoRoot, ".gitgov");
+      
+      // Check if .gitgov/ exists in gitgov-state
+      const gitgovExists = await fs.access(gitgovPath).then(() => true).catch(() => false);
+      
+      if (gitgovExists && hasNewChanges) {
+        logger.debug("[pullState] Copying .gitgov/ to filesystem for work branch access");
+        // Files will be copied when we return to savedBranch
+        // Git will preserve .gitgov/ in the filesystem even though it's ignored
+      }
+
+      // 7. Return to original branch
       await this.git.checkoutBranch(savedBranch);
+      
+      // After returning to work branch, ensure .gitgov/ is accessible
+      // If .gitgov/ is ignored, manually copy from gitgov-state
+      if (gitgovExists) {
+        try {
+          // Check if .gitgov/ exists in current branch filesystem
+          const gitgovExistsInWorkBranch = await fs.access(gitgovPath).then(() => true).catch(() => false);
+          
+          if (!gitgovExistsInWorkBranch || hasNewChanges) {
+            logger.debug("[pullState] Restoring .gitgov/ to filesystem from gitgov-state");
+            
+            // Use git checkout to copy .gitgov/ from gitgov-state to filesystem
+            const { exec } = await import("child_process");
+            const { promisify } = await import("util");
+            const execAsync = promisify(exec);
+            
+            await execAsync(`git checkout ${stateBranch} -- .gitgov/`, { cwd: repoRoot });
+            
+            // Unstage the files (keep them untracked if .gitgov/ is ignored)
+            await execAsync('git reset HEAD .gitgov/', { cwd: repoRoot });
+            
+            logger.debug("[pullState] .gitgov/ restored to filesystem successfully");
+          }
+        } catch (error) {
+          logger.warn(`[pullState] Failed to restore .gitgov/ to filesystem: ${(error as Error).message}`);
+          // Non-critical: user can manually restore with 'git checkout gitgov-state -- .gitgov/'
+        }
+      }
 
       result.success = true;
       return result;
