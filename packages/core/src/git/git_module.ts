@@ -768,6 +768,74 @@ export class GitModule {
   }
 
   /**
+   * Stash uncommitted changes
+   * 
+   * @param message - Optional message for the stash
+   * @returns Stash hash if changes were stashed, null if nothing to stash
+   */
+  async stash(message?: string): Promise<string | null> {
+    const hasChanges = await this.hasUncommittedChanges();
+    if (!hasChanges) {
+      return null; // Nothing to stash
+    }
+
+    const args = ['stash', 'push'];
+    if (message) {
+      args.push('-m', message);
+    }
+
+    const result = await this.execGit(args);
+
+    if (result.exitCode !== 0) {
+      throw new GitCommandError('Failed to stash changes', result.stderr);
+    }
+
+    // Get the hash of the stash we just created
+    const listResult = await this.execGit(['stash', 'list', '-n', '1', '--format=%H']);
+    return listResult.stdout.trim() || null;
+  }
+
+  /**
+   * Pop the most recent stash
+   * 
+   * @returns true if stash was popped successfully, false if no stash exists
+   */
+  async stashPop(): Promise<boolean> {
+    // Check if there are any stashes
+    const listResult = await this.execGit(['stash', 'list']);
+    if (!listResult.stdout.trim()) {
+      return false; // No stashes to pop
+    }
+
+    const result = await this.execGit(['stash', 'pop']);
+
+    if (result.exitCode !== 0) {
+      // If pop fails, it might be due to conflicts - this is okay, we'll leave it stashed
+      throw new GitCommandError('Failed to pop stash (conflicts may exist)', result.stderr);
+    }
+
+    return true;
+  }
+
+  /**
+   * Drop a specific stash or the most recent one
+   * 
+   * @param stashHash - Optional stash hash to drop, defaults to most recent
+   */
+  async stashDrop(stashHash?: string): Promise<void> {
+    const args = ['stash', 'drop'];
+    if (stashHash) {
+      args.push(stashHash);
+    }
+
+    const result = await this.execGit(args);
+
+    if (result.exitCode !== 0) {
+      throw new GitCommandError('Failed to drop stash', result.stderr);
+    }
+  }
+
+  /**
    * Creates an orphan branch (no history) and switches to it
    * 
    * @param branchName - Orphan branch name to create

@@ -620,8 +620,11 @@ export class ProjectAdapter implements IProjectAdapter {
     const gitignorePath = pathUtils.join(projectRoot, '.gitignore');
     const gitignoreContent = `
 # GitGovernance
-.gitgov/.session.json
-.gitgov/actors/*.key
+# Ignore entire .gitgov/ directory (state lives in gitgov-state branch)
+.gitgov/
+
+# Exception: Don't ignore .gitgov/.gitignore itself (meta!)
+!.gitgov/.gitignore
 `;
 
     try {
@@ -634,7 +637,7 @@ export class ProjectAdapter implements IProjectAdapter {
       }
 
       // Only add if not already present
-      if (existingContent && !existingContent.includes('.gitgov/.session.json')) {
+      if (existingContent && !existingContent.includes('# GitGovernance')) {
         await fs.appendFile(gitignorePath, gitignoreContent);
       } else if (!existingContent) {
         await fs.writeFile(gitignorePath, gitignoreContent);

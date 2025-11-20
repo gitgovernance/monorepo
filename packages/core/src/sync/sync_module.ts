@@ -628,6 +628,10 @@ export class SyncModule {
       conflictDetected: false,
     };
 
+    // [EARS-43] Declare stash tracking variables in outer scope for error handling
+    let stashHash: string | null = null;
+    let savedBranch: string = sourceBranch || "";
+
     try {
       log('=== STARTING pushState ===');
 
@@ -674,23 +678,105 @@ export class SyncModule {
 
       // PHASE 1: Automatic Reconciliation (EARS-9, EARS-10)
       log('=== Phase 1: Reconciliation ===');
-      const savedBranch = sourceBranch;
+      savedBranch = sourceBranch;
       log(`Saved branch: ${savedBranch}`);
+
+      // [EARS-43] Check if current branch has untracked .gitgov/ files BEFORE stashing
+      const isCurrentBranch = sourceBranch === (await this.git.getCurrentBranch());
+      let hasUntrackedGitgovFiles = false;
+      let tempDir: string | null = null;
+
+      if (isCurrentBranch) {
+        const { exec } = await import("child_process");
+        const { promisify } = await import("util");
+        const execAsync = promisify(exec);
+        const repoRoot = await this.git.getRepoRoot();
+
+        try {
+          const { stdout } = await execAsync('git status --porcelain .gitgov/', { cwd: repoRoot });
+          hasUntrackedGitgovFiles = stdout.trim().length > 0;
+          log(`[EARS-43] .gitgov/ has untracked/modified files: ${hasUntrackedGitgovFiles}`);
+        } catch {
+          hasUntrackedGitgovFiles = false;
+        }
+
+        // If untracked files exist, copy them to temp directory BEFORE stashing
+        if (hasUntrackedGitgovFiles) {
+          log('[EARS-43] Copying untracked .gitgov/ files to temp directory...');
+          const os = await import("os");
+          const path = await import("path");
+          const fs = await import("fs/promises");
+
+          tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'gitgov-sync-'));
+          log(`[EARS-43] Created temp directory: ${tempDir}`);
+
+          // Import whitelist
+          const { SYNC_WHITELIST } = await import("./types");
+
+          // Copy each whitelisted path to temp
+          for (const item of SYNC_WHITELIST) {
+            const sourcePath = path.join(repoRoot, '.gitgov', item);
+            const destPath = path.join(tempDir, item);
+
+            try {
+              const stat = await fs.stat(sourcePath);
+
+              if (stat.isDirectory()) {
+                await fs.cp(sourcePath, destPath, { recursive: true });
+                log(`[EARS-43] Copied directory to temp: ${item}`);
+              } else if (stat.isFile()) {
+                await fs.mkdir(path.dirname(destPath), { recursive: true });
+                await fs.copyFile(sourcePath, destPath);
+                log(`[EARS-43] Copied file to temp: ${item}`);
+              }
+            } catch (error) {
+              log(`[EARS-43] Path ${item} does not exist, skipping`);
+            }
+          }
+          log('[EARS-43] Temp copy complete');
+        }
+      }
+
+      // [EARS-43] Stash uncommitted changes before checkout to allow sync from dirty working tree
+      // This is safe because:
+      // 1. Stash preserves all local changes including .gitgov/
+      // 2. We restore the stash when returning to original branch
+      // 3. Enables seamless workflow: dev can work + sync without committing
+      log('[EARS-43] Checking for uncommitted changes before checkout...');
+      const hasUncommittedBeforeCheckout = await this.git.hasUncommittedChanges();
+
+      if (hasUncommittedBeforeCheckout) {
+        log('[EARS-43] Uncommitted changes detected, stashing before checkout...');
+        stashHash = await this.git.stash('gitgov-sync-temp-stash');
+        log(`[EARS-43] Changes stashed: ${stashHash || 'none'}`);
+      }
+
+      // Helper function to restore stash when returning early
+      const restoreStashAndReturn = async (returnResult: SyncPushResult): Promise<SyncPushResult> => {
+        await this.git.checkoutBranch(savedBranch);
+        if (stashHash) {
+          try {
+            await this.git.stashPop();
+            log('[EARS-43] Stashed changes restored');
+          } catch (stashError) {
+            log(`[EARS-43] Failed to restore stash: ${stashError}`);
+            returnResult.error = returnResult.error
+              ? `${returnResult.error}. Failed to restore stashed changes.`
+              : 'Failed to restore stashed changes. Run \'git stash pop\' manually.';
+          }
+        }
+        return returnResult;
+      };
 
       // Checkout to gitgov-state
       log(`Checking out to ${stateBranch}...`);
       await this.git.checkoutBranch(stateBranch);
       log(`Now on branch: ${await this.git.getCurrentBranch()}`);
 
-      // Verify no uncommitted changes
-      const hasUncommitted = await this.git.hasUncommittedChanges();
-      log(`Has uncommitted changes: ${hasUncommitted}`);
-
-      if (hasUncommitted) {
-        log('ERROR: Uncommitted changes detected, aborting');
-        await this.git.checkoutBranch(savedBranch);
-        throw new UncommittedChangesError(stateBranch);
-      }
+      // Note: We don't check for uncommitted changes here because:
+      // 1. Untracked files from working tree (like .gitgov/) are expected and harmless
+      // 2. If there are actual staged changes, git commit will detect them
+      // 3. This allows seamless workflow without false positives from untracked files
 
       // Attempt pull --rebase to reconcile with remote
       log('Attempting pull --rebase...');
@@ -715,7 +801,6 @@ export class SyncModule {
           if (conflictedFiles.length > 0) {
             // Abort rebase and restore clean state
             await this.git.rebaseAbort();
-            await this.git.checkoutBranch(savedBranch);
 
             result.conflictDetected = true;
             result.conflictInfo = {
@@ -729,7 +814,7 @@ export class SyncModule {
               ],
             };
             result.error = "Conflict detected during reconciliation";
-            return result;
+            return await restoreStashAndReturn(result);
           }
 
           // If not conflict or "already up to date", propagate error
@@ -773,61 +858,95 @@ export class SyncModule {
         // If no changes, return without commit (EARS-11)
         if (delta.length === 0) {
           log('No changes detected, returning without commit');
-          await this.git.checkoutBranch(savedBranch);
           result.success = true;
           result.filesSynced = 0;
-          return result;
+          return await restoreStashAndReturn(result);
         }
       } else {
         log('First push: will copy all whitelisted files');
       }
 
-      // [EARS-42] Copy files from source branch using whitelist
+      // [EARS-42] & [EARS-43] Copy files from source branch using whitelist
       log(`Checking out whitelisted .gitgov/ files from ${sourceBranch}...`);
 
       // Import whitelist
       const { SYNC_WHITELIST } = await import("./types");
 
       // Build paths for whitelist items
-      const allWhitelistedPaths = SYNC_WHITELIST.map(item => `.gitgov/${item}`);
+      const allWhitelistedPaths = SYNC_WHITELIST;
       log(`Whitelist paths: ${allWhitelistedPaths.join(', ')}`);
 
-      // Filter whitelist to only paths that exist in source branch
-      // Use git ls-tree to check existence
       const { exec } = await import("child_process");
       const { promisify } = await import("util");
       const execAsync = promisify(exec);
       const repoRoot = await this.git.getRepoRoot();
+      const fs = await import("fs/promises");
+      const path = await import("path");
 
-      const existingPaths: string[] = [];
-      for (const path of allWhitelistedPaths) {
-        try {
-          const { stdout } = await execAsync(
-            `git ls-tree -r ${sourceBranch} ${path}`,
-            { cwd: repoRoot }
-          );
-          if (stdout.trim()) {
-            existingPaths.push(path);
+      // Note: untracked file detection was moved earlier, before stashing
+
+      // If we have temp directory with untracked files, copy from there
+      // Otherwise, use git checkout from source branch
+      if (tempDir) {
+        log('[EARS-43] Copying whitelisted files from temp directory...');
+
+        // Copy each whitelisted path from temp to gitgov-state
+        for (const item of allWhitelistedPaths) {
+          const sourcePath = path.join(tempDir, item);
+          const destPath = path.join(repoRoot, '.gitgov', item);
+
+          try {
+            const stat = await fs.stat(sourcePath);
+
+            if (stat.isDirectory()) {
+              // Copy directory recursively
+              await fs.cp(sourcePath, destPath, { recursive: true, force: true });
+              log(`[EARS-43] Copied directory from temp: ${item}`);
+            } else if (stat.isFile()) {
+              // Copy file
+              await fs.mkdir(path.dirname(destPath), { recursive: true });
+              await fs.copyFile(sourcePath, destPath);
+              log(`[EARS-43] Copied file from temp: ${item}`);
+            }
+          } catch (error) {
+            // Path doesn't exist, skip it
+            log(`[EARS-43] Path ${item} does not exist in temp, skipping`);
           }
-        } catch {
-          // Path doesn't exist, skip it
-          log(`Path ${path} does not exist in ${sourceBranch}, skipping`);
         }
+        log('[EARS-43] Temp directory copy complete');
+      } else {
+        // Use git checkout for tracked files
+        log('Copying whitelisted files from git...');
+
+        const existingPaths: string[] = [];
+        for (const item of allWhitelistedPaths) {
+          const fullPath = `.gitgov/${item}`;
+          try {
+            const { stdout } = await execAsync(
+              `git ls-tree -r ${sourceBranch} ${fullPath}`,
+              { cwd: repoRoot }
+            );
+            if (stdout.trim()) {
+              existingPaths.push(fullPath);
+            }
+          } catch {
+            log(`Path ${item} does not exist in ${sourceBranch}, skipping`);
+          }
+        }
+
+        log(`Existing whitelisted paths: ${existingPaths.length} of ${allWhitelistedPaths.length}`);
+
+        if (existingPaths.length === 0) {
+          log('No whitelisted files to sync, aborting');
+          result.success = true;
+          result.filesSynced = 0;
+          return await restoreStashAndReturn(result);
+        }
+
+        // Copy only existing whitelisted files
+        await this.git.checkoutFilesFromBranch(sourceBranch, existingPaths);
+        log('Whitelisted files checked out successfully');
       }
-
-      log(`Existing whitelisted paths: ${existingPaths.length} of ${allWhitelistedPaths.length}`);
-
-      if (existingPaths.length === 0) {
-        log('No whitelisted files to sync, aborting');
-        await this.git.checkoutBranch(savedBranch);
-        result.success = true;
-        result.filesSynced = 0;
-        return result;
-      }
-
-      // Copy only existing whitelisted files
-      await this.git.checkoutFilesFromBranch(sourceBranch, existingPaths);
-      log('Whitelisted files checked out successfully');
 
       // Create structured commit message
       const timestamp = new Date().toISOString();
@@ -891,10 +1010,9 @@ export class SyncModule {
         if (!hasStaged) {
           log('No staged changes detected, returning without commit');
           // No changes to commit - return early
-          await this.git.checkoutBranch(savedBranch);
           result.success = true;
           result.filesSynced = 0;
-          return result;
+          return await restoreStashAndReturn(result);
         }
 
         // Create commit
@@ -939,12 +1057,56 @@ export class SyncModule {
       await this.git.checkoutBranch(savedBranch);
       log(`Back on ${await this.git.getCurrentBranch()}`);
 
+      // [EARS-43] Restore stashed changes
+      if (stashHash) {
+        log('[EARS-43] Restoring stashed changes...');
+        try {
+          await this.git.stashPop();
+          log('[EARS-43] Stashed changes restored successfully');
+        } catch (stashError) {
+          log(`[EARS-43] Warning: Failed to restore stashed changes: ${stashError}`);
+          // Don't fail the push if stash pop fails, but warn the user
+          result.error = `Push succeeded but failed to restore stashed changes. Run 'git stash pop' manually. Error: ${stashError}`;
+        }
+      }
+
+      // [EARS-43] Cleanup temp directory
+      if (tempDir) {
+        log('[EARS-43] Cleaning up temp directory...');
+        try {
+          const fs = await import("fs/promises");
+          await fs.rm(tempDir, { recursive: true, force: true });
+          log('[EARS-43] Temp directory cleaned up');
+        } catch (cleanupError) {
+          log(`[EARS-43] Warning: Failed to cleanup temp directory: ${cleanupError}`);
+        }
+      }
+
       result.success = true;
       result.filesSynced = delta.length;
       log(`=== pushState COMPLETED SUCCESSFULLY: ${delta.length} files synced ===`);
       return result;
     } catch (error) {
       log(`=== pushState FAILED: ${(error as Error).message} ===`);
+
+      // [EARS-43] Try to restore stashed changes even on error
+      if (stashHash) {
+        log('[EARS-43] Attempting to restore stashed changes after error...');
+        try {
+          // Try to return to original branch first
+          const currentBranch = await this.git.getCurrentBranch();
+          if (currentBranch !== savedBranch) {
+            await this.git.checkoutBranch(savedBranch);
+          }
+          await this.git.stashPop();
+          log('[EARS-43] Stashed changes restored after error');
+        } catch (stashError) {
+          log(`[EARS-43] Failed to restore stashed changes after error: ${stashError}`);
+          // Add to error message
+          const originalError = (error as Error).message;
+          (error as Error).message = `${originalError}. Additionally, failed to restore stashed changes. Run 'git stash pop' manually.`;
+        }
+      }
 
       // Re-throw critical errors that should fail fast
       if (
