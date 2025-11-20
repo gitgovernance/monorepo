@@ -1,5 +1,6 @@
 import * as path from 'path';
-import { Adapters, Config, Records, Store, EventBus } from '@gitgov/core';
+import { Adapters, Config, Records, Store, EventBus, Lint, Git } from '@gitgov/core';
+import { spawn } from 'child_process';
 
 /**
  * Dependency Injection Service for GitGovernance CLI
@@ -11,6 +12,10 @@ export class DependencyInjectionService {
   private static instance: DependencyInjectionService | null = null;
   private indexerAdapter: Adapters.IIndexerAdapter | null = null;
   private backlogAdapter: Adapters.BacklogAdapter | null = null;
+  private lintModule: Lint.LintModule | null = null;
+  private syncModule: any | null = null;
+  private configManager: Config.ConfigManager | null = null;
+  private gitModule: Git.GitModule | null = null;
   private stores: {
     taskStore: Store.RecordStore<Records.TaskRecord>;
     cycleStore: Store.RecordStore<Records.CycleRecord>;
@@ -171,6 +176,9 @@ export class DependencyInjectionService {
       // Create WorkflowMethodologyAdapter
       const workflowMethodologyAdapter = Adapters.WorkflowMethodologyAdapter.createDefault(feedbackAdapter);
 
+      // Get ConfigManager for BacklogAdapter
+      const configManager = await this.getConfigManager();
+
       // Create Adapters.BacklogAdapter with all dependencies
       this.backlogAdapter = new Adapters.BacklogAdapter({
         taskStore: this.stores.taskStore,
@@ -184,7 +192,8 @@ export class DependencyInjectionService {
         metricsAdapter,
         workflowMethodologyAdapter,
         identity: identityAdapter,
-        eventBus
+        eventBus,
+        configManager
       });
 
       return this.backlogAdapter;
@@ -294,6 +303,203 @@ export class DependencyInjectionService {
         throw new Error(`❌ Failed to initialize metrics system: ${error.message}`);
       }
       throw new Error("❌ Unknown error initializing metrics system.");
+    }
+  }
+
+  /**
+   * Creates and returns LintModule with all required dependencies
+   */
+  async getLintModule(): Promise<Lint.LintModule> {
+    if (this.lintModule) {
+      return this.lintModule;
+    }
+
+    try {
+      await this.initializeStores();
+      if (!this.stores) {
+        throw new Error("Failed to initialize stores");
+      }
+
+      // Get indexer adapter for reference validation
+      const indexerAdapter = await this.getIndexerAdapter();
+
+      // Create a generic record store for lint validation
+      // The LintModule needs to read all record types, so we use taskStore as base
+      // (any store works since they all inherit from RecordStore)
+      const projectRoot = process.env['GITGOV_ORIGINAL_DIR'] || Config.ConfigManager.findGitgovRoot() || process.cwd();
+      const { Factories } = await import('@gitgov/core');
+
+      // Create a generic record store that can read any record type
+      const genericStore = new Store.RecordStore<any>('', Factories.loadTaskRecord, projectRoot);
+
+      // Create LintModule with dependencies
+      this.lintModule = new Lint.LintModule({
+        recordStore: genericStore,
+        indexerAdapter
+      });
+
+      return this.lintModule;
+
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message.includes('Could not find project root')) {
+          throw new Error("❌ GitGovernance not initialized. Run 'gitgov init' first.");
+        }
+        throw new Error(`❌ Failed to initialize lint system: ${error.message}`);
+      }
+      throw new Error("❌ Unknown error initializing lint system.");
+    }
+  }
+
+  /**
+   * Creates and returns SyncModule with all required dependencies
+   */
+  async getSyncModule(): Promise<any> {
+    if (this.syncModule) {
+      return this.syncModule;
+    }
+
+    try {
+      const projectRoot = process.env['GITGOV_ORIGINAL_DIR'] || Config.ConfigManager.findGitgovRoot() || process.cwd();
+
+      // Import modules from namespaces
+      const { Sync, Git } = await import('@gitgov/core');
+      const { spawn } = await import('child_process');
+
+      // Get required dependencies
+      const indexerAdapter = await this.getIndexerAdapter();
+      const configManager = await this.getConfigManager();
+      const identityAdapter = await this.getIdentityAdapter();
+      const lintModule = await this.getLintModule();
+
+      // Create execCommand function for GitModule
+      const execCommand = (command: string, args: string[], options?: any) => {
+        return new Promise<{ exitCode: number; stdout: string; stderr: string }>((resolve) => {
+          const proc = spawn(command, args, {
+            cwd: options?.cwd || projectRoot,
+            env: { ...process.env, ...options?.env },
+          });
+
+          let stdout = '';
+          let stderr = '';
+
+          proc.stdout?.on('data', (data) => { stdout += data.toString(); });
+          proc.stderr?.on('data', (data) => { stderr += data.toString(); });
+
+          proc.on('close', (code) => {
+            resolve({ exitCode: code || 0, stdout, stderr });
+          });
+
+          proc.on('error', (error) => {
+            resolve({ exitCode: 1, stdout, stderr: error.message });
+          });
+        });
+      };
+
+      // Create GitModule with execCommand
+      const gitModule = new Git.GitModule({
+        repoRoot: projectRoot,
+        execCommand
+      });
+
+      // Create SyncModule with all dependencies
+      this.syncModule = new Sync.SyncModule({
+        git: gitModule,
+        config: configManager,
+        identity: identityAdapter,
+        lint: lintModule,
+        indexer: indexerAdapter
+      });
+
+      return this.syncModule;
+
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message.includes('Could not find project root')) {
+          throw new Error("❌ GitGovernance not initialized. Run 'gitgov init' first.");
+        }
+        throw new Error(`❌ Failed to initialize sync module: ${error.message}`);
+      }
+      throw new Error("❌ Unknown error initializing sync module.");
+    }
+  }
+
+  /**
+   * Creates and returns ConfigManager instance
+   */
+  /**
+   * Creates and returns GitModule
+   */
+  async getGitModule(): Promise<Git.GitModule> {
+    if (this.gitModule) {
+      return this.gitModule;
+    }
+
+    try {
+      const projectRoot = process.env['GITGOV_ORIGINAL_DIR'] || Config.ConfigManager.findProjectRoot() || process.cwd();
+
+      // Create execCommand function for GitModule
+      const execCommand = (command: string, args: string[], options?: any) => {
+        return new Promise<{ exitCode: number; stdout: string; stderr: string }>((resolve) => {
+          const proc = spawn(command, args, {
+            cwd: options?.cwd || projectRoot,
+            env: { ...process.env, ...options?.env },
+          });
+
+          let stdout = '';
+          let stderr = '';
+
+          proc.stdout?.on('data', (data) => { stdout += data.toString(); });
+          proc.stderr?.on('data', (data) => { stderr += data.toString(); });
+
+          proc.on('close', (code) => {
+            resolve({ exitCode: code || 0, stdout, stderr });
+          });
+
+          proc.on('error', (error) => {
+            resolve({ exitCode: 1, stdout, stderr: error.message });
+          });
+        });
+      };
+
+      this.gitModule = new Git.GitModule({
+        repoRoot: projectRoot,
+        execCommand
+      });
+
+      return this.gitModule;
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message.includes('Could not find project root')) {
+          throw new Error("❌ GitGovernance not initialized. Run 'gitgov init' first.");
+        }
+        throw new Error(`❌ Failed to initialize Git module: ${error.message}`);
+      }
+      throw new Error("❌ Unknown error initializing Git module.");
+    }
+  }
+
+  async getConfigManager(): Promise<Config.ConfigManager> {
+    if (this.configManager) {
+      return this.configManager;
+    }
+
+    try {
+      const projectRoot = process.env['GITGOV_ORIGINAL_DIR'] || Config.ConfigManager.findGitgovRoot() || process.cwd();
+
+      // Create ConfigManager instance
+      this.configManager = new Config.ConfigManager(projectRoot);
+
+      return this.configManager;
+
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message.includes('Could not find project root')) {
+          throw new Error("❌ GitGovernance not initialized. Run 'gitgov init' first.");
+        }
+        throw new Error(`❌ Failed to initialize config manager: ${error.message}`);
+      }
+      throw new Error("❌ Unknown error initializing config manager.");
     }
   }
 

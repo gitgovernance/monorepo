@@ -35,15 +35,55 @@ jest.doMock('@gitgov/core', () => {
     ...overrides
   });
 
+  // Create ConfigManager mock with static methods
+  const ConfigManagerMock = Object.assign(
+    jest.fn().mockImplementation(() => ({
+      loadConfig: jest.fn().mockResolvedValue({
+        protocolVersion: '1.0.0',
+        projectId: 'test-project',
+        projectName: 'Test Project'
+      }),
+      loadSession: jest.fn().mockResolvedValue({
+        lastSession: {
+          actorId: 'human:test-user',
+          timestamp: new Date().toISOString()
+        },
+        actorState: {}
+      }),
+      saveConfig: jest.fn().mockResolvedValue(undefined),
+      saveSession: jest.fn().mockResolvedValue(undefined),
+      updateActorState: jest.fn().mockResolvedValue(undefined)
+    })),
+    {
+      // Static methods
+      findProjectRoot: jest.fn().mockReturnValue('/mock/project/root'),
+      findGitgovRoot: jest.fn().mockReturnValue('/mock/project/root'),
+      getGitgovPath: jest.fn().mockReturnValue('/mock/project/root/.gitgov'),
+      isGitgovProject: jest.fn().mockReturnValue(true)
+    }
+  );
+
   return {
     // 🎭 MOCK CONFIG: Mock configuration management
     Config: {
-      ConfigManager: {
-        findProjectRoot: jest.fn(),
-        findGitgovRoot: jest.fn(),
-        getGitgovPath: jest.fn(),
-        isGitgovProject: jest.fn()
-      }
+      ConfigManager: ConfigManagerMock,
+      createConfigManager: jest.fn().mockImplementation(() => ({
+        loadConfig: jest.fn().mockResolvedValue({
+          protocolVersion: '1.0.0',
+          projectId: 'test-project',
+          projectName: 'Test Project'
+        }),
+        loadSession: jest.fn().mockResolvedValue({
+          lastSession: {
+            actorId: 'human:test-user',
+            timestamp: new Date().toISOString()
+          },
+          actorState: {}
+        }),
+        saveConfig: jest.fn().mockResolvedValue(undefined),
+        saveSession: jest.fn().mockResolvedValue(undefined),
+        updateActorState: jest.fn().mockResolvedValue(undefined)
+      }))
     },
 
     // 🎭 MOCK STORE: Mock data persistence

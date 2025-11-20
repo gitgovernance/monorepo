@@ -29,7 +29,7 @@ describe('CycleCommand - Complete Unit Tests', () => {
   };
   let mockIndexerAdapter: {
     isIndexUpToDate: jest.MockedFunction<() => Promise<boolean>>;
-    getIndexData: jest.MockedFunction<() => Promise<{ cycles: Records.CycleRecord[]; metadata: { generatedAt: string } } | null>>;
+    getIndexData: jest.MockedFunction<() => Promise<{ cycles: Records.GitGovCycleRecord[]; metadata: { generatedAt: string } } | null>>;
     generateIndex: jest.MockedFunction<() => Promise<void>>;
     invalidateCache: jest.MockedFunction<() => Promise<void>>;
   };
@@ -56,6 +56,23 @@ describe('CycleCommand - Complete Unit Tests', () => {
     roles: ['author'],
     status: 'active'
   };
+
+  // Helper to wrap CycleRecord into GitGovCycleRecord
+  const createMockGitGovCycleRecord = (cycle: Records.CycleRecord): Records.GitGovCycleRecord => ({
+    header: {
+      version: '1.0' as const,
+      type: 'cycle' as const,
+      payloadChecksum: 'mock-checksum',
+      signatures: [{
+        keyId: 'human:test-user',
+        role: 'author',
+        notes: 'Created cycle',
+        signature: 'mock-signature',
+        timestamp: Date.now()
+      }] as [Records.Signature, ...Records.Signature[]]
+    },
+    payload: cycle
+  });
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -126,7 +143,7 @@ describe('CycleCommand - Complete Unit Tests', () => {
     it('[EARS-2] should verify cache freshness and use IndexerAdapter for performance', async () => {
       mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(true);
       mockIndexerAdapter.getIndexData.mockResolvedValue({
-        cycles: [sampleCycle],
+        cycles: [createMockGitGovCycleRecord(sampleCycle)],
         metadata: { generatedAt: new Date().toISOString() }
       });
 
@@ -141,7 +158,7 @@ describe('CycleCommand - Complete Unit Tests', () => {
     it('[EARS-3] should show cycle from cache with task hierarchy and metadata', async () => {
       mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(true);
       mockIndexerAdapter.getIndexData.mockResolvedValue({
-        cycles: [sampleCycle],
+        cycles: [createMockGitGovCycleRecord(sampleCycle)],
         metadata: { generatedAt: new Date().toISOString() }
       });
 
@@ -203,7 +220,7 @@ describe('CycleCommand - Complete Unit Tests', () => {
       mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(false);
       mockIndexerAdapter.generateIndex.mockResolvedValue();
       mockIndexerAdapter.getIndexData.mockResolvedValue({
-        cycles: [sampleCycle],
+        cycles: [createMockGitGovCycleRecord(sampleCycle)],
         metadata: { generatedAt: new Date().toISOString() }
       });
 
@@ -278,7 +295,7 @@ describe('CycleCommand - Complete Unit Tests', () => {
     it('[EARS-12] should show additional details with verbose flag', async () => {
       mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(true);
       mockIndexerAdapter.getIndexData.mockResolvedValue({
-        cycles: [sampleCycle],
+        cycles: [createMockGitGovCycleRecord(sampleCycle)],
         metadata: { generatedAt: new Date().toISOString() }
       });
 
@@ -292,7 +309,7 @@ describe('CycleCommand - Complete Unit Tests', () => {
       mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(false);
       mockIndexerAdapter.generateIndex.mockResolvedValue();
       mockIndexerAdapter.getIndexData.mockResolvedValue({
-        cycles: [sampleCycle],
+        cycles: [createMockGitGovCycleRecord(sampleCycle)],
         metadata: { generatedAt: new Date().toISOString() }
       });
 
@@ -402,7 +419,7 @@ describe('CycleCommand - Complete Unit Tests', () => {
     it('should use cache when up to date', async () => {
       mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(true);
       mockIndexerAdapter.getIndexData.mockResolvedValue({
-        cycles: [sampleCycle],
+        cycles: [createMockGitGovCycleRecord(sampleCycle)],
         metadata: { generatedAt: new Date().toISOString() }
       });
 
@@ -442,7 +459,7 @@ describe('CycleCommand - Complete Unit Tests', () => {
 
       mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(true);
       mockIndexerAdapter.getIndexData.mockResolvedValue({
-        cycles: cycles,
+        cycles: cycles.map(c => createMockGitGovCycleRecord(c)),
         metadata: { generatedAt: new Date().toISOString() }
       });
 
@@ -461,7 +478,7 @@ describe('CycleCommand - Complete Unit Tests', () => {
 
       mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(true);
       mockIndexerAdapter.getIndexData.mockResolvedValue({
-        cycles: cycles,
+        cycles: cycles.map(c => createMockGitGovCycleRecord(c)),
         metadata: { generatedAt: new Date().toISOString() }
       });
 

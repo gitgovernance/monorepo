@@ -163,6 +163,13 @@ describe('InitCommand - Complete Unit Tests', () => {
     // Create InitCommand
     initCommand = new InitCommand();
 
+    // SPY on getProjectAdapter to return our mock
+    // Note: Casting to access private method for testing purposes
+    jest.spyOn(
+      initCommand as unknown as { getProjectAdapter: () => Promise<typeof mockProjectAdapter> },
+      'getProjectAdapter'
+    ).mockResolvedValue(mockProjectAdapter);
+
     // Setup default mock returns for ALL tests
     mockProjectAdapter.validateEnvironment.mockResolvedValue(sampleValidEnvironment);
     mockProjectAdapter.initializeProject.mockResolvedValue(sampleInitResult);
