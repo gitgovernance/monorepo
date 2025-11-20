@@ -1,8 +1,9 @@
 import { DependencyInjectionService } from '../../services/dependency-injection';
 import type { Adapters, Records } from '@gitgov/core';
-import { Config } from '@gitgov/core';
+import { Config, Git, Lint, Sync } from '@gitgov/core';
 
 import * as pathUtils from 'path';
+import { spawn } from 'child_process';
 
 /**
  * Init Command Options interface
@@ -169,6 +170,9 @@ export class InitCommand {
 
       const workflowMethodologyAdapter = Adapters.WorkflowMethodologyAdapter.createDefault(feedbackAdapter);
 
+      // Create ConfigManager (needed by BacklogAdapter)
+      const configManager = Config.createConfigManager(projectRoot);
+
       const backlogAdapter = new Adapters.BacklogAdapter({
         taskStore,
         cycleStore,
@@ -181,17 +185,73 @@ export class InitCommand {
         metricsAdapter,
         workflowMethodologyAdapter,
         identity: identityAdapter,
-        eventBus
+        eventBus,
+        configManager
+      });
+
+      // Create IndexerAdapter for SyncModule
+      const indexerAdapter = new Adapters.FileIndexerAdapter({
+        metricsAdapter,
+        taskStore,
+        cycleStore,
+        feedbackStore,
+        executionStore,
+        changelogStore,
+        actorStore,
+        cacheStrategy: 'json',
+        cachePath: pathUtils.join(projectRoot, '.gitgov', 'index.json')
+      });
+
+      // Create execCommand for GitModule
+      const execCommand = (command: string, args: string[], options?: any) => {
+        return new Promise<{ exitCode: number; stdout: string; stderr: string }>((resolve) => {
+          const proc = spawn(command, args, {
+            cwd: options?.cwd || projectRoot,
+            env: { ...process.env, ...options?.env },
+          });
+
+          let stdout = '';
+          let stderr = '';
+
+          proc.stdout?.on('data', (data) => { stdout += data.toString(); });
+          proc.stderr?.on('data', (data) => { stderr += data.toString(); });
+
+          proc.on('close', (code) => {
+            resolve({ exitCode: code || 0, stdout, stderr });
+          });
+
+          proc.on('error', (error) => {
+            resolve({ exitCode: 1, stdout, stderr: error.message });
+          });
+        });
+      };
+
+      // Create GitModule
+      const gitModule = new Git.GitModule({
+        repoRoot: projectRoot,
+        execCommand
+      });
+
+      // Create LintModule
+      const lintModule = new Lint.LintModule({
+        recordStore: taskStore,
+        indexerAdapter
+      });
+
+      // Create SyncModule
+      const syncModule = new Sync.SyncModule({
+        git: gitModule,
+        config: configManager,
+        identity: identityAdapter,
+        lint: lintModule,
+        indexer: indexerAdapter
       });
 
       const projectAdapter = new Adapters.ProjectAdapter({
         identityAdapter,
         backlogAdapter,
-        workflowMethodologyAdapter,
-        configManager: Config.createConfigManager(projectRoot), // Pass explicit project root
-        taskStore,
-        cycleStore,
-        eventBus,
+        syncModule,
+        configManager,
       });
 
       return projectAdapter;

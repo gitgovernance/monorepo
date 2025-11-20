@@ -6,7 +6,12 @@ dist
 coverage
 tmp
 bin
+
 # GitGovernance
-.gitgov/.session.json
-.gitgov/actors/*.key
+# Ignore entire .gitgov/ directory (state lives in gitgov-state branch)
+.gitgov/
+
+# Exception: Don't ignore .gitgov/.gitignore itself (meta!)
+!.gitgov/.gitignore
+
 .env

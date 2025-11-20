@@ -73,6 +73,28 @@ const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation();
 const mockConsoleError = jest.spyOn(console, 'error').mockImplementation();
 const mockProcessExit = jest.spyOn(process, 'exit').mockImplementation();
 
+/**
+ * Helper to convert TaskRecord payload to GitGovTaskRecord with mock header.
+ * Mimics the structure that RecordStore would return from disk.
+ */
+function createMockGitGovTaskRecord(taskPayload: Records.TaskRecord): Records.GitGovTaskRecord {
+  return {
+    header: {
+      version: '1.0' as const,
+      type: 'task' as const,
+      payloadChecksum: 'mock-checksum',
+      signatures: [{
+        keyId: 'human:demo-user',
+        role: 'author',
+        notes: 'Created task',
+        signature: 'mock-signature',
+        timestamp: Date.now()
+      }] as [{ keyId: string; role: string; notes: string; signature: string; timestamp: number }]
+    },
+    payload: taskPayload
+  };
+}
+
 describe('DashboardCommand - Demo Optimizations', () => {
   let dashboardCommand: DashboardCommand;
   let mockBacklogAdapter: {
@@ -158,10 +180,17 @@ describe('DashboardCommand - Demo Optimizations', () => {
       ...sampleProductivityMetrics,
       ...sampleCollaborationMetrics
     },
+    derivedStates: {
+      stalledTasks: [],
+      atRiskTasks: [],
+      needsClarificationTasks: [],
+      blockedByDependencyTasks: []
+    },
     tasks: [],
     cycles: [],
     actors: [],
     enrichedTasks: [],
+    feedback: [],
     activityHistory: []
   };
 
@@ -256,6 +285,7 @@ describe('DashboardCommand - Demo Optimizations', () => {
         success: true,
         recordsProcessed: 10,
         metricsCalculated: 3,
+        derivedStatesApplied: 0,
         generationTime: 100,
         cacheSize: 2048,
         cacheStrategy: 'json',
@@ -318,6 +348,7 @@ describe('DashboardCommand - Demo Optimizations', () => {
         success: true,
         recordsProcessed: 15,
         metricsCalculated: 4,
+        derivedStatesApplied: 0,
         generationTime: 120,
         cacheSize: 3072,
         cacheStrategy: 'json',
@@ -403,6 +434,7 @@ describe('DashboardCommand - Demo Optimizations', () => {
         success: true,
         recordsProcessed: 50,
         metricsCalculated: 5,
+        derivedStatesApplied: 0,
         generationTime: 80, // Under 100ms
         cacheSize: 4096,
         cacheStrategy: 'json',
@@ -475,6 +507,7 @@ describe('DashboardCommand - Demo Optimizations', () => {
         success: true,
         recordsProcessed: 25,
         metricsCalculated: 6,
+        derivedStatesApplied: 0,
         generationTime: 150,
         cacheSize: 5120,
         cacheStrategy: 'json',
@@ -488,7 +521,7 @@ describe('DashboardCommand - Demo Optimizations', () => {
 
       const completeIndexData: Adapters.IndexData = {
         ...sampleIndexData,
-        tasks: [sampleTask],
+        tasks: [createMockGitGovTaskRecord(sampleTask)],
         activityHistory: demoActivity
       };
 

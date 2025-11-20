@@ -14,6 +14,7 @@ import { FeedbackAdapter } from '../feedback_adapter';
 import { ExecutionAdapter } from '../execution_adapter';
 import { ChangelogAdapter } from '../changelog_adapter';
 import { MetricsAdapter } from '../metrics_adapter';
+import { ConfigManager } from '../../config_manager';
 import { WorkflowMethodologyAdapter } from '../workflow_methodology_adapter';
 import { IdentityAdapter } from '../identity_adapter';
 import type { SystemDailyTickEvent, IEventStream } from '../../event_bus';
@@ -127,7 +128,10 @@ describe('BacklogAdapter - End-to-End Tests', () => {
           getSubscriptions: jest.fn(),
           clearSubscriptions: jest.fn(),
           waitForIdle: jest.fn().mockResolvedValue(undefined)
-        } as IEventStream
+        } as IEventStream,
+        configManager: {
+          updateActorState: jest.fn().mockResolvedValue(undefined)
+        } as unknown as ConfigManager
       };
 
       const backlogAdapter = new BacklogAdapter(mockDependencies as BacklogAdapterDependencies);

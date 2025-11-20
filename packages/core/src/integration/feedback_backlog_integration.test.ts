@@ -62,6 +62,7 @@ import { FeedbackAdapter } from '../adapters/feedback_adapter';
 import { BacklogAdapter } from '../adapters/backlog_adapter';
 import { IdentityAdapter } from '../adapters/identity_adapter';
 import { MetricsAdapter } from '../adapters/metrics_adapter';
+import { ConfigManager } from '../config_manager';
 import { WorkflowMethodologyAdapter } from '../adapters/workflow_methodology_adapter';
 import { RecordStore } from '../store';
 import { EventBus } from '../event_bus/event_bus';
@@ -140,7 +141,10 @@ describe('FeedbackAdapter <-> BacklogAdapter Integration (Real Event Communicati
       metricsAdapter, // REAL MetricsAdapter
       workflowMethodologyAdapter: workflowAdapter,
       identity: identityAdapter,
-      eventBus // SAME EventBus instance
+      eventBus, // SAME EventBus instance
+      configManager: {
+        updateActorState: jest.fn().mockResolvedValue(undefined)
+      } as unknown as ConfigManager
     });
 
     // Actor is already mocked in jest.doMock at the top

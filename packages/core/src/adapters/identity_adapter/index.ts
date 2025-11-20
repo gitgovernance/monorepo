@@ -252,15 +252,15 @@ export class IdentityAdapter implements IIdentityAdapter {
     // Replace placeholder signatures or add new signature if no placeholders exist
     const existingSignatures = record.header.signatures || [];
     const hasPlaceholder = existingSignatures.some(sig => sig.signature === 'placeholder');
-    
+
     let finalSignatures: [Signature, ...Signature[]];
     if (hasPlaceholder) {
       // Replace placeholder signatures with the real signature
-      const replaced = existingSignatures.map(sig => 
+      const replaced = existingSignatures.map(sig =>
         sig.signature === 'placeholder' ? signature : sig
       );
       // Ensure at least one signature (should always be true after replacement)
-      finalSignatures = replaced.length > 0 
+      finalSignatures = replaced.length > 0
         ? replaced as [Signature, ...Signature[]]
         : [signature];
     } else {

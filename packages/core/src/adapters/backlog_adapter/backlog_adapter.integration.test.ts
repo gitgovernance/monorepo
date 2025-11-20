@@ -46,6 +46,7 @@ import { ExecutionAdapter } from '../execution_adapter';
 import type { IFeedbackAdapter } from '../feedback_adapter';
 import { ChangelogAdapter } from '../changelog_adapter';
 import { MetricsAdapter } from '../metrics_adapter';
+import { ConfigManager } from '../../config_manager';
 import { eventBus } from '../../event_bus';
 import type {
   FeedbackCreatedEvent,
@@ -236,6 +237,9 @@ describe('BacklogAdapter Integration Tests', () => {
         getProductivityMetrics: jest.fn(),
         getCollaborationMetrics: jest.fn()
       } as unknown as MetricsAdapter,
+      configManager: {
+        updateActorState: jest.fn().mockResolvedValue(undefined)
+      } as unknown as ConfigManager,
     });
   });
 

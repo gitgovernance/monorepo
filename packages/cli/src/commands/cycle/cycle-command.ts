@@ -223,7 +223,7 @@ export class CycleCommand extends BaseCommand<BaseCommandOptions> {
         // 3. Use cache for performance
         const indexData = await indexerAdapter.getIndexData();
         if (indexData) {
-          cycles = indexData.cycles || [];
+          cycles = indexData.cycles?.map(c => c.payload) || [];
         } else {
           // Fallback to direct access
           cycles = await backlogAdapter.getAllCycles();
@@ -303,7 +303,7 @@ export class CycleCommand extends BaseCommand<BaseCommandOptions> {
         // Use cache first
         const indexData = await indexerAdapter.getIndexData();
         if (indexData) {
-          cycle = indexData.cycles?.find((c: Records.CycleRecord) => c.id === cycleId) || null;
+          cycle = indexData.cycles?.find((c) => c.payload.id === cycleId)?.payload || null;
         }
       }
 

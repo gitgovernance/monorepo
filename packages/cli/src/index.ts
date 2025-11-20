@@ -8,6 +8,9 @@ import { registerTaskCommands } from './commands/task/task';
 import { registerCycleCommands } from './commands/cycle/cycle';
 import { registerStatusCommands } from './commands/status/status';
 import { registerDashboardCommands } from './commands/dashboard/dashboard';
+import { registerContextCommands } from './commands/context/context';
+import { registerLintCommand } from './commands/lint/lint';
+import { registerSyncCommands } from './commands/sync/sync';
 import { DependencyInjectionService } from './services/dependency-injection';
 import packageJson from '../package.json' assert { type: 'json' };
 
@@ -23,6 +26,9 @@ async function setupCommands() {
   try {
     // Register init commands first (no dependencies required for basic usage)
     registerInitCommands(program);
+
+    // Register context commands (no dependencies required, uses ConfigManager)
+    registerContextCommands(program);
 
     // Register diagram commands (no dependencies required)
     const diagramCommand = new DiagramCommand();
@@ -46,6 +52,12 @@ async function setupCommands() {
 
     // Register dashboard commands
     registerDashboardCommands(program);
+
+    // Register lint commands
+    registerLintCommand(program);
+
+    // Register sync commands
+    registerSyncCommands(program);
 
   } catch (error) {
     // Handle initialization errors gracefully
@@ -91,7 +103,7 @@ setupCommands().then(() => {
     if (arg === '--' && index === 2) return false;
     return true;
   });
-  
+
   program.parse(args);
 }).catch((error) => {
   console.error("❌ Fatal error:", error);
