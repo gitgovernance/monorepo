@@ -28,9 +28,16 @@ import type {
   ConflictFileDiff,
   StateDeltaFile,
 } from "./types";
-import { readFileSync, existsSync, promises as fs } from "fs";
+import { readFileSync, existsSync, promises as fs, writeFileSync } from "fs";
 import { join } from "path";
 import path from "path";
+import { exec } from "child_process";
+import { promisify } from "util";
+import os from "os";
+import { SYNC_WHITELIST } from "./types";
+
+// Create reusable helper
+const execAsync = promisify(exec);
 
 const logger = createLogger("[SyncModule] ");
 
@@ -144,9 +151,6 @@ export class SyncModule {
 
         // Create local branch tracking remote
         // Use git checkout -b instead of checkoutOrphanBranch to create a tracking branch
-        const { exec } = await import("child_process");
-        const { promisify } = await import("util");
-        const execAsync = promisify(exec);
         const repoRoot = await this.git.getRepoRoot();
 
         try {
@@ -229,9 +233,6 @@ export class SyncModule {
       // 2. Clean staging area and create initial commit
       // After `git checkout --orphan`, all files from previous branch are staged
       // We need to clear them and create an empty initial commit
-      const { exec } = await import("child_process");
-      const { promisify } = await import("util");
-      const execAsync = promisify(exec);
 
       try {
         // Remove all staged files
@@ -688,9 +689,6 @@ export class SyncModule {
       let tempDir: string | null = null;
 
       if (isCurrentBranch) {
-        const { exec } = await import("child_process");
-        const { promisify } = await import("util");
-        const execAsync = promisify(exec);
         const repoRoot = await this.git.getRepoRoot();
 
         try {
@@ -704,15 +702,9 @@ export class SyncModule {
         // If untracked files exist, copy them to temp directory BEFORE stashing
         if (hasUntrackedGitgovFiles) {
           log('[EARS-43] Copying untracked .gitgov/ files to temp directory...');
-          const os = await import("os");
-          const path = await import("path");
-          const fs = await import("fs/promises");
 
           tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'gitgov-sync-'));
           log(`[EARS-43] Created temp directory: ${tempDir}`);
-
-          // Import whitelist
-          const { SYNC_WHITELIST } = await import("./types");
 
           // Copy each whitelisted path to temp
           for (const item of SYNC_WHITELIST) {
@@ -830,9 +822,6 @@ export class SyncModule {
       log('Checking if .gitgov/ exists in gitgov-state...');
       let isFirstPush = false;
       try {
-        const { exec } = await import("child_process");
-        const { promisify } = await import("util");
-        const execAsync = promisify(exec);
         const repoRoot = await this.git.getRepoRoot();
 
         // Check if .gitgov/ directory exists in gitgov-state branch
@@ -870,19 +859,11 @@ export class SyncModule {
       // [EARS-42] & [EARS-43] Copy files from source branch using whitelist
       log(`Checking out whitelisted .gitgov/ files from ${sourceBranch}...`);
 
-      // Import whitelist
-      const { SYNC_WHITELIST } = await import("./types");
-
       // Build paths for whitelist items
       const allWhitelistedPaths = SYNC_WHITELIST;
       log(`Whitelist paths: ${allWhitelistedPaths.join(', ')}`);
 
-      const { exec } = await import("child_process");
-      const { promisify } = await import("util");
-      const execAsync = promisify(exec);
       const repoRoot = await this.git.getRepoRoot();
-      const fs = await import("fs/promises");
-      const path = await import("path");
 
       // Note: untracked file detection was moved earlier, before stashing
 
@@ -958,9 +939,6 @@ export class SyncModule {
         await this.git.add([".gitgov"]);
 
         // Get list of staged files for commit message
-        const { exec } = await import("child_process");
-        const { promisify } = await import("util");
-        const execAsync = promisify(exec);
         const repoRoot = await this.git.getRepoRoot();
 
         try {
@@ -1075,7 +1053,6 @@ export class SyncModule {
       if (tempDir) {
         log('[EARS-43] Cleaning up temp directory...');
         try {
-          const fs = await import("fs/promises");
           await fs.rm(tempDir, { recursive: true, force: true });
           log('[EARS-43] Temp directory cleaned up');
         } catch (cleanupError) {
@@ -1155,11 +1132,29 @@ export class SyncModule {
       // Checkout to gitgov-state
       await this.git.checkoutBranch(stateBranch);
 
-      // Verify no uncommitted changes
-      const hasUncommitted = await this.git.hasUncommittedChanges();
-      if (hasUncommitted) {
-        await this.git.checkoutBranch(savedBranch);
-        throw new UncommittedChangesError(stateBranch);
+      // Verify no staged or modified changes (ignore untracked files)
+      // Untracked files from work branch are expected and harmless in gitgov-state
+      try {
+        const pullRepoRoot = await this.git.getRepoRoot();
+
+        // Check only for staged (A, M, D) or modified (M) files, NOT untracked (??)
+        const { stdout } = await execAsync('git status --porcelain', { cwd: pullRepoRoot });
+        const lines = stdout.trim().split('\n').filter(l => l);
+        const hasStagedOrModified = lines.some(line => {
+          const status = line.substring(0, 2);
+          // Ignore untracked files (??), only check for staged/modified
+          return status !== '??' && status.trim().length > 0;
+        });
+
+        if (hasStagedOrModified) {
+          await this.git.checkoutBranch(savedBranch);
+          throw new UncommittedChangesError(stateBranch);
+        }
+      } catch (error) {
+        if (error instanceof UncommittedChangesError) {
+          throw error;
+        }
+        // If git status fails, continue (branch might be clean)
       }
 
       // 2. Save current commit to compare later
@@ -1238,10 +1233,10 @@ export class SyncModule {
       // from gitgov-state to the filesystem so they're available for CLI commands
       const repoRoot = await this.git.getRepoRoot();
       const gitgovPath = path.join(repoRoot, ".gitgov");
-      
+
       // Check if .gitgov/ exists in gitgov-state
       const gitgovExists = await fs.access(gitgovPath).then(() => true).catch(() => false);
-      
+
       if (gitgovExists && hasNewChanges) {
         logger.debug("[pullState] Copying .gitgov/ to filesystem for work branch access");
         // Files will be copied when we return to savedBranch
@@ -1250,27 +1245,23 @@ export class SyncModule {
 
       // 7. Return to original branch
       await this.git.checkoutBranch(savedBranch);
-      
+
       // After returning to work branch, ensure .gitgov/ is accessible
       // If .gitgov/ is ignored, manually copy from gitgov-state
       if (gitgovExists) {
         try {
           // Check if .gitgov/ exists in current branch filesystem
           const gitgovExistsInWorkBranch = await fs.access(gitgovPath).then(() => true).catch(() => false);
-          
+
           if (!gitgovExistsInWorkBranch || hasNewChanges) {
             logger.debug("[pullState] Restoring .gitgov/ to filesystem from gitgov-state");
-            
+
             // Use git checkout to copy .gitgov/ from gitgov-state to filesystem
-            const { exec } = await import("child_process");
-            const { promisify } = await import("util");
-            const execAsync = promisify(exec);
-            
             await execAsync(`git checkout ${stateBranch} -- .gitgov/`, { cwd: repoRoot });
-            
+
             // Unstage the files (keep them untracked if .gitgov/ is ignored)
             await execAsync('git reset HEAD .gitgov/', { cwd: repoRoot });
-            
+
             logger.debug("[pullState] .gitgov/ restored to filesystem successfully");
           }
         } catch (error) {
@@ -1363,7 +1354,6 @@ export class SyncModule {
           );
 
           // Write back the updated Record
-          const { writeFileSync } = await import('fs');
           writeFileSync(fullPath, JSON.stringify(signedRecord, null, 2) + '\n', 'utf-8');
 
           logger.info(`Updated Record: ${filePath} (new checksum + resolver signature)`);
