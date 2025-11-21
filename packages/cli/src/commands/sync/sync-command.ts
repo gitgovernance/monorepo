@@ -2,6 +2,8 @@ import { Command } from 'commander';
 import { BaseCommand } from '../../base/base-command';
 import type { BaseCommandOptions } from '../../interfaces/command';
 import type { Sync, Config } from '@gitgov/core';
+import { promises as fs } from 'fs';
+import path from 'path';
 
 /**
  * SyncCommand Options - CLI flags and arguments for sync subcommands
@@ -203,13 +205,8 @@ export class SyncCommand extends BaseCommand {
       const syncModule = await this.dependencyService.getSyncModule();
       const configManager = await this.dependencyService.getConfigManager();
 
-      // Get actor ID from session
-      const session = await configManager.loadSession();
-      if (!session || !session.lastSession?.actorId) {
-        this.handleError('No active actor in session. Please initialize session first.', options);
-        return;
-      }
-      const actorId = session.lastSession.actorId;
+      // NOTE: Pull does NOT require an active actor (it's a read operation)
+      // Only push requires an actor (for commit authorship)
 
       if (!options.quiet) {
         console.log('🔄 Pulling state changes from gitgov-state...');
@@ -223,10 +220,13 @@ export class SyncCommand extends BaseCommand {
 
       // [EARS-14] Handle conflict detection
       if (pullResult.conflictDetected) {
-        // [EARS-29] Update session status to conflict
-        await configManager.updateActorState(actorId, {
-          syncStatus: { status: 'conflict' }
-        });
+        // [EARS-29] Update session status to conflict (if actor exists)
+        const session = await configManager.loadSession();
+        if (session?.lastSession?.actorId) {
+          await configManager.updateActorState(session.lastSession.actorId, {
+            syncStatus: { status: 'conflict' }
+          });
+        }
 
         this.handleError(
           this.formatConflictMessage(pullResult),
@@ -235,14 +235,17 @@ export class SyncCommand extends BaseCommand {
         return;
       }
 
-      // [EARS-28] Success - update session
+      // [EARS-28] Success - update session (if actor exists)
       if (pullResult.success) {
-        await configManager.updateActorState(actorId, {
-          syncStatus: {
-            lastSyncPull: new Date().toISOString(),
-            status: 'synced'
-          }
-        });
+        const session = await configManager.loadSession();
+        if (session?.lastSession?.actorId) {
+          await configManager.updateActorState(session.lastSession.actorId, {
+            syncStatus: {
+              lastSyncPull: new Date().toISOString(),
+              status: 'synced'
+            }
+          });
+        }
       }
 
       // Format output
@@ -439,8 +442,6 @@ export class SyncCommand extends BaseCommand {
    * [EARS-17] Check for conflict markers in .gitgov/ files
    */
   private async checkConflictMarkers(): Promise<boolean> {
-    const fs = await import('fs/promises');
-    const path = await import('path');
     const gitgovDir = path.join(process.cwd(), '.gitgov');
 
     try {
@@ -468,8 +469,6 @@ export class SyncCommand extends BaseCommand {
    * Recursively get all files in a directory
    */
   private async getAllFilesRecursively(dir: string): Promise<string[]> {
-    const fs = await import('fs/promises');
-    const path = await import('path');
     const entries = await fs.readdir(dir, { withFileTypes: true });
     const files: string[] = [];
 

@@ -2,6 +2,8 @@ import { Command } from 'commander';
 import { BaseCommand } from '../../base/base-command';
 import type { Records } from '@gitgov/core';
 import type { BaseCommandOptions } from '../../interfaces/command';
+import { promises as fs } from 'fs';
+import path from 'path';
 
 /**
  * Task Command Options interfaces
@@ -1111,9 +1113,6 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
    */
   private async readDescriptionFromFile(filePath: string): Promise<string> {
     try {
-      const fs = await import('fs/promises');
-      const path = await import('path');
-
       // Resolve path (handle relative paths)
       const resolvedPath = path.isAbsolute(filePath)
         ? filePath
@@ -1146,9 +1145,6 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
    */
   private async cleanupDescriptionFile(filePath: string, options: BaseCommandOptions): Promise<void> {
     try {
-      const fs = await import('fs/promises');
-      const path = await import('path');
-
       // Resolve path
       const resolvedPath = path.isAbsolute(filePath)
         ? filePath
