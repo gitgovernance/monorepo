@@ -199,6 +199,23 @@ export class SyncModule {
   }
 
   /**
+   * Checks if a remote is configured in the git repository.
+   *
+   * @param remoteName - Name of the remote to check (default: "origin")
+   * @returns true if the remote is configured, false otherwise
+   */
+  private async isRemoteConfigured(remoteName: string): Promise<boolean> {
+    try {
+      const repoRoot = await this.git.getRepoRoot();
+      const { stdout } = await execAsync(`git remote`, { cwd: repoRoot });
+      const remotes = stdout.trim().split("\n").filter(Boolean);
+      return remotes.includes(remoteName);
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Ensures that the gitgov-state branch exists both locally and remotely.
    * If it doesn't exist, creates it as an orphan branch.
    *
@@ -336,22 +353,31 @@ export class SyncModule {
       }
 
       // 5. Push with upstream (if remote is configured)
-      // Try to push - if it fails due to no remote, that's OK
-      try {
-        await this.git.pushWithUpstream(remoteName, stateBranch);
-      } catch (pushError) {
-        const pushErrorMsg = pushError instanceof Error ? pushError.message : String(pushError);
-        // Only ignore error if remote doesn't exist
-        // All other errors should be investigated/thrown
-        const isNoRemoteError =
-          pushErrorMsg.includes("does not appear to be") ||
-          pushErrorMsg.includes("Could not read from remote");
+      // First check if the remote is actually configured
+      const hasRemote = await this.isRemoteConfigured(remoteName);
 
-        if (!isNoRemoteError) {
-          // For other errors, propagate them (something went wrong)
-          throw new Error(`Failed to push state branch to remote: ${pushErrorMsg}`);
+      if (hasRemote) {
+        try {
+          await this.git.pushWithUpstream(remoteName, stateBranch);
+        } catch (pushError) {
+          const pushErrorMsg = pushError instanceof Error ? pushError.message : String(pushError);
+          // Only ignore error if it's a remote connectivity issue
+          // All other errors should be investigated/thrown
+          const isRemoteError =
+            pushErrorMsg.includes("does not appear to be") ||
+            pushErrorMsg.includes("Could not read from remote") ||
+            pushErrorMsg.includes("repository not found");
+
+          if (!isRemoteError) {
+            // For other errors, propagate them (something went wrong)
+            throw new Error(`Failed to push state branch to remote: ${pushErrorMsg}`);
+          }
+          // If remote connectivity issue, continue - local branch is functional
+          logger.info(`Remote '${remoteName}' not reachable, gitgov-state branch created locally only`);
         }
-        // If no remote configured, continue - local branch is functional
+      } else {
+        // No remote configured, continue - local branch is functional
+        logger.info(`No remote '${remoteName}' configured, gitgov-state branch created locally only`);
       }
 
       // 6. Return to original branch

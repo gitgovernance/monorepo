@@ -242,6 +242,20 @@ export class ProjectAdapter implements IProjectAdapter {
       // Create gitgov-state orphan branch if it doesn't exist
       await this.syncModule.ensureStateBranch();
 
+      // 6.6. Initial State Synchronization
+      // Push .gitgov/ directory to gitgov-state branch so it's not empty
+      // This ensures the remote has the initial project structure
+      try {
+        await this.syncModule.pushState({
+          actorId: actor.id,
+          dryRun: false,
+        });
+      } catch (pushError) {
+        // Non-critical: local setup is complete, remote sync can happen later
+        // This might fail if no remote is configured, which is OK
+        console.warn('⚠️ Initial state sync skipped (no remote or push failed). Run "gitgov sync push" when ready.');
+      }
+
       // 7. Session Initialization
       await this.initializeSession(actor.id, gitgovPath);
 
@@ -311,16 +325,18 @@ export class ProjectAdapter implements IProjectAdapter {
         suggestions.push("Ensure you have write permissions in the target directory");
       }
 
-      // Check if already initialized
+      // Check if already initialized (requires config.json, not just .gitgov/ directory)
       const gitgovPath = pathUtils.join(targetPath, '.gitgov');
+      const configPath = pathUtils.join(gitgovPath, 'config.json');
       let isAlreadyInitialized = false;
       try {
-        await fs.access(gitgovPath);
+        await fs.access(configPath);
         isAlreadyInitialized = true;
         warnings.push(`GitGovernance already initialized in directory: ${targetPath}`);
         suggestions.push("Use 'gitgov status' to check current state or choose a different directory");
       } catch {
-        // Directory doesn't exist, which is good
+        // config.json doesn't exist, so not fully initialized
+        // Note: An empty .gitgov/ directory from bootstrap is OK to init over
       }
 
       const isValid = isGitRepo && hasWritePermissions && !isAlreadyInitialized;
