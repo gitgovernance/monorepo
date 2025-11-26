@@ -1,0 +1,57 @@
+{
+  "header": {
+    "version": "1.0",
+    "type": "cycle",
+    "payloadChecksum": "55df97e74261305c575fc8dfcc0708de44bff9e4bc433ff87cdbfd1e13f18ceb",
+    "signatures": [
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "du2vG7mrAWCPJxjRSKHtVm3kqHy8iRo9Wn/M4q2EfSh4H/rVq76IBKK4FX8EpKe2uxr3RjuQHLQXUYmT0ktDAw==",
+        "timestamp": 1763344333
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "qsEVHwI77uUl75JKkjCyHNqqVgJcBWeb257NUmz2x9hhLZLX+26guxF4O+DyPhSnTF2YyV/lDKQF4KTEw6EXBg==",
+        "timestamp": 1763344457
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "CXls4A4ITLy0EAY5HipMprb7JwL4xXrt4Q2V1HIqUcKIKTNZWeyOb/EDbPVGTH8kBSmRPp0B0P0nvC7ZrR4QDA==",
+        "timestamp": 1763344458
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "RuUMKe7w3UecacKTCdzMlz1kGGaJG512+TPgzTsVYlA2Zp20R/MIxWp1iVJq+id+VKKgROftP5rohJI410nSCQ==",
+        "timestamp": 1763344459
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "IvQ/PCEg9M7Ynv03o0F7E23Bdzm8z6gVvCEi9qFFaANmOBqTLqln/zkr8tqVj98frrD2zdd/K9f0AjYbuzY2Dg==",
+        "timestamp": 1763344460
+      }
+    ]
+  },
+  "payload": {
+    "id": "1763344333-cycle-cycle-5-auto-sync-immediate-strategy",
+    "title": "Cycle 5: Auto-Sync Immediate Strategy",
+    "status": "planning",
+    "taskIds": [
+      "1763344457-task-add-auto-sync-in-backlogadapter-createtask-updatet",
+      "1763344458-task-implement-error-handling-for-auto-sync",
+      "1763344459-task-maintain-manual-commands-available",
+      "1763344460-task-create-adaptersyncmodule-integration-tests"
+    ],
+    "tags": [],
+    "notes": "Planning description for: Cycle 5: Auto-Sync Immediate Strategy"
+  }
+}

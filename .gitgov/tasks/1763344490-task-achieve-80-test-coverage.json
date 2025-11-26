@@ -1,0 +1,39 @@
+{
+  "header": {
+    "version": "1.0",
+    "type": "task",
+    "payloadChecksum": "c318190656373b1274203eb25182e3f2e83a0233685f26f29f399a22cd8fbcc3",
+    "signatures": [
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "zFqV9zDYOKvW1VI9yEyeEh56BEYesPsqL8HbPTnwFgGJvJ4oHIlUmRFJvgwGsZxxO0quM4uYUGlDlLh4ZuosAQ==",
+        "timestamp": 1763344490
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "j00Vaw8g1wQoJaiucS/eRp22wAUK224AJJiB45MWVMXHoIMwS76QGezGPxn0P5jKNCq7ya4o5smXJo7f1P1jDw==",
+        "timestamp": 1763344490
+      }
+    ]
+  },
+  "payload": {
+    "id": "1763344490-task-achieve-80-test-coverage",
+    "title": "Achieve >80% test coverage",
+    "status": "draft",
+    "priority": "high",
+    "description": "Identificar código sin tests y agregar tests faltantes. Objetivo >80% cobertura. GitModule >80%, SyncModule >85%, LocalSyncModule >80%. Istanbul coverage reports. Fix untested edge cases. Increase coverage systematically.",
+    "tags": [
+      "category:testing",
+      "cycle:07",
+      "package:core"
+    ],
+    "cycleIds": [
+      "1763344335-cycle-cycle-7-quality--polish"
+    ],
+    "references": []
+  }
+}

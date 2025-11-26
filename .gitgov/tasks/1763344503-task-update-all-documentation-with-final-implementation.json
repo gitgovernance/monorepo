@@ -1,0 +1,38 @@
+{
+  "header": {
+    "version": "1.0",
+    "type": "task",
+    "payloadChecksum": "960bb8a0f34dffe8e26ce7c459800ddc5d0d6517f20ba0537949f18ba0217e43",
+    "signatures": [
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "T9ZZ4HoT+uRt9q+hwlZqOG63/XL6WlX/12Vhe9+3vArZieyzr6j76FNIXj3V7eWyZuVpKIYkgBa1UaJDV1gpCQ==",
+        "timestamp": 1763344503
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "P4Yplae7tSUPpkRAjIdErEEimpzSOwbZf/75rBHWI9/mUJLtw4APgThb/PrKPS4poRR4ioLNLh6LjSohIsl7AQ==",
+        "timestamp": 1763344503
+      }
+    ]
+  },
+  "payload": {
+    "id": "1763344503-task-update-all-documentation-with-final-implementation",
+    "title": "Update all documentation with final implementation",
+    "status": "draft",
+    "priority": "high",
+    "description": "Actualizar Protocol docs, Core docs, CLI docs - verificar sincronización con código. Sync specs con implementation. API docs actualizadas. Examples correctos. Breaking changes documented. Docs review complete.",
+    "tags": [
+      "category:documentation",
+      "cycle:08"
+    ],
+    "cycleIds": [
+      "1763344346-cycle-cycle-8-documentation--release"
+    ],
+    "references": []
+  }
+}

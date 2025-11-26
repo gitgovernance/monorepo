@@ -1,0 +1,41 @@
+{
+  "header": {
+    "version": "1.0",
+    "type": "task",
+    "payloadChecksum": "c9c44ba1321aa35d0cec21ebff349d6403b26f0eb8b6a7abc06e214593bb6194",
+    "signatures": [
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "ppxhiqPm0KEGywg73OSSF3/8TQbfGa8NmeVmU4ogI48bJ69WWin5bjEDnNNdVCc/keoBQO8Epn4uHC9YuhK2Dg==",
+        "timestamp": 1763344492
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "R67LmsguVL0Q/YqkiHfWKXG+sBvrAIwkCOJpLbZHmL3TIr7mfewZQ/gowIcumU17RoSILqqVBbZDxkCLvISSAg==",
+        "timestamp": 1763344492
+      }
+    ]
+  },
+  "payload": {
+    "id": "1763344492-task-validate-and-update-troubleshooting-guide-with-rea",
+    "title": "Validate and update troubleshooting guide with real problems",
+    "status": "draft",
+    "priority": "medium",
+    "description": "Revisar troubleshooting guide contra problemas reales encontrados durante testing. Verificar: Síntoma, Diagnóstico, Causa Raíz, Solución, Prevención. Agregar problemas nuevos de Cycles 1-6. Comandos ejecutables validados.",
+    "tags": [
+      "category:documentation",
+      "cycle:07",
+      "package:documentation"
+    ],
+    "cycleIds": [
+      "1763344335-cycle-cycle-7-quality--polish"
+    ],
+    "references": [
+      "file:packages/blueprints/03_products/epics/collaboration_system/implementation_guide.md"
+    ]
+  }
+}

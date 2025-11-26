@@ -1,0 +1,66 @@
+{
+  "header": {
+    "version": "1.0",
+    "type": "task",
+    "payloadChecksum": "9a4f231c93d68374d2a354ea521bb32ddb19aa392ab04c93f3af258e17af3278",
+    "signatures": [
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "TDY2zhSQ/hDJARVf03rPzjqK+yFUu7gtXfWh81nSjEat/aVforZJPYtAmZfn0M1bFudbC9c0/34t8ZTzB7AxCg==",
+        "timestamp": 1763344405
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "Bol2A+5Qry6pv4KgKYIQVfC+IZt1nXLCbXSrSt+4SQomML1TDcy5qyK/V07EgU/gPZH5xQl/U8b3hKxrhO0ABw==",
+        "timestamp": 1763344405
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "submitter",
+        "notes": "Record signed",
+        "signature": "ESV9GUUf9rkiBP/MoPbVM91gR0+8uxQETuKER4SmQIjVrvhxz80SGXcKydH+Dgb8SaTtnSO9u7N705Cm1UAGCQ==",
+        "timestamp": 1763599461
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "approver",
+        "notes": "Record signed",
+        "signature": "na2bgEPiTJ6laRSOBxIbND+AN+VEZ/PO4gnnKrz2PGMQEE6t7bPpZUfWX+bmQV6uzmMp+2BPuRK7M7X7EQFcAA==",
+        "timestamp": 1763599471
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "executor",
+        "notes": "Record signed",
+        "signature": "E989iUVU6h0KA6054uV9c05oxA/v332FJ5RhHZs0JhNzmawRYpDnnbHQzy369TMDAMIYXfFbbNJSPQ1pQZ9jCA==",
+        "timestamp": 1763599480
+      }
+    ]
+  },
+  "payload": {
+    "id": "1763344405-task-implement-cli-commands-for-sync-pushpull",
+    "title": "Implement CLI commands for sync push/pull",
+    "status": "active",
+    "priority": "high",
+    "description": "Implementar comandos CLI que consumen SyncModule para operaciones manuales de sync.\\n\\n## ⚠️ DEPENDENCIAS CRÍTICAS\\n\\n**BLOQUEADA** - Requiere Task 1.1 (SyncModule) completado primero.\\n\\n## Comandos a Implementar\\n\\n### gitgov sync push\\n- Push local state a rama gitgov-state\\n- Actualizar syncStatus en .session.json (EARS 27)\\n- Output text/json\\n- Retry automático según config\\n\\n### gitgov sync pull\\n- Pull remote changes de gitgov-state\\n- Re-indexación automática post-pull (EARS 15)\\n- Actualizar syncStatus en .session.json (EARS 28)\\n- Output text/json\\n\\n## Referencias\\n\\n- sync_push.ts - Comando push\\n- sync_pull.ts - Comando pull\\n- sync_command.md - Especificación completa\\n\\n## 💡 Implementación\\n\\n**Ubicación**: packages/cli/src/commands/sync/\\n\\n**Flujo Típico**:\\n1. Validar que estamos en proyecto GitGovernance\\n2. Cargar SyncModule\\n3. Ejecutar operación (push/pull)\\n4. Actualizar .session.json con resultado\\n5. Mostrar resultado al usuario\\n\\n**Output Formats**:\\n- Text: Para uso humano\\n- JSON: Para scripting\\n\\n## ✅ Criterios de Aceptación\\n\\n- [ ] gitgov sync push funciona correctamente\\n- [ ] gitgov sync pull funciona correctamente\\n- [ ] syncStatus se actualiza en .session.json\\n- [ ] Re-indexación automática después de pull\\n- [ ] Manejo de errores claro\\n- [ ] Output en formato text y json\\n- [ ] Help text completo\\n\\n## Tags\\n\\nskill:cli, skill:typescript",
+    "tags": [
+      "category:feature",
+      "cycle:01",
+      "package:cli",
+      "skill:typescript",
+      "skill:cli"
+    ],
+    "cycleIds": [
+      "1763344330-cycle-cycle-1-syncmodule-basic---manual-sync"
+    ],
+    "references": [
+      "file:packages/cli/src/commands/sync/sync_push.ts",
+      "file:packages/cli/src/commands/sync/sync_pull.ts",
+      "file:packages/blueprints/03_products/cli/specs/sync_command.md"
+    ]
+  }
+}

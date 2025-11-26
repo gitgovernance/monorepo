@@ -1,0 +1,39 @@
+{
+  "header": {
+    "version": "1.0",
+    "type": "task",
+    "payloadChecksum": "d572fabcf65f76cfb301455db134faa42e1868088ab9631bfddeb8cc739fa8b1",
+    "signatures": [
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "dJ3LezOzu/ZRaxVpkgKK8h+tguDo84DW+TlrowoW6jkmhvZp8fDRkyBHCWU+IFjYhJQUYKRI4ffE/S5y9a4OBA==",
+        "timestamp": 1763344459
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "xoA5BmlLZAeyw15O2IC0V838YfKSrwpGcTcpjS0Wpn3utkrqrm/1KNe0sZrFZ5JBq2xs0rsvoCSOg+eMYF8ADw==",
+        "timestamp": 1763344459
+      }
+    ]
+  },
+  "payload": {
+    "id": "1763344459-task-maintain-manual-commands-available",
+    "title": "Maintain manual commands available",
+    "status": "draft",
+    "priority": "low",
+    "description": "Asegurar que gitgov sync push/pull siguen funcionando para control manual. Los comandos manuales siempre disponibles aunque auto-sync esté habilitado. Testing de compatibilidad.",
+    "tags": [
+      "category:validation",
+      "cycle:05",
+      "package:cli"
+    ],
+    "cycleIds": [
+      "1763344333-cycle-cycle-5-auto-sync-immediate-strategy"
+    ],
+    "references": []
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "header": {
+    "version": "1.0",
+    "type": "task",
+    "payloadChecksum": "a6acf672faca9c18b7067ee0a7f5e5bc87c9401d9addf400ebfbf92869798d83",
+    "signatures": [
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "iW57xz4O3XZT61YpAhNqDspQBqtPd4+RjdbUsxn5XVGkCjsd/7jnaQVbcNET+PTYDP0VPPeht3/wmwN23VwcBA==",
+        "timestamp": 1763344418
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "QAeYn8lhwx0jnECM7B3QAWspd47h7I/tqNYN4NYPS63qrouZKZv22HYqdajBbsMLeeKVFKnKbBOk6v+/Z3quCg==",
+        "timestamp": 1763344418
+      }
+    ]
+  },
+  "payload": {
+    "id": "1763344418-task-add-deduplication-in-eventbus",
+    "title": "Add deduplication in EventBus",
+    "status": "draft",
+    "priority": "high",
+    "description": "Agregar campo  a DomainEvent y lógica de deduplicación con ventana de 1 segundo.\\n\\n## Problema a Resolver\\n\\nCuando LocalSyncModule emite eventos y Adapters también emiten eventos, podemos tener DUPLICADOS:\\n- Adapter crea task → emite task.created\\n- File watcher detecta nuevo JSON → emite task.created (duplicado!)\\n\\n## Solución: Deduplicación\\n\\n### 1. Agregar campo \\n\\n\\n### 2. Agregar campo \\nIdentificador único del Record para detectar duplicados\\n\\n### 3. Ventana de deduplicación: 1 segundo\\nSi mismo evento (tipo + recordId) se emite 2 veces en 1s, ignorar el segundo.\\n\\n## Referencias\\n\\n- event_bus.ts - EventBus actualizado\\n- event_bus_module.md - Especificación\\n\\n## Implementación\\n\\n**Cache de eventos recientes:**\\n- Map<string, timestamp>\\n- Key: \\n- TTL: 1000ms\\n\\n**Flujo:**\\n1. Evento llega a emit()\\n2. Generar key = \\n3. Si key existe en cache (< 1s): ignorar\\n4. Si no: emitir + agregar a cache\\n\\n## Criterios de Aceptación\\n\\n- [ ] Campo source agregado\\n- [ ] Campo recordId agregado\\n- [ ] Deduplicación funciona (ventana 1s)\\n- [ ] Tests de deduplicación pasan\\n- [ ] Performance no afectada\\n\\nTags: skill:typescript, skill:event-bus",
+    "tags": [
+      "category:feature",
+      "cycle:02",
+      "package:core",
+      "skill:typescript"
+    ],
+    "cycleIds": [
+      "1763344331-cycle-cycle-2-local-sync---file-watchers"
+    ],
+    "references": [
+      "file:packages/core/src/event_bus/event_bus.ts",
+      "file:packages/blueprints/03_products/core/specs/modules/event_bus_module/event_bus_module.md"
+    ]
+  }
+}

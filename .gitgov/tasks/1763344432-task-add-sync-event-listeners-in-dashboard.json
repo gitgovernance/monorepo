@@ -1,0 +1,39 @@
+{
+  "header": {
+    "version": "1.0",
+    "type": "task",
+    "payloadChecksum": "eede8144b2b75f7137898ad142de9d332221be1e9575f97d09deff30bd4eba65",
+    "signatures": [
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "8iM7orKqNepEhkTs2bdhxehpaY7QIfFm98jD0N0DhjiKUt7fW1Mjj6OQQfTtsdxhrOKEOTsvjDFzz7JDxMeTCQ==",
+        "timestamp": 1763344432
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "e8qjs+u/KQkqISYjTJS7mIDr/eQIPvy6v9/bh7Qhps/UVjQQ86urV/sTux1BmyAZUsuU5P1L6elCc8MW5EQLDQ==",
+        "timestamp": 1763344432
+      }
+    ]
+  },
+  "payload": {
+    "id": "1763344432-task-add-sync-event-listeners-in-dashboard",
+    "title": "Add sync event listeners in Dashboard",
+    "status": "draft",
+    "priority": "medium",
+    "description": "Escuchar eventos sync.* del EventBus y actualizar UI en tiempo real.\\n\\n## Eventos a Escuchar\\n\\n### sync.push.started\\n- Mostrar spinner en SyncIndicator\\n- Log: \"Pushing changes...\"\\n\\n### sync.push.completed\\n- Actualizar SyncIndicator a \"Synced\"\\n- Log: \"Push completed: X records\"\\n\\n### sync.pull.started\\n- Mostrar spinner en SyncIndicator\\n- Log: \"Pulling changes...\"\\n\\n### sync.pull.completed\\n- Actualizar Dashboard con nuevos datos\\n- Mostrar notificación: \"X new changes from remote\"\\n- Re-render task lists\\n\\n### sync.conflict.detected\\n- Mostrar notificación crítica\\n- Cambiar SyncIndicator a \"Error\"\\n- Sugerir comando: gitgov sync resolve\\n\\n### sync.error\\n- Mostrar error en SyncIndicator\\n- Log detallado del error\\n- Mantener datos locales\\n\\n## Implementación\\n\\n**Setup en Dashboard.tsx**:\\n\\n\\n## Criterios de Aceptación\\n\\n- [ ] Todos los eventos sync.* escuchados\\n- [ ] UI se actualiza en <200ms\\n- [ ] Notificaciones claras y no intrusivas\\n- [ ] Dashboard re-render automático post-pull\\n- [ ] No memory leaks (cleanup correcto)\\n\\nTags: skill:react, skill:event-bus, skill:typescript",
+    "tags": [
+      "category:feature",
+      "cycle:03",
+      "package:cli"
+    ],
+    "cycleIds": [
+      "1763344332-cycle-cycle-3-dashboard-integration"
+    ],
+    "references": []
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "header": {
+    "version": "1.0",
+    "type": "task",
+    "payloadChecksum": "51dbb7a37566300bd1e63273b47717fe29b0b6fd6f46c03f4b9f593e11178dba",
+    "signatures": [
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "howPQyJqjYmgoG8uCyFmtBAatZuGu/Cfbm/FazBzfzfWjtgfo4H9sDfdO1BpIlqvsaHNF5TV7jYh1RYBB2KcBw==",
+        "timestamp": 1763344446
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "y3WL3y2JQdViCnIk6Xsep5IuoCn2IDstLlDnSTtXH5sihPljBuVdvFFIKa3TSIFBIu5hc6H3LIEyIdivemKKCw==",
+        "timestamp": 1763344446
+      }
+    ]
+  },
+  "payload": {
+    "id": "1763344446-task-implement-cli-command-gitgov-sync-audit",
+    "title": "Implement CLI command gitgov sync audit",
+    "status": "draft",
+    "priority": "medium",
+    "description": "Crear comando para auditoría completa del estado de gitgov-state.\\n\\n## Comando\\n\\ngitgov sync audit [options]\\n\\n## Flags\\n\\n- --no-signatures: Skip validación de firmas\\n- --no-checksums: Skip validación de checksums\\n- --no-files: Skip validación de archivos\\n- --scope <dir>: Auditar solo un directorio (.gitgov/tasks/)\\n\\n## Auditoría Completa\\n\\n1. Resoluciones: Verificar que cada rebase tiene commit de resolución\\n2. Firmas: Verificar firmas Ed25519 de todos los Records\\n3. Checksums: Verificar SHA256 de todos los payloads\\n4. Archivos: Verificar que no hay archivos corruptos\\n\\n## Output\\n\\n📊 Audit Report\\n  ✅ Resolutions: 5/5 valid\\n  ✅ Signatures: 142/142 valid  \\n  ✅ Checksums: 142/142 valid\\n  ✅ Files: 142/142 accessible\\n  \\n  Result: ✅ State is healthy\\n\\n## EARS Cubiertos\\n\\n21-26: Operación audit completa\\n\\nTags: skill:cli, skill:validation",
+    "tags": [
+      "category:feature",
+      "cycle:04",
+      "package:cli"
+    ],
+    "cycleIds": [
+      "1763344332-cycle-cycle-4-conflict-resolution"
+    ],
+    "references": [
+      "file:packages/cli/src/commands/sync/sync_audit.ts"
+    ]
+  }
+}

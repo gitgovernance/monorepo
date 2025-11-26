@@ -1,0 +1,38 @@
+{
+  "header": {
+    "version": "1.0",
+    "type": "task",
+    "payloadChecksum": "6afc6be40c9351097f15c13d68c981288404690b990693d1cf6fa66add079554",
+    "signatures": [
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "ehhS9I5fQOHfUkY6vErHP/Mcm1xDzn9UROeOU8LfjIhe1eqNj78OqoRZ4FjJoqfHT+GQQgwIh78tzHjOp853Bg==",
+        "timestamp": 1763344505
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "g1JS3eNDxRXBYKrOBVqFTz6VMiRMSBLKN2UTJKlLf5kB+1Uo5gZjW0zZiCsSZ0zFqlaQLcsN/8acr9E7mcnXDA==",
+        "timestamp": 1763344505
+      }
+    ]
+  },
+  "payload": {
+    "id": "1763344505-task-create-release-notes-v110",
+    "title": "Create release notes v1.1.0",
+    "status": "draft",
+    "priority": "low",
+    "description": "Resumen ejecutivo, features principales, ejemplos de uso, known issues. Marketing-friendly format. Video demos. Screenshots. Community announcement draft. Highlight key improvements.",
+    "tags": [
+      "category:documentation",
+      "cycle:08"
+    ],
+    "cycleIds": [
+      "1763344346-cycle-cycle-8-documentation--release"
+    ],
+    "references": []
+  }
+}

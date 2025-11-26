@@ -1,0 +1,43 @@
+{
+  "header": {
+    "version": "1.0",
+    "type": "task",
+    "payloadChecksum": "aa7fca47a33ffc5feb1ca9ad0fce98917a77e612ad32b55757a4eb14cbceb61b",
+    "signatures": [
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "AngcX1gkolmWR4H/GIoRyv567Z/d/sjCV+2MCzjnTlEUfXET9DI5PdWpkqCe1fB5ihh32GR1qfqlqXjR9tAUDg==",
+        "timestamp": 1763344420
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "/KBgRzWwxC8wngcktje2KiiRf7u0fwMkV6GSqwRO1x5CSIr3D3MNMUe7UGaAasCJTm2n8BCRl2cDxxMdIhymCA==",
+        "timestamp": 1763344420
+      }
+    ]
+  },
+  "payload": {
+    "id": "1763344420-task-create-tests-for-localsync-and-deduplication",
+    "title": "Create tests for LocalSync and deduplication",
+    "status": "draft",
+    "priority": "high",
+    "description": "Tests para file watchers, debouncing, y deduplicación de eventos.\\n\\n## Test Coverage\\n\\n### LocalSync Tests (5 tests)\\n1. Watcher detecta file added\\n2. Watcher detecta file changed\\n3. Watcher detecta file removed\\n4. Debouncing 300ms funciona\\n5. Checksum validation antes de emitir\\n\\n### EventBus Deduplication Tests (4 tests)\\n1. Duplicado en ventana 1s es ignorado\\n2. Evento después de 1s se emite\\n3. source field se preserva\\n4. recordId field se preserva\\n\\n## Referencias\\n\\n- local_sync.test.ts - Tests LocalSync\\n- event_bus.test.ts - Tests deduplication\\n\\n## Target Coverage\\n\\n>80% en ambos módulos\\n\\nTags: skill:jest, skill:testing",
+    "tags": [
+      "category:testing",
+      "cycle:02",
+      "package:core",
+      "skill:jest"
+    ],
+    "cycleIds": [
+      "1763344331-cycle-cycle-2-local-sync---file-watchers"
+    ],
+    "references": [
+      "file:packages/core/src/modules/sync/local_sync.test.ts",
+      "file:packages/core/src/event_bus/event_bus.test.ts"
+    ]
+  }
+}

@@ -1049,8 +1049,37 @@ export class SyncModule {
         }
       }
 
-      // [EARS-43] Cleanup temp directory
+      // [EARS-43] Restore untracked files from temp directory back to working tree
+      // This is CRITICAL: stash only preserves tracked files, untracked files need manual restoration
       if (tempDir) {
+        log('[EARS-43] Restoring untracked files from temp directory to working tree...');
+        const repoRoot = await this.git.getRepoRoot();
+
+        for (const item of SYNC_WHITELIST) {
+          const sourcePath = path.join(tempDir, item);
+          const destPath = path.join(repoRoot, '.gitgov', item);
+
+          try {
+            const stat = await fs.stat(sourcePath);
+
+            if (stat.isDirectory()) {
+              // Copy directory recursively, preserving untracked files
+              await fs.cp(sourcePath, destPath, { recursive: true, force: true });
+              log(`[EARS-43] Restored directory to working tree: ${item}`);
+            } else if (stat.isFile()) {
+              // Copy file
+              await fs.mkdir(path.dirname(destPath), { recursive: true });
+              await fs.copyFile(sourcePath, destPath);
+              log(`[EARS-43] Restored file to working tree: ${item}`);
+            }
+          } catch (error) {
+            // Path doesn't exist in temp, skip (it may have been a tracked-only path)
+            log(`[EARS-43] Path ${item} not in temp, skipping restoration`);
+          }
+        }
+        log('[EARS-43] Untracked files restored to working tree');
+
+        // Cleanup temp directory
         log('[EARS-43] Cleaning up temp directory...');
         try {
           await fs.rm(tempDir, { recursive: true, force: true });

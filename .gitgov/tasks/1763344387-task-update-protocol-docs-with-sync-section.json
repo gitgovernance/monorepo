@@ -1,0 +1,71 @@
+{
+  "header": {
+    "version": "1.0",
+    "type": "task",
+    "payloadChecksum": "473ad4984eb22964839b1ec1ab73394d54283c1212f00fd7b4070b4b85ac5685",
+    "signatures": [
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "m9XcaDsNQF6sC7mengGqgpO9LNjQvtQbFgGkrXZdFvnEl1JJGd4ejxIFRz9Mbe8hWpBCrmooL91AEhFxUV/cBA==",
+        "timestamp": 1763344387
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "BUlFf9773uwuHu569KdGsMpeJ4Dham5oEx4G00U8WvRjeJbmgtyND5K0vYah/yUBPS+tKZSggWKtekPwDa+MCA==",
+        "timestamp": 1763344387
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "submitter",
+        "notes": "Record signed",
+        "signature": "Kj8Y12kWad7L+20bwfIWym6TmdtBVHe8s3W4k905h7ZGOf+5uSl2TL8Ke+6f9rDniVd2jMAYcMa4SpFX20IwAQ==",
+        "timestamp": 1763345872
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "approver",
+        "notes": "Record signed",
+        "signature": "mbFB/dT3ECvtiAmu8S8VGd9tOP1fFeOG2y/DrmCI/Dn2VqTWtGvdoR7I05lN0QmA7z/nb6MnMqV6j7TsRENlCA==",
+        "timestamp": 1763345879
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "executor",
+        "notes": "Record signed",
+        "signature": "SyNmzDrbZBRgdZOvttXuM776490eA5o859SttD3ZUOnHnEAfbe5SWCz2Ubk96xoT9n0t9zRBKi5GSD9bB+HPAA==",
+        "timestamp": 1763345886
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "approver",
+        "notes": "Record signed",
+        "signature": "QrQS1G1aHrVI8zoYyBQ/rurOZtDbGQF/VtZzGtAim48jL1a8YdjWbmgAZYOwICjWHWy6Mdl4WBcbaTRE+h4kDA==",
+        "timestamp": 1763349539
+      }
+    ]
+  },
+  "payload": {
+    "id": "1763344387-task-update-protocol-docs-with-sync-section",
+    "title": "Update Protocol docs with sync section",
+    "status": "done",
+    "priority": "high",
+    "description": "Actualizar los documentos de protocolo para incluir configuración de sincronización y estado de sesión.\\n\\n## Referencias\\n\\n- state_sync.md - Protocolo consolidado de sincronización (incluye arquitectura de gitgov-state § 2.3-2.4, resolución de conflictos § 4-5)\\n- config_file.md - Sección state.sync agregada\\n- session_state.md - Campo syncStatus agregado\\n\\n## Notas Completadas\\n\\n✅ state_sync.md actualizado con arquitectura consolidada (+150-200 líneas)\\n✅ config_file.md actualizado con sección state.sync\\n✅ session_state.md actualizado con syncStatus en actorState\\n✅ Consolidados sync_architecture.md, state_branch.md y conflict_resolution_protocol.md en state_sync.md",
+    "tags": [
+      "category:documentation",
+      "cycle:00",
+      "package:protocol"
+    ],
+    "cycleIds": [
+      "1763344317-cycle-cycle-00-setup--documentation"
+    ],
+    "references": [
+      "file:packages/blueprints/03_products/protocol/99_appendices/state_sync.md",
+      "file:packages/blueprints/03_products/protocol/99_appendices/config_file.md",
+      "file:packages/blueprints/03_products/protocol/99_appendices/session_state.md"
+    ]
+  }
+}

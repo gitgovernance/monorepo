@@ -1,0 +1,65 @@
+{
+  "header": {
+    "version": "1.0",
+    "type": "task",
+    "payloadChecksum": "c9b6b4208bb1e805b3cc483bed1c95cd7b3c97f4f0de36d58e914c52494d4625",
+    "signatures": [
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "AzqijG8z/0mkWC7VjMSW698GUNPSD6LzmjRjpWF0ERWOE9N+ZiypgtaoEaOOIiJW0CUoUwgdiV82tAoim+wYAA==",
+        "timestamp": 1762699192
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "submitter",
+        "notes": "Record signed",
+        "signature": "GL1pLzz0fO13A4upYeY5IR9IdQLGtYtbgfSP5Yas9BUVSn1wTB77vaQUjcmZsvgcpjgejZsQne8zIHSuvJBvAA==",
+        "timestamp": 1762699226
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "approver",
+        "notes": "Record signed",
+        "signature": "8PUc+feVAZZB7zsOz3vKQ0Uoo2r95E5hBwJaSrdJ49AFOnc+MxKCs4g9a/ZQklHCKYBD6bUlYowCZfY4mozoAQ==",
+        "timestamp": 1762699226
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "executor",
+        "notes": "Record signed",
+        "signature": "vBufy7I16pwPoxQEtAP+0xDL+R5xO/cZRSOt9IGoUATAHDbv2KGZ5yclbHHCxaLezbhZ7GZYDiU1CWowzjTrBQ==",
+        "timestamp": 1762699227
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "approver",
+        "notes": "Record signed",
+        "signature": "3tLxDtL327FOu4S1L/+7Ly8rRi8KgkqDes86a+mf2OAlySxL3sbpqgbppqS5aijUJ4hiXT7Qcty6EJVnmrHNAg==",
+        "timestamp": 1762938905
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "r0ICpt0myYTVBOtYOggXKfblhaDAz50dZpu4QAQTKvPA4bUkj7jT+WshoXSbA1au5kuea7dGRxw2o6XU6KxADw==",
+        "timestamp": 1763344809
+      }
+    ]
+  },
+  "payload": {
+    "id": "1762699192-task-update-dashboard-priority-colors-high-to-orange",
+    "title": "Update dashboard priority colors: high to orange",
+    "status": "done",
+    "priority": "medium",
+    "description": "Change priority color mapping in dashboard: high priority should use orange (🟠) instead of yellow (🟡), while keeping medium as blue (🔵). This improves visual hierarchy and semantic clarity.",
+    "tags": [],
+    "references": [
+      "pr:https://github.com/gitgovernance/monorepo/pull/57"
+    ],
+    "cycleIds": [
+      "1763344784-cycle-tareas-hurfanas-consolidadas"
+    ]
+  }
+}

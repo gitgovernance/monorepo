@@ -1,0 +1,15 @@
+{
+  "lastSession": {
+    "actorId": "human_camilo",
+    "workflowMethodology": "human_workflow",
+    "timestamp": "2024-11-20T00:00:00.000Z"
+  },
+  "actorState": {
+    "human_camilo": {
+      "syncStatus": {
+        "status": "pending"
+      },
+      "lastSync": "2025-11-26T02:13:49.118Z"
+    }
+  }
+}

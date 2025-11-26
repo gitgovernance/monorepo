@@ -1,0 +1,57 @@
+{
+  "header": {
+    "version": "1.0",
+    "type": "cycle",
+    "payloadChecksum": "e38c9e5032b4fd4ca9ed3a4f34ba5a7bd8181b06cd39e48c72174de550fa2683",
+    "signatures": [
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "xeXbVc5KPAevA+N+m2F7JRSXLxQ2w07o2cxwzo1hhxhS6Qjc2MEd/b85JsK0RSLt/O1//RFuH8qbzoWeHIBUBA==",
+        "timestamp": 1763344332
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "q3beoPTqlCr/6ujodOVZLFmNcwR8r8fjroQygx70ytEazbRKnITv9iQ9u4Zy2qhegWcWQnUZAG4JSRAzG4ZYDg==",
+        "timestamp": 1763344430
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "vdc8By+SyZayL/Squ9JFxhXTRu1sGUa5AK7zmYyKu5dTxF0rd2KvYQDJ4dRmO+REHZkK0bRP16zgcq6Vu4BrAQ==",
+        "timestamp": 1763344431
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "0g2+cd5DNVvxBLkBamXoemFbi4+GOSFnhjFY/DVj/q45HoNX9d+THFRqNecwx5gDLz8Yi03QZpEFFLvxVFENAw==",
+        "timestamp": 1763344432
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "k5dHWENBlRlrcCYM7z5pLagWyxj4KCZxJy3qAP5BRko2Nsek5hStmVBHPYJ7kkwnGcZ1Rfbzzthfyx+b3Z/2CA==",
+        "timestamp": 1763344433
+      }
+    ]
+  },
+  "payload": {
+    "id": "1763344332-cycle-cycle-3-dashboard-integration",
+    "title": "Cycle 3: Dashboard Integration",
+    "status": "planning",
+    "taskIds": [
+      "1763344430-task-create-syncindicator-component-for-dashboard",
+      "1763344431-task-implement-auto-pull-on-dashboard-start",
+      "1763344432-task-add-sync-event-listeners-in-dashboard",
+      "1763344433-task-expose-syncmodulegetstatus-for-dashboard"
+    ],
+    "tags": [],
+    "notes": "Planning description for: Cycle 3: Dashboard Integration"
+  }
+}

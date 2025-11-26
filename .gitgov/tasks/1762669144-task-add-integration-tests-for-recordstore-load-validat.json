@@ -1,0 +1,40 @@
+{
+  "header": {
+    "version": "1.0",
+    "type": "task",
+    "payloadChecksum": "daa4dbc18757ca2e7ea29987e153561c66d6df8e3beebddfc39f4f528e9c853e",
+    "signatures": [
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Task created",
+        "signature": "DE0J7NLyT3bMrE+KltG/B+6SE5BuMIo/hb153TEmxQoS5z7+w08IrAuXzHmax8fp4FVcL3ZXnxHdmndxHFk8AQ==",
+        "timestamp": 1762669266
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "5AAUkYN4e7pviBfnCCnkijNO6t9ROR0vNQLXVbwJgj5KzdvIeGjPPamYSxFhB7qckTGhcWCpVu3WWQ+VhzA/BQ==",
+        "timestamp": 1763344818
+      }
+    ]
+  },
+  "payload": {
+    "id": "1762669144-task-add-integration-tests-for-recordstore-load-validat",
+    "title": "Add Integration Tests for RecordStore Load Validation",
+    "status": "draft",
+    "priority": "low",
+    "description": "# Add Integration Tests for RecordStore Load Validation\n\n## Context\n\nThis task was deferred from task:1762449462-task-add-load-validation-methods-to-record-factories. The core functionality (load() validation methods) has been implemented and is working correctly. Unit tests cover the main scenarios, but integration tests with real files were left as future work.\n\n## Problem\n\nWhile unit tests verify the validation logic works correctly, we lack integration tests that:\n- Test with real `.gitgov/` files on disk\n- Verify end-to-end behavior when reading corrupted/invalid records\n- Ensure the indexer gracefully handles invalid data in production scenarios\n\n## Solution\n\nCreate integration tests that exercise the validation system with real file I/O:\n\n### File 1: `packages/core/src/store/record_store.integration.test.ts`\n\n**Tests:**\n1. Read valid record from disk → should succeed\n2. Read invalid record (missing required field) → should return null + warn\n3. Read corrupted JSON → should handle gracefully\n4. Read record with schema violation → should detect and warn\n\n### File 2: `packages/core/src/adapters/indexer_adapter/indexer_adapter.integration.test.ts`\n\n**Tests:**\n1. Index generation with real `.gitgov/` files\n2. Invalid changelogs → should be skipped with warnings\n3. Invalid tasks → should be filtered out\n4. System should NOT crash on schema violations\n\n## Implementation Notes\n\n- Use temporary directories for test isolation\n- Create real JSON files with valid/invalid schemas\n- Verify console.warn is called appropriately\n- Ensure no crashes occur with invalid data\n\n## Acceptance Criteria\n\n✅ Integration tests for RecordStore with real file I/O\n✅ Integration tests for IndexerAdapter with real `.gitgov/` structure\n✅ Tests verify graceful handling of invalid data\n✅ Tests verify warnings are logged appropriately\n✅ All tests pass\n\n## Priority\n\n**Low** - Core functionality is working. These tests add confidence but are not blocking.",
+    "tags": [
+      "testing",
+      "integration",
+      "validation",
+      "low-priority"
+    ],
+    "references": [],
+    "cycleIds": [
+      "1763344784-cycle-tareas-hurfanas-consolidadas"
+    ]
+  }
+}

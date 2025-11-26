@@ -1,0 +1,51 @@
+{
+  "header": {
+    "version": "1.0",
+    "type": "task",
+    "payloadChecksum": "a65ce211c907ba1c8197f8902acd30f35018b6634f4126ff8d199d7f89ff3e9f",
+    "signatures": [
+      {
+        "keyId": "human:camilo",
+        "role": "author",
+        "notes": "Task created",
+        "signature": "/regLcZOyDw13B1nBwNV+SxYD7PzT1vOvW14/h4pVfc1ONnLF3EnJ0DWj7ypIymNohTu3OiXCUxzgo1Fd7TfCw==",
+        "timestamp": 1762658229
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "approver",
+        "notes": "Record signed",
+        "signature": "nEuKY97Hf3Du+Uk7fnrurPe/MaTfNmvDOxWoKSR5K+Jof6Gbqe9KG1A+9lpOqP0aBUPKwgJs8AiuPjavKb+qAg==",
+        "timestamp": 1762668625
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "i84lZArPOWtSBvLU6DJBNSnxwFswJ3FQUyaIur0FgEHDONPHvY+JF7MjLtfLFH28aE0+2mJwqJzaDfrzVueECg==",
+        "timestamp": 1763344809
+      }
+    ]
+  },
+  "payload": {
+    "id": "1762488681-task-implement-lint-module--command-for-structural-vali",
+    "title": "Implement lint module + command for structural validation (Layer 1)",
+    "status": "done",
+    "priority": "high",
+    "description": "# Implement Lint Module + Command for Structural Validation (Quality Model Layer 1)\n\n## 🎯 Problem\n\n**Current:** Schema changes → 47 legacy JSONs → `gitgov dashboard` crashes\n**Impact:** No systematic validation, no migration path, dashboard failures\n\n## 💡 Solution\n\n**Reusable `lint_module`** in `@gitgov/core` for CLI, SDK, SaaS, MCP, CI/CD\n\n### Architecture (Delegation Pattern)\n\n- `lint_module` → `recordStore.read()` → loaders validate (schema + embedded metadata + checksums)\n- `lint_module` captures errors + adds validations (conventions, references, schema version detection)\n- **Aligned with:** `checksum.ts` (canonical JSON), `signatures.ts` (`keyId`), `common.types.ts`, `embedded.types.ts`\n\n## 📦 Deliverables\n\n### 1. Core Module: `packages/core/src/modules/lint_module/`\n\n```typescript\nexport class LintModule {\n  constructor(deps: { validatorModule, recordStore, indexerModule?, cryptoModule? })\n  async lint(options: LintOptions): Promise<LintReport>\n  async lintFile(path: string): Promise<LintResult>\n  async fix(report: LintReport, fixOptions: FixOptions): Promise<FixReport>\n}\n```\n\n### 2. Blueprints (✅ COMPLETED)\n\n- `lint_module.md`: 33 EARS, Mermaid diagram, Migration Workflow, Performance targets\n- `lint_command.md`: 9 CLI EARS, `--check-migrations`, `--fix`, CI/CD patterns\n\n### 3. CLI Command: `packages/cli/src/commands/tools/lint.ts`\n\n```bash\ngitgov lint                      # Validate all\ngitgov lint --check-migrations   # List obsolete records (detection only)\ngitgov lint --fix                # Auto-repair with backups\ngitgov lint --format json        # CI/CD output\n```\n\n## 🔧 Key Features\n\n### Validation (33 EARS)\n\n- **EARS 1-3:** Init with graceful degradation\n- **EARS 4-8:** Delegate to `recordStore.read()`\n- **EARS 9-12:** Store validates schema + embedded metadata\n- **EARS 13-16:** Lint validates conventions (file naming, timestamps)\n- **EARS 17-22:** Lint validates references (optional, requires `indexerModule`)\n- **EARS 23-26:** Auto-fix (legacy normalization, bidirectional sync)\n- **EARS 27-29:** Performance (<2s for 100 records)\n- **EARS 30-32:** Error handling + backup restoration\n- **EARS-33:** Schema version detection (NEW)\n\n### Auto-Fix Implementation\n\n```typescript\nasync fixLegacyRecord(result, fixOptions) {\n  const raw = JSON.parse(await fs.readFile(result.filePath));\n  \n  // 1. Wrap in embedded metadata\n  const wrapped = { header: {...}, payload: raw };\n  \n  // 2. Migrate deprecated fields\n  wrapped.payload = await this.migrateDeprecatedFields(wrapped.payload);\n  \n  // 3. Calculate checksum (SHA256 canonical JSON)\n  wrapped.header.payloadChecksum = calculatePayloadChecksum(wrapped.payload);\n  \n  // 4. Sign with keyId (not actorId)\n  const sig = signPayload(wrapped.payload, privateKey, fixOptions.keyId, 'system:migrator', 'Auto-migration');\n  wrapped.header.signatures.push(sig);\n  \n  // 5. Backup original\n  await fs.writeFile(`${result.filePath}.pre-migration`, JSON.stringify(raw, null, 2));\n  await fs.writeFile(result.filePath, JSON.stringify(wrapped, null, 2));\n}\n```\n\n### Migration Workflow (Solves Real Problem)\n\n```bash\n# 1. Detect\n$ gitgov lint --check-migrations\n[INFO] 47 records obsoletos: 23 tasks, 15 cycles, 9 executions\n\n# 2. Backup\n$ cp -r .gitgov/ .gitgov.backup-$(date +%Y%m%d)\n\n# 3. Fix\n$ gitgov lint --fix\n[INFO] ✅ 47 fixes aplicados, 0 fallidos\n\n# 4. Verify\n$ gitgov lint --references --actors\n[INFO] ✅ 0 errores\n\n# 5. Works\n$ gitgov dashboard\n✅ Success\n```\n\n## 🧪 Testing\n\n- **Unit:** 33/33 EARS in `lint_module.test.ts`\n- **Integration:** CLI with valid/invalid records, `--fix`, `--check-migrations`\n- **Target:** 100% EARS coverage, 90%+ code coverage\n\n## 📚 Dependencies\n\n**Code:**\n- `packages/core/src/crypto/checksum.ts` - `calculatePayloadChecksum()` with `sortKeys()`\n- `packages/core/src/crypto/signatures.ts` - `signPayload(keyId, ...)`\n- `packages/core/src/types/common.types.ts`, `embedded.types.ts`\n- `packages/core/src/store/record_store.ts` - Validation via `read()`\n\n**Blueprints:**\n- `quality_model.md` - Layer 1 definition\n- `module_designer_v2.md` - Module design standard\n- `lint_module.md`, `lint_command.md` (✅ COMPLETED)\n\n## 🎯 Success Criteria\n\n**Must Have:**\n- ✅ Core module with `lint()`, `lintFile()`, `fix()`\n- ✅ Constructor with graceful degradation\n- ✅ Auto-fix with `signPayload()` using `keyId`\n- ✅ Backup/restore mechanism\n- ✅ CLI with `--check-migrations` and `--fix`\n- ✅ 33 module EARS + 9 CLI EARS tested\n- ✅ Blueprints completed\n\n**Nice to Have (Future):**\n- ⏱️ Dashboard streaming validation\n- ⏱️ Pre-commit hook template\n\n## 🚀 Implementation Plan\n\n1. **Core Module Structure** (1h): Create files, define interfaces with JSDoc\n2. **Core Logic** (3h): `lint()`, `lintFile()`, validators\n3. **Auto-Fix** (2h): `fix()`, `fixLegacyRecord()`, backup/restore\n4. **Tests** (2h): 33 EARS as test cases\n5. **CLI** (1h): Thin wrapper, `--check-migrations`, `--fix`\n6. **Integration** (1h): Test with 47 legacy records scenario\n\n**Total:** 10-12 hours\n\n## 💼 Business Value\n\n- ✅ **Prevents dashboard crashes** (REAL PROBLEM: 47 JSONs → crash)\n- ✅ **Safe schema migrations** with auto-fix + backups\n- ✅ **CI/CD validation** with exit codes\n- ✅ **Reusable** in CLI, SDK, SaaS, MCP, Dashboard\n- ✅ **Quality Model Layer 1** complete\n\n## 🔗 Context\n\n**Why Canonical JSON?** Deterministic serialization for reproducible checksums (uses `sortKeys()` from `checksum.ts`)\n\n**Why `keyId` not `actorId`?** Aligns with `signPayload()` parameter in `signatures.ts` and `Signature` type field\n\n**Why Delegation?** Loaders already validate schema/checksums/signatures. Lint captures errors + adds new validations (conventions, references, schema detection).\n\n---\n\n**Priority:** High (blocks work, prevents crashes)\n**Complexity:** Medium (reuses infrastructure, clear requirements)\n**Status:** Draft → Ready (blueprints complete, architecture validated)",
+    "tags": [
+      "skill:typescript",
+      "area:core",
+      "area:cli",
+      "quality-model",
+      "layer-1"
+    ],
+    "references": [
+      "pr:https://github.com/gitgovernance/monorepo/pull/54",
+      "pr:https://github.com/gitgovernance/monorepo/pull/55"
+    ],
+    "cycleIds": [
+      "1763344784-cycle-tareas-hurfanas-consolidadas"
+    ]
+  }
+}

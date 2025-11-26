@@ -529,9 +529,18 @@ describe("SyncModule", () => {
     });
 
     it("[EARS-10] should abort rebase and return conflict if conflict detected", async () => {
-      // This test requires complex setup with conflicting changes
-      // Skipping for now as it requires remote simulation
-      // TODO: Implement with remote conflict simulation
+      // SKIPPED: This test requires complex setup with conflicting changes
+      // between main and gitgov-state branches to simulate a rebase conflict.
+      // 
+      // To implement:
+      // 1. Create conflicting changes in gitgov-state (simulate remote push)
+      // 2. Create conflicting changes in main
+      // 3. Attempt pushState() and verify it detects conflict
+      // 4. Verify result.conflictDetected === true
+      // 5. Verify rebase was aborted
+      //
+      // The implementation logic is already in place (lines 792-810 in sync_module.ts)
+      // but requires multi-branch conflict simulation which is complex to set up.
     }, 30000);
 
     it("[EARS-11] should return without commit if no changes", async () => {
@@ -659,6 +668,127 @@ describe("SyncModule", () => {
       // Return to main
       await git.checkoutBranch("main");
     });
+
+    it("[EARS-43] should handle untracked .gitgov/ files with stash and temp directory", async () => {
+      // Setup: Create .gitgov/ with mix of tracked and untracked files
+      const gitgovDir = path.join(repoPath, ".gitgov");
+
+      // 1. Create and commit some initial files (tracked)
+      fs.mkdirSync(path.join(gitgovDir, "tasks"), { recursive: true });
+      fs.writeFileSync(
+        path.join(gitgovDir, "tasks/task-tracked.json"),
+        '{"title": "Tracked task"}'
+      );
+      fs.writeFileSync(
+        path.join(gitgovDir, "config.json"),
+        '{"projectId": "test-43"}'
+      );
+      await execAsync("git add .gitgov", { cwd: repoPath });
+      await execAsync('git commit -m "Add initial tracked files"', { cwd: repoPath });
+
+      // 2. Modify tracked file (creates uncommitted change)
+      fs.writeFileSync(
+        path.join(gitgovDir, "config.json"),
+        '{"projectId": "test-43-modified"}'
+      );
+
+      // 3. Create NEW untracked files (not added to git)
+      fs.writeFileSync(
+        path.join(gitgovDir, "tasks/task-untracked.json"),
+        '{"title": "Untracked task"}'
+      );
+      fs.mkdirSync(path.join(gitgovDir, "cycles"), { recursive: true });
+      fs.writeFileSync(
+        path.join(gitgovDir, "cycles/cycle-untracked.json"),
+        '{"id": "cycle-1"}'
+      );
+
+      // Verify initial state: should have both tracked changes and untracked files
+      const statusBefore = await execAsync("git status --porcelain .gitgov/", {
+        cwd: repoPath,
+      });
+      expect(statusBefore.stdout).toContain("M"); // Modified tracked file
+      expect(statusBefore.stdout).toContain("??"); // Untracked files
+
+      // Store original content for verification later
+      const originalConfigContent = fs.readFileSync(
+        path.join(gitgovDir, "config.json"),
+        "utf-8"
+      );
+      const originalUntrackedTask = fs.readFileSync(
+        path.join(gitgovDir, "tasks/task-untracked.json"),
+        "utf-8"
+      );
+      const originalUntrackedCycle = fs.readFileSync(
+        path.join(gitgovDir, "cycles/cycle-untracked.json"),
+        "utf-8"
+      );
+
+      // Execute push (should handle stash + temp directory)
+      const result = await syncModule.pushState({
+        actorId: "test-actor-43",
+      });
+
+      // Debug output if failed
+      if (!result.success) {
+        console.log("[EARS-43 DEBUG] Push failed:", {
+          error: result.error,
+          conflictDetected: result.conflictDetected,
+          conflictInfo: result.conflictInfo,
+        });
+      }
+
+      // Verify push succeeded
+      expect(result.success).toBe(true);
+      expect(result.filesSynced).toBeGreaterThan(0);
+
+      // Verify we're back on main branch
+      const currentBranch = await git.getCurrentBranch();
+      expect(currentBranch).toBe("main");
+
+      // CRITICAL VERIFICATION: All files should be restored
+      // 1. Modified tracked file should be restored
+      const restoredConfigContent = fs.readFileSync(
+        path.join(gitgovDir, "config.json"),
+        "utf-8"
+      );
+      expect(restoredConfigContent).toBe(originalConfigContent);
+
+      // 2. Untracked files should be restored
+      expect(fs.existsSync(path.join(gitgovDir, "tasks/task-untracked.json"))).toBe(true);
+      const restoredUntrackedTask = fs.readFileSync(
+        path.join(gitgovDir, "tasks/task-untracked.json"),
+        "utf-8"
+      );
+      expect(restoredUntrackedTask).toBe(originalUntrackedTask);
+
+      expect(fs.existsSync(path.join(gitgovDir, "cycles/cycle-untracked.json"))).toBe(true);
+      const restoredUntrackedCycle = fs.readFileSync(
+        path.join(gitgovDir, "cycles/cycle-untracked.json"),
+        "utf-8"
+      );
+      expect(restoredUntrackedCycle).toBe(originalUntrackedCycle);
+
+      // 3. Verify git status shows same state as before push
+      const statusAfter = await execAsync("git status --porcelain .gitgov/", {
+        cwd: repoPath,
+      });
+      expect(statusAfter.stdout).toContain("M"); // Modified file still there
+      expect(statusAfter.stdout).toContain("??"); // Untracked files still there
+
+      // 4. Final verification: No stash left behind
+      const stashList = await execAsync("git stash list", { cwd: repoPath });
+      expect(stashList.stdout.trim()).toBe(""); // No stashes should remain
+
+      // 5. Verify gitgov-state branch exists and has the synced files
+      const branchExists = await git.branchExists("gitgov-state");
+      expect(branchExists).toBe(true);
+
+      // Note: We don't checkout to gitgov-state to verify files because:
+      // 1. The push operation already verified the sync was successful
+      // 2. Checking out would require stashing our untracked files again
+      // 3. The critical test is that files are RESTORED on main, not what's in gitgov-state
+    });
   });
 
   // ===== EARS 13-16: Pull Operation =====
@@ -678,8 +808,18 @@ describe("SyncModule", () => {
     });
 
     it("[EARS-14] should pause rebase and return conflict if conflict detected", async () => {
-      // This requires complex conflict simulation
-      // TODO: Implement with conflict setup
+      // SKIPPED: This test requires complex setup with conflicting changes
+      // during pullState() operation.
+      //
+      // To implement:
+      // 1. Create conflicting changes in remote gitgov-state
+      // 2. Create conflicting changes in local gitgov-state
+      // 3. Attempt pullState() and verify it detects conflict
+      // 4. Verify result.conflictDetected === true
+      // 5. Verify rebase was paused (not aborted)
+      //
+      // The implementation logic is already in place (lines 1234-1252 in sync_module.ts)
+      // but requires remote simulation which is complex to set up in unit tests.
     });
 
     it("[EARS-15] should invoke indexer.generateIndex() if there are new changes", async () => {
@@ -730,8 +870,17 @@ describe("SyncModule", () => {
     });
 
     it("[EARS-18] should return error if conflict markers present", async () => {
-      // This requires setting up a rebase with unresolved markers
-      // TODO: Implement with conflict markers setup
+      // SKIPPED: This test requires setting up a rebase with unresolved conflict markers
+      // in .gitgov/ files, then attempting resolveConflict().
+      //
+      // To implement:
+      // 1. Create a rebase conflict with unresolved markers in a .gitgov/ file
+      // 2. Attempt resolveConflict()
+      // 3. Verify it returns error with conflictMarkersPresent: true
+      // 4. Verify it lists the files with markers
+      //
+      // The implementation logic is already in place (lines 1461-1467 in sync_module.ts)
+      // but requires complex rebase + marker simulation.
     });
 
     it("[EARS-19] should update resolved records with new checksum and signature", async () => {
@@ -1827,8 +1976,18 @@ describe("SyncModule", () => {
     });
 
     it("[EARS-25] should return list of violations if found", async () => {
-      // This requires creating actual violations in history
-      // TODO: Implement with violation setup
+      // SKIPPED: This test requires creating actual audit violations in git history
+      // (e.g., rebase commits without resolution commits).
+      //
+      // To implement:
+      // 1. Create a rebase commit in gitgov-state history
+      // 2. Do NOT create a corresponding resolution commit
+      // 3. Run auditState() with scope: "history"
+      // 4. Verify it detects the violation
+      // 5. Verify violations array contains the commit info
+      //
+      // The implementation logic is already in place (lines 1628-1707 in sync_module.ts)
+      // but requires complex git history manipulation.
     });
 
     it("[EARS-26] should return empty array if no violations", async () => {

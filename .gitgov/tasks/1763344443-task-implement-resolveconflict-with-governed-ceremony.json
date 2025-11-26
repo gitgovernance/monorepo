@@ -1,0 +1,44 @@
+{
+  "header": {
+    "version": "1.0",
+    "type": "task",
+    "payloadChecksum": "a0f78a67ebbb79166e80aca196cf9df2f7368f41cf8416766b7668cabba957db",
+    "signatures": [
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "SdH5SAQSjoLvOcZasn67bPipcw10rpcpditOM/bnS/x/lCzjjO7Tq5ZQPhDmSGnRMJDPPPiC1/W7V7KgygWcBw==",
+        "timestamp": 1763344443
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "LXqIOWnATNLDKagn0DzW6jhi6/co5ZfIpbNJ3MkJSbqJBBa3/IlVxEM3AfI5VczFUINezusqWD3Dw5C4Hl7/BA==",
+        "timestamp": 1763344443
+      }
+    ]
+  },
+  "payload": {
+    "id": "1763344443-task-implement-resolveconflict-with-governed-ceremony",
+    "title": "Implement resolveConflict() with governed ceremony",
+    "status": "draft",
+    "priority": "critical",
+    "description": "Implementar operación de resolución de conflictos con actualización de Records, checksums, firmas, y commits de resolución.\\n\\n## Ceremonia Gobernada\\n\\n### Flujo Completo (8 pasos)\\n1. Verificar que hay rebase en progreso\\n2. Validar que TODOS los conflictos están resueltos\\n3. Git continue rebase (Git crea rebase commit)\\n4. Crear commit de resolución con firma criptográfica\\n5. Actualizar Records resueltos (recalcular checksums)\\n6. Firmar Records actualizados (Ed25519)\\n7. Validar integridad final\\n8. Emitir evento sync.conflict.resolved\\n\\n### Commit de Resolución\\n\\nFormato del commit:\\n- Message: RESOLUTION: [reason] by [actor] at [timestamp]\\n- Signature: Ed25519 signature del actor\\n- Metadata: JSON con detalles de resolución\\n\\n## Referencias\\n\\nEspecificación completa en state_sync.md § 5\\n\\n## EARS Cubiertos\\n\\n17-23: resolveConflict con validaciones completas\\n\\n## Criterios de Aceptación\\n\\n- [ ] Ceremonia completa de 8 pasos funciona\\n- [ ] Checksums recalculados correctamente\\n- [ ] Firmas Ed25519 válidas\\n- [ ] Commit de resolución creado\\n- [ ] Audit trail completo\\n- [ ] No se permite skip de ceremonia\\n\\nTags: skill:git, skill:crypto, skill:typescript",
+    "tags": [
+      "category:feature",
+      "cycle:04",
+      "package:core",
+      "skill:git",
+      "skill:crypto"
+    ],
+    "cycleIds": [
+      "1763344332-cycle-cycle-4-conflict-resolution"
+    ],
+    "references": [
+      "file:packages/core/src/modules/sync/git_sync.ts",
+      "file:packages/blueprints/03_products/protocol/99_appendices/state_sync.md"
+    ]
+  }
+}

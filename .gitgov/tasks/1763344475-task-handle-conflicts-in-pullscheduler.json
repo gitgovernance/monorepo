@@ -1,0 +1,39 @@
+{
+  "header": {
+    "version": "1.0",
+    "type": "task",
+    "payloadChecksum": "cad85274d0e4206a244358fd8da5bd1d6b1e8f43ae8dd5fd3901d04cb9979036",
+    "signatures": [
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "qJk1Bi1p6jhtBcuqCdAl9VrtqVGzoUfcbzz5OFtVXhGui13Ole5WwMUWoFlBO5J06EKUYes5xyydIF/qjHG2AQ==",
+        "timestamp": 1763344475
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "WVmLyQzLoLMMhzjgCcQf+5Lk+K5kFFZEv/0FG5QaZcd0ycExwzayRsJ2MkgjaIBooun7Eaang4pOs8tuWAcNCg==",
+        "timestamp": 1763344475
+      }
+    ]
+  },
+  "payload": {
+    "id": "1763344475-task-handle-conflicts-in-pullscheduler",
+    "title": "Handle conflicts in PullScheduler",
+    "status": "draft",
+    "priority": "medium",
+    "description": "Si pull detecta conflicto, notificar usuario pero continuar scheduler o pausar si stopOnConflict true. EARS 38. Usuario configura stopOnConflict en .session.json. Conflict notifications. Graceful degradation.",
+    "tags": [
+      "category:feature",
+      "cycle:06",
+      "package:core"
+    ],
+    "cycleIds": [
+      "1763344334-cycle-cycle-6-pull-scheduler---auto-pull"
+    ],
+    "references": []
+  }
+}

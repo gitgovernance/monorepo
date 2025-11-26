@@ -1,0 +1,12 @@
+{
+  "protocolVersion": "1.0.0",
+  "projectId": "solo-hub",
+  "projectName": "Solo Hub - GitGovernance Implementation",
+  "rootCycle": "1758513186-cycle-gitgovernance",
+  "blueprints": {
+    "root": "./packages/blueprints"
+  },
+  "state": {
+    "branch": "gitgov-state"
+  }
+}

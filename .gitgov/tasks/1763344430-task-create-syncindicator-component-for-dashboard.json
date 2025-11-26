@@ -1,0 +1,43 @@
+{
+  "header": {
+    "version": "1.0",
+    "type": "task",
+    "payloadChecksum": "757c7d57a998cf058ecf2ede84b9ad2bf8efb3f3ffd206adfa506d08fc461cf6",
+    "signatures": [
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "8ZihmEglNUIwtauqyA6DSypTeHfXpnszmsDiTqVKfnH9sOVw0LIZUCvVbTUGvXwcrFtGnNKZEQQ+9TZv6+stAw==",
+        "timestamp": 1763344430
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "H8+SyDmykSefADxsyocLw7+kAa9i8zbmKl1x1q0NLRzjXVjyvcLrLB8wQFsKS6MCGBBItWb3DO2Pj/boiQ84AQ==",
+        "timestamp": 1763344430
+      }
+    ]
+  },
+  "payload": {
+    "id": "1763344430-task-create-syncindicator-component-for-dashboard",
+    "title": "Create SyncIndicator component for Dashboard",
+    "status": "draft",
+    "priority": "high",
+    "description": "Crear componente React que muestra estado de sync en tiempo real con iconos visuales.\\n\\n## Estados Visuales\\n\\n- **Synced** 🟢: Todo sincronizado, última sync exitosa\\n- **Syncing** 🔵: Operación en progreso (push/pull)\\n- **Error** 🔴: Error en última sync\\n- **Offline** 🟡: Sin conexión a remote\\n\\n## Features\\n\\n### 1. Real-time Updates\\nActualización automática vía EventBus:\\n- Escuchar sync.push.*, sync.pull.*, sync.error\\n- Actualizar UI sin reload\\n\\n### 2. Información Contextual\\n- Timestamp de última sync\\n- Nombre del actor que hizo push\\n- Número de records sincronizados\\n- Mensajes de error descriptivos\\n\\n### 3. Acciones Rápidas\\n- Click para ver detalles\\n- Botón para forzar pull manual\\n- Indicador de conflictos pendientes\\n\\n## Referencias\\n\\n- SyncIndicator.tsx - Componente React\\n- Dashboard component integration\\n\\n## Implementación\\n\\n**Ubicación**: packages/cli/src/components/dashboard/SyncIndicator.tsx\\n\\n**Props**:\\n\\n\\n## Criterios de Aceptación\\n\\n- [ ] 4 estados visuales implementados\\n- [ ] Actualización en tiempo real (<200ms)\\n- [ ] Información contextual visible\\n- [ ] Click para detalles funciona\\n- [ ] UI responsive y clara\\n\\nTags: skill:react, skill:ui, skill:typescript",
+    "tags": [
+      "category:feature",
+      "cycle:03",
+      "package:cli",
+      "skill:react",
+      "skill:ui"
+    ],
+    "cycleIds": [
+      "1763344332-cycle-cycle-3-dashboard-integration"
+    ],
+    "references": [
+      "file:packages/cli/src/components/dashboard/SyncIndicator.tsx"
+    ]
+  }
+}

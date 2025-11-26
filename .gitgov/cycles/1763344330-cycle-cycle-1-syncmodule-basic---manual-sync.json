@@ -1,0 +1,73 @@
+{
+  "header": {
+    "version": "1.0",
+    "type": "cycle",
+    "payloadChecksum": "af1a1f1fc4dec591b40aabc29b74e8b50b39f5ba8e71e6e3294b7e0ff059c772",
+    "signatures": [
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "CIO855d69tFFFOmi1yOa4lDsHXuNsIX3Sq9xDxRDCccxsJi8MpfrSEkqOSK9UDC9Yq3j9MXWuIs7OSdRq9SnAA==",
+        "timestamp": 1763344330
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "e+dcgTnOSK2i7CatmNgnzTOY9D/Ch81XMm/WdFXpQoKBCIR6fc5d65JdpxMhHYBWXyWR7NLk3CCpR+W0oM49Aw==",
+        "timestamp": 1763344402
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "2P/1IxVXmKJKZThKbWXA06lb+CjFaaOwnc3scEThPpfzGckhKJIdopS1ZTuUAAfRKep2mJncrhcsnryYAJ9cAw==",
+        "timestamp": 1763344403
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "5LZXgbsbhSltaZzRWFn7a3mVRupSEA//HEA6l+Xypg0vjRRTNWSP4wtwOe7T9jVDCrkeWD0cvZmp3UPCx1NkCA==",
+        "timestamp": 1763344404
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "F8zUnTOqqwfD8N912hqSDo3xV1wtxlw8voscHAJyrFrsgEW/EDx1dDNXDhkGS3wi8BvAJi7njUKGpQ3MJ5a9BA==",
+        "timestamp": 1763344405
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "teskAacMoWy2MkCnWHQNZHfpm9afH9xIT3KfsaSwhGPDM1ZNu5+QjNSBiedtj/8vVk5lFQl3Zt/GlqG4wAZfCQ==",
+        "timestamp": 1763344406
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "33QqhfXodGpwNnQW1DpWbtyZdPIlAVf5ePNA5LoPW9kK799Uac1fMXGvaJm9HSb2CEKc/8s8zwFI0AOmaeUXBQ==",
+        "timestamp": 1763344406
+      }
+    ]
+  },
+  "payload": {
+    "id": "1763344330-cycle-cycle-1-syncmodule-basic---manual-sync",
+    "title": "Cycle 1: SyncModule Basic - Manual Sync",
+    "status": "active",
+    "taskIds": [
+      "1763344402-task-implement-gitmodule-with-low-level-git-operations",
+      "1763344403-task-implement-syncmodule-with-pushstate-pullstate-reso",
+      "1763344404-task-implement-config-types-and-validation",
+      "1763344405-task-implement-cli-commands-for-sync-pushpull",
+      "1763344406-task-create-unit-tests-for-gitmodule-and-syncmodule",
+      "1763344406-task-integrate-syncmodule-in-projectadapterinitializepr"
+    ],
+    "tags": [],
+    "notes": "Planning description for: Cycle 1: SyncModule Basic - Manual Sync"
+  }
+}

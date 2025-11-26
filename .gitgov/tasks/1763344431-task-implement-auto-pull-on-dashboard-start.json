@@ -1,0 +1,41 @@
+{
+  "header": {
+    "version": "1.0",
+    "type": "task",
+    "payloadChecksum": "9139d882fe4c514ed71c25496fbc949551a7138d1c97bea1dfcf574cfeb3ef58",
+    "signatures": [
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "6pgbhjNa7NhTnfaPXIPSCNCuqIOwnpIacZV3seyo5SJVPJzefJuBFe8HEL2cEWfJO8FVWF8oVAvJOl8cpBfEAg==",
+        "timestamp": 1763344431
+      },
+      {
+        "keyId": "human:camilo-v2",
+        "role": "author",
+        "notes": "Record signed",
+        "signature": "AlYWPzQOosVYBBUbxkSFsxbeNUbqvMlvR9VAZFED/RBWMbT1sURF2IkX6mjYIS25B6jn8/sjPtGpdaIEVkmRCw==",
+        "timestamp": 1763344431
+      }
+    ]
+  },
+  "payload": {
+    "id": "1763344431-task-implement-auto-pull-on-dashboard-start",
+    "title": "Implement auto-pull on Dashboard start",
+    "status": "draft",
+    "priority": "medium",
+    "description": "Ejecutar pullState() automáticamente al iniciar Dashboard si está habilitado en config.\\n\\n## Flujo de Inicio\\n\\n1. Dashboard arranca\\n2. Leer config.autoSync.pullOnStart\\n3. Si true: Ejecutar pull silencioso en background\\n4. Mostrar resultado en SyncIndicator\\n\\n## Comportamiento\\n\\n### Pull Exitoso\\n- Silent: No bloquear inicio de Dashboard\\n- Log: \"Auto-pull completed: 5 records synced\"\\n- UI: SyncIndicator muestra \"Synced\"\\n\\n### Pull con Conflictos\\n- Mostrar notificación\\n- No bloquear Dashboard\\n- Usuario puede resolver después\\n\\n### Pull Fallido (Network)\\n- Log warning\\n- Continuar con datos locales\\n- Retry automático después de 1 minuto\\n\\n## Referencias\\n\\n- dashboard.ts - Dashboard command\\n- config.json - autoSync.pullOnStart setting\\n\\n## Criterios de Aceptación\\n\\n- [ ] Pull automático al iniciar\\n- [ ] Configuración en config.json respetada\\n- [ ] No bloquea inicio de Dashboard\\n- [ ] Manejo de errores graceful\\n- [ ] Log visible en modo verbose\\n\\nTags: skill:typescript, skill:cli",
+    "tags": [
+      "category:feature",
+      "cycle:03",
+      "package:cli"
+    ],
+    "cycleIds": [
+      "1763344332-cycle-cycle-3-dashboard-integration"
+    ],
+    "references": [
+      "file:packages/cli/src/commands/dashboard.ts"
+    ]
+  }
+}
