@@ -106,8 +106,9 @@ export class SyncCommand extends BaseCommand {
       });
 
       if (!auditResult.passed) {
+        const violationCount = auditResult.integrityViolations.length + (auditResult.lintReport?.summary.errors || 0);
         this.handleError(
-          `Pre-push audit failed with ${auditResult.violations.length} violations. Fix issues before pushing.`,
+          `Pre-push audit failed with ${violationCount} violation(s). Fix issues before pushing.`,
           options
         );
         return;

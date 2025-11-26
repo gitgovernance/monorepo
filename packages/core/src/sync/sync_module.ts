@@ -91,6 +91,96 @@ export class SyncModule {
     this.indexer = dependencies.indexer;
   }
 
+  /**
+   * Static method to bootstrap .gitgov/ from gitgov-state branch.
+   * Used when cloning a repo that has gitgov-state but .gitgov/ is not in the work branch.
+   *
+   * This method only requires GitModule and can be called before full SyncModule initialization.
+   *
+   * @param gitModule - GitModule instance for git operations
+   * @param stateBranch - Name of the state branch (default: "gitgov-state")
+   * @returns Promise<{ success: boolean; error?: string }>
+   */
+  static async bootstrapFromStateBranch(
+    gitModule: GitModule,
+    stateBranch: string = "gitgov-state"
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      const repoRoot = await gitModule.getRepoRoot();
+
+      // 1. Check if gitgov-state branch exists (local or remote)
+      const hasLocalBranch = await gitModule.branchExists(stateBranch);
+
+      let hasRemoteBranch = false;
+      try {
+        const remoteBranches = await gitModule.listRemoteBranches("origin");
+        hasRemoteBranch = remoteBranches.includes(stateBranch);
+      } catch {
+        // Remote might not be configured, continue with local check
+      }
+
+      if (!hasLocalBranch && !hasRemoteBranch) {
+        return {
+          success: false,
+          error: `State branch '${stateBranch}' does not exist locally or remotely`,
+        };
+      }
+
+      // 2. If only remote exists, fetch it
+      if (!hasLocalBranch && hasRemoteBranch) {
+        try {
+          const currentBranch = await gitModule.getCurrentBranch();
+          await gitModule.fetch("origin");
+          await execAsync(`git checkout -b ${stateBranch} origin/${stateBranch}`, { cwd: repoRoot });
+          // Return to previous branch
+          if (currentBranch && currentBranch !== stateBranch) {
+            await gitModule.checkoutBranch(currentBranch);
+          }
+        } catch (error) {
+          return {
+            success: false,
+            error: `Failed to fetch state branch: ${(error as Error).message}`,
+          };
+        }
+      }
+
+      // 3. Check if .gitgov/ exists in gitgov-state
+      try {
+        const { stdout } = await execAsync(`git ls-tree -r ${stateBranch} --name-only .gitgov/`, { cwd: repoRoot });
+        if (!stdout.trim()) {
+          return {
+            success: false,
+            error: `No .gitgov/ directory found in '${stateBranch}' branch`,
+          };
+        }
+      } catch {
+        return {
+          success: false,
+          error: `Failed to check .gitgov/ in '${stateBranch}' branch`,
+        };
+      }
+
+      // 4. Copy .gitgov/ from gitgov-state to filesystem
+      try {
+        await execAsync(`git checkout ${stateBranch} -- .gitgov/`, { cwd: repoRoot });
+        // Unstage the files (keep them untracked if .gitgov/ is ignored)
+        await execAsync("git reset HEAD .gitgov/", { cwd: repoRoot });
+        logger.info(`[bootstrapFromStateBranch] Successfully restored .gitgov/ from ${stateBranch}`);
+      } catch (error) {
+        return {
+          success: false,
+          error: `Failed to copy .gitgov/ from state branch: ${(error as Error).message}`,
+        };
+      }
+
+      return { success: true };
+    } catch (error) {
+      return {
+        success: false,
+        error: `Bootstrap failed: ${(error as Error).message}`,
+      };
+    }
+  }
 
   /**
    * Gets the state branch name from configuration.

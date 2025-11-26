@@ -264,6 +264,137 @@ jest.doMock('@gitgov/core', () => {
       }))
     },
 
+    // 🎭 MOCK GIT: Mock Git operations
+    Git: {
+      GitModule: jest.fn().mockImplementation(() => ({
+        getRepoRoot: jest.fn().mockResolvedValue('/mock/project/root'),
+        getCurrentBranch: jest.fn().mockResolvedValue('main'),
+        branchExists: jest.fn().mockResolvedValue(true),
+        checkoutFilesFromBranch: jest.fn().mockResolvedValue(undefined),
+        fetch: jest.fn().mockResolvedValue(undefined),
+        listRemoteBranches: jest.fn().mockResolvedValue([]),
+        checkoutBranch: jest.fn().mockResolvedValue(undefined),
+        pushWithUpstream: jest.fn().mockResolvedValue(undefined),
+        setUpstream: jest.fn().mockResolvedValue(undefined),
+        getBranchRemote: jest.fn().mockResolvedValue(null),
+        checkoutOrphanBranch: jest.fn().mockResolvedValue(undefined),
+        pullRebase: jest.fn().mockResolvedValue(undefined),
+        getChangedFiles: jest.fn().mockResolvedValue([]),
+        add: jest.fn().mockResolvedValue(undefined),
+        commit: jest.fn().mockResolvedValue('mock-commit-hash'),
+        push: jest.fn().mockResolvedValue(undefined),
+        hasUncommittedChanges: jest.fn().mockResolvedValue(false),
+        stash: jest.fn().mockResolvedValue('mock-stash-hash'),
+        stashPop: jest.fn().mockResolvedValue(true),
+        getConflictedFiles: jest.fn().mockResolvedValue([]),
+        rebaseAbort: jest.fn().mockResolvedValue(undefined),
+        isRebaseInProgress: jest.fn().mockResolvedValue(false),
+        getCommitHistory: jest.fn().mockResolvedValue([]),
+        getStagedFiles: jest.fn().mockResolvedValue([]),
+        rebaseContinue: jest.fn().mockResolvedValue('mock-commit-hash'),
+        commitAllowEmpty: jest.fn().mockResolvedValue('mock-commit-hash')
+      }))
+    },
+
+    // 🎭 MOCK SYNC: Mock sync operations
+    Sync: {
+      SyncModule: Object.assign(
+        jest.fn().mockImplementation(() => ({
+          pushState: jest.fn().mockResolvedValue({
+            success: true,
+            filesSynced: 0,
+            sourceBranch: 'main',
+            commitHash: 'mock-commit-hash',
+            commitMessage: 'mock commit message',
+            conflictDetected: false
+          }),
+          pullState: jest.fn().mockResolvedValue({
+            success: true,
+            hasChanges: false,
+            filesUpdated: 0,
+            reindexed: false,
+            conflictDetected: false
+          }),
+          resolveConflict: jest.fn().mockResolvedValue({
+            success: true,
+            rebaseCommitHash: 'mock-rebase-hash',
+            resolutionCommitHash: 'mock-resolution-hash',
+            conflictsResolved: 0,
+            resolvedBy: 'human:test-user',
+            reason: 'test reason'
+          }),
+          auditState: jest.fn().mockResolvedValue({
+            passed: true,
+            scope: 'current',
+            totalCommits: 0,
+            rebaseCommits: 0,
+            resolutionCommits: 0,
+            integrityViolations: [],
+            summary: 'Audit passed'
+          }),
+          ensureStateBranch: jest.fn().mockResolvedValue(undefined),
+          getStateBranchName: jest.fn().mockResolvedValue('gitgov-state'),
+          calculateStateDelta: jest.fn().mockResolvedValue([]),
+          isRebaseInProgress: jest.fn().mockResolvedValue(false),
+          checkConflictMarkers: jest.fn().mockResolvedValue([]),
+          getConflictDiff: jest.fn().mockResolvedValue({
+            files: [],
+            message: 'No conflicted files found',
+            resolutionSteps: []
+          }),
+          verifyResolutionIntegrity: jest.fn().mockResolvedValue([])
+        })),
+        {
+          // Static method for bootstrapping from gitgov-state branch
+          bootstrapFromStateBranch: jest.fn().mockResolvedValue({ success: false, error: 'State branch does not exist' })
+        }
+      )
+    },
+
+    // 🎭 MOCK LINT: Mock lint operations
+    Lint: {
+      LintModule: jest.fn().mockImplementation(() => ({
+        lint: jest.fn().mockResolvedValue({
+          summary: {
+            filesChecked: 0,
+            errors: 0,
+            warnings: 0,
+            fixable: 0,
+            executionTime: 0
+          },
+          results: [],
+          metadata: {
+            timestamp: new Date().toISOString(),
+            options: {},
+            version: '1.0.0'
+          }
+        }),
+        lintFile: jest.fn().mockResolvedValue({
+          summary: {
+            filesChecked: 1,
+            errors: 0,
+            warnings: 0,
+            fixable: 0,
+            executionTime: 0
+          },
+          results: [],
+          metadata: {
+            timestamp: new Date().toISOString(),
+            options: {},
+            version: '1.0.0'
+          }
+        }),
+        fix: jest.fn().mockResolvedValue({
+          summary: {
+            fixed: 0,
+            failed: 0,
+            backupsCreated: 0
+          },
+          fixes: []
+        })
+      }))
+    },
+
     // 📋 MOCK TYPES: Provide empty namespaces for type imports
     Records: {},
     Models: {},
@@ -336,10 +467,24 @@ describe('DependencyInjectionService', () => {
     it('[EARS-3] should throw error when project root not found', async () => {
       // Mock ConfigManager to return null
       mockedConfigManager.findGitgovRoot.mockReturnValue(null);
+      mockedConfigManager.findProjectRoot.mockReturnValue(null);
 
       // Mock fs.access to reject (no .gitgov directory)
       const mockFs = require('fs');
       mockFs.promises.access.mockRejectedValue(new Error('Directory not found'));
+
+      // Mock GitModule to return false for branchExists('gitgov-state')
+      const { Git } = require('@gitgov/core');
+      const mockGitModule = new Git.GitModule({
+        repoRoot: process.cwd(),
+        execCommand: jest.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' })
+      });
+      mockGitModule.branchExists = jest.fn().mockResolvedValue(false);
+      mockGitModule.getRepoRoot = jest.fn().mockResolvedValue(process.cwd());
+
+      // Override getGitModule to return our mock
+      const originalGetGitModule = diService.getGitModule.bind(diService);
+      diService.getGitModule = jest.fn().mockResolvedValue(mockGitModule);
 
       await expect(diService.getIndexerAdapter())
         .rejects.toThrow("❌ GitGovernance not initialized. Run 'gitgov init' first.");
@@ -348,10 +493,23 @@ describe('DependencyInjectionService', () => {
     it('[EARS-4] should throw error for BacklogAdapter when project root not found', async () => {
       // Mock ConfigManager to return null
       mockedConfigManager.findGitgovRoot.mockReturnValue(null);
+      mockedConfigManager.findProjectRoot.mockReturnValue(null);
 
       // Mock fs.access to reject (no .gitgov directory)
       const mockFs = require('fs');
       mockFs.promises.access.mockRejectedValue(new Error('Directory not found'));
+
+      // Mock GitModule to return false for branchExists('gitgov-state')
+      const { Git } = require('@gitgov/core');
+      const mockGitModule = new Git.GitModule({
+        repoRoot: process.cwd(),
+        execCommand: jest.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' })
+      });
+      mockGitModule.branchExists = jest.fn().mockResolvedValue(false);
+      mockGitModule.getRepoRoot = jest.fn().mockResolvedValue(process.cwd());
+
+      // Override getGitModule to return our mock
+      diService.getGitModule = jest.fn().mockResolvedValue(mockGitModule);
 
       await expect(diService.getBacklogAdapter())
         .rejects.toThrow("❌ GitGovernance not initialized. Run 'gitgov init' first.");

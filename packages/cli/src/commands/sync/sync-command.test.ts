@@ -150,6 +150,49 @@ describe('SyncCommand - Unit Tests', () => {
       expect(mockSyncModule.pushState).toHaveBeenCalled();
     });
 
+    it('[EARS-1] should abort push when pre-push audit fails', async () => {
+      // Setup: Mock audit to fail
+      mockSyncModule.auditState.mockResolvedValue({
+        passed: false,
+        scope: 'current',
+        totalCommits: 10,
+        rebaseCommits: 0,
+        resolutionCommits: 0,
+        integrityViolations: [
+          {
+            rebaseCommitHash: 'abc123',
+            commitMessage: 'Rebase without resolution',
+            timestamp: new Date().toISOString(),
+            author: 'test-user'
+          }
+        ],
+        summary: 'Audit failed with violations',
+        lintReport: {
+          summary: { filesChecked: 5, errors: 2, warnings: 1, fixable: 0, executionTime: 50 },
+          results: [],
+          metadata: { timestamp: new Date().toISOString(), options: {}, version: '1.0.0' }
+        }
+      });
+
+      // Execute
+      await syncCommand.executePush({});
+
+      // Verify audit was called
+      expect(mockSyncModule.auditState).toHaveBeenCalled();
+
+      // Verify push was NOT called (aborted due to audit failure)
+      expect(mockSyncModule.pushState).not.toHaveBeenCalled();
+
+      // Verify error handling
+      expect(mockProcessExit).toHaveBeenCalledWith(1);
+      expect(mockConsoleError).toHaveBeenCalledWith(
+        expect.stringContaining('Pre-push audit failed with')
+      );
+      expect(mockConsoleError).toHaveBeenCalledWith(
+        expect.stringContaining('violation(s)')
+      );
+    });
+
     it('[EARS-2] should abort push if executed from gitgov-state branch', async () => {
       // Setup: Mock GitModule to return gitgov-state as current branch
       mockGitModule.getCurrentBranch.mockResolvedValue('gitgov-state');
@@ -583,6 +626,36 @@ describe('SyncCommand - Unit Tests', () => {
       );
     });
 
+    it('[EARS-28.1] should complete pull successfully without updating session when no actor', async () => {
+      // Setup: Pull succeeds but no actor in session
+      mockSyncModule.pullState.mockResolvedValue({
+        success: true,
+        hasChanges: true,
+        filesUpdated: 3,
+        reindexed: true,
+        conflictDetected: false
+      });
+
+      // Mock session without actor
+      mockConfigManager.loadSession.mockResolvedValue({
+        lastSession: null,
+        actorState: {}
+      });
+
+      // Execute
+      await syncCommand.executePull({});
+
+      // Verify pull completed successfully
+      expect(mockSyncModule.pullState).toHaveBeenCalled();
+      expect(mockConsoleLog).toHaveBeenCalledWith(
+        expect.stringContaining('3 files updated')
+      );
+
+      // Verify session was NOT updated (graceful degradation)
+      expect(mockConfigManager.updateActorState).not.toHaveBeenCalled();
+      expect(mockProcessExit).not.toHaveBeenCalled();
+    });
+
     it('[EARS-29] should update status conflict when conflict is detected during pull', async () => {
       // Setup
       mockSyncModule.pullState.mockResolvedValue({
@@ -611,6 +684,44 @@ describe('SyncCommand - Unit Tests', () => {
           })
         })
       );
+    });
+
+    it('[EARS-29.1] should handle conflict without updating session when no actor', async () => {
+      // Setup: Conflict detected but no actor in session
+      mockSyncModule.pullState.mockResolvedValue({
+        success: false,
+        hasChanges: false,
+        filesUpdated: 0,
+        reindexed: false,
+        conflictDetected: true,
+        conflictInfo: {
+          type: 'rebase_conflict',
+          affectedFiles: ['.gitgov/tasks/conflict.json'],
+          message: 'Conflict during pull',
+          resolutionSteps: [
+            '1. Resolve conflicts manually',
+            '2. Run: gitgov sync resolve --reason "..."'
+          ]
+        }
+      });
+
+      // Mock session without actor
+      mockConfigManager.loadSession.mockResolvedValue({
+        lastSession: null,
+        actorState: {}
+      });
+
+      // Execute
+      await syncCommand.executePull({});
+
+      // Verify conflict was handled (error shown)
+      expect(mockProcessExit).toHaveBeenCalledWith(1);
+      expect(mockConsoleError).toHaveBeenCalledWith(
+        expect.stringContaining('Conflict')
+      );
+
+      // Verify session was NOT updated (graceful degradation)
+      expect(mockConfigManager.updateActorState).not.toHaveBeenCalled();
     });
   });
 
@@ -1127,6 +1238,46 @@ describe('SyncCommand - Unit Tests', () => {
       expect(mockConsoleError).toHaveBeenCalledWith(
         expect.stringContaining('Push failed')
       );
+    });
+
+    it('[EARS-32.1] should ignore session update errors and propagate original error', async () => {
+      // Setup: Push fails with network error
+      mockSyncModule.auditState.mockResolvedValue({
+        passed: true,
+        scope: 'current',
+        totalCommits: 10,
+        rebaseCommits: 0,
+        resolutionCommits: 0,
+        integrityViolations: [],
+        summary: 'All checks passed'
+      });
+
+      const originalError = new Error('Network error during push');
+      mockSyncModule.pushState.mockRejectedValue(originalError);
+
+      // Mock updateActorState to fail (simulating session update error)
+      mockConfigManager.updateActorState.mockRejectedValue(
+        new Error('Failed to update session')
+      );
+
+      // Execute
+      await syncCommand.executePush({});
+
+      // Verify original error is propagated (not masked by session update error)
+      expect(mockProcessExit).toHaveBeenCalledWith(1);
+      expect(mockConsoleError).toHaveBeenCalledWith(
+        expect.stringContaining('Push failed: Network error during push')
+      );
+
+      // Verify session update was attempted (but failed gracefully)
+      expect(mockConfigManager.updateActorState).toHaveBeenCalled();
+
+      // Verify original error message is preserved (not session update error)
+      const errorCalls = mockConsoleError.mock.calls;
+      const hasOriginalError = errorCalls.some(call =>
+        call[0].includes('Network error during push')
+      );
+      expect(hasOriginalError).toBe(true);
     });
   });
 });
