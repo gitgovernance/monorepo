@@ -207,7 +207,7 @@ gitgov indexer --force
 
 ```bash
 # Project Initialization (IMPLEMENTED)
-gitgov init --blueprint=saas-mvp
+gitgov init --template=saas-mvp
 
 # All core commands are implemented
 gitgov indexer && gitgov status && gitgov dashboard
@@ -262,11 +262,11 @@ gitgov init
 gitgov init --name "GitGovernance CLI" --actor-name "Project Owner"
 
 # SaaS MVP template
-gitgov init --blueprint=saas-mvp --methodology=scrum
+gitgov init --template=saas-mvp --methodology=scrum
 
 # Complete business setup
 gitgov init --name "Business Project" \
-  --blueprint=saas-mvp \
+  --template=saas-mvp \
   --methodology=scrum \
   --actor-name "Tech Lead" \
   --verbose

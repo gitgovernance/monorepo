@@ -9,7 +9,7 @@ import { spawn } from 'child_process';
  */
 export interface InitCommandOptions {
   name?: string;
-  blueprint?: string;
+  template?: string;
   methodology?: 'default' | 'scrum' | 'kanban';
   actorName?: string;
   actorEmail?: string;
@@ -55,7 +55,7 @@ export class InitCommand {
         name: completeOptions.name!,
       };
 
-      if (completeOptions.blueprint) projectInitOptions.template = completeOptions.blueprint;
+      if (completeOptions.template) projectInitOptions.template = completeOptions.template;
       if (completeOptions.actorName) projectInitOptions.actorName = completeOptions.actorName;
       if (completeOptions.actorEmail) projectInitOptions.actorEmail = completeOptions.actorEmail;
       if (completeOptions.methodology) projectInitOptions.methodology = completeOptions.methodology;
@@ -377,8 +377,8 @@ export class InitCommand {
         message = "❌ Not a Git repository. Please run 'git init' first.";
       } else if (error.message.includes('No write permissions')) {
         message = "❌ Cannot write to directory. Please check file permissions.";
-      } else if (error.message.includes('Blueprint') && error.message.includes('not found')) {
-        message = "❌ Blueprint template not found. Available: basic, saas-mvp, ai-product, enterprise.";
+      } else if (error.message.includes('Template') && error.message.includes('not found')) {
+        message = "❌ Template not found. Available: basic, saas-mvp, ai-product, enterprise.";
       } else if (error.message.includes('DetailedValidationError')) {
         message = `❌ Invalid configuration: ${error.message}`;
       } else {

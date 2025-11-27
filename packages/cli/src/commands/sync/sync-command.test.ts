@@ -443,10 +443,10 @@ describe('SyncCommand - Unit Tests', () => {
   });
 
   // =====================================================================
-  // EARS 13-16: Operación Pull
+  // EARS 13-16, 28, 28.1, 29, 29.1, 44: Operación Pull
   // =====================================================================
 
-  describe('Pull Operation (EARS 13-16, 28, 29)', () => {
+  describe('Pull Operation (EARS 13-16, 28, 28.1, 29, 29.1, 44)', () => {
     it('[EARS-13] should update local branch with remote changes using rebase', async () => {
       // Setup
       mockSyncModule.pullState.mockResolvedValue({
