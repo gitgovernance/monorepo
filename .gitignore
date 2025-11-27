@@ -9,9 +9,6 @@ bin
 
 # GitGovernance
 # Ignore entire .gitgov/ directory (state lives in gitgov-state branch)
-.gitgov/
-
-# Exception: Don't ignore .gitgov/.gitignore itself (meta!)
-!.gitgov/.gitignore
+.gitgov
 
 .env
