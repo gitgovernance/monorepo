@@ -34,12 +34,129 @@ import path from "path";
 import { exec } from "child_process";
 import { promisify } from "util";
 import os from "os";
-import { SYNC_WHITELIST } from "./types";
+import { SYNC_DIRECTORIES, SYNC_ROOT_FILES, SYNC_ALLOWED_EXTENSIONS, SYNC_EXCLUDED_PATTERNS, LOCAL_ONLY_FILES } from "./types";
 
 // Create reusable helper
 const execAsync = promisify(exec);
 
 const logger = createLogger("[SyncModule] ");
+
+/**
+ * Helper: Check if a file should be synced to gitgov-state
+ * Returns true only for allowed *.json files in sync directories
+ */
+function shouldSyncFile(filePath: string): boolean {
+  const fileName = path.basename(filePath);
+  const ext = path.extname(filePath);
+
+  // Check if extension is allowed
+  if (!SYNC_ALLOWED_EXTENSIONS.includes(ext as typeof SYNC_ALLOWED_EXTENSIONS[number])) {
+    return false;
+  }
+
+  // Check if file matches any excluded pattern
+  for (const pattern of SYNC_EXCLUDED_PATTERNS) {
+    if (pattern.test(fileName)) {
+      return false;
+    }
+  }
+
+  // Check if it's a local-only file
+  if (LOCAL_ONLY_FILES.includes(fileName as typeof LOCAL_ONLY_FILES[number])) {
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * Helper: Recursively get all files in a directory
+ */
+async function getAllFiles(dir: string, baseDir: string = dir): Promise<string[]> {
+  const files: string[] = [];
+
+  try {
+    const entries = await fs.readdir(dir, { withFileTypes: true });
+
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        const subFiles = await getAllFiles(fullPath, baseDir);
+        files.push(...subFiles);
+      } else if (entry.isFile()) {
+        files.push(path.relative(baseDir, fullPath));
+      }
+    }
+  } catch {
+    // Directory doesn't exist
+  }
+
+  return files;
+}
+
+/**
+ * Helper: Copy only syncable files from source directory to destination
+ * Filters to only copy *.json files, excluding keys, backups, etc.
+ */
+async function copySyncableFiles(
+  sourceDir: string,
+  destDir: string,
+  log: (msg: string) => void
+): Promise<number> {
+  let copiedCount = 0;
+
+  // Copy sync directories (only *.json files)
+  for (const dirName of SYNC_DIRECTORIES) {
+    const sourcePath = path.join(sourceDir, dirName);
+    const destPath = path.join(destDir, dirName);
+
+    try {
+      const stat = await fs.stat(sourcePath);
+      if (!stat.isDirectory()) continue;
+
+      // Get all files recursively
+      const allFiles = await getAllFiles(sourcePath);
+
+      for (const relativePath of allFiles) {
+        const fullSourcePath = path.join(sourcePath, relativePath);
+        const fullDestPath = path.join(destPath, relativePath);
+
+        if (shouldSyncFile(fullSourcePath)) {
+          await fs.mkdir(path.dirname(fullDestPath), { recursive: true });
+          await fs.copyFile(fullSourcePath, fullDestPath);
+          log(`Copied: ${dirName}/${relativePath}`);
+          copiedCount++;
+        } else {
+          log(`Skipped (not syncable): ${dirName}/${relativePath}`);
+        }
+      }
+    } catch (error) {
+      const errCode = (error as NodeJS.ErrnoException).code;
+      if (errCode !== 'ENOENT') {
+        log(`Error processing ${dirName}: ${error}`);
+      }
+    }
+  }
+
+  // Copy root-level sync files
+  for (const fileName of SYNC_ROOT_FILES) {
+    const sourcePath = path.join(sourceDir, fileName);
+    const destPath = path.join(destDir, fileName);
+
+    try {
+      await fs.copyFile(sourcePath, destPath);
+      log(`Copied root file: ${fileName}`);
+      copiedCount++;
+    } catch (error) {
+      const errCode = (error as NodeJS.ErrnoException).code;
+      if (errCode !== 'ENOENT') {
+        log(`Error copying ${fileName}: ${error}`);
+      }
+    }
+  }
+
+  return copiedCount;
+}
 
 /**
  * SyncModule - Manages state synchronization between local environment and gitgov-state branch
@@ -199,23 +316,6 @@ export class SyncModule {
   }
 
   /**
-   * Checks if a remote is configured in the git repository.
-   *
-   * @param remoteName - Name of the remote to check (default: "origin")
-   * @returns true if the remote is configured, false otherwise
-   */
-  private async isRemoteConfigured(remoteName: string): Promise<boolean> {
-    try {
-      const repoRoot = await this.git.getRepoRoot();
-      const { stdout } = await execAsync(`git remote`, { cwd: repoRoot });
-      const remotes = stdout.trim().split("\n").filter(Boolean);
-      return remotes.includes(remoteName);
-    } catch {
-      return false;
-    }
-  }
-
-  /**
    * Ensures that the gitgov-state branch exists both locally and remotely.
    * If it doesn't exist, creates it as an orphan branch.
    *
@@ -333,6 +433,15 @@ export class SyncModule {
     const currentBranch = await this.git.getCurrentBranch();
     const repoRoot = await this.git.getRepoRoot();
 
+    // Check if current branch has any commits (required to return after creating orphan)
+    const currentBranchHasCommits = await this.git.branchExists(currentBranch);
+    if (!currentBranchHasCommits) {
+      throw new Error(
+        `Cannot initialize GitGovernance: branch '${currentBranch}' has no commits. ` +
+        `Please create an initial commit first (e.g., 'git commit --allow-empty -m "Initial commit"').`
+      );
+    }
+
     try {
       // 1. Create orphan branch
       await this.git.checkoutOrphanBranch(stateBranch);
@@ -354,7 +463,7 @@ export class SyncModule {
 
       // 5. Push with upstream (if remote is configured)
       // First check if the remote is actually configured
-      const hasRemote = await this.isRemoteConfigured(remoteName);
+      const hasRemote = await this.git.isRemoteConfigured(remoteName);
 
       if (hasRemote) {
         try {
@@ -768,6 +877,33 @@ export class SyncModule {
       }
       log(`Pre-check passed: pushing from ${sourceBranch} to ${stateBranch}`);
 
+      // [EARS-44] PRE-CHECK 1: Verify remote is configured for push (FIRST!)
+      // This must be checked first because without remote, sync makes no sense
+      const remoteName = "origin";
+      const hasRemote = await this.git.isRemoteConfigured(remoteName);
+      if (!hasRemote) {
+        log(`ERROR: No remote '${remoteName}' configured`);
+        throw new SyncError(
+          `No remote repository configured. ` +
+          `State sync requires a remote for multi-machine collaboration.\n` +
+          `Add a remote with: git remote add origin <url>\n` +
+          `Then push your changes: git push -u origin ${sourceBranch}`
+        );
+      }
+      log(`Pre-check passed: remote '${remoteName}' configured`);
+
+      // [EARS-44] PRE-CHECK 2: Verify current branch has commits
+      // This is required for creating gitgov-state orphan branch and returning to original branch
+      const hasCommits = await this.git.branchExists(sourceBranch);
+      if (!hasCommits) {
+        log(`ERROR: Branch '${sourceBranch}' has no commits`);
+        throw new SyncError(
+          `Cannot sync: branch '${sourceBranch}' has no commits. ` +
+          `Please create an initial commit first (e.g., 'git commit --allow-empty -m "Initial commit"').`
+        );
+      }
+      log(`Pre-check passed: branch '${sourceBranch}' has commits`);
+
       // PHASE 0: Integrity Verification and Audit (EARS-6, EARS-7)
       log('Phase 0: Starting audit...');
       const auditReport = await this.auditState({ scope: "current" });
@@ -806,43 +942,24 @@ export class SyncModule {
 
       if (isCurrentBranch) {
         const repoRoot = await this.git.getRepoRoot();
+        const gitgovPath = path.join(repoRoot, '.gitgov');
 
-        try {
-          const { stdout } = await execAsync('git status --porcelain .gitgov/', { cwd: repoRoot });
-          hasUntrackedGitgovFiles = stdout.trim().length > 0;
-          log(`[EARS-43] .gitgov/ has untracked/modified files: ${hasUntrackedGitgovFiles}`);
-        } catch {
-          hasUntrackedGitgovFiles = false;
-        }
+        // Check if .gitgov/ EXISTS ON FILESYSTEM (not git status)
+        // This is critical because .gitgov/ may be in .gitignore and git status won't show it
+        hasUntrackedGitgovFiles = existsSync(gitgovPath);
+        log(`[EARS-43] .gitgov/ exists on filesystem: ${hasUntrackedGitgovFiles}`);
 
-        // If untracked files exist, copy them to temp directory BEFORE stashing
+        // If untracked files exist, copy ENTIRE .gitgov/ to temp directory BEFORE stashing
+        // This preserves ALL local files (not just SYNC_WHITELIST) for restoration after branch switch
         if (hasUntrackedGitgovFiles) {
-          log('[EARS-43] Copying untracked .gitgov/ files to temp directory...');
+          log('[EARS-43] Copying ENTIRE .gitgov/ to temp directory for preservation...');
 
           tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'gitgov-sync-'));
           log(`[EARS-43] Created temp directory: ${tempDir}`);
 
-          // Copy each whitelisted path to temp
-          for (const item of SYNC_WHITELIST) {
-            const sourcePath = path.join(repoRoot, '.gitgov', item);
-            const destPath = path.join(tempDir, item);
-
-            try {
-              const stat = await fs.stat(sourcePath);
-
-              if (stat.isDirectory()) {
-                await fs.cp(sourcePath, destPath, { recursive: true });
-                log(`[EARS-43] Copied directory to temp: ${item}`);
-              } else if (stat.isFile()) {
-                await fs.mkdir(path.dirname(destPath), { recursive: true });
-                await fs.copyFile(sourcePath, destPath);
-                log(`[EARS-43] Copied file to temp: ${item}`);
-              }
-            } catch (error) {
-              log(`[EARS-43] Path ${item} does not exist, skipping`);
-            }
-          }
-          log('[EARS-43] Temp copy complete');
+          // Copy entire .gitgov/ directory to preserve ALL files (including local-only files)
+          await fs.cp(gitgovPath, tempDir, { recursive: true });
+          log('[EARS-43] Entire .gitgov/ copied to temp');
         }
       }
 
@@ -860,9 +977,30 @@ export class SyncModule {
         log(`[EARS-43] Changes stashed: ${stashHash || 'none'}`);
       }
 
-      // Helper function to restore stash when returning early
+      // Helper function to restore stash AND tempDir when returning early
       const restoreStashAndReturn = async (returnResult: SyncPushResult): Promise<SyncPushResult> => {
         await this.git.checkoutBranch(savedBranch);
+
+        // [EARS-47] CRITICAL: Always restore tempDir FIRST to preserve local files (keys, etc.)
+        if (tempDir) {
+          try {
+            log('[EARS-47] Restoring .gitgov/ from temp directory (early return)...');
+            const repoRoot = await this.git.getRepoRoot();
+            const gitgovDir = path.join(repoRoot, '.gitgov');
+            await fs.cp(tempDir, gitgovDir, { recursive: true, force: true });
+            log('[EARS-47] .gitgov/ restored from temp (early return)');
+
+            // Cleanup temp
+            await fs.rm(tempDir, { recursive: true, force: true });
+            log('[EARS-47] Temp directory cleaned up (early return)');
+          } catch (tempRestoreError) {
+            log(`[EARS-47] WARNING: Failed to restore tempDir: ${tempRestoreError}`);
+            returnResult.error = returnResult.error
+              ? `${returnResult.error}. Failed to restore .gitgov/ from temp.`
+              : `Failed to restore .gitgov/ from temp. Check /tmp for gitgov-sync-* directory.`;
+          }
+        }
+
         if (stashHash) {
           try {
             await this.git.stashPop();
@@ -972,12 +1110,10 @@ export class SyncModule {
         log('First push: will copy all whitelisted files');
       }
 
-      // [EARS-42] & [EARS-43] Copy files from source branch using whitelist
-      log(`Checking out whitelisted .gitgov/ files from ${sourceBranch}...`);
-
-      // Build paths for whitelist items
-      const allWhitelistedPaths = SYNC_WHITELIST;
-      log(`Whitelist paths: ${allWhitelistedPaths.join(', ')}`);
+      // [EARS-42] & [EARS-43] Copy ONLY syncable files (*.json, no keys, no backups)
+      log(`Copying syncable .gitgov/ files from ${sourceBranch}...`);
+      log(`Sync directories: ${SYNC_DIRECTORIES.join(', ')}`);
+      log(`Sync root files: ${SYNC_ROOT_FILES.join(', ')}`);
 
       const repoRoot = await this.git.getRepoRoot();
 
@@ -986,64 +1122,75 @@ export class SyncModule {
       // If we have temp directory with untracked files, copy from there
       // Otherwise, use git checkout from source branch
       if (tempDir) {
-        log('[EARS-43] Copying whitelisted files from temp directory...');
+        log('[EARS-43] Copying ONLY syncable files from temp directory...');
 
-        // Copy each whitelisted path from temp to gitgov-state
-        for (const item of allWhitelistedPaths) {
-          const sourcePath = path.join(tempDir, item);
-          const destPath = path.join(repoRoot, '.gitgov', item);
+        // Create .gitgov/ directory if it doesn't exist (first push to orphan branch)
+        const gitgovDir = path.join(repoRoot, '.gitgov');
+        await fs.mkdir(gitgovDir, { recursive: true });
+        log(`[EARS-43] Ensured .gitgov/ directory exists: ${gitgovDir}`);
 
-          try {
-            const stat = await fs.stat(sourcePath);
-
-            if (stat.isDirectory()) {
-              // Copy directory recursively
-              await fs.cp(sourcePath, destPath, { recursive: true, force: true });
-              log(`[EARS-43] Copied directory from temp: ${item}`);
-            } else if (stat.isFile()) {
-              // Copy file
-              await fs.mkdir(path.dirname(destPath), { recursive: true });
-              await fs.copyFile(sourcePath, destPath);
-              log(`[EARS-43] Copied file from temp: ${item}`);
-            }
-          } catch (error) {
-            // Path doesn't exist, skip it
-            log(`[EARS-43] Path ${item} does not exist in temp, skipping`);
-          }
-        }
-        log('[EARS-43] Temp directory copy complete');
+        // Use helper to copy only syncable files (*.json, no keys, no backups)
+        const copiedCount = await copySyncableFiles(tempDir, gitgovDir, log);
+        log(`[EARS-43] Syncable files copy complete: ${copiedCount} files copied`);
       } else {
         // Use git checkout for tracked files
-        log('Copying whitelisted files from git...');
+        log('Copying syncable files from git...');
 
+        // Build list of paths that exist in source branch AND are syncable
         const existingPaths: string[] = [];
-        for (const item of allWhitelistedPaths) {
-          const fullPath = `.gitgov/${item}`;
+
+        // Check sync directories
+        for (const dirName of SYNC_DIRECTORIES) {
+          const fullPath = `.gitgov/${dirName}`;
           try {
             const { stdout } = await execAsync(
-              `git ls-tree -r ${sourceBranch} ${fullPath}`,
+              `git ls-tree -r ${sourceBranch} -- ${fullPath}`,
+              { cwd: repoRoot }
+            );
+            // Filter to only include syncable files (*.json, no keys, no backups)
+            const lines = stdout.trim().split('\n').filter(l => l);
+            for (const line of lines) {
+              const parts = line.split('\t');
+              const filePath = parts[1];
+              if (filePath && shouldSyncFile(filePath)) {
+                existingPaths.push(filePath);
+              } else if (filePath) {
+                log(`Skipped (not syncable): ${filePath}`);
+              }
+            }
+          } catch {
+            log(`Directory ${dirName} does not exist in ${sourceBranch}, skipping`);
+          }
+        }
+
+        // Check root sync files
+        for (const fileName of SYNC_ROOT_FILES) {
+          const fullPath = `.gitgov/${fileName}`;
+          try {
+            const { stdout } = await execAsync(
+              `git ls-tree ${sourceBranch} -- ${fullPath}`,
               { cwd: repoRoot }
             );
             if (stdout.trim()) {
               existingPaths.push(fullPath);
             }
           } catch {
-            log(`Path ${item} does not exist in ${sourceBranch}, skipping`);
+            log(`File ${fileName} does not exist in ${sourceBranch}, skipping`);
           }
         }
 
-        log(`Existing whitelisted paths: ${existingPaths.length} of ${allWhitelistedPaths.length}`);
+        log(`Syncable paths found: ${existingPaths.length}`);
 
         if (existingPaths.length === 0) {
-          log('No whitelisted files to sync, aborting');
+          log('No syncable files to sync, aborting');
           result.success = true;
           result.filesSynced = 0;
           return await restoreStashAndReturn(result);
         }
 
-        // Copy only existing whitelisted files
+        // Copy only syncable files
         await this.git.checkoutFilesFromBranch(sourceBranch, existingPaths);
-        log('Whitelisted files checked out successfully');
+        log('Syncable files checked out successfully');
       }
 
       // Create structured commit message
@@ -1052,7 +1199,8 @@ export class SyncModule {
       // For first push, we need to recalculate delta now that files are staged
       if (isFirstPush) {
         // Stage the copied files first
-        await this.git.add([".gitgov"]);
+        // Use force: true because .gitgov/ may be in .gitignore (by design)
+        await this.git.add([".gitgov"], { force: true });
 
         // Get list of staged files for commit message
         const repoRoot = await this.git.getRepoRoot();
@@ -1091,10 +1239,41 @@ export class SyncModule {
       result.commitMessage = commitMessage;
 
       if (!dryRun) {
+        // [EARS-47] Remove ALL non-syncable files from gitgov-state
+        // This ensures only files that pass shouldSyncFile() remain in shared state
+        log('[EARS-47] Scanning for non-syncable files in gitgov-state...');
+
+        // Get ALL files currently tracked in .gitgov/ on this branch
+        try {
+          const { stdout: trackedFiles } = await execAsync(
+            `git ls-files ".gitgov" 2>/dev/null || true`,
+            { cwd: repoRoot }
+          );
+          const allTrackedFiles = trackedFiles.trim().split('\n').filter(f => f);
+          log(`[EARS-47] Found ${allTrackedFiles.length} tracked files in .gitgov/`);
+
+          // Remove any file that should NOT be synced (using the same shouldSyncFile() logic)
+          for (const trackedFile of allTrackedFiles) {
+            if (!shouldSyncFile(trackedFile)) {
+              try {
+                await execAsync(`git rm -f "${trackedFile}"`, { cwd: repoRoot });
+                log(`[EARS-47] Removed non-syncable file: ${trackedFile}`);
+              } catch {
+                // File might not exist or not be tracked anymore
+              }
+            }
+          }
+        } catch {
+          // No tracked files, that's fine (first push)
+        }
+
+        log('[EARS-47] Non-syncable files cleanup complete');
+
         // Stage changes (skip if already staged during first push delta calculation)
         if (!isFirstPush) {
           log('Staging changes...');
-          await this.git.add([".gitgov"]);
+          // Use force: true because .gitgov/ may be in .gitignore (by design)
+          await this.git.add([".gitgov"], { force: true });
           log('Changes staged');
         }
 
@@ -1117,9 +1296,28 @@ export class SyncModule {
           log(`Commit created: ${commitHash}`);
           result.commitHash = commitHash;
         } catch (commitError) {
-          // If commit fails, provide more context including stderr if available
+          // Check if this is a "nothing to commit" error (common on second push with identical files)
           const errorMsg = commitError instanceof Error ? commitError.message : String(commitError);
-          const stderr = (commitError as any).stderr || 'No stderr available';
+          const stdout = (commitError as any).stdout || '';
+          const stderr = (commitError as any).stderr || '';
+
+          log(`Commit attempt output - stdout: ${stdout}, stderr: ${stderr}`);
+
+          // Git returns exit code 1 with "nothing to commit" in stdout when there are no changes
+          const isNothingToCommit =
+            stdout.includes('nothing to commit') ||
+            stderr.includes('nothing to commit') ||
+            stdout.includes('nothing added to commit') ||
+            stderr.includes('nothing added to commit');
+
+          if (isNothingToCommit) {
+            log('Nothing to commit - files are identical to gitgov-state HEAD');
+            result.success = true;
+            result.filesSynced = 0;
+            return await restoreStashAndReturn(result);
+          }
+
+          // Otherwise, it's a real error
           log(`ERROR: Commit failed: ${errorMsg}`);
           log(`ERROR: Git stderr: ${stderr}`);
           throw new Error(`Failed to create commit: ${errorMsg} | stderr: ${stderr}`);
@@ -1165,35 +1363,16 @@ export class SyncModule {
         }
       }
 
-      // [EARS-43] Restore untracked files from temp directory back to working tree
-      // This is CRITICAL: stash only preserves tracked files, untracked files need manual restoration
+      // [EARS-43] Restore ALL files from temp directory back to working tree
+      // This is CRITICAL: we preserve ENTIRE .gitgov/ including local-only files
       if (tempDir) {
-        log('[EARS-43] Restoring untracked files from temp directory to working tree...');
+        log('[EARS-43] Restoring ENTIRE .gitgov/ from temp directory to working tree...');
         const repoRoot = await this.git.getRepoRoot();
+        const gitgovDir = path.join(repoRoot, '.gitgov');
 
-        for (const item of SYNC_WHITELIST) {
-          const sourcePath = path.join(tempDir, item);
-          const destPath = path.join(repoRoot, '.gitgov', item);
-
-          try {
-            const stat = await fs.stat(sourcePath);
-
-            if (stat.isDirectory()) {
-              // Copy directory recursively, preserving untracked files
-              await fs.cp(sourcePath, destPath, { recursive: true, force: true });
-              log(`[EARS-43] Restored directory to working tree: ${item}`);
-            } else if (stat.isFile()) {
-              // Copy file
-              await fs.mkdir(path.dirname(destPath), { recursive: true });
-              await fs.copyFile(sourcePath, destPath);
-              log(`[EARS-43] Restored file to working tree: ${item}`);
-            }
-          } catch (error) {
-            // Path doesn't exist in temp, skip (it may have been a tracked-only path)
-            log(`[EARS-43] Path ${item} not in temp, skipping restoration`);
-          }
-        }
-        log('[EARS-43] Untracked files restored to working tree');
+        // Copy entire temp back to .gitgov/ (this restores ALL files including local-only)
+        await fs.cp(tempDir, gitgovDir, { recursive: true, force: true });
+        log('[EARS-43] Entire .gitgov/ restored from temp');
 
         // Cleanup temp directory
         log('[EARS-43] Cleaning up temp directory...');
@@ -1212,15 +1391,22 @@ export class SyncModule {
     } catch (error) {
       log(`=== pushState FAILED: ${(error as Error).message} ===`);
 
-      // [EARS-43] Try to restore stashed changes even on error
+      // [EARS-43] Try to restore original branch even on error (ALWAYS, not just with stash)
+      try {
+        const currentBranch = await this.git.getCurrentBranch();
+        if (currentBranch !== savedBranch && savedBranch) {
+          log(`[EARS-43] Restoring original branch: ${savedBranch}...`);
+          await this.git.checkoutBranch(savedBranch);
+          log(`[EARS-43] Restored to ${savedBranch}`);
+        }
+      } catch (branchError) {
+        log(`[EARS-43] Failed to restore original branch: ${branchError}`);
+      }
+
+      // [EARS-43] Try to restore stashed changes if any
       if (stashHash) {
         log('[EARS-43] Attempting to restore stashed changes after error...');
         try {
-          // Try to return to original branch first
-          const currentBranch = await this.git.getCurrentBranch();
-          if (currentBranch !== savedBranch) {
-            await this.git.checkoutBranch(savedBranch);
-          }
           await this.git.stashPop();
           log('[EARS-43] Stashed changes restored after error');
         } catch (stashError) {
@@ -1250,6 +1436,7 @@ export class SyncModule {
    * Includes automatic re-indexing if there are new changes.
    *
    * [EARS-13 through EARS-16]
+   * [EARS-44] Requires remote to be configured (pull without remote makes no sense)
    */
   async pullState(
     options: SyncPullOptions = {}
@@ -1260,6 +1447,10 @@ export class SyncModule {
       throw new SyncError("Failed to get state branch name");
     }
 
+    // Debug logging helper
+    const log = (msg: string) => logger.debug(`[pullState] ${msg}`);
+
+    // Initialize result
     const result: SyncPullResult = {
       success: false,
       hasChanges: false,
@@ -1269,7 +1460,71 @@ export class SyncModule {
     };
 
     try {
-      // 1. Pre-checks
+      log('=== STARTING pullState ===');
+
+      // ═══════════════════════════════════════════════════════════
+      // PHASE 0: Pre-flight Checks (EARS-44)
+      // ═══════════════════════════════════════════════════════════
+      log('Phase 0: Pre-flight checks...');
+
+      // [EARS-44] PRE-CHECK: Verify remote is configured (pull without remote is meaningless)
+      const remoteName = "origin";
+      const hasRemote = await this.git.isRemoteConfigured(remoteName);
+
+      if (!hasRemote) {
+        throw new SyncError(
+          `No remote '${remoteName}' configured. Pull requires a remote repository. ` +
+          `Add a remote with: git remote add origin <url>`
+        );
+      }
+
+      // [EARS-44] PRE-CHECK: Verify gitgov-state exists remotely
+      // Fetch first to get latest remote refs
+      await this.git.fetch(remoteName);
+      const remoteBranches = await this.git.listRemoteBranches(remoteName);
+      const existsRemote = remoteBranches.includes(stateBranch);
+
+      if (!existsRemote) {
+        // Check if local branch exists (maybe not pushed yet)
+        const existsLocal = await this.git.branchExists(stateBranch);
+
+        if (!existsLocal) {
+          // Check if .gitgov/ exists - if so, user already ran init and just needs to push
+          const repoRoot = await this.git.getRepoRoot();
+          const gitgovPath = path.join(repoRoot, ".gitgov");
+          const gitgovExists = existsSync(gitgovPath);
+
+          if (gitgovExists) {
+            // User has .gitgov/ but hasn't pushed yet - suggest sync push
+            throw new SyncError(
+              `State branch '${stateBranch}' does not exist remotely yet. ` +
+              `Run 'gitgov sync push' to publish your local state to the remote.`
+            );
+          } else {
+            // User hasn't initialized at all
+            throw new SyncError(
+              `State branch '${stateBranch}' does not exist locally or remotely. ` +
+              `Run 'gitgov init' first to initialize GitGovernance, then 'gitgov sync push' to publish.`
+            );
+          }
+        }
+
+        // Local exists but remote doesn't - nothing to pull
+        result.success = true;
+        result.hasChanges = false;
+        result.filesUpdated = 0;
+        logger.info(`[pullState] State branch exists locally but not remotely. Nothing to pull.`);
+        return result;
+      }
+
+      log('Pre-flight checks complete');
+
+      // ═══════════════════════════════════════════════════════════
+      // PHASE 1: Branch Setup and Verification
+      // ═══════════════════════════════════════════════════════════
+      log('Phase 1: Setting up branches...');
+
+      // 1. Pre-checks - ensure local branch tracks remote
       await this.ensureStateBranch();
 
       const savedBranch = await this.git.getCurrentBranch();
@@ -1301,6 +1556,13 @@ export class SyncModule {
         }
         // If git status fails, continue (branch might be clean)
       }
+
+      log('Branch setup complete');
+
+      // ═══════════════════════════════════════════════════════════
+      // PHASE 2: Pull Remote Changes (EARS-13, EARS-14)
+      // ═══════════════════════════════════════════════════════════
+      log('Phase 2: Pulling remote changes...');
 
       // 2. Save current commit to compare later
       const commitBefore = await this.git.getCommitHistory(stateBranch, {
@@ -1338,6 +1600,13 @@ export class SyncModule {
         // If not a conflict, propagate error
         throw error;
       }
+
+      log('Pull rebase successful');
+
+      // ═══════════════════════════════════════════════════════════
+      // PHASE 3: Re-indexing and File Updates (EARS-15, EARS-16)
+      // ═══════════════════════════════════════════════════════════
+      log('Phase 3: Checking for changes and re-indexing...');
 
       // 4. Check if there are new changes (EARS-15)
       const commitAfter = await this.git.getCommitHistory(stateBranch, {
@@ -1388,6 +1657,11 @@ export class SyncModule {
         // Git will preserve .gitgov/ in the filesystem even though it's ignored
       }
 
+      // ═══════════════════════════════════════════════════════════
+      // PHASE 4: Restore Working Branch and Cleanup
+      // ═══════════════════════════════════════════════════════════
+      log('Phase 4: Restoring working branch...');
+
       // 7. Return to original branch
       await this.git.checkoutBranch(savedBranch);
 
@@ -1416,8 +1690,10 @@ export class SyncModule {
       }
 
       result.success = true;
+      log(`=== pullState COMPLETED: ${hasNewChanges ? 'new changes pulled' : 'no changes'}, reindexed: ${result.reindexed} ===`);
       return result;
     } catch (error) {
+      log(`=== pullState FAILED: ${(error as Error).message} ===`);
       // Re-throw critical errors that should fail fast
       if (error instanceof UncommittedChangesError) {
         throw error;
@@ -1440,6 +1716,15 @@ export class SyncModule {
     options: SyncResolveOptions
   ): Promise<SyncResolveResult> {
     const { reason, actorId } = options;
+
+    // Debug logging helper
+    const log = (msg: string) => logger.debug(`[resolveConflict] ${msg}`);
+    log('=== STARTING resolveConflict ===');
+
+    // ═══════════════════════════════════════════════════════════
+    // PHASE 0: Pre-flight Checks (EARS-17, EARS-18)
+    // ═══════════════════════════════════════════════════════════
+    log('Phase 0: Verifying rebase state...');
 
     // 1. Verify rebase is in progress (EARS-17)
     const rebaseInProgress = await this.isRebaseInProgress();
@@ -1515,7 +1800,8 @@ export class SyncModule {
 
     // 5. Re-stage resolved files (now includes updated Records with new checksums/signatures)
     console.log("[resolveConflict] Re-staging .gitgov/ with updated metadata...");
-    await this.git.add([".gitgov"]);
+    // Use force: true because .gitgov/ may be in .gitignore (by design)
+    await this.git.add([".gitgov"], { force: true });
 
     // 6. Continue rebase (creates technical commit) (EARS-20)
     console.log("[resolveConflict] Step 6: Calling git.rebaseContinue() (THIS MAY HANG)...");
@@ -1553,6 +1839,8 @@ export class SyncModule {
       logger.warn(`Failed to regenerate index after resolution: ${(error as Error).message}`);
       // Non-critical: index regeneration failure doesn't fail the resolution
     }
+
+    log(`=== resolveConflict COMPLETED: ${resolvedRecords.length} conflicts resolved ===`);
 
     return {
       success: true,

@@ -265,13 +265,53 @@ export interface StateDeltaFile {
  * - *.tmp (temporary files)
  * - .DS_Store (macOS metadata)
  */
-export const SYNC_WHITELIST = [
+/**
+ * Directories to SYNC to gitgov-state branch (shared state)
+ * Only *.json files within these directories will be synced
+ */
+export const SYNC_DIRECTORIES = [
   'tasks',
   'cycles',
   'actors',
+  'agents',
   'feedback',
+  'executions',
+  'changelogs',
   'workflows',
-  'index.json',
+] as const;
+
+/**
+ * Root-level files to SYNC to gitgov-state
+ */
+export const SYNC_ROOT_FILES = [
   'config.json',
+] as const;
+
+/**
+ * File extensions that are ALLOWED to be synced
+ * Only these extensions will be copied to gitgov-state
+ */
+export const SYNC_ALLOWED_EXTENSIONS = ['.json'] as const;
+
+/**
+ * File patterns that are NEVER synced (even if they match allowed extensions)
+ * These are excluded from gitgov-state branch
+ */
+export const SYNC_EXCLUDED_PATTERNS = [
+  /\.key$/,           // Private keys (e.g., actors/*.key)
+  /\.backup$/,        // Backup files from lint
+  /\.backup-\d+$/,    // Numbered backup files
+  /\.tmp$/,           // Temporary files
+  /\.bak$/,           // Backup files
+] as const;
+
+/**
+ * Files/directories that are LOCAL-ONLY (never synced to gitgov-state)
+ * These are regenerated or machine-specific
+ */
+export const LOCAL_ONLY_FILES = [
+  'index.json',      // Generated index, rebuilt on each machine
+  '.session.json',   // Local session state for current user/agent
+  'gitgov',          // Local binary/script
 ] as const;
 

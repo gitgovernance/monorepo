@@ -247,10 +247,10 @@ describe('GitModule', () => {
   });
 
   // ═══════════════════════════════════════════════════════════════════════
-  // 4.1. Read Operations (EARS 1-18)
+  // 4.1. Read Operations (EARS 1-18, 45-50)
   // ═══════════════════════════════════════════════════════════════════════
 
-  describe('4.1. Read Operations (EARS 1-18)', () => {
+  describe('4.1. Read Operations (EARS 1-18, 45-50)', () => {
     it('[EARS-1] should return repository root path', async () => {
       const repoRoot = await gitModule.getRepoRoot();
       expect(repoRoot).toBe(tempRepo);
@@ -1215,10 +1215,10 @@ describe('GitModule', () => {
   });
 
   // ══════════════════════════════════════════════════════════
-  // setConfig() Tests (EARS-51, 52)
+  // 4.6. Configuration Operations (EARS 51-52)
   // ══════════════════════════════════════════════════════════
 
-  describe("setConfig()", () => {
+  describe("4.6. Configuration Operations (EARS 51-52)", () => {
     it("[EARS-51] should set git config value in local scope (default)", async () => {
       const repoPath = await createTempRepo();
       const git = new GitModule({ repoRoot: repoPath, execCommand: createExecCommand(repoPath) });
@@ -1263,6 +1263,150 @@ describe('GitModule', () => {
       await expect(
         git.setConfig("invalid key with spaces", "value")
       ).rejects.toThrow("Failed to set Git config");
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════
+  // 4.7. Stash Operations (EARS 53-58)
+  // ══════════════════════════════════════════════════════════
+
+  describe("4.7. Stash Operations (EARS 53-58)", () => {
+    it("[EARS-53] should stash uncommitted changes with custom message", async () => {
+      const repoPath = await createTempRepo();
+      const git = new GitModule({ repoRoot: repoPath, execCommand: createExecCommand(repoPath) });
+
+      // Create uncommitted changes
+      fs.writeFileSync(path.join(repoPath, 'test-file.txt'), 'uncommitted content');
+      await git.add(['test-file.txt']);
+
+      // Stash with custom message
+      const stashHash = await git.stash('test stash message');
+
+      // Should return a hash
+      expect(stashHash).not.toBeNull();
+      expect(typeof stashHash).toBe('string');
+
+      // Verify file is no longer in working directory
+      expect(fs.existsSync(path.join(repoPath, 'test-file.txt'))).toBe(false);
+
+      // Verify stash was created with message
+      const result = await execAsync('git stash list', { cwd: repoPath });
+      expect(result.stdout).toContain('test stash message');
+
+      removeTempRepo(repoPath);
+    });
+
+    it("[EARS-54] should return null when stashing with no uncommitted changes", async () => {
+      const repoPath = await createTempRepo();
+      const git = new GitModule({ repoRoot: repoPath, execCommand: createExecCommand(repoPath) });
+
+      // No changes - just the initial commit
+      const stashHash = await git.stash('empty stash');
+
+      // Should return null since nothing to stash
+      expect(stashHash).toBeNull();
+
+      // Verify no stash was created
+      const result = await execAsync('git stash list', { cwd: repoPath });
+      expect(result.stdout.trim()).toBe('');
+
+      removeTempRepo(repoPath);
+    });
+
+    it("[EARS-55] should pop stashed changes and restore them", async () => {
+      const repoPath = await createTempRepo();
+      const git = new GitModule({ repoRoot: repoPath, execCommand: createExecCommand(repoPath) });
+
+      // Create and stash changes
+      const testContent = 'content to stash and restore';
+      fs.writeFileSync(path.join(repoPath, 'stash-test.txt'), testContent);
+      await git.add(['stash-test.txt']);
+      await git.stash('stash for pop test');
+
+      // Verify file is gone
+      expect(fs.existsSync(path.join(repoPath, 'stash-test.txt'))).toBe(false);
+
+      // Pop the stash
+      const popped = await git.stashPop();
+
+      // Should return true
+      expect(popped).toBe(true);
+
+      // Verify file is restored
+      expect(fs.existsSync(path.join(repoPath, 'stash-test.txt'))).toBe(true);
+      expect(fs.readFileSync(path.join(repoPath, 'stash-test.txt'), 'utf-8')).toBe(testContent);
+
+      // Verify stash list is now empty
+      const result = await execAsync('git stash list', { cwd: repoPath });
+      expect(result.stdout.trim()).toBe('');
+
+      removeTempRepo(repoPath);
+    });
+
+    it("[EARS-56] should return false when popping with no stash", async () => {
+      const repoPath = await createTempRepo();
+      const git = new GitModule({ repoRoot: repoPath, execCommand: createExecCommand(repoPath) });
+
+      // No stashes exist
+      const popped = await git.stashPop();
+
+      // Should return false (graceful degradation)
+      expect(popped).toBe(false);
+
+      removeTempRepo(repoPath);
+    });
+
+    it("[EARS-57] should drop a specific stash by hash", async () => {
+      const repoPath = await createTempRepo();
+      const git = new GitModule({ repoRoot: repoPath, execCommand: createExecCommand(repoPath) });
+
+      // Create first stash
+      fs.writeFileSync(path.join(repoPath, 'file1.txt'), 'content 1');
+      await git.add(['file1.txt']);
+      await git.stash('first stash');
+
+      // Create second stash
+      fs.writeFileSync(path.join(repoPath, 'file2.txt'), 'content 2');
+      await git.add(['file2.txt']);
+      await git.stash('second stash');
+
+      // Get stash list before drop
+      const beforeResult = await execAsync('git stash list', { cwd: repoPath });
+      expect(beforeResult.stdout).toContain('first stash');
+      expect(beforeResult.stdout).toContain('second stash');
+
+      // Drop the most recent stash using stash@{0}
+      await git.stashDrop('stash@{0}');
+
+      // Verify only first stash remains
+      const afterResult = await execAsync('git stash list', { cwd: repoPath });
+      expect(afterResult.stdout).toContain('first stash');
+      expect(afterResult.stdout).not.toContain('second stash');
+
+      removeTempRepo(repoPath);
+    });
+
+    it("[EARS-58] should drop the most recent stash when no hash provided", async () => {
+      const repoPath = await createTempRepo();
+      const git = new GitModule({ repoRoot: repoPath, execCommand: createExecCommand(repoPath) });
+
+      // Create a stash
+      fs.writeFileSync(path.join(repoPath, 'drop-test.txt'), 'content to drop');
+      await git.add(['drop-test.txt']);
+      await git.stash('stash to drop');
+
+      // Verify stash exists
+      const beforeResult = await execAsync('git stash list', { cwd: repoPath });
+      expect(beforeResult.stdout).toContain('stash to drop');
+
+      // Drop without specifying hash
+      await git.stashDrop();
+
+      // Verify stash is gone
+      const afterResult = await execAsync('git stash list', { cwd: repoPath });
+      expect(afterResult.stdout.trim()).toBe('');
+
+      removeTempRepo(repoPath);
     });
   });
 });

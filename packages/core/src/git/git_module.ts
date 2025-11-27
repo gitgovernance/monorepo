@@ -402,13 +402,9 @@ export class GitModule {
    * // => [".gitgov/tasks/123.json"]
    */
   async getStagedFiles(): Promise<string[]> {
-    console.log("[getStagedFiles DEBUG] Getting staged files...");
     const args = ['diff', '--cached', '--name-only'];
 
     const result = await this.execGit(args);
-    console.log("[getStagedFiles DEBUG] exitCode:", result.exitCode);
-    console.log("[getStagedFiles DEBUG] stdout:", result.stdout);
-    console.log("[getStagedFiles DEBUG] stderr:", result.stderr);
 
     if (result.exitCode !== 0) {
       throw new GitCommandError('Failed to get staged files', result.stderr);
@@ -420,7 +416,6 @@ export class GitModule {
       .split('\n')
       .filter((line) => line.length > 0);
 
-    console.log("[getStagedFiles DEBUG] Parsed files:", files);
     return files;
   }
 
@@ -693,12 +688,33 @@ export class GitModule {
   }
 
   /**
+   * Checks if a remote is configured in the git repository.
+   *
+   * @param remoteName - Name of the remote to check (e.g., "origin")
+   * @returns true if the remote is configured, false otherwise
+   *
+   * @example
+   * const hasOrigin = await gitModule.isRemoteConfigured("origin");
+   * // => true
+   */
+  async isRemoteConfigured(remoteName: string): Promise<boolean> {
+    const result = await this.execGit(['remote']);
+
+    if (result.exitCode !== 0) {
+      return false;
+    }
+
+    const remotes = result.stdout.trim().split('\n').filter(Boolean);
+    return remotes.includes(remoteName);
+  }
+
+  /**
    * Retrieves the tracking remote for a branch
-   * 
+   *
    * @param branchName - Branch name
    * @returns Remote name or null if not configured
    * @throws BranchNotFoundError if branch doesn't exist
-   * 
+   *
    * @example
    * const remote = await gitModule.getBranchRemote("main");
    * // => "origin"
@@ -964,15 +980,23 @@ export class GitModule {
 
   /**
    * Adds files to the staging area
-   * 
+   *
    * @param filePaths - Array of file paths to add
+   * @param options - Optional settings (force: add ignored files)
    * @throws GitCommandError if operation fails
-   * 
+   *
    * @example
    * await gitModule.add([".gitgov/tasks/123.json"]);
+   * await gitModule.add([".gitgov"], { force: true }); // Add ignored files
    */
-  async add(filePaths: string[]): Promise<void> {
-    const result = await this.execGit(['add', ...filePaths]);
+  async add(filePaths: string[], options?: { force?: boolean }): Promise<void> {
+    const args = ['add'];
+    if (options?.force) {
+      args.push('--force');
+    }
+    args.push(...filePaths);
+
+    const result = await this.execGit(args);
 
     if (result.exitCode !== 0) {
       throw new GitCommandError('Failed to add files', result.stderr);
@@ -1026,7 +1050,9 @@ export class GitModule {
     const result = await this.execGit(args);
 
     if (result.exitCode !== 0) {
-      throw new GitCommandError('Failed to create commit', result.stderr);
+      // Include both stdout and stderr in error for better diagnostics
+      // (git commit outputs "nothing to commit" to stdout, not stderr)
+      throw new GitCommandError('Failed to create commit', result.stderr, undefined, result.stdout);
     }
 
     // Get the commit hash
@@ -1152,18 +1178,12 @@ export class GitModule {
    * // => "abc123def456..."
    */
   async rebaseContinue(): Promise<string> {
-    console.log("[rebaseContinue] START");
     if (!(await this.isRebaseInProgress())) {
       throw new RebaseNotInProgressError();
     }
-    console.log("[rebaseContinue] Rebase confirmed in progress");
 
     logger.debug('Continuing rebase...');
-    console.log("[rebaseContinue] About to execute: git rebase --continue");
     const result = await this.execGit(['rebase', '--continue']);
-    console.log("[rebaseContinue] Git command returned with exitCode:", result.exitCode);
-    console.log("[rebaseContinue] stdout:", result.stdout);
-    console.log("[rebaseContinue] stderr:", result.stderr);
 
     if (result.exitCode !== 0) {
       logger.error(`Rebase continue failed: ${result.stderr}`);
@@ -1174,7 +1194,6 @@ export class GitModule {
     const hashResult = await this.execGit(['rev-parse', 'HEAD']);
     const commitHash = hashResult.stdout.trim();
     logger.info(`Rebase continued successfully, commit: ${commitHash.substring(0, 8)}...`);
-    console.log("[rebaseContinue] SUCCESS - commitHash:", commitHash);
     return commitHash;
   }
 

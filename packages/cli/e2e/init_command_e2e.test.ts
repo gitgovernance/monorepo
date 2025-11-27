@@ -200,15 +200,13 @@ describe('Init CLI Command - Edge Cases E2E Tests', () => {
       process.chdir(originalCwd);
     });
 
-    it('[EARS-INIT-6] WHEN repo has no commits THE SYSTEM SHALL handle gracefully', () => {
-      // This is an edge case - gitgov init requires at least one commit for orphan branch creation
+    it('[EARS-INIT-6] WHEN repo has no commits THE SYSTEM SHALL fail with clear guidance', () => {
+      // gitgov init requires at least one commit for orphan branch creation
       const result = runCliCommand(['init', '--name', 'Empty Main Project', '--actor-name', 'Test User', '--quiet'], { cwd: testProjectRoot, expectError: true });
 
-      // Should either succeed with a clear workflow or fail with clear guidance
-      // If it fails, it should provide a helpful error message
-      if (!result.success) {
-        expect(result.error || result.output).toMatch(/(commit|empty|initial|first)/i);
-      }
+      // Should fail with a clear error message guiding the user
+      expect(result.success).toBe(false);
+      expect(result.error || result.output).toMatch(/no commits|initial commit/i);
     });
 
     it('[EARS-INIT-7] WHEN user creates initial commit THEN init THE SYSTEM SHALL succeed', () => {

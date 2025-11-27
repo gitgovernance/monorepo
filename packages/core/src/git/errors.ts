@@ -21,12 +21,14 @@ export class GitError extends Error {
  */
 export class GitCommandError extends GitError {
   public readonly stderr: string;
+  public readonly stdout?: string;
   public readonly command?: string | undefined;
 
-  constructor(message: string, stderr: string = '', command?: string | undefined) {
+  constructor(message: string, stderr: string = '', command?: string | undefined, stdout?: string) {
     super(message);
     this.name = 'GitCommandError';
     this.stderr = stderr;
+    this.stdout = stdout;
     this.command = command;
     Object.setPrototypeOf(this, GitCommandError.prototype);
   }

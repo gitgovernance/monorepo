@@ -5,12 +5,14 @@ import { ConfigManager } from '../../config_manager';
 import { DetailedValidationError } from '../../validation/common';
 import type { IdentityAdapter } from '../identity_adapter';
 import type { BacklogAdapter } from '../backlog_adapter';
-import type { SyncModule } from '../../sync';
+import type { GitModule } from '../../git';
 import { createTaskRecord } from '../../factories/task_factory';
 import { createCycleRecord } from '../../factories/cycle_factory';
 import { getImportMetaUrl } from '../../utils/esm_helper';
 import { createRequire } from 'module';
 import { fileURLToPath } from 'url';
+import { createLogger } from "../../logger";
+const logger = createLogger("[ProjectAdapter] ");
 
 /**
  * ProjectAdapter Dependencies - Facade + Dependency Injection Pattern
@@ -19,7 +21,7 @@ export interface ProjectAdapterDependencies {
   // Core Adapters (REQUIRED - Fase 1)
   identityAdapter: IdentityAdapter;
   backlogAdapter: BacklogAdapter;
-  syncModule: SyncModule;
+  gitModule: GitModule;
 
   // Infrastructure Layer (REQUIRED)
   configManager: ConfigManager;
@@ -134,13 +136,13 @@ export interface IProjectAdapter {
 export class ProjectAdapter implements IProjectAdapter {
   private identityAdapter: IdentityAdapter;
   private backlogAdapter: BacklogAdapter;
-  private syncModule: SyncModule;
+  private gitModule: GitModule;
   private configManager: ConfigManager;
 
   constructor(dependencies: ProjectAdapterDependencies) {
     this.identityAdapter = dependencies.identityAdapter;
     this.backlogAdapter = dependencies.backlogAdapter;
-    this.syncModule = dependencies.syncModule;
+    this.gitModule = dependencies.gitModule;
     this.configManager = dependencies.configManager;
   }
 
@@ -238,22 +240,24 @@ export class ProjectAdapter implements IProjectAdapter {
 
       await this.persistConfiguration(config, gitgovPath);
 
-      // 6.5. State Branch Setup via SyncModule (EARS-4, EARS-13)
-      // Create gitgov-state orphan branch if it doesn't exist
-      await this.syncModule.ensureStateBranch();
+      // 6.5. Lazy State Branch Setup (EARS-4, EARS-13)
+      // gitgov-state branch is NOT created here - it will be created lazily on first "sync push"
+      // This allows init to work in repos without remote or without commits
+      const hasRemote = await this.gitModule.isRemoteConfigured("origin");
+      const currentBranch = await this.gitModule.getCurrentBranch();
+      const hasCommits = await this.gitModule.branchExists(currentBranch);
 
-      // 6.6. Initial State Synchronization
-      // Push .gitgov/ directory to gitgov-state branch so it's not empty
-      // This ensures the remote has the initial project structure
-      try {
-        await this.syncModule.pushState({
-          actorId: actor.id,
-          dryRun: false,
-        });
-      } catch (pushError) {
-        // Non-critical: local setup is complete, remote sync can happen later
-        // This might fail if no remote is configured, which is OK
-        console.warn('⚠️ Initial state sync skipped (no remote or push failed). Run "gitgov sync push" when ready.');
+      if (!hasRemote || !hasCommits) {
+        const warnings: string[] = [];
+        if (!hasCommits) {
+          warnings.push("No commits in current branch");
+        }
+        if (!hasRemote) {
+          warnings.push("No remote 'origin' configured");
+        }
+        console.warn(`⚠️  ${warnings.join(", ")}.`);
+        console.warn(`   State sync will be available after 'git remote add origin <url>' and first commit.`);
+        console.warn(`   Run 'gitgov sync push' when ready to enable multi-machine collaboration.`);
       }
 
       // 7. Session Initialization
@@ -583,7 +587,7 @@ export class ProjectAdapter implements IProjectAdapter {
       try {
         await fs.access(source);
         await fs.copyFile(source, targetPrompt);
-        console.log(`📋 @gitgov agent prompt copied to .gitgov/gitgov`);
+        logger.debug(`📋 @gitgov agent prompt copied to .gitgov/gitgov\n`);
         return;
       } catch {
         // Source not accessible, try next one

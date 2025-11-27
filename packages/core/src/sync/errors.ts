@@ -118,3 +118,68 @@ export class UncommittedChangesError extends SyncError {
   }
 }
 
+/**
+ * Type guards for error handling
+ * 
+ * These functions enable type-safe error handling by narrowing the error type.
+ * They are additive and don't break any existing code.
+ * 
+ * Example usage:
+ * ```typescript
+ * try {
+ *   await syncModule.pushState(options);
+ * } catch (error) {
+ *   if (isPushFromStateBranchError(error)) {
+ *     // TypeScript knows error.branch exists here
+ *     console.log(`Cannot push from ${error.branch}`);
+ *   }
+ * }
+ * ```
+ */
+
+export function isSyncError(error: unknown): error is SyncError {
+  return error instanceof SyncError;
+}
+
+export function isPushFromStateBranchError(
+  error: unknown
+): error is PushFromStateBranchError {
+  return error instanceof PushFromStateBranchError;
+}
+
+export function isIntegrityViolationError(
+  error: unknown
+): error is IntegrityViolationError {
+  return error instanceof IntegrityViolationError;
+}
+
+export function isConflictMarkersPresentError(
+  error: unknown
+): error is ConflictMarkersPresentError {
+  return error instanceof ConflictMarkersPresentError;
+}
+
+export function isUncommittedChangesError(
+  error: unknown
+): error is UncommittedChangesError {
+  return error instanceof UncommittedChangesError;
+}
+
+export function isNoRebaseInProgressError(
+  error: unknown
+): error is NoRebaseInProgressError {
+  return error instanceof NoRebaseInProgressError;
+}
+
+export function isStateBranchSetupError(
+  error: unknown
+): error is StateBranchSetupError {
+  return error instanceof StateBranchSetupError;
+}
+
+export function isCryptoModuleRequiredError(
+  error: unknown
+): error is CryptoModuleRequiredError {
+  return error instanceof CryptoModuleRequiredError;
+}
+

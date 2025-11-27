@@ -38,5 +38,15 @@ export {
   NoRebaseInProgressError,
   StateBranchSetupError,
   UncommittedChangesError,
+  CryptoModuleRequiredError,
+  // Type guards for error handling (additive - backward compatible)
+  isSyncError,
+  isPushFromStateBranchError,
+  isIntegrityViolationError,
+  isConflictMarkersPresentError,
+  isUncommittedChangesError,
+  isNoRebaseInProgressError,
+  isStateBranchSetupError,
+  isCryptoModuleRequiredError,
 } from "./errors";
 

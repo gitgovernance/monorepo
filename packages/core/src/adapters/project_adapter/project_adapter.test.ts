@@ -5,7 +5,7 @@ import type { CycleRecord } from '../../types';
 import type { ActorRecord } from '../../types';
 import type { IdentityAdapter } from '../identity_adapter';
 import type { BacklogAdapter } from '../backlog_adapter';
-import type { SyncModule } from '../../sync';
+import type { GitModule } from '../../git';
 import { DetailedValidationError } from '../../validation/common';
 import { promises as fs, existsSync, type PathLike } from 'fs';
 import { createTaskRecord } from '../../factories/task_factory';
@@ -91,7 +91,7 @@ describe('ProjectAdapter', () => {
   let projectAdapter: ProjectAdapter;
   let mockIdentityAdapter: jest.Mocked<IdentityAdapter>;
   let mockBacklogAdapter: jest.Mocked<BacklogAdapter>;
-  let mockSyncModule: jest.Mocked<SyncModule>;
+  let mockGitModule: jest.Mocked<GitModule>;
   let mockConfigManager: jest.Mocked<ConfigManager>;
   let mockFs: jest.Mocked<typeof fs> & { existsSync: jest.MockedFunction<any> };
   let mockCreateTaskRecord: jest.MockedFunction<typeof createTaskRecord>;
@@ -122,19 +122,17 @@ describe('ProjectAdapter', () => {
       getAllCycles: jest.fn(),
     } as unknown as jest.Mocked<BacklogAdapter>;
 
-    mockSyncModule = {
-      ensureStateBranch: jest.fn().mockResolvedValue(undefined),
-      pushState: jest.fn(),
-      pullState: jest.fn(),
-      resolveConflict: jest.fn(),
-      getStateBranchName: jest.fn().mockResolvedValue('gitgov-state'),
-      calculateStateDelta: jest.fn(),
-      isRebaseInProgress: jest.fn(),
-      checkConflictMarkers: jest.fn(),
-      getConflictDiff: jest.fn(),
-      verifyResolutionIntegrity: jest.fn(),
-      auditState: jest.fn(),
-    } as unknown as jest.Mocked<SyncModule>;
+    mockGitModule = {
+      isRemoteConfigured: jest.fn().mockResolvedValue(true),
+      getCurrentBranch: jest.fn().mockResolvedValue('main'),
+      branchExists: jest.fn().mockResolvedValue(true),
+      getRepoRoot: jest.fn().mockResolvedValue('/test/project'),
+      checkoutBranch: jest.fn().mockResolvedValue(undefined),
+      checkoutOrphanBranch: jest.fn().mockResolvedValue(undefined),
+      fetch: jest.fn().mockResolvedValue(undefined),
+      listRemoteBranches: jest.fn().mockResolvedValue([]),
+      pushWithUpstream: jest.fn().mockResolvedValue(undefined),
+    } as unknown as jest.Mocked<GitModule>;
 
     mockConfigManager = {
       loadConfig: jest.fn(),
@@ -182,7 +180,7 @@ describe('ProjectAdapter', () => {
     projectAdapter = new ProjectAdapter({
       identityAdapter: mockIdentityAdapter,
       backlogAdapter: mockBacklogAdapter,
-      syncModule: mockSyncModule,
+      gitModule: mockGitModule,
       configManager: mockConfigManager,
     });
   });
@@ -409,8 +407,10 @@ describe('ProjectAdapter', () => {
         }),
         mockActor.id
       );
-      // Verify SyncModule integration (EARS-4, EARS-13)
-      expect(mockSyncModule.ensureStateBranch).toHaveBeenCalled();
+      // Verify lazy state branch setup checks (EARS-4, EARS-13)
+      // Note: gitgov-state branch is NOT created during init (lazy creation on first sync push)
+      expect(mockGitModule.isRemoteConfigured).toHaveBeenCalledWith('origin');
+      expect(mockGitModule.branchExists).toHaveBeenCalled();
     });
 
     it('[EARS-6] should return ProjectInitResult with complete metadata', async () => {
@@ -653,7 +653,7 @@ describe('ProjectAdapter', () => {
       const minimalAdapter = new ProjectAdapter({
         identityAdapter: mockIdentityAdapter,
         backlogAdapter: mockBacklogAdapter,
-        syncModule: mockSyncModule,
+        gitModule: mockGitModule,
         configManager: mockConfigManager,
         // No eventBus, platformApi, or userManagement
       });
@@ -815,9 +815,6 @@ describe('ProjectAdapter', () => {
       mockIdentityAdapter.createActor.mockResolvedValueOnce(createMockActorRecord());
       mockBacklogAdapter.createCycle.mockResolvedValueOnce(createMockCycleRecord());
 
-      // Capture console.log to verify success message
-      const logSpy = jest.spyOn(console, 'log').mockImplementation();
-
       const result = await projectAdapter.initializeProject({
         name: 'Test Agent Prompt Copy',
         actorName: 'Test User',
@@ -828,13 +825,6 @@ describe('ProjectAdapter', () => {
 
       // Verify that copyFile was called (new implementation uses fs.copyFile)
       expect(mockFs.copyFile.mock.calls.length).toBeGreaterThan(0);
-
-      // Verify success message
-      expect(logSpy).toHaveBeenCalledWith(
-        expect.stringContaining('@gitgov agent prompt copied')
-      );
-
-      logSpy.mockRestore();
     });
 
     it('should gracefully degrade when agent prompt is not available', async () => {

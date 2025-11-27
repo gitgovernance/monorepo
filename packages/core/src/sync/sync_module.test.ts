@@ -463,9 +463,9 @@ describe("SyncModule", () => {
     });
   });
 
-  // ===== EARS 6-12: Push Operation =====
+  // ===== EARS 6-12, 41-47: Push Operation =====
 
-  describe("Push Operation (EARS 6-12)", () => {
+  describe("Push Operation (EARS 6-12, 41-47)", () => {
     beforeEach(async () => {
       // Ensure state branch exists for push tests
       await syncModule.ensureStateBranch();
@@ -789,11 +789,343 @@ describe("SyncModule", () => {
       // 2. Checking out would require stashing our untracked files again
       // 3. The critical test is that files are RESTORED on main, not what's in gitgov-state
     });
+
+    it("[EARS-45] should NOT sync local-only files, keys, or backups to gitgov-state", async () => {
+      // Setup: Create .gitgov/ with various file types
+      const gitgovDir = path.join(repoPath, ".gitgov");
+
+      // Syncable *.json files: SHOULD be synced
+      fs.mkdirSync(path.join(gitgovDir, "tasks"), { recursive: true });
+      fs.writeFileSync(path.join(gitgovDir, "tasks/task-sync.json"), '{"title": "Should sync"}');
+      fs.mkdirSync(path.join(gitgovDir, "actors"), { recursive: true });
+      fs.writeFileSync(path.join(gitgovDir, "actors/human_test-actor.json"), '{"id": "human_test-actor", "displayName": "Test"}');
+      fs.writeFileSync(path.join(gitgovDir, "config.json"), '{"projectId": "test-45"}');
+
+      // PRIVATE KEYS: should NOT be synced (security critical!)
+      fs.writeFileSync(path.join(gitgovDir, "actors/human_test-actor.key"), 'PRIVATE_KEY_DATA_DO_NOT_SYNC');
+
+      // BACKUP FILES: should NOT be synced
+      fs.writeFileSync(path.join(gitgovDir, "tasks/task-sync.json.backup"), '{"old": "backup"}');
+      fs.writeFileSync(path.join(gitgovDir, "tasks/task-old.json.backup-001"), '{"numbered": "backup"}');
+
+      // LOCAL-ONLY FILES: should NOT be synced
+      fs.writeFileSync(path.join(gitgovDir, ".session.json"), '{"actorId": "local-actor", "machine": "my-pc"}');
+      fs.writeFileSync(path.join(gitgovDir, "index.json"), '{"indexed": true, "localCache": true}');
+      fs.writeFileSync(path.join(gitgovDir, "gitgov"), '#!/bin/bash\necho "local binary"');
+
+      // Commit files to main (simulate tracked files scenario)
+      await execAsync("git add .gitgov", { cwd: repoPath });
+      await execAsync('git commit -m "Add files including keys, backups, local-only"', { cwd: repoPath });
+
+      // Execute push
+      const result = await syncModule.pushState({
+        actorId: "test-actor-45",
+      });
+
+      // Verify push succeeded
+      expect(result.success).toBe(true);
+
+      // Switch to gitgov-state and verify only *.json files are synced
+      await git.checkoutBranch("gitgov-state");
+
+      // Syncable *.json files SHOULD exist
+      expect(fs.existsSync(path.join(repoPath, ".gitgov/tasks/task-sync.json"))).toBe(true);
+      expect(fs.existsSync(path.join(repoPath, ".gitgov/actors/human_test-actor.json"))).toBe(true);
+      expect(fs.existsSync(path.join(repoPath, ".gitgov/config.json"))).toBe(true);
+
+      // PRIVATE KEYS should NOT exist on gitgov-state (SECURITY CRITICAL!)
+      expect(fs.existsSync(path.join(repoPath, ".gitgov/actors/human_test-actor.key"))).toBe(false);
+
+      // BACKUP FILES should NOT exist on gitgov-state
+      expect(fs.existsSync(path.join(repoPath, ".gitgov/tasks/task-sync.json.backup"))).toBe(false);
+      expect(fs.existsSync(path.join(repoPath, ".gitgov/tasks/task-old.json.backup-001"))).toBe(false);
+
+      // Local-only files should NOT exist on gitgov-state
+      expect(fs.existsSync(path.join(repoPath, ".gitgov/.session.json"))).toBe(false);
+      expect(fs.existsSync(path.join(repoPath, ".gitgov/index.json"))).toBe(false);
+      expect(fs.existsSync(path.join(repoPath, ".gitgov/gitgov"))).toBe(false);
+
+      // Return to main
+      await git.checkoutBranch("main");
+    });
+
+    it("[EARS-46] should preserve ALL local files after sync push (including keys, backups, local-only)", async () => {
+      // Setup: Create .gitgov/ with various file types (untracked)
+      const gitgovDir = path.join(repoPath, ".gitgov");
+
+      // Syncable files
+      fs.mkdirSync(path.join(gitgovDir, "tasks"), { recursive: true });
+      fs.writeFileSync(path.join(gitgovDir, "tasks/task-preserve.json"), '{"title": "Preserve me"}');
+      fs.mkdirSync(path.join(gitgovDir, "actors"), { recursive: true });
+      fs.writeFileSync(path.join(gitgovDir, "actors/human_test.json"), '{"id": "human_test"}');
+      fs.writeFileSync(path.join(gitgovDir, "config.json"), '{"projectId": "test-46"}');
+
+      // PRIVATE KEYS (must be preserved locally!)
+      const keyContent = 'PRIVATE_KEY_DATA_MUST_PRESERVE_LOCALLY';
+      fs.writeFileSync(path.join(gitgovDir, "actors/human_test.key"), keyContent);
+
+      // BACKUP FILES (must be preserved locally!)
+      const backupContent = '{"old": "backup data"}';
+      fs.writeFileSync(path.join(gitgovDir, "tasks/task-old.json.backup"), backupContent);
+
+      // Local-only files
+      const sessionContent = '{"actorId": "local-actor-46", "localMachine": "test-machine"}';
+      const indexContent = '{"indexed": true, "recordCount": 5}';
+      const gitgovBinaryContent = '#!/bin/bash\necho "local gitgov script"';
+
+      fs.writeFileSync(path.join(gitgovDir, ".session.json"), sessionContent);
+      fs.writeFileSync(path.join(gitgovDir, "index.json"), indexContent);
+      fs.writeFileSync(path.join(gitgovDir, "gitgov"), gitgovBinaryContent);
+
+      // Add .gitgov/ to .gitignore (real-world scenario)
+      fs.writeFileSync(path.join(repoPath, ".gitignore"), ".gitgov/\n");
+      await execAsync("git add .gitignore", { cwd: repoPath });
+      await execAsync('git commit -m "Add .gitignore"', { cwd: repoPath });
+
+      // Execute push (with untracked .gitgov/)
+      const result = await syncModule.pushState({
+        actorId: "test-actor-46",
+      });
+
+      // Verify push succeeded
+      expect(result.success).toBe(true);
+
+      // Verify we're back on main
+      const currentBranch = await git.getCurrentBranch();
+      expect(currentBranch).toBe("main");
+
+      // CRITICAL: Verify ALL files are preserved locally
+
+      // Syncable files should be preserved
+      expect(fs.existsSync(path.join(gitgovDir, "tasks/task-preserve.json"))).toBe(true);
+      expect(fs.existsSync(path.join(gitgovDir, "actors/human_test.json"))).toBe(true);
+      expect(fs.existsSync(path.join(gitgovDir, "config.json"))).toBe(true);
+
+      // PRIVATE KEYS must be preserved locally (SECURITY CRITICAL!)
+      expect(fs.existsSync(path.join(gitgovDir, "actors/human_test.key"))).toBe(true);
+      expect(fs.readFileSync(path.join(gitgovDir, "actors/human_test.key"), "utf-8")).toBe(keyContent);
+
+      // BACKUP FILES must be preserved locally
+      expect(fs.existsSync(path.join(gitgovDir, "tasks/task-old.json.backup"))).toBe(true);
+      expect(fs.readFileSync(path.join(gitgovDir, "tasks/task-old.json.backup"), "utf-8")).toBe(backupContent);
+
+      // Local-only files must be preserved
+      expect(fs.existsSync(path.join(gitgovDir, ".session.json"))).toBe(true);
+      expect(fs.existsSync(path.join(gitgovDir, "index.json"))).toBe(true);
+      expect(fs.existsSync(path.join(gitgovDir, "gitgov"))).toBe(true);
+
+      // Verify content is unchanged
+      expect(fs.readFileSync(path.join(gitgovDir, ".session.json"), "utf-8")).toBe(sessionContent);
+      expect(fs.readFileSync(path.join(gitgovDir, "index.json"), "utf-8")).toBe(indexContent);
+      expect(fs.readFileSync(path.join(gitgovDir, "gitgov"), "utf-8")).toBe(gitgovBinaryContent);
+    });
+
+    it("[EARS-47] should remove old non-syncable files from gitgov-state on subsequent push", async () => {
+      // This test simulates a scenario where gitgov-state has old files from previous pushes
+      // (before the current filtering logic) and verifies they are cleaned up on new push
+
+      const gitgovDir = path.join(repoPath, ".gitgov");
+
+      // Step 1: Create initial files and do first push
+      fs.mkdirSync(path.join(gitgovDir, "tasks"), { recursive: true });
+      fs.writeFileSync(path.join(gitgovDir, "tasks/task-initial.json"), '{"title": "Initial"}');
+      fs.mkdirSync(path.join(gitgovDir, "actors"), { recursive: true });
+      fs.writeFileSync(path.join(gitgovDir, "actors/human_old.json"), '{"id": "human_old"}');
+      fs.writeFileSync(path.join(gitgovDir, "config.json"), '{"projectId": "test-47"}');
+
+      // Also create local-only files
+      fs.writeFileSync(path.join(gitgovDir, ".session.json"), '{"local": true}');
+      fs.writeFileSync(path.join(gitgovDir, "actors/human_old.key"), 'OLD_KEY_DATA');
+
+      await execAsync("git add .gitgov", { cwd: repoPath });
+      await execAsync('git commit -m "Add initial .gitgov with mixed files"', { cwd: repoPath });
+
+      // First push - should create gitgov-state and sync only valid files
+      const firstPush = await syncModule.pushState({ actorId: "test-actor-47" });
+      expect(firstPush.success).toBe(true);
+
+      // Step 2: Manually add old non-syncable files to gitgov-state (simulating legacy state)
+      // Use execAsync to avoid state issues with GitModule
+      await execAsync("git checkout gitgov-state", { cwd: repoPath });
+
+      // Add files that shouldn't be there (simulating old behavior)
+      fs.writeFileSync(path.join(repoPath, ".gitgov/.session.json"), '{"old": "session"}');
+      fs.mkdirSync(path.join(repoPath, ".gitgov/actors"), { recursive: true });
+      fs.writeFileSync(path.join(repoPath, ".gitgov/actors/legacy.key"), 'LEGACY_KEY');
+      fs.writeFileSync(path.join(repoPath, ".gitgov/tasks/old.json.backup"), '{"backup": true}');
+
+      await execAsync("git add .gitgov", { cwd: repoPath });
+      await execAsync('git commit -m "Add legacy non-syncable files"', { cwd: repoPath });
+      await execAsync("git push origin gitgov-state", { cwd: repoPath });
+
+      // Return to main
+      await execAsync("git checkout main", { cwd: repoPath });
+
+      // Verify legacy files exist on gitgov-state before cleanup using git ls-tree
+      const { stdout: beforeFiles } = await execAsync(
+        "git ls-tree -r --name-only gitgov-state -- .gitgov/",
+        { cwd: repoPath }
+      );
+      expect(beforeFiles).toContain(".session.json");
+      expect(beforeFiles).toContain("legacy.key");
+      expect(beforeFiles).toContain("old.json.backup");
+
+      // Step 3: Create new valid file and push again
+      // Restore .gitgov to local for second push
+      fs.mkdirSync(path.join(gitgovDir, "tasks"), { recursive: true });
+      fs.writeFileSync(path.join(gitgovDir, "tasks/task-initial.json"), '{"title": "Initial"}');
+      fs.writeFileSync(path.join(gitgovDir, "tasks/task-new.json"), '{"title": "New task"}');
+      fs.mkdirSync(path.join(gitgovDir, "actors"), { recursive: true });
+      fs.writeFileSync(path.join(gitgovDir, "actors/human_old.json"), '{"id": "human_old"}');
+      fs.writeFileSync(path.join(gitgovDir, "config.json"), '{"projectId": "test-47"}');
+      fs.writeFileSync(path.join(gitgovDir, ".session.json"), '{"local": true}');
+      fs.writeFileSync(path.join(gitgovDir, "actors/human_old.key"), 'OLD_KEY_DATA');
+
+      const secondPush = await syncModule.pushState({ actorId: "test-actor-47" });
+      expect(secondPush.success).toBe(true);
+
+      // Step 4: Verify gitgov-state was cleaned up using git ls-tree
+      const { stdout: afterFiles } = await execAsync(
+        "git ls-tree -r --name-only gitgov-state -- .gitgov/",
+        { cwd: repoPath }
+      );
+
+      // Valid files should exist
+      expect(afterFiles).toContain("tasks/task-initial.json");
+      expect(afterFiles).toContain("tasks/task-new.json");
+      expect(afterFiles).toContain("actors/human_old.json");
+      expect(afterFiles).toContain("config.json");
+
+      // Non-syncable files should be REMOVED
+      expect(afterFiles).not.toContain(".session.json");
+      expect(afterFiles).not.toContain("legacy.key");
+      expect(afterFiles).not.toContain("old.json.backup");
+    });
+
+    it("[EARS-44] should fail with clear error when no remote configured for push", async () => {
+      // Setup: Create a repo with commits but WITHOUT remote
+      const noRemoteRepoPath = path.join(
+        os.tmpdir(),
+        `gitgov-sync-noremote-push-${Date.now()}-${Math.random().toString(36).slice(2)}`
+      );
+      fs.mkdirSync(noRemoteRepoPath, { recursive: true });
+      const normalizedNoRemotePath = fs.realpathSync(noRemoteRepoPath);
+
+      try {
+        // Initialize Git repo with commit but NO remote
+        await execAsync("git init", { cwd: normalizedNoRemotePath });
+        await execAsync('git config user.name "Test User"', { cwd: normalizedNoRemotePath });
+        await execAsync('git config user.email "test@example.com"', { cwd: normalizedNoRemotePath });
+        fs.writeFileSync(path.join(normalizedNoRemotePath, "README.md"), "# Test");
+        await execAsync("git add README.md", { cwd: normalizedNoRemotePath });
+        await execAsync('git commit -m "Initial commit"', { cwd: normalizedNoRemotePath });
+
+        // Create GitModule for repo without remote
+        const noRemoteGit = new GitModule({
+          repoRoot: normalizedNoRemotePath,
+          execCommand: createExecCommand(normalizedNoRemotePath),
+        });
+
+        // Setup .gitgov/ and commit
+        const gitgovDir = path.join(normalizedNoRemotePath, ".gitgov");
+        fs.mkdirSync(gitgovDir, { recursive: true });
+        fs.writeFileSync(path.join(gitgovDir, "config.json"), '{"projectId": "noremote-push-test"}');
+        await execAsync("git add .gitgov", { cwd: normalizedNoRemotePath });
+        await execAsync('git commit -m "Add .gitgov"', { cwd: normalizedNoRemotePath });
+
+        // Create SyncModule for repo without remote
+        const noRemoteConfig = new ConfigManager(normalizedNoRemotePath);
+        const noRemoteSyncModule = new SyncModule({
+          git: noRemoteGit,
+          config: noRemoteConfig,
+          identity: createMockIdentityAdapter(),
+          lint: createMockLintModule(),
+          indexer: createMockIndexerAdapter(),
+        });
+
+        // Execute: Try to push without remote configured
+        const result = await noRemoteSyncModule.pushState({
+          actorId: "test-actor-noremote",
+        });
+
+        // Verify: Should fail with clear error about no remote
+        expect(result.success).toBe(false);
+        expect(result.error).toBeDefined();
+        expect(result.error).toMatch(/No remote|remote.*configured/i);
+        expect(result.error).toContain("git remote add");
+      } finally {
+        // Cleanup
+        fs.rmSync(normalizedNoRemotePath, { recursive: true, force: true });
+      }
+    });
+
+    it("[EARS-44] should fail with clear error when source branch has no commits", async () => {
+      // Setup: Create a repo WITH remote but WITHOUT commits
+      const emptyRepoPath = path.join(
+        os.tmpdir(),
+        `gitgov-sync-empty-${Date.now()}-${Math.random().toString(36).slice(2)}`
+      );
+      const emptyRemotePath = path.join(
+        os.tmpdir(),
+        `gitgov-sync-empty-remote-${Date.now()}-${Math.random().toString(36).slice(2)}`
+      );
+      fs.mkdirSync(emptyRepoPath, { recursive: true });
+      fs.mkdirSync(emptyRemotePath, { recursive: true });
+      const normalizedEmptyPath = fs.realpathSync(emptyRepoPath);
+      const normalizedEmptyRemotePath = fs.realpathSync(emptyRemotePath);
+
+      try {
+        // Create bare remote
+        await execAsync("git init --bare", { cwd: normalizedEmptyRemotePath });
+
+        // Initialize Git repo WITHOUT initial commit but WITH remote
+        await execAsync("git init", { cwd: normalizedEmptyPath });
+        await execAsync('git config user.name "Test User"', { cwd: normalizedEmptyPath });
+        await execAsync('git config user.email "test@example.com"', { cwd: normalizedEmptyPath });
+        await execAsync(`git remote add origin ${normalizedEmptyRemotePath}`, { cwd: normalizedEmptyPath });
+
+        // Create GitModule for empty repo
+        const emptyGit = new GitModule({
+          repoRoot: normalizedEmptyPath,
+          execCommand: createExecCommand(normalizedEmptyPath),
+        });
+
+        // Setup .gitgov/ but DON'T commit (untracked)
+        const gitgovDir = path.join(normalizedEmptyPath, ".gitgov");
+        fs.mkdirSync(gitgovDir, { recursive: true });
+        fs.writeFileSync(path.join(gitgovDir, "config.json"), '{"projectId": "empty-test"}');
+
+        // Create SyncModule for empty repo
+        const emptyConfig = new ConfigManager(normalizedEmptyPath);
+        const emptySyncModule = new SyncModule({
+          git: emptyGit,
+          config: emptyConfig,
+          identity: createMockIdentityAdapter(),
+          lint: createMockLintModule(),
+          indexer: createMockIndexerAdapter(),
+        });
+
+        // Execute: Try to push from branch with no commits
+        const result = await emptySyncModule.pushState({
+          actorId: "test-actor-empty",
+        });
+
+        // Verify: Should fail with clear error about no commits
+        expect(result.success).toBe(false);
+        expect(result.error).toBeDefined();
+        expect(result.error).toContain("no commits");
+        expect(result.error).toContain("initial commit");
+      } finally {
+        // Cleanup
+        fs.rmSync(normalizedEmptyPath, { recursive: true, force: true });
+        fs.rmSync(normalizedEmptyRemotePath, { recursive: true, force: true });
+      }
+    });
   });
 
-  // ===== EARS 13-16: Pull Operation =====
+  // ===== EARS 13-16, 44: Pull Operation =====
 
-  describe("Pull Operation (EARS 13-16)", () => {
+  describe("Pull Operation (EARS 13-16, 44)", () => {
     beforeEach(async () => {
       await syncModule.ensureStateBranch();
       await git.checkoutBranch("main");
@@ -805,6 +1137,54 @@ describe("SyncModule", () => {
 
       // Verify
       expect(result.success).toBe(true);
+    });
+
+    it("[EARS-44] should fail with clear error when no remote configured for pull", async () => {
+      // Setup: Create a repo with commits but WITHOUT remote
+      const noRemoteRepoPath = path.join(
+        os.tmpdir(),
+        `gitgov-sync-noremote-pull-${Date.now()}-${Math.random().toString(36).slice(2)}`
+      );
+      fs.mkdirSync(noRemoteRepoPath, { recursive: true });
+      const normalizedNoRemotePath = fs.realpathSync(noRemoteRepoPath);
+
+      try {
+        // Initialize Git repo with commit but NO remote
+        await execAsync("git init", { cwd: normalizedNoRemotePath });
+        await execAsync('git config user.name "Test User"', { cwd: normalizedNoRemotePath });
+        await execAsync('git config user.email "test@example.com"', { cwd: normalizedNoRemotePath });
+        fs.writeFileSync(path.join(normalizedNoRemotePath, "README.md"), "# Test");
+        await execAsync("git add README.md", { cwd: normalizedNoRemotePath });
+        await execAsync('git commit -m "Initial commit"', { cwd: normalizedNoRemotePath });
+
+        // Create GitModule for repo without remote
+        const noRemoteGit = new GitModule({
+          repoRoot: normalizedNoRemotePath,
+          execCommand: createExecCommand(normalizedNoRemotePath),
+        });
+
+        // Create SyncModule for repo without remote
+        const noRemoteConfig = new ConfigManager(normalizedNoRemotePath);
+        const noRemoteSyncModule = new SyncModule({
+          git: noRemoteGit,
+          config: noRemoteConfig,
+          identity: createMockIdentityAdapter(),
+          lint: createMockLintModule(),
+          indexer: createMockIndexerAdapter(),
+        });
+
+        // Execute: Try to pull without remote configured
+        const result = await noRemoteSyncModule.pullState();
+
+        // Verify: Should fail with clear error about no remote
+        expect(result.success).toBe(false);
+        expect(result.error).toBeDefined();
+        expect(result.error).toMatch(/No remote|remote.*configured/i);
+        expect(result.error).toContain("git remote add");
+      } finally {
+        // Cleanup
+        fs.rmSync(normalizedNoRemotePath, { recursive: true, force: true });
+      }
     });
 
     it("[EARS-14] should pause rebase and return conflict if conflict detected", async () => {
@@ -853,6 +1233,212 @@ describe("SyncModule", () => {
       expect(result.success).toBe(true);
       expect(result.reindexed).toBe(true);
       expect(mockIndexer.generateIndex).toHaveBeenCalledTimes(1);
+    });
+
+    it("[EARS-44] should fail with clear error when no remote configured", async () => {
+      // Setup: Create a repo WITHOUT remote
+      const noRemoteRepoPath = path.join(
+        os.tmpdir(),
+        `gitgov-sync-noremote-${Date.now()}-${Math.random().toString(36).slice(2)}`
+      );
+      fs.mkdirSync(noRemoteRepoPath, { recursive: true });
+      const normalizedNoRemotePath = fs.realpathSync(noRemoteRepoPath);
+
+      try {
+        // Initialize Git repo with commit but NO remote
+        await execAsync("git init", { cwd: normalizedNoRemotePath });
+        await execAsync('git config user.name "Test User"', { cwd: normalizedNoRemotePath });
+        await execAsync('git config user.email "test@example.com"', { cwd: normalizedNoRemotePath });
+        fs.writeFileSync(path.join(normalizedNoRemotePath, "README.md"), "# Test");
+        await execAsync("git add README.md", { cwd: normalizedNoRemotePath });
+        await execAsync('git commit -m "Initial commit"', { cwd: normalizedNoRemotePath });
+
+        // Create GitModule for repo without remote
+        const noRemoteGit = new GitModule({
+          repoRoot: normalizedNoRemotePath,
+          execCommand: createExecCommand(normalizedNoRemotePath),
+        });
+
+        // Setup .gitgov/
+        const gitgovDir = path.join(normalizedNoRemotePath, ".gitgov");
+        fs.mkdirSync(gitgovDir, { recursive: true });
+        fs.writeFileSync(path.join(gitgovDir, "config.json"), '{"projectId": "noremote-test"}');
+        await execAsync("git add .gitgov", { cwd: normalizedNoRemotePath });
+        await execAsync('git commit -m "Add .gitgov"', { cwd: normalizedNoRemotePath });
+
+        // Create SyncModule for repo without remote
+        const noRemoteConfig = new ConfigManager(normalizedNoRemotePath);
+        const noRemoteSyncModule = new SyncModule({
+          git: noRemoteGit,
+          config: noRemoteConfig,
+          identity: createMockIdentityAdapter(),
+          lint: createMockLintModule(),
+          indexer: createMockIndexerAdapter(),
+        });
+
+        // Execute: Try to pull without remote configured
+        // Note: pullState returns error in result instead of throwing
+        const result = await noRemoteSyncModule.pullState();
+
+        // Verify: Should fail with clear error about no remote
+        expect(result.success).toBe(false);
+        expect(result.error).toBeDefined();
+        expect(result.error).toContain("No remote");
+        expect(result.error).toContain("origin");
+        expect(result.error).toContain("git remote add");
+      } finally {
+        // Cleanup
+        fs.rmSync(normalizedNoRemotePath, { recursive: true, force: true });
+      }
+    });
+
+    it("[EARS-44] should succeed with nothing to pull if gitgov-state exists locally but not remotely", async () => {
+      // Note: We need a fresh setup because beforeEach already creates and pushes gitgov-state
+      // Setup: Create a fresh repo with remote where gitgov-state exists ONLY locally
+      const localOnlyRepoPath = path.join(
+        os.tmpdir(),
+        `gitgov-sync-localonly-${Date.now()}-${Math.random().toString(36).slice(2)}`
+      );
+      const localOnlyRemotePath = path.join(
+        os.tmpdir(),
+        `gitgov-sync-localonly-remote-${Date.now()}-${Math.random().toString(36).slice(2)}`
+      );
+      fs.mkdirSync(localOnlyRepoPath, { recursive: true });
+      fs.mkdirSync(localOnlyRemotePath, { recursive: true });
+      const normalizedLocalOnlyPath = fs.realpathSync(localOnlyRepoPath);
+      const normalizedLocalOnlyRemotePath = fs.realpathSync(localOnlyRemotePath);
+
+      try {
+        // Create bare remote
+        await execAsync("git init --bare", { cwd: normalizedLocalOnlyRemotePath });
+
+        // Initialize local repo with remote
+        await execAsync("git init", { cwd: normalizedLocalOnlyPath });
+        await execAsync('git config user.name "Test User"', { cwd: normalizedLocalOnlyPath });
+        await execAsync('git config user.email "test@example.com"', { cwd: normalizedLocalOnlyPath });
+        fs.writeFileSync(path.join(normalizedLocalOnlyPath, "README.md"), "# Test");
+        await execAsync("git add README.md", { cwd: normalizedLocalOnlyPath });
+        await execAsync('git commit -m "Initial commit"', { cwd: normalizedLocalOnlyPath });
+        await execAsync(`git remote add origin ${normalizedLocalOnlyRemotePath}`, { cwd: normalizedLocalOnlyPath });
+        await execAsync("git push -u origin main", { cwd: normalizedLocalOnlyPath });
+
+        // Create GitModule
+        const localOnlyGit = new GitModule({
+          repoRoot: normalizedLocalOnlyPath,
+          execCommand: createExecCommand(normalizedLocalOnlyPath),
+        });
+
+        // Setup .gitgov/
+        const gitgovDir = path.join(normalizedLocalOnlyPath, ".gitgov");
+        fs.mkdirSync(gitgovDir, { recursive: true });
+        fs.writeFileSync(path.join(gitgovDir, "config.json"), '{"projectId": "localonly-test"}');
+        await execAsync("git add .gitgov", { cwd: normalizedLocalOnlyPath });
+        await execAsync('git commit -m "Add .gitgov"', { cwd: normalizedLocalOnlyPath });
+
+        // Create gitgov-state locally but DON'T push to remote
+        await execAsync("git checkout --orphan gitgov-state", { cwd: normalizedLocalOnlyPath });
+        await execAsync("git rm -rf .", { cwd: normalizedLocalOnlyPath });
+        await execAsync('git commit --allow-empty -m "Init state"', { cwd: normalizedLocalOnlyPath });
+        await execAsync("git checkout main", { cwd: normalizedLocalOnlyPath });
+
+        // Verify: Local exists, remote doesn't
+        const { stdout: localBranches } = await execAsync("git branch --list gitgov-state", { cwd: normalizedLocalOnlyPath });
+        expect(localBranches.trim()).toContain("gitgov-state");
+
+        const { stdout: remoteBranches } = await execAsync("git ls-remote --heads origin gitgov-state", { cwd: normalizedLocalOnlyPath });
+        expect(remoteBranches.trim()).toBe("");
+
+        // Create SyncModule
+        const localOnlyConfig = new ConfigManager(normalizedLocalOnlyPath);
+        const localOnlySyncModule = new SyncModule({
+          git: localOnlyGit,
+          config: localOnlyConfig,
+          identity: createMockIdentityAdapter(),
+          lint: createMockLintModule(),
+          indexer: createMockIndexerAdapter(),
+        });
+
+        // Execute: Pull when local exists but remote doesn't
+        const result = await localOnlySyncModule.pullState();
+
+        // Verify: Should succeed with nothing to pull (local-only mode)
+        expect(result.success).toBe(true);
+        expect(result.hasChanges).toBe(false);
+        expect(result.filesUpdated).toBe(0);
+      } finally {
+        // Cleanup
+        fs.rmSync(normalizedLocalOnlyPath, { recursive: true, force: true });
+        fs.rmSync(normalizedLocalOnlyRemotePath, { recursive: true, force: true });
+      }
+    });
+
+    it("[EARS-44] should fail with clear error if gitgov-state does not exist anywhere", async () => {
+      // Setup: Create a repo with remote but WITHOUT gitgov-state anywhere
+      const freshRepoPath = path.join(
+        os.tmpdir(),
+        `gitgov-sync-fresh-${Date.now()}-${Math.random().toString(36).slice(2)}`
+      );
+      const freshRemotePath = path.join(
+        os.tmpdir(),
+        `gitgov-sync-fresh-remote-${Date.now()}-${Math.random().toString(36).slice(2)}`
+      );
+      fs.mkdirSync(freshRepoPath, { recursive: true });
+      fs.mkdirSync(freshRemotePath, { recursive: true });
+      const normalizedFreshPath = fs.realpathSync(freshRepoPath);
+      const normalizedFreshRemotePath = fs.realpathSync(freshRemotePath);
+
+      try {
+        // Create bare remote
+        await execAsync("git init --bare", { cwd: normalizedFreshRemotePath });
+
+        // Initialize local repo with remote
+        await execAsync("git init", { cwd: normalizedFreshPath });
+        await execAsync('git config user.name "Test User"', { cwd: normalizedFreshPath });
+        await execAsync('git config user.email "test@example.com"', { cwd: normalizedFreshPath });
+        fs.writeFileSync(path.join(normalizedFreshPath, "README.md"), "# Test");
+        await execAsync("git add README.md", { cwd: normalizedFreshPath });
+        await execAsync('git commit -m "Initial commit"', { cwd: normalizedFreshPath });
+        await execAsync(`git remote add origin ${normalizedFreshRemotePath}`, { cwd: normalizedFreshPath });
+        await execAsync("git push -u origin main", { cwd: normalizedFreshPath });
+
+        // Create GitModule
+        const freshGit = new GitModule({
+          repoRoot: normalizedFreshPath,
+          execCommand: createExecCommand(normalizedFreshPath),
+        });
+
+        // Setup .gitgov/ locally but DON'T create gitgov-state branch
+        const gitgovDir = path.join(normalizedFreshPath, ".gitgov");
+        fs.mkdirSync(gitgovDir, { recursive: true });
+        fs.writeFileSync(path.join(gitgovDir, "config.json"), '{"projectId": "fresh-test"}');
+        await execAsync("git add .gitgov", { cwd: normalizedFreshPath });
+        await execAsync('git commit -m "Add .gitgov"', { cwd: normalizedFreshPath });
+
+        // Create SyncModule
+        const freshConfig = new ConfigManager(normalizedFreshPath);
+        const freshSyncModule = new SyncModule({
+          git: freshGit,
+          config: freshConfig,
+          identity: createMockIdentityAdapter(),
+          lint: createMockLintModule(),
+          indexer: createMockIndexerAdapter(),
+        });
+
+        // Execute: Try to pull when gitgov-state doesn't exist anywhere
+        // Note: pullState returns error in result instead of throwing
+        const result = await freshSyncModule.pullState();
+
+        // Verify: Should fail with clear error about missing gitgov-state
+        // Since .gitgov/ exists locally (committed to main), it suggests sync push instead of init
+        expect(result.success).toBe(false);
+        expect(result.error).toBeDefined();
+        expect(result.error).toContain("gitgov-state");
+        expect(result.error).toContain("gitgov sync push");
+      } finally {
+        // Cleanup
+        fs.rmSync(normalizedFreshPath, { recursive: true, force: true });
+        fs.rmSync(normalizedFreshRemotePath, { recursive: true, force: true });
+      }
     });
   });
 
