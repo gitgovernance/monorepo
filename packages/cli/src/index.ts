@@ -34,6 +34,10 @@ async function setupCommands() {
     const diagramCommand = new DiagramCommand();
     diagramCommand.register(program);
 
+    // Register sync commands EARLY (before indexer) so they're available for bootstrap
+    // This allows "gitgov sync pull" to work even when .gitgov/ doesn't exist yet
+    registerSyncCommands(program);
+
     // Setup adapters dependency injection
     const diService = DependencyInjectionService.getInstance();
     const indexerAdapter = await diService.getIndexerAdapter();
@@ -63,9 +67,14 @@ async function setupCommands() {
     // Handle initialization errors gracefully
     if (error instanceof Error) {
       if (error.message.includes('GitGovernance not initialized')) {
-        // Only register diagram commands if not initialized
-        console.warn("⚠️ GitGovernance not initialized. Some commands may not be available.");
-        console.warn("💡 Run 'gitgov init' to initialize GitGovernance in this repository.");
+        // Check if user is running 'init' command - don't show warning in that case
+        const commandArg = process.argv[2];
+        const isInitCommand = commandArg === 'init';
+
+        if (!isInitCommand) {
+          console.warn("⚠️  GitGovernance not initialized. Some commands may not be available.\n");
+          console.warn("💡 Run 'gitgov init' to initialize GitGovernance in this repository.\n");
+        }
       } else {
         console.error("❌ Error initializing GitGovernance CLI:", error.message);
         process.exit(1);

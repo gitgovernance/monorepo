@@ -1,6 +1,5 @@
-import { DependencyInjectionService } from '../../services/dependency-injection';
 import type { Adapters, Records } from '@gitgov/core';
-import { Config, Git, Lint, Sync } from '@gitgov/core';
+import { Git } from '@gitgov/core';
 
 import * as pathUtils from 'path';
 import { spawn } from 'child_process';
@@ -29,8 +28,6 @@ export interface InitCommandOptions {
  * Delegates all business logic to ProjectAdapter and focuses on UX excellence.
  */
 export class InitCommand {
-  private dependencyService = DependencyInjectionService.getInstance();
-
   /**
    * [EARS-1] Main execution method with complete project bootstrap
    */
@@ -51,7 +48,7 @@ export class InitCommand {
       const projectAdapter = await this.getProjectAdapter();
 
       // 5. Delegate ALL business logic to ProjectAdapter
-      progressTracker.start("🚀 Initializing GitGovernance Project...");
+      progressTracker.start("🚀 Initializing GitGovernance Project...\n");
 
       // Build ProjectInitOptions with only defined values
       const projectInitOptions: Adapters.ProjectInitOptions = {
@@ -189,19 +186,6 @@ export class InitCommand {
         configManager
       });
 
-      // Create IndexerAdapter for SyncModule
-      const indexerAdapter = new Adapters.FileIndexerAdapter({
-        metricsAdapter,
-        taskStore,
-        cycleStore,
-        feedbackStore,
-        executionStore,
-        changelogStore,
-        actorStore,
-        cacheStrategy: 'json',
-        cachePath: pathUtils.join(projectRoot, '.gitgov', 'index.json')
-      });
-
       // Create execCommand for GitModule
       const execCommand = (command: string, args: string[], options?: any) => {
         return new Promise<{ exitCode: number; stdout: string; stderr: string }>((resolve) => {
@@ -232,25 +216,14 @@ export class InitCommand {
         execCommand
       });
 
-      // Create LintModule
-      const lintModule = new Lint.LintModule({
-        recordStore: taskStore,
-        indexerAdapter
-      });
-
-      // Create SyncModule
-      const syncModule = new Sync.SyncModule({
-        git: gitModule,
-        config: configManager,
-        identity: identityAdapter,
-        lint: lintModule,
-        indexer: indexerAdapter
-      });
+      // Note: SyncModule and LintModule are NOT needed for init
+      // LintModule was removed as unused (created for SyncModule which is also not needed)
+      // gitgov-state branch is created lazily on first "sync push"
 
       const projectAdapter = new Adapters.ProjectAdapter({
         identityAdapter,
         backlogAdapter,
-        syncModule,
+        gitModule,
         configManager,
       });
 
@@ -276,9 +249,8 @@ export class InitCommand {
         }
       },
       complete: () => {
-        if (!options.quiet) {
-          console.log("🎉 GitGovernance initialization completed successfully!");
-        }
+        // Note: Success message is shown by showSuccessOutput(), not here
+        // to avoid duplicate/redundant messages
       }
     };
   }

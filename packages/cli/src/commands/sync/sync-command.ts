@@ -93,33 +93,8 @@ export class SyncCommand extends BaseCommand {
         return;
       }
 
-      // [EARS-1] Pre-push audit
-      if (!options.quiet) {
-        console.log('🔍 Running pre-push audit...');
-      }
-      const auditResult = await syncModule.auditState({
-        scope: 'current',
-        verifySignatures: true,
-        verifyChecksums: true,
-        verifyExpectedFiles: true,
-        expectedFilesScope: 'head'
-      });
-
-      if (!auditResult.passed) {
-        const violationCount = auditResult.integrityViolations.length + (auditResult.lintReport?.summary.errors || 0);
-        this.handleError(
-          `Pre-push audit failed with ${violationCount} violation(s). Fix issues before pushing.`,
-          options
-        );
-        return;
-      }
-
-      if (!options.quiet) {
-        console.log('✅ Pre-push audit passed');
-      }
-
       // [EARS-8, EARS-9, EARS-10, EARS-11, EARS-12]
-      // Execute push
+      // Execute push (audit runs internally in pushState)
       const pushResult = await syncModule.pushState({
         sourceBranch: currentBranch,
         actorId,
@@ -141,8 +116,14 @@ export class SyncCommand extends BaseCommand {
         return;
       }
 
-      // [EARS-9] No changes
-      if (!pushResult.success && !pushResult.conflictDetected) {
+      // [EARS-44] Handle actual errors (not just "no changes")
+      if (!pushResult.success && pushResult.error) {
+        this.handleError(pushResult.error, options);
+        return;
+      }
+
+      // [EARS-9] No changes (success=false without error means nothing to sync)
+      if (!pushResult.success && !pushResult.conflictDetected && !pushResult.error) {
         if (!options.quiet) {
           console.log('ℹ️  No changes to push');
         }
@@ -218,6 +199,12 @@ export class SyncCommand extends BaseCommand {
       const pullResult = await syncModule.pullState({
         forceReindex: options.reindex || false
       });
+
+      // [EARS-44] Handle actual errors (not just "no changes")
+      if (!pullResult.success && pullResult.error) {
+        this.handleError(pullResult.error, options);
+        return;
+      }
 
       // [EARS-14] Handle conflict detection
       if (pullResult.conflictDetected) {

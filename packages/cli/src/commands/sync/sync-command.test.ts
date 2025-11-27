@@ -113,18 +113,8 @@ describe('SyncCommand - Unit Tests', () => {
   // =====================================================================
 
   describe('Pre-conditions (EARS 1-4)', () => {
-    it('[EARS-1] should execute complete audit before push', async () => {
-      // Setup
-      mockSyncModule.auditState.mockResolvedValue({
-        passed: true,
-        scope: 'current',
-        totalCommits: 10,
-        rebaseCommits: 0,
-        resolutionCommits: 0,
-        integrityViolations: [],
-        summary: 'All checks passed'
-      });
-
+    it('[EARS-1] should delegate push to pushState (audit runs internally)', async () => {
+      // Setup: pushState handles audit internally and returns success
       mockSyncModule.pushState.mockResolvedValue({
         success: true,
         filesSynced: 3,
@@ -137,59 +127,37 @@ describe('SyncCommand - Unit Tests', () => {
       // Execute
       await syncCommand.executePush({});
 
-      // Verify audit was called with correct scope
-      expect(mockSyncModule.auditState).toHaveBeenCalledWith({
-        scope: 'current',
-        verifySignatures: true,
-        verifyChecksums: true,
-        verifyExpectedFiles: true,
-        expectedFilesScope: 'head'
+      // Verify pushState was called (audit runs internally in pushState)
+      expect(mockSyncModule.pushState).toHaveBeenCalledWith({
+        sourceBranch: 'main',
+        actorId: 'human:test-user',
+        dryRun: false,
+        force: false
       });
-
-      // Verify push was called after audit passed
-      expect(mockSyncModule.pushState).toHaveBeenCalled();
     });
 
-    it('[EARS-1] should abort push when pre-push audit fails', async () => {
-      // Setup: Mock audit to fail
-      mockSyncModule.auditState.mockResolvedValue({
-        passed: false,
-        scope: 'current',
-        totalCommits: 10,
-        rebaseCommits: 0,
-        resolutionCommits: 0,
-        integrityViolations: [
-          {
-            rebaseCommitHash: 'abc123',
-            commitMessage: 'Rebase without resolution',
-            timestamp: new Date().toISOString(),
-            author: 'test-user'
-          }
-        ],
-        summary: 'Audit failed with violations',
-        lintReport: {
-          summary: { filesChecked: 5, errors: 2, warnings: 1, fixable: 0, executionTime: 50 },
-          results: [],
-          metadata: { timestamp: new Date().toISOString(), options: {}, version: '1.0.0' }
-        }
+    it('[EARS-1] should handle audit failure returned by pushState', async () => {
+      // Setup: pushState returns error when internal audit fails
+      mockSyncModule.pushState.mockResolvedValue({
+        success: false,
+        filesSynced: 0,
+        sourceBranch: 'main',
+        commitHash: '',
+        commitMessage: '',
+        conflictDetected: false,
+        error: 'Pre-push audit failed: 3 integrity violation(s) detected'
       });
 
       // Execute
       await syncCommand.executePush({});
 
-      // Verify audit was called
-      expect(mockSyncModule.auditState).toHaveBeenCalled();
-
-      // Verify push was NOT called (aborted due to audit failure)
-      expect(mockSyncModule.pushState).not.toHaveBeenCalled();
+      // Verify pushState was called
+      expect(mockSyncModule.pushState).toHaveBeenCalled();
 
       // Verify error handling
       expect(mockProcessExit).toHaveBeenCalledWith(1);
       expect(mockConsoleError).toHaveBeenCalledWith(
-        expect.stringContaining('Pre-push audit failed with')
-      );
-      expect(mockConsoleError).toHaveBeenCalledWith(
-        expect.stringContaining('violation(s)')
+        expect.stringContaining('Pre-push audit failed')
       );
     });
 
@@ -198,27 +166,12 @@ describe('SyncCommand - Unit Tests', () => {
       mockGitModule.getCurrentBranch.mockResolvedValue('gitgov-state');
       mockSyncModule.getStateBranchName.mockResolvedValue('gitgov-state');
 
-      // Mock audit to pass (we want to test branch check, not audit failure)
-      mockSyncModule.auditState.mockResolvedValue({
-        passed: true,
-        scope: 'current',
-        totalCommits: 10,
-        rebaseCommits: 0,
-        resolutionCommits: 0,
-        integrityViolations: [],
-        summary: 'All checks passed',
-        lintReport: {
-          summary: { errors: 0, warnings: 0, filesChecked: 0, fixable: 0, executionTime: 0 },
-          results: [],
-          metadata: { timestamp: '', options: {}, version: '' }
-        }
-      });
-
       // Execute
       await syncCommand.executePush({});
 
-      // Verify error handling
+      // Verify error handling - branch check aborts before pushState is called
       expect(mockProcessExit).toHaveBeenCalledWith(1);
+      expect(mockSyncModule.pushState).not.toHaveBeenCalled();
     });
 
     it('[EARS-3] should verify no uncommitted changes before push or pull', async () => {
@@ -271,18 +224,7 @@ describe('SyncCommand - Unit Tests', () => {
   // =====================================================================
 
   describe('Push Operation (EARS 8-12, 27, 29, 30)', () => {
-    beforeEach(() => {
-      // Setup successful audit by default
-      mockSyncModule.auditState.mockResolvedValue({
-        passed: true,
-        scope: 'current',
-        totalCommits: 10,
-        rebaseCommits: 0,
-        resolutionCommits: 0,
-        integrityViolations: [],
-        summary: 'All checks passed'
-      });
-    });
+    // Note: Audit is now handled internally by pushState, not by CLI
 
     it('[EARS-8] should calculate delta of files before push', async () => {
       // Setup
@@ -683,6 +625,27 @@ describe('SyncCommand - Unit Tests', () => {
             status: 'conflict'
           })
         })
+      );
+    });
+
+    it('[EARS-44] should handle error from pullState and show clear message', async () => {
+      // Setup: Pull returns error (e.g., no remote configured)
+      mockSyncModule.pullState.mockResolvedValue({
+        success: false,
+        hasChanges: false,
+        filesUpdated: 0,
+        reindexed: false,
+        conflictDetected: false,
+        error: 'No remote \'origin\' configured. Pull requires a remote repository. Add a remote with: git remote add origin <url>'
+      });
+
+      // Execute
+      await syncCommand.executePull({});
+
+      // Verify error was shown to user
+      expect(mockProcessExit).toHaveBeenCalledWith(1);
+      expect(mockConsoleError).toHaveBeenCalledWith(
+        expect.stringContaining('No remote')
       );
     });
 

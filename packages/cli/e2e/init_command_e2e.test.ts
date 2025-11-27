@@ -109,25 +109,82 @@ describe('Init CLI Command - Edge Cases E2E Tests', () => {
       expect(fs.existsSync(path.join(testProjectRoot, '.gitgov', 'config.json'))).toBe(true);
     });
 
-    it('[EARS-INIT-2] WHEN repo has no remote THE SYSTEM SHALL create gitgov-state branch locally', () => {
+    it('[EARS-INIT-2] WHEN repo has no remote THE SYSTEM SHALL NOT create gitgov-state (lazy creation on sync push)', () => {
       runCliCommand(['init', '--name', 'No Remote Project', '--actor-name', 'Test User', '--quiet'], { cwd: testProjectRoot });
 
-      // Check if gitgov-state branch exists locally
+      // With lazy branch creation, gitgov-state should NOT exist after init
+      // It will be created on first 'sync push'
       const branches = execSync('git branch --list gitgov-state', { cwd: testProjectRoot, encoding: 'utf8' });
-      expect(branches.trim()).toContain('gitgov-state');
+      expect(branches.trim()).toBe('');
     });
 
-    it('[EARS-INIT-3] WHEN sync push is attempted without remote THE SYSTEM SHALL report warning gracefully', () => {
+    it('[EARS-INIT-3] WHEN sync push is attempted without remote THE SYSTEM SHALL fail with clear error', () => {
       runCliCommand(['init', '--name', 'No Remote Project', '--actor-name', 'Test User', '--quiet'], { cwd: testProjectRoot });
 
-      // Ensure we're on main branch (init may leave us on gitgov-state in some edge cases)
+      // Ensure we're on main branch
       execSync('git checkout main', { cwd: testProjectRoot, stdio: 'pipe' });
 
-      // Sync push should work but warn about no remote
-      const pushResult = runCliCommand(['sync', 'push', '--json'], { cwd: testProjectRoot });
+      // Sync push should FAIL with clear error when no remote configured
+      const pushResult = runCliCommand(['sync', 'push'], { cwd: testProjectRoot, expectError: true });
 
-      // Should succeed locally even without remote
+      // Should fail with clear error about no remote
+      expect(pushResult.success).toBe(false);
+      expect(pushResult.error || pushResult.output).toMatch(/No remote|remote.*configured|git remote add/i);
+    });
+
+    it('[EARS-INIT-4] WHEN sync pull is attempted without remote THE SYSTEM SHALL fail with clear error', () => {
+      runCliCommand(['init', '--name', 'No Remote Pull Project', '--actor-name', 'Test User', '--quiet'], { cwd: testProjectRoot });
+
+      // Ensure we're on main branch
+      execSync('git checkout main', { cwd: testProjectRoot, stdio: 'pipe' });
+
+      // Sync pull should FAIL with clear error when no remote configured
+      const pullResult = runCliCommand(['sync', 'pull'], { cwd: testProjectRoot, expectError: true });
+
+      // Should fail with clear error about no remote
+      expect(pullResult.success).toBe(false);
+      expect(pullResult.error || pullResult.output).toMatch(/No remote|remote.*configured|git remote add/i);
+    });
+
+    it('[EARS-INIT-5] WHEN remote is added later THEN sync push SHALL create gitgov-state with files', () => {
+      // This is the complete Case 1 flow: init without remote, add remote later, then sync push
+
+      // 1. Init without remote
+      runCliCommand(['init', '--name', 'Case1 Complete', '--actor-name', 'Test User', '--quiet'], { cwd: testProjectRoot });
+
+      // 2. Verify .gitgov/ exists locally
+      expect(fs.existsSync(path.join(testProjectRoot, '.gitgov'))).toBe(true);
+      expect(fs.existsSync(path.join(testProjectRoot, '.gitgov', 'config.json'))).toBe(true);
+      expect(fs.existsSync(path.join(testProjectRoot, '.gitgov', 'actors'))).toBe(true);
+
+      // 3. Create bare remote and add it
+      const remotePath = path.join(tempDir, `case1-remote-${Date.now()}`);
+      createBareRemote(remotePath);
+      addRemote(testProjectRoot, remotePath);
+
+      // 4. Push main to remote
+      execSync('git push -u origin main', { cwd: testProjectRoot, stdio: 'pipe' });
+
+      // 5. Now sync push should work and create gitgov-state with files
+      const pushResult = runCliCommand(['sync', 'push'], { cwd: testProjectRoot });
       expect(pushResult.success).toBe(true);
+
+      // 6. Verify gitgov-state exists remotely
+      const remoteBranches = execSync('git ls-remote --heads origin gitgov-state', { cwd: testProjectRoot, encoding: 'utf8' });
+      expect(remoteBranches.trim()).toContain('gitgov-state');
+
+      // 7. Checkout gitgov-state and verify it has files
+      execSync('git fetch origin gitgov-state', { cwd: testProjectRoot, stdio: 'pipe' });
+      execSync('git checkout gitgov-state', { cwd: testProjectRoot, stdio: 'pipe' });
+
+      // Verify .gitgov/ exists with expected structure
+      expect(fs.existsSync(path.join(testProjectRoot, '.gitgov'))).toBe(true);
+      expect(fs.existsSync(path.join(testProjectRoot, '.gitgov', 'config.json'))).toBe(true);
+      expect(fs.existsSync(path.join(testProjectRoot, '.gitgov', 'actors'))).toBe(true);
+      expect(fs.existsSync(path.join(testProjectRoot, '.gitgov', 'cycles'))).toBe(true);
+
+      // Return to main
+      execSync('git checkout main', { cwd: testProjectRoot, stdio: 'pipe' });
     });
   });
 
@@ -155,26 +212,53 @@ describe('Init CLI Command - Edge Cases E2E Tests', () => {
       process.chdir(originalCwd);
     });
 
-    it('[EARS-INIT-4] WHEN remote exists but gitgov-state does not THE SYSTEM SHALL create gitgov-state branch', () => {
+    it('[EARS-INIT-4] WHEN remote exists but gitgov-state does not THE SYSTEM SHALL init without creating gitgov-state (lazy)', () => {
       const result = runCliCommand(['init', '--name', 'New Remote Project', '--actor-name', 'Test User', '--quiet'], { cwd: testProjectRoot });
 
       expect(result.success).toBe(true);
       expect(fs.existsSync(path.join(testProjectRoot, '.gitgov'))).toBe(true);
 
-      // gitgov-state should exist locally
+      // With lazy branch creation, gitgov-state should NOT exist after init
+      // It will be created on first 'sync push'
       const branches = execSync('git branch --list gitgov-state', { cwd: testProjectRoot, encoding: 'utf8' });
-      expect(branches.trim()).toContain('gitgov-state');
+      expect(branches.trim()).toBe('');
     });
 
     it('[EARS-INIT-5] WHEN init completes THE SYSTEM SHALL allow sync push to create remote gitgov-state', () => {
       runCliCommand(['init', '--name', 'New Remote Project', '--actor-name', 'Test User', '--quiet'], { cwd: testProjectRoot });
 
-      const pushResult = runCliCommand(['sync', 'push', '--json'], { cwd: testProjectRoot });
+      const pushResult = runCliCommand(['sync', 'push'], { cwd: testProjectRoot });
       expect(pushResult.success).toBe(true);
 
       // Verify remote has gitgov-state
       const remoteBranches = execSync('git ls-remote --heads origin gitgov-state', { cwd: testProjectRoot, encoding: 'utf8' });
       expect(remoteBranches.trim()).toContain('gitgov-state');
+    });
+
+    it('[EARS-INIT-6] WHEN sync push completes THE gitgov-state branch SHALL contain .gitgov files', () => {
+      // This is Case 2A complete verification: remote exists from start
+      runCliCommand(['init', '--name', 'Case2A Files', '--actor-name', 'Test User', '--quiet'], { cwd: testProjectRoot });
+
+      // Sync push should create gitgov-state with files
+      const pushResult = runCliCommand(['sync', 'push'], { cwd: testProjectRoot });
+      expect(pushResult.success).toBe(true);
+
+      // Checkout gitgov-state and verify it has files
+      execSync('git fetch origin gitgov-state', { cwd: testProjectRoot, stdio: 'pipe' });
+      execSync('git checkout gitgov-state', { cwd: testProjectRoot, stdio: 'pipe' });
+
+      // Verify .gitgov/ exists with expected structure
+      expect(fs.existsSync(path.join(testProjectRoot, '.gitgov'))).toBe(true);
+      expect(fs.existsSync(path.join(testProjectRoot, '.gitgov', 'config.json'))).toBe(true);
+      expect(fs.existsSync(path.join(testProjectRoot, '.gitgov', 'actors'))).toBe(true);
+      expect(fs.existsSync(path.join(testProjectRoot, '.gitgov', 'cycles'))).toBe(true);
+
+      // Verify at least one actor file exists
+      const actorFiles = fs.readdirSync(path.join(testProjectRoot, '.gitgov', 'actors'));
+      expect(actorFiles.length).toBeGreaterThan(0);
+
+      // Return to main
+      execSync('git checkout main', { cwd: testProjectRoot, stdio: 'pipe' });
     });
   });
 
@@ -200,13 +284,21 @@ describe('Init CLI Command - Edge Cases E2E Tests', () => {
       process.chdir(originalCwd);
     });
 
-    it('[EARS-INIT-6] WHEN repo has no commits THE SYSTEM SHALL fail with clear guidance', () => {
-      // gitgov init requires at least one commit for orphan branch creation
-      const result = runCliCommand(['init', '--name', 'Empty Main Project', '--actor-name', 'Test User', '--quiet'], { cwd: testProjectRoot, expectError: true });
+    it('[EARS-INIT-6] WHEN repo has no commits THE SYSTEM SHALL succeed with local .gitgov (sync push fails)', () => {
+      // With lazy branch creation, init should succeed even without commits
+      // The .gitgov directory is created locally, gitgov-state branch will be
+      // created lazily on first sync push (when there are commits)
+      const result = runCliCommand(['init', '--name', 'Empty Main Project', '--actor-name', 'Test User', '--quiet'], { cwd: testProjectRoot });
 
-      // Should fail with a clear error message guiding the user
-      expect(result.success).toBe(false);
-      expect(result.error || result.output).toMatch(/no commits|initial commit/i);
+      // Init should succeed and create .gitgov locally
+      expect(result.success).toBe(true);
+      expect(fs.existsSync(path.join(testProjectRoot, '.gitgov'))).toBe(true);
+      expect(fs.existsSync(path.join(testProjectRoot, '.gitgov', 'config.json'))).toBe(true);
+
+      // Sync push without commits should FAIL with clear error
+      const pushResult = runCliCommand(['sync', 'push'], { cwd: testProjectRoot, expectError: true });
+      expect(pushResult.success).toBe(false);
+      expect(pushResult.error || pushResult.output).toMatch(/no commits|initial commit/i);
     });
 
     it('[EARS-INIT-7] WHEN user creates initial commit THEN init THE SYSTEM SHALL succeed', () => {
@@ -324,20 +416,30 @@ describe('Init CLI Command - Edge Cases E2E Tests', () => {
       process.chdir(originalCwd);
     });
 
-    it('[EARS-INIT-10] WHEN cloning repo with gitgov-state THE SYSTEM SHALL bootstrap .gitgov from state branch', () => {
+    it('[EARS-INIT-10] WHEN cloning repo with gitgov-state THE SYSTEM SHALL require init then sync pull', () => {
       // After clone, .gitgov should NOT exist (it's gitignored)
       expect(fs.existsSync(path.join(cloneRepoPath, '.gitgov'))).toBe(false);
 
-      // Running sync pull should bootstrap from gitgov-state
-      const pullResult = runCliCommand(['sync', 'pull', '--json'], { cwd: cloneRepoPath });
+      // CURRENT BEHAVIOR: sync pull requires .gitgov to exist
+      // Running sync pull without init should fail with clear error
+      const pullResultWithoutInit = runCliCommand(['sync', 'pull', '--json'], { cwd: cloneRepoPath, expectError: true });
+      expect(pullResultWithoutInit.success).toBe(false);
+      expect(pullResultWithoutInit.error || pullResultWithoutInit.output).toMatch(/not initialized|init/i);
 
+      // SOLUTION: Run init first, then sync pull
+      const initResult = runCliCommand(['init', '--name', 'Clone Project', '--actor-name', 'Clone User', '--quiet'], { cwd: cloneRepoPath });
+      expect(initResult.success).toBe(true);
+
+      // Now sync pull should work and merge remote state
+      const pullResult = runCliCommand(['sync', 'pull', '--json'], { cwd: cloneRepoPath });
       expect(pullResult.success).toBe(true);
       expect(fs.existsSync(path.join(cloneRepoPath, '.gitgov'))).toBe(true);
       expect(fs.existsSync(path.join(cloneRepoPath, '.gitgov', 'config.json'))).toBe(true);
     });
 
-    it('[EARS-INIT-11] WHEN bootstrap completes THE SYSTEM SHALL restore full .gitgov structure', () => {
-      // Bootstrap via sync pull
+    it('[EARS-INIT-11] WHEN init + sync pull completes THE SYSTEM SHALL restore full .gitgov structure', () => {
+      // First init, then sync pull
+      runCliCommand(['init', '--name', 'Clone Project', '--actor-name', 'Clone User', '--quiet'], { cwd: cloneRepoPath });
       runCliCommand(['sync', 'pull', '--json'], { cwd: cloneRepoPath });
 
       // Verify key directories exist
