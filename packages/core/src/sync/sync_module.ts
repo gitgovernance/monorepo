@@ -1239,18 +1239,29 @@ export class SyncModule {
       result.commitMessage = commitMessage;
 
       if (!dryRun) {
+        // IMPORTANT: Stage ALL files FIRST, then cleanup non-syncable files
+        // This ensures EARS-47 can detect and remove untracked files from worktree
+        // that shouldn't be synced (like .session.json, gitgov binary)
+        if (!isFirstPush) {
+          log('Staging all .gitgov/ files before cleanup...');
+          // Use force: true because .gitgov/ may be in .gitignore (by design)
+          await this.git.add([".gitgov"], { force: true });
+          log('All files staged, proceeding to cleanup');
+        }
+
         // [EARS-47] Remove ALL non-syncable files from gitgov-state
         // This ensures only files that pass shouldSyncFile() remain in shared state
+        // MUST run AFTER git add so we can detect and remove untracked files
         log('[EARS-47] Scanning for non-syncable files in gitgov-state...');
 
-        // Get ALL files currently tracked in .gitgov/ on this branch
+        // Get ALL files currently in staging area for .gitgov/
         try {
           const { stdout: trackedFiles } = await execAsync(
             `git ls-files ".gitgov" 2>/dev/null || true`,
             { cwd: repoRoot }
           );
           const allTrackedFiles = trackedFiles.trim().split('\n').filter(f => f);
-          log(`[EARS-47] Found ${allTrackedFiles.length} tracked files in .gitgov/`);
+          log(`[EARS-47] Found ${allTrackedFiles.length} staged/tracked files in .gitgov/`);
 
           // Remove any file that should NOT be synced (using the same shouldSyncFile() logic)
           for (const trackedFile of allTrackedFiles) {
@@ -1268,14 +1279,6 @@ export class SyncModule {
         }
 
         log('[EARS-47] Non-syncable files cleanup complete');
-
-        // Stage changes (skip if already staged during first push delta calculation)
-        if (!isFirstPush) {
-          log('Staging changes...');
-          // Use force: true because .gitgov/ may be in .gitignore (by design)
-          await this.git.add([".gitgov"], { force: true });
-          log('Changes staged');
-        }
 
         // Verify there are staged changes
         const hasStaged = await this.git.hasUncommittedChanges();
@@ -1524,19 +1527,53 @@ export class SyncModule {
       // ═══════════════════════════════════════════════════════════
       log('Phase 1: Setting up branches...');
 
+      // Get repoRoot early for use throughout this function
+      const pullRepoRoot = await this.git.getRepoRoot();
+
       // 1. Pre-checks - ensure local branch tracks remote
       await this.ensureStateBranch();
 
       const savedBranch = await this.git.getCurrentBranch();
 
+      // [EARS-51] Save LOCAL_ONLY_FILES before checkout
+      // When .gitgov/ is untracked on work branch but tracked on gitgov-state,
+      // git checkout will fail or overwrite files. We save local-only files first.
+      const savedLocalFiles: Map<string, string> = new Map();
+      try {
+        for (const fileName of LOCAL_ONLY_FILES) {
+          const filePath = path.join(pullRepoRoot, ".gitgov", fileName);
+          try {
+            const content = await fs.readFile(filePath, "utf-8");
+            savedLocalFiles.set(fileName, content);
+            log(`[EARS-51] Saved local-only file: ${fileName}`);
+          } catch {
+            // File doesn't exist, that's fine
+          }
+        }
+      } catch (error) {
+        log(`[EARS-51] Warning: Could not save local files: ${(error as Error).message}`);
+      }
+
       // Checkout to gitgov-state
-      await this.git.checkoutBranch(stateBranch);
+      // Use force to handle case where .gitgov/ is untracked on work branch
+      // but tracked on gitgov-state (would otherwise fail with "would be overwritten")
+      try {
+        await this.git.checkoutBranch(stateBranch);
+      } catch (checkoutError) {
+        // If normal checkout fails, try with force
+        log(`[EARS-51] Normal checkout failed, trying with force: ${(checkoutError as Error).message}`);
+        try {
+          await execAsync(`git checkout -f ${stateBranch}`, { cwd: pullRepoRoot });
+          log(`[EARS-51] Force checkout successful`);
+        } catch (forceError) {
+          // Still failed - rethrow original error
+          throw checkoutError;
+        }
+      }
 
       // Verify no staged or modified changes (ignore untracked files)
       // Untracked files from work branch are expected and harmless in gitgov-state
       try {
-        const pullRepoRoot = await this.git.getRepoRoot();
-
         // Check only for staged (A, M, D) or modified (M) files, NOT untracked (??)
         const { stdout } = await execAsync('git status --porcelain', { cwd: pullRepoRoot });
         const lines = stdout.trim().split('\n').filter(l => l);
@@ -1645,8 +1682,7 @@ export class SyncModule {
       // 6. Copy .gitgov/ to filesystem in work branch (EARS-43 complement)
       // When .gitgov/ is ignored in work branch, we need to manually copy files
       // from gitgov-state to the filesystem so they're available for CLI commands
-      const repoRoot = await this.git.getRepoRoot();
-      const gitgovPath = path.join(repoRoot, ".gitgov");
+      const gitgovPath = path.join(pullRepoRoot, ".gitgov");
 
       // Check if .gitgov/ exists in gitgov-state
       const gitgovExists = await fs.access(gitgovPath).then(() => true).catch(() => false);
@@ -1665,24 +1701,58 @@ export class SyncModule {
       // 7. Return to original branch
       await this.git.checkoutBranch(savedBranch);
 
-      // After returning to work branch, ensure .gitgov/ is accessible
-      // If .gitgov/ is ignored, manually copy from gitgov-state
+      // After returning to work branch, ALWAYS restore .gitgov/ from gitgov-state
+      // This is necessary because switching branches may have modified/deleted files
+      // even if there are no "new changes" from the remote.
+      // IMPORTANT: Only checkout SYNC_DIRECTORIES and SYNC_ROOT_FILES, preserving LOCAL_ONLY_FILES
       if (gitgovExists) {
         try {
-          // Check if .gitgov/ exists in current branch filesystem
-          const gitgovExistsInWorkBranch = await fs.access(gitgovPath).then(() => true).catch(() => false);
+          logger.debug("[pullState] Restoring .gitgov/ to filesystem from gitgov-state (preserving local-only files)");
 
-          if (!gitgovExistsInWorkBranch || hasNewChanges) {
-            logger.debug("[pullState] Restoring .gitgov/ to filesystem from gitgov-state");
+          // Build list of paths to checkout (SYNC_DIRECTORIES + SYNC_ROOT_FILES)
+          // This preserves LOCAL_ONLY_FILES like .session.json, index.json, gitgov binary
+          const pathsToCheckout: string[] = [];
 
-            // Use git checkout to copy .gitgov/ from gitgov-state to filesystem
-            await execAsync(`git checkout ${stateBranch} -- .gitgov/`, { cwd: repoRoot });
-
-            // Unstage the files (keep them untracked if .gitgov/ is ignored)
-            await execAsync('git reset HEAD .gitgov/', { cwd: repoRoot });
-
-            logger.debug("[pullState] .gitgov/ restored to filesystem successfully");
+          // Add sync directories
+          for (const dirName of SYNC_DIRECTORIES) {
+            pathsToCheckout.push(`.gitgov/${dirName}`);
           }
+
+          // Add root-level sync files
+          for (const fileName of SYNC_ROOT_FILES) {
+            pathsToCheckout.push(`.gitgov/${fileName}`);
+          }
+
+          // Checkout only syncable paths, one at a time (some may not exist)
+          for (const checkoutPath of pathsToCheckout) {
+            try {
+              await execAsync(`git checkout ${stateBranch} -- "${checkoutPath}"`, { cwd: pullRepoRoot });
+              logger.debug(`[pullState] Checked out: ${checkoutPath}`);
+            } catch {
+              // Path might not exist in gitgov-state, that's fine
+              logger.debug(`[pullState] Skipped (not in gitgov-state): ${checkoutPath}`);
+            }
+          }
+
+          // Unstage the files (keep them untracked if .gitgov/ is ignored)
+          try {
+            await execAsync('git reset HEAD .gitgov/', { cwd: pullRepoRoot });
+          } catch {
+            // Nothing staged, that's fine
+          }
+
+          // [EARS-51] Restore saved LOCAL_ONLY_FILES (they may have been lost during checkout)
+          for (const [fileName, content] of savedLocalFiles) {
+            try {
+              const filePath = path.join(pullRepoRoot, ".gitgov", fileName);
+              await fs.writeFile(filePath, content, "utf-8");
+              logger.debug(`[EARS-51] Restored local-only file: ${fileName}`);
+            } catch (writeError) {
+              logger.warn(`[EARS-51] Failed to restore ${fileName}: ${(writeError as Error).message}`);
+            }
+          }
+
+          logger.debug("[pullState] .gitgov/ restored to filesystem successfully (local-only files preserved)");
         } catch (error) {
           logger.warn(`[pullState] Failed to restore .gitgov/ to filesystem: ${(error as Error).message}`);
           // Non-critical: user can manually restore with 'git checkout gitgov-state -- .gitgov/'

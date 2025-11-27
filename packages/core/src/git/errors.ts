@@ -21,7 +21,7 @@ export class GitError extends Error {
  */
 export class GitCommandError extends GitError {
   public readonly stderr: string;
-  public readonly stdout?: string;
+  public readonly stdout?: string | undefined;
   public readonly command?: string | undefined;
 
   constructor(message: string, stderr: string = '', command?: string | undefined, stdout?: string) {

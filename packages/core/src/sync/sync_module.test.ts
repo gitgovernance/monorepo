@@ -1002,6 +1002,79 @@ describe("SyncModule", () => {
       expect(afterFiles).not.toContain("old.json.backup");
     });
 
+    it("[EARS-48] should NOT sync untracked worktree files (.session.json, gitgov) on subsequent push", async () => {
+      // This test verifies the fix for the bug where untracked files from the worktree
+      // were accidentally added to gitgov-state on subsequent pushes because git add
+      // ran AFTER the EARS-47 cleanup instead of BEFORE
+
+      const gitgovDir = path.join(repoPath, ".gitgov");
+
+      // Step 1: Create ONLY syncable files and do first push
+      fs.mkdirSync(path.join(gitgovDir, "tasks"), { recursive: true });
+      fs.writeFileSync(path.join(gitgovDir, "tasks/task-1.json"), '{"title": "Task 1"}');
+      fs.writeFileSync(path.join(gitgovDir, "config.json"), '{"projectId": "test-48"}');
+
+      await execAsync("git add .gitgov", { cwd: repoPath });
+      await execAsync('git commit -m "Add initial syncable .gitgov files"', { cwd: repoPath });
+
+      // First push - clean state
+      const firstPush = await syncModule.pushState({ actorId: "test-actor-48" });
+      expect(firstPush.success).toBe(true);
+
+      // Step 2: Verify gitgov-state is clean (no LOCAL_ONLY_FILES)
+      const { stdout: afterFirstPush } = await execAsync(
+        "git ls-tree -r --name-only gitgov-state -- .gitgov/",
+        { cwd: repoPath }
+      );
+      expect(afterFirstPush).toContain("tasks/task-1.json");
+      expect(afterFirstPush).toContain("config.json");
+      // Check for exact file names, not substrings (to avoid .gitgov/config.json matching "gitgov")
+      const firstPushFiles = afterFirstPush.trim().split("\n").map(f => f.replace(".gitgov/", ""));
+      expect(firstPushFiles).not.toContain(".session.json");
+      expect(firstPushFiles).not.toContain("gitgov"); // Binary file, not .gitgov/ path
+      expect(firstPushFiles).not.toContain("index.json");
+
+      // Step 3: Add LOCAL_ONLY_FILES to worktree (untracked, as they normally would be)
+      // These files should NOT be synced on subsequent push
+      fs.writeFileSync(path.join(gitgovDir, ".session.json"), '{"actorId": "local-session", "machine": "test-machine"}');
+      fs.writeFileSync(path.join(gitgovDir, "gitgov"), '#!/bin/bash\necho "local binary"');
+      fs.writeFileSync(path.join(gitgovDir, "index.json"), '{"records": [], "generated": true}');
+
+      // Also add a new syncable file to trigger a real push
+      fs.writeFileSync(path.join(gitgovDir, "tasks/task-2.json"), '{"title": "Task 2"}');
+
+      // Commit only the syncable file
+      await execAsync("git add .gitgov/tasks/task-2.json", { cwd: repoPath });
+      await execAsync('git commit -m "Add task-2"', { cwd: repoPath });
+
+      // Step 4: Do SECOND push - LOCAL_ONLY_FILES should NOT be synced
+      const secondPush = await syncModule.pushState({ actorId: "test-actor-48" });
+      expect(secondPush.success).toBe(true);
+
+      // Step 5: Verify gitgov-state does NOT have LOCAL_ONLY_FILES
+      const { stdout: afterSecondPush } = await execAsync(
+        "git ls-tree -r --name-only gitgov-state -- .gitgov/",
+        { cwd: repoPath }
+      );
+
+      // Syncable files should be there
+      expect(afterSecondPush).toContain("tasks/task-1.json");
+      expect(afterSecondPush).toContain("tasks/task-2.json");
+      expect(afterSecondPush).toContain("config.json");
+
+      // LOCAL_ONLY_FILES should NOT be in gitgov-state
+      // Check for exact file names, not substrings
+      const secondPushFiles = afterSecondPush.trim().split("\n").map(f => f.replace(".gitgov/", ""));
+      expect(secondPushFiles).not.toContain(".session.json");
+      expect(secondPushFiles).not.toContain("gitgov"); // Binary file
+      expect(secondPushFiles).not.toContain("index.json");
+
+      // Step 6: Verify LOCAL_ONLY_FILES are still in local worktree
+      expect(fs.existsSync(path.join(gitgovDir, ".session.json"))).toBe(true);
+      expect(fs.existsSync(path.join(gitgovDir, "gitgov"))).toBe(true);
+      expect(fs.existsSync(path.join(gitgovDir, "index.json"))).toBe(true);
+    });
+
     it("[EARS-44] should fail with clear error when no remote configured for push", async () => {
       // Setup: Create a repo with commits but WITHOUT remote
       const noRemoteRepoPath = path.join(
@@ -1439,6 +1512,181 @@ describe("SyncModule", () => {
         fs.rmSync(normalizedFreshPath, { recursive: true, force: true });
         fs.rmSync(normalizedFreshRemotePath, { recursive: true, force: true });
       }
+    });
+
+    it("[EARS-49] should preserve LOCAL_ONLY_FILES (.session.json, index.json, gitgov) after pull", async () => {
+      // This test verifies the fix for the bug where pullState deleted LOCAL_ONLY_FILES
+      // because it used `git checkout gitgov-state -- .gitgov/` which replaced the entire directory
+
+      const gitgovDir = path.join(repoPath, ".gitgov");
+
+      // Step 1: Ensure we have a clean gitgov-state with syncable files
+      fs.mkdirSync(path.join(gitgovDir, "tasks"), { recursive: true });
+      fs.writeFileSync(path.join(gitgovDir, "tasks/task-sync.json"), '{"title": "Synced Task"}');
+      fs.writeFileSync(path.join(gitgovDir, "config.json"), '{"projectId": "test-49"}');
+
+      await execAsync("git add .gitgov", { cwd: repoPath });
+      await execAsync('git commit -m "Add syncable files"', { cwd: repoPath });
+
+      // Push to create gitgov-state
+      const pushResult = await syncModule.pushState({ actorId: "test-actor-49" });
+      expect(pushResult.success).toBe(true);
+
+      // Get current gitgov-state commit hash (we'll reset to this after pushing remote changes)
+      const { stdout: hashBefore } = await execAsync("git rev-parse gitgov-state", { cwd: repoPath });
+      const commitBeforePull = hashBefore.trim();
+
+      // Step 2: Create LOCAL_ONLY_FILES in the worktree (these should be preserved)
+      const sessionContent = '{"actorId": "my-session", "machine": "local-machine", "timestamp": "2025-01-01"}';
+      const indexContent = '{"records": [{"id": "1"}, {"id": "2"}], "generated": true, "version": 1}';
+      const gitgovBinaryContent = '#!/bin/bash\necho "gitgov v1.0.0 - LOCAL BINARY"';
+
+      fs.writeFileSync(path.join(gitgovDir, ".session.json"), sessionContent);
+      fs.writeFileSync(path.join(gitgovDir, "index.json"), indexContent);
+      fs.writeFileSync(path.join(gitgovDir, "gitgov"), gitgovBinaryContent);
+
+      // Verify LOCAL_ONLY_FILES exist before pull
+      expect(fs.existsSync(path.join(gitgovDir, ".session.json"))).toBe(true);
+      expect(fs.existsSync(path.join(gitgovDir, "index.json"))).toBe(true);
+      expect(fs.existsSync(path.join(gitgovDir, "gitgov"))).toBe(true);
+
+      // Step 3: Simulate remote changes by pushing a new task from "another machine"
+      // This simulates: collaborator pushes changes to remote, local is now "behind"
+      await execAsync("git checkout gitgov-state", { cwd: repoPath });
+      fs.writeFileSync(path.join(repoPath, ".gitgov/tasks/task-remote.json"), '{"title": "Remote Task from collaborator"}');
+      await execAsync("git add .gitgov/tasks/task-remote.json", { cwd: repoPath });
+      await execAsync('git commit -m "Add remote task (simulating collaborator)"', { cwd: repoPath });
+      await execAsync("git push origin gitgov-state", { cwd: repoPath });
+
+      // Reset local gitgov-state to BEFORE the remote changes (simulating being "behind")
+      await execAsync(`git reset --hard ${commitBeforePull}`, { cwd: repoPath });
+      await execAsync("git checkout main", { cwd: repoPath });
+
+      // Restore LOCAL_ONLY_FILES (they were removed when we switched branches)
+      fs.writeFileSync(path.join(gitgovDir, ".session.json"), sessionContent);
+      fs.writeFileSync(path.join(gitgovDir, "index.json"), indexContent);
+      fs.writeFileSync(path.join(gitgovDir, "gitgov"), gitgovBinaryContent);
+
+      // Step 4: Execute pullState - should pull new changes AND preserve LOCAL_ONLY_FILES
+      const pullResult = await syncModule.pullState();
+      expect(pullResult.success).toBe(true);
+      expect(pullResult.hasChanges).toBe(true);
+
+      // Step 5: Verify LOCAL_ONLY_FILES are PRESERVED (not deleted!)
+      expect(fs.existsSync(path.join(gitgovDir, ".session.json"))).toBe(true);
+      expect(fs.existsSync(path.join(gitgovDir, "index.json"))).toBe(true);
+      expect(fs.existsSync(path.join(gitgovDir, "gitgov"))).toBe(true);
+
+      // Verify content is unchanged
+      expect(fs.readFileSync(path.join(gitgovDir, ".session.json"), "utf-8")).toBe(sessionContent);
+      expect(fs.readFileSync(path.join(gitgovDir, "index.json"), "utf-8")).toBe(indexContent);
+      expect(fs.readFileSync(path.join(gitgovDir, "gitgov"), "utf-8")).toBe(gitgovBinaryContent);
+
+      // Step 6: Verify synced files were updated
+      expect(fs.existsSync(path.join(gitgovDir, "tasks/task-sync.json"))).toBe(true);
+      expect(fs.existsSync(path.join(gitgovDir, "tasks/task-remote.json"))).toBe(true);
+      expect(fs.existsSync(path.join(gitgovDir, "config.json"))).toBe(true);
+    });
+
+    it("[EARS-50] should preserve ALL files after pull with NO changes (already up to date)", async () => {
+      // This test verifies the fix for the bug where pullState with no new changes
+      // would still delete files because switching branches modified .gitgov/
+
+      const gitgovDir = path.join(repoPath, ".gitgov");
+
+      // Step 1: Create initial state and push
+      fs.mkdirSync(path.join(gitgovDir, "tasks"), { recursive: true });
+      fs.mkdirSync(path.join(gitgovDir, "cycles"), { recursive: true });
+      fs.writeFileSync(path.join(gitgovDir, "tasks/task-1.json"), '{"title": "Task 1"}');
+      fs.writeFileSync(path.join(gitgovDir, "cycles/cycle-1.json"), '{"title": "Cycle 1"}');
+      fs.writeFileSync(path.join(gitgovDir, "config.json"), '{"projectId": "test-50"}');
+
+      await execAsync("git add .gitgov", { cwd: repoPath });
+      await execAsync('git commit -m "Add files for EARS-50"', { cwd: repoPath });
+
+      // Push to gitgov-state
+      const pushResult = await syncModule.pushState({ actorId: "test-actor-50" });
+      expect(pushResult.success).toBe(true);
+
+      // Step 2: Create LOCAL_ONLY_FILES
+      const sessionContent = '{"actorId": "ears-50-session"}';
+      const indexContent = '{"records": [], "version": 50}';
+      const gitgovBinaryContent = '#!/bin/bash\necho "EARS-50 binary"';
+
+      fs.writeFileSync(path.join(gitgovDir, ".session.json"), sessionContent);
+      fs.writeFileSync(path.join(gitgovDir, "index.json"), indexContent);
+      fs.writeFileSync(path.join(gitgovDir, "gitgov"), gitgovBinaryContent);
+
+      // Verify all files exist before pull
+      expect(fs.existsSync(path.join(gitgovDir, "tasks/task-1.json"))).toBe(true);
+      expect(fs.existsSync(path.join(gitgovDir, "cycles/cycle-1.json"))).toBe(true);
+      expect(fs.existsSync(path.join(gitgovDir, "config.json"))).toBe(true);
+      expect(fs.existsSync(path.join(gitgovDir, ".session.json"))).toBe(true);
+      expect(fs.existsSync(path.join(gitgovDir, "index.json"))).toBe(true);
+      expect(fs.existsSync(path.join(gitgovDir, "gitgov"))).toBe(true);
+
+      // Step 3: Execute pullState - NO new changes (already up to date)
+      const pullResult = await syncModule.pullState();
+      expect(pullResult.success).toBe(true);
+      expect(pullResult.hasChanges).toBe(false); // No new changes!
+
+      // Step 4: Verify ALL files are still present (synced AND local-only)
+      // Synced files
+      expect(fs.existsSync(path.join(gitgovDir, "tasks/task-1.json"))).toBe(true);
+      expect(fs.existsSync(path.join(gitgovDir, "cycles/cycle-1.json"))).toBe(true);
+      expect(fs.existsSync(path.join(gitgovDir, "config.json"))).toBe(true);
+
+      // Local-only files (should be preserved, not deleted!)
+      expect(fs.existsSync(path.join(gitgovDir, ".session.json"))).toBe(true);
+      expect(fs.existsSync(path.join(gitgovDir, "index.json"))).toBe(true);
+      expect(fs.existsSync(path.join(gitgovDir, "gitgov"))).toBe(true);
+
+      // Verify content is unchanged
+      expect(fs.readFileSync(path.join(gitgovDir, ".session.json"), "utf-8")).toBe(sessionContent);
+      expect(fs.readFileSync(path.join(gitgovDir, "index.json"), "utf-8")).toBe(indexContent);
+      expect(fs.readFileSync(path.join(gitgovDir, "gitgov"), "utf-8")).toBe(gitgovBinaryContent);
+    });
+
+    it("[EARS-51] should handle pull when .gitgov/ is untracked on work branch (force checkout)", async () => {
+      // This test verifies the fix for the bug where pullState failed with
+      // "Failed to checkout branch gitgov-state" when .gitgov/ was untracked
+      // on the work branch but tracked on gitgov-state
+
+      const gitgovDir = path.join(repoPath, ".gitgov");
+
+      // Step 1: Create initial state and push
+      fs.mkdirSync(path.join(gitgovDir, "tasks"), { recursive: true });
+      fs.writeFileSync(path.join(gitgovDir, "tasks/task-51.json"), '{"title": "Task 51"}');
+      fs.writeFileSync(path.join(gitgovDir, "config.json"), '{"projectId": "test-51"}');
+
+      await execAsync("git add .gitgov", { cwd: repoPath });
+      await execAsync('git commit -m "Add .gitgov for EARS-51"', { cwd: repoPath });
+
+      // Push to gitgov-state
+      const pushResult = await syncModule.pushState({ actorId: "test-actor-51" });
+      expect(pushResult.success).toBe(true);
+
+      // Step 2: Add LOCAL_ONLY_FILES (these exist in worktree but not in gitgov-state)
+      const sessionContent = '{"actorId": "ears-51-session", "important": "data"}';
+      fs.writeFileSync(path.join(gitgovDir, ".session.json"), sessionContent);
+      fs.writeFileSync(path.join(gitgovDir, "gitgov"), '#!/bin/bash\necho "EARS-51"');
+
+      // Step 3: Verify files exist before pull
+      expect(fs.existsSync(path.join(gitgovDir, "tasks/task-51.json"))).toBe(true);
+      expect(fs.existsSync(path.join(gitgovDir, "config.json"))).toBe(true);
+      expect(fs.existsSync(path.join(gitgovDir, ".session.json"))).toBe(true);
+
+      // Step 4: Execute pullState - should NOT fail due to untracked .gitgov/ conflict
+      const pullResult = await syncModule.pullState();
+      expect(pullResult.success).toBe(true);
+
+      // Step 5: Verify all files still exist after pull
+      expect(fs.existsSync(path.join(gitgovDir, "tasks/task-51.json"))).toBe(true);
+      expect(fs.existsSync(path.join(gitgovDir, "config.json"))).toBe(true);
+
+      // LOCAL_ONLY_FILES should be preserved
+      expect(fs.existsSync(path.join(gitgovDir, ".session.json"))).toBe(true);
+      expect(fs.readFileSync(path.join(gitgovDir, ".session.json"), "utf-8")).toBe(sessionContent);
     });
   });
 
