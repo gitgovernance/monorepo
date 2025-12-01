@@ -263,9 +263,9 @@ describe('SyncCommand - Unit Tests', () => {
       // Execute
       await syncCommand.executePush({});
 
-      // Verify output
+      // Verify output - [EARS-54] message updated to clarify "local" changes
       expect(mockConsoleLog).toHaveBeenCalledWith(
-        expect.stringContaining('No changes to push')
+        expect.stringContaining('No local changes to push')
       );
     });
 
@@ -322,6 +322,38 @@ describe('SyncCommand - Unit Tests', () => {
       );
       expect(mockConsoleLog).toHaveBeenCalledWith(
         expect.stringContaining('def456'.substring(0, 8))
+      );
+    });
+
+    it('[EARS-54] should display implicit pull results when push reconciles with remote', async () => {
+      // Setup - push result includes implicit pull results
+      mockSyncModule.pushState.mockResolvedValue({
+        success: true,
+        filesSynced: 3,
+        sourceBranch: 'main',
+        commitHash: 'abc123',
+        commitMessage: 'state: Sync from main',
+        conflictDetected: false,
+        implicitPull: {
+          hasChanges: true,
+          filesUpdated: 7,
+          reindexed: true
+        }
+      });
+
+      // Execute
+      await syncCommand.executePush({});
+
+      // Verify implicit pull results are displayed
+      expect(mockConsoleLog).toHaveBeenCalledWith(
+        expect.stringContaining('Pulled 7 files from remote during reconciliation')
+      );
+      expect(mockConsoleLog).toHaveBeenCalledWith(
+        expect.stringContaining('Index regenerated')
+      );
+      // Also verify normal push results are displayed
+      expect(mockConsoleLog).toHaveBeenCalledWith(
+        expect.stringContaining('3 files synced')
       );
     });
 

@@ -513,15 +513,24 @@ ${steps.join('\n')}
         sourceBranch: result.sourceBranch,
         commitHash: result.commitHash,
         commitMessage: result.commitMessage,
-        conflictDetected: result.conflictDetected
+        conflictDetected: result.conflictDetected,
+        implicitPull: result.implicitPull // [EARS-54] Include implicit pull results
       }, null, 2));
       return;
     }
 
     if (!options.quiet) {
+      // [EARS-54] Show implicit pull results first (if any changes were pulled)
+      if (result.implicitPull?.hasChanges) {
+        console.log(`🔄 Pulled ${result.implicitPull.filesUpdated} files from remote during reconciliation`);
+        if (result.implicitPull.reindexed) {
+          console.log('🔄 Index regenerated');
+        }
+      }
+
       // [EARS-9] Handle "no changes" case (can be success=true with 0 files or success=false without conflict)
       if (result.filesSynced === 0) {
-        console.log('ℹ️  No changes to push');
+        console.log('ℹ️  No local changes to push');
       } else if (result.success) {
         console.log(`✅ ${result.filesSynced} files synced to gitgov-state`);
         if (result.commitHash) {

@@ -1025,11 +1025,43 @@ export class SyncModule {
       // 2. If there are actual staged changes, git commit will detect them
       // 3. This allows seamless workflow without false positives from untracked files
 
+      // [EARS-54] Capture state before implicit pull for tracking changes
+      let hashBeforePull: string | null = null;
+      try {
+        const beforeResult = await execAsync(`git rev-parse HEAD`, { cwd: await this.git.getRepoRoot() });
+        hashBeforePull = beforeResult.stdout.trim();
+        log(`Hash before pull: ${hashBeforePull}`);
+      } catch {
+        // Ignore - might be first commit
+      }
+
       // Attempt pull --rebase to reconcile with remote
       log('Attempting pull --rebase...');
       try {
         await this.git.pullRebase("origin", stateBranch);
         log('Pull rebase successful');
+
+        // [EARS-54] Capture implicit pull results
+        if (hashBeforePull) {
+          try {
+            const repoRoot = await this.git.getRepoRoot();
+            const afterResult = await execAsync(`git rev-parse HEAD`, { cwd: repoRoot });
+            const hashAfterPull = afterResult.stdout.trim();
+
+            if (hashAfterPull !== hashBeforePull) {
+              // Changes were pulled from remote
+              const changedFiles = await this.git.getChangedFiles(hashBeforePull, hashAfterPull, ".gitgov/");
+              result.implicitPull = {
+                hasChanges: true,
+                filesUpdated: changedFiles.length,
+                reindexed: false // Will be set to true after actual reindex at end of pushState
+              };
+              log(`[EARS-54] Implicit pull detected: ${changedFiles.length} files updated`);
+            }
+          } catch (e) {
+            log(`[EARS-54] Could not capture implicit pull details: ${e}`);
+          }
+        }
       } catch (error) {
         // Check if error is because we're already up to date or remote doesn't exist
         const errorMsg = error instanceof Error ? error.message : String(error);
@@ -1387,6 +1419,20 @@ export class SyncModule {
         }
       }
 
+      // [EARS-54-FIX] If implicit pull occurred, regenerate index NOW (after returning to work branch)
+      // Previously, reindexed: true was just a flag but indexer was never called - BUG!
+      if (result.implicitPull?.hasChanges) {
+        log('[EARS-54] Regenerating index after implicit pull...');
+        try {
+          await this.indexer.generateIndex();
+          result.implicitPull.reindexed = true;
+          log('[EARS-54] Index regenerated successfully after implicit pull');
+        } catch (indexError) {
+          log(`[EARS-54] Warning: Failed to regenerate index after implicit pull: ${indexError}`);
+          result.implicitPull.reindexed = false;
+        }
+      }
+
       result.success = true;
       result.filesSynced = delta.length;
       log(`=== pushState COMPLETED SUCCESSFULLY: ${delta.length} files synced ===`);
@@ -1654,8 +1700,10 @@ export class SyncModule {
       const hasNewChanges = hashBefore !== hashAfter;
       result.hasChanges = hasNewChanges;
 
-      // 5. Re-index if there are new changes or force requested (EARS-15, EARS-16)
-      if (hasNewChanges || forceReindex) {
+      // 5. Calculate if reindex is needed (EARS-15, EARS-16)
+      // NOTE: Actual reindex happens AFTER file restoration in Phase 4
+      const shouldReindex = hasNewChanges || forceReindex;
+      if (shouldReindex) {
         result.reindexed = true;
 
         // Calculate number of changed files
@@ -1666,16 +1714,6 @@ export class SyncModule {
             ".gitgov/"
           );
           result.filesUpdated = changedFiles.length;
-        }
-
-        // Invoke indexer to regenerate cache (EARS-15, EARS-16)
-        logger.info("Invoking IndexerAdapter.generateIndex() after pull...");
-        try {
-          await this.indexer.generateIndex();
-          logger.info("Index regenerated successfully");
-        } catch (error) {
-          logger.warn(`Failed to regenerate index: ${(error as Error).message}`);
-          // Non-critical: index regeneration failure doesn't fail the pull
         }
       }
 
@@ -1756,6 +1794,19 @@ export class SyncModule {
         } catch (error) {
           logger.warn(`[pullState] Failed to restore .gitgov/ to filesystem: ${(error as Error).message}`);
           // Non-critical: user can manually restore with 'git checkout gitgov-state -- .gitgov/'
+        }
+      }
+
+      // [EARS-15, EARS-16, EARS-52] Invoke indexer AFTER file restoration is complete
+      // This ensures the index reflects the latest pulled files, not the old saved index.json
+      if (shouldReindex) {
+        logger.info("Invoking IndexerAdapter.generateIndex() after pull...");
+        try {
+          await this.indexer.generateIndex();
+          logger.info("Index regenerated successfully");
+        } catch (error) {
+          logger.warn(`Failed to regenerate index: ${(error as Error).message}`);
+          // Non-critical: index regeneration failure doesn't fail the pull
         }
       }
 

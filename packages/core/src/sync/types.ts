@@ -54,6 +54,15 @@ export interface SyncPushResult {
   conflictInfo?: ConflictInfo;
   /** Error message if operation failed */
   error?: string;
+  /** [EARS-54] Implicit pull results when push does reconciliation with remote */
+  implicitPull?: {
+    /** Whether changes were pulled from remote */
+    hasChanges: boolean;
+    /** Number of files updated from remote */
+    filesUpdated: number;
+    /** Whether index was regenerated */
+    reindexed: boolean;
+  };
 }
 
 /**

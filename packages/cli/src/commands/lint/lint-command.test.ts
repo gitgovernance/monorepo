@@ -53,6 +53,10 @@ let mockIdentityAdapter: {
   getCurrentActor: jest.MockedFunction<() => Promise<Records.ActorRecord>>;
 };
 
+let mockIndexerAdapter: {
+  generateIndex: jest.MockedFunction<() => Promise<{ success: boolean }>>;
+};
+
 describe('LintCommand - Complete Unit Tests', () => {
   let lintCommand: LintCommand;
 
@@ -138,10 +142,15 @@ describe('LintCommand - Complete Unit Tests', () => {
       getCurrentActor: jest.fn()
     };
 
+    mockIndexerAdapter = {
+      generateIndex: jest.fn().mockResolvedValue({ success: true })
+    };
+
     // Create mock dependency service
     const mockDependencyService = {
       getLintModule: jest.fn().mockResolvedValue(mockLintModule),
-      getIdentityAdapter: jest.fn().mockResolvedValue(mockIdentityAdapter)
+      getIdentityAdapter: jest.fn().mockResolvedValue(mockIdentityAdapter),
+      getIndexerAdapter: jest.fn().mockResolvedValue(mockIndexerAdapter)
     };
 
     // Mock singleton getInstance
@@ -669,6 +678,76 @@ describe('LintCommand - Complete Unit Tests', () => {
       expect(output).toContain('Fixed:');
       expect(output).toContain('Failed:');
       expect(output).toContain('Backups created:');
+    });
+
+    it('[EARS-55] should regenerate index after fix when records are modified', async () => {
+      // Mock fix report with successful fixes
+      const fixReportWithFixes: Lint.FixReport = {
+        summary: {
+          fixed: 3,
+          failed: 0,
+          backupsCreated: 3
+        },
+        fixes: [
+          {
+            success: true,
+            filePath: '.gitgov/tasks/task1.json',
+            validator: 'SIGNATURE_STRUCTURE',
+            action: 'Signature regenerated',
+            backupPath: '.gitgov/tasks/task1.json.backup'
+          }
+        ]
+      };
+      mockLintModule.fix.mockResolvedValueOnce(fixReportWithFixes);
+
+      await lintCommand.execute({
+        fix: true
+      });
+
+      // Key assertion: indexer.generateIndex() should be called when fixes were applied
+      expect(mockIndexerAdapter.generateIndex).toHaveBeenCalled();
+    });
+
+    it('[EARS-55] should NOT regenerate index when no records were fixed', async () => {
+      // Mock fix report with no fixes (all failed or nothing to fix)
+      const fixReportNoFixes: Lint.FixReport = {
+        summary: {
+          fixed: 0,
+          failed: 0,
+          backupsCreated: 0
+        },
+        fixes: []
+      };
+      mockLintModule.fix.mockResolvedValueOnce(fixReportNoFixes);
+
+      await lintCommand.execute({
+        fix: true
+      });
+
+      // Key assertion: indexer.generateIndex() should NOT be called when no fixes
+      expect(mockIndexerAdapter.generateIndex).not.toHaveBeenCalled();
+    });
+
+    it('[EARS-55] should handle indexer errors gracefully during post-fix reindex', async () => {
+      // Mock fix report with successful fixes
+      const fixReportWithFixes: Lint.FixReport = {
+        summary: {
+          fixed: 1,
+          failed: 0,
+          backupsCreated: 1
+        },
+        fixes: []
+      };
+      mockLintModule.fix.mockResolvedValueOnce(fixReportWithFixes);
+
+      // Make indexer fail
+      mockIndexerAdapter.generateIndex.mockRejectedValueOnce(new Error('Index generation failed'));
+
+      // Should not throw - errors are handled gracefully
+      await expect(lintCommand.execute({ fix: true })).resolves.not.toThrow();
+
+      // Verify indexer was called but error was handled
+      expect(mockIndexerAdapter.generateIndex).toHaveBeenCalled();
     });
   });
 

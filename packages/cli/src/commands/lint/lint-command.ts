@@ -262,6 +262,23 @@ export class LintCommand extends BaseCommand {
 
     const fixReport = await lintModule.fix(lintReport, fixOptions);
 
+    // [EARS-55] Regenerate index after fix if records were modified
+    // This ensures the index reflects the fixed records
+    if (fixReport.summary.fixed > 0) {
+      if (!quiet) {
+        this.logger.info('🔄 Regenerating index after fix...');
+      }
+      try {
+        const indexerAdapter = await this.container.getIndexerAdapter();
+        await indexerAdapter.generateIndex();
+        if (!quiet) {
+          this.logger.info('✅ Index regenerated');
+        }
+      } catch (indexError) {
+        this.logger.warn(`⚠️  Failed to regenerate index: ${indexError}`);
+      }
+    }
+
     // Display fix results
     if (format === 'json') {
       console.log(JSON.stringify({ lintReport, fixReport }, null, 2));
