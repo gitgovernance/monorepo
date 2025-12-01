@@ -1398,16 +1398,50 @@ export class SyncModule {
         }
       }
 
-      // [EARS-43] Restore ALL files from temp directory back to working tree
-      // This is CRITICAL: we preserve ENTIRE .gitgov/ including local-only files
+      // [EARS-43] Restore files from temp directory back to working tree
+      // [EARS-56] If implicit pull occurred, we must keep the NEW synced files from gitgov-state,
+      // only restoring LOCAL_ONLY_FILES from tempDir
       if (tempDir) {
-        log('[EARS-43] Restoring ENTIRE .gitgov/ from temp directory to working tree...');
         const repoRoot = await this.git.getRepoRoot();
         const gitgovDir = path.join(repoRoot, '.gitgov');
 
-        // Copy entire temp back to .gitgov/ (this restores ALL files including local-only)
-        await fs.cp(tempDir, gitgovDir, { recursive: true, force: true });
-        log('[EARS-43] Entire .gitgov/ restored from temp');
+        if (result.implicitPull?.hasChanges) {
+          // [EARS-56] Implicit pull occurred - we need to preserve the new files from remote
+          log('[EARS-56] Implicit pull detected - copying synced files from gitgov-state first...');
+
+          // First, checkout the synced directories/files from gitgov-state to work branch
+          // This brings the newly pulled files to the work tree
+          try {
+            await this.git.checkoutFilesFromBranch(stateBranch, ['.gitgov/']);
+            log('[EARS-56] Synced files copied from gitgov-state to work branch');
+          } catch (checkoutError) {
+            log(`[EARS-56] Warning: Failed to checkout from gitgov-state: ${checkoutError}`);
+            // Fall back to restoring everything from temp
+            await fs.cp(tempDir, gitgovDir, { recursive: true, force: true });
+            log('[EARS-56] Fallback: Entire .gitgov/ restored from temp');
+          }
+
+          // Then, restore ONLY LOCAL_ONLY_FILES from tempDir (they're not in gitgov-state)
+          log('[EARS-56] Restoring LOCAL_ONLY_FILES from temp directory...');
+          for (const fileName of LOCAL_ONLY_FILES) {
+            const tempFilePath = path.join(tempDir, fileName);
+            const destFilePath = path.join(gitgovDir, fileName);
+            try {
+              await fs.access(tempFilePath);
+              await fs.cp(tempFilePath, destFilePath, { force: true });
+              log(`[EARS-56] Restored LOCAL_ONLY_FILE: ${fileName}`);
+            } catch {
+              // File doesn't exist in temp, that's ok
+              log(`[EARS-56] LOCAL_ONLY_FILE not in temp (ok): ${fileName}`);
+            }
+          }
+          log('[EARS-56] LOCAL_ONLY_FILES restored from temp');
+        } else {
+          // No implicit pull - restore everything from temp (original behavior)
+          log('[EARS-43] Restoring ENTIRE .gitgov/ from temp directory to working tree...');
+          await fs.cp(tempDir, gitgovDir, { recursive: true, force: true });
+          log('[EARS-43] Entire .gitgov/ restored from temp');
+        }
 
         // Cleanup temp directory
         log('[EARS-43] Cleaning up temp directory...');

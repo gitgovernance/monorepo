@@ -1135,6 +1135,82 @@ describe("SyncModule", () => {
       }
     });
 
+    it("[EARS-56] should preserve newly pulled files from remote after implicit pull during push", async () => {
+      // This test verifies the bug fix where implicit pull brought new files from remote
+      // but they were overwritten by the tempDir restore (which had old files)
+      //
+      // The key difference from EARS-54-FIX: this test verifies the FILES are preserved,
+      // not just that the indexer is called.
+
+      const gitgovDir = path.join(repoPath, ".gitgov");
+
+      // Step 1: Setup initial state and do first push
+      fs.mkdirSync(path.join(gitgovDir, "tasks"), { recursive: true });
+      fs.writeFileSync(path.join(gitgovDir, "tasks/task-initial.json"), '{"title": "Initial Task"}');
+      fs.writeFileSync(path.join(gitgovDir, "config.json"), '{"projectId": "test-56"}');
+      // Also create LOCAL_ONLY_FILES that should be preserved
+      fs.writeFileSync(path.join(gitgovDir, ".session.json"), '{"lastSession": {"actorId": "test-actor"}}');
+      fs.writeFileSync(path.join(gitgovDir, "index.json"), '{"records": []}');
+
+      await execAsync("git add .gitgov", { cwd: repoPath });
+      await execAsync('git commit -m "Initial .gitgov"', { cwd: repoPath });
+
+      // First push establishes gitgov-state on the remote
+      const firstPush = await syncModule.pushState({ actorId: "test-actor-56" });
+      expect(firstPush.success).toBe(true);
+
+      // Step 2: Simulate "remote" changes by:
+      // a) Checkout gitgov-state locally
+      // b) Add new files
+      // c) Commit AND push to origin (so origin/gitgov-state has the new commits)
+      await execAsync("git checkout gitgov-state", { cwd: repoPath });
+      fs.writeFileSync(path.join(gitgovDir, "tasks/task-from-remote.json"), '{"title": "Task From Remote Machine"}');
+      fs.writeFileSync(path.join(gitgovDir, "tasks/task-from-remote-2.json"), '{"title": "Another Remote Task"}');
+      await execAsync("git add .gitgov/tasks/task-from-remote.json .gitgov/tasks/task-from-remote-2.json", { cwd: repoPath });
+      await execAsync('git commit -m "Remote changes from another machine"', { cwd: repoPath });
+      // CRITICAL: Push to origin so origin/gitgov-state has these commits
+      await execAsync("git push origin gitgov-state", { cwd: repoPath });
+
+      // Reset local gitgov-state to be BEHIND origin (simulate fresh clone that hasn't pulled)
+      await execAsync("git reset --hard HEAD~1", { cwd: repoPath });
+      await execAsync("git checkout main", { cwd: repoPath });
+
+      // Restore LOCAL_ONLY_FILES after checkout (they're not in gitgov-state)
+      fs.writeFileSync(path.join(gitgovDir, ".session.json"), '{"lastSession": {"actorId": "test-actor"}}');
+      fs.writeFileSync(path.join(gitgovDir, "index.json"), '{"records": []}');
+
+      // Step 3: Make local changes and push - this should trigger implicit pull from origin
+      fs.writeFileSync(path.join(gitgovDir, "tasks/task-local.json"), '{"title": "Local Task"}');
+      await execAsync("git add .gitgov/tasks/task-local.json", { cwd: repoPath });
+      await execAsync('git commit -m "Local change"', { cwd: repoPath });
+
+      // Execute push - this should do implicit pull (fetch from origin/gitgov-state)
+      const result = await syncModule.pushState({ actorId: "test-actor-56" });
+
+      // Verify push succeeded
+      expect(result.success).toBe(true);
+
+      // Verify implicit pull was detected
+      expect(result.implicitPull?.hasChanges).toBe(true);
+
+      // KEY ASSERTIONS for EARS-56:
+      // 1. The newly pulled files from remote should exist in the work tree
+      expect(fs.existsSync(path.join(gitgovDir, "tasks/task-from-remote.json"))).toBe(true);
+      expect(fs.existsSync(path.join(gitgovDir, "tasks/task-from-remote-2.json"))).toBe(true);
+
+      // 2. The original and local files should also exist
+      expect(fs.existsSync(path.join(gitgovDir, "tasks/task-initial.json"))).toBe(true);
+      expect(fs.existsSync(path.join(gitgovDir, "tasks/task-local.json"))).toBe(true);
+
+      // 3. LOCAL_ONLY_FILES should be preserved (not in gitgov-state but kept locally)
+      expect(fs.existsSync(path.join(gitgovDir, ".session.json"))).toBe(true);
+      expect(fs.existsSync(path.join(gitgovDir, "index.json"))).toBe(true);
+
+      // 4. Verify the content of newly pulled files is correct
+      const remoteTaskContent = JSON.parse(fs.readFileSync(path.join(gitgovDir, "tasks/task-from-remote.json"), "utf-8"));
+      expect(remoteTaskContent.title).toBe("Task From Remote Machine");
+    });
+
     it("[EARS-44] should fail with clear error when no remote configured for push", async () => {
       // Setup: Create a repo with commits but WITHOUT remote
       const noRemoteRepoPath = path.join(
