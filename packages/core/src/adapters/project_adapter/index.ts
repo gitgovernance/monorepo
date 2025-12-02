@@ -257,7 +257,7 @@ export class ProjectAdapter implements IProjectAdapter {
         }
         console.warn(`⚠️  ${warnings.join(", ")}.`);
         console.warn(`   State sync will be available after 'git remote add origin <url>' and first commit.`);
-        console.warn(`   Run 'gitgov sync push' when ready to enable multi-machine collaboration.`);
+        console.warn(`   Run 'gitgov sync push' when ready to enable multi-machine collaboration.\n`);
       }
 
       // 7. Session Initialization
