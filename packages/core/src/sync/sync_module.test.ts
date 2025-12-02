@@ -1211,6 +1211,238 @@ describe("SyncModule", () => {
       expect(remoteTaskContent.title).toBe("Task From Remote Machine");
     });
 
+    it("[EARS-57] should sync deleted files to gitgov-state when pushing", async () => {
+      // This test verifies that when a user deletes a record locally,
+      // the deletion is propagated to gitgov-state when pushing.
+
+      const gitgovDir = path.join(repoPath, ".gitgov");
+
+      // Step 1: Setup initial state with multiple files and do first push
+      fs.mkdirSync(path.join(gitgovDir, "tasks"), { recursive: true });
+      fs.writeFileSync(path.join(gitgovDir, "tasks/task-keep.json"), '{"title": "Task to Keep"}');
+      fs.writeFileSync(path.join(gitgovDir, "tasks/task-delete.json"), '{"title": "Task to Delete"}');
+      fs.writeFileSync(path.join(gitgovDir, "config.json"), '{"projectId": "test-57"}');
+
+      await execAsync("git add .gitgov", { cwd: repoPath });
+      await execAsync('git commit -m "Initial .gitgov with multiple files"', { cwd: repoPath });
+
+      // First push establishes gitgov-state
+      const firstPush = await syncModule.pushState({ actorId: "test-actor-57" });
+      expect(firstPush.success).toBe(true);
+
+      // Verify both files exist in gitgov-state
+      await execAsync("git checkout gitgov-state", { cwd: repoPath });
+      expect(fs.existsSync(path.join(gitgovDir, "tasks/task-keep.json"))).toBe(true);
+      expect(fs.existsSync(path.join(gitgovDir, "tasks/task-delete.json"))).toBe(true);
+      await execAsync("git checkout main", { cwd: repoPath });
+
+      // Step 2: Delete one file locally
+      fs.unlinkSync(path.join(gitgovDir, "tasks/task-delete.json"));
+
+      // Commit the deletion
+      await execAsync("git add -A .gitgov", { cwd: repoPath });
+      await execAsync('git commit -m "Delete task-delete.json"', { cwd: repoPath });
+
+      // Step 3: Push - this should sync the deletion to gitgov-state
+      const secondPush = await syncModule.pushState({ actorId: "test-actor-57" });
+      expect(secondPush.success).toBe(true);
+
+      // KEY ASSERTIONS for EARS-57:
+      // 1. The deleted file should NOT exist in gitgov-state
+      await execAsync("git checkout gitgov-state", { cwd: repoPath });
+      expect(fs.existsSync(path.join(gitgovDir, "tasks/task-delete.json"))).toBe(false);
+
+      // 2. The kept file should still exist
+      expect(fs.existsSync(path.join(gitgovDir, "tasks/task-keep.json"))).toBe(true);
+
+      // 3. Verify git rm was used (file is not tracked)
+      const { stdout: trackedFiles } = await execAsync("git ls-files .gitgov/tasks/", { cwd: repoPath });
+      expect(trackedFiles).toContain("task-keep.json");
+      expect(trackedFiles).not.toContain("task-delete.json");
+
+      // Cleanup
+      await execAsync("git checkout main", { cwd: repoPath });
+    });
+
+    it("[EARS-57-IMPLICIT] should sync deleted files even when implicit pull brings new files from remote", async () => {
+      // This is the critical test case:
+      // - Machine A has files: task-keep.json, task-to-delete.json
+      // - Machine B (remote) adds: task-from-remote.json
+      // - Machine A deletes: task-to-delete.json
+      // - Machine A pushes → implicit pull brings task-from-remote.json
+      // - EXPECTED: task-to-delete.json is DELETED, task-from-remote.json is KEPT
+
+      const gitgovDir = path.join(repoPath, ".gitgov");
+
+      // Step 1: Setup initial state with files and first push
+      fs.mkdirSync(path.join(gitgovDir, "tasks"), { recursive: true });
+      fs.writeFileSync(path.join(gitgovDir, "tasks/task-keep.json"), '{"title": "Task to Keep"}');
+      fs.writeFileSync(path.join(gitgovDir, "tasks/task-to-delete.json"), '{"title": "Task to Delete"}');
+      fs.writeFileSync(path.join(gitgovDir, "config.json"), '{"projectId": "test-57-implicit"}');
+
+      await execAsync("git add .gitgov", { cwd: repoPath });
+      await execAsync('git commit -m "Initial .gitgov"', { cwd: repoPath });
+
+      // First push establishes gitgov-state on remote
+      const firstPush = await syncModule.pushState({ actorId: "test-actor-57-implicit" });
+      expect(firstPush.success).toBe(true);
+
+      // Step 2: Simulate "remote" changes (another machine adds a file)
+      // Checkout gitgov-state, add file, commit, push to origin
+      await execAsync("git checkout gitgov-state", { cwd: repoPath });
+      fs.writeFileSync(path.join(gitgovDir, "tasks/task-from-remote.json"), '{"title": "Task From Remote Machine"}');
+      await execAsync("git add .gitgov/tasks/task-from-remote.json", { cwd: repoPath });
+      await execAsync('git commit -m "Remote adds new task"', { cwd: repoPath });
+      await execAsync("git push origin gitgov-state", { cwd: repoPath });
+
+      // Reset local gitgov-state to be BEHIND origin (simulate fresh state)
+      await execAsync("git reset --hard HEAD~1", { cwd: repoPath });
+      await execAsync("git checkout main", { cwd: repoPath });
+
+      // Step 3: Local user DELETES a file
+      fs.unlinkSync(path.join(gitgovDir, "tasks/task-to-delete.json"));
+
+      // Step 4: Push - should do implicit pull AND sync deletion
+      const secondPush = await syncModule.pushState({ actorId: "test-actor-57-implicit" });
+      expect(secondPush.success).toBe(true);
+
+      // Verify implicit pull occurred
+      expect(secondPush.implicitPull?.hasChanges).toBe(true);
+
+      // KEY ASSERTIONS for EARS-57-IMPLICIT:
+      await execAsync("git checkout gitgov-state", { cwd: repoPath });
+
+      // 1. The deleted file should NOT exist (user deleted it)
+      expect(fs.existsSync(path.join(gitgovDir, "tasks/task-to-delete.json"))).toBe(false);
+
+      // 2. The new file from remote should EXIST (EARS-56 preserved it)
+      expect(fs.existsSync(path.join(gitgovDir, "tasks/task-from-remote.json"))).toBe(true);
+
+      // 3. The kept file should still exist
+      expect(fs.existsSync(path.join(gitgovDir, "tasks/task-keep.json"))).toBe(true);
+
+      // 4. Verify in git tracking
+      const { stdout: trackedFiles } = await execAsync("git ls-files .gitgov/tasks/", { cwd: repoPath });
+      expect(trackedFiles).toContain("task-keep.json");
+      expect(trackedFiles).toContain("task-from-remote.json");
+      expect(trackedFiles).not.toContain("task-to-delete.json");
+
+      // Cleanup
+      await execAsync("git checkout main", { cwd: repoPath });
+    });
+
+    it("[EARS-58] should regenerate index after implicit pull even when no local changes to push", async () => {
+      // This tests the bug where:
+      // 1. Machine A creates tasks and pushes
+      // 2. Machine B has no local changes but does sync push
+      // 3. Machine B's push does implicit pull (gets Machine A's tasks)
+      // 4. Machine B returns "No local changes to push" BUT index should still regenerate
+
+      const gitgovDir = path.join(repoPath, ".gitgov");
+
+      // Step 1: Setup initial state with files and first push
+      fs.mkdirSync(path.join(gitgovDir, "tasks"), { recursive: true });
+      fs.writeFileSync(path.join(gitgovDir, "tasks/initial-task.json"), '{"title": "Initial Task"}');
+      fs.writeFileSync(path.join(gitgovDir, "config.json"), '{"projectId": "test-58"}');
+
+      await execAsync("git add .gitgov", { cwd: repoPath });
+      await execAsync('git commit -m "Initial .gitgov"', { cwd: repoPath });
+
+      // First push establishes gitgov-state
+      const firstPush = await syncModule.pushState({ actorId: "test-actor-58" });
+      expect(firstPush.success).toBe(true);
+
+      // Step 2: Simulate "remote" changes (another machine adds a task)
+      await execAsync("git checkout gitgov-state", { cwd: repoPath });
+      fs.writeFileSync(path.join(gitgovDir, "tasks/remote-task.json"), '{"title": "Task From Remote"}');
+      await execAsync("git add .gitgov/tasks/remote-task.json", { cwd: repoPath });
+      await execAsync('git commit -m "Remote adds task"', { cwd: repoPath });
+      await execAsync("git push origin gitgov-state", { cwd: repoPath });
+
+      // Reset local gitgov-state to be BEHIND origin
+      await execAsync("git reset --hard HEAD~1", { cwd: repoPath });
+      await execAsync("git checkout main", { cwd: repoPath });
+
+      // Track if indexer was called
+      let indexerCalled = false;
+      const originalGenerateIndex = syncModule["indexer"].generateIndex;
+      syncModule["indexer"].generateIndex = async () => {
+        indexerCalled = true;
+        return originalGenerateIndex.call(syncModule["indexer"]);
+      };
+
+      // Step 3: Push with NO local changes - should do implicit pull and regenerate index
+      const secondPush = await syncModule.pushState({ actorId: "test-actor-58" });
+
+      // Restore original indexer
+      syncModule["indexer"].generateIndex = originalGenerateIndex;
+
+      // KEY ASSERTIONS for EARS-58:
+      expect(secondPush.success).toBe(true);
+      expect(secondPush.implicitPull?.hasChanges).toBe(true);
+      expect(secondPush.implicitPull?.reindexed).toBe(true);  // This was failing before fix
+      expect(indexerCalled).toBe(true);  // Index should have been regenerated
+      expect(secondPush.filesSynced).toBe(0);  // No local changes were pushed
+
+      // Verify the remote task is now in local .gitgov/
+      expect(fs.existsSync(path.join(gitgovDir, "tasks/remote-task.json"))).toBe(true);
+    });
+
+    it("[EARS-59] should preserve .key files during implicit pull (excluded patterns)", async () => {
+      // This tests the critical bug where .key files were deleted during implicit pull
+      // because git checkout .gitgov/ overwrites everything, and .key files are not in gitgov-state
+
+      const gitgovDir = path.join(repoPath, ".gitgov");
+
+      // Step 1: Setup with .key file in actors/
+      fs.mkdirSync(path.join(gitgovDir, "actors"), { recursive: true });
+      fs.mkdirSync(path.join(gitgovDir, "tasks"), { recursive: true });
+      fs.writeFileSync(path.join(gitgovDir, "actors/human_test-actor.json"), '{"id": "human:test-actor"}');
+      fs.writeFileSync(path.join(gitgovDir, "actors/human_test-actor.key"), 'PRIVATE_KEY_CONTENT_DO_NOT_SYNC');
+      fs.writeFileSync(path.join(gitgovDir, "tasks/initial-task.json"), '{"title": "Initial Task"}');
+      fs.writeFileSync(path.join(gitgovDir, "config.json"), '{"projectId": "test-59"}');
+
+      await execAsync("git add .gitgov", { cwd: repoPath });
+      await execAsync('git commit -m "Initial .gitgov with .key file"', { cwd: repoPath });
+
+      // First push - .key should NOT be synced to gitgov-state
+      const firstPush = await syncModule.pushState({ actorId: "test-actor-59" });
+      expect(firstPush.success).toBe(true);
+
+      // Verify .key is NOT in gitgov-state
+      await execAsync("git checkout gitgov-state", { cwd: repoPath });
+      expect(fs.existsSync(path.join(gitgovDir, "actors/human_test-actor.json"))).toBe(true);
+      expect(fs.existsSync(path.join(gitgovDir, "actors/human_test-actor.key"))).toBe(false); // NOT synced
+
+      // Step 2: Add remote changes
+      fs.writeFileSync(path.join(gitgovDir, "tasks/remote-task.json"), '{"title": "Task From Remote"}');
+      await execAsync("git add .gitgov/tasks/remote-task.json", { cwd: repoPath });
+      await execAsync('git commit -m "Remote adds task"', { cwd: repoPath });
+      await execAsync("git push origin gitgov-state", { cwd: repoPath });
+
+      // Reset local to be behind
+      await execAsync("git reset --hard HEAD~1", { cwd: repoPath });
+      await execAsync("git checkout main", { cwd: repoPath });
+
+      // Verify .key still exists locally before push
+      expect(fs.existsSync(path.join(gitgovDir, "actors/human_test-actor.key"))).toBe(true);
+      const keyContentBefore = fs.readFileSync(path.join(gitgovDir, "actors/human_test-actor.key"), "utf-8");
+      expect(keyContentBefore).toBe('PRIVATE_KEY_CONTENT_DO_NOT_SYNC');
+
+      // Step 3: Push with no local changes - triggers implicit pull
+      const secondPush = await syncModule.pushState({ actorId: "test-actor-59" });
+      expect(secondPush.success).toBe(true);
+      expect(secondPush.implicitPull?.hasChanges).toBe(true);
+
+      // KEY ASSERTION for EARS-59: .key file must still exist after implicit pull!
+      expect(fs.existsSync(path.join(gitgovDir, "actors/human_test-actor.key"))).toBe(true);
+      const keyContentAfter = fs.readFileSync(path.join(gitgovDir, "actors/human_test-actor.key"), "utf-8");
+      expect(keyContentAfter).toBe('PRIVATE_KEY_CONTENT_DO_NOT_SYNC');
+
+      // Also verify the remote task was pulled
+      expect(fs.existsSync(path.join(gitgovDir, "tasks/remote-task.json"))).toBe(true);
+    });
+
     it("[EARS-44] should fail with clear error when no remote configured for push", async () => {
       // Setup: Create a repo with commits but WITHOUT remote
       const noRemoteRepoPath = path.join(

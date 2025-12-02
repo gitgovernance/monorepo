@@ -43,7 +43,13 @@ const logger = createLogger("[SyncModule] ");
 
 /**
  * Helper: Check if a file should be synced to gitgov-state
- * Returns true only for allowed *.json files in sync directories
+ * Returns true only for allowed *.json files in SYNC_DIRECTORIES or SYNC_ROOT_FILES
+ *
+ * Accepts paths in multiple formats:
+ * - .gitgov/tasks/foo.json (git ls-files output)
+ * - /absolute/path/.gitgov/tasks/foo.json
+ * - /tmp/tempdir/tasks/foo.json (tempDir copy without .gitgov)
+ * - tasks/foo.json (relative to .gitgov)
  */
 function shouldSyncFile(filePath: string): boolean {
   const fileName = path.basename(filePath);
@@ -54,19 +60,55 @@ function shouldSyncFile(filePath: string): boolean {
     return false;
   }
 
-  // Check if file matches any excluded pattern
+  // Check if file matches any excluded pattern (.key, .backup, etc.)
   for (const pattern of SYNC_EXCLUDED_PATTERNS) {
     if (pattern.test(fileName)) {
       return false;
     }
   }
 
-  // Check if it's a local-only file
+  // Check if it's a local-only file (.session.json, index.json, gitgov)
   if (LOCAL_ONLY_FILES.includes(fileName as typeof LOCAL_ONLY_FILES[number])) {
     return false;
   }
 
-  return true;
+  // CRITICAL: Verify file is in an allowed sync directory or is a root sync file
+  const normalizedPath = filePath.replace(/\\/g, '/');
+  const parts = normalizedPath.split('/');
+
+  // Find .gitgov in path and get the part after it
+  const gitgovIndex = parts.findIndex(p => p === '.gitgov');
+
+  let relativeParts: string[];
+  if (gitgovIndex !== -1) {
+    // Path contains .gitgov: .gitgov/tasks/foo.json or /path/.gitgov/tasks/foo.json
+    relativeParts = parts.slice(gitgovIndex + 1);
+  } else {
+    // Path is relative to .gitgov or from tempDir: tasks/foo.json or /tmp/tempdir/tasks/foo.json
+    // Check if any part matches a sync directory
+    const syncDirIndex = parts.findIndex(p =>
+      SYNC_DIRECTORIES.includes(p as typeof SYNC_DIRECTORIES[number])
+    );
+    if (syncDirIndex !== -1) {
+      relativeParts = parts.slice(syncDirIndex);
+    } else if (SYNC_ROOT_FILES.includes(fileName as typeof SYNC_ROOT_FILES[number])) {
+      // It's a root sync file like config.json
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+  if (relativeParts.length === 1) {
+    // Root file: config.json
+    return SYNC_ROOT_FILES.includes(relativeParts[0] as typeof SYNC_ROOT_FILES[number]);
+  } else if (relativeParts.length >= 2) {
+    // Directory file: tasks/foo.json
+    const dirName = relativeParts[0];
+    return SYNC_DIRECTORIES.includes(dirName as typeof SYNC_DIRECTORIES[number]);
+  }
+
+  return false;
 }
 
 /**
@@ -984,11 +1026,62 @@ export class SyncModule {
         // [EARS-47] CRITICAL: Always restore tempDir FIRST to preserve local files (keys, etc.)
         if (tempDir) {
           try {
-            log('[EARS-47] Restoring .gitgov/ from temp directory (early return)...');
             const repoRoot = await this.git.getRepoRoot();
             const gitgovDir = path.join(repoRoot, '.gitgov');
-            await fs.cp(tempDir, gitgovDir, { recursive: true, force: true });
-            log('[EARS-47] .gitgov/ restored from temp (early return)');
+
+            // [EARS-58] If implicit pull occurred, preserve new files from gitgov-state
+            if (returnResult.implicitPull?.hasChanges) {
+              log('[EARS-58] Implicit pull detected in early return - preserving new files from gitgov-state...');
+              // First checkout synced files from gitgov-state
+              try {
+                await this.git.checkoutFilesFromBranch(stateBranch, ['.gitgov/']);
+                log('[EARS-58] Synced files copied from gitgov-state');
+              } catch (checkoutError) {
+                log(`[EARS-58] Warning: Failed to checkout from gitgov-state: ${checkoutError}`);
+              }
+              // Then restore LOCAL_ONLY_FILES and EXCLUDED files from tempDir
+              // [EARS-59] This includes .key files which are excluded from sync but must be preserved
+              for (const fileName of LOCAL_ONLY_FILES) {
+                const tempFilePath = path.join(tempDir, fileName);
+                const destFilePath = path.join(gitgovDir, fileName);
+                try {
+                  await fs.access(tempFilePath);
+                  await fs.cp(tempFilePath, destFilePath, { force: true });
+                  log(`[EARS-58] Restored LOCAL_ONLY_FILE: ${fileName}`);
+                } catch {
+                  // File doesn't exist in temp, that's ok
+                }
+              }
+
+              // [EARS-59] Restore files matching SYNC_EXCLUDED_PATTERNS (e.g., .key files)
+              const restoreExcludedFilesEarly = async (dir: string, destDir: string) => {
+                try {
+                  const entries = await fs.readdir(dir, { withFileTypes: true });
+                  for (const entry of entries) {
+                    const srcPath = path.join(dir, entry.name);
+                    const dstPath = path.join(destDir, entry.name);
+                    if (entry.isDirectory()) {
+                      await restoreExcludedFilesEarly(srcPath, dstPath);
+                    } else {
+                      const isExcluded = SYNC_EXCLUDED_PATTERNS.some(pattern => pattern.test(entry.name));
+                      if (isExcluded) {
+                        await fs.mkdir(path.dirname(dstPath), { recursive: true });
+                        await fs.copyFile(srcPath, dstPath);
+                        log(`[EARS-59] Restored excluded file (early return): ${entry.name}`);
+                      }
+                    }
+                  }
+                } catch {
+                  // Directory doesn't exist
+                }
+              };
+              await restoreExcludedFilesEarly(tempDir, gitgovDir);
+            } else {
+              // No implicit pull - restore everything from temp (original behavior)
+              log('[EARS-47] Restoring .gitgov/ from temp directory (early return)...');
+              await fs.cp(tempDir, gitgovDir, { recursive: true, force: true });
+              log('[EARS-47] .gitgov/ restored from temp (early return)');
+            }
 
             // Cleanup temp
             await fs.rm(tempDir, { recursive: true, force: true });
@@ -1012,6 +1105,20 @@ export class SyncModule {
               : 'Failed to restore stashed changes. Run \'git stash pop\' manually.';
           }
         }
+
+        // [EARS-58] Regenerate index if implicit pull brought changes (even on early return)
+        if (returnResult.implicitPull?.hasChanges) {
+          log('[EARS-58] Regenerating index after implicit pull (early return)...');
+          try {
+            await this.indexer.generateIndex();
+            returnResult.implicitPull.reindexed = true;
+            log('[EARS-58] Index regenerated successfully');
+          } catch (indexError) {
+            log(`[EARS-58] Warning: Failed to regenerate index: ${indexError}`);
+            returnResult.implicitPull.reindexed = false;
+          }
+        }
+
         return returnResult;
       };
 
@@ -1027,10 +1134,21 @@ export class SyncModule {
 
       // [EARS-54] Capture state before implicit pull for tracking changes
       let hashBeforePull: string | null = null;
+      // [EARS-57] Capture files in gitgov-state BEFORE pull to distinguish user deletions vs new remote files
+      let filesBeforePull: Set<string> = new Set();
       try {
-        const beforeResult = await execAsync(`git rev-parse HEAD`, { cwd: await this.git.getRepoRoot() });
+        const repoRoot = await this.git.getRepoRoot();
+        const beforeResult = await execAsync(`git rev-parse HEAD`, { cwd: repoRoot });
         hashBeforePull = beforeResult.stdout.trim();
         log(`Hash before pull: ${hashBeforePull}`);
+
+        // [EARS-57] Capture tracked files before pull
+        const { stdout: filesOutput } = await execAsync(
+          `git ls-files ".gitgov" 2>/dev/null || true`,
+          { cwd: repoRoot }
+        );
+        filesBeforePull = new Set(filesOutput.trim().split('\n').filter(f => f && shouldSyncFile(f)));
+        log(`[EARS-57] Files in gitgov-state before pull: ${filesBeforePull.size}`);
       } catch {
         // Ignore - might be first commit
       }
@@ -1312,6 +1430,63 @@ export class SyncModule {
 
         log('[EARS-47] Non-syncable files cleanup complete');
 
+        // [EARS-57] Sync deleted files: remove files from gitgov-state that no longer exist in source
+        // This handles the case where a user deletes a record locally and pushes
+        // KEY INSIGHT: We use filesBeforePull to distinguish:
+        //   - Files that existed BEFORE pull but not in tempDir → user deleted → DELETE
+        //   - Files that are NEW from remote (not in filesBeforePull) → KEEP
+        log('[EARS-57] Checking for deleted files to sync...');
+
+        try {
+          // Get all syncable files in source (tempDir = user's local state)
+          const sourceFiles = new Set<string>();
+
+          // Recursively find all files in source
+          const findSourceFiles = async (dir: string, prefix: string = '.gitgov') => {
+            try {
+              const entries = await fs.readdir(dir, { withFileTypes: true });
+              for (const entry of entries) {
+                const fullPath = path.join(dir, entry.name);
+                const relativePath = `${prefix}/${entry.name}`;
+                if (entry.isDirectory()) {
+                  await findSourceFiles(fullPath, relativePath);
+                } else if (shouldSyncFile(relativePath)) {
+                  sourceFiles.add(relativePath);
+                }
+              }
+            } catch {
+              // Directory doesn't exist, that's ok
+            }
+          };
+
+          // Use tempDir if available (untracked files case), otherwise working tree
+          const sourceDir = tempDir || path.join(repoRoot, '.gitgov');
+          await findSourceFiles(sourceDir);
+          log(`[EARS-57] Found ${sourceFiles.size} syncable files in source (user's local state)`);
+          log(`[EARS-57] Files that existed before pull: ${filesBeforePull.size}`);
+
+          // Delete files that:
+          // 1. Existed in gitgov-state BEFORE pull (filesBeforePull)
+          // 2. Are NOT in user's local state (sourceFiles/tempDir)
+          // This ensures we only delete files the user intentionally removed,
+          // NOT new files that came from remote during implicit pull
+          let deletedCount = 0;
+          for (const fileBeforePull of filesBeforePull) {
+            if (!sourceFiles.has(fileBeforePull)) {
+              try {
+                await execAsync(`git rm -f "${fileBeforePull}"`, { cwd: repoRoot });
+                log(`[EARS-57] Deleted (user removed): ${fileBeforePull}`);
+                deletedCount++;
+              } catch {
+                // File might already be removed or not tracked
+              }
+            }
+          }
+          log(`[EARS-57] Deleted ${deletedCount} files that user removed locally`);
+        } catch (err) {
+          log(`[EARS-57] Warning: Failed to sync deleted files: ${err}`);
+        }
+
         // Verify there are staged changes
         const hasStaged = await this.git.hasUncommittedChanges();
         log(`Has staged changes: ${hasStaged}`);
@@ -1421,8 +1596,11 @@ export class SyncModule {
             log('[EARS-56] Fallback: Entire .gitgov/ restored from temp');
           }
 
-          // Then, restore ONLY LOCAL_ONLY_FILES from tempDir (they're not in gitgov-state)
-          log('[EARS-56] Restoring LOCAL_ONLY_FILES from temp directory...');
+          // Then, restore LOCAL_ONLY_FILES and EXCLUDED files from tempDir (they're not in gitgov-state)
+          // [EARS-59] This includes .key files which are excluded from sync but must be preserved
+          log('[EARS-56] Restoring local-only files from temp directory...');
+
+          // Restore LOCAL_ONLY_FILES (root level: .session.json, index.json, gitgov)
           for (const fileName of LOCAL_ONLY_FILES) {
             const tempFilePath = path.join(tempDir, fileName);
             const destFilePath = path.join(gitgovDir, fileName);
@@ -1432,10 +1610,37 @@ export class SyncModule {
               log(`[EARS-56] Restored LOCAL_ONLY_FILE: ${fileName}`);
             } catch {
               // File doesn't exist in temp, that's ok
-              log(`[EARS-56] LOCAL_ONLY_FILE not in temp (ok): ${fileName}`);
             }
           }
-          log('[EARS-56] LOCAL_ONLY_FILES restored from temp');
+
+          // [EARS-59] Restore files matching SYNC_EXCLUDED_PATTERNS (e.g., .key files in actors/)
+          // These are local-only files that exist in subdirectories
+          const restoreExcludedFiles = async (dir: string, destDir: string) => {
+            try {
+              const entries = await fs.readdir(dir, { withFileTypes: true });
+              for (const entry of entries) {
+                const srcPath = path.join(dir, entry.name);
+                const dstPath = path.join(destDir, entry.name);
+
+                if (entry.isDirectory()) {
+                  await restoreExcludedFiles(srcPath, dstPath);
+                } else {
+                  // Check if this file matches any excluded pattern
+                  const isExcluded = SYNC_EXCLUDED_PATTERNS.some(pattern => pattern.test(entry.name));
+                  if (isExcluded) {
+                    await fs.mkdir(path.dirname(dstPath), { recursive: true });
+                    await fs.copyFile(srcPath, dstPath);
+                    log(`[EARS-59] Restored excluded file: ${entry.name}`);
+                  }
+                }
+              }
+            } catch {
+              // Directory doesn't exist, that's ok
+            }
+          };
+
+          await restoreExcludedFiles(tempDir, gitgovDir);
+          log('[EARS-59] Local-only and excluded files restored from temp');
         } else {
           // No implicit pull - restore everything from temp (original behavior)
           log('[EARS-43] Restoring ENTIRE .gitgov/ from temp directory to working tree...');
