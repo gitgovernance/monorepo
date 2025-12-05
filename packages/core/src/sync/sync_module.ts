@@ -2343,10 +2343,12 @@ export class SyncModule {
           }
 
           // Re-sign the record (this recalculates checksum AND adds new signature)
+          // Pass the reason as notes for the signature
           const signedRecord = await this.identity.signRecord(
             record,
             currentActor.id,
-            'resolver'
+            'resolver',
+            `Conflict resolved: ${reason}`
           );
 
           // Write back the updated Record

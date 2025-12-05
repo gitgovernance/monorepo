@@ -158,7 +158,7 @@ export class FeedbackAdapter implements IFeedbackAdapter {
       };
 
       // 3. Sign the record
-      const signedRecord = await this.identity.signRecord(unsignedRecord, actorId, 'author');
+      const signedRecord = await this.identity.signRecord(unsignedRecord, actorId, 'author', 'Feedback record created');
 
       // 4. Persist the record
       await this.feedbackStore.write(signedRecord as GitGovRecord & { payload: FeedbackRecord });
