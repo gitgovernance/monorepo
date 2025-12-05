@@ -144,7 +144,8 @@ export type ConflictType =
   | "rebase_conflict" // Conflict during automatic rebase
   | "merge_conflict" // Conflict during merge
   | "integrity_violation" // Integrity violation (rebase without resolution)
-  | "unresolved_markers"; // Conflict markers present in files
+  | "unresolved_markers" // Conflict markers present in files
+  | "file_conflict"; // [EARS-60] Same file modified both locally and remotely
 
 /**
  * Information about a detected integrity violation

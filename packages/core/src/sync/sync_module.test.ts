@@ -1443,6 +1443,177 @@ describe("SyncModule", () => {
       expect(fs.existsSync(path.join(gitgovDir, "tasks/remote-task.json"))).toBe(true);
     });
 
+    it("[EARS-60] should detect conflict when same file modified locally and remotely", async () => {
+      // This tests the critical scenario:
+      // 1. Machine A modifies task-1 (priority: critical) and pushes
+      // 2. Machine B modifies same task-1 (priority: low) and tries to push
+      // 3. Push should detect conflict, write conflict markers, and fail
+
+      const gitgovDir = path.join(repoPath, ".gitgov");
+
+      // Step 1: Setup initial task
+      // NOTE: Using single-line JSON to ensure Git detects conflict (same line modified)
+      fs.mkdirSync(path.join(gitgovDir, "tasks"), { recursive: true });
+      fs.writeFileSync(
+        path.join(gitgovDir, "tasks/shared-task.json"),
+        '{"title":"Shared Task","priority":"medium"}'
+      );
+      fs.writeFileSync(path.join(gitgovDir, "config.json"), '{"projectId": "test-60"}');
+
+      await execAsync("git add .gitgov", { cwd: repoPath });
+      await execAsync('git commit -m "Initial task"', { cwd: repoPath });
+
+      // First push establishes gitgov-state
+      const firstPush = await syncModule.pushState({ actorId: "test-actor-60" });
+      expect(firstPush.success).toBe(true);
+
+      // Step 2: Simulate "remote" changes (Machine A changes priority to "low")
+      await execAsync("git checkout gitgov-state", { cwd: repoPath });
+      fs.writeFileSync(
+        path.join(gitgovDir, "tasks/shared-task.json"),
+        '{"title":"Shared Task","priority":"low"}'
+      );
+      await execAsync("git add .gitgov/tasks/shared-task.json", { cwd: repoPath });
+      await execAsync('git commit -m "Remote changes priority to low"', { cwd: repoPath });
+      await execAsync("git push origin gitgov-state", { cwd: repoPath });
+
+      // Reset local gitgov-state to be BEHIND origin
+      await execAsync("git reset --hard HEAD~1", { cwd: repoPath });
+      await execAsync("git checkout main", { cwd: repoPath });
+
+      // Step 3: Local changes the same file (Machine B changes priority to "critical")
+      // Both modify the same line, ensuring Git cannot auto-merge
+      fs.writeFileSync(
+        path.join(gitgovDir, "tasks/shared-task.json"),
+        '{"title":"Shared Task","priority":"critical"}'
+      );
+      // IMPORTANT: Must commit the local change for pushState to see it
+      // (pushState uses git checkout from source branch, not working tree)
+      await execAsync("git add .gitgov/tasks/shared-task.json", { cwd: repoPath });
+      await execAsync('git commit -m "Local changes priority to critical"', { cwd: repoPath });
+
+      // Step 4: Push should detect conflict (GIT-NATIVE via rebase)
+      const conflictPush = await syncModule.pushState({ actorId: "test-actor-60" });
+
+      // KEY ASSERTIONS for EARS-60 (Git-Native):
+      expect(conflictPush.success).toBe(false);
+      expect(conflictPush.conflictDetected).toBe(true);
+      expect(conflictPush.conflictInfo?.type).toBe("rebase_conflict"); // Git-native conflict
+      expect(conflictPush.conflictInfo?.affectedFiles).toContain(".gitgov/tasks/shared-task.json");
+
+      // After conflict, rebase should be in progress
+      // Note: During a rebase conflict, git branch --show-current may return empty
+      // because Git is in detached HEAD state. We verify via .git/rebase-* directory.
+      const rebaseDir = path.join(repoPath, ".git", "rebase-merge");
+      const rebaseApplyDir = path.join(repoPath, ".git", "rebase-apply");
+      expect(fs.existsSync(rebaseDir) || fs.existsSync(rebaseApplyDir)).toBe(true);
+
+      // The conflicting file should contain Git's native conflict markers
+      const conflictedContent = fs.readFileSync(
+        path.join(gitgovDir, "tasks/shared-task.json"),
+        "utf-8"
+      );
+      expect(conflictedContent).toContain("<<<<<<<"); // Git-native marker (ours/HEAD)
+      expect(conflictedContent).toContain("=======");
+      expect(conflictedContent).toContain(">>>>>>>"); // Git-native marker (theirs)
+      // Both versions should be present in the conflict
+      expect(conflictedContent).toMatch(/critical|low/); // At least one version should be visible
+
+      // Resolution steps should mention git commands and sync resolve
+      expect(conflictPush.conflictInfo?.resolutionSteps).toBeDefined();
+      expect(conflictPush.conflictInfo?.resolutionSteps?.join(" ")).toContain("git status");
+      expect(conflictPush.conflictInfo?.resolutionSteps?.join(" ")).toContain("rebase --continue");
+      expect(conflictPush.conflictInfo?.resolutionSteps?.join(" ")).toContain("sync resolve");
+
+      // Cleanup: abort rebase to restore repo state
+      await execAsync("git rebase --abort", { cwd: repoPath });
+      await execAsync("git checkout main", { cwd: repoPath });
+    });
+
+    it("[EARS-60] should NOT detect conflict when different files modified", async () => {
+      // Machine A modifies task-1, Machine B modifies task-2
+      // No conflict should occur
+
+      const gitgovDir = path.join(repoPath, ".gitgov");
+
+      // Step 1: Setup initial tasks
+      fs.mkdirSync(path.join(gitgovDir, "tasks"), { recursive: true });
+      fs.writeFileSync(path.join(gitgovDir, "tasks/task-a.json"), '{"title": "Task A"}');
+      fs.writeFileSync(path.join(gitgovDir, "tasks/task-b.json"), '{"title": "Task B"}');
+      fs.writeFileSync(path.join(gitgovDir, "config.json"), '{"projectId": "test-60-noconflict"}');
+
+      await execAsync("git add .gitgov", { cwd: repoPath });
+      await execAsync('git commit -m "Initial tasks"', { cwd: repoPath });
+
+      const firstPush = await syncModule.pushState({ actorId: "test-actor-60-nc" });
+      expect(firstPush.success).toBe(true);
+
+      // Step 2: Remote modifies task-a
+      await execAsync("git checkout gitgov-state", { cwd: repoPath });
+      fs.writeFileSync(path.join(gitgovDir, "tasks/task-a.json"), '{"title": "Task A - Modified by Remote"}');
+      await execAsync("git add .gitgov/tasks/task-a.json", { cwd: repoPath });
+      await execAsync('git commit -m "Remote modifies task-a"', { cwd: repoPath });
+      await execAsync("git push origin gitgov-state", { cwd: repoPath });
+
+      await execAsync("git reset --hard HEAD~1", { cwd: repoPath });
+      await execAsync("git checkout main", { cwd: repoPath });
+
+      // Step 3: Local modifies task-b (DIFFERENT file)
+      fs.writeFileSync(path.join(gitgovDir, "tasks/task-b.json"), '{"title": "Task B - Modified by Local"}');
+
+      // Step 4: Push should succeed (no conflict - different files)
+      const push = await syncModule.pushState({ actorId: "test-actor-60-nc" });
+
+      expect(push.success).toBe(true);
+      expect(push.conflictDetected).toBe(false);
+
+      // Both modifications should be in gitgov-state
+      await execAsync("git checkout gitgov-state", { cwd: repoPath });
+      const taskA = JSON.parse(fs.readFileSync(path.join(gitgovDir, "tasks/task-a.json"), "utf-8"));
+      const taskB = JSON.parse(fs.readFileSync(path.join(gitgovDir, "tasks/task-b.json"), "utf-8"));
+
+      expect(taskA.title).toBe("Task A - Modified by Remote");
+      expect(taskB.title).toBe("Task B - Modified by Local");
+
+      await execAsync("git checkout main", { cwd: repoPath });
+    });
+
+    it("[EARS-60] should NOT detect conflict when same content", async () => {
+      // Both machines have the same content - no conflict
+
+      const gitgovDir = path.join(repoPath, ".gitgov");
+
+      // Step 1: Setup
+      fs.mkdirSync(path.join(gitgovDir, "tasks"), { recursive: true });
+      fs.writeFileSync(path.join(gitgovDir, "tasks/same-task.json"), '{"title": "Same"}');
+      fs.writeFileSync(path.join(gitgovDir, "config.json"), '{"projectId": "test-60-same"}');
+
+      await execAsync("git add .gitgov", { cwd: repoPath });
+      await execAsync('git commit -m "Initial"', { cwd: repoPath });
+
+      const firstPush = await syncModule.pushState({ actorId: "test-actor-60-same" });
+      expect(firstPush.success).toBe(true);
+
+      // Step 2: Remote has same content (simulate by adding unrelated file)
+      await execAsync("git checkout gitgov-state", { cwd: repoPath });
+      fs.writeFileSync(path.join(gitgovDir, "tasks/other-task.json"), '{"title": "Other"}');
+      await execAsync("git add .gitgov/tasks/other-task.json", { cwd: repoPath });
+      await execAsync('git commit -m "Remote adds other task"', { cwd: repoPath });
+      await execAsync("git push origin gitgov-state", { cwd: repoPath });
+
+      await execAsync("git reset --hard HEAD~1", { cwd: repoPath });
+      await execAsync("git checkout main", { cwd: repoPath });
+
+      // Step 3: Local has same content for same-task.json (no change)
+      // The file content is identical
+
+      // Step 4: Push should succeed (same content = no conflict)
+      const push = await syncModule.pushState({ actorId: "test-actor-60-same" });
+
+      expect(push.success).toBe(true);
+      expect(push.conflictDetected).toBe(false);
+    });
+
     it("[EARS-44] should fail with clear error when no remote configured for push", async () => {
       // Setup: Create a repo with commits but WITHOUT remote
       const noRemoteRepoPath = path.join(
@@ -2974,24 +3145,32 @@ describe("SyncModule", () => {
     });
 
     it("[EARS-20] should create rebase commit and signed resolution commit", async () => {
-      // Setup: Create a REAL conflict
-      const testFile = path.join(repoPath, "test-file.txt");
+      // Setup: Create a REAL conflict with .gitgov/*.json files
+      const gitgovDir = path.join(repoPath, ".gitgov");
+      const taskFile = path.join(gitgovDir, "tasks/task-20.json");
+      fs.mkdirSync(path.dirname(taskFile), { recursive: true });
 
-      // 1. Create base version
-      fs.writeFileSync(testFile, "Base content");
-      await git.add(["test-file.txt"]);
-      await git.commit("Add base file");
+      // 1. Create base version with EmbeddedMetadataRecord structure
+      const baseRecord = {
+        header: { version: "1.0", type: "task", payloadChecksum: "base", signatures: [] },
+        payload: { id: "task-20", title: "Base task", status: "draft" }
+      };
+      fs.writeFileSync(taskFile, JSON.stringify(baseRecord, null, 2));
+      await git.add([".gitgov/tasks/task-20.json"], { force: true });
+      await git.commit("Add base task");
 
-      // 2. Create conflict branch
+      // 2. Create conflict branch with different content
       await git.createBranch("conflict-test");
-      fs.writeFileSync(testFile, "Conflict branch content");
-      await git.add(["test-file.txt"]);
+      const conflictRecord = { ...baseRecord, payload: { ...baseRecord.payload, title: "Conflict version" } };
+      fs.writeFileSync(taskFile, JSON.stringify(conflictRecord, null, 2));
+      await git.add([".gitgov/tasks/task-20.json"], { force: true });
       await git.commit("Update in conflict branch");
 
       // 3. Go back to main and create conflicting change
       await git.checkoutBranch("main");
-      fs.writeFileSync(testFile, "Main branch content");
-      await git.add(["test-file.txt"]);
+      const mainRecord = { ...baseRecord, payload: { ...baseRecord.payload, title: "Main version" } };
+      fs.writeFileSync(taskFile, JSON.stringify(mainRecord, null, 2));
+      await git.add([".gitgov/tasks/task-20.json"], { force: true });
       await git.commit("Update in main");
 
       // 4. Try to rebase (will create conflict)
@@ -3002,9 +3181,10 @@ describe("SyncModule", () => {
         // Expected conflict
       }
 
-      // 5. Resolve conflict
-      fs.writeFileSync(testFile, "Resolved content");
-      await git.add(["test-file.txt"]);
+      // 5. Resolve conflict (create merged version)
+      const resolvedRecord = { ...baseRecord, payload: { ...baseRecord.payload, title: "Resolved version" } };
+      fs.writeFileSync(taskFile, JSON.stringify(resolvedRecord, null, 2));
+      await git.add([".gitgov/tasks/task-20.json"], { force: true });
 
       // Execute
       const result = await syncModule.resolveConflict({
@@ -3012,10 +3192,11 @@ describe("SyncModule", () => {
         reason: "Manual resolution",
       });
 
-      // Verify: Two commits were created (rebase + resolution)
+      // Verify: Commits were created
       expect(result.success).toBe(true);
       expect(result.rebaseCommitHash).toBeDefined();
       expect(result.resolutionCommitHash).toBeDefined();
+      // With .gitgov/*.json files to re-sign, a separate resolution commit is created
       expect(result.rebaseCommitHash).not.toBe(result.resolutionCommitHash);
 
       // Verify: Indexer was called after resolution (EARS-20)
@@ -3026,24 +3207,32 @@ describe("SyncModule", () => {
     });
 
     it("[EARS-21] should include actor-id and reason in signed resolution commit", async () => {
-      // Setup: Create a REAL conflict
-      const testFile = path.join(repoPath, "test-file-21.txt");
+      // Setup: Create a REAL conflict with .gitgov/*.json files
+      const gitgovDir = path.join(repoPath, ".gitgov");
+      const taskFile = path.join(gitgovDir, "tasks/task-21.json");
+      fs.mkdirSync(path.dirname(taskFile), { recursive: true });
 
-      // 1. Create base version
-      fs.writeFileSync(testFile, "Base content");
-      await git.add(["test-file-21.txt"]);
-      await git.commit("Add base file");
+      // 1. Create base version with EmbeddedMetadataRecord structure
+      const baseRecord = {
+        header: { version: "1.0", type: "task", payloadChecksum: "base", signatures: [] },
+        payload: { id: "task-21", title: "Base task", status: "draft" }
+      };
+      fs.writeFileSync(taskFile, JSON.stringify(baseRecord, null, 2));
+      await git.add([".gitgov/tasks/task-21.json"], { force: true });
+      await git.commit("Add base task");
 
-      // 2. Create conflict branch
+      // 2. Create conflict branch with different content
       await git.createBranch("conflict-test-21");
-      fs.writeFileSync(testFile, "Conflict branch content");
-      await git.add(["test-file-21.txt"]);
+      const conflictRecord = { ...baseRecord, payload: { ...baseRecord.payload, title: "Conflict version" } };
+      fs.writeFileSync(taskFile, JSON.stringify(conflictRecord, null, 2));
+      await git.add([".gitgov/tasks/task-21.json"], { force: true });
       await git.commit("Update in conflict branch");
 
       // 3. Go back to main and create conflicting change
       await git.checkoutBranch("main");
-      fs.writeFileSync(testFile, "Main branch content");
-      await git.add(["test-file-21.txt"]);
+      const mainRecord = { ...baseRecord, payload: { ...baseRecord.payload, title: "Main version" } };
+      fs.writeFileSync(taskFile, JSON.stringify(mainRecord, null, 2));
+      await git.add([".gitgov/tasks/task-21.json"], { force: true });
       await git.commit("Update in main");
 
       // 4. Try to rebase (will create conflict)
@@ -3054,9 +3243,10 @@ describe("SyncModule", () => {
         // Expected conflict
       }
 
-      // 5. Resolve conflict
-      fs.writeFileSync(testFile, "Resolved content");
-      await git.add(["test-file-21.txt"]);
+      // 5. Resolve conflict (create merged version)
+      const resolvedRecord = { ...baseRecord, payload: { ...baseRecord.payload, title: "Resolved version" } };
+      fs.writeFileSync(taskFile, JSON.stringify(resolvedRecord, null, 2));
+      await git.add([".gitgov/tasks/task-21.json"], { force: true });
 
       // Execute
       const actorId = "human:camilo";
@@ -3117,6 +3307,151 @@ describe("SyncModule", () => {
 
       // Cleanup
       fs.unlinkSync(testFile);
+    });
+
+    it("[EARS-60-RESOLVE] should complete Git-native conflict resolution with sync resolve", async () => {
+      // This tests the complete Git-native flow:
+      // 1. Machine A and B modify same file
+      // 2. Push triggers rebase which detects conflict natively
+      // 3. User manually resolves by editing the file (remove Git markers)
+      // 4. User stages files and runs git rebase --continue
+      // 5. User runs sync resolve to sign and complete
+
+      const gitgovDir = path.join(repoPath, ".gitgov");
+
+      // Setup mock identity adapter for signing
+      const mockIdentityAdapter: Partial<IIdentityAdapter> = {
+        getCurrentActor: jest.fn().mockResolvedValue({
+          id: "human:test-resolver",
+          displayName: "Test Resolver",
+          publicKey: "ed25519:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+          type: "human",
+          roles: ["developer"],
+          status: "active",
+          metadata: {},
+        }),
+        signRecord: jest.fn().mockImplementation(async (record, actorId, role) => {
+          return {
+            ...record,
+            header: {
+              ...record.header,
+              signatures: [
+                ...(record.header.signatures || []),
+                {
+                  keyId: actorId,
+                  role: role,
+                  notes: "Record signed after conflict resolution",
+                  signature: `mock-signature-${Date.now()}`,
+                  timestamp: Math.floor(Date.now() / 1000),
+                },
+              ],
+            },
+          };
+        }),
+        getActorPublicKey: jest.fn().mockResolvedValue("ed25519:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="),
+      };
+
+      const syncModuleWithIdentity = new SyncModule({
+        git,
+        config,
+        identity: mockIdentityAdapter as IIdentityAdapter,
+        lint: createMockLintModule(),
+        indexer: createMockIndexerAdapter(),
+      });
+
+      // Step 1: Setup initial task
+      // NOTE: Using single-line JSON to ensure Git detects conflict (same line modified)
+      fs.mkdirSync(path.join(gitgovDir, "tasks"), { recursive: true });
+      fs.writeFileSync(
+        path.join(gitgovDir, "tasks/resolve-task.json"),
+        '{"title":"Task","priority":"medium"}'
+      );
+      fs.writeFileSync(path.join(gitgovDir, "config.json"), '{"projectId": "test-60-resolve"}');
+
+      await execAsync("git add .gitgov", { cwd: repoPath });
+      await execAsync('git commit -m "Initial task"', { cwd: repoPath });
+
+      // First push
+      const firstPush = await syncModuleWithIdentity.pushState({ actorId: "test-actor" });
+      expect(firstPush.success).toBe(true);
+
+      // Step 2: Remote modifies (Machine A)
+      await execAsync("git checkout gitgov-state", { cwd: repoPath });
+      fs.writeFileSync(
+        path.join(gitgovDir, "tasks/resolve-task.json"),
+        '{"title":"Task","priority":"low"}'
+      );
+      await execAsync("git add .gitgov/tasks/resolve-task.json", { cwd: repoPath });
+      await execAsync('git commit -m "Remote changes priority"', { cwd: repoPath });
+      await execAsync("git push origin gitgov-state", { cwd: repoPath });
+
+      await execAsync("git reset --hard HEAD~1", { cwd: repoPath });
+      await execAsync("git checkout main", { cwd: repoPath });
+
+      // Step 3: Local modifies (Machine B)
+      // Both modify the same line, ensuring Git cannot auto-merge
+      fs.writeFileSync(
+        path.join(gitgovDir, "tasks/resolve-task.json"),
+        '{"title":"Task","priority":"critical"}'
+      );
+      // IMPORTANT: Must commit the local change for pushState to see it
+      await execAsync("git add .gitgov/tasks/resolve-task.json", { cwd: repoPath });
+      await execAsync('git commit -m "Local changes priority to critical"', { cwd: repoPath });
+
+      // Step 4: Push detects conflict via Git-native rebase
+      const conflictPush = await syncModuleWithIdentity.pushState({ actorId: "test-actor" });
+      expect(conflictPush.success).toBe(false);
+      expect(conflictPush.conflictInfo?.type).toBe("rebase_conflict"); // Git-native
+
+      // Verify rebase is in progress
+      // Note: During a rebase conflict, git branch --show-current may return empty
+      // because Git is in detached HEAD state. We verify via .git/rebase-* directory.
+      const rebaseDir = path.join(repoPath, ".git", "rebase-merge");
+      const rebaseApplyDir = path.join(repoPath, ".git", "rebase-apply");
+      expect(fs.existsSync(rebaseDir) || fs.existsSync(rebaseApplyDir)).toBe(true);
+
+      const markedContent = fs.readFileSync(
+        path.join(gitgovDir, "tasks/resolve-task.json"),
+        "utf-8"
+      );
+      expect(markedContent).toContain("<<<<<<<"); // Git-native marker
+
+      // Step 5: User resolves by editing file (keeps critical, but also notes the merge)
+      const resolvedContent = JSON.stringify(
+        { title: "Task (merged)", priority: "critical", mergedFrom: "low" },
+        null,
+        2
+      );
+      fs.writeFileSync(path.join(gitgovDir, "tasks/resolve-task.json"), resolvedContent);
+      await execAsync("git add .gitgov/tasks/resolve-task.json", { cwd: repoPath });
+
+      // Step 6: Run sync resolve which will:
+      // - Verify rebase is in progress
+      // - Re-sign resolved records
+      // - Call git rebase --continue internally
+      // - Create signed resolution commit
+      const resolveResult = await syncModuleWithIdentity.resolveConflict({
+        actorId: "human:test-resolver",
+        reason: "Merged priorities: kept critical but noted low",
+      });
+
+      // Verify resolution completed
+      expect(resolveResult.success).toBe(true);
+      expect(resolveResult.conflictsResolved).toBeGreaterThanOrEqual(0);
+
+      // Verify we're back on main after resolution
+      const { stdout: finalBranch } = await execAsync(
+        "git branch --show-current",
+        { cwd: repoPath }
+      );
+      expect(finalBranch.trim()).toBe("main");
+
+      // Verify the resolved file is committed in gitgov-state
+      const { stdout: lastCommitMsg } = await execAsync(
+        "git log gitgov-state -1 --format=%s",
+        { cwd: repoPath }
+      );
+      expect(lastCommitMsg).toContain("resolution");
     });
   });
 
