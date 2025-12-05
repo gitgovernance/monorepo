@@ -516,8 +516,32 @@ export class SyncModule {
         // Remove all staged files
         await execAsync("git rm -rf . 2>/dev/null || true", { cwd: repoRoot });
 
+        // [EARS-61] Create .gitignore for LOCAL_ONLY_FILES and SYNC_EXCLUDED_PATTERNS
+        // This prevents these files from appearing as untracked in gitgov-state
+        const gitignoreContent = `# GitGovernance State Branch .gitignore
+# This file is auto-generated during gitgov init
+# These files are machine-specific and should NOT be synced
+
+# Local-only files (regenerated/machine-specific)
+index.json
+.session.json
+gitgov
+
+# Private keys (never synced for security)
+*.key
+
+# Backup and temporary files
+*.backup
+*.backup-*
+*.tmp
+*.bak
+`;
+        const gitignorePath = path.join(repoRoot, '.gitignore');
+        await fs.writeFile(gitignorePath, gitignoreContent, 'utf-8');
+        await execAsync('git add .gitignore', { cwd: repoRoot });
+
         // Create initial commit directly with exec (more reliable than GitModule methods for orphan branch)
-        await execAsync('git commit --allow-empty -m "Initialize state branch"', { cwd: repoRoot });
+        await execAsync('git commit -m "Initialize state branch with .gitignore"', { cwd: repoRoot });
       } catch (commitError) {
         const error = commitError as { stderr?: string; message?: string };
         throw new Error(`Failed to create initial commit on orphan branch: ${error.stderr || error.message}`);
