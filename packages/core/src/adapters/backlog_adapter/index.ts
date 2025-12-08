@@ -70,7 +70,7 @@ export interface IBacklogAdapter {
   getAllTasks(): Promise<TaskRecord[]>;
   submitTask(taskId: string, actorId: string): Promise<TaskRecord>;
   approveTask(taskId: string, actorId: string): Promise<TaskRecord>;
-  updateTask(taskId: string, payload: Partial<TaskRecord>): Promise<TaskRecord>;
+  updateTask(taskId: string, payload: Partial<TaskRecord>, actorId: string): Promise<TaskRecord>;
   activateTask(taskId: string, actorId: string): Promise<TaskRecord>;
   completeTask(taskId: string, actorId: string): Promise<TaskRecord>;
   pauseTask(taskId: string, actorId: string, reason?: string): Promise<TaskRecord>;
@@ -775,8 +775,9 @@ export class BacklogAdapter implements IBacklogAdapter {
 
   /**
    * Updates a task with new payload
+   * [EARS-28] Signs the updated record with the editor's signature
    */
-  async updateTask(taskId: string, payload: Partial<TaskRecord>): Promise<TaskRecord> {
+  async updateTask(taskId: string, payload: Partial<TaskRecord>, actorId: string): Promise<TaskRecord> {
     const taskRecord = await this.taskStore.read(taskId);
     if (!taskRecord) {
       throw new Error(`RecordNotFoundError: Task not found: ${taskId}`);
@@ -791,7 +792,10 @@ export class BacklogAdapter implements IBacklogAdapter {
     const updatedPayload = createTaskRecord({ ...taskRecord.payload, ...payload });
     const updatedRecord = { ...taskRecord, payload: updatedPayload };
 
-    await this.taskStore.write(updatedRecord);
+    // Sign the updated record with editor role
+    const signedRecord = await this.identity.signRecord(updatedRecord, actorId, 'editor', 'Task updated');
+    await this.taskStore.write(signedRecord as GitGovRecord & { payload: TaskRecord });
+
     return updatedPayload;
   }
 
