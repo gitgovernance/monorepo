@@ -177,6 +177,8 @@ describe('Init CLI Command - Edge Cases E2E Tests', () => {
       expect(remoteBranches.trim()).toContain('gitgov-state');
 
       // 7. Checkout gitgov-state and verify it has files
+      // Note: Remove local .gitgov/ first because it's untracked in main but tracked in gitgov-state
+      fs.rmSync(path.join(testProjectRoot, '.gitgov'), { recursive: true, force: true });
       execSync('git fetch origin gitgov-state', { cwd: testProjectRoot, stdio: 'pipe' });
       execSync('git checkout gitgov-state', { cwd: testProjectRoot, stdio: 'pipe' });
 
@@ -247,6 +249,8 @@ describe('Init CLI Command - Edge Cases E2E Tests', () => {
       expect(pushResult.success).toBe(true);
 
       // Checkout gitgov-state and verify it has files
+      // Note: Remove local .gitgov/ first because it's untracked in main but tracked in gitgov-state
+      fs.rmSync(path.join(testProjectRoot, '.gitgov'), { recursive: true, force: true });
       execSync('git fetch origin gitgov-state', { cwd: testProjectRoot, stdio: 'pipe' });
       execSync('git checkout gitgov-state', { cwd: testProjectRoot, stdio: 'pipe' });
 

@@ -1130,7 +1130,9 @@ gitgov
               // First checkout synced files from gitgov-state
               try {
                 await this.git.checkoutFilesFromBranch(stateBranch, ['.gitgov/']);
-                log('[EARS-58] Synced files copied from gitgov-state');
+                // [EARS-63] Unstage files - git checkout adds them to staging area
+                await execAsync('git reset HEAD .gitgov/ 2>/dev/null || true', { cwd: repoRoot });
+                log('[EARS-58] Synced files copied from gitgov-state (unstaged)');
               } catch (checkoutError) {
                 log(`[EARS-58] Warning: Failed to checkout from gitgov-state: ${checkoutError}`);
               }
@@ -1765,7 +1767,9 @@ gitgov
           // This brings the newly pulled files to the work tree
           try {
             await this.git.checkoutFilesFromBranch(stateBranch, ['.gitgov/']);
-            log('[EARS-56] Synced files copied from gitgov-state to work branch');
+            // [EARS-63] Unstage files - git checkout adds them to staging area
+            await execAsync('git reset HEAD .gitgov/ 2>/dev/null || true', { cwd: repoRoot });
+            log('[EARS-56] Synced files copied from gitgov-state to work branch (unstaged)');
           } catch (checkoutError) {
             log(`[EARS-56] Warning: Failed to checkout from gitgov-state: ${checkoutError}`);
             // Fall back to restoring everything from temp
@@ -1906,7 +1910,7 @@ gitgov
   async pullState(
     options: SyncPullOptions = {}
   ): Promise<SyncPullResult> {
-    const { forceReindex = false } = options;
+    const { forceReindex = false, force = false } = options;
     const stateBranch = await this.getStateBranchName();
     if (!stateBranch) {
       throw new SyncError("Failed to get state branch name");
@@ -2016,6 +2020,46 @@ gitgov
         log(`[EARS-51] Warning: Could not save local files: ${(error as Error).message}`);
       }
 
+      // [EARS-61] Save ALL syncable files BEFORE checkout for conflict detection
+      // We need to compare local changes vs remote changes BEFORE checkout overwrites them
+      const savedSyncableFiles: Map<string, string> = new Map();
+      try {
+        const gitgovPath = path.join(pullRepoRoot, ".gitgov");
+        const gitgovExists = await fs.access(gitgovPath).then(() => true).catch(() => false);
+
+        if (gitgovExists) {
+          // Recursively read all syncable files
+          const readSyncableFilesRecursive = async (dir: string, baseDir: string) => {
+            try {
+              const entries = await fs.readdir(dir, { withFileTypes: true });
+              for (const entry of entries) {
+                const fullPath = path.join(dir, entry.name);
+                const relativePath = path.relative(baseDir, fullPath);
+                const gitgovRelativePath = `.gitgov/${relativePath}`;
+
+                if (entry.isDirectory()) {
+                  await readSyncableFilesRecursive(fullPath, baseDir);
+                } else if (shouldSyncFile(gitgovRelativePath)) {
+                  try {
+                    const content = await fs.readFile(fullPath, 'utf-8');
+                    savedSyncableFiles.set(gitgovRelativePath, content);
+                  } catch {
+                    // Ignore read errors
+                  }
+                }
+              }
+            } catch {
+              // Ignore directory read errors
+            }
+          };
+
+          await readSyncableFilesRecursive(gitgovPath, gitgovPath);
+          log(`[EARS-61] Saved ${savedSyncableFiles.size} syncable files before checkout for conflict detection`);
+        }
+      } catch (error) {
+        log(`[EARS-61] Warning: Could not save syncable files: ${(error as Error).message}`);
+      }
+
       // Checkout to gitgov-state
       // Use force to handle case where .gitgov/ is untracked on work branch
       // but tracked on gitgov-state (would otherwise fail with "would be overwritten")
@@ -2069,9 +2113,126 @@ gitgov
       });
       const hashBefore = commitBefore[0]?.hash;
 
-      // 3. Fetch + Pull --rebase (EARS-13, EARS-14)
+      // 3. Fetch to get remote refs
       await this.git.fetch("origin");
 
+      // ═══════════════════════════════════════════════════════════
+      // [EARS-61] CONFLICT DETECTION: Detect if local changes would be overwritten
+      // Compare: savedSyncableFiles (captured BEFORE checkout) vs gitgov-state vs origin/gitgov-state
+      // If same file modified locally AND remotely → abort like git pull does
+      // ═══════════════════════════════════════════════════════════
+      log('[EARS-61] Checking for local changes that would be overwritten...');
+
+      // Step 1: Get files that changed in remote (origin/gitgov-state vs local gitgov-state)
+      let remoteChangedFiles: string[] = [];
+      try {
+        const { stdout: remoteChanges } = await execAsync(
+          `git diff --name-only ${stateBranch} origin/${stateBranch} -- .gitgov/ 2>/dev/null || true`,
+          { cwd: pullRepoRoot }
+        );
+        remoteChangedFiles = remoteChanges.trim().split('\n').filter(f => f && shouldSyncFile(f));
+        log(`[EARS-61] Remote changed files: ${remoteChangedFiles.length} - ${remoteChangedFiles.join(', ')}`);
+      } catch {
+        log('[EARS-61] Could not determine remote changes, continuing...');
+      }
+
+      // Step 2: Check if local files (saved BEFORE checkout) differ from gitgov-state HEAD
+      // This detects: user edited file locally that was also edited remotely
+      let localModifiedFiles: string[] = [];
+      if (remoteChangedFiles.length > 0 && savedSyncableFiles.size > 0) {
+        try {
+          for (const remoteFile of remoteChangedFiles) {
+            // Check if we have a saved version of this file (from before checkout)
+            const savedContent = savedSyncableFiles.get(remoteFile);
+
+            if (savedContent !== undefined) {
+              // Get content from gitgov-state HEAD (what was synced last time)
+              try {
+                const { stdout: gitStateContent } = await execAsync(
+                  `git show HEAD:${remoteFile} 2>/dev/null`,
+                  { cwd: pullRepoRoot }
+                );
+
+                // Compare saved local content vs last synced content
+                // If different, user modified this file locally since last sync
+                if (savedContent !== gitStateContent) {
+                  localModifiedFiles.push(remoteFile);
+                  log(`[EARS-61] Local file was modified since last sync: ${remoteFile}`);
+                }
+              } catch {
+                // File doesn't exist in gitgov-state HEAD (new file locally)
+                // This is also a local modification
+                localModifiedFiles.push(remoteFile);
+                log(`[EARS-61] Local file is new (not in gitgov-state): ${remoteFile}`);
+              }
+            }
+          }
+          log(`[EARS-61] Local modified files that overlap with remote: ${localModifiedFiles.length}`);
+        } catch (error) {
+          log(`[EARS-61] Warning: Could not check local modifications: ${(error as Error).message}`);
+        }
+      }
+
+      // Step 3: If there's overlap (same file modified locally AND remotely)
+      if (localModifiedFiles.length > 0) {
+        // [EARS-62] If force flag is set, continue and overwrite local changes
+        if (force) {
+          log(`[EARS-62] Force flag set - will overwrite ${localModifiedFiles.length} local file(s)`);
+          logger.warn(`[pullState] Force pull: overwriting local changes to ${localModifiedFiles.length} file(s)`);
+          result.forcedOverwrites = localModifiedFiles;
+        } else {
+          // [EARS-61] Abort and restore local changes
+          log(`[EARS-61] CONFLICT: Local changes would be overwritten by pull`);
+
+          // Return to original branch before aborting
+          await this.git.checkoutBranch(savedBranch);
+
+          // Restore ALL saved syncable files (user's local changes that would be overwritten)
+          for (const [filePath, content] of savedSyncableFiles) {
+            const fullPath = path.join(pullRepoRoot, filePath);
+            try {
+              await fs.mkdir(path.dirname(fullPath), { recursive: true });
+              await fs.writeFile(fullPath, content, "utf-8");
+              log(`[EARS-61] Restored syncable file: ${filePath}`);
+            } catch {
+              // Ignore restore errors
+            }
+          }
+
+          // Also restore LOCAL_ONLY_FILES
+          for (const [fileName, content] of savedLocalFiles) {
+            const filePath = path.join(pullRepoRoot, ".gitgov", fileName);
+            try {
+              await fs.mkdir(path.dirname(filePath), { recursive: true });
+              await fs.writeFile(filePath, content, "utf-8");
+              log(`[EARS-61] Restored local-only file: ${fileName}`);
+            } catch {
+              // Ignore restore errors
+            }
+          }
+
+          result.success = false;
+          result.conflictDetected = true;
+          result.conflictInfo = {
+            type: "local_changes_conflict",
+            affectedFiles: localModifiedFiles,
+            message: `Your local changes to the following files would be overwritten by pull.\nYou have modified these files locally, and they were also modified remotely.\nTo avoid losing your changes, push first or use --force to overwrite.`,
+            resolutionSteps: [
+              "1. Run 'gitgov sync push' to push your local changes first",
+              "   → This will trigger a rebase and let you resolve conflicts properly",
+              "2. Or run 'gitgov sync pull --force' to discard your local changes",
+            ],
+          };
+          result.error = "Aborting pull: local changes would be overwritten by remote changes";
+
+          logger.warn(`[pullState] Aborting: local changes to ${localModifiedFiles.length} file(s) would be overwritten by pull`);
+          return result;
+        }
+      }
+
+      log('[EARS-61] No conflicting local changes (or force enabled), proceeding with pull...');
+
+      // 4. Pull --rebase (EARS-13, EARS-14)
       try {
         await this.git.pullRebase("origin", stateBranch);
       } catch (error) {
@@ -2505,7 +2666,9 @@ gitgov
     log('Restoring .gitgov/ from gitgov-state...');
     try {
       await this.git.checkoutFilesFromBranch('gitgov-state', ['.gitgov/']);
-      log('Restored .gitgov/ from gitgov-state');
+      // [EARS-63] Unstage files - git checkout adds them to staging area
+      await execAsync('git reset HEAD .gitgov/ 2>/dev/null || true', { cwd: repoRoot });
+      log('Restored .gitgov/ from gitgov-state (unstaged)');
     } catch (checkoutFilesError) {
       log(`Warning: Could not restore .gitgov/ from gitgov-state: ${checkoutFilesError}`);
     }

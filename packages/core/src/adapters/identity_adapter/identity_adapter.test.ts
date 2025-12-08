@@ -359,7 +359,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       });
       mockedCalculatePayloadChecksum.mockReturnValue('calculated-checksum');
 
-      const signedRecord = await identityAdapter.signRecord(mockRecord, 'human:test-user', 'author');
+      const signedRecord = await identityAdapter.signRecord(mockRecord, 'human:test-user', 'author', 'Record signed');
 
       // Should have 2 signatures: original + new real signature
       expect(signedRecord.header.signatures).toHaveLength(2);

@@ -33,6 +33,7 @@ export function registerSyncCommands(program: Command): void {
     .command('pull')
     .description('Pull remote state changes from gitgov-state')
     .option('--reindex', 'Force re-indexation even if there are no new changes')
+    .option('--force', '[EARS-62] Force pull even if local changes would be overwritten (discards local changes)')
     .option('--format <format>', 'Output format: text or json', 'text')
     .option('--json', 'Shortcut for --format json')
     .option('--quiet', 'Suppress output except errors and warnings')

@@ -249,7 +249,7 @@ describe('Sync CLI Commands - E2E Tests', () => {
       runCliCommand(['task', 'new', 'Remote Task', '-d', 'This task was created remotely on another machine'], { cwd: clonePath });
 
       // Commit the .gitgov changes before sync push
-      execSync('git add .gitgov', { cwd: clonePath, stdio: 'pipe' });
+      execSync('git add --force .gitgov', { cwd: clonePath, stdio: 'pipe' });
       execSync('git commit -m "Add remote task"', { cwd: clonePath, stdio: 'pipe' });
 
       const clonePush = runCliCommand(['sync', 'push'], { cwd: clonePath });
@@ -258,7 +258,11 @@ describe('Sync CLI Commands - E2E Tests', () => {
       // 6. Create a local task (simulating local change)
       runCliCommand(['task', 'new', 'Local Task', '-d', 'This task was created locally on this machine'], { cwd: testProjectRoot });
 
-      // 6. Push from original repo - should detect remote changes and do implicit pull
+      // Commit the .gitgov changes before sync push
+      execSync('git add --force .gitgov', { cwd: testProjectRoot, stdio: 'pipe' });
+      execSync('git commit -m "Add local task"', { cwd: testProjectRoot, stdio: 'pipe' });
+
+      // 7. Push from original repo - should detect remote changes and do implicit pull
       const pushResult = runCliCommand(['sync', 'push'], { cwd: testProjectRoot });
       expect(pushResult.success).toBe(true);
 
@@ -300,7 +304,7 @@ describe('Sync CLI Commands - E2E Tests', () => {
       runCliCommand(['task', 'new', 'Remote Task for Index Test', '-d', 'This task was created remotely for index test'], { cwd: clonePath });
 
       // Commit the .gitgov changes before sync push
-      execSync('git add .gitgov', { cwd: clonePath, stdio: 'pipe' });
+      execSync('git add --force .gitgov', { cwd: clonePath, stdio: 'pipe' });
       execSync('git commit -m "Add remote task for index test"', { cwd: clonePath, stdio: 'pipe' });
 
       runCliCommand(['sync', 'push'], { cwd: clonePath });
@@ -308,7 +312,11 @@ describe('Sync CLI Commands - E2E Tests', () => {
       // 6. Create a local task
       runCliCommand(['task', 'new', 'Local Task for Index Test', '-d', 'This task was created locally for index test'], { cwd: testProjectRoot });
 
-      // 6. Get mtime of index.json before push
+      // Commit the .gitgov changes before sync push
+      execSync('git add --force .gitgov', { cwd: testProjectRoot, stdio: 'pipe' });
+      execSync('git commit -m "Add local task for index test"', { cwd: testProjectRoot, stdio: 'pipe' });
+
+      // 7. Get mtime of index.json before push
       const indexPath = path.join(testProjectRoot, '.gitgov', 'index.json');
       const indexBefore = fs.existsSync(indexPath) ? fs.statSync(indexPath).mtimeMs : 0;
 
@@ -327,6 +335,167 @@ describe('Sync CLI Commands - E2E Tests', () => {
       // Note: This can be flaky if both operations happen in the same millisecond,
       // but with the sleep it should be reliable
       expect(indexAfter).toBeGreaterThanOrEqual(indexBefore);
+    });
+  });
+
+  // ============================================================================
+  // EARS-59: Preserve .key files during implicit pull
+  // ============================================================================
+  describe('EARS-59: Preserve .key files during implicit pull', () => {
+    let testProjectRoot: string;
+    let remotePath: string;
+
+    beforeEach(() => {
+      const caseName = `ears59-${Date.now()}`;
+      testProjectRoot = path.join(tempDir, caseName);
+      remotePath = path.join(tempDir, `${caseName}-remote`);
+      createGitRepo(testProjectRoot, true);
+      createBareRemote(remotePath);
+      addRemote(testProjectRoot, remotePath);
+      execSync('git push -u origin main', { cwd: testProjectRoot, stdio: 'pipe' });
+    });
+
+    afterEach(() => {
+      process.chdir(originalCwd);
+    });
+
+    it('[EARS-59] WHEN implicit pull occurs THEN .key files SHALL be preserved', () => {
+      // 1. Initialize GitGovernance and push to gitgov-state
+      runCliCommand(['init', '--name', 'EARS-59 Test', '--actor-name', 'Test User', '--quiet'], { cwd: testProjectRoot });
+      runCliCommand(['sync', 'push'], { cwd: testProjectRoot });
+
+      // 2. Get the .key file content before any operations
+      const gitgovDir = path.join(testProjectRoot, '.gitgov');
+      const actorsDir = path.join(gitgovDir, 'actors');
+      const keyFiles = fs.readdirSync(actorsDir).filter(f => f.endsWith('.key'));
+      expect(keyFiles.length).toBeGreaterThan(0);
+      const keyFileName = keyFiles[0] as string;
+      const keyFilePath = path.join(actorsDir, keyFileName);
+      const keyContentBefore = fs.readFileSync(keyFilePath, 'utf-8');
+
+      // 3. Clone repo (simulating another machine)
+      const clonePath = path.join(tempDir, `ears59-clone-${Date.now()}`);
+      execSync(`git clone "${remotePath}" "${clonePath}"`, { stdio: 'pipe' });
+      execSync('git config user.name "Remote User"', { cwd: clonePath, stdio: 'pipe' });
+      execSync('git config user.email "remote@example.com"', { cwd: clonePath, stdio: 'pipe' });
+
+      // 4. Pull gitgov-state in clone and setup actor
+      runCliCommand(['sync', 'pull'], { cwd: clonePath });
+      const cloneGitgov = path.join(clonePath, '.gitgov');
+      const cloneActorsDir = path.join(cloneGitgov, 'actors');
+
+      // Copy key file to clone (simulating same user on different machine)
+      fs.writeFileSync(path.join(cloneActorsDir, keyFileName), keyContentBefore);
+      const sessionContent = JSON.stringify({
+        lastSession: { actorId: keyFileName.replace('.key', ''), timestamp: new Date().toISOString() }
+      });
+      fs.writeFileSync(path.join(cloneGitgov, '.session.json'), sessionContent);
+
+      // 5. Create a task in the clone and push (simulating remote change)
+      runCliCommand(['task', 'new', 'Remote Task for Key Test', '-d', 'Created remotely'], { cwd: clonePath });
+      execSync('git add --force .gitgov', { cwd: clonePath, stdio: 'pipe' });
+      execSync('git commit -m "Add remote task"', { cwd: clonePath, stdio: 'pipe' });
+      runCliCommand(['sync', 'push'], { cwd: clonePath });
+
+      // 6. Create a local task (to trigger implicit pull during push)
+      runCliCommand(['task', 'new', 'Local Task for Key Test', '-d', 'Created locally'], { cwd: testProjectRoot });
+      execSync('git add --force .gitgov', { cwd: testProjectRoot, stdio: 'pipe' });
+      execSync('git commit -m "Add local task"', { cwd: testProjectRoot, stdio: 'pipe' });
+
+      // 7. Push from original repo - triggers implicit pull
+      const pushResult = runCliCommand(['sync', 'push'], { cwd: testProjectRoot });
+      expect(pushResult.success).toBe(true);
+
+      // 8. KEY ASSERTION: .key file must still exist with same content!
+      expect(fs.existsSync(keyFilePath)).toBe(true);
+      const keyContentAfter = fs.readFileSync(keyFilePath, 'utf-8');
+      expect(keyContentAfter).toBe(keyContentBefore);
+    });
+  });
+
+  // ============================================================================
+  // EARS-60: Auto-merge when different files modified (no conflict)
+  // ============================================================================
+  describe('EARS-60: Auto-merge different files', () => {
+    let testProjectRoot: string;
+    let remotePath: string;
+
+    beforeEach(() => {
+      const caseName = `ears60-${Date.now()}`;
+      testProjectRoot = path.join(tempDir, caseName);
+      remotePath = path.join(tempDir, `${caseName}-remote`);
+      createGitRepo(testProjectRoot, true);
+      createBareRemote(remotePath);
+      addRemote(testProjectRoot, remotePath);
+      execSync('git push -u origin main', { cwd: testProjectRoot, stdio: 'pipe' });
+    });
+
+    afterEach(() => {
+      process.chdir(originalCwd);
+    });
+
+    it('[EARS-60] WHEN different files modified on different machines THEN auto-merge SHALL succeed', () => {
+      // 1. Initialize GitGovernance and push to gitgov-state
+      runCliCommand(['init', '--name', 'EARS-60 Test', '--actor-name', 'Test User', '--quiet'], { cwd: testProjectRoot });
+
+      // Create initial task A
+      runCliCommand(['task', 'new', 'Task A Initial', '-d', 'Initial task A'], { cwd: testProjectRoot });
+      execSync('git add --force .gitgov', { cwd: testProjectRoot, stdio: 'pipe' });
+      execSync('git commit -m "Add task A"', { cwd: testProjectRoot, stdio: 'pipe' });
+      runCliCommand(['sync', 'push'], { cwd: testProjectRoot });
+
+      // 2. Clone repo (simulating another machine)
+      const clonePath = path.join(tempDir, `ears60-clone-${Date.now()}`);
+      execSync(`git clone "${remotePath}" "${clonePath}"`, { stdio: 'pipe' });
+      execSync('git config user.name "Remote User"', { cwd: clonePath, stdio: 'pipe' });
+      execSync('git config user.email "remote@example.com"', { cwd: clonePath, stdio: 'pipe' });
+
+      // 3. Pull gitgov-state in clone and setup actor
+      runCliCommand(['sync', 'pull'], { cwd: clonePath });
+      const gitgovDir = path.join(testProjectRoot, '.gitgov');
+      const cloneGitgov = path.join(clonePath, '.gitgov');
+      const actorsDir = path.join(gitgovDir, 'actors');
+      const keyFiles = fs.readdirSync(actorsDir).filter(f => f.endsWith('.key'));
+      if (keyFiles[0]) {
+        const keyContent = fs.readFileSync(path.join(actorsDir, keyFiles[0]), 'utf-8');
+        fs.writeFileSync(path.join(cloneGitgov, 'actors', keyFiles[0]), keyContent);
+      }
+      const sessionContent = JSON.stringify({
+        lastSession: { actorId: keyFiles[0]?.replace('.key', ''), timestamp: new Date().toISOString() }
+      });
+      fs.writeFileSync(path.join(cloneGitgov, '.session.json'), sessionContent);
+
+      // 4. Remote machine creates Task B (DIFFERENT file)
+      runCliCommand(['task', 'new', 'Task B Remote', '-d', 'Created on remote machine'], { cwd: clonePath });
+      execSync('git add --force .gitgov', { cwd: clonePath, stdio: 'pipe' });
+      execSync('git commit -m "Add task B from remote"', { cwd: clonePath, stdio: 'pipe' });
+      runCliCommand(['sync', 'push'], { cwd: clonePath });
+
+      // 5. Local machine creates Task C (DIFFERENT file)
+      runCliCommand(['task', 'new', 'Task C Local', '-d', 'Created on local machine'], { cwd: testProjectRoot });
+      execSync('git add --force .gitgov', { cwd: testProjectRoot, stdio: 'pipe' });
+      execSync('git commit -m "Add task C locally"', { cwd: testProjectRoot, stdio: 'pipe' });
+
+      // 6. Push from local - should auto-merge (different files, no conflict)
+      const pushResult = runCliCommand(['sync', 'push'], { cwd: testProjectRoot });
+      expect(pushResult.success).toBe(true);
+
+      // Should NOT report conflict
+      expect(pushResult.output).not.toMatch(/conflict/i);
+
+      // 7. Verify both tasks exist in local .gitgov
+      const tasksDir = path.join(gitgovDir, 'tasks');
+      const taskFiles = fs.readdirSync(tasksDir).filter(f => f.endsWith('.json'));
+
+      // Should have at least 3 tasks (A, B, C)
+      expect(taskFiles.length).toBeGreaterThanOrEqual(3);
+
+      // Verify Task B from remote is present
+      const allTasksContent = taskFiles.map(f =>
+        fs.readFileSync(path.join(tasksDir, f), 'utf-8')
+      ).join(' ');
+      expect(allTasksContent).toContain('Task B Remote');
+      expect(allTasksContent).toContain('Task C Local');
     });
   });
 });

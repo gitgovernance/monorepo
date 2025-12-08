@@ -71,6 +71,8 @@ export interface SyncPushResult {
 export interface SyncPullOptions {
   /** Force re-indexing even if there are no new changes */
   forceReindex?: boolean;
+  /** [EARS-62] Force pull even if local changes would be overwritten */
+  force?: boolean;
 }
 
 /**
@@ -91,6 +93,8 @@ export interface SyncPullResult {
   conflictInfo?: ConflictInfo;
   /** Error message if operation failed */
   error?: string;
+  /** [EARS-62] Files that were forcefully overwritten (when force: true) */
+  forcedOverwrites?: string[];
 }
 
 /**
@@ -139,13 +143,16 @@ export interface ConflictInfo {
 
 /**
  * Auxiliary type to identify the conflict type
+ *
+ * Git-Native conflict model (post-refactor):
+ * - rebase_conflict: Used for all Git-level conflicts during push/pull
+ * - local_changes_conflict: Used when pull would overwrite local changes (EARS-61)
+ * - integrity_violation: Used when resolution commits are missing
  */
 export type ConflictType =
-  | "rebase_conflict" // Conflict during automatic rebase
-  | "merge_conflict" // Conflict during merge
-  | "integrity_violation" // Integrity violation (rebase without resolution)
-  | "unresolved_markers" // Conflict markers present in files
-  | "file_conflict"; // [EARS-60] Same file modified both locally and remotely
+  | "rebase_conflict" // Conflict during automatic rebase (Git-native, includes EARS-60 scenarios)
+  | "integrity_violation" // Integrity violation (rebase without resolution commit)
+  | "local_changes_conflict"; // [EARS-61] Local changes would be overwritten by pull
 
 /**
  * Information about a detected integrity violation

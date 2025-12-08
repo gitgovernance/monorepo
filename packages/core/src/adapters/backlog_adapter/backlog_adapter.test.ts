@@ -825,7 +825,8 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
           payload: expect.objectContaining({ status: 'active' })
         }),
         'human:developer',
-        'executor'
+        'executor',
+        expect.any(String) // notes parameter
       );
       expect(mockDependencies.taskStore.write).toHaveBeenCalled();
       expect(mockDependencies.eventBus.publish).toHaveBeenCalledWith(
@@ -980,7 +981,8 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
           })
         }),
         'human:tech-lead',
-        'pauser'
+        'pauser',
+        expect.any(String) // notes parameter
       );
       expect(mockDependencies.taskStore.write).toHaveBeenCalled();
       expect(mockDependencies.eventBus.publish).toHaveBeenCalledWith(
@@ -1142,7 +1144,8 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
           payload: expect.objectContaining({ status: 'active' })
         }),
         'human:ops-lead',
-        'resumer'
+        'resumer',
+        expect.any(String) // notes parameter
       );
       expect(mockDependencies.taskStore.write).toHaveBeenCalled();
       expect(mockDependencies.eventBus.publish).toHaveBeenCalledWith(
@@ -1253,7 +1256,8 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
           payload: expect.objectContaining({ status: 'active' })
         }),
         'human:ops-lead',
-        'resumer'
+        'resumer',
+        expect.any(String) // notes parameter
       );
       expect(mockDependencies.taskStore.write).toHaveBeenCalled();
       expect(mockDependencies.eventBus.publish).toHaveBeenCalledWith(
@@ -2569,7 +2573,8 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       expect(mockDependencies.identity.signRecord).toHaveBeenCalledWith(
         expect.any(Object),
         actorId,
-        'pauser'
+        'pauser',
+        expect.any(String) // notes parameter
       );
       expect(mockDependencies.eventBus.publish).toHaveBeenCalledWith(
         expect.objectContaining({
