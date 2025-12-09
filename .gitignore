@@ -1,0 +1,17 @@
+# GitGovernance State Branch .gitignore
+# This file is auto-generated during gitgov init
+# These files are machine-specific and should NOT be synced
+
+# Local-only files (regenerated/machine-specific)
+index.json
+.session.json
+gitgov
+
+# Private keys (never synced for security)
+*.key
+
+# Backup and temporary files
+*.backup
+*.backup-*
+*.tmp
+*.bak
