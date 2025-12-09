@@ -169,7 +169,8 @@ export class ProjectAdapter implements IProjectAdapter {
       await this.createDirectoryStructure(gitgovPath);
 
       // 2.5. Copy Agent Prompt (@gitgov instructions for AI assistants)
-      await this.copyAgentPrompt(gitgovPath);
+      // Note: Agent prompt is placed in project root for easy access via @gitgov in IDEs
+      await this.copyAgentPrompt(projectRoot);
 
       // 3. Trust Root Creation via IdentityAdapter
       const actor = await this.identityAdapter.createActor(
@@ -542,8 +543,9 @@ export class ProjectAdapter implements IProjectAdapter {
     }
   }
 
-  private async copyAgentPrompt(gitgovPath: string): Promise<void> {
-    const targetPrompt = pathUtils.join(gitgovPath, 'gitgov');
+  private async copyAgentPrompt(projectRoot: string): Promise<void> {
+    // Target: project root for easy IDE access via @gitgov
+    const targetPrompt = pathUtils.join(projectRoot, 'gitgov');
     const potentialSources: string[] = [];
 
     // 1️⃣ Development scenario: search in monorepo prompts/ (package root)
@@ -587,7 +589,7 @@ export class ProjectAdapter implements IProjectAdapter {
       try {
         await fs.access(source);
         await fs.copyFile(source, targetPrompt);
-        logger.debug(`📋 @gitgov agent prompt copied to .gitgov/gitgov\n`);
+        logger.debug(`📋 @gitgov agent prompt copied to project root (./gitgov)\n`);
         return;
       } catch {
         // Source not accessible, try next one
@@ -643,8 +645,8 @@ export class ProjectAdapter implements IProjectAdapter {
 # Ignore entire .gitgov/ directory (state lives in gitgov-state branch)
 .gitgov/
 
-# Exception: Don't ignore .gitgov/.gitignore itself (meta!)
-!.gitgov/.gitignore
+# Ignore agent prompt file (project-specific, created by gitgov init)
+gitgov
 `;
 
     try {

@@ -825,6 +825,12 @@ describe('ProjectAdapter', () => {
 
       // Verify that copyFile was called (new implementation uses fs.copyFile)
       expect(mockFs.copyFile.mock.calls.length).toBeGreaterThan(0);
+
+      // Verify destination is project root, not .gitgov/ (for easy IDE access via @gitgov)
+      const copyFileCall = mockFs.copyFile.mock.calls[0];
+      const destinationPath = copyFileCall?.[1] as string;
+      expect(destinationPath).toMatch(/\/gitgov$/); // Ends with /gitgov (not .gitgov/gitgov)
+      expect(destinationPath).not.toContain('.gitgov/gitgov');
     });
 
     it('should gracefully degrade when agent prompt is not available', async () => {
