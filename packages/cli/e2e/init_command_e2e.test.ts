@@ -66,7 +66,7 @@ describe('Init CLI Command - Edge Cases E2E Tests', () => {
   // Helper to create a fresh git repo
   const createGitRepo = (repoPath: string, withInitialCommit: boolean = true) => {
     fs.mkdirSync(repoPath, { recursive: true });
-    execSync('git init', { cwd: repoPath, stdio: 'pipe' });
+    execSync('git init --initial-branch=main', { cwd: repoPath, stdio: 'pipe' });
     execSync('git config user.name "Test User"', { cwd: repoPath, stdio: 'pipe' });
     execSync('git config user.email "test@example.com"', { cwd: repoPath, stdio: 'pipe' });
 
