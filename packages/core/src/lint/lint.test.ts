@@ -1978,13 +1978,14 @@ describe('LintModule', () => {
     it('should filter redundant oneOf errors when additional properties are present', async () => {
       // Simulate validation error with additional properties that causes multiple oneOf errors
       // The loader will throw this error when validating the record
-      const errorWithOneOf = new DetailedValidationError('TaskRecord', [
-        { field: '/payload', message: 'must NOT have additional properties', value: { lala: 1 } },
-        { field: '/payload', message: '#/oneOf/0/else/false schema: boolean schema is false', value: undefined },
-        { field: '/payload', message: '#/oneOf/0/if: must match "else" schema', value: undefined },
-        { field: '/payload', message: '#/oneOf/1/else/false schema: boolean schema is false', value: undefined },
-        { field: '/payload', message: '#/oneOf/1/if: must match "else" schema', value: undefined }
-      ]);
+      // Example error structure that would be thrown (documented for reference):
+      // new DetailedValidationError('TaskRecord', [
+      //   { field: '/payload', message: 'must NOT have additional properties', value: { lala: 1 } },
+      //   { field: '/payload', message: '#/oneOf/0/else/false schema: boolean schema is false', value: undefined },
+      //   { field: '/payload', message: '#/oneOf/0/if: must match "else" schema', value: undefined },
+      //   { field: '/payload', message: '#/oneOf/1/else/false schema: boolean schema is false', value: undefined },
+      //   { field: '/payload', message: '#/oneOf/1/if: must match "else" schema', value: undefined }
+      // ]);
 
       mockFilesystemDiscovery(mockReaddir, [{ id: 'task-with-extra-props', type: 'task' }]);
 

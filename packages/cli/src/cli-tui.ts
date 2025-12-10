@@ -34,7 +34,7 @@ program
   .command('init')
   .description('Initialize GitGovernance in current repository')
   .option('-n, --name <name>', 'Project name')
-  .option('-b, --blueprint <template>', 'Blueprint template')
+  .option('-t, --template <name>', 'Project template')
   .option('-m, --methodology <type>', 'Workflow methodology', 'default')
   .option('-a, --actor-name <name>', 'Actor display name')
   .option('-e, --actor-email <email>', 'Actor email')

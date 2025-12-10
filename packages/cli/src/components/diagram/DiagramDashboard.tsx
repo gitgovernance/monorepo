@@ -174,7 +174,7 @@ export const DiagramDashboard: React.FC<DiagramDashboardProps> = ({
               showAssignments: false,
             });
 
-            const actualOutputPath = path.join(projectRoot, outputPath);
+            const actualOutputPath = path.join(projectRoot, '.gitgov', outputPath);
 
             // Capture warnings in watch mode too
             const originalWarn = console.warn;

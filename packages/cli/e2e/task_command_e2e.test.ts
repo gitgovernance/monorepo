@@ -81,6 +81,21 @@ describe('Task Delete CLI Command - E2E Tests', () => {
 
     // Initialize git repo (required for project root detection)
     execSync('git init', { cwd: testProjectRoot, stdio: 'pipe' });
+    execSync('git config user.name "Test User"', { cwd: testProjectRoot, stdio: 'pipe' });
+    execSync('git config user.email "test@example.com"', { cwd: testProjectRoot, stdio: 'pipe' });
+
+    // Create initial commit (required for SyncModule to create gitgov-state from main)
+    fs.writeFileSync(path.join(testProjectRoot, 'README.md'), '# Test Project\n');
+    execSync('git add README.md', { cwd: testProjectRoot, stdio: 'pipe' });
+    execSync('git commit -m "Initial commit"', { cwd: testProjectRoot, stdio: 'pipe' });
+
+    // Create a bare repo as mock remote (for git push to work in E2E tests)
+    const bareRepoPath = path.join(testProjectRoot, '..', 'test-remote.git');
+    if (fs.existsSync(bareRepoPath)) {
+      fs.rmSync(bareRepoPath, { recursive: true, force: true });
+    }
+    execSync(`git init --bare ${bareRepoPath}`, { cwd: testProjectRoot, stdio: 'pipe' });
+    execSync(`git remote add origin ${bareRepoPath}`, { cwd: testProjectRoot, stdio: 'pipe' });
 
     // ✅ Use real CLI command instead of manual file creation
     // This is E2E testing done right: test the actual user workflow

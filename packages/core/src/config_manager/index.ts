@@ -16,15 +16,26 @@ export interface GitGovConfig {
   projectId: string;        // Obligatorio según config_file.md
   projectName: string;      // Obligatorio según config_file.md
   rootCycle: string;        // Obligatorio: ID del ciclo raíz (creado durante 'gitgov init')
-  blueprints?: {
-    root?: string;          // Opcional, default: "./blueprints"
-  };
   state?: {
     branch?: string;        // Opcional, default: "gitgov-state"
-  };
-  cloud?: {
-    projectId?: string;     // Opcional, para SaaS integration
-    providerMappings?: Record<string, string>; // Opcional
+    sync?: {
+      strategy?: "manual" | "immediate" | "batched";
+      maxRetries?: number;
+      pushIntervalSeconds?: number;
+      batchIntervalSeconds?: number;
+    };
+    defaults?: {
+      pullScheduler?: {
+        defaultIntervalSeconds?: number;
+        defaultEnabled?: boolean;
+        defaultContinueOnNetworkError?: boolean;
+        defaultStopOnConflict?: boolean;
+      };
+      fileWatcher?: {
+        defaultDebounceMs?: number;
+        defaultIgnoredPatterns?: string[];
+      };
+    };
   };
 }
 
@@ -33,10 +44,18 @@ export interface GitGovConfig {
  * Based on session_state.md blueprint
  */
 
+export interface SyncStatus {
+  lastSyncPush?: string; // ISO 8601 timestamp
+  lastSyncPull?: string; // ISO 8601 timestamp
+  status?: 'synced' | 'pending' | 'pulling' | 'pushing' | 'conflict';
+  lastError?: string;
+}
+
 export interface ActorState {
-  activeTaskId?: string;
-  activeCycleId?: string;
+  activeTaskId?: string | undefined; // Current task being worked on (undefined = no active task)
+  activeCycleId?: string | undefined; // Current cycle being worked on (undefined = no active cycle)
   lastSync?: string;
+  syncStatus?: SyncStatus;
   [key: string]: any; // Allow additional actor-specific state
 }
 
@@ -49,6 +68,19 @@ export interface GitGovSession {
     timestamp: string;
   };
   actorState?: Record<string, ActorState>;
+  syncPreferences?: {
+    pullScheduler?: {
+      enabled?: boolean;
+      pullIntervalSeconds?: number;
+      continueOnNetworkError?: boolean;
+      stopOnConflict?: boolean;
+    };
+    fileWatcher?: {
+      enabled?: boolean;
+      debounceMs?: number;
+      ignoredPatterns?: string[];
+    };
+  };
 }
 
 /**
@@ -70,7 +102,17 @@ export class ConfigManager {
   async loadConfig(): Promise<GitGovConfig | null> {
     try {
       const configContent = await fs.readFile(this.configPath, 'utf-8');
-      return JSON.parse(configContent) as GitGovConfig;
+      const config = JSON.parse(configContent) as GitGovConfig;
+
+      // Optional validation: Warn if rootCycle doesn't match expected format
+      if (config.rootCycle && !/^\d+-cycle-[a-z0-9-]+$/.test(config.rootCycle)) {
+        console.warn(
+          `⚠️  Warning: rootCycle "${config.rootCycle}" doesn't match expected format ` +
+          `"{timestamp}-cycle-{slug}". This may cause issues with cycle navigation.`
+        );
+      }
+
+      return config;
     } catch (error) {
       // Config file doesn't exist or is invalid
       return null;
@@ -132,6 +174,15 @@ export class ConfigManager {
       lastSync: new Date().toISOString()
     };
 
+    // Update lastSession if the actor is a human (not an agent)
+    // This ensures lastSession reflects the last human interaction with the CLI
+    if (actorId.startsWith('human:')) {
+      session.lastSession = {
+        actorId,
+        timestamp: new Date().toISOString()
+      };
+    }
+
     await fs.writeFile(this.sessionPath, JSON.stringify(session, null, 2), 'utf-8');
   }
 
@@ -143,7 +194,179 @@ export class ConfigManager {
     return session?.cloud?.sessionToken || null;
   }
 
-  // --- Static Utility Methods (consolidated from project-utils) ---
+  /**
+   * Get complete context information for an actor
+   * Useful for agents to understand current working context
+   * Returns information from both config.json (project-level) and .session.json (actor-level)
+   */
+  async getActorContext(actorId: string): Promise<{
+    actorId: string;
+    activeCycleId: string | null;
+    activeTaskId: string | null;
+    rootCycle: string | null;
+    projectInfo: { id: string; name: string } | null;
+    syncStatus: SyncStatus | null;
+  }> {
+    const [actorState, rootCycle, projectInfo] = await Promise.all([
+      this.getActorState(actorId),
+      this.getRootCycle(),
+      this.getProjectInfo()
+    ]);
+
+    return {
+      actorId,
+      activeCycleId: actorState?.activeCycleId || null,
+      activeTaskId: actorState?.activeTaskId || null,
+      rootCycle,
+      projectInfo,
+      syncStatus: actorState?.syncStatus || null
+    };
+  }
+
+  /**
+   * Get sync configuration from config.json
+   * Returns sync strategy and related settings with defaults
+   */
+  async getSyncConfig(): Promise<{
+    strategy: "manual" | "immediate" | "batched";
+    maxRetries: number;
+    pushIntervalSeconds: number;
+    batchIntervalSeconds: number;
+  } | null> {
+    const config = await this.loadConfig();
+    if (!config?.state?.sync) return null;
+
+    return {
+      strategy: config.state.sync.strategy || "manual",
+      maxRetries: config.state.sync.maxRetries || 3,
+      pushIntervalSeconds: config.state.sync.pushIntervalSeconds || 30,
+      batchIntervalSeconds: config.state.sync.batchIntervalSeconds || 60
+    };
+  }
+
+  /**
+   * Get sync defaults from config.json
+   * Returns recommended defaults for pullScheduler and fileWatcher
+   */
+  async getSyncDefaults(): Promise<{
+    pullScheduler: {
+      defaultIntervalSeconds: number;
+      defaultEnabled: boolean;
+      defaultContinueOnNetworkError: boolean;
+      defaultStopOnConflict: boolean;
+    };
+    fileWatcher: {
+      defaultDebounceMs: number;
+      defaultIgnoredPatterns: string[];
+    };
+  }> {
+    const config = await this.loadConfig();
+
+    return {
+      pullScheduler: {
+        defaultIntervalSeconds: config?.state?.defaults?.pullScheduler?.defaultIntervalSeconds || 30,
+        defaultEnabled: config?.state?.defaults?.pullScheduler?.defaultEnabled || false,
+        defaultContinueOnNetworkError: config?.state?.defaults?.pullScheduler?.defaultContinueOnNetworkError ?? true,
+        defaultStopOnConflict: config?.state?.defaults?.pullScheduler?.defaultStopOnConflict || false
+      },
+      fileWatcher: {
+        defaultDebounceMs: config?.state?.defaults?.fileWatcher?.defaultDebounceMs || 300,
+        defaultIgnoredPatterns: config?.state?.defaults?.fileWatcher?.defaultIgnoredPatterns || ["*.tmp", ".DS_Store", "*.swp"]
+      }
+    };
+  }
+
+  /**
+   * Resolve PullScheduler configuration with priority logic:
+   * 1. Local preferences (.session.json syncPreferences)
+   * 2. Project defaults (config.json state.defaults)
+   * 3. Hardcoded fallbacks
+   */
+  async resolvePullSchedulerConfig(): Promise<{
+    enabled: boolean;
+    pullIntervalSeconds: number;
+    continueOnNetworkError: boolean;
+    stopOnConflict: boolean;
+  }> {
+    const [session, defaults] = await Promise.all([
+      this.loadSession(),
+      this.getSyncDefaults()
+    ]);
+
+    const localPrefs = session?.syncPreferences?.pullScheduler;
+
+    return {
+      enabled: localPrefs?.enabled ?? defaults.pullScheduler.defaultEnabled,
+      pullIntervalSeconds: localPrefs?.pullIntervalSeconds ?? defaults.pullScheduler.defaultIntervalSeconds,
+      continueOnNetworkError: localPrefs?.continueOnNetworkError ?? defaults.pullScheduler.defaultContinueOnNetworkError,
+      stopOnConflict: localPrefs?.stopOnConflict ?? defaults.pullScheduler.defaultStopOnConflict
+    };
+  }
+
+  /**
+   * Resolve FileWatcher configuration with priority logic:
+   * 1. Local preferences (.session.json syncPreferences)
+   * 2. Project defaults (config.json state.defaults)
+   * 3. Hardcoded fallbacks
+   */
+  async resolveFileWatcherConfig(): Promise<{
+    enabled: boolean;
+    debounceMs: number;
+    ignoredPatterns: string[];
+  }> {
+    const [session, defaults] = await Promise.all([
+      this.loadSession(),
+      this.getSyncDefaults()
+    ]);
+
+    const localPrefs = session?.syncPreferences?.fileWatcher;
+
+    return {
+      enabled: localPrefs?.enabled ?? false,
+      debounceMs: localPrefs?.debounceMs ?? defaults.fileWatcher.defaultDebounceMs,
+      ignoredPatterns: localPrefs?.ignoredPatterns ?? defaults.fileWatcher.defaultIgnoredPatterns
+    };
+  }
+
+  /**
+   * Update sync preferences in .session.json
+   * These are local machine preferences that override project defaults
+   */
+  async updateSyncPreferences(preferences: {
+    pullScheduler?: Partial<{
+      enabled: boolean;
+      pullIntervalSeconds: number;
+      continueOnNetworkError: boolean;
+      stopOnConflict: boolean;
+    }>;
+    fileWatcher?: Partial<{
+      enabled: boolean;
+      debounceMs: number;
+      ignoredPatterns: string[];
+    }>;
+  }): Promise<void> {
+    const session = await this.loadSession() || {};
+
+    if (!session.syncPreferences) {
+      session.syncPreferences = {};
+    }
+
+    if (preferences.pullScheduler) {
+      session.syncPreferences.pullScheduler = {
+        ...session.syncPreferences.pullScheduler,
+        ...preferences.pullScheduler
+      };
+    }
+
+    if (preferences.fileWatcher) {
+      session.syncPreferences.fileWatcher = {
+        ...session.syncPreferences.fileWatcher,
+        ...preferences.fileWatcher
+      };
+    }
+
+    await fs.writeFile(this.sessionPath, JSON.stringify(session, null, 2), 'utf-8');
+  }
 
   /**
    * Finds the project root by searching upwards for a .git directory.
