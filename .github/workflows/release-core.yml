@@ -36,8 +36,6 @@ jobs:
         with:
           node-version: "20"
           registry-url: "https://registry.npmjs.org"
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v2
@@ -55,7 +53,7 @@ jobs:
       - name: Semantic Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: true
         run: |
           cd packages/core
           npx semantic-release
