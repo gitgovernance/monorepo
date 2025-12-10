@@ -1,20 +1,18 @@
 import { promises as fs, existsSync } from 'fs';
 import * as pathUtils from 'path';
-import { RecordStore } from '../../store';
-import type { TaskRecord } from '../../types';
-import type { CycleRecord } from '../../types';
 import type { GitGovConfig } from '../../config_manager';
 import { ConfigManager } from '../../config_manager';
 import { DetailedValidationError } from '../../validation/common';
 import type { IdentityAdapter } from '../identity_adapter';
 import type { BacklogAdapter } from '../backlog_adapter';
-import type { WorkflowMethodologyAdapter } from '../workflow_methodology_adapter';
-import type { IEventStream } from '../../event_bus';
+import type { GitModule } from '../../git';
 import { createTaskRecord } from '../../factories/task_factory';
 import { createCycleRecord } from '../../factories/cycle_factory';
 import { getImportMetaUrl } from '../../utils/esm_helper';
 import { createRequire } from 'module';
 import { fileURLToPath } from 'url';
+import { createLogger } from "../../logger";
+const logger = createLogger("[ProjectAdapter] ");
 
 /**
  * ProjectAdapter Dependencies - Facade + Dependency Injection Pattern
@@ -23,26 +21,10 @@ export interface ProjectAdapterDependencies {
   // Core Adapters (REQUIRED - Fase 1)
   identityAdapter: IdentityAdapter;
   backlogAdapter: BacklogAdapter;
-  workflowMethodologyAdapter: WorkflowMethodologyAdapter;
+  gitModule: GitModule;
 
   // Infrastructure Layer (REQUIRED)
   configManager: ConfigManager;
-  taskStore: RecordStore<TaskRecord>;
-  cycleStore: RecordStore<CycleRecord>;
-
-  // Optional: Graceful degradation (Fase 2)
-  eventBus?: IEventStream;
-  platformApi?: IPlatformApi;
-  userManagement?: IUserManagement;
-}
-
-// Platform API interface (Fase 2 - Future)
-interface IPlatformApi {
-  getProjectInfo(projectId: string): Promise<ProjectInfo>;
-}
-
-interface IUserManagement {
-  addUserToProject(projectId: string, userId: string, role: string): Promise<void>;
 }
 
 // Return types specific to the adapter
@@ -154,18 +136,20 @@ export interface IProjectAdapter {
 export class ProjectAdapter implements IProjectAdapter {
   private identityAdapter: IdentityAdapter;
   private backlogAdapter: BacklogAdapter;
+  private gitModule: GitModule;
   private configManager: ConfigManager;
 
   constructor(dependencies: ProjectAdapterDependencies) {
     this.identityAdapter = dependencies.identityAdapter;
     this.backlogAdapter = dependencies.backlogAdapter;
+    this.gitModule = dependencies.gitModule;
     this.configManager = dependencies.configManager;
   }
 
   // ===== FASE 1: BOOTSTRAP CORE METHODS =====
 
   /**
-   * [EARS-1] Initializes complete GitGovernance project with 3-adapter orchestration and trust root Ed25519
+   * [EARS-1] Initializes complete GitGovernance project with 4-module orchestration (Identity, Backlog, WorkflowMethodology, SyncModule) and trust root Ed25519
    */
   async initializeProject(options: ProjectInitOptions): Promise<ProjectInitResult> {
     const startTime = Date.now();
@@ -231,15 +215,50 @@ export class ProjectAdapter implements IProjectAdapter {
         projectId,
         projectName: options.name,
         rootCycle: rootCycle.id,
-        blueprints: {
-          root: "./packages/blueprints"
-        },
         state: {
-          branch: "gitgov-state"
+          branch: "gitgov-state",
+          sync: {
+            strategy: "manual",
+            maxRetries: 3,
+            pushIntervalSeconds: 30,
+            batchIntervalSeconds: 60
+          },
+          defaults: {
+            pullScheduler: {
+              defaultIntervalSeconds: 30,
+              defaultEnabled: false,
+              defaultContinueOnNetworkError: true,
+              defaultStopOnConflict: false
+            },
+            fileWatcher: {
+              defaultDebounceMs: 300,
+              defaultIgnoredPatterns: ["*.tmp", ".DS_Store", "*.swp"]
+            }
+          }
         }
       };
 
       await this.persistConfiguration(config, gitgovPath);
+
+      // 6.5. Lazy State Branch Setup (EARS-4, EARS-13)
+      // gitgov-state branch is NOT created here - it will be created lazily on first "sync push"
+      // This allows init to work in repos without remote or without commits
+      const hasRemote = await this.gitModule.isRemoteConfigured("origin");
+      const currentBranch = await this.gitModule.getCurrentBranch();
+      const hasCommits = await this.gitModule.branchExists(currentBranch);
+
+      if (!hasRemote || !hasCommits) {
+        const warnings: string[] = [];
+        if (!hasCommits) {
+          warnings.push("No commits in current branch");
+        }
+        if (!hasRemote) {
+          warnings.push("No remote 'origin' configured");
+        }
+        console.warn(`⚠️  ${warnings.join(", ")}.`);
+        console.warn(`   State sync will be available after 'git remote add origin <url>' and first commit.`);
+        console.warn(`   Run 'gitgov sync push' when ready to enable multi-machine collaboration.`);
+      }
 
       // 7. Session Initialization
       await this.initializeSession(actor.id, gitgovPath);
@@ -310,16 +329,18 @@ export class ProjectAdapter implements IProjectAdapter {
         suggestions.push("Ensure you have write permissions in the target directory");
       }
 
-      // Check if already initialized
+      // Check if already initialized (requires config.json, not just .gitgov/ directory)
       const gitgovPath = pathUtils.join(targetPath, '.gitgov');
+      const configPath = pathUtils.join(gitgovPath, 'config.json');
       let isAlreadyInitialized = false;
       try {
-        await fs.access(gitgovPath);
+        await fs.access(configPath);
         isAlreadyInitialized = true;
         warnings.push(`GitGovernance already initialized in directory: ${targetPath}`);
         suggestions.push("Use 'gitgov status' to check current state or choose a different directory");
       } catch {
-        // Directory doesn't exist, which is good
+        // config.json doesn't exist, so not fully initialized
+        // Note: An empty .gitgov/ directory from bootstrap is OK to init over
       }
 
       const isValid = isGitRepo && hasWritePermissions && !isAlreadyInitialized;
@@ -566,7 +587,7 @@ export class ProjectAdapter implements IProjectAdapter {
       try {
         await fs.access(source);
         await fs.copyFile(source, targetPrompt);
-        console.log(`📋 @gitgov agent prompt copied to .gitgov/gitgov`);
+        logger.debug(`📋 @gitgov agent prompt copied to .gitgov/gitgov\n`);
         return;
       } catch {
         // Source not accessible, try next one
@@ -605,6 +626,9 @@ export class ProjectAdapter implements IProjectAdapter {
       actorState: {
         [actorId]: {
           lastSync: new Date().toISOString(),
+          syncStatus: {
+            status: 'synced' as const  // Initialize as synced (no pending changes at init)
+          }
         },
       },
     };
@@ -616,8 +640,11 @@ export class ProjectAdapter implements IProjectAdapter {
     const gitignorePath = pathUtils.join(projectRoot, '.gitignore');
     const gitignoreContent = `
 # GitGovernance
-.gitgov/.session.json
-.gitgov/actors/*.key
+# Ignore entire .gitgov/ directory (state lives in gitgov-state branch)
+.gitgov/
+
+# Exception: Don't ignore .gitgov/.gitignore itself (meta!)
+!.gitgov/.gitignore
 `;
 
     try {
@@ -630,7 +657,7 @@ export class ProjectAdapter implements IProjectAdapter {
       }
 
       // Only add if not already present
-      if (existingContent && !existingContent.includes('.gitgov/.session.json')) {
+      if (existingContent && !existingContent.includes('# GitGovernance')) {
         await fs.appendFile(gitignorePath, gitignoreContent);
       } else if (!existingContent) {
         await fs.writeFile(gitignorePath, gitignoreContent);

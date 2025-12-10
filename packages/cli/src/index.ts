@@ -8,6 +8,9 @@ import { registerTaskCommands } from './commands/task/task';
 import { registerCycleCommands } from './commands/cycle/cycle';
 import { registerStatusCommands } from './commands/status/status';
 import { registerDashboardCommands } from './commands/dashboard/dashboard';
+import { registerContextCommands } from './commands/context/context';
+import { registerLintCommand } from './commands/lint/lint';
+import { registerSyncCommands } from './commands/sync/sync';
 import { DependencyInjectionService } from './services/dependency-injection';
 import packageJson from '../package.json' assert { type: 'json' };
 
@@ -24,9 +27,16 @@ async function setupCommands() {
     // Register init commands first (no dependencies required for basic usage)
     registerInitCommands(program);
 
+    // Register context commands (no dependencies required, uses ConfigManager)
+    registerContextCommands(program);
+
     // Register diagram commands (no dependencies required)
     const diagramCommand = new DiagramCommand();
     diagramCommand.register(program);
+
+    // Register sync commands EARLY (before indexer) so they're available for bootstrap
+    // This allows "gitgov sync pull" to work even when .gitgov/ doesn't exist yet
+    registerSyncCommands(program);
 
     // Setup adapters dependency injection
     const diService = DependencyInjectionService.getInstance();
@@ -47,13 +57,24 @@ async function setupCommands() {
     // Register dashboard commands
     registerDashboardCommands(program);
 
+    // Register lint commands
+    registerLintCommand(program);
+
+    // Register sync commands
+    registerSyncCommands(program);
+
   } catch (error) {
     // Handle initialization errors gracefully
     if (error instanceof Error) {
       if (error.message.includes('GitGovernance not initialized')) {
-        // Only register diagram commands if not initialized
-        console.warn("⚠️ GitGovernance not initialized. Some commands may not be available.");
-        console.warn("💡 Run 'gitgov init' to initialize GitGovernance in this repository.");
+        // Check if user is running 'init' command - don't show warning in that case
+        const commandArg = process.argv[2];
+        const isInitCommand = commandArg === 'init';
+
+        if (!isInitCommand) {
+          console.warn("⚠️  GitGovernance not initialized. Some commands may not be available.\n");
+          console.warn("💡 Run 'gitgov init' to initialize GitGovernance in this repository.\n");
+        }
       } else {
         console.error("❌ Error initializing GitGovernance CLI:", error.message);
         process.exit(1);
@@ -91,7 +112,7 @@ setupCommands().then(() => {
     if (arg === '--' && index === 2) return false;
     return true;
   });
-  
+
   program.parse(args);
 }).catch((error) => {
   console.error("❌ Fatal error:", error);

@@ -1,15 +1,15 @@
-import { DependencyInjectionService } from '../../services/dependency-injection';
 import type { Adapters, Records } from '@gitgov/core';
-import { Config } from '@gitgov/core';
+import { Git } from '@gitgov/core';
 
 import * as pathUtils from 'path';
+import { spawn } from 'child_process';
 
 /**
  * Init Command Options interface
  */
 export interface InitCommandOptions {
   name?: string;
-  blueprint?: string;
+  template?: string;
   methodology?: 'default' | 'scrum' | 'kanban';
   actorName?: string;
   actorEmail?: string;
@@ -28,8 +28,6 @@ export interface InitCommandOptions {
  * Delegates all business logic to ProjectAdapter and focuses on UX excellence.
  */
 export class InitCommand {
-  private dependencyService = DependencyInjectionService.getInstance();
-
   /**
    * [EARS-1] Main execution method with complete project bootstrap
    */
@@ -50,14 +48,14 @@ export class InitCommand {
       const projectAdapter = await this.getProjectAdapter();
 
       // 5. Delegate ALL business logic to ProjectAdapter
-      progressTracker.start("🚀 Initializing GitGovernance Project...");
+      progressTracker.start("🚀 Initializing GitGovernance Project...\n");
 
       // Build ProjectInitOptions with only defined values
       const projectInitOptions: Adapters.ProjectInitOptions = {
         name: completeOptions.name!,
       };
 
-      if (completeOptions.blueprint) projectInitOptions.template = completeOptions.blueprint;
+      if (completeOptions.template) projectInitOptions.template = completeOptions.template;
       if (completeOptions.actorName) projectInitOptions.actorName = completeOptions.actorName;
       if (completeOptions.actorEmail) projectInitOptions.actorEmail = completeOptions.actorEmail;
       if (completeOptions.methodology) projectInitOptions.methodology = completeOptions.methodology;
@@ -169,6 +167,9 @@ export class InitCommand {
 
       const workflowMethodologyAdapter = Adapters.WorkflowMethodologyAdapter.createDefault(feedbackAdapter);
 
+      // Create ConfigManager (needed by BacklogAdapter)
+      const configManager = Config.createConfigManager(projectRoot);
+
       const backlogAdapter = new Adapters.BacklogAdapter({
         taskStore,
         cycleStore,
@@ -181,17 +182,49 @@ export class InitCommand {
         metricsAdapter,
         workflowMethodologyAdapter,
         identity: identityAdapter,
-        eventBus
+        eventBus,
+        configManager
       });
+
+      // Create execCommand for GitModule
+      const execCommand = (command: string, args: string[], options?: any) => {
+        return new Promise<{ exitCode: number; stdout: string; stderr: string }>((resolve) => {
+          const proc = spawn(command, args, {
+            cwd: options?.cwd || projectRoot,
+            env: { ...process.env, ...options?.env },
+          });
+
+          let stdout = '';
+          let stderr = '';
+
+          proc.stdout?.on('data', (data) => { stdout += data.toString(); });
+          proc.stderr?.on('data', (data) => { stderr += data.toString(); });
+
+          proc.on('close', (code) => {
+            resolve({ exitCode: code || 0, stdout, stderr });
+          });
+
+          proc.on('error', (error) => {
+            resolve({ exitCode: 1, stdout, stderr: error.message });
+          });
+        });
+      };
+
+      // Create GitModule
+      const gitModule = new Git.GitModule({
+        repoRoot: projectRoot,
+        execCommand
+      });
+
+      // Note: SyncModule and LintModule are NOT needed for init
+      // LintModule was removed as unused (created for SyncModule which is also not needed)
+      // gitgov-state branch is created lazily on first "sync push"
 
       const projectAdapter = new Adapters.ProjectAdapter({
         identityAdapter,
         backlogAdapter,
-        workflowMethodologyAdapter,
-        configManager: Config.createConfigManager(projectRoot), // Pass explicit project root
-        taskStore,
-        cycleStore,
-        eventBus,
+        gitModule,
+        configManager,
       });
 
       return projectAdapter;
@@ -216,9 +249,8 @@ export class InitCommand {
         }
       },
       complete: () => {
-        if (!options.quiet) {
-          console.log("🎉 GitGovernance initialization completed successfully!");
-        }
+        // Note: Success message is shown by showSuccessOutput(), not here
+        // to avoid duplicate/redundant messages
       }
     };
   }
@@ -345,8 +377,8 @@ export class InitCommand {
         message = "❌ Not a Git repository. Please run 'git init' first.";
       } else if (error.message.includes('No write permissions')) {
         message = "❌ Cannot write to directory. Please check file permissions.";
-      } else if (error.message.includes('Blueprint') && error.message.includes('not found')) {
-        message = "❌ Blueprint template not found. Available: basic, saas-mvp, ai-product, enterprise.";
+      } else if (error.message.includes('Template') && error.message.includes('not found')) {
+        message = "❌ Template not found. Available: basic, saas-mvp, ai-product, enterprise.";
       } else if (error.message.includes('DetailedValidationError')) {
         message = `❌ Invalid configuration: ${error.message}`;
       } else {

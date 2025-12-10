@@ -163,6 +163,13 @@ describe('InitCommand - Complete Unit Tests', () => {
     // Create InitCommand
     initCommand = new InitCommand();
 
+    // SPY on getProjectAdapter to return our mock
+    // Note: Casting to access private method for testing purposes
+    jest.spyOn(
+      initCommand as unknown as { getProjectAdapter: () => Promise<typeof mockProjectAdapter> },
+      'getProjectAdapter'
+    ).mockResolvedValue(mockProjectAdapter);
+
     // Setup default mock returns for ALL tests
     mockProjectAdapter.validateEnvironment.mockResolvedValue(sampleValidEnvironment);
     mockProjectAdapter.initializeProject.mockResolvedValue(sampleInitResult);
@@ -192,8 +199,8 @@ describe('InitCommand - Complete Unit Tests', () => {
         skipValidation: undefined,
         verbose: undefined
       });
-      expect(mockConsoleLog).toHaveBeenCalledWith('🚀 Initializing GitGovernance Project...');
-      expect(mockConsoleLog).toHaveBeenCalledWith('🎉 GitGovernance initialization completed successfully!');
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('🚀 Initializing GitGovernance Project...'));
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('✅ GitGovernance initialized successfully!'));
     });
 
     it('[EARS-2] should create root cycle and configure in config.json', async () => {
@@ -219,7 +226,7 @@ describe('InitCommand - Complete Unit Tests', () => {
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('My Project'));
     });
 
-    it('[EARS-3] should process blueprint template when specified', async () => {
+    it('[EARS-3] should process template when specified', async () => {
       const resultWithTemplate = {
         ...sampleInitResult,
         template: {
@@ -232,7 +239,7 @@ describe('InitCommand - Complete Unit Tests', () => {
 
       await initCommand.execute({
         name: 'SaaS Project',
-        blueprint: 'saas-mvp'
+        template: 'saas-mvp'
       });
 
       expect(mockProjectAdapter.initializeProject).toHaveBeenCalledWith(
@@ -360,16 +367,16 @@ describe('InitCommand - Complete Unit Tests', () => {
       expect(mockProcessExit).toHaveBeenCalledWith(1);
     });
 
-    it('should handle blueprint template errors', async () => {
-      const templateError = new Error('Blueprint saas-mvp not found');
+    it('should handle template errors', async () => {
+      const templateError = new Error('Template saas-mvp not found');
       mockProjectAdapter.initializeProject.mockRejectedValue(templateError);
 
       await initCommand.execute({
         name: 'Test Project',
-        blueprint: 'invalid-template'
+        template: 'invalid-template'
       });
 
-      expect(mockConsoleError).toHaveBeenCalledWith('❌ Blueprint template not found. Available: basic, saas-mvp, ai-product, enterprise.');
+      expect(mockConsoleError).toHaveBeenCalledWith('❌ Template not found. Available: basic, saas-mvp, ai-product, enterprise.');
       expect(mockProcessExit).toHaveBeenCalledWith(1);
     });
 
@@ -442,7 +449,7 @@ describe('InitCommand - Complete Unit Tests', () => {
         name: 'Custom Project',
         actorName: 'Custom User',
         methodology: 'kanban',
-        blueprint: 'enterprise'
+        template: 'enterprise'
       });
 
       expect(mockProjectAdapter.initializeProject).toHaveBeenCalledWith({
@@ -473,7 +480,7 @@ describe('InitCommand - Complete Unit Tests', () => {
       expect(mockConsoleLog).toHaveBeenCalledWith('\n💡 Pro Tips:');
     });
 
-    it('should show template processing details when blueprint used', async () => {
+    it('should show template processing details when template used', async () => {
       const resultWithTemplate = {
         ...sampleInitResult,
         template: {
@@ -486,7 +493,7 @@ describe('InitCommand - Complete Unit Tests', () => {
 
       await initCommand.execute({
         name: 'Template Project',
-        blueprint: 'saas-mvp'
+        template: 'saas-mvp'
       });
 
       expect(mockConsoleLog).toHaveBeenCalledWith('📋 Blueprint Template Processed:');
@@ -501,7 +508,7 @@ describe('InitCommand - Complete Unit Tests', () => {
         name: 'Integration Test',
         actorName: 'Integration User',
         methodology: 'scrum',
-        blueprint: 'basic'
+        template: 'basic'
       });
 
       expect(mockProjectAdapter.initializeProject).toHaveBeenCalledWith({
@@ -584,7 +591,7 @@ describe('InitCommand - Complete Unit Tests', () => {
     it('[EARS-16] should handle all flag combinations correctly', async () => {
       await initCommand.execute({
         name: 'Full Test',
-        blueprint: 'enterprise',
+        template: 'enterprise',
         methodology: 'scrum',
         actorName: 'Full User',
         actorEmail: 'user@example.com',
@@ -620,8 +627,8 @@ describe('InitCommand - Complete Unit Tests', () => {
           expectedMessage: "❌ Not a Git repository. Please run 'git init' first."
         },
         {
-          error: new Error('Blueprint saas-enterprise not found'),
-          expectedMessage: '❌ Blueprint template not found. Available: basic, saas-mvp, ai-product, enterprise.'
+          error: new Error('Template saas-enterprise not found'),
+          expectedMessage: '❌ Template not found. Available: basic, saas-mvp, ai-product, enterprise.'
         }
       ];
 

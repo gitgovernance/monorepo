@@ -36,9 +36,7 @@ describe('ConfigManager', () => {
         projectId: 'test-project-123',
         projectName: 'Test Project',
         rootCycle: 'root-cycle-456',
-        blueprints: { root: './blueprints' },
-        state: { branch: 'gitgov-state' },
-        cloud: { projectId: 'cloud-123', providerMappings: { github: 'repo-456' } }
+        state: { branch: 'gitgov-state' }
       };
 
       mockedFs.readFile.mockResolvedValue(JSON.stringify(mockConfig));
@@ -216,6 +214,51 @@ describe('ConfigManager', () => {
       );
     });
 
+    it('WHEN updateActorState is invoked with human actor, THE SYSTEM SHALL update lastSession automatically', async () => {
+      const existingSession: GitGovSession = {
+        lastSession: { actorId: 'human:old-user', timestamp: '2025-01-08T10:00:00Z' },
+        actorState: {
+          'human:camilo': { activeTaskId: 'task-123' }
+        }
+      };
+
+      mockedFs.readFile.mockResolvedValue(JSON.stringify(existingSession));
+      mockedFs.writeFile.mockResolvedValue();
+
+      await configManager.updateActorState('human:camilo', { activeTaskId: 'task-456' });
+
+      const writeCall = mockedFs.writeFile.mock.calls[0];
+      expect(writeCall).toBeDefined();
+      const writtenSession = JSON.parse(writeCall![1] as string) as GitGovSession;
+
+      expect(writtenSession.lastSession).toBeDefined();
+      expect(writtenSession.lastSession?.actorId).toBe('human:camilo');
+      expect(writtenSession.lastSession?.timestamp).toBeDefined();
+      expect(new Date(writtenSession.lastSession!.timestamp).getTime()).toBeGreaterThan(
+        new Date('2025-01-08T10:00:00Z').getTime()
+      );
+    });
+
+    it('WHEN updateActorState is invoked with agent actor, THE SYSTEM SHALL NOT update lastSession', async () => {
+      const existingSession: GitGovSession = {
+        lastSession: { actorId: 'human:camilo', timestamp: '2025-01-08T10:00:00Z' },
+        actorState: {}
+      };
+
+      mockedFs.readFile.mockResolvedValue(JSON.stringify(existingSession));
+      mockedFs.writeFile.mockResolvedValue();
+
+      await configManager.updateActorState('agent:camilo:cursor', { activeTaskId: 'task-789' });
+
+      const writeCall = mockedFs.writeFile.mock.calls[0];
+      expect(writeCall).toBeDefined();
+      const writtenSession = JSON.parse(writeCall![1] as string) as GitGovSession;
+
+      // lastSession should remain unchanged for agent actors
+      expect(writtenSession.lastSession?.actorId).toBe('human:camilo');
+      expect(writtenSession.lastSession?.timestamp).toBe('2025-01-08T10:00:00Z');
+    });
+
     it('[EARS-12] WHEN updateActorState is invoked with non-existent session, THE SYSTEM SHALL create new session with provided state', async () => {
       mockedFs.readFile.mockRejectedValue(new Error('ENOENT'));
       mockedFs.writeFile.mockResolvedValue();
@@ -234,6 +277,13 @@ describe('ConfigManager', () => {
         expect.stringContaining('task-first'),
         'utf-8'
       );
+
+      // Verify lastSession is created for human actors
+      const writeCall = mockedFs.writeFile.mock.calls[0];
+      expect(writeCall).toBeDefined();
+      const writtenSession = JSON.parse(writeCall![1] as string) as GitGovSession;
+      expect(writtenSession.lastSession).toBeDefined();
+      expect(writtenSession.lastSession?.actorId).toBe('human:new-user');
     });
   });
 
@@ -261,6 +311,374 @@ describe('ConfigManager', () => {
       const result = await configManager.getCloudSessionToken();
 
       expect(result).toBeNull();
+    });
+  });
+
+  // --- Sync Configuration Methods (EARS-7 to EARS-9) ---
+
+  describe('getSyncConfig', () => {
+    it('[EARS-7] WHEN getSyncConfig is invoked with state.sync defined in config.json, THE SYSTEM SHALL return object with strategy, maxRetries, and intervals', async () => {
+      const mockConfig: GitGovConfig = {
+        protocolVersion: '1.0',
+        projectId: 'test-project',
+        projectName: 'Test',
+        rootCycle: 'root-cycle-123',
+        state: {
+          sync: {
+            strategy: 'immediate',
+            maxRetries: 5,
+            pushIntervalSeconds: 60,
+            batchIntervalSeconds: 120
+          }
+        }
+      };
+
+      mockedFs.readFile.mockResolvedValue(JSON.stringify(mockConfig));
+
+      const result = await configManager.getSyncConfig();
+
+      expect(result).toEqual({
+        strategy: 'immediate',
+        maxRetries: 5,
+        pushIntervalSeconds: 60,
+        batchIntervalSeconds: 120
+      });
+    });
+
+    it('[EARS-8] WHEN getSyncConfig is invoked without state.sync in config.json, THE SYSTEM SHALL return null', async () => {
+      const mockConfig: GitGovConfig = {
+        protocolVersion: '1.0',
+        projectId: 'test-project',
+        projectName: 'Test',
+        rootCycle: 'root-cycle-123'
+        // No state.sync
+      };
+
+      mockedFs.readFile.mockResolvedValue(JSON.stringify(mockConfig));
+
+      const result = await configManager.getSyncConfig();
+
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('getSyncDefaults', () => {
+    it('[EARS-9] WHEN getSyncDefaults is invoked, THE SYSTEM SHALL return defaults from config.json or hardcoded fallbacks', async () => {
+      const mockConfig: GitGovConfig = {
+        protocolVersion: '1.0',
+        projectId: 'test-project',
+        projectName: 'Test',
+        rootCycle: 'root-cycle-123',
+        state: {
+          defaults: {
+            pullScheduler: {
+              defaultIntervalSeconds: 45,
+              defaultEnabled: true,
+              defaultContinueOnNetworkError: false,
+              defaultStopOnConflict: true
+            },
+            fileWatcher: {
+              defaultDebounceMs: 500,
+              defaultIgnoredPatterns: ['*.log', '*.bak']
+            }
+          }
+        }
+      };
+
+      mockedFs.readFile.mockResolvedValue(JSON.stringify(mockConfig));
+
+      const result = await configManager.getSyncDefaults();
+
+      expect(result).toEqual({
+        pullScheduler: {
+          defaultIntervalSeconds: 45,
+          defaultEnabled: true,
+          defaultContinueOnNetworkError: false,
+          defaultStopOnConflict: true
+        },
+        fileWatcher: {
+          defaultDebounceMs: 500,
+          defaultIgnoredPatterns: ['*.log', '*.bak']
+        }
+      });
+    });
+
+    it('WHEN getSyncDefaults is invoked without state.defaults, THE SYSTEM SHALL return hardcoded fallbacks', async () => {
+      const mockConfig: GitGovConfig = {
+        protocolVersion: '1.0',
+        projectId: 'test-project',
+        projectName: 'Test',
+        rootCycle: 'root-cycle-123'
+        // No state.defaults
+      };
+
+      mockedFs.readFile.mockResolvedValue(JSON.stringify(mockConfig));
+
+      const result = await configManager.getSyncDefaults();
+
+      expect(result).toEqual({
+        pullScheduler: {
+          defaultIntervalSeconds: 30,
+          defaultEnabled: false,
+          defaultContinueOnNetworkError: true,
+          defaultStopOnConflict: false
+        },
+        fileWatcher: {
+          defaultDebounceMs: 300,
+          defaultIgnoredPatterns: ["*.tmp", ".DS_Store", "*.swp"]
+        }
+      });
+    });
+  });
+
+  // --- Sync Preferences Resolution (EARS-24 to EARS-26) ---
+
+  describe('resolvePullSchedulerConfig', () => {
+    it('[EARS-24] WHEN resolvePullSchedulerConfig is invoked, THE SYSTEM SHALL apply priority: local > project > hardcoded', async () => {
+      // Setup: config with project defaults
+      const mockConfig: GitGovConfig = {
+        protocolVersion: '1.0',
+        projectId: 'test-project',
+        projectName: 'Test',
+        rootCycle: 'root-cycle-123',
+        state: {
+          defaults: {
+            pullScheduler: {
+              defaultIntervalSeconds: 45,
+              defaultEnabled: true,
+              defaultContinueOnNetworkError: false,
+              defaultStopOnConflict: true
+            }
+          }
+        }
+      };
+
+      // Setup: session with local preferences (overrides project)
+      const mockSession: GitGovSession = {
+        syncPreferences: {
+          pullScheduler: {
+            enabled: false, // Override project default (true)
+            pullIntervalSeconds: 60 // Override project default (45)
+            // continueOnNetworkError not set, should use project default
+            // stopOnConflict not set, should use project default
+          }
+        }
+      };
+
+      // Mock both reads
+      mockedFs.readFile.mockImplementation(async (path: any) => {
+        if (path.includes('config.json')) {
+          return JSON.stringify(mockConfig);
+        }
+        if (path.includes('.session.json')) {
+          return JSON.stringify(mockSession);
+        }
+        throw new Error('File not found');
+      });
+
+      const result = await configManager.resolvePullSchedulerConfig();
+
+      expect(result).toEqual({
+        enabled: false, // Local preference
+        pullIntervalSeconds: 60, // Local preference
+        continueOnNetworkError: false, // Project default (no local override)
+        stopOnConflict: true // Project default (no local override)
+      });
+    });
+
+    it('WHEN resolvePullSchedulerConfig is invoked without local preferences, THE SYSTEM SHALL use project defaults', async () => {
+      const mockConfig: GitGovConfig = {
+        protocolVersion: '1.0',
+        projectId: 'test-project',
+        projectName: 'Test',
+        rootCycle: 'root-cycle-123',
+        state: {
+          defaults: {
+            pullScheduler: {
+              defaultIntervalSeconds: 45,
+              defaultEnabled: true,
+              defaultContinueOnNetworkError: false,
+              defaultStopOnConflict: true
+            }
+          }
+        }
+      };
+
+      const mockSession: GitGovSession = {
+        // No syncPreferences
+      };
+
+      mockedFs.readFile.mockImplementation(async (path: any) => {
+        if (path.includes('config.json')) {
+          return JSON.stringify(mockConfig);
+        }
+        if (path.includes('.session.json')) {
+          return JSON.stringify(mockSession);
+        }
+        throw new Error('File not found');
+      });
+
+      const result = await configManager.resolvePullSchedulerConfig();
+
+      expect(result).toEqual({
+        enabled: true,
+        pullIntervalSeconds: 45,
+        continueOnNetworkError: false,
+        stopOnConflict: true
+      });
+    });
+
+    it('WHEN resolvePullSchedulerConfig is invoked without config or session, THE SYSTEM SHALL use hardcoded defaults', async () => {
+      mockedFs.readFile.mockRejectedValue(new Error('ENOENT'));
+
+      const result = await configManager.resolvePullSchedulerConfig();
+
+      expect(result).toEqual({
+        enabled: false,
+        pullIntervalSeconds: 30,
+        continueOnNetworkError: true,
+        stopOnConflict: false
+      });
+    });
+  });
+
+  describe('resolveFileWatcherConfig', () => {
+    it('[EARS-25] WHEN resolveFileWatcherConfig is invoked, THE SYSTEM SHALL apply priority: local > project > hardcoded', async () => {
+      const mockConfig: GitGovConfig = {
+        protocolVersion: '1.0',
+        projectId: 'test-project',
+        projectName: 'Test',
+        rootCycle: 'root-cycle-123',
+        state: {
+          defaults: {
+            fileWatcher: {
+              defaultDebounceMs: 500,
+              defaultIgnoredPatterns: ['*.log', '*.bak']
+            }
+          }
+        }
+      };
+
+      const mockSession: GitGovSession = {
+        syncPreferences: {
+          fileWatcher: {
+            enabled: true,
+            debounceMs: 1000, // Override project default
+            // ignoredPatterns not set, should use project default
+          }
+        }
+      };
+
+      mockedFs.readFile.mockImplementation(async (path: any) => {
+        if (path.includes('config.json')) {
+          return JSON.stringify(mockConfig);
+        }
+        if (path.includes('.session.json')) {
+          return JSON.stringify(mockSession);
+        }
+        throw new Error('File not found');
+      });
+
+      const result = await configManager.resolveFileWatcherConfig();
+
+      expect(result).toEqual({
+        enabled: true, // Local preference
+        debounceMs: 1000, // Local preference
+        ignoredPatterns: ['*.log', '*.bak'] // Project default
+      });
+    });
+
+    it('WHEN resolveFileWatcherConfig is invoked without local preferences, THE SYSTEM SHALL use project defaults', async () => {
+      const mockConfig: GitGovConfig = {
+        protocolVersion: '1.0',
+        projectId: 'test-project',
+        projectName: 'Test',
+        rootCycle: 'root-cycle-123',
+        state: {
+          defaults: {
+            fileWatcher: {
+              defaultDebounceMs: 500,
+              defaultIgnoredPatterns: ['*.log']
+            }
+          }
+        }
+      };
+
+      mockedFs.readFile.mockResolvedValue(JSON.stringify(mockConfig));
+
+      const result = await configManager.resolveFileWatcherConfig();
+
+      expect(result).toEqual({
+        enabled: false, // Hardcoded default (file watchers disabled by default)
+        debounceMs: 500,
+        ignoredPatterns: ['*.log']
+      });
+    });
+  });
+
+  describe('updateSyncPreferences', () => {
+    it('[EARS-26] WHEN updateSyncPreferences is invoked, THE SYSTEM SHALL merge partial preferences with existing and persist to session', async () => {
+      const existingSession: GitGovSession = {
+        syncPreferences: {
+          pullScheduler: {
+            enabled: true,
+            pullIntervalSeconds: 30
+          }
+        }
+      };
+
+      mockedFs.readFile.mockResolvedValue(JSON.stringify(existingSession));
+      mockedFs.writeFile.mockResolvedValue();
+
+      await configManager.updateSyncPreferences({
+        pullScheduler: {
+          pullIntervalSeconds: 60 // Update only interval, keep enabled
+        },
+        fileWatcher: {
+          enabled: true,
+          debounceMs: 500
+        }
+      });
+
+      expect(mockedFs.writeFile).toHaveBeenCalledWith(
+        path.join(tempDir, '.gitgov', '.session.json'),
+        expect.stringContaining('"pullIntervalSeconds": 60'),
+        'utf-8'
+      );
+
+      // Verify merge happened
+      const writeCall = mockedFs.writeFile.mock.calls[0];
+      const writtenSession = JSON.parse(writeCall![1] as string) as GitGovSession;
+
+      expect(writtenSession.syncPreferences?.pullScheduler).toEqual({
+        enabled: true, // Preserved from existing
+        pullIntervalSeconds: 60 // Updated
+      });
+
+      expect(writtenSession.syncPreferences?.fileWatcher).toEqual({
+        enabled: true,
+        debounceMs: 500
+      });
+    });
+
+    it('WHEN updateSyncPreferences is invoked with non-existent session, THE SYSTEM SHALL create new session with preferences', async () => {
+      mockedFs.readFile.mockRejectedValue(new Error('ENOENT'));
+      mockedFs.writeFile.mockResolvedValue();
+
+      await configManager.updateSyncPreferences({
+        pullScheduler: {
+          enabled: true,
+          pullIntervalSeconds: 45
+        }
+      });
+
+      const writeCall = mockedFs.writeFile.mock.calls[0];
+      const writtenSession = JSON.parse(writeCall![1] as string) as GitGovSession;
+
+      expect(writtenSession.syncPreferences?.pullScheduler).toEqual({
+        enabled: true,
+        pullIntervalSeconds: 45
+      });
     });
   });
 

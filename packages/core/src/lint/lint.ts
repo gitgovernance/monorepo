@@ -64,7 +64,7 @@ function isExecutionRecord(payload: GitGovRecordPayload): payload is ExecutionRe
 }
 
 
-const logger = createLogger("[LintModule]");
+const logger = createLogger("[Lint] ");
 
 /**
  * Structural validation module for GitGovernance records.

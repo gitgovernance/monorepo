@@ -6,6 +6,7 @@ import { FeedbackAdapter } from '../feedback_adapter';
 import { ExecutionAdapter } from '../execution_adapter';
 import { ChangelogAdapter } from '../changelog_adapter';
 import { MetricsAdapter } from '../metrics_adapter';
+import { ConfigManager } from '../../config_manager';
 import type { TaskRecord } from '../../types';
 import type { CycleRecord } from '../../types';
 import type { FeedbackRecord } from '../../types';
@@ -53,6 +54,7 @@ export type BacklogAdapterDependencies = {
   // Infrastructure Layer
   identity: IdentityAdapter;
   eventBus: IEventStream; // For listening to events (consumer pattern)
+  configManager: ConfigManager; // For updating session state (activeTaskId, activeCycleId)
 
   // Configuration Layer (Optional)
   config?: BacklogAdapterConfig; // Optional configuration, defaults to DEFAULT_CONFIG
@@ -145,6 +147,7 @@ export class BacklogAdapter implements IBacklogAdapter {
   private workflowMethodologyAdapter: IWorkflowMethodology;
   private identity: IdentityAdapter;
   private eventBus: IEventStream;
+  private configManager: ConfigManager;
   private config: BacklogAdapterConfig;
 
 
@@ -163,6 +166,7 @@ export class BacklogAdapter implements IBacklogAdapter {
     this.workflowMethodologyAdapter = dependencies.workflowMethodologyAdapter;
     this.identity = dependencies.identity;
     this.eventBus = dependencies.eventBus;
+    this.configManager = dependencies.configManager;
 
     // Configuration with defaults
     this.config = dependencies.config || DEFAULT_CONFIG;
@@ -433,7 +437,12 @@ export class BacklogAdapter implements IBacklogAdapter {
     const signedRecord = await this.identity.signRecord(updatedRecord, actorId, 'executor');
     await this.taskStore.write(signedRecord as GitGovRecord & { payload: TaskRecord });
 
-    // 6. Emit task status changed event
+    // 6. Update activeTaskId in session state
+    await this.configManager.updateActorState(actorId, {
+      activeTaskId: taskId
+    });
+
+    // 7. Emit task status changed event
     this.eventBus.publish({
       type: 'task.status.changed',
       timestamp: Date.now(),
@@ -496,7 +505,12 @@ export class BacklogAdapter implements IBacklogAdapter {
     const signedRecord = await this.identity.signRecord(updatedRecord, actorId, 'pauser');
     await this.taskStore.write(signedRecord as GitGovRecord & { payload: TaskRecord });
 
-    // 6. Emit task status changed event
+    // 6. Clear activeTaskId in session state (task no longer active)
+    await this.configManager.updateActorState(actorId, {
+      activeTaskId: undefined
+    });
+
+    // 7. Emit task status changed event
     this.eventBus.publish({
       type: 'task.status.changed',
       timestamp: Date.now(),
@@ -560,7 +574,12 @@ export class BacklogAdapter implements IBacklogAdapter {
     const signedRecord = await this.identity.signRecord(updatedRecord, actorId, 'resumer');
     await this.taskStore.write(signedRecord as GitGovRecord & { payload: TaskRecord });
 
-    // 6. Emit task status changed event
+    // 6. Update activeTaskId in session state
+    await this.configManager.updateActorState(actorId, {
+      activeTaskId: taskId
+    });
+
+    // 7. Emit task status changed event
     this.eventBus.publish({
       type: 'task.status.changed',
       timestamp: Date.now(),
@@ -615,7 +634,12 @@ export class BacklogAdapter implements IBacklogAdapter {
     const signedRecord = await this.identity.signRecord(updatedRecord, actorId, 'approver');
     await this.taskStore.write(signedRecord as GitGovRecord & { payload: TaskRecord });
 
-    // 6. Emit task status changed event
+    // 6. Clear activeTaskId in session state (task completed)
+    await this.configManager.updateActorState(actorId, {
+      activeTaskId: undefined
+    });
+
+    // 7. Emit task status changed event
     this.eventBus.publish({
       type: 'task.status.changed',
       timestamp: Date.now(),
@@ -682,7 +706,12 @@ export class BacklogAdapter implements IBacklogAdapter {
     const signedRecord = await this.identity.signRecord(updatedRecord, actorId, 'canceller');
     await this.taskStore.write(signedRecord as GitGovRecord & { payload: TaskRecord });
 
-    // 6. Emit task status changed event
+    // 6. Clear activeTaskId in session state (task discarded)
+    await this.configManager.updateActorState(actorId, {
+      activeTaskId: undefined
+    });
+
+    // 7. Emit task status changed event
     this.eventBus.publish({
       type: 'task.status.changed',
       timestamp: Date.now(),
@@ -1237,7 +1266,7 @@ export class BacklogAdapter implements IBacklogAdapter {
   /**
    * Updates a cycle with new payload
    */
-  async updateCycle(cycleId: string, payload: Partial<CycleRecord>): Promise<CycleRecord> {
+  async updateCycle(cycleId: string, payload: Partial<CycleRecord>, actorId?: string): Promise<CycleRecord> {
     const cycleRecord = await this.cycleStore.read(cycleId);
     if (!cycleRecord) {
       throw new Error(`RecordNotFoundError: Cycle not found: ${cycleId}`);
@@ -1252,6 +1281,22 @@ export class BacklogAdapter implements IBacklogAdapter {
     const updatedPayload = createCycleRecord({ ...cycleRecord.payload, ...payload });
     const updatedRecord = { ...cycleRecord, payload: updatedPayload };
 
+    // Update activeCycleId in session state based on cycle status transitions
+    if (actorId) {
+      // Set activeCycleId when cycle is activated
+      if (updatedPayload.status === 'active' && cycleRecord.payload.status !== 'active') {
+        await this.configManager.updateActorState(actorId, {
+          activeCycleId: cycleId
+        });
+      }
+      // Clear activeCycleId when cycle is completed
+      else if (updatedPayload.status === 'completed' && cycleRecord.payload.status !== 'completed') {
+        await this.configManager.updateActorState(actorId, {
+          activeCycleId: undefined
+        });
+      }
+    }
+
     // Emit event if status changed
     if (cycleRecord.payload.status !== updatedPayload.status) {
       this.eventBus.publish({
@@ -1262,7 +1307,7 @@ export class BacklogAdapter implements IBacklogAdapter {
           cycleId,
           oldStatus: cycleRecord.payload.status,
           newStatus: updatedPayload.status,
-          actorId: 'system'
+          actorId: actorId || 'system'
         }
       } as CycleStatusChangedEvent);
     }
@@ -1515,8 +1560,8 @@ export class BacklogAdapter implements IBacklogAdapter {
     throw new Error('NotImplementedError: audit() will be implemented when audit_command.md is ready');
   }
 
-  // TODO: Implement when commit_processor.md is implemented
+  // TODO: Implement when commit_processor_adapter.md is implemented
   async processChanges(_changes: unknown[]): Promise<ExecutionRecord[]> {
-    throw new Error('NotImplementedError: processChanges() will be implemented when commit_processor.md is ready');
+    throw new Error('NotImplementedError: processChanges() will be implemented when commit_processor_adapter.md is ready');
   }
 }
