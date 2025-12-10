@@ -1,3 +1,16 @@
+## [1.13.0](https://github.com/gitgovernance/monorepo/compare/cli-v1.12.1...cli-v1.13.0) (2025-12-10)
+
+
+### 🚀 Features
+
+* **core:** implement EARS-43 and ignore .gitgov/ in work branches ([#58](https://github.com/gitgovernance/monorepo/issues/58)) ([b22b90f](https://github.com/gitgovernance/monorepo/commit/b22b90f851cd33e3ef9b2768397b49905f23acd7)), closes [#1763344405](https://github.com/gitgovernance/monorepo/issues/1763344405) [#1763344405](https://github.com/gitgovernance/monorepo/issues/1763344405) [#1763344405](https://github.com/gitgovernance/monorepo/issues/1763344405) [#1763344405](https://github.com/gitgovernance/monorepo/issues/1763344405) [#1763344405](https://github.com/gitgovernance/monorepo/issues/1763344405)
+
+
+### 🐛 Bug Fixes
+
+* **cli:** avoid checkout conflict in e2e init tests ([#60](https://github.com/gitgovernance/monorepo/issues/60)) ([fa3f62f](https://github.com/gitgovernance/monorepo/commit/fa3f62fd5fc1f7b05c9b7c0d36b59198b697626e))
+* **cli:** fix e2e init tests for CI environment ([#61](https://github.com/gitgovernance/monorepo/issues/61)) ([269fdbb](https://github.com/gitgovernance/monorepo/commit/269fdbbed4dd992e0754a21309b25563abde1c1f))
+
 ## [1.12.1](https://github.com/gitgovernance/monorepo/compare/cli-v1.12.0...cli-v1.12.1) (2025-11-09)
 
 

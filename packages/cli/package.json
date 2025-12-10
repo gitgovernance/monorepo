@@ -1,6 +1,6 @@
 {
   "name": "@gitgov/cli",
-  "version": "1.12.1",
+  "version": "1.13.0",
   "description": "🚀 AI-first governance CLI for intelligent work. Install with `npm install -g @gitgov/cli` and start governing your projects with interactive dashboards, task management, and workflow automation.",
   "type": "module",
   "main": "build/dist/gitgov.mjs",
