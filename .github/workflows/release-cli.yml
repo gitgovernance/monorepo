@@ -36,6 +36,8 @@ jobs:
         with:
           node-version: "20"
           registry-url: "https://registry.npmjs.org"
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v2
@@ -55,6 +57,17 @@ jobs:
           cd packages/cli
           pnpm build
 
+      - name: Debug NPM Token
+        run: |
+          if [ -z "${{ secrets.NPM_TOKEN }}" ]; then
+            echo "❌ NPM_TOKEN is empty or not set"
+          else
+            echo "✅ NPM_TOKEN is set (length: ${#NPM_TOKEN})"
+            echo "✅ Token starts with: ${NPM_TOKEN:0:10}..."
+          fi
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
       - name: Run Tests
         run: |
           cd packages/cli
@@ -63,7 +76,7 @@ jobs:
       - name: Semantic Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_CONFIG_PROVENANCE: true
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           cd packages/cli
           npx semantic-release
