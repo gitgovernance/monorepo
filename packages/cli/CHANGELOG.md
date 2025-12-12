@@ -1,3 +1,21 @@
+## [1.13.0](https://github.com/gitgovernance/monorepo/compare/cli-v1.12.1...cli-v1.13.0) (2025-12-12)
+
+
+### 🚀 Features
+
+* **cli/core:** EARS-27/28/43/61 sync improvements and UX fixes ([#65](https://github.com/gitgovernance/monorepo/issues/65)) ([0d44c85](https://github.com/gitgovernance/monorepo/commit/0d44c85901959c3e95bfd7a70d8f008f767fb4df)), closes [#1763344405](https://github.com/gitgovernance/monorepo/issues/1763344405) [#1763344405](https://github.com/gitgovernance/monorepo/issues/1763344405) [#1763344405](https://github.com/gitgovernance/monorepo/issues/1763344405) [#1763344405](https://github.com/gitgovernance/monorepo/issues/1763344405) [#1763344405](https://github.com/gitgovernance/monorepo/issues/1763344405)
+* **cli:** update @gitgov/core dependency to ^1.8.3 ([#70](https://github.com/gitgovernance/monorepo/issues/70)) ([5161583](https://github.com/gitgovernance/monorepo/commit/5161583bd20b742be6d4843ffc1bb11add04f18c))
+* **core:** implement EARS-43 and ignore .gitgov/ in work branches ([#58](https://github.com/gitgovernance/monorepo/issues/58)) ([b22b90f](https://github.com/gitgovernance/monorepo/commit/b22b90f851cd33e3ef9b2768397b49905f23acd7)), closes [#1763344405](https://github.com/gitgovernance/monorepo/issues/1763344405) [#1763344405](https://github.com/gitgovernance/monorepo/issues/1763344405) [#1763344405](https://github.com/gitgovernance/monorepo/issues/1763344405) [#1763344405](https://github.com/gitgovernance/monorepo/issues/1763344405) [#1763344405](https://github.com/gitgovernance/monorepo/issues/1763344405)
+
+
+### 🐛 Bug Fixes
+
+* **cli:** use --initial-branch=main in sync e2e tests ([#71](https://github.com/gitgovernance/monorepo/issues/71)) ([59aab5c](https://github.com/gitgovernance/monorepo/commit/59aab5c713de4816dc40746b268c3187f2b99155))
+* **core:** add tasks to SDK description in README ([#66](https://github.com/gitgovernance/monorepo/issues/66)) ([85762d3](https://github.com/gitgovernance/monorepo/commit/85762d3d331407fcb0d55af07b8e470a426b7ac5))
+* **core:** update comment in index.ts ([#67](https://github.com/gitgovernance/monorepo/issues/67)) ([b20132e](https://github.com/gitgovernance/monorepo/commit/b20132e36948b5bce227ab58c1f51c58a311a4d4))
+* **core:** update export comment ([#68](https://github.com/gitgovernance/monorepo/issues/68)) ([e5fded9](https://github.com/gitgovernance/monorepo/commit/e5fded9e794aff85a3999fbb6e3a8039b8356f0d))
+* **core:** update type exports comment ([#69](https://github.com/gitgovernance/monorepo/issues/69)) ([5970dce](https://github.com/gitgovernance/monorepo/commit/5970dce03eadd76e697778b2f0c95c55444b03f5))
+
 ## [1.12.1](https://github.com/gitgovernance/monorepo/compare/cli-v1.12.0...cli-v1.12.1) (2025-11-09)
 
 
