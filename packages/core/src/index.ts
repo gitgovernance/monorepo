@@ -8,7 +8,7 @@ export * as Logger from "./logger";
 export * as Schemas from "./schemas";
 export * as Store from "./store";
 export * as Sync from "./sync";
-// Core exports - organized by module
+// Validation and type exports
 export * as Validation from "./validation";
 export * as Records from "./types";
 export * as EventBus from "./event_bus";
