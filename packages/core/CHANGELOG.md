@@ -1,3 +1,23 @@
+## [1.8.0](https://github.com/gitgovernance/monorepo/compare/core-v1.7.0...core-v1.8.0) (2025-12-12)
+
+
+### ✨ Features
+
+* **cli/core:** EARS-27/28/43/61 sync improvements and UX fixes ([#65](https://github.com/gitgovernance/monorepo/issues/65)) ([0d44c85](https://github.com/gitgovernance/monorepo/commit/0d44c85901959c3e95bfd7a70d8f008f767fb4df)), closes [#1763344405](https://github.com/gitgovernance/monorepo/issues/1763344405) [#1763344405](https://github.com/gitgovernance/monorepo/issues/1763344405) [#1763344405](https://github.com/gitgovernance/monorepo/issues/1763344405) [#1763344405](https://github.com/gitgovernance/monorepo/issues/1763344405) [#1763344405](https://github.com/gitgovernance/monorepo/issues/1763344405)
+* **cli:** implement lint command and update core dependency ([7497d0b](https://github.com/gitgovernance/monorepo/commit/7497d0bc1eab20b8d2167bd19d992caf95c04dbb)), closes [#1762488681](https://github.com/gitgovernance/monorepo/issues/1762488681)
+* **core:** implement EARS-43 and ignore .gitgov/ in work branches ([#58](https://github.com/gitgovernance/monorepo/issues/58)) ([b22b90f](https://github.com/gitgovernance/monorepo/commit/b22b90f851cd33e3ef9b2768397b49905f23acd7)), closes [#1763344405](https://github.com/gitgovernance/monorepo/issues/1763344405) [#1763344405](https://github.com/gitgovernance/monorepo/issues/1763344405) [#1763344405](https://github.com/gitgovernance/monorepo/issues/1763344405) [#1763344405](https://github.com/gitgovernance/monorepo/issues/1763344405) [#1763344405](https://github.com/gitgovernance/monorepo/issues/1763344405)
+
+
+### 🐛 Bug Fixes
+
+* **cli:** add loader functions to RecordStore initialization ([dcd0b38](https://github.com/gitgovernance/monorepo/commit/dcd0b380a6e74aade972dcc93505c63fc77905c4))
+* **cli:** update priority color high to orange ([#57](https://github.com/gitgovernance/monorepo/issues/57)) ([cc30d8f](https://github.com/gitgovernance/monorepo/commit/cc30d8f612f6357ba01f640709b60b989d1b50d9)), closes [#1762699192](https://github.com/gitgovernance/monorepo/issues/1762699192)
+
+
+### ♻️ Refactoring
+
+* **cli:** restore factory-based record loading and dashboard enhancements ([ef00365](https://github.com/gitgovernance/monorepo/commit/ef00365a8aaa2871e79ed82874b06a768777ee27))
+
 ## [1.7.0](https://github.com/gitgovernance/monorepo/compare/core-v1.6.4...core-v1.7.0) (2025-11-09)
 
 
