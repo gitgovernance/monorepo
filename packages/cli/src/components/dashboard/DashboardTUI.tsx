@@ -327,7 +327,13 @@ export const DashboardTUI: React.FC<Props> = ({
           setIntelligence(newIntelligence);
           setLastUpdate(new Date());
         } catch (error) {
-          console.error('Error refreshing dashboard:', error);
+          // Show clean error message instead of full stack trace
+          if (error instanceof SyntaxError) {
+            console.error('⚠️  Dashboard refresh skipped: Some records have git conflicts or are corrupted. Run "gitgov sync resolve" to fix.');
+          } else {
+            const msg = error instanceof Error ? error.message : String(error);
+            console.error(`⚠️  Dashboard refresh error: ${msg}`);
+          }
         }
       }, refreshInterval * 1000);
 
@@ -421,7 +427,13 @@ export const DashboardTUI: React.FC<Props> = ({
             setIntelligence(newIntelligence);
             setLastUpdate(new Date());
           }).catch((error) => {
-            console.error('Error refreshing dashboard:', error);
+            // Show clean error message instead of full stack trace
+            if (error instanceof SyntaxError) {
+              console.error('⚠️  Dashboard refresh skipped: Some records have git conflicts or are corrupted. Run "gitgov sync resolve" to fix.');
+            } else {
+              const msg = error instanceof Error ? error.message : String(error);
+              console.error(`⚠️  Dashboard refresh error: ${msg}`);
+            }
           });
         } else {
           setLastUpdate(new Date());

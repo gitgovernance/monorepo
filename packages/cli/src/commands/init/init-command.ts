@@ -316,7 +316,7 @@ export class InitCommand {
       }, null, 2));
     } else {
       // Demo-optimized visual output
-      console.log("\n✅ GitGovernance initialized successfully!\n");
+      console.log("✅ GitGovernance initialized successfully!\n");
 
       console.log("🏗️  Project Structure Created:");
       console.log("   📁 .gitgov/");

@@ -40,7 +40,7 @@ export interface IIdentityAdapter {
   getEffectiveActorForAgent(agentId: string): Promise<ActorRecord | null>;
 
   // Advanced Operations
-  signRecord(record: GitGovRecord, actorId: string, role: string): Promise<GitGovRecord>;
+  signRecord(record: GitGovRecord, actorId: string, role: string, notes: string): Promise<GitGovRecord>;
   rotateActorKey(actorId: string): Promise<{ oldActor: ActorRecord; newActor: ActorRecord }>;
   authenticate(sessionToken: string): Promise<void>;
   getActorPublicKey(keyId: string): Promise<string | null>;
@@ -208,7 +208,8 @@ export class IdentityAdapter implements IIdentityAdapter {
   async signRecord(
     record: GitGovRecord,
     actorId: string,
-    role: string
+    role: string,
+    notes: string
   ): Promise<GitGovRecord> {
     // Verify actor exists
     const actor = await this.getActor(actorId);
@@ -237,13 +238,13 @@ export class IdentityAdapter implements IIdentityAdapter {
     let signature: Signature;
     if (privateKey) {
       // Real cryptographic signing
-      signature = signPayload(record.payload, privateKey, actorId, role, 'Record signed');
+      signature = signPayload(record.payload, privateKey, actorId, role, notes);
     } else {
       // Fallback to mock signature for backward compatibility
       signature = {
         keyId: actorId,
         role: role,
-        notes: 'Record signed',
+        notes: notes,
         signature: `mock-signature-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         timestamp: Math.floor(Date.now() / 1000)
       };

@@ -762,8 +762,14 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       const { createTaskRecord } = require('../../factories/task_factory');
       createTaskRecord.mockReturnValue(updatedTask.payload);
 
-      const result = await backlogAdapter.updateTask('1757687335-task-test-task', { title: 'Updated Title' });
+      const result = await backlogAdapter.updateTask('1757687335-task-test-task', { title: 'Updated Title' }, 'human:editor');
 
+      expect(mockDependencies.identity.signRecord).toHaveBeenCalledWith(
+        expect.any(Object),
+        'human:editor',
+        'editor',
+        expect.any(String)
+      );
       expect(mockDependencies.taskStore.write).toHaveBeenCalled();
       expect(result.title).toBe('Updated Title');
     });
@@ -776,8 +782,36 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
 
       mockDependencies.taskStore.read.mockResolvedValue(archivedTask as unknown as TaskRecord);
 
-      await expect(backlogAdapter.updateTask('1757687335-task-archived', { title: 'New Title' }))
+      await expect(backlogAdapter.updateTask('1757687335-task-archived', { title: 'New Title' }, 'human:editor'))
         .rejects.toThrow('ProtocolViolationError: Cannot update task in final state: archived');
+    });
+
+    it('[EARS-28] should sign the updated record with editor role', async () => {
+      const originalTask = createMockTaskRecord({
+        id: '1757687335-task-sign-test',
+        title: 'Original Title',
+        status: 'draft'
+      });
+
+      mockDependencies.taskStore.read.mockResolvedValue(originalTask as unknown as TaskRecord);
+      mockDependencies.taskStore.write.mockResolvedValue(undefined);
+
+      const { createTaskRecord } = require('../../factories/task_factory');
+      createTaskRecord.mockReturnValue({
+        ...originalTask.payload,
+        title: 'Updated Title'
+      });
+
+      await backlogAdapter.updateTask('1757687335-task-sign-test', { title: 'Updated Title' }, 'human:editor');
+
+      expect(mockDependencies.identity.signRecord).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({ title: 'Updated Title' })
+        }),
+        'human:editor',
+        'editor',
+        'Task updated'
+      );
     });
 
     it('[EARS-27] should activate task from ready to active with permission validation', async () => {
@@ -825,7 +859,8 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
           payload: expect.objectContaining({ status: 'active' })
         }),
         'human:developer',
-        'executor'
+        'executor',
+        expect.any(String) // notes parameter
       );
       expect(mockDependencies.taskStore.write).toHaveBeenCalled();
       expect(mockDependencies.eventBus.publish).toHaveBeenCalledWith(
@@ -980,7 +1015,8 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
           })
         }),
         'human:tech-lead',
-        'pauser'
+        'pauser',
+        expect.any(String) // notes parameter
       );
       expect(mockDependencies.taskStore.write).toHaveBeenCalled();
       expect(mockDependencies.eventBus.publish).toHaveBeenCalledWith(
@@ -1142,7 +1178,8 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
           payload: expect.objectContaining({ status: 'active' })
         }),
         'human:ops-lead',
-        'resumer'
+        'resumer',
+        expect.any(String) // notes parameter
       );
       expect(mockDependencies.taskStore.write).toHaveBeenCalled();
       expect(mockDependencies.eventBus.publish).toHaveBeenCalledWith(
@@ -1253,7 +1290,8 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
           payload: expect.objectContaining({ status: 'active' })
         }),
         'human:ops-lead',
-        'resumer'
+        'resumer',
+        expect.any(String) // notes parameter
       );
       expect(mockDependencies.taskStore.write).toHaveBeenCalled();
       expect(mockDependencies.eventBus.publish).toHaveBeenCalledWith(
@@ -2569,7 +2607,8 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       expect(mockDependencies.identity.signRecord).toHaveBeenCalledWith(
         expect.any(Object),
         actorId,
-        'pauser'
+        'pauser',
+        expect.any(String) // notes parameter
       );
       expect(mockDependencies.eventBus.publish).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -2718,7 +2757,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         title: 'Updated Title'
       });
 
-      await backlogAdapter.updateTask('1757687335-task-validation', { title: 'Updated Title' });
+      await backlogAdapter.updateTask('1757687335-task-validation', { title: 'Updated Title' }, 'human:editor');
 
       // Verify factory was called with merged payload
       expect(createTaskRecord).toHaveBeenCalledWith({

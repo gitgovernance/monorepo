@@ -1027,7 +1027,7 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
       const currentActor = await identityAdapter.getCurrentActor();
 
       // 6. Delegate to BacklogAdapter (uses task_factory internally)
-      const updatedTask = await backlogAdapter.updateTask(taskId, updatePayload);
+      const updatedTask = await backlogAdapter.updateTask(taskId, updatePayload, currentActor.id);
 
       // 7. Cache invalidation
       await indexerAdapter.invalidateCache();

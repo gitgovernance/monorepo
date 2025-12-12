@@ -104,7 +104,7 @@ export class ExecutionAdapter implements IExecutionAdapter {
       };
 
       // 3. Sign the record
-      const signedRecord = await this.identity.signRecord(unsignedRecord, actorId, 'author');
+      const signedRecord = await this.identity.signRecord(unsignedRecord, actorId, 'author', 'Execution record created');
 
       // 4. Persist the record
       await this.executionStore.write(signedRecord as GitGovRecord & { payload: ExecutionRecord });

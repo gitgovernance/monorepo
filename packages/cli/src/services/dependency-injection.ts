@@ -27,6 +27,9 @@ export class DependencyInjectionService {
     agentStore: Store.RecordStore<Records.AgentRecord>;
   } | null = null;
 
+  /** [EARS-52] Tracks if bootstrap from gitgov-state occurred, requiring reindex */
+  private bootstrapOccurred: boolean = false;
+
   private constructor() { }
 
   /**
@@ -73,8 +76,9 @@ export class DependencyInjectionService {
       const bootstrapResult = await Sync.SyncModule.bootstrapFromStateBranch(gitModule);
 
       if (bootstrapResult.success) {
-        // Bootstrap successful
+        // [EARS-52] Bootstrap successful - mark for reindex
         projectRoot = repoRoot;
+        this.bootstrapOccurred = true;
       } else {
         // Bootstrap failed - project not initialized
         throw new Error("❌ GitGovernance not initialized. Run 'gitgov init' first.");
@@ -136,6 +140,18 @@ export class DependencyInjectionService {
         cacheStrategy: 'json',
         cachePath: absoluteCachePath
       });
+
+      // [EARS-52] If bootstrap occurred, regenerate index immediately
+      // This ensures index.json is up-to-date after restoring .gitgov/ from gitgov-state
+      if (this.bootstrapOccurred) {
+        try {
+          await this.indexerAdapter.generateIndex();
+          this.bootstrapOccurred = false; // Reset flag after reindex
+        } catch (reindexError) {
+          // Non-critical: log warning but don't fail
+          console.warn('⚠️  Warning: Failed to regenerate index after bootstrap');
+        }
+      }
 
       return this.indexerAdapter;
 

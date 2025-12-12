@@ -152,7 +152,7 @@ export class ChangelogAdapter implements IChangelogAdapter {
       };
 
       // 3. Sign the record
-      const signedRecord = await this.identity.signRecord(unsignedRecord, actorId, 'author');
+      const signedRecord = await this.identity.signRecord(unsignedRecord, actorId, 'author', 'Changelog record created');
 
       // 4. Persist the record
       await this.changelogStore.write(signedRecord as GitGovRecord & { payload: ChangelogRecord });

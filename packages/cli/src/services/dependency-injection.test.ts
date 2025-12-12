@@ -526,6 +526,46 @@ describe('DependencyInjectionService', () => {
     });
   });
 
+  describe('Bootstrap and Reindex (EARS-52)', () => {
+    it('[EARS-52] should call generateIndex() after successful bootstrap from gitgov-state', async () => {
+      // Mock fs.access to reject (no .gitgov directory exists in filesystem)
+      const mockFs = require('fs');
+      mockFs.promises.access.mockRejectedValue(new Error('.gitgov directory not found'));
+
+      // Mock bootstrap to succeed (gitgov-state branch exists)
+      const { Sync, Adapters } = require('@gitgov/core');
+      Sync.SyncModule.bootstrapFromStateBranch.mockResolvedValue({ success: true });
+
+      // Get the indexer adapter (this should trigger bootstrap + reindex)
+      const indexerAdapter = await diService.getIndexerAdapter();
+
+      // Verify bootstrap was called
+      expect(Sync.SyncModule.bootstrapFromStateBranch).toHaveBeenCalled();
+
+      // Verify indexer.generateIndex() was called after bootstrap
+      expect(indexerAdapter.generateIndex).toHaveBeenCalledTimes(1);
+    });
+
+    it('[EARS-52] should NOT call generateIndex() when .gitgov/ already exists (no bootstrap)', async () => {
+      // Mock fs.access to succeed (directory exists)
+      const mockFs = require('fs');
+      mockFs.promises.access.mockResolvedValue(undefined);
+
+      // Reset bootstrap mock
+      const { Sync, Adapters } = require('@gitgov/core');
+      Sync.SyncModule.bootstrapFromStateBranch.mockClear();
+
+      // Get the indexer adapter (bootstrap should not be triggered)
+      const indexerAdapter = await diService.getIndexerAdapter();
+
+      // Verify bootstrap was NOT called
+      expect(Sync.SyncModule.bootstrapFromStateBranch).not.toHaveBeenCalled();
+
+      // Verify indexer.generateIndex() was NOT called
+      expect(indexerAdapter.generateIndex).not.toHaveBeenCalled();
+    });
+  });
+
   describe('Dependency Validation', () => {
     it('[EARS-6] should return false when project root not found', async () => {
       // Mock fs.access to reject (no .gitgov directory)

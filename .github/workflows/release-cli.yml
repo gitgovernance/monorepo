@@ -8,6 +8,12 @@ on:
       - "packages/cli/**"
       - ".github/workflows/release-cli.yml"
       - "!packages/cli/**/*.md"
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to run tests on'
+        required: false
+        default: 'main'
 
 jobs:
   release:

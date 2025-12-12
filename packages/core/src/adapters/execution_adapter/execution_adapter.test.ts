@@ -144,7 +144,8 @@ describe('ExecutionAdapter', () => {
           payload: mockCreatedExecutionPayload
         }),
         mockActorId,
-        'author'
+        'author',
+        expect.any(String) // notes parameter
       );
       expect(mockExecutionStore.write).toHaveBeenCalledWith(mockSignedRecord);
       // Note: Now using this.eventBus.publish instead of publishEvent

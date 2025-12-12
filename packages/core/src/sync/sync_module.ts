@@ -43,7 +43,13 @@ const logger = createLogger("[SyncModule] ");
 
 /**
  * Helper: Check if a file should be synced to gitgov-state
- * Returns true only for allowed *.json files in sync directories
+ * Returns true only for allowed *.json files in SYNC_DIRECTORIES or SYNC_ROOT_FILES
+ *
+ * Accepts paths in multiple formats:
+ * - .gitgov/tasks/foo.json (git ls-files output)
+ * - /absolute/path/.gitgov/tasks/foo.json
+ * - /tmp/tempdir/tasks/foo.json (tempDir copy without .gitgov)
+ * - tasks/foo.json (relative to .gitgov)
  */
 function shouldSyncFile(filePath: string): boolean {
   const fileName = path.basename(filePath);
@@ -54,19 +60,55 @@ function shouldSyncFile(filePath: string): boolean {
     return false;
   }
 
-  // Check if file matches any excluded pattern
+  // Check if file matches any excluded pattern (.key, .backup, etc.)
   for (const pattern of SYNC_EXCLUDED_PATTERNS) {
     if (pattern.test(fileName)) {
       return false;
     }
   }
 
-  // Check if it's a local-only file
+  // Check if it's a local-only file (.session.json, index.json, gitgov)
   if (LOCAL_ONLY_FILES.includes(fileName as typeof LOCAL_ONLY_FILES[number])) {
     return false;
   }
 
-  return true;
+  // CRITICAL: Verify file is in an allowed sync directory or is a root sync file
+  const normalizedPath = filePath.replace(/\\/g, '/');
+  const parts = normalizedPath.split('/');
+
+  // Find .gitgov in path and get the part after it
+  const gitgovIndex = parts.findIndex(p => p === '.gitgov');
+
+  let relativeParts: string[];
+  if (gitgovIndex !== -1) {
+    // Path contains .gitgov: .gitgov/tasks/foo.json or /path/.gitgov/tasks/foo.json
+    relativeParts = parts.slice(gitgovIndex + 1);
+  } else {
+    // Path is relative to .gitgov or from tempDir: tasks/foo.json or /tmp/tempdir/tasks/foo.json
+    // Check if any part matches a sync directory
+    const syncDirIndex = parts.findIndex(p =>
+      SYNC_DIRECTORIES.includes(p as typeof SYNC_DIRECTORIES[number])
+    );
+    if (syncDirIndex !== -1) {
+      relativeParts = parts.slice(syncDirIndex);
+    } else if (SYNC_ROOT_FILES.includes(fileName as typeof SYNC_ROOT_FILES[number])) {
+      // It's a root sync file like config.json
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+  if (relativeParts.length === 1) {
+    // Root file: config.json
+    return SYNC_ROOT_FILES.includes(relativeParts[0] as typeof SYNC_ROOT_FILES[number]);
+  } else if (relativeParts.length >= 2) {
+    // Directory file: tasks/foo.json
+    const dirName = relativeParts[0];
+    return SYNC_DIRECTORIES.includes(dirName as typeof SYNC_DIRECTORIES[number]);
+  }
+
+  return false;
 }
 
 /**
@@ -97,11 +139,17 @@ async function getAllFiles(dir: string, baseDir: string = dir): Promise<string[]
 /**
  * Helper: Copy only syncable files from source directory to destination
  * Filters to only copy *.json files, excluding keys, backups, etc.
+ *
+ * @param sourceDir - Source directory (tempDir with user's local files)
+ * @param destDir - Destination directory (.gitgov in gitgov-state)
+ * @param log - Logging function
+ * @param excludeFiles - [EARS-60] Files to exclude from copying (remote-only changes to preserve)
  */
 async function copySyncableFiles(
   sourceDir: string,
   destDir: string,
-  log: (msg: string) => void
+  log: (msg: string) => void,
+  excludeFiles: Set<string> = new Set()
 ): Promise<number> {
   let copiedCount = 0;
 
@@ -120,6 +168,13 @@ async function copySyncableFiles(
       for (const relativePath of allFiles) {
         const fullSourcePath = path.join(sourcePath, relativePath);
         const fullDestPath = path.join(destPath, relativePath);
+        // [EARS-60] Check if this file should be excluded (remote-only change)
+        const gitgovRelativePath = `.gitgov/${dirName}/${relativePath}`;
+
+        if (excludeFiles.has(gitgovRelativePath)) {
+          log(`[EARS-60] Skipped (remote-only change preserved): ${gitgovRelativePath}`);
+          continue;
+        }
 
         if (shouldSyncFile(fullSourcePath)) {
           await fs.mkdir(path.dirname(fullDestPath), { recursive: true });
@@ -142,6 +197,13 @@ async function copySyncableFiles(
   for (const fileName of SYNC_ROOT_FILES) {
     const sourcePath = path.join(sourceDir, fileName);
     const destPath = path.join(destDir, fileName);
+    // [EARS-60] Check if this file should be excluded
+    const gitgovRelativePath = `.gitgov/${fileName}`;
+
+    if (excludeFiles.has(gitgovRelativePath)) {
+      log(`[EARS-60] Skipped (remote-only change preserved): ${gitgovRelativePath}`);
+      continue;
+    }
 
     try {
       await fs.copyFile(sourcePath, destPath);
@@ -454,8 +516,32 @@ export class SyncModule {
         // Remove all staged files
         await execAsync("git rm -rf . 2>/dev/null || true", { cwd: repoRoot });
 
+        // [EARS-61] Create .gitignore for LOCAL_ONLY_FILES and SYNC_EXCLUDED_PATTERNS
+        // This prevents these files from appearing as untracked in gitgov-state
+        const gitignoreContent = `# GitGovernance State Branch .gitignore
+# This file is auto-generated during gitgov init
+# These files are machine-specific and should NOT be synced
+
+# Local-only files (regenerated/machine-specific)
+index.json
+.session.json
+gitgov
+
+# Private keys (never synced for security)
+*.key
+
+# Backup and temporary files
+*.backup
+*.backup-*
+*.tmp
+*.bak
+`;
+        const gitignorePath = path.join(repoRoot, '.gitignore');
+        await fs.writeFile(gitignorePath, gitignoreContent, 'utf-8');
+        await execAsync('git add .gitignore', { cwd: repoRoot });
+
         // Create initial commit directly with exec (more reliable than GitModule methods for orphan branch)
-        await execAsync('git commit --allow-empty -m "Initialize state branch"', { cwd: repoRoot });
+        await execAsync('git commit -m "Initialize state branch with .gitignore"', { cwd: repoRoot });
       } catch (commitError) {
         const error = commitError as { stderr?: string; message?: string };
         throw new Error(`Failed to create initial commit on orphan branch: ${error.stderr || error.message}`);
@@ -532,6 +618,17 @@ export class SyncModule {
     }
   }
 
+  /**
+   * [EARS-60] Detect file-level conflicts and identify remote-only changes.
+   *
+   * A conflict exists when:
+   * 1. A file was modified by the remote during implicit pull
+   * 2. AND the LOCAL USER also modified that same file (content in tempDir differs from what was in git before pull)
+   *
+   * This catches conflicts that git rebase can't detect because we copy files AFTER the pull.
+   *
+   * @param tempDir - Directory containing local .gitgov/ files (preserved before checkout)
+   * @param repoRoot - Repository root path
   /**
    * Checks if a rebase is in progress.
    *
@@ -698,19 +795,31 @@ export class SyncModule {
       }
 
       // Analyze history to detect rebase commits without resolution
+      // A "rebase commit" is one created by git during rebase (contains conflict markers that were resolved)
+      // A "resolution commit" is one created by gitgov sync resolve (starts with "resolution:")
       for (let i = 0; i < commits.length; i++) {
         const commit = commits[i];
         if (!commit) continue;
 
         const message = commit.message.toLowerCase();
 
-        // Detect rebase commits (common patterns)
-        const isRebaseCommit =
-          message.includes("rebase") ||
-          message.includes("pick") ||
-          message.includes("conflict");
+        // Skip resolution commits - these are NOT rebase commits, they ARE the resolution
+        if (message.startsWith("resolution:")) {
+          continue;
+        }
 
-        if (isRebaseCommit) {
+        // Skip sync commits - these are normal sync operations
+        if (message.startsWith("sync:")) {
+          continue;
+        }
+
+        // Detect explicit rebase-related commits (not our own commits)
+        // Only flag commits that explicitly mention rebase operations
+        const isExplicitRebaseCommit =
+          message.includes("rebase") ||
+          message.includes("pick ");
+
+        if (isExplicitRebaseCommit) {
           // Check if the next commit is a resolution
           const nextCommit = commits[i + 1];
           const isResolutionNext =
@@ -911,14 +1020,42 @@ export class SyncModule {
 
       if (!auditReport.passed) {
         log(`Audit violations: ${auditReport.summary}`);
+
+        // Extract affected files from lint errors and integrity violations
+        const affectedFiles: string[] = [];
+        const detailedErrors: string[] = [];
+
+        // Add files from lintReport errors
+        if (auditReport.lintReport?.results) {
+          for (const r of auditReport.lintReport.results) {
+            if (r.level === 'error') {
+              if (!affectedFiles.includes(r.filePath)) {
+                affectedFiles.push(r.filePath);
+              }
+              detailedErrors.push(`  • ${r.filePath}: [${r.validator}] ${r.message}`);
+            }
+          }
+        }
+
+        // Add info from integrity violations (commit-level)
+        for (const v of auditReport.integrityViolations) {
+          detailedErrors.push(`  • Commit ${v.rebaseCommitHash.slice(0, 8)}: ${v.commitMessage} (by ${v.author})`);
+        }
+
+        // Build detailed message
+        const detailSection = detailedErrors.length > 0
+          ? `\n\nDetails:\n${detailedErrors.join('\n')}`
+          : '';
+
         result.conflictDetected = true;
         result.conflictInfo = {
           type: "integrity_violation",
-          affectedFiles: [],
-          message: auditReport.summary,
+          affectedFiles,
+          message: auditReport.summary + detailSection,
           resolutionSteps: [
-            "Review audit violations",
-            "Fix integrity issues before pushing",
+            "Run 'gitgov lint --fix' to auto-fix signature/checksum issues",
+            "If issues persist, manually review the affected files",
+            "Then retry: gitgov sync push",
           ],
         };
         result.error = "Integrity violations detected. Cannot push.";
@@ -984,11 +1121,64 @@ export class SyncModule {
         // [EARS-47] CRITICAL: Always restore tempDir FIRST to preserve local files (keys, etc.)
         if (tempDir) {
           try {
-            log('[EARS-47] Restoring .gitgov/ from temp directory (early return)...');
             const repoRoot = await this.git.getRepoRoot();
             const gitgovDir = path.join(repoRoot, '.gitgov');
-            await fs.cp(tempDir, gitgovDir, { recursive: true, force: true });
-            log('[EARS-47] .gitgov/ restored from temp (early return)');
+
+            // [EARS-58] If implicit pull occurred, preserve new files from gitgov-state
+            if (returnResult.implicitPull?.hasChanges) {
+              log('[EARS-58] Implicit pull detected in early return - preserving new files from gitgov-state...');
+              // First checkout synced files from gitgov-state
+              try {
+                await this.git.checkoutFilesFromBranch(stateBranch, ['.gitgov/']);
+                // [EARS-63] Unstage files - git checkout adds them to staging area
+                await execAsync('git reset HEAD .gitgov/ 2>/dev/null || true', { cwd: repoRoot });
+                log('[EARS-58] Synced files copied from gitgov-state (unstaged)');
+              } catch (checkoutError) {
+                log(`[EARS-58] Warning: Failed to checkout from gitgov-state: ${checkoutError}`);
+              }
+              // Then restore LOCAL_ONLY_FILES and EXCLUDED files from tempDir
+              // [EARS-59] This includes .key files which are excluded from sync but must be preserved
+              for (const fileName of LOCAL_ONLY_FILES) {
+                const tempFilePath = path.join(tempDir, fileName);
+                const destFilePath = path.join(gitgovDir, fileName);
+                try {
+                  await fs.access(tempFilePath);
+                  await fs.cp(tempFilePath, destFilePath, { force: true });
+                  log(`[EARS-58] Restored LOCAL_ONLY_FILE: ${fileName}`);
+                } catch {
+                  // File doesn't exist in temp, that's ok
+                }
+              }
+
+              // [EARS-59] Restore files matching SYNC_EXCLUDED_PATTERNS (e.g., .key files)
+              const restoreExcludedFilesEarly = async (dir: string, destDir: string) => {
+                try {
+                  const entries = await fs.readdir(dir, { withFileTypes: true });
+                  for (const entry of entries) {
+                    const srcPath = path.join(dir, entry.name);
+                    const dstPath = path.join(destDir, entry.name);
+                    if (entry.isDirectory()) {
+                      await restoreExcludedFilesEarly(srcPath, dstPath);
+                    } else {
+                      const isExcluded = SYNC_EXCLUDED_PATTERNS.some(pattern => pattern.test(entry.name));
+                      if (isExcluded) {
+                        await fs.mkdir(path.dirname(dstPath), { recursive: true });
+                        await fs.copyFile(srcPath, dstPath);
+                        log(`[EARS-59] Restored excluded file (early return): ${entry.name}`);
+                      }
+                    }
+                  }
+                } catch {
+                  // Directory doesn't exist
+                }
+              };
+              await restoreExcludedFilesEarly(tempDir, gitgovDir);
+            } else {
+              // No implicit pull - restore everything from temp (original behavior)
+              log('[EARS-47] Restoring .gitgov/ from temp directory (early return)...');
+              await fs.cp(tempDir, gitgovDir, { recursive: true, force: true });
+              log('[EARS-47] .gitgov/ restored from temp (early return)');
+            }
 
             // Cleanup temp
             await fs.rm(tempDir, { recursive: true, force: true });
@@ -1012,6 +1202,20 @@ export class SyncModule {
               : 'Failed to restore stashed changes. Run \'git stash pop\' manually.';
           }
         }
+
+        // [EARS-58] Regenerate index if implicit pull brought changes (even on early return)
+        if (returnResult.implicitPull?.hasChanges) {
+          log('[EARS-58] Regenerating index after implicit pull (early return)...');
+          try {
+            await this.indexer.generateIndex();
+            returnResult.implicitPull.reindexed = true;
+            log('[EARS-58] Index regenerated successfully');
+          } catch (indexError) {
+            log(`[EARS-58] Warning: Failed to regenerate index: ${indexError}`);
+            returnResult.implicitPull.reindexed = false;
+          }
+        }
+
         return returnResult;
       };
 
@@ -1025,51 +1229,27 @@ export class SyncModule {
       // 2. If there are actual staged changes, git commit will detect them
       // 3. This allows seamless workflow without false positives from untracked files
 
-      // Attempt pull --rebase to reconcile with remote
-      log('Attempting pull --rebase...');
+      // [EARS-57] Capture files in gitgov-state BEFORE any changes to distinguish user deletions vs new remote files
+      let filesBeforeChanges: Set<string> = new Set();
       try {
-        await this.git.pullRebase("origin", stateBranch);
-        log('Pull rebase successful');
-      } catch (error) {
-        // Check if error is because we're already up to date or remote doesn't exist
-        const errorMsg = error instanceof Error ? error.message : String(error);
-        log(`Pull rebase failed: ${errorMsg}`);
-
-        const isAlreadyUpToDate = errorMsg.includes("up to date") || errorMsg.includes("up-to-date");
-        const isNoRemote = errorMsg.includes("does not appear to be") || errorMsg.includes("Could not read from remote");
-
-        if (isAlreadyUpToDate || isNoRemote) {
-          log('Pull failed but continuing (already up-to-date or no remote)');
-          // Not an error - we're up to date or no remote configured
-          // Continue with local push
-        } else {
-          // Detect if it's a conflict
-          const conflictedFiles = await this.git.getConflictedFiles();
-          if (conflictedFiles.length > 0) {
-            // Abort rebase and restore clean state
-            await this.git.rebaseAbort();
-
-            result.conflictDetected = true;
-            result.conflictInfo = {
-              type: "rebase_conflict",
-              affectedFiles: conflictedFiles,
-              message: "Conflict detected during automatic reconciliation",
-              resolutionSteps: [
-                "Pull remote changes first: gitgov sync pull",
-                "Resolve any conflicts",
-                "Then push your changes",
-              ],
-            };
-            result.error = "Conflict detected during reconciliation";
-            return await restoreStashAndReturn(result);
-          }
-
-          // If not conflict or "already up to date", propagate error
-          throw error;
-        }
+        const repoRoot = await this.git.getRepoRoot();
+        const { stdout: filesOutput } = await execAsync(
+          `git ls-files ".gitgov" 2>/dev/null || true`,
+          { cwd: repoRoot }
+        );
+        filesBeforeChanges = new Set(filesOutput.trim().split('\n').filter(f => f && shouldSyncFile(f)));
+        log(`[EARS-57] Files in gitgov-state before changes: ${filesBeforeChanges.size}`);
+      } catch {
+        // Ignore - might be first commit
       }
 
-      // PHASE 2: Publication (EARS-11, EARS-12, EARS-41, EARS-42)
+      // ═══════════════════════════════════════════════════════════════════════════
+      // GIT-NATIVE SYNC FLOW
+      // Order: Copy files → Commit locally → Pull --rebase → Push
+      // This allows Git to detect conflicts naturally (modify/modify, delete/modify)
+      // ═══════════════════════════════════════════════════════════════════════════
+
+      // PHASE 2: Stage Local Changes (EARS-11, EARS-12, EARS-41, EARS-42)
       log('=== Phase 2: Publication ===');
 
       // [EARS-41] Detect first push: check if .gitgov/ exists in gitgov-state
@@ -1129,7 +1309,9 @@ export class SyncModule {
         await fs.mkdir(gitgovDir, { recursive: true });
         log(`[EARS-43] Ensured .gitgov/ directory exists: ${gitgovDir}`);
 
-        // Use helper to copy only syncable files (*.json, no keys, no backups)
+        // Copy only syncable files (*.json, no keys, no backups)
+        // Git-native flow: we copy ALL local files, then commit, then pull --rebase
+        // Git will detect conflicts during rebase if same file was modified remotely
         const copiedCount = await copySyncableFiles(tempDir, gitgovDir, log);
         log(`[EARS-43] Syncable files copy complete: ${copiedCount} files copied`);
       } else {
@@ -1280,6 +1462,60 @@ export class SyncModule {
 
         log('[EARS-47] Non-syncable files cleanup complete');
 
+        // [EARS-57] Sync deleted files: remove files from gitgov-state that no longer exist in source
+        // This handles the case where a user deletes a record locally and pushes
+        // In Git-native flow, deleted files will be detected during rebase if there's a conflict
+        log('[EARS-57] Checking for deleted files to sync...');
+
+        try {
+          // Get all syncable files in source (tempDir = user's local state)
+          const sourceFiles = new Set<string>();
+
+          // Recursively find all files in source
+          const findSourceFiles = async (dir: string, prefix: string = '.gitgov') => {
+            try {
+              const entries = await fs.readdir(dir, { withFileTypes: true });
+              for (const entry of entries) {
+                const fullPath = path.join(dir, entry.name);
+                const relativePath = `${prefix}/${entry.name}`;
+                if (entry.isDirectory()) {
+                  await findSourceFiles(fullPath, relativePath);
+                } else if (shouldSyncFile(relativePath)) {
+                  sourceFiles.add(relativePath);
+                }
+              }
+            } catch {
+              // Directory doesn't exist, that's ok
+            }
+          };
+
+          // Use tempDir if available (untracked files case), otherwise working tree
+          const sourceDir = tempDir || path.join(repoRoot, '.gitgov');
+          await findSourceFiles(sourceDir);
+          log(`[EARS-57] Found ${sourceFiles.size} syncable files in source (user's local state)`);
+          log(`[EARS-57] Files that existed before changes: ${filesBeforeChanges.size}`);
+
+          // Delete files that:
+          // 1. Existed in gitgov-state BEFORE our changes (filesBeforeChanges)
+          // 2. Are NOT in user's local state (sourceFiles/tempDir)
+          // This ensures we only delete files the user intentionally removed
+          let deletedCount = 0;
+          for (const fileBeforeChange of filesBeforeChanges) {
+            if (!sourceFiles.has(fileBeforeChange)) {
+              try {
+                await execAsync(`git rm -f "${fileBeforeChange}"`, { cwd: repoRoot });
+                log(`[EARS-57] Deleted (user removed): ${fileBeforeChange}`);
+                deletedCount++;
+              } catch {
+                // File might already be removed or not tracked
+              }
+            }
+          }
+          log(`[EARS-57] Deleted ${deletedCount} files that user removed locally`);
+        } catch (err) {
+          log(`[EARS-57] Warning: Failed to sync deleted files: ${err}`);
+        }
+
         // Verify there are staged changes
         const hasStaged = await this.git.hasUncommittedChanges();
         log(`Has staged changes: ${hasStaged}`);
@@ -1293,10 +1529,10 @@ export class SyncModule {
         }
 
         // Create commit
-        log('Creating commit...');
+        log('Creating local commit...');
         try {
           const commitHash = await this.git.commit(commitMessage);
-          log(`Commit created: ${commitHash}`);
+          log(`Local commit created: ${commitHash}`);
           result.commitHash = commitHash;
         } catch (commitError) {
           // Check if this is a "nothing to commit" error (common on second push with identical files)
@@ -1326,7 +1562,157 @@ export class SyncModule {
           throw new Error(`Failed to create commit: ${errorMsg} | stderr: ${stderr}`);
         }
 
+        // ═══════════════════════════════════════════════════════════════════════════
+        // GIT-NATIVE CONFLICT DETECTION: Pull --rebase AFTER local commit
+        // This is the key change: Git can now detect conflicts naturally because
+        // we have a local commit to rebase onto the remote changes
+        // ═══════════════════════════════════════════════════════════════════════════
+        log('=== Phase 3: Reconcile with Remote (Git-Native) ===');
+
+        // Capture hash before pull to detect if remote had changes
+        let hashBeforePull: string | null = null;
+        try {
+          const { stdout: beforeHash } = await execAsync(`git rev-parse HEAD`, { cwd: repoRoot });
+          hashBeforePull = beforeHash.trim();
+          log(`Hash before pull: ${hashBeforePull}`);
+        } catch {
+          // Ignore
+        }
+
+        // Attempt pull --rebase to reconcile with remote
+        log('Attempting git pull --rebase origin gitgov-state...');
+        try {
+          await this.git.pullRebase("origin", stateBranch);
+          log('Pull rebase successful - no conflicts');
+
+          // [EARS-54] Check if remote had changes (implicit pull)
+          if (hashBeforePull) {
+            try {
+              const { stdout: afterHash } = await execAsync(`git rev-parse HEAD`, { cwd: repoRoot });
+              const hashAfterPull = afterHash.trim();
+
+              if (hashAfterPull !== hashBeforePull) {
+                // Our commit was rebased on top of remote changes
+                const pulledChangedFiles = await this.git.getChangedFiles(hashBeforePull, hashAfterPull, ".gitgov/");
+                result.implicitPull = {
+                  hasChanges: true,
+                  filesUpdated: pulledChangedFiles.length,
+                  reindexed: false // Will be set to true after actual reindex
+                };
+                log(`[EARS-54] Implicit pull: ${pulledChangedFiles.length} files from remote were rebased`);
+              }
+            } catch (e) {
+              log(`[EARS-54] Could not capture implicit pull details: ${e}`);
+            }
+          }
+        } catch (pullError) {
+          const errorMsg = pullError instanceof Error ? pullError.message : String(pullError);
+          log(`Pull rebase result: ${errorMsg}`);
+
+          const isAlreadyUpToDate = errorMsg.includes("up to date") || errorMsg.includes("up-to-date");
+          const isNoRemote = errorMsg.includes("does not appear to be") || errorMsg.includes("Could not read from remote");
+          const isNoUpstream = errorMsg.includes("no tracking information") || errorMsg.includes("There is no tracking information");
+
+          if (isAlreadyUpToDate || isNoRemote || isNoUpstream) {
+            log('Pull not needed or no remote - continuing to push');
+            // Continue - we'll just push our local commit
+          } else {
+            // Check if it's a conflict - THIS IS THE GIT-NATIVE CONFLICT DETECTION
+            const isRebaseInProgress = await this.isRebaseInProgress();
+            const conflictedFiles = await this.git.getConflictedFiles();
+
+            if (isRebaseInProgress || conflictedFiles.length > 0) {
+              log(`[GIT-NATIVE] Conflict detected! Files: ${conflictedFiles.join(', ')}`);
+
+              // DO NOT abort - leave rebase in progress for user to resolve with git tools
+              result.conflictDetected = true;
+              // Build dynamic resolution steps based on number of conflicted files
+              const fileWord = conflictedFiles.length === 1 ? "file" : "files";
+              const stageCommand = conflictedFiles.length === 1
+                ? `git add ${conflictedFiles[0]}`
+                : "git add .gitgov/";
+
+              result.conflictInfo = {
+                type: "rebase_conflict",
+                affectedFiles: conflictedFiles,
+                message: "Conflict detected during sync - Git has paused the rebase for manual resolution",
+                resolutionSteps: [
+                  `1. Edit the conflicted ${fileWord} to resolve conflicts (remove <<<<<<, ======, >>>>>> markers)`,
+                  `2. Stage resolved ${fileWord}: ${stageCommand}`,
+                  "3. Complete sync: gitgov sync resolve --reason 'your reason'",
+                  "(This will continue the rebase, re-sign the record, and return you to your original branch)"
+                ]
+              };
+              result.error = `Conflict detected: ${conflictedFiles.length} file(s) need manual resolution. Use 'git status' to see details.`;
+
+              // DO NOT restore to original branch - user must resolve in gitgov-state
+              // But restore stash to original branch if there was one
+              if (stashHash) {
+                try {
+                  await this.git.checkoutBranch(sourceBranch);
+                  await execAsync('git stash pop', { cwd: repoRoot });
+                  await this.git.checkoutBranch(stateBranch);
+                  log('Restored stash to original branch during conflict');
+                } catch (stashErr) {
+                  log(`Warning: Could not restore stash: ${stashErr}`);
+                }
+              }
+
+              // CRITICAL: Restore LOCAL_ONLY_FILES and EXCLUDED files (.key) to gitgov-state
+              // These are needed for signing during conflict resolution
+              if (tempDir) {
+                log('Restoring local files (.key, .session.json, etc.) for conflict resolution...');
+                const gitgovInState = path.join(repoRoot, '.gitgov');
+
+                // Restore LOCAL_ONLY_FILES
+                for (const fileName of LOCAL_ONLY_FILES) {
+                  const srcPath = path.join(tempDir, fileName);
+                  const destPath = path.join(gitgovInState, fileName);
+                  try {
+                    await fs.access(srcPath);
+                    await fs.cp(srcPath, destPath, { force: true });
+                    log(`Restored LOCAL_ONLY_FILE for conflict resolution: ${fileName}`);
+                  } catch {
+                    // File doesn't exist in temp, ok
+                  }
+                }
+
+                // Restore EXCLUDED files (like .key) recursively
+                const restoreExcluded = async (srcDir: string, destDir: string) => {
+                  try {
+                    const entries = await fs.readdir(srcDir, { withFileTypes: true });
+                    for (const entry of entries) {
+                      const srcPath = path.join(srcDir, entry.name);
+                      const dstPath = path.join(destDir, entry.name);
+                      if (entry.isDirectory()) {
+                        await restoreExcluded(srcPath, dstPath);
+                      } else {
+                        const isExcluded = SYNC_EXCLUDED_PATTERNS.some(pattern => pattern.test(entry.name));
+                        if (isExcluded) {
+                          await fs.mkdir(path.dirname(dstPath), { recursive: true });
+                          await fs.copyFile(srcPath, dstPath);
+                          log(`Restored EXCLUDED file for conflict resolution: ${entry.name}`);
+                        }
+                      }
+                    }
+                  } catch {
+                    // Directory doesn't exist
+                  }
+                };
+                await restoreExcluded(tempDir, gitgovInState);
+                log('Local files restored for conflict resolution');
+              }
+
+              return result;
+            }
+
+            // Not a conflict, propagate the error
+            throw pullError;
+          }
+        }
+
         // Push
+        log('=== Phase 4: Push to Remote ===');
         log('Pushing to remote...');
         try {
           await this.git.push("origin", stateBranch);
@@ -1366,16 +1752,82 @@ export class SyncModule {
         }
       }
 
-      // [EARS-43] Restore ALL files from temp directory back to working tree
-      // This is CRITICAL: we preserve ENTIRE .gitgov/ including local-only files
+      // [EARS-43] Restore files from temp directory back to working tree
+      // [EARS-56] If implicit pull occurred, we must keep the NEW synced files from gitgov-state,
+      // only restoring LOCAL_ONLY_FILES from tempDir
       if (tempDir) {
-        log('[EARS-43] Restoring ENTIRE .gitgov/ from temp directory to working tree...');
         const repoRoot = await this.git.getRepoRoot();
         const gitgovDir = path.join(repoRoot, '.gitgov');
 
-        // Copy entire temp back to .gitgov/ (this restores ALL files including local-only)
-        await fs.cp(tempDir, gitgovDir, { recursive: true, force: true });
-        log('[EARS-43] Entire .gitgov/ restored from temp');
+        if (result.implicitPull?.hasChanges) {
+          // [EARS-56] Implicit pull occurred - we need to preserve the new files from remote
+          log('[EARS-56] Implicit pull detected - copying synced files from gitgov-state first...');
+
+          // First, checkout the synced directories/files from gitgov-state to work branch
+          // This brings the newly pulled files to the work tree
+          try {
+            await this.git.checkoutFilesFromBranch(stateBranch, ['.gitgov/']);
+            // [EARS-63] Unstage files - git checkout adds them to staging area
+            await execAsync('git reset HEAD .gitgov/ 2>/dev/null || true', { cwd: repoRoot });
+            log('[EARS-56] Synced files copied from gitgov-state to work branch (unstaged)');
+          } catch (checkoutError) {
+            log(`[EARS-56] Warning: Failed to checkout from gitgov-state: ${checkoutError}`);
+            // Fall back to restoring everything from temp
+            await fs.cp(tempDir, gitgovDir, { recursive: true, force: true });
+            log('[EARS-56] Fallback: Entire .gitgov/ restored from temp');
+          }
+
+          // Then, restore LOCAL_ONLY_FILES and EXCLUDED files from tempDir (they're not in gitgov-state)
+          // [EARS-59] This includes .key files which are excluded from sync but must be preserved
+          log('[EARS-56] Restoring local-only files from temp directory...');
+
+          // Restore LOCAL_ONLY_FILES (root level: .session.json, index.json, gitgov)
+          for (const fileName of LOCAL_ONLY_FILES) {
+            const tempFilePath = path.join(tempDir, fileName);
+            const destFilePath = path.join(gitgovDir, fileName);
+            try {
+              await fs.access(tempFilePath);
+              await fs.cp(tempFilePath, destFilePath, { force: true });
+              log(`[EARS-56] Restored LOCAL_ONLY_FILE: ${fileName}`);
+            } catch {
+              // File doesn't exist in temp, that's ok
+            }
+          }
+
+          // [EARS-59] Restore files matching SYNC_EXCLUDED_PATTERNS (e.g., .key files in actors/)
+          // These are local-only files that exist in subdirectories
+          const restoreExcludedFiles = async (dir: string, destDir: string) => {
+            try {
+              const entries = await fs.readdir(dir, { withFileTypes: true });
+              for (const entry of entries) {
+                const srcPath = path.join(dir, entry.name);
+                const dstPath = path.join(destDir, entry.name);
+
+                if (entry.isDirectory()) {
+                  await restoreExcludedFiles(srcPath, dstPath);
+                } else {
+                  // Check if this file matches any excluded pattern
+                  const isExcluded = SYNC_EXCLUDED_PATTERNS.some(pattern => pattern.test(entry.name));
+                  if (isExcluded) {
+                    await fs.mkdir(path.dirname(dstPath), { recursive: true });
+                    await fs.copyFile(srcPath, dstPath);
+                    log(`[EARS-59] Restored excluded file: ${entry.name}`);
+                  }
+                }
+              }
+            } catch {
+              // Directory doesn't exist, that's ok
+            }
+          };
+
+          await restoreExcludedFiles(tempDir, gitgovDir);
+          log('[EARS-59] Local-only and excluded files restored from temp');
+        } else {
+          // No implicit pull - restore everything from temp (original behavior)
+          log('[EARS-43] Restoring ENTIRE .gitgov/ from temp directory to working tree...');
+          await fs.cp(tempDir, gitgovDir, { recursive: true, force: true });
+          log('[EARS-43] Entire .gitgov/ restored from temp');
+        }
 
         // Cleanup temp directory
         log('[EARS-43] Cleaning up temp directory...');
@@ -1384,6 +1836,20 @@ export class SyncModule {
           log('[EARS-43] Temp directory cleaned up');
         } catch (cleanupError) {
           log(`[EARS-43] Warning: Failed to cleanup temp directory: ${cleanupError}`);
+        }
+      }
+
+      // [EARS-54-FIX] If implicit pull occurred, regenerate index NOW (after returning to work branch)
+      // Previously, reindexed: true was just a flag but indexer was never called - BUG!
+      if (result.implicitPull?.hasChanges) {
+        log('[EARS-54] Regenerating index after implicit pull...');
+        try {
+          await this.indexer.generateIndex();
+          result.implicitPull.reindexed = true;
+          log('[EARS-54] Index regenerated successfully after implicit pull');
+        } catch (indexError) {
+          log(`[EARS-54] Warning: Failed to regenerate index after implicit pull: ${indexError}`);
+          result.implicitPull.reindexed = false;
         }
       }
 
@@ -1444,7 +1910,7 @@ export class SyncModule {
   async pullState(
     options: SyncPullOptions = {}
   ): Promise<SyncPullResult> {
-    const { forceReindex = false } = options;
+    const { forceReindex = false, force = false } = options;
     const stateBranch = await this.getStateBranchName();
     if (!stateBranch) {
       throw new SyncError("Failed to get state branch name");
@@ -1554,6 +2020,46 @@ export class SyncModule {
         log(`[EARS-51] Warning: Could not save local files: ${(error as Error).message}`);
       }
 
+      // [EARS-61] Save ALL syncable files BEFORE checkout for conflict detection
+      // We need to compare local changes vs remote changes BEFORE checkout overwrites them
+      const savedSyncableFiles: Map<string, string> = new Map();
+      try {
+        const gitgovPath = path.join(pullRepoRoot, ".gitgov");
+        const gitgovExists = await fs.access(gitgovPath).then(() => true).catch(() => false);
+
+        if (gitgovExists) {
+          // Recursively read all syncable files
+          const readSyncableFilesRecursive = async (dir: string, baseDir: string) => {
+            try {
+              const entries = await fs.readdir(dir, { withFileTypes: true });
+              for (const entry of entries) {
+                const fullPath = path.join(dir, entry.name);
+                const relativePath = path.relative(baseDir, fullPath);
+                const gitgovRelativePath = `.gitgov/${relativePath}`;
+
+                if (entry.isDirectory()) {
+                  await readSyncableFilesRecursive(fullPath, baseDir);
+                } else if (shouldSyncFile(gitgovRelativePath)) {
+                  try {
+                    const content = await fs.readFile(fullPath, 'utf-8');
+                    savedSyncableFiles.set(gitgovRelativePath, content);
+                  } catch {
+                    // Ignore read errors
+                  }
+                }
+              }
+            } catch {
+              // Ignore directory read errors
+            }
+          };
+
+          await readSyncableFilesRecursive(gitgovPath, gitgovPath);
+          log(`[EARS-61] Saved ${savedSyncableFiles.size} syncable files before checkout for conflict detection`);
+        }
+      } catch (error) {
+        log(`[EARS-61] Warning: Could not save syncable files: ${(error as Error).message}`);
+      }
+
       // Checkout to gitgov-state
       // Use force to handle case where .gitgov/ is untracked on work branch
       // but tracked on gitgov-state (would otherwise fail with "would be overwritten")
@@ -1607,9 +2113,126 @@ export class SyncModule {
       });
       const hashBefore = commitBefore[0]?.hash;
 
-      // 3. Fetch + Pull --rebase (EARS-13, EARS-14)
+      // 3. Fetch to get remote refs
       await this.git.fetch("origin");
 
+      // ═══════════════════════════════════════════════════════════
+      // [EARS-61] CONFLICT DETECTION: Detect if local changes would be overwritten
+      // Compare: savedSyncableFiles (captured BEFORE checkout) vs gitgov-state vs origin/gitgov-state
+      // If same file modified locally AND remotely → abort like git pull does
+      // ═══════════════════════════════════════════════════════════
+      log('[EARS-61] Checking for local changes that would be overwritten...');
+
+      // Step 1: Get files that changed in remote (origin/gitgov-state vs local gitgov-state)
+      let remoteChangedFiles: string[] = [];
+      try {
+        const { stdout: remoteChanges } = await execAsync(
+          `git diff --name-only ${stateBranch} origin/${stateBranch} -- .gitgov/ 2>/dev/null || true`,
+          { cwd: pullRepoRoot }
+        );
+        remoteChangedFiles = remoteChanges.trim().split('\n').filter(f => f && shouldSyncFile(f));
+        log(`[EARS-61] Remote changed files: ${remoteChangedFiles.length} - ${remoteChangedFiles.join(', ')}`);
+      } catch {
+        log('[EARS-61] Could not determine remote changes, continuing...');
+      }
+
+      // Step 2: Check if local files (saved BEFORE checkout) differ from gitgov-state HEAD
+      // This detects: user edited file locally that was also edited remotely
+      let localModifiedFiles: string[] = [];
+      if (remoteChangedFiles.length > 0 && savedSyncableFiles.size > 0) {
+        try {
+          for (const remoteFile of remoteChangedFiles) {
+            // Check if we have a saved version of this file (from before checkout)
+            const savedContent = savedSyncableFiles.get(remoteFile);
+
+            if (savedContent !== undefined) {
+              // Get content from gitgov-state HEAD (what was synced last time)
+              try {
+                const { stdout: gitStateContent } = await execAsync(
+                  `git show HEAD:${remoteFile} 2>/dev/null`,
+                  { cwd: pullRepoRoot }
+                );
+
+                // Compare saved local content vs last synced content
+                // If different, user modified this file locally since last sync
+                if (savedContent !== gitStateContent) {
+                  localModifiedFiles.push(remoteFile);
+                  log(`[EARS-61] Local file was modified since last sync: ${remoteFile}`);
+                }
+              } catch {
+                // File doesn't exist in gitgov-state HEAD (new file locally)
+                // This is also a local modification
+                localModifiedFiles.push(remoteFile);
+                log(`[EARS-61] Local file is new (not in gitgov-state): ${remoteFile}`);
+              }
+            }
+          }
+          log(`[EARS-61] Local modified files that overlap with remote: ${localModifiedFiles.length}`);
+        } catch (error) {
+          log(`[EARS-61] Warning: Could not check local modifications: ${(error as Error).message}`);
+        }
+      }
+
+      // Step 3: If there's overlap (same file modified locally AND remotely)
+      if (localModifiedFiles.length > 0) {
+        // [EARS-62] If force flag is set, continue and overwrite local changes
+        if (force) {
+          log(`[EARS-62] Force flag set - will overwrite ${localModifiedFiles.length} local file(s)`);
+          logger.warn(`[pullState] Force pull: overwriting local changes to ${localModifiedFiles.length} file(s)`);
+          result.forcedOverwrites = localModifiedFiles;
+        } else {
+          // [EARS-61] Abort and restore local changes
+          log(`[EARS-61] CONFLICT: Local changes would be overwritten by pull`);
+
+          // Return to original branch before aborting
+          await this.git.checkoutBranch(savedBranch);
+
+          // Restore ALL saved syncable files (user's local changes that would be overwritten)
+          for (const [filePath, content] of savedSyncableFiles) {
+            const fullPath = path.join(pullRepoRoot, filePath);
+            try {
+              await fs.mkdir(path.dirname(fullPath), { recursive: true });
+              await fs.writeFile(fullPath, content, "utf-8");
+              log(`[EARS-61] Restored syncable file: ${filePath}`);
+            } catch {
+              // Ignore restore errors
+            }
+          }
+
+          // Also restore LOCAL_ONLY_FILES
+          for (const [fileName, content] of savedLocalFiles) {
+            const filePath = path.join(pullRepoRoot, ".gitgov", fileName);
+            try {
+              await fs.mkdir(path.dirname(filePath), { recursive: true });
+              await fs.writeFile(filePath, content, "utf-8");
+              log(`[EARS-61] Restored local-only file: ${fileName}`);
+            } catch {
+              // Ignore restore errors
+            }
+          }
+
+          result.success = false;
+          result.conflictDetected = true;
+          result.conflictInfo = {
+            type: "local_changes_conflict",
+            affectedFiles: localModifiedFiles,
+            message: `Your local changes to the following files would be overwritten by pull.\nYou have modified these files locally, and they were also modified remotely.\nTo avoid losing your changes, push first or use --force to overwrite.`,
+            resolutionSteps: [
+              "1. Run 'gitgov sync push' to push your local changes first",
+              "   → This will trigger a rebase and let you resolve conflicts properly",
+              "2. Or run 'gitgov sync pull --force' to discard your local changes",
+            ],
+          };
+          result.error = "Aborting pull: local changes would be overwritten by remote changes";
+
+          logger.warn(`[pullState] Aborting: local changes to ${localModifiedFiles.length} file(s) would be overwritten by pull`);
+          return result;
+        }
+      }
+
+      log('[EARS-61] No conflicting local changes (or force enabled), proceeding with pull...');
+
+      // 4. Pull --rebase (EARS-13, EARS-14)
       try {
         await this.git.pullRebase("origin", stateBranch);
       } catch (error) {
@@ -1654,8 +2277,13 @@ export class SyncModule {
       const hasNewChanges = hashBefore !== hashAfter;
       result.hasChanges = hasNewChanges;
 
-      // 5. Re-index if there are new changes or force requested (EARS-15, EARS-16)
-      if (hasNewChanges || forceReindex) {
+      // 5. Calculate if reindex is needed (EARS-15, EARS-16, EARS-52)
+      // NOTE: Actual reindex happens AFTER file restoration in Phase 4
+      // [EARS-52] Also reindex if index.json doesn't exist (bootstrap scenario)
+      const indexPath = path.join(pullRepoRoot, '.gitgov', 'index.json');
+      const indexExists = await fs.access(indexPath).then(() => true).catch(() => false);
+      const shouldReindex = hasNewChanges || forceReindex || !indexExists;
+      if (shouldReindex) {
         result.reindexed = true;
 
         // Calculate number of changed files
@@ -1666,16 +2294,6 @@ export class SyncModule {
             ".gitgov/"
           );
           result.filesUpdated = changedFiles.length;
-        }
-
-        // Invoke indexer to regenerate cache (EARS-15, EARS-16)
-        logger.info("Invoking IndexerAdapter.generateIndex() after pull...");
-        try {
-          await this.indexer.generateIndex();
-          logger.info("Index regenerated successfully");
-        } catch (error) {
-          logger.warn(`Failed to regenerate index: ${(error as Error).message}`);
-          // Non-critical: index regeneration failure doesn't fail the pull
         }
       }
 
@@ -1759,6 +2377,19 @@ export class SyncModule {
         }
       }
 
+      // [EARS-15, EARS-16, EARS-52] Invoke indexer AFTER file restoration is complete
+      // This ensures the index reflects the latest pulled files, not the old saved index.json
+      if (shouldReindex) {
+        logger.info("Invoking IndexerAdapter.generateIndex() after pull...");
+        try {
+          await this.indexer.generateIndex();
+          logger.info("Index regenerated successfully");
+        } catch (error) {
+          logger.warn(`Failed to regenerate index: ${(error as Error).message}`);
+          // Non-critical: index regeneration failure doesn't fail the pull
+        }
+      }
+
       result.success = true;
       log(`=== pullState COMPLETED: ${hasNewChanges ? 'new changes pulled' : 'no changes'}, reindexed: ${result.reindexed} ===`);
       return result;
@@ -1776,9 +2407,20 @@ export class SyncModule {
   }
 
   /**
-   * Resolves state conflicts in a governed manner.
-   * Updates resolved Records (recalculates checksum and adds resolver signature),
-   * creates rebase and resolution commits signed according to protocol.
+   * Resolves state conflicts in a governed manner (Git-Native).
+   *
+   * Git-Native Flow:
+   * 1. User resolves conflicts using standard Git tools (edit files, remove markers)
+   * 2. User stages resolved files: git add .gitgov/
+   * 3. User runs: gitgov sync resolve --reason "reason"
+   *
+   * This method:
+   * - Verifies that a rebase is in progress
+   * - Checks that no conflict markers remain in staged files
+   * - Updates resolved Records with new checksums and signatures
+   * - Continues the git rebase (git rebase --continue)
+   * - Creates a signed resolution commit
+   * - Regenerates the index
    *
    * [EARS-17 through EARS-23]
    */
@@ -1789,18 +2431,22 @@ export class SyncModule {
 
     // Debug logging helper
     const log = (msg: string) => logger.debug(`[resolveConflict] ${msg}`);
-    log('=== STARTING resolveConflict ===');
+    log('=== STARTING resolveConflict (Git-Native) ===');
 
     // ═══════════════════════════════════════════════════════════
     // PHASE 0: Pre-flight Checks (EARS-17, EARS-18)
+    // Git-Native: Only rebase conflicts exist now
     // ═══════════════════════════════════════════════════════════
-    log('Phase 0: Verifying rebase state...');
+    log('Phase 0: Verifying rebase in progress...');
 
-    // 1. Verify rebase is in progress (EARS-17)
+    // 1. Check if rebase is in progress (EARS-17)
     const rebaseInProgress = await this.isRebaseInProgress();
+
     if (!rebaseInProgress) {
       throw new NoRebaseInProgressError();
     }
+
+    log('Conflict mode: rebase_conflict (Git-Native)');
 
     // 2. Get STAGED files (user already resolved and added them)
     console.log("[resolveConflict] Getting staged files...");
@@ -1808,7 +2454,7 @@ export class SyncModule {
     console.log("[resolveConflict] All staged files:", allStagedFiles);
 
     // Filter to only .gitgov/*.json files (Records)
-    const resolvedRecords = allStagedFiles.filter(f =>
+    let resolvedRecords = allStagedFiles.filter(f =>
       f.startsWith('.gitgov/') && f.endsWith('.json')
     );
     console.log("[resolveConflict] Resolved Records (staged .gitgov/*.json):", resolvedRecords);
@@ -1821,8 +2467,46 @@ export class SyncModule {
       throw new ConflictMarkersPresentError(filesWithMarkers);
     }
 
-    // 4. Update resolved Records (EARS-19)
-    console.log("[resolveConflict] Updating resolved Records...");
+    let rebaseCommitHash = "";
+
+    // 4. Continue git rebase FIRST (EARS-20) - Git-Native flow
+    // This completes the rebase with user's resolved files
+    console.log("[resolveConflict] Step 4: Calling git.rebaseContinue()...");
+    await this.git.rebaseContinue();
+    console.log("[resolveConflict] rebaseContinue completed successfully");
+
+    // Get rebase commit hash
+    const currentBranch = await this.git.getCurrentBranch();
+    const rebaseCommit = await this.git.getCommitHistory(currentBranch, {
+      maxCount: 1,
+    });
+    rebaseCommitHash = rebaseCommit[0]?.hash ?? "";
+
+    // 4b. Get resolved files from the rebase commit (since getStagedFiles doesn't work during rebase)
+    // The files that were modified in the rebase commit are the ones that had conflicts
+    if (resolvedRecords.length === 0 && rebaseCommitHash) {
+      console.log("[resolveConflict] No staged files detected, getting files from rebase commit...");
+      const repoRoot = await this.git.getRepoRoot();
+      try {
+        // Get files changed in the rebase commit
+        const { stdout } = await execAsync(
+          `git diff-tree --no-commit-id --name-only -r ${rebaseCommitHash}`,
+          { cwd: repoRoot }
+        );
+        const commitFiles = stdout.trim().split('\n').filter(f => f);
+        // Filter to .gitgov/*.json files
+        resolvedRecords = commitFiles.filter(f =>
+          f.startsWith('.gitgov/') && f.endsWith('.json')
+        );
+        console.log("[resolveConflict] Files from rebase commit:", resolvedRecords);
+      } catch (e) {
+        console.log("[resolveConflict] Could not get files from rebase commit:", e);
+      }
+    }
+
+    // 5. NOW update resolved Records with new checksums and signatures (EARS-19)
+    // This happens AFTER rebase so we can create a separate signed resolution commit
+    console.log("[resolveConflict] Updating resolved Records with signatures...");
     if (resolvedRecords.length > 0) {
       // Get current actor for signing
       const currentActor = await this.identity.getCurrentActor();
@@ -1847,10 +2531,12 @@ export class SyncModule {
           }
 
           // Re-sign the record (this recalculates checksum AND adds new signature)
+          // Pass the reason as notes for the signature
           const signedRecord = await this.identity.signRecord(
             record,
             currentActor.id,
-            'resolver'
+            'resolver',
+            `Conflict resolved: ${reason}`
           );
 
           // Write back the updated Record
@@ -1865,42 +2551,177 @@ export class SyncModule {
         }
       }
 
-      console.log("[resolveConflict] All Records updated, re-staging...");
+      console.log("[resolveConflict] All Records updated, staging...");
     }
 
-    // 5. Re-stage resolved files (now includes updated Records with new checksums/signatures)
-    console.log("[resolveConflict] Re-staging .gitgov/ with updated metadata...");
+    // 6. Stage updated files with new checksums/signatures
+    console.log("[resolveConflict] Staging .gitgov/ with updated metadata...");
     // Use force: true because .gitgov/ may be in .gitignore (by design)
     await this.git.add([".gitgov"], { force: true });
-
-    // 6. Continue rebase (creates technical commit) (EARS-20)
-    console.log("[resolveConflict] Step 6: Calling git.rebaseContinue() (THIS MAY HANG)...");
-    await this.git.rebaseContinue();
-    console.log("[resolveConflict] rebaseContinue completed successfully");
-
-    // Get rebase commit hash
-    const currentBranch = await this.git.getCurrentBranch();
-    const rebaseCommit = await this.git.getCommitHistory(currentBranch, {
-      maxCount: 1,
-    });
-    const rebaseCommitHash = rebaseCommit[0]?.hash ?? "";
 
     // 7. Create signed resolution commit (EARS-21)
     const timestamp = new Date().toISOString();
     const resolutionMessage =
-      `resolution: Conflict resolved by ${actorId}\n\n` +
+      `resolution: conflict resolved by ${actorId}\n\n` +
       `Actor: ${actorId}\n` +
       `Timestamp: ${timestamp}\n` +
       `Reason: ${reason}\n` +
       `Files: ${resolvedRecords.length} file(s) resolved\n\n` +
       `Signed-off-by: ${actorId}`;
 
-    // Create resolution commit (may be empty if no additional changes)
-    const resolutionCommitHash = await this.git.commitAllowEmpty(
-      resolutionMessage
-    );
+    // Create resolution commit (may have signature updates or be empty if no records to sign)
+    let resolutionCommitHash = "";
+    try {
+      resolutionCommitHash = await this.git.commit(resolutionMessage);
+    } catch (commitError) {
+      // If nothing to commit (no records needed re-signing), that's OK
+      const stdout = (commitError as any).stdout || '';
+      const stderr = (commitError as any).stderr || '';
 
-    // 8. Re-index after conflict resolution (EARS-20)
+      const isNothingToCommit =
+        stdout.includes('nothing to commit') ||
+        stderr.includes('nothing to commit') ||
+        stdout.includes('nothing added to commit') ||
+        stderr.includes('nothing added to commit');
+
+      if (isNothingToCommit) {
+        log('No additional changes to commit (no records needed re-signing)');
+        // Use the rebase commit hash as the resolution hash
+        resolutionCommitHash = rebaseCommitHash;
+      } else {
+        throw commitError;
+      }
+    }
+
+    // 8. Push to remote (best effort - don't fail if no remote)
+    log('Pushing resolved state to remote...');
+    try {
+      await this.git.push("origin", "gitgov-state");
+      log('Push successful');
+    } catch (pushError) {
+      // Don't fail resolution just because push failed - local commit is enough
+      // This handles: no remote, no network, permission denied, etc.
+      const pushErrorMsg = pushError instanceof Error ? pushError.message : String(pushError);
+      log(`Push failed (non-fatal): ${pushErrorMsg}`);
+    }
+
+    // 9. Return to original branch and restore .gitgov/ files
+    // This is complex because:
+    // - In main branch, .gitgov/ is in .gitignore (untracked)
+    // - When we checkout from gitgov-state to main, Git doesn't preserve untracked files
+    // - We need to: save local-only files, checkout, restore from gitgov-state, restore local-only
+    log('Returning to original branch and restoring .gitgov/ files...');
+    const repoRoot = await this.git.getRepoRoot();
+    const gitgovDir = path.join(repoRoot, '.gitgov');
+
+    // 9a. Save LOCAL_ONLY_FILES and EXCLUDED files to temp BEFORE checkout
+    const tempDir = path.join(os.tmpdir(), `gitgov-resolve-${Date.now()}`);
+    await fs.mkdir(tempDir, { recursive: true });
+    log(`Created temp directory for local files: ${tempDir}`);
+
+    // Save LOCAL_ONLY_FILES
+    for (const fileName of LOCAL_ONLY_FILES) {
+      const srcPath = path.join(gitgovDir, fileName);
+      const destPath = path.join(tempDir, fileName);
+      try {
+        await fs.access(srcPath);
+        await fs.cp(srcPath, destPath, { force: true });
+        log(`Saved LOCAL_ONLY_FILE to temp: ${fileName}`);
+      } catch {
+        // File doesn't exist, ok
+      }
+    }
+
+    // Save EXCLUDED files (like .key files) recursively
+    const saveExcludedFiles = async (srcDir: string, destDir: string) => {
+      try {
+        const entries = await fs.readdir(srcDir, { withFileTypes: true });
+        for (const entry of entries) {
+          const srcPath = path.join(srcDir, entry.name);
+          const dstPath = path.join(destDir, entry.name);
+          if (entry.isDirectory()) {
+            await fs.mkdir(dstPath, { recursive: true });
+            await saveExcludedFiles(srcPath, dstPath);
+          } else {
+            const isExcluded = SYNC_EXCLUDED_PATTERNS.some(pattern => pattern.test(entry.name));
+            if (isExcluded) {
+              await fs.mkdir(path.dirname(dstPath), { recursive: true });
+              await fs.copyFile(srcPath, dstPath);
+              log(`Saved EXCLUDED file to temp: ${entry.name}`);
+            }
+          }
+        }
+      } catch {
+        // Directory doesn't exist
+      }
+    };
+    await saveExcludedFiles(gitgovDir, tempDir);
+
+    // 9b. Checkout to original branch
+    try {
+      await execAsync('git checkout -', { cwd: repoRoot });
+      log('Returned to original branch');
+    } catch (checkoutError) {
+      log(`Warning: Could not return to original branch: ${checkoutError}`);
+    }
+
+    // 9c. Restore .gitgov/ from gitgov-state branch
+    log('Restoring .gitgov/ from gitgov-state...');
+    try {
+      await this.git.checkoutFilesFromBranch('gitgov-state', ['.gitgov/']);
+      // [EARS-63] Unstage files - git checkout adds them to staging area
+      await execAsync('git reset HEAD .gitgov/ 2>/dev/null || true', { cwd: repoRoot });
+      log('Restored .gitgov/ from gitgov-state (unstaged)');
+    } catch (checkoutFilesError) {
+      log(`Warning: Could not restore .gitgov/ from gitgov-state: ${checkoutFilesError}`);
+    }
+
+    // 9d. Restore LOCAL_ONLY_FILES from temp
+    for (const fileName of LOCAL_ONLY_FILES) {
+      const srcPath = path.join(tempDir, fileName);
+      const destPath = path.join(gitgovDir, fileName);
+      try {
+        await fs.access(srcPath);
+        await fs.cp(srcPath, destPath, { force: true });
+        log(`Restored LOCAL_ONLY_FILE from temp: ${fileName}`);
+      } catch {
+        // File wasn't saved, ok
+      }
+    }
+
+    // 9e. Restore EXCLUDED files from temp
+    const restoreExcludedFiles = async (srcDir: string, destDir: string) => {
+      try {
+        const entries = await fs.readdir(srcDir, { withFileTypes: true });
+        for (const entry of entries) {
+          const srcPath = path.join(srcDir, entry.name);
+          const dstPath = path.join(destDir, entry.name);
+          if (entry.isDirectory()) {
+            await restoreExcludedFiles(srcPath, dstPath);
+          } else {
+            const isExcluded = SYNC_EXCLUDED_PATTERNS.some(pattern => pattern.test(entry.name));
+            if (isExcluded) {
+              await fs.mkdir(path.dirname(dstPath), { recursive: true });
+              await fs.copyFile(srcPath, dstPath);
+              log(`Restored EXCLUDED file from temp: ${entry.name}`);
+            }
+          }
+        }
+      } catch {
+        // Directory doesn't exist
+      }
+    };
+    await restoreExcludedFiles(tempDir, gitgovDir);
+
+    // 9f. Cleanup temp
+    try {
+      await fs.rm(tempDir, { recursive: true, force: true });
+      log('Temp directory cleaned up');
+    } catch {
+      // Cleanup failure is not critical
+    }
+
+    // 10. Re-index after conflict resolution (EARS-20)
     logger.info("Invoking IndexerAdapter.generateIndex() after conflict resolution...");
     try {
       await this.indexer.generateIndex();
