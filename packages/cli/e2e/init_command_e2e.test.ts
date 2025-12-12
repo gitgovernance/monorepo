@@ -66,7 +66,7 @@ describe('Init CLI Command - Edge Cases E2E Tests', () => {
   // Helper to create a fresh git repo
   const createGitRepo = (repoPath: string, withInitialCommit: boolean = true) => {
     fs.mkdirSync(repoPath, { recursive: true });
-    execSync('git init', { cwd: repoPath, stdio: 'pipe' });
+    execSync('git init --initial-branch=main', { cwd: repoPath, stdio: 'pipe' });
     execSync('git config user.name "Test User"', { cwd: repoPath, stdio: 'pipe' });
     execSync('git config user.email "test@example.com"', { cwd: repoPath, stdio: 'pipe' });
 
@@ -176,20 +176,14 @@ describe('Init CLI Command - Edge Cases E2E Tests', () => {
       const remoteBranches = execSync('git ls-remote --heads origin gitgov-state', { cwd: testProjectRoot, encoding: 'utf8' });
       expect(remoteBranches.trim()).toContain('gitgov-state');
 
-      // 7. Checkout gitgov-state and verify it has files
-      // Note: Remove local .gitgov/ first because it's untracked in main but tracked in gitgov-state
-      fs.rmSync(path.join(testProjectRoot, '.gitgov'), { recursive: true, force: true });
+      // 7. Verify gitgov-state has files using git ls-tree (avoids checkout conflicts with untracked .gitgov/)
       execSync('git fetch origin gitgov-state', { cwd: testProjectRoot, stdio: 'pipe' });
-      execSync('git checkout gitgov-state', { cwd: testProjectRoot, stdio: 'pipe' });
+      const stateFiles = execSync('git ls-tree -r --name-only origin/gitgov-state', { cwd: testProjectRoot, encoding: 'utf8' });
 
-      // Verify .gitgov/ exists with expected structure
-      expect(fs.existsSync(path.join(testProjectRoot, '.gitgov'))).toBe(true);
-      expect(fs.existsSync(path.join(testProjectRoot, '.gitgov', 'config.json'))).toBe(true);
-      expect(fs.existsSync(path.join(testProjectRoot, '.gitgov', 'actors'))).toBe(true);
-      expect(fs.existsSync(path.join(testProjectRoot, '.gitgov', 'cycles'))).toBe(true);
-
-      // Return to main
-      execSync('git checkout main', { cwd: testProjectRoot, stdio: 'pipe' });
+      // Verify .gitgov/ exists with expected structure in gitgov-state branch
+      expect(stateFiles).toContain('.gitgov/config.json');
+      expect(stateFiles).toMatch(/\.gitgov\/actors\/.*\.json/);
+      expect(stateFiles).toMatch(/\.gitgov\/cycles\/.*\.json/);
     });
   });
 
@@ -248,24 +242,14 @@ describe('Init CLI Command - Edge Cases E2E Tests', () => {
       const pushResult = runCliCommand(['sync', 'push'], { cwd: testProjectRoot });
       expect(pushResult.success).toBe(true);
 
-      // Checkout gitgov-state and verify it has files
-      // Note: Remove local .gitgov/ first because it's untracked in main but tracked in gitgov-state
-      fs.rmSync(path.join(testProjectRoot, '.gitgov'), { recursive: true, force: true });
+      // Verify gitgov-state has files using git ls-tree (avoids checkout conflicts with untracked .gitgov/)
       execSync('git fetch origin gitgov-state', { cwd: testProjectRoot, stdio: 'pipe' });
-      execSync('git checkout gitgov-state', { cwd: testProjectRoot, stdio: 'pipe' });
+      const stateFiles = execSync('git ls-tree -r --name-only origin/gitgov-state', { cwd: testProjectRoot, encoding: 'utf8' });
 
-      // Verify .gitgov/ exists with expected structure
-      expect(fs.existsSync(path.join(testProjectRoot, '.gitgov'))).toBe(true);
-      expect(fs.existsSync(path.join(testProjectRoot, '.gitgov', 'config.json'))).toBe(true);
-      expect(fs.existsSync(path.join(testProjectRoot, '.gitgov', 'actors'))).toBe(true);
-      expect(fs.existsSync(path.join(testProjectRoot, '.gitgov', 'cycles'))).toBe(true);
-
-      // Verify at least one actor file exists
-      const actorFiles = fs.readdirSync(path.join(testProjectRoot, '.gitgov', 'actors'));
-      expect(actorFiles.length).toBeGreaterThan(0);
-
-      // Return to main
-      execSync('git checkout main', { cwd: testProjectRoot, stdio: 'pipe' });
+      // Verify .gitgov/ exists with expected structure in gitgov-state branch
+      expect(stateFiles).toContain('.gitgov/config.json');
+      expect(stateFiles).toMatch(/\.gitgov\/actors\/.*\.json/);
+      expect(stateFiles).toMatch(/\.gitgov\/cycles\/.*\.json/);
     });
   });
 

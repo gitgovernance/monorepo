@@ -266,10 +266,17 @@ describe('Sync CLI Commands - E2E Tests', () => {
       const pushResult = runCliCommand(['sync', 'push'], { cwd: testProjectRoot });
       expect(pushResult.success).toBe(true);
 
-      // 7. Verify output mentions pulled files or reconciliation
-      // The output should indicate that remote changes were pulled
-      const output = pushResult.output;
-      expect(output).toMatch(/Pulled|reconcil|remote|files.*updated|rebase|implicit/i);
+      // 7. Verify both tasks exist in local .gitgov (proves merge/reconciliation worked)
+      // This is a more reliable check than parsing output text
+      const tasksDir = path.join(testProjectRoot, '.gitgov', 'tasks');
+      const taskFiles = fs.readdirSync(tasksDir).filter(f => f.endsWith('.json'));
+      const allTasksContent = taskFiles.map(f =>
+        fs.readFileSync(path.join(tasksDir, f), 'utf-8')
+      ).join(' ');
+
+      // Verify Remote Task from clone is present (proves implicit pull worked)
+      expect(allTasksContent).toContain('Remote Task');
+      expect(allTasksContent).toContain('Local Task');
     });
 
     it('[EARS-54-FIX] WHEN implicit pull occurs THEN index SHALL be regenerated', () => {

@@ -2277,9 +2277,12 @@ gitgov
       const hasNewChanges = hashBefore !== hashAfter;
       result.hasChanges = hasNewChanges;
 
-      // 5. Calculate if reindex is needed (EARS-15, EARS-16)
+      // 5. Calculate if reindex is needed (EARS-15, EARS-16, EARS-52)
       // NOTE: Actual reindex happens AFTER file restoration in Phase 4
-      const shouldReindex = hasNewChanges || forceReindex;
+      // [EARS-52] Also reindex if index.json doesn't exist (bootstrap scenario)
+      const indexPath = path.join(pullRepoRoot, '.gitgov', 'index.json');
+      const indexExists = await fs.access(indexPath).then(() => true).catch(() => false);
+      const shouldReindex = hasNewChanges || forceReindex || !indexExists;
       if (shouldReindex) {
         result.reindexed = true;
 
