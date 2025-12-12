@@ -1,3 +1,18 @@
+## [1.14.0](https://github.com/gitgovernance/monorepo/compare/cli-v1.13.1...cli-v1.14.0) (2025-12-12)
+
+
+### 🚀 Features
+
+* **cli:** restore original CLI description ([#75](https://github.com/gitgovernance/monorepo/issues/75)) ([323dbfd](https://github.com/gitgovernance/monorepo/commit/323dbfde376b13e6c7ea9f25966451048bf713b8))
+* **cli:** simplify description ([#74](https://github.com/gitgovernance/monorepo/issues/74)) ([3deb4e7](https://github.com/gitgovernance/monorepo/commit/3deb4e7f9546d1f25ab0062e4db71e4e2754b19e))
+* **cli:** update CLI description ([#72](https://github.com/gitgovernance/monorepo/issues/72)) ([b658391](https://github.com/gitgovernance/monorepo/commit/b658391514b03cface9906c2ff5c0690fc6c5794))
+* **cli:** update description wording ([#73](https://github.com/gitgovernance/monorepo/issues/73)) ([5ec571b](https://github.com/gitgovernance/monorepo/commit/5ec571bc390e2d14d69f3ca43844be01052e6bd4))
+
+
+### 🐛 Bug Fixes
+
+* **cli:** use --initial-branch=main in sync e2e tests ([#71](https://github.com/gitgovernance/monorepo/issues/71)) ([59aab5c](https://github.com/gitgovernance/monorepo/commit/59aab5c713de4816dc40746b268c3187f2b99155))
+
 ## [1.13.0](https://github.com/gitgovernance/monorepo/compare/cli-v1.12.1...cli-v1.13.0) (2025-12-12)
 
 
