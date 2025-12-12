@@ -18,7 +18,7 @@ const program = new Command();
 
 program
   .name('gitgov')
-  .description('GitGovernance CLI - AI-first governance for intelligent work')
+  .description('GitGovernance CLI - AI-first governance for software teams')
   .version(packageJson.version);
 
 // Setup dependency injection and register commands
