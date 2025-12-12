@@ -471,7 +471,7 @@ describe('InitCommand - Complete Unit Tests', () => {
         actorName: 'Demo User'
       });
 
-      expect(mockConsoleLog).toHaveBeenCalledWith('\n✅ GitGovernance initialized successfully!\n');
+      expect(mockConsoleLog).toHaveBeenCalledWith('✅ GitGovernance initialized successfully!\n');
       expect(mockConsoleLog).toHaveBeenCalledWith('🏗️  Project Structure Created:');
       expect(mockConsoleLog).toHaveBeenCalledWith('🔐 Cryptographic Trust Established:');
       expect(mockConsoleLog).toHaveBeenCalledWith('🎯 Root Cycle Created:');

@@ -359,7 +359,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       });
       mockedCalculatePayloadChecksum.mockReturnValue('calculated-checksum');
 
-      const signedRecord = await identityAdapter.signRecord(mockRecord, 'human:test-user', 'author');
+      const signedRecord = await identityAdapter.signRecord(mockRecord, 'human:test-user', 'author', 'Record signed');
 
       // Should have 2 signatures: original + new real signature
       expect(signedRecord.header.signatures).toHaveLength(2);
@@ -418,7 +418,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       const originalWarn = console.warn;
       console.warn = jest.fn();
 
-      const signedRecord = await identityAdapter.signRecord(mockRecord, 'human:test-user', 'author');
+      const signedRecord = await identityAdapter.signRecord(mockRecord, 'human:test-user', 'author', 'Record signed');
 
       // Should have 2 signatures: original + new mock signature
       expect(signedRecord.header.signatures).toHaveLength(2);
@@ -454,7 +454,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
 
       mockActorStore.read.mockResolvedValue(null);
 
-      await expect(identityAdapter.signRecord(mockRecord, 'non-existent', 'author'))
+      await expect(identityAdapter.signRecord(mockRecord, 'non-existent', 'author', 'Test signature'))
         .rejects.toThrow('Actor not found: non-existent');
     });
 
@@ -488,7 +488,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       const originalWarn = console.warn;
       console.warn = jest.fn();
 
-      const signedRecord = await identityAdapter.signRecord(mockRecord, 'human:test-user', 'author');
+      const signedRecord = await identityAdapter.signRecord(mockRecord, 'human:test-user', 'author', 'Placeholder replacement');
 
       // Should have only 1 signature (placeholder replaced, not added)
       expect(signedRecord.header.signatures).toHaveLength(1);

@@ -197,7 +197,7 @@ describe('TaskCommand - Complete Unit Tests', () => {
     getAllTasks: jest.MockedFunction<() => Promise<Records.TaskRecord[]>>;
     submitTask: jest.MockedFunction<(taskId: string, actorId: string) => Promise<Records.TaskRecord>>;
     approveTask: jest.MockedFunction<(taskId: string, actorId: string) => Promise<Records.TaskRecord>>;
-    updateTask: jest.MockedFunction<(taskId: string, payload: Partial<Records.TaskRecord>) => Promise<Records.TaskRecord>>;
+    updateTask: jest.MockedFunction<(taskId: string, payload: Partial<Records.TaskRecord>, actorId: string) => Promise<Records.TaskRecord>>;
     pauseTask: jest.MockedFunction<(taskId: string, actorId: string, reason?: string) => Promise<Records.TaskRecord>>;
     resumeTask: jest.MockedFunction<(taskId: string, actorId: string, force?: boolean) => Promise<Records.TaskRecord>>;
     deleteTask: jest.MockedFunction<(taskId: string, actorId: string) => Promise<void>>;
@@ -669,7 +669,7 @@ const test = "value";
       expect(mockIndexerAdapter.invalidateCache).toHaveBeenCalled();
     });
 
-    it('[EARS-7] should validate immutability before editing description', async () => {
+    it('[EARS-11] should validate immutability before editing description and pass actorId', async () => {
       mockBacklogAdapter.getTask.mockResolvedValue(sampleTask);
       mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
       mockBacklogAdapter.updateTask.mockResolvedValue({ ...sampleTask, description: 'Updated' });
@@ -678,7 +678,31 @@ const test = "value";
       await taskCommand.executeEdit('1757789000-task-test-task', { description: 'Updated description' });
 
       expect(mockConsoleWarn).toHaveBeenCalledWith('⚠️ Description editing - in production would check execution records for immutability');
-      expect(mockBacklogAdapter.updateTask).toHaveBeenCalled();
+      // CRITICAL: Verify actorId is passed to updateTask (this was the bug that broke production)
+      expect(mockBacklogAdapter.updateTask).toHaveBeenCalledWith(
+        '1757789000-task-test-task',
+        { description: 'Updated description' },
+        'human:test-user'
+      );
+    });
+
+    it('[EARS-11B] should pass actorId when editing priority (regression test for actorId bug)', async () => {
+      mockBacklogAdapter.getTask.mockResolvedValue(sampleTask);
+      mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
+      mockBacklogAdapter.updateTask.mockResolvedValue({ ...sampleTask, priority: 'critical' as const });
+      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+
+      await taskCommand.executeEdit('1757789000-task-test-task', { priority: 'critical' });
+
+      // CRITICAL: This test exists because we had a production bug where actorId was missing
+      // The error was: "Cannot read properties of undefined (reading 'replace')"
+      // which happened because updateTask was called without the actorId parameter
+      expect(mockBacklogAdapter.updateTask).toHaveBeenCalledWith(
+        '1757789000-task-test-task',
+        { priority: 'critical' },
+        'human:test-user'
+      );
+      expect(mockConsoleLog).toHaveBeenCalledWith('✅ Task updated: 1757789000-task-test-task');
     });
 
     it('[EARS-8] should show educational message for epic promotion', async () => {
@@ -933,6 +957,60 @@ const test = "value";
       expect(mockConsoleError).toHaveBeenCalledWith(expect.stringContaining("Cannot delete task in 'ready' state"));
       expect(mockConsoleError).toHaveBeenCalledWith(expect.stringContaining('gitgov task cancel'));
       expect(mockProcessExit).toHaveBeenCalledWith(1);
+    });
+
+    it('[EARS-35B] should pass actorId and reason when cancelling task (regression test)', async () => {
+      const discardedTask = { ...sampleTask, status: 'discarded' as const };
+
+      mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
+      mockBacklogAdapter.discardTask.mockResolvedValue(discardedTask);
+      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+
+      await taskCommand.executeCancel('1757789000-task-test-task', { reason: 'No longer needed' });
+
+      // CRITICAL: Verify actorId and reason are passed correctly to discardTask
+      // This test exists to prevent regression where parameters could be missing
+      expect(mockBacklogAdapter.discardTask).toHaveBeenCalledWith(
+        '1757789000-task-test-task',
+        'human:test-user',
+        'No longer needed'
+      );
+      expect(mockConsoleLog).toHaveBeenCalledWith('❌ Task cancelled: 1757789000-task-test-task');
+    });
+
+    it('[EARS-35C] should pass actorId and reason when rejecting task (regression test)', async () => {
+      const discardedTask = { ...sampleTask, status: 'discarded' as const };
+
+      mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
+      mockBacklogAdapter.discardTask.mockResolvedValue(discardedTask);
+      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+
+      await taskCommand.executeReject('1757789000-task-test-task', { reason: 'Does not meet requirements' });
+
+      // CRITICAL: Verify actorId and reason are passed correctly to discardTask
+      // This test exists to prevent regression where parameters could be missing
+      expect(mockBacklogAdapter.discardTask).toHaveBeenCalledWith(
+        '1757789000-task-test-task',
+        'human:test-user',
+        'Does not meet requirements'
+      );
+      expect(mockConsoleLog).toHaveBeenCalledWith('🚫 Task rejected: 1757789000-task-test-task');
+    });
+
+    it('[EARS-35D] should pass undefined reason when cancelling without reason', async () => {
+      const discardedTask = { ...sampleTask, status: 'discarded' as const };
+
+      mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
+      mockBacklogAdapter.discardTask.mockResolvedValue(discardedTask);
+      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+
+      await taskCommand.executeCancel('1757789000-task-test-task', {});
+
+      expect(mockBacklogAdapter.discardTask).toHaveBeenCalledWith(
+        '1757789000-task-test-task',
+        'human:test-user',
+        undefined
+      );
     });
   });
 

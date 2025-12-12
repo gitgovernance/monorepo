@@ -59,10 +59,6 @@ async function setupCommands() {
 
     // Register lint commands
     registerLintCommand(program);
-
-    // Register sync commands
-    registerSyncCommands(program);
-
   } catch (error) {
     // Handle initialization errors gracefully
     if (error instanceof Error) {

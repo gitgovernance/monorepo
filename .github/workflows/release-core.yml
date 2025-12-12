@@ -8,6 +8,12 @@ on:
       - "packages/core/**"
       - ".github/workflows/release-core.yml"
       - "!packages/core/**/*.md"
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to run tests on'
+        required: false
+        default: 'main'
 
 jobs:
   release:

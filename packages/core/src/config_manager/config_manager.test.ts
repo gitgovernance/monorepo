@@ -8,6 +8,7 @@ jest.mock('fs', () => ({
   promises: {
     readFile: jest.fn(),
     writeFile: jest.fn(),
+    readdir: jest.fn(),
   },
   existsSync: jest.fn(),
 }));
@@ -146,8 +147,87 @@ describe('ConfigManager', () => {
 
     it('[EARS-8] WHEN loadSession is invoked with non-existent .session.json file, THE SYSTEM SHALL return null without throwing error', async () => {
       mockedFs.readFile.mockRejectedValue(new Error('ENOENT: no such file or directory'));
+      // Mock readdir to return no .key files
+      (mockedFs.readdir as jest.Mock).mockRejectedValue(new Error('ENOENT'));
 
       const result = await configManager.loadSession();
+
+      expect(result).toBeNull();
+    });
+  });
+
+  // --- Auto-detect Actor from .key Files (EARS-53) ---
+
+  describe('detectActorFromKeyFiles and loadSession auto-detection (EARS-53)', () => {
+    it('[EARS-53] WHEN .session.json exists without actorId and .key files exist, loadSession SHALL auto-detect and set actorId', async () => {
+      // Session exists but without lastSession.actorId
+      const sessionWithoutActor: GitGovSession = {
+        actorState: {}
+      };
+
+      // Mock readFile to return session without actorId
+      mockedFs.readFile.mockResolvedValueOnce(JSON.stringify(sessionWithoutActor));
+      mockedFs.writeFile.mockResolvedValue();
+
+      // Mock readdir to return .key files
+      (mockedFs.readdir as jest.Mock).mockResolvedValue(['human:camilo-v2.key']);
+
+      const result = await configManager.loadSession();
+
+      // Should auto-detect actor from .key file
+      expect(result?.lastSession?.actorId).toBe('human:camilo-v2');
+      // Should persist the auto-detected session
+      expect(mockedFs.writeFile).toHaveBeenCalled();
+    });
+
+    it('[EARS-53] WHEN .session.json does not exist but .key files exist, loadSession SHALL create session with auto-detected actorId', async () => {
+      // Session file doesn't exist
+      mockedFs.readFile.mockRejectedValue(new Error('ENOENT'));
+      mockedFs.writeFile.mockResolvedValue();
+
+      // Mock readdir to return .key files
+      (mockedFs.readdir as jest.Mock).mockResolvedValue(['human:developer.key', 'agent:assistant.key']);
+
+      const result = await configManager.loadSession();
+
+      // Should create session with first .key file actor
+      expect(result?.lastSession?.actorId).toBe('human:developer');
+      // Should persist the new session
+      expect(mockedFs.writeFile).toHaveBeenCalled();
+    });
+
+    it('[EARS-53] WHEN .session.json has valid actorId, loadSession SHALL NOT override with .key file detection', async () => {
+      const sessionWithActor: GitGovSession = {
+        lastSession: { actorId: 'human:existing-user', timestamp: '2025-01-01T00:00:00Z' },
+        actorState: {}
+      };
+
+      mockedFs.readFile.mockResolvedValue(JSON.stringify(sessionWithActor));
+
+      const result = await configManager.loadSession();
+
+      // Should preserve existing actorId
+      expect(result?.lastSession?.actorId).toBe('human:existing-user');
+      // Should NOT write file (no changes needed)
+      expect(mockedFs.writeFile).not.toHaveBeenCalled();
+    });
+
+    it('[EARS-53] WHEN no .key files exist, detectActorFromKeyFiles SHALL return null', async () => {
+      // Mock readdir to return no .key files
+      (mockedFs.readdir as jest.Mock).mockResolvedValue(['actor.json', 'README.md']);
+
+      // @ts-ignore - accessing private method for testing
+      const result = await configManager.detectActorFromKeyFiles();
+
+      expect(result).toBeNull();
+    });
+
+    it('[EARS-53] WHEN actors directory does not exist, detectActorFromKeyFiles SHALL return null', async () => {
+      // Mock readdir to throw (directory doesn't exist)
+      (mockedFs.readdir as jest.Mock).mockRejectedValue(new Error('ENOENT'));
+
+      // @ts-ignore - accessing private method for testing
+      const result = await configManager.detectActorFromKeyFiles();
 
       expect(result).toBeNull();
     });

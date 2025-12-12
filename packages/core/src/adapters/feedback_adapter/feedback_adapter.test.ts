@@ -120,7 +120,8 @@ describe('FeedbackAdapter', () => {
           payload: mockCreatedFeedbackPayload
         }),
         mockActorId,
-        'author'
+        'author',
+        expect.any(String) // notes parameter
       );
       expect(mockFeedbackStore.write).toHaveBeenCalledWith(mockSignedRecord);
       // Note: Now using this.eventBus.publish instead of publishEvent

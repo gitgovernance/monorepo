@@ -121,13 +121,80 @@ export class ConfigManager {
 
   /**
    * Load GitGovernance session state
+   * [EARS-53] Auto-detects actor from .key files if no session or no actorId exists
    */
   async loadSession(): Promise<GitGovSession | null> {
     try {
       const sessionContent = await fs.readFile(this.sessionPath, 'utf-8');
-      return JSON.parse(sessionContent) as GitGovSession;
+      const session = JSON.parse(sessionContent) as GitGovSession;
+
+      // [EARS-53] If session exists but no lastSession.actorId, try to auto-detect
+      if (!session.lastSession?.actorId) {
+        const detectedActorId = await this.detectActorFromKeyFiles();
+        if (detectedActorId) {
+          session.lastSession = {
+            actorId: detectedActorId,
+            timestamp: new Date().toISOString()
+          };
+          // Save the auto-detected session
+          await fs.writeFile(this.sessionPath, JSON.stringify(session, null, 2), 'utf-8');
+        }
+      }
+
+      return session;
     } catch (error) {
       // Session file doesn't exist or is invalid
+      // [EARS-53] Try to create session from .key files
+      const detectedActorId = await this.detectActorFromKeyFiles();
+      if (detectedActorId) {
+        const newSession: GitGovSession = {
+          lastSession: {
+            actorId: detectedActorId,
+            timestamp: new Date().toISOString()
+          },
+          actorState: {}
+        };
+        // Save the auto-detected session
+        try {
+          await fs.writeFile(this.sessionPath, JSON.stringify(newSession, null, 2), 'utf-8');
+          return newSession;
+        } catch {
+          // Failed to save, return the session anyway
+          return newSession;
+        }
+      }
+      return null;
+    }
+  }
+
+  /**
+   * [EARS-53] Detect actor from .key files in .gitgov/actors/
+   * Returns the actor ID if exactly one .key file exists, or the first one if multiple exist.
+   * Private keys (.key files) indicate which actors can sign on this machine.
+   */
+  async detectActorFromKeyFiles(): Promise<string | null> {
+    try {
+      // sessionPath is /path/to/.gitgov/.session.json
+      // actorsDir should be /path/to/.gitgov/actors
+      const gitgovDir = path.dirname(this.sessionPath);
+      const actorsDir = path.join(gitgovDir, 'actors');
+      const files = await fs.readdir(actorsDir);
+
+      // Find all .key files
+      const keyFiles = files.filter(f => f.endsWith('.key'));
+
+      // Get first .key file
+      const firstKeyFile = keyFiles[0];
+      if (!firstKeyFile) {
+        return null;
+      }
+
+      // Extract actor ID from first .key file (filename without .key extension)
+      // e.g., "human:camilo-v2.key" -> "human:camilo-v2"
+      const actorId = firstKeyFile.replace('.key', '');
+      return actorId;
+    } catch {
+      // Directory doesn't exist or can't be read
       return null;
     }
   }
