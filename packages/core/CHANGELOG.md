@@ -1,3 +1,11 @@
+## [1.8.1](https://github.com/gitgovernance/monorepo/compare/core-v1.8.0...core-v1.8.1) (2025-12-12)
+
+
+### 🐛 Bug Fixes
+
+* **core:** add tasks to SDK description in README ([#66](https://github.com/gitgovernance/monorepo/issues/66)) ([85762d3](https://github.com/gitgovernance/monorepo/commit/85762d3d331407fcb0d55af07b8e470a426b7ac5))
+* **core:** update comment in index.ts ([#67](https://github.com/gitgovernance/monorepo/issues/67)) ([b20132e](https://github.com/gitgovernance/monorepo/commit/b20132e36948b5bce227ab58c1f51c58a311a4d4))
+
 ## [1.8.0](https://github.com/gitgovernance/monorepo/compare/core-v1.7.0...core-v1.8.0) (2025-12-12)
 
 
