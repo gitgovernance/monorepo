@@ -1,3 +1,10 @@
+## [1.8.3](https://github.com/gitgovernance/monorepo/compare/core-v1.8.2...core-v1.8.3) (2025-12-12)
+
+
+### 🐛 Bug Fixes
+
+* **core:** update type exports comment ([#69](https://github.com/gitgovernance/monorepo/issues/69)) ([5970dce](https://github.com/gitgovernance/monorepo/commit/5970dce03eadd76e697778b2f0c95c55444b03f5))
+
 ## [1.8.2](https://github.com/gitgovernance/monorepo/compare/core-v1.8.1...core-v1.8.2) (2025-12-12)
 
 
