@@ -1,3 +1,10 @@
+## [1.12.1](https://github.com/gitgovernance/monorepo/compare/cli-v1.12.0...cli-v1.12.1) (2025-11-09)
+
+
+### 🐛 Bug Fixes
+
+* **cli:** update priority color high to orange ([#57](https://github.com/gitgovernance/monorepo/issues/57)) ([cc30d8f](https://github.com/gitgovernance/monorepo/commit/cc30d8f612f6357ba01f640709b60b989d1b50d9)), closes [#1762699192](https://github.com/gitgovernance/monorepo/issues/1762699192)
+
 ## [1.12.0](https://github.com/gitgovernance/monorepo/compare/cli-v1.11.1...cli-v1.12.0) (2025-11-09)
 
 
