@@ -77,6 +77,29 @@
       },
       "default": [],
       "description": "Optional list of typed references to relevant commits, files, PRs, or external documents.\nShould use typed prefixes for clarity and trazabilidad (see execution_protocol_appendix.md):\n- commit:     Git commit SHA\n- pr:         Pull Request number\n- file:       File path (relative to repo root)\n- url:        External URL\n- issue:      GitHub Issue number\n- task:       TaskRecord ID\n- exec:       ExecutionRecord ID (for corrections or dependencies)\n- changelog:  ChangelogRecord ID\n"
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Optional structured data for machine consumption.\nUse this field for data that needs to be programmatically processed (e.g., audit findings,\nperformance metrics, scan results). This complements result (human-readable WHAT) and\nnotes (narrative HOW/WHY) by providing structured, queryable data.\nCommon use cases: audit findings arrays, performance metrics, tool outputs, scan summaries.\n",
+      "examples": [
+        {
+          "findings": [
+            {
+              "type": "PII",
+              "file": "src/user.ts",
+              "line": 42
+            }
+          ],
+          "scannedFiles": 245
+        },
+        {
+          "metrics": {
+            "duration_ms": 1250,
+            "memory_mb": 512
+          }
+        }
+      ]
     }
   },
   "examples": [
@@ -149,6 +172,52 @@
       "references": [
         "exec:1752275500-exec-refactor-queries"
       ]
+    },
+    {
+      "id": "1752276000-exec-gdpr-audit-scan",
+      "taskId": "1752274500-task-gdpr-compliance",
+      "type": "analysis",
+      "title": "GDPR Audit Scan - 2025-01-15",
+      "result": "Escaneados 245 archivos. Encontrados 10 findings (3 critical, 4 high, 3 medium). Ver metadata para detalles estructurados.",
+      "notes": "Scan ejecutado con RegexDetector + HeuristicDetector. LLM calls: 0 (tier free).",
+      "references": [
+        "file:src/config/db.ts",
+        "file:src/auth/keys.ts"
+      ],
+      "metadata": {
+        "scannedFiles": 245,
+        "scannedLines": 18420,
+        "duration_ms": 1250,
+        "findings": [
+          {
+            "id": "SEC-001",
+            "severity": "critical",
+            "file": "src/config/db.ts",
+            "line": 5,
+            "type": "api_key"
+          },
+          {
+            "id": "SEC-003",
+            "severity": "critical",
+            "file": "src/auth/keys.ts",
+            "line": 2,
+            "type": "private_key"
+          },
+          {
+            "id": "PII-003",
+            "severity": "critical",
+            "file": "src/payments/stripe.ts",
+            "line": 8,
+            "type": "credit_card"
+          }
+        ],
+        "summary": {
+          "critical": 3,
+          "high": 4,
+          "medium": 3,
+          "low": 0
+        }
+      }
     }
   ]
 }

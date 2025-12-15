@@ -5,15 +5,28 @@ import { validateEmbeddedMetadataDetailed } from '../validation/embedded_metadat
 import { DetailedValidationError } from '../validation/common';
 
 /**
- * Creates a complete ExecutionRecord with validation
- * 
- * @param payload - Partial ExecutionRecord payload
- * @returns ExecutionRecord - The validated ExecutionRecord
+ * Creates a complete ExecutionRecord with validation.
+ *
+ * The factory is generic to preserve the metadata type for compile-time safety.
+ *
+ * @param payload - Partial ExecutionRecord payload with optional typed metadata
+ * @returns ExecutionRecord<TMetadata> - The validated ExecutionRecord with preserved metadata type
+ *
+ * @example
+ * interface AuditMetadata { scannedFiles: number; }
+ * const record = createExecutionRecord<AuditMetadata>({
+ *   taskId: '1752274500-task-audit',
+ *   result: 'Audit complete',
+ *   metadata: { scannedFiles: 245 }
+ * });
+ * // record.metadata?.scannedFiles is typed as number
  */
-export function createExecutionRecord(payload: Partial<ExecutionRecord>): ExecutionRecord {
+export function createExecutionRecord<TMetadata extends object = object>(
+  payload: Partial<ExecutionRecord<TMetadata>>
+): ExecutionRecord<TMetadata> {
   const timestamp = Math.floor(Date.now() / 1000);
 
-  const execution: ExecutionRecord = {
+  const execution = {
     id: payload.id || generateExecutionId(payload.title || 'execution', timestamp),
     taskId: payload.taskId || '',
     result: payload.result || '',
@@ -21,8 +34,8 @@ export function createExecutionRecord(payload: Partial<ExecutionRecord>): Execut
     title: payload.title,
     notes: payload.notes,
     references: payload.references,
-    ...payload,
-  } as ExecutionRecord;
+    metadata: payload.metadata,
+  } as ExecutionRecord<TMetadata>;
 
   // Validate the complete execution record
   const validation = validateExecutionRecordDetailed(execution);
@@ -48,14 +61,14 @@ export function loadExecutionRecord(data: unknown): GitGovExecutionRecord {
   if (!embeddedValidation.isValid) {
     throw new DetailedValidationError('GitGovRecord (ExecutionRecord)', embeddedValidation.errors);
   }
-  
+
   // Then validate specific ExecutionRecord payload
   const record = data as GitGovExecutionRecord;
   const payloadValidation = validateExecutionRecordDetailed(record.payload);
   if (!payloadValidation.isValid) {
     throw new DetailedValidationError('ExecutionRecord payload', payloadValidation.errors);
   }
-  
+
   return record;
 }
 

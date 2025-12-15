@@ -1,10 +1,13 @@
 #!/usr/bin/env tsx
 /**
  * Compile JSON schemas to TypeScript types
- * 
+ *
  * This script reads the JSON schemas from src/schemas/ (with $ref references)
  * and generates TypeScript types using json-schema-to-typescript.
  * It handles $ref resolution automatically.
+ *
+ * Post-processing: Fields with `type: object` and `additionalProperties: true`
+ * are converted to generic type parameters for better TypeScript ergonomics.
  */
 
 import * as fs from 'fs';
@@ -19,6 +22,94 @@ const __dirname = path.dirname(__filename);
 // Paths
 const SCHEMAS_DIR = path.join(__dirname, '../src/schemas/generated');
 const OUTPUT_DIR = path.join(__dirname, '../src/types/generated');
+
+/**
+ * Configuration for fields that should be converted to generic type parameters.
+ * When a schema property has `type: object` and `additionalProperties: true`,
+ * we can make it a generic parameter for better type safety in TypeScript.
+ */
+interface GenericFieldConfig {
+  /** The property name in the schema (e.g., 'metadata') */
+  fieldName: string;
+  /** The generic type parameter name (e.g., 'TMetadata') */
+  genericName: string;
+  /** The default type when no generic is provided */
+  defaultType: string;
+}
+
+/**
+ * Detect properties that should become generic type parameters.
+ * A property qualifies if it has `type: object` and `additionalProperties: true`.
+ */
+function detectGenericFields(schema: Record<string, unknown>): GenericFieldConfig[] {
+  const genericFields: GenericFieldConfig[] = [];
+  const properties = schema['properties'] as Record<string, unknown> | undefined;
+
+  if (!properties) return genericFields;
+
+  for (const [fieldName, fieldSchema] of Object.entries(properties)) {
+    const field = fieldSchema as Record<string, unknown>;
+    if (
+      field['type'] === 'object' &&
+      field['additionalProperties'] === true
+    ) {
+      // Convert fieldName to PascalCase for the generic parameter
+      const genericName = 'T' + fieldName.charAt(0).toUpperCase() + fieldName.slice(1);
+      genericFields.push({
+        fieldName,
+        genericName,
+        // Use `object` as default to allow interfaces without index signatures
+        defaultType: 'object',
+      });
+    }
+  }
+
+  return genericFields;
+}
+
+/**
+ * Post-process generated TypeScript to add generic type parameters.
+ * Transforms:
+ *   export interface Foo { metadata?: { [k: string]: unknown | undefined }; }
+ * Into:
+ *   export interface Foo<TMetadata = Record<string, unknown>> { metadata?: TMetadata; }
+ */
+function addGenericParameters(
+  tsContent: string,
+  interfaceName: string,
+  genericFields: GenericFieldConfig[]
+): string {
+  if (genericFields.length === 0) return tsContent;
+
+  let result = tsContent;
+
+  // Build the generic parameter declaration
+  // e.g., "<TMetadata = Record<string, unknown>>"
+  const genericParams = genericFields
+    .map(g => `${g.genericName} = ${g.defaultType}`)
+    .join(', ');
+
+  // Replace interface declaration to add generic parameter
+  // Match: "export interface InterfaceName {"
+  const interfaceRegex = new RegExp(
+    `(export interface ${interfaceName})\\s*\\{`,
+    'g'
+  );
+  result = result.replace(interfaceRegex, `$1<${genericParams}> {`);
+
+  // Replace each generic field's type
+  for (const field of genericFields) {
+    // Match the field declaration with the index signature type
+    // Handles both: { [k: string]: unknown | undefined; } and { [k: string]: unknown; }
+    const fieldRegex = new RegExp(
+      `(${field.fieldName}\\??):\\s*\\{\\s*\\[k:\\s*string\\]:\\s*unknown(?:\\s*\\|\\s*undefined)?;?\\s*\\}`,
+      'g'
+    );
+    result = result.replace(fieldRegex, `$1: ${field.genericName}`);
+  }
+
+  return result;
+}
 
 /**
  * Generate schema mappings by reading all JSON files in the schemas directory
@@ -100,8 +191,11 @@ async function compileSchemas() {
         .map(word => word.charAt(0).toUpperCase() + word.slice(1))
         .join('');
 
+      // Detect fields that should become generic parameters
+      const genericFields = detectGenericFields(schema);
+
       // Compile to TypeScript with custom options
-      const tsContent = await compile(schema, typeName, {
+      let tsContent = await compile(schema, typeName, {
         bannerComment: `/**
  * This file was automatically generated from ${jsonFile}.
  * DO NOT MODIFY IT BY HAND. Instead, modify the source schema,
@@ -122,6 +216,12 @@ async function compileSchemas() {
         enableConstEnums: true,
         strictIndexSignatures: true,
       });
+
+      // Post-process to add generic type parameters for fields with additionalProperties: true
+      if (genericFields.length > 0) {
+        tsContent = addGenericParameters(tsContent, typeName, genericFields);
+        console.log(`   ↳ Added generic parameters: ${genericFields.map(g => g.genericName).join(', ')}`);
+      }
 
       // Write TypeScript file
       fs.writeFileSync(tsPath, tsContent);
