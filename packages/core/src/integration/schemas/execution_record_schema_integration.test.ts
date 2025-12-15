@@ -1299,6 +1299,178 @@ describe('ExecutionRecord Schema Integration Tests', () => {
     });
   });
 
+  describe('Metadata Field Validations (EARS 1002-1012)', () => {
+    it('[EARS-1002] should accept missing metadata', () => {
+      const valid = createValidExecutionRecord();
+      // metadata is undefined by default
+
+      const result = validateExecutionRecordDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+    });
+
+    it('[EARS-1003] should accept empty metadata object', () => {
+      const valid = {
+        ...createValidExecutionRecord(),
+        metadata: {}
+      };
+
+      const result = validateExecutionRecordDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+    });
+
+    it('[EARS-1004] should accept metadata with simple key-value pairs', () => {
+      const valid = {
+        ...createValidExecutionRecord(),
+        metadata: {
+          scannedFiles: 245,
+          duration_ms: 1250,
+          tier: 'free'
+        }
+      };
+
+      const result = validateExecutionRecordDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+    });
+
+    it('[EARS-1005] should accept metadata with nested objects', () => {
+      const valid = {
+        ...createValidExecutionRecord(),
+        metadata: {
+          summary: {
+            critical: 3,
+            high: 4,
+            medium: 3,
+            low: 0
+          },
+          config: {
+            detectors: ['regex', 'heuristic'],
+            llmEnabled: false
+          }
+        }
+      };
+
+      const result = validateExecutionRecordDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+    });
+
+    it('[EARS-1006] should accept metadata with arrays', () => {
+      const valid = {
+        ...createValidExecutionRecord(),
+        metadata: {
+          findings: [
+            { id: 'SEC-001', severity: 'critical', file: 'src/config.ts', line: 5 },
+            { id: 'PII-001', severity: 'high', file: 'src/user.ts', line: 42 }
+          ],
+          scannedPaths: ['src/', 'lib/', 'config/']
+        }
+      };
+
+      const result = validateExecutionRecordDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+    });
+
+    it('[EARS-1007] should reject non-object metadata (string)', () => {
+      const invalid = {
+        ...createValidExecutionRecord(),
+        metadata: 'not-an-object' as unknown as object
+      };
+
+      const result = validateExecutionRecordDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.field.includes('metadata') && e.message.includes('object')
+      )).toBe(true);
+    });
+
+    it('[EARS-1008] should reject non-object metadata (number)', () => {
+      const invalid = {
+        ...createValidExecutionRecord(),
+        metadata: 123 as unknown as object
+      };
+
+      const result = validateExecutionRecordDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.field.includes('metadata') && e.message.includes('object')
+      )).toBe(true);
+    });
+
+    it('[EARS-1009] should reject non-object metadata (array)', () => {
+      const invalid = {
+        ...createValidExecutionRecord(),
+        metadata: ['not', 'an', 'object'] as unknown as object
+      };
+
+      const result = validateExecutionRecordDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.field.includes('metadata') && e.message.includes('object')
+      )).toBe(true);
+    });
+
+    it('[EARS-1010] should reject null metadata', () => {
+      const invalid = {
+        ...createValidExecutionRecord(),
+        metadata: null as unknown as object
+      };
+
+      const result = validateExecutionRecordDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.field.includes('metadata')
+      )).toBe(true);
+    });
+
+    it('[EARS-1011] should accept metadata with GDPR audit findings structure', () => {
+      const valid = {
+        ...createValidExecutionRecord(),
+        type: 'analysis' as const,
+        metadata: {
+          scannedFiles: 245,
+          scannedLines: 18420,
+          duration_ms: 1250,
+          findings: [
+            { id: 'SEC-001', severity: 'critical', file: 'src/config/db.ts', line: 5, type: 'api_key' },
+            { id: 'SEC-003', severity: 'critical', file: 'src/auth/keys.ts', line: 2, type: 'private_key' },
+            { id: 'PII-003', severity: 'critical', file: 'src/payments/stripe.ts', line: 8, type: 'credit_card' }
+          ],
+          summary: { critical: 3, high: 4, medium: 3, low: 0 }
+        }
+      };
+
+      const result = validateExecutionRecordDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+    });
+
+    it('[EARS-1012] should accept metadata with mixed value types', () => {
+      const valid = {
+        ...createValidExecutionRecord(),
+        metadata: {
+          stringValue: 'hello',
+          numberValue: 42,
+          booleanValue: true,
+          nullValue: null,
+          arrayValue: [1, 2, 3],
+          objectValue: { nested: 'object' }
+        }
+      };
+
+      const result = validateExecutionRecordDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+    });
+  });
+
   describe('Edge Cases - Root Type and Optional Fields (EARS 462-464)', () => {
     it('[EARS-462] should reject ExecutionRecord as array type', () => {
       const invalid = [

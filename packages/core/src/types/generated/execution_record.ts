@@ -7,7 +7,7 @@
 /**
  * Canonical schema for execution log records - the universal event stream
  */
-export interface ExecutionRecord {
+export interface ExecutionRecord<TMetadata = object> {
   /**
    * Unique identifier for the execution log entry (10 timestamp + 1 dash + 4 'exec' + 1 dash + max 50 slug = 66 max)
    */
@@ -50,4 +50,13 @@ export interface ExecutionRecord {
    *
    */
   references?: string[];
+  /**
+   * Optional structured data for machine consumption.
+   * Use this field for data that needs to be programmatically processed (e.g., audit findings,
+   * performance metrics, scan results). This complements result (human-readable WHAT) and
+   * notes (narrative HOW/WHY) by providing structured, queryable data.
+   * Common use cases: audit findings arrays, performance metrics, tool outputs, scan summaries.
+   *
+   */
+  metadata?: TMetadata;
 }
