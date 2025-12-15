@@ -1,3 +1,20 @@
+## [1.9.0](https://github.com/gitgovernance/monorepo/compare/core-v1.8.3...core-v1.9.0) (2025-12-15)
+
+
+### ✨ Features
+
+* **cli:** restore original CLI description ([#75](https://github.com/gitgovernance/monorepo/issues/75)) ([323dbfd](https://github.com/gitgovernance/monorepo/commit/323dbfde376b13e6c7ea9f25966451048bf713b8))
+* **cli:** simplify description ([#74](https://github.com/gitgovernance/monorepo/issues/74)) ([3deb4e7](https://github.com/gitgovernance/monorepo/commit/3deb4e7f9546d1f25ab0062e4db71e4e2754b19e))
+* **cli:** update @gitgov/core dependency to ^1.8.3 ([#70](https://github.com/gitgovernance/monorepo/issues/70)) ([5161583](https://github.com/gitgovernance/monorepo/commit/5161583bd20b742be6d4843ffc1bb11add04f18c))
+* **cli:** update CLI description ([#72](https://github.com/gitgovernance/monorepo/issues/72)) ([b658391](https://github.com/gitgovernance/monorepo/commit/b658391514b03cface9906c2ff5c0690fc6c5794))
+* **cli:** update description wording ([#73](https://github.com/gitgovernance/monorepo/issues/73)) ([5ec571b](https://github.com/gitgovernance/monorepo/commit/5ec571bc390e2d14d69f3ca43844be01052e6bd4))
+* **core:** add generic metadata support to ExecutionRecord ([#76](https://github.com/gitgovernance/monorepo/issues/76)) ([97e1421](https://github.com/gitgovernance/monorepo/commit/97e1421ce87727daea144959359eee5b3d19c34a))
+
+
+### 🐛 Bug Fixes
+
+* **cli:** use --initial-branch=main in sync e2e tests ([#71](https://github.com/gitgovernance/monorepo/issues/71)) ([59aab5c](https://github.com/gitgovernance/monorepo/commit/59aab5c713de4816dc40746b268c3187f2b99155))
+
 ## [1.8.3](https://github.com/gitgovernance/monorepo/compare/core-v1.8.2...core-v1.8.3) (2025-12-12)
 
 
