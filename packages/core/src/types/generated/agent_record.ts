@@ -7,7 +7,7 @@
 /**
  * Canonical schema for agent operational manifests.
  */
-export interface AgentRecord {
+export interface AgentRecord<TMetadata = object> {
   /**
    * Unique identifier for the agent, linking to an ActorRecord.
    */
@@ -40,9 +40,7 @@ export interface AgentRecord {
    * This field does NOT affect agent execution - it is purely informational.
    *
    */
-  metadata?: {
-    [k: string]: unknown | undefined;
-  };
+  metadata?: TMetadata;
   engine:
     | {
         type: 'local';
