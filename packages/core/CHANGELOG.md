@@ -1,3 +1,10 @@
+## [1.10.1](https://github.com/gitgovernance/monorepo/compare/core-v1.10.0...core-v1.10.1) (2025-12-16)
+
+
+### ♻️ Refactoring
+
+* **git:** update readme file ([e0942ee](https://github.com/gitgovernance/monorepo/commit/e0942ee526e8737616980c2881c07b2678154452))
+
 ## [1.10.0](https://github.com/gitgovernance/monorepo/compare/core-v1.9.0...core-v1.10.0) (2025-12-16)
 
 
