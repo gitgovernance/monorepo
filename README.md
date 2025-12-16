@@ -84,28 +84,6 @@ Natural language becomes your primary interface. Ask the agent to check project 
 
 ## 📦 Monorepo Structure
 
-### High-Level Architecture
-
-```
-            +------------------+
-            |    Developer     |
-            +--------+---------+
-                     |
-            +--------v---------+
-            |      CLI         | (gitgov <command>)
-            +--------+---------+
-                     |
-      +--------------v--------------+
-      |      Core Engine            |
-      | (Adapters, Business Logic)  |
-      +--------------+--------------+
-                     |
-     +---------------v----------------+
-     |     .gitgov/ (Records)         |
-     | (Tasks, Cycles, Feedback, etc) |
-     +--------------------------------+
-```
-
 ### Package Details
 
 | Package             | License    | Purpose                                          | Key Documentation                      |
