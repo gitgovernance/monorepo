@@ -7,7 +7,7 @@
 /**
  * Canonical schema for feedback records - structured conversation about work
  */
-export interface FeedbackRecord {
+export interface FeedbackRecord<TMetadata = object> {
   /**
    * Unique identifier for the feedback entry
    */
@@ -50,4 +50,11 @@ export interface FeedbackRecord {
    * Optional. The ID of another feedback record that this one resolves or responds to
    */
   resolvesFeedbackId?: string;
+  /**
+   * Optional structured data for machine consumption.
+   * Use this field for domain-specific data that needs to be programmatically processed.
+   * Common use cases: waiver details (fingerprint, ruleId, file, line), approval context, assignment metadata.
+   *
+   */
+  metadata?: TMetadata;
 }

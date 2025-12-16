@@ -1,6 +1,7 @@
 import { createFeedbackRecord } from './feedback_factory';
 import { generateFeedbackId } from '../utils/id_generator';
 import { DetailedValidationError } from '../validation/common';
+import type { FeedbackRecord } from '../types';
 
 // Mock the validator
 jest.mock('../validation/feedback_validator', () => ({
@@ -30,7 +31,7 @@ describe('FeedbackRecord Factory', () => {
   });
 
   describe('createFeedbackRecord', () => {
-    it('[EARS-1] should create a valid FeedbackRecord with all required fields', async () => {
+    it('[EARS-14] should create a valid FeedbackRecord with defaults applied', async () => {
       const payload = {
         entityType: 'task' as const,
         entityId: '1752274500-task-test-task',
@@ -56,7 +57,7 @@ describe('FeedbackRecord Factory', () => {
       expect(mockValidateFeedbackRecordDetailed).toHaveBeenCalledWith(result);
     });
 
-    it('[EARS-2] should apply default values for missing optional fields', async () => {
+    it('[EARS-18] should apply default values for missing optional fields', async () => {
       const payload = {
         entityType: 'task' as const,
         entityId: '1752274500-task-test-task',
@@ -79,7 +80,7 @@ describe('FeedbackRecord Factory', () => {
       expect(mockGenerateFeedbackId).toHaveBeenCalledWith('Test feedback content', expect.any(Number));
     });
 
-    it('[EARS-3] should preserve provided ID when specified', async () => {
+    it('[EARS-16] should preserve provided ID when specified', async () => {
       const payload = {
         id: '1752788200-feedback-custom-id',
         entityType: 'execution' as const,
@@ -94,7 +95,7 @@ describe('FeedbackRecord Factory', () => {
       expect(mockGenerateFeedbackId).not.toHaveBeenCalled();
     });
 
-    it('[EARS-4] should set status to resolved for assignment type feedback', async () => {
+    it('[EARS-38] should set status to resolved for assignment type feedback', async () => {
       const payload = {
         entityType: 'task' as const,
         entityId: '1752274500-task-test-task',
@@ -109,7 +110,7 @@ describe('FeedbackRecord Factory', () => {
       expect(result.type).toBe('assignment');
     });
 
-    it('[EARS-5] should throw DetailedValidationError when validation fails', async () => {
+    it('[EARS-13] should throw DetailedValidationError when validation fails', async () => {
       const payload = {
         entityType: 'task' as const,
         entityId: '1752274500-task-test-task',
@@ -130,7 +131,7 @@ describe('FeedbackRecord Factory', () => {
       expect(() => createFeedbackRecord(payload)).toThrow('FeedbackRecord');
     });
 
-    it('[EARS-6] should preserve all provided fields in the output', async () => {
+    it('[EARS-14] should preserve all provided fields in the output', async () => {
       const payload = {
         id: '1752788200-feedback-preserve-fields',
         entityType: 'feedback' as const,
@@ -148,7 +149,7 @@ describe('FeedbackRecord Factory', () => {
       expect(mockValidateFeedbackRecordDetailed).toHaveBeenCalledWith(payload);
     });
 
-    it('[EARS-7] should generate ID from content when content is provided but ID is not', async () => {
+    it('[EARS-15] should generate ID from content when content is provided but ID is not', async () => {
       const payload = {
         entityType: 'task' as const,
         entityId: '1752274500-task-test-task',
@@ -164,7 +165,7 @@ describe('FeedbackRecord Factory', () => {
       expect(mockGenerateFeedbackId).toHaveBeenCalledWith('This is a specific question about implementation', expect.any(Number));
     });
 
-    it('[EARS-8] should use current timestamp when none provided', async () => {
+    it('[EARS-15] should use current timestamp for ID generation', async () => {
       const payload = {
         entityType: 'task' as const,
         entityId: '1752274500-task-test-task',
@@ -186,8 +187,8 @@ describe('FeedbackRecord Factory', () => {
       expect(calledTimestamp).toBeLessThanOrEqual(afterTime);
     });
 
-    describe('FeedbackRecord Specific Factory Operations (EARS 25-28)', () => {
-      it('[EARS-25] should throw DetailedValidationError for invalid entityType', async () => {
+    describe('FeedbackRecord Specific Factory Operations (EARS 35-38)', () => {
+      it('[EARS-35] should throw DetailedValidationError for invalid entityType', async () => {
         const validationErrors = [
           { field: 'entityType', message: 'must be one of task, execution, changelog, feedback', value: 'invalid-entity' }
         ];
@@ -207,7 +208,7 @@ describe('FeedbackRecord Factory', () => {
         expect(() => createFeedbackRecord(payload)).toThrow(DetailedValidationError);
       });
 
-      it('[EARS-26] should throw DetailedValidationError for invalid type', async () => {
+      it('[EARS-36] should throw DetailedValidationError for invalid type', async () => {
         const validationErrors = [
           { field: 'type', message: 'must be one of blocking, suggestion, question, approval, clarification, assignment', value: 'invalid-type' }
         ];
@@ -227,7 +228,7 @@ describe('FeedbackRecord Factory', () => {
         expect(() => createFeedbackRecord(payload)).toThrow(DetailedValidationError);
       });
 
-      it('[EARS-27] should throw DetailedValidationError for invalid status', async () => {
+      it('[EARS-37] should throw DetailedValidationError for invalid status', async () => {
         const validationErrors = [
           { field: 'status', message: 'must be one of open, acknowledged, resolved, wontfix', value: 'invalid-status' }
         ];
@@ -248,7 +249,7 @@ describe('FeedbackRecord Factory', () => {
         expect(() => createFeedbackRecord(payload)).toThrow(DetailedValidationError);
       });
 
-      it('[EARS-28] should apply status resolved for type assignment', async () => {
+      it('[EARS-38] should apply status resolved for type assignment', async () => {
         const payload = {
           entityType: 'task' as const,
           entityId: '1752274500-task-test-task',
@@ -264,7 +265,7 @@ describe('FeedbackRecord Factory', () => {
         expect(result.assignee).toBe('human:backend-lead');
       });
 
-      it('[EARS-25] should accept valid entityType values', async () => {
+      it('[EARS-35] should accept valid entityType values', async () => {
         const validEntityTypes = ['task', 'execution', 'changelog', 'feedback'];
 
         for (const entityType of validEntityTypes) {
@@ -280,7 +281,7 @@ describe('FeedbackRecord Factory', () => {
         }
       });
 
-      it('[EARS-26] should accept valid type values', async () => {
+      it('[EARS-36] should accept valid type values', async () => {
         const validTypes = ['blocking', 'suggestion', 'question', 'approval', 'clarification', 'assignment'];
 
         for (const type of validTypes) {
@@ -296,7 +297,7 @@ describe('FeedbackRecord Factory', () => {
         }
       });
 
-      it('[EARS-27] should accept valid status values', async () => {
+      it('[EARS-37] should accept valid status values', async () => {
         const validStatuses = ['open', 'acknowledged', 'resolved', 'wontfix'];
 
         for (const status of validStatuses) {
@@ -311,6 +312,217 @@ describe('FeedbackRecord Factory', () => {
           const feedback = createFeedbackRecord(payload);
           expect(feedback.status).toBe(status);
         }
+      });
+    });
+
+    describe('FeedbackRecord Metadata Factory Operations (EARS 57-60)', () => {
+      it('[EARS-57] should preserve metadata field when provided', async () => {
+        const payload = {
+          entityType: 'execution' as const,
+          entityId: '1752275500-exec-test-execution',
+          type: 'approval' as const,
+          content: 'Approved with additional context',
+          metadata: {
+            reviewerId: 'reviewer-123',
+            approvalLevel: 'senior'
+          }
+        };
+
+        const result = createFeedbackRecord(payload);
+
+        expect(result.metadata).toEqual({
+          reviewerId: 'reviewer-123',
+          approvalLevel: 'senior'
+        });
+      });
+
+      it('[EARS-58] should preserve complex metadata with nested structures', async () => {
+        const payload = {
+          entityType: 'task' as const,
+          entityId: '1752274500-task-test-task',
+          type: 'blocking' as const,
+          content: 'Blocking issue with detailed context',
+          metadata: {
+            issueId: 'ISSUE-001',
+            details: {
+              severity: 'high',
+              category: 'security'
+            },
+            affectedFiles: ['src/config.ts', 'src/auth.ts']
+          }
+        };
+
+        const result = createFeedbackRecord(payload);
+
+        expect(result.metadata).toEqual({
+          issueId: 'ISSUE-001',
+          details: {
+            severity: 'high',
+            category: 'security'
+          },
+          affectedFiles: ['src/config.ts', 'src/auth.ts']
+        });
+      });
+
+      it('[EARS-59] should accept FeedbackRecord without metadata', async () => {
+        const payload = {
+          entityType: 'task' as const,
+          entityId: '1752274500-task-test-task',
+          type: 'question' as const,
+          content: 'Feedback without metadata field'
+        };
+
+        const result = createFeedbackRecord(payload);
+
+        expect(result.metadata).toBeUndefined();
+      });
+
+      it('[EARS-60] should accept empty metadata object', async () => {
+        const payload = {
+          entityType: 'task' as const,
+          entityId: '1752274500-task-test-task',
+          type: 'suggestion' as const,
+          content: 'Feedback with empty metadata',
+          metadata: {}
+        };
+
+        const result = createFeedbackRecord(payload);
+
+        expect(result.metadata).toEqual({});
+      });
+    });
+
+    describe('FeedbackRecord Typed Metadata Helpers (EARS 61-65)', () => {
+      it('[EARS-61] should allow FeedbackRecord with typed review metadata', () => {
+        type ReviewMetadata = {
+          reviewerId: string;
+          reviewDate: string;
+          score: number;
+        };
+
+        const reviewMetadata: ReviewMetadata = {
+          reviewerId: 'reviewer-456',
+          reviewDate: '2025-01-15',
+          score: 95
+        };
+
+        const typedRecord: FeedbackRecord<ReviewMetadata> = {
+          id: '1752788500-feedback-review',
+          entityType: 'execution',
+          entityId: '1752275500-exec-test',
+          type: 'approval',
+          status: 'resolved',
+          content: 'Code review completed',
+          metadata: reviewMetadata
+        };
+
+        const result = createFeedbackRecord(typedRecord);
+
+        expect(result.metadata).toEqual(reviewMetadata);
+        expect(result.metadata?.reviewerId).toBe('reviewer-456');
+        expect(result.metadata?.score).toBe(95);
+      });
+
+      it('[EARS-62] should allow FeedbackRecord with typed issue metadata', () => {
+        type IssueMetadata = {
+          issueId: string;
+          severity: string;
+          file: string;
+          line: number;
+        };
+
+        const issueMetadata: IssueMetadata = {
+          issueId: 'SEC-001',
+          severity: 'critical',
+          file: 'src/config.ts',
+          line: 42
+        };
+
+        const typedRecord: FeedbackRecord<IssueMetadata> = {
+          id: '1752788500-feedback-issue',
+          entityType: 'execution',
+          entityId: '1752275500-exec-scan',
+          type: 'blocking',
+          status: 'open',
+          content: 'Critical issue found in config',
+          metadata: issueMetadata
+        };
+
+        const result = createFeedbackRecord(typedRecord);
+
+        expect(result.metadata).toEqual(issueMetadata);
+        expect(result.metadata?.issueId).toBe('SEC-001');
+        expect(result.metadata?.line).toBe(42);
+      });
+
+      it('[EARS-63] should allow Partial<FeedbackRecord<T>> for factory input', () => {
+        type ApprovalContext = {
+          approvedBy: string;
+          expiresAt?: string;
+        };
+
+        const payload: Partial<FeedbackRecord<ApprovalContext>> = {
+          entityType: 'task',
+          entityId: '1752274500-task-test',
+          type: 'approval',
+          content: 'Approved with context',
+          metadata: { approvedBy: 'lead-dev', expiresAt: '2025-12-31' }
+        };
+
+        const result = createFeedbackRecord(payload);
+
+        expect(result.metadata?.approvedBy).toBe('lead-dev');
+        expect(result.metadata?.expiresAt).toBe('2025-12-31');
+      });
+
+      it('[EARS-64] should allow custom metadata types defined by consumers', () => {
+        type CustomFeedbackContext = {
+          source: string;
+          priority: number;
+          tags: string[];
+        };
+
+        const customMetadata: CustomFeedbackContext = {
+          source: 'automated-scan',
+          priority: 1,
+          tags: ['security', 'urgent']
+        };
+
+        const typedRecord: FeedbackRecord<CustomFeedbackContext> = {
+          id: '1752788500-feedback-custom',
+          entityType: 'task',
+          entityId: '1752274500-task-test',
+          type: 'blocking',
+          status: 'open',
+          content: 'Custom context feedback',
+          metadata: customMetadata
+        };
+
+        const result = createFeedbackRecord(typedRecord);
+
+        expect(result.metadata).toEqual(customMetadata);
+        expect(result.metadata?.source).toBe('automated-scan');
+        expect(result.metadata?.priority).toBe(1);
+        expect(result.metadata?.tags).toEqual(['security', 'urgent']);
+      });
+
+      it('[EARS-65] should allow FeedbackRecord<T> without metadata (optional)', () => {
+        type SomeMetadata = {
+          field: string;
+        };
+
+        const typedRecord: FeedbackRecord<SomeMetadata> = {
+          id: '1752788500-feedback-no-metadata',
+          entityType: 'task',
+          entityId: '1752274500-task-simple',
+          type: 'question',
+          status: 'open',
+          content: 'Question without metadata field'
+        };
+
+        const result = createFeedbackRecord(typedRecord);
+
+        expect(result.metadata).toBeUndefined();
       });
     });
   });

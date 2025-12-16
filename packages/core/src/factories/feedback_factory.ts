@@ -5,15 +5,19 @@ import { validateEmbeddedMetadataDetailed } from '../validation/embedded_metadat
 import { DetailedValidationError } from '../validation/common';
 
 /**
- * Creates a complete FeedbackRecord with validation
- * 
- * @param payload - Partial FeedbackRecord payload
- * @returns FeedbackRecord - The validated FeedbackRecord
+ * Creates a complete FeedbackRecord with validation.
+ *
+ * The factory is generic to preserve the metadata type for compile-time safety.
+ *
+ * @param payload - Partial FeedbackRecord payload with optional typed metadata
+ * @returns FeedbackRecord<TMetadata> - The validated FeedbackRecord with preserved metadata type
  */
-export function createFeedbackRecord(payload: Partial<FeedbackRecord>): FeedbackRecord {
+export function createFeedbackRecord<TMetadata extends object = object>(
+  payload: Partial<FeedbackRecord<TMetadata>>
+): FeedbackRecord<TMetadata> {
   const timestamp = Math.floor(Date.now() / 1000);
 
-  const feedback: FeedbackRecord = {
+  const feedback = {
     id: payload.id || generateFeedbackId(payload.content || 'feedback', timestamp),
     entityType: payload.entityType || 'task',
     entityId: payload.entityId || '',
@@ -22,8 +26,8 @@ export function createFeedbackRecord(payload: Partial<FeedbackRecord>): Feedback
     content: payload.content || '',
     assignee: payload.assignee,
     resolvesFeedbackId: payload.resolvesFeedbackId,
-    ...payload,
-  } as FeedbackRecord;
+    metadata: payload.metadata,
+  } as FeedbackRecord<TMetadata>;
 
   // Validate the complete feedback record
   const validation = validateFeedbackRecordDetailed(feedback);
@@ -49,14 +53,14 @@ export function loadFeedbackRecord(data: unknown): GitGovFeedbackRecord {
   if (!embeddedValidation.isValid) {
     throw new DetailedValidationError('GitGovRecord (FeedbackRecord)', embeddedValidation.errors);
   }
-  
+
   // Then validate specific FeedbackRecord payload
   const record = data as GitGovFeedbackRecord;
   const payloadValidation = validateFeedbackRecordDetailed(record.payload);
   if (!payloadValidation.isValid) {
     throw new DetailedValidationError('FeedbackRecord payload', payloadValidation.errors);
   }
-  
+
   return record;
 }
 
