@@ -1,9 +1,9 @@
 ![License: MPL-2.0](https://img.shields.io/badge/Core_License-MPL--2.0-blue.svg)
 ![core npm version](https://img.shields.io/npm/v/@gitgov/core?color=orange&label=Core%20npm)
-![Tests](https://img.shields.io/badge/tests-1770%20Core%20-success?label=Core%20tests)
+![Tests](https://img.shields.io/badge/tests-2120%20Core%20-success?label=Core%20tests)
 ![License: Apache-2.0](https://img.shields.io/badge/CLI_License-Apache--2.0-blue.svg)
 ![cli npm version](https://img.shields.io/npm/v/@gitgov/cli?color=orange&label=CLI%20npm)
-![Tests](https://img.shields.io/badge/tests-219%20CLI-success?label=CLI%20tests)
+![Tests](https://img.shields.io/badge/tests-236%20CLI-success?label=CLI%20tests)
 
 # GitGovernance
 
@@ -82,56 +82,7 @@ Natural language becomes your primary interface. Ask the agent to check project 
 
 ---
 
-## 🔧 Developer Guide
-
-This guide is for contributors who want to work on the GitGovernance ecosystem.
-
-### Prerequisites
-
-- Node.js (v18 or higher)
-- pnpm
-
-### Setup and Verification
-
-1.  **Clone the repository:**
-
-    ```bash
-    git clone https://github.com/gitgovernance/monorepo.git
-    cd monorepo
-    ```
-
-2.  **Install dependencies:**
-
-    ```bash
-    pnpm install
-    ```
-
-3.  **Verify the packages:**
-
-    This command builds the code and runs all tests for both `core` and `cli`.
-
-    ```bash
-    pnpm -r verify
-    ```
-
-### Development Workflow
-
-```bash
-# To run the CLI with hot-reloading:
-cd packages/cli
-pnpm dev status
-
-# To test the CLI system-wide (from any directory):
-cd packages/cli
-pnpm build && npm link
-
-# Now you can use `gitgov` anywhere
-gitgov status
-```
-
 ## 📦 Monorepo Structure
-
-For a high-level view of the product architecture, consult the **[Core Technical Design](packages/core/README.md)**.
 
 ### High-Level Architecture
 
@@ -157,115 +108,10 @@ For a high-level view of the product architecture, consult the **[Core Technical
 
 ### Package Details
 
-```
-packages/
-├── 🟢 cli/         # The Tool (Apache 2.0)
-└── 🟢 core/        # The Engine (MPL-2.0)
-```
-
 | Package             | License    | Purpose                                          | Key Documentation                      |
 | :------------------ | :--------- | :----------------------------------------------- | :------------------------------------- |
 | **`packages/core`** | MPL-2.0    | The **Engine:** Agnostic SDK for business logic. | [`README.md`](packages/core/README.md) |
 | **`packages/cli`**  | Apache 2.0 | The **Tool:** Command line interface.            | [`README.md`](packages/cli/README.md)  |
-
-## 🤝 Contribution Flow
-
-- **Changes to Open Source Packages (`core`, `cli`):** Must be made in the corresponding `upstream` submodule repository. Once merged, the submodule pointer is updated in this monorepo.
-
-## 🎯 Current Implementation Status
-
-### ✅ **Core Ecosystem (Complete)**
-
-- **@gitgov/core**: 704 tests passing, 9/9 adapters implemented
-  - ProjectAdapter, BacklogAdapter, MetricsAdapter, IndexerAdapter
-  - IdentityAdapter, ExecutionAdapter, FeedbackAdapter, ChangelogAdapter
-  - WorkflowMethodologyAdapter, EventBusModule
-- **@gitgov/cli**: 167 tests passing, 7/7 commands functional
-  - `gitgov init`, `gitgov indexer`, `gitgov task`, `gitgov cycle`
-  - `gitgov status`, `gitgov dashboard`, `gitgov diagram`
-
-### 🚀 **Available Commands**
-
-```bash
-# Project initialization
-gitgov init --name "My Project" --actor-name "Project Owner"
-
-# Cache management
-gitgov indexer
-
-# Task management (operational workflow)
-gitgov task new "Implement user authentication"
-gitgov task submit task-id-123    # Send definition to review
-gitgov task approve task-id-123   # Approve definition
-gitgov task activate task-id-123  # Start implementation
-gitgov task complete task-id-123  # Mark as done
-
-# Strategic planning
-gitgov cycle new "Sprint Q1" --description "Q1 objectives"
-gitgov cycle add-task cycle-id --task task-id-123
-
-# Intelligent dashboards
-gitgov status --all --health --alerts
-gitgov dashboard  # Interactive TUI with live updates
-gitgov dashboard --template=kanban-7col  # Kanban workflow visualization
-gitgov dashboard --template=scrum-board  # Scrum ceremonies view
-
-# Workflow visualization
-gitgov diagram --watch  # Auto-regenerating diagrams
-```
-
-### 🎯 **Dashboard Views - Multi-Methodology Support**
-
-GitGovernance includes a sophisticated TUI dashboard with multiple views for different workflows:
-
-#### **Row-Based View (Default)**
-
-```bash
-gitgov dashboard  # Default view
-```
-
-- **Integrated View**: Shows multiple adapters working in coordination
-- **Real-Time Intelligence**: Auto-refresh every 5 seconds
-- **Activity Stream**: Live system activity with agent collaboration
-- **Interactive Controls**: Keyboard shortcuts for quick actions
-
-#### **Kanban Workflow View**
-
-```bash
-gitgov dashboard --template=kanban-7col
-```
-
-- **7-Column Layout**: Draft → Review → Ready → Active → Done → Archived → Blocked
-- **Flow Intelligence**: Bottleneck detection and flow acceleration
-- **WIP Limits**: Visual warnings for column capacity
-- **Cycle Time Tracking**: Performance metrics per stage
-
-#### **Scrum Ceremonies View**
-
-```bash
-gitgov dashboard --template=scrum-board
-```
-
-- **Sprint Focus**: Product Backlog → Sprint Backlog → In Progress → Done → Demo Ready
-- **Sprint Intelligence**: Burndown charts and velocity tracking
-- **Ceremony Reminders**: Daily standups and sprint reviews
-- **Impediment Detection**: Blocked tasks with escalation alerts
-
-#### **Interactive Controls**
-
-- **v**: Cycle between views (Row → Kanban → Scrum → loop)
-- **1-3**: Direct view selection (1: Row, 2: Kanban, 3: Scrum)
-- **s**: Sort tasks by Recent Activity, Creation Date, Priority, or Status
-- **r**: Manual refresh, **?**: Help, **q**: Quit
-- **n,s,a,e,c**: Educational shortcuts (shows CLI commands)
-
-### 📊 **Performance Metrics**
-
-- **Core Tests**: 704 passing (100% success rate)
-- **CLI Tests**: 167 passing (100% success rate)
-- **Cache Performance**: 146 records indexed in ~50ms
-- **Dashboard Launch**: <500ms with 6-adapter orchestration
-- **Project Bootstrap**: Initialization <500ms
 
 ## 🤝 Community and Support
 
