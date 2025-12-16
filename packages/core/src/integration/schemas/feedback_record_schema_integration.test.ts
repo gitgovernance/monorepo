@@ -1389,5 +1389,194 @@ describe('FeedbackRecord Schema Integration Tests', () => {
       });
     });
   });
+
+  describe('Metadata Field Validations (EARS 1013-1024)', () => {
+    it('[EARS-1013] should accept missing metadata', () => {
+      const valid = createValidFeedbackRecord();
+      // metadata is undefined by default
+
+      const result = validateFeedbackRecordDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+    });
+
+    it('[EARS-1014] should accept empty metadata object', () => {
+      const valid = {
+        ...createValidFeedbackRecord(),
+        metadata: {}
+      };
+
+      const result = validateFeedbackRecordDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+    });
+
+    it('[EARS-1015] should accept metadata with simple key-value pairs', () => {
+      const valid = {
+        ...createValidFeedbackRecord(),
+        metadata: {
+          reviewerId: 'reviewer-123',
+          score: 95,
+          tier: 'senior'
+        }
+      };
+
+      const result = validateFeedbackRecordDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+    });
+
+    it('[EARS-1016] should accept metadata with nested objects', () => {
+      const valid = {
+        ...createValidFeedbackRecord(),
+        metadata: {
+          context: {
+            source: 'automated-scan',
+            priority: 'high'
+          },
+          details: {
+            category: 'security',
+            subcategory: 'credentials'
+          }
+        }
+      };
+
+      const result = validateFeedbackRecordDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+    });
+
+    it('[EARS-1017] should accept metadata with arrays', () => {
+      const valid = {
+        ...createValidFeedbackRecord(),
+        metadata: {
+          issues: [
+            { id: 'SEC-001', severity: 'critical', file: 'src/config.ts', line: 5 },
+            { id: 'SEC-002', severity: 'high', file: 'src/auth.ts', line: 42 }
+          ],
+          affectedPaths: ['src/', 'lib/', 'config/']
+        }
+      };
+
+      const result = validateFeedbackRecordDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+    });
+
+    it('[EARS-1018] should reject non-object metadata (string)', () => {
+      const invalid = {
+        ...createValidFeedbackRecord(),
+        metadata: 'not-an-object' as unknown as object
+      };
+
+      const result = validateFeedbackRecordDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.field.includes('metadata') && e.message.includes('object')
+      )).toBe(true);
+    });
+
+    it('[EARS-1019] should reject non-object metadata (number)', () => {
+      const invalid = {
+        ...createValidFeedbackRecord(),
+        metadata: 123 as unknown as object
+      };
+
+      const result = validateFeedbackRecordDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.field.includes('metadata') && e.message.includes('object')
+      )).toBe(true);
+    });
+
+    it('[EARS-1020] should reject non-object metadata (array)', () => {
+      const invalid = {
+        ...createValidFeedbackRecord(),
+        metadata: ['not', 'an', 'object'] as unknown as object
+      };
+
+      const result = validateFeedbackRecordDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.field.includes('metadata') && e.message.includes('object')
+      )).toBe(true);
+    });
+
+    it('[EARS-1021] should reject null metadata', () => {
+      const invalid = {
+        ...createValidFeedbackRecord(),
+        metadata: null as unknown as object
+      };
+
+      const result = validateFeedbackRecordDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.field.includes('metadata')
+      )).toBe(true);
+    });
+
+    it('[EARS-1022] should accept metadata with issue tracking structure', () => {
+      const valid = {
+        ...createValidFeedbackRecord(),
+        type: 'blocking' as const,
+        metadata: {
+          issueId: 'SEC-001',
+          severity: 'critical',
+          file: 'src/config.ts',
+          line: 42,
+          expiresAt: '2025-12-31T23:59:59Z'
+        }
+      };
+
+      const result = validateFeedbackRecordDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+    });
+
+    it('[EARS-1023] should accept metadata with mixed value types', () => {
+      const valid = {
+        ...createValidFeedbackRecord(),
+        metadata: {
+          stringValue: 'hello',
+          numberValue: 42,
+          booleanValue: true,
+          nullValue: null,
+          arrayValue: [1, 2, 3],
+          objectValue: { nested: 'object' }
+        }
+      };
+
+      const result = validateFeedbackRecordDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+    });
+
+    it('[EARS-1024] should accept FeedbackRecord with all fields including metadata', () => {
+      const valid: FeedbackRecord = {
+        id: '1752788100-feedback-complete-with-metadata',
+        entityType: 'execution',
+        entityId: '1752642000-exec-scan',
+        type: 'approval',
+        status: 'resolved',
+        content: 'Approved with full context and metadata.',
+        assignee: 'human:security-lead',
+        resolvesFeedbackId: '1752788000-feedback-previous',
+        metadata: {
+          reviewerId: 'reviewer-456',
+          approvalLevel: 'senior',
+          context: { source: 'manual-review', priority: 'high' }
+        }
+      };
+
+      const result = validateFeedbackRecordDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+  });
 });
 
