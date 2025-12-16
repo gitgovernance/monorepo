@@ -56,7 +56,7 @@ gitgov dashboard
 
 ## 🤝 Converse with Your Project
 
-After installation, open your preferred IDE—Cursor, VS Code, or any editor with AI capabilities. Open the chat and use `@gitgov` (located in `.gitgov/gitgov` if your editor uses different syntax like `#gitgov`) to start conversing with your project.
+After installation, open your preferred IDE—Cursor, VS Code, or any editor with AI capabilities. Open the chat and use `@gitgov` (located in `gitgov` if your editor uses different syntax like `#gitgov`) to start conversing with your project.
 
 Natural language becomes your primary interface. Ask the agent to check project health, assign work, or identify priorities. The agent executes `gitgov` commands on your behalf, providing conversational access to the complete system functionality.
 
