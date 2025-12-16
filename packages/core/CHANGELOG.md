@@ -1,3 +1,10 @@
+## [1.10.0](https://github.com/gitgovernance/monorepo/compare/core-v1.9.0...core-v1.10.0) (2025-12-16)
+
+
+### ✨ Features
+
+* **core:** add generic metadata support to FeedbackRecord ([#77](https://github.com/gitgovernance/monorepo/issues/77)) ([fc657c1](https://github.com/gitgovernance/monorepo/commit/fc657c109432e394042d90f6d443916e85171ddd))
+
 ## [1.9.0](https://github.com/gitgovernance/monorepo/compare/core-v1.8.3...core-v1.9.0) (2025-12-15)
 
 
