@@ -98,6 +98,20 @@
       "examples": [
         "1752788100-feedback-blocking-rest-api"
       ]
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Optional structured data for machine consumption.\nUse this field for domain-specific data that needs to be programmatically processed.\nCommon use cases: waiver details (fingerprint, ruleId, file, line), approval context, assignment metadata.\n",
+      "examples": [
+        {
+          "fingerprint": "abc123def456",
+          "ruleId": "PII-001",
+          "file": "src/user.ts",
+          "line": 42,
+          "expiresAt": "2025-12-31T23:59:59Z"
+        }
+      ]
     }
   },
   "examples": [
