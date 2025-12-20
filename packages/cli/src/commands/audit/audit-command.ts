@@ -1,15 +1,23 @@
-import { Command } from 'commander';
+import { Command, Option } from 'commander';
 import { BaseCommand } from '../../base/base-command';
 import type { BaseCommandOptions } from '../../interfaces/command';
-import type { SourceAuditor, PiiDetector } from '@gitgov/core';
+import type { SourceAuditor, PiiDetector, Config, Git } from '@gitgov/core';
+
+// Types are imported from Core via the SourceAuditor namespace
+// Re-export for consumers of this command
+export type AuditTarget = SourceAuditor.AuditTarget;
+export type CodeScope = SourceAuditor.CodeScope;
+export type GroupByOption = SourceAuditor.GroupByOption;
 
 /**
  * CLI-specific options for audit command
  * Maps to AuditOptions in core module
  */
 export interface AuditCommandOptions extends BaseCommandOptions {
-  /** Scope of files to audit (default: 'full') */
-  scope: 'full' | 'git-diff' | 'pr' | string;
+  /** Target to audit (default: 'code') - MVP only supports 'code' */
+  target: AuditTarget;
+  /** Scope of audit - values depend on target (default for code: 'diff') */
+  scope: CodeScope;
   /** Output format (default: 'text') */
   output: 'text' | 'json' | 'sarif';
   /** Minimum severity for exit 1 (default: 'critical') */
@@ -22,6 +30,12 @@ export interface AuditCommandOptions extends BaseCommandOptions {
   exclude?: string;
   /** Quiet mode - only fatal errors */
   quiet?: boolean;
+  /** Show only summary without individual findings (default: false) */
+  summary?: boolean;
+  /** Limit findings shown, 0 = all (default: 50) */
+  maxFindings?: number;
+  /** Group findings by: file, severity, category (default: 'file') */
+  groupBy?: GroupByOption;
 }
 
 /**
@@ -71,18 +85,27 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
     const auditCmd = program
       .command('audit')
       .description(this.description)
-      .option('-s, --scope <scope>', 'Scope: full, git-diff, pr, or glob pattern', 'full')
-      .option('-o, --output <format>', 'Output format: text, json, sarif', 'text')
-      .option('-f, --fail-on <severity>', 'Exit 1 on: critical, high, medium, low', 'critical')
-      .option('-d, --detector <type>', 'Detector: regex, heuristic, llm')
+      .addOption(new Option('-t, --target <target>', 'What to audit').choices(['code', 'jira', 'gitgov']).default('code'))
+      .addOption(new Option('-s, --scope <scope>', 'Scope: diff (incremental), full (no save), baseline (full + save)').choices(['diff', 'full', 'baseline']).default('diff'))
+      .addOption(new Option('-o, --output <format>', 'Output format').choices(['text', 'json', 'sarif']).default('text'))
+      .addOption(new Option('-f, --fail-on <severity>', 'Exit 1 on severity level').choices(['critical', 'high', 'medium', 'low']).default('critical'))
+      .addOption(new Option('-d, --detector <type>', 'Detector type').choices(['regex', 'heuristic', 'llm']))
       .option('-i, --include <globs>', 'Additional globs to include (CSV)')
       .option('-e, --exclude <globs>', 'Additional globs to exclude (CSV)')
       .option('-q, --quiet', 'Quiet mode - only fatal errors', false)
       .option('--json', 'Alias for --output json', false)
+      .option('--summary', 'Show only summary without individual findings', false)
+      .option('--max-findings <n>', 'Limit findings shown (0 = all)', (val: string) => parseInt(val, 10), 50)
+      .addOption(new Option('--group-by <type>', 'Group findings by').choices(['file', 'severity', 'category']).default('file'))
       .action(async (options: AuditCommandOptions & { json?: boolean }) => {
-        // [EARS-A1] Handle --json alias
+        // Handle --json alias
         if (options.json) {
           options.output = 'json';
+        }
+        // Validate target (MVP only supports 'code')
+        if (options.target !== 'code') {
+          console.error(`❌ Target '${options.target}' not yet supported. Only 'code' is available.`);
+          process.exit(1);
         }
         await this.execute(options);
       });
@@ -104,30 +127,62 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
    */
   async execute(options: AuditCommandOptions): Promise<void> {
     try {
-      const startTime = Date.now();
-
-      // [EARS-A4] Initialize dependencies
+      // Initialize dependencies
       const sourceAuditor = await this.container.getSourceAuditorModule();
+      const configManager = await this.container.getConfigManager();
+      const gitModule = await this.container.getGitModule();
 
-      // [EARS-A2] Map CLI options to AuditOptions
-      const auditOptions = this.mapToAuditOptions(options);
+      // Map CLI options to AuditOptions
+      const auditOptions = await this.mapToAuditOptions(options, configManager);
+
+      // Determine scan mode for user feedback
+      const isIncremental = options.scope === 'diff' && auditOptions.scope.changedSince;
 
       if (!options.quiet) {
-        this.logger.log('Scanning repository...');
+        if (isIncremental) {
+          const shortSha = auditOptions.scope.changedSince!.substring(0, 7);
+          this.logger.log(`Scanning changes since ${shortSha}...`);
+        } else if (options.scope === 'diff') {
+          // First run - no baseline exists
+          this.logger.log('Scanning repository (no baseline found)...');
+        } else {
+          this.logger.log(`Scanning repository (scope: ${options.scope})...`);
+        }
       }
 
       // Invoke core module - ALL logic lives here
       const result = await sourceAuditor.audit(auditOptions);
 
+      // If --scope baseline, save the current commit as new baseline
+      if (options.scope === 'baseline') {
+        try {
+          const currentCommit = await gitModule.getCommitHash('HEAD');
+          const shortCommit = currentCommit.substring(0, 7);
+          await configManager.updateAuditState({
+            lastFullAuditCommit: shortCommit,
+            lastFullAuditTimestamp: new Date().toISOString(),
+            lastFullAuditFindingsCount: result.summary.total,
+          });
+          if (!options.quiet) {
+            this.logger.log(`\n📌 Baseline saved: ${shortCommit}`);
+          }
+        } catch {
+          // Git not available or not in a repo - skip saving baseline
+          if (!options.quiet) {
+            this.logger.log('\n⚠️ Could not save baseline (git not available)');
+          }
+        }
+      }
+
       // Format and display output
       this.formatOutput(result, options);
 
-      // [EARS-D1, EARS-D2] Calculate exit code
+      // Calculate exit code
       const exitCode = this.calculateExitCode(result, options.failOn);
       process.exit(exitCode);
 
     } catch (error) {
-      // [EARS-A4] Handle initialization errors
+      // Handle initialization errors
       const message = error instanceof Error ? error.message : 'Unknown error';
       if (options.output === 'json') {
         console.log(JSON.stringify({ success: false, error: message }, null, 2));
@@ -140,10 +195,13 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
 
   /**
    * Map CLI options to core AuditOptions
-   * [EARS-A2, EARS-B1, EARS-B2, EARS-B3, EARS-B4]
+   * Loads baseline commit from config for incremental mode
    */
-  private mapToAuditOptions(options: AuditCommandOptions): SourceAuditor.AuditOptions {
-    const scope = this.resolveScope(options);
+  private async mapToAuditOptions(
+    options: AuditCommandOptions,
+    configManager: Config.ConfigManager
+  ): Promise<SourceAuditor.AuditOptions> {
+    const scope = await this.resolveScope(options, configManager);
 
     return {
       scope,
@@ -151,24 +209,21 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
   }
 
   /**
-   * Resolve scope configuration based on CLI option
+   * Resolve scope configuration based on CLI options
    * [EARS-B1, EARS-B2, EARS-B3, EARS-B4]
+   *
+   * - --scope diff (default): incremental from last baseline
+   * - --scope full: scan everything, don't save baseline
+   * - --scope baseline: scan everything, save commit as baseline
    */
-  private resolveScope(options: AuditCommandOptions): SourceAuditor.ScopeConfig {
-    const baseInclude: string[] = [];
+  private async resolveScope(
+    options: AuditCommandOptions,
+    configManager: Config.ConfigManager
+  ): Promise<SourceAuditor.ScopeConfig> {
+    const baseInclude: string[] = ['**/*'];
     const baseExclude: string[] = [];
 
-    // [EARS-B1] full scope - all files
-    if (options.scope === 'full') {
-      baseInclude.push('**/*');
-    }
-    // [EARS-B4] Custom glob pattern
-    else if (!['git-diff', 'pr'].includes(options.scope)) {
-      baseInclude.push(options.scope);
-    }
-    // [EARS-B2, EARS-B3] git-diff and pr handled by core module
-
-    // Add user-provided includes/excludes
+    // [EARS-B4] Add user-provided includes/excludes as filters
     if (options.include) {
       baseInclude.push(...options.include.split(',').map(g => g.trim()));
     }
@@ -176,8 +231,29 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
       baseExclude.push(...options.exclude.split(',').map(g => g.trim()));
     }
 
+    // [EARS-B2] --scope full: scan everything, don't save baseline
+    // [EARS-B3] --scope baseline: scan everything (baseline saving handled in execute)
+    if (options.scope === 'full' || options.scope === 'baseline') {
+      return {
+        include: baseInclude,
+        exclude: baseExclude,
+      };
+    }
+
+    // [EARS-B1] --scope diff (default): incremental mode from last baseline
+    const auditState = await configManager.getAuditState();
+    if (auditState.lastFullAuditCommit) {
+      return {
+        include: baseInclude,
+        exclude: baseExclude,
+        changedSince: auditState.lastFullAuditCommit,
+      };
+    }
+
+    // No baseline exists - run full scan (first time)
+    // Behaves like --scope full when no baseline is available
     return {
-      include: baseInclude.length > 0 ? baseInclude : ['**/*'],
+      include: baseInclude,
       exclude: baseExclude,
     };
   }
@@ -209,62 +285,163 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
         this.formatSarifOutput(result);
         break;
       default:
-        // [EARS-C1] Text output
-        this.formatTextOutput(result);
+        // [EARS-C1, C5, C6, C7] Text output with grouping and limits
+        this.formatTextOutput(result, options);
     }
   }
 
   /**
-   * Format text output with colors and severity
-   * [EARS-C1]
+   * Format text output with new structure: FINDINGS → SUMMARY → SCAN INFO
+   * [EARS-C1, EARS-C5, EARS-C6, EARS-C7]
    */
-  private formatTextOutput(result: SourceAuditor.AuditResult): void {
-    const { findings, summary, scannedFiles, duration, waivers } = result;
+  private formatTextOutput(result: SourceAuditor.AuditResult, options: AuditCommandOptions): void {
+    const { findings, summary, scannedFiles, duration } = result;
+    const maxFindings = options.maxFindings ?? 50;
+    const groupBy = options.groupBy ?? 'file';
+    const showSummaryOnly = options.summary ?? false;
 
-    // Header
-    console.log('\n' + '═'.repeat(60));
-    console.log('                    GITGOV SECURITY AUDIT');
-    console.log('═'.repeat(60) + '\n');
+    // [EARS-C5] If --summary, skip findings section
+    if (!showSummaryOnly && findings.length > 0) {
+      // [EARS-C6] Limit findings if maxFindings > 0
+      const displayFindings = maxFindings > 0 ? findings.slice(0, maxFindings) : findings;
+      const remainingCount = findings.length - displayFindings.length;
 
-    // Scan info
-    console.log(`Scanned: ${scannedFiles} files in ${duration}ms`);
-    console.log(`Waivers: ${waivers.acknowledged} acknowledged, ${waivers.new} new\n`);
-
-    // Findings
-    if (findings.length > 0) {
-      console.log('─'.repeat(60));
-      console.log('FINDINGS');
+      console.log('\n' + '─'.repeat(60));
+      if (remainingCount > 0) {
+        console.log(`FINDINGS (showing ${displayFindings.length} of ${findings.length})`);
+      } else {
+        console.log('FINDINGS');
+      }
       console.log('─'.repeat(60) + '\n');
 
-      // Group by file
-      const byFile = this.groupByFile(findings);
-      for (const [file, fileFindings] of Object.entries(byFile)) {
-        console.log(`\x1b[1m${file}\x1b[0m`);
-        for (const f of fileFindings) {
-          const icon = this.getSeverityIcon(f.severity);
-          const color = this.getSeverityColor(f.severity);
-          console.log(`  ${icon} ${color}${f.severity.toUpperCase()}\x1b[0m :${f.line}`);
-          console.log(`     ${f.message}`);
-          console.log(`     Fingerprint: ${f.fingerprint.slice(0, 12)}...`);
-        }
-        console.log('');
+      // [EARS-C7] Group findings according to --group-by
+      this.displayGroupedFindings(displayFindings, groupBy);
+
+      // Show remaining count if limited
+      if (remainingCount > 0) {
+        console.log(`\x1b[33m... ${remainingCount} more finding(s) (use --max-findings 0 to see all)\x1b[0m\n`);
       }
     }
 
-    // Summary
+    // SUMMARY section
     console.log('─'.repeat(60));
     console.log('SUMMARY');
     console.log('─'.repeat(60) + '\n');
 
-    console.log('┌──────────┬───────┐');
-    console.log('│ Severity │ Count │');
-    console.log('├──────────┼───────┤');
-    console.log(`│ Critical │   ${summary.bySeverity.critical.toString().padStart(3)}   │`);
-    console.log(`│ High     │   ${summary.bySeverity.high.toString().padStart(3)}   │`);
-    console.log(`│ Medium   │   ${summary.bySeverity.medium.toString().padStart(3)}   │`);
-    console.log(`│ Low      │   ${summary.bySeverity.low.toString().padStart(3)}   │`);
-    console.log('└──────────┴───────┘');
-    console.log(`\nTotal: ${summary.total} findings\n`);
+    console.log('┌──────────┬───────┬────────────────────────────────────────┐');
+    console.log('│ Severity │ Count │ Status                                 │');
+    console.log('├──────────┼───────┼────────────────────────────────────────┤');
+    console.log(`│ Critical │ ${summary.bySeverity.critical.toString().padStart(5)} │ ${summary.bySeverity.critical > 0 ? '🔴 Blocking (exit 1)' : '✅'}${' '.repeat(summary.bySeverity.critical > 0 ? 19 : 38)} │`);
+    console.log(`│ High     │ ${summary.bySeverity.high.toString().padStart(5)} │ ${summary.bySeverity.high > 0 ? '🟠 Requires attention' : '✅'}${' '.repeat(summary.bySeverity.high > 0 ? 18 : 38)} │`);
+    console.log(`│ Medium   │ ${summary.bySeverity.medium.toString().padStart(5)} │ ${summary.bySeverity.medium > 0 ? '🟡 Review recommended' : '✅'}${' '.repeat(summary.bySeverity.medium > 0 ? 18 : 38)} │`);
+    console.log(`│ Low      │ ${summary.bySeverity.low.toString().padStart(5)} │ ${summary.bySeverity.low > 0 ? '🔵 Info' : '✅'}${' '.repeat(summary.bySeverity.low > 0 ? 32 : 38)} │`);
+    console.log('└──────────┴───────┴────────────────────────────────────────┘');
+    console.log(`\nTotal: ${summary.total} findings in ${scannedFiles} files\n`);
+
+    // SCAN INFO section (always at the end for visibility)
+    console.log('─'.repeat(60));
+    console.log('SCAN INFO');
+    console.log('─'.repeat(60) + '\n');
+
+    console.log(`Target:     ${options.target}`);
+    console.log(`Scope:      ${options.scope}`);
+    console.log(`Duration:   ${duration}ms`);
+
+    const exitCode = this.calculateExitCode(result, options.failOn);
+    if (exitCode === 1) {
+      console.log(`Exit code:  \x1b[31m1 (${options.failOn} findings detected)\x1b[0m`);
+    } else {
+      console.log(`Exit code:  \x1b[32m0 (no ${options.failOn} findings)\x1b[0m`);
+    }
+
+    if (summary.total > 0) {
+      console.log(`\nTip: gitgov audit waive <fingerprint> -j "reason"`);
+    }
+    console.log('');
+  }
+
+  /**
+   * Display findings grouped by the specified option
+   * [EARS-C7]
+   */
+  private displayGroupedFindings(findings: PiiDetector.GdprFinding[], groupBy: GroupByOption): void {
+    switch (groupBy) {
+      case 'severity':
+        this.displayBySeverity(findings);
+        break;
+      case 'category':
+        this.displayByCategory(findings);
+        break;
+      case 'file':
+      default:
+        this.displayByFile(findings);
+        break;
+    }
+  }
+
+  /**
+   * Display findings grouped by file (default)
+   */
+  private displayByFile(findings: PiiDetector.GdprFinding[]): void {
+    const byFile = this.groupByFile(findings);
+    for (const [file, fileFindings] of Object.entries(byFile)) {
+      console.log(`\x1b[1m${file}\x1b[0m`);
+      for (const f of fileFindings) {
+        const icon = this.getSeverityIcon(f.severity);
+        const color = this.getSeverityColor(f.severity);
+        const line = f.line?.toString() ?? '?';
+        const col = f.column?.toString() ?? '?';
+        console.log(`  ${icon} ${line.padStart(4)}:${col.padEnd(3)} ${color}${f.severity.toUpperCase().padEnd(8)}\x1b[0m ${f.message}`);
+        console.log(`            └── Fingerprint: ${f.fingerprint?.slice(0, 12) ?? 'unknown'}...`);
+      }
+      console.log('');
+    }
+  }
+
+  /**
+   * Display findings grouped by severity
+   */
+  private displayBySeverity(findings: PiiDetector.GdprFinding[]): void {
+    const severities = ['critical', 'high', 'medium', 'low', 'info'] as const;
+
+    for (const severity of severities) {
+      const severityFindings = findings.filter(f => f.severity === severity);
+      if (severityFindings.length === 0) continue;
+
+      const icon = this.getSeverityIcon(severity);
+      const color = this.getSeverityColor(severity);
+      console.log(`${icon} ${color}${severity.toUpperCase()}\x1b[0m (${severityFindings.length})`);
+
+      for (const f of severityFindings) {
+        console.log(`  ${f.file}:${f.line}  ${f.message}`);
+      }
+      console.log('');
+    }
+  }
+
+  /**
+   * Display findings grouped by category
+   */
+  private displayByCategory(findings: PiiDetector.GdprFinding[]): void {
+    const byCategory: Record<string, PiiDetector.GdprFinding[]> = {};
+
+    for (const f of findings) {
+      const cat = f.category || 'unknown';
+      if (!byCategory[cat]) {
+        byCategory[cat] = [];
+      }
+      byCategory[cat]!.push(f);
+    }
+
+    for (const [category, catFindings] of Object.entries(byCategory)) {
+      console.log(`\x1b[1m${category.toUpperCase()}\x1b[0m (${catFindings.length})`);
+
+      for (const f of catFindings) {
+        const icon = this.getSeverityIcon(f.severity);
+        console.log(`  ${icon} ${f.file}:${f.line}  ${f.message}`);
+      }
+      console.log('');
+    }
   }
 
   /**
