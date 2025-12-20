@@ -9,6 +9,17 @@ export { WaiverWriter } from "./waiver_writer";
 
 // Types
 export type {
+  // Target and Scope types
+  AuditTarget,
+  CodeScope,
+  JiraScope,
+  GitgovScope,
+  AuditScope,
+  // Output/Display types
+  GroupByOption,
+  OutputFormat,
+  FailOnSeverity,
+  // Core interfaces
   SourceAuditorDependencies,
   ScopeConfig,
   AuditOptions,

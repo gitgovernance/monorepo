@@ -1,5 +1,6 @@
 import * as fs from "fs/promises";
 import * as path from "path";
+import { execSync } from "child_process";
 import fg from "fast-glob";
 import type { ScopeConfig } from "./types";
 
@@ -11,7 +12,8 @@ export class ScopeSelector {
   /**
    * Selects files matching include patterns, excluding those matching exclude patterns.
    * Automatically respects .gitignore patterns from the project root.
-   * @param scope - Include and exclude glob patterns
+   * If scope.changedSince is set, only returns files changed since that commit.
+   * @param scope - Include and exclude glob patterns, optional changedSince commit
    * @param baseDir - Base directory for file search
    * @returns Array of file paths relative to baseDir
    */
@@ -26,6 +28,12 @@ export class ScopeSelector {
     // Merge: gitignore patterns + user-provided excludes
     const allExcludes = [...gitignorePatterns, ...scope.exclude];
 
+    // If changedSince is set, use incremental mode
+    if (scope.changedSince) {
+      return this.selectChangedFiles(scope.changedSince, allExcludes, baseDir);
+    }
+
+    // Full mode: use glob patterns
     const files = await fg(scope.include, {
       cwd: baseDir,
       ignore: allExcludes,
@@ -34,6 +42,64 @@ export class ScopeSelector {
     });
 
     return files.sort();
+  }
+
+  /**
+   * Selects files changed since a specific commit (incremental mode).
+   * Includes: git diff, modified files, untracked files.
+   */
+  private async selectChangedFiles(
+    sinceCommit: string,
+    excludes: string[],
+    baseDir: string
+  ): Promise<string[]> {
+    const changedFiles = new Set<string>();
+
+    try {
+      // 1. Files changed between sinceCommit and HEAD
+      const diffOutput = execSync(
+        `git diff --name-only ${sinceCommit}..HEAD`,
+        { cwd: baseDir, encoding: "utf-8" }
+      );
+      diffOutput.split("\n").filter(Boolean).forEach((f) => changedFiles.add(f));
+
+      // 2. Currently modified files (staged and unstaged)
+      const statusOutput = execSync(
+        `git status --porcelain`,
+        { cwd: baseDir, encoding: "utf-8" }
+      );
+      statusOutput.split("\n").filter(Boolean).forEach((line) => {
+        // Format: "XY filename" where X=staged, Y=unstaged
+        const file = line.slice(3).trim();
+        if (file) changedFiles.add(file);
+      });
+
+      // 3. Untracked files
+      const untrackedOutput = execSync(
+        `git ls-files --others --exclude-standard`,
+        { cwd: baseDir, encoding: "utf-8" }
+      );
+      untrackedOutput.split("\n").filter(Boolean).forEach((f) => changedFiles.add(f));
+    } catch {
+      // Git commands failed - fall back to empty (caller should handle)
+      return [];
+    }
+
+    // Filter out excluded files using micromatch via fast-glob
+    const allFiles = Array.from(changedFiles);
+    if (allFiles.length === 0) {
+      return [];
+    }
+
+    // Use fast-glob to filter by excludes
+    const filtered = await fg(allFiles, {
+      cwd: baseDir,
+      ignore: excludes,
+      onlyFiles: true,
+      absolute: false,
+    });
+
+    return filtered.sort();
   }
 
   /**

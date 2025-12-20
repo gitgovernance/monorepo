@@ -7,6 +7,71 @@ import type {
 import type { FeedbackRecord } from "../types";
 import type { PiiDetectorModule } from "../pii_detector";
 
+// ============================================================================
+// AUDIT TARGET TYPES
+// ============================================================================
+
+/**
+ * What to audit.
+ * - code: Source code in the repository (MVP)
+ * - jira: Jira issues (future)
+ * - gitgov: GitGovernance records (future)
+ */
+export type AuditTarget = "code" | "jira" | "gitgov";
+
+/**
+ * Scope for code auditing.
+ * - diff: Only files modified since last baseline (default)
+ * - full: All files in repo (without saving baseline)
+ * - baseline: All files + save commit as new baseline
+ */
+export type CodeScope = "diff" | "full" | "baseline";
+
+/**
+ * Scope for Jira auditing (future).
+ * - all: All issues
+ * - sprint: Only current sprint issues
+ * - stale: Issues without activity > 30 days
+ * - backlog: Unassigned backlog issues
+ */
+export type JiraScope = "all" | "sprint" | "stale" | "backlog";
+
+/**
+ * Scope for GitGov records auditing (future).
+ * - all: All records
+ * - tasks: Only TaskRecords
+ * - cycles: Only CycleRecords
+ */
+export type GitgovScope = "all" | "tasks" | "cycles";
+
+/**
+ * Union of all possible scopes depending on target.
+ */
+export type AuditScope = CodeScope | JiraScope | GitgovScope;
+
+// ============================================================================
+// OUTPUT/DISPLAY OPTIONS
+// ============================================================================
+
+/**
+ * How to group findings in output.
+ */
+export type GroupByOption = "file" | "severity" | "category";
+
+/**
+ * Output format for the report.
+ */
+export type OutputFormat = "text" | "json" | "sarif";
+
+/**
+ * Minimum severity level to fail the audit.
+ */
+export type FailOnSeverity = "critical" | "high" | "medium" | "low" | "none";
+
+// ============================================================================
+// WAIVER TYPES
+// ============================================================================
+
 /**
  * Metadata stored in FeedbackRecord for waivers.
  * Uses the generic metadata<T> field of FeedbackRecord.
@@ -58,6 +123,8 @@ export interface ScopeConfig {
   include: string[];
   /** Glob patterns to exclude */
   exclude: string[];
+  /** Commit SHA to compare against for incremental mode (optional) */
+  changedSince?: string;
 }
 
 /**
