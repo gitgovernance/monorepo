@@ -1,3 +1,16 @@
+## [1.11.0](https://github.com/gitgovernance/monorepo/compare/core-v1.10.0...core-v1.11.0) (2025-12-20)
+
+
+### ✨ Features
+
+* gitgov audit - PII/secrets detection CLI ([#78](https://github.com/gitgovernance/monorepo/issues/78)) ([f47fbb5](https://github.com/gitgovernance/monorepo/commit/f47fbb554bb00c029c4ce649935033ab76c3eb99))
+
+
+### ♻️ Refactoring
+
+* **git:** update readme file ([e784a63](https://github.com/gitgovernance/monorepo/commit/e784a632b2bb31f395037fab994c9606dff23f20))
+* **git:** update readme file ([4060922](https://github.com/gitgovernance/monorepo/commit/406092232156ca4c7e12aae7b343747e48f5e59d))
+
 ## [1.10.0](https://github.com/gitgovernance/monorepo/compare/core-v1.9.0...core-v1.10.0) (2025-12-16)
 
 
