@@ -14,6 +14,10 @@ export * as Records from "./types";
 export * as EventBus from "./event_bus";
 export * as DiagramGenerator from "./diagram_generator";
 
+// Audit modules
+export * as PiiDetector from "./pii_detector";
+export * as SourceAuditor from "./source_auditor";
+
 // adapters
 export * as BacklogAdapter from "./adapters/backlog_adapter";
 export * as ChangelogAdapter from "./adapters/changelog_adapter";

@@ -1,5 +1,5 @@
 import * as path from 'path';
-import { Adapters, Config, Records, Store, EventBus, Lint, Git, Sync } from '@gitgov/core';
+import { Adapters, Config, Records, Store, EventBus, Lint, Git, Sync, SourceAuditor, PiiDetector } from '@gitgov/core';
 import { spawn } from 'child_process';
 
 /**
@@ -14,6 +14,7 @@ export class DependencyInjectionService {
   private backlogAdapter: Adapters.BacklogAdapter | null = null;
   private lintModule: Lint.LintModule | null = null;
   private syncModule: Sync.SyncModule | null = null;
+  private sourceAuditorModule: SourceAuditor.SourceAuditorModule | null = null;
   private configManager: Config.ConfigManager | null = null;
   private gitModule: Git.GitModule | null = null;
   private projectRoot: string | null = null;
@@ -397,6 +398,62 @@ export class DependencyInjectionService {
       }
       throw new Error("❌ Unknown error initializing lint system.");
     }
+  }
+
+  /**
+   * Creates and returns SourceAuditorModule with all required dependencies
+   */
+  async getSourceAuditorModule(): Promise<SourceAuditor.SourceAuditorModule> {
+    if (this.sourceAuditorModule) {
+      return this.sourceAuditorModule;
+    }
+
+    try {
+      await this.initializeStores();
+      if (!this.stores) {
+        throw new Error("Failed to initialize stores");
+      }
+
+      // Create PiiDetectorModule (uses default config)
+      const piiDetector = new PiiDetector.PiiDetectorModule();
+
+      // Create WaiverReader with FeedbackAdapter
+      const feedbackAdapter = await this.getFeedbackAdapter();
+      const waiverReader = new SourceAuditor.WaiverReader(feedbackAdapter);
+
+      // Create SourceAuditorModule with dependencies
+      this.sourceAuditorModule = new SourceAuditor.SourceAuditorModule({
+        piiDetector,
+        waiverReader,
+      });
+
+      return this.sourceAuditorModule;
+
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message.includes('Could not find project root')) {
+          throw new Error("❌ GitGovernance not initialized. Run 'gitgov init' first.");
+        }
+        throw new Error(`❌ Failed to initialize source auditor: ${error.message}`);
+      }
+      throw new Error("❌ Unknown error initializing source auditor.");
+    }
+  }
+
+  /**
+   * Creates and returns WaiverWriter for creating waivers
+   */
+  async getWaiverWriter(): Promise<SourceAuditor.WaiverWriter> {
+    const feedbackAdapter = await this.getFeedbackAdapter();
+    return new SourceAuditor.WaiverWriter(feedbackAdapter);
+  }
+
+  /**
+   * Creates and returns WaiverReader for reading waivers
+   */
+  async getWaiverReader(): Promise<SourceAuditor.WaiverReader> {
+    const feedbackAdapter = await this.getFeedbackAdapter();
+    return new SourceAuditor.WaiverReader(feedbackAdapter);
   }
 
   /**

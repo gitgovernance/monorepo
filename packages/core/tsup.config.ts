@@ -9,5 +9,6 @@ export default defineConfig({
   outDir: 'dist/src',
   splitting: false,
   treeshake: true,
+  external: ['fast-glob'],
 });
 
