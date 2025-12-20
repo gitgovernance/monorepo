@@ -10,6 +10,7 @@ import { registerStatusCommands } from './commands/status/status';
 import { registerDashboardCommands } from './commands/dashboard/dashboard';
 import { registerContextCommands } from './commands/context/context';
 import { registerLintCommand } from './commands/lint/lint';
+import { registerAuditCommand } from './commands/audit/audit';
 import { registerSyncCommands } from './commands/sync/sync';
 import { DependencyInjectionService } from './services/dependency-injection';
 import packageJson from '../package.json' assert { type: 'json' };
@@ -59,6 +60,9 @@ async function setupCommands() {
 
     // Register lint commands
     registerLintCommand(program);
+
+    // Register audit commands
+    registerAuditCommand(program);
   } catch (error) {
     // Handle initialization errors gracefully
     if (error instanceof Error) {

@@ -36,6 +36,14 @@ export interface GitGovConfig {
         defaultIgnoredPatterns?: string[];
       };
     };
+    audit?: {
+      /** Commit SHA of last full audit (for incremental mode) */
+      lastFullAuditCommit?: string;
+      /** ISO 8601 timestamp of last full audit */
+      lastFullAuditTimestamp?: string;
+      /** Number of findings in last full audit */
+      lastFullAuditFindingsCount?: number;
+    };
   };
 }
 
@@ -57,6 +65,15 @@ export interface ActorState {
   lastSync?: string;
   syncStatus?: SyncStatus;
   [key: string]: any; // Allow additional actor-specific state
+}
+
+/**
+ * Audit state stored in config.json for incremental mode
+ */
+export interface AuditState {
+  lastFullAuditCommit: string | null;
+  lastFullAuditTimestamp: string | null;
+  lastFullAuditFindingsCount: number | null;
 }
 
 export interface GitGovSession {
@@ -433,6 +450,46 @@ export class ConfigManager {
     }
 
     await fs.writeFile(this.sessionPath, JSON.stringify(session, null, 2), 'utf-8');
+  }
+
+  /**
+   * Get audit state from config.json
+   * Returns last full audit commit and timestamp for incremental mode
+   */
+  async getAuditState(): Promise<AuditState> {
+    const config = await this.loadConfig();
+    return {
+      lastFullAuditCommit: config?.state?.audit?.lastFullAuditCommit || null,
+      lastFullAuditTimestamp: config?.state?.audit?.lastFullAuditTimestamp || null,
+      lastFullAuditFindingsCount: config?.state?.audit?.lastFullAuditFindingsCount ?? null
+    };
+  }
+
+  /**
+   * Update audit state in config.json after a full audit
+   * This is used to enable incremental audits
+   */
+  async updateAuditState(auditState: {
+    lastFullAuditCommit: string;
+    lastFullAuditTimestamp: string;
+    lastFullAuditFindingsCount: number;
+  }): Promise<void> {
+    const config = await this.loadConfig();
+    if (!config) {
+      throw new Error('Cannot update audit state: config.json not found');
+    }
+
+    if (!config.state) {
+      config.state = {};
+    }
+
+    config.state.audit = {
+      lastFullAuditCommit: auditState.lastFullAuditCommit,
+      lastFullAuditTimestamp: auditState.lastFullAuditTimestamp,
+      lastFullAuditFindingsCount: auditState.lastFullAuditFindingsCount
+    };
+
+    await fs.writeFile(this.configPath, JSON.stringify(config, null, 2), 'utf-8');
   }
 
   /**
