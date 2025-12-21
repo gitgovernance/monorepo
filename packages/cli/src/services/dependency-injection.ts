@@ -1,5 +1,5 @@
 import * as path from 'path';
-import { Adapters, Config, Records, Store, EventBus, Lint, Git, Sync, SourceAuditor, PiiDetector } from '@gitgov/core';
+import { Adapters, Config, Records, Store, EventBus, Lint, Git, Sync, SourceAuditor, PiiDetector, Runner } from '@gitgov/core';
 import { spawn } from 'child_process';
 
 /**
@@ -15,6 +15,7 @@ export class DependencyInjectionService {
   private lintModule: Lint.LintModule | null = null;
   private syncModule: Sync.SyncModule | null = null;
   private sourceAuditorModule: SourceAuditor.SourceAuditorModule | null = null;
+  private agentRunnerModule: Runner.AgentRunnerModule | null = null;
   private configManager: Config.ConfigManager | null = null;
   private gitModule: Git.GitModule | null = null;
   private projectRoot: string | null = null;
@@ -454,6 +455,103 @@ export class DependencyInjectionService {
   async getWaiverReader(): Promise<SourceAuditor.WaiverReader> {
     const feedbackAdapter = await this.getFeedbackAdapter();
     return new SourceAuditor.WaiverReader(feedbackAdapter);
+  }
+
+  /**
+   * Creates and returns ExecutionAdapter with all required dependencies
+   */
+  async getExecutionAdapter(): Promise<Adapters.ExecutionAdapter> {
+    try {
+      await this.initializeStores();
+      if (!this.stores) {
+        throw new Error("Failed to initialize stores");
+      }
+
+      // Create EventBus and IdentityAdapter
+      const eventBus = new EventBus.EventBus();
+      const identityAdapter = new Adapters.IdentityAdapter({
+        actorStore: this.stores.actorStore,
+        agentStore: this.stores.agentStore,
+        eventBus
+      });
+
+      // Create ExecutionAdapter with dependencies
+      return new Adapters.ExecutionAdapter({
+        executionStore: this.stores.executionStore,
+        identity: identityAdapter,
+        eventBus
+      });
+
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message.includes('Could not find project root')) {
+          throw new Error("❌ GitGovernance not initialized. Run 'gitgov init' first.");
+        }
+        throw new Error(`❌ Failed to initialize execution adapter: ${error.message}`);
+      }
+      throw new Error("❌ Unknown error initializing execution adapter.");
+    }
+  }
+
+  /**
+   * Creates and returns AgentRunnerModule with all required dependencies
+   */
+  async getAgentRunnerModule(): Promise<Runner.AgentRunnerModule> {
+    if (this.agentRunnerModule) {
+      return this.agentRunnerModule;
+    }
+
+    try {
+      await this.initializeStores();
+      if (!this.stores || !this.projectRoot) {
+        throw new Error("Failed to initialize stores");
+      }
+
+      // Get required dependencies
+      const executionAdapter = await this.getExecutionAdapter();
+      const eventBus = new EventBus.EventBus();
+
+      // Create AgentRunnerModule with dependencies
+      this.agentRunnerModule = new Runner.AgentRunnerModule({
+        gitgovPath: path.join(this.projectRoot, '.gitgov'),
+        projectRoot: this.projectRoot,
+        executionAdapter,
+        eventBus
+      });
+
+      return this.agentRunnerModule;
+
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message.includes('Could not find project root')) {
+          throw new Error("❌ GitGovernance not initialized. Run 'gitgov init' first.");
+        }
+        throw new Error(`❌ Failed to initialize agent runner: ${error.message}`);
+      }
+      throw new Error("❌ Unknown error initializing agent runner.");
+    }
+  }
+
+  /**
+   * Returns the project root path (after initialization)
+   */
+  async getProjectRoot(): Promise<string> {
+    await this.initializeStores();
+    if (!this.projectRoot) {
+      throw new Error("Project root not initialized");
+    }
+    return this.projectRoot;
+  }
+
+  /**
+   * Returns the agent store for listing agents
+   */
+  async getAgentStore(): Promise<Store.RecordStore<Records.AgentRecord>> {
+    await this.initializeStores();
+    if (!this.stores) {
+      throw new Error("Failed to initialize stores");
+    }
+    return this.stores.agentStore;
   }
 
   /**
