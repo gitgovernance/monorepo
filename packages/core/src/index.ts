@@ -18,6 +18,9 @@ export * as DiagramGenerator from "./diagram_generator";
 export * as PiiDetector from "./pii_detector";
 export * as SourceAuditor from "./source_auditor";
 
+// Agent runner
+export * as Runner from "./runner";
+
 // adapters
 export * as BacklogAdapter from "./adapters/backlog_adapter";
 export * as ChangelogAdapter from "./adapters/changelog_adapter";
