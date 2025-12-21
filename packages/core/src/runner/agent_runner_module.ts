@@ -148,18 +148,28 @@ export class AgentRunnerModule {
       new Date(completedAt).getTime() - new Date(startedAt).getTime();
 
     // [EARS-H1, H2] Write ExecutionRecord
+    // Build result message (min 10 chars required by schema)
+    const resultMessage = status === "success"
+      ? output?.message || `Agent ${opts.agentId} completed successfully`
+      : `Agent ${opts.agentId} failed: ${error || 'Unknown error'}`;
+
     const executionRecord = await this.executionAdapter.create(
       {
-        agentId: opts.agentId,
         taskId: opts.taskId,
-        runId,
-        status,
-        output: status === "success" ? output : undefined,
-        error: status === "error" ? error : undefined,
-        startedAt,
-        completedAt,
-        durationMs,
-      } as Record<string, unknown>,
+        type: status === "success" ? "completion" : "blocker",
+        title: `Agent execution: ${opts.agentId}`,
+        result: resultMessage.length >= 10 ? resultMessage : resultMessage.padEnd(10, '.'),
+        metadata: {
+          agentId: opts.agentId,
+          runId,
+          status,
+          output: status === "success" ? output : undefined,
+          error: status === "error" ? error : undefined,
+          startedAt,
+          completedAt,
+          durationMs,
+        },
+      },
       ctx.actorId
     );
 
