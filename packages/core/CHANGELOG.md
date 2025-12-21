@@ -1,3 +1,10 @@
+## [1.12.0](https://github.com/gitgovernance/monorepo/compare/core-v1.11.0...core-v1.12.0) (2025-12-21)
+
+
+### ✨ Features
+
+* gitgov agent command - run, list, show ([#79](https://github.com/gitgovernance/monorepo/issues/79)) ([e59ec64](https://github.com/gitgovernance/monorepo/commit/e59ec64bca414f5fa94a6a14eae93b17d884cd56))
+
 ## [1.11.0](https://github.com/gitgovernance/monorepo/compare/core-v1.10.0...core-v1.11.0) (2025-12-20)
 
 
