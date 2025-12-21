@@ -25,6 +25,19 @@ importers:
         specifier: ^4.16.2
         version: 4.20.3
 
+  packages/agents/test-echo:
+    dependencies:
+      '@gitgov/core':
+        specifier: workspace:*
+        version: link:../../core
+    devDependencies:
+      esbuild:
+        specifier: ^0.19.0
+        version: 0.19.12
+      typescript:
+        specifier: ^5.0.0
+        version: 5.9.2
+
   packages/cli:
     dependencies:
       '@gitgov/core':
@@ -98,6 +111,9 @@ importers:
       ajv-formats:
         specifier: ^3.0.1
         version: 3.0.1(ajv@8.17.1)
+      fast-glob:
+        specifier: ^3.3.2
+        version: 3.3.3
       js-yaml:
         specifier: ^4.1.0
         version: 4.1.0
