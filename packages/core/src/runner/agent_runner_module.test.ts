@@ -483,10 +483,15 @@ describe("AgentRunnerModule", () => {
 
       expect(mockExecutionAdapter.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          agentId: "agent:success",
           taskId: "task:1",
-          status: "success",
-          output: expect.objectContaining({ data: "ok" }),
+          type: "completion",
+          title: "Agent execution: agent:success",
+          result: expect.stringContaining("completed successfully"),
+          metadata: expect.objectContaining({
+            agentId: "agent:success",
+            status: "success",
+            output: expect.objectContaining({ data: "ok" }),
+          }),
         }),
         expect.any(String)
       );
@@ -514,9 +519,16 @@ describe("AgentRunnerModule", () => {
 
       expect(mockExecutionAdapter.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          status: "error",
-          error: "fail",
-          output: undefined,
+          taskId: "task:1",
+          type: "blocker",
+          title: "Agent execution: agent:error",
+          result: expect.stringContaining("failed"),
+          metadata: expect.objectContaining({
+            agentId: "agent:error",
+            status: "error",
+            error: "fail",
+            output: undefined,
+          }),
         }),
         expect.any(String)
       );

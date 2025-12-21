@@ -102,9 +102,12 @@ export class LocalBackend {
 
     if (typeof result === "object") {
       const obj = result as Record<string, unknown>;
-      const output: AgentOutput = {
-        data: obj["data"] ?? obj,
-      };
+      const output: AgentOutput = {};
+
+      // Only include data if explicitly returned
+      if (obj["data"] !== undefined) {
+        output.data = obj["data"];
+      }
 
       const message = obj["message"];
       if (typeof message === "string") {
