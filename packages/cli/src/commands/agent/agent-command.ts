@@ -1,7 +1,7 @@
 import { Command, Option } from 'commander';
 import { BaseCommand } from '../../base/base-command';
 import type { BaseCommandOptions } from '../../interfaces/command';
-import type { Runner, Records } from '@gitgov/core';
+import type { Runner } from '@gitgov/core';
 
 /**
  * CLI-specific options for agent run command
@@ -191,13 +191,16 @@ export class AgentCommand extends BaseCommand<RunCommandOptions> {
       }
 
       // Execute agent
-      const response: Runner.AgentResponse = await runner.runOnce({
+      const runOptions: Runner.RunOptions = {
         agentId,
         taskId,
         actorId: currentActor.id,
         input,
-        tool: options.tool,
-      });
+      };
+      if (options.tool) {
+        runOptions.tool = options.tool;
+      }
+      const response: Runner.AgentResponse = await runner.runOnce(runOptions);
 
       // Format output
       if (options.output === 'json') {
@@ -274,7 +277,7 @@ export class AgentCommand extends BaseCommand<RunCommandOptions> {
       const agentIds = await agentStore.list();
 
       // Load all agents
-      const agents: Array<{ id: string; name: string; engine: string; description?: string }> = [];
+      const agents: Array<{ id: string; name: string; engine: string; description: string | undefined }> = [];
       for (const id of agentIds) {
         const record = await agentStore.read(id);
         if (record) {
@@ -286,11 +289,12 @@ export class AgentCommand extends BaseCommand<RunCommandOptions> {
             continue;
           }
 
+          const meta = payload.metadata as Record<string, unknown> | undefined;
           agents.push({
             id: payload.id,
             name: id.replace('agent-', ''),
             engine: engineType,
-            description: payload.metadata?.description as string | undefined,
+            description: meta?.['description'] as string | undefined,
           });
         }
       }
@@ -348,6 +352,10 @@ export class AgentCommand extends BaseCommand<RunCommandOptions> {
       }
 
       const payload = record.payload;
+      // Cast to any to access dynamic properties safely
+      const agentPayload = payload as any;
+      const engine = agentPayload.engine;
+      const metadata = agentPayload.metadata;
 
       // Output
       if (options.json) {
@@ -359,33 +367,33 @@ export class AgentCommand extends BaseCommand<RunCommandOptions> {
         console.log(`  ID:          ${payload.id}`);
         console.log(`  Status:      ${payload.status || 'active'}`);
 
-        if (payload.metadata?.description) {
-          console.log(`  Description: ${payload.metadata.description}`);
+        if (metadata?.description) {
+          console.log(`  Description: ${metadata.description}`);
         }
 
         console.log('\n  Engine:');
-        console.log(`    Type: ${payload.engine?.type || 'unknown'}`);
-        if (payload.engine?.entrypoint) {
-          console.log(`    Entrypoint: ${payload.engine.entrypoint}`);
+        console.log(`    Type: ${engine?.type || 'unknown'}`);
+        if (engine?.entrypoint) {
+          console.log(`    Entrypoint: ${engine.entrypoint}`);
         }
-        if (payload.engine?.function) {
-          console.log(`    Function: ${payload.engine.function}`);
+        if (engine?.function) {
+          console.log(`    Function: ${engine.function}`);
         }
-        if (payload.engine?.url) {
-          console.log(`    URL: ${payload.engine.url}`);
+        if (engine?.url) {
+          console.log(`    URL: ${engine.url}`);
         }
-        if (payload.engine?.tool) {
-          console.log(`    Tool: ${payload.engine.tool}`);
+        if (engine?.tool) {
+          console.log(`    Tool: ${engine.tool}`);
         }
 
-        if (payload.capabilities && payload.capabilities.length > 0) {
+        if (agentPayload.capabilities && agentPayload.capabilities.length > 0) {
           console.log('\n  Capabilities:');
-          payload.capabilities.forEach((cap: string) => console.log(`    - ${cap}`));
+          agentPayload.capabilities.forEach((cap: string) => console.log(`    - ${cap}`));
         }
 
-        if (payload.triggers && payload.triggers.length > 0) {
+        if (agentPayload.triggers && agentPayload.triggers.length > 0) {
           console.log('\n  Triggers:');
-          payload.triggers.forEach((t: any) => console.log(`    - ${t.type}${t.event ? `: ${t.event}` : ''}`));
+          agentPayload.triggers.forEach((t: any) => console.log(`    - ${t.type}${t.event ? `: ${t.event}` : ''}`));
         }
 
         console.log('─'.repeat(60) + '\n');
