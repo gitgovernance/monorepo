@@ -102,16 +102,15 @@ describe('AgentCommand', () => {
     status: 'active',
     priority: 'medium',
     tags: ['agent', 'automated'],
-    createdAt: '2025-12-21T10:00:00.000Z',
-    updatedAt: '2025-12-21T10:00:00.000Z',
   };
 
   // Mock ActorRecord
   const mockActor: Records.ActorRecord = {
     id: 'human:developer',
     type: 'human',
-    name: 'Developer',
-    email: 'dev@example.com',
+    displayName: 'Developer',
+    publicKey: 'mock-public-key-base64-encoded-44chars==',
+    roles: ['developer'],
   };
 
   beforeEach(() => {
