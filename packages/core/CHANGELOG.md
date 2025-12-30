@@ -1,3 +1,10 @@
+## [1.13.0](https://github.com/gitgovernance/monorepo/compare/core-v1.12.0...core-v1.13.0) (2025-12-30)
+
+
+### ✨ Features
+
+* **agents:** add GDPR audit agent with formatted output ([#80](https://github.com/gitgovernance/monorepo/issues/80)) ([6fe884c](https://github.com/gitgovernance/monorepo/commit/6fe884ca803e41892db95d1d452d87d47fc3bf43))
+
 ## [1.12.0](https://github.com/gitgovernance/monorepo/compare/core-v1.11.0...core-v1.12.0) (2025-12-21)
 
 
