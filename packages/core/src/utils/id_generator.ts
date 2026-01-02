@@ -19,6 +19,14 @@ export function generateActorId(type: 'human' | 'agent', displayName: string): s
 }
 
 /**
+ * Generates an Agent ID (e.g., 'agent:code-reviewer').
+ * Convenience wrapper over generateActorId for agent-specific use cases.
+ */
+export function generateAgentId(displayName: string): string {
+  return generateActorId('agent', displayName);
+}
+
+/**
  * Generates a Task ID (e.g., '12345-task-implement-auth').
  */
 export function generateTaskId(title: string, timestamp: number): string {
