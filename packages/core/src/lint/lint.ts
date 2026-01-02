@@ -305,7 +305,7 @@ export class LintModule implements ILintModule {
     // Path format: .gitgov/{type}s/{recordId}.json
     const pathParts = filePath.split('/');
     const typeDirIndex = pathParts.findIndex(part =>
-      ['tasks', 'cycles', 'executions', 'changelogs', 'feedback', 'actors', 'agents'].includes(part)
+      ['tasks', 'cycles', 'executions', 'changelogs', 'feedbacks', 'actors', 'agents'].includes(part)
     );
     let entityType: Exclude<GitGovRecordType, 'custom'> = this.getEntityType(recordId);
     if (typeDirIndex >= 0 && pathParts[typeDirIndex]) {
@@ -316,7 +316,7 @@ export class LintModule implements ILintModule {
         'cycles': 'cycle',
         'executions': 'execution',
         'changelogs': 'changelog',
-        'feedback': 'feedback',
+        'feedbacks': 'feedback',
         'actors': 'actor',
         'agents': 'agent'
       };
@@ -807,7 +807,7 @@ export class LintModule implements ILintModule {
         'cycle': 'cycles',
         'execution': 'executions',
         'changelog': 'changelogs',
-        'feedback': 'feedback',  // feedback directory is singular, not plural
+        'feedback': 'feedbacks',
         'actor': 'actors',
         'agent': 'agents'
       };
@@ -847,7 +847,7 @@ export class LintModule implements ILintModule {
       'cycle': 'cycles',
       'execution': 'executions',
       'changelog': 'changelogs',
-      'feedback': 'feedback',  // feedback directory is singular, not plural
+      'feedback': 'feedbacks',
       'actor': 'actors',
       'agent': 'agents'
     };
@@ -1001,7 +1001,7 @@ export class LintModule implements ILintModule {
       'cycle': 'cycles',
       'execution': 'executions',
       'changelog': 'changelogs',
-      'feedback': 'feedback',  // feedback directory is singular, not plural
+      'feedback': 'feedbacks',
       'actor': 'actors',
       'agent': 'agents'
     };

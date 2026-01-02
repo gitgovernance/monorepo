@@ -291,7 +291,7 @@ export const SYNC_DIRECTORIES = [
   'cycles',
   'actors',
   'agents',
-  'feedback',
+  'feedbacks',
   'executions',
   'changelogs',
   'workflows',

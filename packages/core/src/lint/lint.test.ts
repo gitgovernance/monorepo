@@ -316,7 +316,7 @@ function mockFilesystemDiscovery(
     cycles: [],
     executions: [],
     changelogs: [],
-    feedback: [],
+    feedbacks: [],
     actors: [],
     agents: []
   };
@@ -327,7 +327,7 @@ function mockFilesystemDiscovery(
       cycle: 'cycles',
       execution: 'executions',
       changelog: 'changelogs',
-      feedback: 'feedback',
+      feedback: 'feedbacks',
       actor: 'actors',
       agent: 'agents'
     };
