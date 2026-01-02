@@ -11,8 +11,16 @@
   ],
   "exports": {
     ".": {
-      "import": "./dist/src/index.js",
-      "types": "./dist/src/index.d.ts"
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/src/index.js"
+    },
+    "./memory-store": {
+      "types": "./dist/src/store/memory/index.d.ts",
+      "import": "./dist/src/store/memory/index.js"
+    },
+    "./fs-store": {
+      "types": "./dist/src/store/fs/index.d.ts",
+      "import": "./dist/src/store/fs/index.js"
     },
     "./package.json": "./package.json"
   },

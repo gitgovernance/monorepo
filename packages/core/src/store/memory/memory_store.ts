@@ -1,21 +1,21 @@
 import type { Store } from '../store';
 
 /**
- * Opciones para MemoryStore
+ * Options for MemoryStore
  */
 export interface MemoryStoreOptions<T> {
-  /** Datos iniciales */
+  /** Initial data */
   initial?: Map<string, T>;
 
-  /** Clonar datos en get/put (default: true) */
+  /** Clone data on get/put (default: true) */
   deepClone?: boolean;
 }
 
 /**
- * MemoryStore<T> - Implementación in-memory de Store<T>
+ * MemoryStore<T> - In-memory implementation of Store<T>
  *
- * Diseñada para tests unitarios y escenarios sin persistencia.
- * Por defecto, clona valores en get/put para evitar mutaciones accidentales.
+ * Designed for unit tests and scenarios without persistence.
+ * By default, clones values on get/put to prevent accidental mutations.
  *
  * @example
  * // Test setup
@@ -65,20 +65,20 @@ export class MemoryStore<T> implements Store<T> {
   }
 
   // ─────────────────────────────────────────────────────────
-  // Test Helpers (no son parte de Store<T>, solo para tests)
+  // Test Helpers (not part of Store<T>, only for tests)
   // ─────────────────────────────────────────────────────────
 
-  /** Limpia todos los records del store */
+  /** Clears all records from the store */
   clear(): void {
     this.data.clear();
   }
 
-  /** Retorna el número de records */
+  /** Returns the number of records */
   size(): number {
     return this.data.size;
   }
 
-  /** Retorna copia del Map interno (para assertions) */
+  /** Returns a copy of the internal Map (for assertions) */
   getAll(): Map<string, T> {
     return new Map(this.data);
   }
