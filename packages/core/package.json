@@ -14,6 +14,14 @@
       "types": "./dist/src/index.d.ts",
       "import": "./dist/src/index.js"
     },
+    "./fs": {
+      "types": "./dist/src/fs.d.ts",
+      "import": "./dist/src/fs.js"
+    },
+    "./memory": {
+      "types": "./dist/src/memory.d.ts",
+      "import": "./dist/src/memory.js"
+    },
     "./memory-store": {
       "types": "./dist/src/store/memory/index.d.ts",
       "import": "./dist/src/store/memory/index.js"
@@ -21,6 +29,18 @@
     "./fs-store": {
       "types": "./dist/src/store/fs/index.d.ts",
       "import": "./dist/src/store/fs/index.js"
+    },
+    "./key-provider": {
+      "types": "./dist/src/key_provider/index.d.ts",
+      "import": "./dist/src/key_provider/index.js"
+    },
+    "./key-provider/fs": {
+      "types": "./dist/src/key_provider/fs/index.d.ts",
+      "import": "./dist/src/key_provider/fs/index.js"
+    },
+    "./key-provider/memory": {
+      "types": "./dist/src/key_provider/memory/index.d.ts",
+      "import": "./dist/src/key_provider/memory/index.js"
     },
     "./package.json": "./package.json"
   },

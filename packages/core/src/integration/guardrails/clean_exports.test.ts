@@ -120,4 +120,78 @@ describe('CI Guardrail: Clean Exports', () => {
       expect(content).toContain('fs');
     });
   });
+
+  describe('Subpath: @gitgov/core/memory', () => {
+    it('[EARS-CI04] should NOT import fs, path, child_process, or chokidar', () => {
+      const memoryPath = path.join(distPath, 'memory.js');
+
+      if (!fs.existsSync(memoryPath)) {
+        throw new Error(`Build output not found: ${memoryPath}. Run 'pnpm build' first.`);
+      }
+
+      const findings = findProhibitedImports(memoryPath);
+
+      if (findings.length > 0) {
+        const report = findings
+          .map((f) => `  - ${f.module} (line ${f.line}): ${f.snippet}`)
+          .join('\n');
+        fail(
+          `[EARS-CI03] Prohibited imports found in @gitgov/core/memory:\n${report}`
+        );
+      }
+
+      expect(findings).toHaveLength(0);
+    });
+  });
+
+  describe('Subpath: @gitgov/core/fs', () => {
+    it('[EARS-CI05] should import fs and path (expected for filesystem backend)', () => {
+      const fsPath = path.join(distPath, 'fs.js');
+
+      if (!fs.existsSync(fsPath)) {
+        throw new Error(`Build output not found: ${fsPath}. Run 'pnpm build' first.`);
+      }
+
+      // @gitgov/core/fs IS expected to use fs - that's its purpose
+      const content = fs.readFileSync(fsPath, 'utf-8');
+      expect(content).toContain('fs');
+    });
+  });
+
+  describe('Subpath: @gitgov/core/key-provider/memory', () => {
+    it('[EARS-CI04] should NOT import fs, path, child_process, or chokidar', () => {
+      const keyProviderMemoryPath = path.join(distPath, 'key_provider/memory/index.js');
+
+      if (!fs.existsSync(keyProviderMemoryPath)) {
+        throw new Error(`Build output not found: ${keyProviderMemoryPath}. Run 'pnpm build' first.`);
+      }
+
+      const findings = findProhibitedImports(keyProviderMemoryPath);
+
+      if (findings.length > 0) {
+        const report = findings
+          .map((f) => `  - ${f.module} (line ${f.line}): ${f.snippet}`)
+          .join('\n');
+        fail(
+          `[EARS-CI03] Prohibited imports found in @gitgov/core/key-provider/memory:\n${report}`
+        );
+      }
+
+      expect(findings).toHaveLength(0);
+    });
+  });
+
+  describe('Subpath: @gitgov/core/key-provider/fs', () => {
+    it('[EARS-CI05] should import fs and path (expected for filesystem backend)', () => {
+      const keyProviderFsPath = path.join(distPath, 'key_provider/fs/index.js');
+
+      if (!fs.existsSync(keyProviderFsPath)) {
+        throw new Error(`Build output not found: ${keyProviderFsPath}. Run 'pnpm build' first.`);
+      }
+
+      // FsKeyProvider IS expected to use fs - that's its purpose
+      const content = fs.readFileSync(keyProviderFsPath, 'utf-8');
+      expect(content).toContain('fs');
+    });
+  });
 });

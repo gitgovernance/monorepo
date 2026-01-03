@@ -3,6 +3,7 @@ export * as Config from "./config_manager";
 export * as Crypto from "./crypto";
 export * as Factories from "./factories";
 export * as Git from "./git";
+export * as KeyProvider from "./key_provider";
 export * as Lint from "./lint";
 export * as Logger from "./logger";
 export * as Schemas from "./schemas";
