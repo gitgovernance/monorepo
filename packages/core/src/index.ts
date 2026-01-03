@@ -4,6 +4,7 @@ export * as Crypto from "./crypto";
 export * as Factories from "./factories";
 export * as Git from "./git";
 export * as KeyProvider from "./key_provider";
+export * as FileLister from "./file_lister";
 export * as Lint from "./lint";
 export * as Logger from "./logger";
 export * as Schemas from "./schemas";

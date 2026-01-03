@@ -1,16 +1,18 @@
 /**
  * CI Guardrail: Clean Exports
  *
- * Validates that @gitgov/core main entrypoint does NOT import
- * filesystem-dependent modules (fs, path, child_process, chokidar).
+ * Validates that @gitgov/core subpath exports follow the clean architecture:
+ * - @gitgov/core/memory: NO filesystem dependencies (serverless-safe)
+ * - @gitgov/core/fs: CAN have filesystem dependencies (expected)
  *
  * EARS Requirements:
  * - EARS-CI01: Analyze imports of @gitgov/core entrypoint
  * - EARS-CI02: Fail if fs, path, child_process, chokidar are imported
  * - EARS-CI03: Show prohibited module and import chain on failure
+ * - EARS-CI04: memory subpath should NOT import prohibited modules
+ * - EARS-CI05: fs subpath SHOULD import fs/path (expected)
  *
- * STATUS: SKIPPED until cycles 2-5 complete the refactoring.
- * The main entrypoint currently exports modules that use fs.
+ * STATUS: Main entrypoint tests SKIPPED until cycles 2-5 complete refactoring.
  */
 
 import * as fs from 'fs';
@@ -33,10 +35,10 @@ function findProhibitedImports(
     for (const mod of PROHIBITED_MODULES) {
       // Match: import ... from 'fs' or require('fs') or from "fs"
       const patterns = [
-        new RegExp(`from\\s+['"]${mod}['"]`),
-        new RegExp(`from\\s+['"]node:${mod}['"]`),
-        new RegExp(`require\\s*\\(\\s*['"]${mod}['"]\\s*\\)`),
-        new RegExp(`require\\s*\\(\\s*['"]node:${mod}['"]\\s*\\)`),
+        new RegExp(`from\\s+['\"]${mod}['\"]`),
+        new RegExp(`from\\s+['\"]node:${mod}['\"]`),
+        new RegExp(`require\\s*\\(\\s*['\"]${mod}['\"]\\s*\\)`),
+        new RegExp(`require\\s*\\(\\s*['\"]node:${mod}['\"]\\s*\\)`),
       ];
 
       for (const pattern of patterns) {
@@ -76,48 +78,11 @@ describe('CI Guardrail: Clean Exports', () => {
           .join('\n');
         fail(
           `[EARS-CI03] Prohibited imports found in @gitgov/core:\n${report}\n\n` +
-            `These modules must be moved to subpaths (@gitgov/core/fs-store, etc.)`
+            `These modules must be moved to @gitgov/core/fs subpath.`
         );
       }
 
       expect(findings).toHaveLength(0);
-    });
-  });
-
-  describe('Subpath: @gitgov/core/memory-store', () => {
-    it('[EARS-CI04] should NOT import fs, path, child_process, or chokidar', () => {
-      const memoryStorePath = path.join(distPath, 'store/memory/index.js');
-
-      if (!fs.existsSync(memoryStorePath)) {
-        throw new Error(`Build output not found: ${memoryStorePath}. Run 'npm run build' first.`);
-      }
-
-      const findings = findProhibitedImports(memoryStorePath);
-
-      if (findings.length > 0) {
-        const report = findings
-          .map((f) => `  - ${f.module} (line ${f.line}): ${f.snippet}`)
-          .join('\n');
-        fail(
-          `[EARS-CI03] Prohibited imports found in @gitgov/core/memory-store:\n${report}`
-        );
-      }
-
-      expect(findings).toHaveLength(0);
-    });
-  });
-
-  describe('Subpath: @gitgov/core/fs-store', () => {
-    it('[EARS-CI05] should import fs and path (expected for filesystem backend)', () => {
-      const fsStorePath = path.join(distPath, 'store/fs/index.js');
-
-      if (!fs.existsSync(fsStorePath)) {
-        throw new Error(`Build output not found: ${fsStorePath}. Run 'npm run build' first.`);
-      }
-
-      // FsStore IS expected to use fs and path - that's its purpose
-      const content = fs.readFileSync(fsStorePath, 'utf-8');
-      expect(content).toContain('fs');
     });
   });
 
@@ -136,7 +101,8 @@ describe('CI Guardrail: Clean Exports', () => {
           .map((f) => `  - ${f.module} (line ${f.line}): ${f.snippet}`)
           .join('\n');
         fail(
-          `[EARS-CI03] Prohibited imports found in @gitgov/core/memory:\n${report}`
+          `[EARS-CI03] Prohibited imports found in @gitgov/core/memory:\n${report}\n\n` +
+            `Memory implementations must NOT use filesystem modules.`
         );
       }
 
@@ -145,7 +111,7 @@ describe('CI Guardrail: Clean Exports', () => {
   });
 
   describe('Subpath: @gitgov/core/fs', () => {
-    it('[EARS-CI05] should import fs and path (expected for filesystem backend)', () => {
+    it('[EARS-CI05] should import fs and path (expected for filesystem implementations)', () => {
       const fsPath = path.join(distPath, 'fs.js');
 
       if (!fs.existsSync(fsPath)) {
@@ -154,43 +120,6 @@ describe('CI Guardrail: Clean Exports', () => {
 
       // @gitgov/core/fs IS expected to use fs - that's its purpose
       const content = fs.readFileSync(fsPath, 'utf-8');
-      expect(content).toContain('fs');
-    });
-  });
-
-  describe('Subpath: @gitgov/core/key-provider/memory', () => {
-    it('[EARS-CI04] should NOT import fs, path, child_process, or chokidar', () => {
-      const keyProviderMemoryPath = path.join(distPath, 'key_provider/memory/index.js');
-
-      if (!fs.existsSync(keyProviderMemoryPath)) {
-        throw new Error(`Build output not found: ${keyProviderMemoryPath}. Run 'pnpm build' first.`);
-      }
-
-      const findings = findProhibitedImports(keyProviderMemoryPath);
-
-      if (findings.length > 0) {
-        const report = findings
-          .map((f) => `  - ${f.module} (line ${f.line}): ${f.snippet}`)
-          .join('\n');
-        fail(
-          `[EARS-CI03] Prohibited imports found in @gitgov/core/key-provider/memory:\n${report}`
-        );
-      }
-
-      expect(findings).toHaveLength(0);
-    });
-  });
-
-  describe('Subpath: @gitgov/core/key-provider/fs', () => {
-    it('[EARS-CI05] should import fs and path (expected for filesystem backend)', () => {
-      const keyProviderFsPath = path.join(distPath, 'key_provider/fs/index.js');
-
-      if (!fs.existsSync(keyProviderFsPath)) {
-        throw new Error(`Build output not found: ${keyProviderFsPath}. Run 'pnpm build' first.`);
-      }
-
-      // FsKeyProvider IS expected to use fs - that's its purpose
-      const content = fs.readFileSync(keyProviderFsPath, 'utf-8');
       expect(content).toContain('fs');
     });
   });

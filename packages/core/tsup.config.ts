@@ -2,15 +2,9 @@ import { defineConfig } from 'tsup';
 
 export default defineConfig({
   entry: [
-    'src/index.ts',
-    'src/fs.ts',
-    'src/memory.ts',
-    // Legacy subpath exports (deprecated, use /fs and /memory instead)
-    'src/store/memory/index.ts',
-    'src/store/fs/index.ts',
-    'src/key_provider/index.ts',
-    'src/key_provider/fs/index.ts',
-    'src/key_provider/memory/index.ts',
+    'src/index.ts',   // @gitgov/core - interfaces + types
+    'src/fs.ts',      // @gitgov/core/fs - all fs implementations
+    'src/memory.ts',  // @gitgov/core/memory - all memory implementations
   ],
   format: ['esm'],
   dts: true,
