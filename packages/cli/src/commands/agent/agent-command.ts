@@ -1,7 +1,16 @@
 import { Command, Option } from 'commander';
 import { BaseCommand } from '../../base/base-command';
 import type { BaseCommandOptions } from '../../interfaces/command';
-import type { Runner, Records } from '@gitgov/core';
+import type { Runner } from '@gitgov/core';
+
+/**
+ * CLI-specific metadata type for agent display purposes.
+ * AgentRecord<TMetadata> allows flexible metadata; this defines the expected shape for CLI display.
+ */
+type AgentDisplayMetadata = {
+  description?: string;
+  [key: string]: unknown;
+};
 
 /**
  * CLI-specific options for agent run command
@@ -191,13 +200,16 @@ export class AgentCommand extends BaseCommand<RunCommandOptions> {
       }
 
       // Execute agent
-      const response: Runner.AgentResponse = await runner.runOnce({
+      const runOptions: Runner.RunOptions = {
         agentId,
         taskId,
         actorId: currentActor.id,
         input,
-        tool: options.tool,
-      });
+      };
+      if (options.tool) {
+        runOptions.tool = options.tool;
+      }
+      const response: Runner.AgentResponse = await runner.runOnce(runOptions);
 
       // Format output
       if (options.output === 'json') {
@@ -279,19 +291,23 @@ export class AgentCommand extends BaseCommand<RunCommandOptions> {
         const record = await agentStore.read(id);
         if (record) {
           const payload = record.payload;
-          const engineType = payload.engine?.type || 'unknown';
+          const engineType = payload.engine.type;
 
           // Filter by engine if specified
           if (options.engine && engineType !== options.engine) {
             continue;
           }
 
-          agents.push({
+          const agentInfo: { id: string; name: string; engine: string; description?: string } = {
             id: payload.id,
             name: id.replace('agent-', ''),
             engine: engineType,
-            description: payload.metadata?.description as string | undefined,
-          });
+          };
+          const metadata = payload.metadata as { description?: string } | undefined;
+          if (metadata?.description) {
+            agentInfo.description = metadata.description;
+          }
+          agents.push(agentInfo);
         }
       }
 
@@ -348,6 +364,8 @@ export class AgentCommand extends BaseCommand<RunCommandOptions> {
       }
 
       const payload = record.payload;
+      const metadata = payload.metadata as AgentDisplayMetadata | undefined;
+      const engine = payload.engine;
 
       // Output
       if (options.json) {
@@ -359,33 +377,35 @@ export class AgentCommand extends BaseCommand<RunCommandOptions> {
         console.log(`  ID:          ${payload.id}`);
         console.log(`  Status:      ${payload.status || 'active'}`);
 
-        if (payload.metadata?.description) {
-          console.log(`  Description: ${payload.metadata.description}`);
+        if (metadata?.description) {
+          console.log(`  Description: ${metadata.description}`);
         }
 
         console.log('\n  Engine:');
-        console.log(`    Type: ${payload.engine?.type || 'unknown'}`);
-        if (payload.engine?.entrypoint) {
-          console.log(`    Entrypoint: ${payload.engine.entrypoint}`);
-        }
-        if (payload.engine?.function) {
-          console.log(`    Function: ${payload.engine.function}`);
-        }
-        if (payload.engine?.url) {
-          console.log(`    URL: ${payload.engine.url}`);
-        }
-        if (payload.engine?.tool) {
-          console.log(`    Tool: ${payload.engine.tool}`);
+        console.log(`    Type: ${engine.type}`);
+
+        // Type-narrowed access for engine-specific properties
+        if (engine.type === 'local') {
+          if (engine.entrypoint) {
+            console.log(`    Entrypoint: ${engine.entrypoint}`);
+          }
+          if (engine.function) {
+            console.log(`    Function: ${engine.function}`);
+          }
+        } else if (engine.type === 'api' || engine.type === 'mcp') {
+          console.log(`    URL: ${engine.url}`);
         }
 
-        if (payload.capabilities && payload.capabilities.length > 0) {
+        // Capabilities may come from extended agent configs
+        const capabilities = (payload as { capabilities?: string[] }).capabilities;
+        if (capabilities && capabilities.length > 0) {
           console.log('\n  Capabilities:');
-          payload.capabilities.forEach((cap: string) => console.log(`    - ${cap}`));
+          capabilities.forEach((cap: string) => console.log(`    - ${cap}`));
         }
 
         if (payload.triggers && payload.triggers.length > 0) {
           console.log('\n  Triggers:');
-          payload.triggers.forEach((t: any) => console.log(`    - ${t.type}${t.event ? `: ${t.event}` : ''}`));
+          payload.triggers.forEach((t) => console.log(`    - ${t.type}${(t as { event?: string }).event ? `: ${(t as { event?: string }).event}` : ''}`));
         }
 
         console.log('─'.repeat(60) + '\n');

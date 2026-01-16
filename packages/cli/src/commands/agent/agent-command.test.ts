@@ -20,7 +20,15 @@ jest.mock('../../services/dependency-injection', () => ({
 
 import { AgentCommand, type RunCommandOptions, type ListCommandOptions, type ShowCommandOptions } from './agent-command';
 import { DependencyInjectionService } from '../../services/dependency-injection';
-import type { Runner, Records } from '@gitgov/core';
+import type { Runner, TaskRecord, ActorRecord, AgentRecord } from '@gitgov/core';
+
+/**
+ * Test-specific metadata type for agent mocks
+ */
+type TestAgentMetadata = {
+  description: string;
+  purpose?: string;
+};
 
 // Mock console methods
 const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation();
@@ -36,23 +44,23 @@ let mockAgentRunnerModule: {
 };
 
 let mockBacklogAdapter: {
-  createTask: jest.MockedFunction<(data: Record<string, unknown>, actorId: string) => Promise<Records.TaskRecord>>;
+  createTask: jest.MockedFunction<(data: Record<string, unknown>, actorId: string) => Promise<TaskRecord>>;
 };
 
 let mockIdentityAdapter: {
-  getCurrentActor: jest.MockedFunction<() => Promise<Records.ActorRecord>>;
+  getCurrentActor: jest.MockedFunction<() => Promise<ActorRecord>>;
 };
 
 let mockAgentStore: {
   list: jest.MockedFunction<() => Promise<string[]>>;
-  read: jest.MockedFunction<(id: string) => Promise<{ payload: Records.AgentRecord } | null>>;
+  read: jest.MockedFunction<(id: string) => Promise<{ payload: AgentRecord<TestAgentMetadata> } | null>>;
 };
 
 describe('AgentCommand', () => {
   let agentCommand: AgentCommand;
 
-  // Mock agent record
-  const mockAgentPayload: Records.AgentRecord = {
+  // Mock agent record with typed metadata
+  const mockAgentPayload: AgentRecord<TestAgentMetadata> = {
     id: 'agent:test-echo',
     status: 'active',
     engine: {
@@ -95,23 +103,22 @@ describe('AgentCommand', () => {
   };
 
   // Mock TaskRecord
-  const mockTaskRecord: Records.TaskRecord = {
+  const mockTaskRecord: TaskRecord = {
     id: 'task-auto-123',
     title: 'Agent run: test-echo',
     description: 'Automated task for agent execution: test-echo',
     status: 'active',
     priority: 'medium',
     tags: ['agent', 'automated'],
-    createdAt: '2025-12-21T10:00:00.000Z',
-    updatedAt: '2025-12-21T10:00:00.000Z',
   };
 
   // Mock ActorRecord
-  const mockActor: Records.ActorRecord = {
+  const mockActor: ActorRecord = {
     id: 'human:developer',
     type: 'human',
-    name: 'Developer',
-    email: 'dev@example.com',
+    displayName: 'Developer',
+    publicKey: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
+    roles: ['developer'],
   };
 
   beforeEach(() => {
