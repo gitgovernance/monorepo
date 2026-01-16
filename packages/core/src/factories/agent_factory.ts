@@ -5,20 +5,26 @@ import { DetailedValidationError } from "../validation/common";
 
 /**
  * Creates a new, fully-formed AgentRecord with validation.
+ *
+ * The factory is generic to preserve the metadata type for compile-time safety.
+ *
+ * @param payload - Partial AgentRecord payload with optional typed metadata
+ * @returns AgentRecord<TMetadata> - The validated AgentRecord with preserved metadata type
  */
-export function createAgentRecord(
-  payload: Partial<AgentRecord>
-): AgentRecord {
+export function createAgentRecord<TMetadata extends object = object>(
+  payload: Partial<AgentRecord<TMetadata>>
+): AgentRecord<TMetadata> {
   // Build agent with defaults for optional fields
-  const agent: AgentRecord = {
+  const agent = {
     id: payload.id || '',
     engine: payload.engine || { type: 'local' as const },
     status: payload.status || 'active',
     triggers: payload.triggers || [],
     knowledge_dependencies: payload.knowledge_dependencies || [],
     prompt_engine_requirements: payload.prompt_engine_requirements || {},
+    metadata: payload.metadata,
     ...payload,
-  } as AgentRecord;
+  } as AgentRecord<TMetadata>;
 
   // Use validator to check complete schema with detailed errors
   const validation = validateAgentRecordDetailed(agent);
