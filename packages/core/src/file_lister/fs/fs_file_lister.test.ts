@@ -159,6 +159,34 @@ describe('FsFileLister', () => {
         code: 'INVALID_PATH',
       });
     });
+
+    it('[EARS-FFL05] should throw INVALID_PATH for absolute path on read', async () => {
+      await expect(lister.read('/etc/passwd')).rejects.toThrow(FileListerError);
+      await expect(lister.read('/etc/passwd')).rejects.toMatchObject({
+        code: 'INVALID_PATH',
+      });
+    });
+
+    it('[EARS-FFL05] should throw INVALID_PATH for absolute path on exists', async () => {
+      await expect(lister.exists('/etc/passwd')).rejects.toThrow(FileListerError);
+      await expect(lister.exists('/etc/passwd')).rejects.toMatchObject({
+        code: 'INVALID_PATH',
+      });
+    });
+
+    it('[EARS-FFL05] should throw INVALID_PATH for absolute path on stat', async () => {
+      await expect(lister.stat('/etc/passwd')).rejects.toThrow(FileListerError);
+      await expect(lister.stat('/etc/passwd')).rejects.toMatchObject({
+        code: 'INVALID_PATH',
+      });
+    });
+
+    it('[EARS-FFL05] should throw INVALID_PATH for absolute path in patterns', async () => {
+      await expect(lister.list(['/etc/**/*'])).rejects.toThrow(FileListerError);
+      await expect(lister.list(['/etc/**/*'])).rejects.toMatchObject({
+        code: 'INVALID_PATH',
+      });
+    });
   });
 
   describe('Options', () => {

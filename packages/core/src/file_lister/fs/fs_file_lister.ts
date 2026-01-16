@@ -40,10 +40,18 @@ export class FsFileLister implements FileLister {
    */
   async list(patterns: string[], options?: FileListOptions): Promise<string[]> {
     // [EARS-FFL04] Validate patterns don't contain path traversal
+    // [EARS-FFL05] Validate patterns are not absolute paths
     for (const pattern of patterns) {
       if (pattern.includes('..')) {
         throw new FileListerError(
           `Invalid pattern: path traversal not allowed: ${pattern}`,
+          'INVALID_PATH',
+          pattern
+        );
+      }
+      if (path.isAbsolute(pattern)) {
+        throw new FileListerError(
+          `Invalid pattern: absolute paths not allowed: ${pattern}`,
           'INVALID_PATH',
           pattern
         );
@@ -157,11 +165,20 @@ export class FsFileLister implements FileLister {
 
   /**
    * [EARS-FFL04] Validates that the path doesn't contain traversal characters.
+   * [EARS-FFL05] Validates that the path is not absolute.
    */
   private validatePath(filePath: string): void {
     if (filePath.includes('..')) {
       throw new FileListerError(
         `Invalid path: path traversal not allowed: ${filePath}`,
+        'INVALID_PATH',
+        filePath
+      );
+    }
+    // [EARS-FFL05] Prevent absolute paths to avoid escaping cwd
+    if (path.isAbsolute(filePath)) {
+      throw new FileListerError(
+        `Invalid path: absolute paths not allowed: ${filePath}`,
         'INVALID_PATH',
         filePath
       );
