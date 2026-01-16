@@ -5,7 +5,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { DependencyInjectionService } from '../../services/dependency-injection';
 // import DashboardTUI from '../../components/dashboard/DashboardTUI';
-import type { Records, Adapters, EventBus } from '@gitgov/core';
+import type { CycleRecord, FeedbackRecord, ActorRecord, TaskRecord, Adapters, EventBus } from '@gitgov/core';
 
 /**
  * Dashboard Command Options interface
@@ -35,9 +35,9 @@ interface DashboardIntelligence {
   productivityMetrics: Adapters.ProductivityMetrics;
   collaborationMetrics: Adapters.CollaborationMetrics;
   tasks: Adapters.EnrichedTaskRecord[]; // ENHANCED - Tasks with last modification info
-  cycles: Records.CycleRecord[];
-  feedback: Records.FeedbackRecord[];
-  currentActor: Records.ActorRecord;
+  cycles: CycleRecord[];
+  feedback: FeedbackRecord[];
+  currentActor: ActorRecord;
   activityHistory: EventBus.ActivityEvent[]; // NUEVO - Activity history real
 }
 
@@ -420,7 +420,7 @@ export class DashboardCommand {
   /**
    * Gets tasks created today using MetricsAdapter
    */
-  private async getTasksToday(tasks: Records.TaskRecord[]): Promise<number> {
+  private async getTasksToday(tasks: TaskRecord[]): Promise<number> {
     const metricsAdapter = await this.dependencyService.getMetricsAdapter();
     return metricsAdapter.calculateTasksCreatedToday(tasks);
   }
@@ -428,7 +428,7 @@ export class DashboardCommand {
   /**
    * Gets derived state for task using MetricsAdapter logic
    */
-  private async getDerivedState(task: Records.TaskRecord): Promise<string | null> {
+  private async getDerivedState(task: TaskRecord): Promise<string | null> {
     const metricsAdapter = await this.dependencyService.getMetricsAdapter();
     const timeInStage = metricsAdapter.calculateTimeInCurrentStage(task);
 
@@ -443,7 +443,7 @@ export class DashboardCommand {
   /**
    * Gets task actor from assignments
    */
-  private getTaskActor(task: Records.TaskRecord, feedback: Records.FeedbackRecord[]): string {
+  private getTaskActor(task: TaskRecord, feedback: FeedbackRecord[]): string {
     const assignment = feedback.find(f =>
       f.entityId === task.id &&
       f.type === 'assignment' &&
