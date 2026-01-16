@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 import { BaseCommand } from '../../base/base-command';
-import { Records } from '@gitgov/core';
+import type { CycleRecord } from '@gitgov/core';
 import type { BaseCommandOptions } from '../../interfaces/command';
 
 /**
@@ -133,7 +133,7 @@ export class CycleCommand extends BaseCommand<BaseCommandOptions> {
   }
 
   /**
-   * [EARS-1] Creates new Records.CycleRecord with $EDITOR integration
+   * [EARS-1] Creates new CycleRecord with $EDITOR integration
    */
   async executeNew(title: string, options: CycleNewOptions): Promise<void> {
     try {
@@ -147,14 +147,14 @@ export class CycleCommand extends BaseCommand<BaseCommandOptions> {
       }
 
       // 3. Build payload (BacklogAdapter will use cycle_factory internally)
-      const payload: Partial<Records.CycleRecord> = {
+      const payload: Partial<CycleRecord> = {
         title: title.trim(),
         notes: options.description || await this.openEditor(title),
         status: options.status || 'planning',
         tags: options.tags ? options.tags.split(',').map(t => t.trim()) : []
       };
 
-      // Note: Using only fields from actual Records.CycleRecord schema
+      // Note: Using only fields from actual CycleRecord schema
 
       // 4. Get current actor dynamically
       const identityAdapter = await this.dependencyService.getIdentityAdapter();
@@ -199,7 +199,7 @@ export class CycleCommand extends BaseCommand<BaseCommandOptions> {
   }
 
   /**
-   * [EARS-2] Lists Records.CycleRecords with auto-indexation and hierarchy filtering
+   * [EARS-2] Lists CycleRecords with auto-indexation and hierarchy filtering
    */
   async executeList(options: CycleListOptions): Promise<void> {
     try {
@@ -207,7 +207,7 @@ export class CycleCommand extends BaseCommand<BaseCommandOptions> {
       const backlogAdapter = await this.dependencyService.getBacklogAdapter();
       const indexerAdapter = await this.dependencyService.getIndexerAdapter();
 
-      let cycles: Records.CycleRecord[] = [];
+      let cycles: CycleRecord[] = [];
 
       // 2. Auto-indexation strategy (unless --from-source)
       if (!options.fromSource) {
@@ -237,7 +237,7 @@ export class CycleCommand extends BaseCommand<BaseCommandOptions> {
       if (options.status) {
         cycles = cycles.filter(cycle => cycle.status === options.status);
       }
-      // Note: parentCycle filtering not available in current Records.CycleRecord schema
+      // Note: parentCycle filtering not available in current CycleRecord schema
       if (options.tags) {
         const filterTags = options.tags.split(',').map(t => t.trim());
         cycles = cycles.filter(cycle =>
@@ -282,7 +282,7 @@ export class CycleCommand extends BaseCommand<BaseCommandOptions> {
   }
 
   /**
-   * [EARS-3] Shows complete Records.CycleRecord details with task hierarchy
+   * [EARS-3] Shows complete CycleRecord details with task hierarchy
    */
   async executeShow(cycleId: string, options: CycleShowOptions): Promise<void> {
     try {
@@ -290,7 +290,7 @@ export class CycleCommand extends BaseCommand<BaseCommandOptions> {
       const backlogAdapter = await this.dependencyService.getBacklogAdapter();
       const indexerAdapter = await this.dependencyService.getIndexerAdapter();
 
-      let cycle: Records.CycleRecord | null = null;
+      let cycle: CycleRecord | null = null;
 
       // 2. Auto-indexation strategy (unless --from-source)
       if (!options.fromSource) {
@@ -617,7 +617,7 @@ export class CycleCommand extends BaseCommand<BaseCommandOptions> {
       }
 
       // 4. Build update payload
-      const updatePayload: Partial<Records.CycleRecord> = {};
+      const updatePayload: Partial<CycleRecord> = {};
 
       if (options.title) updatePayload.title = options.title;
       if (options.description) updatePayload.notes = options.description;
