@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 import { BaseCommand } from '../../base/base-command';
-import type { Records } from '@gitgov/core';
+import type { TaskRecord } from '@gitgov/core';
 import type { BaseCommandOptions } from '../../interfaces/command';
 import { promises as fs } from 'fs';
 import path from 'path';
@@ -305,7 +305,7 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
   }
 
   /**
-   * [EARS-1] Creates new Records.TaskRecord with $EDITOR integration
+   * [EARS-1] Creates new TaskRecord with $EDITOR integration
    */
   async executeNew(title: string, options: TaskNewOptions): Promise<void> {
     try {
@@ -336,7 +336,7 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
       }
 
       // 4. Build payload (BacklogAdapter will use task_factory internally)
-      const payload: Partial<Records.TaskRecord> = {
+      const payload: Partial<TaskRecord> = {
         title: title.trim(),
         description,
         priority: options.priority || 'medium',
@@ -482,7 +482,7 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
   }
 
   /**
-   * [EARS-3] Shows complete Records.TaskRecord details with health analysis
+   * [EARS-3] Shows complete TaskRecord details with health analysis
    */
   async executeShow(taskId: string, options: TaskShowOptions): Promise<void> {
     try {
@@ -490,7 +490,7 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
       const backlogAdapter = await this.dependencyService.getBacklogAdapter();
       const indexerAdapter = await this.dependencyService.getIndexerAdapter();
 
-      let task: Records.TaskRecord | null = null;
+      let task: TaskRecord | null = null;
 
       // 2. Auto-indexation strategy (unless --from-source)
       if (!options.fromSource) {
@@ -992,7 +992,7 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
       }
 
       // 4. Build update payload
-      const updatePayload: Partial<Records.TaskRecord> = {};
+      const updatePayload: Partial<TaskRecord> = {};
 
       if (options.title) updatePayload.title = options.title;
       if (options.description) updatePayload.description = options.description;
