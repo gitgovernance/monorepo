@@ -32,7 +32,7 @@ jest.mock('fs', () => ({
 import { LintCommand } from './lint-command';
 import { DependencyInjectionService } from '../../services/dependency-injection';
 import { promises as fs } from 'fs';
-import type { Lint, Records, IdentityAdapter } from '@gitgov/core';
+import type { Lint, IdentityAdapter, ActorRecord } from '@gitgov/core';
 
 // Mock console methods to capture output
 const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation();
@@ -50,7 +50,7 @@ let mockLintModule: {
 };
 
 let mockIdentityAdapter: {
-  getCurrentActor: jest.MockedFunction<() => Promise<Records.ActorRecord>>;
+  getCurrentActor: jest.MockedFunction<() => Promise<ActorRecord>>;
 };
 
 let mockIndexerAdapter: {
@@ -118,7 +118,7 @@ describe('LintCommand - Complete Unit Tests', () => {
     ]
   };
 
-  const mockActor: Records.ActorRecord = {
+  const mockActor: ActorRecord = {
     id: 'human:test-user',
     type: 'human',
     displayName: 'Test User',

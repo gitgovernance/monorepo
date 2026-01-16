@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Box, Text, useInput, useApp, useStdout } from 'ink';
-import type { Records, MetricsAdapter, EventBus } from '@gitgov/core';
+import type { CycleRecord, FeedbackRecord, ActorRecord, MetricsAdapter, EventBus } from '@gitgov/core';
 import clipboard from 'clipboardy';
 
 // Import IndexerAdapter.EnrichedTaskRecord from IndexerAdapter
@@ -92,9 +92,9 @@ interface DashboardIntelligence {
   productivityMetrics: MetricsAdapter.ProductivityMetrics;
   collaborationMetrics: MetricsAdapter.CollaborationMetrics;
   tasks: IndexerAdapter.EnrichedTaskRecord[];
-  cycles: Records.CycleRecord[];
-  feedback: Records.FeedbackRecord[];
-  currentActor: Records.ActorRecord;
+  cycles: CycleRecord[];
+  feedback: FeedbackRecord[];
+  currentActor: ActorRecord;
   activityHistory: EventBus.ActivityEvent[];
 }
 

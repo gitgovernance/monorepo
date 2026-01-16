@@ -16,7 +16,7 @@ jest.mock('../../services/dependency-injection', () => ({
 import { ContextCommand } from './context-command';
 import { DependencyInjectionService } from '../../services/dependency-injection';
 import { Config } from '@gitgov/core';
-import type { Records } from '@gitgov/core';
+import type { ActorRecord } from '@gitgov/core';
 
 // Mock console methods to capture output
 const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation();
@@ -35,13 +35,13 @@ describe('ContextCommand - Complete Unit Tests', () => {
     }>>;
   };
   let mockIdentityAdapter: {
-    getCurrentActor: jest.MockedFunction<() => Promise<Records.ActorRecord>>;
+    getCurrentActor: jest.MockedFunction<() => Promise<ActorRecord>>;
   };
   let mockDependencyService: {
     getIdentityAdapter: jest.MockedFunction<() => Promise<typeof mockIdentityAdapter>>;
   };
 
-  const sampleActor: Records.ActorRecord = {
+  const sampleActor: ActorRecord = {
     id: 'human:test-user',
     displayName: 'Test User',
     type: 'human',
