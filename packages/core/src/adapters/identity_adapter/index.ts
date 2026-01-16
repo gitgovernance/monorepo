@@ -10,7 +10,7 @@ import { createActorRecord } from "../../factories/actor_factory";
 import { validateFullActorRecord } from "../../validation/actor_validator";
 import { createAgentRecord } from "../../factories/agent_factory";
 import { validateFullAgentRecord } from "../../validation/agent_validator";
-import { generateKeys, signPayload } from "../../crypto/signatures";
+import { generateKeys, signPayload, generateMockSignature } from "../../crypto/signatures";
 import { calculatePayloadChecksum } from "../../crypto/checksum";
 import { generateActorId } from "../../utils/id_generator";
 import type { Signature } from "../../types";
@@ -21,8 +21,7 @@ import type {
   AgentRegisteredEvent
 } from "../../event_bus";
 import { ConfigManager } from "../../config_manager";
-import { promises as fs } from "fs";
-import * as path from "path";
+import type { KeyProvider } from "../../key_provider/key_provider";
 
 /**
  * IdentityAdapter Interface - The Identity Management Contract
@@ -59,6 +58,9 @@ export interface IdentityAdapterDependencies {
   actorStore: RecordStore<ActorRecord>;
   agentStore: RecordStore<AgentRecord>;
 
+  // Key Management
+  keyProvider: KeyProvider;
+
   // Optional: Event Bus for event-driven integration (graceful degradation)
   eventBus?: IEventStream;
 }
@@ -66,11 +68,13 @@ export interface IdentityAdapterDependencies {
 export class IdentityAdapter implements IIdentityAdapter {
   private actorStore: RecordStore<ActorRecord>;
   private agentStore: RecordStore<AgentRecord>;
+  private keyProvider: KeyProvider;
   private eventBus: IEventStream | undefined;
 
   constructor(dependencies: IdentityAdapterDependencies) {
     this.actorStore = dependencies.actorStore;
     this.agentStore = dependencies.agentStore;
+    this.keyProvider = dependencies.keyProvider;
     this.eventBus = dependencies.eventBus; // Graceful degradation
   }
 
@@ -144,18 +148,9 @@ export class IdentityAdapter implements IIdentityAdapter {
     // Store the record with validation
     await this.actorStore.write(record);
 
-    // Persist private key to .gitgov/actors/{actorId}.key
+    // Persist private key via KeyProvider
     try {
-      const projectRoot = ConfigManager.findProjectRoot();
-      if (projectRoot) {
-        const actorsDir = path.join(projectRoot, '.gitgov', 'actors');
-        await fs.mkdir(actorsDir, { recursive: true });
-
-        const keyPath = path.join(actorsDir, `${actorId}.key`);
-        await fs.writeFile(keyPath, privateKey, 'utf-8');
-        // Set secure file permissions (0600 = owner read/write only)
-        await fs.chmod(keyPath, 0o600);
-      }
+      await this.keyProvider.setPrivateKey(actorId, privateKey);
     } catch (error) {
       // Log warning but don't fail actor creation if key persistence fails
       // This allows graceful degradation in environments where file permissions might be restricted
@@ -220,15 +215,10 @@ export class IdentityAdapter implements IIdentityAdapter {
     // Calculate payload checksum (real)
     const payloadChecksum = calculatePayloadChecksum(record.payload);
 
-    // Try to load private key from .gitgov/actors/{actorId}.key for real signing
+    // Try to load private key via KeyProvider for real signing
     let privateKey: string | null = null;
     try {
-      const projectRoot = ConfigManager.findProjectRoot();
-      if (projectRoot) {
-        const keyPath = path.join(projectRoot, '.gitgov', 'actors', `${actorId}.key`);
-        const keyContent = await fs.readFile(keyPath, 'utf-8');
-        privateKey = keyContent.trim();
-      }
+      privateKey = await this.keyProvider.getPrivateKey(actorId);
     } catch (error) {
       // Private key not found - fallback to mock signature for backward compatibility
       console.warn(`⚠️  Private key not found for ${actorId}, using mock signature`);
@@ -245,7 +235,7 @@ export class IdentityAdapter implements IIdentityAdapter {
         keyId: actorId,
         role: role,
         notes: notes,
-        signature: `mock-signature-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        signature: generateMockSignature(),
         timestamp: Math.floor(Date.now() / 1000)
       };
     }
@@ -427,53 +417,26 @@ export class IdentityAdapter implements IIdentityAdapter {
       newActorId // Mark succession
     );
 
-    // Update session to point to the new actor
+    // Update session to point to the new actor using ConfigManager
     try {
       const configManager = new ConfigManager();
-      const session = await configManager.loadSession();
 
-      if (session) {
-        // Update lastSession to point to new actor
-        session.lastSession = {
-          actorId: newActorId,
-          timestamp: new Date().toISOString()
-        };
-
-        // Migrate actorState from old actor to new actor if it exists
-        if (session.actorState && session.actorState[actorId]) {
-          const oldState = session.actorState[actorId];
-          session.actorState[newActorId] = {
-            ...oldState,
-            lastSync: new Date().toISOString()
-          };
-          // Keep old actor state for history (don't delete it)
-        } else if (!session.actorState) {
-          session.actorState = {};
-        }
-
-        // Write updated session using ConfigManager's sessionPath
-        // Access private sessionPath via reflection or use the same pattern as updateActorState
-        const projectRoot = ConfigManager.findProjectRoot() || process.cwd();
-        const sessionPath = path.join(projectRoot, '.gitgov', '.session.json');
-        await fs.writeFile(sessionPath, JSON.stringify(session, null, 2), 'utf-8');
+      // Migrate actorState from old actor to new actor
+      const oldState = await configManager.getActorState(actorId);
+      if (oldState) {
+        await configManager.updateActorState(newActorId, oldState);
+      } else {
+        // Create initial state for new actor
+        await configManager.updateActorState(newActorId, {});
       }
     } catch (error) {
       // Graceful degradation: session update is not critical
       console.warn(`⚠️  Could not update session for ${newActorId}: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
 
-    // Persist new private key to .gitgov/actors/{newActorId}.key
+    // Persist new private key via KeyProvider
     try {
-      const projectRoot = ConfigManager.findProjectRoot();
-      if (projectRoot) {
-        const actorsDir = path.join(projectRoot, '.gitgov', 'actors');
-        await fs.mkdir(actorsDir, { recursive: true });
-
-        const keyPath = path.join(actorsDir, `${newActorId}.key`);
-        await fs.writeFile(keyPath, newPrivateKey, 'utf-8');
-        // Set secure file permissions (0600 = owner read/write only)
-        await fs.chmod(keyPath, 0o600);
-      }
+      await this.keyProvider.setPrivateKey(newActorId, newPrivateKey);
     } catch (error) {
       console.warn(`⚠️  Could not persist private key for ${newActorId}: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
@@ -575,21 +538,16 @@ export class IdentityAdapter implements IIdentityAdapter {
     // Calculate checksum for the payload
     const payloadChecksum = calculatePayloadChecksum(validatedPayload);
 
-    // Load private key from .gitgov/actors/{actorId}.key for real signing
+    // Load private key via KeyProvider for real signing
     // Since createActor() always persists the private key, it should be available
     // If not found, this indicates a problem (legacy actor, key deleted, or I/O error)
     let privateKey: string;
     try {
-      const projectRoot = ConfigManager.findProjectRoot();
-      if (!projectRoot) {
-        throw new Error('Project root not found. Cannot locate private key.');
+      const key = await this.keyProvider.getPrivateKey(payload.id);
+      if (!key) {
+        throw new Error(`Private key not found for ${payload.id}`);
       }
-      const keyPath = path.join(projectRoot, '.gitgov', 'actors', `${payload.id}.key`);
-      const keyContent = await fs.readFile(keyPath, 'utf-8');
-      privateKey = keyContent.trim();
-      if (!privateKey) {
-        throw new Error(`Private key file is empty for ${payload.id}`);
-      }
+      privateKey = key;
     } catch (error) {
       throw new Error(
         `Private key not found for actor ${payload.id}. ` +

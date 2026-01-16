@@ -7,7 +7,7 @@ import { createActorRecord } from '../../factories/actor_factory';
 import { validateFullActorRecord } from '../../validation/actor_validator';
 import { createAgentRecord } from '../../factories/agent_factory';
 import { validateFullAgentRecord } from '../../validation/agent_validator';
-import { generateKeys, signPayload } from '../../crypto/signatures';
+import { generateKeys, signPayload, generateMockSignature } from '../../crypto/signatures';
 import { calculatePayloadChecksum } from '../../crypto/checksum';
 import { generateActorId } from '../../utils/id_generator';
 import { ConfigManager } from '../../config_manager';
@@ -21,20 +21,23 @@ jest.mock('../../crypto/signatures');
 jest.mock('../../crypto/checksum');
 jest.mock('../../utils/id_generator');
 jest.mock('../../config_manager');
-jest.mock('fs', () => ({
-  promises: {
-    mkdir: jest.fn(),
-    writeFile: jest.fn(),
-    chmod: jest.fn(),
-    readFile: jest.fn(),
-  }
-}));
+
+import type { KeyProvider } from '../../key_provider/key_provider';
+
+// Mock KeyProvider
+interface MockKeyProvider extends KeyProvider {
+  getPrivateKey: jest.MockedFunction<(actorId: string) => Promise<string | null>>;
+  setPrivateKey: jest.MockedFunction<(actorId: string, key: string) => Promise<void>>;
+  hasPrivateKey: jest.MockedFunction<(actorId: string) => Promise<boolean>>;
+  deletePrivateKey: jest.MockedFunction<(actorId: string) => Promise<boolean>>;
+}
 const mockedCreateActorRecord = createActorRecord as jest.MockedFunction<typeof createActorRecord>;
 const mockedValidateFullActorRecord = validateFullActorRecord as jest.MockedFunction<typeof validateFullActorRecord>;
 const mockedCreateAgentRecord = createAgentRecord as jest.MockedFunction<typeof createAgentRecord>;
 const mockedValidateFullAgentRecord = validateFullAgentRecord as jest.MockedFunction<typeof validateFullAgentRecord>;
 const mockedGenerateKeys = generateKeys as jest.MockedFunction<typeof generateKeys>;
 const mockedSignPayload = signPayload as jest.MockedFunction<typeof signPayload>;
+const mockedGenerateMockSignature = generateMockSignature as jest.MockedFunction<typeof generateMockSignature>;
 const mockedCalculatePayloadChecksum = calculatePayloadChecksum as jest.MockedFunction<typeof calculatePayloadChecksum>;
 const mockedGenerateActorId = generateActorId as jest.MockedFunction<typeof generateActorId>;
 
@@ -54,6 +57,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
   let identityAdapterWithEvents: IdentityAdapter;
   let mockActorStore: jest.Mocked<RecordStore<ActorRecord>>;
   let mockAgentStore: jest.Mocked<RecordStore<AgentRecord>>;
+  let mockKeyProvider: MockKeyProvider;
   let mockEventBus: MockEventBus;
 
   beforeEach(() => {
@@ -76,6 +80,14 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       exists: jest.fn(),
     } as unknown as jest.Mocked<RecordStore<AgentRecord>>;
 
+    // Create mock KeyProvider
+    mockKeyProvider = {
+      getPrivateKey: jest.fn().mockResolvedValue('mock-private-key'),
+      setPrivateKey: jest.fn().mockResolvedValue(undefined),
+      hasPrivateKey: jest.fn().mockResolvedValue(true),
+      deletePrivateKey: jest.fn().mockResolvedValue(true),
+    } as MockKeyProvider;
+
     // Create mock event bus
     mockEventBus = {
       publish: jest.fn(),
@@ -90,14 +102,19 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
     identityAdapter = new IdentityAdapter({
       actorStore: mockActorStore,
       agentStore: mockAgentStore,
+      keyProvider: mockKeyProvider,
     });
 
     // Create IdentityAdapter with events
     identityAdapterWithEvents = new IdentityAdapter({
       actorStore: mockActorStore,
       agentStore: mockAgentStore,
+      keyProvider: mockKeyProvider,
       eventBus: mockEventBus,
     });
+
+    // Mock generateMockSignature to return valid Ed25519-like signature (64 bytes = 86 chars + ==)
+    mockedGenerateMockSignature.mockReturnValue('oro1j+DqU3XtJrkW4eNqP4gXqHtygAgSaRfuBuW19YAxAAR083ktaWpSBJk4AIof13gO3butj5L4n30XTn+Spg==');
   });
 
   const sampleActorPayload: ActorRecord = {
@@ -220,7 +237,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       console.warn = originalWarn;
     });
 
-    it('[EARS-12] should persist private key to .gitgov/actors/{actorId}.key with secure permissions', async () => {
+    it('[EARS-12] should persist private key via KeyProvider', async () => {
       const inputPayload = {
         type: 'human' as const,
         displayName: 'Test User',
@@ -228,7 +245,6 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       };
 
       const testPrivateKey = 'test-private-key-base64';
-      const testProjectRoot = '/test/project';
 
       // Mock all dependencies
       mockedGenerateKeys.mockResolvedValue({
@@ -249,37 +265,16 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       mockActorStore.write.mockResolvedValue(undefined);
       mockActorStore.list.mockResolvedValue(['human:test-user']);
 
-      // Mock ConfigManager and fs
-      jest.spyOn(ConfigManager, 'findProjectRoot').mockReturnValue(testProjectRoot);
-      const fs = await import('fs');
-      const mockMkdir = fs.promises.mkdir as jest.MockedFunction<typeof fs.promises.mkdir>;
-      const mockWriteFile = fs.promises.writeFile as jest.MockedFunction<typeof fs.promises.writeFile>;
-      const mockChmod = fs.promises.chmod as jest.MockedFunction<typeof fs.promises.chmod>;
-
-      mockMkdir.mockResolvedValue(undefined);
-      mockWriteFile.mockResolvedValue(undefined);
-      mockChmod.mockResolvedValue(undefined);
-
       // Suppress console.warn for tests
       const originalWarn = console.warn;
       console.warn = jest.fn();
 
       await identityAdapter.createActor(inputPayload, 'human:test-user');
 
-      // Verify private key was persisted
-      expect(ConfigManager.findProjectRoot).toHaveBeenCalled();
-      expect(mockMkdir).toHaveBeenCalledWith(
-        `${testProjectRoot}/.gitgov/actors`,
-        { recursive: true }
-      );
-      expect(mockWriteFile).toHaveBeenCalledWith(
-        `${testProjectRoot}/.gitgov/actors/human:test-user.key`,
-        testPrivateKey,
-        'utf-8'
-      );
-      expect(mockChmod).toHaveBeenCalledWith(
-        `${testProjectRoot}/.gitgov/actors/human:test-user.key`,
-        0o600
+      // Verify private key was persisted via KeyProvider
+      expect(mockKeyProvider.setPrivateKey).toHaveBeenCalledWith(
+        'human:test-user',
+        testPrivateKey
       );
 
       // Restore console.warn
@@ -338,16 +333,12 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       };
 
       const testPrivateKey = 'test-private-key-base64';
-      const testProjectRoot = '/test/project';
 
       // Mock actor exists
       mockActorStore.read.mockResolvedValue(sampleRecord);
 
-      // Mock ConfigManager and fs to return private key
-      jest.spyOn(ConfigManager, 'findProjectRoot').mockReturnValue(testProjectRoot);
-      const fs = await import('fs');
-      const mockReadFile = fs.promises.readFile as jest.MockedFunction<typeof fs.promises.readFile>;
-      mockReadFile.mockResolvedValue(testPrivateKey);
+      // Mock KeyProvider to return private key
+      mockKeyProvider.getPrivateKey.mockResolvedValue(testPrivateKey);
 
       // Mock signPayload to return real signature
       mockedSignPayload.mockReturnValue({
@@ -373,12 +364,8 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       expect(newSignature!.signature).not.toContain('mock-signature-');
       expect(newSignature!.timestamp).toBeGreaterThan(0);
 
-      // Verify private key was loaded
-      expect(ConfigManager.findProjectRoot).toHaveBeenCalled();
-      expect(mockReadFile).toHaveBeenCalledWith(
-        `${testProjectRoot}/.gitgov/actors/human:test-user.key`,
-        'utf-8'
-      );
+      // Verify private key was loaded via KeyProvider
+      expect(mockKeyProvider.getPrivateKey).toHaveBeenCalledWith('human:test-user');
       expect(mockedSignPayload).toHaveBeenCalledWith(
         sampleActorPayload,
         testPrivateKey,
@@ -408,11 +395,8 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       // Mock actor exists
       mockActorStore.read.mockResolvedValue(sampleRecord);
 
-      // Mock ConfigManager to return null (no project root) or fs to throw error
-      jest.spyOn(ConfigManager, 'findProjectRoot').mockReturnValue(null);
-      const fs = await import('fs');
-      const mockReadFile = fs.promises.readFile as jest.MockedFunction<typeof fs.promises.readFile>;
-      mockReadFile.mockRejectedValue(new Error('File not found'));
+      // Mock KeyProvider to return null (no private key)
+      mockKeyProvider.getPrivateKey.mockResolvedValue(null);
 
       // Suppress console.warn for tests
       const originalWarn = console.warn;
@@ -428,7 +412,8 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       expect(newSignature).toBeDefined();
       expect(newSignature!.keyId).toBe('human:test-user');
       expect(newSignature!.role).toBe('author');
-      expect(newSignature!.signature).toContain('mock-signature-');
+      // Mock signature should be valid base64 Ed25519 format (86 chars + ==)
+      expect(newSignature!.signature).toMatch(/^[A-Za-z0-9+/]{86}==$/);
       expect(newSignature!.timestamp).toBeGreaterThan(0);
 
       // Restore console.warn
@@ -478,11 +463,8 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       // Mock actor exists
       mockActorStore.read.mockResolvedValue(sampleRecord);
 
-      // Mock ConfigManager to return null (no project root) - will use mock signature
-      jest.spyOn(ConfigManager, 'findProjectRoot').mockReturnValue(null);
-      const fs = await import('fs');
-      const mockReadFile = fs.promises.readFile as jest.MockedFunction<typeof fs.promises.readFile>;
-      mockReadFile.mockRejectedValue(new Error('File not found'));
+      // Mock KeyProvider to return null (no private key) - will use mock signature
+      mockKeyProvider.getPrivateKey.mockResolvedValue(null);
 
       // Suppress console.warn for tests
       const originalWarn = console.warn;
@@ -499,7 +481,8 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       expect(finalSignature!.keyId).toBe('human:test-user');
       expect(finalSignature!.role).toBe('author');
       expect(finalSignature!.signature).not.toBe('placeholder');
-      expect(finalSignature!.signature).toContain('mock-signature-');
+      // Mock signature should be valid base64 Ed25519 format (86 chars + ==)
+      expect(finalSignature!.signature).toMatch(/^[A-Za-z0-9+/]{86}==$/);
       expect(finalSignature!.timestamp).toBeGreaterThan(0);
 
       // Restore console.warn
@@ -559,16 +542,6 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
         .mockResolvedValueOnce(sampleRecord) // Read for revoke
         .mockResolvedValueOnce(sampleRecord); // Read for revoke (second call)
 
-      // Mock ConfigManager and fs for key persistence
-      jest.spyOn(ConfigManager, 'findProjectRoot').mockReturnValue('/test/project');
-      const fs = await import('fs');
-      const mockWriteFile = fs.promises.writeFile as jest.MockedFunction<typeof fs.promises.writeFile>;
-      const mockChmod = fs.promises.chmod as jest.MockedFunction<typeof fs.promises.chmod>;
-      const mockMkdir = fs.promises.mkdir as jest.MockedFunction<typeof fs.promises.mkdir>;
-      mockMkdir.mockResolvedValue(undefined);
-      mockWriteFile.mockResolvedValue(undefined);
-      mockChmod.mockResolvedValue(undefined);
-
       const result = await identityAdapter.rotateActorKey('human:test-user');
 
       expect(result.oldActor.status).toBe('revoked');
@@ -576,14 +549,9 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       expect(result.newActor.id).toBe(newActorId);
       expect(result.newActor.publicKey).toBe(newPublicKey);
       expect(mockActorStore.write).toHaveBeenCalled(); // New actor written
-      expect(mockWriteFile).toHaveBeenCalledWith(
-        '/test/project/.gitgov/actors/human:new-test-user-v2.key',
-        newPrivateKey,
-        'utf-8'
-      );
-      expect(mockChmod).toHaveBeenCalledWith(
-        '/test/project/.gitgov/actors/human:new-test-user-v2.key',
-        0o600
+      expect(mockKeyProvider.setPrivateKey).toHaveBeenCalledWith(
+        newActorId,
+        newPrivateKey
       );
     });
 
@@ -752,13 +720,8 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
         .mockResolvedValueOnce(sampleRecord)
         .mockResolvedValueOnce(sampleRecord);
 
-      // Mock private key persistence to fail
-      jest.spyOn(ConfigManager, 'findProjectRoot').mockReturnValue('/test/project');
-      const fs = await import('fs');
-      const mockWriteFile = fs.promises.writeFile as jest.MockedFunction<typeof fs.promises.writeFile>;
-      const mockMkdir = fs.promises.mkdir as jest.MockedFunction<typeof fs.promises.mkdir>;
-      mockMkdir.mockResolvedValue(undefined);
-      mockWriteFile.mockRejectedValue(new Error('Permission denied'));
+      // Mock KeyProvider to fail on setPrivateKey
+      mockKeyProvider.setPrivateKey.mockRejectedValue(new Error('Permission denied'));
 
       const originalWarn = console.warn;
       console.warn = jest.fn();
@@ -891,18 +854,14 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
         };
 
         const testPrivateKey = 'test-agent-private-key-base64';
-        const testProjectRoot = '/test/project';
 
         // Mock dependencies
         mockActorStore.read.mockResolvedValue(correspondingActorRecord);
         mockedCreateAgentRecord.mockReturnValue(sampleAgentPayload);
         mockedCalculatePayloadChecksum.mockReturnValue('calculated-agent-checksum');
 
-        // Mock ConfigManager and fs to return private key
-        jest.spyOn(ConfigManager, 'findProjectRoot').mockReturnValue(testProjectRoot);
-        const fs = await import('fs');
-        const mockReadFile = fs.promises.readFile as jest.MockedFunction<typeof fs.promises.readFile>;
-        mockReadFile.mockResolvedValue(testPrivateKey);
+        // Mock KeyProvider to return private key
+        mockKeyProvider.getPrivateKey.mockResolvedValue(testPrivateKey);
 
         mockedSignPayload.mockReturnValue({
           keyId: 'agent:test-agent',
@@ -920,12 +879,8 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
         expect(mockedCreateAgentRecord).toHaveBeenCalled();
         expect(mockedCalculatePayloadChecksum).toHaveBeenCalled();
 
-        // Verify private key was loaded and used for real signing
-        expect(ConfigManager.findProjectRoot).toHaveBeenCalled();
-        expect(mockReadFile).toHaveBeenCalledWith(
-          `${testProjectRoot}/.gitgov/actors/agent:test-agent.key`,
-          'utf-8'
-        );
+        // Verify private key was loaded via KeyProvider
+        expect(mockKeyProvider.getPrivateKey).toHaveBeenCalledWith('agent:test-agent');
         expect(mockedSignPayload).toHaveBeenCalledWith(
           sampleAgentPayload,
           testPrivateKey,
@@ -945,18 +900,13 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
           engine: { type: 'local' as const, runtime: 'typescript', entrypoint: 'test.ts', function: 'run' }
         };
 
-        const testProjectRoot = '/test/project';
-
         // Mock dependencies
         mockActorStore.read.mockResolvedValue(correspondingActorRecord);
         mockedCreateAgentRecord.mockReturnValue(sampleAgentPayload);
         mockedCalculatePayloadChecksum.mockReturnValue('calculated-agent-checksum');
 
-        // Mock ConfigManager to return project root but fs.readFile to fail (no private key)
-        jest.spyOn(ConfigManager, 'findProjectRoot').mockReturnValue(testProjectRoot);
-        const fs = await import('fs');
-        const mockReadFile = fs.promises.readFile as jest.MockedFunction<typeof fs.promises.readFile>;
-        mockReadFile.mockRejectedValue(new Error('File not found'));
+        // Mock KeyProvider to return null (no private key)
+        mockKeyProvider.getPrivateKey.mockResolvedValue(null);
 
         await expect(identityAdapter.createAgentRecord(inputPayload))
           .rejects.toThrow('Private key not found for actor agent:test-agent');
@@ -965,12 +915,8 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
         expect(mockedCreateAgentRecord).toHaveBeenCalled();
         expect(mockedCalculatePayloadChecksum).toHaveBeenCalled();
 
-        // Verify private key was attempted to be loaded
-        expect(ConfigManager.findProjectRoot).toHaveBeenCalled();
-        expect(mockReadFile).toHaveBeenCalledWith(
-          `${testProjectRoot}/.gitgov/actors/agent:test-agent.key`,
-          'utf-8'
-        );
+        // Verify private key was attempted to be loaded via KeyProvider
+        expect(mockKeyProvider.getPrivateKey).toHaveBeenCalledWith('agent:test-agent');
 
         // Should NOT call signPayload or write (operation should fail)
         expect(mockedSignPayload).not.toHaveBeenCalled();
