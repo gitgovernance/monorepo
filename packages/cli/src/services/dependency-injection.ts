@@ -1,5 +1,6 @@
 import * as path from 'path';
-import { Adapters, Config, Records, Store, EventBus, Lint, Git, Sync, SourceAuditor, PiiDetector, Runner } from '@gitgov/core';
+import { Adapters, Config, Store, EventBus, Lint, Git, Sync, SourceAuditor, PiiDetector, Runner, KeyProvider } from '@gitgov/core';
+import type { TaskRecord, CycleRecord, FeedbackRecord, ExecutionRecord, ChangelogRecord, ActorRecord, AgentRecord, GitGovRecordPayload, CustomRecord } from '@gitgov/core';
 import { spawn } from 'child_process';
 
 /**
@@ -20,13 +21,13 @@ export class DependencyInjectionService {
   private gitModule: Git.GitModule | null = null;
   private projectRoot: string | null = null;
   private stores: {
-    taskStore: Store.RecordStore<Records.TaskRecord>;
-    cycleStore: Store.RecordStore<Records.CycleRecord>;
-    feedbackStore: Store.RecordStore<Records.FeedbackRecord>;
-    executionStore: Store.RecordStore<Records.ExecutionRecord>;
-    changelogStore: Store.RecordStore<Records.ChangelogRecord>;
-    actorStore: Store.RecordStore<Records.ActorRecord>;
-    agentStore: Store.RecordStore<Records.AgentRecord>;
+    taskStore: Store.RecordStore<TaskRecord>;
+    cycleStore: Store.RecordStore<CycleRecord>;
+    feedbackStore: Store.RecordStore<FeedbackRecord>;
+    executionStore: Store.RecordStore<ExecutionRecord>;
+    changelogStore: Store.RecordStore<ChangelogRecord>;
+    actorStore: Store.RecordStore<ActorRecord>;
+    agentStore: Store.RecordStore<AgentRecord>;
   } | null = null;
 
   /** [EARS-52] Tracks if bootstrap from gitgov-state occurred, requiring reindex */
@@ -91,13 +92,13 @@ export class DependencyInjectionService {
     this.projectRoot = projectRoot;
 
     this.stores = {
-      taskStore: new Store.RecordStore<Records.TaskRecord>('tasks', Factories.loadTaskRecord, projectRoot),
-      cycleStore: new Store.RecordStore<Records.CycleRecord>('cycles', Factories.loadCycleRecord, projectRoot),
-      feedbackStore: new Store.RecordStore<Records.FeedbackRecord>('feedback', Factories.loadFeedbackRecord, projectRoot),
-      executionStore: new Store.RecordStore<Records.ExecutionRecord>('executions', Factories.loadExecutionRecord, projectRoot),
-      changelogStore: new Store.RecordStore<Records.ChangelogRecord>('changelogs', Factories.loadChangelogRecord, projectRoot),
-      actorStore: new Store.RecordStore<Records.ActorRecord>('actors', Factories.loadActorRecord, projectRoot),
-      agentStore: new Store.RecordStore<Records.AgentRecord>('agents', Factories.loadAgentRecord, projectRoot),
+      taskStore: new Store.RecordStore<TaskRecord>('tasks', Factories.loadTaskRecord, projectRoot),
+      cycleStore: new Store.RecordStore<CycleRecord>('cycles', Factories.loadCycleRecord, projectRoot),
+      feedbackStore: new Store.RecordStore<FeedbackRecord>('feedback', Factories.loadFeedbackRecord, projectRoot),
+      executionStore: new Store.RecordStore<ExecutionRecord>('executions', Factories.loadExecutionRecord, projectRoot),
+      changelogStore: new Store.RecordStore<ChangelogRecord>('changelogs', Factories.loadChangelogRecord, projectRoot),
+      actorStore: new Store.RecordStore<ActorRecord>('actors', Factories.loadActorRecord, projectRoot),
+      agentStore: new Store.RecordStore<AgentRecord>('agents', Factories.loadAgentRecord, projectRoot),
     };
   }
 
@@ -185,10 +186,16 @@ export class DependencyInjectionService {
       // Create EventBus
       const eventBus = new EventBus.EventBus();
 
+      // Create KeyProvider for filesystem-based key storage
+      const keyProvider = new KeyProvider.FsKeyProvider({
+        actorsDir: path.join(this.projectRoot!, '.gitgov', 'actors')
+      });
+
       // Create IdentityAdapter with correct dependencies
       const identityAdapter = new Adapters.IdentityAdapter({
         actorStore: this.stores.actorStore,
         agentStore: this.stores.agentStore,
+        keyProvider,
         eventBus
       });
 
@@ -269,10 +276,16 @@ export class DependencyInjectionService {
       // Create EventBus
       const eventBus = new EventBus.EventBus();
 
+      // Create KeyProvider for filesystem-based key storage
+      const keyProvider = new KeyProvider.FsKeyProvider({
+        actorsDir: path.join(this.projectRoot!, '.gitgov', 'actors')
+      });
+
       // Create IdentityAdapter with dependencies
       return new Adapters.IdentityAdapter({
         actorStore: this.stores.actorStore,
         agentStore: this.stores.agentStore,
+        keyProvider,
         eventBus
       });
 
@@ -297,11 +310,17 @@ export class DependencyInjectionService {
         throw new Error("Failed to initialize stores");
       }
 
-      // Create EventBus and IdentityAdapter
+      // Create EventBus and KeyProvider
       const eventBus = new EventBus.EventBus();
+      const keyProvider = new KeyProvider.FsKeyProvider({
+        actorsDir: path.join(this.projectRoot!, '.gitgov', 'actors')
+      });
+
+      // Create IdentityAdapter
       const identityAdapter = new Adapters.IdentityAdapter({
         actorStore: this.stores.actorStore,
         agentStore: this.stores.agentStore,
+        keyProvider,
         eventBus
       });
 
@@ -379,7 +398,7 @@ export class DependencyInjectionService {
 
       // Cast taskStore to the expected type for LintModule
       // StorablePayload = Exclude<GitGovRecordPayload, CustomRecord>
-      type StorablePayload = Exclude<Records.GitGovRecordPayload, Records.CustomRecord>;
+      type StorablePayload = Exclude<GitGovRecordPayload, CustomRecord>;
       const lintRecordStore = this.stores.taskStore as unknown as Store.RecordStore<StorablePayload>;
 
       // Create LintModule with dependencies
@@ -467,11 +486,17 @@ export class DependencyInjectionService {
         throw new Error("Failed to initialize stores");
       }
 
-      // Create EventBus and IdentityAdapter
+      // Create EventBus and KeyProvider
       const eventBus = new EventBus.EventBus();
+      const keyProvider = new KeyProvider.FsKeyProvider({
+        actorsDir: path.join(this.projectRoot!, '.gitgov', 'actors')
+      });
+
+      // Create IdentityAdapter
       const identityAdapter = new Adapters.IdentityAdapter({
         actorStore: this.stores.actorStore,
         agentStore: this.stores.agentStore,
+        keyProvider,
         eventBus
       });
 
@@ -546,7 +571,7 @@ export class DependencyInjectionService {
   /**
    * Returns the agent store for listing agents
    */
-  async getAgentStore(): Promise<Store.RecordStore<Records.AgentRecord>> {
+  async getAgentStore(): Promise<Store.RecordStore<AgentRecord>> {
     await this.initializeStores();
     if (!this.stores) {
       throw new Error("Failed to initialize stores");

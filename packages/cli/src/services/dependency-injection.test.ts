@@ -264,6 +264,34 @@ jest.doMock('@gitgov/core', () => {
       }))
     },
 
+    // 🎭 MOCK KEY PROVIDER: Mock key storage operations
+    KeyProvider: {
+      FsKeyProvider: jest.fn().mockImplementation(() => ({
+        getPrivateKey: jest.fn().mockResolvedValue('mock-private-key-base64'),
+        setPrivateKey: jest.fn().mockResolvedValue(undefined),
+        hasPrivateKey: jest.fn().mockResolvedValue(true),
+        deletePrivateKey: jest.fn().mockResolvedValue(true)
+      })),
+      EnvKeyProvider: jest.fn().mockImplementation(() => ({
+        getPrivateKey: jest.fn().mockResolvedValue('mock-private-key-base64'),
+        setPrivateKey: jest.fn().mockResolvedValue(undefined),
+        hasPrivateKey: jest.fn().mockResolvedValue(true),
+        deletePrivateKey: jest.fn().mockResolvedValue(true)
+      })),
+      MockKeyProvider: jest.fn().mockImplementation(() => ({
+        getPrivateKey: jest.fn().mockResolvedValue('mock-private-key-base64'),
+        setPrivateKey: jest.fn().mockResolvedValue(undefined),
+        hasPrivateKey: jest.fn().mockResolvedValue(true),
+        deletePrivateKey: jest.fn().mockResolvedValue(true)
+      })),
+      KeyProviderError: class KeyProviderError extends Error {
+        constructor(message: string, public code: string, public actorId?: string) {
+          super(message);
+          this.name = 'KeyProviderError';
+        }
+      }
+    },
+
     // 🎭 MOCK GIT: Mock Git operations
     Git: {
       GitModule: jest.fn().mockImplementation(() => ({
