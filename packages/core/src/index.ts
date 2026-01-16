@@ -14,6 +14,33 @@ export * as Sync from "./sync";
 export * as Validation from "./validation";
 export * as Records from "./types";
 export * as EventBus from "./event_bus";
+
+// Direct type exports for verbatimModuleSyntax compatibility
+export type {
+  TaskRecord,
+  CycleRecord,
+  ActorRecord,
+  AgentRecord,
+  FeedbackRecord,
+  ExecutionRecord,
+  ChangelogRecord,
+  WorkflowMethodologyRecord,
+} from "./types";
+export type {
+  GitGovTaskRecord,
+  GitGovCycleRecord,
+  GitGovActorRecord,
+  GitGovAgentRecord,
+  GitGovFeedbackRecord,
+  GitGovExecutionRecord,
+  GitGovChangelogRecord,
+  GitGovRecord,
+  GitGovRecordPayload,
+  GitGovRecordType,
+  Signature,
+  EmbeddedMetadataRecord,
+  CustomRecord,
+} from "./types";
 export * as DiagramGenerator from "./diagram_generator";
 
 // Audit modules
