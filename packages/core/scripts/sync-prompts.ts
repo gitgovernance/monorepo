@@ -17,12 +17,12 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const MONOREPO_ROOT = path.resolve(__dirname, '../../..');
-const SOURCE_DIR = path.join(MONOREPO_ROOT, 'docs');
+const SOURCE_DIR = path.join(MONOREPO_ROOT, 'packages/blueprints/02_agents/design');
 const TARGET_DIR = path.join(__dirname, '../prompts');
 
 // Agent prompts to sync (official prompts that ship with @gitgov/core)
 const PROMPTS_TO_SYNC = [
-  'gitgov_agent_prompt.md',
+  'gitgov_agent.md',
 ];
 
 async function syncPrompts(): Promise<void> {
