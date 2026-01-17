@@ -173,7 +173,6 @@ describe('DashboardCommand - Demo Optimizations', () => {
       lastCommitHash: 'abc123',
       integrityStatus: 'valid',
       recordCounts: { tasks: 1, cycles: 1, actors: 1 },
-      cacheStrategy: 'json',
       generationTime: 100
     },
     metrics: {
@@ -288,8 +287,6 @@ describe('DashboardCommand - Demo Optimizations', () => {
         metricsCalculated: 3,
         derivedStatesApplied: 0,
         generationTime: 100,
-        cacheSize: 2048,
-        cacheStrategy: 'json',
         errors: [],
         performance: {
           readTime: 30,
@@ -351,8 +348,6 @@ describe('DashboardCommand - Demo Optimizations', () => {
         metricsCalculated: 4,
         derivedStatesApplied: 0,
         generationTime: 120,
-        cacheSize: 3072,
-        cacheStrategy: 'json',
         errors: [],
         performance: {
           readTime: 40,
@@ -437,8 +432,6 @@ describe('DashboardCommand - Demo Optimizations', () => {
         metricsCalculated: 5,
         derivedStatesApplied: 0,
         generationTime: 80, // Under 100ms
-        cacheSize: 4096,
-        cacheStrategy: 'json',
         errors: [],
         performance: {
           readTime: 25,
@@ -510,8 +503,6 @@ describe('DashboardCommand - Demo Optimizations', () => {
         metricsCalculated: 6,
         derivedStatesApplied: 0,
         generationTime: 150,
-        cacheSize: 5120,
-        cacheStrategy: 'json',
         errors: [],
         performance: {
           readTime: 50,

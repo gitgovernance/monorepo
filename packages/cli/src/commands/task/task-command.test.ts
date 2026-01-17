@@ -177,7 +177,6 @@ function createMockIndexData(
       lastCommitHash: 'mock-hash',
       integrityStatus: 'valid',
       recordCounts: { tasks: tasks.length },
-      cacheStrategy: 'json',
       generationTime: 0
     }
   };
