@@ -136,8 +136,6 @@ export class IndexerCommand extends SimpleCommand<IndexerCommandOptions> {
         recordsProcessed: report.recordsProcessed,
         metricsCalculated: report.metricsCalculated,
         generationTime: report.generationTime,
-        cacheSize: report.cacheSize,
-        cacheStrategy: report.cacheStrategy,
         errors: report.errors,
         performance: report.performance
       }, null, 2));
@@ -152,8 +150,6 @@ export class IndexerCommand extends SimpleCommand<IndexerCommandOptions> {
         console.log(`📊 Records processed: ${report.recordsProcessed}`);
         console.log(`🧮 Metrics calculated: ${report.metricsCalculated}`);
         console.log(`⏱️  Generation time: ${report.generationTime.toFixed(0)}ms`);
-        console.log(`💾 Cache size: ${this.formatBytes(report.cacheSize)}`);
-        console.log(`🔧 Cache strategy: ${report.cacheStrategy}`);
       }
 
       if (options.verbose) {
@@ -274,18 +270,5 @@ export class IndexerCommand extends SimpleCommand<IndexerCommandOptions> {
     }
 
     // Note: process.exit is called in the main execute method
-  }
-
-  /**
-   * Helper method to format bytes in human-readable format
-   */
-  private formatBytes(bytes: number): string {
-    if (bytes === 0) return '0 Bytes';
-
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
   }
 }
