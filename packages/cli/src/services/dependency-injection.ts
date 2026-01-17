@@ -130,9 +130,13 @@ export class DependencyInjectionService {
       if (!this.projectRoot) {
         throw new Error("Project root not initialized");
       }
-      const absoluteCachePath = path.join(this.projectRoot, '.gitgov', 'index.json');
 
-      this.indexerAdapter = new Adapters.FileIndexerAdapter({
+      // Create FsStore for cache (backend-agnostic abstraction)
+      const cacheStore = new Store.FsStore<Adapters.IndexData>({
+        basePath: path.join(this.projectRoot, '.gitgov'),
+      });
+
+      this.indexerAdapter = new Adapters.IndexerAdapter({
         metricsAdapter,
         taskStore: this.stores.taskStore,
         cycleStore: this.stores.cycleStore,
@@ -140,8 +144,7 @@ export class DependencyInjectionService {
         executionStore: this.stores.executionStore,
         changelogStore: this.stores.changelogStore,
         actorStore: this.stores.actorStore,
-        cacheStrategy: 'json',
-        cachePath: absoluteCachePath
+        cacheStore,
       });
 
       // [EARS-52] If bootstrap occurred, regenerate index immediately
