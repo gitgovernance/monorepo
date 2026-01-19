@@ -4,15 +4,6 @@ import type { BaseCommandOptions } from '../../interfaces/command';
 import type { Runner } from '@gitgov/core';
 
 /**
- * CLI-specific metadata type for agent display purposes.
- * AgentRecord<TMetadata> allows flexible metadata; this defines the expected shape for CLI display.
- */
-type AgentDisplayMetadata = {
-  description?: string;
-  [key: string]: unknown;
-};
-
-/**
  * CLI-specific options for agent run command
  */
 export interface RunCommandOptions extends BaseCommandOptions {
@@ -286,7 +277,7 @@ export class AgentCommand extends BaseCommand<RunCommandOptions> {
       const agentIds = await agentStore.list();
 
       // Load all agents
-      const agents: Array<{ id: string; name: string; engine: string; description?: string }> = [];
+      const agents: Array<{ id: string; name: string; engine: string; description: string | undefined }> = [];
       for (const id of agentIds) {
         const record = await agentStore.read(id);
         if (record) {
@@ -298,16 +289,13 @@ export class AgentCommand extends BaseCommand<RunCommandOptions> {
             continue;
           }
 
-          const agentInfo: { id: string; name: string; engine: string; description?: string } = {
+          const meta = payload.metadata as Record<string, unknown> | undefined;
+          agents.push({
             id: payload.id,
             name: id.replace('agent-', ''),
             engine: engineType,
-          };
-          const metadata = payload.metadata as { description?: string } | undefined;
-          if (metadata?.description) {
-            agentInfo.description = metadata.description;
-          }
-          agents.push(agentInfo);
+            description: meta?.['description'] as string | undefined,
+          });
         }
       }
 
@@ -364,8 +352,10 @@ export class AgentCommand extends BaseCommand<RunCommandOptions> {
       }
 
       const payload = record.payload;
-      const metadata = payload.metadata as AgentDisplayMetadata | undefined;
-      const engine = payload.engine;
+      // Cast to any to access dynamic properties safely
+      const agentPayload = payload as any;
+      const engine = agentPayload.engine;
+      const metadata = agentPayload.metadata;
 
       // Output
       if (options.json) {
@@ -382,30 +372,28 @@ export class AgentCommand extends BaseCommand<RunCommandOptions> {
         }
 
         console.log('\n  Engine:');
-        console.log(`    Type: ${engine.type}`);
-
-        // Type-narrowed access for engine-specific properties
-        if (engine.type === 'local') {
-          if (engine.entrypoint) {
-            console.log(`    Entrypoint: ${engine.entrypoint}`);
-          }
-          if (engine.function) {
-            console.log(`    Function: ${engine.function}`);
-          }
-        } else if (engine.type === 'api' || engine.type === 'mcp') {
+        console.log(`    Type: ${engine?.type || 'unknown'}`);
+        if (engine?.entrypoint) {
+          console.log(`    Entrypoint: ${engine.entrypoint}`);
+        }
+        if (engine?.function) {
+          console.log(`    Function: ${engine.function}`);
+        }
+        if (engine?.url) {
           console.log(`    URL: ${engine.url}`);
         }
-
-        // Capabilities may come from extended agent configs
-        const capabilities = (payload as { capabilities?: string[] }).capabilities;
-        if (capabilities && capabilities.length > 0) {
-          console.log('\n  Capabilities:');
-          capabilities.forEach((cap: string) => console.log(`    - ${cap}`));
+        if (engine?.tool) {
+          console.log(`    Tool: ${engine.tool}`);
         }
 
-        if (payload.triggers && payload.triggers.length > 0) {
+        if (agentPayload.capabilities && agentPayload.capabilities.length > 0) {
+          console.log('\n  Capabilities:');
+          agentPayload.capabilities.forEach((cap: string) => console.log(`    - ${cap}`));
+        }
+
+        if (agentPayload.triggers && agentPayload.triggers.length > 0) {
           console.log('\n  Triggers:');
-          payload.triggers.forEach((t) => console.log(`    - ${t.type}${(t as { event?: string }).event ? `: ${(t as { event?: string }).event}` : ''}`));
+          agentPayload.triggers.forEach((t: any) => console.log(`    - ${t.type}${t.event ? `: ${t.event}` : ''}`));
         }
 
         console.log('─'.repeat(60) + '\n');
