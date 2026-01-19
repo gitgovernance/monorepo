@@ -10,7 +10,14 @@ import { validateFullAgentRecord } from '../../validation/agent_validator';
 import { generateKeys, signPayload, generateMockSignature } from '../../crypto/signatures';
 import { calculatePayloadChecksum } from '../../crypto/checksum';
 import { generateActorId } from '../../utils/id_generator';
-import { ConfigManager } from '../../config_manager';
+// Note: ConfigManager module is fully mocked below, createConfigManager returns mockConfigManagerInstance
+
+// Mock ConfigManager instance that will be returned by createConfigManager
+const mockConfigManagerInstance = {
+  loadSession: jest.fn(),
+  loadConfig: jest.fn(),
+  saveSession: jest.fn(),
+};
 
 // Mock all dependencies
 jest.mock('../../factories/actor_factory');
@@ -20,7 +27,10 @@ jest.mock('../../validation/agent_validator');
 jest.mock('../../crypto/signatures');
 jest.mock('../../crypto/checksum');
 jest.mock('../../utils/id_generator');
-jest.mock('../../config_manager');
+jest.mock('../../config_manager', () => ({
+  ConfigManager: jest.fn(),
+  createConfigManager: jest.fn(() => mockConfigManagerInstance),
+}));
 
 import type { KeyProvider } from '../../key_provider/key_provider';
 
@@ -1057,7 +1067,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
   describe('getCurrentActor', () => {
     it('[EARS-35] should return actor from valid session resolving succession chain', async () => {
       // Mock ConfigManager to simulate existing session (testing the primary path)
-      jest.spyOn(ConfigManager.prototype, 'loadSession').mockResolvedValue({
+      mockConfigManagerInstance.loadSession.mockResolvedValue({
         lastSession: {
           actorId: 'human:camilo',
           timestamp: '2025-09-15T17:21:00Z'
@@ -1078,7 +1088,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
 
     it('[EARS-36] should return first active actor when no valid session', async () => {
       // Mock ConfigManager to simulate no session (testing the fallback path)
-      jest.spyOn(ConfigManager.prototype, 'loadSession').mockResolvedValue(null);
+      mockConfigManagerInstance.loadSession.mockResolvedValue(null);
 
       // Mock listActors to return active actor
       jest.spyOn(identityAdapter, 'listActors')
@@ -1095,7 +1105,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
 
     it('[EARS-37] should throw error when no active actors exist', async () => {
       // Mock ConfigManager to simulate no session
-      jest.spyOn(ConfigManager.prototype, 'loadSession').mockResolvedValue(null);
+      mockConfigManagerInstance.loadSession.mockResolvedValue(null);
 
       // Mock listActors to return only revoked actors
       jest.spyOn(identityAdapter, 'listActors')

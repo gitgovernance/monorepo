@@ -1,7 +1,8 @@
 // Mock @gitgov/core FIRST to avoid import.meta issues in Jest
 jest.mock('@gitgov/core', () => ({
   Config: {
-    ConfigManager: jest.fn()
+    ConfigManager: jest.fn(),
+    createConfigManager: jest.fn()
   },
   Records: {}
 }));
@@ -93,8 +94,8 @@ describe('ContextCommand - Complete Unit Tests', () => {
     // Mock DependencyInjectionService.getInstance()
     (DependencyInjectionService.getInstance as jest.Mock).mockReturnValue(mockDependencyService);
 
-    // Mock Config.ConfigManager constructor
-    (Config.ConfigManager as unknown as jest.Mock).mockImplementation(() => mockConfigManager);
+    // Mock Config.createConfigManager factory function
+    (Config.createConfigManager as unknown as jest.Mock).mockReturnValue(mockConfigManager);
 
     // Create ContextCommand
     contextCommand = new ContextCommand();

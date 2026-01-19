@@ -728,8 +728,8 @@ export class DependencyInjectionService {
         this.projectRoot = process.env['GITGOV_ORIGINAL_DIR'] || Config.ConfigManager.findGitgovRoot() || process.cwd();
       }
 
-      // Create ConfigManager instance
-      this.configManager = new Config.ConfigManager(this.projectRoot);
+      // Create ConfigManager instance using factory function
+      this.configManager = Config.createConfigManager(this.projectRoot);
 
       return this.configManager;
 

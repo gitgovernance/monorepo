@@ -20,7 +20,7 @@ import type {
   ActorRevokedEvent,
   AgentRegisteredEvent
 } from "../../event_bus";
-import { ConfigManager } from "../../config_manager";
+import { createConfigManager } from "../../config_manager";
 import type { KeyProvider } from "../../key_provider/key_provider";
 
 /**
@@ -300,7 +300,7 @@ export class IdentityAdapter implements IIdentityAdapter {
    */
   async getCurrentActor(): Promise<ActorRecord> {
     // 1. Try to get from session
-    const configManager = new ConfigManager();
+    const configManager = createConfigManager();
     const session = await configManager.loadSession();
 
     if (session?.lastSession?.actorId) {
@@ -419,7 +419,7 @@ export class IdentityAdapter implements IIdentityAdapter {
 
     // Update session to point to the new actor using ConfigManager
     try {
-      const configManager = new ConfigManager();
+      const configManager = createConfigManager();
 
       // Migrate actorState from old actor to new actor
       const oldState = await configManager.getActorState(actorId);

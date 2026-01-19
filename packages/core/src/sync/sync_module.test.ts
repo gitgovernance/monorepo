@@ -56,7 +56,7 @@ import * as path from "path";
 import * as os from "os";
 import { SyncModule } from "./sync_module";
 import { GitModule } from "../git/git_module";
-import { ConfigManager } from "../config_manager";
+import { ConfigManager, createConfigManager } from "../config_manager";
 import type { ExecOptions, ExecResult } from "../git/types";
 import {
   SyncError,
@@ -311,7 +311,7 @@ describe("SyncModule", () => {
       execCommand: createExecCommand(repoPath),
     });
 
-    config = new ConfigManager(repoPath);
+    config = createConfigManager(repoPath);
     mockIndexer = createMockIndexerAdapter();
     syncModule = new SyncModule({
       git,
@@ -1440,7 +1440,7 @@ describe("SyncModule", () => {
         await execAsync('git commit -m "Add .gitgov"', { cwd: normalizedNoRemotePath });
 
         // Create SyncModule for repo without remote
-        const noRemoteConfig = new ConfigManager(normalizedNoRemotePath);
+        const noRemoteConfig = createConfigManager(normalizedNoRemotePath);
         const noRemoteSyncModule = new SyncModule({
           git: noRemoteGit,
           config: noRemoteConfig,
@@ -1502,7 +1502,7 @@ describe("SyncModule", () => {
         fs.writeFileSync(path.join(gitgovDir, "config.json"), '{"projectId": "empty-test"}');
 
         // Create SyncModule for empty repo
-        const emptyConfig = new ConfigManager(normalizedEmptyPath);
+        const emptyConfig = createConfigManager(normalizedEmptyPath);
         const emptySyncModule = new SyncModule({
           git: emptyGit,
           config: emptyConfig,
@@ -1570,7 +1570,7 @@ describe("SyncModule", () => {
         });
 
         // Create SyncModule for repo without remote
-        const noRemoteConfig = new ConfigManager(normalizedNoRemotePath);
+        const noRemoteConfig = createConfigManager(normalizedNoRemotePath);
         const noRemoteSyncModule = new SyncModule({
           git: noRemoteGit,
           config: noRemoteConfig,
@@ -1673,7 +1673,7 @@ describe("SyncModule", () => {
         await execAsync('git commit -m "Add .gitgov"', { cwd: normalizedNoRemotePath });
 
         // Create SyncModule for repo without remote
-        const noRemoteConfig = new ConfigManager(normalizedNoRemotePath);
+        const noRemoteConfig = createConfigManager(normalizedNoRemotePath);
         const noRemoteSyncModule = new SyncModule({
           git: noRemoteGit,
           config: noRemoteConfig,
@@ -1755,7 +1755,7 @@ describe("SyncModule", () => {
         expect(remoteBranches.trim()).toBe("");
 
         // Create SyncModule
-        const localOnlyConfig = new ConfigManager(normalizedLocalOnlyPath);
+        const localOnlyConfig = createConfigManager(normalizedLocalOnlyPath);
         const localOnlySyncModule = new SyncModule({
           git: localOnlyGit,
           config: localOnlyConfig,
@@ -1821,7 +1821,7 @@ describe("SyncModule", () => {
         await execAsync('git commit -m "Add .gitgov"', { cwd: normalizedFreshPath });
 
         // Create SyncModule
-        const freshConfig = new ConfigManager(normalizedFreshPath);
+        const freshConfig = createConfigManager(normalizedFreshPath);
         const freshSyncModule = new SyncModule({
           git: freshGit,
           config: freshConfig,
