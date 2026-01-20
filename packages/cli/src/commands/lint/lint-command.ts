@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import { BaseCommand } from '../../base/base-command';
 import type { BaseCommandOptions } from '../../interfaces/command';
-import type { Lint } from '@gitgov/core';
+import type { IFsLintModule, FsLintOptions, FsFixOptions, LintReport, LintResult, ValidatorType, FixReport } from '@gitgov/core';
 import * as path from 'path';
 import { promises as fs } from 'fs';
 import { Config } from '@gitgov/core';
@@ -105,7 +105,7 @@ export class LintCommand extends BaseCommand {
       // [EARS-2] Initialize LintModule with DI
       const lintModule = await this.container.getLintModule();
 
-      // Detect if path is a file or directory
+      // [EARS-10] Detect if path is a file or directory
       let isFile = false;
       let filePath = inputPath;
 
@@ -124,7 +124,7 @@ export class LintCommand extends BaseCommand {
       }
 
       // Map CLI options to FsLintModule options
-      const lintOptions: Partial<Lint.FsLintOptions> = {
+      const lintOptions: Partial<FsLintOptions> = {
         path: isFile ? path.dirname(inputPath) : inputPath,
         validateReferences: options.references || false,
         validateActors: options.actors || false,
@@ -144,18 +144,18 @@ export class LintCommand extends BaseCommand {
         ? await lintModule.lintFile(filePath, lintOptions)
         : await lintModule.lint(lintOptions);
 
-      // Filter results by excluded validators
+      // [EARS-11] Filter results by excluded validators
       let filteredReport = report;
       if (options.excludeValidators && options.excludeValidators.length > 0) {
         const excluded = options.excludeValidators.split(',').map(v => v.trim());
         filteredReport = {
           ...report,
-          results: report.results.filter((r: Lint.LintResult) => !excluded.includes(r.validator)),
+          results: report.results.filter((r: LintResult) => !excluded.includes(r.validator)),
           summary: {
             ...report.summary,
-            errors: report.results.filter((r: Lint.LintResult) => !excluded.includes(r.validator) && r.level === 'error').length,
-            warnings: report.results.filter((r: Lint.LintResult) => !excluded.includes(r.validator) && r.level === 'warning').length,
-            fixable: report.results.filter((r: Lint.LintResult) => !excluded.includes(r.validator) && r.fixable).length
+            errors: report.results.filter((r: LintResult) => !excluded.includes(r.validator) && r.level === 'error').length,
+            warnings: report.results.filter((r: LintResult) => !excluded.includes(r.validator) && r.level === 'warning').length,
+            fixable: report.results.filter((r: LintResult) => !excluded.includes(r.validator) && r.fixable).length
           }
         };
       }
@@ -188,7 +188,7 @@ export class LintCommand extends BaseCommand {
           options.summary || false,
           maxErrors
         );
-        // [EARS-8] Exit code based on filtered report
+        // [EARS-8] Exit code 1 when errors, [EARS-9] Exit code 0 when no errors
         const exitCode = filteredReport.summary.errors > 0 ? 1 : 0;
         process.exit(exitCode);
       }
@@ -205,12 +205,12 @@ export class LintCommand extends BaseCommand {
    * @returns FixReport for exit code calculation
    */
   private async handleFixMode(
-    lintModule: Lint.IFsLintModule,
-    lintReport: Lint.LintReport,
+    lintModule: IFsLintModule,
+    lintReport: LintReport,
     options: LintCommandOptions,
     format: string,
     quiet: boolean
-  ): Promise<Lint.FixReport | undefined> {
+  ): Promise<FixReport | undefined> {
     const fixableCount = lintReport.summary.fixable;
 
     if (fixableCount === 0) {
@@ -246,14 +246,15 @@ export class LintCommand extends BaseCommand {
       }
     }
 
-    // Parse fix-validators option if provided
-    let fixTypes: Lint.ValidatorType[] | undefined;
+    // [EARS-13] Parse fix-validators option - fix only specified validators
+    let fixTypes: ValidatorType[] | undefined;
     if (options.fixValidators) {
-      const validators = options.fixValidators.split(',').map(v => v.trim() as Lint.ValidatorType);
+      const validators = options.fixValidators.split(',').map(v => v.trim() as ValidatorType);
       fixTypes = validators.filter(v => v.length > 0);
     }
 
-    const fixOptions: Partial<Lint.FsFixOptions> = {
+    // [EARS-14] Fix all fixable when no --fix-validators specified
+    const fixOptions: Partial<FsFixOptions> = {
       createBackups: true,
       keyId: currentActor.id,
       ...(privateKey && { privateKey }),
@@ -299,7 +300,7 @@ export class LintCommand extends BaseCommand {
    * [EARS-4, EARS-5, EARS-15, EARS-16]
    */
   private formatLintReport(
-    report: Lint.LintReport,
+    report: LintReport,
     format: string,
     quiet: boolean,
     executionTime: number,
@@ -374,6 +375,7 @@ export class LintCommand extends BaseCommand {
       console.log('\n\x1b[1mIssues:\x1b[0m');
       console.log('─'.repeat(60));
 
+      // [EARS-12] Group output by validator/file/none
       if (groupBy === 'validator') {
         // Group by validator type
         const grouped = displayResults.reduce((acc, result) => {
@@ -382,7 +384,7 @@ export class LintCommand extends BaseCommand {
           }
           acc[result.validator]!.push(result);
           return acc;
-        }, {} as Record<string, Lint.LintResult[]>);
+        }, {} as Record<string, LintResult[]>);
 
         Object.entries(grouped).forEach(([validator, validatorResults]) => {
           const errorCount = validatorResults.filter(r => r.level === 'error').length;
@@ -414,7 +416,7 @@ export class LintCommand extends BaseCommand {
           }
           acc[result.filePath]!.push(result);
           return acc;
-        }, {} as Record<string, Lint.LintResult[]>);
+        }, {} as Record<string, LintResult[]>);
 
         Object.entries(grouped).forEach(([filePath, fileResults]) => {
           console.log(`\n📄 ${filePath}`);
@@ -506,7 +508,7 @@ export class LintCommand extends BaseCommand {
    * [EARS-6]
    */
   private formatMigrationReport(
-    report: Lint.LintReport,
+    report: LintReport,
     format: string,
     quiet: boolean
   ): void {
@@ -540,7 +542,7 @@ export class LintCommand extends BaseCommand {
    * Format fix report for display
    * [EARS-7]
    */
-  private formatFixReport(report: Lint.FixReport, quiet: boolean): void {
+  private formatFixReport(report: FixReport, quiet: boolean): void {
     const { summary, fixes } = report;
 
     if (!quiet) {
