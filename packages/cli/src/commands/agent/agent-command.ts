@@ -282,7 +282,7 @@ export class AgentCommand extends BaseCommand<RunCommandOptions> {
         const record = await agentStore.read(id);
         if (record) {
           const payload = record.payload;
-          const engineType = payload.engine?.type || 'unknown';
+          const engineType = payload.engine.type;
 
           // Filter by engine if specified
           if (options.engine && engineType !== options.engine) {

@@ -1,10 +1,14 @@
-import { promises as fs } from 'fs';
-import * as path from 'path';
-import { existsSync } from 'fs';
+/**
+ * ConfigManager - Configuration and Session Manager
+ *
+ * Provides typed access to GitGovernance configuration and session state.
+ * Uses ConfigStore abstraction for backend-agnostic persistence.
+ *
+ * @see packages/blueprints/03_products/core/specs/modules/config_session_module.md
+ */
 
-// Project root cache for performance
-let projectRoot: string | null = null;
-let lastSearchPath: string | null = null;
+import type { ConfigStore } from '../store/config_store';
+import { FsConfigStore } from '../store/fs/config_store';
 
 /**
  * GitGovernance Configuration Types
@@ -102,66 +106,63 @@ export interface GitGovSession {
 
 /**
  * Configuration Manager Class
- * Provides typed access to GitGovernance configuration and session state
+ *
+ * Provides typed access to GitGovernance configuration and session state.
+ * Uses ConfigStore abstraction for backend-agnostic persistence (filesystem, memory, etc.).
+ *
+ * @example
+ * ```typescript
+ * // Production usage (uses FsConfigStore internally)
+ * const manager = createConfigManager();
+ * const config = await manager.loadConfig();
+ *
+ * // Test usage with MemoryConfigStore
+ * const store = new MemoryConfigStore();
+ * store.setConfig({ ... });
+ * const manager = new ConfigManager(store);
+ * ```
  */
 export class ConfigManager {
-  private configPath: string;
-  private sessionPath: string;
+  private readonly configStore: ConfigStore;
 
-  constructor(projectRootPath: string = ConfigManager.findProjectRoot() || process.cwd()) {
-    this.configPath = path.join(projectRootPath, '.gitgov', 'config.json');
-    this.sessionPath = path.join(projectRootPath, '.gitgov', '.session.json');
+  /**
+   * Create a ConfigManager with a ConfigStore backend.
+   *
+   * @param configStore - Store implementation for config/session persistence (REQUIRED)
+   */
+  constructor(configStore: ConfigStore) {
+    this.configStore = configStore;
   }
 
   /**
    * Load GitGovernance configuration
    */
   async loadConfig(): Promise<GitGovConfig | null> {
-    try {
-      const configContent = await fs.readFile(this.configPath, 'utf-8');
-      const config = JSON.parse(configContent) as GitGovConfig;
-
-      // Optional validation: Warn if rootCycle doesn't match expected format
-      if (config.rootCycle && !/^\d+-cycle-[a-z0-9-]+$/.test(config.rootCycle)) {
-        console.warn(
-          `⚠️  Warning: rootCycle "${config.rootCycle}" doesn't match expected format ` +
-          `"{timestamp}-cycle-{slug}". This may cause issues with cycle navigation.`
-        );
-      }
-
-      return config;
-    } catch (error) {
-      // Config file doesn't exist or is invalid
-      return null;
-    }
+    return this.configStore.loadConfig();
   }
 
   /**
    * Load GitGovernance session state
-   * [EARS-53] Auto-detects actor from .key files if no session or no actorId exists
+   * [EARS-B9] Auto-detects actor from .key files if no session or no actorId exists
    */
   async loadSession(): Promise<GitGovSession | null> {
-    try {
-      const sessionContent = await fs.readFile(this.sessionPath, 'utf-8');
-      const session = JSON.parse(sessionContent) as GitGovSession;
+    let session = await this.configStore.loadSession();
 
-      // [EARS-53] If session exists but no lastSession.actorId, try to auto-detect
-      if (!session.lastSession?.actorId) {
-        const detectedActorId = await this.detectActorFromKeyFiles();
-        if (detectedActorId) {
-          session.lastSession = {
-            actorId: detectedActorId,
-            timestamp: new Date().toISOString()
-          };
-          // Save the auto-detected session
-          await fs.writeFile(this.sessionPath, JSON.stringify(session, null, 2), 'utf-8');
-        }
+    // [EARS-B9] If session exists but no lastSession.actorId, try to auto-detect
+    if (session && !session.lastSession?.actorId) {
+      const detectedActorId = await this.detectActorFromKeyFiles();
+      if (detectedActorId) {
+        session.lastSession = {
+          actorId: detectedActorId,
+          timestamp: new Date().toISOString()
+        };
+        // Save the auto-detected session
+        await this.configStore.saveSession(session);
       }
+    }
 
-      return session;
-    } catch (error) {
-      // Session file doesn't exist or is invalid
-      // [EARS-53] Try to create session from .key files
+    // [EARS-B9] If no session, try to create from .key files
+    if (!session) {
       const detectedActorId = await this.detectActorFromKeyFiles();
       if (detectedActorId) {
         const newSession: GitGovSession = {
@@ -173,47 +174,28 @@ export class ConfigManager {
         };
         // Save the auto-detected session
         try {
-          await fs.writeFile(this.sessionPath, JSON.stringify(newSession, null, 2), 'utf-8');
+          await this.configStore.saveSession(newSession);
           return newSession;
         } catch {
           // Failed to save, return the session anyway
           return newSession;
         }
       }
-      return null;
     }
+
+    return session;
   }
 
   /**
-   * [EARS-53] Detect actor from .key files in .gitgov/actors/
-   * Returns the actor ID if exactly one .key file exists, or the first one if multiple exist.
+   * [EARS-B9] Detect actor from .key files in .gitgov/actors/
+   * Returns the actor ID if .key files exist, or null otherwise.
    * Private keys (.key files) indicate which actors can sign on this machine.
    */
   async detectActorFromKeyFiles(): Promise<string | null> {
-    try {
-      // sessionPath is /path/to/.gitgov/.session.json
-      // actorsDir should be /path/to/.gitgov/actors
-      const gitgovDir = path.dirname(this.sessionPath);
-      const actorsDir = path.join(gitgovDir, 'actors');
-      const files = await fs.readdir(actorsDir);
-
-      // Find all .key files
-      const keyFiles = files.filter(f => f.endsWith('.key'));
-
-      // Get first .key file
-      const firstKeyFile = keyFiles[0];
-      if (!firstKeyFile) {
-        return null;
-      }
-
-      // Extract actor ID from first .key file (filename without .key extension)
-      // e.g., "human:camilo-v2.key" -> "human:camilo-v2"
-      const actorId = firstKeyFile.replace('.key', '');
-      return actorId;
-    } catch {
-      // Directory doesn't exist or can't be read
-      return null;
+    if (this.configStore.detectActorFromKeyFiles) {
+      return this.configStore.detectActorFromKeyFiles();
     }
+    return null;
   }
 
   /**
@@ -267,7 +249,7 @@ export class ConfigManager {
       };
     }
 
-    await fs.writeFile(this.sessionPath, JSON.stringify(session, null, 2), 'utf-8');
+    await this.configStore.saveSession(session);
   }
 
   /**
@@ -449,7 +431,7 @@ export class ConfigManager {
       };
     }
 
-    await fs.writeFile(this.sessionPath, JSON.stringify(session, null, 2), 'utf-8');
+    await this.configStore.saveSession(session);
   }
 
   /**
@@ -489,8 +471,11 @@ export class ConfigManager {
       lastFullAuditFindingsCount: auditState.lastFullAuditFindingsCount
     };
 
-    await fs.writeFile(this.configPath, JSON.stringify(config, null, 2), 'utf-8');
+    await this.configStore.saveConfig(config);
   }
+
+  // ==================== Static Utility Methods ====================
+  // These delegate to FsConfigStore for backward compatibility
 
   /**
    * Finds the project root by searching upwards for a .git directory.
@@ -499,42 +484,7 @@ export class ConfigManager {
    * @returns The absolute path to the project root, or null if not found.
    */
   static findProjectRoot(startPath: string = process.cwd()): string | null {
-    // In test environment, allow cache reset via global
-    if (typeof (global as any).projectRoot !== 'undefined' && (global as any).projectRoot === null) {
-      projectRoot = null;
-      lastSearchPath = null;
-    }
-
-    // Reset cache if we're searching from a different directory
-    if (lastSearchPath && lastSearchPath !== startPath) {
-      projectRoot = null;
-      lastSearchPath = null;
-    }
-
-    if (projectRoot && lastSearchPath === startPath) {
-      return projectRoot;
-    }
-
-    // Update last search path
-    lastSearchPath = startPath;
-
-    let currentPath = startPath;
-    // Prevent infinite loop by stopping at the filesystem root
-    while (currentPath !== path.parse(currentPath).root) {
-      if (existsSync(path.join(currentPath, '.git'))) {
-        projectRoot = currentPath;
-        return projectRoot;
-      }
-      currentPath = path.dirname(currentPath);
-    }
-
-    // Final check at the root directory
-    if (existsSync(path.join(currentPath, '.git'))) {
-      projectRoot = currentPath;
-      return projectRoot;
-    }
-
-    return null;
+    return FsConfigStore.findProjectRoot(startPath);
   }
 
   /**
@@ -544,65 +494,44 @@ export class ConfigManager {
    * @returns The absolute path to the project root, or null if not found.
    */
   static findGitgovRoot(startPath: string = process.cwd()): string | null {
-    let currentPath = startPath;
-
-    // First pass: Look for .gitgov (initialized GitGovernance project)
-    while (currentPath !== path.parse(currentPath).root) {
-      if (existsSync(path.join(currentPath, '.gitgov'))) {
-        return currentPath;
-      }
-      currentPath = path.dirname(currentPath);
-    }
-
-    // Final check at root for .gitgov
-    if (existsSync(path.join(currentPath, '.gitgov'))) {
-      return currentPath;
-    }
-
-    // Second pass: Look for .git (for init command)
-    currentPath = startPath;
-    while (currentPath !== path.parse(currentPath).root) {
-      if (existsSync(path.join(currentPath, '.git'))) {
-        return currentPath;
-      }
-      currentPath = path.dirname(currentPath);
-    }
-
-    // Final check at root for .git
-    if (existsSync(path.join(currentPath, '.git'))) {
-      return currentPath;
-    }
-
-    return null;
+    return FsConfigStore.findGitgovRoot(startPath);
   }
 
   /**
    * Gets the .gitgov directory path from project root
    */
   static getGitgovPath(): string {
-    const root = ConfigManager.findGitgovRoot();
-    if (!root) {
-      throw new Error("Could not find project root. Make sure you are inside a GitGovernance repository.");
-    }
-    return path.join(root, '.gitgov');
+    return FsConfigStore.getGitgovPath();
   }
 
   /**
    * Checks if current directory is a GitGovernance project
    */
   static isGitgovProject(): boolean {
-    try {
-      const gitgovPath = ConfigManager.getGitgovPath();
-      return existsSync(gitgovPath);
-    } catch {
-      return false;
-    }
+    return FsConfigStore.isGitgovProject();
   }
 }
 
 /**
- * Create a ConfigManager instance for the current project
+ * Create a ConfigManager instance for the current project.
+ *
+ * This factory function provides backward compatibility by automatically
+ * creating an FsConfigStore for filesystem-based persistence.
+ *
+ * @param projectRoot - Optional project root path (for testing)
+ * @returns ConfigManager instance with FsConfigStore backend
+ *
+ * @example
+ * ```typescript
+ * // Production usage
+ * const manager = createConfigManager();
+ *
+ * // Testing with custom project root
+ * const manager = createConfigManager('/tmp/test-project');
+ * ```
  */
 export function createConfigManager(projectRoot?: string): ConfigManager {
-  return new ConfigManager(projectRoot);
+  const resolvedRoot = projectRoot || ConfigManager.findProjectRoot() || process.cwd();
+  const configStore = new FsConfigStore(resolvedRoot);
+  return new ConfigManager(configStore);
 }

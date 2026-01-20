@@ -1,0 +1,3 @@
+[submodule "packages/blueprints"]
+	path = packages/blueprints
+	url = git@github.com:gitgovernance/blueprints.git

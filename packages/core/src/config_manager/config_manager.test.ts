@@ -1,6 +1,7 @@
 import { promises as fs } from 'fs';
 import * as path from 'path';
-import { ConfigManager } from './index';
+import { ConfigManager, createConfigManager } from './index';
+import { FsConfigStore } from '../store/fs/config_store';
 import type { GitGovConfig, GitGovSession, ActorState } from './index';
 
 // Mock filesystem operations
@@ -23,15 +24,15 @@ describe('ConfigManager', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     tempDir = '/test/project';
-    configManager = new ConfigManager(tempDir);
+    configManager = createConfigManager(tempDir);
     // Reset project root cache
     (global as any).projectRoot = null;
   });
 
-  // --- Configuration Methods (EARS-1 to EARS-6) ---
+  // --- Configuration Methods (EARS-A1 to EARS-A9) ---
 
   describe('loadConfig', () => {
-    it('[EARS-1] WHEN loadConfig is invoked with valid config.json file, THE SYSTEM SHALL return complete GitGovConfig object', async () => {
+    it('[EARS-A1] WHEN loadConfig is invoked with valid config.json file, THE SYSTEM SHALL return complete GitGovConfig object', async () => {
       const mockConfig: GitGovConfig = {
         protocolVersion: '1.0',
         projectId: 'test-project-123',
@@ -51,7 +52,7 @@ describe('ConfigManager', () => {
       );
     });
 
-    it('[EARS-2] WHEN loadConfig is invoked with non-existent config.json file, THE SYSTEM SHALL return null without throwing error', async () => {
+    it('[EARS-A2] WHEN loadConfig is invoked with non-existent config.json file, THE SYSTEM SHALL return null without throwing error', async () => {
       mockedFs.readFile.mockRejectedValue(new Error('ENOENT: no such file or directory'));
 
       const result = await configManager.loadConfig();
@@ -59,7 +60,7 @@ describe('ConfigManager', () => {
       expect(result).toBeNull();
     });
 
-    it('[EARS-3] WHEN loadConfig is invoked with invalid JSON in config.json, THE SYSTEM SHALL return null without throwing error', async () => {
+    it('[EARS-A3] WHEN loadConfig is invoked with invalid JSON in config.json, THE SYSTEM SHALL return null without throwing error', async () => {
       mockedFs.readFile.mockResolvedValue('{ invalid json }');
 
       const result = await configManager.loadConfig();
@@ -69,7 +70,7 @@ describe('ConfigManager', () => {
   });
 
   describe('getRootCycle', () => {
-    it('[EARS-4] WHEN getRootCycle is invoked with configuration that has rootCycle defined, THE SYSTEM SHALL return the root cycle ID', async () => {
+    it('[EARS-A4] WHEN getRootCycle is invoked with configuration that has rootCycle defined, THE SYSTEM SHALL return the root cycle ID', async () => {
       const mockConfig: GitGovConfig = {
         protocolVersion: '1.0',
         projectId: 'test-project',
@@ -84,7 +85,7 @@ describe('ConfigManager', () => {
       expect(result).toBe('root-cycle-123');
     });
 
-    it('[EARS-5] WHEN getRootCycle is invoked with configuration without rootCycle defined, THE SYSTEM SHALL return null', async () => {
+    it('[EARS-A5] WHEN getRootCycle is invoked with configuration without rootCycle defined, THE SYSTEM SHALL return null', async () => {
       // Note: This test simulates an invalid/incomplete config.json file
       // In practice, rootCycle is obligatory and created during 'gitgov init'
       const incompleteConfig = {
@@ -103,7 +104,7 @@ describe('ConfigManager', () => {
   });
 
   describe('getProjectInfo', () => {
-    it('[EARS-6] WHEN getProjectInfo is invoked with valid configuration, THE SYSTEM SHALL return object with projectId and projectName', async () => {
+    it('[EARS-A6] WHEN getProjectInfo is invoked with valid configuration, THE SYSTEM SHALL return object with projectId and projectName', async () => {
       const mockConfig: GitGovConfig = {
         protocolVersion: '1.0',
         projectId: 'project-456',
@@ -122,10 +123,10 @@ describe('ConfigManager', () => {
     });
   });
 
-  // --- Session Methods (EARS-7 to EARS-14) ---
+  // --- Session Methods (EARS-B1 to EARS-B9) ---
 
   describe('loadSession', () => {
-    it('[EARS-7] WHEN loadSession is invoked with valid .session.json file, THE SYSTEM SHALL return complete GitGovSession object', async () => {
+    it('[EARS-B1] WHEN loadSession is invoked with valid .session.json file, THE SYSTEM SHALL return complete GitGovSession object', async () => {
       const mockSession: GitGovSession = {
         cloud: { sessionToken: 'jwt-token-123' },
         lastSession: { actorId: 'human:camilo', timestamp: '2025-01-09T10:00:00Z' },
@@ -145,7 +146,7 @@ describe('ConfigManager', () => {
       );
     });
 
-    it('[EARS-8] WHEN loadSession is invoked with non-existent .session.json file, THE SYSTEM SHALL return null without throwing error', async () => {
+    it('[EARS-B2] WHEN loadSession is invoked with non-existent .session.json file, THE SYSTEM SHALL return null without throwing error', async () => {
       mockedFs.readFile.mockRejectedValue(new Error('ENOENT: no such file or directory'));
       // Mock readdir to return no .key files
       (mockedFs.readdir as jest.Mock).mockRejectedValue(new Error('ENOENT'));
@@ -156,10 +157,10 @@ describe('ConfigManager', () => {
     });
   });
 
-  // --- Auto-detect Actor from .key Files (EARS-53) ---
+  // --- Auto-detect Actor from .key Files (EARS-B9) ---
 
-  describe('detectActorFromKeyFiles and loadSession auto-detection (EARS-53)', () => {
-    it('[EARS-53] WHEN .session.json exists without actorId and .key files exist, loadSession SHALL auto-detect and set actorId', async () => {
+  describe('detectActorFromKeyFiles and loadSession auto-detection (EARS-B9)', () => {
+    it('[EARS-B9] WHEN .session.json exists without actorId and .key files exist, loadSession SHALL auto-detect and set actorId', async () => {
       // Session exists but without lastSession.actorId
       const sessionWithoutActor: GitGovSession = {
         actorState: {}
@@ -180,7 +181,7 @@ describe('ConfigManager', () => {
       expect(mockedFs.writeFile).toHaveBeenCalled();
     });
 
-    it('[EARS-53] WHEN .session.json does not exist but .key files exist, loadSession SHALL create session with auto-detected actorId', async () => {
+    it('[EARS-B9] WHEN .session.json does not exist but .key files exist, loadSession SHALL create session with auto-detected actorId', async () => {
       // Session file doesn't exist
       mockedFs.readFile.mockRejectedValue(new Error('ENOENT'));
       mockedFs.writeFile.mockResolvedValue();
@@ -196,7 +197,7 @@ describe('ConfigManager', () => {
       expect(mockedFs.writeFile).toHaveBeenCalled();
     });
 
-    it('[EARS-53] WHEN .session.json has valid actorId, loadSession SHALL NOT override with .key file detection', async () => {
+    it('[EARS-B9] WHEN .session.json has valid actorId, loadSession SHALL NOT override with .key file detection', async () => {
       const sessionWithActor: GitGovSession = {
         lastSession: { actorId: 'human:existing-user', timestamp: '2025-01-01T00:00:00Z' },
         actorState: {}
@@ -212,7 +213,7 @@ describe('ConfigManager', () => {
       expect(mockedFs.writeFile).not.toHaveBeenCalled();
     });
 
-    it('[EARS-53] WHEN no .key files exist, detectActorFromKeyFiles SHALL return null', async () => {
+    it('[EARS-B9] WHEN no .key files exist, detectActorFromKeyFiles SHALL return null', async () => {
       // Mock readdir to return no .key files
       (mockedFs.readdir as jest.Mock).mockResolvedValue(['actor.json', 'README.md']);
 
@@ -222,7 +223,7 @@ describe('ConfigManager', () => {
       expect(result).toBeNull();
     });
 
-    it('[EARS-53] WHEN actors directory does not exist, detectActorFromKeyFiles SHALL return null', async () => {
+    it('[EARS-B9] WHEN actors directory does not exist, detectActorFromKeyFiles SHALL return null', async () => {
       // Mock readdir to throw (directory doesn't exist)
       (mockedFs.readdir as jest.Mock).mockRejectedValue(new Error('ENOENT'));
 
@@ -234,7 +235,7 @@ describe('ConfigManager', () => {
   });
 
   describe('getActorState', () => {
-    it('[EARS-9] WHEN getActorState is invoked with actorId existing in session, THE SYSTEM SHALL return actor state', async () => {
+    it('[EARS-B3] WHEN getActorState is invoked with actorId existing in session, THE SYSTEM SHALL return actor state', async () => {
       const mockSession: GitGovSession = {
         actorState: {
           'human:camilo': { activeTaskId: 'task-789', activeCycleId: 'cycle-101', lastSync: '2025-01-09T10:15:00Z' }
@@ -252,7 +253,7 @@ describe('ConfigManager', () => {
       });
     });
 
-    it('[EARS-10] WHEN getActorState is invoked with non-existent actorId, THE SYSTEM SHALL return null', async () => {
+    it('[EARS-B4] WHEN getActorState is invoked with non-existent actorId, THE SYSTEM SHALL return null', async () => {
       const mockSession: GitGovSession = {
         actorState: {
           'human:alice': { activeTaskId: 'task-999' }
@@ -268,7 +269,7 @@ describe('ConfigManager', () => {
   });
 
   describe('updateActorState', () => {
-    it('[EARS-11] WHEN updateActorState is invoked, THE SYSTEM SHALL merge partial state with existing state and persist', async () => {
+    it('[EARS-B5] WHEN updateActorState is invoked, THE SYSTEM SHALL merge partial state with existing state and persist', async () => {
       const existingSession: GitGovSession = {
         actorState: {
           'human:camilo': { activeTaskId: 'task-old', activeCycleId: 'cycle-old', lastSync: '2025-01-08T10:00:00Z' }
@@ -339,7 +340,7 @@ describe('ConfigManager', () => {
       expect(writtenSession.lastSession?.timestamp).toBe('2025-01-08T10:00:00Z');
     });
 
-    it('[EARS-12] WHEN updateActorState is invoked with non-existent session, THE SYSTEM SHALL create new session with provided state', async () => {
+    it('[EARS-B6] WHEN updateActorState is invoked with non-existent session, THE SYSTEM SHALL create new session with provided state', async () => {
       mockedFs.readFile.mockRejectedValue(new Error('ENOENT'));
       mockedFs.writeFile.mockResolvedValue();
 
@@ -368,7 +369,7 @@ describe('ConfigManager', () => {
   });
 
   describe('getCloudSessionToken', () => {
-    it('[EARS-13] WHEN getCloudSessionToken is invoked with token configured, THE SYSTEM SHALL return the session token', async () => {
+    it('[EARS-B7] WHEN getCloudSessionToken is invoked with token configured, THE SYSTEM SHALL return the session token', async () => {
       const mockSession: GitGovSession = {
         cloud: { sessionToken: 'jwt-token-xyz' }
       };
@@ -380,7 +381,7 @@ describe('ConfigManager', () => {
       expect(result).toBe('jwt-token-xyz');
     });
 
-    it('[EARS-14] WHEN getCloudSessionToken is invoked without token configured, THE SYSTEM SHALL return null', async () => {
+    it('[EARS-B8] WHEN getCloudSessionToken is invoked without token configured, THE SYSTEM SHALL return null', async () => {
       const mockSession: GitGovSession = {
         lastSession: { actorId: 'human:test', timestamp: '2025-01-09T10:00:00Z' }
         // No cloud.sessionToken
@@ -394,10 +395,10 @@ describe('ConfigManager', () => {
     });
   });
 
-  // --- Sync Configuration Methods (EARS-7 to EARS-9) ---
+  // --- Sync Configuration Methods (EARS-A7 to EARS-A9) ---
 
   describe('getSyncConfig', () => {
-    it('[EARS-7] WHEN getSyncConfig is invoked with state.sync defined in config.json, THE SYSTEM SHALL return object with strategy, maxRetries, and intervals', async () => {
+    it('[EARS-A7] WHEN getSyncConfig is invoked with state.sync defined in config.json, THE SYSTEM SHALL return object with strategy, maxRetries, and intervals', async () => {
       const mockConfig: GitGovConfig = {
         protocolVersion: '1.0',
         projectId: 'test-project',
@@ -425,7 +426,7 @@ describe('ConfigManager', () => {
       });
     });
 
-    it('[EARS-8] WHEN getSyncConfig is invoked without state.sync in config.json, THE SYSTEM SHALL return null', async () => {
+    it('[EARS-A8] WHEN getSyncConfig is invoked without state.sync in config.json, THE SYSTEM SHALL return null', async () => {
       const mockConfig: GitGovConfig = {
         protocolVersion: '1.0',
         projectId: 'test-project',
@@ -443,7 +444,7 @@ describe('ConfigManager', () => {
   });
 
   describe('getSyncDefaults', () => {
-    it('[EARS-9] WHEN getSyncDefaults is invoked, THE SYSTEM SHALL return defaults from config.json or hardcoded fallbacks', async () => {
+    it('[EARS-A9] WHEN getSyncDefaults is invoked, THE SYSTEM SHALL return defaults from config.json or hardcoded fallbacks', async () => {
       const mockConfig: GitGovConfig = {
         protocolVersion: '1.0',
         projectId: 'test-project',
@@ -511,10 +512,10 @@ describe('ConfigManager', () => {
     });
   });
 
-  // --- Sync Preferences Resolution (EARS-24 to EARS-26) ---
+  // --- Sync Preferences Resolution (EARS-D1 to EARS-D3) ---
 
   describe('resolvePullSchedulerConfig', () => {
-    it('[EARS-24] WHEN resolvePullSchedulerConfig is invoked, THE SYSTEM SHALL apply priority: local > project > hardcoded', async () => {
+    it('[EARS-D1] WHEN resolvePullSchedulerConfig is invoked, THE SYSTEM SHALL apply priority: local > project > hardcoded', async () => {
       // Setup: config with project defaults
       const mockConfig: GitGovConfig = {
         protocolVersion: '1.0',
@@ -623,7 +624,7 @@ describe('ConfigManager', () => {
   });
 
   describe('resolveFileWatcherConfig', () => {
-    it('[EARS-25] WHEN resolveFileWatcherConfig is invoked, THE SYSTEM SHALL apply priority: local > project > hardcoded', async () => {
+    it('[EARS-D2] WHEN resolveFileWatcherConfig is invoked, THE SYSTEM SHALL apply priority: local > project > hardcoded', async () => {
       const mockConfig: GitGovConfig = {
         protocolVersion: '1.0',
         projectId: 'test-project',
@@ -697,7 +698,7 @@ describe('ConfigManager', () => {
   });
 
   describe('updateSyncPreferences', () => {
-    it('[EARS-26] WHEN updateSyncPreferences is invoked, THE SYSTEM SHALL merge partial preferences with existing and persist to session', async () => {
+    it('[EARS-D3] WHEN updateSyncPreferences is invoked, THE SYSTEM SHALL merge partial preferences with existing and persist to session', async () => {
       const existingSession: GitGovSession = {
         syncPreferences: {
           pullScheduler: {
@@ -762,7 +763,7 @@ describe('ConfigManager', () => {
     });
   });
 
-  // --- Static Utility Methods (EARS-15 to EARS-20) ---
+  // --- Static Utility Methods (EARS-C1 to EARS-C6) ---
 
   describe('findProjectRoot', () => {
     beforeEach(() => {
@@ -770,7 +771,7 @@ describe('ConfigManager', () => {
       (global as any).projectRoot = null;
     });
 
-    it('[EARS-15] WHEN findProjectRoot is invoked from directory within Git project, THE SYSTEM SHALL return absolute path to root directory', () => {
+    it('[EARS-C1] WHEN findProjectRoot is invoked from directory within Git project, THE SYSTEM SHALL return absolute path to root directory', () => {
       const startPath = '/test/project/src/components';
       const rootPath = '/test/project';
 
@@ -783,7 +784,7 @@ describe('ConfigManager', () => {
       expect(result).toBe(rootPath);
     });
 
-    it('[EARS-16] WHEN findProjectRoot is invoked from directory outside Git project, THE SYSTEM SHALL return null', () => {
+    it('[EARS-C2] WHEN findProjectRoot is invoked from directory outside Git project, THE SYSTEM SHALL return null', () => {
       mockedExistsSync.mockReturnValue(false);
       // Reset cache for this specific test
       (global as any).projectRoot = null;
@@ -903,20 +904,20 @@ describe('ConfigManager', () => {
       (global as any).projectRoot = null;
     });
 
-    it('[EARS-17] WHEN getGitgovPath is invoked from GitGovernance project, THE SYSTEM SHALL return absolute path to .gitgov directory', () => {
+    it('[EARS-C3] WHEN getGitgovPath is invoked from GitGovernance project, THE SYSTEM SHALL return absolute path to .gitgov directory', () => {
       const rootPath = '/test/project';
 
-      // Mock findGitgovRoot to return a specific path
-      jest.spyOn(ConfigManager, 'findGitgovRoot').mockReturnValue(rootPath);
+      // Mock FsConfigStore.findGitgovRoot (ConfigManager delegates to it)
+      jest.spyOn(FsConfigStore, 'findGitgovRoot').mockReturnValue(rootPath);
 
       const result = ConfigManager.getGitgovPath();
 
       expect(result).toBe(path.join(rootPath, '.gitgov'));
     });
 
-    it('[EARS-18] WHEN getGitgovPath is invoked outside GitGovernance project, THE SYSTEM SHALL throw descriptive Error', () => {
-      // Mock findGitgovRoot to return null
-      jest.spyOn(ConfigManager, 'findGitgovRoot').mockReturnValue(null);
+    it('[EARS-C4] WHEN getGitgovPath is invoked outside GitGovernance project, THE SYSTEM SHALL throw descriptive Error', () => {
+      // Mock FsConfigStore.findGitgovRoot to return null (ConfigManager delegates to it)
+      jest.spyOn(FsConfigStore, 'findGitgovRoot').mockReturnValue(null);
 
       expect(() => ConfigManager.getGitgovPath()).toThrow(
         'Could not find project root. Make sure you are inside a GitGovernance repository.'
@@ -930,11 +931,11 @@ describe('ConfigManager', () => {
       (global as any).projectRoot = null;
     });
 
-    it('[EARS-19] WHEN isGitgovProject is invoked from GitGovernance project, THE SYSTEM SHALL return true', () => {
+    it('[EARS-C5] WHEN isGitgovProject is invoked from GitGovernance project, THE SYSTEM SHALL return true', () => {
       const rootPath = '/test/project';
 
-      // Mock getGitgovPath to return a valid path and existsSync to return true
-      jest.spyOn(ConfigManager, 'getGitgovPath').mockReturnValue(path.join(rootPath, '.gitgov'));
+      // Mock FsConfigStore.getGitgovPath (ConfigManager.isGitgovProject delegates to FsConfigStore)
+      jest.spyOn(FsConfigStore, 'getGitgovPath').mockReturnValue(path.join(rootPath, '.gitgov'));
       mockedExistsSync.mockReturnValue(true);
 
       const result = ConfigManager.isGitgovProject();
@@ -942,7 +943,7 @@ describe('ConfigManager', () => {
       expect(result).toBe(true);
     });
 
-    it('[EARS-20] WHEN isGitgovProject is invoked outside GitGovernance project, THE SYSTEM SHALL return false', () => {
+    it('[EARS-C6] WHEN isGitgovProject is invoked outside GitGovernance project, THE SYSTEM SHALL return false', () => {
       mockedExistsSync.mockReturnValue(false);
 
       const result = ConfigManager.isGitgovProject();

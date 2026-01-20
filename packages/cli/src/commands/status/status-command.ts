@@ -1,5 +1,5 @@
 import { DependencyInjectionService } from '../../services/dependency-injection';
-import { Records, MetricsAdapter } from "@gitgov/core";
+import type { TaskRecord, FeedbackRecord, CycleRecord, ActorRecord, MetricsAdapter } from "@gitgov/core";
 
 /**
  * Status Command Options interface
@@ -20,9 +20,9 @@ export interface StatusCommandOptions {
  * Personal Work Summary
  */
 interface PersonalWorkSummary {
-  assignedTasks: Records.TaskRecord[];
-  pendingFeedback: Records.FeedbackRecord[];
-  activeCycles: Records.CycleRecord[];
+  assignedTasks: TaskRecord[];
+  pendingFeedback: FeedbackRecord[];
+  activeCycles: CycleRecord[];
   suggestedActions: string[];
 }
 
@@ -175,7 +175,7 @@ export class StatusCommand {
     const feedbackAdapter = await this.dependencyService.getFeedbackAdapter();
 
     // Get assigned tasks (graceful degradation)
-    let assignedTasks: Records.TaskRecord[] = [];
+    let assignedTasks: TaskRecord[] = [];
     try {
       assignedTasks = await backlogAdapter.getTasksAssignedToActor(actorId);
     } catch (error) {
@@ -183,7 +183,7 @@ export class StatusCommand {
     }
 
     // Get pending feedback for actor (graceful degradation)
-    let pendingFeedback: Records.FeedbackRecord[] = [];
+    let pendingFeedback: FeedbackRecord[] = [];
     try {
       const allFeedback = await feedbackAdapter.getAllFeedback();
       pendingFeedback = allFeedback.filter(feedback =>
@@ -195,7 +195,7 @@ export class StatusCommand {
     }
 
     // Get active cycles (graceful degradation)
-    let activeCycles: Records.CycleRecord[] = [];
+    let activeCycles: CycleRecord[] = [];
     try {
       const allCycles = await backlogAdapter.getAllCycles();
       activeCycles = allCycles.filter(cycle =>
@@ -298,7 +298,7 @@ export class StatusCommand {
   /**
    * Generates suggested actions based on work state
    */
-  private generateSuggestedActions(assignedTasks: Records.TaskRecord[], pendingFeedback: Records.FeedbackRecord[]): string[] {
+  private generateSuggestedActions(assignedTasks: TaskRecord[], pendingFeedback: FeedbackRecord[]): string[] {
     const suggestions: string[] = [];
 
     // Blocking feedback suggestions
@@ -326,7 +326,7 @@ export class StatusCommand {
    * Renders personal dashboard view
    */
   private renderPersonalDashboard(
-    actor: Records.ActorRecord,
+    actor: ActorRecord,
     personalWork: PersonalWorkSummary,
     systemHealth: { healthScore: number; alerts: Array<{ type: string; message: string; severity: string }> },
     options: StatusCommandOptions
@@ -487,7 +487,7 @@ export class StatusCommand {
   /**
    * Counts tasks by priority
    */
-  private countByPriority(tasks: Records.TaskRecord[]): Record<string, number> {
+  private countByPriority(tasks: TaskRecord[]): Record<string, number> {
     const counts: Record<string, number> = {};
     tasks.forEach(task => {
       counts[task.priority] = (counts[task.priority] || 0) + 1;

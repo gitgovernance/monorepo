@@ -159,10 +159,19 @@ describe('BacklogAdapter Integration Tests', () => {
     const mockActorStore = new RecordStore<ActorRecord>('actors', loadActorRecord, testRoot);
     const mockAgentStore = new RecordStore<AgentRecord>('agents', loadAgentRecord, testRoot);
 
+    // Create mock KeyProvider for integration test
+    const mockKeyProvider = {
+      getPrivateKey: jest.fn().mockResolvedValue('mock-private-key'),
+      setPrivateKey: jest.fn().mockResolvedValue(undefined),
+      hasPrivateKey: jest.fn().mockResolvedValue(true),
+      deletePrivateKey: jest.fn().mockResolvedValue(true),
+    };
+
     // Create identity adapter - will be mocked by jest.doMock
     identityAdapter = new IdentityAdapter({
       actorStore: mockActorStore,
       agentStore: mockAgentStore,
+      keyProvider: mockKeyProvider,
     });
 
     // Create stores with identity for validation

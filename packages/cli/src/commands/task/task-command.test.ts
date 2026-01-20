@@ -39,13 +39,13 @@ jest.mock('../../services/dependency-injection', () => ({
 
 import { TaskCommand } from './task-command';
 import { DependencyInjectionService } from '../../services/dependency-injection';
-import type { Records, IndexerAdapter } from '@gitgov/core';
+import type { TaskRecord, ActorRecord, IndexerAdapter, GitGovTaskRecord } from '@gitgov/core';
 import { Factories } from '@gitgov/core';
 
 // Test helper: Simple conversion to EnrichedTaskRecord for mocking
 // Note: This is NOT the real enrichment - the real one needs EmbeddedMetadata header
 // with signatures to calculate lastUpdated properly. This is just for unit tests.
-function enrichTaskForTest(task: Records.TaskRecord): IndexerAdapter.EnrichedTaskRecord {
+function enrichTaskForTest(task: TaskRecord): IndexerAdapter.EnrichedTaskRecord {
   // Extract timestamp from task ID (format: {timestamp}-{type}-{slug})
   const idTimestamp = parseInt(task.id.split('-')[0] || '0', 10);
   const defaultTimestamp = idTimestamp > 0 ? idTimestamp * 1000 : Date.now();
@@ -93,9 +93,9 @@ function enrichTaskForTest(task: Records.TaskRecord): IndexerAdapter.EnrichedTas
  * @returns GitGovTaskRecord - Fully validated task record
  */
 function createMockTaskRecord(
-  overrides: Partial<Records.TaskRecord> = {},
+  overrides: Partial<TaskRecord> = {},
   keyId: string = 'human:test-user'
-): Records.GitGovTaskRecord {
+): GitGovTaskRecord {
   // Use factory to create validated payload
   const payload = Factories.createTaskRecord({
     title: 'Test Task',
@@ -112,13 +112,13 @@ function createMockTaskRecord(
   const signature = Factories.createTestSignature(keyId, 'author', 'Task created');
 
   // Build complete record with validation
-  return Factories.createEmbeddedMetadataRecord(payload, { signatures: [signature] }) as Records.GitGovTaskRecord;
+  return Factories.createEmbeddedMetadataRecord(payload, { signatures: [signature] }) as GitGovTaskRecord;
 }
 
 // Helper function to create mock index data with proper typing
 function createMockIndexData(
-  tasks: Records.TaskRecord[],
-  options?: { enrichedTasks?: Records.TaskRecord[] }
+  tasks: TaskRecord[],
+  options?: { enrichedTasks?: TaskRecord[] }
 ): IndexerAdapter.IndexData {
   // Always create enrichedTasks from tasks if not explicitly provided
   // This ensures the code can access task.status, task.priority, etc. directly
@@ -177,7 +177,6 @@ function createMockIndexData(
       lastCommitHash: 'mock-hash',
       integrityStatus: 'valid',
       recordCounts: { tasks: tasks.length },
-      cacheStrategy: 'json',
       generationTime: 0
     }
   };
@@ -192,18 +191,18 @@ const mockProcessExit = jest.spyOn(process, 'exit').mockImplementation();
 describe('TaskCommand - Complete Unit Tests', () => {
   let taskCommand: TaskCommand;
   let mockBacklogAdapter: {
-    createTask: jest.MockedFunction<(payload: Partial<Records.TaskRecord>, actorId: string) => Promise<Records.TaskRecord>>;
-    getTask: jest.MockedFunction<(taskId: string) => Promise<Records.TaskRecord | null>>;
-    getAllTasks: jest.MockedFunction<() => Promise<Records.TaskRecord[]>>;
-    submitTask: jest.MockedFunction<(taskId: string, actorId: string) => Promise<Records.TaskRecord>>;
-    approveTask: jest.MockedFunction<(taskId: string, actorId: string) => Promise<Records.TaskRecord>>;
-    updateTask: jest.MockedFunction<(taskId: string, payload: Partial<Records.TaskRecord>, actorId: string) => Promise<Records.TaskRecord>>;
-    pauseTask: jest.MockedFunction<(taskId: string, actorId: string, reason?: string) => Promise<Records.TaskRecord>>;
-    resumeTask: jest.MockedFunction<(taskId: string, actorId: string, force?: boolean) => Promise<Records.TaskRecord>>;
+    createTask: jest.MockedFunction<(payload: Partial<TaskRecord>, actorId: string) => Promise<TaskRecord>>;
+    getTask: jest.MockedFunction<(taskId: string) => Promise<TaskRecord | null>>;
+    getAllTasks: jest.MockedFunction<() => Promise<TaskRecord[]>>;
+    submitTask: jest.MockedFunction<(taskId: string, actorId: string) => Promise<TaskRecord>>;
+    approveTask: jest.MockedFunction<(taskId: string, actorId: string) => Promise<TaskRecord>>;
+    updateTask: jest.MockedFunction<(taskId: string, payload: Partial<TaskRecord>, actorId: string) => Promise<TaskRecord>>;
+    pauseTask: jest.MockedFunction<(taskId: string, actorId: string, reason?: string) => Promise<TaskRecord>>;
+    resumeTask: jest.MockedFunction<(taskId: string, actorId: string, force?: boolean) => Promise<TaskRecord>>;
     deleteTask: jest.MockedFunction<(taskId: string, actorId: string) => Promise<void>>;
-    discardTask: jest.MockedFunction<(taskId: string, actorId: string, reason?: string) => Promise<Records.TaskRecord>>;
-    activateTask: jest.MockedFunction<(taskId: string, actorId: string) => Promise<Records.TaskRecord>>;
-    completeTask: jest.MockedFunction<(taskId: string, actorId: string) => Promise<Records.TaskRecord>>;
+    discardTask: jest.MockedFunction<(taskId: string, actorId: string, reason?: string) => Promise<TaskRecord>>;
+    activateTask: jest.MockedFunction<(taskId: string, actorId: string) => Promise<TaskRecord>>;
+    completeTask: jest.MockedFunction<(taskId: string, actorId: string) => Promise<TaskRecord>>;
   };
   let mockIndexerAdapter: {
     isIndexUpToDate: jest.MockedFunction<() => Promise<boolean>>;
@@ -212,14 +211,14 @@ describe('TaskCommand - Complete Unit Tests', () => {
     invalidateCache: jest.MockedFunction<() => Promise<void>>;
   };
   let mockIdentityAdapter: {
-    getCurrentActor: jest.MockedFunction<() => Promise<Records.ActorRecord>>;
-    getActor: jest.MockedFunction<(actorId: string) => Promise<Records.ActorRecord | null>>;
+    getCurrentActor: jest.MockedFunction<() => Promise<ActorRecord>>;
+    getActor: jest.MockedFunction<(actorId: string) => Promise<ActorRecord | null>>;
   };
   let mockFeedbackAdapter: {
     create: jest.MockedFunction<(payload: Record<string, string>, actorId: string) => Promise<{ id: string; type: string }>>;
   };
 
-  const sampleTask: Records.TaskRecord = {
+  const sampleTask: TaskRecord = {
     id: '1757789000-task-test-task',
     title: 'Test Task',
     status: 'draft',
@@ -230,7 +229,7 @@ describe('TaskCommand - Complete Unit Tests', () => {
     cycleIds: []
   };
 
-  const sampleActor: Records.ActorRecord = {
+  const sampleActor: ActorRecord = {
     id: 'human:test-user',
     type: 'human',
     displayName: 'Test User',

@@ -1,4 +1,4 @@
-import { generateKeyPair, sign, verify, createHash } from "crypto";
+import { generateKeyPair, sign, verify, createHash, randomBytes } from "crypto";
 import { promisify } from "util";
 import { calculatePayloadChecksum } from "./checksum";
 import type { GitGovRecordPayload, Signature } from "../types";
@@ -110,4 +110,14 @@ export async function verifySignatures(
     }
   }
   return true;
+}
+
+/**
+ * Generates a mock signature with valid Ed25519 format.
+ * Used as fallback when private key is not available.
+ *
+ * [EARS-7] Returns a base64-encoded string of 64 random bytes (86 chars + ==)
+ */
+export function generateMockSignature(): string {
+  return randomBytes(64).toString('base64');
 }

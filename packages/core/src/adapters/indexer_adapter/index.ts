@@ -1,7 +1,5 @@
-import { promises as fs } from 'fs';
-import * as fsSync from 'fs';
-import * as path from 'path';
 import { RecordStore } from '../../store';
+import type { Store } from '../../store/store';
 import { MetricsAdapter } from '../metrics_adapter';
 import { extractAuthor, extractLastModifier } from '../../utils/signature_utils';
 import { calculatePayloadChecksum, verifySignatures } from '../../crypto';
@@ -77,6 +75,8 @@ export type EnrichedTaskRecord = TaskRecord & {
 
 /**
  * IndexerAdapter Dependencies - Facade + Dependency Injection Pattern
+ *
+ * @see indexer_adapter.md Section 2 - Architecture
  */
 export type IndexerAdapterDependencies = {
   // Core calculation engine (CRITICAL)
@@ -90,9 +90,9 @@ export type IndexerAdapterDependencies = {
   changelogStore?: RecordStore<ChangelogRecord>;
   actorStore?: RecordStore<ActorRecord>;
 
-  // Optional: Configuration for evolution phases
-  cacheStrategy?: "json" | "sqlite" | "dual"; // Default: 'json'
-  cachePath?: string; // Default: '.gitgov/index.json'
+  // Cache abstraction (REQUIRED - store_backends epic)
+  // Caller chooses implementation: FsStore, MemoryStore, DatabaseStore, etc.
+  cacheStore: Store<IndexData>;
 };
 
 /**
@@ -104,7 +104,6 @@ export type IndexData = {
     lastCommitHash: string;
     integrityStatus: "valid" | "warnings" | "errors";
     recordCounts: Record<string, number>;
-    cacheStrategy: "json" | "sqlite" | "dual";
     generationTime: number; // ms
   };
   metrics: SystemStatus & ProductivityMetrics & CollaborationMetrics;
@@ -177,8 +176,6 @@ export type IndexGenerationReport = {
   metricsCalculated: number;
   derivedStatesApplied: number; // Number of tasks with derived states calculated
   generationTime: number; // ms
-  cacheSize: number; // bytes
-  cacheStrategy: "json" | "sqlite" | "dual";
   errors: string[];
   performance: {
     readTime: number;
@@ -206,21 +203,28 @@ export interface IIndexerAdapter {
   generateIndex(): Promise<IndexGenerationReport>;
   getIndexData(): Promise<IndexData | null>;
   validateIntegrity(): Promise<IntegrityReport>;
-  calculateDerivedStates(allRecords: AllRecords): Promise<DerivedStates>; // NUEVO - System-wide derived states
-  calculateActivityHistory(allRecords: AllRecords): Promise<ActivityEvent[]>; // NUEVO
-  calculateLastUpdated(taskPayload: TaskRecord, relatedRecords: AllRecords): Promise<{ lastUpdated: number; lastActivityType: EnrichedTaskRecord['lastActivityType']; recentActivity: string }>; // NUEVO
-  enrichTaskRecord(task: GitGovTaskRecord, relatedRecords: AllRecords, derivedStateSets: DerivedStateSets): Promise<EnrichedTaskRecord>; // UPDATED: Uses DerivedStateSets (Sets) for O(1) lookup (EARS-43)
+  calculateDerivedStates(allRecords: AllRecords): Promise<DerivedStates>;
+  calculateActivityHistory(allRecords: AllRecords): Promise<ActivityEvent[]>;
+  /**
+   * [EARS-19, EARS-22, EARS-24] Calculate lastUpdated using signature timestamps (backend-agnostic)
+   * @param task - Full GitGovTaskRecord with header.signatures for timestamp extraction
+   * @param relatedRecords - Related records for activity tracking
+   */
+  calculateLastUpdated(task: GitGovTaskRecord, relatedRecords: AllRecords): Promise<{ lastUpdated: number; lastActivityType: EnrichedTaskRecord['lastActivityType']; recentActivity: string }>;
+  enrichTaskRecord(task: GitGovTaskRecord, relatedRecords: AllRecords, derivedStateSets: DerivedStateSets): Promise<EnrichedTaskRecord>;
   isIndexUpToDate(): Promise<boolean>;
   invalidateCache(): Promise<void>;
 }
 
 /**
- * FileIndexerAdapter - Phase 1 Implementation
- * 
- * File-based cache implementation using .gitgov/index.json
- * Optimized for teams with <500 records
+ * IndexerAdapter - Backend-agnostic cache implementation
+ *
+ * Uses Store<IndexData> abstraction for cache operations.
+ * Caller chooses implementation: FsStore (local), MemoryStore (serverless/tests), etc.
+ *
+ * @see indexer_adapter.md Section 2 - Architecture
  */
-export class FileIndexerAdapter implements IIndexerAdapter {
+export class IndexerAdapter implements IIndexerAdapter {
   private metricsAdapter: MetricsAdapter;
   private taskStore: RecordStore<TaskRecord>;
   private cycleStore: RecordStore<CycleRecord>;
@@ -228,8 +232,7 @@ export class FileIndexerAdapter implements IIndexerAdapter {
   private executionStore: RecordStore<ExecutionRecord> | undefined;
   private changelogStore: RecordStore<ChangelogRecord> | undefined;
   private actorStore: RecordStore<ActorRecord> | undefined;
-  private cacheStrategy: "json" | "sqlite" | "dual";
-  private cachePath: string;
+  private cacheStore: Store<IndexData>;
 
   constructor(dependencies: IndexerAdapterDependencies) {
     // Core calculation engine (REQUIRED)
@@ -245,9 +248,8 @@ export class FileIndexerAdapter implements IIndexerAdapter {
     this.changelogStore = dependencies.changelogStore;
     this.actorStore = dependencies.actorStore;
 
-    // Configuration with defaults
-    this.cacheStrategy = dependencies.cacheStrategy || "json";
-    this.cachePath = dependencies.cachePath || ".gitgov/index.json";
+    // Cache abstraction (REQUIRED - store_backends epic)
+    this.cacheStore = dependencies.cacheStore;
   }
 
   /**
@@ -329,7 +331,6 @@ export class FileIndexerAdapter implements IIndexerAdapter {
             executions: allRecords.executions.length,
             changelogs: allRecords.changelogs.length
           },
-          cacheStrategy: this.cacheStrategy,
           generationTime: 0 // Will be set below
         },
         metrics: { ...systemStatus, ...productivityMetrics, ...collaborationMetrics },
@@ -342,7 +343,7 @@ export class FileIndexerAdapter implements IIndexerAdapter {
         feedback: allRecords.feedback // Optional - Phase 1B+ raw feedback records
       };
 
-      // 4. Write cache (Phase 1: JSON file)
+      // 4. Write cache using Store abstraction
       const writeStart = performance.now();
       await this.writeCacheFile(indexData);
       performance_metrics.writeTime = performance.now() - writeStart;
@@ -350,17 +351,12 @@ export class FileIndexerAdapter implements IIndexerAdapter {
       const totalTime = performance.now() - startTime;
       indexData.metadata.generationTime = totalTime;
 
-      // 5. Get cache size
-      const cacheSize = await this.getCacheFileSize();
-
       return {
         success: true,
         recordsProcessed: tasks.length + cycles.length + actors.length,
         metricsCalculated: 3, // systemStatus + productivity + collaboration
         derivedStatesApplied: Object.values(derivedStates).reduce((sum, arr) => sum + arr.length, 0), // Total tasks with derived states
         generationTime: totalTime,
-        cacheSize,
-        cacheStrategy: this.cacheStrategy,
         errors: [],
         performance: performance_metrics
       };
@@ -372,8 +368,6 @@ export class FileIndexerAdapter implements IIndexerAdapter {
         metricsCalculated: 0,
         derivedStatesApplied: 0,
         generationTime: performance.now() - startTime,
-        cacheSize: 0,
-        cacheStrategy: this.cacheStrategy,
         errors: [error instanceof Error ? error.message : String(error)],
         performance: performance_metrics
       };
@@ -386,21 +380,17 @@ export class FileIndexerAdapter implements IIndexerAdapter {
    */
   async getIndexData(): Promise<IndexData | null> {
     try {
-      // Check if cache file exists
-      const cacheExists = await this.cacheFileExists();
-      if (!cacheExists) {
+      // Use Store abstraction for backend-agnostic cache access
+      const indexData = await this.cacheStore.get('index');
+      if (!indexData) {
         return null; // EARS-3: Return null without cache
       }
 
-      // Validate freshness
+      // Validate freshness using metadata.generatedAt (backend-agnostic)
       const isUpToDate = await this.isIndexUpToDate();
       if (!isUpToDate) {
         return null; // Cache is stale
       }
-
-      // Read and parse cache file
-      const cacheContent = await fs.readFile(this.cachePath, 'utf-8');
-      const indexData: IndexData = JSON.parse(cacheContent);
 
       return indexData;
     } catch (error) {
@@ -553,18 +543,22 @@ export class FileIndexerAdapter implements IIndexerAdapter {
 
   /**
    * [EARS-5] Checks if index is up to date by comparing timestamps
+   * Uses metadata.generatedAt from cached data (backend-agnostic)
    */
   async isIndexUpToDate(): Promise<boolean> {
     try {
-      // Check if cache exists
-      const cacheExists = await this.cacheFileExists();
+      // Check if cache exists using Store abstraction
+      const cacheExists = await this.cacheStore.exists('index');
       if (!cacheExists) {
         return false;
       }
 
-      // Get cache timestamp
-      const cacheStats = await fs.stat(this.cachePath);
-      const cacheTime = cacheStats.mtime.getTime();
+      // Get cache generation timestamp from metadata (backend-agnostic)
+      const indexData = await this.cacheStore.get('index');
+      if (!indexData) {
+        return false;
+      }
+      const cacheTime = new Date(indexData.metadata.generatedAt).getTime();
 
       // Get last modified time of any record (simplified check)
       const taskIds = await this.taskStore.list();
@@ -586,13 +580,13 @@ export class FileIndexerAdapter implements IIndexerAdapter {
   }
 
   /**
-   * [EARS-6] Invalidates local cache by removing cache files
+   * [EARS-6] Invalidates local cache by removing cache
    */
   async invalidateCache(): Promise<void> {
     try {
-      const cacheExists = await this.cacheFileExists();
+      const cacheExists = await this.cacheStore.exists('index');
       if (cacheExists) {
-        await fs.unlink(this.cachePath);
+        await this.cacheStore.delete('index');
       }
     } catch (error) {
       throw new Error(`Failed to invalidate cache: ${error instanceof Error ? error.message : String(error)}`);
@@ -723,109 +717,12 @@ export class FileIndexerAdapter implements IIndexerAdapter {
   }
 
   /**
-   * Writes cache data to file (Phase 1: JSON)
-   * 
-   * [EARS-14] Creates automatic backup of existing cache before writing.
-   * If write fails, backup can be restored to preserve previous cache state.
+   * Writes cache data using Store abstraction
+   * [EARS-14] Store implementation handles atomicity internally
    */
   private async writeCacheFile(indexData: IndexData): Promise<void> {
-    // Ensure .gitgov directory exists
-    const cacheDir = path.dirname(this.cachePath);
-    await fs.mkdir(cacheDir, { recursive: true });
-
-    // [EARS-14] Create backup of existing cache before writing new one
-    await this.createCacheBackup();
-
-    try {
-      // Write JSON cache file
-      const jsonContent = JSON.stringify(indexData, null, 2);
-      await fs.writeFile(this.cachePath, jsonContent, 'utf-8');
-
-      // [EARS-14] Successfully written - delete backup
-      await this.deleteCacheBackup();
-    } catch (error) {
-      // [EARS-14] Write failed - restore backup
-      await this.restoreCacheFromBackup();
-      throw error; // Re-throw to propagate error to caller
-    }
-  }
-
-  /**
-   * [EARS-14] Creates a backup of the current cache file.
-   * If cache doesn't exist, this is a no-op (nothing to backup).
-   */
-  private async createCacheBackup(): Promise<void> {
-    const backupPath = `${this.cachePath}.backup`;
-
-    try {
-      const cacheExists = await this.cacheFileExists();
-      if (cacheExists) {
-        await fs.copyFile(this.cachePath, backupPath);
-      }
-    } catch (error) {
-      // If backup creation fails, log warning but don't block write
-      console.warn(`Warning: Could not create cache backup: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }
-
-  /**
-   * [EARS-14] Restores cache from backup file.
-   * Used when cache write operation fails to preserve previous state.
-   */
-  private async restoreCacheFromBackup(): Promise<void> {
-    const backupPath = `${this.cachePath}.backup`;
-
-    try {
-      // Check if backup exists
-      await fs.access(backupPath);
-
-      // Restore backup to original cache location
-      await fs.copyFile(backupPath, this.cachePath);
-
-      // Clean up backup after restoration
-      await fs.unlink(backupPath);
-    } catch (error) {
-      // If no backup exists or restoration fails, log but don't throw
-      // (original cache is already gone at this point)
-      console.warn(`Warning: Could not restore cache from backup: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }
-
-  /**
-   * [EARS-14] Deletes backup file after successful cache write.
-   */
-  private async deleteCacheBackup(): Promise<void> {
-    const backupPath = `${this.cachePath}.backup`;
-
-    try {
-      await fs.unlink(backupPath);
-    } catch {
-      // Backup might not exist or already deleted - this is fine
-    }
-  }
-
-  /**
-   * Checks if cache file exists
-   */
-  private async cacheFileExists(): Promise<boolean> {
-    try {
-      await fs.access(this.cachePath);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  /**
-   * Gets cache file size in bytes
-   */
-  private async getCacheFileSize(): Promise<number> {
-    try {
-      const stats = await fs.stat(this.cachePath);
-      return stats.size;
-    } catch {
-      return 0;
-    }
+    // Store abstraction handles atomicity internally
+    await this.cacheStore.put('index', indexData);
   }
 
   /**
@@ -1070,44 +967,34 @@ export class FileIndexerAdapter implements IIndexerAdapter {
   }
 
   /**
-   * [EARS-21] Calculate lastUpdated timestamp and activity type for a task
-   * Considers task file modification time and related records timestamps
-   * @param taskPayload - Task payload (not full record with headers)
+   * [EARS-19, EARS-22, EARS-24] Calculate lastUpdated timestamp and activity type for a task
+   * Uses signature timestamps instead of file mtime (backend-agnostic)
+   * @param task - Full GitGovTaskRecord with header.signatures for timestamp extraction
    */
   async calculateLastUpdated(
-    taskPayload: TaskRecord,
+    task: GitGovTaskRecord,
     relatedRecords: AllRecords
   ): Promise<{ lastUpdated: number; lastActivityType: EnrichedTaskRecord['lastActivityType']; recentActivity: string }> {
     try {
-      let lastUpdated = this.getTimestampFromId(taskPayload.id) * 1000; // Convert to milliseconds for consistency
+      const taskPayload = task.payload;
+      const creationTime = this.getTimestampFromId(taskPayload.id) * 1000; // Convert to milliseconds
+      let lastUpdated = creationTime;
       let lastActivityType: EnrichedTaskRecord['lastActivityType'] = 'task_created';
       let recentActivity = 'Task created';
 
+      // 1. [EARS-22] Check signature timestamp for task modification (backend-agnostic)
+      // Uses extractLastModifier() instead of file mtime
+      const lastModifier = extractLastModifier(task);
+      if (lastModifier) {
+        const signatureTime = lastModifier.timestamp * 1000; // Convert to milliseconds
+        const timeDifference = signatureTime - creationTime;
 
-      // 1. Check task file modification time (only if significantly newer than creation)
-      try {
-        // Find the project root by looking for .gitgov directory
-        let projectRoot = process.cwd();
-        while (!fsSync.existsSync(path.join(projectRoot, '.gitgov')) && projectRoot !== '/') {
-          projectRoot = path.dirname(projectRoot);
-        }
-        const taskFilePath = path.join(projectRoot, '.gitgov', 'tasks', `${taskPayload.id}.json`);
-        const stats = await fs.stat(taskFilePath);
-        const fileModTime = stats.mtime.getTime();
-
-        // Only consider file modification if it's more than 60 seconds after creation
-        // This avoids counting initial file creation as "modification"
-        const creationTime = this.getTimestampFromId(taskPayload.id) * 1000;
-        const timeDifference = fileModTime - creationTime;
-
-        if (timeDifference > 60000 && fileModTime > lastUpdated) { // 60 seconds threshold
-          lastUpdated = fileModTime;
+        // [EARS-24] Only consider significant modifications (>60s after creation)
+        if (timeDifference > 60000 && signatureTime > lastUpdated) {
+          lastUpdated = signatureTime;
           lastActivityType = 'task_modified';
-          recentActivity = `Task modified ${this.formatTimeAgo(fileModTime)}`;
-
+          recentActivity = `Task modified ${this.formatTimeAgo(signatureTime)}`;
         }
-      } catch (error) {
-        // File not accessible, continue with other checks
       }
 
       // 2. Check related feedback records
@@ -1155,7 +1042,7 @@ export class FileIndexerAdapter implements IIndexerAdapter {
 
     } catch (error) {
       // Graceful fallback
-      const fallbackTime = this.getTimestampFromId(taskPayload.id) * 1000; // Convert to milliseconds
+      const fallbackTime = this.getTimestampFromId(task.payload.id) * 1000; // Convert to milliseconds
       return {
         lastUpdated: fallbackTime,
         lastActivityType: 'task_created',
@@ -1195,8 +1082,8 @@ export class FileIndexerAdapter implements IIndexerAdapter {
     relatedRecords: AllRecords,
     derivedStateSets: DerivedStateSets
   ): Promise<EnrichedTaskRecord> {
-    // Step 1: Activity metadata
-    const { lastUpdated, lastActivityType, recentActivity } = await this.calculateLastUpdated(task.payload, relatedRecords);
+    // Step 1: Activity metadata (now uses full task for signature timestamps)
+    const { lastUpdated, lastActivityType, recentActivity } = await this.calculateLastUpdated(task, relatedRecords);
 
     // Step 2: Signatures (author, lastModifier) using signature_utils helpers
     const author = extractAuthor(task);

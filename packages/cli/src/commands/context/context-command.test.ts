@@ -1,7 +1,8 @@
 // Mock @gitgov/core FIRST to avoid import.meta issues in Jest
 jest.mock('@gitgov/core', () => ({
   Config: {
-    ConfigManager: jest.fn()
+    ConfigManager: jest.fn(),
+    createConfigManager: jest.fn()
   },
   Records: {}
 }));
@@ -16,7 +17,7 @@ jest.mock('../../services/dependency-injection', () => ({
 import { ContextCommand } from './context-command';
 import { DependencyInjectionService } from '../../services/dependency-injection';
 import { Config } from '@gitgov/core';
-import type { Records } from '@gitgov/core';
+import type { ActorRecord } from '@gitgov/core';
 
 // Mock console methods to capture output
 const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation();
@@ -35,13 +36,13 @@ describe('ContextCommand - Complete Unit Tests', () => {
     }>>;
   };
   let mockIdentityAdapter: {
-    getCurrentActor: jest.MockedFunction<() => Promise<Records.ActorRecord>>;
+    getCurrentActor: jest.MockedFunction<() => Promise<ActorRecord>>;
   };
   let mockDependencyService: {
     getIdentityAdapter: jest.MockedFunction<() => Promise<typeof mockIdentityAdapter>>;
   };
 
-  const sampleActor: Records.ActorRecord = {
+  const sampleActor: ActorRecord = {
     id: 'human:test-user',
     displayName: 'Test User',
     type: 'human',
@@ -93,8 +94,8 @@ describe('ContextCommand - Complete Unit Tests', () => {
     // Mock DependencyInjectionService.getInstance()
     (DependencyInjectionService.getInstance as jest.Mock).mockReturnValue(mockDependencyService);
 
-    // Mock Config.ConfigManager constructor
-    (Config.ConfigManager as unknown as jest.Mock).mockImplementation(() => mockConfigManager);
+    // Mock Config.createConfigManager factory function
+    (Config.createConfigManager as unknown as jest.Mock).mockReturnValue(mockConfigManager);
 
     // Create ContextCommand
     contextCommand = new ContextCommand();

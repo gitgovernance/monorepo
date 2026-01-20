@@ -24,7 +24,6 @@ jest.doMock('@gitgov/core', () => ({
         recordsProcessed: 10,
         metricsCalculated: 5,
         generationTime: 250,
-        cacheSize: 1536,
         errors: []
       }),
       validateIntegrity: jest.fn().mockResolvedValue({
@@ -247,7 +246,6 @@ describe('IndexerCommand - Complete Unit Tests', () => {
       const parsedOutput = JSON.parse(jsonOutput![0] as string);
       expect(parsedOutput.success).toBe(true);
       expect(parsedOutput.recordsProcessed).toBe(5);
-      expect(parsedOutput.cacheStrategy).toBe('json');
     });
 
     it('[EARS-4] should format integrity report as JSON', async () => {
@@ -424,8 +422,6 @@ describe('IndexerCommand - Complete Unit Tests', () => {
         recordsProcessed: 25,
         metricsCalculated: 4,
         generationTime: 450,
-        cacheSize: 8192,
-        cacheStrategy: 'json',
         errors: [],
         performance: {
           readTime: 120,
@@ -442,8 +438,6 @@ describe('IndexerCommand - Complete Unit Tests', () => {
       expect(mockConsoleLog).toHaveBeenCalledWith("📊 Records processed: 25");
       expect(mockConsoleLog).toHaveBeenCalledWith("🧮 Metrics calculated: 4");
       expect(mockConsoleLog).toHaveBeenCalledWith("⏱️  Generation time: 450ms");
-      expect(mockConsoleLog).toHaveBeenCalledWith("💾 Cache size: 8 KB");
-      expect(mockConsoleLog).toHaveBeenCalledWith("🔧 Cache strategy: json");
       expect(mockProcessExit).not.toHaveBeenCalled(); // Success case doesn't call exit
     });
 
@@ -623,8 +617,6 @@ describe('IndexerCommand - Complete Unit Tests', () => {
         recordsProcessed: 10,
         metricsCalculated: 2,
         generationTime: 200,
-        cacheSize: 1536, // Should format as 1.5 KB
-        cacheStrategy: 'json',
         errors: [],
         performance: {
           readTime: 50,
@@ -637,18 +629,16 @@ describe('IndexerCommand - Complete Unit Tests', () => {
 
       await indexerCommand.execute({});
 
-      // Verify human-readable format with 1 decimal
-      expect(mockConsoleLog).toHaveBeenCalledWith("💾 Cache size: 1.5 KB");
+      // Verify generation time is displayed
+      expect(mockConsoleLog).toHaveBeenCalledWith("⏱️  Generation time: 200ms");
     });
 
-    it('[EARS-17] should handle cache size 0 correctly without format errors', async () => {
+    it('[EARS-17] should handle zero records correctly', async () => {
       const mockReport: any = {
         success: true,
         recordsProcessed: 0,
         metricsCalculated: 0,
         generationTime: 50,
-        cacheSize: 0, // Edge case: zero bytes
-        cacheStrategy: 'json',
         errors: [],
         performance: {
           readTime: 0,
@@ -661,8 +651,8 @@ describe('IndexerCommand - Complete Unit Tests', () => {
 
       await indexerCommand.execute({});
 
-      // Verify zero bytes handled correctly
-      expect(mockConsoleLog).toHaveBeenCalledWith("💾 Cache size: 0 Bytes");
+      // Verify zero records handled correctly
+      expect(mockConsoleLog).toHaveBeenCalledWith("📊 Records processed: 0");
     });
 
     it('[EARS-18] should handle non-Error types gracefully with generic message', async () => {
@@ -778,52 +768,6 @@ describe('IndexerCommand - Complete Unit Tests', () => {
   });
 
   describe('Helper Methods and Edge Cases', () => {
-    it('should format bytes correctly', async () => {
-      const mockReport: any = {
-        success: true,
-        recordsProcessed: 10,
-        metricsCalculated: 3,
-        generationTime: 200,
-        cacheSize: 1536, // 1.5 KB
-        cacheStrategy: 'json',
-        errors: [],
-        performance: {
-          readTime: 50,
-          calculationTime: 100,
-          writeTime: 50
-        }
-      };
-
-      mockIndexerAdapter.generateIndex.mockResolvedValue(mockReport);
-
-      await indexerCommand.execute({});
-
-      expect(mockConsoleLog).toHaveBeenCalledWith("💾 Cache size: 1.5 KB");
-    });
-
-    it('should handle zero cache size', async () => {
-      const mockReport: any = {
-        success: true,
-        recordsProcessed: 0,
-        metricsCalculated: 0,
-        generationTime: 50,
-        cacheSize: 0,
-        cacheStrategy: 'json',
-        errors: [],
-        performance: {
-          readTime: 0,
-          calculationTime: 0,
-          writeTime: 0
-        }
-      };
-
-      mockIndexerAdapter.generateIndex.mockResolvedValue(mockReport);
-
-      await indexerCommand.execute({});
-
-      expect(mockConsoleLog).toHaveBeenCalledWith("💾 Cache size: 0 Bytes");
-    });
-
     it('should handle unknown error types', async () => {
       const error = 'Unknown string error';
       mockIndexerAdapter.generateIndex.mockRejectedValue(error);

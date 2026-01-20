@@ -100,10 +100,19 @@ describe('FeedbackAdapter <-> BacklogAdapter Integration (Real Event Communicati
     actorStore = new RecordStore<ActorRecord>('actors', loadActorRecord, testRoot);
     agentStore = new RecordStore<AgentRecord>('agents', loadAgentRecord, testRoot);
 
+    // Create mock KeyProvider for integration test
+    const mockKeyProvider = {
+      getPrivateKey: jest.fn().mockResolvedValue('mock-private-key'),
+      setPrivateKey: jest.fn().mockResolvedValue(undefined),
+      hasPrivateKey: jest.fn().mockResolvedValue(true),
+      deletePrivateKey: jest.fn().mockResolvedValue(true),
+    };
+
     // Create REAL IdentityAdapter
     identityAdapter = new IdentityAdapter({
       actorStore,
-      agentStore
+      agentStore,
+      keyProvider: mockKeyProvider,
     });
 
     // Create REAL FeedbackAdapter

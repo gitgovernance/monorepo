@@ -56,7 +56,7 @@ import * as path from "path";
 import * as os from "os";
 import { SyncModule } from "./sync_module";
 import { GitModule } from "../git/git_module";
-import { ConfigManager } from "../config_manager";
+import { ConfigManager, createConfigManager } from "../config_manager";
 import type { ExecOptions, ExecResult } from "../git/types";
 import {
   SyncError,
@@ -70,7 +70,7 @@ import type { ActorRecord, TaskRecord, Signature } from "../types";
 import { createTaskRecord } from "../factories/task_factory";
 import { createEmbeddedMetadataRecord } from "../factories/embedded_metadata_factory";
 import type { IIdentityAdapter } from "../adapters/identity_adapter";
-import type { LintReport, LintResult, LintSummary, LintModule } from "../lint";
+import type { LintReport, LintResult, LintSummary, IFsLintModule, FixReport } from "../lint";
 import type { IIndexerAdapter } from "../adapters/indexer_adapter";
 
 const execAsync = promisify(exec);
@@ -87,18 +87,26 @@ function createMockIdentityAdapter(): IIdentityAdapter {
 }
 
 /**
- * Test Helper: Creates a default mock LintModule
+ * Test Helper: Creates a default mock IFsLintModule
+ * Updated for Store Backends Epic - now implements full IFsLintModule interface
  */
-function createMockLintModule(): LintModule {
+function createMockLintModule(): IFsLintModule {
   const defaultLintReport: LintReport = {
     summary: { filesChecked: 0, errors: 0, warnings: 0, fixable: 0, executionTime: 0 },
     results: [],
     metadata: { timestamp: new Date().toISOString(), options: {}, version: "1.0.0" },
   };
 
+  const defaultFixReport: FixReport = {
+    summary: { fixed: 0, failed: 0, backupsCreated: 0 },
+    fixes: []
+  };
+
   return {
     lint: jest.fn().mockResolvedValue(defaultLintReport),
-  } as unknown as LintModule;
+    lintFile: jest.fn().mockResolvedValue(defaultLintReport),
+    fix: jest.fn().mockResolvedValue(defaultFixReport),
+  } as IFsLintModule;
 }
 
 /**
@@ -311,7 +319,7 @@ describe("SyncModule", () => {
       execCommand: createExecCommand(repoPath),
     });
 
-    config = new ConfigManager(repoPath);
+    config = createConfigManager(repoPath);
     mockIndexer = createMockIndexerAdapter();
     syncModule = new SyncModule({
       git,
@@ -1440,7 +1448,7 @@ describe("SyncModule", () => {
         await execAsync('git commit -m "Add .gitgov"', { cwd: normalizedNoRemotePath });
 
         // Create SyncModule for repo without remote
-        const noRemoteConfig = new ConfigManager(normalizedNoRemotePath);
+        const noRemoteConfig = createConfigManager(normalizedNoRemotePath);
         const noRemoteSyncModule = new SyncModule({
           git: noRemoteGit,
           config: noRemoteConfig,
@@ -1502,7 +1510,7 @@ describe("SyncModule", () => {
         fs.writeFileSync(path.join(gitgovDir, "config.json"), '{"projectId": "empty-test"}');
 
         // Create SyncModule for empty repo
-        const emptyConfig = new ConfigManager(normalizedEmptyPath);
+        const emptyConfig = createConfigManager(normalizedEmptyPath);
         const emptySyncModule = new SyncModule({
           git: emptyGit,
           config: emptyConfig,
@@ -1570,7 +1578,7 @@ describe("SyncModule", () => {
         });
 
         // Create SyncModule for repo without remote
-        const noRemoteConfig = new ConfigManager(normalizedNoRemotePath);
+        const noRemoteConfig = createConfigManager(normalizedNoRemotePath);
         const noRemoteSyncModule = new SyncModule({
           git: noRemoteGit,
           config: noRemoteConfig,
@@ -1673,7 +1681,7 @@ describe("SyncModule", () => {
         await execAsync('git commit -m "Add .gitgov"', { cwd: normalizedNoRemotePath });
 
         // Create SyncModule for repo without remote
-        const noRemoteConfig = new ConfigManager(normalizedNoRemotePath);
+        const noRemoteConfig = createConfigManager(normalizedNoRemotePath);
         const noRemoteSyncModule = new SyncModule({
           git: noRemoteGit,
           config: noRemoteConfig,
@@ -1755,7 +1763,7 @@ describe("SyncModule", () => {
         expect(remoteBranches.trim()).toBe("");
 
         // Create SyncModule
-        const localOnlyConfig = new ConfigManager(normalizedLocalOnlyPath);
+        const localOnlyConfig = createConfigManager(normalizedLocalOnlyPath);
         const localOnlySyncModule = new SyncModule({
           git: localOnlyGit,
           config: localOnlyConfig,
@@ -1821,7 +1829,7 @@ describe("SyncModule", () => {
         await execAsync('git commit -m "Add .gitgov"', { cwd: normalizedFreshPath });
 
         // Create SyncModule
-        const freshConfig = new ConfigManager(normalizedFreshPath);
+        const freshConfig = createConfigManager(normalizedFreshPath);
         const freshSyncModule = new SyncModule({
           git: freshGit,
           config: freshConfig,
@@ -3498,8 +3506,10 @@ describe("SyncModule", () => {
         },
       };
 
-      const mockLintModule = {
+      const mockLintModule: IFsLintModule = {
         lint: jest.fn().mockResolvedValue(lintReportMock),
+        lintFile: jest.fn().mockResolvedValue(lintReportMock),
+        fix: jest.fn().mockResolvedValue({ summary: { fixed: 0, failed: 0, backupsCreated: 0 }, fixes: [] }),
       };
 
       // Create SyncModule with LintModule mock
@@ -3507,7 +3517,7 @@ describe("SyncModule", () => {
         git,
         config,
         identity: createMockIdentityAdapter(),
-        lint: mockLintModule as unknown as LintModule,
+        lint: mockLintModule,
         indexer: createMockIndexerAdapter(),
       });
 
@@ -3603,15 +3613,17 @@ describe("SyncModule", () => {
         metadata: { timestamp: new Date().toISOString(), options: {}, version: "1.0.0" },
       };
 
-      const mockLintModule = {
+      const mockLintModule: IFsLintModule = {
         lint: jest.fn().mockResolvedValue(lintReportMock),
+        lintFile: jest.fn().mockResolvedValue(lintReportMock),
+        fix: jest.fn().mockResolvedValue({ summary: { fixed: 0, failed: 0, backupsCreated: 0 }, fixes: [] }),
       };
 
       const syncModuleWithLint = new SyncModule({
         git,
         config,
         identity: createMockIdentityAdapter(),
-        lint: mockLintModule as unknown as LintModule,
+        lint: mockLintModule,
         indexer: createMockIndexerAdapter(),
       });
 
@@ -3645,15 +3657,17 @@ describe("SyncModule", () => {
         metadata: { timestamp: new Date().toISOString(), options: {}, version: "1.0.0" },
       };
 
-      const mockLintModule = {
+      const mockLintModule: IFsLintModule = {
         lint: jest.fn().mockResolvedValue(lintReportMock),
+        lintFile: jest.fn().mockResolvedValue(lintReportMock),
+        fix: jest.fn().mockResolvedValue({ summary: { fixed: 0, failed: 0, backupsCreated: 0 }, fixes: [] }),
       };
 
       const syncModuleWithLint = new SyncModule({
         git,
         config,
         identity: createMockIdentityAdapter(),
-        lint: mockLintModule as unknown as LintModule,
+        lint: mockLintModule,
         indexer: createMockIndexerAdapter(),
       });
 

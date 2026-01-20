@@ -66,7 +66,8 @@ jest.doMock('@gitgov/core', () => ({
 
 import { DashboardCommand } from './dashboard-command';
 import { DependencyInjectionService } from '../../services/dependency-injection';
-import { Records, Factories, Adapters, EventBus } from '@gitgov/core';
+import { Factories, Adapters, EventBus } from '@gitgov/core';
+import type { TaskRecord, CycleRecord, FeedbackRecord, ActorRecord, GitGovTaskRecord } from '@gitgov/core';
 
 // Mock console methods to capture output
 const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation();
@@ -77,7 +78,7 @@ const mockProcessExit = jest.spyOn(process, 'exit').mockImplementation();
  * Helper to convert TaskRecord payload to GitGovTaskRecord with mock header.
  * Mimics the structure that RecordStore would return from disk.
  */
-function createMockGitGovTaskRecord(taskPayload: Records.TaskRecord): Records.GitGovTaskRecord {
+function createMockGitGovTaskRecord(taskPayload: TaskRecord): GitGovTaskRecord {
   return {
     header: {
       version: '1.0' as const,
@@ -98,11 +99,11 @@ function createMockGitGovTaskRecord(taskPayload: Records.TaskRecord): Records.Gi
 describe('DashboardCommand - Demo Optimizations', () => {
   let dashboardCommand: DashboardCommand;
   let mockBacklogAdapter: {
-    getAllTasks: jest.MockedFunction<() => Promise<Records.TaskRecord[]>>;
-    getAllCycles: jest.MockedFunction<() => Promise<Records.CycleRecord[]>>;
+    getAllTasks: jest.MockedFunction<() => Promise<TaskRecord[]>>;
+    getAllCycles: jest.MockedFunction<() => Promise<CycleRecord[]>>;
   };
   let mockFeedbackAdapter: {
-    getAllFeedback: jest.MockedFunction<() => Promise<Records.FeedbackRecord[]>>;
+    getAllFeedback: jest.MockedFunction<() => Promise<FeedbackRecord[]>>;
   };
   let mockMetricsAdapter: {
     getSystemStatus: jest.MockedFunction<() => Promise<Adapters.SystemStatus>>;
@@ -116,7 +117,7 @@ describe('DashboardCommand - Demo Optimizations', () => {
     calculateActivityHistory: jest.MockedFunction<() => Promise<EventBus.ActivityEvent[]>>;
   };
   let mockIdentityAdapter: {
-    getCurrentActor: jest.MockedFunction<() => Promise<Records.ActorRecord>>;
+    getCurrentActor: jest.MockedFunction<() => Promise<ActorRecord>>;
   };
   let mockDependencyService: {
     getBacklogAdapter: jest.MockedFunction<() => Promise<typeof mockBacklogAdapter>>;
@@ -127,10 +128,10 @@ describe('DashboardCommand - Demo Optimizations', () => {
   };
 
   // Sample data using factories
-  let sampleActor: Records.ActorRecord;
-  let sampleTask: Records.TaskRecord;
-  let sampleCycle: Records.CycleRecord;
-  let sampleFeedback: Records.FeedbackRecord;
+  let sampleActor: ActorRecord;
+  let sampleTask: TaskRecord;
+  let sampleCycle: CycleRecord;
+  let sampleFeedback: FeedbackRecord;
 
   const sampleSystemStatus: Adapters.SystemStatus = {
     tasks: {
@@ -172,7 +173,6 @@ describe('DashboardCommand - Demo Optimizations', () => {
       lastCommitHash: 'abc123',
       integrityStatus: 'valid',
       recordCounts: { tasks: 1, cycles: 1, actors: 1 },
-      cacheStrategy: 'json',
       generationTime: 100
     },
     metrics: {
@@ -287,8 +287,6 @@ describe('DashboardCommand - Demo Optimizations', () => {
         metricsCalculated: 3,
         derivedStatesApplied: 0,
         generationTime: 100,
-        cacheSize: 2048,
-        cacheStrategy: 'json',
         errors: [],
         performance: {
           readTime: 30,
@@ -350,8 +348,6 @@ describe('DashboardCommand - Demo Optimizations', () => {
         metricsCalculated: 4,
         derivedStatesApplied: 0,
         generationTime: 120,
-        cacheSize: 3072,
-        cacheStrategy: 'json',
         errors: [],
         performance: {
           readTime: 40,
@@ -436,8 +432,6 @@ describe('DashboardCommand - Demo Optimizations', () => {
         metricsCalculated: 5,
         derivedStatesApplied: 0,
         generationTime: 80, // Under 100ms
-        cacheSize: 4096,
-        cacheStrategy: 'json',
         errors: [],
         performance: {
           readTime: 25,
@@ -509,8 +503,6 @@ describe('DashboardCommand - Demo Optimizations', () => {
         metricsCalculated: 6,
         derivedStatesApplied: 0,
         generationTime: 150,
-        cacheSize: 5120,
-        cacheStrategy: 'json',
         errors: [],
         performance: {
           readTime: 50,

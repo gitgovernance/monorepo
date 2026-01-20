@@ -25,7 +25,8 @@ jest.mock('../../services/dependency-injection', () => ({
 
 import { StatusCommand } from './status-command';
 import { DependencyInjectionService } from '../../services/dependency-injection';
-import { Factories, Records, MetricsAdapter } from "@gitgov/core";
+import { Factories } from "@gitgov/core";
+import type { TaskRecord, CycleRecord, FeedbackRecord, ActorRecord, MetricsAdapter } from "@gitgov/core";
 
 // Mock console methods to capture output
 const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation();
@@ -35,12 +36,12 @@ const mockProcessExit = jest.spyOn(process, 'exit').mockImplementation();
 describe('StatusCommand - Complete Unit Tests', () => {
   let statusCommand: StatusCommand;
   let mockBacklogAdapter: {
-    getTasksAssignedToActor: jest.MockedFunction<(actorId: string) => Promise<Records.TaskRecord[]>>;
-    getAllTasks: jest.MockedFunction<() => Promise<Records.TaskRecord[]>>;
-    getAllCycles: jest.MockedFunction<() => Promise<Records.CycleRecord[]>>;
+    getTasksAssignedToActor: jest.MockedFunction<(actorId: string) => Promise<TaskRecord[]>>;
+    getAllTasks: jest.MockedFunction<() => Promise<TaskRecord[]>>;
+    getAllCycles: jest.MockedFunction<() => Promise<CycleRecord[]>>;
   };
   let mockFeedbackAdapter: {
-    getAllFeedback: jest.MockedFunction<() => Promise<Records.FeedbackRecord[]>>;
+    getAllFeedback: jest.MockedFunction<() => Promise<FeedbackRecord[]>>;
   };
   let mockMetricsAdapter: {
     getSystemStatus: jest.MockedFunction<() => Promise<MetricsAdapter.SystemStatus>>;
@@ -53,7 +54,7 @@ describe('StatusCommand - Complete Unit Tests', () => {
     generateIndex: jest.MockedFunction<() => Promise<void>>;
   };
   let mockIdentityAdapter: {
-    getCurrentActor: jest.MockedFunction<() => Promise<Records.ActorRecord>>;
+    getCurrentActor: jest.MockedFunction<() => Promise<ActorRecord>>;
   };
   let mockDependencyService: {
     getBacklogAdapter: jest.MockedFunction<() => Promise<typeof mockBacklogAdapter>>;
@@ -64,10 +65,10 @@ describe('StatusCommand - Complete Unit Tests', () => {
   };
 
   // Sample data using factories
-  let sampleActor: Records.ActorRecord;
-  let sampleTask: Records.TaskRecord;
-  let sampleCycle: Records.CycleRecord;
-  let sampleFeedback: Records.FeedbackRecord;
+  let sampleActor: ActorRecord;
+  let sampleTask: TaskRecord;
+  let sampleCycle: CycleRecord;
+  let sampleFeedback: FeedbackRecord;
 
   const sampleSystemStatus: MetricsAdapter.SystemStatus = {
     tasks: {
@@ -218,7 +219,7 @@ describe('StatusCommand - Complete Unit Tests', () => {
 
     it('[EARS-2] should execute global dashboard with --all flag', async () => {
       // Setup multiple tasks using factory
-      const multipleTasks: Records.TaskRecord[] = [];
+      const multipleTasks: TaskRecord[] = [];
       for (let i = 0; i < 10; i++) {
         const task = await Factories.createTaskRecord({
           title: `Test Task ${i}`,

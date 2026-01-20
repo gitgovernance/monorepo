@@ -19,6 +19,14 @@ export function generateActorId(type: 'human' | 'agent', displayName: string): s
 }
 
 /**
+ * Generates an Agent ID (e.g., 'agent:code-reviewer').
+ * Convenience wrapper over generateActorId for agent-specific use cases.
+ */
+export function generateAgentId(displayName: string): string {
+  return generateActorId('agent', displayName);
+}
+
+/**
  * Generates a Task ID (e.g., '12345-task-implement-auth').
  */
 export function generateTaskId(title: string, timestamp: number): string {
@@ -62,50 +70,4 @@ export function generateChangelogId(title: string, timestamp: number): string {
 export function generateFeedbackId(title: string, timestamp: number): string {
   const slug = sanitizeForId(title);
   return `${timestamp}-feedback-${slug}`;
-}
-
-/**
- * Parses a timestamp-based record ID (e.g., '12345-task-slug') into its components.
- */
-export function parseTimestampedId(id: string): { timestamp: number; prefix: string; slug: string } | null {
-  if (typeof id !== 'string') return null;
-  const match = id.match(/^(\d+)-(\w+)-(.+)$/);
-  if (!match || !match[1] || !match[2] || !match[3]) {
-    return null;
-  }
-  return {
-    timestamp: parseInt(match[1], 10),
-    prefix: match[2],
-    slug: match[3],
-  };
-}
-
-/**
- * Parses an Actor ID (e.g., 'human:camilo') into its components.
- */
-export function parseActorId(id: string): { type: 'human' | 'agent'; slug: string } | null {
-  if (typeof id !== 'string') return null;
-  const parts = id.split(':');
-  if (parts.length < 2 || (parts[0] !== 'human' && parts[0] !== 'agent')) {
-    return null;
-  }
-  const type = parts[0] as 'human' | 'agent';
-  const slug = parts.slice(1).join(':'); // Re-join in case slug contains ':'
-  return { type, slug };
-}
-
-/**
- * Valid prefixes for timestamp-based record IDs.
- */
-const VALID_PREFIXES = ['task', 'cycle', 'exec', 'changelog', 'feedback'] as const;
-
-/**
- * Validates the format of a timestamp-based record ID.
- */
-export function isValidTimestampedId(id: string): boolean {
-  const parsed = parseTimestampedId(id);
-  if (!parsed) return false;
-
-  // Check if prefix is valid and slug is not empty
-  return VALID_PREFIXES.includes(parsed.prefix as any) && parsed.slug.length > 0;
 }

@@ -25,7 +25,7 @@ jest.mock('../../services/dependency-injection', () => ({
 
 import { AuditCommand, type AuditCommandOptions } from './audit-command';
 import { DependencyInjectionService } from '../../services/dependency-injection';
-import type { SourceAuditor, PiiDetector, Records, Config } from '@gitgov/core';
+import type { SourceAuditor, PiiDetector, Config, FeedbackRecord, ActorRecord } from '@gitgov/core';
 
 // Mock console methods
 const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation();
@@ -45,11 +45,11 @@ let mockWaiverReader: {
 };
 
 let mockFeedbackAdapter: {
-  create: jest.MockedFunction<(data: Record<string, unknown>, actorId: string) => Promise<Records.FeedbackRecord>>;
+  create: jest.MockedFunction<(data: Record<string, unknown>, actorId: string) => Promise<FeedbackRecord>>;
 };
 
 let mockIdentityAdapter: {
-  getCurrentActor: jest.MockedFunction<() => Promise<Records.ActorRecord>>;
+  getCurrentActor: jest.MockedFunction<() => Promise<ActorRecord>>;
 };
 
 let mockConfigManager: {
@@ -136,11 +136,11 @@ describe('AuditCommand', () => {
     };
 
     mockFeedbackAdapter = {
-      create: jest.fn().mockResolvedValue({ id: 'feedback-123' } as Records.FeedbackRecord),
+      create: jest.fn().mockResolvedValue({ id: 'feedback-123' } as FeedbackRecord),
     };
 
     mockIdentityAdapter = {
-      getCurrentActor: jest.fn().mockResolvedValue({ id: 'human:developer' } as Records.ActorRecord),
+      getCurrentActor: jest.fn().mockResolvedValue({ id: 'human:developer' } as ActorRecord),
     };
 
     mockConfigManager = {
