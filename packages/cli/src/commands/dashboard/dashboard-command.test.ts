@@ -66,8 +66,12 @@ jest.doMock('@gitgov/core', () => ({
 
 import { DashboardCommand } from './dashboard-command';
 import { DependencyInjectionService } from '../../services/dependency-injection';
-import { Factories, Adapters, EventBus } from '@gitgov/core';
-import type { TaskRecord, CycleRecord, FeedbackRecord, ActorRecord, GitGovTaskRecord } from '@gitgov/core';
+import { Factories } from '@gitgov/core';
+import type {
+  TaskRecord, CycleRecord, FeedbackRecord, ActorRecord, GitGovTaskRecord,
+  SystemStatus, ProductivityMetrics, CollaborationMetrics, IndexData,
+  IndexGenerationReport, ActivityEvent,
+} from '@gitgov/core';
 
 // Mock console methods to capture output
 const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation();
@@ -96,7 +100,7 @@ function createMockGitGovTaskRecord(taskPayload: TaskRecord): GitGovTaskRecord {
   };
 }
 
-describe('DashboardCommand - Demo Optimizations', () => {
+describe('DashboardCommand - EARS Compliance Tests', () => {
   let dashboardCommand: DashboardCommand;
   let mockBacklogAdapter: {
     getAllTasks: jest.MockedFunction<() => Promise<TaskRecord[]>>;
@@ -106,15 +110,15 @@ describe('DashboardCommand - Demo Optimizations', () => {
     getAllFeedback: jest.MockedFunction<() => Promise<FeedbackRecord[]>>;
   };
   let mockMetricsAdapter: {
-    getSystemStatus: jest.MockedFunction<() => Promise<Adapters.SystemStatus>>;
-    getProductivityMetrics: jest.MockedFunction<() => Promise<Adapters.ProductivityMetrics>>;
-    getCollaborationMetrics: jest.MockedFunction<() => Promise<Adapters.CollaborationMetrics>>;
+    getSystemStatus: jest.MockedFunction<() => Promise<SystemStatus>>;
+    getProductivityMetrics: jest.MockedFunction<() => Promise<ProductivityMetrics>>;
+    getCollaborationMetrics: jest.MockedFunction<() => Promise<CollaborationMetrics>>;
   };
   let mockIndexerAdapter: {
-    getIndexData: jest.MockedFunction<() => Promise<Adapters.IndexData | null>>;
-    generateIndex: jest.MockedFunction<() => Promise<Adapters.IndexGenerationReport>>;
+    getIndexData: jest.MockedFunction<() => Promise<IndexData | null>>;
+    generateIndex: jest.MockedFunction<() => Promise<IndexGenerationReport>>;
     isIndexUpToDate: jest.MockedFunction<() => Promise<boolean>>;
-    calculateActivityHistory: jest.MockedFunction<() => Promise<EventBus.ActivityEvent[]>>;
+    calculateActivityHistory: jest.MockedFunction<() => Promise<ActivityEvent[]>>;
   };
   let mockIdentityAdapter: {
     getCurrentActor: jest.MockedFunction<() => Promise<ActorRecord>>;
@@ -133,7 +137,7 @@ describe('DashboardCommand - Demo Optimizations', () => {
   let sampleCycle: CycleRecord;
   let sampleFeedback: FeedbackRecord;
 
-  const sampleSystemStatus: Adapters.SystemStatus = {
+  const sampleSystemStatus: SystemStatus = {
     tasks: {
       total: 10,
       byStatus: { active: 3, done: 5, draft: 2 },
@@ -151,7 +155,7 @@ describe('DashboardCommand - Demo Optimizations', () => {
     }
   };
 
-  const sampleProductivityMetrics: Adapters.ProductivityMetrics = {
+  const sampleProductivityMetrics: ProductivityMetrics = {
     throughput: 10,
     leadTime: 5.5,
     cycleTime: 3.2,
@@ -159,7 +163,7 @@ describe('DashboardCommand - Demo Optimizations', () => {
     averageCompletionTime: 5.5
   };
 
-  const sampleCollaborationMetrics: Adapters.CollaborationMetrics = {
+  const sampleCollaborationMetrics: CollaborationMetrics = {
     activeAgents: 2,
     totalAgents: 5,
     agentUtilization: 40,
@@ -167,7 +171,7 @@ describe('DashboardCommand - Demo Optimizations', () => {
     collaborationIndex: 65
   };
 
-  const sampleIndexData: Adapters.IndexData = {
+  const sampleIndexData: IndexData = {
     metadata: {
       generatedAt: new Date().toISOString(),
       lastCommitHash: 'abc123',
@@ -264,10 +268,10 @@ describe('DashboardCommand - Demo Optimizations', () => {
     mockProcessExit.mockClear();
   });
 
-  describe('EARS-19: Activity Stream Never Disappears', () => {
-    it('should immediately regenerate cache when indexData is null', async () => {
+  describe('EARS-E1: EnrichedTasks & Activity Stream', () => {
+    it('[EARS-E1] should immediately regenerate cache when indexData is null', async () => {
       // Arrange: Mock scenario where cache is invalidated (indexData is null)
-      const sampleActivity: EventBus.ActivityEvent[] = [
+      const sampleActivity: ActivityEvent[] = [
         {
           timestamp: Date.now(),
           type: 'task_created',
@@ -281,7 +285,7 @@ describe('DashboardCommand - Demo Optimizations', () => {
         }
       ];
 
-      const mockGenerationReport: Adapters.IndexGenerationReport = {
+      const mockGenerationReport: IndexGenerationReport = {
         success: true,
         recordsProcessed: 10,
         metricsCalculated: 3,
@@ -295,7 +299,7 @@ describe('DashboardCommand - Demo Optimizations', () => {
         }
       };
 
-      const indexDataWithActivity: Adapters.IndexData = {
+      const indexDataWithActivity: IndexData = {
         ...sampleIndexData,
         activityHistory: sampleActivity
       };
@@ -315,9 +319,9 @@ describe('DashboardCommand - Demo Optimizations', () => {
       expect(mockIndexerAdapter.generateIndex).toHaveBeenCalledTimes(1);
     });
 
-    it('should preserve activity history even when cache is regenerated', async () => {
+    it('[EARS-E1] should preserve activity history even when cache is regenerated', async () => {
       // Arrange: Mock activity history
-      const expectedActivity: EventBus.ActivityEvent[] = [
+      const expectedActivity: ActivityEvent[] = [
         {
           timestamp: Date.now() - 1000,
           type: 'task_created',
@@ -342,7 +346,7 @@ describe('DashboardCommand - Demo Optimizations', () => {
         }
       ];
 
-      const mockGenerationReport: Adapters.IndexGenerationReport = {
+      const mockGenerationReport: IndexGenerationReport = {
         success: true,
         recordsProcessed: 15,
         metricsCalculated: 4,
@@ -356,7 +360,7 @@ describe('DashboardCommand - Demo Optimizations', () => {
         }
       };
 
-      const indexDataWithActivity: Adapters.IndexData = {
+      const indexDataWithActivity: IndexData = {
         ...sampleIndexData,
         activityHistory: expectedActivity
       };
@@ -384,8 +388,8 @@ describe('DashboardCommand - Demo Optimizations', () => {
     });
   });
 
-  describe('EARS-20: Demo Performance Optimizations', () => {
-    it('should use 1 second refresh interval by default (demo optimization)', async () => {
+  describe('EARS-E4: Timestamp Consistency & Performance', () => {
+    it('[EARS-E4] should use 1 second refresh interval by default (demo optimization)', async () => {
       // Arrange: Mock successful cache
       mockIndexerAdapter.getIndexData.mockResolvedValue(sampleIndexData);
 
@@ -405,7 +409,7 @@ describe('DashboardCommand - Demo Optimizations', () => {
       expect(renderArgs.length).toBeGreaterThan(0);
     });
 
-    it('should respect custom refresh interval when provided', async () => {
+    it('[EARS-E4] should respect custom refresh interval when provided', async () => {
       // Arrange: Mock successful cache
       mockIndexerAdapter.getIndexData.mockResolvedValue(sampleIndexData);
 
@@ -424,9 +428,9 @@ describe('DashboardCommand - Demo Optimizations', () => {
       expect(renderArgs.length).toBeGreaterThan(0);
     });
 
-    it('should regenerate cache in under 100ms for demo responsiveness', async () => {
+    it('[EARS-A4] should regenerate cache in under 100ms for demo responsiveness', async () => {
       // Arrange: Mock cache miss scenario
-      const mockGenerationReport: Adapters.IndexGenerationReport = {
+      const mockGenerationReport: IndexGenerationReport = {
         success: true,
         recordsProcessed: 50,
         metricsCalculated: 5,
@@ -459,10 +463,10 @@ describe('DashboardCommand - Demo Optimizations', () => {
     });
   });
 
-  describe('Integration: Complete Demo Flow', () => {
-    it('should handle complete demo scenario: cache miss -> regeneration -> activity display', async () => {
+  describe('Integration: EARS-A Multi-Adapter Orchestration', () => {
+    it('[EARS-A1] [EARS-A4] should handle complete demo scenario: cache miss -> regeneration -> activity display', async () => {
       // Arrange: Complete demo scenario
-      const demoActivity: EventBus.ActivityEvent[] = [
+      const demoActivity: ActivityEvent[] = [
         {
           timestamp: Date.now() - 2000,
           type: 'task_created',
@@ -497,7 +501,7 @@ describe('DashboardCommand - Demo Optimizations', () => {
         }
       ];
 
-      const mockGenerationReport: Adapters.IndexGenerationReport = {
+      const mockGenerationReport: IndexGenerationReport = {
         success: true,
         recordsProcessed: 25,
         metricsCalculated: 6,
@@ -511,7 +515,7 @@ describe('DashboardCommand - Demo Optimizations', () => {
         }
       };
 
-      const completeIndexData: Adapters.IndexData = {
+      const completeIndexData: IndexData = {
         ...sampleIndexData,
         tasks: [createMockGitGovTaskRecord(sampleTask)],
         activityHistory: demoActivity
