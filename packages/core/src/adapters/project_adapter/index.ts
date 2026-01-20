@@ -1,5 +1,3 @@
-import { promises as fs, existsSync } from 'fs';
-import * as pathUtils from 'path';
 import type { GitGovConfig } from '../../config_manager';
 import { ConfigManager } from '../../config_manager';
 import { DetailedValidationError } from '../../validation/common';
@@ -8,11 +6,7 @@ import type { BacklogAdapter } from '../backlog_adapter';
 import type { GitModule } from '../../git';
 import { createTaskRecord } from '../../factories/task_factory';
 import { createCycleRecord } from '../../factories/cycle_factory';
-import { getImportMetaUrl } from '../../utils/esm_helper';
-import { createRequire } from 'module';
-import { fileURLToPath } from 'url';
-import { createLogger } from "../../logger";
-const logger = createLogger("[ProjectAdapter] ");
+import type { IProjectInitializer, EnvironmentValidation } from '../../project_initializer';
 
 /**
  * ProjectAdapter Dependencies - Facade + Dependency Injection Pattern
@@ -25,6 +19,9 @@ export interface ProjectAdapterDependencies {
 
   // Infrastructure Layer (REQUIRED)
   configManager: ConfigManager;
+
+  // Project Initialization (REQUIRED - caller injects appropriate implementation)
+  projectInitializer: IProjectInitializer;
 }
 
 // Return types specific to the adapter
@@ -57,15 +54,8 @@ export type ProjectInitResult = {
   nextSteps: string[];
 };
 
-export type EnvironmentValidation = {
-  isValid: boolean;
-  isGitRepo: boolean;
-  hasWritePermissions: boolean;
-  isAlreadyInitialized: boolean;
-  gitgovPath?: string | undefined;
-  warnings: string[];
-  suggestions: string[];
-};
+// Re-export EnvironmentValidation from project_initializer
+export type { EnvironmentValidation } from '../../project_initializer';
 
 export type ProjectContext = {
   projectId: string;
@@ -129,7 +119,7 @@ export interface IProjectAdapter {
 
 /**
  * ProjectAdapter - The Project Initialization Engine
- * 
+ *
  * Implements Facade + Dependency Injection Pattern for testeable and configurable orchestration.
  * Acts as Mediator between project initialization and the ecosystem of adapters.
  */
@@ -138,39 +128,37 @@ export class ProjectAdapter implements IProjectAdapter {
   private backlogAdapter: BacklogAdapter;
   private gitModule: GitModule;
   private configManager: ConfigManager;
+  private projectInitializer: IProjectInitializer;
 
   constructor(dependencies: ProjectAdapterDependencies) {
     this.identityAdapter = dependencies.identityAdapter;
     this.backlogAdapter = dependencies.backlogAdapter;
     this.gitModule = dependencies.gitModule;
     this.configManager = dependencies.configManager;
+    this.projectInitializer = dependencies.projectInitializer;
   }
 
   // ===== FASE 1: BOOTSTRAP CORE METHODS =====
 
   /**
-   * [EARS-1] Initializes complete GitGovernance project with 4-module orchestration (Identity, Backlog, WorkflowMethodology, SyncModule) and trust root Ed25519
+   * [EARS-A1] Initializes complete GitGovernance project with 3-adapter orchestration (Identity, Backlog, GitModule) and trust root Ed25519
    */
   async initializeProject(options: ProjectInitOptions): Promise<ProjectInitResult> {
     const startTime = Date.now();
-    let setupId = `setup-${Date.now()}`;
+    const projectRoot = process.env['GITGOV_ORIGINAL_DIR'] || process.cwd();
 
     try {
-      // 1. Environment Validation
+      // 1. Environment Validation (delegates to IProjectInitializer)
       const envValidation = await this.validateEnvironment();
       if (!envValidation.isValid) {
         throw new Error(`Environment validation failed: ${envValidation.warnings.join(', ')}`);
       }
 
-      // 2. Directory Structure Creation
-      const projectRoot = process.env['GITGOV_ORIGINAL_DIR'] || process.cwd();
-      const gitgovPath = pathUtils.join(projectRoot, '.gitgov');
+      // 2. Directory Structure Creation via ProjectInitializer
+      await this.projectInitializer.createProjectStructure(projectRoot);
 
-      await this.createDirectoryStructure(gitgovPath);
-
-      // 2.5. Copy Agent Prompt (@gitgov instructions for AI assistants)
-      // Note: Agent prompt is placed in project root for easy access via @gitgov in IDEs
-      await this.copyAgentPrompt(projectRoot);
+      // 2.5. Copy Agent Prompt
+      await this.projectInitializer.copyAgentPrompt(projectRoot);
 
       // 3. Trust Root Creation via IdentityAdapter
       const actor = await this.identityAdapter.createActor(
@@ -209,7 +197,7 @@ export class ProjectAdapter implements IProjectAdapter {
         templateResult = await this.processBlueprintTemplate(options.template, projectContext);
       }
 
-      // 6. Configuration Persistence via ConfigManager
+      // 6. Configuration Persistence via ProjectInitializer
       const projectId = this.generateProjectId(options.name);
       const config: GitGovConfig = {
         protocolVersion: "1.0.0",
@@ -239,9 +227,9 @@ export class ProjectAdapter implements IProjectAdapter {
         }
       };
 
-      await this.persistConfiguration(config, gitgovPath);
+      await this.projectInitializer.writeConfig(config, projectRoot);
 
-      // 6.5. Lazy State Branch Setup (EARS-4, EARS-13)
+      // 6.5. Lazy State Branch Setup (EARS-A4, EARS-B3)
       // gitgov-state branch is NOT created here - it will be created lazily on first "sync push"
       // This allows init to work in repos without remote or without commits
       const hasRemote = await this.gitModule.isRemoteConfigured("origin");
@@ -261,11 +249,11 @@ export class ProjectAdapter implements IProjectAdapter {
         console.warn(`   Run 'gitgov sync push' when ready to enable multi-machine collaboration.\n`);
       }
 
-      // 7. Session Initialization
-      await this.initializeSession(actor.id, gitgovPath);
+      // 7. Session Initialization via ProjectInitializer
+      await this.projectInitializer.initializeSession(actor.id, projectRoot);
 
       // 8. Git Integration
-      await this.setupGitIntegration(projectRoot);
+      await this.projectInitializer.setupGitIntegration(projectRoot);
 
       const initializationTime = Date.now() - startTime;
 
@@ -277,7 +265,7 @@ export class ProjectAdapter implements IProjectAdapter {
         actor: {
           id: actor.id,
           displayName: actor.displayName,
-          publicKeyPath: pathUtils.join(gitgovPath, 'actors', `${actor.id}.json`),
+          publicKeyPath: this.projectInitializer.getActorPath(actor.id, projectRoot),
         },
         template: templateResult ? {
           processed: true,
@@ -293,86 +281,22 @@ export class ProjectAdapter implements IProjectAdapter {
       };
 
     } catch (error) {
-      // Error Recovery - Automatic rollback
-      await this.rollbackPartialSetup(setupId);
+      // Error Recovery - Automatic rollback via ProjectInitializer
+      await this.projectInitializer.rollback(projectRoot);
       throw error;
     }
   }
 
   /**
-   * [EARS-2] Validates environment for GitGovernance initialization
+   * [EARS-A2] Validates environment for GitGovernance initialization
+   * Delegates to IProjectInitializer.validateEnvironment().
    */
   async validateEnvironment(path?: string): Promise<EnvironmentValidation> {
-    // For init: validate user's original directory, handling development scenarios
-    const targetPath = path || process.env['GITGOV_ORIGINAL_DIR'] || process.cwd();
-    const warnings: string[] = [];
-    const suggestions: string[] = [];
-
-    try {
-      // Check if it's a Git repository by looking for .git directory
-      const gitPath = pathUtils.join(targetPath, '.git');
-      const isGitRepo = existsSync(gitPath);
-
-      if (!isGitRepo) {
-        warnings.push(`Not a Git repository in directory: ${targetPath}`);
-        suggestions.push("Run 'git init' to initialize a Git repository first");
-      }
-
-      // Check write permissions
-      let hasWritePermissions = false;
-      try {
-        const testFile = pathUtils.join(targetPath, '.gitgov-test');
-        await fs.writeFile(testFile, 'test');
-        await fs.unlink(testFile);
-        hasWritePermissions = true;
-      } catch {
-        warnings.push("No write permissions in target directory");
-        suggestions.push("Ensure you have write permissions in the target directory");
-      }
-
-      // Check if already initialized (requires config.json, not just .gitgov/ directory)
-      const gitgovPath = pathUtils.join(targetPath, '.gitgov');
-      const configPath = pathUtils.join(gitgovPath, 'config.json');
-      let isAlreadyInitialized = false;
-      try {
-        await fs.access(configPath);
-        isAlreadyInitialized = true;
-        warnings.push(`GitGovernance already initialized in directory: ${targetPath}`);
-        suggestions.push("Use 'gitgov status' to check current state or choose a different directory");
-      } catch {
-        // config.json doesn't exist, so not fully initialized
-        // Note: An empty .gitgov/ directory from bootstrap is OK to init over
-      }
-
-      const isValid = isGitRepo && hasWritePermissions && !isAlreadyInitialized;
-
-      return {
-        isValid,
-        isGitRepo,
-        hasWritePermissions,
-        isAlreadyInitialized,
-        gitgovPath: isAlreadyInitialized ? gitgovPath : undefined,
-        warnings,
-        suggestions,
-      };
-
-    } catch (error) {
-      warnings.push(`Environment validation error: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      suggestions.push("Check file system permissions and try again");
-
-      return {
-        isValid: false,
-        isGitRepo: false,
-        hasWritePermissions: false,
-        isAlreadyInitialized: false,
-        warnings,
-        suggestions,
-      };
-    }
+    return this.projectInitializer.validateEnvironment(path);
   }
 
   /**
-   * [EARS-3] Processes blueprint template JSON with schema validation creating cycles and tasks
+   * [EARS-A3] Processes blueprint template JSON with schema validation creating cycles and tasks
    */
   async processBlueprintTemplate(
     templatePath: string,
@@ -383,7 +307,7 @@ export class ProjectAdapter implements IProjectAdapter {
 
     try {
       // Load and validate template JSON
-      const templateContent = await fs.readFile(templatePath, 'utf-8');
+      const templateContent = await this.projectInitializer.readFile(templatePath);
       const template = JSON.parse(templateContent);
 
       if (!template.cycles || !Array.isArray(template.cycles)) {
@@ -447,27 +371,13 @@ export class ProjectAdapter implements IProjectAdapter {
   }
 
   /**
-   * [EARS-4] Cleans up partial setup artifacts if initialization fails
+   * [EARS-A5/A10] Cleans up partial setup artifacts if initialization fails
+   * Delegates to ProjectInitializer.rollback().
    */
   async rollbackPartialSetup(setupId: string): Promise<void> {
     try {
       const projectRoot = process.env['GITGOV_ORIGINAL_DIR'] || process.cwd();
-      const gitgovPath = pathUtils.join(projectRoot, '.gitgov');
-
-      // Check if .gitgov directory exists
-      try {
-        await fs.access(gitgovPath);
-        // Remove .gitgov directory recursively
-        await fs.rm(gitgovPath, { recursive: true, force: true });
-      } catch {
-        // Directory doesn't exist, nothing to clean up
-      }
-
-      // TODO: Cleanup any other artifacts created during initialization
-      // - Remove Git config changes
-      // - Delete created actor keys
-      // - Restore previous state if needed
-
+      await this.projectInitializer.rollback(projectRoot);
     } catch (error) {
       // Log error but don't throw to avoid masking original error
       console.warn(`Rollback failed for setup ${setupId}:`, error);
@@ -477,7 +387,7 @@ export class ProjectAdapter implements IProjectAdapter {
   // ===== FASE 2: FUTURE PLATFORM METHODS =====
 
   /**
-   * [EARS-19] Gets project information from config.json via ConfigManager (Fase 2)
+   * [EARS-E1] Gets project information from config.json via ConfigManager (Fase 2)
    */
   async getProjectInfo(): Promise<ProjectInfo | null> {
     try {
@@ -500,7 +410,7 @@ export class ProjectAdapter implements IProjectAdapter {
   }
 
   /**
-   * [EARS-20] Updates project configuration with validation (Fase 2)
+   * [EARS-E2] Updates project configuration with validation (Fase 2)
    */
   async updateProjectConfig(updates: Partial<GitGovConfig>): Promise<void> {
     try {
@@ -526,147 +436,7 @@ export class ProjectAdapter implements IProjectAdapter {
 
   // ===== PRIVATE HELPER METHODS =====
 
-  private async createDirectoryStructure(gitgovPath: string): Promise<void> {
-    const directories = [
-      'actors',
-      'cycles',
-      'tasks',
-      'executions',
-      'feedbacks',
-      'changelogs',
-    ];
-
-    await fs.mkdir(gitgovPath, { recursive: true });
-
-    for (const dir of directories) {
-      await fs.mkdir(pathUtils.join(gitgovPath, dir), { recursive: true });
-    }
-  }
-
-  private async copyAgentPrompt(projectRoot: string): Promise<void> {
-    // Target: project root for easy IDE access via @gitgov
-    const targetPrompt = pathUtils.join(projectRoot, 'gitgov');
-    const potentialSources: string[] = [];
-
-    // 1️⃣ Development scenario: search in monorepo prompts/ (package root)
-    potentialSources.push(
-      pathUtils.join(process.cwd(), 'prompts/gitgov_agent_prompt.md'),
-    );
-
-    // 2️⃣ NPM installation: use require.resolve to find @gitgov/core package
-    try {
-      // Get import.meta.url via helper (separated to avoid Jest parse errors)
-      const metaUrl = getImportMetaUrl();
-
-      if (metaUrl) {
-        const require = createRequire(metaUrl);
-        const pkgJsonPath = require.resolve('@gitgov/core/package.json');
-        const pkgRoot = pathUtils.dirname(pkgJsonPath);
-        const promptPath = pathUtils.join(pkgRoot, 'prompts/gitgov_agent_prompt.md');
-        potentialSources.push(promptPath);
-      }
-    } catch {
-      // require.resolve failed - continue with other sources
-    }
-
-    // 3️⃣ Build fallback: relative to compiled __dirname
-    try {
-      // Get import.meta.url via helper (separated to avoid Jest parse errors)
-      const metaUrl = getImportMetaUrl();
-
-      if (metaUrl) {
-        const __filename = fileURLToPath(metaUrl);
-        const __dirname = pathUtils.dirname(__filename);
-        const promptPath = pathUtils.resolve(__dirname, '../../prompts/gitgov_agent_prompt.md');
-        potentialSources.push(promptPath);
-      }
-    } catch {
-      // import.meta not available - continue with other sources
-    }
-
-    // 🔍 Find and copy the first accessible file
-    for (const source of potentialSources) {
-      try {
-        await fs.access(source);
-        await fs.copyFile(source, targetPrompt);
-        logger.debug(`📋 @gitgov agent prompt copied to project root (./gitgov)\n`);
-        return;
-      } catch {
-        // Source not accessible, try next one
-        continue;
-      }
-    }
-
-    // Graceful degradation: if prompt file doesn't exist in any location
-    console.warn('Warning: Could not copy @gitgov agent prompt. Project will work but AI assistant may not have local instructions.');
-  }
-
   private generateProjectId(name: string): string {
     return name.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-');
-  }
-
-  private async persistConfiguration(config: GitGovConfig, gitgovPath: string): Promise<void> {
-    // TODO: ARCHITECTURAL IMPROVEMENT - Use ConfigManager.saveConfig() instead of direct file write
-    // Currently ProjectAdapter writes config.json directly for initialization
-    // Future: await this.configManager.saveConfig(config) for better separation of concerns
-    // Risk: ConfigManager is used by 40+ files, requires careful backward compatibility
-    const configPath = pathUtils.join(gitgovPath, 'config.json');
-    await fs.writeFile(configPath, JSON.stringify(config, null, 2), 'utf-8');
-  }
-
-  private async initializeSession(actorId: string, gitgovPath: string): Promise<void> {
-    // TODO: ARCHITECTURAL IMPROVEMENT - Use ConfigManager.initializeSession() instead of direct file write
-    // Currently ProjectAdapter creates .session.json directly for initialization
-    // Future: await this.configManager.initializeSession(actorId) for better separation of concerns
-    // Risk: ConfigManager is used by 40+ files, requires careful backward compatibility
-    const sessionPath = pathUtils.join(gitgovPath, '.session.json');
-    const session = {
-      lastSession: {
-        actorId,
-        timestamp: new Date().toISOString(),
-      },
-      actorState: {
-        [actorId]: {
-          lastSync: new Date().toISOString(),
-          syncStatus: {
-            status: 'synced' as const  // Initialize as synced (no pending changes at init)
-          }
-        },
-      },
-    };
-
-    await fs.writeFile(sessionPath, JSON.stringify(session, null, 2), 'utf-8');
-  }
-
-  private async setupGitIntegration(projectRoot: string): Promise<void> {
-    const gitignorePath = pathUtils.join(projectRoot, '.gitignore');
-    const gitignoreContent = `
-# GitGovernance
-# Ignore entire .gitgov/ directory (state lives in gitgov-state branch)
-.gitgov/
-
-# Ignore agent prompt file (project-specific, created by gitgov init)
-gitgov
-`;
-
-    try {
-      // Check if .gitignore exists
-      let existingContent = '';
-      try {
-        existingContent = await fs.readFile(gitignorePath, 'utf-8');
-      } catch {
-        // File doesn't exist, will create new
-      }
-
-      // Only add if not already present
-      if (existingContent && !existingContent.includes('# GitGovernance')) {
-        await fs.appendFile(gitignorePath, gitignoreContent);
-      } else if (!existingContent) {
-        await fs.writeFile(gitignorePath, gitignoreContent);
-      }
-    } catch (error) {
-      // Non-critical error, continue
-      console.warn('Failed to setup Git integration:', error);
-    }
   }
 }

@@ -87,6 +87,32 @@ jest.doMock('@gitgov/core', () => ({
   }
 }));
 
+// Mock @gitgov/core/fs for FsProjectInitializer
+jest.doMock('@gitgov/core/fs', () => ({
+  FsProjectInitializer: jest.fn().mockImplementation(() => ({
+    createProjectStructure: jest.fn().mockResolvedValue(undefined),
+    isInitialized: jest.fn().mockResolvedValue(false),
+    writeConfig: jest.fn().mockResolvedValue(undefined),
+    initializeSession: jest.fn().mockResolvedValue(undefined),
+    rollback: jest.fn().mockResolvedValue(undefined),
+    validateEnvironment: jest.fn().mockResolvedValue({
+      isValid: true,
+      isGitRepo: true,
+      hasWritePermissions: true,
+      isAlreadyInitialized: false,
+      warnings: [],
+      suggestions: []
+    }),
+    readFile: jest.fn().mockResolvedValue('{}'),
+    copyAgentPrompt: jest.fn().mockResolvedValue(undefined),
+    setupGitIntegration: jest.fn().mockResolvedValue(undefined),
+    getActorPath: jest.fn().mockReturnValue('/test/.gitgov/actors/test.json')
+  })),
+  FsStore: jest.fn().mockImplementation(() => ({})),
+  FsKeyProvider: jest.fn().mockImplementation(() => ({})),
+  FsFileLister: jest.fn().mockImplementation(() => ({}))
+}));
+
 // Mock child_process for git config
 jest.mock('child_process', () => ({
   execSync: jest.fn()

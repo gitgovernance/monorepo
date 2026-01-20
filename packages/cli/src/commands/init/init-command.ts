@@ -1,5 +1,6 @@
 import type { Adapters, TaskRecord, CycleRecord, ActorRecord, AgentRecord, FeedbackRecord, ExecutionRecord, ChangelogRecord } from '@gitgov/core';
 import { Git } from '@gitgov/core';
+import { FsProjectInitializer } from '@gitgov/core/fs';
 
 import * as pathUtils from 'path';
 import { spawn } from 'child_process';
@@ -226,11 +227,15 @@ export class InitCommand {
       // LintModule was removed as unused (created for SyncModule which is also not needed)
       // gitgov-state branch is created lazily on first "sync push"
 
+      // Create ProjectInitializer (filesystem implementation for CLI)
+      const projectInitializer = new FsProjectInitializer();
+
       const projectAdapter = new Adapters.ProjectAdapter({
         identityAdapter,
         backlogAdapter,
         gitModule,
         configManager,
+        projectInitializer,
       });
 
       return projectAdapter;
