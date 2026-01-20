@@ -1,6 +1,6 @@
 import * as path from 'path';
 import { Adapters, Config, Store, EventBus, Lint, Git, Sync, SourceAuditor, PiiDetector, Runner, KeyProvider } from '@gitgov/core';
-import type { TaskRecord, CycleRecord, FeedbackRecord, ExecutionRecord, ChangelogRecord, ActorRecord, AgentRecord, GitGovRecordPayload, CustomRecord } from '@gitgov/core';
+import type { TaskRecord, CycleRecord, FeedbackRecord, ExecutionRecord, ChangelogRecord, ActorRecord, AgentRecord, GitGovRecordPayload, CustomRecord, GitGovRecord } from '@gitgov/core';
 import { spawn } from 'child_process';
 
 /**
@@ -13,7 +13,7 @@ export class DependencyInjectionService {
   private static instance: DependencyInjectionService | null = null;
   private indexerAdapter: Adapters.IIndexerAdapter | null = null;
   private backlogAdapter: Adapters.BacklogAdapter | null = null;
-  private lintModule: Lint.LintModule | null = null;
+  private lintModule: Lint.IFsLintModule | null = null;
   private syncModule: Sync.SyncModule | null = null;
   private sourceAuditorModule: SourceAuditor.SourceAuditorModule | null = null;
   private agentRunnerModule: Runner.AgentRunnerModule | null = null;
@@ -376,9 +376,13 @@ export class DependencyInjectionService {
   }
 
   /**
-   * Creates and returns LintModule with all required dependencies
+   * Creates and returns FsLintModule with all required dependencies.
+   *
+   * Architecture (Store Backends Epic):
+   * - LintModule (pure): Core validation logic without I/O
+   * - FsLintModule (with I/O): Filesystem wrapper for CLI usage
    */
-  async getLintModule(): Promise<Lint.LintModule> {
+  async getLintModule(): Promise<Lint.IFsLintModule> {
     if (this.lintModule) {
       return this.lintModule;
     }
@@ -392,21 +396,28 @@ export class DependencyInjectionService {
       // Get indexer adapter for reference validation
       const indexerAdapter = await this.getIndexerAdapter();
 
-      // Use taskStore for lint validation
-      // The LintModule needs to read all record types, and any store works since they all inherit from RecordStore
-      // We cast to the expected type (StorablePayload) which excludes CustomRecord
-      if (!this.stores) {
-        throw new Error("Stores not initialized");
-      }
+      // Create stores object for LintModule
+      // RecordStore is compatible with Store<GitGovRecord> interface
+      const lintStores = {
+        tasks: this.stores.taskStore,
+        cycles: this.stores.cycleStore,
+        actors: this.stores.actorStore,
+        agents: this.stores.agentStore,
+        executions: this.stores.executionStore,
+        feedbacks: this.stores.feedbackStore,
+        changelogs: this.stores.changelogStore,
+      } as unknown as Lint.RecordStores;
 
-      // Cast taskStore to the expected type for LintModule
-      // StorablePayload = Exclude<GitGovRecordPayload, CustomRecord>
-      type StorablePayload = Exclude<GitGovRecordPayload, CustomRecord>;
-      const lintRecordStore = this.stores.taskStore as unknown as Store.RecordStore<StorablePayload>;
+      // Create pure LintModule (no I/O)
+      const pureLintModule = new Lint.LintModule({
+        stores: lintStores,
+        indexerAdapter
+      });
 
-      // Create LintModule with dependencies
-      this.lintModule = new Lint.LintModule({
-        recordStore: lintRecordStore,
+      // Create FsLintModule (with I/O) wrapping the pure module
+      this.lintModule = new Lint.FsLintModule({
+        lintModule: pureLintModule,
+        stores: lintStores,
         indexerAdapter
       });
 

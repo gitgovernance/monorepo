@@ -123,12 +123,12 @@ export class LintCommand extends BaseCommand {
         isFile = inputPath.endsWith('.json');
       }
 
-      // Map CLI options to LintModule options
-      const lintOptions: Partial<Lint.LintOptions> = {
+      // Map CLI options to FsLintModule options
+      const lintOptions: Partial<Lint.FsLintOptions> = {
         path: isFile ? path.dirname(inputPath) : inputPath,
         validateReferences: options.references || false,
         validateActors: options.actors || false,
-        validateConventions: true // Always validate conventions
+        validateFileNaming: true // Always validate file naming conventions
       };
 
       if (!quiet) {
@@ -150,12 +150,12 @@ export class LintCommand extends BaseCommand {
         const excluded = options.excludeValidators.split(',').map(v => v.trim());
         filteredReport = {
           ...report,
-          results: report.results.filter(r => !excluded.includes(r.validator)),
+          results: report.results.filter((r: Lint.LintResult) => !excluded.includes(r.validator)),
           summary: {
             ...report.summary,
-            errors: report.results.filter(r => !excluded.includes(r.validator) && r.level === 'error').length,
-            warnings: report.results.filter(r => !excluded.includes(r.validator) && r.level === 'warning').length,
-            fixable: report.results.filter(r => !excluded.includes(r.validator) && r.fixable).length
+            errors: report.results.filter((r: Lint.LintResult) => !excluded.includes(r.validator) && r.level === 'error').length,
+            warnings: report.results.filter((r: Lint.LintResult) => !excluded.includes(r.validator) && r.level === 'warning').length,
+            fixable: report.results.filter((r: Lint.LintResult) => !excluded.includes(r.validator) && r.fixable).length
           }
         };
       }
@@ -205,7 +205,7 @@ export class LintCommand extends BaseCommand {
    * @returns FixReport for exit code calculation
    */
   private async handleFixMode(
-    lintModule: Lint.LintModule,
+    lintModule: Lint.IFsLintModule,
     lintReport: Lint.LintReport,
     options: LintCommandOptions,
     format: string,
@@ -253,7 +253,7 @@ export class LintCommand extends BaseCommand {
       fixTypes = validators.filter(v => v.length > 0);
     }
 
-    const fixOptions: Partial<Lint.FixOptions> = {
+    const fixOptions: Partial<Lint.FsFixOptions> = {
       createBackups: true,
       keyId: currentActor.id,
       ...(privateKey && { privateKey }),

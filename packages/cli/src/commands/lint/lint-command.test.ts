@@ -44,9 +44,9 @@ const mockDI = jest.mocked(DependencyInjectionService);
 
 // Global references to the mock adapters for easy access in tests
 let mockLintModule: {
-  lint: jest.MockedFunction<(options?: Partial<Lint.LintOptions>) => Promise<Lint.LintReport>>;
-  lintFile: jest.MockedFunction<(filePath: string, options?: Partial<Lint.LintOptions>) => Promise<Lint.LintReport>>;
-  fix: jest.MockedFunction<(lintReport: Lint.LintReport, fixOptions?: Partial<Lint.FixOptions>) => Promise<Lint.FixReport>>;
+  lint: jest.MockedFunction<(options?: Partial<Lint.FsLintOptions>) => Promise<Lint.LintReport>>;
+  lintFile: jest.MockedFunction<(filePath: string, options?: Partial<Lint.FsLintOptions>) => Promise<Lint.LintReport>>;
+  fix: jest.MockedFunction<(lintReport: Lint.LintReport, fixOptions?: Partial<Lint.FsFixOptions>) => Promise<Lint.FixReport>>;
 };
 
 let mockIdentityAdapter: {
@@ -190,7 +190,7 @@ describe('LintCommand - Complete Unit Tests', () => {
         path: '.gitgov/',
         validateReferences: false,
         validateActors: false,
-        validateConventions: true
+        validateFileNaming: true
       });
     });
 
@@ -207,7 +207,7 @@ describe('LintCommand - Complete Unit Tests', () => {
         path: '.gitgov/custom',
         validateReferences: true,
         validateActors: true,
-        validateConventions: true
+        validateFileNaming: true
       });
     });
 
@@ -236,7 +236,7 @@ describe('LintCommand - Complete Unit Tests', () => {
       expect(mockLintModule.lintFile).toHaveBeenCalledWith(
         '.gitgov/tasks/task1.json',
         expect.objectContaining({
-          validateConventions: true
+          validateFileNaming: true
         })
       );
       expect(mockLintModule.lint).not.toHaveBeenCalled();
