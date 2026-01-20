@@ -91,21 +91,21 @@ export class LintCommand extends BaseCommand {
 
   /**
    * Execute lint command
-   * [EARS-1, EARS-2, EARS-3]
+   * [EARS-A1, EARS-A2, EARS-A3]
    */
   async execute(options: LintCommandOptions): Promise<void> {
     try {
       const startTime = Date.now();
 
-      // [EARS-1] Parse and set defaults
+      // [EARS-A1] Parse and set defaults
       const inputPath = options.path || '.gitgov/';
       const format = options.format || 'text';
       const quiet = options.quiet || false;
 
-      // [EARS-2] Initialize LintModule with DI
+      // [EARS-A2] Initialize LintModule with DI
       const lintModule = await this.container.getLintModule();
 
-      // [EARS-10] Detect if path is a file or directory
+      // [EARS-A4] Detect if path is a file or directory
       let isFile = false;
       let filePath = inputPath;
 
@@ -139,12 +139,12 @@ export class LintCommand extends BaseCommand {
         }
       }
 
-      // [EARS-3] Invoke core module - use lintFile for single files, lint for directories
+      // [EARS-A3] Invoke core module - use lintFile for single files, lint for directories
       const report = isFile
         ? await lintModule.lintFile(filePath, lintOptions)
         : await lintModule.lint(lintOptions);
 
-      // [EARS-11] Filter results by excluded validators
+      // [EARS-A5] Filter results by excluded validators
       let filteredReport = report;
       if (options.excludeValidators && options.excludeValidators.length > 0) {
         const excluded = options.excludeValidators.split(',').map(v => v.trim());
@@ -162,22 +162,22 @@ export class LintCommand extends BaseCommand {
 
       const executionTime = Date.now() - startTime;
 
-      // [EARS-4, EARS-5] Format and display output
+      // [EARS-B1, EARS-B2] Format and display output
       if (options.checkMigrations) {
-        // [EARS-6] Migration detection mode
+        // [EARS-C1] Migration detection mode
         this.formatMigrationReport(filteredReport, format, quiet);
-        // [EARS-8] Exit code based on filtered report
+        // [EARS-D2] Exit code based on filtered report
         const exitCode = filteredReport.summary.errors > 0 ? 1 : 0;
         process.exit(exitCode);
       } else if (options.fix) {
-        // [EARS-7] Fix mode
+        // [EARS-D1] Fix mode
         const fixReport = await this.handleFixMode(lintModule, filteredReport, options, format, quiet);
-        // [EARS-8] Exit code based on remaining errors after fix
+        // [EARS-D2] Exit code based on remaining errors after fix
         // If fix failed for some items, exit with code 1
         const exitCode = (fixReport?.summary.failed ?? 0) > 0 ? 1 : 0;
         process.exit(exitCode);
       } else {
-        // [EARS-4, EARS-5, EARS-15, EARS-16] Normal lint mode
+        // [EARS-B1, EARS-B2, EARS-E1, EARS-E2] Normal lint mode
         const maxErrors = options.maxErrors !== undefined ? parseInt(options.maxErrors.toString(), 10) : 0;
         this.formatLintReport(
           filteredReport,
@@ -188,7 +188,7 @@ export class LintCommand extends BaseCommand {
           options.summary || false,
           maxErrors
         );
-        // [EARS-8] Exit code 1 when errors, [EARS-9] Exit code 0 when no errors
+        // [EARS-D2] Exit code 1 when errors, [EARS-D3] Exit code 0 when no errors
         const exitCode = filteredReport.summary.errors > 0 ? 1 : 0;
         process.exit(exitCode);
       }
@@ -201,7 +201,7 @@ export class LintCommand extends BaseCommand {
 
   /**
    * Handle fix mode
-   * [EARS-7]
+   * [EARS-D1]
    * @returns FixReport for exit code calculation
    */
   private async handleFixMode(
@@ -246,14 +246,14 @@ export class LintCommand extends BaseCommand {
       }
     }
 
-    // [EARS-13] Parse fix-validators option - fix only specified validators
+    // [EARS-A7] Parse fix-validators option - fix only specified validators
     let fixTypes: ValidatorType[] | undefined;
     if (options.fixValidators) {
       const validators = options.fixValidators.split(',').map(v => v.trim() as ValidatorType);
       fixTypes = validators.filter(v => v.length > 0);
     }
 
-    // [EARS-14] Fix all fixable when no --fix-validators specified
+    // [EARS-A8] Fix all fixable when no --fix-validators specified
     const fixOptions: Partial<FsFixOptions> = {
       createBackups: true,
       keyId: currentActor.id,
@@ -263,7 +263,7 @@ export class LintCommand extends BaseCommand {
 
     const fixReport = await lintModule.fix(lintReport, fixOptions);
 
-    // [EARS-55] Regenerate index after fix if records were modified
+    // [EARS-E3] Regenerate index after fix if records were modified
     // This ensures the index reflects the fixed records
     if (fixReport.summary.fixed > 0) {
       if (!quiet) {
@@ -297,7 +297,7 @@ export class LintCommand extends BaseCommand {
 
   /**
    * Format lint report for display
-   * [EARS-4, EARS-5, EARS-15, EARS-16]
+   * [EARS-B1, EARS-B2, EARS-E1, EARS-E2]
    */
   private formatLintReport(
     report: LintReport,
@@ -309,15 +309,15 @@ export class LintCommand extends BaseCommand {
     maxErrors: number = 0
   ): void {
     if (format === 'json') {
-      // [EARS-7] JSON output - ignore summary and maxErrors flags
+      // [EARS-D1] JSON output - ignore summary and maxErrors flags
       console.log(JSON.stringify(report, null, 2));
       return;
     }
 
-    // [EARS-4, EARS-15, EARS-16] Text output
+    // [EARS-B1, EARS-E1, EARS-E2] Text output
     const { summary: reportSummary, results } = report;
 
-    // [EARS-16] Limit results if maxErrors is set (calculate before showing summary)
+    // [EARS-E2] Limit results if maxErrors is set (calculate before showing summary)
     let displayResults = results;
     let remainingCount = 0;
     if (maxErrors > 0 && results.length > maxErrors) {
@@ -325,7 +325,7 @@ export class LintCommand extends BaseCommand {
       remainingCount = results.length - maxErrors;
     }
 
-    // [EARS-15] If summary flag is set, show only summary and Validator Types
+    // [EARS-E1] If summary flag is set, show only summary and Validator Types
     if (summary) {
       // Show Lint Report summary only
       if (!quiet) {
@@ -375,7 +375,7 @@ export class LintCommand extends BaseCommand {
       console.log('\n\x1b[1mIssues:\x1b[0m');
       console.log('─'.repeat(60));
 
-      // [EARS-12] Group output by validator/file/none
+      // [EARS-A6] Group output by validator/file/none
       if (groupBy === 'validator') {
         // Group by validator type
         const grouped = displayResults.reduce((acc, result) => {
@@ -505,7 +505,7 @@ export class LintCommand extends BaseCommand {
 
   /**
    * Format migration detection report
-   * [EARS-6]
+   * [EARS-C1]
    */
   private formatMigrationReport(
     report: LintReport,
@@ -540,7 +540,7 @@ export class LintCommand extends BaseCommand {
 
   /**
    * Format fix report for display
-   * [EARS-7]
+   * [EARS-D1]
    */
   private formatFixReport(report: FixReport, quiet: boolean): void {
     const { summary, fixes } = report;
