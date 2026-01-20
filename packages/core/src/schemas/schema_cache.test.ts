@@ -233,14 +233,12 @@ describe('SchemaValidationCache', () => {
 
       const stats = SchemaValidationCache.getCacheStats();
       expect(stats.cachedSchemas).toBe(0);
-      expect(stats.schemasLoaded).toEqual([]);
     });
 
     it('[EARS-11] should return accurate cache statistics', () => {
       // Initial state: empty cache
       let stats = SchemaValidationCache.getCacheStats();
       expect(stats.cachedSchemas).toBe(0);
-      expect(stats.schemasLoaded).toEqual([]);
 
       // Load 3 validators
       SchemaValidationCache.getValidatorFromSchema(Schemas.ActorRecord);
@@ -250,7 +248,6 @@ describe('SchemaValidationCache', () => {
       // Verify stats reflect all 3 cached schemas
       stats = SchemaValidationCache.getCacheStats();
       expect(stats.cachedSchemas).toBe(3);
-      expect(stats.schemasLoaded).toHaveLength(0); // schemasLoaded tracks file paths, not schema objects
 
       // Load same schema again - should not increase count
       SchemaValidationCache.getValidatorFromSchema(Schemas.ActorRecord);

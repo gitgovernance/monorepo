@@ -85,20 +85,6 @@ This method uses an installer script to download a self-contained executable wit
 curl -sSL https://get.gitgovernance.com | sh
 ```
 
-## Current Status
-
-**ECOSYSTEM STATUS:**
-
-- ✅ **Core Adapters:** ProjectAdapter, BacklogAdapter, MetricsAdapter, IndexerAdapter, IdentityAdapter implemented
-- ✅ **CLI Implementation:** 7 commands are fully functional and operational
-- ✅ **Quality Assurance:** 210 tests passing (222 total with 12 skipped), clean TypeScript, EARS coverage, shell-safe input validation
-- ✅ **Production Ready:** Commands work with real project data, MVP mode is operational
-- ✅ **TUI Dashboard:** The interactive TUI Dashboard is functional
-- ✅ **Project Initialization:** The `gitgov init` command is ready for demos
-
-**AVAILABLE COMMANDS:** `gitgov init`, `gitgov indexer`, `gitgov diagram`, `gitgov task` (14 subcommands), `gitgov cycle`, `gitgov status`, `gitgov dashboard`
-**ALL WORKFLOWS COMPLETE:** Full task lifecycle including pause/resume/cancel/reject/delete implemented and tested.
-
 ## Development Workflow
 
 ### 🔧 **Main Development (pnpm):**
@@ -213,42 +199,7 @@ gitgov init --template=saas-mvp
 gitgov indexer && gitgov status && gitgov dashboard
 ```
 
-**IMPLEMENTATION STATUS:**
-
-- ✅ **7/7 commands** implemented (`init`, `indexer`, `diagram`, `task`, `cycle`, `status`, `dashboard`)
-- ✅ **14/14 task subcommands** (new, list, show, submit, approve, assign, activate, complete, pause, resume, cancel, reject, delete, edit, promote)
-- ✅ **All specifications** ready with 10/10 quality scores
-- ✅ **Core dependencies** ready
-- ✅ **TUI Dashboard** functional
-- ✅ **Project Initialization** functional
-
 ## Implementation Guidelines for Agents
-
-**FOR IMPLEMENTER AGENTS:**
-
-### **📋 Verified Prerequisites:**
-
-- ✅ **IndexerAdapter:** `packages/core/src/adapters/indexer_adapter/index.ts`
-- ✅ **MetricsAdapter:** `packages/core/src/adapters/metrics_adapter/index.ts`
-- ✅ **BacklogAdapter:** `packages/core/src/adapters/backlog_adapter/index.ts`
-- ✅ **CLI Specifications:** 7 commands with 10/10 quality specs ready to implement
-
-### **🎯 Implementation Order (COMPLETED):**
-
-1. ✅ **`gitgov init`** - Project Initialization (Specification: `init_command.md`) - **COMPLETED**
-2. ✅ **`gitgov indexer`** - Cache control foundation (Specification: `index_command.md`) - **COMPLETED**
-3. ✅ **`gitgov task`** - Core operations (Specification: `task_command.md`) - **COMPLETED**
-4. ✅ **`gitgov cycle`** - Strategic planning (Specification: `cycle_command.md`) - **COMPLETED**
-5. ✅ **`gitgov status`** - Intelligence dashboard (Specification: `status_command.md`) - **COMPLETED**
-6. ✅ **`gitgov dashboard`** - TUI Dashboard (Specification: `dashboard_command.md`) - **COMPLETED**
-7. ✅ **`gitgov diagram`** - Workflow visualization (Specification: `diagram_command.md`) - **COMPLETED**
-
-### **🏗️ Architectural Patterns:**
-
-- **Pure CLI Interface:** Commands delegate to `@gitgov/core` adapters
-- **Auto-indexation:** Read commands check cache freshness automatically
-- **Cache invalidation:** Write commands invalidate the cache for consistency
-- **Graceful degradation:** All commands work without the cache (slower)
 
 ### **📋 Functional Commands - Real Examples**
 
@@ -418,23 +369,32 @@ gitgov dashboard --json --quiet
 - **r**: Manual refresh, **?**: Help, **q**: Quit
 - **n,s,a,e,c**: Educational shortcuts (show CLI commands)
 
-**Performance Metrics:**
+## Contributing
 
-- ✅ `gitgov init`: Bootstrap <500ms with 3-adapter orchestration
-- ✅ `gitgov indexer`: 146 records in ~50ms
-- ✅ `gitgov diagram`: Generation in <2s
-- ✅ `gitgov task`: Full workflow including pause/resume/cancel/reject/delete (14 subcommands, 46 tests, 102% EARS coverage)
-- ✅ `gitgov cycle`: Planning with bidirectional linking
-- ✅ `gitgov status`: Personal dashboard <100ms, global <200ms with cache
-- ✅ `gitgov dashboard`: TUI launch <500ms, live refresh every 5s
-- ✅ Cache size: ~146 KB for a project
-- ✅ Test suite: 204 tests passing (216 total with 12 skipped)
+Contributions are welcome.
 
-## Complete Documentation
+- For local development, see **Developer Guide** above (pnpm setup, `pnpm verify`, `npm link` workflow).
+- Please open issues for bugs/feature requests and include reproduction steps.
 
-All CLI functionality is defined in specifications.
+## Security
 
-- **Command Reference:** For a full list and roadmap → **[`cli_reference.md`](../blueprints/03_products/cli/cli_reference.md)**
-- **Technical Design:** For internal architecture → **[`cli_tech_design.md`](../blueprints/03_products/cli/cli_tech_design.md)**
-- **Core API:** For the SDK it consumes → **[`core_reference.md`](../blueprints/03_products/core/core_reference.md)**
-- **CLI Designer Agent:** For spec auditing → **[`cli_designer.md`](../blueprints/02_agents/design/cli_designer.md)**
+If you believe you've found a security issue, please report it responsibly via a private channel (or GitHub Security Advisories if enabled) before opening a public issue.
+
+## Community
+
+- GitHub Discussions: questions, ideas, and architecture discussions
+- Discord: community chat
+- Twitter/X: project updates
+
+## License
+
+This package (**@gitgov/cli**) is licensed under the **Apache License 2.0**.
+
+## Links
+
+- GitHub org / monorepo: https://github.com/gitgovernance
+- NPM: https://www.npmjs.com/package/@gitgov/cli
+
+---
+
+Built with ❤️ by the GitGovernance team.

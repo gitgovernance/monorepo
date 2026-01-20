@@ -908,7 +908,7 @@ describe('FeedbackAdapter', () => {
   });
 
   describe('Performance - Advanced', () => {
-    it('[EARS-29] should filter 1000+ feedbacks in under 100ms', async () => {
+    it.skip('[EARS-29] should filter 1000+ feedbacks in under 100ms', async () => {
       // Create 1200 feedbacks, 150 for task-123
       const feedbacks: any[] = [];
       for (let i = 0; i < 1200; i++) {

@@ -150,4 +150,191 @@ describe('createAgentRecord', () => {
       (validateAgentRecordDetailed as jest.Mock).mockReturnValue({ isValid: true, errors: [] });
     });
   });
+
+  describe('AgentRecord Metadata Factory Operations (EARS-AG 1-4)', () => {
+    it('[EARS-AG-1] should preserve metadata field when provided', async () => {
+      const payload: Partial<AgentRecord> = {
+        id: 'agent:with-metadata',
+        engine: { type: 'local' },
+        metadata: {
+          description: 'Test agent with metadata',
+          purpose: 'testing'
+        }
+      };
+
+      const result = createAgentRecord(payload);
+
+      expect(result.metadata).toEqual({
+        description: 'Test agent with metadata',
+        purpose: 'testing'
+      });
+    });
+
+    it('[EARS-AG-2] should preserve complex metadata with nested structures', async () => {
+      const payload: Partial<AgentRecord> = {
+        id: 'agent:complex-metadata',
+        engine: { type: 'api', url: 'https://api.example.com' },
+        metadata: {
+          description: 'Complex agent',
+          config: {
+            timeout: 30000,
+            retries: 3
+          },
+          capabilities: ['search', 'analyze', 'report']
+        }
+      };
+
+      const result = createAgentRecord(payload);
+
+      expect(result.metadata).toEqual({
+        description: 'Complex agent',
+        config: {
+          timeout: 30000,
+          retries: 3
+        },
+        capabilities: ['search', 'analyze', 'report']
+      });
+    });
+
+    it('[EARS-AG-3] should accept AgentRecord without metadata', async () => {
+      const payload: Partial<AgentRecord> = {
+        id: 'agent:no-metadata',
+        engine: { type: 'local' }
+      };
+
+      const result = createAgentRecord(payload);
+
+      expect(result.metadata).toBeUndefined();
+    });
+
+    it('[EARS-AG-4] should accept empty metadata object', async () => {
+      const payload: Partial<AgentRecord> = {
+        id: 'agent:empty-metadata',
+        engine: { type: 'local' },
+        metadata: {}
+      };
+
+      const result = createAgentRecord(payload);
+
+      expect(result.metadata).toEqual({});
+    });
+  });
+
+  describe('AgentRecord Typed Metadata Helpers (EARS-AG 5-9)', () => {
+    it('[EARS-AG-5] should allow AgentRecord with typed description metadata', () => {
+      type AgentMetadata = {
+        description: string;
+        purpose: string;
+        version: string;
+      };
+
+      const agentMetadata: AgentMetadata = {
+        description: 'Code review agent',
+        purpose: 'automated code review',
+        version: '1.0.0'
+      };
+
+      const typedRecord: AgentRecord<AgentMetadata> = {
+        id: 'agent:code-reviewer',
+        engine: { type: 'local', entrypoint: 'src/index.ts' },
+        metadata: agentMetadata
+      };
+
+      const result = createAgentRecord(typedRecord);
+
+      expect(result.metadata).toEqual(agentMetadata);
+      expect(result.metadata?.description).toBe('Code review agent');
+      expect(result.metadata?.version).toBe('1.0.0');
+    });
+
+    it('[EARS-AG-6] should allow AgentRecord with typed config metadata', () => {
+      type ConfigMetadata = {
+        description: string;
+        maxTokens: number;
+        model: string;
+        capabilities: string[];
+      };
+
+      const configMetadata: ConfigMetadata = {
+        description: 'LLM-powered agent',
+        maxTokens: 4096,
+        model: 'claude-3',
+        capabilities: ['code-generation', 'analysis']
+      };
+
+      const typedRecord: AgentRecord<ConfigMetadata> = {
+        id: 'agent:llm-agent',
+        engine: { type: 'api', url: 'https://api.anthropic.com' },
+        metadata: configMetadata
+      };
+
+      const result = createAgentRecord(typedRecord);
+
+      expect(result.metadata).toEqual(configMetadata);
+      expect(result.metadata?.maxTokens).toBe(4096);
+      expect(result.metadata?.capabilities).toContain('code-generation');
+    });
+
+    it('[EARS-AG-7] should allow Partial<AgentRecord<T>> for factory input', () => {
+      type MinimalMetadata = {
+        description: string;
+        owner?: string;
+      };
+
+      const payload: Partial<AgentRecord<MinimalMetadata>> = {
+        id: 'agent:partial-input',
+        engine: { type: 'local' },
+        metadata: { description: 'Partial input agent', owner: 'team-a' }
+      };
+
+      const result = createAgentRecord(payload);
+
+      expect(result.metadata?.description).toBe('Partial input agent');
+      expect(result.metadata?.owner).toBe('team-a');
+    });
+
+    it('[EARS-AG-8] should allow custom metadata types defined by consumers', () => {
+      type CustomAgentContext = {
+        description: string;
+        source: string;
+        priority: number;
+        tags: string[];
+      };
+
+      const customMetadata: CustomAgentContext = {
+        description: 'Custom context agent',
+        source: 'external-system',
+        priority: 1,
+        tags: ['integration', 'external']
+      };
+
+      const typedRecord: AgentRecord<CustomAgentContext> = {
+        id: 'agent:custom-context',
+        engine: { type: 'mcp', url: 'https://mcp.example.com' },
+        metadata: customMetadata
+      };
+
+      const result = createAgentRecord(typedRecord);
+
+      expect(result.metadata).toEqual(customMetadata);
+      expect(result.metadata?.source).toBe('external-system');
+      expect(result.metadata?.priority).toBe(1);
+      expect(result.metadata?.tags).toEqual(['integration', 'external']);
+    });
+
+    it('[EARS-AG-9] should allow AgentRecord<T> without metadata (optional)', () => {
+      type SomeMetadata = {
+        field: string;
+      };
+
+      const typedRecord: AgentRecord<SomeMetadata> = {
+        id: 'agent:no-metadata-typed',
+        engine: { type: 'local' }
+      };
+
+      const result = createAgentRecord(typedRecord);
+
+      expect(result.metadata).toBeUndefined();
+    });
+  });
 });

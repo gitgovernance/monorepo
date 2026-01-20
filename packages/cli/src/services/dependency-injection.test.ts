@@ -95,6 +95,13 @@ jest.doMock('@gitgov/core', () => {
         update: jest.fn().mockResolvedValue(undefined),
         delete: jest.fn().mockResolvedValue(undefined),
         list: jest.fn().mockResolvedValue([])
+      })),
+      FsStore: jest.fn().mockImplementation(() => ({
+        get: jest.fn().mockResolvedValue(null),
+        put: jest.fn().mockResolvedValue(undefined),
+        delete: jest.fn().mockResolvedValue(undefined),
+        exists: jest.fn().mockResolvedValue(false),
+        list: jest.fn().mockResolvedValue([])
       }))
     },
 
@@ -111,10 +118,9 @@ jest.doMock('@gitgov/core', () => {
 
     // 🎭 MOCK ADAPTERS: Mock business logic behavior with valid data
     Adapters: {
-      FileIndexerAdapter: jest.fn().mockImplementation(() => ({
+      IndexerAdapter: jest.fn().mockImplementation(() => ({
         generateIndex: jest.fn().mockResolvedValue({
           recordsProcessed: 146,
-          cacheSize: 146000,
           generatedAt: Date.now()
         }),
         validateIntegrity: jest.fn().mockResolvedValue({
@@ -262,6 +268,34 @@ jest.doMock('@gitgov/core', () => {
         getActiveEventTypes: jest.fn().mockReturnValue(['task.created', 'task.status.changed']),
         getSubscriptionCount: jest.fn().mockReturnValue(3)
       }))
+    },
+
+    // 🎭 MOCK KEY PROVIDER: Mock key storage operations
+    KeyProvider: {
+      FsKeyProvider: jest.fn().mockImplementation(() => ({
+        getPrivateKey: jest.fn().mockResolvedValue('mock-private-key-base64'),
+        setPrivateKey: jest.fn().mockResolvedValue(undefined),
+        hasPrivateKey: jest.fn().mockResolvedValue(true),
+        deletePrivateKey: jest.fn().mockResolvedValue(true)
+      })),
+      EnvKeyProvider: jest.fn().mockImplementation(() => ({
+        getPrivateKey: jest.fn().mockResolvedValue('mock-private-key-base64'),
+        setPrivateKey: jest.fn().mockResolvedValue(undefined),
+        hasPrivateKey: jest.fn().mockResolvedValue(true),
+        deletePrivateKey: jest.fn().mockResolvedValue(true)
+      })),
+      MockKeyProvider: jest.fn().mockImplementation(() => ({
+        getPrivateKey: jest.fn().mockResolvedValue('mock-private-key-base64'),
+        setPrivateKey: jest.fn().mockResolvedValue(undefined),
+        hasPrivateKey: jest.fn().mockResolvedValue(true),
+        deletePrivateKey: jest.fn().mockResolvedValue(true)
+      })),
+      KeyProviderError: class KeyProviderError extends Error {
+        constructor(message: string, public code: string, public actorId?: string) {
+          super(message);
+          this.name = 'KeyProviderError';
+        }
+      }
     },
 
     // 🎭 MOCK GIT: Mock Git operations
@@ -444,8 +478,8 @@ describe('DependencyInjectionService', () => {
     DependencyInjectionService.reset();
   });
 
-  describe('Singleton Pattern', () => {
-    it('[EARS-1] should return same instance across multiple calls', () => {
+  describe('Singleton Pattern (EARS A1-A2)', () => {
+    it('[EARS-A1] should return same instance across multiple calls', () => {
       const instance1 = DependencyInjectionService.getInstance();
       const instance2 = DependencyInjectionService.getInstance();
 
@@ -453,7 +487,7 @@ describe('DependencyInjectionService', () => {
       expect(instance1).toBe(diService);
     });
 
-    it('[EARS-2] should reset singleton instance correctly', () => {
+    it('[EARS-A2] should reset singleton instance correctly', () => {
       const instance1 = DependencyInjectionService.getInstance();
 
       DependencyInjectionService.reset();
@@ -463,8 +497,8 @@ describe('DependencyInjectionService', () => {
     });
   });
 
-  describe('Error Handling', () => {
-    it('[EARS-3] should throw error when project root not found', async () => {
+  describe('Error Handling (EARS E1-E4)', () => {
+    it('[EARS-E1] should throw error when project root not found (IndexerAdapter)', async () => {
       // Mock ConfigManager to return null
       mockedConfigManager.findGitgovRoot.mockReturnValue(null);
       mockedConfigManager.findProjectRoot.mockReturnValue(null);
@@ -490,7 +524,7 @@ describe('DependencyInjectionService', () => {
         .rejects.toThrow("❌ GitGovernance not initialized. Run 'gitgov init' first.");
     });
 
-    it('[EARS-4] should throw error for BacklogAdapter when project root not found', async () => {
+    it('[EARS-E1] should throw error when project root not found (BacklogAdapter)', async () => {
       // Mock ConfigManager to return null
       mockedConfigManager.findGitgovRoot.mockReturnValue(null);
       mockedConfigManager.findProjectRoot.mockReturnValue(null);
@@ -516,18 +550,26 @@ describe('DependencyInjectionService', () => {
     });
   });
 
-  describe('Adapter Creation', () => {
-    it('[EARS-5] should handle adapter creation when project root exists', async () => {
+  describe('Adapter Creation (EARS C1-C8)', () => {
+    it('[EARS-C1] should create IndexerAdapter with all dependencies', async () => {
       mockedConfigManager.findProjectRoot.mockReturnValue(mockProjectRoot);
 
-      // These should not throw for basic functionality
-      await expect(diService.getIndexerAdapter()).resolves.toBeDefined();
-      await expect(diService.getBacklogAdapter()).resolves.toBeDefined();
+      const indexerAdapter = await diService.getIndexerAdapter();
+      expect(indexerAdapter).toBeDefined();
+      expect(indexerAdapter.generateIndex).toBeDefined();
+    });
+
+    it('[EARS-C2] should create BacklogAdapter with all dependencies', async () => {
+      mockedConfigManager.findProjectRoot.mockReturnValue(mockProjectRoot);
+
+      const backlogAdapter = await diService.getBacklogAdapter();
+      expect(backlogAdapter).toBeDefined();
+      expect(backlogAdapter.createTask).toBeDefined();
     });
   });
 
-  describe('Bootstrap and Reindex (EARS-52)', () => {
-    it('[EARS-52] should call generateIndex() after successful bootstrap from gitgov-state', async () => {
+  describe('Bootstrap and Reindex (EARS D1-D2)', () => {
+    it('[EARS-D1] should call generateIndex() after successful bootstrap from gitgov-state', async () => {
       // Mock fs.access to reject (no .gitgov directory exists in filesystem)
       const mockFs = require('fs');
       mockFs.promises.access.mockRejectedValue(new Error('.gitgov directory not found'));
@@ -546,7 +588,7 @@ describe('DependencyInjectionService', () => {
       expect(indexerAdapter.generateIndex).toHaveBeenCalledTimes(1);
     });
 
-    it('[EARS-52] should NOT call generateIndex() when .gitgov/ already exists (no bootstrap)', async () => {
+    it('[EARS-D2] should NOT call generateIndex() when .gitgov/ already exists (no bootstrap)', async () => {
       // Mock fs.access to succeed (directory exists)
       const mockFs = require('fs');
       mockFs.promises.access.mockResolvedValue(undefined);
@@ -566,8 +608,8 @@ describe('DependencyInjectionService', () => {
     });
   });
 
-  describe('Dependency Validation', () => {
-    it('[EARS-6] should return false when project root not found', async () => {
+  describe('Dependency Validation (EARS F1-F2)', () => {
+    it('[EARS-F2] should return false when project root not found', async () => {
       // Mock fs.access to reject (no .gitgov directory)
       const mockFs = require('fs');
       mockFs.promises.access.mockRejectedValue(new Error('Directory not found'));
@@ -577,13 +619,16 @@ describe('DependencyInjectionService', () => {
       expect(isValid).toBe(false);
     });
 
-    it('[EARS-7] should handle validation errors gracefully', async () => {
+    it('[EARS-F1] should return true when .gitgov exists', async () => {
       mockedConfigManager.findProjectRoot.mockReturnValue(mockProjectRoot);
 
-      // Should not throw, should return false on errors
+      // Mock fs.access to succeed (.gitgov exists)
+      const mockFs = require('fs');
+      mockFs.promises.access.mockResolvedValue(undefined);
+
       const isValid = await diService.validateDependencies();
 
-      expect(typeof isValid).toBe('boolean');
+      expect(isValid).toBe(true);
     });
   });
 });

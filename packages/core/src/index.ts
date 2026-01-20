@@ -3,6 +3,8 @@ export * as Config from "./config_manager";
 export * as Crypto from "./crypto";
 export * as Factories from "./factories";
 export * as Git from "./git";
+export * as KeyProvider from "./key_provider";
+export * as FileLister from "./file_lister";
 export * as Lint from "./lint";
 export * as Logger from "./logger";
 export * as Schemas from "./schemas";
@@ -12,6 +14,33 @@ export * as Sync from "./sync";
 export * as Validation from "./validation";
 export * as Records from "./types";
 export * as EventBus from "./event_bus";
+
+// Direct type exports for verbatimModuleSyntax compatibility
+export type {
+  TaskRecord,
+  CycleRecord,
+  ActorRecord,
+  AgentRecord,
+  FeedbackRecord,
+  ExecutionRecord,
+  ChangelogRecord,
+  WorkflowMethodologyRecord,
+} from "./types";
+export type {
+  GitGovTaskRecord,
+  GitGovCycleRecord,
+  GitGovActorRecord,
+  GitGovAgentRecord,
+  GitGovFeedbackRecord,
+  GitGovExecutionRecord,
+  GitGovChangelogRecord,
+  GitGovRecord,
+  GitGovRecordPayload,
+  GitGovRecordType,
+  Signature,
+  EmbeddedMetadataRecord,
+  CustomRecord,
+} from "./types";
 export * as DiagramGenerator from "./diagram_generator";
 
 // Audit modules

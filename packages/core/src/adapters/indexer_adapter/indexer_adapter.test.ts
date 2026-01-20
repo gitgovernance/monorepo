@@ -30,9 +30,10 @@ jest.mock('../../crypto', () => {
 // Mock dependencies
 jest.mock('../../store');
 
-import { FileIndexerAdapter } from './index';
-import type { AllRecords } from './index';
+import { IndexerAdapter } from './index';
+import type { AllRecords, IndexData } from './index';
 import { RecordStore } from '../../store';
+import type { Store } from '../../store/store';
 import { verifySignatures, calculatePayloadChecksum } from '../../crypto';
 import type { GitGovActorRecord, GitGovCycleRecord, GitGovTaskRecord, GitGovExecutionRecord, TaskRecord, ActorRecord, CycleRecord, ExecutionRecord, Signature } from '../../types';
 import type { MetricsAdapter } from '../metrics_adapter';
@@ -176,11 +177,32 @@ async function createMockExecutionRecord(
   return createEmbeddedMetadataRecord(payload, { signatures: [signature] }) as GitGovExecutionRecord;
 }
 
-describe('FileIndexerAdapter', () => {
-  let indexerAdapter: FileIndexerAdapter;
+/**
+ * Creates a mock Store<IndexData> for testing.
+ * Uses in-memory storage to simulate cache operations.
+ */
+function createMockCacheStore(): jest.Mocked<Store<IndexData>> {
+  let cachedData: IndexData | null = null;
+
+  return {
+    get: jest.fn().mockImplementation(async () => cachedData),
+    put: jest.fn().mockImplementation(async (_key: string, data: IndexData) => {
+      cachedData = data;
+    }),
+    delete: jest.fn().mockImplementation(async () => {
+      cachedData = null;
+    }),
+    exists: jest.fn().mockImplementation(async () => cachedData !== null),
+    list: jest.fn().mockResolvedValue([]),
+  } as jest.Mocked<Store<IndexData>>;
+}
+
+describe('IndexerAdapter', () => {
+  let indexerAdapter: IndexerAdapter;
   let mockTaskStore: jest.Mocked<RecordStore<TaskRecord>>;
   let mockCycleStore: jest.Mocked<RecordStore<CycleRecord>>;
   let mockActorStore: jest.Mocked<RecordStore<ActorRecord>>;
+  let mockCacheStore: jest.Mocked<Store<IndexData>>;
   let mockMetricsAdapter: jest.Mocked<Pick<MetricsAdapter, 'getSystemStatus' | 'getProductivityMetrics' | 'getCollaborationMetrics' | 'getTaskHealth'>>;
 
   beforeEach(() => {
@@ -281,13 +303,15 @@ describe('FileIndexerAdapter', () => {
       displayName: 'Test User'
     }));
 
-    indexerAdapter = new FileIndexerAdapter({
+    // Create mock cache store
+    mockCacheStore = createMockCacheStore();
+
+    indexerAdapter = new IndexerAdapter({
       metricsAdapter: mockMetricsAdapter as unknown as MetricsAdapter,
       taskStore: mockTaskStore,
       cycleStore: mockCycleStore,
       actorStore: mockActorStore,
-      cacheStrategy: 'json',
-      cachePath: '/tmp/gitgov-test/test-index.json'
+      cacheStore: mockCacheStore,
     });
   });
 
@@ -341,10 +365,6 @@ describe('FileIndexerAdapter', () => {
       expect(metadata?.recordCounts['feedback']).toBeDefined();
       expect(metadata?.recordCounts['executions']).toBeDefined();
       expect(metadata?.recordCounts['changelogs']).toBeDefined();
-
-      // cacheStrategy should be valid
-      expect(metadata?.cacheStrategy).toBeDefined();
-      expect(['json', 'sqlite', 'dual']).toContain(metadata?.cacheStrategy);
 
       // generationTime should be number >= 0
       expect(metadata?.generationTime).toBeDefined();
@@ -542,21 +562,20 @@ describe('FileIndexerAdapter', () => {
       expect(indexData?.tasks).toHaveLength(1);
       expect(indexData?.cycles).toHaveLength(1);
       expect(indexData?.actors).toHaveLength(1);
-      expect(indexData?.metadata.cacheStrategy).toBe('json');
 
       // Validate performance requirement (EARS-2: < 10ms for cache reads)
       expect(readTime).toBeLessThan(10); // Critical performance requirement
     });
 
     it('[EARS-3] should return null without cache', async () => {
-      // Test with fresh adapter (different cache path)
-      const freshAdapter = new FileIndexerAdapter({
+      // Test with fresh adapter (empty cache store)
+      const emptyCacheStore = createMockCacheStore();
+      const freshAdapter = new IndexerAdapter({
         metricsAdapter: mockMetricsAdapter as unknown as MetricsAdapter,
         taskStore: mockTaskStore,
         cycleStore: mockCycleStore,
         actorStore: mockActorStore,
-        cacheStrategy: 'json',
-        cachePath: '/tmp/gitgov-test/non-existent-index.json'
+        cacheStore: emptyCacheStore,
       });
 
       const result = await freshAdapter.getIndexData();
@@ -639,7 +658,7 @@ describe('FileIndexerAdapter', () => {
   });
 
   describe('Error Handling & Graceful Degradation (EARS 12-14)', () => {
-    it('[EARS-14] should preserve previous cache using backup on generation error', async () => {
+    it('[EARS-14] should handle cacheStore write errors gracefully', async () => {
       // Step 1: Generate initial valid cache
       const report1 = await indexerAdapter.generateIndex();
       expect(report1.success).toBe(true);
@@ -647,46 +666,27 @@ describe('FileIndexerAdapter', () => {
       // Step 2: Verify initial cache exists and is valid
       const initialCache = await indexerAdapter.getIndexData();
       expect(initialCache).not.toBeNull();
-      const initialTaskCount = initialCache?.tasks.length;
 
-      // Step 3: Mock a write error during next generation
-      // We'll mock fs.writeFile to fail after backup is created
-      const fs = require('fs').promises;
-      const originalWriteFile = fs.writeFile;
-      let writeCallCount = 0;
-
-      jest.spyOn(fs, 'writeFile').mockImplementation(async (...args: unknown[]) => {
-        writeCallCount++;
-        const path = args[0] as string;
-        // Fail on cache write, but allow backup operations to succeed
-        if (path.includes('index.json') && !path.includes('backup')) {
-          throw new Error('Simulated write error');
-        }
-        return originalWriteFile(...args);
-      });
+      // Step 3: Mock cacheStore.put to fail on next call
+      mockCacheStore.put.mockRejectedValueOnce(new Error('Simulated write error'));
 
       // Step 4: Attempt to generate index again (should fail)
       const report2 = await indexerAdapter.generateIndex();
       expect(report2.success).toBe(false);
       expect(report2.errors).toContain('Simulated write error');
 
-      // Step 5: CRITICAL - Verify cache was preserved (backup restored original)
-      const preservedCache = await indexerAdapter.getIndexData();
-      expect(preservedCache).not.toBeNull();
-      expect(preservedCache?.tasks.length).toBe(initialTaskCount);
-
-      // Cleanup mock
-      jest.restoreAllMocks();
+      // Step 5: Verify cacheStore.put was called (Store handles atomicity internally)
+      expect(mockCacheStore.put).toHaveBeenCalled();
     });
 
     it('[EARS-12] should handle missing stores with graceful degradation', async () => {
       // Test with minimal dependencies (no optional stores)
-      const minimalAdapter = new FileIndexerAdapter({
+      const minimalCacheStore = createMockCacheStore();
+      const minimalAdapter = new IndexerAdapter({
         metricsAdapter: mockMetricsAdapter as unknown as MetricsAdapter,
         taskStore: mockTaskStore,
         cycleStore: mockCycleStore,
-        cacheStrategy: 'json',
-        cachePath: '/tmp/gitgov-test/minimal-index.json'
+        cacheStore: minimalCacheStore,
       });
 
       const report = await minimalAdapter.generateIndex();
@@ -694,28 +694,30 @@ describe('FileIndexerAdapter', () => {
     });
 
     it('[EARS-13] should return null and log warning for corrupted cache', async () => {
-      // Step 1: Create adapter with corrupted cache path
-      const corruptedAdapter = new FileIndexerAdapter({
+      // Step 1: Create cache store that throws error (simulating corruption)
+      const corruptedCacheStore: jest.Mocked<Store<IndexData>> = {
+        get: jest.fn().mockRejectedValue(new Error('Invalid JSON data')),
+        put: jest.fn().mockResolvedValue(undefined),
+        delete: jest.fn().mockResolvedValue(undefined),
+        exists: jest.fn().mockResolvedValue(true), // Cache exists but is corrupted
+        list: jest.fn().mockResolvedValue([]),
+      };
+
+      const corruptedAdapter = new IndexerAdapter({
         metricsAdapter: mockMetricsAdapter as unknown as MetricsAdapter,
         taskStore: mockTaskStore,
         cycleStore: mockCycleStore,
         actorStore: mockActorStore,
-        cacheStrategy: 'json',
-        cachePath: '/tmp/gitgov-test/corrupted-index.json'
+        cacheStore: corruptedCacheStore,
       });
 
-      // Step 2: Write invalid JSON to simulate corruption
-      const fs = require('fs').promises;
-      await fs.mkdir('/tmp/gitgov-test', { recursive: true });
-      await fs.writeFile('/tmp/gitgov-test/corrupted-index.json', '{invalid json content!!!', 'utf-8');
-
-      // Step 3: Mock console.warn to capture warning messages
+      // Step 2: Mock console.warn to capture warning messages
       const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => { });
 
-      // Step 4: Attempt to read corrupted cache
+      // Step 3: Attempt to read corrupted cache
       const result = await corruptedAdapter.getIndexData();
 
-      // Step 5: Validate EARS-13 behavior
+      // Step 4: Validate EARS-13 behavior
       expect(result).toBeNull(); // Should return null
       expect(consoleWarnSpy).toHaveBeenCalledWith(
         expect.stringContaining("Cache is corrupted or invalid")
@@ -726,7 +728,6 @@ describe('FileIndexerAdapter', () => {
 
       // Cleanup
       consoleWarnSpy.mockRestore();
-      await fs.unlink('/tmp/gitgov-test/corrupted-index.json').catch(() => { });
     });
   });
 
@@ -755,8 +756,6 @@ describe('FileIndexerAdapter', () => {
     it('should provide detailed performance metrics', async () => {
       const report = await indexerAdapter.generateIndex();
 
-      expect(report.cacheSize).toBeGreaterThan(0);
-      expect(report.cacheStrategy).toBe('json');
       expect(report.performance).toHaveProperty('readTime');
       expect(report.performance).toHaveProperty('calculationTime');
       expect(report.performance).toHaveProperty('writeTime');
@@ -1003,10 +1002,10 @@ describe('FileIndexerAdapter', () => {
     });
 
     it('[EARS-19] should calculate lastUpdated directly with task payload and related records', async () => {
-      // Create test task payload (without headers)
+      // Create test task as GitGovTaskRecord (with headers)
       const baseTimestamp = Math.floor(Date.now() / 1000);
 
-      const taskPayload: TaskRecord = {
+      const taskRecord = await createMockTaskRecord({
         id: `${baseTimestamp}-task-direct`,
         title: 'Direct Test Task',
         status: 'active',
@@ -1015,7 +1014,7 @@ describe('FileIndexerAdapter', () => {
         tags: [],
         cycleIds: [],
         references: []
-      };
+      });
 
       // Create related execution with newer timestamp (65 seconds after task creation)
       const relatedExecution = await createMockExecutionRecord({
@@ -1034,7 +1033,7 @@ describe('FileIndexerAdapter', () => {
       };
 
       // Call calculateLastUpdated directly (not via generateIndex)
-      const result = await indexerAdapter.calculateLastUpdated(taskPayload, allRecords);
+      const result = await indexerAdapter.calculateLastUpdated(taskRecord, allRecords);
 
       // Validate structure
       expect(result).toBeDefined();
@@ -1786,13 +1785,13 @@ describe('FileIndexerAdapter', () => {
 
     it('[EARS-76] should gracefully degrade without actorStore', async () => {
       // Create adapter without actorStore
-      const adapterWithoutActorStore = new FileIndexerAdapter({
+      const noActorCacheStore = createMockCacheStore();
+      const adapterWithoutActorStore = new IndexerAdapter({
         metricsAdapter: mockMetricsAdapter as unknown as MetricsAdapter,
         taskStore: mockTaskStore,
         cycleStore: mockCycleStore,
         // No actorStore provided
-        cacheStrategy: 'json',
-        cachePath: '/tmp/gitgov-test/no-actor-index.json'
+        cacheStore: noActorCacheStore,
       });
 
       // Mock verifySignatures to return false (no actorStore means cannot verify)

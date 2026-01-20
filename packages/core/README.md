@@ -309,6 +309,34 @@ npm test -- --watch
 - **DiagramGenerator Module**: Automatic Mermaid diagram generation with deduplication, data quality warnings, and advanced filtering.
 - **Schema Generation Pipeline**: YAML→JSON→TypeScript build-time transformation with automatic synchronization.
 
+## Contributing
+
+Contributions are welcome.
+
+- For local development, see **Testing & Development** above.
+- Please open issues for bugs/feature requests and include reproduction steps.
+- Run `npm test` and `npm run build` before submitting PRs.
+
+## Security
+
+If you believe you've found a security issue, please report it responsibly via a private channel (or GitHub Security Advisories if enabled) before opening a public issue.
+
+## Community
+
+- **GitHub Discussions:** Questions, ideas, and architecture discussions
+- **Discord:** Community chat
+- **Twitter/X:** Project updates
+
+## License
+
+This package (**@gitgov/core**) is licensed under the **Mozilla Public License 2.0 (MPL-2.0)**.
+
+## Links
+
+- **GitHub:** https://github.com/gitgovernance
+- **NPM:** https://www.npmjs.com/package/@gitgov/core
+- **Blueprints:** https://github.com/gitgovernance/monorepo/tree/main/packages/blueprints
+
 ---
 
-**Built with ❤️ by the GitGovernance Team**
+Built with ❤️ by the GitGovernance team.

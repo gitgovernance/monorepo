@@ -532,7 +532,7 @@ export class ProjectAdapter implements IProjectAdapter {
       'cycles',
       'tasks',
       'executions',
-      'feedback',
+      'feedbacks',
       'changelogs',
     ];
 

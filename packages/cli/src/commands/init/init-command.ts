@@ -1,4 +1,4 @@
-import type { Adapters, Records } from '@gitgov/core';
+import type { Adapters, TaskRecord, CycleRecord, ActorRecord, AgentRecord, FeedbackRecord, ExecutionRecord, ChangelogRecord } from '@gitgov/core';
 import { Git } from '@gitgov/core';
 
 import * as pathUtils from 'path';
@@ -115,7 +115,7 @@ export class InitCommand {
     // For init command, ALWAYS create adapter manually using current directory
     // NEVER use DependencyInjectionService which searches for existing .gitgov
     try {
-      const { Adapters, Store, Config, EventBus } = await import('@gitgov/core');
+      const { Adapters, Store, Config, EventBus, KeyProvider } = await import('@gitgov/core');
 
       // For init: Use original directory where user executed command
       const projectRoot = process.env['GITGOV_ORIGINAL_DIR'] || process.cwd();
@@ -123,18 +123,24 @@ export class InitCommand {
 
       const { Factories } = await import('@gitgov/core');
 
-      const taskStore = new Store.RecordStore<Records.TaskRecord>('tasks', Factories.loadTaskRecord, projectRoot);
-      const cycleStore = new Store.RecordStore<Records.CycleRecord>('cycles', Factories.loadCycleRecord, projectRoot);
-      const actorStore = new Store.RecordStore<Records.ActorRecord>('actors', Factories.loadActorRecord, projectRoot);
-      const agentStore = new Store.RecordStore<Records.AgentRecord>('agents', Factories.loadAgentRecord, projectRoot);
-      const feedbackStore = new Store.RecordStore<Records.FeedbackRecord>('feedback', Factories.loadFeedbackRecord, projectRoot);
-      const executionStore = new Store.RecordStore<Records.ExecutionRecord>('executions', Factories.loadExecutionRecord, projectRoot);
-      const changelogStore = new Store.RecordStore<Records.ChangelogRecord>('changelogs', Factories.loadChangelogRecord, projectRoot);
+      // Create KeyProvider for filesystem-based key storage
+      const keyProvider = new KeyProvider.FsKeyProvider({
+        actorsDir: `${projectRoot}/.gitgov/actors`
+      });
+
+      const taskStore = new Store.RecordStore<TaskRecord>('tasks', Factories.loadTaskRecord, projectRoot);
+      const cycleStore = new Store.RecordStore<CycleRecord>('cycles', Factories.loadCycleRecord, projectRoot);
+      const actorStore = new Store.RecordStore<ActorRecord>('actors', Factories.loadActorRecord, projectRoot);
+      const agentStore = new Store.RecordStore<AgentRecord>('agents', Factories.loadAgentRecord, projectRoot);
+      const feedbackStore = new Store.RecordStore<FeedbackRecord>('feedback', Factories.loadFeedbackRecord, projectRoot);
+      const executionStore = new Store.RecordStore<ExecutionRecord>('executions', Factories.loadExecutionRecord, projectRoot);
+      const changelogStore = new Store.RecordStore<ChangelogRecord>('changelogs', Factories.loadChangelogRecord, projectRoot);
 
       // Create adapters
       const identityAdapter = new Adapters.IdentityAdapter({
         actorStore,
         agentStore,
+        keyProvider,
         eventBus
       });
 

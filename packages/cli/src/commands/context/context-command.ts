@@ -39,7 +39,7 @@ export class ContextCommand {
       }
 
       // 2. Get context from ConfigManager
-      const configManager = new Config.ConfigManager();
+      const configManager = Config.createConfigManager();
       const context = await configManager.getActorContext(actorId);
 
       // 3. Output based on format
