@@ -30,7 +30,7 @@ export interface InitCommandOptions {
  */
 export class InitCommand {
   /**
-   * [EARS-1] Main execution method with complete project bootstrap
+   * [EARS-A1] Main execution method with complete project bootstrap
    */
   async execute(options: InitCommandOptions): Promise<void> {
     try {
@@ -51,14 +51,17 @@ export class InitCommand {
       // 5. Delegate ALL business logic to ProjectAdapter
       progressTracker.start("🚀 Initializing GitGovernance Project...\n");
 
-      // Build ProjectInitOptions with only defined values
+      // [EARS-D1] Build ProjectInitOptions handling all flag combinations correctly
+      // [EARS-A2] Root cycle created via ProjectAdapter with project name
       const projectInitOptions: Adapters.ProjectInitOptions = {
         name: completeOptions.name!,
       };
 
+      // [EARS-A3] Process template when specified
       if (completeOptions.template) projectInitOptions.template = completeOptions.template;
       if (completeOptions.actorName) projectInitOptions.actorName = completeOptions.actorName;
       if (completeOptions.actorEmail) projectInitOptions.actorEmail = completeOptions.actorEmail;
+      // [EARS-A4] Configure methodology according to flag
       if (completeOptions.methodology) projectInitOptions.methodology = completeOptions.methodology;
       if (completeOptions.skipValidation) projectInitOptions.skipValidation = completeOptions.skipValidation;
       if (completeOptions.verbose) projectInitOptions.verbose = completeOptions.verbose;
@@ -79,7 +82,8 @@ export class InitCommand {
   // ===== PRIVATE HELPER METHODS =====
 
   /**
-   * [EARS-15] Validates environment before initialization
+   * [EARS-C5] Validates environment before initialization
+   * [EARS-B2] Shows validation errors with warnings and suggestions
    */
   private async validateEnvironment(options: InitCommandOptions): Promise<void> {
     const projectAdapter = await this.getProjectAdapter();
@@ -110,7 +114,7 @@ export class InitCommand {
   }
 
   /**
-   * Gets ProjectAdapter from dependency injection
+   * [EARS-B1] Gets ProjectAdapter for complete orchestration
    */
   private async getProjectAdapter(): Promise<Adapters.ProjectAdapter> {
     // For init command, ALWAYS create adapter manually using current directory
@@ -245,7 +249,8 @@ export class InitCommand {
   }
 
   /**
-   * Creates progress tracker for visual feedback
+   * [EARS-C1] Creates progress tracker for visual feedback with --verbose
+   * [EARS-C3] Respects --quiet flag for scripting
    */
   private createProgressTracker(options: InitCommandOptions) {
     return {
@@ -267,7 +272,8 @@ export class InitCommand {
   }
 
   /**
-   * Gathers missing information through interactive prompts
+   * [EARS-D3] Gathers missing information through interactive prompts
+   * [EARS-A5] Uses intelligent defaults from git config and directory name
    */
   private async gatherMissingInfo(options: InitCommandOptions): Promise<Required<Pick<InitCommandOptions, 'name' | 'actorName'>> & InitCommandOptions> {
     // Get project name
@@ -307,7 +313,9 @@ export class InitCommand {
   }
 
   /**
-   * [EARS-14] Shows success output with visual impact
+   * [EARS-C4] Shows success output with visual impact
+   * [EARS-C2] Handles --json output for automation
+   * [EARS-B4] Shows performance metrics in output
    */
   private showSuccessOutput(result: Adapters.ProjectInitResult, options: InitCommandOptions): void {
     if (options.json) {
@@ -373,7 +381,9 @@ export class InitCommand {
   }
 
   /**
-   * Handles errors with user-friendly messages
+   * [EARS-D2] Handles errors with user-friendly messages and troubleshooting suggestions
+   * [EARS-B3] Captures adapter errors with specific context
+   * [EARS-B5] Shows rollback message when adapter fails
    */
   private handleError(error: unknown, options: InitCommandOptions): void {
     let message: string;
