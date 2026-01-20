@@ -121,7 +121,7 @@ jest.mock('child_process', () => ({
 import { InitCommand } from './init-command';
 import { DependencyInjectionService } from '../../services/dependency-injection';
 import { execSync } from 'child_process';
-import type { Adapters } from '@gitgov/core';
+import type { EnvironmentValidation, ProjectInitResult } from '@gitgov/core';
 
 // Mock console methods to capture output
 const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation();
@@ -132,8 +132,8 @@ const mockProcessExit = jest.spyOn(process, 'exit').mockImplementation();
 describe('InitCommand - Complete Unit Tests', () => {
   let initCommand: InitCommand;
   let mockProjectAdapter: {
-    initializeProject: jest.MockedFunction<(options: any) => Promise<Adapters.ProjectInitResult>>;
-    validateEnvironment: jest.MockedFunction<(path?: string) => Promise<Adapters.EnvironmentValidation>>;
+    initializeProject: jest.MockedFunction<(options: any) => Promise<ProjectInitResult>>;
+    validateEnvironment: jest.MockedFunction<(path?: string) => Promise<EnvironmentValidation>>;
   };
   let mockDependencyService: {
     getProjectAdapter: jest.MockedFunction<() => Promise<typeof mockProjectAdapter>>;
@@ -141,7 +141,7 @@ describe('InitCommand - Complete Unit Tests', () => {
     getBacklogAdapter: jest.MockedFunction<() => Promise<any>>;
   };
 
-  const sampleInitResult: Adapters.ProjectInitResult = {
+  const sampleInitResult: ProjectInitResult = {
     success: true,
     projectId: 'test-project',
     projectName: 'Test Project',
@@ -158,7 +158,7 @@ describe('InitCommand - Complete Unit Tests', () => {
     ]
   };
 
-  const sampleValidEnvironment: Adapters.EnvironmentValidation = {
+  const sampleValidEnvironment: EnvironmentValidation = {
     isValid: true,
     isGitRepo: true,
     hasWritePermissions: true,
@@ -208,8 +208,8 @@ describe('InitCommand - Complete Unit Tests', () => {
     mockProcessExit.mockClear();
   });
 
-  describe('Bootstrap Core Functionality (EARS 1-5)', () => {
-    it('[EARS-1] should create complete gitgov structure and trust root', async () => {
+  describe('Bootstrap Core Functionality (EARS-A: A1-A5)', () => {
+    it('[EARS-A1] should create complete gitgov structure and trust root', async () => {
       await initCommand.execute({
         name: 'Test Project',
         actorName: 'Test User'
@@ -229,7 +229,7 @@ describe('InitCommand - Complete Unit Tests', () => {
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('✅ GitGovernance initialized successfully!'));
     });
 
-    it('[EARS-2] should create root cycle and configure in config.json', async () => {
+    it('[EARS-A2] should create root cycle and configure in config.json', async () => {
       const customResult = {
         ...sampleInitResult,
         projectName: 'My Project',
@@ -252,7 +252,7 @@ describe('InitCommand - Complete Unit Tests', () => {
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('My Project'));
     });
 
-    it('[EARS-3] should process template when specified', async () => {
+    it('[EARS-A3] should process template when specified', async () => {
       const resultWithTemplate = {
         ...sampleInitResult,
         template: {
@@ -278,7 +278,7 @@ describe('InitCommand - Complete Unit Tests', () => {
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('5 tasks created'));
     });
 
-    it('[EARS-4] should configure methodology according to flag', async () => {
+    it('[EARS-A4] should configure methodology according to flag', async () => {
       await initCommand.execute({
         name: 'Scrum Project',
         methodology: 'scrum'
@@ -291,7 +291,7 @@ describe('InitCommand - Complete Unit Tests', () => {
       );
     });
 
-    it('[EARS-5] should use defaults when no options provided', async () => {
+    it('[EARS-A5] should use defaults when no options provided', async () => {
       // This test verifies that defaults are applied correctly
       // For now, we just verify it doesn't crash
       try {
@@ -305,9 +305,9 @@ describe('InitCommand - Complete Unit Tests', () => {
     });
   });
 
-  describe('Environment Validation (EARS 15)', () => {
-    it('[EARS-15] should show user-friendly error when already initialized', async () => {
-      const invalidEnvironment: Adapters.EnvironmentValidation = {
+  describe('Environment Validation (EARS-C5)', () => {
+    it('[EARS-C5] should show user-friendly error when already initialized', async () => {
+      const invalidEnvironment: EnvironmentValidation = {
         isValid: false,
         isGitRepo: true,
         hasWritePermissions: true,
@@ -336,8 +336,8 @@ describe('InitCommand - Complete Unit Tests', () => {
     });
   });
 
-  describe('CLI Consistency & Flags (EARS 11-13)', () => {
-    it('[EARS-11] should show detailed progress with --verbose flag', async () => {
+  describe('CLI Consistency & Flags (EARS-C: C1-C3)', () => {
+    it('[EARS-C1] should show detailed progress with --verbose flag', async () => {
       await initCommand.execute({
         name: 'Test Project',
         verbose: true
@@ -352,7 +352,7 @@ describe('InitCommand - Complete Unit Tests', () => {
       );
     });
 
-    it('[EARS-12] should return structured JSON output with --json flag', async () => {
+    it('[EARS-C2] should return structured JSON output with --json flag', async () => {
       await initCommand.execute({
         name: 'Test Project',
         json: true
@@ -369,7 +369,7 @@ describe('InitCommand - Complete Unit Tests', () => {
       expect(parsedOutput.actor.displayName).toBe('Test User');
     });
 
-    it('[EARS-13] should suppress output with --quiet flag', async () => {
+    it('[EARS-C3] should suppress output with --quiet flag', async () => {
       await initCommand.execute({
         name: 'Test Project',
         quiet: true
@@ -380,8 +380,8 @@ describe('InitCommand - Complete Unit Tests', () => {
     });
   });
 
-  describe('Error Handling & Edge Cases (EARS 10)', () => {
-    it('[EARS-10] should rollback automatically when adapter fails during init', async () => {
+  describe('Error Handling & Edge Cases (EARS-B5)', () => {
+    it('[EARS-B5] should rollback automatically when adapter fails during init', async () => {
       const initError = new Error('IdentityAdapter creation failed');
       mockProjectAdapter.initializeProject.mockRejectedValue(initError);
 
@@ -439,8 +439,8 @@ describe('InitCommand - Complete Unit Tests', () => {
     });
   });
 
-  describe('Interactive Prompts & Defaults', () => {
-    it('[EARS-18] should use interactive prompts and intelligent defaults for UX excellence', async () => {
+  describe('Interactive Prompts & Defaults (EARS-D3)', () => {
+    it('[EARS-D3] should use interactive prompts and intelligent defaults for UX excellence', async () => {
       (execSync as jest.MockedFunction<typeof execSync>).mockReturnValue('John Doe\n');
 
       await initCommand.execute({
@@ -490,8 +490,8 @@ describe('InitCommand - Complete Unit Tests', () => {
     });
   });
 
-  describe('Visual Output & Demo Excellence (EARS 14)', () => {
-    it('[EARS-14] should show visually impactful output when initialization complete', async () => {
+  describe('Visual Output & Demo Excellence (EARS-C4)', () => {
+    it('[EARS-C4] should show visually impactful output when initialization complete', async () => {
       await initCommand.execute({
         name: 'Demo Project',
         actorName: 'Demo User'
@@ -528,8 +528,8 @@ describe('InitCommand - Complete Unit Tests', () => {
     });
   });
 
-  describe('ProjectAdapter Integration (EARS 6-9)', () => {
-    it('[EARS-6] should delegate to ProjectAdapter for complete orchestration', async () => {
+  describe('ProjectAdapter Integration (EARS-B: B1-B4)', () => {
+    it('[EARS-B1] should delegate to ProjectAdapter for complete orchestration', async () => {
       await initCommand.execute({
         name: 'Integration Test',
         actorName: 'Integration User',
@@ -548,8 +548,8 @@ describe('InitCommand - Complete Unit Tests', () => {
       });
     });
 
-    it('[EARS-7] should handle ProjectAdapter validation errors', async () => {
-      const invalidEnvironment: Adapters.EnvironmentValidation = {
+    it('[EARS-B2] should handle ProjectAdapter validation errors', async () => {
+      const invalidEnvironment: EnvironmentValidation = {
         isValid: false,
         isGitRepo: false,
         hasWritePermissions: true,
@@ -568,7 +568,7 @@ describe('InitCommand - Complete Unit Tests', () => {
       expect(mockProcessExit).toHaveBeenCalledWith(1);
     });
 
-    it('[EARS-8] should handle ProjectAdapter initialization failures', async () => {
+    it('[EARS-B3] should handle ProjectAdapter initialization failures', async () => {
       const initError = new Error('BacklogAdapter connection failed');
       mockProjectAdapter.initializeProject.mockRejectedValue(initError);
 
@@ -580,7 +580,7 @@ describe('InitCommand - Complete Unit Tests', () => {
       expect(mockProcessExit).toHaveBeenCalledWith(1);
     });
 
-    it('[EARS-9] should show performance metrics in output', async () => {
+    it('[EARS-B4] should show performance metrics in output', async () => {
       await initCommand.execute({
         name: 'Performance Test'
       });
@@ -614,7 +614,7 @@ describe('InitCommand - Complete Unit Tests', () => {
       );
     });
 
-    it('[EARS-16] should handle all flag combinations correctly', async () => {
+    it('[EARS-D1] should handle all flag combinations correctly', async () => {
       await initCommand.execute({
         name: 'Full Test',
         template: 'enterprise',
@@ -637,8 +637,8 @@ describe('InitCommand - Complete Unit Tests', () => {
     });
   });
 
-  describe('Error Message Specificity', () => {
-    it('[EARS-17] should show user-friendly error messages with troubleshooting suggestions', async () => {
+  describe('Error Message Specificity (EARS-D2)', () => {
+    it('[EARS-D2] should show user-friendly error messages with troubleshooting suggestions', async () => {
       const testCases = [
         {
           error: new Error('Environment validation failed: Not a Git repository'),
