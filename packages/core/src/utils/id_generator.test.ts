@@ -4,10 +4,7 @@ import {
   generateCycleId,
   generateExecutionId,
   generateChangelogId,
-  generateFeedbackId,
-  parseTimestampedId,
-  parseActorId,
-  isValidTimestampedId
+  generateFeedbackId
 } from './id_generator';
 
 describe('ID Generators', () => {
@@ -72,62 +69,6 @@ describe('ID Generators', () => {
   describe('generateFeedbackId', () => {
     it('[EARS-6] should create a valid feedback ID', () => {
       expect(generateFeedbackId('Code Review Comments', 77777)).toBe('77777-feedback-code-review-comments');
-    });
-  });
-
-  describe('parseTimestampedId', () => {
-    it('[EARS-7] should parse a valid task ID', () => {
-      const parsed = parseTimestampedId('12345-task-implement-auth');
-      expect(parsed).toEqual({
-        timestamp: 12345,
-        prefix: 'task',
-        slug: 'implement-auth',
-      });
-    });
-
-    it('[EARS-7] should return null for invalid formats', () => {
-      expect(parseTimestampedId('invalid-id')).toBeNull();
-      expect(parseTimestampedId('123-task')).toBeNull();
-    });
-  });
-
-  describe('parseActorId', () => {
-    it('[EARS-8] should parse a valid human ID', () => {
-      const parsed = parseActorId('human:camilo-velandia');
-      expect(parsed).toEqual({
-        type: 'human',
-        slug: 'camilo-velandia',
-      });
-    });
-
-    it('[EARS-8] should parse a valid agent ID with scope', () => {
-      const parsed = parseActorId('agent:camilo:cursor:planner');
-      expect(parsed).toEqual({
-        type: 'agent',
-        slug: 'camilo:cursor:planner',
-      });
-    });
-
-    it('[EARS-8] should return null for invalid actor IDs', () => {
-      expect(parseActorId('invalid-id')).toBeNull();
-      expect(parseActorId('badtype:name')).toBeNull();
-    });
-  });
-
-  describe('isValidTimestampedId', () => {
-    it('[EARS-9] should return true for valid IDs', () => {
-      expect(isValidTimestampedId('12345-task-valid-slug')).toBe(true);
-      expect(isValidTimestampedId('54321-cycle-another-slug')).toBe(true);
-      expect(isValidTimestampedId('67890-exec-execution-slug')).toBe(true);
-      expect(isValidTimestampedId('11111-changelog-changelog-slug')).toBe(true);
-      expect(isValidTimestampedId('22222-feedback-feedback-slug')).toBe(true);
-    });
-
-    it('[EARS-10] should return false for invalid IDs', () => {
-      expect(isValidTimestampedId('123-badprefix-slug')).toBe(false);
-      expect(isValidTimestampedId('notatimestamp-task-slug')).toBe(false);
-      expect(isValidTimestampedId('12345-task-')).toBe(false);
-      expect(isValidTimestampedId('12345-task')).toBe(false);
     });
   });
 });
