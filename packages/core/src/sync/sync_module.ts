@@ -1,7 +1,7 @@
 import type { GitModule } from "../git";
 import type { ConfigManager } from "../config_manager";
 import type { IIdentityAdapter } from "../adapters/identity_adapter";
-import type { LintModule } from "../lint";
+import type { IFsLintModule } from "../lint";
 import type { IIndexerAdapter } from "../adapters/indexer_adapter";
 import { createLogger } from "../logger/logger";
 import type { EmbeddedMetadataRecord, GitGovRecordPayload } from "../types";
@@ -239,7 +239,7 @@ export class SyncModule {
   private git: GitModule;
   private config: ConfigManager;
   private identity: IIdentityAdapter;
-  private lint: LintModule;
+  private lint: IFsLintModule;
   private indexer: IIndexerAdapter;
 
   /**
