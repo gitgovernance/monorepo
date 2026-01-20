@@ -7,6 +7,7 @@ export * as KeyProvider from "./key_provider";
 export * as FileLister from "./file_lister";
 export * as Lint from "./lint";
 export * as Logger from "./logger";
+export * as ProjectInitializer from "./project_initializer";
 export * as Schemas from "./schemas";
 export * as Store from "./store";
 export * as Sync from "./sync";

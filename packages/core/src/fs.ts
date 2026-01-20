@@ -15,3 +15,6 @@ export type { FsKeyProviderOptions } from './key_provider/fs';
 // FileLister
 export { FsFileLister } from './file_lister/fs';
 export type { FsFileListerOptions } from './file_lister/fs';
+
+// ProjectInitializer
+export { FsProjectInitializer } from './project_initializer/fs';
