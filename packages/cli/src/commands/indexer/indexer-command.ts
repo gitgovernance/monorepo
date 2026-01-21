@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 import { SimpleCommand } from '../../base/base-command';
-import type { Adapters } from '@gitgov/core';
+import type { IIndexerAdapter, IndexGenerationReport, IntegrityReport } from '@gitgov/core';
 import type { BaseCommandOptions } from '../../interfaces/command';
 
 /**
@@ -44,7 +44,7 @@ export class IndexerCommand extends SimpleCommand<IndexerCommandOptions> {
   }
 
   /**
-   * [EARS-1] Main execution method for gitgov indexer command
+   * [EARS-A1] Main execution method for gitgov indexer command
    */
   async execute(options: IndexerCommandOptions): Promise<void> {
     try {
@@ -71,9 +71,9 @@ export class IndexerCommand extends SimpleCommand<IndexerCommandOptions> {
   }
 
   /**
-   * [EARS-2] Validates integrity without regenerating cache
+   * [EARS-A2] Validates integrity without regenerating cache
    */
-  private async executeValidateOnly(indexerAdapter: Adapters.IIndexerAdapter, options: IndexerCommandOptions): Promise<void> {
+  private async executeValidateOnly(indexerAdapter: IIndexerAdapter, options: IndexerCommandOptions): Promise<void> {
     if (!options.quiet) {
       console.log("🔍 Validating cache integrity...");
     }
@@ -83,9 +83,9 @@ export class IndexerCommand extends SimpleCommand<IndexerCommandOptions> {
   }
 
   /**
-   * [EARS-3] Forces cache invalidation before regeneration
+   * [EARS-A3] Forces cache invalidation before regeneration
    */
-  private async executeForceRegeneration(indexerAdapter: Adapters.IIndexerAdapter, options: IndexerCommandOptions): Promise<void> {
+  private async executeForceRegeneration(indexerAdapter: IIndexerAdapter, options: IndexerCommandOptions): Promise<void> {
     if (!options.quiet) {
       console.log("🗑️  Invalidating existing cache...");
     }
@@ -101,9 +101,9 @@ export class IndexerCommand extends SimpleCommand<IndexerCommandOptions> {
   }
 
   /**
-   * [EARS-1] Standard cache generation
+   * [EARS-A1] Standard cache generation
    */
-  private async executeGeneration(indexerAdapter: Adapters.IIndexerAdapter, options: IndexerCommandOptions): Promise<void> {
+  private async executeGeneration(indexerAdapter: IIndexerAdapter, options: IndexerCommandOptions): Promise<void> {
     if (!options.quiet) {
       console.log("🔄 Generating index...");
     }
@@ -113,7 +113,7 @@ export class IndexerCommand extends SimpleCommand<IndexerCommandOptions> {
   }
 
   /**
-   * [EARS-9] Validates flag combinations for conflicts
+   * [EARS-B3] Validates flag combinations for conflicts
    */
   private validateOptions(options: IndexerCommandOptions): void {
     // Check for conflicting flags
@@ -127,9 +127,9 @@ export class IndexerCommand extends SimpleCommand<IndexerCommandOptions> {
   }
 
   /**
-   * [EARS-4] Formats JSON output for generation report
+   * [EARS-A4, EARS-A6] Formats output for generation report (JSON or text)
    */
-  private formatGenerationReport(report: Adapters.IndexGenerationReport, options: IndexerCommandOptions): void {
+  private formatGenerationReport(report: IndexGenerationReport, options: IndexerCommandOptions): void {
     if (options.json) {
       console.log(JSON.stringify({
         success: report.success,
@@ -172,9 +172,9 @@ export class IndexerCommand extends SimpleCommand<IndexerCommandOptions> {
   }
 
   /**
-   * [EARS-4] Formats JSON output for integrity report
+   * [EARS-A4, EARS-E2, EARS-E3] Formats output for integrity report
    */
-  private formatIntegrityReport(report: Adapters.IntegrityReport, options: IndexerCommandOptions): void {
+  private formatIntegrityReport(report: IntegrityReport, options: IndexerCommandOptions): void {
     if (options.json) {
       console.log(JSON.stringify({
         status: report.status,
@@ -223,7 +223,7 @@ export class IndexerCommand extends SimpleCommand<IndexerCommandOptions> {
   }
 
   /**
-   * [EARS-5] Handles errors with user-friendly messages and exit codes
+   * [EARS-A5, EARS-C1, EARS-C2, EARS-D3, EARS-D6, EARS-E4] Handles errors with user-friendly messages
    */
   private handleIndexerError(error: unknown, options: IndexerCommandOptions): void {
     let message: string;
