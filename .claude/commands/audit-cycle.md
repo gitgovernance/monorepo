@@ -1,18 +1,22 @@
-Audita el Cycle **$ARGUMENTS** de la epic store_backends.
+Audita el Cycle de una Epic usando los argumentos: **$ARGUMENTS**
+
+Formato: `/audit-cycle <epic> <cycle_number>`
 
 ## Contexto
 
 - **Agent:** cycle_completion_auditor
 - **Spec:** `packages/blueprints/02_agents/design/cycle_completion_auditor.md`
-- **Roadmap:** `packages/blueprints/03_products/epics/store_backends/roadmap.md`
+- **Roadmap:** `packages/blueprints/03_products/epics/{epic}/roadmap.md`
 
 ## Instrucciones
 
-1. **Lee el roadmap** y ubica la sección `## Cycle {$ARGUMENTS}`
+1. **Parsea los argumentos:** `<epic> <cycle_number>` (ej: `store_backends 4`)
 
-2. **Extrae los Criterios de Aceptación** (lista de checkboxes)
+2. **Lee el roadmap** en `packages/blueprints/03_products/epics/{epic}/roadmap.md` y ubica la sección `## Cycle {cycle_number}`
 
-3. **Verifica cada criterio en el código:**
+3. **Extrae los Criterios de Aceptación** (lista de checkboxes)
+
+4. **Verifica cada criterio en el código:**
 
    | Patrón | Verificación |
    |--------|--------------|
@@ -23,14 +27,16 @@ Audita el Cycle **$ARGUMENTS** de la epic store_backends.
    | `Tests funcionan` | npm test pasa |
    | `CI guardrail` | npm run build pasa |
 
-4. **Genera reporte** con estado de cada criterio y evidencia
+5. **Genera reporte** con estado de cada criterio y evidencia
 
-5. **Actualiza roadmap.md:**
+6. **Pregunta al usuario** si desea actualizar el roadmap.md
+
+7. **Si el usuario confirma**, actualiza roadmap.md:
    - Cambia `[ ]` → `[x]` para criterios cumplidos
    - Actualiza "Última actualización" con fecha y versión
    - Agrega notas para criterios movidos o parciales
 
-6. **Sugiere commit message** para el submodule blueprints
+8. **Sugiere commit message** para el submodule blueprints (NO commitear sin permiso)
 
 ## Output Esperado
 
@@ -50,7 +56,7 @@ Audita el Cycle **$ARGUMENTS** de la epic store_backends.
 ## Ejemplo
 
 ```
-/audit-cycle 4
-/audit-cycle 5
-/audit-cycle "Adapters Phase 2"
+/audit-cycle store_backends 4
+/audit-cycle store_backends 5
+/audit-cycle saas_mvp 1
 ```
