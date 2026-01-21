@@ -97,17 +97,47 @@ export class GitModule {
   }
 
   // ═══════════════════════════════════════════════════════════════════════
+  // PUBLIC COMMAND EXECUTION
+  // ═══════════════════════════════════════════════════════════════════════
+
+  /**
+   * Executes an arbitrary shell command with the repository as working directory.
+   *
+   * This method is intended for advanced use cases where the existing
+   * semantic methods don't cover the needed functionality. Use with caution.
+   *
+   * @param command - The command to execute (e.g., 'git')
+   * @param args - Command arguments
+   * @param options - Optional execution options
+   * @returns Command execution result with exitCode, stdout, stderr
+   *
+   * @example
+   * const result = await gitModule.exec('git', ['diff', '--name-only', 'HEAD~1..HEAD']);
+   * if (result.exitCode === 0) {
+   *   const files = result.stdout.split('\n');
+   * }
+   */
+  async exec(
+    command: string,
+    args: string[],
+    options?: ExecOptions
+  ): Promise<ExecResult> {
+    const cwd = options?.cwd || await this.ensureRepoRoot();
+    return this.execCommand(command, args, { ...options, cwd });
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
   // INITIALIZATION
   // ═══════════════════════════════════════════════════════════════════════
 
   /**
    * Initializes a new Git repository in the current directory
-   * 
+   *
    * Creates the `.git/` directory structure and sets up initial configuration.
    * Useful for testing and for commands that require a fresh repository.
-   * 
+   *
    * @throws GitCommandError if directory is already a Git repository
-   * 
+   *
    * @example
    * await gitModule.init();
    * // Repository initialized with default branch (main or master)
@@ -254,7 +284,7 @@ export class GitModule {
    * Set a Git configuration value.
    * Used for configuring repository settings like user.name, core.editor, etc.
    *
-   * [EARS-51, EARS-52]
+   * [EARS-F1, EARS-F2]
    *
    * @param key - Configuration key (e.g., "user.name", "core.editor")
    * @param value - Configuration value
