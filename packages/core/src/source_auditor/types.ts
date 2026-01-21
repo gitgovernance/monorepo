@@ -6,6 +6,8 @@ import type {
 } from "../pii_detector/types";
 import type { FeedbackRecord } from "../types";
 import type { PiiDetectorModule } from "../pii_detector";
+import type { FileLister } from "../file_lister";
+import type { GitModule } from "../git";
 
 // ============================================================================
 // AUDIT TARGET TYPES
@@ -183,23 +185,31 @@ export interface AuditResult {
 
 /**
  * Injectable dependencies for SourceAuditorModule.
- * ScopeSelector and ScoringEngine are internal.
+ * ScopeSelector and ScoringEngine are internal components.
+ *
+ * Store Backends Epic: FileLister abstracts filesystem operations
+ * for serverless compatibility.
  */
 export interface SourceAuditorDependencies {
   /** PII/secrets detection module */
   piiDetector: PiiDetectorModule;
   /** Waiver reader for loading active waivers */
   waiverReader: IWaiverReader;
+  /** File lister for reading files and listing by glob patterns */
+  fileLister: FileLister;
+  /** Git module for incremental mode (optional - if not provided, changedSince is ignored) */
+  gitModule?: GitModule;
 }
 
 /**
- * File reader interface for dependency injection.
+ * Dependencies for ScopeSelector internal component.
+ * Injected by SourceAuditorModule.
  */
-export interface IFileReader {
-  /** Reads file content as string */
-  readFile(path: string): Promise<string>;
-  /** Checks if file exists */
-  exists(path: string): Promise<boolean>;
+export interface ScopeSelectorDependencies {
+  /** File lister for glob patterns and reading files */
+  fileLister: FileLister;
+  /** Git module for incremental mode (optional) */
+  gitModule?: GitModule;
 }
 
 /**
