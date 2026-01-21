@@ -27,6 +27,32 @@ export type {
   ChangelogRecord,
   WorkflowMethodologyRecord,
 } from "./types";
+
+// Adapter type exports (for CLI usage without namespace confusion)
+export type {
+  IIndexerAdapter,
+  IndexerAdapterDependencies,
+  IndexData,
+  IndexGenerationReport,
+  IntegrityReport,
+  EnrichedTaskRecord,
+  AllRecords,
+  DerivedStates,
+} from "./adapters/indexer_adapter";
+export type { IMetricsAdapter, SystemStatus, ProductivityMetrics, CollaborationMetrics } from "./adapters/metrics_adapter";
+
+// Lint type exports
+export type { IFsLintModule, RecordStores, LintOptions, FsLintOptions, FsFixOptions, FixReport, LintResult, ValidatorType, LintReport } from "./lint";
+
+// EventBus type exports
+export type { ActivityEvent } from "./event_bus";
+
+// ProjectInitializer type exports
+export type { EnvironmentValidation } from "./project_initializer";
+export type { ProjectInitResult } from "./adapters/project_adapter";
+
+// Store type exports
+export { RecordStore } from "./store";
 export type {
   GitGovTaskRecord,
   GitGovCycleRecord,
