@@ -1,6 +1,15 @@
 import * as path from 'path';
-import { Adapters, Config, Store, EventBus, Lint, Git, Sync, SourceAuditor, PiiDetector, Runner, KeyProvider } from '@gitgov/core';
-import type { TaskRecord, CycleRecord, FeedbackRecord, ExecutionRecord, ChangelogRecord, ActorRecord, AgentRecord, GitGovRecordPayload, CustomRecord, GitGovRecord } from '@gitgov/core';
+import { Adapters, Config, Store, EventBus, Lint, Git, Sync, SourceAuditor, PiiDetector, Runner, KeyProvider, Factories } from '@gitgov/core';
+import { FsFileLister } from '@gitgov/core/fs';
+import type {
+  TaskRecord, CycleRecord, FeedbackRecord, ExecutionRecord, ChangelogRecord, ActorRecord, AgentRecord,
+  GitGovRecordPayload, CustomRecord, GitGovRecord,
+  // Adapter types
+  IIndexerAdapter, IndexData, IMetricsAdapter,
+  // Lint types
+  IFsLintModule, RecordStores as LintRecordStores,
+} from '@gitgov/core';
+import { RecordStore } from '@gitgov/core';
 import { spawn } from 'child_process';
 
 /**
@@ -11,9 +20,9 @@ import { spawn } from 'child_process';
  */
 export class DependencyInjectionService {
   private static instance: DependencyInjectionService | null = null;
-  private indexerAdapter: Adapters.IIndexerAdapter | null = null;
+  private indexerAdapter: IIndexerAdapter | null = null;
   private backlogAdapter: Adapters.BacklogAdapter | null = null;
-  private lintModule: Lint.IFsLintModule | null = null;
+  private lintModule: IFsLintModule | null = null;
   private syncModule: Sync.SyncModule | null = null;
   private sourceAuditorModule: SourceAuditor.SourceAuditorModule | null = null;
   private agentRunnerModule: Runner.AgentRunnerModule | null = null;
@@ -21,13 +30,13 @@ export class DependencyInjectionService {
   private gitModule: Git.GitModule | null = null;
   private projectRoot: string | null = null;
   private stores: {
-    taskStore: Store.RecordStore<TaskRecord>;
-    cycleStore: Store.RecordStore<CycleRecord>;
-    feedbackStore: Store.RecordStore<FeedbackRecord>;
-    executionStore: Store.RecordStore<ExecutionRecord>;
-    changelogStore: Store.RecordStore<ChangelogRecord>;
-    actorStore: Store.RecordStore<ActorRecord>;
-    agentStore: Store.RecordStore<AgentRecord>;
+    taskStore: RecordStore<TaskRecord>;
+    cycleStore: RecordStore<CycleRecord>;
+    feedbackStore: RecordStore<FeedbackRecord>;
+    executionStore: RecordStore<ExecutionRecord>;
+    changelogStore: RecordStore<ChangelogRecord>;
+    actorStore: RecordStore<ActorRecord>;
+    agentStore: RecordStore<AgentRecord>;
   } | null = null;
 
   /** [EARS-52] Tracks if bootstrap from gitgov-state occurred, requiring reindex */
@@ -92,20 +101,20 @@ export class DependencyInjectionService {
     this.projectRoot = projectRoot;
 
     this.stores = {
-      taskStore: new Store.RecordStore<TaskRecord>('tasks', Factories.loadTaskRecord, projectRoot),
-      cycleStore: new Store.RecordStore<CycleRecord>('cycles', Factories.loadCycleRecord, projectRoot),
-      feedbackStore: new Store.RecordStore<FeedbackRecord>('feedback', Factories.loadFeedbackRecord, projectRoot),
-      executionStore: new Store.RecordStore<ExecutionRecord>('executions', Factories.loadExecutionRecord, projectRoot),
-      changelogStore: new Store.RecordStore<ChangelogRecord>('changelogs', Factories.loadChangelogRecord, projectRoot),
-      actorStore: new Store.RecordStore<ActorRecord>('actors', Factories.loadActorRecord, projectRoot),
-      agentStore: new Store.RecordStore<AgentRecord>('agents', Factories.loadAgentRecord, projectRoot),
+      taskStore: new RecordStore<TaskRecord>('tasks', Factories.loadTaskRecord, projectRoot),
+      cycleStore: new RecordStore<CycleRecord>('cycles', Factories.loadCycleRecord, projectRoot),
+      feedbackStore: new RecordStore<FeedbackRecord>('feedback', Factories.loadFeedbackRecord, projectRoot),
+      executionStore: new RecordStore<ExecutionRecord>('executions', Factories.loadExecutionRecord, projectRoot),
+      changelogStore: new RecordStore<ChangelogRecord>('changelogs', Factories.loadChangelogRecord, projectRoot),
+      actorStore: new RecordStore<ActorRecord>('actors', Factories.loadActorRecord, projectRoot),
+      agentStore: new RecordStore<AgentRecord>('agents', Factories.loadAgentRecord, projectRoot),
     };
   }
 
   /**
    * Creates and returns IndexerAdapter with all required dependencies
    */
-  async getIndexerAdapter(): Promise<Adapters.IIndexerAdapter> {
+  async getIndexerAdapter(): Promise<IIndexerAdapter> {
     if (this.indexerAdapter) {
       return this.indexerAdapter;
     }
@@ -132,7 +141,7 @@ export class DependencyInjectionService {
       }
 
       // Create FsStore for cache (backend-agnostic abstraction)
-      const cacheStore = new Store.FsStore<Adapters.IndexData>({
+      const cacheStore = new Store.FsStore<IndexData>({
         basePath: path.join(this.projectRoot, '.gitgov'),
       });
 
@@ -348,7 +357,7 @@ export class DependencyInjectionService {
   /**
    * Creates and returns Adapters.MetricsAdapter with all required dependencies
    */
-  async getMetricsAdapter(): Promise<Adapters.MetricsAdapter> {
+  async getMetricsAdapter(): Promise<IMetricsAdapter> {
     try {
       await this.initializeStores();
       if (!this.stores) {
@@ -382,7 +391,7 @@ export class DependencyInjectionService {
    * - LintModule (pure): Core validation logic without I/O
    * - FsLintModule (with I/O): Filesystem wrapper for CLI usage
    */
-  async getLintModule(): Promise<Lint.IFsLintModule> {
+  async getLintModule(): Promise<IFsLintModule> {
     if (this.lintModule) {
       return this.lintModule;
     }
@@ -406,7 +415,7 @@ export class DependencyInjectionService {
         executions: this.stores.executionStore,
         feedbacks: this.stores.feedbackStore,
         changelogs: this.stores.changelogStore,
-      } as unknown as Lint.RecordStores;
+      } as unknown as LintRecordStores;
 
       // Create pure LintModule (no I/O)
       const pureLintModule = new Lint.LintModule({
@@ -455,10 +464,15 @@ export class DependencyInjectionService {
       const feedbackAdapter = await this.getFeedbackAdapter();
       const waiverReader = new SourceAuditor.WaiverReader(feedbackAdapter);
 
-      // Create SourceAuditorModule with dependencies
+      // Create FileLister for filesystem access
+      const projectRoot = await this.getProjectRoot();
+      const fileLister = new FsFileLister({ cwd: projectRoot });
+
+      // Create SourceAuditorModule with dependencies (including FileLister)
       this.sourceAuditorModule = new SourceAuditor.SourceAuditorModule({
         piiDetector,
         waiverReader,
+        fileLister,
       });
 
       return this.sourceAuditorModule;
@@ -585,7 +599,7 @@ export class DependencyInjectionService {
   /**
    * Returns the agent store for listing agents
    */
-  async getAgentStore(): Promise<Store.RecordStore<AgentRecord>> {
+  async getAgentStore(): Promise<RecordStore<AgentRecord>> {
     await this.initializeStores();
     if (!this.stores) {
       throw new Error("Failed to initialize stores");

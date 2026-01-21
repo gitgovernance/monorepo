@@ -105,6 +105,16 @@ jest.doMock('@gitgov/core', () => {
       }))
     },
 
+    // Direct RecordStore export (for verbatimModuleSyntax compatibility)
+    RecordStore: jest.fn().mockImplementation(() => ({
+      create: jest.fn().mockResolvedValue(undefined),
+      read: jest.fn().mockResolvedValue(null),
+      write: jest.fn().mockResolvedValue(undefined),
+      update: jest.fn().mockResolvedValue(undefined),
+      delete: jest.fn().mockResolvedValue(undefined),
+      list: jest.fn().mockResolvedValue([])
+    })),
+
     // 🎭 MOCK FACTORIES: Mock record loaders
     Factories: {
       loadTaskRecord: jest.fn((data) => data),
@@ -426,6 +436,46 @@ jest.doMock('@gitgov/core', () => {
           },
           fixes: []
         })
+      })),
+      FsLintModule: jest.fn().mockImplementation(() => ({
+        lint: jest.fn().mockResolvedValue({
+          summary: {
+            filesChecked: 0,
+            errors: 0,
+            warnings: 0,
+            fixable: 0,
+            executionTime: 0
+          },
+          results: [],
+          metadata: {
+            timestamp: new Date().toISOString(),
+            options: {},
+            version: '1.0.0'
+          }
+        }),
+        lintFile: jest.fn().mockResolvedValue({
+          summary: {
+            filesChecked: 1,
+            errors: 0,
+            warnings: 0,
+            fixable: 0,
+            executionTime: 0
+          },
+          results: [],
+          metadata: {
+            timestamp: new Date().toISOString(),
+            options: {},
+            version: '1.0.0'
+          }
+        }),
+        fix: jest.fn().mockResolvedValue({
+          summary: {
+            fixed: 0,
+            failed: 0,
+            backupsCreated: 0
+          },
+          fixes: []
+        })
       }))
     },
 
@@ -446,6 +496,19 @@ jest.doMock('@gitgov/core', () => {
     }
   };
 });
+
+// Mock @gitgov/core/fs to avoid ESM import.meta issues
+jest.doMock('@gitgov/core/fs', () => ({
+  FsFileLister: jest.fn().mockImplementation(() => ({
+    list: jest.fn().mockResolvedValue([]),
+    read: jest.fn().mockResolvedValue(''),
+    exists: jest.fn().mockResolvedValue(false),
+    stat: jest.fn().mockResolvedValue({ isFile: true, isDirectory: false, size: 0, mtime: new Date() })
+  })),
+  FsStore: jest.fn().mockImplementation(() => ({})),
+  FsKeyProvider: jest.fn().mockImplementation(() => ({})),
+  FsProjectInitializer: jest.fn().mockImplementation(() => ({}))
+}));
 
 import { DependencyInjectionService } from './dependency-injection';
 import { Config } from '@gitgov/core';
@@ -629,6 +692,182 @@ describe('DependencyInjectionService', () => {
       const isValid = await diService.validateDependencies();
 
       expect(isValid).toBe(true);
+    });
+  });
+
+  describe('Store Initialization (EARS B1, B4)', () => {
+    it('[EARS-B1] should create RecordStores when .gitgov exists', async () => {
+      mockedConfigManager.findProjectRoot.mockReturnValue(mockProjectRoot);
+
+      // Mock fs.access to succeed (.gitgov exists)
+      const mockFs = require('fs');
+      mockFs.promises.access.mockResolvedValue(undefined);
+
+      // Getting any adapter triggers initializeStores
+      const indexerAdapter = await diService.getIndexerAdapter();
+
+      // Verify stores were created by checking adapter was created successfully
+      expect(indexerAdapter).toBeDefined();
+
+      // Verify RecordStore constructor was called for each store type
+      const { RecordStore } = require('@gitgov/core');
+      expect(RecordStore).toHaveBeenCalled();
+    });
+
+    it('[EARS-B4] should not reinitialize existing stores on subsequent calls', async () => {
+      mockedConfigManager.findProjectRoot.mockReturnValue(mockProjectRoot);
+
+      const mockFs = require('fs');
+      mockFs.promises.access.mockResolvedValue(undefined);
+
+      // First call - initializes stores
+      await diService.getIndexerAdapter();
+
+      // Clear mock call counts
+      const { RecordStore } = require('@gitgov/core');
+      const callCountAfterFirst = RecordStore.mock.calls.length;
+
+      // Second call - should use cached stores
+      await diService.getBacklogAdapter();
+
+      // RecordStore should not be called again (stores already initialized)
+      // Note: BacklogAdapter may create additional stores, but initializeStores should return early
+      expect(RecordStore.mock.calls.length).toBe(callCountAfterFirst);
+    });
+  });
+
+  describe('Additional Adapter Factories (EARS C3-C8)', () => {
+    it('[EARS-C3] should create MetricsAdapter with stores', async () => {
+      mockedConfigManager.findProjectRoot.mockReturnValue(mockProjectRoot);
+
+      const metricsAdapter = await diService.getMetricsAdapter();
+
+      expect(metricsAdapter).toBeDefined();
+      expect(metricsAdapter.getSystemStatus).toBeDefined();
+    });
+
+    it('[EARS-C4] should create IdentityAdapter with KeyProvider and EventBus', async () => {
+      mockedConfigManager.findProjectRoot.mockReturnValue(mockProjectRoot);
+
+      const identityAdapter = await diService.getIdentityAdapter();
+
+      expect(identityAdapter).toBeDefined();
+      expect(identityAdapter.getActor).toBeDefined();
+
+      // Verify KeyProvider was instantiated
+      const { KeyProvider } = require('@gitgov/core');
+      expect(KeyProvider.FsKeyProvider).toHaveBeenCalled();
+
+      // Verify EventBus was instantiated
+      const { EventBus } = require('@gitgov/core');
+      expect(EventBus.EventBus).toHaveBeenCalled();
+    });
+
+    it('[EARS-C5] should create FeedbackAdapter with IdentityAdapter', async () => {
+      mockedConfigManager.findProjectRoot.mockReturnValue(mockProjectRoot);
+
+      const feedbackAdapter = await diService.getFeedbackAdapter();
+
+      expect(feedbackAdapter).toBeDefined();
+      expect(feedbackAdapter.create).toBeDefined();
+
+      // Verify IdentityAdapter was created as dependency
+      const { Adapters } = require('@gitgov/core');
+      expect(Adapters.IdentityAdapter).toHaveBeenCalled();
+    });
+
+    it('[EARS-C6] should create LintModule with IndexerAdapter', async () => {
+      mockedConfigManager.findProjectRoot.mockReturnValue(mockProjectRoot);
+
+      const lintModule = await diService.getLintModule();
+
+      expect(lintModule).toBeDefined();
+    });
+
+    it('[EARS-C7] should create SyncModule with all dependencies', async () => {
+      mockedConfigManager.findProjectRoot.mockReturnValue(mockProjectRoot);
+
+      const syncModule = await diService.getSyncModule();
+
+      expect(syncModule).toBeDefined();
+      expect(syncModule.pushState).toBeDefined();
+      expect(syncModule.pullState).toBeDefined();
+    });
+
+    it('[EARS-C8] should return cached instance on subsequent calls', async () => {
+      mockedConfigManager.findProjectRoot.mockReturnValue(mockProjectRoot);
+
+      // First call creates new instance
+      const indexer1 = await diService.getIndexerAdapter();
+      const indexer2 = await diService.getIndexerAdapter();
+
+      // Should be same instance (cached)
+      expect(indexer1).toBe(indexer2);
+
+      // Test caching for other adapters
+      const backlog1 = await diService.getBacklogAdapter();
+      const backlog2 = await diService.getBacklogAdapter();
+      expect(backlog1).toBe(backlog2);
+
+      const lint1 = await diService.getLintModule();
+      const lint2 = await diService.getLintModule();
+      expect(lint1).toBe(lint2);
+
+      const sync1 = await diService.getSyncModule();
+      const sync2 = await diService.getSyncModule();
+      expect(sync1).toBe(sync2);
+    });
+  });
+
+  describe('Error Handling Details (EARS E2-E4)', () => {
+    it('[EARS-E2] should throw cache system error with message', async () => {
+      // Mock ConfigManager to return valid path
+      mockedConfigManager.findProjectRoot.mockReturnValue(mockProjectRoot);
+
+      // Mock fs.access to succeed
+      const mockFs = require('fs');
+      mockFs.promises.access.mockResolvedValue(undefined);
+
+      // Mock IndexerAdapter constructor to throw
+      const { Adapters } = require('@gitgov/core');
+      Adapters.IndexerAdapter.mockImplementationOnce(() => {
+        throw new Error('Connection failed');
+      });
+
+      await expect(diService.getIndexerAdapter())
+        .rejects.toThrow('❌ Failed to initialize cache system: Connection failed');
+    });
+
+    it('[EARS-E3] should throw backlog system error with message', async () => {
+      mockedConfigManager.findProjectRoot.mockReturnValue(mockProjectRoot);
+
+      const mockFs = require('fs');
+      mockFs.promises.access.mockResolvedValue(undefined);
+
+      // Mock BacklogAdapter constructor to throw
+      const { Adapters } = require('@gitgov/core');
+      Adapters.BacklogAdapter.mockImplementationOnce(() => {
+        throw new Error('Database connection failed');
+      });
+
+      await expect(diService.getBacklogAdapter())
+        .rejects.toThrow('❌ Failed to initialize backlog system: Database connection failed');
+    });
+
+    it('[EARS-E4] should handle non-Error types gracefully', async () => {
+      mockedConfigManager.findProjectRoot.mockReturnValue(mockProjectRoot);
+
+      const mockFs = require('fs');
+      mockFs.promises.access.mockResolvedValue(undefined);
+
+      // Mock IndexerAdapter to throw a string instead of Error
+      const { Adapters } = require('@gitgov/core');
+      Adapters.IndexerAdapter.mockImplementationOnce(() => {
+        throw 'String error instead of Error object';
+      });
+
+      await expect(diService.getIndexerAdapter())
+        .rejects.toThrow('❌ Unknown error initializing cache system.');
     });
   });
 });
