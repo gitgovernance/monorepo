@@ -16,5 +16,8 @@ export type { FsKeyProviderOptions } from './key_provider/fs';
 export { FsFileLister } from './file_lister/fs';
 export type { FsFileListerOptions } from './file_lister/fs';
 
+// FsLintModule
+export { FsLintModule } from './lint/fs';
+
 // ProjectInitializer
 export { FsProjectInitializer } from './project_initializer/fs';
