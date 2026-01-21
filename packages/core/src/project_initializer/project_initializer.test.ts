@@ -13,7 +13,7 @@
  */
 
 import * as path from 'path';
-import type { IProjectInitializer } from './project_initializer';
+import type { IProjectInitializer, EnvironmentValidation } from './project_initializer';
 import type { GitGovConfig } from '../config_manager';
 
 // Mock ESM helper to avoid import.meta issues in Jest
@@ -109,6 +109,11 @@ class MockProjectInitializer implements IProjectInitializer {
   public writeConfigCalled = false;
   public initializeSessionCalled = false;
   public rollbackCalled = false;
+  public validateEnvironmentCalled = false;
+  public readFileCalled = false;
+  public copyAgentPromptCalled = false;
+  public setupGitIntegrationCalled = false;
+  public getActorPathCalled = false;
 
   public isInitializedReturn = false;
 
@@ -131,6 +136,36 @@ class MockProjectInitializer implements IProjectInitializer {
 
   async rollback(_projectRoot: string): Promise<void> {
     this.rollbackCalled = true;
+  }
+
+  async validateEnvironment(_projectRoot?: string): Promise<EnvironmentValidation> {
+    this.validateEnvironmentCalled = true;
+    return {
+      isValid: true,
+      isGitRepo: true,
+      hasWritePermissions: true,
+      isAlreadyInitialized: false,
+      warnings: [],
+      suggestions: [],
+    };
+  }
+
+  async readFile(_filePath: string): Promise<string> {
+    this.readFileCalled = true;
+    return '';
+  }
+
+  async copyAgentPrompt(_projectRoot: string): Promise<void> {
+    this.copyAgentPromptCalled = true;
+  }
+
+  async setupGitIntegration(_projectRoot: string): Promise<void> {
+    this.setupGitIntegrationCalled = true;
+  }
+
+  getActorPath(_actorId: string, _projectRoot: string): string {
+    this.getActorPathCalled = true;
+    return '/mock/actor/path';
   }
 }
 
