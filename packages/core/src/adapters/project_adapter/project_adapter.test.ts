@@ -8,7 +8,7 @@ import type { BacklogAdapter } from '../backlog_adapter';
 import type { GitModule } from '../../git';
 import type { IProjectInitializer, EnvironmentValidation } from '../../project_initializer';
 import { DetailedValidationError } from '../../validation/common';
-import { promises as fs, existsSync, type PathLike } from 'fs';
+import { promises as fs, existsSync } from 'fs';
 import { createTaskRecord } from '../../factories/task_factory';
 import { createCycleRecord } from '../../factories/cycle_factory';
 
@@ -154,8 +154,7 @@ describe('ProjectAdapter', () => {
       writeConfig: jest.fn().mockResolvedValue(undefined),
       initializeSession: jest.fn().mockResolvedValue(undefined),
       rollback: jest.fn().mockResolvedValue(undefined),
-      validateEnvironment: jest.fn().mockImplementation(async (targetPath?: string): Promise<EnvironmentValidation> => {
-        const projectRoot = targetPath || process.env['GITGOV_ORIGINAL_DIR'] || process.cwd();
+      validateEnvironment: jest.fn().mockImplementation(async (_targetPath?: string): Promise<EnvironmentValidation> => {
         // Default: valid environment (can be overridden per-test)
         return {
           isValid: true,
