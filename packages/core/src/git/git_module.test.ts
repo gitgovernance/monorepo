@@ -209,11 +209,11 @@ describe('GitModule', () => {
   });
 
   // ═══════════════════════════════════════════════════════════════════════
-  // 4.2. Repository Initialization (EARS 19-20)
+  // 4.2. Repository Initialization (EARS-B1 to B2)
   // ═══════════════════════════════════════════════════════════════════════
 
-  describe('4.2. Repository Initialization (EARS 19-20)', () => {
-    it('[EARS-19] should initialize new git repository', async () => {
+  describe('4.2. Repository Initialization (EARS-B1 to B2)', () => {
+    it('[EARS-B1] should initialize new git repository', async () => {
       // Create a fresh directory without Git
       const freshDir = path.join(os.tmpdir(), `gitgov-fresh-${Date.now()}-${Math.random().toString(36).slice(2)}`);
       fs.mkdirSync(freshDir, { recursive: true });
@@ -239,7 +239,7 @@ describe('GitModule', () => {
       }
     });
 
-    it('[EARS-20] should throw GitCommandError if already initialized', async () => {
+    it('[EARS-B2] should throw GitCommandError if already initialized', async () => {
       // tempRepo is already initialized by createTempRepo()
       await expect(gitModule.init()).rejects.toThrow(GitCommandError);
       await expect(gitModule.init()).rejects.toThrow('Directory is already a Git repository');
@@ -247,16 +247,16 @@ describe('GitModule', () => {
   });
 
   // ═══════════════════════════════════════════════════════════════════════
-  // 4.1. Read Operations (EARS 1-18, 45-50)
+  // 4.1. Read Operations (EARS-A1 to A24)
   // ═══════════════════════════════════════════════════════════════════════
 
-  describe('4.1. Read Operations (EARS 1-18, 45-50)', () => {
-    it('[EARS-1] should return repository root path', async () => {
+  describe('4.1. Read Operations (EARS-A1 to A24)', () => {
+    it('[EARS-A1] should return repository root path', async () => {
       const repoRoot = await gitModule.getRepoRoot();
       expect(repoRoot).toBe(tempRepo);
     });
 
-    it('[EARS-1] should auto-detect repo root if not provided', async () => {
+    it('[EARS-A1] should auto-detect repo root if not provided', async () => {
       const gitModuleNoRoot = new GitModule({
         execCommand: createExecCommand(tempRepo),
       });
@@ -265,13 +265,13 @@ describe('GitModule', () => {
       expect(repoRoot).toBe(tempRepo);
     });
 
-    it('[EARS-2] should return current branch name', async () => {
+    it('[EARS-A2] should return current branch name', async () => {
       // Repo already has initial commit from createTempRepo()
       const branch = await gitModule.getCurrentBranch();
       expect(branch).toMatch(/^(main|master)$/);
     });
 
-    it('[EARS-47] should return commit hash for HEAD', async () => {
+    it('[EARS-A23] should return commit hash for HEAD', async () => {
       // Get HEAD hash
       const headHash = await gitModule.getCommitHash("HEAD");
 
@@ -284,7 +284,7 @@ describe('GitModule', () => {
       expect(headHash).toBe(branchHash);
     });
 
-    it('[EARS-47] should return commit hash for branch name', async () => {
+    it('[EARS-A23] should return commit hash for branch name', async () => {
       // Create a commit
       const testFile = path.join(tempRepo, 'test.txt');
       fs.writeFileSync(testFile, 'test content');
@@ -300,7 +300,7 @@ describe('GitModule', () => {
       expect(branchHash).toMatch(/^[0-9a-f]{40}$/);
     });
 
-    it('[EARS-47] should return commit hash for relative refs', async () => {
+    it('[EARS-A23] should return commit hash for relative refs', async () => {
       // Create two commits
       fs.writeFileSync(path.join(tempRepo, 'file1.txt'), 'content 1');
       await gitModule.add(['file1.txt']);
@@ -318,12 +318,12 @@ describe('GitModule', () => {
       expect(parentHash).toMatch(/^[0-9a-f]{40}$/);
     });
 
-    it('[EARS-48] should throw GitCommandError if ref does not exist', async () => {
+    it('[EARS-A24] should throw GitCommandError if ref does not exist', async () => {
       await expect(gitModule.getCommitHash("non-existent-branch")).rejects.toThrow();
       await expect(gitModule.getCommitHash("non-existent-branch")).rejects.toThrow(/Failed to get commit hash for ref "non-existent-branch"/);
     });
 
-    it('[EARS-49] should return staged files', async () => {
+    it('[EARS-A19] should return staged files', async () => {
       // Create and stage some files
       const file1 = path.join(tempRepo, "staged-file-1.txt");
       const file2 = path.join(tempRepo, "staged-file-2.txt");
@@ -338,12 +338,12 @@ describe('GitModule', () => {
       expect(stagedFiles.length).toBe(2);
     });
 
-    it('[EARS-50] should return empty array if no staged files', async () => {
+    it('[EARS-A20] should return empty array if no staged files', async () => {
       const stagedFiles = await gitModule.getStagedFiles();
       expect(stagedFiles).toEqual([]);
     });
 
-    it('[EARS-3] should return merge base commit hash', async () => {
+    it('[EARS-A3] should return merge base commit hash', async () => {
       // Initial commit already exists from createTempRepo()
 
       // Create feature branch
@@ -364,7 +364,7 @@ describe('GitModule', () => {
       expect(mergeBase).toMatch(/^[a-f0-9]{40}$/);
     });
 
-    it('[EARS-4] should throw BranchNotFoundError if branch does not exist', async () => {
+    it('[EARS-A4] should throw BranchNotFoundError if branch does not exist', async () => {
       // Create initial commit
       await execAsync('echo "test" > file.txt', { cwd: tempRepo });
       await execAsync('git add .', { cwd: tempRepo });
@@ -377,7 +377,7 @@ describe('GitModule', () => {
       ).rejects.toThrow(BranchNotFoundError);
     });
 
-    it('[EARS-5] should return list of changed files with status', async () => {
+    it('[EARS-A5] should return list of changed files with status', async () => {
       // Create initial commit
       await execAsync('echo "v1" > file1.txt', { cwd: tempRepo });
       await execAsync('echo "v1" > file2.txt', { cwd: tempRepo });
@@ -397,7 +397,7 @@ describe('GitModule', () => {
       expect(changes.some(c => c.file === 'file3.txt' && c.status === 'A')).toBe(true);
     });
 
-    it('[EARS-6] should return file content from commit', async () => {
+    it('[EARS-A6] should return file content from commit', async () => {
       const content = 'Hello from commit!';
       await execAsync(`echo "${content}" > file.txt`, { cwd: tempRepo });
       await execAsync('git add .', { cwd: tempRepo });
@@ -409,7 +409,7 @@ describe('GitModule', () => {
       expect(fileContent.trim()).toBe(content);
     });
 
-    it('[EARS-7] should throw FileNotFoundError if file does not exist in commit', async () => {
+    it('[EARS-A7] should throw FileNotFoundError if file does not exist in commit', async () => {
       await execAsync('echo "test" > file.txt', { cwd: tempRepo });
       await execAsync('git add .', { cwd: tempRepo });
       await execAsync('git commit -m "Initial commit"', { cwd: tempRepo });
@@ -421,7 +421,7 @@ describe('GitModule', () => {
       ).rejects.toThrow(FileNotFoundError);
     });
 
-    it('[EARS-8] should return commit history ordered from newest to oldest', async () => {
+    it('[EARS-A8] should return commit history ordered from newest to oldest', async () => {
       // Create 3 additional commits (tempRepo already has "Initial commit")
       for (let i = 1; i <= 3; i++) {
         await execAsync(`echo "v${i}" > file.txt`, { cwd: tempRepo });
@@ -440,7 +440,7 @@ describe('GitModule', () => {
       expect(history[3]?.message).toBe('Initial commit');
     });
 
-    it('[EARS-8] should respect maxCount option when specified', async () => {
+    it('[EARS-A8] should respect maxCount option when specified', async () => {
       // Create 5 additional commits
       for (let i = 1; i <= 5; i++) {
         await execAsync(`echo "v${i}" > file.txt`, { cwd: tempRepo });
@@ -457,7 +457,7 @@ describe('GitModule', () => {
       expect(history[1]?.message).toBe('Commit 4');
     });
 
-    it('[EARS-9] should return commit history in specified range', async () => {
+    it('[EARS-A9] should return commit history in specified range', async () => {
       // Create 5 commits
       const hashes: string[] = [];
       for (let i = 1; i <= 5; i++) {
@@ -476,7 +476,7 @@ describe('GitModule', () => {
       expect(history[1]?.message).toBe('Commit 3');
     });
 
-    it('[EARS-10] should throw GitCommandError if commit does not exist in range', async () => {
+    it('[EARS-A10] should throw GitCommandError if commit does not exist in range', async () => {
       await execAsync('echo "test" > file.txt', { cwd: tempRepo });
       await execAsync('git add .', { cwd: tempRepo });
       await execAsync('git commit -m "Initial commit"', { cwd: tempRepo });
@@ -486,7 +486,7 @@ describe('GitModule', () => {
       ).rejects.toThrow(GitCommandError);
     });
 
-    it('[EARS-11] should return full commit message', async () => {
+    it('[EARS-A11] should return full commit message', async () => {
       const message = 'feat: add new feature\n\nThis is a detailed description.';
       await execAsync('echo "test" > file.txt', { cwd: tempRepo });
       await execAsync('git add .', { cwd: tempRepo });
@@ -498,13 +498,13 @@ describe('GitModule', () => {
       expect(commitMessage).toContain('feat: add new feature');
     });
 
-    it('[EARS-12] should throw GitCommandError if commit does not exist', async () => {
+    it('[EARS-A12] should throw GitCommandError if commit does not exist', async () => {
       await expect(
         gitModule.getCommitMessage('invalid-hash')
       ).rejects.toThrow(GitCommandError);
     });
 
-    it('[EARS-13] should correctly verify branch existence', async () => {
+    it('[EARS-A13] should correctly verify branch existence', async () => {
       // Create initial commit
       await execAsync('echo "test" > file.txt', { cwd: tempRepo });
       await execAsync('git add .', { cwd: tempRepo });
@@ -516,7 +516,7 @@ describe('GitModule', () => {
       expect(await gitModule.branchExists('non-existent')).toBe(false);
     });
 
-    it('[EARS-45] should list remote branches correctly', async () => {
+    it('[EARS-A21] should list remote branches correctly', async () => {
       // Create remote repo (empty, no initial commit)
       const remoteRepo = await createRemoteRepo();
       try {
@@ -559,7 +559,7 @@ describe('GitModule', () => {
       }
     });
 
-    it('[EARS-46] should return empty array for non-existent remote', async () => {
+    it('[EARS-A22] should return empty array for non-existent remote', async () => {
       // Create initial commit (needed for repo setup)
       await execAsync('echo "test" > file.txt', { cwd: tempRepo });
       await execAsync('git add .', { cwd: tempRepo });
@@ -570,7 +570,7 @@ describe('GitModule', () => {
       expect(nonExistentRemote).toEqual([]);
     });
 
-    it('[EARS-14] should return tracking remote if configured', async () => {
+    it('[EARS-A14] should return tracking remote if configured', async () => {
       // Create initial commit
       await execAsync('echo "test" > file.txt', { cwd: tempRepo });
       await execAsync('git add .', { cwd: tempRepo });
@@ -591,7 +591,7 @@ describe('GitModule', () => {
       }
     });
 
-    it('[EARS-15] should return null if no tracking configured', async () => {
+    it('[EARS-A15] should return null if no tracking configured', async () => {
       // Create initial commit
       await execAsync('echo "test" > file.txt', { cwd: tempRepo });
       await execAsync('git add .', { cwd: tempRepo });
@@ -603,13 +603,13 @@ describe('GitModule', () => {
       expect(remote).toBeNull();
     });
 
-    it('[EARS-16] should throw BranchNotFoundError if branch does not exist', async () => {
+    it('[EARS-A16] should throw BranchNotFoundError if branch does not exist', async () => {
       await expect(
         gitModule.getBranchRemote('non-existent')
       ).rejects.toThrow(BranchNotFoundError);
     });
 
-    it('[EARS-17] should return conflicted files during rebase/merge', async () => {
+    it('[EARS-A17] should return conflicted files during rebase/merge', async () => {
       // Create initial commit
       await execAsync('echo "v1" > file.txt', { cwd: tempRepo });
       await execAsync('git add .', { cwd: tempRepo });
@@ -644,7 +644,7 @@ describe('GitModule', () => {
       await execAsync('git rebase --abort', { cwd: tempRepo });
     });
 
-    it('[EARS-18] should throw GitCommandError if no rebase/merge in progress', async () => {
+    it('[EARS-A18] should throw GitCommandError if no rebase/merge in progress', async () => {
       // When no conflict, getConflictedFiles should return empty array
       const conflicts = await gitModule.getConflictedFiles();
       expect(conflicts).toEqual([]);
@@ -652,11 +652,11 @@ describe('GitModule', () => {
   });
 
   // ═══════════════════════════════════════════════════════════════════════
-  // 4.3. Write Operations (EARS 21-30)
+  // 4.3. Write Operations (EARS-C1 to C10)
   // ═══════════════════════════════════════════════════════════════════════
 
-  describe('4.3. Write Operations (EARS 21-30)', () => {
-    it('[EARS-21] should checkout to specified branch', async () => {
+  describe('4.3. Write Operations (EARS-C1 to C10)', () => {
+    it('[EARS-C1] should checkout to specified branch', async () => {
       // Create initial commit
       await execAsync('echo "test" > file.txt', { cwd: tempRepo });
       await execAsync('git add .', { cwd: tempRepo });
@@ -675,13 +675,13 @@ describe('GitModule', () => {
       expect(newBranch).toBe('feature');
     });
 
-    it('[EARS-22] should throw BranchNotFoundError if branch does not exist', async () => {
+    it('[EARS-C2] should throw BranchNotFoundError if branch does not exist', async () => {
       await expect(
         gitModule.checkoutBranch('non-existent')
       ).rejects.toThrow(BranchNotFoundError);
     });
 
-    it('[EARS-23] should create orphan branch and checkout to it', async () => {
+    it('[EARS-C3] should create orphan branch and checkout to it', async () => {
       // Create initial commit on main
       await execAsync('echo "test" > file.txt', { cwd: tempRepo });
       await execAsync('git add .', { cwd: tempRepo });
@@ -698,7 +698,7 @@ describe('GitModule', () => {
       expect(history).toEqual([]);
     });
 
-    it('[EARS-24] should throw GitCommandError if orphan branch already exists', async () => {
+    it('[EARS-C4] should throw GitCommandError if orphan branch already exists', async () => {
       // Create initial commit
       await execAsync('echo "test" > file.txt', { cwd: tempRepo });
       await execAsync('git add .', { cwd: tempRepo });
@@ -720,7 +720,7 @@ describe('GitModule', () => {
       expect(await gitModule.getCurrentBranch()).toBe('orphan-2');
     });
 
-    it('[EARS-25] should fetch changes from remote', async () => {
+    it('[EARS-C5] should fetch changes from remote', async () => {
       // Create remote repo (empty, no initial commit)
       const remoteRepo = await createRemoteRepo();
       try {
@@ -748,7 +748,7 @@ describe('GitModule', () => {
       }
     });
 
-    it('[EARS-26] should pull and merge remote branch successfully', async () => {
+    it('[EARS-C6] should pull and merge remote branch successfully', async () => {
       // Create remote repo (empty, no initial commit)
       const remoteRepo = await createRemoteRepo();
       try {
@@ -781,7 +781,7 @@ describe('GitModule', () => {
       }
     });
 
-    it('[EARS-27] should throw MergeConflictError if merge conflicts occur', async () => {
+    it('[EARS-C7] should throw MergeConflictError if merge conflicts occur', async () => {
       // Create remote repo (empty, no initial commit)
       const remoteRepo = await createRemoteRepo();
       try {
@@ -815,7 +815,7 @@ describe('GitModule', () => {
       }
     });
 
-    it('[EARS-28] should pull and rebase remote branch successfully', async () => {
+    it('[EARS-C8] should pull and rebase remote branch successfully', async () => {
       // Create remote repo (empty, no initial commit)
       const remoteRepo = await createRemoteRepo();
       try {
@@ -849,7 +849,7 @@ describe('GitModule', () => {
       }
     });
 
-    it('[EARS-29] should throw RebaseConflictError if rebase conflicts occur', async () => {
+    it('[EARS-C9] should throw RebaseConflictError if rebase conflicts occur', async () => {
       // Create remote repo (empty, no initial commit)
       const remoteRepo = await createRemoteRepo();
       try {
@@ -883,7 +883,7 @@ describe('GitModule', () => {
       }
     });
 
-    it('[EARS-30] should checkout files from source branch to staging area', async () => {
+    it('[EARS-C10] should checkout files from source branch to staging area', async () => {
       // Create initial commit
       await execAsync('echo "v1" > file.txt', { cwd: tempRepo });
       await execAsync('git add .', { cwd: tempRepo });
@@ -909,11 +909,11 @@ describe('GitModule', () => {
   });
 
   // ═══════════════════════════════════════════════════════════════════════
-  // 4.4. Commit and Push Operations (EARS 31-38)
+  // 4.4. Commit and Push Operations (EARS-D1 to D8)
   // ═══════════════════════════════════════════════════════════════════════
 
-  describe('4.4. Commit and Push Operations (EARS 31-38)', () => {
-    it('[EARS-31] should add files to staging area', async () => {
+  describe('4.4. Commit and Push Operations (EARS-D1 to D8)', () => {
+    it('[EARS-D1] should add files to staging area', async () => {
       await execAsync('echo "test" > file.txt', { cwd: tempRepo });
       await gitModule.add(['file.txt']);
 
@@ -921,7 +921,7 @@ describe('GitModule', () => {
       expect(stdout).toContain('A  file.txt');
     });
 
-    it('[EARS-32] should create commit and return hash', async () => {
+    it('[EARS-D2] should create commit and return hash', async () => {
       await execAsync('echo "test" > file.txt', { cwd: tempRepo });
       await gitModule.add(['file.txt']);
 
@@ -933,7 +933,7 @@ describe('GitModule', () => {
       expect(message).toBe('Initial commit');
     });
 
-    it('[EARS-33] should use specified author in commit', async () => {
+    it('[EARS-D3] should use specified author in commit', async () => {
       await execAsync('echo "test" > file.txt', { cwd: tempRepo });
       await gitModule.add(['file.txt']);
 
@@ -944,7 +944,7 @@ describe('GitModule', () => {
       expect(stdout.trim()).toBe('Custom Author <custom@example.com>');
     });
 
-    it('[EARS-34] should create empty commit and return hash', async () => {
+    it('[EARS-D4] should create empty commit and return hash', async () => {
       const hash = await gitModule.commitAllowEmpty('Empty commit');
 
       expect(hash).toMatch(/^[a-f0-9]{40}$/);
@@ -953,7 +953,7 @@ describe('GitModule', () => {
       expect(message).toBe('Empty commit');
     });
 
-    it('[EARS-35] should push branch to remote', async () => {
+    it('[EARS-D5] should push branch to remote', async () => {
       // Create remote repo (empty, no initial commit)
       const remoteRepo = await createRemoteRepo();
       try {
@@ -977,7 +977,7 @@ describe('GitModule', () => {
       }
     });
 
-    it('[EARS-36] should push branch and configure tracking', async () => {
+    it('[EARS-D6] should push branch and configure tracking', async () => {
       // Create remote repo (empty, no initial commit)
       const remoteRepo = await createRemoteRepo();
       try {
@@ -1001,7 +1001,7 @@ describe('GitModule', () => {
       }
     });
 
-    it('[EARS-37] should configure branch tracking', async () => {
+    it('[EARS-D7] should configure branch tracking', async () => {
       // Create remote repo (empty, no initial commit)
       const remoteRepo = await createRemoteRepo();
       try {
@@ -1031,7 +1031,7 @@ describe('GitModule', () => {
       }
     });
 
-    it('[EARS-38] should throw BranchNotFoundError if branch does not exist', async () => {
+    it('[EARS-D8] should throw BranchNotFoundError if branch does not exist', async () => {
       await expect(
         gitModule.setUpstream('non-existent', 'origin', 'main')
       ).rejects.toThrow(BranchNotFoundError);
@@ -1039,12 +1039,12 @@ describe('GitModule', () => {
   });
 
   // ═══════════════════════════════════════════════════════════════════════
-  // 4.5. Rebase Operations and Utilities (EARS 39-44)
+  // 4.5. Rebase Operations and Utilities (EARS-E1 to E6)
   // ═══════════════════════════════════════════════════════════════════════
 
-  describe('4.5. Rebase Operations and Utilities (EARS 39-44)', () => {
-    it('[EARS-39] should continue rebase and return commit hash', async () => {
-      // Use same approach as EARS-17 which works reliably
+  describe('4.5. Rebase Operations and Utilities (EARS-E1 to E6)', () => {
+    it('[EARS-E1] should continue rebase and return commit hash', async () => {
+      // Use same approach as EARS-A17 which works reliably
       // Create initial commit on main
       await execAsync('echo "base" > file.txt', { cwd: tempRepo });
       await execAsync('git add .', { cwd: tempRepo });
@@ -1083,13 +1083,13 @@ describe('GitModule', () => {
       expect(commitHash).toMatch(/^[a-f0-9]{40}$/);
     });
 
-    it('[EARS-40] should throw RebaseNotInProgressError if no rebase in progress', async () => {
+    it('[EARS-E2] should throw RebaseNotInProgressError if no rebase in progress', async () => {
       await expect(
         gitModule.rebaseContinue()
       ).rejects.toThrow(RebaseNotInProgressError);
     });
 
-    it('[EARS-41] should abort rebase and restore previous state', async () => {
+    it('[EARS-E3] should abort rebase and restore previous state', async () => {
       // Create initial commit
       await execAsync('echo "v1" > file.txt', { cwd: tempRepo });
       await execAsync('git add .', { cwd: tempRepo });
@@ -1131,13 +1131,13 @@ describe('GitModule', () => {
       expect(afterAbortHash).toBe(beforeRebaseHash);
     });
 
-    it('[EARS-42] should throw RebaseNotInProgressError if no rebase in progress', async () => {
+    it('[EARS-E4] should throw RebaseNotInProgressError if no rebase in progress', async () => {
       await expect(
         gitModule.rebaseAbort()
       ).rejects.toThrow(RebaseNotInProgressError);
     });
 
-    it('[EARS-43] should detect uncommitted changes correctly', async () => {
+    it('[EARS-E5] should detect uncommitted changes correctly', async () => {
       // No changes initially
       expect(await gitModule.hasUncommittedChanges()).toBe(false);
 
@@ -1154,7 +1154,7 @@ describe('GitModule', () => {
       expect(await gitModule.hasUncommittedChanges()).toBe(false);
     });
 
-    it('[EARS-43] should respect pathFilter when specified', async () => {
+    it('[EARS-E5] should respect pathFilter when specified', async () => {
       // Create file in root
       await execAsync('echo "test" > root.txt', { cwd: tempRepo });
 
@@ -1176,7 +1176,7 @@ describe('GitModule', () => {
       expect(await gitModule.hasUncommittedChanges('root.txt')).toBe(false);
     });
 
-    it('[EARS-44] should detect rebase in progress correctly', async () => {
+    it('[EARS-E6] should detect rebase in progress correctly', async () => {
       // Initially no rebase
       expect(await gitModule.isRebaseInProgress()).toBe(false);
 
@@ -1215,11 +1215,11 @@ describe('GitModule', () => {
   });
 
   // ══════════════════════════════════════════════════════════
-  // 4.6. Configuration Operations (EARS 51-52)
+  // 4.6. Configuration Operations (EARS-F1 to F2)
   // ══════════════════════════════════════════════════════════
 
-  describe("4.6. Configuration Operations (EARS 51-52)", () => {
-    it("[EARS-51] should set git config value in local scope (default)", async () => {
+  describe("4.6. Configuration Operations (EARS-F1 to F2)", () => {
+    it("[EARS-F1] should set git config value in local scope (default)", async () => {
       const repoPath = await createTempRepo();
       const git = new GitModule({ repoRoot: repoPath, execCommand: createExecCommand(repoPath) });
 
@@ -1231,7 +1231,7 @@ describe('GitModule', () => {
       expect(result.stdout.trim()).toBe("test@example.com");
     });
 
-    it("[EARS-51] should set git config for core.editor", async () => {
+    it("[EARS-F1] should set git config for core.editor", async () => {
       const repoPath = await createTempRepo();
       const git = new GitModule({ repoRoot: repoPath, execCommand: createExecCommand(repoPath) });
 
@@ -1243,7 +1243,7 @@ describe('GitModule', () => {
       expect(result.stdout.trim()).toBe("vim");
     });
 
-    it("[EARS-51] should set git config with explicit local scope", async () => {
+    it("[EARS-F1] should set git config with explicit local scope", async () => {
       const repoPath = await createTempRepo();
       const git = new GitModule({ repoRoot: repoPath, execCommand: createExecCommand(repoPath) });
 
@@ -1255,7 +1255,7 @@ describe('GitModule', () => {
       expect(result.stdout.trim()).toBe("Explicit Local User");
     });
 
-    it("[EARS-52] should throw GitCommandError if config key is invalid", async () => {
+    it("[EARS-F2] should throw GitCommandError if config key is invalid", async () => {
       const repoPath = await createTempRepo();
       const git = new GitModule({ repoRoot: repoPath, execCommand: createExecCommand(repoPath) });
 
@@ -1267,11 +1267,11 @@ describe('GitModule', () => {
   });
 
   // ══════════════════════════════════════════════════════════
-  // 4.7. Stash Operations (EARS 53-58)
+  // 4.7. Stash Operations (EARS-G1 to G6)
   // ══════════════════════════════════════════════════════════
 
-  describe("4.7. Stash Operations (EARS 53-58)", () => {
-    it("[EARS-53] should stash uncommitted changes with custom message", async () => {
+  describe("4.7. Stash Operations (EARS-G1 to G6)", () => {
+    it("[EARS-G1] should stash uncommitted changes with custom message", async () => {
       const repoPath = await createTempRepo();
       const git = new GitModule({ repoRoot: repoPath, execCommand: createExecCommand(repoPath) });
 
@@ -1296,7 +1296,7 @@ describe('GitModule', () => {
       removeTempRepo(repoPath);
     });
 
-    it("[EARS-54] should return null when stashing with no uncommitted changes", async () => {
+    it("[EARS-G2] should return null when stashing with no uncommitted changes", async () => {
       const repoPath = await createTempRepo();
       const git = new GitModule({ repoRoot: repoPath, execCommand: createExecCommand(repoPath) });
 
@@ -1313,7 +1313,7 @@ describe('GitModule', () => {
       removeTempRepo(repoPath);
     });
 
-    it("[EARS-55] should pop stashed changes and restore them", async () => {
+    it("[EARS-G3] should pop stashed changes and restore them", async () => {
       const repoPath = await createTempRepo();
       const git = new GitModule({ repoRoot: repoPath, execCommand: createExecCommand(repoPath) });
 
@@ -1343,7 +1343,7 @@ describe('GitModule', () => {
       removeTempRepo(repoPath);
     });
 
-    it("[EARS-56] should return false when popping with no stash", async () => {
+    it("[EARS-G4] should return false when popping with no stash", async () => {
       const repoPath = await createTempRepo();
       const git = new GitModule({ repoRoot: repoPath, execCommand: createExecCommand(repoPath) });
 
@@ -1356,7 +1356,7 @@ describe('GitModule', () => {
       removeTempRepo(repoPath);
     });
 
-    it("[EARS-57] should drop a specific stash by hash", async () => {
+    it("[EARS-G5] should drop a specific stash by hash", async () => {
       const repoPath = await createTempRepo();
       const git = new GitModule({ repoRoot: repoPath, execCommand: createExecCommand(repoPath) });
 
@@ -1386,7 +1386,7 @@ describe('GitModule', () => {
       removeTempRepo(repoPath);
     });
 
-    it("[EARS-58] should drop the most recent stash when no hash provided", async () => {
+    it("[EARS-G6] should drop the most recent stash when no hash provided", async () => {
       const repoPath = await createTempRepo();
       const git = new GitModule({ repoRoot: repoPath, execCommand: createExecCommand(repoPath) });
 
