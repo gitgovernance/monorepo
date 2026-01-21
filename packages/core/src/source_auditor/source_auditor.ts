@@ -1,8 +1,7 @@
-import * as fs from "fs/promises";
-import * as path from "path";
 import type { GdprFinding, DetectorName } from "../pii_detector/types";
 import type {
   SourceAuditorDependencies,
+  ScopeSelectorDependencies,
   AuditOptions,
   AuditResult,
   AuditSummary,
@@ -20,6 +19,8 @@ const BATCH_SIZE = 100;
  *
  * Orchestrates the complete flow: file selection, PII/secrets detection,
  * waiver filtering, scoring, and structured result generation.
+ *
+ * Store Backends Epic: Uses FileLister abstraction instead of direct fs access.
  */
 export class SourceAuditorModule {
   private scopeSelector: ScopeSelector;
@@ -30,7 +31,15 @@ export class SourceAuditorModule {
    * ScopeSelector and ScoringEngine are internal components.
    */
   constructor(private deps: SourceAuditorDependencies) {
-    this.scopeSelector = new ScopeSelector();
+    // Pass FileLister and GitModule to internal ScopeSelector
+    // Note: gitModule is optional, only pass if defined
+    const scopeDeps: ScopeSelectorDependencies = {
+      fileLister: deps.fileLister,
+    };
+    if (deps.gitModule) {
+      scopeDeps.gitModule = deps.gitModule;
+    }
+    this.scopeSelector = new ScopeSelector(scopeDeps);
     this.scoringEngine = new ScoringEngine();
   }
 
@@ -57,11 +66,8 @@ export class SourceAuditorModule {
       // Graceful degradation: continue without waivers
     }
 
-    // Step 3: Detection
-    const { findings, scannedLines, detectors } = await this.runDetection(
-      files,
-      baseDir
-    );
+    // Step 3: Detection (using FileLister for file content)
+    const { findings, scannedLines, detectors } = await this.runDetection(files);
 
     // Step 4: Filter by Waivers
     const { newFindings, acknowledgedCount } = this.filterByWaivers(
@@ -91,10 +97,10 @@ export class SourceAuditorModule {
 
   /**
    * Runs detection on all files, processing in batches for large file counts.
+   * Uses FileLister.read() for file content access.
    */
   private async runDetection(
-    files: string[],
-    baseDir: string
+    files: string[]
   ): Promise<{
     findings: GdprFinding[];
     scannedLines: number;
@@ -109,10 +115,9 @@ export class SourceAuditorModule {
 
     for (const batch of batches) {
       for (const file of batch) {
-        const filePath = path.join(baseDir, file);
-
         try {
-          const content = await fs.readFile(filePath, "utf-8");
+          // Use FileLister.read() instead of fs.readFile
+          const content = await this.deps.fileLister.read(file);
           scannedLines += content.split("\n").length;
 
           const fileFindings = await this.deps.piiDetector.detect(content, file);

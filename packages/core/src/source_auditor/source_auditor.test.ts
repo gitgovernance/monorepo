@@ -2,9 +2,10 @@ import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 import { SourceAuditorModule } from "./source_auditor";
+import { FsFileLister } from "../file_lister";
 import type { PiiDetectorModule } from "../pii_detector";
 import type { GdprFinding } from "../pii_detector/types";
-import type { IWaiverReader, ActiveWaiver } from "./types";
+import type { IWaiverReader, ActiveWaiver, SourceAuditorDependencies } from "./types";
 
 describe("SourceAuditorModule", () => {
   let tempDir: string;
@@ -39,6 +40,15 @@ describe("SourceAuditorModule", () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
+  /**
+   * Creates SourceAuditorDependencies with FsFileLister for tempDir
+   */
+  const createDeps = (): SourceAuditorDependencies => ({
+    piiDetector: mockPiiDetector,
+    waiverReader: mockWaiverReader,
+    fileLister: new FsFileLister({ cwd: tempDir }),
+  });
+
   const createFinding = (overrides: Partial<GdprFinding> = {}): GdprFinding => ({
     id: "finding-1",
     ruleId: "PII-001",
@@ -56,10 +66,7 @@ describe("SourceAuditorModule", () => {
 
   describe("4.1. Scope Selection (EARS-A1 to EARS-A3)", () => {
     it("[EARS-A1] should select files matching include globs", async () => {
-      const auditor = new SourceAuditorModule({
-        piiDetector: mockPiiDetector,
-        waiverReader: mockWaiverReader,
-      });
+      const auditor = new SourceAuditorModule(createDeps());
 
       await auditor.audit({
         scope: { include: ["**/*.ts"], exclude: [] },
@@ -73,10 +80,7 @@ describe("SourceAuditorModule", () => {
       fs.mkdirSync(path.join(tempDir, "node_modules"), { recursive: true });
       fs.writeFileSync(path.join(tempDir, "node_modules", "lib.ts"), "export const x = 1;");
 
-      const auditor = new SourceAuditorModule({
-        piiDetector: mockPiiDetector,
-        waiverReader: mockWaiverReader,
-      });
+      const auditor = new SourceAuditorModule(createDeps());
 
       await auditor.audit({
         scope: { include: ["**/*.ts"], exclude: ["node_modules/**"] },
@@ -91,10 +95,7 @@ describe("SourceAuditorModule", () => {
     });
 
     it("[EARS-A3] should return empty result when include is empty", async () => {
-      const auditor = new SourceAuditorModule({
-        piiDetector: mockPiiDetector,
-        waiverReader: mockWaiverReader,
-      });
+      const auditor = new SourceAuditorModule(createDeps());
 
       const result = await auditor.audit({
         scope: { include: [], exclude: [] },
@@ -109,10 +110,7 @@ describe("SourceAuditorModule", () => {
 
   describe("4.2. Detection Pipeline (EARS-B1 to EARS-B4)", () => {
     it("[EARS-B1] should run piiDetector.detect() on each selected file", async () => {
-      const auditor = new SourceAuditorModule({
-        piiDetector: mockPiiDetector,
-        waiverReader: mockWaiverReader,
-      });
+      const auditor = new SourceAuditorModule(createDeps());
 
       await auditor.audit({
         scope: { include: ["**/*.ts"], exclude: [] },
@@ -138,10 +136,7 @@ describe("SourceAuditorModule", () => {
         return [];
       });
 
-      const auditor = new SourceAuditorModule({
-        piiDetector: mockPiiDetector,
-        waiverReader: mockWaiverReader,
-      });
+      const auditor = new SourceAuditorModule(createDeps());
 
       const result = await auditor.audit({
         scope: { include: ["**/*.ts"], exclude: [] },
@@ -154,10 +149,7 @@ describe("SourceAuditorModule", () => {
 
     it("[EARS-B3] should continue when file cannot be read", async () => {
       // Create unreadable file scenario by removing file after glob
-      const auditor = new SourceAuditorModule({
-        piiDetector: mockPiiDetector,
-        waiverReader: mockWaiverReader,
-      });
+      const auditor = new SourceAuditorModule(createDeps());
 
       // Delete one file to simulate read error
       fs.unlinkSync(path.join(tempDir, "src", "utils.ts"));
@@ -177,10 +169,7 @@ describe("SourceAuditorModule", () => {
         createFinding({ id: "2", detector: "heuristic", fingerprint: "def456" }),
       ]);
 
-      const auditor = new SourceAuditorModule({
-        piiDetector: mockPiiDetector,
-        waiverReader: mockWaiverReader,
-      });
+      const auditor = new SourceAuditorModule(createDeps());
 
       const result = await auditor.audit({
         scope: { include: ["src/app.ts"], exclude: [] },
@@ -194,10 +183,7 @@ describe("SourceAuditorModule", () => {
 
   describe("4.3. Waiver Filtering (EARS-C1 to EARS-C5)", () => {
     it("[EARS-C1] should load active waivers before filtering", async () => {
-      const auditor = new SourceAuditorModule({
-        piiDetector: mockPiiDetector,
-        waiverReader: mockWaiverReader,
-      });
+      const auditor = new SourceAuditorModule(createDeps());
 
       await auditor.audit({
         scope: { include: ["**/*.ts"], exclude: [] },
@@ -218,10 +204,7 @@ describe("SourceAuditorModule", () => {
       };
       mockWaiverReader.loadActiveWaivers.mockResolvedValue([waiver]);
 
-      const auditor = new SourceAuditorModule({
-        piiDetector: mockPiiDetector,
-        waiverReader: mockWaiverReader,
-      });
+      const auditor = new SourceAuditorModule(createDeps());
 
       const result = await auditor.audit({
         scope: { include: ["src/app.ts"], exclude: [] },
@@ -239,10 +222,7 @@ describe("SourceAuditorModule", () => {
       mockPiiDetector.detect.mockResolvedValue([finding]);
       mockWaiverReader.loadActiveWaivers.mockResolvedValue([]);
 
-      const auditor = new SourceAuditorModule({
-        piiDetector: mockPiiDetector,
-        waiverReader: mockWaiverReader,
-      });
+      const auditor = new SourceAuditorModule(createDeps());
 
       const result = await auditor.audit({
         scope: { include: ["src/app.ts"], exclude: [] },
@@ -264,10 +244,7 @@ describe("SourceAuditorModule", () => {
       };
       mockWaiverReader.loadActiveWaivers.mockResolvedValue([permanentWaiver]);
 
-      const auditor = new SourceAuditorModule({
-        piiDetector: mockPiiDetector,
-        waiverReader: mockWaiverReader,
-      });
+      const auditor = new SourceAuditorModule(createDeps());
 
       const result = await auditor.audit({
         scope: { include: ["src/app.ts"], exclude: [] },
@@ -292,10 +269,7 @@ describe("SourceAuditorModule", () => {
       };
       mockWaiverReader.loadActiveWaivers.mockResolvedValue([waiver]);
 
-      const auditor = new SourceAuditorModule({
-        piiDetector: mockPiiDetector,
-        waiverReader: mockWaiverReader,
-      });
+      const auditor = new SourceAuditorModule(createDeps());
 
       const result = await auditor.audit({
         scope: { include: ["src/app.ts"], exclude: [] },
@@ -314,10 +288,7 @@ describe("SourceAuditorModule", () => {
         createFinding({ id: "2", fingerprint: "2" }),
       ]);
 
-      const auditor = new SourceAuditorModule({
-        piiDetector: mockPiiDetector,
-        waiverReader: mockWaiverReader,
-      });
+      const auditor = new SourceAuditorModule(createDeps());
 
       const result = await auditor.audit({
         scope: { include: ["src/app.ts"], exclude: [] },
@@ -335,10 +306,7 @@ describe("SourceAuditorModule", () => {
         createFinding({ id: "4", severity: "medium", fingerprint: "4" }),
       ]);
 
-      const auditor = new SourceAuditorModule({
-        piiDetector: mockPiiDetector,
-        waiverReader: mockWaiverReader,
-      });
+      const auditor = new SourceAuditorModule(createDeps());
 
       const result = await auditor.audit({
         scope: { include: ["src/app.ts"], exclude: [] },
@@ -358,10 +326,7 @@ describe("SourceAuditorModule", () => {
         createFinding({ id: "3", category: "hardcoded-secret", fingerprint: "3" }),
       ]);
 
-      const auditor = new SourceAuditorModule({
-        piiDetector: mockPiiDetector,
-        waiverReader: mockWaiverReader,
-      });
+      const auditor = new SourceAuditorModule(createDeps());
 
       const result = await auditor.audit({
         scope: { include: ["src/app.ts"], exclude: [] },
@@ -379,10 +344,7 @@ describe("SourceAuditorModule", () => {
         createFinding({ id: "3", detector: "heuristic", fingerprint: "3" }),
       ]);
 
-      const auditor = new SourceAuditorModule({
-        piiDetector: mockPiiDetector,
-        waiverReader: mockWaiverReader,
-      });
+      const auditor = new SourceAuditorModule(createDeps());
 
       const result = await auditor.audit({
         scope: { include: ["src/app.ts"], exclude: [] },
@@ -397,10 +359,7 @@ describe("SourceAuditorModule", () => {
 
   describe("4.5. Metrics and Performance (EARS-E1 to EARS-E4)", () => {
     it("[EARS-E1] should report scannedFiles count", async () => {
-      const auditor = new SourceAuditorModule({
-        piiDetector: mockPiiDetector,
-        waiverReader: mockWaiverReader,
-      });
+      const auditor = new SourceAuditorModule(createDeps());
 
       const result = await auditor.audit({
         scope: { include: ["**/*.ts"], exclude: [] },
@@ -411,10 +370,7 @@ describe("SourceAuditorModule", () => {
     });
 
     it("[EARS-E2] should report scannedLines count", async () => {
-      const auditor = new SourceAuditorModule({
-        piiDetector: mockPiiDetector,
-        waiverReader: mockWaiverReader,
-      });
+      const auditor = new SourceAuditorModule(createDeps());
 
       const result = await auditor.audit({
         scope: { include: ["**/*.ts"], exclude: [] },
@@ -426,10 +382,7 @@ describe("SourceAuditorModule", () => {
     });
 
     it("[EARS-E3] should report duration in milliseconds", async () => {
-      const auditor = new SourceAuditorModule({
-        piiDetector: mockPiiDetector,
-        waiverReader: mockWaiverReader,
-      });
+      const auditor = new SourceAuditorModule(createDeps());
 
       const result = await auditor.audit({
         scope: { include: ["**/*.ts"], exclude: [] },
@@ -446,10 +399,7 @@ describe("SourceAuditorModule", () => {
         fs.writeFileSync(path.join(tempDir, "src", `file${i}.ts`), `// file ${i}`);
       }
 
-      const auditor = new SourceAuditorModule({
-        piiDetector: mockPiiDetector,
-        waiverReader: mockWaiverReader,
-      });
+      const auditor = new SourceAuditorModule(createDeps());
 
       const result = await auditor.audit({
         scope: { include: ["**/*.ts"], exclude: [] },
