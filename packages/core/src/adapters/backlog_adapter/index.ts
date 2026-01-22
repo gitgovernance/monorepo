@@ -1,19 +1,20 @@
 import { createTaskRecord } from '../../factories/task_factory';
 import { createCycleRecord } from '../../factories/cycle_factory';
-import { RecordStore } from '../../store';
+import type { RecordStores } from '../../record_store';
 import { IdentityAdapter } from '../identity_adapter';
 import { FeedbackAdapter } from '../feedback_adapter';
 import { ExecutionAdapter } from '../execution_adapter';
 import { ChangelogAdapter } from '../changelog_adapter';
 import { MetricsAdapter } from '../metrics_adapter';
 import { ConfigManager } from '../../config_manager';
-import type { TaskRecord } from '../../types';
-import type { CycleRecord } from '../../types';
-import type { FeedbackRecord } from '../../types';
-import type { ExecutionRecord } from '../../types';
-import type { ChangelogRecord } from '../../types';
+import type {
+  TaskRecord,
+  CycleRecord,
+  ExecutionRecord,
+  ActorRecord,
+  GitGovRecord,
+} from '../../types';
 import type { IWorkflowMethodology } from '../workflow_methodology_adapter';
-import type { ActorRecord } from '../../types';
 import type {
   IEventStream,
   TaskCreatedEvent,
@@ -26,20 +27,13 @@ import type {
   SystemDailyTickEvent,
   EventMetadata
 } from '../../event_bus';
-import type { GitGovRecord } from '../../types';
 
 /**
  * BacklogAdapter Dependencies - Facade + Dependency Injection Pattern
  */
 export type BacklogAdapterDependencies = {
-  // Data Layer (Protocols)
-  taskStore: RecordStore<TaskRecord>;
-  cycleStore: RecordStore<CycleRecord>;
-
-  // Cross-Adapter Dependencies (Mediator coordination) - PHASE 3 READY
-  feedbackStore: RecordStore<FeedbackRecord>;
-  executionStore: RecordStore<ExecutionRecord>;
-  changelogStore: RecordStore<ChangelogRecord>;
+  // Data Layer - Required stores for BacklogAdapter
+  stores: Required<Pick<RecordStores, 'tasks' | 'cycles' | 'feedbacks' | 'changelogs'>>;
 
   // Adapter Dependencies (Phase 3 Integration)
   feedbackAdapter: FeedbackAdapter;
@@ -136,10 +130,7 @@ type AuditReport = { status: 'success' | 'failed'; violations: string[] };
  * Acts as Mediator between Task/Cycle protocols and Workflow/Planning methodologies.
  */
 export class BacklogAdapter implements IBacklogAdapter {
-  private taskStore: RecordStore<TaskRecord>;
-  private cycleStore: RecordStore<CycleRecord>;
-  private feedbackStore: RecordStore<FeedbackRecord>;
-  private changelogStore: RecordStore<ChangelogRecord>;
+  private stores: Required<Pick<RecordStores, 'tasks' | 'cycles' | 'feedbacks' | 'changelogs'>>;
 
   private feedbackAdapter: FeedbackAdapter;
   private metricsAdapter: MetricsAdapter;
@@ -153,10 +144,7 @@ export class BacklogAdapter implements IBacklogAdapter {
 
   constructor(dependencies: BacklogAdapterDependencies) {
     // Data Layer
-    this.taskStore = dependencies.taskStore;
-    this.cycleStore = dependencies.cycleStore;
-    this.feedbackStore = dependencies.feedbackStore;
-    this.changelogStore = dependencies.changelogStore;
+    this.stores = dependencies.stores;
 
     // Adapter Dependencies
     this.feedbackAdapter = dependencies.feedbackAdapter;
@@ -226,7 +214,7 @@ export class BacklogAdapter implements IBacklogAdapter {
     const signedRecord = await this.identity.signRecord(unsignedRecord, actorId, 'author', 'Task created');
 
     // 4. Persist the record with validation
-    await this.taskStore.write(signedRecord as GitGovRecord & { payload: TaskRecord });
+    await this.stores.tasks.put(signedRecord.payload.id, signedRecord);
 
     // 5. Emit event
     this.eventBus.publish({
@@ -251,7 +239,7 @@ export class BacklogAdapter implements IBacklogAdapter {
    * Gets a specific task by ID
    */
   async getTask(taskId: string): Promise<TaskRecord | null> {
-    const record = await this.taskStore.read(taskId);
+    const record = await this.stores.tasks.get(taskId);
     return record ? record.payload : null;
   }
 
@@ -259,11 +247,11 @@ export class BacklogAdapter implements IBacklogAdapter {
    * Gets all tasks in the system
    */
   async getAllTasks(): Promise<TaskRecord[]> {
-    const ids = await this.taskStore.list();
+    const ids = await this.stores.tasks.list();
     const tasks: TaskRecord[] = [];
 
     for (const id of ids) {
-      const record = await this.taskStore.read(id);
+      const record = await this.stores.tasks.get(id);
       if (record) {
         tasks.push(record.payload);
       }
@@ -277,7 +265,7 @@ export class BacklogAdapter implements IBacklogAdapter {
    */
   async submitTask(taskId: string, actorId: string): Promise<TaskRecord> {
     // Read and validate task exists
-    const taskRecord = await this.taskStore.read(taskId);
+    const taskRecord = await this.stores.tasks.get(taskId);
     if (!taskRecord) {
       throw new Error(`RecordNotFoundError: Task not found: ${taskId}`);
     }
@@ -309,7 +297,7 @@ export class BacklogAdapter implements IBacklogAdapter {
 
     // Sign and persist
     const signedRecord = await this.identity.signRecord(updatedRecord, actorId, 'submitter', 'Task submitted for review');
-    await this.taskStore.write(signedRecord as GitGovRecord & { payload: TaskRecord });
+    await this.stores.tasks.put(signedRecord.payload.id, signedRecord);
 
     // Emit event
     this.eventBus.publish({
@@ -332,7 +320,7 @@ export class BacklogAdapter implements IBacklogAdapter {
    */
   async approveTask(taskId: string, actorId: string): Promise<TaskRecord> {
     // 1. Read and validate task exists
-    const taskRecord = await this.taskStore.read(taskId);
+    const taskRecord = await this.stores.tasks.get(taskId);
     if (!taskRecord) {
       throw new Error(`RecordNotFoundError: Task not found: ${taskId}`);
     }
@@ -380,7 +368,7 @@ export class BacklogAdapter implements IBacklogAdapter {
     const updatedRecord = { ...taskRecord, payload: updatedPayload };
 
     const signedRecord = await this.identity.signRecord(updatedRecord, actorId, 'approver', `Task approved: ${task.status} → ${targetState}`);
-    await this.taskStore.write(signedRecord as GitGovRecord & { payload: TaskRecord });
+    await this.stores.tasks.put(signedRecord.payload.id, signedRecord);
 
     // 7. Emit event
     this.eventBus.publish({
@@ -403,7 +391,7 @@ export class BacklogAdapter implements IBacklogAdapter {
    */
   async activateTask(taskId: string, actorId: string): Promise<TaskRecord> {
     // 1. Read and validate task exists
-    const taskRecord = await this.taskStore.read(taskId);
+    const taskRecord = await this.stores.tasks.get(taskId);
     if (!taskRecord) {
       throw new Error(`RecordNotFoundError: Task not found: ${taskId}`);
     }
@@ -435,7 +423,7 @@ export class BacklogAdapter implements IBacklogAdapter {
 
     // 5. Sign the record with 'executor' role
     const signedRecord = await this.identity.signRecord(updatedRecord, actorId, 'executor', 'Task activated');
-    await this.taskStore.write(signedRecord as GitGovRecord & { payload: TaskRecord });
+    await this.stores.tasks.put(signedRecord.payload.id, signedRecord);
 
     // 6. Update activeTaskId in session state
     await this.configManager.updateActorState(actorId, {
@@ -463,7 +451,7 @@ export class BacklogAdapter implements IBacklogAdapter {
    */
   async pauseTask(taskId: string, actorId: string, reason?: string): Promise<TaskRecord> {
     // 1. Read and validate task exists
-    const taskRecord = await this.taskStore.read(taskId);
+    const taskRecord = await this.stores.tasks.get(taskId);
     if (!taskRecord) {
       throw new Error(`RecordNotFoundError: Task not found: ${taskId}`);
     }
@@ -503,7 +491,7 @@ export class BacklogAdapter implements IBacklogAdapter {
 
     // 5. Sign and persist with pauser role
     const signedRecord = await this.identity.signRecord(updatedRecord, actorId, 'pauser', `Task paused: ${reason || 'No reason provided'}`);
-    await this.taskStore.write(signedRecord as GitGovRecord & { payload: TaskRecord });
+    await this.stores.tasks.put(signedRecord.payload.id, signedRecord);
 
     // 6. Clear activeTaskId in session state (task no longer active)
     await this.configManager.updateActorState(actorId, {
@@ -532,7 +520,7 @@ export class BacklogAdapter implements IBacklogAdapter {
    */
   async resumeTask(taskId: string, actorId: string, force: boolean = false): Promise<TaskRecord> {
     // 1. Read and validate task exists
-    const taskRecord = await this.taskStore.read(taskId);
+    const taskRecord = await this.stores.tasks.get(taskId);
     if (!taskRecord) {
       throw new Error(`RecordNotFoundError: Task not found: ${taskId}`);
     }
@@ -572,7 +560,7 @@ export class BacklogAdapter implements IBacklogAdapter {
 
     // 5. Sign and persist with resumer role
     const signedRecord = await this.identity.signRecord(updatedRecord, actorId, 'resumer', 'Task resumed');
-    await this.taskStore.write(signedRecord as GitGovRecord & { payload: TaskRecord });
+    await this.stores.tasks.put(signedRecord.payload.id, signedRecord);
 
     // 6. Update activeTaskId in session state
     await this.configManager.updateActorState(actorId, {
@@ -600,7 +588,7 @@ export class BacklogAdapter implements IBacklogAdapter {
    */
   async completeTask(taskId: string, actorId: string): Promise<TaskRecord> {
     // 1. Read and validate task exists
-    const taskRecord = await this.taskStore.read(taskId);
+    const taskRecord = await this.stores.tasks.get(taskId);
     if (!taskRecord) {
       throw new Error(`RecordNotFoundError: Task not found: ${taskId}`);
     }
@@ -632,7 +620,7 @@ export class BacklogAdapter implements IBacklogAdapter {
 
     // 5. Sign the record with 'approver' role
     const signedRecord = await this.identity.signRecord(updatedRecord, actorId, 'approver', 'Task completed');
-    await this.taskStore.write(signedRecord as GitGovRecord & { payload: TaskRecord });
+    await this.stores.tasks.put(signedRecord.payload.id, signedRecord);
 
     // 6. Clear activeTaskId in session state (task completed)
     await this.configManager.updateActorState(actorId, {
@@ -661,7 +649,7 @@ export class BacklogAdapter implements IBacklogAdapter {
    */
   async discardTask(taskId: string, actorId: string, reason?: string): Promise<TaskRecord> {
     // 1. Read and validate task exists
-    const taskRecord = await this.taskStore.read(taskId);
+    const taskRecord = await this.stores.tasks.get(taskId);
     if (!taskRecord) {
       throw new Error(`RecordNotFoundError: Task not found: ${taskId}`);
     }
@@ -704,7 +692,7 @@ export class BacklogAdapter implements IBacklogAdapter {
 
     // 5. Sign the record with 'canceller' role
     const signedRecord = await this.identity.signRecord(updatedRecord, actorId, 'canceller', `Task discarded: ${reason || 'No reason provided'}`);
-    await this.taskStore.write(signedRecord as GitGovRecord & { payload: TaskRecord });
+    await this.stores.tasks.put(signedRecord.payload.id, signedRecord);
 
     // 6. Clear activeTaskId in session state (task discarded)
     await this.configManager.updateActorState(actorId, {
@@ -734,7 +722,7 @@ export class BacklogAdapter implements IBacklogAdapter {
    */
   async deleteTask(taskId: string, actorId: string): Promise<void> {
     // 1. Read and validate task exists
-    const taskRecord = await this.taskStore.read(taskId);
+    const taskRecord = await this.stores.tasks.get(taskId);
     if (!taskRecord) {
       throw new Error(`RecordNotFoundError: Task not found: ${taskId}`);
     }
@@ -756,7 +744,7 @@ export class BacklogAdapter implements IBacklogAdapter {
     await this.getActor(actorId);
 
     // 4. Delete the task file directly (no discarded state needed for draft)
-    await this.taskStore.delete(taskId);
+    await this.stores.tasks.delete(taskId);
 
     // 5. Emit task deleted event (not a status change since it's being removed)
     this.eventBus.publish({
@@ -778,7 +766,7 @@ export class BacklogAdapter implements IBacklogAdapter {
    * [EARS-28] Signs the updated record with the editor's signature
    */
   async updateTask(taskId: string, payload: Partial<TaskRecord>, actorId: string): Promise<TaskRecord> {
-    const taskRecord = await this.taskStore.read(taskId);
+    const taskRecord = await this.stores.tasks.get(taskId);
     if (!taskRecord) {
       throw new Error(`RecordNotFoundError: Task not found: ${taskId}`);
     }
@@ -794,7 +782,7 @@ export class BacklogAdapter implements IBacklogAdapter {
 
     // Sign the updated record with editor role
     const signedRecord = await this.identity.signRecord(updatedRecord, actorId, 'editor', 'Task updated');
-    await this.taskStore.write(signedRecord as GitGovRecord & { payload: TaskRecord });
+    await this.stores.tasks.put(signedRecord.payload.id, signedRecord);
 
     return updatedPayload;
   }
@@ -806,11 +794,11 @@ export class BacklogAdapter implements IBacklogAdapter {
    */
   async getTasksAssignedToActor(actorId: string): Promise<TaskRecord[]> {
     // Read all feedbacks to find assignments
-    const feedbackIds = await this.feedbackStore.list();
+    const feedbackIds = await this.stores.feedbacks.list();
     const assignedTaskIds: string[] = [];
 
     for (const id of feedbackIds) {
-      const record = await this.feedbackStore.read(id);
+      const record = await this.stores.feedbacks.get(id);
       if (record &&
         record.payload.type === 'assignment' &&
         record.payload.assignee === actorId) {
@@ -872,10 +860,10 @@ export class BacklogAdapter implements IBacklogAdapter {
 
         // Update task to paused
         const updatedTask = { ...task, status: 'paused' as const };
-        const taskRecord = await this.taskStore.read(task.id);
+        const taskRecord = await this.stores.tasks.get(task.id);
         if (taskRecord) {
           const updatedRecord = { ...taskRecord, payload: updatedTask };
-          await this.taskStore.write(updatedRecord);
+          await this.stores.tasks.put(updatedRecord.payload.id, updatedRecord);
 
           // Emit status change event
           this.eventBus.publish({
@@ -921,10 +909,10 @@ export class BacklogAdapter implements IBacklogAdapter {
 
         // 4. Resume task automatically
         const updatedTask = { ...task, status: 'active' as const };
-        const taskRecord = await this.taskStore.read(task.id);
+        const taskRecord = await this.stores.tasks.get(task.id);
         if (taskRecord) {
           const updatedRecord = { ...taskRecord, payload: updatedTask };
-          await this.taskStore.write(updatedRecord);
+          await this.stores.tasks.put(updatedRecord.payload.id, updatedRecord);
 
           this.eventBus.publish({
             type: 'task.status.changed',
@@ -979,10 +967,10 @@ export class BacklogAdapter implements IBacklogAdapter {
 
       // Transition to active
       const updatedTask = { ...task, status: 'active' as const };
-      const taskRecord = await this.taskStore.read(task.id);
+      const taskRecord = await this.stores.tasks.get(task.id);
       if (taskRecord) {
         const updatedRecord = { ...taskRecord, payload: updatedTask };
-        await this.taskStore.write(updatedRecord);
+        await this.stores.tasks.put(updatedRecord.payload.id, updatedRecord);
 
         this.eventBus.publish({
           type: 'task.status.changed',
@@ -1007,7 +995,7 @@ export class BacklogAdapter implements IBacklogAdapter {
   async handleChangelogCreated(event: ChangelogCreatedEvent): Promise<void> {
     try {
       // Get changelog record to access entityType and entityId
-      const changelogRecord = await this.changelogStore.read(event.payload.changelogId);
+      const changelogRecord = await this.stores.changelogs.get(event.payload.changelogId);
       if (!changelogRecord) {
         console.warn(`Changelog not found: ${event.payload.changelogId}`);
         return;
@@ -1027,10 +1015,10 @@ export class BacklogAdapter implements IBacklogAdapter {
 
         // Transition to archived
         const updatedTask = { ...task, status: 'archived' as const };
-        const taskRecord = await this.taskStore.read(task.id);
+        const taskRecord = await this.stores.tasks.get(task.id);
         if (taskRecord) {
           const updatedRecord = { ...taskRecord, payload: updatedTask };
-          await this.taskStore.write(updatedRecord);
+          await this.stores.tasks.put(updatedRecord.payload.id, updatedRecord);
 
           this.eventBus.publish({
             type: 'task.status.changed',
@@ -1221,7 +1209,7 @@ export class BacklogAdapter implements IBacklogAdapter {
     const signedRecord = await this.identity.signRecord(unsignedRecord, actorId, 'author', 'Cycle created');
 
     // 4. Persist the record
-    await this.cycleStore.write(signedRecord as GitGovRecord & { payload: CycleRecord });
+    await this.stores.cycles.put(signedRecord.payload.id, signedRecord);
 
     // 5. Emit event
     this.eventBus.publish({
@@ -1246,7 +1234,7 @@ export class BacklogAdapter implements IBacklogAdapter {
    * Gets a specific cycle by ID
    */
   async getCycle(cycleId: string): Promise<CycleRecord | null> {
-    const record = await this.cycleStore.read(cycleId);
+    const record = await this.stores.cycles.get(cycleId);
     return record ? record.payload : null;
   }
 
@@ -1254,11 +1242,11 @@ export class BacklogAdapter implements IBacklogAdapter {
    * Gets all cycles in the system
    */
   async getAllCycles(): Promise<CycleRecord[]> {
-    const ids = await this.cycleStore.list();
+    const ids = await this.stores.cycles.list();
     const cycles: CycleRecord[] = [];
 
     for (const id of ids) {
-      const record = await this.cycleStore.read(id);
+      const record = await this.stores.cycles.get(id);
       if (record) {
         cycles.push(record.payload);
       }
@@ -1271,7 +1259,7 @@ export class BacklogAdapter implements IBacklogAdapter {
    * Updates a cycle with new payload
    */
   async updateCycle(cycleId: string, payload: Partial<CycleRecord>, actorId?: string): Promise<CycleRecord> {
-    const cycleRecord = await this.cycleStore.read(cycleId);
+    const cycleRecord = await this.stores.cycles.get(cycleId);
     if (!cycleRecord) {
       throw new Error(`RecordNotFoundError: Cycle not found: ${cycleId}`);
     }
@@ -1316,7 +1304,7 @@ export class BacklogAdapter implements IBacklogAdapter {
       } as CycleStatusChangedEvent);
     }
 
-    await this.cycleStore.write(updatedRecord);
+    await this.stores.cycles.put(updatedRecord.payload.id, updatedRecord);
     return updatedPayload;
   }
 
@@ -1325,8 +1313,8 @@ export class BacklogAdapter implements IBacklogAdapter {
    */
   async addTaskToCycle(cycleId: string, taskId: string): Promise<void> {
     // Read both records
-    const cycleRecord = await this.cycleStore.read(cycleId);
-    const taskRecord = await this.taskStore.read(taskId);
+    const cycleRecord = await this.stores.cycles.get(cycleId);
+    const taskRecord = await this.stores.tasks.get(taskId);
 
     if (!cycleRecord) {
       throw new Error(`RecordNotFoundError: Cycle not found: ${cycleId}`);
@@ -1363,8 +1351,8 @@ export class BacklogAdapter implements IBacklogAdapter {
     );
 
     await Promise.all([
-      this.cycleStore.write(signedCycleRecord as GitGovRecord & { payload: CycleRecord }),
-      this.taskStore.write(signedTaskRecord as GitGovRecord & { payload: TaskRecord })
+      this.stores.cycles.put(signedCycleRecord.payload.id, signedCycleRecord),
+      this.stores.tasks.put(signedTaskRecord.payload.id, signedTaskRecord)
     ]);
   }
 
@@ -1382,7 +1370,7 @@ export class BacklogAdapter implements IBacklogAdapter {
     }
 
     // 2. Read cycle record
-    const cycleRecord = await this.cycleStore.read(cycleId);
+    const cycleRecord = await this.stores.cycles.get(cycleId);
     if (!cycleRecord) {
       throw new Error(`RecordNotFoundError: Cycle not found: ${cycleId}`);
     }
@@ -1390,7 +1378,7 @@ export class BacklogAdapter implements IBacklogAdapter {
     // 3. Read all task records and validate they exist
     const taskRecords = await Promise.all(
       taskIds.map(async (taskId) => {
-        const taskRecord = await this.taskStore.read(taskId);
+        const taskRecord = await this.stores.tasks.get(taskId);
         if (!taskRecord) {
           throw new Error(`RecordNotFoundError: Task not found: ${taskId}`);
         }
@@ -1441,9 +1429,9 @@ export class BacklogAdapter implements IBacklogAdapter {
 
     // 9. Atomic write - all or nothing
     await Promise.all([
-      this.cycleStore.write(signedCycleRecord as GitGovRecord & { payload: CycleRecord }),
+      this.stores.cycles.put(signedCycleRecord.payload.id, signedCycleRecord),
       ...signedTaskRecords.map(signedTask =>
-        this.taskStore.write(signedTask as GitGovRecord & { payload: TaskRecord })
+        this.stores.tasks.put(signedTask.payload.id, signedTask)
       )
     ]);
   }
@@ -1470,8 +1458,8 @@ export class BacklogAdapter implements IBacklogAdapter {
 
     // 2. Read all records
     const [sourceCycleRecord, targetCycleRecord] = await Promise.all([
-      this.cycleStore.read(sourceCycleId),
-      this.cycleStore.read(targetCycleId)
+      this.stores.cycles.get(sourceCycleId),
+      this.stores.cycles.get(targetCycleId)
     ]);
 
     if (!sourceCycleRecord) {
@@ -1484,7 +1472,7 @@ export class BacklogAdapter implements IBacklogAdapter {
     // 3. Read all task records and validate they exist
     const taskRecords = await Promise.all(
       taskIds.map(async (taskId) => {
-        const taskRecord = await this.taskStore.read(taskId);
+        const taskRecord = await this.stores.tasks.get(taskId);
         if (!taskRecord) {
           throw new Error(`RecordNotFoundError: Task not found: ${taskId}`);
         }
@@ -1550,10 +1538,10 @@ export class BacklogAdapter implements IBacklogAdapter {
     // 9. Atomic write - all or nothing
     try {
       await Promise.all([
-        this.cycleStore.write(signedSourceCycle as GitGovRecord & { payload: CycleRecord }),
-        this.cycleStore.write(signedTargetCycle as GitGovRecord & { payload: CycleRecord }),
+        this.stores.cycles.put(signedSourceCycle.payload.id, signedSourceCycle),
+        this.stores.cycles.put(signedTargetCycle.payload.id, signedTargetCycle),
         ...signedTaskRecords.map(signedTask =>
-          this.taskStore.write(signedTask as GitGovRecord & { payload: TaskRecord })
+          this.stores.tasks.put(signedTask.payload.id, signedTask)
         )
       ]);
     } catch (error) {

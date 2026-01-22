@@ -9,7 +9,7 @@
 
 import { BacklogAdapter } from './index';
 import type { BacklogAdapterDependencies } from './index';
-import { RecordStore } from '../../store';
+import type { RecordStore } from '../../record_store';
 import { FeedbackAdapter } from '../feedback_adapter';
 import { ExecutionAdapter } from '../execution_adapter';
 import { ChangelogAdapter } from '../changelog_adapter';
@@ -18,54 +18,50 @@ import { ConfigManager } from '../../config_manager';
 import { WorkflowMethodologyAdapter } from '../workflow_methodology_adapter';
 import { IdentityAdapter } from '../identity_adapter';
 import type { SystemDailyTickEvent, IEventStream } from '../../event_bus';
-import type { TaskRecord } from '../../types';
-import type { CycleRecord } from '../../types';
-import type { FeedbackRecord } from '../../types';
-import type { ExecutionRecord } from '../../types';
-import type { ChangelogRecord } from '../../types';
+import type {
+  GitGovTaskRecord,
+  GitGovCycleRecord,
+  GitGovFeedbackRecord,
+  GitGovChangelogRecord,
+} from '../../types';
 
 describe('BacklogAdapter - End-to-End Tests', () => {
-  describe('[EARS-46] "Startup Week Simulation" - The Ultimate Integration Test', () => {
+  describe('[EARS-N6] "Startup Week Simulation" - The Ultimate Integration Test', () => {
     it('should simulate complete startup week with all adapters and workflows', async () => {
       console.log('🚀 Starting Startup Week Simulation...');
 
       // SETUP: Mock all dependencies for E2E simulation
       const mockDependencies = {
-        taskStore: {
-          write: jest.fn(),
-          read: jest.fn(),
-          list: jest.fn().mockResolvedValue([]),
-          delete: jest.fn(),
-          exists: jest.fn()
-        } as unknown as RecordStore<TaskRecord>,
-        cycleStore: {
-          write: jest.fn(),
-          read: jest.fn(),
-          list: jest.fn().mockResolvedValue([]),
-          delete: jest.fn(),
-          exists: jest.fn()
-        } as unknown as RecordStore<CycleRecord>,
-        feedbackStore: {
-          read: jest.fn(),
-          list: jest.fn().mockResolvedValue([]),
-          write: jest.fn(),
-          delete: jest.fn(),
-          exists: jest.fn()
-        } as unknown as RecordStore<FeedbackRecord>,
-        executionStore: {
-          read: jest.fn(),
-          list: jest.fn().mockResolvedValue([]),
-          write: jest.fn(),
-          delete: jest.fn(),
-          exists: jest.fn()
-        } as unknown as RecordStore<ExecutionRecord>,
-        changelogStore: {
-          read: jest.fn(),
-          list: jest.fn().mockResolvedValue([]),
-          write: jest.fn(),
-          delete: jest.fn(),
-          exists: jest.fn()
-        } as unknown as RecordStore<ChangelogRecord>,
+        stores: {
+          tasks: {
+            put: jest.fn(),
+            get: jest.fn(),
+            list: jest.fn().mockResolvedValue([]),
+            delete: jest.fn(),
+            exists: jest.fn()
+          } as unknown as RecordStore<GitGovTaskRecord>,
+          cycles: {
+            put: jest.fn(),
+            get: jest.fn(),
+            list: jest.fn().mockResolvedValue([]),
+            delete: jest.fn(),
+            exists: jest.fn()
+          } as unknown as RecordStore<GitGovCycleRecord>,
+          feedbacks: {
+            get: jest.fn(),
+            list: jest.fn().mockResolvedValue([]),
+            put: jest.fn(),
+            delete: jest.fn(),
+            exists: jest.fn()
+          } as unknown as RecordStore<GitGovFeedbackRecord>,
+          changelogs: {
+            get: jest.fn(),
+            list: jest.fn().mockResolvedValue([]),
+            put: jest.fn(),
+            delete: jest.fn(),
+            exists: jest.fn()
+          } as unknown as RecordStore<GitGovChangelogRecord>,
+        },
         feedbackAdapter: {
           create: jest.fn().mockResolvedValue({ id: 'feedback-auto' }),
           resolve: jest.fn(),
