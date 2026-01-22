@@ -28,14 +28,25 @@ jest.mock('../../crypto', () => {
 });
 
 // Mock dependencies
-jest.mock('../../store');
+jest.mock('../../record_store');
 
 import { IndexerAdapter } from './index';
 import type { AllRecords, IndexData } from './index';
-import { RecordStore } from '../../store';
-import type { Store } from '../../store/store';
+import type { RecordStore } from '../../record_store';
 import { verifySignatures, calculatePayloadChecksum } from '../../crypto';
-import type { GitGovActorRecord, GitGovCycleRecord, GitGovTaskRecord, GitGovExecutionRecord, TaskRecord, ActorRecord, CycleRecord, ExecutionRecord, Signature } from '../../types';
+import type {
+  GitGovActorRecord,
+  GitGovCycleRecord,
+  GitGovTaskRecord,
+  GitGovExecutionRecord,
+  GitGovFeedbackRecord,
+  GitGovChangelogRecord,
+  TaskRecord,
+  ActorRecord,
+  CycleRecord,
+  ExecutionRecord,
+  Signature,
+} from '../../types';
 import type { MetricsAdapter } from '../metrics_adapter';
 import { createTaskRecord, createCycleRecord, createActorRecord, createExecutionRecord, createEmbeddedMetadataRecord, createTestSignature } from '../../factories';
 
@@ -178,10 +189,10 @@ async function createMockExecutionRecord(
 }
 
 /**
- * Creates a mock Store<IndexData> for testing.
+ * Creates a mock RecordStore<IndexData> for testing.
  * Uses in-memory storage to simulate cache operations.
  */
-function createMockCacheStore(): jest.Mocked<Store<IndexData>> {
+function createMockCacheStore(): jest.Mocked<RecordStore<IndexData>> {
   let cachedData: IndexData | null = null;
 
   return {
@@ -194,63 +205,70 @@ function createMockCacheStore(): jest.Mocked<Store<IndexData>> {
     }),
     exists: jest.fn().mockImplementation(async () => cachedData !== null),
     list: jest.fn().mockResolvedValue([]),
-  } as jest.Mocked<Store<IndexData>>;
+  } as jest.Mocked<RecordStore<IndexData>>;
 }
 
 describe('IndexerAdapter', () => {
   let indexerAdapter: IndexerAdapter;
-  let mockTaskStore: jest.Mocked<RecordStore<TaskRecord>>;
-  let mockCycleStore: jest.Mocked<RecordStore<CycleRecord>>;
-  let mockActorStore: jest.Mocked<RecordStore<ActorRecord>>;
-  let mockCacheStore: jest.Mocked<Store<IndexData>>;
+  let mockStores: {
+    tasks: jest.Mocked<RecordStore<GitGovTaskRecord>>;
+    cycles: jest.Mocked<RecordStore<GitGovCycleRecord>>;
+    actors: jest.Mocked<RecordStore<GitGovActorRecord>>;
+    feedbacks: jest.Mocked<RecordStore<GitGovFeedbackRecord>>;
+    executions: jest.Mocked<RecordStore<GitGovExecutionRecord>>;
+    changelogs: jest.Mocked<RecordStore<GitGovChangelogRecord>>;
+  };
+  let mockCacheStore: jest.Mocked<RecordStore<IndexData>>;
   let mockMetricsAdapter: jest.Mocked<Pick<MetricsAdapter, 'getSystemStatus' | 'getProductivityMetrics' | 'getCollaborationMetrics' | 'getTaskHealth'>>;
 
   beforeEach(() => {
-    // Reset mocks
     jest.clearAllMocks();
 
-    // Create mock stores with passthrough loaders (no validation in tests)
-    // Loaders just return the data assuming it's already a valid GitGovRecord
-    const taskLoader = (data: unknown) => {
-      const record = data as { header?: unknown; payload?: unknown };
-      if (record.header && record.payload) {
-        return data as GitGovTaskRecord;
-      }
-      throw new Error('Invalid record structure');
+    // Create mock stores with get/put pattern
+    mockStores = {
+      tasks: {
+        get: jest.fn(),
+        put: jest.fn().mockResolvedValue(undefined),
+        delete: jest.fn().mockResolvedValue(undefined),
+        list: jest.fn(),
+        exists: jest.fn().mockResolvedValue(false),
+      } as jest.Mocked<RecordStore<GitGovTaskRecord>>,
+      cycles: {
+        get: jest.fn(),
+        put: jest.fn().mockResolvedValue(undefined),
+        delete: jest.fn().mockResolvedValue(undefined),
+        list: jest.fn(),
+        exists: jest.fn().mockResolvedValue(false),
+      } as jest.Mocked<RecordStore<GitGovCycleRecord>>,
+      actors: {
+        get: jest.fn(),
+        put: jest.fn().mockResolvedValue(undefined),
+        delete: jest.fn().mockResolvedValue(undefined),
+        list: jest.fn(),
+        exists: jest.fn().mockResolvedValue(false),
+      } as jest.Mocked<RecordStore<GitGovActorRecord>>,
+      feedbacks: {
+        get: jest.fn().mockResolvedValue(null),
+        put: jest.fn().mockResolvedValue(undefined),
+        delete: jest.fn().mockResolvedValue(undefined),
+        list: jest.fn().mockResolvedValue([]),
+        exists: jest.fn().mockResolvedValue(false),
+      } as jest.Mocked<RecordStore<GitGovFeedbackRecord>>,
+      executions: {
+        get: jest.fn().mockResolvedValue(null),
+        put: jest.fn().mockResolvedValue(undefined),
+        delete: jest.fn().mockResolvedValue(undefined),
+        list: jest.fn().mockResolvedValue([]),
+        exists: jest.fn().mockResolvedValue(false),
+      } as jest.Mocked<RecordStore<GitGovExecutionRecord>>,
+      changelogs: {
+        get: jest.fn().mockResolvedValue(null),
+        put: jest.fn().mockResolvedValue(undefined),
+        delete: jest.fn().mockResolvedValue(undefined),
+        list: jest.fn().mockResolvedValue([]),
+        exists: jest.fn().mockResolvedValue(false),
+      } as jest.Mocked<RecordStore<GitGovChangelogRecord>>,
     };
-
-    const cycleLoader = (data: unknown) => {
-      const record = data as { header?: unknown; payload?: unknown };
-      if (record.header && record.payload) {
-        return data as GitGovCycleRecord;
-      }
-      throw new Error('Invalid record structure');
-    };
-
-    const actorLoader = (data: unknown) => {
-      const record = data as { header?: unknown; payload?: unknown };
-      if (record.header && record.payload) {
-        return data as GitGovActorRecord;
-      }
-      throw new Error('Invalid record structure');
-    };
-
-    mockTaskStore = new RecordStore<TaskRecord>('tasks', taskLoader) as jest.Mocked<RecordStore<TaskRecord>>;
-    mockCycleStore = new RecordStore<CycleRecord>('cycles', cycleLoader) as jest.Mocked<RecordStore<CycleRecord>>;
-    mockActorStore = new RecordStore<ActorRecord>('actors', actorLoader) as jest.Mocked<RecordStore<ActorRecord>>;
-
-    // Mock store methods
-    mockTaskStore.list = jest.fn();
-    mockTaskStore.read = jest.fn();
-    mockTaskStore.write = jest.fn();
-
-    mockCycleStore.list = jest.fn();
-    mockCycleStore.read = jest.fn();
-    mockCycleStore.write = jest.fn();
-
-    mockActorStore.list = jest.fn();
-    mockActorStore.read = jest.fn();
-    mockActorStore.write = jest.fn();
 
     // Create mock MetricsAdapter
     mockMetricsAdapter = {
@@ -285,32 +303,30 @@ describe('IndexerAdapter', () => {
     } as jest.Mocked<Pick<MetricsAdapter, 'getSystemStatus' | 'getProductivityMetrics' | 'getCollaborationMetrics' | 'getTaskHealth'>>;
 
     // Setup default mock responses
-    mockTaskStore.list.mockResolvedValue(['1757687335-task-test']);
-    mockTaskStore.read.mockResolvedValue(createMockTaskRecord({
+    mockStores.tasks.list.mockResolvedValue(['1757687335-task-test']);
+    mockStores.tasks.get.mockResolvedValue(createMockTaskRecord({
       id: '1757687335-task-test',
       title: 'Test Task'
-    }));
+    }) as unknown as GitGovTaskRecord);
 
-    mockCycleStore.list.mockResolvedValue(['1757687335-cycle-test']);
-    mockCycleStore.read.mockResolvedValue(createMockCycleRecord({
+    mockStores.cycles.list.mockResolvedValue(['1757687335-cycle-test']);
+    mockStores.cycles.get.mockResolvedValue(createMockCycleRecord({
       id: '1757687335-cycle-test',
       title: 'Test Cycle'
-    }));
+    }) as unknown as GitGovCycleRecord);
 
-    mockActorStore.list.mockResolvedValue(['human:test']);
-    mockActorStore.read.mockResolvedValue(createMockActorRecord({
+    mockStores.actors.list.mockResolvedValue(['human:test']);
+    mockStores.actors.get.mockResolvedValue(createMockActorRecord({
       id: 'human:test',
       displayName: 'Test User'
-    }));
+    }) as unknown as GitGovActorRecord);
 
     // Create mock cache store
     mockCacheStore = createMockCacheStore();
 
     indexerAdapter = new IndexerAdapter({
       metricsAdapter: mockMetricsAdapter as unknown as MetricsAdapter,
-      taskStore: mockTaskStore,
-      cycleStore: mockCycleStore,
-      actorStore: mockActorStore,
+      stores: mockStores,
       cacheStore: mockCacheStore,
     });
   });
@@ -572,9 +588,7 @@ describe('IndexerAdapter', () => {
       const emptyCacheStore = createMockCacheStore();
       const freshAdapter = new IndexerAdapter({
         metricsAdapter: mockMetricsAdapter as unknown as MetricsAdapter,
-        taskStore: mockTaskStore,
-        cycleStore: mockCycleStore,
-        actorStore: mockActorStore,
+        stores: mockStores,
         cacheStore: emptyCacheStore,
       });
 
@@ -604,7 +618,7 @@ describe('IndexerAdapter', () => {
       validTask.payload.title = ''; // Invalid - empty title (< 3 chars)
       validTask.payload.description = ''; // Invalid - empty description (< 10 chars)
 
-      mockTaskStore.read.mockResolvedValueOnce(validTask);
+      mockStores.tasks.get.mockResolvedValueOnce(validTask);
 
       const report = await indexerAdapter.validateIntegrity();
 
@@ -679,23 +693,22 @@ describe('IndexerAdapter', () => {
       expect(mockCacheStore.put).toHaveBeenCalled();
     });
 
-    it('[EARS-12] should handle missing stores with graceful degradation', async () => {
-      // Test with minimal dependencies (no optional stores)
-      const minimalCacheStore = createMockCacheStore();
-      const minimalAdapter = new IndexerAdapter({
+    it('[EARS-12] should generate index with all required stores', async () => {
+      // Test with all stores (all are now required)
+      const fullCacheStore = createMockCacheStore();
+      const fullAdapter = new IndexerAdapter({
         metricsAdapter: mockMetricsAdapter as unknown as MetricsAdapter,
-        taskStore: mockTaskStore,
-        cycleStore: mockCycleStore,
-        cacheStore: minimalCacheStore,
+        stores: mockStores,
+        cacheStore: fullCacheStore,
       });
 
-      const report = await minimalAdapter.generateIndex();
+      const report = await fullAdapter.generateIndex();
       expect(report.success).toBe(true);
     });
 
     it('[EARS-13] should return null and log warning for corrupted cache', async () => {
       // Step 1: Create cache store that throws error (simulating corruption)
-      const corruptedCacheStore: jest.Mocked<Store<IndexData>> = {
+      const corruptedCacheStore: jest.Mocked<RecordStore<IndexData>> = {
         get: jest.fn().mockRejectedValue(new Error('Invalid JSON data')),
         put: jest.fn().mockResolvedValue(undefined),
         delete: jest.fn().mockResolvedValue(undefined),
@@ -705,9 +718,7 @@ describe('IndexerAdapter', () => {
 
       const corruptedAdapter = new IndexerAdapter({
         metricsAdapter: mockMetricsAdapter as unknown as MetricsAdapter,
-        taskStore: mockTaskStore,
-        cycleStore: mockCycleStore,
-        actorStore: mockActorStore,
+        stores: mockStores,
         cacheStore: corruptedCacheStore,
       });
 
@@ -734,9 +745,9 @@ describe('IndexerAdapter', () => {
   describe('Performance & Optimization (EARS 11)', () => {
     it('[EARS-11] should generate index efficiently for phase 1 datasets (0-500 records)', async () => {
       // Validate we're testing Phase 1 dataset size
-      const taskCount = (await mockTaskStore.list()).length;
-      const cycleCount = (await mockCycleStore.list()).length;
-      const actorCount = (await mockActorStore.list()).length;
+      const taskCount = (await mockStores.tasks.list()).length;
+      const cycleCount = (await mockStores.cycles.list()).length;
+      const actorCount = (await mockStores.actors.list()).length;
       const recordCount = taskCount + cycleCount + actorCount;
 
       expect(recordCount).toBeLessThan(500); // EARS-11: Phase 1 constraint (0-500 records)
@@ -794,8 +805,8 @@ describe('IndexerAdapter', () => {
       });
 
       // Update mock to return newer record
-      mockTaskStore.list.mockResolvedValue([`${newerTimestamp}-task-newer`]);
-      mockTaskStore.read.mockResolvedValue(newerTask);
+      mockStores.tasks.list.mockResolvedValue([`${newerTimestamp}-task-newer`]);
+      mockStores.tasks.get.mockResolvedValue(newerTask);
 
       // Cache should now be stale and suggest regeneration
       const isUpToDate = await indexerAdapter.isIndexUpToDate();
@@ -823,8 +834,8 @@ describe('IndexerAdapter', () => {
         tags: ['sprint:q1']
       });
 
-      mockTaskStore.read.mockResolvedValue(realisticTask);
-      mockCycleStore.read.mockResolvedValue(realisticCycle);
+      mockStores.tasks.get.mockResolvedValue(realisticTask);
+      mockStores.cycles.get.mockResolvedValue(realisticCycle);
 
       const report = await indexerAdapter.generateIndex();
       expect(report.success).toBe(true);
@@ -836,9 +847,9 @@ describe('IndexerAdapter', () => {
 
     it('[EARS-12] should handle empty system gracefully', async () => {
       // Setup empty stores
-      mockTaskStore.list.mockResolvedValue([]);
-      mockCycleStore.list.mockResolvedValue([]);
-      mockActorStore.list.mockResolvedValue([]);
+      mockStores.tasks.list.mockResolvedValue([]);
+      mockStores.cycles.list.mockResolvedValue([]);
+      mockStores.actors.list.mockResolvedValue([]);
 
       mockMetricsAdapter.getSystemStatus.mockResolvedValue({
         tasks: { total: 0, byStatus: {}, byPriority: {} },
@@ -899,8 +910,8 @@ describe('IndexerAdapter', () => {
         references: ['task:1757687335-blocker-task']
       });
 
-      mockTaskStore.list.mockResolvedValue(['1757687335-task-blocked']);
-      mockTaskStore.read.mockResolvedValue(taskWithDeps);
+      mockStores.tasks.list.mockResolvedValue(['1757687335-task-blocked']);
+      mockStores.tasks.get.mockResolvedValue(taskWithDeps);
 
       await indexerAdapter.generateIndex();
       const indexData = await indexerAdapter.getIndexData();
@@ -1075,8 +1086,8 @@ describe('IndexerAdapter', () => {
         title: 'Task for Path Resolution Test'
       });
 
-      mockTaskStore.list.mockResolvedValue(['1757687335-task-path-test']);
-      mockTaskStore.read.mockResolvedValue(testTask);
+      mockStores.tasks.list.mockResolvedValue(['1757687335-task-path-test']);
+      mockStores.tasks.get.mockResolvedValue(testTask);
 
       // Generate index which calls calculateLastUpdated internally
       await indexerAdapter.generateIndex();
@@ -1149,8 +1160,8 @@ describe('IndexerAdapter', () => {
           title: 'Task with Author'
         });
 
-        mockTaskStore.list.mockResolvedValue(['1757687335-task-with-author']);
-        mockTaskStore.read.mockResolvedValue(taskWithSignatures);
+        mockStores.tasks.list.mockResolvedValue(['1757687335-task-with-author']);
+        mockStores.tasks.get.mockResolvedValue(taskWithSignatures);
 
         await indexerAdapter.generateIndex();
         const indexData = await indexerAdapter.getIndexData();
@@ -1186,8 +1197,8 @@ describe('IndexerAdapter', () => {
           }
         ] as [Signature, ...Signature[]];
 
-        mockTaskStore.list.mockResolvedValue(['1757687335-task-multi-sig']);
-        mockTaskStore.read.mockResolvedValue(taskWithMultipleSignatures);
+        mockStores.tasks.list.mockResolvedValue(['1757687335-task-multi-sig']);
+        mockStores.tasks.get.mockResolvedValue(taskWithMultipleSignatures);
 
         await indexerAdapter.generateIndex();
         const indexData = await indexerAdapter.getIndexData();
@@ -1222,8 +1233,8 @@ describe('IndexerAdapter', () => {
           }
         };
 
-        mockTaskStore.list.mockResolvedValue(['1757687335-task-no-sigs']);
-        mockTaskStore.read.mockResolvedValue(taskWithoutProperSignatures as unknown as GitGovTaskRecord);
+        mockStores.tasks.list.mockResolvedValue(['1757687335-task-no-sigs']);
+        mockStores.tasks.get.mockResolvedValue(taskWithoutProperSignatures as unknown as GitGovTaskRecord);
 
         // Should not throw error
         await expect(indexerAdapter.generateIndex()).resolves.toBeDefined();
@@ -1251,8 +1262,8 @@ describe('IndexerAdapter', () => {
           }
         };
 
-        mockTaskStore.list.mockResolvedValue(['1757687335-task-no-author']);
-        mockTaskStore.read.mockResolvedValue(taskWithoutProperSignatures as unknown as GitGovTaskRecord);
+        mockStores.tasks.list.mockResolvedValue(['1757687335-task-no-author']);
+        mockStores.tasks.get.mockResolvedValue(taskWithoutProperSignatures as unknown as GitGovTaskRecord);
 
         await indexerAdapter.generateIndex();
         const indexData = await indexerAdapter.getIndexData();
@@ -1300,8 +1311,8 @@ describe('IndexerAdapter', () => {
           status: 'done'
         });
 
-        mockTaskStore.list.mockResolvedValue(['1757687335-task-done']);
-        mockTaskStore.read.mockResolvedValue(doneTask);
+        mockStores.tasks.list.mockResolvedValue(['1757687335-task-done']);
+        mockStores.tasks.get.mockResolvedValue(doneTask);
 
         await indexerAdapter.generateIndex();
         const indexData = await indexerAdapter.getIndexData();
@@ -1349,8 +1360,8 @@ describe('IndexerAdapter', () => {
           }
         ] as [Signature, ...Signature[]];
 
-        mockTaskStore.list.mockResolvedValue(['1757687335-task-modified']);
-        mockTaskStore.read.mockResolvedValue(taskWithModifier);
+        mockStores.tasks.list.mockResolvedValue(['1757687335-task-modified']);
+        mockStores.tasks.get.mockResolvedValue(taskWithModifier);
 
         await indexerAdapter.generateIndex();
         const indexData = await indexerAdapter.getIndexData();
@@ -1372,10 +1383,10 @@ describe('IndexerAdapter', () => {
           cycleIds: ['1757687335-cycle-test']
         });
 
-        mockTaskStore.list.mockResolvedValue(['1757687335-task-in-cycle']);
-        mockTaskStore.read.mockResolvedValue(taskInCycle);
-        mockCycleStore.list.mockResolvedValue(['1757687335-cycle-test']);
-        mockCycleStore.read.mockResolvedValue(cycle);
+        mockStores.tasks.list.mockResolvedValue(['1757687335-task-in-cycle']);
+        mockStores.tasks.get.mockResolvedValue(taskInCycle);
+        mockStores.cycles.list.mockResolvedValue(['1757687335-cycle-test']);
+        mockStores.cycles.get.mockResolvedValue(cycle);
 
         await indexerAdapter.generateIndex();
         const indexData = await indexerAdapter.getIndexData();
@@ -1410,8 +1421,8 @@ describe('IndexerAdapter', () => {
           ]
         });
 
-        mockTaskStore.list.mockResolvedValue(['1757687335-task-all-refs']);
-        mockTaskStore.read.mockResolvedValue(taskWithAllRefs);
+        mockStores.tasks.list.mockResolvedValue(['1757687335-task-all-refs']);
+        mockStores.tasks.get.mockResolvedValue(taskWithAllRefs);
 
         await indexerAdapter.generateIndex();
         const indexData = await indexerAdapter.getIndexData();
@@ -1472,7 +1483,7 @@ describe('IndexerAdapter', () => {
         });
 
         // Mock stores to return all tasks
-        mockTaskStore.list.mockResolvedValue([
+        mockStores.tasks.list.mockResolvedValue([
           '1757687335-task-completed',
           '1757687336-task-archived',
           '1757687337-task-discarded',
@@ -1480,7 +1491,7 @@ describe('IndexerAdapter', () => {
           '1757687339-task-main'
         ]);
 
-        mockTaskStore.read
+        mockStores.tasks.get
           .mockResolvedValueOnce(completedTask)
           .mockResolvedValueOnce(archivedTask)
           .mockResolvedValueOnce(discardedTask)
@@ -1533,10 +1544,10 @@ describe('IndexerAdapter', () => {
           cycleIds: ['1757687335-cycle-sprint1', '1757687335-cycle-sprint2']
         });
 
-        mockTaskStore.list.mockResolvedValue(['1757687335-task-with-cycles']);
-        mockTaskStore.read.mockResolvedValue(taskWithCycles);
-        mockCycleStore.list.mockResolvedValue(['1757687335-cycle-sprint1', '1757687335-cycle-sprint2']);
-        mockCycleStore.read.mockImplementation(async (id: string) => {
+        mockStores.tasks.list.mockResolvedValue(['1757687335-task-with-cycles']);
+        mockStores.tasks.get.mockResolvedValue(taskWithCycles);
+        mockStores.cycles.list.mockResolvedValue(['1757687335-cycle-sprint1', '1757687335-cycle-sprint2']);
+        mockStores.cycles.get.mockImplementation(async (id: string) => {
           if (id === '1757687335-cycle-sprint1') return cycle1;
           if (id === '1757687335-cycle-sprint2') return cycle2;
           throw new Error('Cycle not found');
@@ -1560,8 +1571,8 @@ describe('IndexerAdapter', () => {
           cycleIds: []
         });
 
-        mockTaskStore.list.mockResolvedValue(['1757687335-task-no-cycles']);
-        mockTaskStore.read.mockResolvedValue(taskWithoutCycles);
+        mockStores.tasks.list.mockResolvedValue(['1757687335-task-no-cycles']);
+        mockStores.tasks.get.mockResolvedValue(taskWithoutCycles);
 
         await indexerAdapter.generateIndex();
         const indexData = await indexerAdapter.getIndexData();
@@ -1646,8 +1657,8 @@ describe('IndexerAdapter', () => {
           priority: 'high'
         });
 
-        mockTaskStore.list.mockResolvedValue(['1757687335-task-high-priority']);
-        mockTaskStore.read.mockResolvedValue(highPriorityTask);
+        mockStores.tasks.list.mockResolvedValue(['1757687335-task-high-priority']);
+        mockStores.tasks.get.mockResolvedValue(highPriorityTask);
 
         await indexerAdapter.generateIndex();
         const indexData = await indexerAdapter.getIndexData();
@@ -1674,20 +1685,20 @@ describe('IndexerAdapter', () => {
       jest.clearAllMocks();
 
       // Re-setup default mocks
-      mockTaskStore.list.mockResolvedValue(['1757687335-task-test']);
-      mockTaskStore.read.mockResolvedValue(createMockTaskRecord({
+      mockStores.tasks.list.mockResolvedValue(['1757687335-task-test']);
+      mockStores.tasks.get.mockResolvedValue(createMockTaskRecord({
         id: '1757687335-task-test',
         title: 'Test Task'
       }));
 
-      mockCycleStore.list.mockResolvedValue(['1757687335-cycle-test']);
-      mockCycleStore.read.mockResolvedValue(createMockCycleRecord({
+      mockStores.cycles.list.mockResolvedValue(['1757687335-cycle-test']);
+      mockStores.cycles.get.mockResolvedValue(createMockCycleRecord({
         id: '1757687335-cycle-test',
         title: 'Test Cycle'
       }));
 
-      mockActorStore.list.mockResolvedValue(['human:test']);
-      mockActorStore.read.mockResolvedValue(createMockActorRecord({
+      mockStores.actors.list.mockResolvedValue(['human:test']);
+      mockStores.actors.get.mockResolvedValue(createMockActorRecord({
         id: 'human:test',
         displayName: 'Test User'
       }));
@@ -1710,8 +1721,8 @@ describe('IndexerAdapter', () => {
       // Tamper with checksum to simulate corruption
       corruptedTask.header.payloadChecksum = 'invalid-checksum-hex-value';
 
-      mockTaskStore.list.mockResolvedValue(['1757687335-task-corrupted']);
-      mockTaskStore.read.mockResolvedValue(corruptedTask);
+      mockStores.tasks.list.mockResolvedValue(['1757687335-task-corrupted']);
+      mockStores.tasks.get.mockResolvedValue(corruptedTask);
 
       const report = await indexerAdapter.validateIntegrity();
 
@@ -1751,8 +1762,8 @@ describe('IndexerAdapter', () => {
       // Tamper with signature to make it invalid
       taskWithBadSig.header.signatures[0].signature = 'invalid-signature-base64-xxxxxxxxxxxxx';
 
-      mockTaskStore.list.mockResolvedValue(['1757687335-task-bad-sig']);
-      mockTaskStore.read.mockResolvedValue(taskWithBadSig);
+      mockStores.tasks.list.mockResolvedValue(['1757687335-task-bad-sig']);
+      mockStores.tasks.get.mockResolvedValue(taskWithBadSig);
 
       // Mock verifySignatures to return false for this specific test
       (verifySignatures as jest.Mock).mockResolvedValueOnce(false);
@@ -1771,7 +1782,7 @@ describe('IndexerAdapter', () => {
 
     it('[EARS-75] should handle unknown actor in signatures', async () => {
       // Mock actorStore to return null (actor not found)
-      mockActorStore.read.mockResolvedValue(null);
+      mockStores.actors.get.mockResolvedValue(null);
 
       // Mock verifySignatures to return false (actor not found means invalid signature)
       (verifySignatures as jest.Mock).mockResolvedValueOnce(false);
@@ -1783,28 +1794,28 @@ describe('IndexerAdapter', () => {
       expect(report.status).toBe('errors');
     });
 
-    it('[EARS-76] should gracefully degrade without actorStore', async () => {
-      // Create adapter without actorStore
-      const noActorCacheStore = createMockCacheStore();
-      const adapterWithoutActorStore = new IndexerAdapter({
+    it('[EARS-76] should handle missing actor gracefully during signature verification', async () => {
+      // Create adapter with actor store that returns null (actor not found)
+      const testCacheStore = createMockCacheStore();
+      mockStores.actors.get.mockResolvedValue(null); // Actor not found
+
+      const adapterWithMissingActor = new IndexerAdapter({
         metricsAdapter: mockMetricsAdapter as unknown as MetricsAdapter,
-        taskStore: mockTaskStore,
-        cycleStore: mockCycleStore,
-        // No actorStore provided
-        cacheStore: noActorCacheStore,
+        stores: mockStores,
+        cacheStore: testCacheStore,
       });
 
-      // Mock verifySignatures to return false (no actorStore means cannot verify)
+      // Mock verifySignatures to return false (actor not found means cannot verify)
       (verifySignatures as jest.Mock).mockResolvedValueOnce(false);
       (verifySignatures as jest.Mock).mockResolvedValueOnce(false); // Once for task, once for cycle
 
-      const report = await adapterWithoutActorStore.validateIntegrity();
+      const report = await adapterWithMissingActor.validateIntegrity();
 
       // Should complete without throwing error (graceful degradation)
       expect(report).toBeDefined();
       expect(report.recordsScanned).toBeGreaterThan(0);
 
-      // Signature verification should fail gracefully when actorStore unavailable
+      // Signature verification should fail gracefully when actor not found
       expect(report.signatureFailures).toBeGreaterThan(0);
     });
   });
@@ -1825,8 +1836,8 @@ describe('IndexerAdapter', () => {
       validTask.payload.description = 'TAMPERED DESCRIPTION!!!';
 
       // The checksum in header is still the original, but payload changed
-      mockTaskStore.list.mockResolvedValue(['1757687335-task-valid']);
-      mockTaskStore.read.mockResolvedValue(validTask);
+      mockStores.tasks.list.mockResolvedValue(['1757687335-task-valid']);
+      mockStores.tasks.get.mockResolvedValue(validTask);
 
       const report = await indexerAdapter.validateIntegrity();
 
@@ -1866,13 +1877,13 @@ describe('IndexerAdapter', () => {
         tags: ['important', 'urgent']
       });
 
-      mockTaskStore.list.mockResolvedValue([
+      mockStores.tasks.list.mockResolvedValue([
         '1757687335-task-1',
         '1757687336-task-2',
         '1757687337-task-3'
       ]);
 
-      mockTaskStore.read
+      mockStores.tasks.get
         .mockResolvedValueOnce(task1)
         .mockResolvedValueOnce(task2)
         .mockResolvedValueOnce(task3);
@@ -1910,13 +1921,13 @@ describe('IndexerAdapter', () => {
       });
       tamperedTask2.payload.title = 'TAMPERED TITLE!!!';
 
-      mockTaskStore.list.mockResolvedValue([
+      mockStores.tasks.list.mockResolvedValue([
         '1757687335-task-valid',
         '1757687336-task-tampered-1',
         '1757687337-task-tampered-2'
       ]);
 
-      mockTaskStore.read
+      mockStores.tasks.get
         .mockResolvedValueOnce(validTask)
         .mockResolvedValueOnce(tamperedTask1)
         .mockResolvedValueOnce(tamperedTask2);
@@ -1956,8 +1967,8 @@ describe('IndexerAdapter', () => {
       // IMPORTANT: Recalculate checksum after mutation to keep integrity valid
       taskWithEmptyFields.header.payloadChecksum = calculatePayloadChecksum(taskWithEmptyFields.payload);
 
-      mockTaskStore.list.mockResolvedValue(['1757687335-task-empty']);
-      mockTaskStore.read.mockResolvedValue(taskWithEmptyFields);
+      mockStores.tasks.list.mockResolvedValue(['1757687335-task-empty']);
+      mockStores.tasks.get.mockResolvedValue(taskWithEmptyFields);
 
       const report = await indexerAdapter.validateIntegrity();
 
@@ -1975,8 +1986,8 @@ describe('IndexerAdapter', () => {
         tags: ['unicode-test', 'special-chars', 'test:international'] // Tags must match pattern ^[a-z0-9-]+(:[a-z0-9-:]+)*$
       });
 
-      mockTaskStore.list.mockResolvedValue(['1757687335-task-unicode']);
-      mockTaskStore.read.mockResolvedValue(taskWithUnicode);
+      mockStores.tasks.list.mockResolvedValue(['1757687335-task-unicode']);
+      mockStores.tasks.get.mockResolvedValue(taskWithUnicode);
 
       const report = await indexerAdapter.validateIntegrity();
 
@@ -1998,11 +2009,11 @@ describe('IndexerAdapter', () => {
       });
       tamperedCycle.payload.title = 'TAMPERED CYCLE TITLE!!!';
 
-      mockTaskStore.list.mockResolvedValue(['1757687335-task-valid']);
-      mockTaskStore.read.mockResolvedValue(validTask);
+      mockStores.tasks.list.mockResolvedValue(['1757687335-task-valid']);
+      mockStores.tasks.get.mockResolvedValue(validTask);
 
-      mockCycleStore.list.mockResolvedValue(['1757687335-cycle-tampered']);
-      mockCycleStore.read.mockResolvedValue(tamperedCycle);
+      mockStores.cycles.list.mockResolvedValue(['1757687335-cycle-tampered']);
+      mockStores.cycles.get.mockResolvedValue(tamperedCycle);
 
       const report = await indexerAdapter.validateIntegrity();
 
