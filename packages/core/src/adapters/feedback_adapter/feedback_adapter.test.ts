@@ -902,32 +902,7 @@ describe('FeedbackAdapter', () => {
   });
 
   describe('Performance - Advanced', () => {
-    it.skip('[EARS-J2] should filter 1000+ feedbacks in under 100ms', async () => {
-      // Create 1200 feedbacks, 150 for task-123
-      const feedbacks: GitGovFeedbackRecord[] = [];
-      for (let i = 0; i < 1200; i++) {
-        feedbacks.push(createMockFeedbackRecord({
-          id: `feedback-${i}`,
-          entityId: i < 150 ? 'task-123' : `task-${i}`,
-          content: `Feedback ${i}`
-        }));
-      }
-
-      mockFeedbackStore.list.mockResolvedValue(feedbacks.map(f => f.payload.id));
-      mockFeedbackStore.get.mockImplementation((id: string) => {
-        const match = feedbacks.find(f => f.payload.id === id);
-        return Promise.resolve(match || null);
-      });
-
-      const startTime = Date.now();
-      const result = await feedbackAdapter.getFeedbackByEntity('task-123');
-      const endTime = Date.now();
-
-      expect(result).toHaveLength(150);
-      expect(endTime - startTime).toBeLessThan(100); // <100ms target
-    });
-
-    it('[EARS-J3] should build thread of 20+ levels in under 200ms', async () => {
+    it('[EARS-J2] should build thread of 20+ levels in under 200ms', async () => {
       // Setup chain of 25 feedbacks
       const feedbacks: GitGovFeedbackRecord[] = [];
       for (let i = 1; i <= 25; i++) {
