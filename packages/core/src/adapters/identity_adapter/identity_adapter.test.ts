@@ -1,8 +1,6 @@
 import { IdentityAdapter } from './index';
-import type { ActorRecord } from '../../types';
-import type { AgentRecord } from '../../types';
-import type { GitGovRecord } from '../../types';
-import { RecordStore } from '../../store/record_store';
+import type { ActorRecord, AgentRecord, GitGovRecord, GitGovActorRecord, GitGovAgentRecord } from '../../types';
+import type { RecordStore } from '../../record_store/record_store';
 import { createActorRecord } from '../../factories/actor_factory';
 import { validateFullActorRecord } from '../../validation/actor_validator';
 import { createAgentRecord } from '../../factories/agent_factory';
@@ -65,8 +63,8 @@ interface MockEventBus extends IEventStream {
 describe('IdentityAdapter - ActorRecord Operations', () => {
   let identityAdapter: IdentityAdapter;
   let identityAdapterWithEvents: IdentityAdapter;
-  let mockActorStore: jest.Mocked<RecordStore<ActorRecord>>;
-  let mockAgentStore: jest.Mocked<RecordStore<AgentRecord>>;
+  let mockActorStore: jest.Mocked<RecordStore<GitGovActorRecord>>;
+  let mockAgentStore: jest.Mocked<RecordStore<GitGovAgentRecord>>;
   let mockKeyProvider: MockKeyProvider;
   let mockEventBus: MockEventBus;
 
@@ -75,20 +73,20 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
 
     // Create mock store instances
     mockActorStore = {
-      read: jest.fn(),
-      write: jest.fn(),
+      get: jest.fn(),
+      put: jest.fn(),
       delete: jest.fn(),
       list: jest.fn().mockResolvedValue([]), // Default to empty array to avoid "not iterable" errors
       exists: jest.fn(),
-    } as unknown as jest.Mocked<RecordStore<ActorRecord>>;
+    } as unknown as jest.Mocked<RecordStore<GitGovActorRecord>>;
 
     mockAgentStore = {
-      read: jest.fn(),
-      write: jest.fn(),
+      get: jest.fn(),
+      put: jest.fn(),
       delete: jest.fn(),
       list: jest.fn().mockResolvedValue([]), // Default to empty array to avoid "not iterable" errors
       exists: jest.fn(),
-    } as unknown as jest.Mocked<RecordStore<AgentRecord>>;
+    } as unknown as jest.Mocked<RecordStore<GitGovAgentRecord>>;
 
     // Create mock KeyProvider
     mockKeyProvider = {
@@ -110,15 +108,13 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
 
     // Create IdentityAdapter without events (graceful degradation)
     identityAdapter = new IdentityAdapter({
-      actorStore: mockActorStore,
-      agentStore: mockAgentStore,
+      stores: { actors: mockActorStore, agents: mockAgentStore },
       keyProvider: mockKeyProvider,
     });
 
     // Create IdentityAdapter with events
     identityAdapterWithEvents = new IdentityAdapter({
-      actorStore: mockActorStore,
-      agentStore: mockAgentStore,
+      stores: { actors: mockActorStore, agents: mockAgentStore },
       keyProvider: mockKeyProvider,
       eventBus: mockEventBus,
     });
@@ -153,46 +149,46 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
   };
 
   describe('getActor', () => {
-    it('[EARS-1] should return ActorRecord when it exists', async () => {
-      mockActorStore.read.mockResolvedValue(sampleRecord);
+    it('[EARS-A1] should return ActorRecord when it exists', async () => {
+      mockActorStore.get.mockResolvedValue(sampleRecord);
 
       const result = await identityAdapter.getActor('human:test-user');
 
-      expect(mockActorStore.read).toHaveBeenCalledWith('human:test-user');
+      expect(mockActorStore.get).toHaveBeenCalledWith('human:test-user');
       expect(result).toEqual(sampleActorPayload);
     });
 
-    it('[EARS-2] should return null when ActorRecord does not exist', async () => {
-      mockActorStore.read.mockResolvedValue(null);
+    it('[EARS-A2] should return null when ActorRecord does not exist', async () => {
+      mockActorStore.get.mockResolvedValue(null);
 
       const result = await identityAdapter.getActor('non-existent');
 
-      expect(mockActorStore.read).toHaveBeenCalledWith('non-existent');
+      expect(mockActorStore.get).toHaveBeenCalledWith('non-existent');
       expect(result).toBeNull();
     });
   });
 
   describe('listActors', () => {
-    it('[EARS-3] should return all ActorRecords', async () => {
+    it('[EARS-B1] should return all ActorRecords', async () => {
       const actorIds = ['human:user1', 'human:user2'];
       const record1 = { ...sampleRecord, payload: { ...sampleActorPayload, id: 'human:user1' } };
       const record2 = { ...sampleRecord, payload: { ...sampleActorPayload, id: 'human:user2' } };
 
       mockActorStore.list.mockResolvedValue(actorIds);
-      mockActorStore.read
+      mockActorStore.get
         .mockResolvedValueOnce(record1)
         .mockResolvedValueOnce(record2);
 
       const result = await identityAdapter.listActors();
 
       expect(mockActorStore.list).toHaveBeenCalled();
-      expect(mockActorStore.read).toHaveBeenCalledTimes(2);
+      expect(mockActorStore.get).toHaveBeenCalledTimes(2);
       expect(result).toHaveLength(2);
       expect(result[0]?.id).toBe('human:user1');
       expect(result[1]?.id).toBe('human:user2');
     });
 
-    it('[EARS-4] should return empty array when no actors exist', async () => {
+    it('[EARS-B2] should return empty array when no actors exist', async () => {
       mockActorStore.list.mockResolvedValue([]);
 
       const result = await identityAdapter.listActors();
@@ -203,7 +199,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
   });
 
   describe('createActor', () => {
-    it('[EARS-5] should create a new ActorRecord with generated keys', async () => {
+    it('[EARS-C1] should create a new ActorRecord with generated keys', async () => {
       const inputPayload = {
         type: 'human' as const,
         displayName: 'Test User',
@@ -226,7 +222,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
         timestamp: 1234567890
       });
       mockedValidateFullActorRecord.mockResolvedValue(undefined);
-      mockActorStore.write.mockResolvedValue(undefined);
+      mockActorStore.put.mockResolvedValue(undefined);
 
       // Suppress console.warn for tests
       const originalWarn = console.warn;
@@ -240,14 +236,14 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       expect(mockedCalculatePayloadChecksum).toHaveBeenCalled();
       expect(mockedSignPayload).toHaveBeenCalled();
       expect(mockedValidateFullActorRecord).toHaveBeenCalled();
-      expect(mockActorStore.write).toHaveBeenCalled();
+      expect(mockActorStore.put).toHaveBeenCalled();
       expect(result).toEqual(sampleActorPayload);
 
       // Restore console.warn
       console.warn = originalWarn;
     });
 
-    it('[EARS-12] should persist private key via KeyProvider', async () => {
+    it('[EARS-C3] should persist private key via KeyProvider', async () => {
       const inputPayload = {
         type: 'human' as const,
         displayName: 'Test User',
@@ -272,7 +268,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
         timestamp: 1234567890
       });
       mockedValidateFullActorRecord.mockResolvedValue(undefined);
-      mockActorStore.write.mockResolvedValue(undefined);
+      mockActorStore.put.mockResolvedValue(undefined);
       mockActorStore.list.mockResolvedValue(['human:test-user']);
 
       // Suppress console.warn for tests
@@ -291,7 +287,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       console.warn = originalWarn;
     });
 
-    it('[EARS-6] should throw error when required fields are missing', async () => {
+    it('[EARS-C2] should throw error when required fields are missing', async () => {
       const invalidPayload = {
         type: 'human' as const,
         // Missing displayName
@@ -303,21 +299,21 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
   });
 
   describe('revokeActor', () => {
-    it('[EARS-7] should revoke an existing actor', async () => {
+    it('[EARS-D1] should revoke an existing actor', async () => {
       const existingRecord = { ...sampleRecord };
-      mockActorStore.read.mockResolvedValue(existingRecord);
-      mockActorStore.write.mockResolvedValue(undefined);
+      mockActorStore.get.mockResolvedValue(existingRecord);
+      mockActorStore.put.mockResolvedValue(undefined);
       mockedCalculatePayloadChecksum.mockReturnValue('new-checksum');
 
       const result = await identityAdapter.revokeActor('human:test-user');
 
-      expect(mockActorStore.read).toHaveBeenCalledWith('human:test-user');
-      expect(mockActorStore.write).toHaveBeenCalled();
+      expect(mockActorStore.get).toHaveBeenCalledWith('human:test-user');
+      expect(mockActorStore.put).toHaveBeenCalled();
       expect(result.status).toBe('revoked');
     });
 
-    it('[EARS-8] should throw error when actor does not exist', async () => {
-      mockActorStore.read.mockResolvedValue(null);
+    it('[EARS-D2] should throw error when actor does not exist', async () => {
+      mockActorStore.get.mockResolvedValue(null);
 
       await expect(identityAdapter.revokeActor('non-existent'))
         .rejects.toThrow('ActorRecord with id non-existent not found');
@@ -325,7 +321,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
   });
 
   describe('signRecord', () => {
-    it('[EARS-9] should sign record with real cryptographic signature when private key is available', async () => {
+    it('[EARS-E1] should sign record with real cryptographic signature when private key is available', async () => {
       const mockRecord: GitGovRecord = {
         header: {
           version: '1.0',
@@ -345,7 +341,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       const testPrivateKey = 'test-private-key-base64';
 
       // Mock actor exists
-      mockActorStore.read.mockResolvedValue(sampleRecord);
+      mockActorStore.get.mockResolvedValue(sampleRecord);
 
       // Mock KeyProvider to return private key
       mockKeyProvider.getPrivateKey.mockResolvedValue(testPrivateKey);
@@ -385,7 +381,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       );
     });
 
-    it('[EARS-10] should sign record with mock signature as fallback when private key is not available', async () => {
+    it('[EARS-E2] should sign record with mock signature as fallback when private key is not available', async () => {
       const mockRecord: GitGovRecord = {
         header: {
           version: '1.0',
@@ -403,7 +399,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       };
 
       // Mock actor exists
-      mockActorStore.read.mockResolvedValue(sampleRecord);
+      mockActorStore.get.mockResolvedValue(sampleRecord);
 
       // Mock KeyProvider to return null (no private key)
       mockKeyProvider.getPrivateKey.mockResolvedValue(null);
@@ -430,7 +426,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       console.warn = originalWarn;
     });
 
-    it('[EARS-11] should throw error when actor not found', async () => {
+    it('[EARS-E3] should throw error when actor not found', async () => {
       const mockRecord: GitGovRecord = {
         header: {
           version: '1.0',
@@ -447,13 +443,13 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
         payload: sampleActorPayload
       };
 
-      mockActorStore.read.mockResolvedValue(null);
+      mockActorStore.get.mockResolvedValue(null);
 
       await expect(identityAdapter.signRecord(mockRecord, 'non-existent', 'author', 'Test signature'))
         .rejects.toThrow('Actor not found: non-existent');
     });
 
-    it('[EARS-12] should replace placeholder signatures instead of adding new ones', async () => {
+    it('[EARS-E4] should replace placeholder signatures instead of adding new ones', async () => {
       const mockRecord: GitGovRecord = {
         header: {
           version: '1.0',
@@ -471,7 +467,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       };
 
       // Mock actor exists
-      mockActorStore.read.mockResolvedValue(sampleRecord);
+      mockActorStore.get.mockResolvedValue(sampleRecord);
 
       // Mock KeyProvider to return null (no private key) - will use mock signature
       mockKeyProvider.getPrivateKey.mockResolvedValue(null);
@@ -501,7 +497,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
   });
 
   describe('rotateActorKey', () => {
-    it('[EARS-13] should rotate keys by creating new actor and revoking old one', async () => {
+    it('[EARS-F1] should rotate keys by creating new actor and revoking old one', async () => {
       const existingActor = sampleActorPayload;
       const baseActorId = 'human:new-test-user';
       const newActorId = 'human:new-test-user-v2'; // rotateActorKey adds -v2 suffix
@@ -544,11 +540,11 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       mockedValidateFullActorRecord.mockResolvedValueOnce(undefined);
 
       // Mock actorStore.write for new actor
-      mockActorStore.write.mockResolvedValue(undefined);
+      mockActorStore.put.mockResolvedValue(undefined);
       mockActorStore.list.mockResolvedValue(['human:test-user']); // For bootstrap check
 
       // Mock revokeActor by mocking the internal calls
-      mockActorStore.read
+      mockActorStore.get
         .mockResolvedValueOnce(sampleRecord) // Read for revoke
         .mockResolvedValueOnce(sampleRecord); // Read for revoke (second call)
 
@@ -558,21 +554,21 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       expect(result.oldActor.supersededBy).toBe(newActorId);
       expect(result.newActor.id).toBe(newActorId);
       expect(result.newActor.publicKey).toBe(newPublicKey);
-      expect(mockActorStore.write).toHaveBeenCalled(); // New actor written
+      expect(mockActorStore.put).toHaveBeenCalled(); // New actor written
       expect(mockKeyProvider.setPrivateKey).toHaveBeenCalledWith(
         newActorId,
         newPrivateKey
       );
     });
 
-    it('[EARS-14] should throw error if actor not found', async () => {
+    it('[EARS-F2] should throw error if actor not found', async () => {
       jest.spyOn(identityAdapter, 'getActor').mockResolvedValue(null);
 
       await expect(identityAdapter.rotateActorKey('non-existent'))
         .rejects.toThrow('ActorRecord with id non-existent not found');
     });
 
-    it('[EARS-15] should throw error if actor already revoked', async () => {
+    it('[EARS-F3] should throw error if actor already revoked', async () => {
       const revokedActor = { ...sampleActorPayload, status: 'revoked' as const };
       jest.spyOn(identityAdapter, 'getActor').mockResolvedValue(revokedActor);
 
@@ -580,7 +576,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
         .rejects.toThrow('Cannot rotate key for revoked actor: human:test-user');
     });
 
-    it('[EARS-16] should throw error if validateFullActorRecord fails', async () => {
+    it('[EARS-F4] should throw error if validateFullActorRecord fails', async () => {
       const existingActor = sampleActorPayload;
       const newActorId = 'human:new-test-user';
       const newPublicKey = 'NEW_PUBLIC_KEY_BASE64_44_CHARS_LONG_AAAAAAAAAAA=';
@@ -615,10 +611,10 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
         .rejects.toThrow('Validation failed: invalid public key format');
 
       // Verify new actor was NOT written
-      expect(mockActorStore.write).not.toHaveBeenCalled();
+      expect(mockActorStore.put).not.toHaveBeenCalled();
     });
 
-    it('[EARS-17] should throw error if actorStore.write fails (rollback scenario)', async () => {
+    it('[EARS-F5] should throw error if actorStore.write fails (rollback scenario)', async () => {
       const existingActor = sampleActorPayload;
       const newActorId = 'human:new-test-user';
       const newPublicKey = 'NEW_PUBLIC_KEY_BASE64_44_CHARS_LONG_AAAAAAAAAAA=';
@@ -646,16 +642,16 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       mockedValidateFullActorRecord.mockResolvedValueOnce(undefined);
 
       // Mock actorStore.write to fail
-      mockActorStore.write.mockRejectedValueOnce(new Error('Disk full: cannot write'));
+      mockActorStore.put.mockRejectedValueOnce(new Error('Disk full: cannot write'));
 
       await expect(identityAdapter.rotateActorKey('human:test-user'))
         .rejects.toThrow('Disk full: cannot write');
 
       // Verify revokeActor was NOT called (rollback)
-      expect(mockActorStore.read).not.toHaveBeenCalledWith('human:test-user');
+      expect(mockActorStore.get).not.toHaveBeenCalledWith('human:test-user');
     });
 
-    it('[EARS-18] should handle failure when revokeActor fails after new actor is created', async () => {
+    it('[EARS-F6] should handle failure when revokeActor fails after new actor is created', async () => {
       const existingActor = sampleActorPayload;
       const newActorId = 'human:new-test-user';
       const newPublicKey = 'NEW_PUBLIC_KEY_BASE64_44_CHARS_LONG_AAAAAAAAAAA=';
@@ -681,7 +677,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
         timestamp: Date.now()
       });
       mockedValidateFullActorRecord.mockResolvedValueOnce(undefined);
-      mockActorStore.write.mockResolvedValue(undefined);
+      mockActorStore.put.mockResolvedValue(undefined);
       mockActorStore.list.mockResolvedValue(['human:test-user']);
 
       // Mock revokeActor to fail directly
@@ -695,10 +691,10 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       // NOTE: This is a known limitation - if revokeActor fails, the new actor
       // is already created. This could leave two active actors. In production,
       // this should be handled with transactions or cleanup logic.
-      expect(mockActorStore.write).toHaveBeenCalled(); // New actor was written
+      expect(mockActorStore.put).toHaveBeenCalled(); // New actor was written
     });
 
-    it('[EARS-19] should handle private key persistence failure gracefully', async () => {
+    it('[EARS-F7] should handle private key persistence failure gracefully', async () => {
       const existingActor = sampleActorPayload;
       const newActorId = 'human:new-test-user';
       const newPublicKey = 'NEW_PUBLIC_KEY_BASE64_44_CHARS_LONG_AAAAAAAAAAA=';
@@ -724,9 +720,9 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
         timestamp: Date.now()
       });
       mockedValidateFullActorRecord.mockResolvedValueOnce(undefined);
-      mockActorStore.write.mockResolvedValue(undefined);
+      mockActorStore.put.mockResolvedValue(undefined);
       mockActorStore.list.mockResolvedValue(['human:test-user']);
-      mockActorStore.read
+      mockActorStore.get
         .mockResolvedValueOnce(sampleRecord)
         .mockResolvedValueOnce(sampleRecord);
 
@@ -750,7 +746,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
   });
 
   describe('authenticate', () => {
-    it('[EARS-20] should log warning for unimplemented method', async () => {
+    it('[EARS-G1] should log warning for unimplemented method', async () => {
       const originalWarn = console.warn;
       console.warn = jest.fn();
 
@@ -807,46 +803,46 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
     };
 
     describe('getAgentRecord', () => {
-      it('[EARS-21] should return AgentRecord when it exists', async () => {
-        mockAgentStore.read.mockResolvedValue(sampleAgentRecord);
+      it('[EARS-H1] should return AgentRecord when it exists', async () => {
+        mockAgentStore.get.mockResolvedValue(sampleAgentRecord);
 
         const result = await identityAdapter.getAgentRecord('agent:test-agent');
 
-        expect(mockAgentStore.read).toHaveBeenCalledWith('agent:test-agent');
+        expect(mockAgentStore.get).toHaveBeenCalledWith('agent:test-agent');
         expect(result).toEqual(sampleAgentPayload);
       });
 
-      it('[EARS-22] should return null when AgentRecord does not exist', async () => {
-        mockAgentStore.read.mockResolvedValue(null);
+      it('[EARS-H2] should return null when AgentRecord does not exist', async () => {
+        mockAgentStore.get.mockResolvedValue(null);
 
         const result = await identityAdapter.getAgentRecord('agent:non-existent');
 
-        expect(mockAgentStore.read).toHaveBeenCalledWith('agent:non-existent');
+        expect(mockAgentStore.get).toHaveBeenCalledWith('agent:non-existent');
         expect(result).toBeNull();
       });
     });
 
     describe('listAgentRecords', () => {
-      it('[EARS-23] should return all AgentRecords', async () => {
+      it('[EARS-I1] should return all AgentRecords', async () => {
         const agentIds = ['agent:agent1', 'agent:agent2'];
         const record1 = { ...sampleAgentRecord, payload: { ...sampleAgentPayload, id: 'agent:agent1' } };
         const record2 = { ...sampleAgentRecord, payload: { ...sampleAgentPayload, id: 'agent:agent2' } };
 
         mockAgentStore.list.mockResolvedValue(agentIds);
-        mockAgentStore.read
+        mockAgentStore.get
           .mockResolvedValueOnce(record1)
           .mockResolvedValueOnce(record2);
 
         const result = await identityAdapter.listAgentRecords();
 
         expect(mockAgentStore.list).toHaveBeenCalled();
-        expect(mockAgentStore.read).toHaveBeenCalledTimes(2);
+        expect(mockAgentStore.get).toHaveBeenCalledTimes(2);
         expect(result).toHaveLength(2);
         expect(result[0]?.id).toBe('agent:agent1');
         expect(result[1]?.id).toBe('agent:agent2');
       });
 
-      it('[EARS-24] should return empty array when no agents exist', async () => {
+      it('[EARS-I2] should return empty array when no agents exist', async () => {
         mockAgentStore.list.mockResolvedValue([]);
 
         const result = await identityAdapter.listAgentRecords();
@@ -857,7 +853,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
     });
 
     describe('createAgentRecord', () => {
-      it('[EARS-25, EARS-26] should create a new AgentRecord when corresponding ActorRecord exists with real signing', async () => {
+      it('[EARS-J1, EARS-J2] should create a new AgentRecord when corresponding ActorRecord exists with real signing', async () => {
         const inputPayload = {
           id: 'agent:test-agent',
           engine: { type: 'local' as const, runtime: 'typescript', entrypoint: 'test.ts', function: 'run' }
@@ -866,7 +862,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
         const testPrivateKey = 'test-agent-private-key-base64';
 
         // Mock dependencies
-        mockActorStore.read.mockResolvedValue(correspondingActorRecord);
+        mockActorStore.get.mockResolvedValue(correspondingActorRecord);
         mockedCreateAgentRecord.mockReturnValue(sampleAgentPayload);
         mockedCalculatePayloadChecksum.mockReturnValue('calculated-agent-checksum');
 
@@ -881,11 +877,11 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
           timestamp: 1234567890
         });
         mockedValidateFullAgentRecord.mockResolvedValue(undefined);
-        mockAgentStore.write.mockResolvedValue(undefined);
+        mockAgentStore.put.mockResolvedValue(undefined);
 
         const result = await identityAdapter.createAgentRecord(inputPayload);
 
-        expect(mockActorStore.read).toHaveBeenCalledWith('agent:test-agent');
+        expect(mockActorStore.get).toHaveBeenCalledWith('agent:test-agent');
         expect(mockedCreateAgentRecord).toHaveBeenCalled();
         expect(mockedCalculatePayloadChecksum).toHaveBeenCalled();
 
@@ -900,18 +896,18 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
         );
 
         expect(mockedValidateFullAgentRecord).toHaveBeenCalled();
-        expect(mockAgentStore.write).toHaveBeenCalled();
+        expect(mockAgentStore.put).toHaveBeenCalled();
         expect(result).toEqual(sampleAgentPayload);
       });
 
-      it('[EARS-27] should throw error when private key is not available', async () => {
+      it('[EARS-J3] should throw error when private key is not available', async () => {
         const inputPayload = {
           id: 'agent:test-agent',
           engine: { type: 'local' as const, runtime: 'typescript', entrypoint: 'test.ts', function: 'run' }
         };
 
         // Mock dependencies
-        mockActorStore.read.mockResolvedValue(correspondingActorRecord);
+        mockActorStore.get.mockResolvedValue(correspondingActorRecord);
         mockedCreateAgentRecord.mockReturnValue(sampleAgentPayload);
         mockedCalculatePayloadChecksum.mockReturnValue('calculated-agent-checksum');
 
@@ -921,7 +917,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
         await expect(identityAdapter.createAgentRecord(inputPayload))
           .rejects.toThrow('Private key not found for actor agent:test-agent');
 
-        expect(mockActorStore.read).toHaveBeenCalledWith('agent:test-agent');
+        expect(mockActorStore.get).toHaveBeenCalledWith('agent:test-agent');
         expect(mockedCreateAgentRecord).toHaveBeenCalled();
         expect(mockedCalculatePayloadChecksum).toHaveBeenCalled();
 
@@ -930,10 +926,10 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
 
         // Should NOT call signPayload or write (operation should fail)
         expect(mockedSignPayload).not.toHaveBeenCalled();
-        expect(mockAgentStore.write).not.toHaveBeenCalled();
+        expect(mockAgentStore.put).not.toHaveBeenCalled();
       });
 
-      it('[EARS-28] should throw error when required fields are missing', async () => {
+      it('[EARS-J4] should throw error when required fields are missing', async () => {
         const invalidPayload = {
           id: 'agent:test-agent',
           // Missing engine
@@ -943,19 +939,19 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
           .rejects.toThrow('AgentRecord requires id and engine');
       });
 
-      it('[EARS-29] should throw error when corresponding ActorRecord does not exist', async () => {
+      it('[EARS-J5] should throw error when corresponding ActorRecord does not exist', async () => {
         const inputPayload = {
           id: 'agent:non-existent',
           engine: { type: 'local' as const }
         };
 
-        mockActorStore.read.mockResolvedValue(null);
+        mockActorStore.get.mockResolvedValue(null);
 
         await expect(identityAdapter.createAgentRecord(inputPayload))
           .rejects.toThrow('ActorRecord with id agent:non-existent not found. AgentRecord can only be created for existing ActorRecord.');
       });
 
-      it('[EARS-30] should throw error when ActorRecord is not of type agent', async () => {
+      it('[EARS-J6] should throw error when ActorRecord is not of type agent', async () => {
         const inputPayload = {
           id: 'human:test-user',
           engine: { type: 'local' as const }
@@ -966,7 +962,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
           payload: { ...correspondingActorPayload, id: 'human:test-user', type: 'human' as const }
         } as unknown as GitGovRecord & { payload: ActorRecord };
 
-        mockActorStore.read.mockResolvedValue(humanActorRecord);
+        mockActorStore.get.mockResolvedValue(humanActorRecord);
 
         await expect(identityAdapter.createAgentRecord(inputPayload))
           .rejects.toThrow('ActorRecord with id human:test-user must be of type \'agent\' to create AgentRecord.');
@@ -975,9 +971,9 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
   });
 
   describe('resolveCurrentActorId', () => {
-    it('[EARS-31] should return same ID for active actor', async () => {
+    it('[EARS-K1] should return same ID for active actor', async () => {
       const activeActor = { ...sampleActorPayload, status: 'active' as const };
-      mockActorStore.read.mockResolvedValue({
+      mockActorStore.get.mockResolvedValue({
         ...sampleRecord,
         payload: activeActor
       });
@@ -985,10 +981,10 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       const result = await identityAdapter.resolveCurrentActorId('human:test-user');
 
       expect(result).toBe('human:test-user');
-      expect(mockActorStore.read).toHaveBeenCalledWith('human:test-user');
+      expect(mockActorStore.get).toHaveBeenCalledWith('human:test-user');
     });
 
-    it('[EARS-32] should follow succession chain for revoked actor', async () => {
+    it('[EARS-K2] should follow succession chain for revoked actor', async () => {
       const revokedActor = {
         ...sampleActorPayload,
         status: 'revoked' as const,
@@ -1000,7 +996,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
         status: 'active' as const
       };
 
-      mockActorStore.read
+      mockActorStore.get
         .mockResolvedValueOnce({
           ...sampleRecord,
           payload: revokedActor
@@ -1013,17 +1009,17 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       const result = await identityAdapter.resolveCurrentActorId('human:test-user');
 
       expect(result).toBe('human:test-user-v2');
-      expect(mockActorStore.read).toHaveBeenCalledTimes(2);
-      expect(mockActorStore.read).toHaveBeenNthCalledWith(1, 'human:test-user');
-      expect(mockActorStore.read).toHaveBeenNthCalledWith(2, 'human:test-user-v2');
+      expect(mockActorStore.get).toHaveBeenCalledTimes(2);
+      expect(mockActorStore.get).toHaveBeenNthCalledWith(1, 'human:test-user');
+      expect(mockActorStore.get).toHaveBeenNthCalledWith(2, 'human:test-user-v2');
     });
 
-    it('[EARS-33] should follow long succession chain', async () => {
+    it('[EARS-K3] should follow long succession chain', async () => {
       const actor1 = { ...sampleActorPayload, status: 'revoked' as const, supersededBy: 'human:test-user-v2' };
       const actor2 = { ...sampleActorPayload, id: 'human:test-user-v2', status: 'revoked' as const, supersededBy: 'human:test-user-v3' };
       const actor3 = { ...sampleActorPayload, id: 'human:test-user-v3', status: 'active' as const };
 
-      mockActorStore.read
+      mockActorStore.get
         .mockResolvedValueOnce({ ...sampleRecord, payload: actor1 })
         .mockResolvedValueOnce({ ...sampleRecord, payload: actor2 })
         .mockResolvedValueOnce({ ...sampleRecord, payload: actor3 });
@@ -1031,12 +1027,12 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       const result = await identityAdapter.resolveCurrentActorId('human:test-user');
 
       expect(result).toBe('human:test-user-v3');
-      expect(mockActorStore.read).toHaveBeenCalledTimes(3);
+      expect(mockActorStore.get).toHaveBeenCalledTimes(3);
     });
   });
 
   describe('getEffectiveActorForAgent', () => {
-    it('[EARS-34] should return effective actor for agent with succession', async () => {
+    it('[EARS-L1] should return effective actor for agent with succession', async () => {
       // Test the method by mocking resolveCurrentActorId and getActor separately
       const newActiveAgentActor = {
         ...sampleActorPayload,
@@ -1065,7 +1061,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
   });
 
   describe('getCurrentActor', () => {
-    it('[EARS-35] should return actor from valid session resolving succession chain', async () => {
+    it('[EARS-M1] should return actor from valid session resolving succession chain', async () => {
       // Mock ConfigManager to simulate existing session (testing the primary path)
       mockConfigManagerInstance.loadSession.mockResolvedValue({
         lastSession: {
@@ -1086,7 +1082,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       expect(identityAdapter.getActor).toHaveBeenCalledWith('human:camilo');
     });
 
-    it('[EARS-36] should return first active actor when no valid session', async () => {
+    it('[EARS-M2] should return first active actor when no valid session', async () => {
       // Mock ConfigManager to simulate no session (testing the fallback path)
       mockConfigManagerInstance.loadSession.mockResolvedValue(null);
 
@@ -1103,7 +1099,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       expect(result.status).toBe('active');
     });
 
-    it('[EARS-37] should throw error when no active actors exist', async () => {
+    it('[EARS-M3] should throw error when no active actors exist', async () => {
       // Mock ConfigManager to simulate no session
       mockConfigManagerInstance.loadSession.mockResolvedValue(null);
 
@@ -1143,7 +1139,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
         timestamp: 1234567890
       });
       mockedValidateFullActorRecord.mockResolvedValue(undefined);
-      mockActorStore.write.mockResolvedValue(undefined);
+      mockActorStore.put.mockResolvedValue(undefined);
       mockActorStore.list.mockResolvedValue(['human:test-user']); // Only one actor (bootstrap)
 
       // Suppress console.warn for tests
@@ -1171,8 +1167,8 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
 
     it('should emit actor.revoked event when revoking actor with eventBus', async () => {
       const existingRecord = { ...sampleRecord };
-      mockActorStore.read.mockResolvedValue(existingRecord);
-      mockActorStore.write.mockResolvedValue(undefined);
+      mockActorStore.get.mockResolvedValue(existingRecord);
+      mockActorStore.put.mockResolvedValue(undefined);
       mockedCalculatePayloadChecksum.mockReturnValue('new-checksum');
 
       await identityAdapterWithEvents.revokeActor('human:test-user', 'admin', 'manual', 'human:test-user-v2');
@@ -1214,7 +1210,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
         timestamp: 1234567890
       });
       mockedValidateFullActorRecord.mockResolvedValue(undefined);
-      mockActorStore.write.mockResolvedValue(undefined);
+      mockActorStore.put.mockResolvedValue(undefined);
 
       // Suppress console.warn for tests
       const originalWarn = console.warn;

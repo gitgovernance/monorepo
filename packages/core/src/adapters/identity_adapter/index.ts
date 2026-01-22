@@ -1,11 +1,13 @@
-import type { ActorRecord, GitGovActorRecord, GitGovAgentRecord } from "../../types";
-import type { AgentRecord } from "../../types";
 import type {
+  ActorRecord,
+  AgentRecord,
   GitGovRecord,
+  GitGovActorRecord,
+  GitGovAgentRecord,
   ActorPayload,
   AgentPayload,
 } from "../../types";
-import { RecordStore } from "../../store/record_store";
+import type { RecordStores } from "../../record_store";
 import { createActorRecord } from "../../factories/actor_factory";
 import { validateFullActorRecord } from "../../validation/actor_validator";
 import { createAgentRecord } from "../../factories/agent_factory";
@@ -39,7 +41,7 @@ export interface IIdentityAdapter {
   getEffectiveActorForAgent(agentId: string): Promise<ActorRecord | null>;
 
   // Advanced Operations
-  signRecord(record: GitGovRecord, actorId: string, role: string, notes: string): Promise<GitGovRecord>;
+  signRecord<T extends GitGovRecord>(record: T, actorId: string, role: string, notes: string): Promise<T>;
   rotateActorKey(actorId: string): Promise<{ oldActor: ActorRecord; newActor: ActorRecord }>;
   authenticate(sessionToken: string): Promise<void>;
   getActorPublicKey(keyId: string): Promise<string | null>;
@@ -54,9 +56,8 @@ export interface IIdentityAdapter {
  * IdentityAdapter Dependencies - Facade + Dependency Injection Pattern
  */
 export interface IdentityAdapterDependencies {
-  // Data Layer (Protocols)
-  actorStore: RecordStore<ActorRecord>;
-  agentStore: RecordStore<AgentRecord>;
+  // Data Layer - Required stores for IdentityAdapter
+  stores: Required<Pick<RecordStores, 'actors' | 'agents'>>;
 
   // Key Management
   keyProvider: KeyProvider;
@@ -66,14 +67,12 @@ export interface IdentityAdapterDependencies {
 }
 
 export class IdentityAdapter implements IIdentityAdapter {
-  private actorStore: RecordStore<ActorRecord>;
-  private agentStore: RecordStore<AgentRecord>;
+  private stores: Required<Pick<RecordStores, 'actors' | 'agents'>>;
   private keyProvider: KeyProvider;
   private eventBus: IEventStream | undefined;
 
   constructor(dependencies: IdentityAdapterDependencies) {
-    this.actorStore = dependencies.actorStore;
-    this.agentStore = dependencies.agentStore;
+    this.stores = dependencies.stores;
     this.keyProvider = dependencies.keyProvider;
     this.eventBus = dependencies.eventBus; // Graceful degradation
   }
@@ -146,7 +145,7 @@ export class IdentityAdapter implements IIdentityAdapter {
     });
 
     // Store the record with validation
-    await this.actorStore.write(record);
+    await this.stores.actors.put(record.payload.id, record);
 
     // Persist private key via KeyProvider
     try {
@@ -160,7 +159,7 @@ export class IdentityAdapter implements IIdentityAdapter {
     // Emit actor created event (graceful degradation if no eventBus)
     if (this.eventBus) {
       // Check if this is the first actor (bootstrap)
-      const allActorIds = await this.actorStore.list();
+      const allActorIds = await this.stores.actors.list();
       const isBootstrap = allActorIds.length === 1; // Only the actor we just created
 
       const event: ActorCreatedEvent = {
@@ -182,16 +181,16 @@ export class IdentityAdapter implements IIdentityAdapter {
   }
 
   async getActor(actorId: string): Promise<ActorRecord | null> {
-    const record = await this.actorStore.read(actorId);
+    const record = await this.stores.actors.get(actorId);
     return record ? record.payload : null;
   }
 
   async listActors(): Promise<ActorRecord[]> {
-    const ids = await this.actorStore.list();
+    const ids = await this.stores.actors.list();
     const actors: ActorRecord[] = [];
 
     for (const id of ids) {
-      const record = await this.actorStore.read(id);
+      const record = await this.stores.actors.get(id);
       if (record) {
         actors.push(record.payload);
       }
@@ -200,12 +199,12 @@ export class IdentityAdapter implements IIdentityAdapter {
     return actors;
   }
 
-  async signRecord(
-    record: GitGovRecord,
+  async signRecord<T extends GitGovRecord>(
+    record: T,
     actorId: string,
     role: string,
     notes: string
-  ): Promise<GitGovRecord> {
+  ): Promise<T> {
     // Verify actor exists
     const actor = await this.getActor(actorId);
     if (!actor) {
@@ -260,14 +259,15 @@ export class IdentityAdapter implements IIdentityAdapter {
     }
 
     // Create signed record with real checksum + signature
-    const signedRecord: GitGovRecord = {
+    // Type assertion safe: we only modify header, payload type T is preserved
+    const signedRecord = {
       ...record,
       header: {
         ...record.header,
         payloadChecksum,
         signatures: finalSignatures
       }
-    };
+    } as T;
 
     return signedRecord;
   }
@@ -407,7 +407,7 @@ export class IdentityAdapter implements IIdentityAdapter {
     });
 
     // Store the new actor record
-    await this.actorStore.write(newRecord);
+    await this.stores.actors.put(newRecord.payload.id, newRecord);
 
     // Revoke old actor and mark succession
     const revokedOldActor = await this.revokeActor(
@@ -449,7 +449,7 @@ export class IdentityAdapter implements IIdentityAdapter {
 
   async revokeActor(actorId: string, revokedBy: string = "system", reason: "compromised" | "rotation" | "manual" = "manual", supersededBy?: string): Promise<ActorRecord> {
     // Read the existing actor
-    const existingRecord = await this.actorStore.read(actorId);
+    const existingRecord = await this.stores.actors.get(actorId);
     if (!existingRecord) {
       throw new Error(`ActorRecord with id ${actorId} not found`);
     }
@@ -475,7 +475,7 @@ export class IdentityAdapter implements IIdentityAdapter {
     };
 
     // Store the updated record with validation
-    await this.actorStore.write(updatedRecord);
+    await this.stores.actors.put(updatedRecord.payload.id, updatedRecord);
 
     // Emit actor revoked event (graceful degradation if no eventBus)
     if (this.eventBus) {
@@ -581,7 +581,7 @@ export class IdentityAdapter implements IIdentityAdapter {
     });
 
     // Store the record with validation
-    await this.agentStore.write(record);
+    await this.stores.agents.put(record.payload.id, record);
 
     // Emit agent registered event (graceful degradation if no eventBus)
     if (this.eventBus) {
@@ -602,16 +602,16 @@ export class IdentityAdapter implements IIdentityAdapter {
   }
 
   async getAgentRecord(agentId: string): Promise<AgentRecord | null> {
-    const record = await this.agentStore.read(agentId);
+    const record = await this.stores.agents.get(agentId);
     return record ? record.payload : null;
   }
 
   async listAgentRecords(): Promise<AgentRecord[]> {
-    const ids = await this.agentStore.list();
+    const ids = await this.stores.agents.list();
     const agents: AgentRecord[] = [];
 
     for (const id of ids) {
-      const record = await this.agentStore.read(id);
+      const record = await this.stores.agents.get(id);
       if (record) {
         agents.push(record.payload);
       }
