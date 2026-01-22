@@ -36,7 +36,7 @@ jest.doMock('../identity_adapter', () => ({
   }))
 }));
 
-import { BacklogAdapter } from './index';
+import { BacklogAdapter } from './backlog_adapter';
 import { MemoryRecordStore } from '../../record_store/memory';
 import { FsRecordStore } from '../../record_store/fs';
 import type { RecordStores } from '../../record_store';
