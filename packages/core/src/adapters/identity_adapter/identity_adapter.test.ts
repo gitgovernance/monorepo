@@ -1115,8 +1115,8 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
     });
   });
 
-  describe('Event Emission', () => {
-    it('should emit actor.created event when creating actor with eventBus', async () => {
+  describe('Event Emission (EARS-N1 to N3)', () => {
+    it('[EARS-N1] should emit actor.created event when creating actor with eventBus', async () => {
       const inputPayload = {
         type: 'human' as const,
         displayName: 'Test User',
@@ -1165,7 +1165,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       console.warn = originalWarn;
     });
 
-    it('should emit actor.revoked event when revoking actor with eventBus', async () => {
+    it('[EARS-N2] should emit actor.revoked event when revoking actor with eventBus', async () => {
       const existingRecord = { ...sampleRecord };
       mockActorStore.get.mockResolvedValue(existingRecord);
       mockActorStore.put.mockResolvedValue(undefined);
@@ -1187,7 +1187,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       });
     });
 
-    it('should not emit events when eventBus is not provided (graceful degradation)', async () => {
+    it('[EARS-N3] should not emit events when eventBus is not provided (graceful degradation)', async () => {
       const inputPayload = {
         type: 'human' as const,
         displayName: 'Test User',
