@@ -106,7 +106,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       waitForIdle: jest.fn().mockResolvedValue(undefined),
     } as unknown as jest.Mocked<IEventStream>;
 
-    // Create IdentityAdapter without events (graceful degradation)
+    // Create IdentityAdapter without events (optional dependency)
     identityAdapter = new IdentityAdapter({
       stores: { actors: mockActorStore, agents: mockAgentStore },
       keyProvider: mockKeyProvider,
@@ -694,7 +694,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       expect(mockActorStore.put).toHaveBeenCalled(); // New actor was written
     });
 
-    it('[EARS-F7] should handle private key persistence failure gracefully', async () => {
+    it('[EARS-F7] should handle private key persistence failure with warning only', async () => {
       const existingActor = sampleActorPayload;
       const newActorId = 'human:new-test-user';
       const newPublicKey = 'NEW_PUBLIC_KEY_BASE64_44_CHARS_LONG_AAAAAAAAAAA=';
@@ -732,7 +732,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       const originalWarn = console.warn;
       console.warn = jest.fn();
 
-      // Should NOT throw error - graceful degradation
+      // Should NOT throw error - warning only (non-blocking failure)
       const result = await identityAdapter.rotateActorKey('human:test-user');
 
       expect(result.oldActor.status).toBe('revoked');
@@ -1187,7 +1187,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       });
     });
 
-    it('[EARS-N3] should not emit events when eventBus is not provided (graceful degradation)', async () => {
+    it('[EARS-N3] should not emit events when eventBus is not provided (optional dependency)', async () => {
       const inputPayload = {
         type: 'human' as const,
         displayName: 'Test User',
@@ -1219,7 +1219,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       // Use adapter WITHOUT eventBus
       await identityAdapter.createActor(inputPayload, 'human:test-user');
 
-      // Verify no events were published (graceful degradation)
+      // Verify no events were published (optional dependency)
       expect(mockEventBus.publish).not.toHaveBeenCalled();
 
       console.warn = originalWarn;

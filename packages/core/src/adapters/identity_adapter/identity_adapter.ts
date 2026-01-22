@@ -35,7 +35,7 @@ export class IdentityAdapter implements IIdentityAdapter {
   constructor(dependencies: IdentityAdapterDependencies) {
     this.stores = dependencies.stores;
     this.keyProvider = dependencies.keyProvider;
-    this.eventBus = dependencies.eventBus; // Graceful degradation
+    this.eventBus = dependencies.eventBus; // Optional dependency
   }
 
   /**
@@ -113,11 +113,11 @@ export class IdentityAdapter implements IIdentityAdapter {
       await this.keyProvider.setPrivateKey(actorId, privateKey);
     } catch (error) {
       // Log warning but don't fail actor creation if key persistence fails
-      // This allows graceful degradation in environments where file permissions might be restricted
+      // This allows fallback behavior in environments where file permissions might be restricted
       console.warn(`⚠️  Could not persist private key for ${actorId}: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
 
-    // Emit actor created event (graceful degradation if no eventBus)
+    // Emit actor created event (skipped if no eventBus)
     if (this.eventBus) {
       // Check if this is the first actor (bootstrap)
       const allActorIds = await this.stores.actors.list();
@@ -391,7 +391,7 @@ export class IdentityAdapter implements IIdentityAdapter {
         await configManager.updateActorState(newActorId, {});
       }
     } catch (error) {
-      // Graceful degradation: session update is not critical
+      // Non-critical: session update failure logged as warning
       console.warn(`⚠️  Could not update session for ${newActorId}: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
 
@@ -438,7 +438,7 @@ export class IdentityAdapter implements IIdentityAdapter {
     // Store the updated record with validation
     await this.stores.actors.put(updatedRecord.payload.id, updatedRecord);
 
-    // Emit actor revoked event (graceful degradation if no eventBus)
+    // Emit actor revoked event (skipped if no eventBus)
     if (this.eventBus) {
       const eventPayload: ActorRevokedEvent["payload"] = {
         actorId,
@@ -544,7 +544,7 @@ export class IdentityAdapter implements IIdentityAdapter {
     // Store the record with validation
     await this.stores.agents.put(record.payload.id, record);
 
-    // Emit agent registered event (graceful degradation if no eventBus)
+    // Emit agent registered event (skipped if no eventBus)
     if (this.eventBus) {
       const event: AgentRegisteredEvent = {
         type: "identity.agent.registered",

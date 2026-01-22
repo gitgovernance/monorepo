@@ -46,6 +46,6 @@ export interface IdentityAdapterDependencies {
   // Key Management
   keyProvider: KeyProvider;
 
-  // Optional: Event Bus for event-driven integration (graceful degradation)
+  // Optional: Event Bus for event-driven integration (optional dependency)
   eventBus?: IEventStream;
 }
