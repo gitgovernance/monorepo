@@ -1,16 +1,15 @@
 import { createFeedbackRecord } from '../../factories/feedback_factory';
-import { RecordStore } from '../../store';
+import type { RecordStores } from '../../record_store/record_store.types';
 import { IdentityAdapter } from '../identity_adapter';
-import type { FeedbackRecord } from '../../types';
+import type { FeedbackRecord, GitGovFeedbackRecord } from '../../types';
 import type { IEventStream, FeedbackCreatedEvent } from '../../event_bus';
-import type { GitGovRecord } from '../../types';
 
 /**
  * FeedbackAdapter Dependencies - Facade + Dependency Injection Pattern
  */
 export interface FeedbackAdapterDependencies {
   // Data Layer (Protocols)
-  feedbackStore: RecordStore<FeedbackRecord>;
+  stores: Required<Pick<RecordStores, 'feedbacks'>>;
 
   // Infrastructure Layer
   identity: IdentityAdapter;
@@ -67,19 +66,19 @@ export interface IFeedbackAdapter {
  * Acts as Mediator between structured communication and data stores.
  */
 export class FeedbackAdapter implements IFeedbackAdapter {
-  private feedbackStore: RecordStore<FeedbackRecord>;
+  private stores: Required<Pick<RecordStores, 'feedbacks'>>;
   private identity: IdentityAdapter;
   private eventBus: IEventStream;
 
   constructor(dependencies: FeedbackAdapterDependencies) {
-    this.feedbackStore = dependencies.feedbackStore;
+    this.stores = dependencies.stores;
     this.identity = dependencies.identity;
     this.eventBus = dependencies.eventBus;
   }
 
   /**
-   * [EARS-1, EARS-2, EARS-3, EARS-4, EARS-5, EARS-6, EARS-7, EARS-8] Creates a new FeedbackRecord for structured communication between actors.
-   * 
+   * [EARS-A1] Creates a new FeedbackRecord for structured communication between actors.
+   *
    * Description: Creates a new FeedbackRecord for structured communication between actors.
    * Implementation: Builds record with status: "open", signs with actorId, persists and emits event.
    * Usage: Invoked by `gitgov feedback create` to create feedback, assignments, blocks, responses.
@@ -141,7 +140,7 @@ export class FeedbackAdapter implements IFeedbackAdapter {
       const validatedPayload = createFeedbackRecord(enrichedPayload);
 
       // 2. Create unsigned record structure
-      const unsignedRecord: GitGovRecord & { payload: FeedbackRecord } = {
+      const unsignedRecord: GitGovFeedbackRecord = {
         header: {
           version: '1.0',
           type: 'feedback',
@@ -161,7 +160,7 @@ export class FeedbackAdapter implements IFeedbackAdapter {
       const signedRecord = await this.identity.signRecord(unsignedRecord, actorId, 'author', 'Feedback record created');
 
       // 4. Persist the record
-      await this.feedbackStore.write(signedRecord as GitGovRecord & { payload: FeedbackRecord });
+      await this.stores.feedbacks.put(signedRecord.payload.id, signedRecord);
 
       // 5. Emit event - responsibility ends here
       this.eventBus.publish({
@@ -191,8 +190,8 @@ export class FeedbackAdapter implements IFeedbackAdapter {
   }
 
   /**
-   * [EARS-9, EARS-10, EARS-11, EARS-12] Helper: Creates a new feedback that "resolves" another (immutable).
-   * 
+   * [EARS-B1] Helper: Creates a new feedback that "resolves" another (immutable).
+   *
    * Description: Helper method that creates a new feedback documenting resolution of another feedback.
    * Implementation: Verifies original exists, then delegates to create() with immutable pattern.
    * Usage: Ergonomic helper for common case. For advanced cases (wontfix, approval), use create() directly.
@@ -221,32 +220,32 @@ export class FeedbackAdapter implements IFeedbackAdapter {
   }
 
   /**
-   * [EARS-13, EARS-14] Gets a specific FeedbackRecord by its ID for query.
-   * 
+   * [EARS-C1] Gets a specific FeedbackRecord by its ID for query.
+   *
    * Description: Gets a specific FeedbackRecord by its ID for query.
    * Implementation: Direct read from record store without modifications.
    * Usage: Invoked by `gitgov feedback show` to display feedback details.
    * Returns: FeedbackRecord found or null if it doesn't exist.
    */
   async getFeedback(feedbackId: string): Promise<FeedbackRecord | null> {
-    const record = await this.feedbackStore.read(feedbackId);
+    const record = await this.stores.feedbacks.get(feedbackId);
     return record ? record.payload : null;
   }
 
   /**
-   * [EARS-15] Gets all FeedbackRecords associated with a specific entity.
-   * 
+   * [EARS-D1] Gets all FeedbackRecords associated with a specific entity.
+   *
    * Description: Gets all FeedbackRecords associated with a specific entity.
    * Implementation: Reads all records and filters by matching entityId.
    * Usage: Invoked by `gitgov feedback list` to display feedback for a task/cycle/execution.
    * Returns: Array of FeedbackRecords filtered for the entity.
    */
   async getFeedbackByEntity(entityId: string): Promise<FeedbackRecord[]> {
-    const ids = await this.feedbackStore.list();
+    const ids = await this.stores.feedbacks.list();
     const feedbacks: FeedbackRecord[] = [];
 
     for (const id of ids) {
-      const record = await this.feedbackStore.read(id);
+      const record = await this.stores.feedbacks.get(id);
       if (record && record.payload.entityId === entityId) {
         feedbacks.push(record.payload);
       }
@@ -256,19 +255,19 @@ export class FeedbackAdapter implements IFeedbackAdapter {
   }
 
   /**
-   * [EARS-16] Gets all FeedbackRecords in the system for indexation.
-   * 
+   * [EARS-E1] Gets all FeedbackRecords in the system for indexation.
+   *
    * Description: Gets all FeedbackRecords in the system for complete indexation.
    * Implementation: Complete read from record store without filters.
    * Usage: Invoked by `gitgov feedback list` and by MetricsAdapter for calculations.
    * Returns: Complete array of all FeedbackRecords.
    */
   async getAllFeedback(): Promise<FeedbackRecord[]> {
-    const ids = await this.feedbackStore.list();
+    const ids = await this.stores.feedbacks.list();
     const feedbacks: FeedbackRecord[] = [];
 
     for (const id of ids) {
-      const record = await this.feedbackStore.read(id);
+      const record = await this.stores.feedbacks.get(id);
       if (record) {
         feedbacks.push(record.payload);
       }
@@ -278,8 +277,8 @@ export class FeedbackAdapter implements IFeedbackAdapter {
   }
 
   /**
-   * [EARS-17, EARS-18, EARS-19, EARS-20] Builds the complete conversation tree for a feedback.
-   * 
+   * [EARS-F1] Builds the complete conversation tree for a feedback.
+   *
    * Description: Recursively constructs the conversation tree for a feedback.
    * Implementation: Reads root feedback, finds all responses, builds tree recursively until maxDepth.
    * Usage: Invoked by `gitgov feedback thread` and `gitgov feedback show --thread`.
