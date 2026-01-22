@@ -9,7 +9,6 @@ import type {
 import type { TaskRecord } from '../../types';
 import type { CycleRecord } from '../../types';
 import type { FeedbackRecord } from '../../types';
-import type { ExecutionRecord } from '../../types';
 import type { ChangelogRecord } from '../../types';
 import type { GitGovRecord } from '../../types';
 import type { ActorRecord } from '../../types';
@@ -26,31 +25,35 @@ type TransitionRule = {
 
 // Properly typed mock dependencies - NO ANY ALLOWED
 type MockBacklogAdapterDependencies = {
-  taskStore: {
-    list: jest.MockedFunction<() => Promise<TaskRecord[]>>;
-    read: jest.MockedFunction<(id: string) => Promise<TaskRecord | null>>;
-    write: jest.MockedFunction<(record: TaskRecord) => Promise<void>>;
-    delete: jest.MockedFunction<(id: string) => Promise<void>>;
-  };
-  cycleStore: {
-    list: jest.MockedFunction<() => Promise<string[]>>;
-    read: jest.MockedFunction<(id: string) => Promise<GitGovRecord & { payload: CycleRecord } | null>>;
-    write: jest.MockedFunction<(record: GitGovRecord & { payload: CycleRecord }) => Promise<void>>;
-  };
-  feedbackStore: {
-    list: jest.MockedFunction<() => Promise<FeedbackRecord[]>>;
-    read: jest.MockedFunction<(id: string) => Promise<FeedbackRecord | null>>;
-    write: jest.MockedFunction<(record: FeedbackRecord) => Promise<void>>;
-  };
-  executionStore: {
-    list: jest.MockedFunction<() => Promise<ExecutionRecord[]>>;
-    read: jest.MockedFunction<(id: string) => Promise<ExecutionRecord | null>>;
-    write: jest.MockedFunction<(record: ExecutionRecord) => Promise<void>>;
-  };
-  changelogStore: {
-    list: jest.MockedFunction<() => Promise<ChangelogRecord[]>>;
-    read: jest.MockedFunction<(id: string) => Promise<ChangelogRecord | null>>;
-    write: jest.MockedFunction<(record: ChangelogRecord) => Promise<void>>;
+  stores: {
+    tasks: {
+      list: jest.MockedFunction<() => Promise<string[]>>;
+      get: jest.MockedFunction<(id: string) => Promise<(GitGovRecord & { payload: TaskRecord }) | null>>;
+      put: jest.MockedFunction<(id: string, record: GitGovRecord & { payload: TaskRecord }) => Promise<void>>;
+      delete: jest.MockedFunction<(id: string) => Promise<void>>;
+      exists: jest.MockedFunction<(id: string) => Promise<boolean>>;
+    };
+    cycles: {
+      list: jest.MockedFunction<() => Promise<string[]>>;
+      get: jest.MockedFunction<(id: string) => Promise<(GitGovRecord & { payload: CycleRecord }) | null>>;
+      put: jest.MockedFunction<(id: string, record: GitGovRecord & { payload: CycleRecord }) => Promise<void>>;
+      delete: jest.MockedFunction<(id: string) => Promise<void>>;
+      exists: jest.MockedFunction<(id: string) => Promise<boolean>>;
+    };
+    feedbacks: {
+      list: jest.MockedFunction<() => Promise<string[]>>;
+      get: jest.MockedFunction<(id: string) => Promise<(GitGovRecord & { payload: FeedbackRecord }) | null>>;
+      put: jest.MockedFunction<(id: string, record: GitGovRecord & { payload: FeedbackRecord }) => Promise<void>>;
+      delete: jest.MockedFunction<(id: string) => Promise<void>>;
+      exists: jest.MockedFunction<(id: string) => Promise<boolean>>;
+    };
+    changelogs: {
+      list: jest.MockedFunction<() => Promise<string[]>>;
+      get: jest.MockedFunction<(id: string) => Promise<(GitGovRecord & { payload: ChangelogRecord }) | null>>;
+      put: jest.MockedFunction<(id: string, record: GitGovRecord & { payload: ChangelogRecord }) => Promise<void>>;
+      delete: jest.MockedFunction<(id: string) => Promise<void>>;
+      exists: jest.MockedFunction<(id: string) => Promise<boolean>>;
+    };
   };
   feedbackAdapter: {
     create: jest.MockedFunction<(payload: Partial<FeedbackRecord>, actorId: string) => Promise<FeedbackRecord>>;
@@ -167,6 +170,27 @@ function createMockFeedbackRecord(payload: Partial<FeedbackRecord>): GitGovRecor
   };
 }
 
+function createMockChangelogRecord(payload: Partial<ChangelogRecord>): GitGovRecord & { payload: ChangelogRecord } {
+  const baseId = payload.id || '1757687335-changelog-mock';
+  return {
+    header: {
+      version: '1.0',
+      type: 'changelog',
+      payloadChecksum: 'mock-checksum',
+      signatures: [{ keyId: 'mock-author', role: 'author', notes: 'Mock signature for backlog tests', signature: 'mock-sig', timestamp: 123 }] as [Signature, ...Signature[]]
+    },
+    payload: {
+      id: baseId,
+      title: 'Mock Changelog',
+      description: 'Mock changelog description',
+      relatedTasks: [],
+      completedAt: Date.now(),
+      version: 'v1.0.0',
+      ...payload
+    } as unknown as ChangelogRecord
+  };
+}
+
 // Complete unit tests for BacklogAdapter
 describe('BacklogAdapter - Complete Unit Tests', () => {
   let backlogAdapter: BacklogAdapter;
@@ -175,31 +199,35 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
   beforeEach(() => {
     // Complete setup for unit tests
     mockDependencies = {
-      taskStore: {
-        list: jest.fn().mockResolvedValue([]),
-        read: jest.fn(),
-        write: jest.fn(),
-        delete: jest.fn()
-      },
-      cycleStore: {
-        list: jest.fn().mockResolvedValue([]),
-        read: jest.fn(),
-        write: jest.fn()
-      },
-      feedbackStore: {
-        read: jest.fn(),
-        list: jest.fn().mockResolvedValue([]),
-        write: jest.fn()
-      },
-      executionStore: {
-        read: jest.fn(),
-        list: jest.fn().mockResolvedValue([]),
-        write: jest.fn()
-      },
-      changelogStore: {
-        read: jest.fn(),
-        list: jest.fn().mockResolvedValue([]),
-        write: jest.fn()
+      stores: {
+        tasks: {
+          list: jest.fn().mockResolvedValue([]),
+          get: jest.fn(),
+          put: jest.fn(),
+          delete: jest.fn(),
+          exists: jest.fn()
+        },
+        cycles: {
+          list: jest.fn().mockResolvedValue([]),
+          get: jest.fn(),
+          put: jest.fn(),
+          delete: jest.fn(),
+          exists: jest.fn()
+        },
+        feedbacks: {
+          list: jest.fn().mockResolvedValue([]),
+          get: jest.fn(),
+          put: jest.fn(),
+          delete: jest.fn(),
+          exists: jest.fn()
+        },
+        changelogs: {
+          list: jest.fn().mockResolvedValue([]),
+          get: jest.fn(),
+          put: jest.fn(),
+          delete: jest.fn(),
+          exists: jest.fn()
+        },
       },
       feedbackAdapter: {
         create: jest.fn(),
@@ -255,7 +283,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
     backlogAdapter = new BacklogAdapter(mockDependencies as unknown as BacklogAdapterDependencies);
   });
 
-  it('[EARS-32] should do nothing for non-blocking feedback', async () => {
+  it('[EARS-M2] should do nothing for non-blocking feedback', async () => {
     const event: FeedbackCreatedEvent = {
       type: 'feedback.created',
       timestamp: Date.now(),
@@ -275,7 +303,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
     await expect(backlogAdapter.handleFeedbackCreated(event)).resolves.not.toThrow();
   });
 
-  it('[EARS-38] should handle daily tick events', async () => {
+  it('[EARS-M8] should handle daily tick events', async () => {
     const event: SystemDailyTickEvent = {
       type: 'system.daily_tick',
       timestamp: Date.now(),
@@ -290,7 +318,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
   });
 
   describe('Cycle Operations', () => {
-    it('[EARS-28] should create, sign, and persist a valid cycle', async () => {
+    it('[EARS-K1] should create, sign, and persist a valid cycle', async () => {
       const mockCycle = createMockCycleRecord({
         id: '1757687335-cycle-test-cycle',
         title: 'Test Cycle',
@@ -302,14 +330,14 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       createCycleRecord.mockReturnValue(mockCycle.payload);
 
       mockDependencies.identity.signRecord.mockResolvedValue(mockCycle);
-      mockDependencies.cycleStore.write.mockResolvedValue(undefined);
+      mockDependencies.stores.cycles.put.mockResolvedValue(undefined);
 
       const result = await backlogAdapter.createCycle({
         title: 'Test Cycle',
         status: 'planning'
       }, 'human:author');
 
-      expect(mockDependencies.cycleStore.write).toHaveBeenCalled();
+      expect(mockDependencies.stores.cycles.put).toHaveBeenCalled();
       expect(mockDependencies.eventBus.publish).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'cycle.created',
@@ -321,39 +349,39 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       expect(result).toEqual(mockCycle.payload);
     });
 
-    it('[EARS-29] should read a cycle by its ID', async () => {
+    it('[EARS-K2] should read a cycle by its ID', async () => {
       const mockCycle = createMockCycleRecord({
         id: '1757687335-cycle-test-cycle',
         title: 'Test Cycle'
       });
 
-      mockDependencies.cycleStore.read.mockResolvedValue(mockCycle);
+      mockDependencies.stores.cycles.get.mockResolvedValue(mockCycle);
 
       const result = await backlogAdapter.getCycle('1757687335-cycle-test-cycle');
 
-      expect(mockDependencies.cycleStore.read).toHaveBeenCalledWith('1757687335-cycle-test-cycle');
+      expect(mockDependencies.stores.cycles.get).toHaveBeenCalledWith('1757687335-cycle-test-cycle');
       expect(result).toEqual(mockCycle.payload);
     });
 
-    it('[EARS-29] should return null for non-existent cycle', async () => {
-      mockDependencies.cycleStore.read.mockResolvedValue(null);
+    it('[EARS-K2b] should return null for non-existent cycle', async () => {
+      mockDependencies.stores.cycles.get.mockResolvedValue(null);
 
       const result = await backlogAdapter.getCycle('non-existent');
 
       expect(result).toBeNull();
     });
 
-    it('[EARS-30] should list all cycles', async () => {
+    it('[EARS-K3] should list all cycles', async () => {
       const mockCycles = [
         createMockCycleRecord({ id: '1757687335-cycle-test-1', title: 'Cycle 1' }),
         createMockCycleRecord({ id: '1757687336-cycle-test-2', title: 'Cycle 2' })
       ];
 
-      mockDependencies.cycleStore.list.mockResolvedValue([
+      mockDependencies.stores.cycles.list.mockResolvedValue([
         '1757687335-cycle-test-1',
         '1757687336-cycle-test-2'
       ]);
-      mockDependencies.cycleStore.read
+      mockDependencies.stores.cycles.get
         .mockResolvedValueOnce(mockCycles[0]!)
         .mockResolvedValueOnce(mockCycles[1]!);
 
@@ -364,7 +392,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       expect(result[1]).toEqual(mockCycles[1]?.payload);
     });
 
-    it('[EARS-31] should update a cycle and emit event on status change', async () => {
+    it('[EARS-K4] should update a cycle and emit event on status change', async () => {
       const originalCycle = createMockCycleRecord({
         id: '1757687335-cycle-test-cycle',
         status: 'planning'
@@ -374,8 +402,8 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         status: 'active'
       });
 
-      mockDependencies.cycleStore.read.mockResolvedValue(originalCycle);
-      mockDependencies.cycleStore.write.mockResolvedValue(undefined);
+      mockDependencies.stores.cycles.get.mockResolvedValue(originalCycle);
+      mockDependencies.stores.cycles.put.mockResolvedValue(undefined);
 
       // Mock the factory function
       const { createCycleRecord } = require('../../factories/cycle_factory');
@@ -383,7 +411,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
 
       const result = await backlogAdapter.updateCycle('1757687335-cycle-test-cycle', { status: 'active' });
 
-      expect(mockDependencies.cycleStore.write).toHaveBeenCalled();
+      expect(mockDependencies.stores.cycles.put).toHaveBeenCalled();
       expect(mockDependencies.eventBus.publish).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'cycle.status.changed',
@@ -397,7 +425,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       expect(result).toEqual(updatedCycle.payload);
     });
 
-    it('[EARS-58] should update activeCycleId in session when cycle is activated', async () => {
+    it('[EARS-K5] should update activeCycleId in session when cycle is activated', async () => {
       const cycleId = '1757687335-cycle-planning-to-active';
       const actorId = 'human:developer';
       const originalCycle = createMockCycleRecord({
@@ -409,8 +437,8 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         status: 'active'
       });
 
-      mockDependencies.cycleStore.read.mockResolvedValue(originalCycle);
-      mockDependencies.cycleStore.write.mockResolvedValue(undefined);
+      mockDependencies.stores.cycles.get.mockResolvedValue(originalCycle);
+      mockDependencies.stores.cycles.put.mockResolvedValue(undefined);
 
       // Mock the factory function
       const { createCycleRecord } = require('../../factories/cycle_factory');
@@ -427,7 +455,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       );
     });
 
-    it('[EARS-62] should clear activeCycleId in session when cycle is completed', async () => {
+    it('[EARS-K6] should clear activeCycleId in session when cycle is completed', async () => {
       const cycleId = '1757687335-cycle-active-to-completed';
       const actorId = 'human:developer';
       const originalCycle = createMockCycleRecord({
@@ -439,8 +467,8 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         status: 'completed'
       });
 
-      mockDependencies.cycleStore.read.mockResolvedValue(originalCycle);
-      mockDependencies.cycleStore.write.mockResolvedValue(undefined);
+      mockDependencies.stores.cycles.get.mockResolvedValue(originalCycle);
+      mockDependencies.stores.cycles.put.mockResolvedValue(undefined);
 
       // Mock the factory function
       const { createCycleRecord } = require('../../factories/cycle_factory');
@@ -457,7 +485,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       );
     });
 
-    it('[EARS-32] should create bidirectional link between task and cycle', async () => {
+    it('[EARS-L1] should create bidirectional link between task and cycle', async () => {
       const taskId = '1757687335-task-test-task';
       const cycleId = '1757687335-cycle-test-cycle';
 
@@ -470,10 +498,10 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         taskIds: []
       });
 
-      mockDependencies.taskStore.read.mockResolvedValue(mockTask as unknown as TaskRecord);
-      mockDependencies.cycleStore.read.mockResolvedValue(mockCycle);
-      mockDependencies.taskStore.write.mockResolvedValue(undefined);
-      mockDependencies.cycleStore.write.mockResolvedValue(undefined);
+      mockDependencies.stores.tasks.get.mockResolvedValue(mockTask);
+      mockDependencies.stores.cycles.get.mockResolvedValue(mockCycle);
+      mockDependencies.stores.tasks.put.mockResolvedValue(undefined);
+      mockDependencies.stores.cycles.put.mockResolvedValue(undefined);
 
       // Mock getCurrentActor for the new implementation
       mockDependencies.identity.getCurrentActor = jest.fn().mockResolvedValue({
@@ -483,14 +511,16 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
 
       await backlogAdapter.addTaskToCycle(cycleId, taskId);
 
-      expect(mockDependencies.cycleStore.write).toHaveBeenCalledWith(
+      expect(mockDependencies.stores.cycles.put).toHaveBeenCalledWith(
+        cycleId,
         expect.objectContaining({
           payload: expect.objectContaining({
             taskIds: expect.arrayContaining([taskId])
           })
         })
       );
-      expect(mockDependencies.taskStore.write).toHaveBeenCalledWith(
+      expect(mockDependencies.stores.tasks.put).toHaveBeenCalledWith(
+        taskId,
         expect.objectContaining({
           payload: expect.objectContaining({
             cycleIds: expect.arrayContaining([cycleId])
@@ -499,19 +529,19 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       );
     });
 
-    it('[EARS-31] should throw error when updating cycle in final state', async () => {
+    it('[EARS-K4b] should throw error when updating cycle in final state', async () => {
       const archivedCycle = createMockCycleRecord({
         id: '1757687335-cycle-archived',
         status: 'archived'
       });
 
-      mockDependencies.cycleStore.read.mockResolvedValue(archivedCycle);
+      mockDependencies.stores.cycles.get.mockResolvedValue(archivedCycle);
 
       await expect(backlogAdapter.updateCycle('1757687335-cycle-archived', { title: 'New Title' }))
         .rejects.toThrow('ProtocolViolationError: Cannot update cycle in final state: archived');
     });
 
-    it('[EARS-33] should remove multiple tasks with batch processing and validation', async () => {
+    it('[EARS-L2] should remove multiple tasks with batch processing and validation', async () => {
       const cycleId = '1757687335-cycle-test-cycle';
       const taskIds = ['1757687335-task-test-1', '1757687335-task-test-2'];
 
@@ -530,12 +560,12 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         cycleIds: [cycleId]
       });
 
-      mockDependencies.cycleStore.read.mockResolvedValue(mockCycle);
-      mockDependencies.taskStore.read
-        .mockResolvedValueOnce(mockTask1 as unknown as TaskRecord)
-        .mockResolvedValueOnce(mockTask2 as unknown as TaskRecord);
-      mockDependencies.cycleStore.write.mockResolvedValue(undefined);
-      mockDependencies.taskStore.write.mockResolvedValue(undefined);
+      mockDependencies.stores.cycles.get.mockResolvedValue(mockCycle);
+      mockDependencies.stores.tasks.get
+        .mockResolvedValueOnce(mockTask1)
+        .mockResolvedValueOnce(mockTask2);
+      mockDependencies.stores.cycles.put.mockResolvedValue(undefined);
+      mockDependencies.stores.tasks.put.mockResolvedValue(undefined);
       mockDependencies.identity.signRecord.mockImplementation(async (record) => record);
 
       // Mock getCurrentActor
@@ -547,7 +577,8 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       await backlogAdapter.removeTasksFromCycle(cycleId, taskIds);
 
       // Verify cycle was updated (taskIds removed)
-      expect(mockDependencies.cycleStore.write).toHaveBeenCalledWith(
+      expect(mockDependencies.stores.cycles.put).toHaveBeenCalledWith(
+        cycleId,
         expect.objectContaining({
           payload: expect.objectContaining({
             taskIds: []
@@ -556,8 +587,9 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       );
 
       // Verify both tasks were updated (cycleId removed)
-      expect(mockDependencies.taskStore.write).toHaveBeenCalledTimes(2);
-      expect(mockDependencies.taskStore.write).toHaveBeenCalledWith(
+      expect(mockDependencies.stores.tasks.put).toHaveBeenCalledTimes(2);
+      expect(mockDependencies.stores.tasks.put).toHaveBeenCalledWith(
+        taskIds[0],
         expect.objectContaining({
           payload: expect.objectContaining({
             cycleIds: []
@@ -566,7 +598,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       );
     });
 
-    it('[EARS-34] should validate tasks are linked to cycle before removing', async () => {
+    it('[EARS-L3] should validate tasks are linked to cycle before removing', async () => {
       const cycleId = '1757687335-cycle-test-cycle';
       const taskId = '1757687335-task-test-1';
 
@@ -580,14 +612,14 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         cycleIds: []
       });
 
-      mockDependencies.cycleStore.read.mockResolvedValue(mockCycle);
-      mockDependencies.taskStore.read.mockResolvedValue(mockTask as unknown as TaskRecord);
+      mockDependencies.stores.cycles.get.mockResolvedValue(mockCycle);
+      mockDependencies.stores.tasks.get.mockResolvedValue(mockTask);
 
       await expect(backlogAdapter.removeTasksFromCycle(cycleId, [taskId]))
         .rejects.toThrow(`Tasks not linked to cycle ${cycleId}: ${taskId}`);
     });
 
-    it('[EARS-35] should move tasks atomically between cycles with all-or-nothing', async () => {
+    it('[EARS-L4] should move tasks atomically between cycles with all-or-nothing', async () => {
       const sourceCycleId = '1757687335-cycle-source';
       const targetCycleId = '1757687335-cycle-target';
       const taskIds = ['1757687335-task-test-1', '1757687335-task-test-2'];
@@ -614,16 +646,16 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       });
 
       // Order: first source, then target (Promise.all reads in method line 1303-1306)
-      mockDependencies.cycleStore.read
+      mockDependencies.stores.cycles.get
         .mockResolvedValueOnce(mockSourceCycle)
         .mockResolvedValueOnce(mockTargetCycle);
 
-      mockDependencies.taskStore.read
-        .mockResolvedValueOnce(mockTask1 as unknown as TaskRecord)
-        .mockResolvedValueOnce(mockTask2 as unknown as TaskRecord);
+      mockDependencies.stores.tasks.get
+        .mockResolvedValueOnce(mockTask1)
+        .mockResolvedValueOnce(mockTask2);
 
-      mockDependencies.cycleStore.write.mockResolvedValue(undefined);
-      mockDependencies.taskStore.write.mockResolvedValue(undefined);
+      mockDependencies.stores.cycles.put.mockResolvedValue(undefined);
+      mockDependencies.stores.tasks.put.mockResolvedValue(undefined);
       mockDependencies.identity.signRecord.mockImplementation(async (record) => record);
 
       // Mock getCurrentActor
@@ -635,7 +667,8 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       await backlogAdapter.moveTasksBetweenCycles(targetCycleId, taskIds, sourceCycleId);
 
       // Verify source cycle was updated (tasks removed)
-      expect(mockDependencies.cycleStore.write).toHaveBeenCalledWith(
+      expect(mockDependencies.stores.cycles.put).toHaveBeenCalledWith(
+        sourceCycleId,
         expect.objectContaining({
           payload: expect.objectContaining({
             id: sourceCycleId,
@@ -645,7 +678,8 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       );
 
       // Verify target cycle was updated (tasks added)
-      expect(mockDependencies.cycleStore.write).toHaveBeenCalledWith(
+      expect(mockDependencies.stores.cycles.put).toHaveBeenCalledWith(
+        targetCycleId,
         expect.objectContaining({
           payload: expect.objectContaining({
             id: targetCycleId,
@@ -655,10 +689,10 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       );
 
       // Verify tasks were updated (cycleIds changed)
-      expect(mockDependencies.taskStore.write).toHaveBeenCalledTimes(2);
+      expect(mockDependencies.stores.tasks.put).toHaveBeenCalledTimes(2);
     });
 
-    it('[EARS-36] should validate source !== target and tasks in source before moving', async () => {
+    it('[EARS-L5] should validate source !== target and tasks in source before moving', async () => {
       const cycleId = '1757687335-cycle-test';
       const taskIds = ['1757687335-task-test-1'];
 
@@ -682,17 +716,17 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         cycleIds: []
       });
 
-      mockDependencies.cycleStore.read
+      mockDependencies.stores.cycles.get
         .mockResolvedValueOnce(mockTargetCycle)
         .mockResolvedValueOnce(mockSourceCycle);
 
-      mockDependencies.taskStore.read.mockResolvedValue(mockTask as unknown as TaskRecord);
+      mockDependencies.stores.tasks.get.mockResolvedValue(mockTask);
 
       await expect(backlogAdapter.moveTasksBetweenCycles('1757687335-cycle-target', taskIds, '1757687335-cycle-source'))
         .rejects.toThrow(`Tasks not linked to source cycle 1757687335-cycle-source: ${taskIds[0]}`);
     });
 
-    it('[EARS-37] should rollback automatically if move operation fails', async () => {
+    it('[EARS-L6] should rollback automatically if move operation fails', async () => {
       const sourceCycleId = '1757687335-cycle-source';
       const targetCycleId = '1757687335-cycle-target';
       const taskIds = ['1757687335-task-test-1'];
@@ -713,11 +747,11 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       });
 
       // Order: source, target (Promise.all reads in method)
-      mockDependencies.cycleStore.read
+      mockDependencies.stores.cycles.get
         .mockResolvedValueOnce(mockSourceCycle)
         .mockResolvedValueOnce(mockTargetCycle);
 
-      mockDependencies.taskStore.read.mockResolvedValue(mockTask as unknown as TaskRecord);
+      mockDependencies.stores.tasks.get.mockResolvedValue(mockTask);
 
       // Mock getCurrentActor
       mockDependencies.identity.getCurrentActor = jest.fn().mockResolvedValue({
@@ -729,7 +763,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       mockDependencies.identity.signRecord.mockImplementation(async (record) => record);
 
       // Make the first cycle write succeed, but second one fail (simulating partial failure)
-      mockDependencies.cycleStore.write
+      mockDependencies.stores.cycles.put
         .mockResolvedValueOnce(undefined) // First cycle write succeeds
         .mockRejectedValueOnce(new Error('Simulated cycle write failure')); // Second cycle write fails
 
@@ -738,12 +772,12 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         .rejects.toThrow('AtomicOperationError');
 
       // Verify that at least one write was attempted
-      expect(mockDependencies.cycleStore.write).toHaveBeenCalled();
+      expect(mockDependencies.stores.cycles.put).toHaveBeenCalled();
     });
   });
 
   describe('Enhanced Task Operations', () => {
-    it('[EARS-25] should correctly update task fields', async () => {
+    it('[EARS-D1] should correctly update task fields', async () => {
       const originalTask = createMockTaskRecord({
         id: '1757687335-task-test-task',
         title: 'Original Title',
@@ -755,8 +789,8 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         status: 'draft'
       });
 
-      mockDependencies.taskStore.read.mockResolvedValue(originalTask as unknown as TaskRecord);
-      mockDependencies.taskStore.write.mockResolvedValue(undefined);
+      mockDependencies.stores.tasks.get.mockResolvedValue(originalTask);
+      mockDependencies.stores.tasks.put.mockResolvedValue(undefined);
 
       // Mock the factory function
       const { createTaskRecord } = require('../../factories/task_factory');
@@ -770,31 +804,31 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         'editor',
         expect.any(String)
       );
-      expect(mockDependencies.taskStore.write).toHaveBeenCalled();
+      expect(mockDependencies.stores.tasks.put).toHaveBeenCalled();
       expect(result.title).toBe('Updated Title');
     });
 
-    it('[EARS-26] should throw error when updating task in final state', async () => {
+    it('[EARS-D2] should throw error when updating task in final state', async () => {
       const archivedTask = createMockTaskRecord({
         id: '1757687335-task-archived',
         status: 'archived'
       });
 
-      mockDependencies.taskStore.read.mockResolvedValue(archivedTask as unknown as TaskRecord);
+      mockDependencies.stores.tasks.get.mockResolvedValue(archivedTask);
 
       await expect(backlogAdapter.updateTask('1757687335-task-archived', { title: 'New Title' }, 'human:editor'))
         .rejects.toThrow('ProtocolViolationError: Cannot update task in final state: archived');
     });
 
-    it('[EARS-28] should sign the updated record with editor role', async () => {
+    it('[EARS-D4] should sign the updated record with editor role', async () => {
       const originalTask = createMockTaskRecord({
         id: '1757687335-task-sign-test',
         title: 'Original Title',
         status: 'draft'
       });
 
-      mockDependencies.taskStore.read.mockResolvedValue(originalTask as unknown as TaskRecord);
-      mockDependencies.taskStore.write.mockResolvedValue(undefined);
+      mockDependencies.stores.tasks.get.mockResolvedValue(originalTask);
+      mockDependencies.stores.tasks.put.mockResolvedValue(undefined);
 
       const { createTaskRecord } = require('../../factories/task_factory');
       createTaskRecord.mockReturnValue({
@@ -814,7 +848,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       );
     });
 
-    it('[EARS-27] should activate task from ready to active with permission validation', async () => {
+    it('[EARS-E1] should activate task from ready to active with permission validation', async () => {
       const taskId = '1757687335-task-ready-task';
       const readyTask = createMockTaskRecord({
         id: taskId,
@@ -825,8 +859,8 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         status: 'active'
       });
 
-      mockDependencies.taskStore.read.mockResolvedValue(readyTask as unknown as TaskRecord);
-      mockDependencies.taskStore.write.mockResolvedValue(undefined);
+      mockDependencies.stores.tasks.get.mockResolvedValue(readyTask);
+      mockDependencies.stores.tasks.put.mockResolvedValue(undefined);
       mockDependencies.identity.getActor.mockResolvedValue({
         id: 'human:developer',
         type: 'human',
@@ -862,7 +896,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         'executor',
         expect.any(String) // notes parameter
       );
-      expect(mockDependencies.taskStore.write).toHaveBeenCalled();
+      expect(mockDependencies.stores.tasks.put).toHaveBeenCalled();
       expect(mockDependencies.eventBus.publish).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'task.status.changed',
@@ -877,20 +911,20 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       expect(result.status).toBe('active');
     });
 
-    it('[EARS-28] should throw error when task not found for activation', async () => {
-      mockDependencies.taskStore.read.mockResolvedValue(null);
+    it('[EARS-E2] should throw error when task not found for activation', async () => {
+      mockDependencies.stores.tasks.get.mockResolvedValue(null);
 
       await expect(backlogAdapter.activateTask('nonexistent-task', 'human:developer'))
         .rejects.toThrow('RecordNotFoundError: Task not found: nonexistent-task');
     });
 
-    it('[EARS-29] should throw error when task is not in ready state for activation', async () => {
+    it('[EARS-E3] should throw error when task is not in ready state for activation', async () => {
       const draftTask = createMockTaskRecord({
         id: '1757687335-task-draft',
         status: 'draft'
       });
 
-      mockDependencies.taskStore.read.mockResolvedValue(draftTask as unknown as TaskRecord);
+      mockDependencies.stores.tasks.get.mockResolvedValue(draftTask);
       mockDependencies.identity.getActor.mockResolvedValue({
         id: 'human:developer',
         type: 'human',
@@ -904,13 +938,13 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         .rejects.toThrow('ProtocolViolationError: Task is in \'draft\' state. Cannot activate from this state.');
     });
 
-    it('[EARS-30] should throw error when workflow methodology rejects activation', async () => {
+    it('[EARS-E4] should throw error when workflow methodology rejects activation', async () => {
       const readyTask = createMockTaskRecord({
         id: '1757687335-task-ready',
         status: 'ready'
       });
 
-      mockDependencies.taskStore.read.mockResolvedValue(readyTask as unknown as TaskRecord);
+      mockDependencies.stores.tasks.get.mockResolvedValue(readyTask);
       mockDependencies.identity.getActor.mockResolvedValue({
         id: 'human:developer',
         type: 'human',
@@ -925,7 +959,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         .rejects.toThrow('ProtocolViolationError: Workflow methodology rejected ready→active transition');
     });
 
-    it('[EARS-56] should update activeTaskId in session when task is activated', async () => {
+    it('[EARS-E5] should update activeTaskId in session when task is activated', async () => {
       const taskId = '1757687335-task-ready-for-activation';
       const actorId = 'human:developer';
       const readyTask = createMockTaskRecord({
@@ -937,8 +971,8 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         status: 'active'
       });
 
-      mockDependencies.taskStore.read.mockResolvedValue(readyTask as unknown as TaskRecord);
-      mockDependencies.taskStore.write.mockResolvedValue(undefined);
+      mockDependencies.stores.tasks.get.mockResolvedValue(readyTask);
+      mockDependencies.stores.tasks.put.mockResolvedValue(undefined);
       mockDependencies.identity.getActor.mockResolvedValue({
         id: actorId,
         type: 'human',
@@ -967,7 +1001,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       );
     });
 
-    it('[EARS-34A] should pause task from active to paused with optional reason', async () => {
+    it('[EARS-I1] should pause task from active to paused with optional reason', async () => {
       const taskId = '1757687335-task-active';
       const activeTask = createMockTaskRecord({
         id: taskId,
@@ -979,7 +1013,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         notes: '[PAUSED] Waiting for external API approval'
       });
 
-      mockDependencies.taskStore.read.mockResolvedValue(activeTask as unknown as TaskRecord);
+      mockDependencies.stores.tasks.get.mockResolvedValue(activeTask);
       mockDependencies.identity.getActor.mockResolvedValue({
         id: 'human:tech-lead',
         type: 'human',
@@ -1018,7 +1052,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         'pauser',
         expect.any(String) // notes parameter
       );
-      expect(mockDependencies.taskStore.write).toHaveBeenCalled();
+      expect(mockDependencies.stores.tasks.put).toHaveBeenCalled();
       expect(mockDependencies.eventBus.publish).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'task.status.changed',
@@ -1034,20 +1068,20 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       expect(result.status).toBe('paused');
     });
 
-    it('[EARS-35A] should throw error when task not found for pause', async () => {
-      mockDependencies.taskStore.read.mockResolvedValue(null);
+    it('[EARS-I2] should throw error when task not found for pause', async () => {
+      mockDependencies.stores.tasks.get.mockResolvedValue(null);
 
       await expect(backlogAdapter.pauseTask('nonexistent-task', 'human:tech-lead'))
         .rejects.toThrow('RecordNotFoundError: Task not found: nonexistent-task');
     });
 
-    it('[EARS-36A] should throw error when task is not in active state for pause', async () => {
+    it('[EARS-I3] should throw error when task is not in active state for pause', async () => {
       const pausedTask = createMockTaskRecord({
         id: '1757687335-task-paused',
         status: 'paused'
       });
 
-      mockDependencies.taskStore.read.mockResolvedValue(pausedTask as unknown as TaskRecord);
+      mockDependencies.stores.tasks.get.mockResolvedValue(pausedTask);
       mockDependencies.identity.getActor.mockResolvedValue({
         id: 'human:tech-lead',
         type: 'human',
@@ -1061,13 +1095,13 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         .rejects.toThrow(`ProtocolViolationError: Task is in 'paused' state. Cannot pause (requires active).`);
     });
 
-    it('[EARS-37A] should reject pause when workflow methodology denies transition', async () => {
+    it('[EARS-I4] should reject pause when workflow methodology denies transition', async () => {
       const activeTask = createMockTaskRecord({
         id: '1757687335-task-active',
         status: 'active'
       });
 
-      mockDependencies.taskStore.read.mockResolvedValue(activeTask as unknown as TaskRecord);
+      mockDependencies.stores.tasks.get.mockResolvedValue(activeTask);
       mockDependencies.identity.getActor.mockResolvedValue({
         id: 'human:tech-lead',
         type: 'human',
@@ -1082,7 +1116,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         .rejects.toThrow('ProtocolViolationError: Workflow methodology rejected active→paused transition');
     });
 
-    it('[EARS-59] should clear activeTaskId in session when task is paused', async () => {
+    it('[EARS-I5] should clear activeTaskId in session when task is paused', async () => {
       const taskId = '1757687335-task-active-for-pause';
       const actorId = 'human:tech-lead';
       const activeTask = createMockTaskRecord({
@@ -1095,7 +1129,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         notes: '[PAUSED] Waiting for dependencies'
       });
 
-      mockDependencies.taskStore.read.mockResolvedValue(activeTask as unknown as TaskRecord);
+      mockDependencies.stores.tasks.get.mockResolvedValue(activeTask);
       mockDependencies.identity.getActor.mockResolvedValue({
         id: actorId,
         type: 'human',
@@ -1124,7 +1158,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       );
     });
 
-    it('[EARS-38A] should resume task from paused to active with blocking validation', async () => {
+    it('[EARS-J1] should resume task from paused to active with blocking validation', async () => {
       const taskId = '1757687335-task-paused';
       const pausedTask = createMockTaskRecord({
         id: taskId,
@@ -1135,7 +1169,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         status: 'active'
       });
 
-      mockDependencies.taskStore.read.mockResolvedValue(pausedTask as unknown as TaskRecord);
+      mockDependencies.stores.tasks.get.mockResolvedValue(pausedTask);
       mockDependencies.identity.getActor.mockResolvedValue({
         id: 'human:ops-lead',
         type: 'human',
@@ -1181,7 +1215,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         'resumer',
         expect.any(String) // notes parameter
       );
-      expect(mockDependencies.taskStore.write).toHaveBeenCalled();
+      expect(mockDependencies.stores.tasks.put).toHaveBeenCalled();
       expect(mockDependencies.eventBus.publish).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'task.status.changed',
@@ -1196,20 +1230,20 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       expect(result.status).toBe('active');
     });
 
-    it('[EARS-39A] should throw error when task not found for resume', async () => {
-      mockDependencies.taskStore.read.mockResolvedValue(null);
+    it('[EARS-J2] should throw error when task not found for resume', async () => {
+      mockDependencies.stores.tasks.get.mockResolvedValue(null);
 
       await expect(backlogAdapter.resumeTask('nonexistent-task', 'human:ops-lead'))
         .rejects.toThrow('RecordNotFoundError: Task not found: nonexistent-task');
     });
 
-    it('[EARS-40A] should throw error when task is not in paused state for resume', async () => {
+    it('[EARS-J3] should throw error when task is not in paused state for resume', async () => {
       const activeTask = createMockTaskRecord({
         id: '1757687335-task-active',
         status: 'active'
       });
 
-      mockDependencies.taskStore.read.mockResolvedValue(activeTask as unknown as TaskRecord);
+      mockDependencies.stores.tasks.get.mockResolvedValue(activeTask);
       mockDependencies.identity.getActor.mockResolvedValue({
         id: 'human:ops-lead',
         type: 'human',
@@ -1223,13 +1257,13 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         .rejects.toThrow(`ProtocolViolationError: Task is in 'active' state. Cannot resume (requires paused).`);
     });
 
-    it('[EARS-41A] should throw error when paused task has blocking feedbacks', async () => {
+    it('[EARS-J4] should throw error when paused task has blocking feedbacks', async () => {
       const pausedTask = createMockTaskRecord({
         id: '1757687335-task-blocked',
         status: 'paused'
       });
 
-      mockDependencies.taskStore.read.mockResolvedValue(pausedTask as unknown as TaskRecord);
+      mockDependencies.stores.tasks.get.mockResolvedValue(pausedTask);
       mockDependencies.identity.getActor.mockResolvedValue({
         id: 'human:ops-lead',
         type: 'human',
@@ -1252,7 +1286,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         .rejects.toThrow('BlockingFeedbackError: Task has blocking feedbacks. Resolve them before resuming or use force.');
     });
 
-    it('[EARS-42A] should force resume ignoring blocking feedbacks with force true', async () => {
+    it('[EARS-J5] should force resume ignoring blocking feedbacks with force true', async () => {
       const taskId = '1757687335-task-force-resume';
       const pausedTask = createMockTaskRecord({
         id: taskId,
@@ -1263,7 +1297,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         status: 'active'
       });
 
-      mockDependencies.taskStore.read.mockResolvedValue(pausedTask as unknown as TaskRecord);
+      mockDependencies.stores.tasks.get.mockResolvedValue(pausedTask);
       mockDependencies.identity.getActor.mockResolvedValue({
         id: 'human:ops-lead',
         type: 'human',
@@ -1293,7 +1327,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         'resumer',
         expect.any(String) // notes parameter
       );
-      expect(mockDependencies.taskStore.write).toHaveBeenCalled();
+      expect(mockDependencies.stores.tasks.put).toHaveBeenCalled();
       expect(mockDependencies.eventBus.publish).toHaveBeenCalledWith(
         expect.objectContaining({
           payload: expect.objectContaining({
@@ -1306,7 +1340,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       expect(result.status).toBe('active');
     });
 
-    it('[EARS-57] should update activeTaskId in session when task is resumed', async () => {
+    it('[EARS-J6] should update activeTaskId in session when task is resumed', async () => {
       const taskId = '1757687335-task-paused-for-resume';
       const actorId = 'human:ops-lead';
       const pausedTask = createMockTaskRecord({
@@ -1318,7 +1352,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         status: 'active'
       });
 
-      mockDependencies.taskStore.read.mockResolvedValue(pausedTask as unknown as TaskRecord);
+      mockDependencies.stores.tasks.get.mockResolvedValue(pausedTask);
       mockDependencies.identity.getActor.mockResolvedValue({
         id: actorId,
         type: 'human',
@@ -1356,7 +1390,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       );
     });
 
-    it('[EARS-31A] should complete task from active to done with approver quality validation', async () => {
+    it('[EARS-F1] should complete task from active to done with approver quality validation', async () => {
       const taskId = '1757687335-task-active-task';
       const activeTask = createMockTaskRecord({
         id: taskId,
@@ -1367,8 +1401,8 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         status: 'done'
       });
 
-      mockDependencies.taskStore.read.mockResolvedValue(activeTask as unknown as TaskRecord);
-      mockDependencies.taskStore.write.mockResolvedValue(undefined);
+      mockDependencies.stores.tasks.get.mockResolvedValue(activeTask);
+      mockDependencies.stores.tasks.put.mockResolvedValue(undefined);
       mockDependencies.identity.getActor.mockResolvedValue({
         id: 'human:qa-lead',
         type: 'human',
@@ -1386,7 +1420,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       const result = await backlogAdapter.completeTask(taskId, 'human:qa-lead');
 
       expect(result.status).toBe('done');
-      expect(mockDependencies.taskStore.write).toHaveBeenCalledWith(doneTask);
+      expect(mockDependencies.stores.tasks.put).toHaveBeenCalledWith(taskId, doneTask);
       expect(mockDependencies.eventBus.publish).toHaveBeenCalledWith({
         type: 'task.status.changed',
         timestamp: expect.any(Number),
@@ -1400,20 +1434,20 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       });
     });
 
-    it('[EARS-32A] should throw error when task not found for completion', async () => {
-      mockDependencies.taskStore.read.mockResolvedValue(null);
+    it('[EARS-F2] should throw error when task not found for completion', async () => {
+      mockDependencies.stores.tasks.get.mockResolvedValue(null);
 
       await expect(backlogAdapter.completeTask('non-existent-task', 'human:qa-lead'))
         .rejects.toThrow('RecordNotFoundError: Task not found: non-existent-task');
     });
 
-    it('[EARS-33A] should throw error when task is not in active state for completion', async () => {
+    it('[EARS-F3] should throw error when task is not in active state for completion', async () => {
       const readyTask = createMockTaskRecord({
         id: '1757687335-task-ready',
         status: 'ready'
       });
 
-      mockDependencies.taskStore.read.mockResolvedValue(readyTask as unknown as TaskRecord);
+      mockDependencies.stores.tasks.get.mockResolvedValue(readyTask);
       mockDependencies.identity.getActor.mockResolvedValue({
         id: 'human:qa-lead',
         type: 'human',
@@ -1427,13 +1461,13 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         .rejects.toThrow('ProtocolViolationError: Task is in \'ready\' state. Cannot complete from this state.');
     });
 
-    it('[EARS-34A] should throw error when workflow methodology rejects completion', async () => {
+    it('[EARS-F4] should throw error when workflow methodology rejects completion', async () => {
       const activeTask = createMockTaskRecord({
         id: '1757687335-task-active',
         status: 'active'
       });
 
-      mockDependencies.taskStore.read.mockResolvedValue(activeTask as unknown as TaskRecord);
+      mockDependencies.stores.tasks.get.mockResolvedValue(activeTask);
       mockDependencies.identity.getActor.mockResolvedValue({
         id: 'human:qa-lead',
         type: 'human',
@@ -1448,7 +1482,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         .rejects.toThrow('ProtocolViolationError: Workflow methodology rejected active→done transition');
     });
 
-    it('[EARS-60] should clear activeTaskId in session when task is completed', async () => {
+    it('[EARS-F5] should clear activeTaskId in session when task is completed', async () => {
       const taskId = '1757687335-task-active-for-completion';
       const actorId = 'human:qa-lead';
       const activeTask = createMockTaskRecord({
@@ -1460,8 +1494,8 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         status: 'done'
       });
 
-      mockDependencies.taskStore.read.mockResolvedValue(activeTask as unknown as TaskRecord);
-      mockDependencies.taskStore.write.mockResolvedValue(undefined);
+      mockDependencies.stores.tasks.get.mockResolvedValue(activeTask);
+      mockDependencies.stores.tasks.put.mockResolvedValue(undefined);
       mockDependencies.identity.getActor.mockResolvedValue({
         id: actorId,
         type: 'human',
@@ -1487,7 +1521,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       );
     });
 
-    it('[EARS-28] should cancel task from ready to discarded with proper validation', async () => {
+    it('[EARS-G1] should cancel task from ready to discarded with proper validation', async () => {
       const taskId = '1757687335-task-ready-to-cancel';
       const readyTask = createMockTaskRecord({
         id: taskId,
@@ -1501,8 +1535,8 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         notes: '[CANCELLED] No longer needed (2025-01-15T10:30:00.000Z)'
       });
 
-      mockDependencies.taskStore.read.mockResolvedValue(readyTask as unknown as TaskRecord);
-      mockDependencies.taskStore.write.mockResolvedValue(undefined);
+      mockDependencies.stores.tasks.get.mockResolvedValue(readyTask);
+      mockDependencies.stores.tasks.put.mockResolvedValue(undefined);
       mockDependencies.identity.getActor.mockResolvedValue({
         id: 'human:product-manager',
         type: 'human',
@@ -1519,12 +1553,12 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
 
       const result = await backlogAdapter.discardTask(taskId, 'human:product-manager', 'No longer needed');
 
-      expect(mockDependencies.taskStore.write).toHaveBeenCalled();
+      expect(mockDependencies.stores.tasks.put).toHaveBeenCalled();
       expect(result.status).toBe('discarded');
       expect(result.notes).toContain('[CANCELLED] No longer needed');
     });
 
-    it('[EARS-29] should cancel task from active to discarded', async () => {
+    it('[EARS-G2] should cancel task from active to discarded', async () => {
       const taskId = '1757687335-task-active-to-cancel';
       const activeTask = createMockTaskRecord({
         id: taskId,
@@ -1532,8 +1566,8 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         title: 'Active Task to Cancel'
       });
 
-      mockDependencies.taskStore.read.mockResolvedValue(activeTask as unknown as TaskRecord);
-      mockDependencies.taskStore.write.mockResolvedValue(undefined);
+      mockDependencies.stores.tasks.get.mockResolvedValue(activeTask);
+      mockDependencies.stores.tasks.put.mockResolvedValue(undefined);
       mockDependencies.identity.getActor.mockResolvedValue({
         id: 'human:team-lead',
         type: 'human',
@@ -1554,16 +1588,16 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       const result = await backlogAdapter.discardTask(taskId, 'human:team-lead');
 
       expect(result.status).toBe('discarded');
-      expect(mockDependencies.taskStore.write).toHaveBeenCalled();
+      expect(mockDependencies.stores.tasks.put).toHaveBeenCalled();
     });
 
-    it('[EARS-30] should throw error when cancelling task from invalid state', async () => {
+    it('[EARS-G3] should throw error when cancelling task from invalid state', async () => {
       const draftTask = createMockTaskRecord({
         id: '1757687335-task-draft',
         status: 'draft'
       });
 
-      mockDependencies.taskStore.read.mockResolvedValue(draftTask as unknown as TaskRecord);
+      mockDependencies.stores.tasks.get.mockResolvedValue(draftTask);
       mockDependencies.identity.getActor.mockResolvedValue({
         id: 'human:anyone',
         type: 'human',
@@ -1577,7 +1611,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         .rejects.toThrow('ProtocolViolationError: Cannot cancel task in \'draft\' state. Use \'gitgov task delete 1757687335-task-draft\' to remove draft tasks.');
     });
 
-    it('[EARS-31B] should reject task from review to discarded with reason', async () => {
+    it('[EARS-G4] should reject task from review to discarded with reason', async () => {
       const taskId = '1757687335-task-review-to-reject';
       const reviewTask = createMockTaskRecord({
         id: taskId,
@@ -1586,8 +1620,8 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         notes: 'Original task notes'
       });
 
-      mockDependencies.taskStore.read.mockResolvedValue(reviewTask as unknown as TaskRecord);
-      mockDependencies.taskStore.write.mockResolvedValue(undefined);
+      mockDependencies.stores.tasks.get.mockResolvedValue(reviewTask);
+      mockDependencies.stores.tasks.put.mockResolvedValue(undefined);
       mockDependencies.identity.getActor.mockResolvedValue({
         id: 'human:reviewer',
         type: 'human',
@@ -1610,10 +1644,10 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       expect(result.status).toBe('discarded');
       expect(result.notes).toContain('[REJECTED] Requirements unclear');
       expect(result.notes).toContain('Original task notes');
-      expect(mockDependencies.taskStore.write).toHaveBeenCalled();
+      expect(mockDependencies.stores.tasks.put).toHaveBeenCalled();
     });
 
-    it('[EARS-32B] should add reason with REJECTED prefix in notes for reject', async () => {
+    it('[EARS-G5] should add reason with REJECTED prefix in notes for reject', async () => {
       const taskId = '1757687335-task-review-rejected';
       const reviewTask = createMockTaskRecord({
         id: taskId,
@@ -1622,8 +1656,8 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         // notes omitted - will be undefined by default
       });
 
-      mockDependencies.taskStore.read.mockResolvedValue(reviewTask as unknown as TaskRecord);
-      mockDependencies.taskStore.write.mockResolvedValue(undefined);
+      mockDependencies.stores.tasks.get.mockResolvedValue(reviewTask);
+      mockDependencies.stores.tasks.put.mockResolvedValue(undefined);
       mockDependencies.identity.getActor.mockResolvedValue({
         id: 'human:reviewer',
         type: 'human',
@@ -1650,15 +1684,15 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       expect(result.notes).toMatch(/\[REJECTED\] Not aligned with architecture \(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\)/);
     });
 
-    it('[EARS-33B] should validate ready active review states for cancel reject', async () => {
+    it('[EARS-G6] should validate ready active review states for cancel reject', async () => {
       // Test ready state (should use [CANCELLED])
       const readyTask = createMockTaskRecord({
         id: '1757687335-task-ready',
         status: 'ready'
       });
 
-      mockDependencies.taskStore.read.mockResolvedValue(readyTask as unknown as TaskRecord);
-      mockDependencies.taskStore.write.mockResolvedValue(undefined);
+      mockDependencies.stores.tasks.get.mockResolvedValue(readyTask);
+      mockDependencies.stores.tasks.put.mockResolvedValue(undefined);
       mockDependencies.identity.getActor.mockResolvedValue({
         id: 'human:pm',
         type: 'human',
@@ -1685,12 +1719,12 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         status: 'review'
       });
 
-      mockDependencies.taskStore.read.mockResolvedValue(reviewTask as unknown as TaskRecord);
+      mockDependencies.stores.tasks.get.mockResolvedValue(reviewTask);
       const reviewResult = await backlogAdapter.discardTask('1757687335-task-review', 'human:pm', 'Requirements unclear');
       expect(reviewResult.notes).toContain('[REJECTED] Requirements unclear');
     });
 
-    it('[EARS-61] should clear activeTaskId in session when task is discarded', async () => {
+    it('[EARS-G7] should clear activeTaskId in session when task is discarded', async () => {
       const taskId = '1757687335-task-active-for-discard';
       const actorId = 'human:product-manager';
       const activeTask = createMockTaskRecord({
@@ -1705,8 +1739,8 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         notes: '[CANCELLED] No longer needed'
       });
 
-      mockDependencies.taskStore.read.mockResolvedValue(activeTask as unknown as TaskRecord);
-      mockDependencies.taskStore.write.mockResolvedValue(undefined);
+      mockDependencies.stores.tasks.get.mockResolvedValue(activeTask);
+      mockDependencies.stores.tasks.put.mockResolvedValue(undefined);
       mockDependencies.identity.getActor.mockResolvedValue({
         id: actorId,
         type: 'human',
@@ -1732,7 +1766,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       );
     });
 
-    it('[EARS-43A] should delete draft task completely without discarded state', async () => {
+    it('[EARS-H1] should delete draft task completely without discarded state', async () => {
       const taskId = '1757687335-task-draft-to-delete';
       const draftTask = createMockTaskRecord({
         id: taskId,
@@ -1740,8 +1774,8 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         title: 'Draft Task to Delete'
       });
 
-      mockDependencies.taskStore.read.mockResolvedValue(draftTask as unknown as TaskRecord);
-      mockDependencies.taskStore.delete = jest.fn().mockResolvedValue(undefined);
+      mockDependencies.stores.tasks.get.mockResolvedValue(draftTask);
+      mockDependencies.stores.tasks.delete = jest.fn().mockResolvedValue(undefined);
       mockDependencies.identity.getActor.mockResolvedValue({
         id: 'human:author',
         type: 'human',
@@ -1753,7 +1787,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
 
       await backlogAdapter.deleteTask(taskId, 'human:author');
 
-      expect(mockDependencies.taskStore.delete).toHaveBeenCalledWith(taskId);
+      expect(mockDependencies.stores.tasks.delete).toHaveBeenCalledWith(taskId);
       expect(mockDependencies.eventBus.publish).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'task.status.changed',
@@ -1768,20 +1802,20 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       );
     });
 
-    it('[EARS-44A] should throw error when task not found for deletion', async () => {
-      mockDependencies.taskStore.read.mockResolvedValue(null);
+    it('[EARS-H2] should throw error when task not found for deletion', async () => {
+      mockDependencies.stores.tasks.get.mockResolvedValue(null);
 
       await expect(backlogAdapter.deleteTask('nonexistent-task', 'human:author'))
         .rejects.toThrow('RecordNotFoundError: Task not found: nonexistent-task');
     });
 
-    it('[EARS-45A] should throw error when task is not in draft state for deletion', async () => {
+    it('[EARS-H3] should throw error when task is not in draft state for deletion', async () => {
       const activeTask = createMockTaskRecord({
         id: '1757687335-task-active',
         status: 'active'
       });
 
-      mockDependencies.taskStore.read.mockResolvedValue(activeTask as unknown as TaskRecord);
+      mockDependencies.stores.tasks.get.mockResolvedValue(activeTask);
       mockDependencies.identity.getActor.mockResolvedValue({
         id: 'human:author',
         type: 'human',
@@ -1795,13 +1829,13 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         .rejects.toThrow('ProtocolViolationError: Cannot delete task in \'active\' state');
     });
 
-    it('[EARS-46A] should show educational error suggesting reject for review task', async () => {
+    it('[EARS-H4] should show educational error suggesting reject for review task', async () => {
       const reviewTask = createMockTaskRecord({
         id: '1757687335-task-review',
         status: 'review'
       });
 
-      mockDependencies.taskStore.read.mockResolvedValue(reviewTask as unknown as TaskRecord);
+      mockDependencies.stores.tasks.get.mockResolvedValue(reviewTask);
       mockDependencies.identity.getActor.mockResolvedValue({
         id: 'human:author',
         type: 'human',
@@ -1815,13 +1849,13 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         .rejects.toThrow('ProtocolViolationError: Cannot delete task in \'review\' state. Use \'gitgov task reject 1757687335-task-review\' to discard tasks under review.');
     });
 
-    it('[EARS-47A] should show educational error suggesting cancel for ready/active tasks', async () => {
+    it('[EARS-H5] should show educational error suggesting cancel for ready/active tasks', async () => {
       const readyTask = createMockTaskRecord({
         id: '1757687335-task-ready',
         status: 'ready'
       });
 
-      mockDependencies.taskStore.read.mockResolvedValue(readyTask as unknown as TaskRecord);
+      mockDependencies.stores.tasks.get.mockResolvedValue(readyTask);
       mockDependencies.identity.getActor.mockResolvedValue({
         id: 'human:author',
         type: 'human',
@@ -1835,15 +1869,15 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         .rejects.toThrow('ProtocolViolationError: Cannot delete task in \'ready\' state. Use \'gitgov task cancel 1757687335-task-ready\' to discard tasks from ready/active states.');
     });
 
-    it('[EARS-48A] should emit task status changed event with deleted status', async () => {
+    it('[EARS-H6] should emit task status changed event with deleted status', async () => {
       const taskId = '1757687335-task-draft-emit-event';
       const draftTask = createMockTaskRecord({
         id: taskId,
         status: 'draft'
       });
 
-      mockDependencies.taskStore.read.mockResolvedValue(draftTask as unknown as TaskRecord);
-      mockDependencies.taskStore.delete = jest.fn().mockResolvedValue(undefined);
+      mockDependencies.stores.tasks.get.mockResolvedValue(draftTask);
+      mockDependencies.stores.tasks.delete = jest.fn().mockResolvedValue(undefined);
       mockDependencies.identity.getActor.mockResolvedValue({
         id: 'human:author',
         type: 'human',
@@ -1872,23 +1906,21 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
   });
 
   describe('Event Handlers', () => {
-    it('[EARS-31] should pause active task when blocking feedback created', async () => {
+    it('[EARS-M1] should pause active task when blocking feedback created', async () => {
       const taskId = '1757687335-task-active-task';
       const mockTask = createMockTaskRecord({
         id: taskId,
         status: 'active'
       });
-      const mockFeedback = {
+      const mockFeedback = createMockFeedbackRecord({
         id: '1757687335-feedback-blocking',
-        payload: {
-          entityId: taskId,
-          type: 'blocking'
-        }
-      };
+        entityId: taskId,
+        type: 'blocking'
+      });
 
-      mockDependencies.feedbackStore.read.mockResolvedValue(mockFeedback as unknown as FeedbackRecord);
-      mockDependencies.taskStore.read.mockResolvedValue(mockTask as unknown as TaskRecord);
-      mockDependencies.taskStore.write.mockResolvedValue(undefined);
+      mockDependencies.stores.feedbacks.get.mockResolvedValue(mockFeedback);
+      mockDependencies.stores.tasks.get.mockResolvedValue(mockTask);
+      mockDependencies.stores.tasks.put.mockResolvedValue(undefined);
 
       const event: FeedbackCreatedEvent = {
         type: 'feedback.created',
@@ -1907,7 +1939,8 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
 
       await backlogAdapter.handleFeedbackCreated(event);
 
-      expect(mockDependencies.taskStore.write).toHaveBeenCalledWith(
+      expect(mockDependencies.stores.tasks.put).toHaveBeenCalledWith(
+        taskId,
         expect.objectContaining({
           payload: expect.objectContaining({
             status: 'paused'
@@ -1925,7 +1958,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       );
     });
 
-    it('[EARS-33] should resume task when last blocking feedback resolved (immutable pattern)', async () => {
+    it('[EARS-M3] should resume task when last blocking feedback resolved (immutable pattern)', async () => {
       const taskId = '1757687335-task-paused-task';
       const originalBlockingFeedbackId = '1757687335-feedback-blocking';
 
@@ -1944,8 +1977,8 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       });
 
       mockDependencies.feedbackAdapter.getFeedback.mockResolvedValue(mockOriginalFeedback.payload);
-      mockDependencies.taskStore.read.mockResolvedValue(mockTask as unknown as TaskRecord);
-      mockDependencies.taskStore.write.mockResolvedValue(undefined);
+      mockDependencies.stores.tasks.get.mockResolvedValue(mockTask);
+      mockDependencies.stores.tasks.put.mockResolvedValue(undefined);
       mockDependencies.metricsAdapter.getTaskHealth.mockResolvedValue({
         taskId: taskId,
         healthScore: 100,
@@ -1975,7 +2008,8 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
 
       await backlogAdapter.handleFeedbackCreated(event);
 
-      expect(mockDependencies.taskStore.write).toHaveBeenCalledWith(
+      expect(mockDependencies.stores.tasks.put).toHaveBeenCalledWith(
+        taskId,
         expect.objectContaining({
           payload: expect.objectContaining({
             status: 'active'
@@ -1984,7 +2018,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       );
     });
 
-    it('[EARS-34] should not resume task if other blocking feedbacks remain (immutable pattern)', async () => {
+    it('[EARS-M4] should not resume task if other blocking feedbacks remain (immutable pattern)', async () => {
       const taskId = '1757687335-task-still-blocked';
       const originalBlockingFeedbackId = '1757687335-feedback-blocking-1';
 
@@ -2003,7 +2037,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       });
 
       mockDependencies.feedbackAdapter.getFeedback.mockResolvedValue(mockOriginalFeedback.payload);
-      mockDependencies.taskStore.read.mockResolvedValue(mockTask as unknown as TaskRecord);
+      mockDependencies.stores.tasks.get.mockResolvedValue(mockTask);
       mockDependencies.metricsAdapter.getTaskHealth.mockResolvedValue({
         taskId: taskId,
         healthScore: 80,
@@ -2034,18 +2068,18 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       await backlogAdapter.handleFeedbackCreated(event);
 
       // Should NOT write to taskStore (task stays paused due to remaining blocks)
-      expect(mockDependencies.taskStore.write).not.toHaveBeenCalled();
+      expect(mockDependencies.stores.tasks.put).not.toHaveBeenCalled();
     });
 
-    it('[EARS-35] should transition task to active on first execution', async () => {
+    it('[EARS-M5] should transition task to active on first execution', async () => {
       const taskId = '1757687335-task-ready-task';
       const mockTask = createMockTaskRecord({
         id: taskId,
         status: 'ready'
       });
 
-      mockDependencies.taskStore.read.mockResolvedValue(mockTask as unknown as TaskRecord);
-      mockDependencies.taskStore.write.mockResolvedValue(undefined);
+      mockDependencies.stores.tasks.get.mockResolvedValue(mockTask);
+      mockDependencies.stores.tasks.put.mockResolvedValue(undefined);
       mockDependencies.identity.getActor.mockResolvedValue({
         id: 'human:executor',
         type: 'human',
@@ -2075,7 +2109,8 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
 
       await backlogAdapter.handleExecutionCreated(event);
 
-      expect(mockDependencies.taskStore.write).toHaveBeenCalledWith(
+      expect(mockDependencies.stores.tasks.put).toHaveBeenCalledWith(
+        taskId,
         expect.objectContaining({
           payload: expect.objectContaining({
             status: 'active'
@@ -2084,7 +2119,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       );
     });
 
-    it('[EARS-36] should do nothing on subsequent executions', async () => {
+    it('[EARS-M6] should do nothing on subsequent executions', async () => {
       const event: ExecutionCreatedEvent = {
         type: 'execution.created',
         timestamp: Date.now(),
@@ -2102,30 +2137,27 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       await backlogAdapter.handleExecutionCreated(event);
 
       // Should not write to taskStore
-      expect(mockDependencies.taskStore.write).not.toHaveBeenCalled();
+      expect(mockDependencies.stores.tasks.put).not.toHaveBeenCalled();
     });
 
-    it('[EARS-37] should archive task when changelog created', async () => {
+    it('[EARS-M7] should archive task when changelog created', async () => {
       const taskId = '1757687335-task-done-task';
       const mockTask = createMockTaskRecord({
         id: taskId,
         status: 'done'
       });
-      const mockChangelog = {
+      const mockChangelog = createMockChangelogRecord({
         id: '1757687335-changelog-task-done',
-        payload: {
-          id: '1757687335-changelog-task-done',
-          title: 'Task completed',
-          description: 'Successfully completed the task with all requirements met',
-          relatedTasks: [taskId],
-          completedAt: 1757687335,
-          version: 'v1.0.0'
-        }
-      };
+        title: 'Task completed',
+        description: 'Successfully completed the task with all requirements met',
+        relatedTasks: [taskId],
+        completedAt: 1757687335,
+        version: 'v1.0.0'
+      });
 
-      mockDependencies.changelogStore.read.mockResolvedValue(mockChangelog as unknown as ChangelogRecord);
-      mockDependencies.taskStore.read.mockResolvedValue(mockTask as unknown as TaskRecord);
-      mockDependencies.taskStore.write.mockResolvedValue(undefined);
+      mockDependencies.stores.changelogs.get.mockResolvedValue(mockChangelog);
+      mockDependencies.stores.tasks.get.mockResolvedValue(mockTask);
+      mockDependencies.stores.tasks.put.mockResolvedValue(undefined);
 
       const event: ChangelogCreatedEvent = {
         type: 'changelog.created',
@@ -2141,7 +2173,8 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
 
       await backlogAdapter.handleChangelogCreated(event);
 
-      expect(mockDependencies.taskStore.write).toHaveBeenCalledWith(
+      expect(mockDependencies.stores.tasks.put).toHaveBeenCalledWith(
+        taskId,
         expect.objectContaining({
           payload: expect.objectContaining({
             status: 'archived'
@@ -2150,7 +2183,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       );
     });
 
-    it('[EARS-45] should complete parent cycle when all child cycles are completed', async () => {
+    it('[EARS-M9] should complete parent cycle when all child cycles are completed', async () => {
       const parentCycleId = '1757687335-cycle-parent';
       const childCycleId = '1757687335-cycle-child';
 
@@ -2168,15 +2201,15 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       });
 
       // Setup mocks
-      mockDependencies.cycleStore.read
+      mockDependencies.stores.cycles.get
         .mockImplementation(async (id: string) => {
           if (id === childCycleId) return childCycle;
           if (id === parentCycleId) return parentCycle;
           return null;
         });
 
-      mockDependencies.cycleStore.list.mockResolvedValue([parentCycleId, childCycleId]);
-      mockDependencies.cycleStore.write.mockResolvedValue(undefined);
+      mockDependencies.stores.cycles.list.mockResolvedValue([parentCycleId, childCycleId]);
+      mockDependencies.stores.cycles.put.mockResolvedValue(undefined);
 
       const event: CycleStatusChangedEvent = {
         type: 'cycle.status.changed',
@@ -2199,15 +2232,15 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
   });
 
   describe('Performance Benchmarks', () => {
-    it('[EARS-44] should execute task operations in under 100ms', async () => {
+    it('[EARS-O1] should execute task operations in under 100ms', async () => {
       const mockTask = createMockTaskRecord({
         id: '1757687335-task-performance',
         title: 'Performance Test Task',
         status: 'draft'
       });
 
-      mockDependencies.taskStore.read.mockResolvedValue(mockTask as unknown as TaskRecord);
-      mockDependencies.taskStore.write.mockResolvedValue(undefined);
+      mockDependencies.stores.tasks.get.mockResolvedValue(mockTask);
+      mockDependencies.stores.tasks.put.mockResolvedValue(undefined);
       mockDependencies.identity.getActor.mockResolvedValue({
         id: 'human:performer',
         type: 'human',
@@ -2228,7 +2261,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       expect(endTime - startTime).toBeLessThan(100); // Performance target <100ms
     });
 
-    it('[EARS-44] should execute cycle operations in under 100ms', async () => {
+    it('[EARS-O2] should execute cycle operations in under 100ms', async () => {
       const mockCycle = createMockCycleRecord({
         id: '1757687335-cycle-performance',
         title: 'Performance Test Cycle',
@@ -2239,7 +2272,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       createCycleRecord.mockReturnValue(mockCycle.payload);
 
       mockDependencies.identity.signRecord.mockResolvedValue(mockCycle);
-      mockDependencies.cycleStore.write.mockResolvedValue(undefined);
+      mockDependencies.stores.cycles.put.mockResolvedValue(undefined);
 
       const startTime = Date.now();
       await backlogAdapter.createCycle({
@@ -2251,7 +2284,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       expect(endTime - startTime).toBeLessThan(100); // Performance target <100ms
     });
 
-    it('[EARS-44] should execute getSystemStatus in under 100ms', async () => {
+    it('[EARS-O3] should execute getSystemStatus in under 100ms', async () => {
       const startTime = Date.now();
       await backlogAdapter.getSystemStatus();
       const endTime = Date.now();
@@ -2260,7 +2293,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       expect(mockDependencies.metricsAdapter.getSystemStatus).toHaveBeenCalled();
     });
 
-    it('[EARS-44] should execute getTaskHealth in under 100ms', async () => {
+    it('[EARS-O4] should execute getTaskHealth in under 100ms', async () => {
       const startTime = Date.now();
       await backlogAdapter.getTaskHealth('1757687335-task-health-test');
       const endTime = Date.now();
@@ -2271,59 +2304,53 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
   });
 
   describe('Agent Navigation', () => {
-    it('[EARS-48] should return tasks assigned to a specific actor', async () => {
+    it('[EARS-R1] should return tasks assigned to a specific actor', async () => {
       const taskId1 = '1757687335-task-assigned-1';
       const taskId2 = '1757687335-task-assigned-2';
       const taskId3 = '1757687335-task-unassigned';
       const actorId = 'human:developer';
 
       // Mock feedback records for assignments
-      const assignmentFeedback1 = {
+      const assignmentFeedback1 = createMockFeedbackRecord({
         id: '1757687335-feedback-assignment-1',
-        payload: {
-          entityId: taskId1,
-          type: 'assignment',
-          assignee: actorId,
-          status: 'resolved'
-        }
-      };
-      const assignmentFeedback2 = {
+        entityId: taskId1,
+        type: 'assignment',
+        assignee: actorId,
+        status: 'resolved'
+      });
+      const assignmentFeedback2 = createMockFeedbackRecord({
         id: '1757687335-feedback-assignment-2',
-        payload: {
-          entityId: taskId2,
-          type: 'assignment',
-          assignee: actorId,
-          status: 'resolved'
-        }
-      };
-      const nonAssignmentFeedback = {
+        entityId: taskId2,
+        type: 'assignment',
+        assignee: actorId,
+        status: 'resolved'
+      });
+      const nonAssignmentFeedback = createMockFeedbackRecord({
         id: '1757687335-feedback-suggestion',
-        payload: {
-          entityId: taskId3,
-          type: 'suggestion',
-          assignee: 'human:other',
-          status: 'open'
-        }
-      };
+        entityId: taskId3,
+        type: 'suggestion',
+        assignee: 'human:other',
+        status: 'open'
+      });
 
       // Mock tasks
       const task1 = createMockTaskRecord({ id: taskId1, title: 'Assigned Task 1' });
       const task2 = createMockTaskRecord({ id: taskId2, title: 'Assigned Task 2' });
 
-      // Setup mocks
-      mockDependencies.feedbackStore.list.mockResolvedValue([
-        createMockFeedbackRecord({ id: '1757687335-feedback-assignment-1' }) as unknown as FeedbackRecord,
-        createMockFeedbackRecord({ id: '1757687335-feedback-assignment-2' }) as unknown as FeedbackRecord,
-        createMockFeedbackRecord({ id: '1757687335-feedback-suggestion' }) as unknown as FeedbackRecord
+      // Setup mocks - list() returns IDs, get() returns full records
+      mockDependencies.stores.feedbacks.list.mockResolvedValue([
+        '1757687335-feedback-assignment-1',
+        '1757687335-feedback-assignment-2',
+        '1757687335-feedback-suggestion'
       ]);
-      mockDependencies.feedbackStore.read
-        .mockResolvedValueOnce(assignmentFeedback1 as unknown as FeedbackRecord)
-        .mockResolvedValueOnce(assignmentFeedback2 as unknown as FeedbackRecord)
-        .mockResolvedValueOnce(nonAssignmentFeedback as unknown as FeedbackRecord);
+      mockDependencies.stores.feedbacks.get
+        .mockResolvedValueOnce(assignmentFeedback1)
+        .mockResolvedValueOnce(assignmentFeedback2)
+        .mockResolvedValueOnce(nonAssignmentFeedback);
 
-      mockDependencies.taskStore.read
-        .mockResolvedValueOnce(task1 as unknown as TaskRecord)
-        .mockResolvedValueOnce(task2 as unknown as TaskRecord);
+      mockDependencies.stores.tasks.get
+        .mockResolvedValueOnce(task1)
+        .mockResolvedValueOnce(task2);
 
       const result = await backlogAdapter.getTasksAssignedToActor(actorId);
 
@@ -2332,69 +2359,62 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       expect(result[1]?.id).toBe(taskId2);
     });
 
-    it('[EARS-49] should return empty array for actor with no assigned tasks', async () => {
+    it('[EARS-R2] should return empty array for actor with no assigned tasks', async () => {
       const actorId = 'human:unassigned';
 
       // Mock no assignment feedbacks for this actor
-      const nonAssignmentFeedback = {
+      const nonAssignmentFeedback = createMockFeedbackRecord({
         id: '1757687335-feedback-other',
-        payload: {
-          entityId: 'task-123',
-          type: 'suggestion',
-          assignee: 'human:other-actor',
-          status: 'open'
-        }
-      };
+        entityId: 'task-123',
+        type: 'suggestion',
+        assignee: 'human:other-actor',
+        status: 'open'
+      });
 
-      mockDependencies.feedbackStore.list.mockResolvedValue([
-        createMockFeedbackRecord({ id: '1757687335-feedback-other' }) as unknown as FeedbackRecord
+      mockDependencies.stores.feedbacks.list.mockResolvedValue([
+        '1757687335-feedback-other'
       ]);
-      mockDependencies.feedbackStore.read.mockResolvedValue(nonAssignmentFeedback as unknown as FeedbackRecord);
+      mockDependencies.stores.feedbacks.get.mockResolvedValue(nonAssignmentFeedback);
 
       const result = await backlogAdapter.getTasksAssignedToActor(actorId);
 
       expect(result).toEqual([]);
     });
 
-    it('[EARS-50] should deduplicate tasks when multiple assignment feedbacks exist for same task', async () => {
+    it('[EARS-R3] should deduplicate tasks when multiple assignment feedbacks exist for same task', async () => {
       const taskId = '1757687335-task-duplicate-assignments';
       const actorId = 'human:developer';
 
       // Mock MULTIPLE assignment feedbacks for the SAME task to the SAME actor
-      // This simulates the bug scenario where duplicate assignments were created
-      const assignmentFeedback1 = {
+      const assignmentFeedback1 = createMockFeedbackRecord({
         id: '1757687335-feedback-assignment-1',
-        payload: {
-          entityId: taskId,
-          type: 'assignment',
-          assignee: actorId,
-          status: 'open'
-        }
-      };
-      const assignmentFeedback2 = {
+        entityId: taskId,
+        type: 'assignment',
+        assignee: actorId,
+        status: 'open'
+      });
+      const assignmentFeedback2 = createMockFeedbackRecord({
         id: '1757687335-feedback-assignment-2',
-        payload: {
-          entityId: taskId,
-          type: 'assignment',
-          assignee: actorId,
-          status: 'open'
-        }
-      };
+        entityId: taskId,
+        type: 'assignment',
+        assignee: actorId,
+        status: 'open'
+      });
 
       // Mock task (should only be returned once)
       const task = createMockTaskRecord({ id: taskId, title: 'Task with Duplicate Assignments' });
 
-      // Setup mocks - both feedbacks point to the same task
-      mockDependencies.feedbackStore.list.mockResolvedValue([
-        createMockFeedbackRecord({ id: '1757687335-feedback-assignment-1' }) as unknown as FeedbackRecord,
-        createMockFeedbackRecord({ id: '1757687335-feedback-assignment-2' }) as unknown as FeedbackRecord
+      // Setup mocks - list returns IDs, get returns full records
+      mockDependencies.stores.feedbacks.list.mockResolvedValue([
+        '1757687335-feedback-assignment-1',
+        '1757687335-feedback-assignment-2'
       ]);
-      mockDependencies.feedbackStore.read
-        .mockResolvedValueOnce(assignmentFeedback1 as unknown as FeedbackRecord)
-        .mockResolvedValueOnce(assignmentFeedback2 as unknown as FeedbackRecord);
+      mockDependencies.stores.feedbacks.get
+        .mockResolvedValueOnce(assignmentFeedback1)
+        .mockResolvedValueOnce(assignmentFeedback2);
 
       // Task should only be read ONCE due to deduplication
-      mockDependencies.taskStore.read.mockResolvedValue(task as unknown as TaskRecord);
+      mockDependencies.stores.tasks.get.mockResolvedValue(task);
 
       const result = await backlogAdapter.getTasksAssignedToActor(actorId);
 
@@ -2404,49 +2424,54 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       expect(result[0]?.title).toBe('Task with Duplicate Assignments');
 
       // Verify task store was only read once (deduplication happened)
-      expect(mockDependencies.taskStore.read).toHaveBeenCalledTimes(1);
-      expect(mockDependencies.taskStore.read).toHaveBeenCalledWith(taskId);
+      expect(mockDependencies.stores.tasks.get).toHaveBeenCalledTimes(1);
+      expect(mockDependencies.stores.tasks.get).toHaveBeenCalledWith(taskId);
     });
 
-    it('[EARS-51] should handle multiple tasks with some having duplicate assignments', async () => {
+    it('[EARS-R4] should handle multiple tasks with some having duplicate assignments', async () => {
       const taskId1 = '1757687335-task-with-duplicates';
       const taskId2 = '1757687335-task-normal';
       const actorId = 'human:developer';
 
       // Mock feedbacks: task1 has 3 duplicate assignments, task2 has 1 normal assignment
-      const feedbacks = [
-        {
+      const feedbackRecords = [
+        createMockFeedbackRecord({
           id: '1757687335-feedback-1',
-          payload: { entityId: taskId1, type: 'assignment', assignee: actorId, status: 'open' }
-        },
-        {
+          entityId: taskId1, type: 'assignment', assignee: actorId, status: 'open'
+        }),
+        createMockFeedbackRecord({
           id: '1757687335-feedback-2',
-          payload: { entityId: taskId1, type: 'assignment', assignee: actorId, status: 'open' }
-        },
-        {
+          entityId: taskId1, type: 'assignment', assignee: actorId, status: 'open'
+        }),
+        createMockFeedbackRecord({
           id: '1757687335-feedback-3',
-          payload: { entityId: taskId1, type: 'assignment', assignee: actorId, status: 'open' }
-        },
-        {
+          entityId: taskId1, type: 'assignment', assignee: actorId, status: 'open'
+        }),
+        createMockFeedbackRecord({
           id: '1757687335-feedback-4',
-          payload: { entityId: taskId2, type: 'assignment', assignee: actorId, status: 'open' }
-        }
+          entityId: taskId2, type: 'assignment', assignee: actorId, status: 'open'
+        })
       ];
 
       const task1 = createMockTaskRecord({ id: taskId1, title: 'Task with 3 duplicate assignments' });
       const task2 = createMockTaskRecord({ id: taskId2, title: 'Normal task' });
 
-      mockDependencies.feedbackStore.list.mockResolvedValue(
-        feedbacks.map(f => createMockFeedbackRecord(f) as unknown as FeedbackRecord)
-      );
+      // list() returns IDs
+      mockDependencies.stores.feedbacks.list.mockResolvedValue([
+        '1757687335-feedback-1',
+        '1757687335-feedback-2',
+        '1757687335-feedback-3',
+        '1757687335-feedback-4'
+      ]);
 
-      feedbacks.forEach(f => {
-        mockDependencies.feedbackStore.read.mockResolvedValueOnce(f as unknown as FeedbackRecord);
+      // get() returns full records
+      feedbackRecords.forEach(f => {
+        mockDependencies.stores.feedbacks.get.mockResolvedValueOnce(f);
       });
 
-      mockDependencies.taskStore.read
-        .mockResolvedValueOnce(task1 as unknown as TaskRecord)
-        .mockResolvedValueOnce(task2 as unknown as TaskRecord);
+      mockDependencies.stores.tasks.get
+        .mockResolvedValueOnce(task1)
+        .mockResolvedValueOnce(task2);
 
       const result = await backlogAdapter.getTasksAssignedToActor(actorId);
 
@@ -2456,37 +2481,39 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       expect(result[1]?.id).toBe(taskId2);
 
       // Verify deduplication: task store called only twice (once per unique task)
-      expect(mockDependencies.taskStore.read).toHaveBeenCalledTimes(2);
+      expect(mockDependencies.stores.tasks.get).toHaveBeenCalledTimes(2);
     });
 
-    it('[EARS-52] should handle task assigned to multiple different actors correctly', async () => {
+    it('[EARS-R5] should handle task assigned to multiple different actors correctly', async () => {
       const taskId = '1757687335-task-multi-actor';
       const actor1 = 'human:developer-1';
       const actor2 = 'human:developer-2';
 
       // Mock assignments for the same task to TWO DIFFERENT actors
-      const feedbacks = [
-        {
+      const feedbackRecords = [
+        createMockFeedbackRecord({
           id: '1757687335-feedback-actor1',
-          payload: { entityId: taskId, type: 'assignment', assignee: actor1, status: 'open' }
-        },
-        {
+          entityId: taskId, type: 'assignment', assignee: actor1, status: 'open'
+        }),
+        createMockFeedbackRecord({
           id: '1757687335-feedback-actor2',
-          payload: { entityId: taskId, type: 'assignment', assignee: actor2, status: 'open' }
-        }
+          entityId: taskId, type: 'assignment', assignee: actor2, status: 'open'
+        })
       ];
 
       const task = createMockTaskRecord({ id: taskId, title: 'Task assigned to multiple actors' });
 
-      mockDependencies.feedbackStore.list.mockResolvedValue(
-        feedbacks.map(f => createMockFeedbackRecord(f) as unknown as FeedbackRecord)
-      );
+      // list() returns IDs
+      mockDependencies.stores.feedbacks.list.mockResolvedValue([
+        '1757687335-feedback-actor1',
+        '1757687335-feedback-actor2'
+      ]);
 
-      feedbacks.forEach(f => {
-        mockDependencies.feedbackStore.read.mockResolvedValueOnce(f as unknown as FeedbackRecord);
+      feedbackRecords.forEach(f => {
+        mockDependencies.stores.feedbacks.get.mockResolvedValueOnce(f);
       });
 
-      mockDependencies.taskStore.read.mockResolvedValue(task as unknown as TaskRecord);
+      mockDependencies.stores.tasks.get.mockResolvedValue(task);
 
       // Query for actor1 - should only return 1 task
       const resultActor1 = await backlogAdapter.getTasksAssignedToActor(actor1);
@@ -2495,13 +2522,14 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
 
       // Reset mocks
       jest.clearAllMocks();
-      mockDependencies.feedbackStore.list.mockResolvedValue(
-        feedbacks.map(f => createMockFeedbackRecord(f) as unknown as FeedbackRecord)
-      );
-      feedbacks.forEach(f => {
-        mockDependencies.feedbackStore.read.mockResolvedValueOnce(f as unknown as FeedbackRecord);
+      mockDependencies.stores.feedbacks.list.mockResolvedValue([
+        '1757687335-feedback-actor1',
+        '1757687335-feedback-actor2'
+      ]);
+      feedbackRecords.forEach(f => {
+        mockDependencies.stores.feedbacks.get.mockResolvedValueOnce(f);
       });
-      mockDependencies.taskStore.read.mockResolvedValue(task as unknown as TaskRecord);
+      mockDependencies.stores.tasks.get.mockResolvedValue(task);
 
       // Query for actor2 - should also return 1 task
       const resultActor2 = await backlogAdapter.getTasksAssignedToActor(actor2);
@@ -2509,56 +2537,60 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       expect(resultActor2[0]?.id).toBe(taskId);
     });
 
-    it('[EARS-53] should handle edge case with no duplicate assignments gracefully', async () => {
+    it('[EARS-R6] should handle edge case with no duplicate assignments gracefully', async () => {
       const actorId = 'human:developer';
       const taskId1 = '1757687335-task-unique-1';
       const taskId2 = '1757687335-task-unique-2';
       const taskId3 = '1757687335-task-unique-3';
 
       // Mock 3 unique assignments (no duplicates)
-      const feedbacks = [
-        {
+      const feedbackRecords = [
+        createMockFeedbackRecord({
           id: '1757687335-feedback-1',
-          payload: { entityId: taskId1, type: 'assignment', assignee: actorId, status: 'open' }
-        },
-        {
+          entityId: taskId1, type: 'assignment', assignee: actorId, status: 'open'
+        }),
+        createMockFeedbackRecord({
           id: '1757687335-feedback-2',
-          payload: { entityId: taskId2, type: 'assignment', assignee: actorId, status: 'open' }
-        },
-        {
+          entityId: taskId2, type: 'assignment', assignee: actorId, status: 'open'
+        }),
+        createMockFeedbackRecord({
           id: '1757687335-feedback-3',
-          payload: { entityId: taskId3, type: 'assignment', assignee: actorId, status: 'open' }
-        }
+          entityId: taskId3, type: 'assignment', assignee: actorId, status: 'open'
+        })
       ];
 
       const task1 = createMockTaskRecord({ id: taskId1, title: 'Unique Task 1' });
       const task2 = createMockTaskRecord({ id: taskId2, title: 'Unique Task 2' });
       const task3 = createMockTaskRecord({ id: taskId3, title: 'Unique Task 3' });
 
-      mockDependencies.feedbackStore.list.mockResolvedValue(
-        feedbacks.map(f => createMockFeedbackRecord(f) as unknown as FeedbackRecord)
-      );
+      // list() returns IDs
+      mockDependencies.stores.feedbacks.list.mockResolvedValue([
+        '1757687335-feedback-1',
+        '1757687335-feedback-2',
+        '1757687335-feedback-3'
+      ]);
 
-      feedbacks.forEach(f => {
-        mockDependencies.feedbackStore.read.mockResolvedValueOnce(f as unknown as FeedbackRecord);
+      // get() returns full records
+      feedbackRecords.forEach(f => {
+        mockDependencies.stores.feedbacks.get.mockResolvedValueOnce(f);
       });
 
-      mockDependencies.taskStore.read
-        .mockResolvedValueOnce(task1 as unknown as TaskRecord)
-        .mockResolvedValueOnce(task2 as unknown as TaskRecord)
-        .mockResolvedValueOnce(task3 as unknown as TaskRecord);
+      mockDependencies.stores.tasks.get
+        .mockResolvedValueOnce(task1)
+        .mockResolvedValueOnce(task2)
+        .mockResolvedValueOnce(task3);
 
       const result = await backlogAdapter.getTasksAssignedToActor(actorId);
 
       // Should work normally with no duplicates
       expect(result).toHaveLength(3);
       expect(result.map(t => t.id)).toEqual([taskId1, taskId2, taskId3]);
-      expect(mockDependencies.taskStore.read).toHaveBeenCalledTimes(3);
+      expect(mockDependencies.stores.tasks.get).toHaveBeenCalledTimes(3);
     });
   });
 
   describe('pauseTask', () => {
-    it('[EARS-34A] should pause task from active to paused with permission validation', async () => {
+    it('[EARS-I1] should pause task from active to paused with permission validation', async () => {
       // Arrange: Task in 'active' state
       const taskId = '1757687335-task-active';
       const actorId = 'human:developer';
@@ -2580,14 +2612,14 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       };
 
       // Mock dependencies
-      mockDependencies.taskStore.read.mockResolvedValue(activeTask as unknown as TaskRecord);
+      mockDependencies.stores.tasks.get.mockResolvedValue(activeTask);
       mockDependencies.identity.getActor.mockResolvedValue(actor);
       mockDependencies.workflowMethodologyAdapter.getTransitionRule.mockResolvedValue({
         to: 'paused',
         conditions: undefined
       });
       mockDependencies.identity.signRecord.mockResolvedValue(activeTask);
-      mockDependencies.taskStore.write.mockResolvedValue(undefined);
+      mockDependencies.stores.tasks.put.mockResolvedValue(undefined);
 
       // Act
       const result = await backlogAdapter.pauseTask(taskId, actorId, 'Waiting for external API approval');
@@ -2624,19 +2656,19 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       );
     });
 
-    it('[EARS-35A] should throw error when task not found for pause', async () => {
+    it('[EARS-I2] should throw error when task not found for pause', async () => {
       // Arrange
       const taskId = '1757687335-task-nonexistent';
       const actorId = 'human:developer';
 
-      mockDependencies.taskStore.read.mockResolvedValue(null);
+      mockDependencies.stores.tasks.get.mockResolvedValue(null);
 
       // Act & Assert
       await expect(backlogAdapter.pauseTask(taskId, actorId, 'Some reason'))
         .rejects.toThrow('RecordNotFoundError: Task not found');
     });
 
-    it('[EARS-36A] should throw error when task is not in active state for pause', async () => {
+    it('[EARS-I3] should throw error when task is not in active state for pause', async () => {
       // Arrange: Task in 'draft' state (not 'active')
       const taskId = '1757687335-task-draft';
       const actorId = 'human:developer';
@@ -2647,14 +2679,14 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         status: 'draft'
       });
 
-      mockDependencies.taskStore.read.mockResolvedValue(draftTask as unknown as TaskRecord);
+      mockDependencies.stores.tasks.get.mockResolvedValue(draftTask);
 
       // Act & Assert
       await expect(backlogAdapter.pauseTask(taskId, actorId, 'Cannot pause draft'))
         .rejects.toThrow("ProtocolViolationError: Task is in 'draft' state");
     });
 
-    it('[EARS-37A] should add reason with PAUSED prefix in notes', async () => {
+    it('[EARS-I4b] should add reason with PAUSED prefix in notes', async () => {
       // Arrange: Active task with existing notes
       const taskId = '1757687335-task-with-notes';
       const actorId = 'human:pm';
@@ -2678,14 +2710,14 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       };
 
       // Mock dependencies
-      mockDependencies.taskStore.read.mockResolvedValue(activeTask as unknown as TaskRecord);
+      mockDependencies.stores.tasks.get.mockResolvedValue(activeTask);
       mockDependencies.identity.getActor.mockResolvedValue(actor);
       mockDependencies.workflowMethodologyAdapter.getTransitionRule.mockResolvedValue({
         to: 'paused',
         conditions: undefined
       });
       mockDependencies.identity.signRecord.mockImplementation((record) => Promise.resolve(record));
-      mockDependencies.taskStore.write.mockResolvedValue(undefined);
+      mockDependencies.stores.tasks.put.mockResolvedValue(undefined);
 
       // Act
       const result = await backlogAdapter.pauseTask(taskId, actorId, pauseReason);
@@ -2700,26 +2732,26 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
   });
 
   describe('Future Methods (Not Implemented)', () => {
-    it('[EARS-38] should throw NotImplementedError for lint method', async () => {
+    it('[EARS-S1] should throw NotImplementedError for lint method', async () => {
       await expect(backlogAdapter.lint())
         .rejects.toThrow('NotImplementedError: lint() will be implemented when lint_command.md is ready');
     });
 
-    it('[EARS-39] should throw NotImplementedError for audit method', async () => {
+    it('[EARS-S2] should throw NotImplementedError for audit method', async () => {
       await expect(backlogAdapter.audit())
         .rejects.toThrow('NotImplementedError: audit() will be implemented when audit_command.md is ready');
     });
 
-    it('[EARS-42] should throw NotImplementedError for processChanges method', async () => {
+    it('[EARS-S3] should throw NotImplementedError for processChanges method', async () => {
       await expect(backlogAdapter.processChanges([]))
         .rejects.toThrow('NotImplementedError: processChanges() will be implemented when commit_processor_adapter.md is ready');
     });
   });
 
   describe('Error Handling & Edge Cases', () => {
-    it('[EARS-45] should handle adapter failures gracefully in event handlers', async () => {
+    it('[EARS-O5] should handle adapter failures gracefully in event handlers', async () => {
       // Simulate adapter failure
-      mockDependencies.feedbackStore.read.mockRejectedValue(new Error('Store failure'));
+      mockDependencies.stores.feedbacks.get.mockRejectedValue(new Error('Store failure'));
 
       const event: FeedbackCreatedEvent = {
         type: 'feedback.created',
@@ -2740,15 +2772,15 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       await expect(backlogAdapter.handleFeedbackCreated(event)).resolves.not.toThrow();
     });
 
-    it('[EARS-27] should re-validate full payload using factory', async () => {
+    it('[EARS-D3] should re-validate full payload using factory', async () => {
       const originalTask = createMockTaskRecord({
         id: '1757687335-task-validation',
         title: 'Original Title',
         status: 'draft'
       });
 
-      mockDependencies.taskStore.read.mockResolvedValue(originalTask as unknown as TaskRecord);
-      mockDependencies.taskStore.write.mockResolvedValue(undefined);
+      mockDependencies.stores.tasks.get.mockResolvedValue(originalTask);
+      mockDependencies.stores.tasks.put.mockResolvedValue(undefined);
 
       // Mock factory to validate the merged payload
       const { createTaskRecord } = require('../../factories/task_factory');
