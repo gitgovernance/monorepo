@@ -7,8 +7,8 @@
  * validating that all adapters work together seamlessly in real scenarios.
  */
 
-import { BacklogAdapter } from './index';
-import type { BacklogAdapterDependencies } from './index';
+import { BacklogAdapter } from './backlog_adapter';
+import type { BacklogAdapterDependencies } from './backlog_adapter.types';
 import type { RecordStore } from '../../record_store';
 import { FeedbackAdapter } from '../feedback_adapter';
 import { ExecutionAdapter } from '../execution_adapter';

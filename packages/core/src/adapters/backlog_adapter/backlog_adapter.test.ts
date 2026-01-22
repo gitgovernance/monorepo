@@ -1,4 +1,5 @@
-import { BacklogAdapter, type BacklogAdapterDependencies } from './index';
+import { BacklogAdapter } from './backlog_adapter';
+import type { BacklogAdapterDependencies } from './backlog_adapter.types';
 import type {
   FeedbackCreatedEvent,
   ExecutionCreatedEvent,
