@@ -1,17 +1,15 @@
 import { ExecutionAdapter } from './index';
 import { createExecutionRecord } from '../../factories/execution_factory';
-import { RecordStore } from '../../store';
+import type { RecordStore } from '../../record_store';
 import { IdentityAdapter } from '../identity_adapter';
 import { publishEvent } from '../../event_bus';
-import type { ExecutionRecord } from '../../types';
-import type { TaskRecord } from '../../types';
+import type { ExecutionRecord, GitGovExecutionRecord, GitGovTaskRecord } from '../../types';
 import type { IEventStream } from '../../event_bus';
 import type { GitGovRecord, Signature } from '../../types';
 import { DetailedValidationError } from '../../validation/common';
 
 // Mock dependencies
 jest.mock('../../factories/execution_factory');
-jest.mock('../../store');
 jest.mock('../identity_adapter');
 jest.mock('../../event_bus', () => ({
   ...jest.requireActual('../../event_bus'),
@@ -48,8 +46,8 @@ function createMockExecutionRecord(overrides: Partial<ExecutionRecord> = {}): Gi
 
 describe('ExecutionAdapter', () => {
   let executionAdapter: ExecutionAdapter;
-  let mockExecutionStore: jest.Mocked<RecordStore<ExecutionRecord>>;
-  let mockTaskStore: jest.Mocked<RecordStore<TaskRecord>>;
+  let mockExecutionStore: jest.Mocked<RecordStore<GitGovExecutionRecord>>;
+  let mockTaskStore: jest.Mocked<RecordStore<GitGovTaskRecord>>;
   let mockIdentityAdapter: jest.Mocked<IdentityAdapter>;
   let mockPublishEvent: jest.Mock;
 
@@ -75,30 +73,20 @@ describe('ExecutionAdapter', () => {
 
     // Mock store with proper typing
     mockExecutionStore = {
-      write: jest.fn().mockResolvedValue(undefined),
-      read: jest.fn().mockResolvedValue(null),
+      put: jest.fn().mockResolvedValue(undefined),
+      get: jest.fn().mockResolvedValue(null),
       list: jest.fn().mockResolvedValue([]),
       delete: jest.fn().mockResolvedValue(undefined),
       exists: jest.fn().mockResolvedValue(false),
-      recordType: 'executions',
-      recordsDir: '/mock/path',
-      fs: {} as never,
-      getRecordPath: jest.fn(),
-      ensureDirExists: jest.fn()
-    } as unknown as jest.Mocked<RecordStore<ExecutionRecord>>;
+    } as unknown as jest.Mocked<RecordStore<GitGovExecutionRecord>>;
 
     mockTaskStore = {
-      read: jest.fn().mockResolvedValue({ payload: { id: 'task-123' } }), // Default: task exists
-      write: jest.fn().mockResolvedValue(undefined),
+      get: jest.fn().mockResolvedValue({ payload: { id: 'task-123' } }), // Default: task exists
+      put: jest.fn().mockResolvedValue(undefined),
       list: jest.fn().mockResolvedValue([]),
       delete: jest.fn().mockResolvedValue(undefined),
       exists: jest.fn().mockResolvedValue(false),
-      recordType: 'tasks',
-      recordsDir: '/mock/path',
-      fs: {} as never,
-      getRecordPath: jest.fn(),
-      ensureDirExists: jest.fn()
-    } as unknown as jest.Mocked<RecordStore<TaskRecord>>;
+    } as unknown as jest.Mocked<RecordStore<GitGovTaskRecord>>;
 
     // Mock identity adapter
     mockIdentityAdapter = {
@@ -120,7 +108,7 @@ describe('ExecutionAdapter', () => {
 
     // Create adapter with mocked dependencies
     executionAdapter = new ExecutionAdapter({
-      executionStore: mockExecutionStore,
+      stores: { executions: mockExecutionStore, tasks: mockTaskStore },
       identity: mockIdentityAdapter,
       eventBus: {
         publish: jest.fn(),
@@ -130,12 +118,11 @@ describe('ExecutionAdapter', () => {
         clearSubscriptions: jest.fn(),
         waitForIdle: jest.fn().mockResolvedValue(undefined)
       } as IEventStream,
-      taskStore: mockTaskStore
     });
   });
 
   describe('create', () => {
-    it('[EARS-1] should create, sign, write, and emit event for valid execution', async () => {
+    it('[EARS-A1] should create, sign, write, and emit event for valid execution', async () => {
       const result = await executionAdapter.create(mockPayload, mockActorId);
 
       expect(createExecutionRecord).toHaveBeenCalledWith(mockPayload);
@@ -147,13 +134,13 @@ describe('ExecutionAdapter', () => {
         'author',
         expect.any(String) // notes parameter
       );
-      expect(mockExecutionStore.write).toHaveBeenCalledWith(mockSignedRecord);
+      expect(mockExecutionStore.put).toHaveBeenCalledWith(mockCreatedExecutionPayload.id, mockSignedRecord);
       // Note: Now using this.eventBus.publish instead of publishEvent
       // The mock eventBus.publish should have been called
       expect(result).toEqual(mockCreatedExecutionPayload);
     });
 
-    it('[EARS-2] should throw DetailedValidationError for invalid payload', async () => {
+    it('[EARS-A2] should throw DetailedValidationError for invalid payload', async () => {
       const validationError = new DetailedValidationError('ExecutionRecord', [{
         field: 'result',
         message: 'result is required',
@@ -166,18 +153,18 @@ describe('ExecutionAdapter', () => {
 
       // Ensure no side effects occurred
       expect(mockIdentityAdapter.signRecord).not.toHaveBeenCalled();
-      expect(mockExecutionStore.write).not.toHaveBeenCalled();
+      expect(mockExecutionStore.put).not.toHaveBeenCalled();
       expect(mockPublishEvent).not.toHaveBeenCalled();
     });
 
-    it('[EARS-3] should throw RecordNotFoundError for non-existent taskId', async () => {
-      mockTaskStore.read.mockResolvedValue(null);
+    it('[EARS-A3] should throw RecordNotFoundError for non-existent taskId', async () => {
+      mockTaskStore.get.mockResolvedValue(null);
 
       await expect(executionAdapter.create({ taskId: 'non-existent', result: 'Valid result with sufficient length' }, mockActorId))
         .rejects.toThrow('RecordNotFoundError: Task not found: non-existent');
     });
 
-    it('[EARS-8] should throw DetailedValidationError for missing result', async () => {
+    it('[EARS-A4] should throw DetailedValidationError for missing result', async () => {
       const invalidPayload = { taskId: 'task-123' }; // Missing result
       const validationError = new DetailedValidationError('ExecutionRecord', [{
         field: 'result',
@@ -190,7 +177,7 @@ describe('ExecutionAdapter', () => {
         .rejects.toThrow(DetailedValidationError);
     });
 
-    it('[EARS-9] should throw DetailedValidationError for short result', async () => {
+    it('[EARS-A5] should throw DetailedValidationError for short result', async () => {
       const invalidPayload = { taskId: 'task-123', result: 'short' }; // Too short
       const validationError = new DetailedValidationError('ExecutionRecord', [{
         field: 'result',
@@ -203,48 +190,28 @@ describe('ExecutionAdapter', () => {
         .rejects.toThrow(DetailedValidationError);
     });
 
-    it('[EARS-1] should create execution record successfully', async () => {
+    it('[EARS-A1] should create execution record successfully', async () => {
       const result = await executionAdapter.create(mockPayload, mockActorId);
 
       expect(createExecutionRecord).toHaveBeenCalledWith(mockPayload);
       expect(result).toEqual(mockCreatedExecutionPayload);
     });
 
-    it('should work with graceful degradation when taskStore is not provided', async () => {
-      const executionAdapterNoTaskStore = new ExecutionAdapter({
-        executionStore: mockExecutionStore,
-        identity: mockIdentityAdapter,
-        eventBus: {
-          publish: jest.fn(),
-          subscribe: jest.fn(),
-          unsubscribe: jest.fn(),
-          getSubscriptions: jest.fn(),
-          clearSubscriptions: jest.fn(),
-          waitForIdle: jest.fn().mockResolvedValue(undefined)
-        } as IEventStream,
-        // No taskStore provided
-      });
-
-      const result = await executionAdapterNoTaskStore.create(mockPayload, mockActorId);
-
-      expect(result).toEqual(mockCreatedExecutionPayload);
-      expect(mockTaskStore.read).not.toHaveBeenCalled();
-    });
   });
 
   describe('getExecution', () => {
-    it('[EARS-4] should return existing execution record', async () => {
+    it('[EARS-B1] should return existing execution record', async () => {
       const mockRecord = createMockExecutionRecord({ id: 'execution-123' });
-      mockExecutionStore.read.mockResolvedValue(mockRecord);
+      mockExecutionStore.get.mockResolvedValue(mockRecord);
 
       const result = await executionAdapter.getExecution('execution-123');
 
-      expect(mockExecutionStore.read).toHaveBeenCalledWith('execution-123');
+      expect(mockExecutionStore.get).toHaveBeenCalledWith('execution-123');
       expect(result).toEqual(mockRecord.payload);
     });
 
-    it('[EARS-5] should return null for non-existent execution', async () => {
-      mockExecutionStore.read.mockResolvedValue(null);
+    it('[EARS-B2] should return null for non-existent execution', async () => {
+      mockExecutionStore.get.mockResolvedValue(null);
 
       const result = await executionAdapter.getExecution('non-existent');
 
@@ -253,13 +220,13 @@ describe('ExecutionAdapter', () => {
   });
 
   describe('getExecutionsByTask', () => {
-    it('[EARS-6] should filter executions by task ID', async () => {
+    it('[EARS-C1] should filter executions by task ID', async () => {
       const execution1 = createMockExecutionRecord({ id: 'execution-1', taskId: 'task-123' });
       const execution2 = createMockExecutionRecord({ id: 'execution-2', taskId: 'task-456' });
       const execution3 = createMockExecutionRecord({ id: 'execution-3', taskId: 'task-123' });
 
       mockExecutionStore.list.mockResolvedValue(['execution-1', 'execution-2', 'execution-3']);
-      mockExecutionStore.read
+      mockExecutionStore.get
         .mockResolvedValueOnce(execution1)
         .mockResolvedValueOnce(execution2)
         .mockResolvedValueOnce(execution3);
@@ -281,12 +248,12 @@ describe('ExecutionAdapter', () => {
   });
 
   describe('getAllExecutions', () => {
-    it('[EARS-7] should return all execution records in the system', async () => {
+    it('[EARS-D1] should return all execution records in the system', async () => {
       const execution1 = createMockExecutionRecord({ id: 'execution-1' });
       const execution2 = createMockExecutionRecord({ id: 'execution-2' });
 
       mockExecutionStore.list.mockResolvedValue(['execution-1', 'execution-2']);
-      mockExecutionStore.read
+      mockExecutionStore.get
         .mockResolvedValueOnce(execution1)
         .mockResolvedValueOnce(execution2);
 
@@ -307,7 +274,7 @@ describe('ExecutionAdapter', () => {
   });
 
   describe('Performance Tests', () => {
-    it('[EARS-10] should execute in under 30ms for typical datasets', async () => {
+    it('[EARS-E1] should execute in under 30ms for typical datasets', async () => {
       // Create mock data for performance test
       const executionIds = Array.from({ length: 100 }, (_, i) => `execution-${i}`);
       const mockExecutions = executionIds.map(id =>
@@ -316,7 +283,7 @@ describe('ExecutionAdapter', () => {
 
       mockExecutionStore.list.mockResolvedValue(executionIds);
       mockExecutions.forEach(execution => {
-        mockExecutionStore.read.mockResolvedValueOnce(execution);
+        mockExecutionStore.get.mockResolvedValueOnce(execution);
       });
 
       const startTime = Date.now();
