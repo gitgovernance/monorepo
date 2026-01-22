@@ -1,24 +1,19 @@
 import { createExecutionRecord } from '../../factories/execution_factory';
-import { RecordStore } from '../../store';
+import type { RecordStores } from '../../record_store';
 import { IdentityAdapter } from '../identity_adapter';
-import type { ExecutionRecord } from '../../types';
-import type { TaskRecord } from '../../types';
+import type { ExecutionRecord, GitGovExecutionRecord } from '../../types';
 import type { IEventStream, ExecutionCreatedEvent } from '../../event_bus';
-import type { GitGovRecord } from '../../types';
 
 /**
  * ExecutionAdapter Dependencies - Facade + Dependency Injection Pattern
  */
-export interface ExecutionAdapterDependencies {
-  // Data Layer (Protocols)
-  executionStore: RecordStore<ExecutionRecord>;
+export type ExecutionAdapterDependencies = {
+  // Data Layer - Required stores for ExecutionAdapter
+  stores: Required<Pick<RecordStores, 'tasks' | 'executions'>>;
 
   // Infrastructure Layer
   identity: IdentityAdapter;
   eventBus: IEventStream; // For emitting events
-
-  // Optional: Task validation (graceful degradation)
-  taskStore?: RecordStore<TaskRecord>;
 }
 
 /**
@@ -53,20 +48,18 @@ export interface IExecutionAdapter {
  * Acts as Mediator between execution logging and data stores.
  */
 export class ExecutionAdapter implements IExecutionAdapter {
-  private executionStore: RecordStore<ExecutionRecord>;
+  private stores: Required<Pick<RecordStores, 'executions'>> & Pick<RecordStores, 'tasks'>;
   private identity: IdentityAdapter;
   private eventBus: IEventStream;
-  private taskStore: RecordStore<TaskRecord> | undefined;
 
   constructor(dependencies: ExecutionAdapterDependencies) {
-    this.executionStore = dependencies.executionStore;
+    this.stores = dependencies.stores;
     this.identity = dependencies.identity;
     this.eventBus = dependencies.eventBus;
-    this.taskStore = dependencies.taskStore; // Graceful degradation
   }
 
   /**
-   * [EARS-1] Records a new execution event to create an immutable audit log.
+   * [EARS-A1] Records a new execution event to create an immutable audit log.
    * 
    * Description: Records a new execution event to create an immutable audit log.
    * Implementation: Builds record with factory, signs with actorId, persists and emits event.
@@ -75,8 +68,8 @@ export class ExecutionAdapter implements IExecutionAdapter {
    */
   async create(payload: Partial<ExecutionRecord>, actorId: string): Promise<ExecutionRecord> {
     // Optional: Validate taskId exists (graceful degradation)
-    if (this.taskStore && payload.taskId) {
-      const taskExists = await this.taskStore.read(payload.taskId);
+    if (this.stores.tasks && payload.taskId) {
+      const taskExists = await this.stores.tasks.get(payload.taskId);
       if (!taskExists) {
         throw new Error(`RecordNotFoundError: Task not found: ${payload.taskId}`);
       }
@@ -87,7 +80,7 @@ export class ExecutionAdapter implements IExecutionAdapter {
       const validatedPayload = createExecutionRecord(payload);
 
       // 2. Create unsigned record structure
-      const unsignedRecord: GitGovRecord & { payload: ExecutionRecord } = {
+      const unsignedRecord: GitGovExecutionRecord = {
         header: {
           version: '1.0',
           type: 'execution',
@@ -107,7 +100,7 @@ export class ExecutionAdapter implements IExecutionAdapter {
       const signedRecord = await this.identity.signRecord(unsignedRecord, actorId, 'author', 'Execution record created');
 
       // 4. Persist the record
-      await this.executionStore.write(signedRecord as GitGovRecord & { payload: ExecutionRecord });
+      await this.stores.executions.put(validatedPayload.id, signedRecord);
 
       // 5. Emit event - responsibility ends here
       this.eventBus.publish({
@@ -131,7 +124,7 @@ export class ExecutionAdapter implements IExecutionAdapter {
   }
 
   /**
-   * [EARS-4] Gets a specific ExecutionRecord by its ID for query.
+   * [EARS-B1] Gets a specific ExecutionRecord by its ID for query.
    * 
    * Description: Gets a specific ExecutionRecord by its ID for query.
    * Implementation: Direct read from record store without modifications.
@@ -139,12 +132,12 @@ export class ExecutionAdapter implements IExecutionAdapter {
    * Returns: ExecutionRecord found or null if it doesn't exist.
    */
   async getExecution(executionId: string): Promise<ExecutionRecord | null> {
-    const record = await this.executionStore.read(executionId);
+    const record = await this.stores.executions.get(executionId);
     return record ? record.payload : null;
   }
 
   /**
-   * [EARS-6] Gets all ExecutionRecords associated with a specific Task.
+   * [EARS-C1] Gets all ExecutionRecords associated with a specific Task.
    * 
    * Description: Gets all ExecutionRecords associated with a specific Task.
    * Implementation: Reads all records and filters by matching taskId.
@@ -152,11 +145,11 @@ export class ExecutionAdapter implements IExecutionAdapter {
    * Returns: Array of ExecutionRecords filtered for the task.
    */
   async getExecutionsByTask(taskId: string): Promise<ExecutionRecord[]> {
-    const ids = await this.executionStore.list();
+    const ids = await this.stores.executions.list();
     const executions: ExecutionRecord[] = [];
 
     for (const id of ids) {
-      const record = await this.executionStore.read(id);
+      const record = await this.stores.executions.get(id);
       if (record && record.payload.taskId === taskId) {
         executions.push(record.payload);
       }
@@ -166,7 +159,7 @@ export class ExecutionAdapter implements IExecutionAdapter {
   }
 
   /**
-   * [EARS-7] Gets all ExecutionRecords in the system for indexation.
+   * [EARS-D1] Gets all ExecutionRecords in the system for indexation.
    * 
    * Description: Gets all ExecutionRecords in the system for complete indexation.
    * Implementation: Complete read from record store without filters.
@@ -174,11 +167,11 @@ export class ExecutionAdapter implements IExecutionAdapter {
    * Returns: Complete array of all ExecutionRecords.
    */
   async getAllExecutions(): Promise<ExecutionRecord[]> {
-    const ids = await this.executionStore.list();
+    const ids = await this.stores.executions.list();
     const executions: ExecutionRecord[] = [];
 
     for (const id of ids) {
-      const record = await this.executionStore.read(id);
+      const record = await this.stores.executions.get(id);
       if (record) {
         executions.push(record.payload);
       }
