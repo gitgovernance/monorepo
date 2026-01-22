@@ -1,21 +1,16 @@
 import { FeedbackAdapter } from './index';
 import { createFeedbackRecord } from '../../factories/feedback_factory';
-import { RecordStore } from '../../store';
+import type { RecordStore } from '../../record_store';
 import { IdentityAdapter } from '../identity_adapter';
-import { publishEvent } from '../../event_bus';
-import type { FeedbackRecord } from '../../types';
+import type { FeedbackRecord, GitGovFeedbackRecord } from '../../types';
 import type { IEventStream } from '../../event_bus';
 import type { GitGovRecord, Signature } from '../../types';
 import { DetailedValidationError } from '../../validation/common';
 
 // Mock dependencies
 jest.mock('../../factories/feedback_factory');
-jest.mock('../../store');
+jest.mock('../../record_store');
 jest.mock('../identity_adapter');
-jest.mock('../../event_bus', () => ({
-  ...jest.requireActual('../../event_bus'),
-  publishEvent: jest.fn(),
-}));
 
 // Helper function to create properly typed mock feedback records
 function createMockFeedbackRecord(overrides: Partial<FeedbackRecord> = {}): GitGovRecord & { payload: FeedbackRecord } {
@@ -46,9 +41,9 @@ function createMockFeedbackRecord(overrides: Partial<FeedbackRecord> = {}): GitG
 
 describe('FeedbackAdapter', () => {
   let feedbackAdapter: FeedbackAdapter;
-  let mockFeedbackStore: jest.Mocked<RecordStore<FeedbackRecord>>;
+  let mockFeedbackStore: jest.Mocked<RecordStore<GitGovFeedbackRecord>>;
   let mockIdentityAdapter: jest.Mocked<IdentityAdapter>;
-  let mockPublishEvent: jest.Mock;
+  let mockEventBus: jest.Mocked<IEventStream>;
 
   const mockPayload = {
     entityType: 'task' as const,
@@ -70,45 +65,44 @@ describe('FeedbackAdapter', () => {
   beforeEach(() => {
     jest.clearAllMocks();
 
-    // Mock store with proper typing
+    // Mock store with proper typing - uses get/put pattern
     mockFeedbackStore = {
-      write: jest.fn().mockResolvedValue(undefined),
-      read: jest.fn().mockResolvedValue(null),
+      put: jest.fn().mockResolvedValue(undefined),
+      get: jest.fn().mockResolvedValue(null),
       list: jest.fn().mockResolvedValue([]),
       delete: jest.fn().mockResolvedValue(undefined),
       exists: jest.fn().mockResolvedValue(false),
-    } as unknown as jest.Mocked<RecordStore<FeedbackRecord>>;
+    } as unknown as jest.Mocked<RecordStore<GitGovFeedbackRecord>>;
 
     // Mock identity adapter
     mockIdentityAdapter = {
       signRecord: jest.fn(),
     } as unknown as jest.Mocked<IdentityAdapter>;
 
-    // Mock publish event
-    mockPublishEvent = publishEvent as jest.Mock;
+    // Mock EventBus
+    mockEventBus = {
+      publish: jest.fn(),
+      subscribe: jest.fn(),
+      unsubscribe: jest.fn(),
+      getSubscriptions: jest.fn(),
+      clearSubscriptions: jest.fn(),
+      waitForIdle: jest.fn().mockResolvedValue(undefined)
+    } as jest.Mocked<IEventStream>;
 
     // Mock factory
     (createFeedbackRecord as jest.Mock).mockReturnValue(mockCreatedFeedbackPayload);
     mockIdentityAdapter.signRecord.mockResolvedValue(mockSignedRecord);
 
-    // Create adapter with mocked dependencies
+    // Create adapter with mocked dependencies - stores container pattern
     feedbackAdapter = new FeedbackAdapter({
-      feedbackStore: mockFeedbackStore,
+      stores: { feedbacks: mockFeedbackStore },
       identity: mockIdentityAdapter,
-      eventBus: {
-        publish: jest.fn(),
-        subscribe: jest.fn(),
-        unsubscribe: jest.fn(),
-        getSubscriptions: jest.fn(),
-        clearSubscriptions: jest.fn(),
-        waitForIdle: jest.fn().mockResolvedValue(undefined)
-      } as IEventStream,
-      // No workflowMethodology for graceful degradation
+      eventBus: mockEventBus,
     });
   });
 
   describe('create', () => {
-    it('[EARS-1] should create, sign, write, and emit event for valid feedback', async () => {
+    it('[EARS-A1] should create, sign, write, and emit event for valid feedback', async () => {
       const result = await feedbackAdapter.create(mockPayload, mockActorId);
 
       expect(createFeedbackRecord).toHaveBeenCalledWith({
@@ -123,13 +117,13 @@ describe('FeedbackAdapter', () => {
         'author',
         expect.any(String) // notes parameter
       );
-      expect(mockFeedbackStore.write).toHaveBeenCalledWith(mockSignedRecord);
+      expect(mockFeedbackStore.put).toHaveBeenCalledWith(mockCreatedFeedbackPayload.id, mockSignedRecord);
       // Note: Now using this.eventBus.publish instead of publishEvent
       // The mock eventBus.publish should have been called
       expect(result).toEqual(mockCreatedFeedbackPayload);
     });
 
-    it('[EARS-2] should throw DetailedValidationError for invalid payload', async () => {
+    it('[EARS-A2] should throw DetailedValidationError for invalid payload', async () => {
       const validationError = new DetailedValidationError('Invalid payload', []);
       (createFeedbackRecord as jest.Mock).mockImplementation(() => { throw validationError; });
 
@@ -138,23 +132,23 @@ describe('FeedbackAdapter', () => {
 
       // Ensure no side effects occurred
       expect(mockIdentityAdapter.signRecord).not.toHaveBeenCalled();
-      expect(mockFeedbackStore.write).not.toHaveBeenCalled();
-      expect(mockPublishEvent).not.toHaveBeenCalled();
+      expect(mockFeedbackStore.put).not.toHaveBeenCalled();
+      expect(mockEventBus.publish).not.toHaveBeenCalled();
     });
 
-    it('[EARS-3] should throw RecordNotFoundError for missing entityId', async () => {
+    it('[EARS-A3] should throw RecordNotFoundError for missing entityId', async () => {
       await expect(feedbackAdapter.create({} as Partial<FeedbackRecord>, mockActorId))
         .rejects.toThrow('RecordNotFoundError: entityId is required');
     });
 
-    it('[EARS-4] should throw InvalidEntityTypeError for invalid entityType', async () => {
+    it('[EARS-A4] should throw InvalidEntityTypeError for invalid entityType', async () => {
       const invalidPayload = { entityType: 'invalid', entityId: 'task-123', content: 'test' } as Partial<FeedbackRecord> & { entityType: 'invalid' };
 
       await expect(feedbackAdapter.create(invalidPayload, mockActorId))
         .rejects.toThrow('InvalidEntityTypeError: entityType must be task, execution, changelog, feedback, or cycle');
     });
 
-    it('[EARS-5] should prevent duplicate assignment to same actor', async () => {
+    it('[EARS-A5] should prevent duplicate assignment to same actor', async () => {
       const assignmentPayload = {
         entityType: 'task' as const,
         entityId: 'task-123',
@@ -173,16 +167,16 @@ describe('FeedbackAdapter', () => {
       });
 
       mockFeedbackStore.list.mockResolvedValue(['existing-assignment']);
-      mockFeedbackStore.read.mockResolvedValue(existingAssignment);
+      mockFeedbackStore.get.mockResolvedValue(existingAssignment);
 
       await expect(feedbackAdapter.create(assignmentPayload, 'human:manager'))
         .rejects.toThrow('DuplicateAssignmentError: Task task-123 is already assigned to human:developer (feedback: existing-assignment)');
 
       // Ensure no side effects occurred
-      expect(mockFeedbackStore.write).not.toHaveBeenCalled();
+      expect(mockFeedbackStore.put).not.toHaveBeenCalled();
     });
 
-    it('[EARS-6] should allow assignment of same task to different actors', async () => {
+    it('[EARS-A6] should allow assignment of same task to different actors', async () => {
       const assignmentPayload = {
         entityType: 'task' as const,
         entityId: 'task-123',
@@ -201,7 +195,7 @@ describe('FeedbackAdapter', () => {
       });
 
       mockFeedbackStore.list.mockResolvedValue(['existing-assignment']);
-      mockFeedbackStore.read.mockResolvedValue(existingAssignment);
+      mockFeedbackStore.get.mockResolvedValue(existingAssignment);
 
       const newAssignment = {
         id: 'new-assignment',
@@ -219,10 +213,10 @@ describe('FeedbackAdapter', () => {
       const result = await feedbackAdapter.create(assignmentPayload, 'human:manager');
 
       expect(result).toEqual(newAssignment);
-      expect(mockFeedbackStore.write).toHaveBeenCalled();
+      expect(mockFeedbackStore.put).toHaveBeenCalled();
     });
 
-    it('[EARS-7] should allow new assignment if previous one is resolved', async () => {
+    it('[EARS-A7] should allow new assignment if previous one is resolved', async () => {
       const assignmentPayload = {
         entityType: 'task' as const,
         entityId: 'task-123',
@@ -241,7 +235,7 @@ describe('FeedbackAdapter', () => {
       });
 
       mockFeedbackStore.list.mockResolvedValue(['resolved-assignment']);
-      mockFeedbackStore.read.mockResolvedValue(existingAssignment);
+      mockFeedbackStore.get.mockResolvedValue(existingAssignment);
 
       const newAssignment = {
         id: 'new-assignment',
@@ -259,10 +253,10 @@ describe('FeedbackAdapter', () => {
       const result = await feedbackAdapter.create(assignmentPayload, 'human:manager');
 
       expect(result).toEqual(newAssignment);
-      expect(mockFeedbackStore.write).toHaveBeenCalled();
+      expect(mockFeedbackStore.put).toHaveBeenCalled();
     });
 
-    it('[EARS-8] should not validate duplicates for non-assignment feedbacks', async () => {
+    it('[EARS-A8] should not validate duplicates for non-assignment feedbacks', async () => {
       const suggestionPayload = {
         entityType: 'task' as const,
         entityId: 'task-123',
@@ -279,7 +273,7 @@ describe('FeedbackAdapter', () => {
       });
 
       mockFeedbackStore.list.mockResolvedValue(['existing-suggestion']);
-      mockFeedbackStore.read.mockResolvedValue(existingSuggestion);
+      mockFeedbackStore.get.mockResolvedValue(existingSuggestion);
 
       const newSuggestion = {
         id: 'new-suggestion',
@@ -296,18 +290,18 @@ describe('FeedbackAdapter', () => {
       const result = await feedbackAdapter.create(suggestionPayload, 'human:reviewer');
 
       expect(result).toEqual(newSuggestion);
-      expect(mockFeedbackStore.write).toHaveBeenCalled();
+      expect(mockFeedbackStore.put).toHaveBeenCalled();
     });
   });
 
   describe('resolve', () => {
-    it('[EARS-9] should create new feedback resolving original (immutable pattern)', async () => {
+    it('[EARS-B1] should create new feedback resolving original (immutable pattern)', async () => {
       const originalFeedback = createMockFeedbackRecord({
         id: 'feedback-123',
         status: 'open'
       });
 
-      mockFeedbackStore.read.mockResolvedValue(originalFeedback);
+      mockFeedbackStore.get.mockResolvedValue(originalFeedback);
 
       const newFeedback = {
         id: 'feedback-resolution-123',
@@ -339,13 +333,13 @@ describe('FeedbackAdapter', () => {
       expect(result.resolvesFeedbackId).toBe('feedback-123'); // Traceability
     });
 
-    it('[EARS-10] should use generic message when content not provided', async () => {
+    it('[EARS-B2] should use generic message when content not provided', async () => {
       const originalFeedback = createMockFeedbackRecord({
         id: 'feedback-123',
         status: 'open'
       });
 
-      mockFeedbackStore.read.mockResolvedValue(originalFeedback);
+      mockFeedbackStore.get.mockResolvedValue(originalFeedback);
 
       const newFeedback = {
         id: 'feedback-resolution-123',
@@ -370,20 +364,20 @@ describe('FeedbackAdapter', () => {
       );
     });
 
-    it('[EARS-11] should throw RecordNotFoundError for non-existent feedback', async () => {
-      mockFeedbackStore.read.mockResolvedValue(null);
+    it('[EARS-B3] should throw RecordNotFoundError for non-existent feedback', async () => {
+      mockFeedbackStore.get.mockResolvedValue(null);
 
       await expect(feedbackAdapter.resolve('non-existent', mockActorId))
         .rejects.toThrow('RecordNotFoundError: Feedback not found: non-existent');
     });
 
-    it('[EARS-12] should use custom content when provided', async () => {
+    it('[EARS-B4] should use custom content when provided', async () => {
       const originalFeedback = createMockFeedbackRecord({
         id: 'feedback-123',
         status: 'open'
       });
 
-      mockFeedbackStore.read.mockResolvedValue(originalFeedback);
+      mockFeedbackStore.get.mockResolvedValue(originalFeedback);
 
       const customContent = 'Fixed the SQL injection vulnerability with prepared statements';
       const newFeedback = {
@@ -411,18 +405,18 @@ describe('FeedbackAdapter', () => {
   });
 
   describe('getFeedback', () => {
-    it('[EARS-13] should return existing feedback record', async () => {
+    it('[EARS-C1] should return existing feedback record', async () => {
       const mockRecord = createMockFeedbackRecord({ id: 'feedback-123' });
-      mockFeedbackStore.read.mockResolvedValue(mockRecord);
+      mockFeedbackStore.get.mockResolvedValue(mockRecord);
 
       const result = await feedbackAdapter.getFeedback('feedback-123');
 
-      expect(mockFeedbackStore.read).toHaveBeenCalledWith('feedback-123');
+      expect(mockFeedbackStore.get).toHaveBeenCalledWith('feedback-123');
       expect(result).toEqual(mockRecord.payload);
     });
 
-    it('[EARS-14] should return null for non-existent feedback', async () => {
-      mockFeedbackStore.read.mockResolvedValue(null);
+    it('[EARS-C2] should return null for non-existent feedback', async () => {
+      mockFeedbackStore.get.mockResolvedValue(null);
 
       const result = await feedbackAdapter.getFeedback('non-existent');
 
@@ -431,13 +425,13 @@ describe('FeedbackAdapter', () => {
   });
 
   describe('getFeedbackByEntity', () => {
-    it('[EARS-15] should filter feedbacks by entity ID', async () => {
+    it('[EARS-D1] should filter feedbacks by entity ID', async () => {
       const feedback1 = createMockFeedbackRecord({ id: 'feedback-1', entityId: 'task-123' });
       const feedback2 = createMockFeedbackRecord({ id: 'feedback-2', entityId: 'task-456' });
       const feedback3 = createMockFeedbackRecord({ id: 'feedback-3', entityId: 'task-123' });
 
       mockFeedbackStore.list.mockResolvedValue(['feedback-1', 'feedback-2', 'feedback-3']);
-      mockFeedbackStore.read
+      mockFeedbackStore.get
         .mockResolvedValueOnce(feedback1)
         .mockResolvedValueOnce(feedback2)
         .mockResolvedValueOnce(feedback3);
@@ -459,12 +453,12 @@ describe('FeedbackAdapter', () => {
   });
 
   describe('getAllFeedback', () => {
-    it('[EARS-16] should return all feedback records in the system', async () => {
+    it('[EARS-E1] should return all feedback records in the system', async () => {
       const feedback1 = createMockFeedbackRecord({ id: 'feedback-1' });
       const feedback2 = createMockFeedbackRecord({ id: 'feedback-2' });
 
       mockFeedbackStore.list.mockResolvedValue(['feedback-1', 'feedback-2']);
-      mockFeedbackStore.read
+      mockFeedbackStore.get
         .mockResolvedValueOnce(feedback1)
         .mockResolvedValueOnce(feedback2);
 
@@ -485,7 +479,7 @@ describe('FeedbackAdapter', () => {
   });
 
   describe('Performance Tests', () => {
-    it('[EARS-20] should execute in under 50ms for typical datasets', async () => {
+    it('[EARS-J1] should execute in under 50ms for typical datasets', async () => {
       // Create mock data for performance test
       const feedbackIds = Array.from({ length: 100 }, (_, i) => `feedback-${i}`);
       const mockFeedbacks = feedbackIds.map(id =>
@@ -494,7 +488,7 @@ describe('FeedbackAdapter', () => {
 
       mockFeedbackStore.list.mockResolvedValue(feedbackIds);
       mockFeedbacks.forEach(feedback => {
-        mockFeedbackStore.read.mockResolvedValueOnce(feedback);
+        mockFeedbackStore.get.mockResolvedValueOnce(feedback);
       });
 
       const startTime = Date.now();
@@ -522,8 +516,8 @@ describe('FeedbackAdapter', () => {
 
     it('should handle store errors gracefully in resolve', async () => {
       const existingFeedback = createMockFeedbackRecord({ status: 'open' });
-      mockFeedbackStore.read.mockResolvedValue(existingFeedback);
-      mockFeedbackStore.write.mockRejectedValue(new Error('Store error'));
+      mockFeedbackStore.get.mockResolvedValue(existingFeedback);
+      mockFeedbackStore.put.mockRejectedValue(new Error('Store error'));
 
       await expect(feedbackAdapter.resolve('feedback-123', mockActorId))
         .rejects.toThrow('Store error');
@@ -531,13 +525,13 @@ describe('FeedbackAdapter', () => {
   });
 
   describe('Event Emission Verification', () => {
-    it('[EARS-20] should emit feedback.created with resolvesFeedbackId when present', async () => {
+    it('[EARS-G1] should emit feedback.created with resolvesFeedbackId when present', async () => {
       const originalFeedback = createMockFeedbackRecord({
         id: 'feedback-original',
         status: 'open'
       });
 
-      mockFeedbackStore.read.mockResolvedValue(originalFeedback);
+      mockFeedbackStore.get.mockResolvedValue(originalFeedback);
 
       const newFeedback = {
         id: 'feedback-resolution',
@@ -567,7 +561,7 @@ describe('FeedbackAdapter', () => {
       );
     });
 
-    it('[EARS-21] should emit feedback.created with assignee when provided', async () => {
+    it('[EARS-G2] should emit feedback.created with assignee when provided', async () => {
       const assignmentPayload = {
         entityType: 'task' as const,
         entityId: 'task-123',
@@ -603,13 +597,13 @@ describe('FeedbackAdapter', () => {
       );
     });
 
-    it('[EARS-22] should emit feedback.created via resolve with resolvesFeedbackId populated', async () => {
+    it('[EARS-G3] should emit feedback.created via resolve with resolvesFeedbackId populated', async () => {
       const originalFeedback = createMockFeedbackRecord({
         id: 'feedback-123',
         status: 'open'
       });
 
-      mockFeedbackStore.read.mockResolvedValue(originalFeedback);
+      mockFeedbackStore.get.mockResolvedValue(originalFeedback);
 
       const newFeedback = {
         id: 'feedback-resolution-123',
@@ -644,7 +638,7 @@ describe('FeedbackAdapter', () => {
   });
 
   describe('Edge Cases - Immutable Pattern', () => {
-    it('[EARS-23] should accept feedback on cycle entities', async () => {
+    it('[EARS-H1] should accept feedback on cycle entities', async () => {
       const cyclePayload = {
         entityType: 'cycle' as const,
         entityId: '1234567890-cycle-sprint-1',
@@ -674,14 +668,14 @@ describe('FeedbackAdapter', () => {
       );
     });
 
-    it('[EARS-24] should allow resolving same feedback multiple times without conflict', async () => {
+    it('[EARS-I1] should allow resolving same feedback multiple times without conflict', async () => {
       const originalFeedback = createMockFeedbackRecord({
         id: 'feedback-question',
         type: 'question',
         status: 'open'
       });
 
-      mockFeedbackStore.read.mockResolvedValue(originalFeedback);
+      mockFeedbackStore.get.mockResolvedValue(originalFeedback);
 
       // First resolution
       const resolution1 = {
@@ -721,7 +715,7 @@ describe('FeedbackAdapter', () => {
       expect(result2.resolvesFeedbackId).toBe('feedback-question');
     });
 
-    it('[EARS-25] should allow creating feedback with resolved status from start', async () => {
+    it('[EARS-I2] should allow creating feedback with resolved status from start', async () => {
       const approvalPayload = {
         entityType: 'execution' as const,
         entityId: '1752642000-exec-api-impl',
@@ -752,7 +746,7 @@ describe('FeedbackAdapter', () => {
       );
     });
 
-    it('[EARS-36] should detect assignment resolution via resolvesFeedbackId', async () => {
+    it('[EARS-A9] should detect assignment resolution via resolvesFeedbackId', async () => {
       // Scenario: Assignment -> Resolution -> Re-assignment should work
       const taskId = 'task-backend-api';
       const assignee = 'human:dev-1';
@@ -781,7 +775,7 @@ describe('FeedbackAdapter', () => {
       // Mock getFeedbackByEntity to return only assignment (resolution is on different entity)
       // Mock getAllFeedback to return both
       mockFeedbackStore.list.mockResolvedValue(['feedback-assignment-1', 'feedback-resolution-1']);
-      mockFeedbackStore.read.mockImplementation((id: string) => {
+      mockFeedbackStore.get.mockImplementation((id: string) => {
         if (id === 'feedback-assignment-1') return Promise.resolve(assignment1);
         if (id === 'feedback-resolution-1') return Promise.resolve(resolution1);
         return Promise.resolve(null);
@@ -815,7 +809,7 @@ describe('FeedbackAdapter', () => {
       expect(result.type).toBe('assignment');
     });
 
-    it('[EARS-36] should reject duplicate assignment when no resolution exists', async () => {
+    it('[EARS-A9] should reject duplicate assignment when no resolution exists', async () => {
       // Scenario: Assignment (no resolution) -> Re-assignment should fail
       const taskId = 'task-frontend-ui';
       const assignee = 'human:dev-2';
@@ -832,7 +826,7 @@ describe('FeedbackAdapter', () => {
 
       // Mock getFeedbackByEntity to return only the assignment (no resolution)
       mockFeedbackStore.list.mockResolvedValue(['feedback-assignment-unresolved']);
-      mockFeedbackStore.read.mockImplementation((id: string) => {
+      mockFeedbackStore.get.mockImplementation((id: string) => {
         if (id === 'feedback-assignment-unresolved') return Promise.resolve(assignment1);
         return Promise.resolve(null);
       });
@@ -854,7 +848,7 @@ describe('FeedbackAdapter', () => {
   });
 
   describe('Threading Edge Cases', () => {
-    it('[EARS-26] should return empty thread for feedback with no responses', async () => {
+    it('[EARS-F4] should return empty thread for feedback with no responses', async () => {
       const lonelyFeedback = createMockFeedbackRecord({
         id: 'feedback-lonely',
         entityType: 'task',
@@ -862,7 +856,7 @@ describe('FeedbackAdapter', () => {
         content: 'Nobody answered this question'
       });
 
-      mockFeedbackStore.read.mockResolvedValue(lonelyFeedback);
+      mockFeedbackStore.get.mockResolvedValue(lonelyFeedback);
       mockFeedbackStore.list.mockResolvedValue(['feedback-lonely']);
 
       const thread = await feedbackAdapter.getFeedbackThread('feedback-lonely');
@@ -871,9 +865,9 @@ describe('FeedbackAdapter', () => {
       expect(thread.responses).toHaveLength(0); // No responses
     });
 
-    it('[EARS-27] should build deep thread (10+ levels) without performance degradation', async () => {
+    it('[EARS-F5] should build deep thread (10+ levels) without performance degradation', async () => {
       // Setup chain: f1 → f2 → f3 → ... → f15
-      const feedbacks: any[] = [];
+      const feedbacks: GitGovFeedbackRecord[] = [];
       for (let i = 1; i <= 15; i++) {
         feedbacks.push(createMockFeedbackRecord({
           id: `feedback-${i}`,
@@ -883,7 +877,7 @@ describe('FeedbackAdapter', () => {
         }));
       }
 
-      mockFeedbackStore.read.mockImplementation((id: string) => {
+      mockFeedbackStore.get.mockImplementation((id: string) => {
         const match = feedbacks.find(f => f.payload.id === id);
         return Promise.resolve(match || null);
       });
@@ -908,9 +902,9 @@ describe('FeedbackAdapter', () => {
   });
 
   describe('Performance - Advanced', () => {
-    it.skip('[EARS-29] should filter 1000+ feedbacks in under 100ms', async () => {
+    it.skip('[EARS-J2] should filter 1000+ feedbacks in under 100ms', async () => {
       // Create 1200 feedbacks, 150 for task-123
-      const feedbacks: any[] = [];
+      const feedbacks: GitGovFeedbackRecord[] = [];
       for (let i = 0; i < 1200; i++) {
         feedbacks.push(createMockFeedbackRecord({
           id: `feedback-${i}`,
@@ -920,7 +914,7 @@ describe('FeedbackAdapter', () => {
       }
 
       mockFeedbackStore.list.mockResolvedValue(feedbacks.map(f => f.payload.id));
-      mockFeedbackStore.read.mockImplementation((id: string) => {
+      mockFeedbackStore.get.mockImplementation((id: string) => {
         const match = feedbacks.find(f => f.payload.id === id);
         return Promise.resolve(match || null);
       });
@@ -933,9 +927,9 @@ describe('FeedbackAdapter', () => {
       expect(endTime - startTime).toBeLessThan(100); // <100ms target
     });
 
-    it('[EARS-30] should build thread of 20+ levels in under 200ms', async () => {
+    it('[EARS-J3] should build thread of 20+ levels in under 200ms', async () => {
       // Setup chain of 25 feedbacks
-      const feedbacks: any[] = [];
+      const feedbacks: GitGovFeedbackRecord[] = [];
       for (let i = 1; i <= 25; i++) {
         feedbacks.push(createMockFeedbackRecord({
           id: `feedback-${i}`,
@@ -945,7 +939,7 @@ describe('FeedbackAdapter', () => {
         }));
       }
 
-      mockFeedbackStore.read.mockImplementation((id: string) => {
+      mockFeedbackStore.get.mockImplementation((id: string) => {
         const match = feedbacks.find(f => f.payload.id === id);
         return Promise.resolve(match || null);
       });
@@ -970,7 +964,7 @@ describe('FeedbackAdapter', () => {
   });
 
   describe('getFeedbackThread', () => {
-    it('[EARS-17] should build complete conversation tree', async () => {
+    it('[EARS-F1] should build complete conversation tree', async () => {
       // Setup: feedback-1 (root) -> feedback-2 (response) -> feedback-3 (nested response)
       const feedback1 = createMockFeedbackRecord({
         id: 'feedback-1',
@@ -992,7 +986,7 @@ describe('FeedbackAdapter', () => {
       });
 
       // Mock read for individual feedback
-      mockFeedbackStore.read
+      mockFeedbackStore.get
         .mockResolvedValueOnce(feedback1) // For root
         .mockResolvedValueOnce(feedback2) // For first level
         .mockResolvedValueOnce(feedback3); // For second level
@@ -1002,7 +996,7 @@ describe('FeedbackAdapter', () => {
 
       // Mock getAllFeedback() to return all feedbacks
       let callCount = 0;
-      mockFeedbackStore.read.mockImplementation((id: string) => {
+      mockFeedbackStore.get.mockImplementation((id: string) => {
         callCount++;
         if (id === 'feedback-1') return Promise.resolve(feedback1);
         if (id === 'feedback-2') return Promise.resolve(feedback2);
@@ -1021,7 +1015,7 @@ describe('FeedbackAdapter', () => {
       expect(result.responses[0]!.responses[0]!.responses).toHaveLength(0);
     });
 
-    it('[EARS-18] should limit tree depth with maxDepth parameter', async () => {
+    it('[EARS-F2] should limit tree depth with maxDepth parameter', async () => {
       // Setup: feedback-1 -> feedback-2 -> feedback-3
       const feedback1 = createMockFeedbackRecord({
         id: 'feedback-1',
@@ -1034,7 +1028,7 @@ describe('FeedbackAdapter', () => {
         entityId: 'feedback-1'
       });
 
-      mockFeedbackStore.read
+      mockFeedbackStore.get
         .mockImplementation((id: string) => {
           if (id === 'feedback-1') return Promise.resolve(feedback1);
           if (id === 'feedback-2') return Promise.resolve(feedback2);
@@ -1050,8 +1044,8 @@ describe('FeedbackAdapter', () => {
       expect(result.responses).toHaveLength(0); // Depth limit prevents going deeper
     });
 
-    it('[EARS-19] should throw error for non-existent feedbackId in thread', async () => {
-      mockFeedbackStore.read.mockResolvedValue(null);
+    it('[EARS-F3] should throw error for non-existent feedbackId in thread', async () => {
+      mockFeedbackStore.get.mockResolvedValue(null);
 
       await expect(feedbackAdapter.getFeedbackThread('non-existent'))
         .rejects.toThrow('RecordNotFoundError: Feedback not found: non-existent');
@@ -1075,7 +1069,7 @@ describe('FeedbackAdapter', () => {
         entityId: 'feedback-1'
       });
 
-      mockFeedbackStore.read.mockImplementation((id: string) => {
+      mockFeedbackStore.get.mockImplementation((id: string) => {
         if (id === 'feedback-1') return Promise.resolve(feedback1);
         if (id === 'feedback-2') return Promise.resolve(feedback2);
         if (id === 'feedback-3') return Promise.resolve(feedback3);
