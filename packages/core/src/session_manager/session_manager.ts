@@ -46,12 +46,12 @@ export class SessionManager implements ISessionManager {
 
   /**
    * Load GitGovernance session state
-   * [EARS-B9] Auto-detects actor from .key files if no session or no actorId exists
+   * [EARS-A9] Auto-detects actor from .key files if no session or no actorId exists
    */
   async loadSession(): Promise<GitGovSession | null> {
     let session = await this.sessionStore.loadSession();
 
-    // [EARS-B9] If session exists but no lastSession.actorId, try to auto-detect
+    // [EARS-A9] If session exists but no lastSession.actorId, try to auto-detect
     if (session && !session.lastSession?.actorId) {
       const detectedActorId = await this.detectActorFromKeyFiles();
       if (detectedActorId) {
@@ -63,7 +63,7 @@ export class SessionManager implements ISessionManager {
       }
     }
 
-    // [EARS-B9] If no session, try to create from .key files
+    // [EARS-A9] If no session, try to create from .key files
     if (!session) {
       const detectedActorId = await this.detectActorFromKeyFiles();
       if (detectedActorId) {
@@ -87,7 +87,7 @@ export class SessionManager implements ISessionManager {
   }
 
   /**
-   * [EARS-B9] Detect actor from .key files in .gitgov/actors/
+   * [EARS-A9] Detect actor from .key files in .gitgov/actors/
    */
   async detectActorFromKeyFiles(): Promise<string | null> {
     if (this.sessionStore.detectActorFromKeyFiles) {
