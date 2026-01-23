@@ -8,14 +8,7 @@ import { validateFullAgentRecord } from '../../validation/agent_validator';
 import { generateKeys, signPayload, generateMockSignature } from '../../crypto/signatures';
 import { calculatePayloadChecksum } from '../../crypto/checksum';
 import { generateActorId } from '../../utils/id_generator';
-// Note: ConfigManager module is fully mocked below, createConfigManager returns mockConfigManagerInstance
-
-// Mock ConfigManager instance that will be returned by createConfigManager
-const mockConfigManagerInstance = {
-  loadSession: jest.fn(),
-  loadConfig: jest.fn(),
-  saveSession: jest.fn(),
-};
+import type { ISessionManager } from '../../session_manager';
 
 // Mock all dependencies
 jest.mock('../../factories/actor_factory');
@@ -25,10 +18,6 @@ jest.mock('../../validation/agent_validator');
 jest.mock('../../crypto/signatures');
 jest.mock('../../crypto/checksum');
 jest.mock('../../utils/id_generator');
-jest.mock('../../config_manager', () => ({
-  ConfigManager: jest.fn(),
-  createConfigManager: jest.fn(() => mockConfigManagerInstance),
-}));
 
 import type { KeyProvider } from '../../key_provider/key_provider';
 
@@ -60,12 +49,25 @@ interface MockEventBus extends IEventStream {
   clearSubscriptions: jest.MockedFunction<() => void>;
 }
 
+// Mock SessionManager interface
+interface MockSessionManager {
+  loadSession: jest.MockedFunction<() => Promise<any>>;
+  getActorState: jest.MockedFunction<(actorId: string) => Promise<any>>;
+  updateActorState: jest.MockedFunction<(actorId: string, state: any) => Promise<void>>;
+  getLastSession: jest.MockedFunction<() => Promise<any>>;
+  getSyncPreferences: jest.MockedFunction<() => Promise<any>>;
+  updateSyncPreferences: jest.MockedFunction<(prefs: any) => Promise<void>>;
+  getCloudSessionToken: jest.MockedFunction<() => Promise<string | null>>;
+  detectActorFromKeyFiles: jest.MockedFunction<() => Promise<string | null>>;
+}
+
 describe('IdentityAdapter - ActorRecord Operations', () => {
   let identityAdapter: IdentityAdapter;
   let identityAdapterWithEvents: IdentityAdapter;
   let mockActorStore: jest.Mocked<RecordStore<GitGovActorRecord>>;
   let mockAgentStore: jest.Mocked<RecordStore<GitGovAgentRecord>>;
   let mockKeyProvider: MockKeyProvider;
+  let mockSessionManager: MockSessionManager;
   let mockEventBus: MockEventBus;
 
   beforeEach(() => {
@@ -106,16 +108,30 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       waitForIdle: jest.fn().mockResolvedValue(undefined),
     } as unknown as jest.Mocked<IEventStream>;
 
+    // Create mock SessionManager
+    mockSessionManager = {
+      loadSession: jest.fn().mockResolvedValue(null),
+      getActorState: jest.fn().mockResolvedValue(null),
+      updateActorState: jest.fn().mockResolvedValue(undefined),
+      getLastSession: jest.fn().mockResolvedValue(null),
+      getSyncPreferences: jest.fn().mockResolvedValue(null),
+      updateSyncPreferences: jest.fn().mockResolvedValue(undefined),
+      getCloudSessionToken: jest.fn().mockResolvedValue(null),
+      detectActorFromKeyFiles: jest.fn().mockResolvedValue(null),
+    };
+
     // Create IdentityAdapter without events (optional dependency)
     identityAdapter = new IdentityAdapter({
       stores: { actors: mockActorStore, agents: mockAgentStore },
       keyProvider: mockKeyProvider,
+      sessionManager: mockSessionManager as unknown as ISessionManager,
     });
 
     // Create IdentityAdapter with events
     identityAdapterWithEvents = new IdentityAdapter({
       stores: { actors: mockActorStore, agents: mockAgentStore },
       keyProvider: mockKeyProvider,
+      sessionManager: mockSessionManager as unknown as ISessionManager,
       eventBus: mockEventBus,
     });
 
@@ -1062,8 +1078,8 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
 
   describe('getCurrentActor', () => {
     it('[EARS-M1] should return actor from valid session resolving succession chain', async () => {
-      // Mock ConfigManager to simulate existing session (testing the primary path)
-      mockConfigManagerInstance.loadSession.mockResolvedValue({
+      // Mock SessionManager to simulate existing session (testing the primary path)
+      mockSessionManager.loadSession.mockResolvedValue({
         lastSession: {
           actorId: 'human:camilo',
           timestamp: '2025-09-15T17:21:00Z'
@@ -1083,8 +1099,8 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
     });
 
     it('[EARS-M2] should return first active actor when no valid session', async () => {
-      // Mock ConfigManager to simulate no session (testing the fallback path)
-      mockConfigManagerInstance.loadSession.mockResolvedValue(null);
+      // Mock SessionManager to simulate no session (testing the fallback path)
+      mockSessionManager.loadSession.mockResolvedValue(null);
 
       // Mock listActors to return active actor
       jest.spyOn(identityAdapter, 'listActors')
@@ -1100,8 +1116,8 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
     });
 
     it('[EARS-M3] should throw error when no active actors exist', async () => {
-      // Mock ConfigManager to simulate no session
-      mockConfigManagerInstance.loadSession.mockResolvedValue(null);
+      // Mock SessionManager to simulate no session
+      mockSessionManager.loadSession.mockResolvedValue(null);
 
       // Mock listActors to return only revoked actors
       jest.spyOn(identityAdapter, 'listActors')
