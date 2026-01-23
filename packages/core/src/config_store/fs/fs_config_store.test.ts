@@ -3,6 +3,12 @@
  *
  * Tests FsConfigStore with mocked filesystem.
  * Session-related tests are in session_store/fs/fs_session_store.test.ts
+ *
+ * EARS Blocks:
+ * - A: Instance Methods (§4.1)
+ * - B: Static Search Methods (§4.2)
+ * - C: Static Utility Methods (§4.3)
+ * - D: Factory Functions (§4.4)
  */
 
 import { FsConfigStore, createConfigManager, createSessionManager, createManagers } from './fs_config_store';
@@ -31,10 +37,10 @@ describe('FsConfigStore', () => {
     FsConfigStore.resetCache();
   });
 
-  // ==================== Instance Methods ====================
+  // ==================== §4.1 Instance Methods (EARS-A) ====================
 
-  describe('loadConfig', () => {
-    it('[EARS-A1] should return complete GitGovConfig for valid files', async () => {
+  describe('Instance Methods (EARS-A)', () => {
+    it('[EARS-A1] WHEN loadConfig is invoked with valid config.json, THE SYSTEM SHALL return complete GitGovConfig', async () => {
       const store = new FsConfigStore(projectRoot);
       const mockConfig: GitGovConfig = {
         protocolVersion: '1.0',
@@ -54,7 +60,7 @@ describe('FsConfigStore', () => {
       );
     });
 
-    it('[EARS-A2] should return null for non-existent files (fail-safe)', async () => {
+    it('[EARS-A2] WHEN loadConfig is invoked with non-existent file, THE SYSTEM SHALL return null (fail-safe)', async () => {
       const store = new FsConfigStore(projectRoot);
       mockedFs.readFile.mockRejectedValue(new Error('ENOENT: no such file'));
 
@@ -63,7 +69,7 @@ describe('FsConfigStore', () => {
       expect(result).toBeNull();
     });
 
-    it('[EARS-A3] should return null for invalid JSON (graceful degradation)', async () => {
+    it('[EARS-A3] WHEN loadConfig is invoked with invalid JSON, THE SYSTEM SHALL return null (graceful degradation)', async () => {
       const store = new FsConfigStore(projectRoot);
       mockedFs.readFile.mockResolvedValue('{ invalid json }');
 
@@ -72,28 +78,7 @@ describe('FsConfigStore', () => {
       expect(result).toBeNull();
     });
 
-    it('[EARS-C5] should warn for non-standard rootCycle format', async () => {
-      const store = new FsConfigStore(projectRoot);
-      const mockConfig: GitGovConfig = {
-        protocolVersion: '1.0',
-        projectId: 'test-project',
-        projectName: 'Test Project',
-        rootCycle: 'invalid-format', // Non-standard format
-      };
-      mockedFs.readFile.mockResolvedValue(JSON.stringify(mockConfig));
-      const warnSpy = jest.spyOn(console, 'warn').mockImplementation();
-
-      await store.loadConfig();
-
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('doesn\'t match expected format')
-      );
-      warnSpy.mockRestore();
-    });
-  });
-
-  describe('saveConfig', () => {
-    it('[EARS-A4] should write config to .gitgov/config.json', async () => {
+    it('[EARS-A4] WHEN saveConfig is invoked, THE SYSTEM SHALL write config to .gitgov/config.json', async () => {
       const store = new FsConfigStore(projectRoot);
       const mockConfig: GitGovConfig = {
         protocolVersion: '1.0',
@@ -113,10 +98,10 @@ describe('FsConfigStore', () => {
     });
   });
 
-  // ==================== Static Methods ====================
+  // ==================== §4.2 Static Search Methods (EARS-B) ====================
 
-  describe('findProjectRoot', () => {
-    it('[EARS-B1] should return absolute path for directories within Git project', () => {
+  describe('Static Search Methods (EARS-B)', () => {
+    it('[EARS-B1] WHEN findProjectRoot is invoked from within Git project, THE SYSTEM SHALL return absolute path', () => {
       mockedExistsSync.mockImplementation((p) => {
         return p === '/test/project/.git';
       });
@@ -126,7 +111,7 @@ describe('FsConfigStore', () => {
       expect(result).toBe('/test/project');
     });
 
-    it('[EARS-B2] should return null for directories outside Git project', () => {
+    it('[EARS-B2] WHEN findProjectRoot is invoked outside Git project, THE SYSTEM SHALL return null', () => {
       mockedExistsSync.mockReturnValue(false);
 
       const result = FsConfigStore.findProjectRoot('/some/random/path');
@@ -134,7 +119,7 @@ describe('FsConfigStore', () => {
       expect(result).toBeNull();
     });
 
-    it('[EARS-B3] should cache result for subsequent calls', () => {
+    it('[EARS-B3] WHEN findProjectRoot is invoked multiple times with same path, THE SYSTEM SHALL return cached result', () => {
       mockedExistsSync.mockImplementation((p) => {
         return p === '/test/project/.git';
       });
@@ -151,7 +136,7 @@ describe('FsConfigStore', () => {
       expect(callsForGit.length).toBe(1);
     });
 
-    it('[EARS-B3] should invalidate cache when searching from different path', () => {
+    it('[EARS-B3] WHEN findProjectRoot is invoked from different path, THE SYSTEM SHALL invalidate cache', () => {
       FsConfigStore.resetCache();
       mockedExistsSync.mockImplementation((p) => {
         return p === '/test/project/.git' || p === '/other/project/.git';
@@ -164,10 +149,8 @@ describe('FsConfigStore', () => {
       expect(mockedExistsSync).toHaveBeenCalledWith('/test/project/.git');
       expect(mockedExistsSync).toHaveBeenCalledWith('/other/project/.git');
     });
-  });
 
-  describe('findGitgovRoot', () => {
-    it('[EARS-B4] should prioritize .gitgov over .git', () => {
+    it('[EARS-B4] WHEN findGitgovRoot finds both .gitgov and .git, THE SYSTEM SHALL prioritize .gitgov', () => {
       mockedExistsSync.mockImplementation((p) => {
         return p === '/test/project/.gitgov' || p === '/test/project/.git';
       });
@@ -177,7 +160,7 @@ describe('FsConfigStore', () => {
       expect(result).toBe('/test/project');
     });
 
-    it('[EARS-B5] should fall back to .git when .gitgov not found', () => {
+    it('[EARS-B5] WHEN findGitgovRoot does not find .gitgov but finds .git, THE SYSTEM SHALL fallback to .git', () => {
       mockedExistsSync.mockImplementation((p) => {
         return p === '/test/project/.git';
       });
@@ -187,66 +170,15 @@ describe('FsConfigStore', () => {
       expect(result).toBe('/test/project');
     });
 
-    it('[EARS-B6] should return null when neither .gitgov nor .git found', () => {
+    it('[EARS-B6] WHEN findGitgovRoot finds neither .gitgov nor .git, THE SYSTEM SHALL return null', () => {
       mockedExistsSync.mockReturnValue(false);
 
       const result = FsConfigStore.findGitgovRoot('/some/path');
 
       expect(result).toBeNull();
     });
-  });
 
-  describe('getGitgovPath', () => {
-    it('[EARS-C1] should return absolute path for GitGovernance projects', () => {
-      mockedExistsSync.mockImplementation((p) => {
-        return p === '/test/project/.gitgov';
-      });
-
-      // Need to mock process.cwd for this test
-      const originalCwd = process.cwd;
-      process.cwd = () => '/test/project/src';
-
-      const result = FsConfigStore.getGitgovPath();
-
-      expect(result).toBe('/test/project/.gitgov');
-      process.cwd = originalCwd;
-    });
-
-    it('[EARS-C2] should throw descriptive Error outside GitGovernance project', () => {
-      mockedExistsSync.mockReturnValue(false);
-
-      expect(() => FsConfigStore.getGitgovPath()).toThrow(
-        'Could not find project root'
-      );
-    });
-  });
-
-  describe('isGitgovProject', () => {
-    it('[EARS-C3] should return true for GitGovernance projects', () => {
-      mockedExistsSync.mockImplementation((p) => {
-        return String(p).includes('.gitgov');
-      });
-
-      const originalCwd = process.cwd;
-      process.cwd = () => '/test/project/src';
-
-      const result = FsConfigStore.isGitgovProject();
-
-      expect(result).toBe(true);
-      process.cwd = originalCwd;
-    });
-
-    it('[EARS-C4] should return false outside GitGovernance projects', () => {
-      mockedExistsSync.mockReturnValue(false);
-
-      const result = FsConfigStore.isGitgovProject();
-
-      expect(result).toBe(false);
-    });
-  });
-
-  describe('resetCache', () => {
-    it('[EARS-B7] should clear project root cache', () => {
+    it('[EARS-B7] WHEN resetCache is invoked, THE SYSTEM SHALL clear project root cache', () => {
       mockedExistsSync.mockImplementation((p) => p === '/test/project/.git');
 
       // First call - populates cache
@@ -267,10 +199,78 @@ describe('FsConfigStore', () => {
     });
   });
 
-  // ==================== Factory Functions ====================
+  // ==================== §4.3 Static Utility Methods (EARS-C) ====================
 
-  describe('createConfigManager', () => {
-    it('[EARS-D1] should create ConfigManager with FsConfigStore backend', () => {
+  describe('Static Utility Methods (EARS-C)', () => {
+    it('[EARS-C1] WHEN getGitgovPath is invoked from GitGovernance project, THE SYSTEM SHALL return absolute path', () => {
+      mockedExistsSync.mockImplementation((p) => {
+        return p === '/test/project/.gitgov';
+      });
+
+      // Need to mock process.cwd for this test
+      const originalCwd = process.cwd;
+      process.cwd = () => '/test/project/src';
+
+      const result = FsConfigStore.getGitgovPath();
+
+      expect(result).toBe('/test/project/.gitgov');
+      process.cwd = originalCwd;
+    });
+
+    it('[EARS-C2] WHEN getGitgovPath is invoked outside GitGovernance project, THE SYSTEM SHALL throw Error', () => {
+      mockedExistsSync.mockReturnValue(false);
+
+      expect(() => FsConfigStore.getGitgovPath()).toThrow(
+        'Could not find project root'
+      );
+    });
+
+    it('[EARS-C3] WHEN isGitgovProject is invoked from GitGovernance project, THE SYSTEM SHALL return true', () => {
+      mockedExistsSync.mockImplementation((p) => {
+        return String(p).includes('.gitgov');
+      });
+
+      const originalCwd = process.cwd;
+      process.cwd = () => '/test/project/src';
+
+      const result = FsConfigStore.isGitgovProject();
+
+      expect(result).toBe(true);
+      process.cwd = originalCwd;
+    });
+
+    it('[EARS-C4] WHEN isGitgovProject is invoked outside GitGovernance project, THE SYSTEM SHALL return false', () => {
+      mockedExistsSync.mockReturnValue(false);
+
+      const result = FsConfigStore.isGitgovProject();
+
+      expect(result).toBe(false);
+    });
+
+    it('[EARS-C5] WHEN config.json has non-standard rootCycle format, THE SYSTEM SHALL emit warning', async () => {
+      const store = new FsConfigStore(projectRoot);
+      const mockConfig: GitGovConfig = {
+        protocolVersion: '1.0',
+        projectId: 'test-project',
+        projectName: 'Test Project',
+        rootCycle: 'invalid-format', // Non-standard format
+      };
+      mockedFs.readFile.mockResolvedValue(JSON.stringify(mockConfig));
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation();
+
+      await store.loadConfig();
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('doesn\'t match expected format')
+      );
+      warnSpy.mockRestore();
+    });
+  });
+
+  // ==================== §4.4 Factory Functions (EARS-D) ====================
+
+  describe('Factory Functions (EARS-D)', () => {
+    it('[EARS-D1] WHEN createConfigManager is invoked with explicit path, THE SYSTEM SHALL create ConfigManager', () => {
       mockedExistsSync.mockImplementation((p) => p === '/test/project/.git');
 
       const manager = createConfigManager('/test/project');
@@ -280,7 +280,7 @@ describe('FsConfigStore', () => {
       expect(manager.getRootCycle).toBeDefined();
     });
 
-    it('[EARS-D2] should auto-detect project root when not provided', () => {
+    it('[EARS-D2] WHEN createConfigManager is invoked without arguments, THE SYSTEM SHALL auto-detect project root', () => {
       mockedExistsSync.mockImplementation((p) => p === '/detected/root/.git');
 
       const originalCwd = process.cwd;
@@ -291,10 +291,8 @@ describe('FsConfigStore', () => {
       expect(manager).toBeDefined();
       process.cwd = originalCwd;
     });
-  });
 
-  describe('createSessionManager', () => {
-    it('[EARS-D3] should create SessionManager with FsSessionStore backend', () => {
+    it('[EARS-D3] WHEN createSessionManager is invoked with explicit path, THE SYSTEM SHALL create SessionManager', () => {
       mockedExistsSync.mockImplementation((p) => p === '/test/project/.git');
 
       const manager = createSessionManager('/test/project');
@@ -304,7 +302,7 @@ describe('FsConfigStore', () => {
       expect(manager.getActorState).toBeDefined();
     });
 
-    it('[EARS-D4] should auto-detect project root when not provided', () => {
+    it('[EARS-D4] WHEN createSessionManager is invoked without arguments, THE SYSTEM SHALL auto-detect project root', () => {
       mockedExistsSync.mockImplementation((p) => p === '/detected/root/.git');
 
       const originalCwd = process.cwd;
@@ -315,10 +313,8 @@ describe('FsConfigStore', () => {
       expect(manager).toBeDefined();
       process.cwd = originalCwd;
     });
-  });
 
-  describe('createManagers', () => {
-    it('[EARS-D5] should create both ConfigManager and SessionManager', () => {
+    it('[EARS-D5] WHEN createManagers is invoked, THE SYSTEM SHALL create both ConfigManager and SessionManager', () => {
       mockedExistsSync.mockImplementation((p) => p === '/test/project/.git');
 
       const { configManager, sessionManager } = createManagers('/test/project');
@@ -329,7 +325,7 @@ describe('FsConfigStore', () => {
       expect(sessionManager.loadSession).toBeDefined();
     });
 
-    it('[EARS-D6] should auto-detect project root when not provided', () => {
+    it('[EARS-D6] WHEN createManagers is invoked without arguments, THE SYSTEM SHALL auto-detect project root', () => {
       mockedExistsSync.mockImplementation((p) => p === '/detected/root/.git');
 
       const originalCwd = process.cwd;

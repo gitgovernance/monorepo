@@ -3,6 +3,11 @@
  *
  * Tests for in-memory ConfigStore implementation.
  * Session-related tests are in session_store/memory/memory_session_store.test.ts
+ *
+ * EARS Blocks:
+ * - A: ConfigStore Interface (§3.1)
+ * - B: Test Helpers (§3.2)
+ * - C: ConfigManager Integration (§3.3)
  */
 
 import { MemoryConfigStore } from './memory_config_store';
@@ -22,15 +27,15 @@ describe('MemoryConfigStore', () => {
     store = new MemoryConfigStore();
   });
 
-  // ==================== ConfigStore Interface ====================
+  // ==================== §3.1 ConfigStore Interface (EARS-A) ====================
 
-  describe('loadConfig', () => {
-    it('[EARS-A1] should return null when no config is set', async () => {
+  describe('ConfigStore Interface (EARS-A)', () => {
+    it('[EARS-A1] WHEN loadConfig is invoked without config set, THE SYSTEM SHALL return null', async () => {
       const result = await store.loadConfig();
       expect(result).toBeNull();
     });
 
-    it('[EARS-A2] should return config when set via setConfig', async () => {
+    it('[EARS-A2] WHEN loadConfig is invoked after setConfig, THE SYSTEM SHALL return the config', async () => {
       store.setConfig(mockConfig);
 
       const result = await store.loadConfig();
@@ -38,23 +43,21 @@ describe('MemoryConfigStore', () => {
       expect(result).toEqual(mockConfig);
     });
 
-    it('[EARS-A3] should return config when saved via saveConfig', async () => {
+    it('[EARS-A3] WHEN loadConfig is invoked after saveConfig, THE SYSTEM SHALL return the config', async () => {
       await store.saveConfig(mockConfig);
 
       const result = await store.loadConfig();
 
       expect(result).toEqual(mockConfig);
     });
-  });
 
-  describe('saveConfig', () => {
-    it('[EARS-A4] should persist config to memory', async () => {
+    it('[EARS-A4] WHEN saveConfig is invoked, THE SYSTEM SHALL persist config to memory', async () => {
       await store.saveConfig(mockConfig);
 
       expect(store.getConfig()).toEqual(mockConfig);
     });
 
-    it('[EARS-A4] should overwrite existing config', async () => {
+    it('[EARS-A4] WHEN saveConfig is invoked with existing config, THE SYSTEM SHALL overwrite it', async () => {
       store.setConfig(mockConfig);
 
       const newConfig: GitGovConfig = {
@@ -67,23 +70,21 @@ describe('MemoryConfigStore', () => {
     });
   });
 
-  // ==================== Test Helper Methods ====================
+  // ==================== §3.2 Test Helpers (EARS-B) ====================
 
-  describe('setConfig / getConfig', () => {
-    it('[EARS-B1] should set and get config synchronously', () => {
+  describe('Test Helpers (EARS-B)', () => {
+    it('[EARS-B1] WHEN setConfig is invoked, THE SYSTEM SHALL set config synchronously via getConfig', () => {
       store.setConfig(mockConfig);
       expect(store.getConfig()).toEqual(mockConfig);
     });
 
-    it('[EARS-B2] should allow setting null config', () => {
+    it('[EARS-B2] WHEN setConfig is invoked with null, THE SYSTEM SHALL clear the config', () => {
       store.setConfig(mockConfig);
       store.setConfig(null);
       expect(store.getConfig()).toBeNull();
     });
-  });
 
-  describe('clear', () => {
-    it('[EARS-B3] should clear all stored data', () => {
+    it('[EARS-B3] WHEN clear is invoked, THE SYSTEM SHALL reset store to initial state', () => {
       store.setConfig(mockConfig);
 
       store.clear();
@@ -92,13 +93,13 @@ describe('MemoryConfigStore', () => {
     });
   });
 
-  // ==================== Integration with ConfigManager ====================
+  // ==================== §3.3 ConfigManager Integration (EARS-C) ====================
 
-  describe('ConfigManager integration', () => {
+  describe('ConfigManager Integration (EARS-C)', () => {
     // Import here to avoid circular dependency issues
     const { ConfigManager } = require('../../config_manager');
 
-    it('[EARS-C1] should work with ConfigManager for loadConfig', async () => {
+    it('[EARS-C1] WHEN used with ConfigManager, THE SYSTEM SHALL work for loadConfig', async () => {
       store.setConfig(mockConfig);
       const manager = new ConfigManager(store);
 
@@ -107,7 +108,7 @@ describe('MemoryConfigStore', () => {
       expect(result).toEqual(mockConfig);
     });
 
-    it('[EARS-C1] should work with ConfigManager for getRootCycle', async () => {
+    it('[EARS-C1] WHEN used with ConfigManager, THE SYSTEM SHALL work for getRootCycle', async () => {
       store.setConfig(mockConfig);
       const manager = new ConfigManager(store);
 
@@ -116,7 +117,7 @@ describe('MemoryConfigStore', () => {
       expect(result).toBe('1234567890-cycle-test');
     });
 
-    it('[EARS-C1] should work with ConfigManager for getProjectInfo', async () => {
+    it('[EARS-C1] WHEN used with ConfigManager, THE SYSTEM SHALL work for getProjectInfo', async () => {
       store.setConfig(mockConfig);
       const manager = new ConfigManager(store);
 
@@ -128,7 +129,7 @@ describe('MemoryConfigStore', () => {
       });
     });
 
-    it('[EARS-C2] should work with ConfigManager for updateAuditState', async () => {
+    it('[EARS-C2] WHEN used with ConfigManager, THE SYSTEM SHALL work for updateAuditState', async () => {
       store.setConfig(mockConfig);
       const manager = new ConfigManager(store);
 
