@@ -3,6 +3,16 @@
  *
  * Tests for ConfigManager which handles project configuration (config.json).
  * Session-related tests are in session_manager.test.ts.
+ *
+ * EARS Blocks:
+ * - A: loadConfig (§4.1)
+ * - B: getRootCycle (§4.2)
+ * - C: getProjectInfo (§4.3)
+ * - D: getSyncConfig (§4.4)
+ * - E: getSyncDefaults (§4.5)
+ * - F: getAuditState (§4.6)
+ * - G: updateAuditState (§4.7)
+ * - H: getStateBranch (§4.8)
  */
 
 import { ConfigManager } from './index';
@@ -18,9 +28,9 @@ describe('ConfigManager', () => {
     configManager = new ConfigManager(store);
   });
 
-  // --- Configuration Methods (EARS-A1 to EARS-A9) ---
+  // ==================== §4.1 loadConfig (EARS-A) ====================
 
-  describe('loadConfig', () => {
+  describe('loadConfig (EARS-A)', () => {
     it('[EARS-A1] WHEN loadConfig is invoked with valid config, THE SYSTEM SHALL return complete GitGovConfig object', async () => {
       const mockConfig: GitGovConfig = {
         protocolVersion: '1.0',
@@ -46,8 +56,10 @@ describe('ConfigManager', () => {
     });
   });
 
-  describe('getRootCycle', () => {
-    it('[EARS-A4] WHEN getRootCycle is invoked with configuration that has rootCycle defined, THE SYSTEM SHALL return the root cycle ID', async () => {
+  // ==================== §4.2 getRootCycle (EARS-B) ====================
+
+  describe('getRootCycle (EARS-B)', () => {
+    it('[EARS-B1] WHEN getRootCycle is invoked with rootCycle defined, THE SYSTEM SHALL return the root cycle ID', async () => {
       const mockConfig: GitGovConfig = {
         protocolVersion: '1.0',
         projectId: 'test-project',
@@ -62,7 +74,7 @@ describe('ConfigManager', () => {
       expect(result).toBe('root-cycle-123');
     });
 
-    it('[EARS-A5] WHEN getRootCycle is invoked with configuration without rootCycle defined, THE SYSTEM SHALL return null', async () => {
+    it('[EARS-B2] WHEN getRootCycle is invoked without rootCycle defined, THE SYSTEM SHALL return null', async () => {
       // Note: This test simulates an invalid/incomplete config
       const incompleteConfig = {
         protocolVersion: '1.0',
@@ -78,7 +90,7 @@ describe('ConfigManager', () => {
       expect(result).toBeNull();
     });
 
-    it('WHEN getRootCycle is invoked with no config, THE SYSTEM SHALL return null', async () => {
+    it('[EARS-B2] WHEN getRootCycle is invoked with no config, THE SYSTEM SHALL return null', async () => {
       // No config set
 
       const result = await configManager.getRootCycle();
@@ -87,8 +99,10 @@ describe('ConfigManager', () => {
     });
   });
 
-  describe('getProjectInfo', () => {
-    it('[EARS-A6] WHEN getProjectInfo is invoked with valid configuration, THE SYSTEM SHALL return object with projectId and projectName', async () => {
+  // ==================== §4.3 getProjectInfo (EARS-C) ====================
+
+  describe('getProjectInfo (EARS-C)', () => {
+    it('[EARS-C1] WHEN getProjectInfo is invoked with valid config, THE SYSTEM SHALL return object with projectId and projectName', async () => {
       const mockConfig: GitGovConfig = {
         protocolVersion: '1.0',
         projectId: 'project-456',
@@ -106,7 +120,7 @@ describe('ConfigManager', () => {
       });
     });
 
-    it('WHEN getProjectInfo is invoked with no config, THE SYSTEM SHALL return null', async () => {
+    it('[EARS-C2] WHEN getProjectInfo is invoked with no config, THE SYSTEM SHALL return null', async () => {
       // No config set
 
       const result = await configManager.getProjectInfo();
@@ -115,10 +129,10 @@ describe('ConfigManager', () => {
     });
   });
 
-  // --- Sync Configuration Methods (EARS-A7 to EARS-A9) ---
+  // ==================== §4.4 getSyncConfig (EARS-D) ====================
 
-  describe('getSyncConfig', () => {
-    it('[EARS-A7] WHEN getSyncConfig is invoked with state.sync defined, THE SYSTEM SHALL return object with strategy, maxRetries, and intervals', async () => {
+  describe('getSyncConfig (EARS-D)', () => {
+    it('[EARS-D1] WHEN getSyncConfig is invoked with state.sync defined, THE SYSTEM SHALL return object with strategy, maxRetries, and intervals', async () => {
       const mockConfig: GitGovConfig = {
         protocolVersion: '1.0',
         projectId: 'test-project',
@@ -146,23 +160,7 @@ describe('ConfigManager', () => {
       });
     });
 
-    it('[EARS-A8] WHEN getSyncConfig is invoked without state.sync, THE SYSTEM SHALL return null', async () => {
-      const mockConfig: GitGovConfig = {
-        protocolVersion: '1.0',
-        projectId: 'test-project',
-        projectName: 'Test',
-        rootCycle: 'root-cycle-123'
-        // No state.sync
-      };
-
-      store.setConfig(mockConfig);
-
-      const result = await configManager.getSyncConfig();
-
-      expect(result).toBeNull();
-    });
-
-    it('WHEN getSyncConfig is invoked with partial state.sync, THE SYSTEM SHALL return defaults for missing values', async () => {
+    it('[EARS-D1] WHEN getSyncConfig is invoked with partial state.sync, THE SYSTEM SHALL return defaults for missing values', async () => {
       const mockConfig: GitGovConfig = {
         protocolVersion: '1.0',
         projectId: 'test-project',
@@ -187,10 +185,28 @@ describe('ConfigManager', () => {
         batchIntervalSeconds: 60 // Default
       });
     });
+
+    it('[EARS-D2] WHEN getSyncConfig is invoked without state.sync, THE SYSTEM SHALL return null', async () => {
+      const mockConfig: GitGovConfig = {
+        protocolVersion: '1.0',
+        projectId: 'test-project',
+        projectName: 'Test',
+        rootCycle: 'root-cycle-123'
+        // No state.sync
+      };
+
+      store.setConfig(mockConfig);
+
+      const result = await configManager.getSyncConfig();
+
+      expect(result).toBeNull();
+    });
   });
 
-  describe('getSyncDefaults', () => {
-    it('[EARS-A9] WHEN getSyncDefaults is invoked, THE SYSTEM SHALL return defaults from config or hardcoded fallbacks', async () => {
+  // ==================== §4.5 getSyncDefaults (EARS-E) ====================
+
+  describe('getSyncDefaults (EARS-E)', () => {
+    it('[EARS-E1] WHEN getSyncDefaults is invoked with state.defaults defined, THE SYSTEM SHALL return defaults from config', async () => {
       const mockConfig: GitGovConfig = {
         protocolVersion: '1.0',
         projectId: 'test-project',
@@ -230,7 +246,7 @@ describe('ConfigManager', () => {
       });
     });
 
-    it('WHEN getSyncDefaults is invoked without state.defaults, THE SYSTEM SHALL return hardcoded fallbacks', async () => {
+    it('[EARS-E2] WHEN getSyncDefaults is invoked without state.defaults, THE SYSTEM SHALL return hardcoded fallbacks', async () => {
       const mockConfig: GitGovConfig = {
         protocolVersion: '1.0',
         projectId: 'test-project',
@@ -257,7 +273,7 @@ describe('ConfigManager', () => {
       });
     });
 
-    it('WHEN getSyncDefaults is invoked with no config, THE SYSTEM SHALL return hardcoded fallbacks', async () => {
+    it('[EARS-E2] WHEN getSyncDefaults is invoked with no config, THE SYSTEM SHALL return hardcoded fallbacks', async () => {
       // No config set
 
       const result = await configManager.getSyncDefaults();
@@ -277,10 +293,10 @@ describe('ConfigManager', () => {
     });
   });
 
-  // --- Audit State Methods ---
+  // ==================== §4.6 getAuditState (EARS-F) ====================
 
-  describe('getAuditState', () => {
-    it('WHEN getAuditState is invoked with audit state in config, THE SYSTEM SHALL return audit state', async () => {
+  describe('getAuditState (EARS-F)', () => {
+    it('[EARS-F1] WHEN getAuditState is invoked with audit state in config, THE SYSTEM SHALL return audit state', async () => {
       const mockConfig: GitGovConfig = {
         protocolVersion: '1.0',
         projectId: 'test-project',
@@ -306,7 +322,7 @@ describe('ConfigManager', () => {
       });
     });
 
-    it('WHEN getAuditState is invoked without audit state, THE SYSTEM SHALL return nulls', async () => {
+    it('[EARS-F2] WHEN getAuditState is invoked without audit state, THE SYSTEM SHALL return nulls', async () => {
       const mockConfig: GitGovConfig = {
         protocolVersion: '1.0',
         projectId: 'test-project',
@@ -325,7 +341,7 @@ describe('ConfigManager', () => {
       });
     });
 
-    it('WHEN getAuditState is invoked with no config, THE SYSTEM SHALL return nulls', async () => {
+    it('[EARS-F2] WHEN getAuditState is invoked with no config, THE SYSTEM SHALL return nulls', async () => {
       // No config set
 
       const result = await configManager.getAuditState();
@@ -338,8 +354,10 @@ describe('ConfigManager', () => {
     });
   });
 
-  describe('updateAuditState', () => {
-    it('WHEN updateAuditState is invoked, THE SYSTEM SHALL update audit state in config', async () => {
+  // ==================== §4.7 updateAuditState (EARS-G) ====================
+
+  describe('updateAuditState (EARS-G)', () => {
+    it('[EARS-G1] WHEN updateAuditState is invoked, THE SYSTEM SHALL update audit state in config', async () => {
       const mockConfig: GitGovConfig = {
         protocolVersion: '1.0',
         projectId: 'test-project',
@@ -363,7 +381,7 @@ describe('ConfigManager', () => {
       });
     });
 
-    it('WHEN updateAuditState is invoked with existing state, THE SYSTEM SHALL preserve other state fields', async () => {
+    it('[EARS-G2] WHEN updateAuditState is invoked with existing state, THE SYSTEM SHALL preserve other state fields', async () => {
       const mockConfig: GitGovConfig = {
         protocolVersion: '1.0',
         projectId: 'test-project',
@@ -389,7 +407,7 @@ describe('ConfigManager', () => {
       expect(updatedConfig?.state?.audit?.lastFullAuditCommit).toBe('abc123');
     });
 
-    it('WHEN updateAuditState is invoked without config, THE SYSTEM SHALL throw error', async () => {
+    it('[EARS-G3] WHEN updateAuditState is invoked without config, THE SYSTEM SHALL throw error', async () => {
       // No config set
 
       await expect(configManager.updateAuditState({
@@ -400,10 +418,10 @@ describe('ConfigManager', () => {
     });
   });
 
-  // --- State Branch Method ---
+  // ==================== §4.8 getStateBranch (EARS-H) ====================
 
-  describe('getStateBranch', () => {
-    it('WHEN getStateBranch is invoked with custom branch in config, THE SYSTEM SHALL return custom branch', async () => {
+  describe('getStateBranch (EARS-H)', () => {
+    it('[EARS-H1] WHEN getStateBranch is invoked with custom branch in config, THE SYSTEM SHALL return custom branch', async () => {
       const mockConfig: GitGovConfig = {
         protocolVersion: '1.0',
         projectId: 'test-project',
@@ -421,7 +439,7 @@ describe('ConfigManager', () => {
       expect(result).toBe('custom-state-branch');
     });
 
-    it('WHEN getStateBranch is invoked without branch in config, THE SYSTEM SHALL return default branch', async () => {
+    it('[EARS-H2] WHEN getStateBranch is invoked without branch in config, THE SYSTEM SHALL return default branch', async () => {
       const mockConfig: GitGovConfig = {
         protocolVersion: '1.0',
         projectId: 'test-project',
@@ -437,7 +455,7 @@ describe('ConfigManager', () => {
       expect(result).toBe('gitgov-state');
     });
 
-    it('WHEN getStateBranch is invoked with no config, THE SYSTEM SHALL return default branch', async () => {
+    it('[EARS-H2] WHEN getStateBranch is invoked with no config, THE SYSTEM SHALL return default branch', async () => {
       // No config set
 
       const result = await configManager.getStateBranch();
