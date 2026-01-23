@@ -25,16 +25,18 @@ import { validateFullAgentRecord } from '../../validation/agent_validator';
 import { generateKeys, signPayload, generateMockSignature } from '../../crypto/signatures';
 import { calculatePayloadChecksum } from '../../crypto/checksum';
 import { generateActorId } from '../../utils/id_generator';
-import { createConfigManager } from '../../config_manager';
+import type { ISessionManager } from '../../session_manager';
 
 export class IdentityAdapter implements IIdentityAdapter {
   private stores: Required<Pick<RecordStores, 'actors' | 'agents'>>;
   private keyProvider: KeyProvider;
+  private sessionManager: ISessionManager;
   private eventBus: IEventStream | undefined;
 
   constructor(dependencies: IdentityAdapterDependencies) {
     this.stores = dependencies.stores;
     this.keyProvider = dependencies.keyProvider;
+    this.sessionManager = dependencies.sessionManager;
     this.eventBus = dependencies.eventBus; // Optional dependency
   }
 
@@ -261,8 +263,7 @@ export class IdentityAdapter implements IIdentityAdapter {
    */
   async getCurrentActor(): Promise<ActorRecord> {
     // 1. Try to get from session
-    const configManager = createConfigManager();
-    const session = await configManager.loadSession();
+    const session = await this.sessionManager.loadSession();
 
     if (session?.lastSession?.actorId) {
       // Use resolveCurrentActorId to handle succession chain
@@ -378,17 +379,15 @@ export class IdentityAdapter implements IIdentityAdapter {
       newActorId // Mark succession
     );
 
-    // Update session to point to the new actor using ConfigManager
+    // Update session to point to the new actor using SessionManager
     try {
-      const configManager = createConfigManager();
-
       // Migrate actorState from old actor to new actor
-      const oldState = await configManager.getActorState(actorId);
+      const oldState = await this.sessionManager.getActorState(actorId);
       if (oldState) {
-        await configManager.updateActorState(newActorId, oldState);
+        await this.sessionManager.updateActorState(newActorId, oldState);
       } else {
         // Create initial state for new actor
-        await configManager.updateActorState(newActorId, {});
+        await this.sessionManager.updateActorState(newActorId, {});
       }
     } catch (error) {
       // Non-critical: session update failure logged as warning

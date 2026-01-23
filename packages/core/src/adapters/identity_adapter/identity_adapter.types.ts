@@ -8,6 +8,7 @@ import type {
 import type { RecordStores } from '../../record_store';
 import type { IEventStream } from '../../event_bus';
 import type { KeyProvider } from '../../key_provider/key_provider';
+import type { ISessionManager } from '../../session_manager';
 
 /**
  * IdentityAdapter Interface - The Identity Management Contract
@@ -45,6 +46,9 @@ export interface IdentityAdapterDependencies {
 
   // Key Management
   keyProvider: KeyProvider;
+
+  // Session Management - Required for getCurrentActor and rotateActorKey
+  sessionManager: ISessionManager;
 
   // Optional: Event Bus for event-driven integration (optional dependency)
   eventBus?: IEventStream;
