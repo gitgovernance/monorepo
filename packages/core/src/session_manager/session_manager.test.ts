@@ -21,7 +21,7 @@ describe('SessionManager', () => {
   // --- Session Methods (EARS-B1 to EARS-B9) ---
 
   describe('loadSession', () => {
-    it('[EARS-B1] WHEN loadSession is invoked with valid session, THE SYSTEM SHALL return complete GitGovSession object', async () => {
+    it('[EARS-A1] WHEN loadSession is invoked with valid session, THE SYSTEM SHALL return complete GitGovSession object', async () => {
       const mockSession: GitGovSession = {
         cloud: { sessionToken: 'jwt-token-123' },
         lastSession: { actorId: 'human:camilo', timestamp: '2025-01-09T10:00:00Z' },
@@ -37,7 +37,7 @@ describe('SessionManager', () => {
       expect(result).toEqual(mockSession);
     });
 
-    it('[EARS-B2] WHEN loadSession is invoked with no session set, THE SYSTEM SHALL return null without throwing error', async () => {
+    it('[EARS-A2] WHEN loadSession is invoked with no session set, THE SYSTEM SHALL return null without throwing error', async () => {
       // store has no session set (default)
       // Also no key files configured
 
@@ -49,8 +49,8 @@ describe('SessionManager', () => {
 
   // --- Auto-detect Actor from .key Files (EARS-B9) ---
 
-  describe('detectActorFromKeyFiles and loadSession auto-detection (EARS-B9)', () => {
-    it('[EARS-B9] WHEN session exists without actorId and .key files exist, loadSession SHALL auto-detect and set actorId', async () => {
+  describe('detectActorFromKeyFiles and loadSession auto-detection (EARS-A9)', () => {
+    it('[EARS-A9] WHEN session exists without actorId and .key files exist, loadSession SHALL auto-detect and set actorId', async () => {
       // Session exists but without lastSession.actorId
       const sessionWithoutActor: GitGovSession = {
         actorState: {}
@@ -65,7 +65,7 @@ describe('SessionManager', () => {
       expect(result?.lastSession?.actorId).toBe('human:camilo-v2');
     });
 
-    it('[EARS-B9] WHEN session does not exist but .key files exist, loadSession SHALL create session with auto-detected actorId', async () => {
+    it('[EARS-A9] WHEN session does not exist but .key files exist, loadSession SHALL create session with auto-detected actorId', async () => {
       // No session set
       store.setKeyFiles(['human:developer.key', 'agent:assistant.key']);
 
@@ -75,7 +75,7 @@ describe('SessionManager', () => {
       expect(result?.lastSession?.actorId).toBe('human:developer');
     });
 
-    it('[EARS-B9] WHEN session has valid actorId, loadSession SHALL NOT override with .key file detection', async () => {
+    it('[EARS-A9] WHEN session has valid actorId, loadSession SHALL NOT override with .key file detection', async () => {
       const sessionWithActor: GitGovSession = {
         lastSession: { actorId: 'human:existing-user', timestamp: '2025-01-01T00:00:00Z' },
         actorState: {}
@@ -90,7 +90,7 @@ describe('SessionManager', () => {
       expect(result?.lastSession?.actorId).toBe('human:existing-user');
     });
 
-    it('[EARS-B9] WHEN no .key files exist, detectActorFromKeyFiles SHALL return null', async () => {
+    it('[EARS-A9] WHEN no .key files exist, detectActorFromKeyFiles SHALL return null', async () => {
       // No key files configured (default)
 
       const result = await sessionManager.detectActorFromKeyFiles();
@@ -100,7 +100,7 @@ describe('SessionManager', () => {
   });
 
   describe('getActorState', () => {
-    it('[EARS-B3] WHEN getActorState is invoked with actorId existing in session, THE SYSTEM SHALL return actor state', async () => {
+    it('[EARS-A3] WHEN getActorState is invoked with actorId existing in session, THE SYSTEM SHALL return actor state', async () => {
       const mockSession: GitGovSession = {
         lastSession: { actorId: 'human:camilo', timestamp: '2025-01-09T10:00:00Z' },
         actorState: {
@@ -119,7 +119,7 @@ describe('SessionManager', () => {
       });
     });
 
-    it('[EARS-B4] WHEN getActorState is invoked with non-existent actorId, THE SYSTEM SHALL return null', async () => {
+    it('[EARS-A4] WHEN getActorState is invoked with non-existent actorId, THE SYSTEM SHALL return null', async () => {
       const mockSession: GitGovSession = {
         lastSession: { actorId: 'human:alice', timestamp: '2025-01-09T10:00:00Z' },
         actorState: {
@@ -134,7 +134,7 @@ describe('SessionManager', () => {
       expect(result).toBeNull();
     });
 
-    it('[EARS-B4] WHEN getActorState is invoked with no session, THE SYSTEM SHALL return null', async () => {
+    it('[EARS-A4] WHEN getActorState is invoked with no session, THE SYSTEM SHALL return null', async () => {
       // No session set
 
       const result = await sessionManager.getActorState('human:anyone');
@@ -144,7 +144,7 @@ describe('SessionManager', () => {
   });
 
   describe('updateActorState', () => {
-    it('[EARS-B5] WHEN updateActorState is invoked, THE SYSTEM SHALL merge partial state with existing state and persist', async () => {
+    it('[EARS-A5] WHEN updateActorState is invoked, THE SYSTEM SHALL merge partial state with existing state and persist', async () => {
       const existingSession: GitGovSession = {
         lastSession: { actorId: 'human:camilo', timestamp: '2025-01-08T10:00:00Z' },
         actorState: {
@@ -163,7 +163,7 @@ describe('SessionManager', () => {
       expect(updatedSession?.actorState?.['human:camilo']?.activeCycleId).toBe('cycle-old'); // Preserved
     });
 
-    it('[EARS-B5] WHEN updateActorState is invoked with human actor, THE SYSTEM SHALL update lastSession automatically', async () => {
+    it('[EARS-A5] WHEN updateActorState is invoked with human actor, THE SYSTEM SHALL update lastSession automatically', async () => {
       const existingSession: GitGovSession = {
         lastSession: { actorId: 'human:old-user', timestamp: '2025-01-08T10:00:00Z' },
         actorState: {
@@ -182,7 +182,7 @@ describe('SessionManager', () => {
       );
     });
 
-    it('[EARS-B5] WHEN updateActorState is invoked with agent actor, THE SYSTEM SHALL NOT update lastSession', async () => {
+    it('[EARS-A5] WHEN updateActorState is invoked with agent actor, THE SYSTEM SHALL NOT update lastSession', async () => {
       const existingSession: GitGovSession = {
         lastSession: { actorId: 'human:camilo', timestamp: '2025-01-08T10:00:00Z' },
         actorState: {}
@@ -198,7 +198,7 @@ describe('SessionManager', () => {
       expect(updatedSession?.lastSession?.timestamp).toBe('2025-01-08T10:00:00Z');
     });
 
-    it('[EARS-B6] WHEN updateActorState is invoked with non-existent session, THE SYSTEM SHALL create new session with provided state', async () => {
+    it('[EARS-A6] WHEN updateActorState is invoked with non-existent session, THE SYSTEM SHALL create new session with provided state', async () => {
       // No session set (default)
 
       const newState: Partial<ActorState> = { activeTaskId: 'task-first', activeCycleId: 'cycle-first' };
@@ -210,7 +210,7 @@ describe('SessionManager', () => {
       expect(createdSession?.lastSession?.actorId).toBe('human:new-user');
     });
 
-    it('[EARS-B5] WHEN updateActorState is invoked, THE SYSTEM SHALL add lastSync timestamp', async () => {
+    it('[EARS-A5] WHEN updateActorState is invoked, THE SYSTEM SHALL add lastSync timestamp', async () => {
       const existingSession: GitGovSession = {
         actorState: {}
       };
@@ -225,7 +225,7 @@ describe('SessionManager', () => {
   });
 
   describe('getCloudSessionToken', () => {
-    it('[EARS-B7] WHEN getCloudSessionToken is invoked with token configured, THE SYSTEM SHALL return the session token', async () => {
+    it('[EARS-A7] WHEN getCloudSessionToken is invoked with token configured, THE SYSTEM SHALL return the session token', async () => {
       const mockSession: GitGovSession = {
         cloud: { sessionToken: 'jwt-token-xyz' }
       };
@@ -237,7 +237,7 @@ describe('SessionManager', () => {
       expect(result).toBe('jwt-token-xyz');
     });
 
-    it('[EARS-B8] WHEN getCloudSessionToken is invoked without token configured, THE SYSTEM SHALL return null', async () => {
+    it('[EARS-A8] WHEN getCloudSessionToken is invoked without token configured, THE SYSTEM SHALL return null', async () => {
       const mockSession: GitGovSession = {
         lastSession: { actorId: 'human:test', timestamp: '2025-01-09T10:00:00Z' }
         // No cloud.sessionToken
@@ -250,7 +250,7 @@ describe('SessionManager', () => {
       expect(result).toBeNull();
     });
 
-    it('[EARS-B8] WHEN getCloudSessionToken is invoked with no session, THE SYSTEM SHALL return null', async () => {
+    it('[EARS-A8] WHEN getCloudSessionToken is invoked with no session, THE SYSTEM SHALL return null', async () => {
       // No session set
 
       const result = await sessionManager.getCloudSessionToken();
@@ -260,7 +260,7 @@ describe('SessionManager', () => {
   });
 
   describe('getSyncPreferences', () => {
-    it('[EARS-B10] WHEN getSyncPreferences is invoked with preferences set, THE SYSTEM SHALL return preferences', async () => {
+    it('[EARS-A10] WHEN getSyncPreferences is invoked with preferences set, THE SYSTEM SHALL return preferences', async () => {
       const mockSession: GitGovSession = {
         syncPreferences: {
           pullScheduler: {
@@ -282,7 +282,7 @@ describe('SessionManager', () => {
       expect(result?.fileWatcher?.enabled).toBe(false);
     });
 
-    it('[EARS-B11] WHEN getSyncPreferences is invoked without preferences, THE SYSTEM SHALL return null', async () => {
+    it('[EARS-A11] WHEN getSyncPreferences is invoked without preferences, THE SYSTEM SHALL return null', async () => {
       const mockSession: GitGovSession = {
         lastSession: { actorId: 'human:test', timestamp: '2025-01-09T10:00:00Z' }
       };
@@ -296,7 +296,7 @@ describe('SessionManager', () => {
   });
 
   describe('updateSyncPreferences', () => {
-    it('[EARS-D3] WHEN updateSyncPreferences is invoked, THE SYSTEM SHALL merge partial preferences with existing and persist', async () => {
+    it('[EARS-B3] WHEN updateSyncPreferences is invoked, THE SYSTEM SHALL merge partial preferences with existing and persist', async () => {
       const existingSession: GitGovSession = {
         syncPreferences: {
           pullScheduler: {
@@ -331,7 +331,7 @@ describe('SessionManager', () => {
       });
     });
 
-    it('[EARS-D3] WHEN updateSyncPreferences is invoked with non-existent session, THE SYSTEM SHALL create new session with preferences', async () => {
+    it('[EARS-B3] WHEN updateSyncPreferences is invoked with non-existent session, THE SYSTEM SHALL create new session with preferences', async () => {
       // No session set
 
       await sessionManager.updateSyncPreferences({
@@ -351,7 +351,7 @@ describe('SessionManager', () => {
   });
 
   describe('getLastSession', () => {
-    it('[EARS-B12] WHEN getLastSession is invoked with lastSession set, THE SYSTEM SHALL return lastSession info', async () => {
+    it('[EARS-A12] WHEN getLastSession is invoked with lastSession set, THE SYSTEM SHALL return lastSession info', async () => {
       const mockSession: GitGovSession = {
         lastSession: { actorId: 'human:camilo', timestamp: '2025-01-09T10:00:00Z' }
       };
@@ -366,7 +366,7 @@ describe('SessionManager', () => {
       });
     });
 
-    it('[EARS-B13] WHEN getLastSession is invoked without lastSession, THE SYSTEM SHALL return null', async () => {
+    it('[EARS-A13] WHEN getLastSession is invoked without lastSession, THE SYSTEM SHALL return null', async () => {
       const mockSession: GitGovSession = {
         actorState: {}
       };
@@ -378,7 +378,7 @@ describe('SessionManager', () => {
       expect(result).toBeNull();
     });
 
-    it('[EARS-B13] WHEN getLastSession is invoked with no session, THE SYSTEM SHALL return null', async () => {
+    it('[EARS-A13] WHEN getLastSession is invoked with no session, THE SYSTEM SHALL return null', async () => {
       // No session set
 
       const result = await sessionManager.getLastSession();
