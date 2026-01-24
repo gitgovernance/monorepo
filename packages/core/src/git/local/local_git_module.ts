@@ -1,15 +1,18 @@
 /**
- * GitModule - Low-level Git Operations
- * 
+ * LocalGitModule - Local Git Operations via CLI
+ *
  * This module provides a business-agnostic abstraction layer for interacting
  * with the local Git repository. It exposes semantic methods instead of raw
  * Git commands, with comprehensive error handling and type safety.
- * 
- * @module git_module
+ *
+ * Uses execCommand (injected) to run git CLI commands.
+ *
+ * @module git/local
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
+import type { IGitModule } from '..';
 import type {
   GitModuleDependencies,
   ExecOptions,
@@ -18,7 +21,7 @@ import type {
   CommitInfo,
   ChangedFile,
   CommitAuthor,
-} from './types';
+} from '../types';
 import {
   GitCommandError,
   BranchNotFoundError,
@@ -27,18 +30,20 @@ import {
   MergeConflictError,
   RebaseConflictError,
   RebaseNotInProgressError,
-} from './errors';
-import { createLogger } from "../logger/logger";
+} from '../errors';
+import { createLogger } from '../../logger/logger';
 
-const logger = createLogger("[GitModule] ");
+const logger = createLogger('[LocalGitModule] ');
 
 /**
- * GitModule class providing low-level Git operations
- * 
+ * LocalGitModule - CLI-based implementation of IGitModule
+ *
  * All operations are async and use dependency injection for testability.
  * Errors are transformed into typed exceptions for better handling.
+ *
+ * For unit tests without git, use MemoryGitModule instead.
  */
-export class GitModule {
+export class LocalGitModule implements IGitModule {
   private repoRoot: string;
   private execCommand: (
     command: string,
@@ -47,14 +52,14 @@ export class GitModule {
   ) => Promise<ExecResult>;
 
   /**
-   * Creates a new GitModule instance
-   * 
+   * Creates a new LocalGitModule instance
+   *
    * @param dependencies - Required dependencies (execCommand) and optional config (repoRoot)
    * @throws Error if execCommand is not provided
    */
   constructor(dependencies: GitModuleDependencies) {
     if (!dependencies.execCommand) {
-      throw new Error('execCommand is required for GitModule');
+      throw new Error('execCommand is required for LocalGitModule');
     }
 
     this.execCommand = dependencies.execCommand;

@@ -1,9 +1,9 @@
 /**
- * GitModule Tests
- * 
+ * LocalGitModule Tests
+ *
  * SAFETY: These tests use TEMPORARY Git repositories in /tmp
  * They NEVER touch the production repository.
- * 
+ *
  * Each test creates an isolated temp repo and cleans up after itself.
  */
 
@@ -12,7 +12,7 @@ import { promisify } from 'util';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { GitModule } from './git_module';
+import { LocalGitModule } from './local_git_module';
 import {
   GitCommandError,
   BranchNotFoundError,
@@ -20,14 +20,14 @@ import {
   RebaseNotInProgressError,
   MergeConflictError,
   RebaseConflictError,
-} from './errors';
-import type { ExecOptions, ExecResult } from './types';
+} from '../errors';
+import type { ExecOptions, ExecResult } from '../types';
 
 const execAsync = promisify(exec);
 
 /**
  * Test Helper: Creates a temporary Git repository for testing
- * Uses GitModule.init() to initialize the repo (dogfooding our own code!)
+ * Uses LocalGitModule.init() to initialize the repo (dogfooding our own code!)
  * 
  * @returns Path to temporary repository (normalized for macOS /private prefix)
  */
@@ -38,8 +38,8 @@ async function createTempRepo(): Promise<string> {
   // Normalize path to resolve macOS /private prefix
   const normalizedPath = fs.realpathSync(tempDir);
 
-  // Initialize Git repo using GitModule.init()
-  const gitModule = new GitModule({
+  // Initialize Git repo using LocalGitModule.init()
+  const gitModule = new LocalGitModule({
     repoRoot: normalizedPath,
     execCommand: createExecCommand(normalizedPath),
   });
@@ -190,14 +190,14 @@ function createExecCommand(repoPath: string) {
   };
 }
 
-describe('GitModule', () => {
+describe('LocalGitModule', () => {
   let tempRepo: string;
-  let gitModule: GitModule;
+  let gitModule: LocalGitModule;
 
   beforeEach(async () => {
     // Create isolated temp repository for each test
     tempRepo = await createTempRepo();
-    gitModule = new GitModule({
+    gitModule = new LocalGitModule({
       repoRoot: tempRepo,
       execCommand: createExecCommand(tempRepo),
     });
@@ -219,7 +219,7 @@ describe('GitModule', () => {
       fs.mkdirSync(freshDir, { recursive: true });
 
       try {
-        const freshGitModule = new GitModule({
+        const freshGitModule = new LocalGitModule({
           repoRoot: freshDir,
           execCommand: createExecCommand(freshDir),
         });
@@ -257,7 +257,7 @@ describe('GitModule', () => {
     });
 
     it('[EARS-A1] should auto-detect repo root if not provided', async () => {
-      const gitModuleNoRoot = new GitModule({
+      const gitModuleNoRoot = new LocalGitModule({
         execCommand: createExecCommand(tempRepo),
       });
 
@@ -1221,7 +1221,7 @@ describe('GitModule', () => {
   describe("4.6. Configuration Operations (EARS-F1 to F2)", () => {
     it("[EARS-F1] should set git config value in local scope (default)", async () => {
       const repoPath = await createTempRepo();
-      const git = new GitModule({ repoRoot: repoPath, execCommand: createExecCommand(repoPath) });
+      const git = new LocalGitModule({ repoRoot: repoPath, execCommand: createExecCommand(repoPath) });
 
       // Set local config (default scope)
       await git.setConfig("user.email", "test@example.com");
@@ -1233,7 +1233,7 @@ describe('GitModule', () => {
 
     it("[EARS-F1] should set git config for core.editor", async () => {
       const repoPath = await createTempRepo();
-      const git = new GitModule({ repoRoot: repoPath, execCommand: createExecCommand(repoPath) });
+      const git = new LocalGitModule({ repoRoot: repoPath, execCommand: createExecCommand(repoPath) });
 
       // Set core.editor (common use case in tests)
       await git.setConfig("core.editor", "vim");
@@ -1245,7 +1245,7 @@ describe('GitModule', () => {
 
     it("[EARS-F1] should set git config with explicit local scope", async () => {
       const repoPath = await createTempRepo();
-      const git = new GitModule({ repoRoot: repoPath, execCommand: createExecCommand(repoPath) });
+      const git = new LocalGitModule({ repoRoot: repoPath, execCommand: createExecCommand(repoPath) });
 
       // Set local config with explicit scope
       await git.setConfig("user.name", "Explicit Local User", "local");
@@ -1257,7 +1257,7 @@ describe('GitModule', () => {
 
     it("[EARS-F2] should throw GitCommandError if config key is invalid", async () => {
       const repoPath = await createTempRepo();
-      const git = new GitModule({ repoRoot: repoPath, execCommand: createExecCommand(repoPath) });
+      const git = new LocalGitModule({ repoRoot: repoPath, execCommand: createExecCommand(repoPath) });
 
       // Try to set invalid config key (contains invalid chars)
       await expect(
@@ -1273,7 +1273,7 @@ describe('GitModule', () => {
   describe("4.7. Stash Operations (EARS-G1 to G6)", () => {
     it("[EARS-G1] should stash uncommitted changes with custom message", async () => {
       const repoPath = await createTempRepo();
-      const git = new GitModule({ repoRoot: repoPath, execCommand: createExecCommand(repoPath) });
+      const git = new LocalGitModule({ repoRoot: repoPath, execCommand: createExecCommand(repoPath) });
 
       // Create uncommitted changes
       fs.writeFileSync(path.join(repoPath, 'test-file.txt'), 'uncommitted content');
@@ -1298,7 +1298,7 @@ describe('GitModule', () => {
 
     it("[EARS-G2] should return null when stashing with no uncommitted changes", async () => {
       const repoPath = await createTempRepo();
-      const git = new GitModule({ repoRoot: repoPath, execCommand: createExecCommand(repoPath) });
+      const git = new LocalGitModule({ repoRoot: repoPath, execCommand: createExecCommand(repoPath) });
 
       // No changes - just the initial commit
       const stashHash = await git.stash('empty stash');
@@ -1315,7 +1315,7 @@ describe('GitModule', () => {
 
     it("[EARS-G3] should pop stashed changes and restore them", async () => {
       const repoPath = await createTempRepo();
-      const git = new GitModule({ repoRoot: repoPath, execCommand: createExecCommand(repoPath) });
+      const git = new LocalGitModule({ repoRoot: repoPath, execCommand: createExecCommand(repoPath) });
 
       // Create and stash changes
       const testContent = 'content to stash and restore';
@@ -1345,7 +1345,7 @@ describe('GitModule', () => {
 
     it("[EARS-G4] should return false when popping with no stash", async () => {
       const repoPath = await createTempRepo();
-      const git = new GitModule({ repoRoot: repoPath, execCommand: createExecCommand(repoPath) });
+      const git = new LocalGitModule({ repoRoot: repoPath, execCommand: createExecCommand(repoPath) });
 
       // No stashes exist
       const popped = await git.stashPop();
@@ -1358,7 +1358,7 @@ describe('GitModule', () => {
 
     it("[EARS-G5] should drop a specific stash by hash", async () => {
       const repoPath = await createTempRepo();
-      const git = new GitModule({ repoRoot: repoPath, execCommand: createExecCommand(repoPath) });
+      const git = new LocalGitModule({ repoRoot: repoPath, execCommand: createExecCommand(repoPath) });
 
       // Create first stash
       fs.writeFileSync(path.join(repoPath, 'file1.txt'), 'content 1');
@@ -1388,7 +1388,7 @@ describe('GitModule', () => {
 
     it("[EARS-G6] should drop the most recent stash when no hash provided", async () => {
       const repoPath = await createTempRepo();
-      const git = new GitModule({ repoRoot: repoPath, execCommand: createExecCommand(repoPath) });
+      const git = new LocalGitModule({ repoRoot: repoPath, execCommand: createExecCommand(repoPath) });
 
       // Create a stash
       fs.writeFileSync(path.join(repoPath, 'drop-test.txt'), 'content to drop');
