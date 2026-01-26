@@ -6,6 +6,9 @@ import type { GitGovConfig } from '../config_manager';
  * This interface defines the contract for initializing GitGovernance projects
  * across different backends (filesystem, database, API).
  *
+ * The project context (path, tenant ID, etc.) is injected at construction time,
+ * so methods operate on the pre-configured project without needing explicit paths.
+ *
  * Implementations:
  * - FsProjectInitializer: Local filesystem (.gitgov/ directory)
  * - DbProjectInitializer: Database (SaaS multi-tenant)
@@ -13,62 +16,53 @@ import type { GitGovConfig } from '../config_manager';
  *
  * @example
  * ```typescript
- * // CLI uses FsProjectInitializer
- * const initializer: IProjectInitializer = new FsProjectInitializer();
- * await initializer.createProjectStructure('/path/to/project');
+ * // CLI uses FsProjectInitializer with projectRoot injected
+ * const initializer: IProjectInitializer = new FsProjectInitializer('/path/to/project');
+ * await initializer.createProjectStructure();
  *
- * // SaaS uses DbProjectInitializer
- * const initializer: IProjectInitializer = new DbProjectInitializer(pool);
- * await initializer.createProjectStructure('tenant-123');
+ * // SaaS uses DbProjectInitializer with tenant injected
+ * const initializer: IProjectInitializer = new DbProjectInitializer(pool, 'tenant-123');
+ * await initializer.createProjectStructure();
  * ```
  */
 export interface IProjectInitializer {
   /**
    * Creates the project structure (directories for fs, tables for db, etc).
-   *
-   * @param projectRoot - For Fs: path like '/path/to/project'
-   *                      For Db: tenant/project identifier
    */
-  createProjectStructure(projectRoot: string): Promise<void>;
+  createProjectStructure(): Promise<void>;
 
   /**
    * Checks if a project is already initialized.
    *
-   * @param projectRoot - Project identifier or path
    * @returns true if already initialized
    */
-  isInitialized(projectRoot: string): Promise<boolean>;
+  isInitialized(): Promise<boolean>;
 
   /**
    * Writes the project configuration.
    *
    * @param config - GitGovConfig to persist
-   * @param projectRoot - Project identifier or path
    */
-  writeConfig(config: GitGovConfig, projectRoot: string): Promise<void>;
+  writeConfig(config: GitGovConfig): Promise<void>;
 
   /**
    * Initializes a session for the bootstrap actor.
    *
    * @param actorId - ID of the bootstrap actor
-   * @param projectRoot - Project identifier or path
    */
-  initializeSession(actorId: string, projectRoot: string): Promise<void>;
+  initializeSession(actorId: string): Promise<void>;
 
   /**
    * Cleans up partial setup if initialization fails.
-   *
-   * @param projectRoot - Project identifier or path
    */
-  rollback(projectRoot: string): Promise<void>;
+  rollback(): Promise<void>;
 
   /**
    * Validates environment for project initialization.
    *
-   * @param projectRoot - Project identifier or path (optional, uses cwd if not provided)
    * @returns Validation result with warnings and suggestions
    */
-  validateEnvironment(projectRoot?: string): Promise<EnvironmentValidation>;
+  validateEnvironment(): Promise<EnvironmentValidation>;
 
   /**
    * Reads a file from the project context.
@@ -80,26 +74,21 @@ export interface IProjectInitializer {
 
   /**
    * Copies the agent prompt to the project root for IDE access.
-   *
-   * @param projectRoot - Project identifier or path
    */
-  copyAgentPrompt(projectRoot: string): Promise<void>;
+  copyAgentPrompt(): Promise<void>;
 
   /**
    * Sets up version control integration (e.g., .gitignore for fs).
-   *
-   * @param projectRoot - Project identifier or path
    */
-  setupGitIntegration(projectRoot: string): Promise<void>;
+  setupGitIntegration(): Promise<void>;
 
   /**
    * Gets the path/identifier for an actor record.
    *
    * @param actorId - Actor ID
-   * @param projectRoot - Project identifier or path
    * @returns Path or identifier for the actor
    */
-  getActorPath(actorId: string, projectRoot: string): string;
+  getActorPath(actorId: string): string;
 }
 
 /**

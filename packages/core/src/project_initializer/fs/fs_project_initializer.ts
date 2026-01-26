@@ -27,40 +27,39 @@ const GITGOV_DIRECTORIES = [
  * Initializes GitGovernance projects on the local filesystem,
  * creating the .gitgov/ directory structure and configuration files.
  *
- * This implementation also provides FS-only methods not in the interface:
- * - validateEnvironment(): Check Git repo, permissions, existing init
- * - copyAgentPrompt(): Copy @gitgov agent prompt to project root
- * - setupGitIntegration(): Configure .gitignore for .gitgov/
+ * The projectRoot is injected at construction time (DI from CLI/bootstrap).
  *
  * @example
  * ```typescript
- * const initializer = new FsProjectInitializer();
+ * const initializer = new FsProjectInitializer('/path/to/project');
  *
- * // Check environment first (FS-only)
- * const validation = await initializer.validateEnvironment('/path/to/project');
+ * const validation = await initializer.validateEnvironment();
  * if (!validation.isValid) {
  *   console.log(validation.warnings);
  *   return;
  * }
  *
- * // Initialize project (interface methods)
- * await initializer.createProjectStructure('/path/to/project');
- * await initializer.writeConfig(config, '/path/to/project');
- * await initializer.initializeSession(actorId, '/path/to/project');
- *
- * // FS-only extras
- * await initializer.copyAgentPrompt('/path/to/project');
- * await initializer.setupGitIntegration('/path/to/project');
+ * await initializer.createProjectStructure();
+ * await initializer.writeConfig(config);
+ * await initializer.initializeSession(actorId);
+ * await initializer.copyAgentPrompt();
+ * await initializer.setupGitIntegration();
  * ```
  */
 export class FsProjectInitializer implements IProjectInitializer {
+  private readonly projectRoot: string;
+
+  constructor(projectRoot: string) {
+    this.projectRoot = projectRoot;
+  }
+
   // ==================== IProjectInitializer Interface Methods ====================
 
   /**
    * Creates the .gitgov/ directory structure.
    */
-  async createProjectStructure(projectRoot: string): Promise<void> {
-    const gitgovPath = path.join(projectRoot, '.gitgov');
+  async createProjectStructure(): Promise<void> {
+    const gitgovPath = path.join(this.projectRoot, '.gitgov');
 
     await fs.mkdir(gitgovPath, { recursive: true });
 
@@ -72,8 +71,8 @@ export class FsProjectInitializer implements IProjectInitializer {
   /**
    * Checks if .gitgov/config.json exists.
    */
-  async isInitialized(projectRoot: string): Promise<boolean> {
-    const configPath = path.join(projectRoot, '.gitgov', 'config.json');
+  async isInitialized(): Promise<boolean> {
+    const configPath = path.join(this.projectRoot, '.gitgov', 'config.json');
     try {
       await fs.access(configPath);
       return true;
@@ -85,16 +84,16 @@ export class FsProjectInitializer implements IProjectInitializer {
   /**
    * Writes config.json to .gitgov/
    */
-  async writeConfig(config: GitGovConfig, projectRoot: string): Promise<void> {
-    const configPath = path.join(projectRoot, '.gitgov', 'config.json');
+  async writeConfig(config: GitGovConfig): Promise<void> {
+    const configPath = path.join(this.projectRoot, '.gitgov', 'config.json');
     await fs.writeFile(configPath, JSON.stringify(config, null, 2), 'utf-8');
   }
 
   /**
    * Creates .session.json with initial actor state.
    */
-  async initializeSession(actorId: string, projectRoot: string): Promise<void> {
-    const sessionPath = path.join(projectRoot, '.gitgov', '.session.json');
+  async initializeSession(actorId: string): Promise<void> {
+    const sessionPath = path.join(this.projectRoot, '.gitgov', '.session.json');
     const session = {
       lastSession: {
         actorId,
@@ -123,33 +122,32 @@ export class FsProjectInitializer implements IProjectInitializer {
   /**
    * Gets the path for an actor record.
    */
-  getActorPath(actorId: string, projectRoot: string): string {
-    return path.join(projectRoot, '.gitgov', 'actors', `${actorId}.json`);
+  getActorPath(actorId: string): string {
+    return path.join(this.projectRoot, '.gitgov', 'actors', `${actorId}.json`);
   }
 
   /**
    * Validates environment for GitGovernance initialization.
    * Checks: Git repo exists, write permissions, not already initialized.
    */
-  async validateEnvironment(targetPath?: string): Promise<EnvironmentValidation> {
-    const projectRoot = targetPath || process.env['GITGOV_ORIGINAL_DIR'] || process.cwd();
+  async validateEnvironment(): Promise<EnvironmentValidation> {
     const warnings: string[] = [];
     const suggestions: string[] = [];
 
     try {
       // Check if it's a Git repository
-      const gitPath = path.join(projectRoot, '.git');
+      const gitPath = path.join(this.projectRoot, '.git');
       const isGitRepo = existsSync(gitPath);
 
       if (!isGitRepo) {
-        warnings.push(`Not a Git repository in directory: ${projectRoot}`);
+        warnings.push(`Not a Git repository in directory: ${this.projectRoot}`);
         suggestions.push("Run 'git init' to initialize a Git repository first");
       }
 
       // Check write permissions
       let hasWritePermissions = false;
       try {
-        const testFile = path.join(projectRoot, '.gitgov-test');
+        const testFile = path.join(this.projectRoot, '.gitgov-test');
         await fs.writeFile(testFile, 'test');
         await fs.unlink(testFile);
         hasWritePermissions = true;
@@ -159,9 +157,9 @@ export class FsProjectInitializer implements IProjectInitializer {
       }
 
       // Check if already initialized
-      const isAlreadyInitialized = await this.isInitialized(projectRoot);
+      const isAlreadyInitialized = await this.isInitialized();
       if (isAlreadyInitialized) {
-        warnings.push(`GitGovernance already initialized in directory: ${projectRoot}`);
+        warnings.push(`GitGovernance already initialized in directory: ${this.projectRoot}`);
         suggestions.push("Use 'gitgov status' to check current state or choose a different directory");
       }
 
@@ -177,7 +175,7 @@ export class FsProjectInitializer implements IProjectInitializer {
       };
 
       if (isAlreadyInitialized) {
-        result.gitgovPath = path.join(projectRoot, '.gitgov');
+        result.gitgovPath = path.join(this.projectRoot, '.gitgov');
       }
 
       return result;
@@ -198,12 +196,9 @@ export class FsProjectInitializer implements IProjectInitializer {
 
   /**
    * Copies the @gitgov agent prompt to project root for IDE access.
-   *
-   * FS-ONLY: This method is specific to filesystem backends.
-   * The agent prompt file enables AI assistants to understand the project.
    */
-  async copyAgentPrompt(projectRoot: string): Promise<void> {
-    const targetPrompt = path.join(projectRoot, 'gitgov');
+  async copyAgentPrompt(): Promise<void> {
+    const targetPrompt = path.join(this.projectRoot, 'gitgov');
     const potentialSources: string[] = [];
 
     // 1. Development scenario: search in monorepo prompts/
@@ -256,11 +251,9 @@ export class FsProjectInitializer implements IProjectInitializer {
 
   /**
    * Sets up .gitignore for GitGovernance files.
-   *
-   * FS-ONLY: This method is specific to filesystem backends.
    */
-  async setupGitIntegration(projectRoot: string): Promise<void> {
-    const gitignorePath = path.join(projectRoot, '.gitignore');
+  async setupGitIntegration(): Promise<void> {
+    const gitignorePath = path.join(this.projectRoot, '.gitignore');
     const gitignoreContent = `
 # GitGovernance
 # Ignore entire .gitgov/ directory (state lives in gitgov-state branch)
@@ -290,11 +283,9 @@ gitgov
 
   /**
    * Removes .gitgov/ directory (for rollback on failed init).
-   *
-   * FS-ONLY: This method is specific to filesystem backends.
    */
-  async rollback(projectRoot: string): Promise<void> {
-    const gitgovPath = path.join(projectRoot, '.gitgov');
+  async rollback(): Promise<void> {
+    const gitgovPath = path.join(this.projectRoot, '.gitgov');
     try {
       await fs.access(gitgovPath);
       await fs.rm(gitgovPath, { recursive: true, force: true });
