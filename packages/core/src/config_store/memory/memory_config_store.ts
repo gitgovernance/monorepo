@@ -6,7 +6,7 @@
  *
  * NOTE: Session state is handled by MemorySessionStore, not this class.
  *
- * @see packages/blueprints/03_products/core/specs/modules/config_session_module.md
+ * @see packages/blueprints/03_products/core/specs/modules/config_store_module/memory_config_store_module.md
  * @see packages/blueprints/03_products/protocol/10_appendices/config_file.md
  */
 
@@ -42,6 +42,11 @@ export class MemoryConfigStore implements ConfigStore {
 
   /**
    * Load configuration from memory
+   *
+   * [EARS-A1] Returns null if no config set
+   * [EARS-A2] Returns config set via setConfig
+   * [EARS-A3] Returns config saved via saveConfig
+   *
    * @returns GitGovConfig or null if not set
    */
   async loadConfig(): Promise<GitGovConfig | null> {
@@ -50,6 +55,8 @@ export class MemoryConfigStore implements ConfigStore {
 
   /**
    * Save configuration to memory
+   *
+   * [EARS-A4] Persists config in memory, accessible via getConfig()
    */
   async saveConfig(config: GitGovConfig): Promise<void> {
     this.config = config;
@@ -59,6 +66,9 @@ export class MemoryConfigStore implements ConfigStore {
 
   /**
    * Set configuration directly (for test setup)
+   *
+   * [EARS-B1] Sets config synchronously, available via getConfig()
+   * [EARS-B2] Accepts null to clear config
    */
   setConfig(config: GitGovConfig | null): void {
     this.config = config;
@@ -73,6 +83,8 @@ export class MemoryConfigStore implements ConfigStore {
 
   /**
    * Clear all stored data (for test cleanup)
+   *
+   * [EARS-B3] Resets store to initial state (config = null)
    */
   clear(): void {
     this.config = null;
