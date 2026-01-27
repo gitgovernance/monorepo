@@ -110,4 +110,12 @@ export type EnvironmentValidation = {
   warnings: string[];
   /** Actionable suggestions for user */
   suggestions: string[];
+
+  // VCS status fields (populated by implementations that support VCS)
+  /** Whether a remote 'origin' is configured */
+  hasRemote?: boolean;
+  /** Whether the current branch has commits */
+  hasCommits?: boolean;
+  /** Name of the current branch */
+  currentBranch?: string;
 };
