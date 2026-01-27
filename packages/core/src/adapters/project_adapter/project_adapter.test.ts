@@ -1,11 +1,10 @@
 import { ProjectAdapter } from './index';
-import { ConfigManager } from '../../config_manager';
+import type { IConfigManager } from '../../config_manager';
 import type { TaskRecord } from '../../types';
 import type { CycleRecord } from '../../types';
 import type { ActorRecord } from '../../types';
 import type { IdentityAdapter } from '../identity_adapter';
 import type { BacklogAdapter } from '../backlog_adapter';
-import type { GitModule } from '../../git';
 import type { IProjectInitializer, EnvironmentValidation } from '../../project_initializer';
 import { DetailedValidationError } from '../../validation/common';
 import { promises as fs, existsSync } from 'fs';
@@ -31,8 +30,6 @@ jest.mock('../../utils/esm_helper', () => ({
 }));
 
 // Mock dependencies
-jest.mock('../../store');
-jest.mock('../../config_manager');
 jest.mock('fs', () => ({
   promises: {
     access: jest.fn(),
@@ -92,8 +89,7 @@ describe('ProjectAdapter', () => {
   let projectAdapter: ProjectAdapter;
   let mockIdentityAdapter: jest.Mocked<IdentityAdapter>;
   let mockBacklogAdapter: jest.Mocked<BacklogAdapter>;
-  let mockGitModule: jest.Mocked<GitModule>;
-  let mockConfigManager: jest.Mocked<ConfigManager>;
+  let mockConfigManager: jest.Mocked<IConfigManager>;
   let mockProjectInitializer: jest.Mocked<IProjectInitializer>;
   let mockFs: jest.Mocked<typeof fs> & { existsSync: jest.MockedFunction<any> };
   let mockCreateTaskRecord: jest.MockedFunction<typeof createTaskRecord>;
@@ -124,28 +120,18 @@ describe('ProjectAdapter', () => {
       getAllCycles: jest.fn(),
     } as unknown as jest.Mocked<BacklogAdapter>;
 
-    mockGitModule = {
-      isRemoteConfigured: jest.fn().mockResolvedValue(true),
-      getCurrentBranch: jest.fn().mockResolvedValue('main'),
-      branchExists: jest.fn().mockResolvedValue(true),
-      getRepoRoot: jest.fn().mockResolvedValue('/test/project'),
-      checkoutBranch: jest.fn().mockResolvedValue(undefined),
-      checkoutOrphanBranch: jest.fn().mockResolvedValue(undefined),
-      fetch: jest.fn().mockResolvedValue(undefined),
-      listRemoteBranches: jest.fn().mockResolvedValue([]),
-      pushWithUpstream: jest.fn().mockResolvedValue(undefined),
-    } as unknown as jest.Mocked<GitModule>;
-
+    // ConfigManager mock - only methods that exist on IConfigManager
+    // Note: loadSession, getActorState, updateActorState are on SessionManager, not ConfigManager
     mockConfigManager = {
       loadConfig: jest.fn(),
-      loadSession: jest.fn(),
       getRootCycle: jest.fn(),
       getProjectInfo: jest.fn(),
-      getActorState: jest.fn(),
-      updateActorState: jest.fn(),
-      getCloudSessionToken: jest.fn(),
-      constructor: { name: 'ConfigManager' },
-    } as unknown as jest.Mocked<ConfigManager>;
+      getSyncConfig: jest.fn(),
+      getSyncDefaults: jest.fn(),
+      getAuditState: jest.fn(),
+      updateAuditState: jest.fn(),
+      getStateBranch: jest.fn(),
+    } as jest.Mocked<IConfigManager>;
 
     // Create mock IProjectInitializer (filesystem abstraction)
     mockProjectInitializer = {
@@ -154,8 +140,8 @@ describe('ProjectAdapter', () => {
       writeConfig: jest.fn().mockResolvedValue(undefined),
       initializeSession: jest.fn().mockResolvedValue(undefined),
       rollback: jest.fn().mockResolvedValue(undefined),
-      validateEnvironment: jest.fn().mockImplementation(async (_targetPath?: string): Promise<EnvironmentValidation> => {
-        // Default: valid environment (can be overridden per-test)
+      validateEnvironment: jest.fn().mockImplementation(async (): Promise<EnvironmentValidation> => {
+        // Default: valid environment with VCS status (can be overridden per-test)
         return {
           isValid: true,
           isGitRepo: true,
@@ -163,6 +149,9 @@ describe('ProjectAdapter', () => {
           isAlreadyInitialized: false,
           warnings: [],
           suggestions: [],
+          hasRemote: true,
+          hasCommits: true,
+          currentBranch: 'main',
         };
       }),
       readFile: jest.fn().mockImplementation(async (filePath: string) => {
@@ -171,8 +160,8 @@ describe('ProjectAdapter', () => {
       }),
       copyAgentPrompt: jest.fn().mockResolvedValue(undefined),
       setupGitIntegration: jest.fn().mockResolvedValue(undefined),
-      getActorPath: jest.fn().mockImplementation((actorId: string, projectRoot: string) => {
-        return `${projectRoot}/.gitgov/actors/${actorId}.json`;
+      getActorPath: jest.fn().mockImplementation((actorId: string) => {
+        return `/test/project/.gitgov/actors/${actorId}.json`;
       }),
     } as jest.Mocked<IProjectInitializer>;
 
@@ -211,102 +200,47 @@ describe('ProjectAdapter', () => {
     projectAdapter = new ProjectAdapter({
       identityAdapter: mockIdentityAdapter,
       backlogAdapter: mockBacklogAdapter,
-      gitModule: mockGitModule,
       configManager: mockConfigManager,
       projectInitializer: mockProjectInitializer,
     });
   });
 
   describe('Environment Validation (EARS A2, A8, A9)', () => {
-    it('[EARS-F1] should validate current directory, not search upward for init', async () => {
-      // This test prevents the critical bug where init modifies parent repositories
-      // Simulate being in /packages/cli/ but wanting to init there, not in parent /solo-hub/
-
-      // Mock IProjectInitializer.validateEnvironment to return invalid (no git repo)
+    it('[EARS-F1] should delegate validation to IProjectInitializer (projectRoot injected at construction)', async () => {
+      // ProjectAdapter delegates to projectInitializer.validateEnvironment()
+      // The projectRoot is already set in the initializer's constructor (DI)
       mockProjectInitializer.validateEnvironment.mockResolvedValueOnce({
         isValid: false,
-        isGitRepo: false, // No .git in subdirectory
+        isGitRepo: false,
         hasWritePermissions: false,
         isAlreadyInitialized: false,
         warnings: ['Not a Git repository in directory: /test/project/packages/cli', 'No write permissions in target directory'],
         suggestions: ["Run 'git init' to initialize a Git repository first"],
       });
 
-      const result = await projectAdapter.validateEnvironment('/test/project/packages/cli');
+      const result = await projectAdapter.validateEnvironment();
 
-      // Should validate the EXACT directory passed, not search upward
       expect(result.isValid).toBe(false);
-      expect(result.isGitRepo).toBe(false); // Should be false for /packages/cli/
+      expect(result.isGitRepo).toBe(false);
       expect(result.warnings).toContain('Not a Git repository in directory: /test/project/packages/cli');
+      // Verify no path argument was passed — initializer knows its own root
+      expect(mockProjectInitializer.validateEnvironment).toHaveBeenCalledWith();
     });
 
-    it('[EARS-F2] should use GITGOV_ORIGINAL_DIR when provided (pnpm --filter case)', async () => {
-      // This test ensures pnpm --filter cli dev init validates the correct directory
+    it('[EARS-F2] should use GITGOV_ORIGINAL_DIR when provided (pnpm case)', async () => {
+      // GITGOV_ORIGINAL_DIR is resolved at CLI level and passed to FsProjectInitializer constructor.
+      // ProjectAdapter must NOT access process.cwd() or env vars directly —
+      // it delegates entirely to the injected projectInitializer whose root is already set.
+      const result = await projectAdapter.validateEnvironment();
 
-      // Mock IProjectInitializer.validateEnvironment to return already initialized
-      mockProjectInitializer.validateEnvironment.mockResolvedValueOnce({
-        isValid: false,
-        isGitRepo: true, // .git exists in original directory
-        hasWritePermissions: true,
-        isAlreadyInitialized: true,
-        gitgovPath: '/test/project/.gitgov',
-        warnings: ['GitGovernance already initialized in directory: /test/project'],
-        suggestions: ["Use 'gitgov status' to check current state or choose a different directory"],
-      });
-
-      const result = await projectAdapter.validateEnvironment(); // No path = use env var
-
-      expect(result.isValid).toBe(false);
-      expect(result.isGitRepo).toBe(true);
-      expect(result.isAlreadyInitialized).toBe(true);
-      expect(result.warnings).toContain('GitGovernance already initialized in directory: /test/project');
+      // Pure delegation: no path arg, no env var access in ProjectAdapter
+      expect(mockProjectInitializer.validateEnvironment).toHaveBeenCalledWith();
+      expect(result.isValid).toBe(true);
     });
 
-    it('[EARS-F3] should create .gitgov in correct directory during init', async () => {
-      // This test ensures init creates .gitgov in the target directory, not in parent repos
-
-      const targetDirectory = '/tmp/new-project';
-      const originalEnv = process.env['GITGOV_ORIGINAL_DIR'];
-      process.env['GITGOV_ORIGINAL_DIR'] = targetDirectory;
-
-      try {
-        const mockActor = createMockActorRecord();
-        const mockCycle = createMockCycleRecord();
-        mockIdentityAdapter.createActor.mockResolvedValueOnce(mockActor);
-        mockBacklogAdapter.createCycle.mockResolvedValueOnce(mockCycle);
-
-        const result = await projectAdapter.initializeProject({
-          name: 'New Project',
-          actorName: 'New User',
-        });
-
-        expect(result.success).toBe(true);
-
-        // Verify .gitgov directory creation was attempted via IProjectInitializer
-        expect(mockProjectInitializer.createProjectStructure).toHaveBeenCalledWith(targetDirectory);
-
-        // Verify config.json was written via IProjectInitializer
-        expect(mockProjectInitializer.writeConfig).toHaveBeenCalledWith(
-          expect.objectContaining({
-            projectName: 'New Project',
-          }),
-          targetDirectory
-        );
-
-      } finally {
-        // Restore original environment
-        if (originalEnv) {
-          process.env['GITGOV_ORIGINAL_DIR'] = originalEnv;
-        } else {
-          delete process.env['GITGOV_ORIGINAL_DIR'];
-        }
-      }
-    });
     it('[EARS-A2] should verify git repo permissions and previous state', async () => {
-      // Mock IProjectInitializer.validateEnvironment (default mock returns valid)
-      // No override needed - default mock returns valid environment
-
-      const result = await projectAdapter.validateEnvironment('/test/project');
+      // Default mock returns valid environment
+      const result = await projectAdapter.validateEnvironment();
 
       expect(result.isValid).toBe(true);
       expect(result.isGitRepo).toBe(true);
@@ -316,7 +250,6 @@ describe('ProjectAdapter', () => {
     });
 
     it('[EARS-A8] should return EnvironmentValidation with specific warnings', async () => {
-      // Mock IProjectInitializer.validateEnvironment to return invalid
       mockProjectInitializer.validateEnvironment.mockResolvedValueOnce({
         isValid: false,
         isGitRepo: false,
@@ -326,7 +259,7 @@ describe('ProjectAdapter', () => {
         suggestions: ["Run 'git init' to initialize a Git repository first", 'Ensure you have write permissions in the target directory'],
       });
 
-      const result = await projectAdapter.validateEnvironment('/invalid/path');
+      const result = await projectAdapter.validateEnvironment();
 
       expect(result.isValid).toBe(false);
       expect(result.isGitRepo).toBe(false);
@@ -337,7 +270,6 @@ describe('ProjectAdapter', () => {
     });
 
     it('[EARS-A9] should detect already initialized GitGovernance project', async () => {
-      // Mock IProjectInitializer.validateEnvironment to return already initialized
       mockProjectInitializer.validateEnvironment.mockResolvedValueOnce({
         isValid: false,
         isGitRepo: true,
@@ -348,7 +280,7 @@ describe('ProjectAdapter', () => {
         suggestions: ["Use 'gitgov status' to check current state or choose a different directory"],
       });
 
-      const result = await projectAdapter.validateEnvironment('/test/project');
+      const result = await projectAdapter.validateEnvironment();
 
       expect(result.isValid).toBe(false);
       expect(result.isAlreadyInitialized).toBe(true);
@@ -360,7 +292,6 @@ describe('ProjectAdapter', () => {
   describe('Project Initialization (EARS A1, A6)', () => {
     beforeEach(() => {
       // Setup successful mocks
-      jest.spyOn(ConfigManager, 'findProjectRoot').mockReturnValue('/test/project');
       mockFs.writeFile.mockResolvedValue(undefined);
       mockFs.unlink.mockResolvedValue(undefined);
       mockFs.access.mockRejectedValue(new Error('Directory does not exist')); // .gitgov doesn't exist
@@ -407,9 +338,8 @@ describe('ProjectAdapter', () => {
         mockActor.id
       );
       // Verify lazy state branch setup checks (EARS-A4, EARS-B3)
-      // Note: gitgov-state branch is NOT created during init (lazy creation on first sync push)
-      expect(mockGitModule.isRemoteConfigured).toHaveBeenCalledWith('origin');
-      expect(mockGitModule.branchExists).toHaveBeenCalled();
+      // VCS status is now read from validateEnvironment() result (no direct gitModule dependency)
+      expect(mockProjectInitializer.validateEnvironment).toHaveBeenCalled();
     });
 
     it('[EARS-A6] should return ProjectInitResult with complete metadata', async () => {
@@ -442,6 +372,33 @@ describe('ProjectAdapter', () => {
           "Use 'gitgov task create' to add your first task"
         ]),
       });
+    });
+
+    it('[EARS-F3] should create .gitgov in correct directory during init', async () => {
+      // ProjectAdapter delegates directory creation to projectInitializer
+      // which has the correct target directory injected at construction.
+      // This ensures .gitgov is never created in parent repositories.
+      const mockActor = createMockActorRecord();
+      const mockCycle = createMockCycleRecord();
+
+      mockIdentityAdapter.createActor.mockResolvedValueOnce(mockActor);
+      mockBacklogAdapter.createCycle.mockResolvedValueOnce(mockCycle);
+
+      await projectAdapter.initializeProject({
+        name: 'Test Project',
+        actorName: 'Test User',
+      });
+
+      // Verify createProjectStructure was delegated to the injected initializer
+      // (which targets the correct directory, never a parent repo)
+      expect(mockProjectInitializer.createProjectStructure).toHaveBeenCalled();
+      // writeConfig also delegated to the same initializer
+      expect(mockProjectInitializer.writeConfig).toHaveBeenCalledWith(
+        expect.objectContaining({
+          projectId: 'test-project',
+          projectName: 'Test Project',
+        })
+      );
     });
   });
 
@@ -534,7 +491,6 @@ describe('ProjectAdapter', () => {
     });
 
     it('[EARS-B6] should capture adapter errors with specific context', async () => {
-      jest.spyOn(ConfigManager, 'findProjectRoot').mockReturnValue('/test/project');
       mockFs.writeFile.mockResolvedValue(undefined);
       mockFs.unlink.mockResolvedValue(undefined);
       mockFs.access.mockRejectedValue(new Error('Directory does not exist'));
@@ -563,7 +519,7 @@ describe('ProjectAdapter', () => {
         suggestions: ["Run 'git init' to initialize a Git repository first", 'Ensure you have write permissions in the target directory'],
       });
 
-      const result = await projectAdapter.validateEnvironment('/invalid/path');
+      const result = await projectAdapter.validateEnvironment();
 
       expect(result.isValid).toBe(false);
       expect(result.suggestions).toContain("Run 'git init' to initialize a Git repository first");
@@ -610,7 +566,7 @@ describe('ProjectAdapter', () => {
         suggestions: ['Ensure you have write permissions in the target directory'],
       });
 
-      const result = await projectAdapter.validateEnvironment('/test/path');
+      const result = await projectAdapter.validateEnvironment();
 
       expect(result.isValid).toBe(false);
       expect(result.warnings).toContain('No write permissions in target directory');
@@ -624,12 +580,10 @@ describe('ProjectAdapter', () => {
       const minimalAdapter = new ProjectAdapter({
         identityAdapter: mockIdentityAdapter,
         backlogAdapter: mockBacklogAdapter,
-        gitModule: mockGitModule,
         configManager: mockConfigManager,
         projectInitializer: mockProjectInitializer,
       });
 
-      jest.spyOn(ConfigManager, 'findProjectRoot').mockReturnValue('/test/project');
       mockFs.writeFile.mockResolvedValue(undefined);
       mockFs.unlink.mockResolvedValue(undefined);
       mockFs.access.mockRejectedValue(new Error('Directory does not exist'));
@@ -695,7 +649,6 @@ describe('ProjectAdapter', () => {
   describe('Integration Tests', () => {
     it('should work end-to-end with real-like data', async () => {
       // Setup complete successful scenario
-      jest.spyOn(ConfigManager, 'findProjectRoot').mockReturnValue('/test/project');
       mockFs.writeFile.mockResolvedValue(undefined);
       mockFs.unlink.mockResolvedValue(undefined);
       mockFs.access.mockRejectedValue(new Error('Directory does not exist'));
@@ -732,7 +685,6 @@ describe('ProjectAdapter', () => {
 
   describe('Performance Tests', () => {
     it('should complete initialization in reasonable time', async () => {
-      jest.spyOn(ConfigManager, 'findProjectRoot').mockReturnValue('/test/project');
       mockFs.writeFile.mockResolvedValue(undefined);
       mockFs.unlink.mockResolvedValue(undefined);
       mockFs.access.mockRejectedValue(new Error('Directory does not exist'));
@@ -754,8 +706,8 @@ describe('ProjectAdapter', () => {
     });
   });
 
-  describe('Agent Prompt Copy (Functional Test)', () => {
-    it('should copy agent prompt from docs/ when available (simulated test)', async () => {
+  describe('Agent Prompt UX (EARS G1)', () => {
+    it('[EARS-G1] should copy agent prompt to project root for easy IDE access', async () => {
       // Mock successful initialization
       mockIdentityAdapter.createActor.mockResolvedValueOnce(createMockActorRecord());
       mockBacklogAdapter.createCycle.mockResolvedValueOnce(createMockCycleRecord());
