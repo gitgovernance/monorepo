@@ -7,6 +7,7 @@
  * - EARS-PI01 to PI05: Interface compliance (IProjectInitializer contract)
  * - EARS-FPI01 to FPI06: Filesystem-specific behavior
  * - EARS-FPI09 to FPI12: Filesystem operations (getActorPath, copyAgentPrompt, setupGitIntegration, readFile)
+ * - EARS-FPI13: VCS status in validateEnvironment (hasRemote, hasCommits, currentBranch)
  *
  * @see fs_project_initializer_module.md for EARS specifications
  */
@@ -27,6 +28,11 @@ jest.mock('../../logger', () => ({
     warn: jest.fn(),
     error: jest.fn(),
   }))
+}));
+
+// Mock child_process for VCS checks
+jest.mock('child_process', () => ({
+  execSync: jest.fn(),
 }));
 
 // Mock fs for controlled filesystem operations
@@ -68,6 +74,11 @@ const fsMock = require('fs') as {
 
 const mockFs = fsMock.promises;
 const mockExistsSync = fsMock.existsSync;
+
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { execSync: mockExecSync } = require('child_process') as {
+  execSync: jest.MockedFunction<(cmd: string, opts?: object) => string | Buffer>;
+};
 
 /**
  * Creates a valid GitGovConfig for testing
@@ -420,6 +431,74 @@ describe('FsProjectInitializer', () => {
 
       expect(result).toBe(fileContent);
       expect(mockFs.readFile).toHaveBeenCalledWith(filePath, 'utf-8');
+    });
+  });
+
+  // ==========================================================================
+  // 4.4. VCS Status in validateEnvironment (EARS-FPI13)
+  // ==========================================================================
+
+  describe('4.4. VCS Status in validateEnvironment (EARS-FPI13)', () => {
+    let initializer: FsProjectInitializer;
+
+    beforeEach(() => {
+      initializer = new FsProjectInitializer(testRoot);
+      // Default: valid git repo with write permissions, not initialized
+      mockExistsSync.mockReturnValue(true); // .git exists
+      mockFs.writeFile.mockResolvedValue(undefined);
+      mockFs.unlink.mockResolvedValue(undefined);
+      mockFs.access.mockRejectedValue(new Error('ENOENT')); // config.json doesn't exist
+    });
+
+    it('[EARS-FPI13] should return VCS status with remote, commits, and branch', async () => {
+      mockExecSync
+        .mockReturnValueOnce('https://github.com/org/repo.git')  // git remote get-url origin
+        .mockReturnValueOnce('main\n')                            // git branch --show-current
+        .mockReturnValueOnce('abc1234 Initial commit\n');         // git log --oneline -1
+
+      const validation = await initializer.validateEnvironment();
+
+      expect(validation.hasRemote).toBe(true);
+      expect(validation.currentBranch).toBe('main');
+      expect(validation.hasCommits).toBe(true);
+    });
+
+    it('[EARS-FPI13] should detect no remote configured', async () => {
+      mockExecSync
+        .mockImplementationOnce(() => { throw new Error('fatal: No such remote'); }) // git remote get-url origin
+        .mockReturnValueOnce('main\n')                                                // git branch --show-current
+        .mockReturnValueOnce('abc1234 Initial commit\n');                              // git log --oneline -1
+
+      const validation = await initializer.validateEnvironment();
+
+      expect(validation.hasRemote).toBe(false);
+      expect(validation.currentBranch).toBe('main');
+      expect(validation.hasCommits).toBe(true);
+    });
+
+    it('[EARS-FPI13] should detect no commits in repository', async () => {
+      mockExecSync
+        .mockReturnValueOnce('https://github.com/org/repo.git')                        // git remote get-url origin
+        .mockReturnValueOnce('main\n')                                                  // git branch --show-current
+        .mockImplementationOnce(() => { throw new Error('fatal: bad default revision'); }); // git log --oneline -1
+
+      const validation = await initializer.validateEnvironment();
+
+      expect(validation.hasRemote).toBe(true);
+      expect(validation.currentBranch).toBe('main');
+      expect(validation.hasCommits).toBe(false);
+    });
+
+    it('[EARS-FPI13] should skip VCS checks when not a git repo', async () => {
+      mockExistsSync.mockReturnValue(false); // .git doesn't exist
+
+      const validation = await initializer.validateEnvironment();
+
+      expect(validation.hasRemote).toBe(false);
+      expect(validation.hasCommits).toBe(false);
+      expect(validation.currentBranch).toBe('');
+      // execSync should NOT have been called
+      expect(mockExecSync).not.toHaveBeenCalled();
     });
   });
 });

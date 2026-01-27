@@ -1,5 +1,6 @@
 import { promises as fs, existsSync } from 'fs';
 import * as path from 'path';
+import { execSync } from 'child_process';
 import type { GitGovConfig } from '../../config_manager';
 import type { IProjectInitializer, EnvironmentValidation } from '../project_initializer';
 import { createRequire } from 'module';
@@ -163,6 +164,43 @@ export class FsProjectInitializer implements IProjectInitializer {
         suggestions.push("Use 'gitgov status' to check current state or choose a different directory");
       }
 
+      // VCS status checks (only if it's a git repo)
+      let hasRemote = false;
+      let hasCommits = false;
+      let currentBranch = '';
+
+      if (isGitRepo) {
+        try {
+          execSync('git remote get-url origin', {
+            cwd: this.projectRoot,
+            stdio: 'pipe',
+          });
+          hasRemote = true;
+        } catch {
+          hasRemote = false;
+        }
+
+        try {
+          currentBranch = execSync('git branch --show-current', {
+            cwd: this.projectRoot,
+            encoding: 'utf-8',
+            stdio: 'pipe',
+          }).trim();
+        } catch {
+          currentBranch = '';
+        }
+
+        try {
+          execSync('git log --oneline -1', {
+            cwd: this.projectRoot,
+            stdio: 'pipe',
+          });
+          hasCommits = true;
+        } catch {
+          hasCommits = false;
+        }
+      }
+
       const isValid = isGitRepo && hasWritePermissions && !isAlreadyInitialized;
 
       const result: EnvironmentValidation = {
@@ -172,6 +210,9 @@ export class FsProjectInitializer implements IProjectInitializer {
         isAlreadyInitialized,
         warnings,
         suggestions,
+        hasRemote,
+        hasCommits,
+        currentBranch,
       };
 
       if (isAlreadyInitialized) {
