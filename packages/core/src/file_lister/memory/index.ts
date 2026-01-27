@@ -1,2 +1,2 @@
-export { MockFileLister } from './mock_file_lister';
-export type { MockFileListerOptions } from '../file_lister';
+export { MemoryFileLister } from './memory_file_lister';
+export type { MemoryFileListerOptions } from '../file_lister';

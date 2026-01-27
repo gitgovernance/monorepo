@@ -33,9 +33,9 @@ export type FsFileListerOptions = {
 }
 
 /**
- * Options for MockFileLister.
+ * Options for MemoryFileLister.
  */
-export type MockFileListerOptions = {
+export type MemoryFileListerOptions = {
   /** Map of filePath -> content */
   files?: Map<string, string> | Record<string, string>;
   /** Map of filePath -> stats (optional, generated if not provided) */

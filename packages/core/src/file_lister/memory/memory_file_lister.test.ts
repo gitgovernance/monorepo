@@ -1,18 +1,18 @@
 /**
- * MockFileLister Tests
+ * MemoryFileLister Tests
  *
  * Tests for the in-memory FileLister implementation.
- * All EARS prefixes map to file_lister_module.md blueprint.
+ * All EARS prefixes map to memory_file_lister_module.md blueprint.
  */
 
-import { MockFileLister } from './mock_file_lister';
+import { MemoryFileLister } from './memory_file_lister';
 import { FileListerError } from '../file_lister';
 
-describe('MockFileLister', () => {
+describe('MemoryFileLister', () => {
   describe('4.1. FileLister Interface (EARS-FL01 to FL04)', () => {
     describe('list()', () => {
       it('[EARS-FL01] should return files matching glob patterns', async () => {
-        const lister = new MockFileLister({
+        const lister = new MemoryFileLister({
           files: {
             'src/index.ts': 'export const x = 1;',
             'src/utils.ts': 'export const y = 2;',
@@ -29,7 +29,7 @@ describe('MockFileLister', () => {
       });
 
       it('[EARS-FL01] should support multiple patterns', async () => {
-        const lister = new MockFileLister({
+        const lister = new MemoryFileLister({
           files: {
             'src/index.ts': '',
             'docs/api.md': '',
@@ -44,7 +44,7 @@ describe('MockFileLister', () => {
 
     describe('exists()', () => {
       it('[EARS-FL02] should return true for existing file', async () => {
-        const lister = new MockFileLister({
+        const lister = new MemoryFileLister({
           files: { 'src/index.ts': 'content' },
         });
 
@@ -52,7 +52,7 @@ describe('MockFileLister', () => {
       });
 
       it('[EARS-FL02] should return false for non-existing file', async () => {
-        const lister = new MockFileLister({
+        const lister = new MemoryFileLister({
           files: { 'src/index.ts': 'content' },
         });
 
@@ -63,7 +63,7 @@ describe('MockFileLister', () => {
     describe('read()', () => {
       it('[EARS-FL03] should return file content as UTF-8 string', async () => {
         const content = 'export const x = 1;';
-        const lister = new MockFileLister({
+        const lister = new MemoryFileLister({
           files: { 'src/index.ts': content },
         });
 
@@ -72,7 +72,7 @@ describe('MockFileLister', () => {
       });
 
       it('[EARS-FL03] should throw FILE_NOT_FOUND for missing file', async () => {
-        const lister = new MockFileLister({ files: {} });
+        const lister = new MemoryFileLister({ files: {} });
 
         await expect(lister.read('missing.ts')).rejects.toThrow(FileListerError);
         await expect(lister.read('missing.ts')).rejects.toMatchObject({
@@ -85,7 +85,7 @@ describe('MockFileLister', () => {
     describe('stat()', () => {
       it('[EARS-FL04] should return size, mtime, and isFile', async () => {
         const content = 'hello world';
-        const lister = new MockFileLister({
+        const lister = new MemoryFileLister({
           files: { 'test.txt': content },
         });
 
@@ -97,7 +97,7 @@ describe('MockFileLister', () => {
       });
 
       it('[EARS-FL04] should throw FILE_NOT_FOUND for missing file', async () => {
-        const lister = new MockFileLister({ files: {} });
+        const lister = new MemoryFileLister({ files: {} });
 
         await expect(lister.stat('missing.txt')).rejects.toThrow(FileListerError);
         await expect(lister.stat('missing.txt')).rejects.toMatchObject({
@@ -107,13 +107,13 @@ describe('MockFileLister', () => {
     });
   });
 
-  describe('4.3. MockFileLister Specifics (EARS-MFL01 to MFL04)', () => {
+  describe('4.3. MemoryFileLister Specifics (EARS-MFL01 to MFL04)', () => {
     it('[EARS-MFL01] should use provided files Map', async () => {
       const filesMap = new Map([
         ['a.ts', 'content a'],
         ['b.ts', 'content b'],
       ]);
-      const lister = new MockFileLister({ files: filesMap });
+      const lister = new MemoryFileLister({ files: filesMap });
 
       expect(await lister.exists('a.ts')).toBe(true);
       expect(await lister.exists('b.ts')).toBe(true);
@@ -121,7 +121,7 @@ describe('MockFileLister', () => {
     });
 
     it('[EARS-MFL01] should accept Record<string,string> as files', async () => {
-      const lister = new MockFileLister({
+      const lister = new MemoryFileLister({
         files: {
           'src/index.ts': 'code',
           'README.md': '# Title',
@@ -133,7 +133,7 @@ describe('MockFileLister', () => {
     });
 
     it('[EARS-MFL02] should filter keys using glob patterns', async () => {
-      const lister = new MockFileLister({
+      const lister = new MemoryFileLister({
         files: {
           'src/index.ts': '',
           'src/utils/helper.ts': '',
@@ -150,7 +150,7 @@ describe('MockFileLister', () => {
     });
 
     it('[EARS-MFL02] should support ignore patterns', async () => {
-      const lister = new MockFileLister({
+      const lister = new MemoryFileLister({
         files: {
           'src/index.ts': '',
           'src/generated/types.ts': '',
@@ -166,7 +166,7 @@ describe('MockFileLister', () => {
 
     it('[EARS-MFL03] should generate stats from content length', async () => {
       const content = 'hello world'; // 11 characters
-      const lister = new MockFileLister({
+      const lister = new MemoryFileLister({
         files: { 'test.txt': content },
       });
 
@@ -178,7 +178,7 @@ describe('MockFileLister', () => {
 
     it('[EARS-MFL03] should use explicit stats when provided', async () => {
       const explicitStats = { size: 100, mtime: 1234567890, isFile: true };
-      const lister = new MockFileLister({
+      const lister = new MemoryFileLister({
         files: { 'test.txt': 'short' },
         stats: new Map([['test.txt', explicitStats]]),
       });
@@ -189,7 +189,7 @@ describe('MockFileLister', () => {
     });
 
     it('[EARS-MFL04] should reflect files added after construction', async () => {
-      const lister = new MockFileLister({ files: {} });
+      const lister = new MemoryFileLister({ files: {} });
 
       expect(await lister.exists('new.ts')).toBe(false);
 
@@ -205,7 +205,7 @@ describe('MockFileLister', () => {
 
   describe('Testing Utilities', () => {
     it('should support removeFile()', async () => {
-      const lister = new MockFileLister({
+      const lister = new MemoryFileLister({
         files: { 'test.ts': 'content' },
       });
 
@@ -216,7 +216,7 @@ describe('MockFileLister', () => {
     });
 
     it('should support size()', () => {
-      const lister = new MockFileLister({
+      const lister = new MemoryFileLister({
         files: { 'a.ts': '', 'b.ts': '', 'c.ts': '' },
       });
 
@@ -224,7 +224,7 @@ describe('MockFileLister', () => {
     });
 
     it('should support clear()', async () => {
-      const lister = new MockFileLister({
+      const lister = new MemoryFileLister({
         files: { 'a.ts': '', 'b.ts': '' },
       });
 
@@ -235,7 +235,7 @@ describe('MockFileLister', () => {
     });
 
     it('should support listPaths()', () => {
-      const lister = new MockFileLister({
+      const lister = new MemoryFileLister({
         files: { 'a.ts': '', 'b.ts': '' },
       });
 
