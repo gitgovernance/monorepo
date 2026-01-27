@@ -11,7 +11,7 @@
 import type { FileListOptions, FileStats } from './file_lister.types';
 
 // Re-export types and errors for barrel consumers
-export type { FileListOptions, FileStats, FsFileListerOptions, MockFileListerOptions } from './file_lister.types';
+export type { FileListOptions, FileStats, FsFileListerOptions, MemoryFileListerOptions } from './file_lister.types';
 export { FileListerError } from './file_lister.errors';
 export type { FileListerErrorCode } from './file_lister.errors';
 
@@ -26,8 +26,8 @@ export type { FileListerErrorCode } from './file_lister.errors';
  * const lister = new FsFileLister({ cwd: '/path/to/project' });
  *
  * // Memory backend (testing)
- * import { MockFileLister } from '@gitgov/core/memory';
- * const lister = new MockFileLister({ files: { 'src/index.ts': 'code...' } });
+ * import { MemoryFileLister } from '@gitgov/core/memory';
+ * const lister = new MemoryFileLister({ files: { 'src/index.ts': 'code...' } });
  *
  * // Usage
  * const files = await lister.list(['**\/*.ts']);

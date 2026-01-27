@@ -1,14 +1,14 @@
 /**
- * MockFileLister - In-memory FileLister for testing
+ * MemoryFileLister - In-memory FileLister for testing
  *
  * Simulates filesystem operations using a Map.
  * Used for unit testing without actual I/O.
  *
- * @module file_lister/memory/mock_file_lister
+ * @module file_lister/memory/memory_file_lister
  */
 
 import picomatch from 'picomatch';
-import type { FileLister, FileListOptions, FileStats, MockFileListerOptions } from '../file_lister';
+import type { FileLister, FileListOptions, FileStats, MemoryFileListerOptions } from '../file_lister';
 import { FileListerError } from '../file_lister';
 
 /**
@@ -34,7 +34,7 @@ function filterIgnored(filePaths: string[], ignorePatterns: string[]): string[] 
  *
  * @example
  * ```typescript
- * const lister = new MockFileLister({
+ * const lister = new MemoryFileLister({
  *   files: new Map([
  *     ['src/index.ts', 'export const x = 1;'],
  *     ['README.md', '# Project'],
@@ -42,21 +42,21 @@ function filterIgnored(filePaths: string[], ignorePatterns: string[]): string[] 
  * });
  *
  * // Or with object syntax
- * const lister = new MockFileLister({
+ * const lister = new MemoryFileLister({
  *   files: { 'src/index.ts': 'code...', 'README.md': '# Project' }
  * });
  *
  * const files = await lister.list(['**\/*.ts']);
  * ```
  */
-export class MockFileLister implements FileLister {
+export class MemoryFileLister implements FileLister {
   private readonly files: Map<string, string>;
   private readonly stats: Map<string, FileStats>;
 
   /**
-   * [EARS-MFL01] Constructs MockFileLister with provided files.
+   * [EARS-MFL01] Constructs MemoryFileLister with provided files.
    */
-  constructor(options: MockFileListerOptions = {}) {
+  constructor(options: MemoryFileListerOptions = {}) {
     // [EARS-MFL01] Accept both Map and Record<string, string>
     if (options.files instanceof Map) {
       this.files = new Map(options.files);
