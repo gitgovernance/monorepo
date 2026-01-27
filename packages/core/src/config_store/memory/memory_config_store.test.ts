@@ -1,7 +1,9 @@
 /**
  * MemoryConfigStore Unit Tests
  *
- * Tests for in-memory ConfigStore implementation.
+ * Tests MemoryConfigStore in-memory implementation.
+ * All EARS prefixes map to memory_config_store_module.md blueprint.
+ *
  * Session-related tests are in session_store/memory/memory_session_store.test.ts
  *
  * EARS Blocks:
@@ -27,9 +29,9 @@ describe('MemoryConfigStore', () => {
     store = new MemoryConfigStore();
   });
 
-  // ==================== §3.1 ConfigStore Interface (EARS-A) ====================
+  // ==================== §3.1 ConfigStore Interface (EARS-A1 to A4) ====================
 
-  describe('ConfigStore Interface (EARS-A)', () => {
+  describe('3.1. ConfigStore Interface (EARS-A1 to A4)', () => {
     it('[EARS-A1] WHEN loadConfig is invoked without config set, THE SYSTEM SHALL return null', async () => {
       const result = await store.loadConfig();
       expect(result).toBeNull();
@@ -70,9 +72,9 @@ describe('MemoryConfigStore', () => {
     });
   });
 
-  // ==================== §3.2 Test Helpers (EARS-B) ====================
+  // ==================== §3.2 Test Helpers (EARS-B1 to B3) ====================
 
-  describe('Test Helpers (EARS-B)', () => {
+  describe('3.2. Test Helpers (EARS-B1 to B3)', () => {
     it('[EARS-B1] WHEN setConfig is invoked, THE SYSTEM SHALL set config synchronously via getConfig', () => {
       store.setConfig(mockConfig);
       expect(store.getConfig()).toEqual(mockConfig);
@@ -93,9 +95,9 @@ describe('MemoryConfigStore', () => {
     });
   });
 
-  // ==================== §3.3 ConfigManager Integration (EARS-C) ====================
+  // ==================== §3.3 ConfigManager Integration (EARS-C1 to C2) ====================
 
-  describe('ConfigManager Integration (EARS-C)', () => {
+  describe('3.3. ConfigManager Integration (EARS-C1 to C2)', () => {
     // Import here to avoid circular dependency issues
     const { ConfigManager } = require('../../config_manager');
 
