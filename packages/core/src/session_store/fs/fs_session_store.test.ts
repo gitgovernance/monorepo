@@ -2,14 +2,16 @@
  * FsSessionStore Unit Tests
  *
  * Tests FsSessionStore with mocked filesystem.
+ * All EARS prefixes map to fs_session_store_module.md blueprint.
  *
  * EARS Blocks:
  * - A: loadSession (§4.1)
  * - B: saveSession (§4.2)
  * - C: detectActorFromKeyFiles (§4.3)
+ * - D: Factory Function (§4.4)
  */
 
-import { FsSessionStore } from './fs_session_store';
+import { FsSessionStore, createSessionManager } from './fs_session_store';
 import type { GitGovSession } from '../../session_manager';
 
 // Mock fs module
@@ -32,9 +34,9 @@ describe('FsSessionStore', () => {
     jest.clearAllMocks();
   });
 
-  // ==================== §4.1 loadSession (EARS-A) ====================
+  // ==================== §4.1 loadSession (EARS-A1 to A5) ====================
 
-  describe('loadSession (EARS-A)', () => {
+  describe('4.1. loadSession (EARS-A1 to A5)', () => {
     it('[EARS-A1] WHEN loadSession is invoked with valid session, THE SYSTEM SHALL return complete GitGovSession', async () => {
       const store = new FsSessionStore(projectRoot);
       const mockSession: GitGovSession = {
@@ -117,9 +119,9 @@ describe('FsSessionStore', () => {
     });
   });
 
-  // ==================== §4.2 saveSession (EARS-B) ====================
+  // ==================== §4.2 saveSession (EARS-B1 to B2) ====================
 
-  describe('saveSession (EARS-B)', () => {
+  describe('4.2. saveSession (EARS-B1 to B2)', () => {
     it('[EARS-B1] WHEN saveSession is invoked, THE SYSTEM SHALL write to .gitgov/.session.json', async () => {
       const store = new FsSessionStore(projectRoot);
       const mockSession: GitGovSession = {
@@ -168,9 +170,9 @@ describe('FsSessionStore', () => {
     });
   });
 
-  // ==================== §4.3 detectActorFromKeyFiles (EARS-C) ====================
+  // ==================== §4.3 detectActorFromKeyFiles (EARS-C1 to C6) ====================
 
-  describe('detectActorFromKeyFiles (EARS-C)', () => {
+  describe('4.3. detectActorFromKeyFiles (EARS-C1 to C6)', () => {
     it('[EARS-C1] WHEN detectActorFromKeyFiles is invoked with .key files, THE SYSTEM SHALL return actor ID', async () => {
       const store = new FsSessionStore(projectRoot);
       mockedFs.readdir.mockResolvedValue(['human:camilo-v2.key'] as any);
@@ -232,6 +234,18 @@ describe('FsSessionStore', () => {
       const result = await store.detectActorFromKeyFiles();
 
       expect(result).toBeNull();
+    });
+  });
+
+  // ==================== §4.4 Factory Function (EARS-D1) ====================
+
+  describe('4.4. Factory Function (EARS-D1)', () => {
+    it('[EARS-D1] WHEN createSessionManager is invoked with explicit path, THE SYSTEM SHALL create SessionManager', () => {
+      const manager = createSessionManager('/test/project');
+
+      expect(manager).toBeDefined();
+      expect(manager.loadSession).toBeDefined();
+      expect(manager.getActorState).toBeDefined();
     });
   });
 });
