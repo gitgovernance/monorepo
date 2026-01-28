@@ -1,4 +1,8 @@
 /**
  * Filesystem SessionStore implementation
  */
-export { FsSessionStore } from './fs_session_store';
+export {
+  FsSessionStore,
+  // Factory with explicit projectRoot (for DI containers)
+  createSessionManager,
+} from './fs_session_store';
