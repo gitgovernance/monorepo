@@ -1,11 +1,8 @@
 import type {
   ActorRecord,
-  AgentRecord,
   GitGovRecord,
   GitGovActorRecord,
-  GitGovAgentRecord,
   ActorPayload,
-  AgentPayload,
   Signature,
 } from '../../types';
 import type { RecordStores } from '../../record_store';
@@ -13,22 +10,19 @@ import type {
   IEventStream,
   ActorCreatedEvent,
   ActorRevokedEvent,
-  AgentRegisteredEvent
 } from '../../event_bus';
 import type { KeyProvider } from '../../key_provider/key_provider';
 import type { IIdentityAdapter, IdentityAdapterDependencies } from './identity_adapter.types';
 
 import { createActorRecord } from '../../factories/actor_factory';
 import { validateFullActorRecord } from '../../validation/actor_validator';
-import { createAgentRecord } from '../../factories/agent_factory';
-import { validateFullAgentRecord } from '../../validation/agent_validator';
 import { generateKeys, signPayload, generateMockSignature } from '../../crypto/signatures';
 import { calculatePayloadChecksum } from '../../crypto/checksum';
 import { generateActorId } from '../../utils/id_generator';
 import type { ISessionManager } from '../../session_manager';
 
 export class IdentityAdapter implements IIdentityAdapter {
-  private stores: Required<Pick<RecordStores, 'actors' | 'agents'>>;
+  private stores: Required<Pick<RecordStores, 'actors'>>;
   private keyProvider: KeyProvider;
   private sessionManager: ISessionManager;
   private eventBus: IEventStream | undefined;
@@ -464,119 +458,5 @@ export class IdentityAdapter implements IIdentityAdapter {
   async authenticate(_sessionToken: string): Promise<void> {
     // TODO: Implement session token storage for SaaS mode
     console.warn('authenticate not fully implemented yet');
-  }
-
-  async createAgentRecord(payload: Partial<AgentPayload>): Promise<AgentRecord> {
-    // Validate required fields
-    if (!payload.id || !payload.engine) {
-      throw new Error('AgentRecord requires id and engine');
-    }
-
-    // Verify that corresponding ActorRecord exists and is of type 'agent'
-    const correspondingActor = await this.getActor(payload.id);
-    if (!correspondingActor) {
-      throw new Error(`ActorRecord with id ${payload.id} not found. AgentRecord can only be created for existing ActorRecord.`);
-    }
-    if (correspondingActor.type !== 'agent') {
-      throw new Error(`ActorRecord with id ${payload.id} must be of type 'agent' to create AgentRecord.`);
-    }
-
-    // Create complete AgentRecord payload
-    const completePayload: AgentRecord = {
-      id: payload.id,
-      engine: payload.engine,
-      status: payload.status || 'active',
-      triggers: payload.triggers || [],
-      knowledge_dependencies: payload.knowledge_dependencies || [],
-      prompt_engine_requirements: payload.prompt_engine_requirements || {},
-      ...payload
-    };
-
-    // Validate the payload using the factory
-    const validatedPayload = createAgentRecord(completePayload);
-
-    // Calculate checksum for the payload
-    const payloadChecksum = calculatePayloadChecksum(validatedPayload);
-
-    // Load private key via KeyProvider for real signing
-    // Since createActor() always persists the private key, it should be available
-    // If not found, this indicates a problem (legacy actor, key deleted, or I/O error)
-    let privateKey: string;
-    try {
-      const key = await this.keyProvider.getPrivateKey(payload.id);
-      if (!key) {
-        throw new Error(`Private key not found for ${payload.id}`);
-      }
-      privateKey = key;
-    } catch (error) {
-      throw new Error(
-        `Private key not found for actor ${payload.id}. ` +
-        `AgentRecord requires a valid private key for cryptographic signing. ` +
-        `If this is a legacy actor, you may need to regenerate the actor with 'gitgov actor new'. ` +
-        `Original error: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
-    }
-
-    // Create real cryptographic signature
-    const signature = signPayload(validatedPayload, privateKey, payload.id, 'author', 'Agent registration');
-
-    // Create the complete GitGovRecord structure
-    const record: GitGovAgentRecord = {
-      header: {
-        version: '1.0',
-        type: 'agent',
-        payloadChecksum,
-        signatures: [signature]
-      },
-      payload: validatedPayload
-    };
-
-    // Validate the complete record
-    await validateFullAgentRecord(record, async (keyId) => {
-      if (keyId === payload.id) {
-        return correspondingActor.publicKey; // Use the actor's public key
-      }
-      const signerActor = await this.getActor(keyId);
-      return signerActor?.publicKey || null;
-    });
-
-    // Store the record with validation
-    await this.stores.agents.put(record.payload.id, record);
-
-    // Emit agent registered event (skipped if no eventBus)
-    if (this.eventBus) {
-      const event: AgentRegisteredEvent = {
-        type: "identity.agent.registered",
-        timestamp: Date.now(),
-        source: "identity_adapter",
-        payload: {
-          agentId: validatedPayload.id,
-          engine: validatedPayload.engine,
-          correspondingActorId: correspondingActor.id,
-        },
-      };
-      this.eventBus.publish(event);
-    }
-
-    return validatedPayload;
-  }
-
-  async getAgentRecord(agentId: string): Promise<AgentRecord | null> {
-    const record = await this.stores.agents.get(agentId);
-    return record ? record.payload : null;
-  }
-
-  async listAgentRecords(): Promise<AgentRecord[]> {
-    const ids = await this.stores.agents.list();
-    const agents: AgentRecord[] = [];
-
-    for (const id of ids) {
-      const record = await this.stores.agents.get(id);
-      if (record) {
-        agents.push(record.payload);
-      }
-    }
-
-    return agents;
   }
 }

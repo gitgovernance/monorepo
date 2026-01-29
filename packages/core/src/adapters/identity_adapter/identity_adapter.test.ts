@@ -1,10 +1,8 @@
 import { IdentityAdapter } from './index';
-import type { ActorRecord, AgentRecord, GitGovRecord, GitGovActorRecord, GitGovAgentRecord } from '../../types';
+import type { ActorRecord, GitGovRecord, GitGovActorRecord } from '../../types';
 import type { RecordStore } from '../../record_store/record_store';
 import { createActorRecord } from '../../factories/actor_factory';
 import { validateFullActorRecord } from '../../validation/actor_validator';
-import { createAgentRecord } from '../../factories/agent_factory';
-import { validateFullAgentRecord } from '../../validation/agent_validator';
 import { generateKeys, signPayload, generateMockSignature } from '../../crypto/signatures';
 import { calculatePayloadChecksum } from '../../crypto/checksum';
 import { generateActorId } from '../../utils/id_generator';
@@ -13,8 +11,6 @@ import type { ISessionManager } from '../../session_manager';
 // Mock all dependencies
 jest.mock('../../factories/actor_factory');
 jest.mock('../../validation/actor_validator');
-jest.mock('../../factories/agent_factory');
-jest.mock('../../validation/agent_validator');
 jest.mock('../../crypto/signatures');
 jest.mock('../../crypto/checksum');
 jest.mock('../../utils/id_generator');
@@ -30,8 +26,6 @@ interface MockKeyProvider extends KeyProvider {
 }
 const mockedCreateActorRecord = createActorRecord as jest.MockedFunction<typeof createActorRecord>;
 const mockedValidateFullActorRecord = validateFullActorRecord as jest.MockedFunction<typeof validateFullActorRecord>;
-const mockedCreateAgentRecord = createAgentRecord as jest.MockedFunction<typeof createAgentRecord>;
-const mockedValidateFullAgentRecord = validateFullAgentRecord as jest.MockedFunction<typeof validateFullAgentRecord>;
 const mockedGenerateKeys = generateKeys as jest.MockedFunction<typeof generateKeys>;
 const mockedSignPayload = signPayload as jest.MockedFunction<typeof signPayload>;
 const mockedGenerateMockSignature = generateMockSignature as jest.MockedFunction<typeof generateMockSignature>;
@@ -65,7 +59,6 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
   let identityAdapter: IdentityAdapter;
   let identityAdapterWithEvents: IdentityAdapter;
   let mockActorStore: jest.Mocked<RecordStore<GitGovActorRecord>>;
-  let mockAgentStore: jest.Mocked<RecordStore<GitGovAgentRecord>>;
   let mockKeyProvider: MockKeyProvider;
   let mockSessionManager: MockSessionManager;
   let mockEventBus: MockEventBus;
@@ -81,14 +74,6 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       list: jest.fn().mockResolvedValue([]), // Default to empty array to avoid "not iterable" errors
       exists: jest.fn(),
     } as unknown as jest.Mocked<RecordStore<GitGovActorRecord>>;
-
-    mockAgentStore = {
-      get: jest.fn(),
-      put: jest.fn(),
-      delete: jest.fn(),
-      list: jest.fn().mockResolvedValue([]), // Default to empty array to avoid "not iterable" errors
-      exists: jest.fn(),
-    } as unknown as jest.Mocked<RecordStore<GitGovAgentRecord>>;
 
     // Create mock KeyProvider
     mockKeyProvider = {
@@ -122,14 +107,14 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
 
     // Create IdentityAdapter without events (optional dependency)
     identityAdapter = new IdentityAdapter({
-      stores: { actors: mockActorStore, agents: mockAgentStore },
+      stores: { actors: mockActorStore },
       keyProvider: mockKeyProvider,
       sessionManager: mockSessionManager as unknown as ISessionManager,
     });
 
     // Create IdentityAdapter with events
     identityAdapterWithEvents = new IdentityAdapter({
-      stores: { actors: mockActorStore, agents: mockAgentStore },
+      stores: { actors: mockActorStore },
       keyProvider: mockKeyProvider,
       sessionManager: mockSessionManager as unknown as ISessionManager,
       eventBus: mockEventBus,
@@ -770,219 +755,6 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
 
       expect(console.warn).toHaveBeenCalledWith('authenticate not fully implemented yet');
       console.warn = originalWarn;
-    });
-  });
-
-  describe('AgentRecord operations', () => {
-    const sampleAgentPayload: AgentRecord = {
-      id: 'agent:test-agent',
-      status: 'active',
-      engine: { type: 'local', runtime: 'typescript', entrypoint: 'test.ts', function: 'run' },
-      triggers: [{ type: 'manual' }],
-      knowledge_dependencies: [],
-      prompt_engine_requirements: {}
-    };
-
-    const sampleAgentRecord: GitGovRecord & { payload: AgentRecord } = {
-      header: {
-        version: '1.0',
-        type: 'agent',
-        payloadChecksum: 'sample-agent-checksum',
-        signatures: [{
-          keyId: 'agent:test-agent',
-          role: 'author',
-          notes: 'Sample agent signature',
-          signature: 'sample-agent-signature',
-          timestamp: 1234567890
-        }]
-      },
-      payload: sampleAgentPayload
-    };
-
-    const correspondingActorPayload: ActorRecord = {
-      id: 'agent:test-agent',
-      type: 'agent',
-      displayName: 'Test Agent',
-      publicKey: 'agent-public-key',
-      roles: ['author'],
-      status: 'active'
-    };
-
-    const correspondingActorRecord: GitGovRecord & { payload: ActorRecord } = {
-      header: {
-        version: '1.0',
-        type: 'actor',
-        payloadChecksum: 'actor-checksum',
-        signatures: [{ keyId: 'agent:test-agent', role: 'author', notes: 'Agent test signature', signature: 'sig', timestamp: 123 }]
-      },
-      payload: correspondingActorPayload
-    };
-
-    describe('getAgentRecord', () => {
-      it('[EARS-H1] should return AgentRecord when it exists', async () => {
-        mockAgentStore.get.mockResolvedValue(sampleAgentRecord);
-
-        const result = await identityAdapter.getAgentRecord('agent:test-agent');
-
-        expect(mockAgentStore.get).toHaveBeenCalledWith('agent:test-agent');
-        expect(result).toEqual(sampleAgentPayload);
-      });
-
-      it('[EARS-H2] should return null when AgentRecord does not exist', async () => {
-        mockAgentStore.get.mockResolvedValue(null);
-
-        const result = await identityAdapter.getAgentRecord('agent:non-existent');
-
-        expect(mockAgentStore.get).toHaveBeenCalledWith('agent:non-existent');
-        expect(result).toBeNull();
-      });
-    });
-
-    describe('listAgentRecords', () => {
-      it('[EARS-I1] should return all AgentRecords', async () => {
-        const agentIds = ['agent:agent1', 'agent:agent2'];
-        const record1 = { ...sampleAgentRecord, payload: { ...sampleAgentPayload, id: 'agent:agent1' } };
-        const record2 = { ...sampleAgentRecord, payload: { ...sampleAgentPayload, id: 'agent:agent2' } };
-
-        mockAgentStore.list.mockResolvedValue(agentIds);
-        mockAgentStore.get
-          .mockResolvedValueOnce(record1)
-          .mockResolvedValueOnce(record2);
-
-        const result = await identityAdapter.listAgentRecords();
-
-        expect(mockAgentStore.list).toHaveBeenCalled();
-        expect(mockAgentStore.get).toHaveBeenCalledTimes(2);
-        expect(result).toHaveLength(2);
-        expect(result[0]?.id).toBe('agent:agent1');
-        expect(result[1]?.id).toBe('agent:agent2');
-      });
-
-      it('[EARS-I2] should return empty array when no agents exist', async () => {
-        mockAgentStore.list.mockResolvedValue([]);
-
-        const result = await identityAdapter.listAgentRecords();
-
-        expect(mockAgentStore.list).toHaveBeenCalled();
-        expect(result).toEqual([]);
-      });
-    });
-
-    describe('createAgentRecord', () => {
-      it('[EARS-J1, EARS-J2] should create a new AgentRecord when corresponding ActorRecord exists with real signing', async () => {
-        const inputPayload = {
-          id: 'agent:test-agent',
-          engine: { type: 'local' as const, runtime: 'typescript', entrypoint: 'test.ts', function: 'run' }
-        };
-
-        const testPrivateKey = 'test-agent-private-key-base64';
-
-        // Mock dependencies
-        mockActorStore.get.mockResolvedValue(correspondingActorRecord);
-        mockedCreateAgentRecord.mockReturnValue(sampleAgentPayload);
-        mockedCalculatePayloadChecksum.mockReturnValue('calculated-agent-checksum');
-
-        // Mock KeyProvider to return private key
-        mockKeyProvider.getPrivateKey.mockResolvedValue(testPrivateKey);
-
-        mockedSignPayload.mockReturnValue({
-          keyId: 'agent:test-agent',
-          role: 'author',
-          notes: 'Agent registration',
-          signature: 'real-agent-signature',
-          timestamp: 1234567890
-        });
-        mockedValidateFullAgentRecord.mockResolvedValue(undefined);
-        mockAgentStore.put.mockResolvedValue(undefined);
-
-        const result = await identityAdapter.createAgentRecord(inputPayload);
-
-        expect(mockActorStore.get).toHaveBeenCalledWith('agent:test-agent');
-        expect(mockedCreateAgentRecord).toHaveBeenCalled();
-        expect(mockedCalculatePayloadChecksum).toHaveBeenCalled();
-
-        // Verify private key was loaded via KeyProvider
-        expect(mockKeyProvider.getPrivateKey).toHaveBeenCalledWith('agent:test-agent');
-        expect(mockedSignPayload).toHaveBeenCalledWith(
-          sampleAgentPayload,
-          testPrivateKey,
-          'agent:test-agent',
-          'author',
-          'Agent registration'
-        );
-
-        expect(mockedValidateFullAgentRecord).toHaveBeenCalled();
-        expect(mockAgentStore.put).toHaveBeenCalled();
-        expect(result).toEqual(sampleAgentPayload);
-      });
-
-      it('[EARS-J3] should throw error when private key is not available', async () => {
-        const inputPayload = {
-          id: 'agent:test-agent',
-          engine: { type: 'local' as const, runtime: 'typescript', entrypoint: 'test.ts', function: 'run' }
-        };
-
-        // Mock dependencies
-        mockActorStore.get.mockResolvedValue(correspondingActorRecord);
-        mockedCreateAgentRecord.mockReturnValue(sampleAgentPayload);
-        mockedCalculatePayloadChecksum.mockReturnValue('calculated-agent-checksum');
-
-        // Mock KeyProvider to return null (no private key)
-        mockKeyProvider.getPrivateKey.mockResolvedValue(null);
-
-        await expect(identityAdapter.createAgentRecord(inputPayload))
-          .rejects.toThrow('Private key not found for actor agent:test-agent');
-
-        expect(mockActorStore.get).toHaveBeenCalledWith('agent:test-agent');
-        expect(mockedCreateAgentRecord).toHaveBeenCalled();
-        expect(mockedCalculatePayloadChecksum).toHaveBeenCalled();
-
-        // Verify private key was attempted to be loaded via KeyProvider
-        expect(mockKeyProvider.getPrivateKey).toHaveBeenCalledWith('agent:test-agent');
-
-        // Should NOT call signPayload or write (operation should fail)
-        expect(mockedSignPayload).not.toHaveBeenCalled();
-        expect(mockAgentStore.put).not.toHaveBeenCalled();
-      });
-
-      it('[EARS-J4] should throw error when required fields are missing', async () => {
-        const invalidPayload = {
-          id: 'agent:test-agent',
-          // Missing engine
-        };
-
-        await expect(identityAdapter.createAgentRecord(invalidPayload))
-          .rejects.toThrow('AgentRecord requires id and engine');
-      });
-
-      it('[EARS-J5] should throw error when corresponding ActorRecord does not exist', async () => {
-        const inputPayload = {
-          id: 'agent:non-existent',
-          engine: { type: 'local' as const }
-        };
-
-        mockActorStore.get.mockResolvedValue(null);
-
-        await expect(identityAdapter.createAgentRecord(inputPayload))
-          .rejects.toThrow('ActorRecord with id agent:non-existent not found. AgentRecord can only be created for existing ActorRecord.');
-      });
-
-      it('[EARS-J6] should throw error when ActorRecord is not of type agent', async () => {
-        const inputPayload = {
-          id: 'human:test-user',
-          engine: { type: 'local' as const }
-        };
-
-        const humanActorRecord = {
-          ...correspondingActorRecord,
-          payload: { ...correspondingActorPayload, id: 'human:test-user', type: 'human' as const }
-        } as unknown as GitGovRecord & { payload: ActorRecord };
-
-        mockActorStore.get.mockResolvedValue(humanActorRecord);
-
-        await expect(identityAdapter.createAgentRecord(inputPayload))
-          .rejects.toThrow('ActorRecord with id human:test-user must be of type \'agent\' to create AgentRecord.');
-      });
     });
   });
 
