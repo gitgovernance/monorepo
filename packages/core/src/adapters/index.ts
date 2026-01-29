@@ -1,3 +1,4 @@
+export * from "./agent_adapter";
 export * from "./backlog_adapter";
 export * from "./changelog_adapter";
 export * from "./execution_adapter";
