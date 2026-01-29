@@ -1,7 +1,7 @@
 import { Command, Option } from 'commander';
 import { BaseCommand } from '../../base/base-command';
 import type { BaseCommandOptions } from '../../interfaces/command';
-import type { SourceAuditor, PiiDetector, Config } from '@gitgov/core';
+import type { SourceAuditor, FindingDetector, Config } from '@gitgov/core';
 
 // Types are imported from Core via the SourceAuditor namespace
 // Re-export for consumers of this command
@@ -364,7 +364,7 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
    * Display findings grouped by the specified option
    * [EARS-C7]
    */
-  private displayGroupedFindings(findings: PiiDetector.Finding[], groupBy: GroupByOption): void {
+  private displayGroupedFindings(findings: FindingDetector.Finding[], groupBy: GroupByOption): void {
     switch (groupBy) {
       case 'severity':
         this.displayBySeverity(findings);
@@ -382,7 +382,7 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
   /**
    * Display findings grouped by file (default)
    */
-  private displayByFile(findings: PiiDetector.Finding[]): void {
+  private displayByFile(findings: FindingDetector.Finding[]): void {
     const byFile = this.groupByFile(findings);
     for (const [file, fileFindings] of Object.entries(byFile)) {
       console.log(`\x1b[1m${file}\x1b[0m`);
@@ -401,7 +401,7 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
   /**
    * Display findings grouped by severity
    */
-  private displayBySeverity(findings: PiiDetector.Finding[]): void {
+  private displayBySeverity(findings: FindingDetector.Finding[]): void {
     const severities = ['critical', 'high', 'medium', 'low', 'info'] as const;
 
     for (const severity of severities) {
@@ -422,8 +422,8 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
   /**
    * Display findings grouped by category
    */
-  private displayByCategory(findings: PiiDetector.Finding[]): void {
-    const byCategory: Record<string, PiiDetector.Finding[]> = {};
+  private displayByCategory(findings: FindingDetector.Finding[]): void {
+    const byCategory: Record<string, FindingDetector.Finding[]> = {};
 
     for (const f of findings) {
       const cat = f.category || 'unknown';
@@ -594,8 +594,8 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
 
   // Helper methods
 
-  private groupByFile(findings: PiiDetector.Finding[]): Record<string, PiiDetector.Finding[]> {
-    const result: Record<string, PiiDetector.Finding[]> = {};
+  private groupByFile(findings: FindingDetector.Finding[]): Record<string, FindingDetector.Finding[]> {
+    const result: Record<string, FindingDetector.Finding[]> = {};
     for (const f of findings) {
       const existing = result[f.file];
       if (existing) {
@@ -629,7 +629,7 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
     return colors[severity] ?? '\x1b[37m';
   }
 
-  private extractRules(findings: PiiDetector.Finding[]): Array<{ id: string; name: string; shortDescription: { text: string } }> {
+  private extractRules(findings: FindingDetector.Finding[]): Array<{ id: string; name: string; shortDescription: { text: string } }> {
     const ruleMap = new Map<string, { id: string; name: string; shortDescription: { text: string } }>();
     for (const f of findings) {
       if (!ruleMap.has(f.ruleId)) {

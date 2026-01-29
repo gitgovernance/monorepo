@@ -26,8 +26,8 @@ jest.doMock('@gitgov/core', () => ({
     WaiverReader: jest.fn(),
     WaiverWriter: jest.fn(),
   },
-  PiiDetector: {
-    PiiDetectorModule: jest.fn(),
+  FindingDetector: {
+    FindingDetectorModule: jest.fn(),
   }
 }));
 
