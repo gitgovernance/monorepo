@@ -140,7 +140,7 @@ describe('AgentAdapter', () => {
     });
   });
 
-  describe('4.1. createAgentRecord (EARS-A1 to EARS-A5)', () => {
+  describe('4.1. createAgentRecord (EARS-A1 to EARS-A6)', () => {
     it('[EARS-A1] should create AgentRecord with valid payload', async () => {
       const payload = {
         id: 'agent:test-agent',
@@ -206,6 +206,24 @@ describe('AgentAdapter', () => {
         correspondingActorId: 'agent:test-agent',
       });
     });
+
+    it('[EARS-A6] should throw error when private key is not available', async () => {
+      // Mock KeyProvider to return null (no private key)
+      mockKeyProvider.getPrivateKey.mockResolvedValue(null);
+
+      await expect(
+        agentAdapter.createAgentRecord({
+          id: 'agent:test-agent',
+          engine: { type: 'local' as const, entrypoint: 'index.ts' },
+        })
+      ).rejects.toThrow('Private key not found for actor agent:test-agent');
+
+      // Verify private key was attempted to be loaded
+      expect(mockKeyProvider.getPrivateKey).toHaveBeenCalledWith('agent:test-agent');
+
+      // Should NOT store (operation should fail before that)
+      expect(mockAgentStore.put).not.toHaveBeenCalled();
+    });
   });
 
   describe('4.2. getAgentRecord (EARS-B1 to EARS-B2)', () => {
@@ -228,7 +246,7 @@ describe('AgentAdapter', () => {
     });
   });
 
-  describe('4.3. listAgentRecords (EARS-C1)', () => {
+  describe('4.3. listAgentRecords (EARS-C1 to EARS-C2)', () => {
     it('[EARS-C1] should return all AgentRecords', async () => {
       const mockRecord1 = createMockAgentRecord({ id: 'agent:agent1' });
       const mockRecord2 = createMockAgentRecord({ id: 'agent:agent2' });
@@ -243,6 +261,15 @@ describe('AgentAdapter', () => {
       expect(result).toHaveLength(2);
       expect(result[0]?.id).toBe('agent:agent1');
       expect(result[1]?.id).toBe('agent:agent2');
+    });
+
+    it('[EARS-C2] should return empty array when no agents exist', async () => {
+      mockAgentStore.list.mockResolvedValue([]);
+
+      const result = await agentAdapter.listAgentRecords();
+
+      expect(mockAgentStore.list).toHaveBeenCalled();
+      expect(result).toEqual([]);
     });
   });
 
