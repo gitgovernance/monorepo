@@ -23,16 +23,19 @@
  * - Bloque I: Schema Version Detection (EARS-I1)
  */
 
-import { LintModule, FsLintModule } from './index';
+import { LintModule } from './index';
+import { FsLintModule } from './fs';
 import type {
   LintModuleDependencies,
-  FsLintModuleDependencies,
   LintOptions,
   LintReport,
   LintResult,
-  FileSystem,
-  IFsLintModule
 } from './lint.types';
+import type {
+  FsLintModuleDependencies,
+  FileSystem,
+  IFsLintModule,
+} from './fs/fs_lint.types';
 import type { IIndexerAdapter } from '../adapters/indexer_adapter';
 import type {
   TaskRecord,
@@ -65,7 +68,6 @@ import {
 import { generateChangelogId } from '../utils/id_generator';
 import type { Signature } from '../types/embedded.types';
 import { readdir } from 'fs/promises';
-import { ConfigManager } from '../config_manager';
 
 // Mock signPayload to avoid real Ed25519 crypto operations in tests
 jest.mock('../crypto/signatures', () => ({
@@ -83,13 +85,6 @@ jest.mock('../crypto/signatures', () => ({
 jest.mock('fs/promises', () => ({
   ...jest.requireActual('fs/promises'),
   readdir: jest.fn()
-}));
-
-// Mock ConfigManager.findProjectRoot to return testRoot
-jest.mock('../config_manager', () => ({
-  ConfigManager: {
-    findProjectRoot: jest.fn(() => null) // Will be overridden in tests
-  }
 }));
 
 // ============================================================================
@@ -295,7 +290,7 @@ function createMockStore(): MockStore {
  * - LintModule (pure): Uses stores (optional) for reference lookups
  * - FsLintModule (with I/O): Uses fileSystem for directory scanning, file reading
  */
-function createMockDependencies(): {
+function createMockDependencies(projectRoot: string = '/tmp/test-project'): {
   stores: {
     tasks: MockStore;
     cycles: MockStore;
@@ -344,8 +339,9 @@ function createMockDependencies(): {
   // Create the pure LintModule instance
   const lintModule = new LintModule(lintModuleDeps);
 
-  // FsLintModule dependencies (requires lintModule)
+  // FsLintModule dependencies (requires lintModule and projectRoot)
   const fsLintModuleDeps: FsLintModuleDependencies = {
+    projectRoot,
     lintModule,
     stores: stores as unknown as import('./lint.types').RecordStores,
     indexerAdapter: indexerAdapter as unknown as IIndexerAdapter,
@@ -415,7 +411,6 @@ describe('LintModule + FsLintModule', () => {
   let mocks: ReturnType<typeof createMockDependencies>;
   let testRoot: string;
   let mockReaddir: jest.MockedFunction<typeof readdir>;
-  let mockFindProjectRoot: jest.MockedFunction<typeof ConfigManager.findProjectRoot>;
 
   beforeAll(() => {
     // Create unique temp directory for this test suite
@@ -423,7 +418,8 @@ describe('LintModule + FsLintModule', () => {
   });
 
   beforeEach(() => {
-    mocks = createMockDependencies();
+    // Pass testRoot to createMockDependencies (projectRoot is now injected)
+    mocks = createMockDependencies(testRoot);
     // Create modules with proper dependencies
     lintModule = new LintModule(mocks.lintModuleDeps);
     fsLintModule = new FsLintModule({
@@ -431,9 +427,6 @@ describe('LintModule + FsLintModule', () => {
       lintModule  // Use fresh lintModule instance
     });
     mockReaddir = readdir as jest.MockedFunction<typeof readdir>;
-    mockFindProjectRoot = ConfigManager.findProjectRoot as jest.MockedFunction<typeof ConfigManager.findProjectRoot>;
-    // Default: return testRoot as project root
-    mockFindProjectRoot.mockReturnValue(testRoot);
     // Default: return empty directories (will be overridden in specific tests)
     // IMPORTANT: Reset to empty to avoid discovering real files from the project
     mockReaddir.mockReset();
@@ -450,7 +443,7 @@ describe('LintModule + FsLintModule', () => {
 
   describe('Bloque A: Initialization & Dependencies', () => {
     // [EARS-A1] LintModule now has all optional dependencies
-    it('[EARS-A1] LintModule should construct without any dependencies (pure module)', () => {
+    it('[EARS-A1] should work without stores (optional dependency)', () => {
       const pureLintModule = new LintModule({});
       expect(pureLintModule).toBeDefined();
       expect(pureLintModule.lint).toBeDefined();
@@ -458,15 +451,16 @@ describe('LintModule + FsLintModule', () => {
       expect(pureLintModule.fixRecord).toBeDefined();
     });
 
-    // [EARS-A2] FsLintModule requires lintModule
-    it('[EARS-A2] FsLintModule should throw error without lintModule', () => {
+    // FsLintModule requires lintModule (not an EARS - FsLintModule specific behavior)
+    it('FsLintModule should throw error without lintModule', () => {
       expect(() => new FsLintModule({} as FsLintModuleDependencies)).toThrow();
     });
 
-    // [EARS-A3] FsLintModule should work with all dependencies
-    it('[EARS-A3] FsLintModule should construct with all dependencies', () => {
+    // [EARS-A3] LintModule should work with all dependencies
+    it('[EARS-A3] should build full pipeline with all dependencies', () => {
       const pureLintModule = new LintModule(mocks.lintModuleDeps);
       const fsMod = new FsLintModule({
+        projectRoot: testRoot,
         lintModule: pureLintModule,
         fileSystem: mocks.fileSystem as FileSystem
       });
@@ -477,8 +471,8 @@ describe('LintModule + FsLintModule', () => {
       expect(fsMod.fix).toBeDefined();
     });
 
-    // [EARS-A2b] LintModule should work without indexerAdapter (degraded mode)
-    it('[EARS-A2b] LintModule should work without indexerAdapter with degradation', () => {
+    // [EARS-A2] LintModule should work without indexerAdapter (degraded mode)
+    it('[EARS-A2] should work without indexerAdapter with degradation', () => {
       const deps: LintModuleDependencies = {
         stores: mocks.stores as unknown as import('./lint.types').RecordStores
       };
@@ -499,7 +493,7 @@ describe('LintModule + FsLintModule', () => {
     // This describe block contains LintModule core operations tests
 
     // [EARS-B1]
-    it('[EARS-B1] should capture DetailedValidationError from store.read()', async () => {
+    it('[EARS-B1] should capture validation errors from loaders', async () => {
       const validationError = new DetailedValidationError('TaskRecord', [
         { field: 'title', message: 'Required field missing', value: undefined }
       ]);
@@ -536,7 +530,7 @@ describe('LintModule + FsLintModule', () => {
     });
 
     // [EARS-B2]
-    it('[EARS-B2] should add conventions and references validations', async () => {
+    it('[EARS-B2] should add timestamps and references validations', async () => {
       const mockRecord = createMockTaskRecord();
       const recordId = mockRecord.payload.id;
 
@@ -1209,7 +1203,7 @@ describe('LintModule + FsLintModule', () => {
     });
 
     // [EARS-F10]
-    it('[EARS-F10] should add notes without regenerating valid signature when only notes is missing', async () => {
+    it('[EARS-F10] should add notes without regenerating valid signature', async () => {
       const mockRecord = createMockTaskRecord({ title: 'Task With Valid Signature But No Notes' });
       const recordId = mockRecord.payload.id;
       const originalSignature = mockRecord.header.signatures[0].signature;
@@ -1999,8 +1993,6 @@ describe('LintModule + FsLintModule', () => {
       mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify(mockActor));
       mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify(mockActor));
 
-      // Disable convention validation as it uses ConfigManager.findProjectRoot() 
-      // which returns the real project root, not testRoot
       const report = await fsLintModule.lint({
         path: `${testRoot}/.gitgov/`,
         validateFileNaming: false
@@ -2018,8 +2010,6 @@ describe('LintModule + FsLintModule', () => {
       mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify(mockAgent));
       mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify(mockAgent));
 
-      // Disable convention validation as it uses ConfigManager.findProjectRoot() 
-      // which returns the real project root, not testRoot
       const report = await fsLintModule.lint({
         path: `${testRoot}/.gitgov/`,
         validateFileNaming: false
@@ -2033,10 +2023,6 @@ describe('LintModule + FsLintModule', () => {
       const mockTask = createMockTaskRecord();
       const mockCycle = createMockCycleRecord();
       const mockExecution = createMockExecutionRecord();
-
-      // IMPORTANT: Make findProjectRoot return null so that the path parameter is used
-      // This ensures we only discover files from the test path, not the real project
-      mockFindProjectRoot.mockReturnValue(null);
 
       // Reset mockReaddir to ensure we only discover the 3 files we want
       // IMPORTANT: Reset completely to avoid discovering real files from the project
