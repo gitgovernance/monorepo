@@ -279,19 +279,18 @@ export class AgentCommand extends BaseCommand<RunCommandOptions> {
       // Load all agents
       const agents: Array<{ id: string; name: string; engine: string; description: string | undefined }> = [];
       for (const id of agentIds) {
-        const record = await agentStore.read(id);
-        if (record) {
-          const payload = record.payload;
-          const engineType = payload.engine.type;
+        const agent = await agentStore.get(id);
+        if (agent) {
+          const engineType = agent.engine.type;
 
           // Filter by engine if specified
           if (options.engine && engineType !== options.engine) {
             continue;
           }
 
-          const meta = payload.metadata as Record<string, unknown> | undefined;
+          const meta = agent.metadata as Record<string, unknown> | undefined;
           agents.push({
-            id: payload.id,
+            id: agent.id,
             name: id.replace('agent-', ''),
             engine: engineType,
             description: meta?.['description'] as string | undefined,
@@ -340,9 +339,9 @@ export class AgentCommand extends BaseCommand<RunCommandOptions> {
 
       // Try to load the agent
       const agentId = name.startsWith('agent-') ? name : `agent-${name}`;
-      const record = await agentStore.read(agentId);
+      const agent = await agentStore.get(agentId);
 
-      if (!record) {
+      if (!agent) {
         if (options.json) {
           console.log(JSON.stringify({ success: false, error: `Agent not found: ${name}` }, null, 2));
         } else {
@@ -351,49 +350,38 @@ export class AgentCommand extends BaseCommand<RunCommandOptions> {
         process.exit(1);
       }
 
-      const payload = record.payload;
-      // Cast to any to access dynamic properties safely
-      const agentPayload = payload as any;
-      const engine = agentPayload.engine;
-      const metadata = agentPayload.metadata;
+      const engine = agent.engine;
+      const metadata = agent.metadata as Record<string, unknown> | undefined;
 
       // Output
       if (options.json) {
-        console.log(JSON.stringify(options.verbose ? record : payload, null, 2));
+        console.log(JSON.stringify(agent, null, 2));
       } else {
         console.log('\n' + '─'.repeat(60));
         console.log(`AGENT: ${name}`);
         console.log('─'.repeat(60));
-        console.log(`  ID:          ${payload.id}`);
-        console.log(`  Status:      ${payload.status || 'active'}`);
+        console.log(`  ID:          ${agent.id}`);
+        console.log(`  Status:      ${agent.status || 'active'}`);
 
-        if (metadata?.description) {
-          console.log(`  Description: ${metadata.description}`);
+        if (metadata && 'description' in metadata) {
+          console.log(`  Description: ${metadata['description']}`);
         }
 
         console.log('\n  Engine:');
-        console.log(`    Type: ${engine?.type || 'unknown'}`);
-        if (engine?.entrypoint) {
+        console.log(`    Type: ${engine.type}`);
+        if ('entrypoint' in engine && engine.entrypoint) {
           console.log(`    Entrypoint: ${engine.entrypoint}`);
         }
-        if (engine?.function) {
+        if ('function' in engine && engine.function) {
           console.log(`    Function: ${engine.function}`);
         }
-        if (engine?.url) {
+        if ('url' in engine && engine.url) {
           console.log(`    URL: ${engine.url}`);
         }
-        if (engine?.tool) {
-          console.log(`    Tool: ${engine.tool}`);
-        }
 
-        if (agentPayload.capabilities && agentPayload.capabilities.length > 0) {
-          console.log('\n  Capabilities:');
-          agentPayload.capabilities.forEach((cap: string) => console.log(`    - ${cap}`));
-        }
-
-        if (agentPayload.triggers && agentPayload.triggers.length > 0) {
+        if (agent.triggers && agent.triggers.length > 0) {
           console.log('\n  Triggers:');
-          agentPayload.triggers.forEach((t: any) => console.log(`    - ${t.type}${t.event ? `: ${t.event}` : ''}`));
+          agent.triggers.forEach((t) => console.log(`    - ${t.type}${t['event'] ? `: ${t['event']}` : ''}`));
         }
 
         console.log('─'.repeat(60) + '\n');
