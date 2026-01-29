@@ -3,7 +3,6 @@
  */
 export {
   FsConfigStore,
+  // Factory with explicit projectRoot (for DI containers)
   createConfigManager,
-  createSessionManager,
-  createManagers
 } from './fs_config_store';

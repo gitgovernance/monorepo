@@ -9,7 +9,7 @@ export * as Lint from "./lint";
 export * as Logger from "./logger";
 export * as ProjectInitializer from "./project_initializer";
 export * as Schemas from "./schemas";
-export * as Store from "./store";
+export * as Store from "./record_store";
 export * as Sync from "./sync";
 // Type system exports
 export * as Validation from "./validation";
@@ -41,8 +41,8 @@ export type {
 } from "./adapters/indexer_adapter";
 export type { IMetricsAdapter, SystemStatus, ProductivityMetrics, CollaborationMetrics } from "./adapters/metrics_adapter";
 
-// Lint type exports
-export type { IFsLintModule, RecordStores, LintOptions, FsLintOptions, FsFixOptions, FixReport, LintResult, ValidatorType, LintReport } from "./lint";
+// Lint type exports (pure types only - Fs types are in @gitgov/core/fs)
+export type { RecordStores, LintOptions, FixReport, LintResult, ValidatorType, LintReport, ILintModule } from "./lint";
 
 // EventBus type exports
 export type { ActivityEvent } from "./event_bus";
@@ -52,7 +52,7 @@ export type { EnvironmentValidation } from "./project_initializer";
 export type { ProjectInitResult } from "./adapters/project_adapter";
 
 // Store type exports
-export { RecordStore } from "./store";
+export type { RecordStore } from "./record_store";
 export type {
   GitGovTaskRecord,
   GitGovCycleRecord,

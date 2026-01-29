@@ -6,7 +6,21 @@
  */
 
 // Store
-export { FsStore } from './store/fs';
+export { FsRecordStore } from './record_store/fs';
+
+// ConfigStore + ConfigManager Factories
+export {
+  FsConfigStore,
+  // Factory with explicit projectRoot (for DI containers)
+  createConfigManager,
+} from './config_store/fs';
+
+// SessionStore + SessionManager Factories
+export {
+  FsSessionStore,
+  // Factory with explicit projectRoot (for DI containers)
+  createSessionManager,
+} from './session_store/fs';
 
 // KeyProvider
 export { FsKeyProvider } from './key_provider/fs';
@@ -18,6 +32,26 @@ export type { FsFileListerOptions } from './file_lister/fs';
 
 // FsLintModule
 export { FsLintModule } from './lint/fs';
+export type {
+  IFsLintModule,
+  FsLintModuleDependencies,
+  FsLintOptions,
+  FsFixOptions,
+  FileSystem,
+} from './lint/fs/fs_lint.types';
 
 // ProjectInitializer
 export { FsProjectInitializer } from './project_initializer/fs';
+
+// LocalGitModule (CLI-based, uses execCommand for git operations)
+export { LocalGitModule, LocalGitModule as GitModule } from './git/local';
+export type { IGitModule, GitModuleDependencies } from './git';
+
+// Project Discovery (filesystem-based project root detection)
+export {
+  findProjectRoot,
+  findGitgovRoot,
+  getGitgovPath,
+  isGitgovProject,
+  resetDiscoveryCache,
+} from './utils/project_discovery';

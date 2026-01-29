@@ -5,8 +5,8 @@
  * Usage: npx tsx packages/core/scripts/diagnose-duplicates.ts
  */
 
-import { DiagramGenerator } from '../src/diagram_generator/index.js';
-import { ConfigManager } from '../src/config_manager/index.js';
+import { DiagramGenerator } from '../src/diagram_generator/index';
+import { findProjectRoot } from '../src/utils/project_discovery';
 import * as path from 'path';
 
 async function diagnoseDuplicates() {
@@ -14,7 +14,7 @@ async function diagnoseDuplicates() {
 
   try {
     // Find project root
-    const projectRoot = ConfigManager.findProjectRoot();
+    const projectRoot = findProjectRoot();
     if (!projectRoot) {
       throw new Error("Could not find project root.");
     }
