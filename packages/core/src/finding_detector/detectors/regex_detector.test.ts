@@ -1,3 +1,5 @@
+// Blueprint: packages/blueprints/03_products/core/specs/modules/finding_detector/finding_detector_module.md
+// Sections: §4.1 (EARS-1 to EARS-9), §4.5 (EARS-23)
 import { RegexDetector } from "./regex_detector";
 
 describe("RegexDetector", () => {

@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import type {
   CodeSnippet,
   FindingCategory,
-  GdprFinding,
+  Finding,
   LlmDetector,
   LlmRawFinding,
 } from "../types";
@@ -72,9 +72,9 @@ export class HttpLlmDetector implements LlmDetector {
   /**
    * Analyzes code snippets with LLM for semantic PII detection.
    * Implements EARS-18: Send candidates to LLM when quota available
-   * Implements EARS-19: Normalize LLM response to GdprFinding format
+   * Implements EARS-19: Normalize LLM response to Finding format
    */
-  async analyzeSnippets(snippets: CodeSnippet[]): Promise<GdprFinding[]> {
+  async analyzeSnippets(snippets: CodeSnippet[]): Promise<Finding[]> {
     if (snippets.length === 0) {
       return [];
     }
@@ -97,15 +97,15 @@ export class HttpLlmDetector implements LlmDetector {
   }
 
   /**
-   * Normalizes raw LLM findings to GdprFinding format.
+   * Normalizes raw LLM findings to Finding format.
    */
-  private normalizeFindings(rawFindings: LlmRawFinding[]): GdprFinding[] {
+  private normalizeFindings(rawFindings: LlmRawFinding[]): Finding[] {
     return rawFindings.map((raw) => {
       const category: FindingCategory = isValidCategory(raw.category)
         ? raw.category
         : "unknown-risk";
 
-      const finding: GdprFinding = {
+      const finding: Finding = {
         id: randomUUID(),
         ruleId: raw.ruleId ?? "LLM-001",
         category,

@@ -1,17 +1,17 @@
 import type {
   CodeSnippet,
   Detector,
-  GdprFinding,
+  Finding,
   LlmDetector,
   LlmDetectorConfig,
-  PiiDetectorConfig,
+  FindingDetectorConfig,
 } from "./types";
 import { RegexDetector } from "./detectors/regex_detector";
 import { HeuristicDetector } from "./detectors/heuristic_detector";
 import { HttpLlmDetector } from "./detectors/http_llm_detector";
 
 /**
- * PII Detector Module - Central component for sensitive data detection.
+ * Finding Detector Module - Central component for sensitive data detection.
  *
  * Architecture: Two-phase detection
  * - Phase 1: Local detection (regex + heuristic) - always runs
@@ -22,7 +22,7 @@ import { HttpLlmDetector } from "./detectors/http_llm_detector";
  * Implements EARS-17: Work with local-only detection when no LLM
  * Implements EARS-23: Truncate snippets to 300 chars
  */
-export class PiiDetectorModule {
+export class FindingDetectorModule {
   private localDetectors: Detector[] = [];
   private llmDetector?: LlmDetector;
   private llmConfig?: LlmDetectorConfig;
@@ -31,7 +31,7 @@ export class PiiDetectorModule {
    * Constructs the module with graceful degradation.
    * Without config -> only RegexDetector (Free tier).
    */
-  constructor(config?: PiiDetectorConfig) {
+  constructor(config?: FindingDetectorConfig) {
     // RegexDetector always available (Free tier)
     if (config?.regex?.enabled === false) {
       // Explicitly disabled
@@ -64,12 +64,12 @@ export class PiiDetectorModule {
    * 3. If LLM enabled and quota OK, analyze candidates (Phase 2)
    * 4. Merge and deduplicate by fingerprint
    */
-  async detect(content: string, filePath: string): Promise<GdprFinding[]> {
+  async detect(content: string, filePath: string): Promise<Finding[]> {
     // Phase 1: Local detection
     const localFindings = await this.runLocalDetectors(content, filePath);
 
     // Phase 2: LLM analysis (if available)
-    let llmFindings: GdprFinding[] = [];
+    let llmFindings: Finding[] = [];
     if (this.llmDetector && this.checkQuota()) {
       const candidates = this.extractCandidates(localFindings, content, filePath);
       if (candidates.length > 0) {
@@ -92,7 +92,7 @@ export class PiiDetectorModule {
   private async runLocalDetectors(
     content: string,
     filePath: string
-  ): Promise<GdprFinding[]> {
+  ): Promise<Finding[]> {
     const results = await Promise.all(
       this.localDetectors.map((d) => d.detect(content, filePath))
     );
@@ -105,7 +105,7 @@ export class PiiDetectorModule {
    * Implements EARS-15: Extract candidates with confidence < 0.8
    */
   private extractCandidates(
-    findings: GdprFinding[],
+    findings: Finding[],
     content: string,
     filePath: string
   ): CodeSnippet[] {
@@ -160,7 +160,7 @@ export class PiiDetectorModule {
   /**
    * Deduplicates findings by SHA256 fingerprint.
    */
-  private deduplicateByFingerprint(findings: GdprFinding[]): GdprFinding[] {
+  private deduplicateByFingerprint(findings: Finding[]): Finding[] {
     const seen = new Set<string>();
     return findings.filter((f) => {
       if (seen.has(f.fingerprint)) return false;

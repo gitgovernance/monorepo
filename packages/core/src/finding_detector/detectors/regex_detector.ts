@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import type { Detector, GdprFinding, RegexRule } from "../types";
+import type { Detector, Finding, RegexRule } from "../types";
 import { REGEX_RULES } from "../rules/regex_rules";
 
 const MAX_SNIPPET_LENGTH = 300;
@@ -60,8 +60,8 @@ export class RegexDetector implements Detector {
     }
   }
 
-  async detect(content: string, filePath: string): Promise<GdprFinding[]> {
-    const findings: GdprFinding[] = [];
+  async detect(content: string, filePath: string): Promise<Finding[]> {
+    const findings: Finding[] = [];
 
     for (const rule of this.rules) {
       // Reset regex lastIndex for global patterns
@@ -72,7 +72,7 @@ export class RegexDetector implements Detector {
         const line = getLineNumber(content, match.index);
         const snippet = extractSnippet(content, match.index);
 
-        const finding: GdprFinding = {
+        const finding: Finding = {
           id: randomUUID(),
           ruleId: rule.id,
           category: rule.category,

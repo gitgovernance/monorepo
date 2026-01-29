@@ -6,17 +6,17 @@ export type {
   DetectorName,
   FindingCategory,
   FindingSeverity,
-  GdprFinding,
+  Finding,
   LlmDetector,
   LlmDetectorConfig,
   LlmRawFinding,
-  PiiDetectorConfig,
+  FindingDetectorConfig,
   QuotaType,
   RegexRule,
 } from "./types";
 
 // Module
-export { PiiDetectorModule } from "./pii_detector";
+export { FindingDetectorModule } from "./finding_detector";
 
 // Detectors
 export { RegexDetector } from "./detectors/regex_detector";
