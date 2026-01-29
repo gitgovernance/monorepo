@@ -1,15 +1,18 @@
 /**
- * GDPR Audit Agent
+ * Source Scanner Agent
  *
- * Executes GDPR/PII audit on source code using SourceAuditorModule.
- * Detects sensitive data (emails, API keys, credit cards) in code.
+ * Scans source code for sensitive data (PII, secrets, API keys).
+ * Uses SourceAuditorModule for detection.
  */
 
 import {
   SourceAuditor,
   PiiDetector,
-  Config,
 } from '@gitgov/core';
+import {
+  findProjectRoot,
+  FsFileLister,
+} from '@gitgov/core/fs';
 
 type AgentExecutionContext = {
   agentId: string;
@@ -26,8 +29,8 @@ type AgentOutput = {
   metadata?: Record<string, unknown>;
 };
 
-interface AuditInput {
-  /** Base directory to audit (default: process.cwd()) */
+interface ScanInput {
+  /** Base directory to scan (default: project root or cwd) */
   baseDir?: string;
   /** Include patterns (glob patterns) */
   include?: string[];
@@ -41,12 +44,12 @@ interface AuditInput {
  * Main agent function.
  * Called by the AgentRunnerModule when the agent is executed.
  */
-export async function runAudit(ctx: AgentExecutionContext): Promise<AgentOutput> {
+export async function runAgent(ctx: AgentExecutionContext): Promise<AgentOutput> {
   const startTime = Date.now();
-  const input = (ctx.input as AuditInput) || {};
+  const input = (ctx.input as ScanInput) || {};
 
-  // Use ConfigManager to find project root (like git works from any subfolder)
-  const projectRoot = Config.ConfigManager.findProjectRoot() || process.cwd();
+  // Find project root (like git works from any subfolder)
+  const projectRoot = findProjectRoot() || process.cwd();
   const baseDir = input.baseDir || projectRoot;
   const include = input.include || ['**/*'];
   const exclude = input.exclude || [
@@ -65,19 +68,23 @@ export async function runAudit(ctx: AgentExecutionContext): Promise<AgentOutput>
       regex: { enabled: true },
     });
 
+    // Create file lister for the base directory
+    const fileLister = new FsFileLister({ cwd: baseDir });
+
     // Create a no-op waiver reader (waivers handled externally)
     const waiverReader: SourceAuditor.IWaiverReader = {
       loadActiveWaivers: async () => [],
       hasActiveWaiver: async () => false,
     };
 
-    // Create source auditor
+    // Create source auditor with all dependencies
     const sourceAuditor = new SourceAuditor.SourceAuditorModule({
       piiDetector,
       waiverReader,
+      fileLister,
     });
 
-    // Execute audit
+    // Execute scan
     const result = await sourceAuditor.audit({
       baseDir,
       scope: {
@@ -131,7 +138,7 @@ export async function runAudit(ctx: AgentExecutionContext): Promise<AgentOutput>
     };
   } catch (error) {
     return {
-      message: `GDPR audit failed: ${(error as Error).message}`,
+      message: `Source scan failed: ${(error as Error).message}`,
       metadata: {
         executedAt: new Date().toISOString(),
         duration: Date.now() - startTime,
