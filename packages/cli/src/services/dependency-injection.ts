@@ -1,6 +1,6 @@
 import * as path from 'path';
-import { Adapters, Config, Store, EventBus, Lint, Git, Sync, SourceAuditor, PiiDetector, Runner, KeyProvider, Factories } from '@gitgov/core';
-import { FsFileLister } from '@gitgov/core/fs';
+import { Adapters, Config, Session, Store, EventBus, Lint, Git, Sync, SourceAuditor, PiiDetector, Runner, KeyProvider, Factories } from '@gitgov/core';
+import { FsFileLister, findProjectRoot, findGitgovRoot, createSessionManager } from '@gitgov/core/fs';
 import type {
   TaskRecord, CycleRecord, FeedbackRecord, ExecutionRecord, ChangelogRecord, ActorRecord, AgentRecord,
   GitGovRecordPayload, CustomRecord, GitGovRecord,
@@ -27,7 +27,9 @@ export class DependencyInjectionService {
   private sourceAuditorModule: SourceAuditor.SourceAuditorModule | null = null;
   private agentRunnerModule: Runner.AgentRunnerModule | null = null;
   private configManager: Config.ConfigManager | null = null;
+  private sessionManager: Session.SessionManager | null = null;
   private gitModule: Git.GitModule | null = null;
+  private keyProvider: KeyProvider.KeyProvider | null = null;
   private projectRoot: string | null = null;
   private stores: {
     taskStore: RecordStore<TaskRecord>;
@@ -199,7 +201,7 @@ export class DependencyInjectionService {
       const eventBus = new EventBus.EventBus();
 
       // Create KeyProvider for filesystem-based key storage
-      const keyProvider = new KeyProvider.FsKeyProvider({
+      this.keyProvider = new KeyProvider.FsKeyProvider({
         actorsDir: path.join(this.projectRoot!, '.gitgov', 'actors')
       });
 
@@ -207,7 +209,7 @@ export class DependencyInjectionService {
       const identityAdapter = new Adapters.IdentityAdapter({
         actorStore: this.stores.actorStore,
         agentStore: this.stores.agentStore,
-        keyProvider,
+        keyProvider: this.keyProvider,
         eventBus
       });
 
@@ -698,7 +700,10 @@ export class DependencyInjectionService {
     }
 
     try {
-      const projectRoot = process.env['GITGOV_ORIGINAL_DIR'] || Config.ConfigManager.findProjectRoot() || process.cwd();
+      const projectRoot = findProjectRoot();
+      if (!projectRoot) {
+        throw new Error("Could not find project root");
+      }
 
       // Create execCommand function for GitModule
       const execCommand = (command: string, args: string[], options?: Git.ExecOptions) => {
@@ -750,7 +755,11 @@ export class DependencyInjectionService {
     try {
       // If projectRoot is not set yet, try to find it (this can happen when getConfigManager is called before initializeStores)
       if (!this.projectRoot) {
-        this.projectRoot = process.env['GITGOV_ORIGINAL_DIR'] || Config.ConfigManager.findGitgovRoot() || process.cwd();
+        const root = findGitgovRoot();
+        if (!root) {
+          throw new Error("Could not find project root");
+        }
+        this.projectRoot = root;
       }
 
       // Create ConfigManager instance using factory function
@@ -770,6 +779,48 @@ export class DependencyInjectionService {
   }
 
   /**
+   * Creates and returns SessionManager instance
+   */
+  async getSessionManager(): Promise<Session.SessionManager> {
+    if (this.sessionManager) {
+      return this.sessionManager;
+    }
+
+    try {
+      if (!this.projectRoot) {
+        const root = findGitgovRoot();
+        if (!root) {
+          throw new Error("Could not find project root");
+        }
+        this.projectRoot = root;
+      }
+
+      this.sessionManager = createSessionManager(this.projectRoot);
+
+      return this.sessionManager;
+
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message.includes('Could not find project root')) {
+          throw new Error("❌ GitGovernance not initialized. Run 'gitgov init' first.");
+        }
+        throw new Error(`❌ Failed to initialize session manager: ${error.message}`);
+      }
+      throw new Error("❌ Unknown error initializing session manager.");
+    }
+  }
+
+  /**
+   * Get the KeyProvider instance (created during store initialization)
+   */
+  getKeyProvider(): KeyProvider.KeyProvider {
+    if (!this.keyProvider) {
+      throw new Error("KeyProvider not initialized. Call initializeStores first.");
+    }
+    return this.keyProvider;
+  }
+
+  /**
    * Resets the singleton instance (useful for testing)
    */
   static reset(): void {
@@ -783,7 +834,11 @@ export class DependencyInjectionService {
     try {
       // If projectRoot is not set yet, try to find it
       if (!this.projectRoot) {
-        this.projectRoot = process.env['GITGOV_ORIGINAL_DIR'] || Config.ConfigManager.findGitgovRoot() || process.cwd();
+        const root = findGitgovRoot();
+        if (!root) {
+          return false;
+        }
+        this.projectRoot = root;
       }
 
       // Check if .gitgov directory exists

@@ -45,6 +45,9 @@ export type { IMetricsAdapter, SystemStatus, ProductivityMetrics, CollaborationM
 // Lint type exports (pure types only - Fs types are in @gitgov/core/fs)
 export type { RecordStores, LintOptions, FixReport, LintResult, ValidatorType, LintReport, ILintModule } from "./lint";
 
+// Session type exports
+export type { SyncStatus, ActorState, ISessionManager } from "./session_manager";
+
 // EventBus type exports
 export type { ActivityEvent } from "./event_bus";
 
