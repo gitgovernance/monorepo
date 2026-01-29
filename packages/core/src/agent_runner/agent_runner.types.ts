@@ -101,7 +101,7 @@ export type Engine = LocalEngine | ApiEngine | McpEngine | CustomEngine;
  * Includes all information needed for traceability.
  */
 export type AgentExecutionContext = {
-  /** Agent ID being executed (e.g., "agent:gdpr-audit") */
+  /** Agent ID being executed (e.g., "agent:source-audit") */
   agentId: string;
   /** ActorRecord executing (type "agent") */
   actorId: string;
@@ -117,7 +117,7 @@ export type AgentExecutionContext = {
  * Options for executing an agent.
  */
 export type RunOptions = {
-  /** Agent ID to execute (e.g., "agent:gdpr-audit") */
+  /** Agent ID to execute (e.g., "agent:source-audit") */
   agentId: string;
   /** TaskRecord that triggers this execution (required) */
   taskId: string;

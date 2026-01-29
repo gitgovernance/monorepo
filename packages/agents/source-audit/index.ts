@@ -1,5 +1,7 @@
 /**
- * Source Scanner Agent
+ * Source Audit Agent
+ *
+ * Blueprint: packages/blueprints/03_products/agents/source-audit/source_audit_agent.md
  *
  * Scans source code for sensitive data (PII, secrets, API keys).
  * Uses SourceAuditorModule for detection.
@@ -7,7 +9,7 @@
 
 import {
   SourceAuditor,
-  PiiDetector,
+  FindingDetector,
 } from '@gitgov/core';
 import {
   findProjectRoot,
@@ -63,8 +65,8 @@ export async function runAgent(ctx: AgentExecutionContext): Promise<AgentOutput>
   ];
 
   try {
-    // Create PII detector with default config (regex enabled by default)
-    const piiDetector = new PiiDetector.PiiDetectorModule({
+    // Create finding detector with default config (regex enabled by default)
+    const findingDetector = new FindingDetector.FindingDetectorModule({
       regex: { enabled: true },
     });
 
@@ -79,7 +81,7 @@ export async function runAgent(ctx: AgentExecutionContext): Promise<AgentOutput>
 
     // Create source auditor with all dependencies
     const sourceAuditor = new SourceAuditor.SourceAuditorModule({
-      piiDetector,
+      findingDetector,
       waiverReader,
       fileLister,
     });
