@@ -69,7 +69,7 @@ import { MemoryRecordStore } from '../record_store/memory';
 import { EventBus } from '../event_bus/event_bus';
 import type {
   GitGovTaskRecord, GitGovFeedbackRecord, GitGovCycleRecord,
-  GitGovExecutionRecord, GitGovChangelogRecord, GitGovActorRecord, GitGovAgentRecord
+  GitGovExecutionRecord, GitGovChangelogRecord, GitGovActorRecord
 } from '../types';
 import type { IEventStream } from '../event_bus';
 import { createTestSignature } from '../factories';
@@ -88,7 +88,6 @@ describe('FeedbackAdapter <-> BacklogAdapter Integration (Real Event Communicati
   let executionStore: MemoryRecordStore<GitGovExecutionRecord>;
   let changelogStore: MemoryRecordStore<GitGovChangelogRecord>;
   let actorStore: MemoryRecordStore<GitGovActorRecord>;
-  let agentStore: MemoryRecordStore<GitGovAgentRecord>;
 
   beforeEach(async () => {
     // Create REAL EventBus (no mock)
@@ -101,7 +100,6 @@ describe('FeedbackAdapter <-> BacklogAdapter Integration (Real Event Communicati
     executionStore = new MemoryRecordStore<GitGovExecutionRecord>();
     changelogStore = new MemoryRecordStore<GitGovChangelogRecord>();
     actorStore = new MemoryRecordStore<GitGovActorRecord>();
-    agentStore = new MemoryRecordStore<GitGovAgentRecord>();
 
     // Create mock KeyProvider for integration test
     const mockKeyProvider = {
@@ -127,7 +125,6 @@ describe('FeedbackAdapter <-> BacklogAdapter Integration (Real Event Communicati
     identityAdapter = new IdentityAdapter({
       stores: {
         actors: actorStore,
-        agents: agentStore,
       },
       keyProvider: mockKeyProvider,
       sessionManager: mockSessionManager,
