@@ -1,10 +1,51 @@
-// Main module
-export { AgentRunnerModule } from "./agent_runner_module";
+/**
+ * AgentRunner - Agent execution abstraction
+ *
+ * This module provides backend-agnostic agent execution.
+ *
+ * IMPORTANT: This module only exports the interface and types.
+ * For implementations, use:
+ * - @gitgov/core/fs for FsAgentRunner
+ *
+ * @example
+ * ```typescript
+ * // Import interface and types
+ * import type { IAgentRunner, RunOptions, AgentResponse } from '@gitgov/core';
+ *
+ * // Import filesystem implementation from fs entry point
+ * import { FsAgentRunner } from '@gitgov/core/fs';
+ * ```
+ */
 
-// Backends
-export { LocalBackend } from "./backends/local_backend";
+// Interface and types only - NO implementation re-exports
+export type {
+  // Core interface
+  IAgentRunner,
+  IAgentLoader,
+  // Execution types
+  RunOptions,
+  AgentResponse,
+  AgentOutput,
+  AgentExecutionContext,
+  AgentRunnerDependencies,
+  AgentRunnerEvent,
+  // Registry types
+  ProtocolHandlerRegistry,
+  ProtocolHandler,
+  RuntimeHandlerRegistry,
+  RuntimeHandler,
+  // Engine types (from protocol)
+  Engine,
+  EngineType,
+  LocalEngine,
+  ApiEngine,
+  McpEngine,
+  CustomEngine,
+  AuthType,
+  AuthConfig,
+} from "./agent_runner.types";
 
-// Errors
+// Errors are part of the public contract
 export {
   RunnerError,
   AgentNotFoundError,
@@ -15,30 +56,3 @@ export {
   MissingDependencyError,
   RuntimeNotFoundError,
 } from "./errors";
-
-// Types
-export type {
-  AgentExecutionContext,
-  AgentOutput,
-  AgentResponse,
-  AgentRunnerDependencies,
-  AgentRunnerEvent,
-  RunOptions,
-  ProtocolHandlerRegistry,
-  ProtocolHandler,
-  RuntimeHandlerRegistry,
-  RuntimeHandler,
-  IAgentLoader,
-} from "./types";
-
-// Engine types
-export type {
-  Engine,
-  EngineType,
-  LocalEngine,
-  ApiEngine,
-  McpEngine,
-  CustomEngine,
-  AuthType,
-  AuthConfig,
-} from "./engines";

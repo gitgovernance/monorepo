@@ -2,7 +2,99 @@ import type { AgentRecord } from "../types";
 import type { IEventStream } from "../event_bus";
 import type { IExecutionAdapter } from "../adapters/execution_adapter";
 import type { IIdentityAdapter } from "../adapters/identity_adapter";
-import type { CustomEngine } from "./engines";
+
+// ============================================================================
+// Engine Types (from agent_protocol.md)
+// ============================================================================
+
+/**
+ * Supported engine types by the runner (per agent_protocol.md).
+ */
+export type EngineType = "local" | "api" | "mcp" | "custom";
+
+/**
+ * Local engine configuration.
+ * Agent executes in the same process.
+ */
+export type LocalEngine = {
+  type: "local";
+  /** Registered runtime (e.g., "claude:computer-use", "langchain:agent") */
+  runtime?: string;
+  /** Relative path to entrypoint (from project root) */
+  entrypoint?: string;
+  /** Exported function name (default: "runAgent") */
+  function?: string;
+};
+
+/**
+ * Authentication types for remote backends (API/MCP).
+ */
+export type AuthType =
+  | "none"
+  | "bearer"
+  | "oauth"
+  | "api-key"
+  | "actor-signature";
+
+/**
+ * Authentication configuration for remote backends.
+ */
+export type AuthConfig = {
+  type: AuthType;
+  /** Environment variable name with token/key */
+  secret_key?: string;
+  /** Direct token (not recommended, prefer secret_key) */
+  token?: string;
+};
+
+/**
+ * API engine configuration.
+ * Agent executes on a remote server via HTTP.
+ */
+export type ApiEngine = {
+  type: "api";
+  /** Agent endpoint URL (required) */
+  url: string;
+  /** HTTP method (default: "POST") */
+  method?: "POST" | "GET" | "PUT";
+  /** Authentication configuration */
+  auth?: AuthConfig;
+};
+
+/**
+ * MCP engine configuration.
+ * Agent executes as MCP server (Model Context Protocol).
+ */
+export type McpEngine = {
+  type: "mcp";
+  /** MCP server URL (required) */
+  url: string;
+  /** Tool name to invoke (default: uses agentId) */
+  tool?: string;
+  /** Authentication configuration */
+  auth?: AuthConfig;
+};
+
+/**
+ * Custom engine configuration.
+ * Allows extensibility via registered protocol handlers.
+ */
+export type CustomEngine = {
+  type: "custom";
+  /** Protocol identifier (e.g., "a2a", "grpc") - required for execution */
+  protocol?: string;
+  /** Protocol-specific configuration */
+  config?: Record<string, unknown>;
+};
+
+/**
+ * Union type of all supported engines.
+ */
+export type Engine = LocalEngine | ApiEngine | McpEngine | CustomEngine;
+
+// ============================================================================
+// Agent Runner Types
+// ============================================================================
 
 /**
  * Execution context passed to each agent.
@@ -78,13 +170,13 @@ export type AgentResponse = {
 };
 
 /**
- * AgentRunner module dependencies.
+ * AgentRunner module dependencies (filesystem implementation).
  */
 export type AgentRunnerDependencies = {
-  /** Path to .gitgov directory (optional, uses ConfigManager by default) */
+  /** Path to project root (REQUIRED, injected from CLI/bootstrap) */
+  projectRoot: string;
+  /** Path to .gitgov directory (optional, defaults to projectRoot/.gitgov) */
   gitgovPath?: string;
-  /** Path to project root (optional, uses ConfigManager by default) */
-  projectRoot?: string;
   /** IdentityAdapter for actor-signature auth (required if that auth type is used) */
   identityAdapter?: IIdentityAdapter;
   /** ExecutionAdapter for persisting executions (REQUIRED) */
@@ -125,19 +217,9 @@ export interface RuntimeHandlerRegistry {
  * Handler for engine.runtime in local engines.
  */
 export type RuntimeHandler = (
-  engine: LocalEngineForHandler,
+  engine: LocalEngine,
   ctx: AgentExecutionContext
 ) => Promise<AgentOutput>;
-
-/**
- * LocalEngine shape for handlers (avoids circular import).
- */
-export type LocalEngineForHandler = {
-  type: "local";
-  runtime?: string;
-  entrypoint?: string;
-  function?: string;
-};
 
 /**
  * Events emitted by the runner via EventBus.
@@ -181,4 +263,16 @@ export type AgentRunnerEvent =
  */
 export interface IAgentLoader {
   loadAgent(agentId: string): Promise<AgentRecord>;
+}
+
+/**
+ * Interface for AgentRunner implementations.
+ * Allows different backends (filesystem, memory, serverless).
+ */
+export interface IAgentRunner {
+  /**
+   * Executes an agent once and returns the response.
+   * TaskRecord must exist before calling this method.
+   */
+  runOnce(opts: RunOptions): Promise<AgentResponse>;
 }

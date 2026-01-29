@@ -4,17 +4,21 @@ import {
   FunctionNotExportedError,
   RuntimeNotFoundError,
 } from "../errors";
-import type { LocalEngine } from "../engines";
 import type {
+  LocalEngine,
   AgentExecutionContext,
   AgentOutput,
   RuntimeHandlerRegistry,
-} from "../types";
+} from "../agent_runner.types";
 
 /**
- * Backend for executing local agents.
- * Supports entrypoint (custom code) and runtime (registered handler).
+ * Backend for executing local agents (engine.type: "local").
+ * Supports entrypoint (dynamic import) and runtime (registered handler).
  * RETURNS AgentOutput captured from the agent function.
+ *
+ * Note: This is called "LocalBackend" because it handles engine.type: "local",
+ * not because of filesystem usage. The FsAgentRunner loads AgentRecords from
+ * filesystem, but this backend executes code locally via dynamic import.
  */
 export class LocalBackend {
   constructor(
