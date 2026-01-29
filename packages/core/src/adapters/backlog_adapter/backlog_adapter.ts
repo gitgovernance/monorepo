@@ -4,7 +4,7 @@ import type { RecordStores } from '../../record_store';
 import { IdentityAdapter } from '../identity_adapter';
 import { FeedbackAdapter } from '../feedback_adapter';
 import { MetricsAdapter, type SystemStatus, type TaskHealthReport } from '../metrics_adapter';
-import { ConfigManager } from '../../config_manager';
+import { SessionManager } from '../../session_manager';
 import type {
   TaskRecord,
   CycleRecord,
@@ -51,7 +51,9 @@ export class BacklogAdapter implements IBacklogAdapter {
   private workflowMethodologyAdapter: IWorkflowMethodology;
   private identity: IdentityAdapter;
   private eventBus: IEventStream;
-  private configManager: ConfigManager;
+  // configManager is required in dependencies but not currently used
+  // Reserved for future use (project config access)
+  private sessionManager: SessionManager;
   private config: BacklogAdapterConfig;
 
 
@@ -67,7 +69,8 @@ export class BacklogAdapter implements IBacklogAdapter {
     this.workflowMethodologyAdapter = dependencies.workflowMethodologyAdapter;
     this.identity = dependencies.identity;
     this.eventBus = dependencies.eventBus;
-    this.configManager = dependencies.configManager;
+    // Note: dependencies.configManager is accepted but not stored (reserved for future use)
+    this.sessionManager = dependencies.sessionManager;
 
     // Configuration with defaults
     this.config = dependencies.config || DEFAULT_CONFIG;
@@ -339,7 +342,7 @@ export class BacklogAdapter implements IBacklogAdapter {
     await this.stores.tasks.put(signedRecord.payload.id, signedRecord);
 
     // 6. Update activeTaskId in session state
-    await this.configManager.updateActorState(actorId, {
+    await this.sessionManager.updateActorState(actorId, {
       activeTaskId: taskId
     });
 
@@ -407,7 +410,7 @@ export class BacklogAdapter implements IBacklogAdapter {
     await this.stores.tasks.put(signedRecord.payload.id, signedRecord);
 
     // 6. Clear activeTaskId in session state (task no longer active)
-    await this.configManager.updateActorState(actorId, {
+    await this.sessionManager.updateActorState(actorId, {
       activeTaskId: undefined
     });
 
@@ -476,7 +479,7 @@ export class BacklogAdapter implements IBacklogAdapter {
     await this.stores.tasks.put(signedRecord.payload.id, signedRecord);
 
     // 6. Update activeTaskId in session state
-    await this.configManager.updateActorState(actorId, {
+    await this.sessionManager.updateActorState(actorId, {
       activeTaskId: taskId
     });
 
@@ -536,7 +539,7 @@ export class BacklogAdapter implements IBacklogAdapter {
     await this.stores.tasks.put(signedRecord.payload.id, signedRecord);
 
     // 6. Clear activeTaskId in session state (task completed)
-    await this.configManager.updateActorState(actorId, {
+    await this.sessionManager.updateActorState(actorId, {
       activeTaskId: undefined
     });
 
@@ -608,7 +611,7 @@ export class BacklogAdapter implements IBacklogAdapter {
     await this.stores.tasks.put(signedRecord.payload.id, signedRecord);
 
     // 6. Clear activeTaskId in session state (task discarded)
-    await this.configManager.updateActorState(actorId, {
+    await this.sessionManager.updateActorState(actorId, {
       activeTaskId: undefined
     });
 
@@ -1190,13 +1193,13 @@ export class BacklogAdapter implements IBacklogAdapter {
     if (actorId) {
       // Set activeCycleId when cycle is activated
       if (updatedPayload.status === 'active' && cycleRecord.payload.status !== 'active') {
-        await this.configManager.updateActorState(actorId, {
+        await this.sessionManager.updateActorState(actorId, {
           activeCycleId: cycleId
         });
       }
       // Clear activeCycleId when cycle is completed
       else if (updatedPayload.status === 'completed' && cycleRecord.payload.status !== 'completed') {
-        await this.configManager.updateActorState(actorId, {
+        await this.sessionManager.updateActorState(actorId, {
           activeCycleId: undefined
         });
       }

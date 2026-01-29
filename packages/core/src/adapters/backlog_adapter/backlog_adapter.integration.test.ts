@@ -49,6 +49,7 @@ import type { IFeedbackAdapter } from '../feedback_adapter';
 import { ChangelogAdapter } from '../changelog_adapter';
 import { MetricsAdapter } from '../metrics_adapter';
 import { ConfigManager } from '../../config_manager';
+import type { SessionManager } from '../../session_manager';
 import { eventBus } from '../../event_bus';
 import type {
   FeedbackCreatedEvent,
@@ -199,6 +200,17 @@ describe.each(backends)('BacklogAdapter Integration Tests with %s backend', (_na
       deletePrivateKey: jest.fn().mockResolvedValue(true),
     };
 
+    const mockIdentitySessionManager = {
+      getActorState: jest.fn().mockResolvedValue({ actorId: 'human:test-user' }),
+      updateActorState: jest.fn().mockResolvedValue(undefined),
+      loadSession: jest.fn().mockResolvedValue(null),
+      detectActorFromKeyFiles: jest.fn().mockResolvedValue('human:test-user'),
+      getCloudSessionToken: jest.fn().mockResolvedValue(null),
+      getSyncPreferences: jest.fn().mockResolvedValue(null),
+      updateSyncPreferences: jest.fn().mockResolvedValue(undefined),
+      getLastSession: jest.fn().mockResolvedValue(null),
+    };
+
     // Create identity adapter - will be mocked by jest.doMock
     identityAdapter = new IdentityAdapter({
       stores: {
@@ -206,6 +218,7 @@ describe.each(backends)('BacklogAdapter Integration Tests with %s backend', (_na
         agents: mockAgentStore,
       },
       keyProvider: mockKeyProvider,
+      sessionManager: mockIdentitySessionManager,
     });
 
     // Create mock feedback adapter for methodology adapter
@@ -254,8 +267,14 @@ describe.each(backends)('BacklogAdapter Integration Tests with %s backend', (_na
     } as unknown as MetricsAdapter;
 
     mockConfigManager = {
-      updateActorState: jest.fn().mockResolvedValue(undefined)
+      loadConfig: jest.fn().mockResolvedValue({})
     } as unknown as ConfigManager;
+
+    const mockSessionManager = {
+      updateActorState: jest.fn().mockResolvedValue(undefined),
+      loadSession: jest.fn().mockResolvedValue(null),
+      getActorState: jest.fn().mockResolvedValue(null),
+    } as unknown as SessionManager;
 
     backlogAdapter = new BacklogAdapter({
       stores,
@@ -267,6 +286,7 @@ describe.each(backends)('BacklogAdapter Integration Tests with %s backend', (_na
       changelogAdapter: mockChangelogAdapter,
       metricsAdapter: mockMetricsAdapter,
       configManager: mockConfigManager,
+      sessionManager: mockSessionManager,
     });
   });
 

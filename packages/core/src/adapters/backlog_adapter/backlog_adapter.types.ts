@@ -2,6 +2,7 @@ import type { RecordStores } from '../../record_store';
 import type { IdentityAdapter } from '../identity_adapter';
 import type { FeedbackAdapter } from '../feedback_adapter';
 import type { ConfigManager } from '../../config_manager';
+import type { SessionManager } from '../../session_manager';
 import type {
   TaskRecord,
   CycleRecord,
@@ -40,7 +41,8 @@ export type BacklogAdapterDependencies = {
   // Infrastructure Layer
   identity: IdentityAdapter;
   eventBus: IEventStream; // For listening to events (consumer pattern)
-  configManager: ConfigManager; // For updating session state (activeTaskId, activeCycleId)
+  configManager: ConfigManager; // For accessing project config
+  sessionManager: SessionManager; // For updating session state (activeTaskId, activeCycleId)
 
   // Configuration Layer (Optional)
   config?: BacklogAdapterConfig; // Optional configuration, defaults to DEFAULT_CONFIG

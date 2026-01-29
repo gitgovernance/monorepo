@@ -94,6 +94,9 @@ type MockBacklogAdapterDependencies = {
   configManager: {
     updateActorState: jest.MockedFunction<(actorId: string, state: { activeTaskId?: string; activeCycleId?: string }) => Promise<void>>;
   };
+  sessionManager: {
+    updateActorState: jest.MockedFunction<(actorId: string, state: { activeTaskId?: string; activeCycleId?: string }) => Promise<void>>;
+  };
 };
 
 // Mock the factories before importing
@@ -278,6 +281,9 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       },
       configManager: {
         updateActorState: jest.fn().mockResolvedValue(undefined)
+      },
+      sessionManager: {
+        updateActorState: jest.fn().mockResolvedValue(undefined)
       }
     };
 
@@ -448,7 +454,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       const result = await backlogAdapter.updateCycle(cycleId, { status: 'active' }, actorId);
 
       expect(result.status).toBe('active');
-      expect(mockDependencies.configManager.updateActorState).toHaveBeenCalledWith(
+      expect(mockDependencies.sessionManager.updateActorState).toHaveBeenCalledWith(
         actorId,
         expect.objectContaining({
           activeCycleId: cycleId
@@ -478,7 +484,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       const result = await backlogAdapter.updateCycle(cycleId, { status: 'completed' }, actorId);
 
       expect(result.status).toBe('completed');
-      expect(mockDependencies.configManager.updateActorState).toHaveBeenCalledWith(
+      expect(mockDependencies.sessionManager.updateActorState).toHaveBeenCalledWith(
         actorId,
         expect.objectContaining({
           activeCycleId: undefined
@@ -994,7 +1000,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       const result = await backlogAdapter.activateTask(taskId, actorId);
 
       expect(result.status).toBe('active');
-      expect(mockDependencies.configManager.updateActorState).toHaveBeenCalledWith(
+      expect(mockDependencies.sessionManager.updateActorState).toHaveBeenCalledWith(
         actorId,
         expect.objectContaining({
           activeTaskId: taskId
@@ -1002,7 +1008,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       );
     });
 
-    it('[EARS-I1] should pause task from active to paused with optional reason', async () => {
+    it('[EARS-I1b] should pause task passing task payload to workflow transition context', async () => {
       const taskId = '1757687335-task-active';
       const activeTask = createMockTaskRecord({
         id: taskId,
@@ -1117,6 +1123,50 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         .rejects.toThrow('ProtocolViolationError: Workflow methodology rejected active→paused transition');
     });
 
+    it('[EARS-I4b] should add reason with PAUSED prefix in notes', async () => {
+      // Arrange: Active task with existing notes
+      const taskId = '1757687335-task-with-notes';
+      const actorId = 'human:pm';
+      const existingNotes = 'Task created for Q1 sprint';
+      const pauseReason = 'Blocked by design review';
+
+      const activeTask = createMockTaskRecord({
+        id: taskId,
+        title: 'Task with Notes',
+        status: 'active',
+        notes: existingNotes
+      });
+
+      const actor: ActorRecord = {
+        id: actorId,
+        type: 'human',
+        displayName: 'Project Manager',
+        publicKey: 'mock-public-key-pm',
+        roles: ['author', 'approver'],
+        status: 'active'
+      };
+
+      // Mock dependencies
+      mockDependencies.stores.tasks.get.mockResolvedValue(activeTask);
+      mockDependencies.identity.getActor.mockResolvedValue(actor);
+      mockDependencies.workflowMethodologyAdapter.getTransitionRule.mockResolvedValue({
+        to: 'paused',
+        conditions: undefined
+      });
+      mockDependencies.identity.signRecord.mockImplementation((record) => Promise.resolve(record));
+      mockDependencies.stores.tasks.put.mockResolvedValue(undefined);
+
+      // Act
+      const result = await backlogAdapter.pauseTask(taskId, actorId, pauseReason);
+
+      // Assert: Verify notes contains existing content + new content with [PAUSED] prefix
+      expect(result.notes).toContain(existingNotes);
+      expect(result.notes).toContain('[PAUSED]');
+      expect(result.notes).toContain(pauseReason);
+      // Verify ISO timestamp format
+      expect(result.notes).toMatch(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
+    });
+
     it('[EARS-I5] should clear activeTaskId in session when task is paused', async () => {
       const taskId = '1757687335-task-active-for-pause';
       const actorId = 'human:tech-lead';
@@ -1151,7 +1201,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       const result = await backlogAdapter.pauseTask(taskId, actorId, 'Waiting for dependencies');
 
       expect(result.status).toBe('paused');
-      expect(mockDependencies.configManager.updateActorState).toHaveBeenCalledWith(
+      expect(mockDependencies.sessionManager.updateActorState).toHaveBeenCalledWith(
         actorId,
         expect.objectContaining({
           activeTaskId: undefined
@@ -1383,7 +1433,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       const result = await backlogAdapter.resumeTask(taskId, actorId);
 
       expect(result.status).toBe('active');
-      expect(mockDependencies.configManager.updateActorState).toHaveBeenCalledWith(
+      expect(mockDependencies.sessionManager.updateActorState).toHaveBeenCalledWith(
         actorId,
         expect.objectContaining({
           activeTaskId: taskId
@@ -1514,7 +1564,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       const result = await backlogAdapter.completeTask(taskId, actorId);
 
       expect(result.status).toBe('done');
-      expect(mockDependencies.configManager.updateActorState).toHaveBeenCalledWith(
+      expect(mockDependencies.sessionManager.updateActorState).toHaveBeenCalledWith(
         actorId,
         expect.objectContaining({
           activeTaskId: undefined
@@ -1759,7 +1809,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       const result = await backlogAdapter.discardTask(taskId, actorId, 'No longer needed');
 
       expect(result.status).toBe('discarded');
-      expect(mockDependencies.configManager.updateActorState).toHaveBeenCalledWith(
+      expect(mockDependencies.sessionManager.updateActorState).toHaveBeenCalledWith(
         actorId,
         expect.objectContaining({
           activeTaskId: undefined
@@ -2590,8 +2640,8 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
     });
   });
 
-  describe('pauseTask', () => {
-    it('[EARS-I1] should pause task from active to paused with permission validation', async () => {
+  describe('pauseTask - Additional Edge Cases', () => {
+    it('[EARS-I1c] should pause task verifying actor in workflow transition context', async () => {
       // Arrange: Task in 'active' state
       const taskId = '1757687335-task-active';
       const actorId = 'human:developer';
@@ -2657,19 +2707,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       );
     });
 
-    it('[EARS-I2] should throw error when task not found for pause', async () => {
-      // Arrange
-      const taskId = '1757687335-task-nonexistent';
-      const actorId = 'human:developer';
-
-      mockDependencies.stores.tasks.get.mockResolvedValue(null);
-
-      // Act & Assert
-      await expect(backlogAdapter.pauseTask(taskId, actorId, 'Some reason'))
-        .rejects.toThrow('RecordNotFoundError: Task not found');
-    });
-
-    it('[EARS-I3] should throw error when task is not in active state for pause', async () => {
+    it('[EARS-I3b] should throw error when task is in draft state for pause', async () => {
       // Arrange: Task in 'draft' state (not 'active')
       const taskId = '1757687335-task-draft';
       const actorId = 'human:developer';
@@ -2687,49 +2725,6 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         .rejects.toThrow("ProtocolViolationError: Task is in 'draft' state");
     });
 
-    it('[EARS-I4b] should add reason with PAUSED prefix in notes', async () => {
-      // Arrange: Active task with existing notes
-      const taskId = '1757687335-task-with-notes';
-      const actorId = 'human:pm';
-      const existingNotes = 'Task created for Q1 sprint';
-      const pauseReason = 'Blocked by design review';
-
-      const activeTask = createMockTaskRecord({
-        id: taskId,
-        title: 'Task with Notes',
-        status: 'active',
-        notes: existingNotes
-      });
-
-      const actor: ActorRecord = {
-        id: actorId,
-        type: 'human',
-        displayName: 'Project Manager',
-        publicKey: 'mock-public-key-pm',
-        roles: ['author', 'approver'],
-        status: 'active'
-      };
-
-      // Mock dependencies
-      mockDependencies.stores.tasks.get.mockResolvedValue(activeTask);
-      mockDependencies.identity.getActor.mockResolvedValue(actor);
-      mockDependencies.workflowMethodologyAdapter.getTransitionRule.mockResolvedValue({
-        to: 'paused',
-        conditions: undefined
-      });
-      mockDependencies.identity.signRecord.mockImplementation((record) => Promise.resolve(record));
-      mockDependencies.stores.tasks.put.mockResolvedValue(undefined);
-
-      // Act
-      const result = await backlogAdapter.pauseTask(taskId, actorId, pauseReason);
-
-      // Assert: Verify notes contains existing content + new content with [PAUSED] prefix
-      expect(result.notes).toContain(existingNotes);
-      expect(result.notes).toContain('[PAUSED]');
-      expect(result.notes).toContain(pauseReason);
-      // Verify ISO timestamp format
-      expect(result.notes).toMatch(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
-    });
   });
 
   describe('Future Methods (Not Implemented)', () => {
