@@ -11,119 +11,14 @@
  * - §4.4 Error Handling & UX Excellence (EARS-D1 to D3)
  */
 
-// Mock @gitgov/core with all required modules
-jest.doMock('@gitgov/core', () => ({
-  Adapters: {
-    ProjectAdapter: jest.fn().mockImplementation(() => ({
-      initializeProject: jest.fn(),
-      validateEnvironment: jest.fn()
-    })),
-    IdentityAdapter: jest.fn().mockImplementation(() => ({})),
-    BacklogAdapter: jest.fn().mockImplementation(() => ({})),
-    WorkflowMethodologyAdapter: Object.assign(
-      jest.fn().mockImplementation(() => ({
-        getTransitionRule: jest.fn().mockResolvedValue({
-          to: 'active',
-          conditions: { signatures: { __default__: { role: 'author' } } }
-        }),
-        validateSignature: jest.fn().mockResolvedValue(true)
-      })),
-      {
-        createDefault: jest.fn().mockImplementation(() => ({
-          getTransitionRule: jest.fn().mockResolvedValue({
-            to: 'active',
-            conditions: { signatures: { __default__: { role: 'author' } } }
-          }),
-          validateSignature: jest.fn().mockResolvedValue(true)
-        }))
-      }
-    ),
-    FeedbackAdapter: jest.fn().mockImplementation(() => ({})),
-    ExecutionAdapter: jest.fn().mockImplementation(() => ({})),
-    ChangelogAdapter: jest.fn().mockImplementation(() => ({
-      create: jest.fn().mockResolvedValue({
-        id: 'test-changelog',
-        name: 'Test Changelog',
-        description: 'Description for test changelog',
-        createdAt: '2023-10-27T10:00:00Z',
-        updatedAt: '2023-10-27T10:00:00Z',
-        createdBy: 'human:test-user',
-        updatedBy: 'human:test-user',
-        version: 1,
-        cycles: [],
-        tasks: []
-      }),
-      getAllChangelogs: jest.fn().mockResolvedValue([])
-    })),
-    MetricsAdapter: jest.fn().mockImplementation(() => ({}))
-  },
-  EventBus: {
-    EventBus: jest.fn().mockImplementation(() => ({
-      publish: jest.fn(),
-      subscribe: jest.fn().mockReturnValue({ id: 'mock-subscription' }),
-      unsubscribe: jest.fn()
-    }))
-  },
-  Store: {
-    RecordStore: jest.fn().mockImplementation(() => ({}))
-  },
-  Modules: {
-    EventBus: jest.fn().mockImplementation(() => ({}))
-  },
-  EventBusModule: {
-    EventBus: jest.fn().mockImplementation(() => ({}))
-  },
-  Config: {
-    ConfigManager: {
-      findProjectRoot: jest.fn(),
-      findGitgovRoot: jest.fn(),
-      getGitgovPath: jest.fn(),
-      isGitgovProject: jest.fn()
-    },
-    createConfigManager: jest.fn().mockImplementation(() => ({
-      loadConfig: jest.fn(),
-      loadSession: jest.fn(),
-      saveConfig: jest.fn(),
-      saveSession: jest.fn(),
-      getRootCycle: jest.fn()
-    }))
-  },
-  Records: {},
-  Factories: {
-    loadTaskRecord: jest.fn((data) => data),
-    loadCycleRecord: jest.fn((data) => data),
-    loadActorRecord: jest.fn((data) => data),
-    loadAgentRecord: jest.fn((data) => data),
-    loadFeedbackRecord: jest.fn((data) => data),
-    loadExecutionRecord: jest.fn((data) => data),
-    loadChangelogRecord: jest.fn((data) => data)
-  }
-}));
-
-// Mock @gitgov/core/fs for FsProjectInitializer
-jest.doMock('@gitgov/core/fs', () => ({
-  FsProjectInitializer: jest.fn().mockImplementation(() => ({
-    createProjectStructure: jest.fn().mockResolvedValue(undefined),
-    isInitialized: jest.fn().mockResolvedValue(false),
-    writeConfig: jest.fn().mockResolvedValue(undefined),
-    initializeSession: jest.fn().mockResolvedValue(undefined),
-    rollback: jest.fn().mockResolvedValue(undefined),
-    validateEnvironment: jest.fn().mockResolvedValue({
-      isValid: true,
-      isGitRepo: true,
-      hasWritePermissions: true,
-      isAlreadyInitialized: false,
-      warnings: [],
-      suggestions: []
+// Mock DependencyInjectionService (InitCommand now uses DI)
+jest.mock('../../services/dependency-injection', () => ({
+  DependencyInjectionService: {
+    getInstance: jest.fn().mockReturnValue({
+      setInitMode: jest.fn(),
+      getProjectAdapter: jest.fn(),
     }),
-    readFile: jest.fn().mockResolvedValue('{}'),
-    copyAgentPrompt: jest.fn().mockResolvedValue(undefined),
-    setupGitIntegration: jest.fn().mockResolvedValue(undefined),
-    getActorPath: jest.fn().mockReturnValue('/test/.gitgov/actors/test.json')
-  })),
-  FsStore: jest.fn().mockImplementation(() => ({})),
-  FsKeyProvider: jest.fn().mockImplementation(() => ({})),
-  FsFileLister: jest.fn().mockImplementation(() => ({}))
+  },
 }));
 
 // Mock child_process for git config
@@ -177,26 +72,19 @@ describe('InitCommand', () => {
   beforeEach(() => {
     jest.clearAllMocks();
 
-    // Get mocked ProjectAdapter from the unified mock
-    const { Adapters } = require('@gitgov/core');
-    const MockedProjectAdapter = Adapters.ProjectAdapter as jest.MockedClass<any>;
-
-    // Create a mock instance
+    // Create a mock ProjectAdapter instance
     mockProjectAdapter = {
       initializeProject: jest.fn(),
       validateEnvironment: jest.fn()
     };
 
-    // Configure the mock to return our instance
-    MockedProjectAdapter.mockImplementation(() => mockProjectAdapter);
-
     // Mock execSync for git config
     (execSync as jest.MockedFunction<typeof execSync>).mockReturnValue('Test User\n');
 
-    // Create InitCommand
+    // Create InitCommand (DI is mocked at module level)
     initCommand = new InitCommand();
 
-    // SPY on getProjectAdapter to return our mock
+    // Spy on getProjectAdapter to return our mock (bypasses DI entirely)
     jest.spyOn(
       initCommand as unknown as { getProjectAdapter: () => Promise<typeof mockProjectAdapter> },
       'getProjectAdapter'

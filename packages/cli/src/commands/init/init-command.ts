@@ -1,9 +1,7 @@
-import type { Adapters, TaskRecord, CycleRecord, ActorRecord, AgentRecord, FeedbackRecord, ExecutionRecord, ChangelogRecord } from '@gitgov/core';
-import { Git } from '@gitgov/core';
-import { FsProjectInitializer } from '@gitgov/core/fs';
+import type { Adapters } from '@gitgov/core';
+import { DependencyInjectionService } from '../../services/dependency-injection';
 
 import * as pathUtils from 'path';
-import { spawn } from 'child_process';
 
 /**
  * Init Command Options interface
@@ -29,6 +27,8 @@ export interface InitCommandOptions {
  * Delegates all business logic to ProjectAdapter and focuses on UX excellence.
  */
 export class InitCommand {
+  private container = DependencyInjectionService.getInstance();
+
   /**
    * [EARS-A1] Main execution method with complete project bootstrap
    */
@@ -114,138 +114,12 @@ export class InitCommand {
   }
 
   /**
-   * [EARS-B1] Gets ProjectAdapter for complete orchestration
+   * [EARS-B1] Gets ProjectAdapter for complete orchestration via DI.
+   * Uses setInitMode() to bypass .gitgov discovery (it doesn't exist yet).
    */
   private async getProjectAdapter(): Promise<Adapters.ProjectAdapter> {
-    // For init command, ALWAYS create adapter manually using current directory
-    // NEVER use DependencyInjectionService which searches for existing .gitgov
-    try {
-      const { Adapters, Store, Config, EventBus, KeyProvider } = await import('@gitgov/core');
-
-      // For init: Use original directory where user executed command
-      const projectRoot = process.env['GITGOV_ORIGINAL_DIR'] || process.cwd();
-      const eventBus = new EventBus.EventBus();
-
-      const { Factories } = await import('@gitgov/core');
-
-      // Create KeyProvider for filesystem-based key storage
-      const keyProvider = new KeyProvider.FsKeyProvider({
-        actorsDir: `${projectRoot}/.gitgov/actors`
-      });
-
-      const taskStore = new Store.RecordStore<TaskRecord>('tasks', Factories.loadTaskRecord, projectRoot);
-      const cycleStore = new Store.RecordStore<CycleRecord>('cycles', Factories.loadCycleRecord, projectRoot);
-      const actorStore = new Store.RecordStore<ActorRecord>('actors', Factories.loadActorRecord, projectRoot);
-      const agentStore = new Store.RecordStore<AgentRecord>('agents', Factories.loadAgentRecord, projectRoot);
-      const feedbackStore = new Store.RecordStore<FeedbackRecord>('feedback', Factories.loadFeedbackRecord, projectRoot);
-      const executionStore = new Store.RecordStore<ExecutionRecord>('executions', Factories.loadExecutionRecord, projectRoot);
-      const changelogStore = new Store.RecordStore<ChangelogRecord>('changelogs', Factories.loadChangelogRecord, projectRoot);
-
-      // Create adapters
-      const identityAdapter = new Adapters.IdentityAdapter({
-        actorStore,
-        agentStore,
-        keyProvider,
-        eventBus
-      });
-
-      // Create other adapters first
-      const feedbackAdapter = new Adapters.FeedbackAdapter({
-        feedbackStore,
-        identity: identityAdapter,
-        eventBus
-      });
-
-      const executionAdapter = new Adapters.ExecutionAdapter({
-        executionStore,
-        identity: identityAdapter,
-        eventBus
-      });
-
-      const changelogAdapter = new Adapters.ChangelogAdapter({
-        changelogStore,
-        identity: identityAdapter,
-        eventBus
-      });
-
-      const metricsAdapter = new Adapters.MetricsAdapter({
-        taskStore,
-        cycleStore,
-        feedbackStore,
-        executionStore,
-        actorStore,
-      });
-
-      const workflowMethodologyAdapter = Adapters.WorkflowMethodologyAdapter.createDefault(feedbackAdapter);
-
-      // Create ConfigManager (needed by BacklogAdapter)
-      const configManager = Config.createConfigManager(projectRoot);
-
-      const backlogAdapter = new Adapters.BacklogAdapter({
-        taskStore,
-        cycleStore,
-        feedbackStore,
-        executionStore,
-        changelogStore,
-        feedbackAdapter,
-        executionAdapter,
-        changelogAdapter,
-        metricsAdapter,
-        workflowMethodologyAdapter,
-        identity: identityAdapter,
-        eventBus,
-        configManager
-      });
-
-      // Create execCommand for GitModule
-      const execCommand = (command: string, args: string[], options?: any) => {
-        return new Promise<{ exitCode: number; stdout: string; stderr: string }>((resolve) => {
-          const proc = spawn(command, args, {
-            cwd: options?.cwd || projectRoot,
-            env: { ...process.env, ...options?.env },
-          });
-
-          let stdout = '';
-          let stderr = '';
-
-          proc.stdout?.on('data', (data) => { stdout += data.toString(); });
-          proc.stderr?.on('data', (data) => { stderr += data.toString(); });
-
-          proc.on('close', (code) => {
-            resolve({ exitCode: code || 0, stdout, stderr });
-          });
-
-          proc.on('error', (error) => {
-            resolve({ exitCode: 1, stdout, stderr: error.message });
-          });
-        });
-      };
-
-      // Create GitModule
-      const gitModule = new Git.GitModule({
-        repoRoot: projectRoot,
-        execCommand
-      });
-
-      // Note: SyncModule and LintModule are NOT needed for init
-      // LintModule was removed as unused (created for SyncModule which is also not needed)
-      // gitgov-state branch is created lazily on first "sync push"
-
-      // Create ProjectInitializer (filesystem implementation for CLI)
-      const projectInitializer = new FsProjectInitializer();
-
-      const projectAdapter = new Adapters.ProjectAdapter({
-        identityAdapter,
-        backlogAdapter,
-        gitModule,
-        configManager,
-        projectInitializer,
-      });
-
-      return projectAdapter;
-    } catch (error) {
-      throw new Error(`Failed to create ProjectAdapter for init: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    this.container.setInitMode(process.cwd());
+    return this.container.getProjectAdapter();
   }
 
   /**
@@ -294,7 +168,7 @@ export class InitCommand {
    */
   private async getProjectNameDefault(): Promise<string> {
     // For project name, always use current directory, not search upward
-    const currentDir = process.env['GITGOV_ORIGINAL_DIR'] || process.cwd();
+    const currentDir = process.cwd();
     return pathUtils.basename(currentDir);
   }
 
