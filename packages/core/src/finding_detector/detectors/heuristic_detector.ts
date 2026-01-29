@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import type { Detector, FindingCategory, FindingSeverity, GdprFinding } from "../types";
+import type { Detector, FindingCategory, FindingSeverity, Finding } from "../types";
 
 const MAX_SNIPPET_LENGTH = 300;
 
@@ -101,8 +101,8 @@ function extractSnippet(content: string, matchIndex: number): string {
 export class HeuristicDetector implements Detector {
   readonly name = "heuristic" as const;
 
-  async detect(content: string, filePath: string): Promise<GdprFinding[]> {
-    const findings: GdprFinding[] = [];
+  async detect(content: string, filePath: string): Promise<Finding[]> {
+    const findings: Finding[] = [];
 
     for (const rule of HEURISTIC_RULES) {
       // Reset regex lastIndex for global patterns
@@ -113,7 +113,7 @@ export class HeuristicDetector implements Detector {
         const line = getLineNumber(content, match.index);
         const snippet = extractSnippet(content, match.index);
 
-        const finding: GdprFinding = {
+        const finding: Finding = {
           id: randomUUID(),
           ruleId: rule.id,
           category: rule.category,

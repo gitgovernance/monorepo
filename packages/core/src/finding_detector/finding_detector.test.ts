@@ -1,19 +1,21 @@
-import { PiiDetectorModule } from "./pii_detector";
+// Blueprint: packages/blueprints/03_products/core/specs/modules/finding_detector/finding_detector_module.md
+// Sections: §4.2 (EARS-13), §4.3 (EARS-14 to EARS-17), §4.4 (EARS-18, EARS-20 to EARS-22), §4.5 (EARS-24)
+import { FindingDetectorModule } from "./finding_detector";
 import { RegexDetector } from "./detectors/regex_detector";
 import { HeuristicDetector } from "./detectors/heuristic_detector";
-import type { PiiDetectorConfig } from "./types";
+import type { FindingDetectorConfig } from "./types";
 
-describe("PiiDetectorModule", () => {
+describe("FindingDetectorModule", () => {
   beforeEach(() => {
     jest.restoreAllMocks();
   });
 
   describe("4.2. Heuristic Detection (EARS-13)", () => {
     it("[EARS-13] should skip heuristic detection when disabled", async () => {
-      const config: PiiDetectorConfig = {
+      const config: FindingDetectorConfig = {
         heuristic: { enabled: false },
       };
-      const module = new PiiDetectorModule(config);
+      const module = new FindingDetectorModule(config);
       const content = "const userEmail = getEmail();";
       const findings = await module.detect(content, "test.ts");
 
@@ -39,10 +41,10 @@ describe("PiiDetectorModule", () => {
           return [];
         });
 
-      const config: PiiDetectorConfig = {
+      const config: FindingDetectorConfig = {
         heuristic: { enabled: true },
       };
-      const module = new PiiDetectorModule(config);
+      const module = new FindingDetectorModule(config);
       await module.detect("test content", "test.ts");
 
       expect(executionOrder).toContain("regex");
@@ -53,10 +55,10 @@ describe("PiiDetectorModule", () => {
     });
 
     it("[EARS-15] should extract candidates with confidence below 0.8", async () => {
-      const config: PiiDetectorConfig = {
+      const config: FindingDetectorConfig = {
         heuristic: { enabled: true },
       };
-      const module = new PiiDetectorModule(config);
+      const module = new FindingDetectorModule(config);
       const content = "const userEmail = getEmail();";
       const findings = await module.detect(content, "test.ts");
 
@@ -78,10 +80,10 @@ describe("PiiDetectorModule", () => {
     });
 
     it("[EARS-17] should work with local-only detection when no LLM", async () => {
-      const config: PiiDetectorConfig = {
+      const config: FindingDetectorConfig = {
         heuristic: { enabled: true },
       };
-      const module = new PiiDetectorModule(config);
+      const module = new FindingDetectorModule(config);
       const content = 'const email = "test@example.com";';
       const findings = await module.detect(content, "test.ts");
 
@@ -110,7 +112,7 @@ describe("PiiDetectorModule", () => {
 
       process.env["GITGOV_LLM_API_KEY"] = "test-api-key";
 
-      const config: PiiDetectorConfig = {
+      const config: FindingDetectorConfig = {
         heuristic: { enabled: true },
         llm: {
           enabled: true,
@@ -118,7 +120,7 @@ describe("PiiDetectorModule", () => {
           quotaType: "unlimited",
         },
       };
-      const module = new PiiDetectorModule(config);
+      const module = new FindingDetectorModule(config);
       const content = "const userEmail = getEmail();";
       await module.detect(content, "test.ts");
 
@@ -131,7 +133,7 @@ describe("PiiDetectorModule", () => {
 
       process.env["GITGOV_LLM_API_KEY"] = "test-api-key";
 
-      const config: PiiDetectorConfig = {
+      const config: FindingDetectorConfig = {
         heuristic: { enabled: true },
         llm: {
           enabled: true,
@@ -141,7 +143,7 @@ describe("PiiDetectorModule", () => {
           remainingUses: 100,
         },
       };
-      const module = new PiiDetectorModule(config);
+      const module = new FindingDetectorModule(config);
       const content = "const userEmail = getEmail();";
       await module.detect(content, "test.ts");
 
@@ -154,7 +156,7 @@ describe("PiiDetectorModule", () => {
 
       process.env["GITGOV_LLM_API_KEY"] = "test-api-key";
 
-      const config: PiiDetectorConfig = {
+      const config: FindingDetectorConfig = {
         heuristic: { enabled: true },
         llm: {
           enabled: true,
@@ -163,7 +165,7 @@ describe("PiiDetectorModule", () => {
           remainingUses: 0,
         },
       };
-      const module = new PiiDetectorModule(config);
+      const module = new FindingDetectorModule(config);
       const content = "const userEmail = getEmail();";
       await module.detect(content, "test.ts");
 
@@ -179,7 +181,7 @@ describe("PiiDetectorModule", () => {
 
       process.env["GITGOV_LLM_API_KEY"] = "test-api-key";
 
-      const config: PiiDetectorConfig = {
+      const config: FindingDetectorConfig = {
         heuristic: { enabled: true },
         llm: {
           enabled: true,
@@ -188,11 +190,23 @@ describe("PiiDetectorModule", () => {
           remainingUses: 100,
         },
       };
-      const module = new PiiDetectorModule(config);
+      const module = new FindingDetectorModule(config);
       const content = "const userEmail = getEmail();";
       await module.detect(content, "test.ts");
 
       expect(mockFetch).toHaveBeenCalled();
+    });
+  });
+
+  describe("4.5. Security and Sanitization (EARS-24)", () => {
+    const originalEnv = process.env;
+
+    beforeEach(() => {
+      process.env = { ...originalEnv };
+    });
+
+    afterEach(() => {
+      process.env = originalEnv;
     });
 
     it("[EARS-24] should read LLM API key from environment variable", async () => {
@@ -204,7 +218,7 @@ describe("PiiDetectorModule", () => {
 
       process.env["GITGOV_LLM_API_KEY"] = "env-api-key-12345";
 
-      const config: PiiDetectorConfig = {
+      const config: FindingDetectorConfig = {
         heuristic: { enabled: true },
         llm: {
           enabled: true,
@@ -212,7 +226,7 @@ describe("PiiDetectorModule", () => {
           quotaType: "unlimited",
         },
       };
-      const module = new PiiDetectorModule(config);
+      const module = new FindingDetectorModule(config);
       await module.detect("const userEmail = test;", "test.ts");
 
       expect(mockFetch).toHaveBeenCalledWith(

@@ -30,7 +30,7 @@ export type DetectorName = "regex" | "heuristic" | "llm";
  * PII/secrets detection result in source code.
  * Includes metadata for deduplication and traceability.
  */
-export interface GdprFinding {
+export interface Finding {
   /** Unique UUID of the finding */
   id: string;
   /** Rule ID that detected it (e.g., "PII-001", "SEC-002") */
@@ -84,7 +84,7 @@ export interface Detector {
    * @param filePath - Relative path to include in findings
    * @returns Array of detected findings
    */
-  detect(content: string, filePath: string): Promise<GdprFinding[]>;
+  detect(content: string, filePath: string): Promise<Finding[]>;
 }
 
 /**
@@ -139,14 +139,14 @@ export interface LlmDetector {
    * @param snippets - Pre-filtered candidates by heuristic
    * @returns Findings confirmed by LLM analysis
    */
-  analyzeSnippets(snippets: CodeSnippet[]): Promise<GdprFinding[]>;
+  analyzeSnippets(snippets: CodeSnippet[]): Promise<Finding[]>;
 }
 
 /**
- * Complete PII Detector module configuration.
+ * Complete Finding Detector module configuration.
  * Allows enabling/disabling each detector individually.
  */
-export interface PiiDetectorConfig {
+export interface FindingDetectorConfig {
   /** Regex detector configuration (Free tier) */
   regex?: DetectorConfig;
   /** Heuristic detector configuration (Trial+ tier) */
@@ -177,7 +177,7 @@ export interface RegexRule {
 
 /**
  * Finding structure returned by LLM API.
- * Normalized to GdprFinding in normalizeFindings().
+ * Normalized to Finding in normalizeFindings().
  */
 export interface LlmRawFinding {
   file: string;
