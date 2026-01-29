@@ -1,9 +1,7 @@
 import type {
   ActorRecord,
-  AgentRecord,
   GitGovRecord,
   ActorPayload,
-  AgentPayload,
 } from '../../types';
 import type { RecordStores } from '../../record_store';
 import type { IEventStream } from '../../event_bus';
@@ -12,6 +10,9 @@ import type { ISessionManager } from '../../session_manager';
 
 /**
  * IdentityAdapter Interface - The Identity Management Contract
+ *
+ * NOTE: AgentRecord operations have been moved to AgentAdapter.
+ * Use AgentAdapter for createAgentRecord, getAgentRecord, listAgentRecords.
  */
 export interface IIdentityAdapter {
   // ActorRecord Operations
@@ -30,32 +31,14 @@ export interface IIdentityAdapter {
   rotateActorKey(actorId: string): Promise<{ oldActor: ActorRecord; newActor: ActorRecord }>;
   authenticate(sessionToken: string): Promise<void>;
   getActorPublicKey(keyId: string): Promise<string | null>;
-
-  /**
-   * @deprecated Use AgentAdapter.createAgentRecord() instead.
-   * AgentRecord management has been moved to AgentAdapter for separation of concerns.
-   */
-  createAgentRecord(payload: Partial<AgentPayload>): Promise<AgentRecord>;
-
-  /**
-   * @deprecated Use AgentAdapter.getAgentRecord() instead.
-   * AgentRecord management has been moved to AgentAdapter for separation of concerns.
-   */
-  getAgentRecord(agentId: string): Promise<AgentRecord | null>;
-
-  /**
-   * @deprecated Use AgentAdapter.listAgentRecords() instead.
-   * AgentRecord management has been moved to AgentAdapter for separation of concerns.
-   */
-  listAgentRecords(): Promise<AgentRecord[]>;
 }
 
 /**
  * IdentityAdapter Dependencies - Facade + Dependency Injection Pattern
  */
 export interface IdentityAdapterDependencies {
-  // Data Layer - Required stores for IdentityAdapter
-  stores: Required<Pick<RecordStores, 'actors' | 'agents'>>;
+  // Data Layer - Required stores for IdentityAdapter (ActorRecords only)
+  stores: Required<Pick<RecordStores, 'actors'>>;
 
   // Key Management
   keyProvider: KeyProvider;
