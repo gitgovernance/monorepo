@@ -10,12 +10,10 @@ import { DetailedValidationError } from './common';
 // Mock dependencies
 jest.mock('../schemas/schema_cache');
 jest.mock('./embedded_metadata_validator');
-jest.mock('../config_manager');
 
 describe('FeedbackRecord Validator', () => {
   const mockSchemaValidationCache = require('../schemas/schema_cache').SchemaValidationCache;
   const mockValidateEmbeddedMetadata = require('./embedded_metadata_validator').validateFullEmbeddedMetadataRecord;
-  const mockConfigManager = require('../config_manager').ConfigManager;
 
   const createMockSignature = (): Signature => ({
     keyId: 'human:test',
@@ -36,7 +34,6 @@ describe('FeedbackRecord Validator', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    mockConfigManager.findProjectRoot.mockReturnValue('/test/project');
     mockValidateEmbeddedMetadata.mockResolvedValue(undefined);
 
     // Default validator mock
