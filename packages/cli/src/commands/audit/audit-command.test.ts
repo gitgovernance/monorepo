@@ -1,3 +1,18 @@
+/**
+ * AuditCommand Unit Tests
+ *
+ * Blueprint: packages/blueprints/03_products/cli/specs/audit_command.md
+ * All EARS prefixes map to audit_command.md §4.1-4.6
+ *
+ * EARS Coverage:
+ * - §4.1 CLI Argument Parsing & Module Integration (EARS-A1 to A4)
+ * - §4.2 Scope Resolution (EARS-B1 to B4)
+ * - §4.3 Output Formatting (EARS-C1 to C10)
+ * - §4.4 Exit Codes & Fail Conditions (EARS-D1 to D4)
+ * - §4.5 Waiver Management (EARS-E1 to E5)
+ * - §4.6 Input Validation (EARS-F1 to F5)
+ */
+
 // Mock @gitgov/core
 jest.doMock('@gitgov/core', () => ({
   Config: {
@@ -25,7 +40,7 @@ jest.mock('../../services/dependency-injection', () => ({
 
 import { AuditCommand, type AuditCommandOptions } from './audit-command';
 import { DependencyInjectionService } from '../../services/dependency-injection';
-import type { SourceAuditor, PiiDetector, Config, FeedbackRecord, ActorRecord } from '@gitgov/core';
+import type { SourceAuditor, Config, FeedbackRecord, ActorRecord } from '@gitgov/core';
 
 // Mock console methods
 const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation();
@@ -242,7 +257,7 @@ describe('AuditCommand', () => {
   });
 
   describe('4.2. Scope Resolution (EARS-B1 to B4)', () => {
-    it('[EARS-B1] should audit only modified files when scope is diff (with baseline)', async () => {
+    it('[EARS-B1] should audit only modified files when scope is diff', async () => {
       // Setup: baseline exists
       mockConfigManager.getAuditState.mockResolvedValue({
         lastFullAuditCommit: 'd32889b',
@@ -285,7 +300,7 @@ describe('AuditCommand', () => {
       expect(callArg.scope.changedSince).toBeUndefined();
     });
 
-    it('[EARS-B2] should audit full repository when scope is full (no baseline save)', async () => {
+    it('[EARS-B2] should audit full repository when scope is full', async () => {
       await auditCommand.execute(createDefaultOptions({ scope: 'full' }));
 
       expect(mockSourceAuditorModule.audit).toHaveBeenCalledWith(
@@ -337,8 +352,8 @@ describe('AuditCommand', () => {
     });
   });
 
-  describe('4.3. Output Formatting (EARS-C1 to C4)', () => {
-    it('[EARS-C1] should format text output with correct structure (FINDINGS → SUMMARY → SCAN INFO)', async () => {
+  describe('4.3. Output Formatting (EARS-C1 to C10)', () => {
+    it('[EARS-C1] should format text output with correct structure', async () => {
       await auditCommand.execute(createDefaultOptions({ scope: 'full', output: 'text' }));
 
       // New structure: FINDINGS → SUMMARY → SCAN INFO
@@ -393,7 +408,7 @@ describe('AuditCommand', () => {
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('critical finding'));
     });
 
-    it('[EARS-C5] should show only summary when --summary is set', async () => {
+    it('[EARS-C5] should show only summary when --summary', async () => {
       await auditCommand.execute(createDefaultOptions({ scope: 'full', output: 'text', summary: true }));
 
       // Should show SUMMARY and SCAN INFO but NOT individual FINDINGS
