@@ -31,9 +31,22 @@ export interface IIdentityAdapter {
   authenticate(sessionToken: string): Promise<void>;
   getActorPublicKey(keyId: string): Promise<string | null>;
 
-  // AgentRecord Operations
+  /**
+   * @deprecated Use AgentAdapter.createAgentRecord() instead.
+   * AgentRecord management has been moved to AgentAdapter for separation of concerns.
+   */
   createAgentRecord(payload: Partial<AgentPayload>): Promise<AgentRecord>;
+
+  /**
+   * @deprecated Use AgentAdapter.getAgentRecord() instead.
+   * AgentRecord management has been moved to AgentAdapter for separation of concerns.
+   */
   getAgentRecord(agentId: string): Promise<AgentRecord | null>;
+
+  /**
+   * @deprecated Use AgentAdapter.listAgentRecords() instead.
+   * AgentRecord management has been moved to AgentAdapter for separation of concerns.
+   */
   listAgentRecords(): Promise<AgentRecord[]>;
 }
 
