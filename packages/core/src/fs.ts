@@ -55,3 +55,7 @@ export {
   isGitgovProject,
   resetDiscoveryCache,
 } from './utils/project_discovery';
+
+// AgentRunner (filesystem-based agent execution)
+export { FsAgentRunner, createAgentRunner } from './agent_runner/fs';
+export type { FsAgentRunnerDependencies } from './agent_runner/fs';

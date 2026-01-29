@@ -1,5 +1,6 @@
 export * as Adapters from "./adapters";
 export * as Config from "./config_manager";
+export * as Session from "./session_manager";
 export * as Crypto from "./crypto";
 export * as Factories from "./factories";
 export * as Git from "./git";
@@ -75,7 +76,7 @@ export * as PiiDetector from "./pii_detector";
 export * as SourceAuditor from "./source_auditor";
 
 // Agent runner
-export * as Runner from "./runner";
+export * as Runner from "./agent_runner";
 
 // adapters
 export * as BacklogAdapter from "./adapters/backlog_adapter";
