@@ -65,7 +65,6 @@ import type {
   GitGovFeedbackRecord,
   GitGovChangelogRecord,
   GitGovActorRecord,
-  GitGovAgentRecord,
 } from '../../types';
 import type { Signature } from '../../types/embedded.types';
 import { generateTaskId, generateCycleId } from '../../utils/id_generator';
@@ -190,7 +189,6 @@ describe.each(backends)('BacklogAdapter Integration Tests with %s backend', (_na
 
     // Create mock stores for IdentityAdapter constructor
     const mockActorStore = new MemoryRecordStore<GitGovActorRecord>();
-    const mockAgentStore = new MemoryRecordStore<GitGovAgentRecord>();
 
     // Create mock KeyProvider for integration test
     const mockKeyProvider = {
@@ -215,7 +213,6 @@ describe.each(backends)('BacklogAdapter Integration Tests with %s backend', (_na
     identityAdapter = new IdentityAdapter({
       stores: {
         actors: mockActorStore,
-        agents: mockAgentStore,
       },
       keyProvider: mockKeyProvider,
       sessionManager: mockIdentitySessionManager,
