@@ -1,10 +1,10 @@
 import { Command } from 'commander';
 import { BaseCommand } from '../../base/base-command';
 import type { BaseCommandOptions } from '../../interfaces/command';
-import type { IFsLintModule, FsLintOptions, FsFixOptions, LintReport, LintResult, ValidatorType, FixReport } from '@gitgov/core';
+import type { LintReport, LintResult, ValidatorType, FixReport } from '@gitgov/core';
+import type { IFsLintModule, FsLintOptions, FsFixOptions } from '@gitgov/core/fs';
 import * as path from 'path';
 import { promises as fs } from 'fs';
-import { Config } from '@gitgov/core';
 
 /**
  * Lint Command Options
@@ -229,19 +229,16 @@ export class LintCommand extends BaseCommand {
     const identityAdapter = await this.container.getIdentityAdapter();
     const currentActor = await identityAdapter.getCurrentActor();
 
-    // Try to load private key from .gitgov/actors/{actorId}.key
-    // Note: This is optional - fix will only work for non-legacy records if key is missing
+    // Load private key via KeyProvider (DI)
     let privateKey: string | undefined;
     try {
-      const projectRoot = Config.ConfigManager.findGitgovRoot() || process.cwd();
-      const keyPath = path.join(projectRoot, '.gitgov', 'actors', `${currentActor.id}.key`);
-      const keyContent = await fs.readFile(keyPath, 'utf-8');
-      privateKey = keyContent.trim();
+      const keyProvider = this.container.getKeyProvider();
+      const key = await keyProvider.getPrivateKey(currentActor.id);
+      privateKey = key ?? undefined;
     } catch (error) {
-      // Private key file not found - this is okay for non-legacy fixes
-      // Legacy record fixes will fail with a clear error message
+      // Private key not found - this is okay for non-legacy fixes
       if (!quiet) {
-        this.logger.warn(`⚠️  Private key not found at .gitgov/actors/${currentActor.id}.key`);
+        this.logger.warn(`⚠️  Private key not found for ${currentActor.id}`);
         this.logger.warn('   Legacy record fixes will not be available. Other fixes will still work.');
       }
     }
