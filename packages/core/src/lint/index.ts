@@ -27,8 +27,13 @@
  * ```
  */
 
+/**
+ * Lint Module - Pure validation without I/O
+ *
+ * For filesystem operations, use @gitgov/core/fs which exports FsLintModule.
+ */
+
 export { LintModule } from "./lint";
-export { FsLintModule } from "./fs";
 
 export type {
   // Pure LintModule interfaces
@@ -39,13 +44,6 @@ export type {
   RecordStores,
   FixRecordOptions,
 
-  // FsLintModule interfaces
-  IFsLintModule,
-  FsLintModuleDependencies,
-  FsLintOptions,
-  FsFixOptions,
-  FileSystem,
-
   // Shared types
   LintOptions,
   LintReport,
@@ -54,5 +52,5 @@ export type {
   ValidatorType,
   ValidationContext,
   FixReport,
-  FixResult
+  FixResult,
 } from "./lint.types";
