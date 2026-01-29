@@ -8,13 +8,11 @@ import type { ValidationContext } from './index';
 import type { WorkflowMethodologyRecord } from '../../types';
 import type { IFeedbackAdapter } from '../feedback_adapter';
 
-// Mock fs and ConfigManager
+// Mock fs for file operations
 jest.mock('fs/promises');
-jest.mock('../../config_manager');
 
 describe('WorkflowMethodologyAdapter', () => {
   const mockFs = require('fs/promises');
-  const mockConfigManager = require('../../config_manager').ConfigManager;
 
   // Mock IFeedbackAdapter
   const mockFeedbackAdapter: IFeedbackAdapter = {
@@ -56,22 +54,17 @@ describe('WorkflowMethodologyAdapter', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    mockConfigManager.findProjectRoot.mockReturnValue('/test/project');
   });
 
   describe('Constructor', () => {
     it('[EARS-1] should initialize with default config when none provided', () => {
       const adapter = WorkflowMethodologyAdapter.createDefault(mockFeedbackAdapter);
       expect(adapter).toBeDefined();
-      // Should use default config without calling ConfigManager
-      expect(mockConfigManager.findProjectRoot).not.toHaveBeenCalled();
     });
 
     it('[EARS-2] should use scrum config when specified', () => {
       const adapter = WorkflowMethodologyAdapter.createScrum(mockFeedbackAdapter);
       expect(adapter).toBeDefined();
-      // Should not call ConfigManager for predefined configs
-      expect(mockConfigManager.findProjectRoot).not.toHaveBeenCalled();
     });
 
     it('[EARS-3] should accept custom config object', () => {
@@ -91,7 +84,6 @@ describe('WorkflowMethodologyAdapter', () => {
         feedbackAdapter: mockFeedbackAdapter
       });
       expect(adapter).toBeDefined();
-      expect(mockConfigManager.findProjectRoot).not.toHaveBeenCalled();
     });
   });
 
@@ -524,7 +516,7 @@ describe('WorkflowMethodologyAdapter', () => {
       adapter = WorkflowMethodologyAdapter.createDefault(mockFeedbackAdapter); // Uses default config
     });
 
-    it('[EARS-19] should return view config for valid view name', async () => {
+    it('[EARS-22] should return view config for valid view name', async () => {
       const viewConfig = await adapter.getViewConfig('kanban-7col');
 
       expect(viewConfig).toEqual({
@@ -543,7 +535,7 @@ describe('WorkflowMethodologyAdapter', () => {
       });
     });
 
-    it('[EARS-20] should return null for non-existent view', async () => {
+    it('[EARS-23] should return null for non-existent view', async () => {
       const viewConfig = await adapter.getViewConfig('non-existent-view');
       expect(viewConfig).toBeNull();
     });
