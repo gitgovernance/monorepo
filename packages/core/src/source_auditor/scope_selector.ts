@@ -1,4 +1,6 @@
 import type { ScopeConfig, ScopeSelectorDependencies } from "./types";
+import type { IGitModule } from "../git";
+import type { FileLister } from "../file_lister";
 
 /**
  * Internal component for selecting files based on glob patterns.
@@ -7,12 +9,14 @@ import type { ScopeConfig, ScopeSelectorDependencies } from "./types";
  * Store Backends Epic: Uses FileLister abstraction instead of direct fs access.
  */
 export class ScopeSelector {
-  private fileLister: ScopeSelectorDependencies['fileLister'];
-  private gitModule: ScopeSelectorDependencies['gitModule'];
+  private fileLister: FileLister;
+  private gitModule: IGitModule | undefined;
 
   constructor(deps: ScopeSelectorDependencies) {
     this.fileLister = deps.fileLister;
-    this.gitModule = deps.gitModule;
+    if (deps.gitModule) {
+      this.gitModule = deps.gitModule;
+    }
   }
 
   /**

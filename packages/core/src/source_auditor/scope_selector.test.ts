@@ -1,3 +1,5 @@
+// Blueprint: packages/blueprints/03_products/core/specs/modules/source_auditor/source_auditor_module.md
+// Sections: §4.1 (EARS-A1 to EARS-A5)
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
@@ -31,7 +33,7 @@ describe("ScopeSelector", () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
-  describe("4.1. Scope Selection (EARS-A1 to EARS-A3)", () => {
+  describe("4.1. Scope Selection (EARS-A1 to EARS-A5)", () => {
     it("[EARS-A1] should select files matching include globs", async () => {
       const files = await selector.selectFiles(
         { include: ["**/*.ts"], exclude: [] },
