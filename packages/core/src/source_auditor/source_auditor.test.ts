@@ -1,15 +1,17 @@
+// Blueprint: packages/blueprints/03_products/core/specs/modules/source_auditor/source_auditor_module.md
+// Sections: §4.1 (EARS-A1 to EARS-A3), §4.2 (EARS-B1 to EARS-B4), §4.3 (EARS-C1 to EARS-C5), §4.4 (EARS-D1 to EARS-D4), §4.5 (EARS-E1 to EARS-E4), §4.8 (EARS-H1 to EARS-H3)
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 import { SourceAuditorModule } from "./source_auditor";
 import { FsFileLister } from "../file_lister";
-import type { PiiDetectorModule } from "../pii_detector";
-import type { GdprFinding } from "../pii_detector/types";
+import type { FindingDetectorModule } from "../finding_detector";
+import type { Finding } from "../finding_detector/types";
 import type { IWaiverReader, ActiveWaiver, SourceAuditorDependencies } from "./types";
 
 describe("SourceAuditorModule", () => {
   let tempDir: string;
-  let mockPiiDetector: jest.Mocked<PiiDetectorModule>;
+  let mockFindingDetector: jest.Mocked<FindingDetectorModule>;
   let mockWaiverReader: jest.Mocked<IWaiverReader>;
 
   beforeEach(() => {
@@ -26,9 +28,9 @@ describe("SourceAuditorModule", () => {
       "export function helper() { return 1; }"
     );
 
-    mockPiiDetector = {
+    mockFindingDetector = {
       detect: jest.fn().mockResolvedValue([]),
-    } as unknown as jest.Mocked<PiiDetectorModule>;
+    } as unknown as jest.Mocked<FindingDetectorModule>;
 
     mockWaiverReader = {
       loadActiveWaivers: jest.fn().mockResolvedValue([]),
@@ -44,12 +46,12 @@ describe("SourceAuditorModule", () => {
    * Creates SourceAuditorDependencies with FsFileLister for tempDir
    */
   const createDeps = (): SourceAuditorDependencies => ({
-    piiDetector: mockPiiDetector,
+    findingDetector: mockFindingDetector,
     waiverReader: mockWaiverReader,
     fileLister: new FsFileLister({ cwd: tempDir }),
   });
 
-  const createFinding = (overrides: Partial<GdprFinding> = {}): GdprFinding => ({
+  const createFinding = (overrides: Partial<Finding> = {}): Finding => ({
     id: "finding-1",
     ruleId: "PII-001",
     category: "pii-email",
@@ -73,7 +75,7 @@ describe("SourceAuditorModule", () => {
         baseDir: tempDir,
       });
 
-      expect(mockPiiDetector.detect).toHaveBeenCalledTimes(2);
+      expect(mockFindingDetector.detect).toHaveBeenCalledTimes(2);
     });
 
     it("[EARS-A2] should exclude files matching exclude globs", async () => {
@@ -87,8 +89,8 @@ describe("SourceAuditorModule", () => {
         baseDir: tempDir,
       });
 
-      expect(mockPiiDetector.detect).toHaveBeenCalledTimes(2);
-      expect(mockPiiDetector.detect).not.toHaveBeenCalledWith(
+      expect(mockFindingDetector.detect).toHaveBeenCalledTimes(2);
+      expect(mockFindingDetector.detect).not.toHaveBeenCalledWith(
         expect.any(String),
         "node_modules/lib.ts"
       );
@@ -104,12 +106,12 @@ describe("SourceAuditorModule", () => {
 
       expect(result.findings).toHaveLength(0);
       expect(result.scannedFiles).toBe(0);
-      expect(mockPiiDetector.detect).not.toHaveBeenCalled();
+      expect(mockFindingDetector.detect).not.toHaveBeenCalled();
     });
   });
 
   describe("4.2. Detection Pipeline (EARS-B1 to EARS-B4)", () => {
-    it("[EARS-B1] should run piiDetector.detect() on each selected file", async () => {
+    it("[EARS-B1] should run findingDetector.detect() on each selected file", async () => {
       const auditor = new SourceAuditorModule(createDeps());
 
       await auditor.audit({
@@ -117,19 +119,19 @@ describe("SourceAuditorModule", () => {
         baseDir: tempDir,
       });
 
-      expect(mockPiiDetector.detect).toHaveBeenCalledTimes(2);
-      expect(mockPiiDetector.detect).toHaveBeenCalledWith(
+      expect(mockFindingDetector.detect).toHaveBeenCalledTimes(2);
+      expect(mockFindingDetector.detect).toHaveBeenCalledWith(
         expect.any(String),
         "src/app.ts"
       );
-      expect(mockPiiDetector.detect).toHaveBeenCalledWith(
+      expect(mockFindingDetector.detect).toHaveBeenCalledWith(
         expect.any(String),
         "src/utils.ts"
       );
     });
 
     it("[EARS-B2] should accumulate findings with correct file path", async () => {
-      mockPiiDetector.detect.mockImplementation(async (_content, file) => {
+      mockFindingDetector.detect.mockImplementation(async (_content, file) => {
         if (file === "src/app.ts") {
           return [createFinding({ file: "src/app.ts" })];
         }
@@ -160,11 +162,11 @@ describe("SourceAuditorModule", () => {
       });
 
       // Should still process the remaining file
-      expect(mockPiiDetector.detect).toHaveBeenCalledTimes(1);
+      expect(mockFindingDetector.detect).toHaveBeenCalledTimes(1);
     });
 
     it("[EARS-B4] should track detectors used in result.detectors", async () => {
-      mockPiiDetector.detect.mockResolvedValue([
+      mockFindingDetector.detect.mockResolvedValue([
         createFinding({ detector: "regex" }),
         createFinding({ id: "2", detector: "heuristic", fingerprint: "def456" }),
       ]);
@@ -195,7 +197,7 @@ describe("SourceAuditorModule", () => {
 
     it("[EARS-C2] should exclude findings matching active waiver fingerprint", async () => {
       const finding = createFinding({ fingerprint: "waived-fingerprint" });
-      mockPiiDetector.detect.mockResolvedValue([finding]);
+      mockFindingDetector.detect.mockResolvedValue([finding]);
 
       const waiver: ActiveWaiver = {
         fingerprint: "waived-fingerprint",
@@ -219,7 +221,7 @@ describe("SourceAuditorModule", () => {
       // Expired waivers are filtered by WaiverReader, not SourceAuditor
       // This test verifies integration behavior
       const finding = createFinding();
-      mockPiiDetector.detect.mockResolvedValue([finding]);
+      mockFindingDetector.detect.mockResolvedValue([finding]);
       mockWaiverReader.loadActiveWaivers.mockResolvedValue([]);
 
       const auditor = new SourceAuditorModule(createDeps());
@@ -234,7 +236,7 @@ describe("SourceAuditorModule", () => {
 
     it("[EARS-C4] should treat waivers without expiresAt as permanent", async () => {
       const finding = createFinding({ fingerprint: "permanent-waiver" });
-      mockPiiDetector.detect.mockResolvedValue([finding]);
+      mockFindingDetector.detect.mockResolvedValue([finding]);
 
       const permanentWaiver: ActiveWaiver = {
         fingerprint: "permanent-waiver",
@@ -256,7 +258,7 @@ describe("SourceAuditorModule", () => {
     });
 
     it("[EARS-C5] should report waivers.new count correctly", async () => {
-      mockPiiDetector.detect.mockResolvedValue([
+      mockFindingDetector.detect.mockResolvedValue([
         createFinding({ fingerprint: "new-1" }),
         createFinding({ id: "2", fingerprint: "new-2" }),
         createFinding({ id: "3", fingerprint: "waived-1" }),
@@ -283,7 +285,7 @@ describe("SourceAuditorModule", () => {
 
   describe("4.4. Summary Calculation (EARS-D1 to EARS-D4)", () => {
     it("[EARS-D1] should calculate summary.total correctly", async () => {
-      mockPiiDetector.detect.mockResolvedValue([
+      mockFindingDetector.detect.mockResolvedValue([
         createFinding({ fingerprint: "1" }),
         createFinding({ id: "2", fingerprint: "2" }),
       ]);
@@ -299,7 +301,7 @@ describe("SourceAuditorModule", () => {
     });
 
     it("[EARS-D2] should calculate summary.bySeverity correctly", async () => {
-      mockPiiDetector.detect.mockResolvedValue([
+      mockFindingDetector.detect.mockResolvedValue([
         createFinding({ severity: "critical", fingerprint: "1" }),
         createFinding({ id: "2", severity: "high", fingerprint: "2" }),
         createFinding({ id: "3", severity: "high", fingerprint: "3" }),
@@ -320,7 +322,7 @@ describe("SourceAuditorModule", () => {
     });
 
     it("[EARS-D3] should calculate summary.byCategory correctly", async () => {
-      mockPiiDetector.detect.mockResolvedValue([
+      mockFindingDetector.detect.mockResolvedValue([
         createFinding({ category: "pii-email", fingerprint: "1" }),
         createFinding({ id: "2", category: "pii-email", fingerprint: "2" }),
         createFinding({ id: "3", category: "hardcoded-secret", fingerprint: "3" }),
@@ -338,7 +340,7 @@ describe("SourceAuditorModule", () => {
     });
 
     it("[EARS-D4] should calculate summary.byDetector correctly", async () => {
-      mockPiiDetector.detect.mockResolvedValue([
+      mockFindingDetector.detect.mockResolvedValue([
         createFinding({ detector: "regex", fingerprint: "1" }),
         createFinding({ id: "2", detector: "regex", fingerprint: "2" }),
         createFinding({ id: "3", detector: "heuristic", fingerprint: "3" }),
@@ -408,6 +410,58 @@ describe("SourceAuditorModule", () => {
 
       // Should process all files (152 = 2 original + 150 new)
       expect(result.scannedFiles).toBe(152);
+    });
+  });
+
+  describe("4.8. Direct Audit Mode (EARS-H1 to EARS-H3)", () => {
+    it("[EARS-H1] should detect findings from FileContent[] without FileLister", async () => {
+      const finding = createFinding({ file: "src/app.ts" });
+      mockFindingDetector.detect.mockResolvedValue([finding]);
+
+      // No fileLister — only findingDetector
+      const auditor = new SourceAuditorModule({ findingDetector: mockFindingDetector });
+
+      const result = await auditor.auditContents({
+        files: [{ path: "src/app.ts", content: 'const email = "test@test.com";' }],
+      });
+
+      expect(result.findings).toHaveLength(1);
+      expect(result.findings[0]?.file).toBe("src/app.ts");
+      expect(result.scannedFiles).toBe(1);
+      expect(mockFindingDetector.detect).toHaveBeenCalledTimes(1);
+    });
+
+    it("[EARS-H2] should filter findings by waiver fingerprint in auditContents()", async () => {
+      const finding = createFinding({ fingerprint: "waived-fp" });
+      mockFindingDetector.detect.mockResolvedValue([finding]);
+
+      const auditor = new SourceAuditorModule({ findingDetector: mockFindingDetector });
+
+      const result = await auditor.auditContents({
+        files: [{ path: "src/app.ts", content: 'const email = "test@test.com";' }],
+        waivers: [
+          {
+            fingerprint: "waived-fp",
+            ruleId: "PII-001",
+            feedback: {} as ActiveWaiver["feedback"],
+          },
+        ],
+      });
+
+      expect(result.findings).toHaveLength(0);
+      expect(result.waivers.acknowledged).toBe(1);
+      expect(result.waivers.new).toBe(0);
+    });
+
+    it("[EARS-H3] should throw when audit() is called without FileLister", async () => {
+      const auditor = new SourceAuditorModule({ findingDetector: mockFindingDetector });
+
+      await expect(
+        auditor.audit({
+          scope: { include: ["**/*.ts"], exclude: [] },
+          baseDir: tempDir,
+        })
+      ).rejects.toThrow("FileLister required for audit()");
     });
   });
 });

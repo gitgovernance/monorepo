@@ -1,5 +1,7 @@
+// Blueprint: packages/blueprints/03_products/core/specs/modules/source_auditor/source_auditor_module.md
+// Sections: §2.3 (Internal Component - ScoringEngine)
 import { ScoringEngine } from "./scoring_engine";
-import type { GdprFinding } from "../pii_detector/types";
+import type { Finding } from "../finding_detector/types";
 
 describe("ScoringEngine", () => {
   let engine: ScoringEngine;
@@ -10,7 +12,7 @@ describe("ScoringEngine", () => {
 
   describe("§2.3 Internal Component - ScoringEngine (Step 5: Scoring)", () => {
     it("[Step-5] should return findings unchanged (pass-through for now)", () => {
-      const findings: GdprFinding[] = [
+      const findings: Finding[] = [
         {
           id: "test-1",
           ruleId: "PII-001",

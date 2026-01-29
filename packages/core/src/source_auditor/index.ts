@@ -19,6 +19,9 @@ export type {
   GroupByOption,
   OutputFormat,
   FailOnSeverity,
+  // File content types (direct audit mode)
+  FileContent,
+  AuditContentsInput,
   // Core interfaces
   SourceAuditorDependencies,
   ScopeConfig,
