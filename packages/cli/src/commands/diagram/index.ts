@@ -50,15 +50,15 @@ class DiagramCommand {
 
         if (options.watch) {
           // Show TUI with watch mode (with or without filters)
-          const { Config } = await import('@gitgov/core');
+          const { findProjectRoot, getGitgovPath } = await import('@gitgov/core/fs');
 
-          const projectRoot = Config.ConfigManager.findProjectRoot();
+          const projectRoot = findProjectRoot();
           if (!projectRoot) {
             console.error('❌ Could not find project root');
             process.exit(1);
           }
 
-          const gitgovPath = Config.ConfigManager.getGitgovPath();
+          const gitgovPath = getGitgovPath();
 
           const props = {
             gitgovPath,  // ✅ USING ConfigManager consistently
@@ -93,17 +93,18 @@ class DiagramCommand {
         } else {
           // Generate diagram directly (with or without filters)
           console.log('🎯 Generating diagram...');
-          const { Config, DiagramGenerator } = await import('@gitgov/core');
+          const { DiagramGenerator } = await import('@gitgov/core');
+          const { findProjectRoot, getGitgovPath } = await import('@gitgov/core/fs');
 
           try {
-            const projectRoot = Config.ConfigManager.findProjectRoot();
+            const projectRoot = findProjectRoot();
             if (!projectRoot) {
               console.error('❌ Could not find project root');
               process.exit(1);
             }
 
             const generator = new DiagramGenerator.DiagramGenerator();
-            const gitgovPath = Config.ConfigManager.getGitgovPath();
+            const gitgovPath = getGitgovPath();
 
             // Build filters (may be empty for full diagram)
             const filters: Record<string, string> = {};
@@ -120,11 +121,8 @@ class DiagramCommand {
             // If no filters specified, try to use rootCycle from config using core ConfigManager
             if (!finalFilters) {
               try {
-
-                console.log("projectRoot", projectRoot)
-
-                const { Config } = await import('@gitgov/core');
-                const configManager = Config.createConfigManager(projectRoot);
+                const { DependencyInjectionService } = await import('../../services/dependency-injection');
+                const configManager = await DependencyInjectionService.getInstance().getConfigManager();
                 const rootCycle = await configManager.getRootCycle();
 
                 if (rootCycle) {
