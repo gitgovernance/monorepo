@@ -1,20 +1,27 @@
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
-import { ConfigManager } from "../config_manager";
-import { LocalBackend } from "./backends/local_backend";
+import {
+  LocalBackend,
+  ApiBackend,
+  McpBackend,
+  CustomBackend,
+} from "../backends";
 import {
   AgentNotFoundError,
   UnsupportedEngineTypeError,
   EngineConfigError,
   MissingDependencyError,
-} from "./errors";
-import type { AgentRecord } from "../types";
-import type { IEventStream } from "../event_bus";
-import type { IExecutionAdapter } from "../adapters/execution_adapter";
-import type { IIdentityAdapter } from "../adapters/identity_adapter";
-import type { LocalEngine } from "./engines";
+} from "../errors";
+import type { AgentRecord } from "../../types";
+import type { IEventStream } from "../../event_bus";
+import type { IExecutionAdapter } from "../../adapters/execution_adapter";
+import type { IIdentityAdapter } from "../../adapters/identity_adapter";
 import type {
+  LocalEngine,
+  ApiEngine,
+  McpEngine,
+  CustomEngine,
   AgentRunnerDependencies,
   AgentExecutionContext,
   AgentOutput,
@@ -23,12 +30,13 @@ import type {
   RunOptions,
   ProtocolHandlerRegistry,
   RuntimeHandlerRegistry,
-} from "./types";
+  IAgentRunner,
+} from "../agent_runner.types";
 
 const VALID_ENGINE_TYPES = ["local", "api", "mcp", "custom"] as const;
 
 /**
- * Agent Runner Module - Executes agents based on their engine.type.
+ * Filesystem-based Agent Runner - Executes agents based on their engine.type.
  *
  * Responsibilities:
  * - Load AgentRecords from .gitgov/agents/
@@ -36,16 +44,21 @@ const VALID_ENGINE_TYPES = ["local", "api", "mcp", "custom"] as const;
  * - Capture responses and write ExecutionRecords
  * - Emit events via EventBus
  */
-export class AgentRunnerModule {
+export class FsAgentRunner implements IAgentRunner {
   private gitgovPath: string;
   private projectRoot: string;
   private identityAdapter: IIdentityAdapter | undefined;
   private executionAdapter: IExecutionAdapter;
   private eventBus: IEventStream | undefined;
-  /** Fase 2: Protocol handlers for CustomBackend */
+  /** Protocol handlers for CustomBackend */
   public readonly protocolHandlers: ProtocolHandlerRegistry | undefined;
   private runtimeHandlers: RuntimeHandlerRegistry | undefined;
+
+  // Engine backends
   private localBackend: LocalBackend;
+  private apiBackend: ApiBackend;
+  private mcpBackend: McpBackend;
+  private customBackend: CustomBackend;
 
   constructor(deps: AgentRunnerDependencies) {
     // [EARS-H4] Validate ExecutionAdapter is provided
@@ -53,16 +66,19 @@ export class AgentRunnerModule {
       throw new MissingDependencyError("ExecutionAdapter", "required");
     }
 
-    this.gitgovPath =
-      deps.gitgovPath ?? path.join(ConfigManager.findProjectRoot()!, ".gitgov");
-    this.projectRoot = deps.projectRoot ?? ConfigManager.findProjectRoot()!;
+    this.projectRoot = deps.projectRoot;
+    this.gitgovPath = deps.gitgovPath ?? path.join(this.projectRoot, ".gitgov");
     this.identityAdapter = deps.identityAdapter ?? undefined;
     this.executionAdapter = deps.executionAdapter;
     this.eventBus = deps.eventBus ?? undefined;
     this.protocolHandlers = deps.protocolHandlers ?? undefined;
     this.runtimeHandlers = deps.runtimeHandlers ?? undefined;
 
+    // Initialize all engine backends
     this.localBackend = new LocalBackend(this.projectRoot, this.runtimeHandlers);
+    this.apiBackend = new ApiBackend(this.identityAdapter);
+    this.mcpBackend = new McpBackend(this.identityAdapter);
+    this.customBackend = new CustomBackend(this.protocolHandlers);
   }
 
   /**
@@ -129,14 +145,18 @@ export class AgentRunnerModule {
           output = await this.localBackend.execute(engine as LocalEngine, ctx);
           break;
         case "api":
-          // Fase 2: ApiBackend
-          throw new Error("ApiBackend not implemented (Fase 2)");
+          output = await this.apiBackend.execute(engine as ApiEngine, ctx);
+          break;
         case "mcp":
-          // Fase 2: McpBackend
-          throw new Error("McpBackend not implemented (Fase 2)");
+          output = await this.mcpBackend.execute(
+            engine as McpEngine,
+            ctx,
+            opts.tool // Pass tool override from RunOptions
+          );
+          break;
         case "custom":
-          // Fase 2: CustomBackend
-          throw new Error("CustomBackend not implemented (Fase 2)");
+          output = await this.customBackend.execute(engine as CustomEngine, ctx);
+          break;
       }
     } catch (err) {
       status = "error";
@@ -260,4 +280,14 @@ export class AgentRunnerModule {
       });
     }
   }
+}
+
+/**
+ * [EARS-K1] Factory function for FsAgentRunner.
+ *
+ * Creates a filesystem-based agent runner with injected dependencies.
+ * Recommended for dependency injection scenarios.
+ */
+export function createFsAgentRunner(deps: AgentRunnerDependencies): IAgentRunner {
+  return new FsAgentRunner(deps);
 }

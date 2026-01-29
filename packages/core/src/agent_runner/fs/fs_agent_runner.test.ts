@@ -1,13 +1,21 @@
+/**
+ * FsAgentRunner Tests
+ *
+ * Tests for filesystem-based agent runner implementation.
+ *
+ * Reference: fs_agent_runner_module.md §4.1-4.8
+ */
+
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
-import { AgentRunnerModule } from "./agent_runner_module";
-import type { IExecutionAdapter } from "../adapters/execution_adapter";
-import type { IEventStream, BaseEvent } from "../event_bus";
-import type { AgentRecord, ExecutionRecord } from "../types";
-import type { RuntimeHandlerRegistry } from "./types";
+import { FsAgentRunner, createFsAgentRunner } from "./fs_agent_runner";
+import type { IExecutionAdapter } from "../../adapters/execution_adapter";
+import type { IEventStream, BaseEvent } from "../../event_bus";
+import type { AgentRecord, ExecutionRecord } from "../../types";
+import type { RuntimeHandlerRegistry } from "../agent_runner.types";
 
-describe("AgentRunnerModule", () => {
+describe("FsAgentRunner", () => {
   let tempDir: string;
   let gitgovPath: string;
   let agentsDir: string;
@@ -80,7 +88,7 @@ describe("AgentRunnerModule", () => {
         "module.exports.run = async () => ({ data: 'ok' })"
       );
 
-      const runner = new AgentRunnerModule({
+      const runner = new FsAgentRunner({
         executionAdapter: mockExecutionAdapter,
         gitgovPath,
         projectRoot: tempDir,
@@ -95,7 +103,7 @@ describe("AgentRunnerModule", () => {
     });
 
     it("[EARS-A2] should throw AgentNotFound when file missing", async () => {
-      const runner = new AgentRunnerModule({
+      const runner = new FsAgentRunner({
         executionAdapter: mockExecutionAdapter,
         gitgovPath,
         projectRoot: tempDir,
@@ -115,7 +123,7 @@ describe("AgentRunnerModule", () => {
         engine: { type: "local", entrypoint, function: "execute" },
       });
 
-      const runner = new AgentRunnerModule({
+      const runner = new FsAgentRunner({
         executionAdapter: mockExecutionAdapter,
         gitgovPath,
         projectRoot: tempDir,
@@ -140,7 +148,7 @@ describe("AgentRunnerModule", () => {
         engine: { type: "local", entrypoint },
       });
 
-      const runner = new AgentRunnerModule({
+      const runner = new FsAgentRunner({
         executionAdapter: mockExecutionAdapter,
         gitgovPath,
         projectRoot: tempDir,
@@ -166,7 +174,7 @@ describe("AgentRunnerModule", () => {
         })),
       };
 
-      const runner = new AgentRunnerModule({
+      const runner = new FsAgentRunner({
         executionAdapter: mockExecutionAdapter,
         gitgovPath,
         projectRoot: tempDir,
@@ -187,7 +195,7 @@ describe("AgentRunnerModule", () => {
         engine: { type: "local" },
       });
 
-      const runner = new AgentRunnerModule({
+      const runner = new FsAgentRunner({
         executionAdapter: mockExecutionAdapter,
         gitgovPath,
         projectRoot: tempDir,
@@ -211,7 +219,7 @@ describe("AgentRunnerModule", () => {
         engine: { type: "local", entrypoint },
       });
 
-      const runner = new AgentRunnerModule({
+      const runner = new FsAgentRunner({
         executionAdapter: mockExecutionAdapter,
         gitgovPath,
         projectRoot: tempDir,
@@ -242,7 +250,7 @@ describe("AgentRunnerModule", () => {
         engine: { type: "local", entrypoint: entrypoint2, function: "customFn" },
       });
 
-      const runner = new AgentRunnerModule({
+      const runner = new FsAgentRunner({
         executionAdapter: mockExecutionAdapter,
         gitgovPath,
         projectRoot: tempDir,
@@ -270,7 +278,7 @@ describe("AgentRunnerModule", () => {
         engine: { type: "local", entrypoint, function: "missingFn" },
       });
 
-      const runner = new AgentRunnerModule({
+      const runner = new FsAgentRunner({
         executionAdapter: mockExecutionAdapter,
         gitgovPath,
         projectRoot: tempDir,
@@ -300,7 +308,7 @@ describe("AgentRunnerModule", () => {
         engine: { type: "local", entrypoint },
       });
 
-      const runner = new AgentRunnerModule({
+      const runner = new FsAgentRunner({
         executionAdapter: mockExecutionAdapter,
         gitgovPath,
         projectRoot: tempDir,
@@ -330,7 +338,7 @@ describe("AgentRunnerModule", () => {
         engine: { type: "local", entrypoint },
       });
 
-      const runner = new AgentRunnerModule({
+      const runner = new FsAgentRunner({
         executionAdapter: mockExecutionAdapter,
         gitgovPath,
         projectRoot: tempDir,
@@ -353,7 +361,7 @@ describe("AgentRunnerModule", () => {
         engine: { type: "local", entrypoint },
       });
 
-      const runner = new AgentRunnerModule({
+      const runner = new FsAgentRunner({
         executionAdapter: mockExecutionAdapter,
         gitgovPath,
         projectRoot: tempDir,
@@ -382,7 +390,7 @@ describe("AgentRunnerModule", () => {
         engine: { type: "local", entrypoint },
       });
 
-      const runner = new AgentRunnerModule({
+      const runner = new FsAgentRunner({
         executionAdapter: mockExecutionAdapter,
         gitgovPath,
         projectRoot: tempDir,
@@ -404,13 +412,13 @@ describe("AgentRunnerModule", () => {
     });
   });
 
-  describe("4.7. Engine Type Validation (EARS-G1 to EARS-G3)", () => {
+  describe("4.4. Engine Type Validation (EARS-G1 to EARS-G3)", () => {
     it("[EARS-G1] should throw UnsupportedEngineType for unknown type", async () => {
       writeAgentFile("unknown-engine", {
         engine: { type: "invalid" as "local" },
       });
 
-      const runner = new AgentRunnerModule({
+      const runner = new FsAgentRunner({
         executionAdapter: mockExecutionAdapter,
         gitgovPath,
         projectRoot: tempDir,
@@ -426,7 +434,7 @@ describe("AgentRunnerModule", () => {
         engine: { type: "api" } as AgentRecord["engine"],
       });
 
-      const runner = new AgentRunnerModule({
+      const runner = new FsAgentRunner({
         executionAdapter: mockExecutionAdapter,
         gitgovPath,
         projectRoot: tempDir,
@@ -446,7 +454,7 @@ describe("AgentRunnerModule", () => {
         } as AgentRecord["engine"],
       });
 
-      const runner = new AgentRunnerModule({
+      const runner = new FsAgentRunner({
         executionAdapter: mockExecutionAdapter,
         gitgovPath,
         projectRoot: tempDir,
@@ -460,7 +468,7 @@ describe("AgentRunnerModule", () => {
     });
   });
 
-  describe("4.8. ExecutionRecord Writing (EARS-H1 to EARS-H4)", () => {
+  describe("4.5. ExecutionRecord Writing (EARS-H1 to EARS-H4)", () => {
     it("[EARS-H1] should create ExecutionRecord on success", async () => {
       const entrypoint = writeAgentEntrypoint(
         "success.js",
@@ -470,7 +478,7 @@ describe("AgentRunnerModule", () => {
         engine: { type: "local", entrypoint },
       });
 
-      const runner = new AgentRunnerModule({
+      const runner = new FsAgentRunner({
         executionAdapter: mockExecutionAdapter,
         gitgovPath,
         projectRoot: tempDir,
@@ -506,7 +514,7 @@ describe("AgentRunnerModule", () => {
         engine: { type: "local", entrypoint },
       });
 
-      const runner = new AgentRunnerModule({
+      const runner = new FsAgentRunner({
         executionAdapter: mockExecutionAdapter,
         gitgovPath,
         projectRoot: tempDir,
@@ -547,7 +555,7 @@ describe("AgentRunnerModule", () => {
         id: "exec:test-123",
       } as ExecutionRecord);
 
-      const runner = new AgentRunnerModule({
+      const runner = new FsAgentRunner({
         executionAdapter: mockExecutionAdapter,
         gitgovPath,
         projectRoot: tempDir,
@@ -563,7 +571,7 @@ describe("AgentRunnerModule", () => {
 
     it("[EARS-H4] should throw MissingDependency when ExecutionAdapter missing", () => {
       expect(() => {
-        new AgentRunnerModule({
+        new FsAgentRunner({
           executionAdapter: undefined as unknown as IExecutionAdapter,
           gitgovPath,
           projectRoot: tempDir,
@@ -572,7 +580,7 @@ describe("AgentRunnerModule", () => {
     });
   });
 
-  describe("4.9. EventBus Integration (EARS-I1 to EARS-I4)", () => {
+  describe("4.6. EventBus Integration (EARS-I1 to EARS-I4)", () => {
     it("[EARS-I1] should emit agent:started event", async () => {
       const entrypoint = writeAgentEntrypoint(
         "event-started.js",
@@ -582,7 +590,7 @@ describe("AgentRunnerModule", () => {
         engine: { type: "local", entrypoint },
       });
 
-      const runner = new AgentRunnerModule({
+      const runner = new FsAgentRunner({
         executionAdapter: mockExecutionAdapter,
         eventBus: mockEventBus,
         gitgovPath,
@@ -611,7 +619,7 @@ describe("AgentRunnerModule", () => {
         engine: { type: "local", entrypoint },
       });
 
-      const runner = new AgentRunnerModule({
+      const runner = new FsAgentRunner({
         executionAdapter: mockExecutionAdapter,
         eventBus: mockEventBus,
         gitgovPath,
@@ -642,7 +650,7 @@ describe("AgentRunnerModule", () => {
         engine: { type: "local", entrypoint },
       });
 
-      const runner = new AgentRunnerModule({
+      const runner = new FsAgentRunner({
         executionAdapter: mockExecutionAdapter,
         eventBus: mockEventBus,
         gitgovPath,
@@ -672,7 +680,7 @@ describe("AgentRunnerModule", () => {
         engine: { type: "local", entrypoint },
       });
 
-      const runner = new AgentRunnerModule({
+      const runner = new FsAgentRunner({
         executionAdapter: mockExecutionAdapter,
         gitgovPath,
         projectRoot: tempDir,
@@ -688,7 +696,7 @@ describe("AgentRunnerModule", () => {
     });
   });
 
-  describe("4.10. Response Return (EARS-J1 to EARS-J3)", () => {
+  describe("4.7. Response Return (EARS-J1 to EARS-J3)", () => {
     it("[EARS-J1] should always return AgentResponse", async () => {
       const entrypoint = writeAgentEntrypoint(
         "response.js",
@@ -698,7 +706,7 @@ describe("AgentRunnerModule", () => {
         engine: { type: "local", entrypoint },
       });
 
-      const runner = new AgentRunnerModule({
+      const runner = new FsAgentRunner({
         executionAdapter: mockExecutionAdapter,
         gitgovPath,
         projectRoot: tempDir,
@@ -727,7 +735,7 @@ describe("AgentRunnerModule", () => {
         engine: { type: "local", entrypoint },
       });
 
-      const runner = new AgentRunnerModule({
+      const runner = new FsAgentRunner({
         executionAdapter: mockExecutionAdapter,
         gitgovPath,
         projectRoot: tempDir,
@@ -754,7 +762,7 @@ describe("AgentRunnerModule", () => {
         engine: { type: "local", entrypoint },
       });
 
-      const runner = new AgentRunnerModule({
+      const runner = new FsAgentRunner({
         executionAdapter: mockExecutionAdapter,
         gitgovPath,
         projectRoot: tempDir,
@@ -768,6 +776,18 @@ describe("AgentRunnerModule", () => {
       expect(response.status).toBe("error");
       expect(response.error).toBe("agent failed");
       expect(response.output).toBeUndefined();
+    });
+  });
+
+  describe("4.8. Factory Function (EARS-K1)", () => {
+    it("[EARS-K1] should create FsAgentRunner with injected dependencies", () => {
+      const runner = createFsAgentRunner({
+        executionAdapter: mockExecutionAdapter,
+        gitgovPath,
+        projectRoot: tempDir,
+      });
+
+      expect(runner).toBeInstanceOf(FsAgentRunner);
     });
   });
 });
