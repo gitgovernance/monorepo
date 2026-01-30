@@ -242,7 +242,6 @@ export class McpBackend {
         break;
       }
 
-      case "none":
       default:
         break;
     }
