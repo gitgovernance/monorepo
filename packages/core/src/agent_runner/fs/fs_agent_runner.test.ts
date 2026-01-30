@@ -3,7 +3,7 @@
  *
  * Tests for filesystem-based agent runner implementation.
  *
- * Reference: fs_agent_runner_module.md §4.1-4.8
+ * Reference: agent_runner_module.md §4.1-4.3, §4.7-4.11
  */
 
 import * as fs from "fs";

@@ -1,96 +1,61 @@
+import type { AgentRecord } from "../types";
 import type { IEventStream } from "../event_bus";
 import type { IExecutionAdapter } from "../adapters/execution_adapter";
 import type { IIdentityAdapter } from "../adapters/identity_adapter";
 import type { ProtocolHandlerRegistry, RuntimeHandlerRegistry } from "./agent_runner";
 
 // ============================================================================
-// Engine Types (from agent_protocol.md)
+// Engine Types (derived from AgentRecord — source: agent_record_schema.yaml)
+//
+// These types are extracted from the generated AgentRecord interface so that
+// the YAML schema remains the single source of truth.  If the schema changes,
+// run `pnpm compile:types` and these aliases update automatically.
 // ============================================================================
 
 /**
- * Supported engine types by the runner (per agent_protocol.md).
+ * Union type of all supported engines.
  */
-export type EngineType = "local" | "api" | "mcp" | "custom";
+export type Engine = AgentRecord["engine"];
+
+/**
+ * Supported engine types by the runner.
+ */
+export type EngineType = Engine["type"];
 
 /**
  * Local engine configuration.
  * Agent executes in the same process.
  */
-export type LocalEngine = {
-  type: "local";
-  /** Registered runtime (e.g., "claude:computer-use", "langchain:agent") */
-  runtime?: string;
-  /** Relative path to entrypoint (from project root) */
-  entrypoint?: string;
-  /** Exported function name (default: "runAgent") */
-  function?: string;
-};
-
-/**
- * Authentication types for remote backends (API/MCP).
- */
-export type AuthType =
-  | "none"
-  | "bearer"
-  | "oauth"
-  | "api-key"
-  | "actor-signature";
-
-/**
- * Authentication configuration for remote backends.
- */
-export type AuthConfig = {
-  type: AuthType;
-  /** Environment variable name with token/key */
-  secret_key?: string;
-  /** Direct token (not recommended, prefer secret_key) */
-  token?: string;
-};
+export type LocalEngine = Extract<Engine, { type: "local" }>;
 
 /**
  * API engine configuration.
  * Agent executes on a remote server via HTTP.
  */
-export type ApiEngine = {
-  type: "api";
-  /** Agent endpoint URL (required) */
-  url: string;
-  /** HTTP method (default: "POST") */
-  method?: "POST" | "GET" | "PUT";
-  /** Authentication configuration */
-  auth?: AuthConfig;
-};
+export type ApiEngine = Extract<Engine, { type: "api" }>;
 
 /**
  * MCP engine configuration.
  * Agent executes as MCP server (Model Context Protocol).
  */
-export type McpEngine = {
-  type: "mcp";
-  /** MCP server URL (required) */
-  url: string;
-  /** Tool name to invoke (default: uses agentId) */
-  tool?: string;
-  /** Authentication configuration */
-  auth?: AuthConfig;
-};
+export type McpEngine = Extract<Engine, { type: "mcp" }>;
 
 /**
  * Custom engine configuration.
  * Allows extensibility via registered protocol handlers.
  */
-export type CustomEngine = {
-  type: "custom";
-  /** Protocol identifier (e.g., "a2a", "grpc") - required for execution */
-  protocol?: string;
-  /** Protocol-specific configuration */
-  config?: Record<string, unknown>;
-};
+export type CustomEngine = Extract<Engine, { type: "custom" }>;
 
 /**
- * Union type of all supported engines.
+ * Authentication configuration for remote backends (API/MCP).
+ * Extracted from the API engine's auth field.
  */
-export type Engine = LocalEngine | ApiEngine | McpEngine | CustomEngine;
+export type AuthConfig = NonNullable<ApiEngine["auth"]>;
+
+/**
+ * Authentication types for remote backends.
+ */
+export type AuthType = NonNullable<AuthConfig["type"]>;
 
 // ============================================================================
 // Agent Runner Types

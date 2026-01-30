@@ -186,7 +186,6 @@ export class ApiBackend {
         }
         break;
 
-      case "none":
       default:
         // No authentication
         break;
