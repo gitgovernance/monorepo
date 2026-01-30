@@ -153,7 +153,7 @@ export class AgentCommand extends BaseCommand<RunCommandOptions> {
         }
       }
 
-      // Dry run mode
+      // [EARS-D6] Dry run mode
       if (options.dryRun) {
         if (options.output === 'json') {
           console.log(JSON.stringify({
@@ -185,6 +185,7 @@ export class AgentCommand extends BaseCommand<RunCommandOptions> {
           tags: ['agent', 'automated'],
         }, currentActor.id);
         taskId = task.id;
+        // [EARS-D3] Suppress output in quiet mode
         if (!options.quiet && options.output !== 'json') {
           console.log(`Created TaskRecord: ${taskId}`);
         }
@@ -202,14 +203,16 @@ export class AgentCommand extends BaseCommand<RunCommandOptions> {
       }
       const response: Runner.AgentResponse = await runner.runOnce(runOptions);
 
-      // Format output
+      // [EARS-D1, D2] Format output
       if (options.output === 'json') {
+        // [EARS-D2] JSON output
         console.log(JSON.stringify(response, null, 2));
       } else {
+        // [EARS-D1] Text output with formatting
         this.formatTextResponse(response, options);
       }
 
-      // Exit code based on status
+      // [EARS-D4, D5] Exit code based on status
       process.exit(response.status === 'success' ? 0 : 1);
 
     } catch (error) {
@@ -281,16 +284,16 @@ export class AgentCommand extends BaseCommand<RunCommandOptions> {
       for (const id of agentIds) {
         const agent = await agentStore.get(id);
         if (agent) {
-          const engineType = agent.engine.type;
+          const engineType = agent.payload.engine.type;
 
           // Filter by engine if specified
           if (options.engine && engineType !== options.engine) {
             continue;
           }
 
-          const meta = agent.metadata as Record<string, unknown> | undefined;
+          const meta = agent.payload.metadata as Record<string, unknown> | undefined;
           agents.push({
-            id: agent.id,
+            id: agent.payload.id,
             name: id.replace('agent-', ''),
             engine: engineType,
             description: meta?.['description'] as string | undefined,
@@ -350,8 +353,8 @@ export class AgentCommand extends BaseCommand<RunCommandOptions> {
         process.exit(1);
       }
 
-      const engine = agent.engine;
-      const metadata = agent.metadata as Record<string, unknown> | undefined;
+      const engine = agent.payload.engine;
+      const metadata = agent.payload.metadata as Record<string, unknown> | undefined;
 
       // Output
       if (options.json) {
@@ -360,8 +363,8 @@ export class AgentCommand extends BaseCommand<RunCommandOptions> {
         console.log('\n' + '─'.repeat(60));
         console.log(`AGENT: ${name}`);
         console.log('─'.repeat(60));
-        console.log(`  ID:          ${agent.id}`);
-        console.log(`  Status:      ${agent.status || 'active'}`);
+        console.log(`  ID:          ${agent.payload.id}`);
+        console.log(`  Status:      ${agent.payload.status || 'active'}`);
 
         if (metadata && 'description' in metadata) {
           console.log(`  Description: ${metadata['description']}`);
@@ -379,9 +382,9 @@ export class AgentCommand extends BaseCommand<RunCommandOptions> {
           console.log(`    URL: ${engine.url}`);
         }
 
-        if (agent.triggers && agent.triggers.length > 0) {
+        if (agent.payload.triggers && agent.payload.triggers.length > 0) {
           console.log('\n  Triggers:');
-          agent.triggers.forEach((t) => console.log(`    - ${t.type}${t['event'] ? `: ${t['event']}` : ''}`));
+          agent.payload.triggers.forEach((t) => console.log(`    - ${t.type}${t['event'] ? `: ${t['event']}` : ''}`));
         }
 
         console.log('─'.repeat(60) + '\n');
