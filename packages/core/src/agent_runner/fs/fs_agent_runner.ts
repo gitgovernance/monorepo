@@ -12,11 +12,16 @@ import {
   UnsupportedEngineTypeError,
   EngineConfigError,
   MissingDependencyError,
-} from "../errors";
+} from "../agent_runner.errors";
 import type { AgentRecord } from "../../types";
 import type { IEventStream } from "../../event_bus";
 import type { IExecutionAdapter } from "../../adapters/execution_adapter";
 import type { IIdentityAdapter } from "../../adapters/identity_adapter";
+import type {
+  IAgentRunner,
+  ProtocolHandlerRegistry,
+  RuntimeHandlerRegistry,
+} from "../agent_runner";
 import type {
   LocalEngine,
   ApiEngine,
@@ -28,9 +33,6 @@ import type {
   AgentResponse,
   AgentRunnerEvent,
   RunOptions,
-  ProtocolHandlerRegistry,
-  RuntimeHandlerRegistry,
-  IAgentRunner,
 } from "../agent_runner.types";
 
 const VALID_ENGINE_TYPES = ["local", "api", "mcp", "custom"] as const;

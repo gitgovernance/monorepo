@@ -13,7 +13,7 @@ import { FsAgentRunner, createFsAgentRunner } from "./fs_agent_runner";
 import type { IExecutionAdapter } from "../../adapters/execution_adapter";
 import type { IEventStream, BaseEvent } from "../../event_bus";
 import type { AgentRecord, ExecutionRecord } from "../../types";
-import type { RuntimeHandlerRegistry } from "../agent_runner.types";
+import type { RuntimeHandlerRegistry } from "../agent_runner";
 
 describe("FsAgentRunner", () => {
   let tempDir: string;
