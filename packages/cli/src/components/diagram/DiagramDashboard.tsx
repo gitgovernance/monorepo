@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Text, useInput, useApp } from 'ink';
-import { Config, DiagramGenerator } from '@gitgov/core';
+import { DiagramGenerator } from '@gitgov/core';
+import { findProjectRoot, getGitgovPath } from '@gitgov/core/fs';
 import { StatusBadge } from '../shared/StatusBadge';
 
 interface DiagramDashboardProps {
@@ -35,7 +36,7 @@ export const DiagramDashboard: React.FC<DiagramDashboardProps> = ({
 
   useEffect(() => {
     const initialSetup = async () => {
-      const root = Config.ConfigManager.findProjectRoot();
+      const root = findProjectRoot();
       if (!root) {
         setStatus('error');
         setMessage('❌ Error: Could not find project root. Make sure you are in a GitGovernance repository.');
@@ -64,10 +65,10 @@ export const DiagramDashboard: React.FC<DiagramDashboardProps> = ({
       setWarnings([]); // Clear previous warnings
 
       // Find project root and paths using core utilities
-      const projectRoot = Config.ConfigManager.findProjectRoot();
+      const projectRoot = findProjectRoot();
       if (!projectRoot) throw new Error("Project root not found.");
 
-      const actualGitgovPath = Config.ConfigManager.getGitgovPath();
+      const actualGitgovPath = getGitgovPath();
       const path = await import('path');
       const actualOutputPath = path.join(projectRoot, outputPath);
 
@@ -133,7 +134,7 @@ export const DiagramDashboard: React.FC<DiagramDashboardProps> = ({
 
       const fs = await import('fs');
       const path = await import('path');
-      const projectRoot = Config.ConfigManager.findProjectRoot();
+      const projectRoot = findProjectRoot();
       if (!projectRoot) throw new Error("Project root not found.");
       const gitgovDir = path.join(projectRoot, '.gitgov');
 
@@ -158,9 +159,9 @@ export const DiagramDashboard: React.FC<DiagramDashboardProps> = ({
             await new Promise(resolve => setTimeout(resolve, 200));
 
             // Get paths
-            const projectRoot = Config.ConfigManager.findProjectRoot();
+            const projectRoot = findProjectRoot();
             if (!projectRoot) throw new Error("Project root not found.");
-            const actualGitgovPath = Config.ConfigManager.getGitgovPath();
+            const actualGitgovPath = getGitgovPath();
             const path = await import('path');
 
             console.log(`📖 About to regenerate after ${fileName} changed`);

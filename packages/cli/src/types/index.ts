@@ -1,5 +1,5 @@
 // Re-exports for all CLI types
-export * from './command-options.js';
+export * from './command-options';
 
 // TUI State types
 export interface TUIState {
