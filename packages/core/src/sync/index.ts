@@ -1,5 +1,7 @@
-// Main module
-export { SyncModule } from "./sync_module";
+// ISyncModule interface
+export type { ISyncModule } from "./sync";
+
+// PullScheduler (pure, depends on interface not implementation)
 export { PullScheduler } from "./pull_scheduler";
 
 // Types
@@ -21,7 +23,7 @@ export type {
   ConflictDiff,
   ConflictFileDiff,
   StateDeltaFile,
-} from "./types";
+} from "./sync.types";
 
 export type {
   PullSchedulerConfig,
@@ -39,6 +41,7 @@ export {
   StateBranchSetupError,
   UncommittedChangesError,
   CryptoModuleRequiredError,
+  ActorIdentityMismatchError,
   // Type guards for error handling (additive - backward compatible)
   isSyncError,
   isPushFromStateBranchError,
@@ -48,5 +51,5 @@ export {
   isNoRebaseInProgressError,
   isStateBranchSetupError,
   isCryptoModuleRequiredError,
-} from "./errors";
-
+  isActorIdentityMismatchError,
+} from "./sync.errors";

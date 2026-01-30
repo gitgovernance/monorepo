@@ -7,8 +7,9 @@
  * @module sync/pull_scheduler
  */
 
-import type { SyncModule } from "./sync_module";
+import type { FsSyncModule } from "./fs/fs_sync";
 import type { ConfigManager } from "../config_manager";
+import type { SessionManager } from "../session_manager";
 
 /**
  * Result of a pull operation executed by the scheduler
@@ -50,10 +51,12 @@ export interface PullSchedulerConfig {
  * Dependencies required by PullScheduler
  */
 export interface PullSchedulerDependencies {
-  /** SyncModule for pull operations */
-  syncModule: SyncModule;
-  /** ConfigManager for loading configuration */
+  /** FsSyncModule for pull operations */
+  syncModule: FsSyncModule;
+  /** ConfigManager for loading project configuration */
   configManager: ConfigManager;
+  /** SessionManager for loading session preferences */
+  sessionManager: SessionManager;
 }
 
 /**
@@ -77,8 +80,9 @@ export interface PullSchedulerDependencies {
  * ```
  */
 export class PullScheduler {
-  private syncModule: SyncModule;
+  private syncModule: FsSyncModule;
   private configManager: ConfigManager;
+  private sessionManager: SessionManager;
   private config: PullSchedulerConfig;
   private intervalId?: NodeJS.Timeout;
   private running: boolean = false;
@@ -86,14 +90,18 @@ export class PullScheduler {
 
   constructor(dependencies: PullSchedulerDependencies) {
     if (!dependencies.syncModule) {
-      throw new Error("SyncModule is required for PullScheduler");
+      throw new Error("FsSyncModule is required for PullScheduler");
     }
     if (!dependencies.configManager) {
       throw new Error("ConfigManager is required for PullScheduler");
     }
+    if (!dependencies.sessionManager) {
+      throw new Error("SessionManager is required for PullScheduler");
+    }
 
     this.syncModule = dependencies.syncModule;
     this.configManager = dependencies.configManager;
+    this.sessionManager = dependencies.sessionManager;
 
     // Default configuration (will be loaded lazily in start())
     this.config = {
@@ -117,7 +125,7 @@ export class PullScheduler {
       const projectDefaults = projectConfig?.state?.defaults?.pullScheduler ?? {};
 
       // Load local preferences from .session.json
-      const session = await this.configManager.loadSession();
+      const session = await this.sessionManager.loadSession();
       const localPreferences = session?.syncPreferences?.pullScheduler ?? {};
 
       // Merge with cascade priority

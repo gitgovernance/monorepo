@@ -1,15 +1,16 @@
-import type { GitModule } from "../git";
+import type { IGitModule } from '../git';
 import type { ConfigManager } from "../config_manager";
 import type { IIdentityAdapter } from "../adapters/identity_adapter";
-import type { IFsLintModule, LintReport } from "../lint";
+import type { LintReport } from "../lint";
+import type { IFsLintModule } from "../lint/fs/fs_lint.types";
 import type { IIndexerAdapter } from "../adapters/indexer_adapter";
 
 /**
  * SyncModule Dependencies
  */
-export interface SyncModuleDependencies {
+export type SyncModuleDependencies = {
   /** Low-level Git module (required) */
-  git: GitModule;
+  git: IGitModule;
   /** Configuration manager (required) */
   config: ConfigManager;
   /** Identity adapter for signature verification and signing (required) */
@@ -23,7 +24,7 @@ export interface SyncModuleDependencies {
 /**
  * Options for pushState operation
  */
-export interface SyncPushOptions {
+export type SyncPushOptions = {
   /** Branch to push from (default: current branch) */
   sourceBranch?: string;
   /** Actor ID publishing the state (required) */
@@ -37,7 +38,7 @@ export interface SyncPushOptions {
 /**
  * Result of pushState operation
  */
-export interface SyncPushResult {
+export type SyncPushResult = {
   /** Indicates if the operation was successful */
   success: boolean;
   /** Number of files synced */
@@ -68,7 +69,7 @@ export interface SyncPushResult {
 /**
  * Options for pullState operation
  */
-export interface SyncPullOptions {
+export type SyncPullOptions = {
   /** Force re-indexing even if there are no new changes */
   forceReindex?: boolean;
   /** [EARS-62] Force pull even if local changes would be overwritten */
@@ -78,7 +79,7 @@ export interface SyncPullOptions {
 /**
  * Result of pullState operation
  */
-export interface SyncPullResult {
+export type SyncPullResult = {
   /** Indicates if the operation was successful */
   success: boolean;
   /** Indicates if there were new remote changes */
@@ -100,7 +101,7 @@ export interface SyncPullResult {
 /**
  * Options for resolveConflict operation
  */
-export interface SyncResolveOptions {
+export type SyncResolveOptions = {
   /** Justification for the conflict resolution (required) */
   reason: string;
   /** Actor ID resolving the conflict (required) */
@@ -110,7 +111,7 @@ export interface SyncResolveOptions {
 /**
  * Result of resolveConflict operation
  */
-export interface SyncResolveResult {
+export type SyncResolveResult = {
   /** Indicates if the operation was successful */
   success: boolean;
   /** Commit hash of the created rebase commit */
@@ -130,7 +131,7 @@ export interface SyncResolveResult {
 /**
  * Detailed information about a detected conflict
  */
-export interface ConflictInfo {
+export type ConflictInfo = {
   /** Type of conflict detected */
   type: ConflictType;
   /** Files affected by the conflict */
@@ -157,7 +158,7 @@ export type ConflictType =
 /**
  * Information about a detected integrity violation
  */
-export interface IntegrityViolation {
+export type IntegrityViolation = {
   /** Commit hash of the rebase commit without resolution */
   rebaseCommitHash: string;
   /** Message of the rebase commit */
@@ -186,7 +187,7 @@ export type ExpectedFilesScope =
 /**
  * Options for state audit
  */
-export interface AuditStateOptions {
+export type AuditStateOptions = {
   /** Verification scope: which Records to verify (default: "all") */
   scope?: AuditScope;
   /** Verify signatures in Records (default: true) */
@@ -204,7 +205,7 @@ export interface AuditStateOptions {
 /**
  * Conflict diff information for a file
  */
-export interface ConflictFileDiff {
+export type ConflictFileDiff = {
   /** Path of the conflicted file */
   filePath: string;
   /** Content of the local version (ours) */
@@ -223,7 +224,7 @@ export interface ConflictFileDiff {
 /**
  * Structured conflict diff
  */
-export interface ConflictDiff {
+export type ConflictDiff = {
   /** Conflicted files with their diff */
   files: ConflictFileDiff[];
   /** Descriptive message of the conflict */
@@ -238,7 +239,7 @@ export interface ConflictDiff {
  * This report combines SyncModule-specific audits (rebase integrity, commits)
  * with structural validation from LintModule (signatures, checksums, schemas).
  */
-export interface AuditStateReport {
+export type AuditStateReport = {
   /** Indicates if the audit passed without violations */
   passed: boolean;
   /** Scope used for the audit */
@@ -260,7 +261,7 @@ export interface AuditStateReport {
 /**
  * Information of a changed file in the delta
  */
-export interface StateDeltaFile {
+export type StateDeltaFile = {
   /** File status: Added, Modified, Deleted */
   status: "A" | "M" | "D";
   /** File path */

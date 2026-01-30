@@ -7,17 +7,18 @@
  */
 
 import { PullScheduler } from "./pull_scheduler";
-import type { SyncModule } from "./sync_module";
+import type { FsSyncModule } from "./fs/fs_sync";
 import type { ConfigManager } from "../config_manager";
-import type { SyncPullResult } from "./types";
+import type { SessionManager } from "../session_manager";
+import type { SyncPullResult } from "./sync.types";
 
 /**
- * Mock SyncModule for testing
+ * Mock FsSyncModule for testing
  */
-function createMockSyncModule(): jest.Mocked<SyncModule> {
+function createMockFsSyncModule(): jest.Mocked<FsSyncModule> {
   return {
     pullState: jest.fn(),
-  } as unknown as jest.Mocked<SyncModule>;
+  } as unknown as jest.Mocked<FsSyncModule>;
 }
 
 /**
@@ -26,22 +27,33 @@ function createMockSyncModule(): jest.Mocked<SyncModule> {
 function createMockConfigManager(config: Record<string, unknown> = {}): jest.Mocked<ConfigManager> {
   return {
     loadConfig: jest.fn().mockResolvedValue(config),
-    loadSession: jest.fn().mockResolvedValue({}),
   } as unknown as jest.Mocked<ConfigManager>;
 }
 
+/**
+ * Mock SessionManager for testing
+ */
+function createMockSessionManager(): jest.Mocked<SessionManager> {
+  return {
+    loadSession: jest.fn().mockResolvedValue({}),
+  } as unknown as jest.Mocked<SessionManager>;
+}
+
 describe("PullScheduler", () => {
-  let mockSyncModule: jest.Mocked<SyncModule>;
+  let mockFsSyncModule: jest.Mocked<FsSyncModule>;
   let mockConfigManager: jest.Mocked<ConfigManager>;
+  let mockSessionManager: jest.Mocked<SessionManager>;
   let scheduler: PullScheduler;
 
   beforeEach(() => {
-    mockSyncModule = createMockSyncModule();
+    mockFsSyncModule = createMockFsSyncModule();
     mockConfigManager = createMockConfigManager();
+    mockSessionManager = createMockSessionManager();
 
     scheduler = new PullScheduler({
-      syncModule: mockSyncModule,
+      syncModule: mockFsSyncModule,
       configManager: mockConfigManager,
+      sessionManager: mockSessionManager,
     });
 
     // Clear all timers
@@ -59,7 +71,7 @@ describe("PullScheduler", () => {
   describe("Start and Control (EARS 33-36)", () => {
     it("[EARS-33] should start scheduler with configured interval", async () => {
       // Setup: Configure scheduler as enabled
-      mockConfigManager.loadSession.mockResolvedValue({
+      mockSessionManager.loadSession.mockResolvedValue({
         syncPreferences: {
           pullScheduler: {
             enabled: true,
@@ -68,7 +80,7 @@ describe("PullScheduler", () => {
         },
       });
 
-      mockSyncModule.pullState.mockResolvedValue({
+      mockFsSyncModule.pullState.mockResolvedValue({
         success: true,
         reindexed: false,
         conflictDetected: false,
@@ -85,12 +97,12 @@ describe("PullScheduler", () => {
       await Promise.resolve(); // Let promises resolve
 
       // Verify pullState was called
-      expect(mockSyncModule.pullState).toHaveBeenCalledTimes(1);
+      expect(mockFsSyncModule.pullState).toHaveBeenCalledTimes(1);
     });
 
     it("[EARS-34] should be idempotent if already running", async () => {
       // Setup
-      mockConfigManager.loadSession.mockResolvedValue({
+      mockSessionManager.loadSession.mockResolvedValue({
         syncPreferences: {
           pullScheduler: {
             enabled: true,
@@ -110,7 +122,7 @@ describe("PullScheduler", () => {
       expect(secondRunning).toBe(true);
 
       // Fast-forward and verify only one interval is active
-      mockSyncModule.pullState.mockResolvedValue({
+      mockFsSyncModule.pullState.mockResolvedValue({
         success: true,
         reindexed: false,
         conflictDetected: false,
@@ -119,12 +131,12 @@ describe("PullScheduler", () => {
       jest.advanceTimersByTime(30000);
       await Promise.resolve();
 
-      expect(mockSyncModule.pullState).toHaveBeenCalledTimes(1);
+      expect(mockFsSyncModule.pullState).toHaveBeenCalledTimes(1);
     });
 
     it("[EARS-35] should stop scheduler and cleanup resources", async () => {
       // Setup
-      mockConfigManager.loadSession.mockResolvedValue({
+      mockSessionManager.loadSession.mockResolvedValue({
         syncPreferences: {
           pullScheduler: {
             enabled: true,
@@ -133,7 +145,7 @@ describe("PullScheduler", () => {
         },
       });
 
-      mockSyncModule.pullState.mockResolvedValue({
+      mockFsSyncModule.pullState.mockResolvedValue({
         success: true,
         reindexed: false,
         conflictDetected: false,
@@ -152,7 +164,7 @@ describe("PullScheduler", () => {
       jest.advanceTimersByTime(60000);
       await Promise.resolve();
 
-      expect(mockSyncModule.pullState).not.toHaveBeenCalled();
+      expect(mockFsSyncModule.pullState).not.toHaveBeenCalled();
     });
 
     it("[EARS-36] should return correct scheduler state", async () => {
@@ -160,7 +172,7 @@ describe("PullScheduler", () => {
       expect(scheduler.isRunning()).toBe(false);
 
       // Setup and start
-      mockConfigManager.loadSession.mockResolvedValue({
+      mockSessionManager.loadSession.mockResolvedValue({
         syncPreferences: {
           pullScheduler: {
             enabled: true,
@@ -183,7 +195,7 @@ describe("PullScheduler", () => {
   describe("Pull Operation and Event Handling (EARS 37-40)", () => {
     it("[EARS-37] should emit event when detects new changes", async () => {
       // Setup: Pull returns changes
-      mockSyncModule.pullState.mockResolvedValue({
+      mockFsSyncModule.pullState.mockResolvedValue({
         success: true,
         reindexed: true,
         conflictDetected: false,
@@ -200,7 +212,7 @@ describe("PullScheduler", () => {
 
     it("[EARS-38] should handle conflicts appropriately", async () => {
       // Setup: Pull returns conflict
-      mockSyncModule.pullState.mockResolvedValue({
+      mockFsSyncModule.pullState.mockResolvedValue({
         success: false,
         reindexed: false,
         conflictDetected: true,
@@ -223,7 +235,7 @@ describe("PullScheduler", () => {
 
     it("[EARS-38] should stop scheduler if stopOnConflict is true", async () => {
       // Setup: Configure to stop on conflict
-      mockConfigManager.loadSession.mockResolvedValue({
+      mockSessionManager.loadSession.mockResolvedValue({
         syncPreferences: {
           pullScheduler: {
             enabled: true,
@@ -237,7 +249,7 @@ describe("PullScheduler", () => {
       expect(scheduler.isRunning()).toBe(true);
 
       // Setup: Pull returns conflict
-      mockSyncModule.pullState.mockResolvedValue({
+      mockFsSyncModule.pullState.mockResolvedValue({
         success: false,
         reindexed: false,
         conflictDetected: true,
@@ -256,7 +268,7 @@ describe("PullScheduler", () => {
 
     it("[EARS-39] should continue after network errors", async () => {
       // Setup: Configure to continue on network error
-      mockConfigManager.loadSession.mockResolvedValue({
+      mockSessionManager.loadSession.mockResolvedValue({
         syncPreferences: {
           pullScheduler: {
             enabled: true,
@@ -269,7 +281,7 @@ describe("PullScheduler", () => {
       await scheduler.start();
 
       // Setup: Pull throws network error
-      mockSyncModule.pullState.mockRejectedValue(new Error("network timeout"));
+      mockFsSyncModule.pullState.mockRejectedValue(new Error("network timeout"));
 
       // Execute
       const result = await scheduler.pullNow();
@@ -289,7 +301,7 @@ describe("PullScheduler", () => {
         resolvePull = resolve;
       });
 
-      mockSyncModule.pullState.mockReturnValue(pullPromise);
+      mockFsSyncModule.pullState.mockReturnValue(pullPromise);
 
       // Execute: Start two pulls simultaneously
       const pull1Promise = scheduler.pullNow();
@@ -311,7 +323,7 @@ describe("PullScheduler", () => {
       expect(result1.success).toBe(true);
 
       // Verify pullState was only called once
-      expect(mockSyncModule.pullState).toHaveBeenCalledTimes(1);
+      expect(mockFsSyncModule.pullState).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -320,7 +332,7 @@ describe("PullScheduler", () => {
   describe("Additional Edge Cases", () => {
     it("should not start if scheduler is not enabled in config", async () => {
       // Setup: Scheduler disabled
-      mockConfigManager.loadSession.mockResolvedValue({
+      mockSessionManager.loadSession.mockResolvedValue({
         syncPreferences: {
           pullScheduler: {
             enabled: false,
@@ -338,7 +350,7 @@ describe("PullScheduler", () => {
     it("should use default config if loading fails", async () => {
       // Setup: Config loading fails
       mockConfigManager.loadConfig.mockRejectedValue(new Error("Config not found"));
-      mockConfigManager.loadSession.mockRejectedValue(new Error("Session not found"));
+      mockSessionManager.loadSession.mockRejectedValue(new Error("Session not found"));
 
       // Execute
       await scheduler.start();
@@ -349,7 +361,7 @@ describe("PullScheduler", () => {
 
     it("should handle no changes gracefully", async () => {
       // Setup: Pull returns no changes
-      mockSyncModule.pullState.mockResolvedValue({
+      mockFsSyncModule.pullState.mockResolvedValue({
         success: true,
         reindexed: false,
         conflictDetected: false,
