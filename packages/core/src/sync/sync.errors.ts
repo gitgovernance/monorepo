@@ -102,6 +102,28 @@ export class StateBranchSetupError extends SyncError {
 }
 
 /**
+ * Error thrown when the provided actorId doesn't match the authenticated identity.
+ *
+ * This prevents impersonation: you can only push/resolve as the actor whose
+ * private key you hold.
+ */
+export class ActorIdentityMismatchError extends SyncError {
+  public requestedActorId: string;
+  public authenticatedActorId: string;
+
+  constructor(requestedActorId: string, authenticatedActorId: string) {
+    super(
+      `Actor identity mismatch: requested '${requestedActorId}' but authenticated as '${authenticatedActorId}'. ` +
+      `You can only operate as the actor whose private key you hold.`
+    );
+    this.name = "ActorIdentityMismatchError";
+    this.requestedActorId = requestedActorId;
+    this.authenticatedActorId = authenticatedActorId;
+    Object.setPrototypeOf(this, ActorIdentityMismatchError.prototype);
+  }
+}
+
+/**
  * Error thrown when uncommitted changes exist in state branch
  */
 export class UncommittedChangesError extends SyncError {
@@ -181,5 +203,11 @@ export function isCryptoModuleRequiredError(
   error: unknown
 ): error is CryptoModuleRequiredError {
   return error instanceof CryptoModuleRequiredError;
+}
+
+export function isActorIdentityMismatchError(
+  error: unknown
+): error is ActorIdentityMismatchError {
+  return error instanceof ActorIdentityMismatchError;
 }
 
