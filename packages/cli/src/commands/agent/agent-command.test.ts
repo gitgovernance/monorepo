@@ -72,20 +72,27 @@ let mockAgentStore: {
 describe('AgentCommand', () => {
   let agentCommand: AgentCommand;
 
-  // Mock agent record with typed metadata
-  const mockAgentPayload: AgentRecord<TestAgentMetadata> = {
-    id: 'agent:test-echo',
-    status: 'active',
-    engine: {
-      type: 'local',
-      entrypoint: 'packages/agents/test-echo/dist/index.mjs',
-      function: 'runAgent',
+  // Mock agent record wrapped as GitGovAgentRecord (EmbeddedMetadataRecord<AgentRecord>)
+  const mockAgentRecord = {
+    header: {
+      version: '1.0' as const,
+      type: 'agent' as const,
+      signatures: [],
     },
-    metadata: {
-      description: 'Simple test agent that echoes input',
-      purpose: 'testing',
-    },
-    triggers: [{ type: 'manual' }],
+    payload: {
+      id: 'agent:test-echo',
+      status: 'active',
+      engine: {
+        type: 'local' as const,
+        entrypoint: 'packages/agents/test-echo/dist/index.mjs',
+        function: 'runAgent',
+      },
+      metadata: {
+        description: 'Simple test agent that echoes input',
+        purpose: 'testing',
+      },
+      triggers: [{ type: 'manual' as const }],
+    } satisfies AgentRecord<TestAgentMetadata>,
   };
 
   // Mock successful AgentResponse
@@ -154,14 +161,17 @@ describe('AgentCommand', () => {
       list: jest.fn().mockResolvedValue(['agent-test-echo', 'agent-jira-manager']),
       get: jest.fn().mockImplementation((id: string) => {
         if (id === 'agent-test-echo') {
-          return Promise.resolve(mockAgentPayload);
+          return Promise.resolve(mockAgentRecord);
         }
         if (id === 'agent-jira-manager') {
           return Promise.resolve({
-            ...mockAgentPayload,
-            id: 'agent:jira-manager',
-            engine: { type: 'api' as const, url: 'https://api.example.com' },
-            metadata: { description: 'Jira integration agent' },
+            header: mockAgentRecord.header,
+            payload: {
+              ...mockAgentRecord.payload,
+              id: 'agent:jira-manager',
+              engine: { type: 'api' as const, url: 'https://api.example.com' },
+              metadata: { description: 'Jira integration agent' },
+            },
           });
         }
         return Promise.resolve(null);
@@ -316,7 +326,7 @@ describe('AgentCommand', () => {
       const jsonCall = mockConsoleLog.mock.calls.find(call => {
         try {
           const parsed = JSON.parse(call[0]);
-          return parsed.id !== undefined && parsed.engine !== undefined;
+          return parsed.payload.id !== undefined && parsed.payload.engine !== undefined;
         } catch {
           return false;
         }
