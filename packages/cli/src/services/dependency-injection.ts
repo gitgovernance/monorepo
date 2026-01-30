@@ -1,6 +1,6 @@
 import * as path from 'path';
-import { Adapters, Config, Session, Store, EventBus, Lint, Git, Sync, SourceAuditor, PiiDetector, Runner, KeyProvider, Factories } from '@gitgov/core';
-import { FsFileLister, findProjectRoot, findGitgovRoot, createSessionManager } from '@gitgov/core/fs';
+import { Adapters, Config, Session, Store, EventBus, Lint, Git, Sync, SourceAuditor, FindingDetector, Runner, KeyProvider, Factories } from '@gitgov/core';
+import { FsFileLister, FsProjectInitializer, findProjectRoot, findGitgovRoot, createSessionManager } from '@gitgov/core/fs';
 import type {
   TaskRecord, CycleRecord, FeedbackRecord, ExecutionRecord, ChangelogRecord, ActorRecord, AgentRecord,
   GitGovRecordPayload, CustomRecord, GitGovRecord,
@@ -41,8 +41,14 @@ export class DependencyInjectionService {
     agentStore: RecordStore<AgentRecord>;
   } | null = null;
 
-  /** [EARS-52] Tracks if bootstrap from gitgov-state occurred, requiring reindex */
+  /** [EARS-D1] Tracks if bootstrap from gitgov-state occurred, requiring reindex */
   private bootstrapOccurred: boolean = false;
+
+  /**
+   * When true, initializeStores() skips .gitgov discovery and bootstrap.
+   * Only set via setInitMode() — never via internal projectRoot assignments.
+   */
+  private initModeEnabled = false;
 
   private constructor() { }
 
@@ -57,8 +63,18 @@ export class DependencyInjectionService {
   }
 
   /**
+   * Configure DI for init mode — sets projectRoot directly,
+   * bypassing .gitgov discovery and bootstrap.
+   * Only called by InitCommand before .gitgov/ exists.
+   */
+  setInitMode(projectRoot: string): void {
+    this.projectRoot = projectRoot;
+    this.initModeEnabled = true;
+  }
+
+  /**
    * Initialize stores (shared between adapters)
-   * 
+   *
    * Bootstrap flow:
    * 1. Try to find .gitgov/ directory
    * 2. If not found, check if gitgov-state branch exists
@@ -70,32 +86,39 @@ export class DependencyInjectionService {
       return; // Already initialized
     }
 
-    const { promises: fs } = await import('fs');
     const { Factories } = await import('@gitgov/core');
 
-    // Get git module for potential bootstrap
-    const gitModule = await this.getGitModule();
-    const repoRoot = await gitModule.getRepoRoot();
-    const gitgovPath = path.join(repoRoot, '.gitgov');
-
-    // Check if .gitgov/ exists in filesystem
     let projectRoot: string;
-    try {
-      await fs.access(gitgovPath);
-      // .gitgov/ exists, use it
-      projectRoot = repoRoot;
-    } catch {
-      // .gitgov/ doesn't exist in filesystem
-      // Try bootstrap from gitgov-state using SyncModule static method (core logic)
-      const bootstrapResult = await Sync.SyncModule.bootstrapFromStateBranch(gitModule);
 
-      if (bootstrapResult.success) {
-        // [EARS-52] Bootstrap successful - mark for reindex
+    if (this.initModeEnabled && this.projectRoot) {
+      // Init mode: projectRoot pre-set via setInitMode(), skip discovery + bootstrap
+      projectRoot = this.projectRoot;
+    } else {
+      // Normal discovery flow
+      const { promises: fs } = await import('fs');
+
+      const gitModule = await this.getGitModule();
+      const repoRoot = await gitModule.getRepoRoot();
+      const gitgovPath = path.join(repoRoot, '.gitgov');
+
+      // Check if .gitgov/ exists in filesystem
+      try {
+        await fs.access(gitgovPath);
+        // .gitgov/ exists, use it
         projectRoot = repoRoot;
-        this.bootstrapOccurred = true;
-      } else {
-        // Bootstrap failed - project not initialized
-        throw new Error("❌ GitGovernance not initialized. Run 'gitgov init' first.");
+      } catch {
+        // .gitgov/ doesn't exist in filesystem
+        // Try bootstrap from gitgov-state using SyncModule static method (core logic)
+        const bootstrapResult = await Sync.SyncModule.bootstrapFromStateBranch(gitModule);
+
+        if (bootstrapResult.success) {
+          // [EARS-52] Bootstrap successful - mark for reindex
+          projectRoot = repoRoot;
+          this.bootstrapOccurred = true;
+        } else {
+          // Bootstrap failed - project not initialized
+          throw new Error("❌ GitGovernance not initialized. Run 'gitgov init' first.");
+        }
       }
     }
 
@@ -158,7 +181,7 @@ export class DependencyInjectionService {
         cacheStore,
       });
 
-      // [EARS-52] If bootstrap occurred, regenerate index immediately
+      // [EARS-D1] If bootstrap occurred, regenerate index immediately
       // This ensures index.json is up-to-date after restoring .gitgov/ from gitgov-state
       if (this.bootstrapOccurred) {
         try {
@@ -315,6 +338,29 @@ export class DependencyInjectionService {
   }
 
   /**
+   * Creates and returns ProjectAdapter with all required dependencies.
+   * Used by InitCommand (via setInitMode) and potentially other commands.
+   */
+  async getProjectAdapter(): Promise<Adapters.ProjectAdapter> {
+    await this.initializeStores();
+    if (!this.projectRoot) {
+      throw new Error("Project root not initialized");
+    }
+
+    const identityAdapter = await this.getIdentityAdapter();
+    const backlogAdapter = await this.getBacklogAdapter();
+    const configManager = await this.getConfigManager();
+    const projectInitializer = new FsProjectInitializer(this.projectRoot);
+
+    return new Adapters.ProjectAdapter({
+      identityAdapter,
+      backlogAdapter,
+      configManager,
+      projectInitializer,
+    });
+  }
+
+  /**
    * Creates and returns FeedbackAdapter with all required dependencies
    */
   async getFeedbackAdapter(): Promise<Adapters.FeedbackAdapter> {
@@ -459,8 +505,8 @@ export class DependencyInjectionService {
         throw new Error("Failed to initialize stores");
       }
 
-      // Create PiiDetectorModule (uses default config)
-      const piiDetector = new PiiDetector.PiiDetectorModule();
+      // Create FindingDetectorModule (uses default config)
+      const findingDetector = new FindingDetector.FindingDetectorModule();
 
       // Create WaiverReader with FeedbackAdapter
       const feedbackAdapter = await this.getFeedbackAdapter();
@@ -472,7 +518,7 @@ export class DependencyInjectionService {
 
       // Create SourceAuditorModule with dependencies (including FileLister)
       this.sourceAuditorModule = new SourceAuditor.SourceAuditorModule({
-        piiDetector,
+        findingDetector,
         waiverReader,
         fileLister,
       });
