@@ -514,15 +514,85 @@ jest.doMock('@gitgov/core', () => {
 
 // Mock @gitgov/core/fs — standalone functions + filesystem classes
 jest.doMock('@gitgov/core/fs', () => ({
+  FsRecordStore: jest.fn().mockImplementation(() => ({
+    get: jest.fn().mockResolvedValue(null),
+    put: jest.fn().mockResolvedValue(undefined),
+    delete: jest.fn().mockResolvedValue(undefined),
+    list: jest.fn().mockResolvedValue([]),
+    exists: jest.fn().mockResolvedValue(false),
+  })),
   FsFileLister: jest.fn().mockImplementation(() => ({
     list: jest.fn().mockResolvedValue([]),
     read: jest.fn().mockResolvedValue(''),
     exists: jest.fn().mockResolvedValue(false),
     stat: jest.fn().mockResolvedValue({ isFile: true, isDirectory: false, size: 0, mtime: new Date() })
   })),
-  FsStore: jest.fn().mockImplementation(() => ({})),
-  FsKeyProvider: jest.fn().mockImplementation(() => ({})),
   FsProjectInitializer: jest.fn().mockImplementation(() => ({})),
+  FsLintModule: jest.fn().mockImplementation(() => ({
+    lint: jest.fn().mockResolvedValue({
+      summary: { filesChecked: 0, errors: 0, warnings: 0, fixable: 0, executionTime: 0 },
+      results: [],
+      metadata: { timestamp: new Date().toISOString(), options: {}, version: '1.0.0' }
+    }),
+    lintFile: jest.fn().mockResolvedValue({
+      summary: { filesChecked: 1, errors: 0, warnings: 0, fixable: 0, executionTime: 0 },
+      results: [],
+      metadata: { timestamp: new Date().toISOString(), options: {}, version: '1.0.0' }
+    }),
+    fix: jest.fn().mockResolvedValue({
+      summary: { fixed: 0, failed: 0, backupsCreated: 0 },
+      fixes: []
+    })
+  })),
+  GitModule: jest.fn().mockImplementation(() => ({
+    getRepoRoot: jest.fn().mockResolvedValue('/tmp/test-gitgov'),
+    getCurrentBranch: jest.fn().mockResolvedValue('main'),
+    branchExists: jest.fn().mockResolvedValue(true),
+    checkoutFilesFromBranch: jest.fn().mockResolvedValue(undefined),
+    fetch: jest.fn().mockResolvedValue(undefined),
+    listRemoteBranches: jest.fn().mockResolvedValue([]),
+    checkoutBranch: jest.fn().mockResolvedValue(undefined),
+    pushWithUpstream: jest.fn().mockResolvedValue(undefined),
+    setUpstream: jest.fn().mockResolvedValue(undefined),
+    getBranchRemote: jest.fn().mockResolvedValue(null),
+    checkoutOrphanBranch: jest.fn().mockResolvedValue(undefined),
+    pullRebase: jest.fn().mockResolvedValue(undefined),
+    getChangedFiles: jest.fn().mockResolvedValue([]),
+    add: jest.fn().mockResolvedValue(undefined),
+    commit: jest.fn().mockResolvedValue('mock-commit-hash'),
+    push: jest.fn().mockResolvedValue(undefined),
+    hasUncommittedChanges: jest.fn().mockResolvedValue(false),
+    stash: jest.fn().mockResolvedValue('mock-stash-hash'),
+    stashPop: jest.fn().mockResolvedValue(true),
+    getConflictedFiles: jest.fn().mockResolvedValue([]),
+    rebaseAbort: jest.fn().mockResolvedValue(undefined),
+    isRebaseInProgress: jest.fn().mockResolvedValue(false),
+    getCommitHistory: jest.fn().mockResolvedValue([]),
+    getStagedFiles: jest.fn().mockResolvedValue([]),
+    rebaseContinue: jest.fn().mockResolvedValue('mock-commit-hash'),
+    commitAllowEmpty: jest.fn().mockResolvedValue('mock-commit-hash'),
+    exec: jest.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' }),
+  })),
+  createAgentRunner: jest.fn().mockImplementation(() => ({
+    run: jest.fn().mockResolvedValue({ success: true }),
+  })),
+  createConfigManager: jest.fn().mockImplementation(() => ({
+    loadConfig: jest.fn().mockResolvedValue({
+      protocolVersion: '1.0.0',
+      projectId: 'test-project',
+      projectName: 'Test Project'
+    }),
+    loadSession: jest.fn().mockResolvedValue({
+      lastSession: {
+        actorId: 'human:test-user',
+        timestamp: new Date().toISOString()
+      },
+      actorState: {}
+    }),
+    saveConfig: jest.fn().mockResolvedValue(undefined),
+    saveSession: jest.fn().mockResolvedValue(undefined),
+    updateActorState: jest.fn().mockResolvedValue(undefined)
+  })),
   findProjectRoot: jest.fn().mockReturnValue('/tmp/test-gitgov'),
   findGitgovRoot: jest.fn().mockReturnValue('/tmp/test-gitgov'),
   createSessionManager: jest.fn().mockReturnValue({
@@ -536,7 +606,7 @@ import { DependencyInjectionService } from './dependency-injection';
 // Mocked module references (require once after doMock, use everywhere)
 const mockFs = require('fs');
 const corefs = require('@gitgov/core/fs');
-const { Config, Sync, Git, Adapters, KeyProvider, EventBus, RecordStore } = require('@gitgov/core');
+const { Config, Sync, Git, Adapters, KeyProvider, EventBus } = require('@gitgov/core');
 
 describe('DependencyInjectionService', () => {
   let diService: DependencyInjectionService;
@@ -599,8 +669,8 @@ describe('DependencyInjectionService', () => {
       // Verify stores were created by checking adapter was created successfully
       expect(indexerAdapter).toBeDefined();
 
-      // Verify RecordStore constructor was called for each store type
-      expect(RecordStore).toHaveBeenCalled();
+      // Verify FsRecordStore constructor was called for each store type
+      expect(corefs.FsRecordStore).toHaveBeenCalled();
     });
 
     // [EARS-B2] Bootstrap from gitgov-state → tested as [EARS-D1] in §4.4
@@ -613,13 +683,13 @@ describe('DependencyInjectionService', () => {
       await diService.getIndexerAdapter();
 
       // Clear mock call counts
-      const callCountAfterFirst = RecordStore.mock.calls.length;
+      const callCountAfterFirst = corefs.FsRecordStore.mock.calls.length;
 
       // Second call - should use cached stores
       await diService.getBacklogAdapter();
 
-      // RecordStore should not be called again (stores already initialized)
-      expect(RecordStore.mock.calls.length).toBe(callCountAfterFirst);
+      // FsRecordStore should not be called again (stores already initialized)
+      expect(corefs.FsRecordStore.mock.calls.length).toBe(callCountAfterFirst);
     });
   });
 
@@ -712,7 +782,7 @@ describe('DependencyInjectionService', () => {
       expect(configManager.loadConfig).toBeDefined();
 
       // Verify createConfigManager was called with projectRoot
-      expect(Config.createConfigManager).toHaveBeenCalledWith(mockProjectRoot);
+      expect(corefs.createConfigManager).toHaveBeenCalledWith(mockProjectRoot);
     });
 
     it('[EARS-C10] should create SessionManager with projectRoot', async () => {
