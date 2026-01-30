@@ -1,3 +1,18 @@
+/**
+ * DependencyInjectionService Unit Tests
+ *
+ * Blueprint: packages/blueprints/03_products/cli/specs/dependency_injection_module.md
+ * All EARS prefixes map to dependency_injection_module.md §4.1-4.6
+ *
+ * EARS Coverage:
+ * - §4.1 Singleton Pattern (EARS-A1 to A2)
+ * - §4.2 Store Initialization & Bootstrap (EARS-B1 to B4)
+ * - §4.3 Adapter Factories (EARS-C1 to C10)
+ * - §4.4 Bootstrap Reindex (EARS-D1 to D2)
+ * - §4.5 Error Handling (EARS-E1 to E4)
+ * - §4.6 Validation (EARS-F1 to F2)
+ */
+
 // Mock all dependencies to avoid import-time execution
 // Mock fs promises
 jest.doMock('fs', () => ({
@@ -55,7 +70,7 @@ jest.doMock('@gitgov/core', () => {
       updateActorState: jest.fn().mockResolvedValue(undefined)
     })),
     {
-      // Static methods
+      // Static methods (legacy — code uses standalone functions from @gitgov/core/fs)
       findProjectRoot: jest.fn().mockReturnValue('/mock/project/root'),
       findGitgovRoot: jest.fn().mockReturnValue('/mock/project/root'),
       getGitgovPath: jest.fn().mockReturnValue('/mock/project/root/.gitgov'),
@@ -497,7 +512,7 @@ jest.doMock('@gitgov/core', () => {
   };
 });
 
-// Mock @gitgov/core/fs to avoid ESM import.meta issues
+// Mock @gitgov/core/fs — standalone functions + filesystem classes
 jest.doMock('@gitgov/core/fs', () => ({
   FsFileLister: jest.fn().mockImplementation(() => ({
     list: jest.fn().mockResolvedValue([]),
@@ -507,13 +522,21 @@ jest.doMock('@gitgov/core/fs', () => ({
   })),
   FsStore: jest.fn().mockImplementation(() => ({})),
   FsKeyProvider: jest.fn().mockImplementation(() => ({})),
-  FsProjectInitializer: jest.fn().mockImplementation(() => ({}))
+  FsProjectInitializer: jest.fn().mockImplementation(() => ({})),
+  findProjectRoot: jest.fn().mockReturnValue('/tmp/test-gitgov'),
+  findGitgovRoot: jest.fn().mockReturnValue('/tmp/test-gitgov'),
+  createSessionManager: jest.fn().mockReturnValue({
+    loadSession: jest.fn().mockResolvedValue(null),
+    saveSession: jest.fn().mockResolvedValue(undefined),
+  }),
 }));
 
 import { DependencyInjectionService } from './dependency-injection';
-import { Config } from '@gitgov/core';
 
-const mockedConfigManager = Config.ConfigManager as jest.Mocked<typeof Config.ConfigManager>;
+// Mocked module references (require once after doMock, use everywhere)
+const mockFs = require('fs');
+const corefs = require('@gitgov/core/fs');
+const { Config, Sync, Git, Adapters, KeyProvider, EventBus, RecordStore } = require('@gitgov/core');
 
 describe('DependencyInjectionService', () => {
   let diService: DependencyInjectionService;
@@ -525,12 +548,11 @@ describe('DependencyInjectionService', () => {
     // Reset singleton for each test
     DependencyInjectionService.reset();
 
-    // Mock ConfigManager
-    mockedConfigManager.findProjectRoot.mockReturnValue(mockProjectRoot);
-    mockedConfigManager.findGitgovRoot.mockReturnValue(mockProjectRoot);
+    // Reset @gitgov/core/fs function mocks to default
+    corefs.findProjectRoot.mockReturnValue(mockProjectRoot);
+    corefs.findGitgovRoot.mockReturnValue(mockProjectRoot);
 
     // Reset fs.access mock to success by default
-    const mockFs = require('fs');
     mockFs.promises.access.mockResolvedValue(undefined);
 
     // Create fresh instance
@@ -541,7 +563,10 @@ describe('DependencyInjectionService', () => {
     DependencyInjectionService.reset();
   });
 
-  describe('Singleton Pattern (EARS A1-A2)', () => {
+  // ============================================================================
+  // §4.1. Singleton Pattern (EARS-A1 to A2)
+  // ============================================================================
+  describe('4.1. Singleton Pattern (EARS-A1 to A2)', () => {
     it('[EARS-A1] should return same instance across multiple calls', () => {
       const instance1 = DependencyInjectionService.getInstance();
       const instance2 = DependencyInjectionService.getInstance();
@@ -560,147 +585,12 @@ describe('DependencyInjectionService', () => {
     });
   });
 
-  describe('Error Handling (EARS E1-E4)', () => {
-    it('[EARS-E1] should throw error when project root not found (IndexerAdapter)', async () => {
-      // Mock ConfigManager to return null
-      mockedConfigManager.findGitgovRoot.mockReturnValue(null);
-      mockedConfigManager.findProjectRoot.mockReturnValue(null);
-
-      // Mock fs.access to reject (no .gitgov directory)
-      const mockFs = require('fs');
-      mockFs.promises.access.mockRejectedValue(new Error('Directory not found'));
-
-      // Mock GitModule to return false for branchExists('gitgov-state')
-      const { Git } = require('@gitgov/core');
-      const mockGitModule = new Git.GitModule({
-        repoRoot: process.cwd(),
-        execCommand: jest.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' })
-      });
-      mockGitModule.branchExists = jest.fn().mockResolvedValue(false);
-      mockGitModule.getRepoRoot = jest.fn().mockResolvedValue(process.cwd());
-
-      // Override getGitModule to return our mock
-      const originalGetGitModule = diService.getGitModule.bind(diService);
-      diService.getGitModule = jest.fn().mockResolvedValue(mockGitModule);
-
-      await expect(diService.getIndexerAdapter())
-        .rejects.toThrow("❌ GitGovernance not initialized. Run 'gitgov init' first.");
-    });
-
-    it('[EARS-E1] should throw error when project root not found (BacklogAdapter)', async () => {
-      // Mock ConfigManager to return null
-      mockedConfigManager.findGitgovRoot.mockReturnValue(null);
-      mockedConfigManager.findProjectRoot.mockReturnValue(null);
-
-      // Mock fs.access to reject (no .gitgov directory)
-      const mockFs = require('fs');
-      mockFs.promises.access.mockRejectedValue(new Error('Directory not found'));
-
-      // Mock GitModule to return false for branchExists('gitgov-state')
-      const { Git } = require('@gitgov/core');
-      const mockGitModule = new Git.GitModule({
-        repoRoot: process.cwd(),
-        execCommand: jest.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' })
-      });
-      mockGitModule.branchExists = jest.fn().mockResolvedValue(false);
-      mockGitModule.getRepoRoot = jest.fn().mockResolvedValue(process.cwd());
-
-      // Override getGitModule to return our mock
-      diService.getGitModule = jest.fn().mockResolvedValue(mockGitModule);
-
-      await expect(diService.getBacklogAdapter())
-        .rejects.toThrow("❌ GitGovernance not initialized. Run 'gitgov init' first.");
-    });
-  });
-
-  describe('Adapter Creation (EARS C1-C8)', () => {
-    it('[EARS-C1] should create IndexerAdapter with all dependencies', async () => {
-      mockedConfigManager.findProjectRoot.mockReturnValue(mockProjectRoot);
-
-      const indexerAdapter = await diService.getIndexerAdapter();
-      expect(indexerAdapter).toBeDefined();
-      expect(indexerAdapter.generateIndex).toBeDefined();
-    });
-
-    it('[EARS-C2] should create BacklogAdapter with all dependencies', async () => {
-      mockedConfigManager.findProjectRoot.mockReturnValue(mockProjectRoot);
-
-      const backlogAdapter = await diService.getBacklogAdapter();
-      expect(backlogAdapter).toBeDefined();
-      expect(backlogAdapter.createTask).toBeDefined();
-    });
-  });
-
-  describe('Bootstrap and Reindex (EARS D1-D2)', () => {
-    it('[EARS-D1] should call generateIndex() after successful bootstrap from gitgov-state', async () => {
-      // Mock fs.access to reject (no .gitgov directory exists in filesystem)
-      const mockFs = require('fs');
-      mockFs.promises.access.mockRejectedValue(new Error('.gitgov directory not found'));
-
-      // Mock bootstrap to succeed (gitgov-state branch exists)
-      const { Sync, Adapters } = require('@gitgov/core');
-      Sync.SyncModule.bootstrapFromStateBranch.mockResolvedValue({ success: true });
-
-      // Get the indexer adapter (this should trigger bootstrap + reindex)
-      const indexerAdapter = await diService.getIndexerAdapter();
-
-      // Verify bootstrap was called
-      expect(Sync.SyncModule.bootstrapFromStateBranch).toHaveBeenCalled();
-
-      // Verify indexer.generateIndex() was called after bootstrap
-      expect(indexerAdapter.generateIndex).toHaveBeenCalledTimes(1);
-    });
-
-    it('[EARS-D2] should NOT call generateIndex() when .gitgov/ already exists (no bootstrap)', async () => {
-      // Mock fs.access to succeed (directory exists)
-      const mockFs = require('fs');
-      mockFs.promises.access.mockResolvedValue(undefined);
-
-      // Reset bootstrap mock
-      const { Sync, Adapters } = require('@gitgov/core');
-      Sync.SyncModule.bootstrapFromStateBranch.mockClear();
-
-      // Get the indexer adapter (bootstrap should not be triggered)
-      const indexerAdapter = await diService.getIndexerAdapter();
-
-      // Verify bootstrap was NOT called
-      expect(Sync.SyncModule.bootstrapFromStateBranch).not.toHaveBeenCalled();
-
-      // Verify indexer.generateIndex() was NOT called
-      expect(indexerAdapter.generateIndex).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('Dependency Validation (EARS F1-F2)', () => {
-    it('[EARS-F2] should return false when project root not found', async () => {
-      // Mock fs.access to reject (no .gitgov directory)
-      const mockFs = require('fs');
-      mockFs.promises.access.mockRejectedValue(new Error('Directory not found'));
-
-      const isValid = await diService.validateDependencies();
-
-      expect(isValid).toBe(false);
-    });
-
-    it('[EARS-F1] should return true when .gitgov exists', async () => {
-      mockedConfigManager.findProjectRoot.mockReturnValue(mockProjectRoot);
-
-      // Mock fs.access to succeed (.gitgov exists)
-      const mockFs = require('fs');
-      mockFs.promises.access.mockResolvedValue(undefined);
-
-      const isValid = await diService.validateDependencies();
-
-      expect(isValid).toBe(true);
-    });
-  });
-
-  describe('Store Initialization (EARS B1, B4)', () => {
+  // ============================================================================
+  // §4.2. Store Initialization & Bootstrap (EARS-B1 to B4)
+  // ============================================================================
+  describe('4.2. Store Initialization & Bootstrap (EARS-B1 to B4)', () => {
     it('[EARS-B1] should create RecordStores when .gitgov exists', async () => {
-      mockedConfigManager.findProjectRoot.mockReturnValue(mockProjectRoot);
-
       // Mock fs.access to succeed (.gitgov exists)
-      const mockFs = require('fs');
       mockFs.promises.access.mockResolvedValue(undefined);
 
       // Getting any adapter triggers initializeStores
@@ -710,36 +600,46 @@ describe('DependencyInjectionService', () => {
       expect(indexerAdapter).toBeDefined();
 
       // Verify RecordStore constructor was called for each store type
-      const { RecordStore } = require('@gitgov/core');
       expect(RecordStore).toHaveBeenCalled();
     });
 
-    it('[EARS-B4] should not reinitialize existing stores on subsequent calls', async () => {
-      mockedConfigManager.findProjectRoot.mockReturnValue(mockProjectRoot);
+    // [EARS-B2] Bootstrap from gitgov-state → tested as [EARS-D1] in §4.4
+    // [EARS-B3] Error when not initialized → tested as [EARS-E1] in §4.5
 
-      const mockFs = require('fs');
+    it('[EARS-B4] should not reinitialize existing stores on subsequent calls', async () => {
       mockFs.promises.access.mockResolvedValue(undefined);
 
       // First call - initializes stores
       await diService.getIndexerAdapter();
 
       // Clear mock call counts
-      const { RecordStore } = require('@gitgov/core');
       const callCountAfterFirst = RecordStore.mock.calls.length;
 
       // Second call - should use cached stores
       await diService.getBacklogAdapter();
 
       // RecordStore should not be called again (stores already initialized)
-      // Note: BacklogAdapter may create additional stores, but initializeStores should return early
       expect(RecordStore.mock.calls.length).toBe(callCountAfterFirst);
     });
   });
 
-  describe('Additional Adapter Factories (EARS C3-C8)', () => {
-    it('[EARS-C3] should create MetricsAdapter with stores', async () => {
-      mockedConfigManager.findProjectRoot.mockReturnValue(mockProjectRoot);
+  // ============================================================================
+  // §4.3. Adapter Factories (EARS-C1 to C10)
+  // ============================================================================
+  describe('4.3. Adapter Factories (EARS-C1 to C10)', () => {
+    it('[EARS-C1] should create IndexerAdapter with all dependencies', async () => {
+      const indexerAdapter = await diService.getIndexerAdapter();
+      expect(indexerAdapter).toBeDefined();
+      expect(indexerAdapter.generateIndex).toBeDefined();
+    });
 
+    it('[EARS-C2] should create BacklogAdapter with all dependencies', async () => {
+      const backlogAdapter = await diService.getBacklogAdapter();
+      expect(backlogAdapter).toBeDefined();
+      expect(backlogAdapter.createTask).toBeDefined();
+    });
+
+    it('[EARS-C3] should create MetricsAdapter with stores', async () => {
       const metricsAdapter = await diService.getMetricsAdapter();
 
       expect(metricsAdapter).toBeDefined();
@@ -747,46 +647,35 @@ describe('DependencyInjectionService', () => {
     });
 
     it('[EARS-C4] should create IdentityAdapter with KeyProvider and EventBus', async () => {
-      mockedConfigManager.findProjectRoot.mockReturnValue(mockProjectRoot);
-
       const identityAdapter = await diService.getIdentityAdapter();
 
       expect(identityAdapter).toBeDefined();
       expect(identityAdapter.getActor).toBeDefined();
 
       // Verify KeyProvider was instantiated
-      const { KeyProvider } = require('@gitgov/core');
       expect(KeyProvider.FsKeyProvider).toHaveBeenCalled();
 
       // Verify EventBus was instantiated
-      const { EventBus } = require('@gitgov/core');
       expect(EventBus.EventBus).toHaveBeenCalled();
     });
 
     it('[EARS-C5] should create FeedbackAdapter with IdentityAdapter', async () => {
-      mockedConfigManager.findProjectRoot.mockReturnValue(mockProjectRoot);
-
       const feedbackAdapter = await diService.getFeedbackAdapter();
 
       expect(feedbackAdapter).toBeDefined();
       expect(feedbackAdapter.create).toBeDefined();
 
       // Verify IdentityAdapter was created as dependency
-      const { Adapters } = require('@gitgov/core');
       expect(Adapters.IdentityAdapter).toHaveBeenCalled();
     });
 
     it('[EARS-C6] should create LintModule with IndexerAdapter', async () => {
-      mockedConfigManager.findProjectRoot.mockReturnValue(mockProjectRoot);
-
       const lintModule = await diService.getLintModule();
 
       expect(lintModule).toBeDefined();
     });
 
     it('[EARS-C7] should create SyncModule with all dependencies', async () => {
-      mockedConfigManager.findProjectRoot.mockReturnValue(mockProjectRoot);
-
       const syncModule = await diService.getSyncModule();
 
       expect(syncModule).toBeDefined();
@@ -795,8 +684,6 @@ describe('DependencyInjectionService', () => {
     });
 
     it('[EARS-C8] should return cached instance on subsequent calls', async () => {
-      mockedConfigManager.findProjectRoot.mockReturnValue(mockProjectRoot);
-
       // First call creates new instance
       const indexer1 = await diService.getIndexerAdapter();
       const indexer2 = await diService.getIndexerAdapter();
@@ -817,19 +704,120 @@ describe('DependencyInjectionService', () => {
       const sync2 = await diService.getSyncModule();
       expect(sync1).toBe(sync2);
     });
+
+    it('[EARS-C9] should create ConfigManager with projectRoot', async () => {
+      const configManager = await diService.getConfigManager();
+
+      expect(configManager).toBeDefined();
+      expect(configManager.loadConfig).toBeDefined();
+
+      // Verify createConfigManager was called with projectRoot
+      expect(Config.createConfigManager).toHaveBeenCalledWith(mockProjectRoot);
+    });
+
+    it('[EARS-C10] should create SessionManager with projectRoot', async () => {
+      const sessionManager = await diService.getSessionManager();
+
+      expect(sessionManager).toBeDefined();
+
+      // Verify createSessionManager was called with projectRoot
+      expect(corefs.createSessionManager).toHaveBeenCalledWith(mockProjectRoot);
+    });
   });
 
-  describe('Error Handling Details (EARS E2-E4)', () => {
-    it('[EARS-E2] should throw cache system error with message', async () => {
-      // Mock ConfigManager to return valid path
-      mockedConfigManager.findProjectRoot.mockReturnValue(mockProjectRoot);
+  // ============================================================================
+  // §4.4. Bootstrap Reindex (EARS-D1 to D2)
+  // ============================================================================
+  describe('4.4. Bootstrap Reindex (EARS-D1 to D2)', () => {
+    it('[EARS-D1] should call generateIndex() after successful bootstrap from gitgov-state', async () => {
+      // Mock fs.access to reject (no .gitgov directory exists in filesystem)
+      mockFs.promises.access.mockRejectedValue(new Error('.gitgov directory not found'));
 
+      // Mock bootstrap to succeed (gitgov-state branch exists)
+      Sync.SyncModule.bootstrapFromStateBranch.mockResolvedValue({ success: true });
+
+      // Get the indexer adapter (this should trigger bootstrap + reindex)
+      const indexerAdapter = await diService.getIndexerAdapter();
+
+      // Verify bootstrap was called
+      expect(Sync.SyncModule.bootstrapFromStateBranch).toHaveBeenCalled();
+
+
+      // Verify indexer.generateIndex() was called after bootstrap
+      expect(indexerAdapter.generateIndex).toHaveBeenCalledTimes(1);
+    });
+
+    it('[EARS-D2] should NOT call generateIndex() when .gitgov/ already exists (no bootstrap)', async () => {
+      // Mock fs.access to succeed (directory exists)
+      mockFs.promises.access.mockResolvedValue(undefined);
+
+      // Reset bootstrap mock
+      Sync.SyncModule.bootstrapFromStateBranch.mockClear();
+
+      // Get the indexer adapter (bootstrap should not be triggered)
+      const indexerAdapter = await diService.getIndexerAdapter();
+
+      // Verify bootstrap was NOT called
+      expect(Sync.SyncModule.bootstrapFromStateBranch).not.toHaveBeenCalled();
+
+      // Verify indexer.generateIndex() was NOT called
+      expect(indexerAdapter.generateIndex).not.toHaveBeenCalled();
+    });
+  });
+
+  // ============================================================================
+  // §4.5. Error Handling (EARS-E1 to E4)
+  // ============================================================================
+  describe('4.5. Error Handling (EARS-E1 to E4)', () => {
+    it('[EARS-E1] should throw error when project root not found (IndexerAdapter)', async () => {
+      // Mock fs.access to reject (no .gitgov directory)
+      mockFs.promises.access.mockRejectedValue(new Error('Directory not found'));
+
+      // Mock bootstrap to fail (no gitgov-state branch either)
+      Sync.SyncModule.bootstrapFromStateBranch.mockResolvedValue({ success: false });
+
+      // Mock GitModule
+      const mockGitModule = new Git.GitModule({
+        repoRoot: process.cwd(),
+        execCommand: jest.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' })
+      });
+      mockGitModule.branchExists = jest.fn().mockResolvedValue(false);
+      mockGitModule.getRepoRoot = jest.fn().mockResolvedValue(process.cwd());
+
+      // Override getGitModule to return our mock
+      diService.getGitModule = jest.fn().mockResolvedValue(mockGitModule);
+
+      await expect(diService.getIndexerAdapter())
+        .rejects.toThrow("❌ GitGovernance not initialized. Run 'gitgov init' first.");
+    });
+
+    it('[EARS-E1] should throw error when project root not found (BacklogAdapter)', async () => {
+      // Mock fs.access to reject (no .gitgov directory)
+      mockFs.promises.access.mockRejectedValue(new Error('Directory not found'));
+
+      // Mock bootstrap to fail (no gitgov-state branch either)
+      Sync.SyncModule.bootstrapFromStateBranch.mockResolvedValue({ success: false });
+
+      // Mock GitModule
+      const mockGitModule = new Git.GitModule({
+        repoRoot: process.cwd(),
+        execCommand: jest.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' })
+      });
+      mockGitModule.branchExists = jest.fn().mockResolvedValue(false);
+      mockGitModule.getRepoRoot = jest.fn().mockResolvedValue(process.cwd());
+
+      // Override getGitModule to return our mock
+      diService.getGitModule = jest.fn().mockResolvedValue(mockGitModule);
+
+      await expect(diService.getBacklogAdapter())
+        .rejects.toThrow("❌ GitGovernance not initialized. Run 'gitgov init' first.");
+    });
+
+    it('[EARS-E2] should throw cache system error with message', async () => {
       // Mock fs.access to succeed
-      const mockFs = require('fs');
       mockFs.promises.access.mockResolvedValue(undefined);
 
       // Mock IndexerAdapter constructor to throw
-      const { Adapters } = require('@gitgov/core');
       Adapters.IndexerAdapter.mockImplementationOnce(() => {
         throw new Error('Connection failed');
       });
@@ -839,13 +827,9 @@ describe('DependencyInjectionService', () => {
     });
 
     it('[EARS-E3] should throw backlog system error with message', async () => {
-      mockedConfigManager.findProjectRoot.mockReturnValue(mockProjectRoot);
-
-      const mockFs = require('fs');
       mockFs.promises.access.mockResolvedValue(undefined);
 
       // Mock BacklogAdapter constructor to throw
-      const { Adapters } = require('@gitgov/core');
       Adapters.BacklogAdapter.mockImplementationOnce(() => {
         throw new Error('Database connection failed');
       });
@@ -855,19 +839,42 @@ describe('DependencyInjectionService', () => {
     });
 
     it('[EARS-E4] should handle non-Error types gracefully', async () => {
-      mockedConfigManager.findProjectRoot.mockReturnValue(mockProjectRoot);
-
-      const mockFs = require('fs');
       mockFs.promises.access.mockResolvedValue(undefined);
 
       // Mock IndexerAdapter to throw a string instead of Error
-      const { Adapters } = require('@gitgov/core');
       Adapters.IndexerAdapter.mockImplementationOnce(() => {
         throw 'String error instead of Error object';
       });
 
       await expect(diService.getIndexerAdapter())
         .rejects.toThrow('❌ Unknown error initializing cache system.');
+    });
+  });
+
+  // ============================================================================
+  // §4.6. Validation (EARS-F1 to F2)
+  // ============================================================================
+  describe('4.6. Validation (EARS-F1 to F2)', () => {
+    it('[EARS-F1] should return true when .gitgov exists', async () => {
+      // Mock fs.access to succeed (.gitgov exists)
+      mockFs.promises.access.mockResolvedValue(undefined);
+
+      const isValid = await diService.validateDependencies();
+
+      expect(isValid).toBe(true);
+    });
+
+    it('[EARS-F2] should return false when project root not found', async () => {
+      // Mock findGitgovRoot to return null
+      corefs.findGitgovRoot.mockReturnValue(null);
+
+      // Reset projectRoot by creating a fresh instance
+      DependencyInjectionService.reset();
+      diService = DependencyInjectionService.getInstance();
+
+      const isValid = await diService.validateDependencies();
+
+      expect(isValid).toBe(false);
     });
   });
 });
