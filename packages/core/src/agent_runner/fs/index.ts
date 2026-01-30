@@ -12,7 +12,8 @@ export { FsAgentRunner } from './fs_agent_runner';
 export { LocalBackend } from '../backends';
 export type { AgentRunnerDependencies as FsAgentRunnerDependencies } from '../agent_runner.types';
 
-import type { IAgentRunner, AgentRunnerDependencies } from '../agent_runner.types';
+import type { IAgentRunner } from '../agent_runner';
+import type { AgentRunnerDependencies } from '../agent_runner.types';
 import { FsAgentRunner } from './fs_agent_runner';
 
 /**

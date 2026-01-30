@@ -3,12 +3,12 @@ import {
   LocalEngineConfigError,
   FunctionNotExportedError,
   RuntimeNotFoundError,
-} from "../errors";
+} from "../agent_runner.errors";
+import type { RuntimeHandlerRegistry } from "../agent_runner";
 import type {
   LocalEngine,
   AgentExecutionContext,
   AgentOutput,
-  RuntimeHandlerRegistry,
 } from "../agent_runner.types";
 
 /**
