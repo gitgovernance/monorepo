@@ -56,6 +56,9 @@ export {
   resetDiscoveryCache,
 } from './utils/project_discovery';
 
+// FsSyncModule (filesystem-based state synchronization)
+export { FsSyncModule } from './sync/fs';
+
 // AgentRunner (filesystem-based agent execution)
 export { FsAgentRunner, createAgentRunner } from './agent_runner/fs';
 export type { FsAgentRunnerDependencies } from './agent_runner/fs';
