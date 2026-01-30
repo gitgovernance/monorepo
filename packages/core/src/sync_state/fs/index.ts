@@ -1,9 +1,9 @@
 /**
- * FsSyncModule - Filesystem-based State Synchronization
+ * FsSyncStateModule - Filesystem-based State Synchronization
  *
- * Re-exports from fs_sync.ts for clean module interface.
+ * Re-exports from fs_sync_state.ts for clean module interface.
  *
- * @module sync/fs
+ * @module sync_state/fs
  */
 
-export { FsSyncModule } from './fs_sync';
+export { FsSyncStateModule } from './fs_sync_state';

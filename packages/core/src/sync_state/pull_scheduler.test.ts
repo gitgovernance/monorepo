@@ -3,22 +3,22 @@
  *
  * Tests for the periodic state synchronization scheduler.
  * 
- * [EARS 33-40]
+ * [EARS-F1 to F8]
  */
 
 import { PullScheduler } from "./pull_scheduler";
-import type { FsSyncModule } from "./fs/fs_sync";
+import type { FsSyncStateModule } from "./fs/fs_sync_state";
 import type { ConfigManager } from "../config_manager";
 import type { SessionManager } from "../session_manager";
-import type { SyncPullResult } from "./sync.types";
+import type { SyncStatePullResult } from "./sync_state.types";
 
 /**
- * Mock FsSyncModule for testing
+ * Mock FsSyncStateModule for testing
  */
-function createMockFsSyncModule(): jest.Mocked<FsSyncModule> {
+function createMockFsSyncStateModule(): jest.Mocked<FsSyncStateModule> {
   return {
     pullState: jest.fn(),
-  } as unknown as jest.Mocked<FsSyncModule>;
+  } as unknown as jest.Mocked<FsSyncStateModule>;
 }
 
 /**
@@ -40,18 +40,18 @@ function createMockSessionManager(): jest.Mocked<SessionManager> {
 }
 
 describe("PullScheduler", () => {
-  let mockFsSyncModule: jest.Mocked<FsSyncModule>;
+  let mockFsSyncStateModule: jest.Mocked<FsSyncStateModule>;
   let mockConfigManager: jest.Mocked<ConfigManager>;
   let mockSessionManager: jest.Mocked<SessionManager>;
   let scheduler: PullScheduler;
 
   beforeEach(() => {
-    mockFsSyncModule = createMockFsSyncModule();
+    mockFsSyncStateModule = createMockFsSyncStateModule();
     mockConfigManager = createMockConfigManager();
     mockSessionManager = createMockSessionManager();
 
     scheduler = new PullScheduler({
-      syncModule: mockFsSyncModule,
+      syncModule: mockFsSyncStateModule,
       configManager: mockConfigManager,
       sessionManager: mockSessionManager,
     });
@@ -66,10 +66,10 @@ describe("PullScheduler", () => {
     jest.useRealTimers();
   });
 
-  // ===== EARS 33-36: Start and Control =====
+  // ===== EARS-F1 to F4: Start and Control =====
 
-  describe("Start and Control (EARS 33-36)", () => {
-    it("[EARS-33] should start scheduler with configured interval", async () => {
+  describe("6.4.1. Start and Control (EARS-F1 to F4)", () => {
+    it("[EARS-F1] should start scheduler with configured interval", async () => {
       // Setup: Configure scheduler as enabled
       mockSessionManager.loadSession.mockResolvedValue({
         syncPreferences: {
@@ -80,11 +80,11 @@ describe("PullScheduler", () => {
         },
       });
 
-      mockFsSyncModule.pullState.mockResolvedValue({
+      mockFsSyncStateModule.pullState.mockResolvedValue({
         success: true,
         reindexed: false,
         conflictDetected: false,
-      } as SyncPullResult);
+      } as SyncStatePullResult);
 
       // Execute
       await scheduler.start();
@@ -97,10 +97,10 @@ describe("PullScheduler", () => {
       await Promise.resolve(); // Let promises resolve
 
       // Verify pullState was called
-      expect(mockFsSyncModule.pullState).toHaveBeenCalledTimes(1);
+      expect(mockFsSyncStateModule.pullState).toHaveBeenCalledTimes(1);
     });
 
-    it("[EARS-34] should be idempotent if already running", async () => {
+    it("[EARS-F2] should be idempotent if already running", async () => {
       // Setup
       mockSessionManager.loadSession.mockResolvedValue({
         syncPreferences: {
@@ -122,19 +122,19 @@ describe("PullScheduler", () => {
       expect(secondRunning).toBe(true);
 
       // Fast-forward and verify only one interval is active
-      mockFsSyncModule.pullState.mockResolvedValue({
+      mockFsSyncStateModule.pullState.mockResolvedValue({
         success: true,
         reindexed: false,
         conflictDetected: false,
-      } as SyncPullResult);
+      } as SyncStatePullResult);
 
       jest.advanceTimersByTime(30000);
       await Promise.resolve();
 
-      expect(mockFsSyncModule.pullState).toHaveBeenCalledTimes(1);
+      expect(mockFsSyncStateModule.pullState).toHaveBeenCalledTimes(1);
     });
 
-    it("[EARS-35] should stop scheduler and cleanup resources", async () => {
+    it("[EARS-F3] should stop scheduler and cleanup resources", async () => {
       // Setup
       mockSessionManager.loadSession.mockResolvedValue({
         syncPreferences: {
@@ -145,11 +145,11 @@ describe("PullScheduler", () => {
         },
       });
 
-      mockFsSyncModule.pullState.mockResolvedValue({
+      mockFsSyncStateModule.pullState.mockResolvedValue({
         success: true,
         reindexed: false,
         conflictDetected: false,
-      } as SyncPullResult);
+      } as SyncStatePullResult);
 
       // Execute
       await scheduler.start();
@@ -164,10 +164,10 @@ describe("PullScheduler", () => {
       jest.advanceTimersByTime(60000);
       await Promise.resolve();
 
-      expect(mockFsSyncModule.pullState).not.toHaveBeenCalled();
+      expect(mockFsSyncStateModule.pullState).not.toHaveBeenCalled();
     });
 
-    it("[EARS-36] should return correct scheduler state", async () => {
+    it("[EARS-F4] should return correct scheduler state", async () => {
       // Initially not running
       expect(scheduler.isRunning()).toBe(false);
 
@@ -190,16 +190,16 @@ describe("PullScheduler", () => {
     });
   });
 
-  // ===== EARS 37-40: Pull Operation and Event Handling =====
+  // ===== EARS-F5 to F8: Pull Operation and Event Handling =====
 
-  describe("Pull Operation and Event Handling (EARS 37-40)", () => {
-    it("[EARS-37] should emit event when detects new changes", async () => {
+  describe("6.4.2. Pull Operation and Event Handling (EARS-F5 to F8)", () => {
+    it("[EARS-F5] should emit event when detects new changes", async () => {
       // Setup: Pull returns changes
-      mockFsSyncModule.pullState.mockResolvedValue({
+      mockFsSyncStateModule.pullState.mockResolvedValue({
         success: true,
         reindexed: true,
         conflictDetected: false,
-      } as SyncPullResult);
+      } as SyncStatePullResult);
 
       // Execute
       const result = await scheduler.pullNow();
@@ -210,9 +210,9 @@ describe("PullScheduler", () => {
       expect(result.conflictDetected).toBe(false);
     });
 
-    it("[EARS-38] should handle conflicts appropriately", async () => {
+    it("[EARS-F6] should handle conflicts appropriately", async () => {
       // Setup: Pull returns conflict
-      mockFsSyncModule.pullState.mockResolvedValue({
+      mockFsSyncStateModule.pullState.mockResolvedValue({
         success: false,
         reindexed: false,
         conflictDetected: true,
@@ -221,7 +221,7 @@ describe("PullScheduler", () => {
           message: "Conflict in file",
           affectedFiles: [".gitgov/tasks/123.json"],
         },
-      } as SyncPullResult);
+      } as SyncStatePullResult);
 
       // Execute
       const result = await scheduler.pullNow();
@@ -233,7 +233,7 @@ describe("PullScheduler", () => {
       expect(result.conflictInfo?.affectedFiles).toContain(".gitgov/tasks/123.json");
     });
 
-    it("[EARS-38] should stop scheduler if stopOnConflict is true", async () => {
+    it("[EARS-F6] should stop scheduler if stopOnConflict is true", async () => {
       // Setup: Configure to stop on conflict
       mockSessionManager.loadSession.mockResolvedValue({
         syncPreferences: {
@@ -249,7 +249,7 @@ describe("PullScheduler", () => {
       expect(scheduler.isRunning()).toBe(true);
 
       // Setup: Pull returns conflict
-      mockFsSyncModule.pullState.mockResolvedValue({
+      mockFsSyncStateModule.pullState.mockResolvedValue({
         success: false,
         reindexed: false,
         conflictDetected: true,
@@ -257,7 +257,7 @@ describe("PullScheduler", () => {
           type: "rebase_conflict",
           message: "Conflict",
         },
-      } as SyncPullResult);
+      } as SyncStatePullResult);
 
       // Execute
       await scheduler.pullNow();
@@ -266,7 +266,7 @@ describe("PullScheduler", () => {
       expect(scheduler.isRunning()).toBe(false);
     });
 
-    it("[EARS-39] should continue after network errors", async () => {
+    it("[EARS-F7] should continue after network errors", async () => {
       // Setup: Configure to continue on network error
       mockSessionManager.loadSession.mockResolvedValue({
         syncPreferences: {
@@ -281,7 +281,7 @@ describe("PullScheduler", () => {
       await scheduler.start();
 
       // Setup: Pull throws network error
-      mockFsSyncModule.pullState.mockRejectedValue(new Error("network timeout"));
+      mockFsSyncStateModule.pullState.mockRejectedValue(new Error("network timeout"));
 
       // Execute
       const result = await scheduler.pullNow();
@@ -294,14 +294,14 @@ describe("PullScheduler", () => {
       expect(scheduler.isRunning()).toBe(true);
     });
 
-    it("[EARS-40] should avoid concurrent pulls", async () => {
+    it("[EARS-F8] should avoid concurrent pulls", async () => {
       // Setup: Slow pull operation using Promise
-      let resolvePull: (value: SyncPullResult) => void;
-      const pullPromise = new Promise<SyncPullResult>((resolve) => {
+      let resolvePull: (value: SyncStatePullResult) => void;
+      const pullPromise = new Promise<SyncStatePullResult>((resolve) => {
         resolvePull = resolve;
       });
 
-      mockFsSyncModule.pullState.mockReturnValue(pullPromise);
+      mockFsSyncStateModule.pullState.mockReturnValue(pullPromise);
 
       // Execute: Start two pulls simultaneously
       const pull1Promise = scheduler.pullNow();
@@ -316,14 +316,14 @@ describe("PullScheduler", () => {
         success: true,
         reindexed: false,
         conflictDetected: false,
-      } as SyncPullResult);
+      } as SyncStatePullResult);
 
       // Wait for first pull to complete
       const result1 = await pull1Promise;
       expect(result1.success).toBe(true);
 
       // Verify pullState was only called once
-      expect(mockFsSyncModule.pullState).toHaveBeenCalledTimes(1);
+      expect(mockFsSyncStateModule.pullState).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -361,11 +361,11 @@ describe("PullScheduler", () => {
 
     it("should handle no changes gracefully", async () => {
       // Setup: Pull returns no changes
-      mockFsSyncModule.pullState.mockResolvedValue({
+      mockFsSyncStateModule.pullState.mockResolvedValue({
         success: true,
         reindexed: false,
         conflictDetected: false,
-      } as SyncPullResult);
+      } as SyncStatePullResult);
 
       // Execute
       const result = await scheduler.pullNow();

@@ -4,10 +4,10 @@
  * Background scheduler that automatically pulls state changes from remote
  * at configured intervals.
  *
- * @module sync/pull_scheduler
+ * @module sync_state/pull_scheduler
  */
 
-import type { FsSyncModule } from "./fs/fs_sync";
+import type { FsSyncStateModule } from "./fs/fs_sync_state";
 import type { ConfigManager } from "../config_manager";
 import type { SessionManager } from "../session_manager";
 
@@ -51,8 +51,8 @@ export interface PullSchedulerConfig {
  * Dependencies required by PullScheduler
  */
 export interface PullSchedulerDependencies {
-  /** FsSyncModule for pull operations */
-  syncModule: FsSyncModule;
+  /** FsSyncStateModule for pull operations */
+  syncModule: FsSyncStateModule;
   /** ConfigManager for loading project configuration */
   configManager: ConfigManager;
   /** SessionManager for loading session preferences */
@@ -65,7 +65,7 @@ export interface PullSchedulerDependencies {
  * Periodically pulls state changes from remote to keep local state up-to-date.
  * Useful for collaboration scenarios where multiple actors are working simultaneously.
  *
- * [EARS-33 to EARS-40]
+ * [EARS-F1 to EARS-F8]
  *
  * @example
  * ```typescript
@@ -80,7 +80,7 @@ export interface PullSchedulerDependencies {
  * ```
  */
 export class PullScheduler {
-  private syncModule: FsSyncModule;
+  private syncModule: FsSyncStateModule;
   private configManager: ConfigManager;
   private sessionManager: SessionManager;
   private config: PullSchedulerConfig;
@@ -90,7 +90,7 @@ export class PullScheduler {
 
   constructor(dependencies: PullSchedulerDependencies) {
     if (!dependencies.syncModule) {
-      throw new Error("FsSyncModule is required for PullScheduler");
+      throw new Error("FsSyncStateModule is required for PullScheduler");
     }
     if (!dependencies.configManager) {
       throw new Error("ConfigManager is required for PullScheduler");
@@ -159,7 +159,7 @@ export class PullScheduler {
   /**
    * Starts the scheduler with configured interval
    *
-   * [EARS-33, EARS-34]
+   * [EARS-F1, EARS-F2]
    *
    * @throws Error if scheduler fails to load configuration
    *
@@ -170,7 +170,7 @@ export class PullScheduler {
    * ```
    */
   async start(): Promise<void> {
-    // [EARS-34] Idempotent - return if already running
+    // [EARS-F2] Idempotent - return if already running
     if (this.running) {
       return;
     }
@@ -183,7 +183,7 @@ export class PullScheduler {
       return;
     }
 
-    // [EARS-33] Start interval
+    // [EARS-F1] Start interval
     this.intervalId = setInterval(() => {
       void this.pullNow(); // Fire and forget
     }, this.config.pullIntervalSeconds * 1000);
@@ -194,7 +194,7 @@ export class PullScheduler {
   /**
    * Stops the scheduler and cleans up resources
    *
-   * [EARS-35]
+   * [EARS-F3]
    *
    * @example
    * ```typescript
@@ -217,7 +217,7 @@ export class PullScheduler {
   /**
    * Checks if the scheduler is currently running
    *
-   * [EARS-36]
+   * [EARS-F4]
    *
    * @returns true if running, false otherwise
    *
@@ -238,7 +238,7 @@ export class PullScheduler {
    * This method can be called manually or is automatically invoked by the scheduler.
    * Handles conflicts, network errors, and concurrent pull prevention.
    *
-   * [EARS-37, EARS-38, EARS-39, EARS-40]
+   * [EARS-F5, EARS-F6, EARS-F7, EARS-F8]
    *
    * @returns Result of the pull operation
    *
@@ -251,7 +251,7 @@ export class PullScheduler {
    * ```
    */
   async pullNow(): Promise<PullSchedulerResult> {
-    // [EARS-40] Prevent concurrent pulls
+    // [EARS-F8] Prevent concurrent pulls
     if (this.pulling) {
       return {
         success: true,
@@ -268,10 +268,10 @@ export class PullScheduler {
       // Execute pull
       const pullResult = await this.syncModule.pullState();
 
-      // [EARS-37] Detect changes
+      // [EARS-F5] Detect changes
       const hasChanges = pullResult.reindexed || false;
 
-      // [EARS-38] Detect conflicts
+      // [EARS-F6] Detect conflicts
       if (pullResult.conflictDetected) {
         const result: PullSchedulerResult = {
           success: false,
@@ -297,7 +297,7 @@ export class PullScheduler {
         timestamp: new Date().toISOString(),
       };
     } catch (error) {
-      // [EARS-39] Handle network errors
+      // [EARS-F7] Handle network errors
       const errorMessage = error instanceof Error ? error.message : String(error);
       const isNetworkError =
         errorMessage.includes("network") ||
