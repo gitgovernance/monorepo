@@ -1,18 +1,18 @@
 /**
  * Base error class for all sync-related errors
  */
-export class SyncError extends Error {
+export class SyncStateError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = "SyncError";
-    Object.setPrototypeOf(this, SyncError.prototype);
+    this.name = "SyncStateError";
+    Object.setPrototypeOf(this, SyncStateError.prototype);
   }
 }
 
 /**
  * Error thrown when attempting to push from gitgov-state branch
  */
-export class PushFromStateBranchError extends SyncError {
+export class PushFromStateBranchError extends SyncStateError {
   public branch: string;
 
   constructor(branchName: string) {
@@ -29,7 +29,7 @@ export class PushFromStateBranchError extends SyncError {
 /**
  * Error thrown when integrity violations are detected during audit
  */
-export class IntegrityViolationError extends SyncError {
+export class IntegrityViolationError extends SyncStateError {
   constructor(
     public violations: Array<{
       type: "resolution" | "signature" | "checksum" | "missing_file";
@@ -48,7 +48,7 @@ export class IntegrityViolationError extends SyncError {
 /**
  * Error thrown when conflict markers are still present in files
  */
-export class ConflictMarkersPresentError extends SyncError {
+export class ConflictMarkersPresentError extends SyncStateError {
   constructor(public filesWithMarkers: string[]) {
     super(
       `Conflict markers still present in ${filesWithMarkers.length} file(s). ` +
@@ -62,7 +62,7 @@ export class ConflictMarkersPresentError extends SyncError {
 /**
  * Error thrown when attempting to resolve conflict without rebase in progress
  */
-export class NoRebaseInProgressError extends SyncError {
+export class NoRebaseInProgressError extends SyncStateError {
   constructor() {
     super(
       `No rebase in progress. Cannot resolve conflict without an active rebase. ` +
@@ -76,11 +76,11 @@ export class NoRebaseInProgressError extends SyncError {
 /**
  * Error thrown when CryptoModule is required but not available
  */
-export class CryptoModuleRequiredError extends SyncError {
+export class CryptoModuleRequiredError extends SyncStateError {
   constructor(operation: string) {
     super(
       `CryptoModule is required for ${operation} operation. ` +
-      `Please provide crypto_module in SyncModuleDependencies.`
+      `Please provide crypto_module in SyncStateModuleDependencies.`
     );
     this.name = "CryptoModuleRequiredError";
     Object.setPrototypeOf(this, CryptoModuleRequiredError.prototype);
@@ -90,7 +90,7 @@ export class CryptoModuleRequiredError extends SyncError {
 /**
  * Error thrown when state branch cannot be created or configured
  */
-export class StateBranchSetupError extends SyncError {
+export class StateBranchSetupError extends SyncStateError {
   constructor(
     public reason: string,
     public underlyingError?: Error
@@ -107,7 +107,7 @@ export class StateBranchSetupError extends SyncError {
  * This prevents impersonation: you can only push/resolve as the actor whose
  * private key you hold.
  */
-export class ActorIdentityMismatchError extends SyncError {
+export class ActorIdentityMismatchError extends SyncStateError {
   public requestedActorId: string;
   public authenticatedActorId: string;
 
@@ -126,7 +126,7 @@ export class ActorIdentityMismatchError extends SyncError {
 /**
  * Error thrown when uncommitted changes exist in state branch
  */
-export class UncommittedChangesError extends SyncError {
+export class UncommittedChangesError extends SyncStateError {
   public branch: string;
 
   constructor(branchName: string) {
@@ -159,8 +159,8 @@ export class UncommittedChangesError extends SyncError {
  * ```
  */
 
-export function isSyncError(error: unknown): error is SyncError {
-  return error instanceof SyncError;
+export function isSyncStateError(error: unknown): error is SyncStateError {
+  return error instanceof SyncStateError;
 }
 
 export function isPushFromStateBranchError(

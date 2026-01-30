@@ -1,18 +1,18 @@
-// ISyncModule interface
-export type { ISyncModule } from "./sync";
+// ISyncStateModule interface
+export type { ISyncStateModule } from "./sync_state";
 
 // PullScheduler (pure, depends on interface not implementation)
 export { PullScheduler } from "./pull_scheduler";
 
 // Types
 export type {
-  SyncModuleDependencies,
-  SyncPushOptions,
-  SyncPushResult,
-  SyncPullOptions,
-  SyncPullResult,
-  SyncResolveOptions,
-  SyncResolveResult,
+  SyncStateModuleDependencies,
+  SyncStatePushOptions,
+  SyncStatePushResult,
+  SyncStatePullOptions,
+  SyncStatePullResult,
+  SyncStateResolveOptions,
+  SyncStateResolveResult,
   ConflictInfo,
   ConflictType,
   IntegrityViolation,
@@ -23,7 +23,7 @@ export type {
   ConflictDiff,
   ConflictFileDiff,
   StateDeltaFile,
-} from "./sync.types";
+} from "./sync_state.types";
 
 export type {
   PullSchedulerConfig,
@@ -33,7 +33,7 @@ export type {
 
 // Errors
 export {
-  SyncError,
+  SyncStateError,
   PushFromStateBranchError,
   IntegrityViolationError,
   ConflictMarkersPresentError,
@@ -42,8 +42,8 @@ export {
   UncommittedChangesError,
   CryptoModuleRequiredError,
   ActorIdentityMismatchError,
-  // Type guards for error handling (additive - backward compatible)
-  isSyncError,
+  // Type guards for error handling
+  isSyncStateError,
   isPushFromStateBranchError,
   isIntegrityViolationError,
   isConflictMarkersPresentError,
@@ -52,4 +52,4 @@ export {
   isStateBranchSetupError,
   isCryptoModuleRequiredError,
   isActorIdentityMismatchError,
-} from "./sync.errors";
+} from "./sync_state.errors";

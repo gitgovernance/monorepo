@@ -6,9 +6,9 @@ import type { IFsLintModule } from "../lint/fs/fs_lint.types";
 import type { IIndexerAdapter } from "../adapters/indexer_adapter";
 
 /**
- * SyncModule Dependencies
+ * SyncStateModule Dependencies
  */
-export type SyncModuleDependencies = {
+export type SyncStateModuleDependencies = {
   /** Low-level Git module (required) */
   git: IGitModule;
   /** Configuration manager (required) */
@@ -24,7 +24,7 @@ export type SyncModuleDependencies = {
 /**
  * Options for pushState operation
  */
-export type SyncPushOptions = {
+export type SyncStatePushOptions = {
   /** Branch to push from (default: current branch) */
   sourceBranch?: string;
   /** Actor ID publishing the state (required) */
@@ -38,7 +38,7 @@ export type SyncPushOptions = {
 /**
  * Result of pushState operation
  */
-export type SyncPushResult = {
+export type SyncStatePushResult = {
   /** Indicates if the operation was successful */
   success: boolean;
   /** Number of files synced */
@@ -55,7 +55,7 @@ export type SyncPushResult = {
   conflictInfo?: ConflictInfo;
   /** Error message if operation failed */
   error?: string;
-  /** [EARS-54] Implicit pull results when push does reconciliation with remote */
+  /** [EARS-B16] Implicit pull results when push does reconciliation with remote */
   implicitPull?: {
     /** Whether changes were pulled from remote */
     hasChanges: boolean;
@@ -69,17 +69,17 @@ export type SyncPushResult = {
 /**
  * Options for pullState operation
  */
-export type SyncPullOptions = {
+export type SyncStatePullOptions = {
   /** Force re-indexing even if there are no new changes */
   forceReindex?: boolean;
-  /** [EARS-62] Force pull even if local changes would be overwritten */
+  /** [EARS-C11] Force pull even if local changes would be overwritten */
   force?: boolean;
 }
 
 /**
  * Result of pullState operation
  */
-export type SyncPullResult = {
+export type SyncStatePullResult = {
   /** Indicates if the operation was successful */
   success: boolean;
   /** Indicates if there were new remote changes */
@@ -94,14 +94,14 @@ export type SyncPullResult = {
   conflictInfo?: ConflictInfo;
   /** Error message if operation failed */
   error?: string;
-  /** [EARS-62] Files that were forcefully overwritten (when force: true) */
+  /** [EARS-C11] Files that were forcefully overwritten (when force: true) */
   forcedOverwrites?: string[];
 }
 
 /**
  * Options for resolveConflict operation
  */
-export type SyncResolveOptions = {
+export type SyncStateResolveOptions = {
   /** Justification for the conflict resolution (required) */
   reason: string;
   /** Actor ID resolving the conflict (required) */
@@ -111,7 +111,7 @@ export type SyncResolveOptions = {
 /**
  * Result of resolveConflict operation
  */
-export type SyncResolveResult = {
+export type SyncStateResolveResult = {
   /** Indicates if the operation was successful */
   success: boolean;
   /** Commit hash of the created rebase commit */
@@ -147,13 +147,13 @@ export type ConflictInfo = {
  *
  * Git-Native conflict model (post-refactor):
  * - rebase_conflict: Used for all Git-level conflicts during push/pull
- * - local_changes_conflict: Used when pull would overwrite local changes (EARS-61)
+ * - local_changes_conflict: Used when pull would overwrite local changes (EARS-C10)
  * - integrity_violation: Used when resolution commits are missing
  */
 export type ConflictType =
-  | "rebase_conflict" // Conflict during automatic rebase (Git-native, includes EARS-60 scenarios)
+  | "rebase_conflict" // Conflict during automatic rebase (Git-native, includes EARS-B23 scenarios)
   | "integrity_violation" // Integrity violation (rebase without resolution commit)
-  | "local_changes_conflict"; // [EARS-61] Local changes would be overwritten by pull
+  | "local_changes_conflict"; // [EARS-C10] Local changes would be overwritten by pull
 
 /**
  * Information about a detected integrity violation
@@ -236,7 +236,7 @@ export type ConflictDiff = {
 /**
  * Complete state audit report
  * 
- * This report combines SyncModule-specific audits (rebase integrity, commits)
+ * This report combines SyncStateModule-specific audits (rebase integrity, commits)
  * with structural validation from LintModule (signatures, checksums, schemas).
  */
 export type AuditStateReport = {
@@ -250,7 +250,7 @@ export type AuditStateReport = {
   rebaseCommits: number;
   /** Resolution commits found */
   resolutionCommits: number;
-  /** Integrity violations of resolutions (SyncModule-specific) */
+  /** Integrity violations of resolutions (SyncStateModule-specific) */
   integrityViolations: IntegrityViolation[];
   /** Summary message of the audit */
   summary: string;
@@ -272,7 +272,7 @@ export type StateDeltaFile = {
  * Whitelist of files and directories allowed for synchronization.
  * Only these paths will be copied from .gitgov/ to gitgov-state.
  * 
- * [EARS-42] Explicitly defines what gets synced, avoiding temporary files,
+ * [EARS-B9] Explicitly defines what gets synced, avoiding temporary files,
  * builds, scripts, and local configurations like .gitignore
  * 
  * Excluded (not in whitelist):

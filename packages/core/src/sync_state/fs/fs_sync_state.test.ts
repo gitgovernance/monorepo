@@ -1,6 +1,7 @@
 /**
- * FsSyncModule Tests
- * 
+ * FsSyncStateModule Tests
+ * @blueprint fs_sync_state_module.md
+ *
  * SAFETY: These tests use TEMPORARY Git repositories in /tmp
  * They NEVER touch the production repository.
  * 
@@ -17,7 +18,7 @@
  *    - No need for HTTP server, authentication, networking
  *    - Faster test execution (no network stack overhead)
  * 
- * 2. SUFFICIENT COVERAGE: FsSyncModule tests focus on BUSINESS LOGIC
+ * 2. SUFFICIENT COVERAGE: FsSyncStateModule tests focus on BUSINESS LOGIC
  *    - Branch management (ensureStateBranch, orphan branches)
  *    - Conflict resolution (rebase, markers, integrity)
  *    - State synchronization (push/pull delta calculation)
@@ -39,7 +40,7 @@
  * ============================================================================
  * 
  * Currently, tests use BOTH:
- * - GitModule methods for FsSyncModule operations (correct ✅)
+ * - GitModule methods for FsSyncStateModule operations (correct ✅)
  * - execAsync for test setup/assertions (temporary workaround ⚠️)
  * 
  * This is INTENTIONAL for now to move fast. Once all tests pass, we'll
@@ -54,18 +55,18 @@ import { promisify } from "util";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
-import { FsSyncModule } from "./fs_sync";
+import { FsSyncStateModule } from "./fs_sync_state";
 import { LocalGitModule } from '../../git/local';
 import { ConfigManager } from "../../config_manager";
 import { createConfigManager } from "../../config_store/fs";
 import type { ExecOptions, ExecResult } from "../../git/types";
 import {
-  SyncError,
+  SyncStateError,
   PushFromStateBranchError,
   ConflictMarkersPresentError,
   NoRebaseInProgressError,
   UncommittedChangesError,
-} from "../sync.errors";
+} from "../sync_state.errors";
 import { calculatePayloadChecksum } from "../../crypto/checksum";
 import type { ActorRecord, TaskRecord, Signature } from "../../types";
 import { createTaskRecord } from "../../factories/task_factory";
@@ -303,13 +304,13 @@ async function createTestTask(
 }
 
 
-describe("FsSyncModule", () => {
+describe("FsSyncStateModule", () => {
   let repoPath: string;
   let remoteRepoPath: string;
   let git: LocalGitModule;
   let config: ConfigManager;
   let mockIndexer: jest.Mocked<IIndexerAdapter>;
-  let syncModule: FsSyncModule;
+  let syncModule: FsSyncStateModule;
 
   beforeEach(async () => {
     // Create temp repo and remote
@@ -333,7 +334,7 @@ describe("FsSyncModule", () => {
 
     config = createConfigManager(repoPath);
     mockIndexer = createMockIndexerAdapter();
-    syncModule = new FsSyncModule({
+    syncModule = new FsSyncStateModule({
       git,
       config,
       identity: createMockIdentityAdapter(),
@@ -347,10 +348,10 @@ describe("FsSyncModule", () => {
     removeTempRepo(remoteRepoPath);
   });
 
-  // ===== EARS 1-5: State Branch Management =====
+  // ===== EARS-A1 to A5: State Branch Management =====
 
-  describe("State Branch Management (EARS 1-5)", () => {
-    it("[EARS-1] should create orphan branch if it doesn't exist", async () => {
+  describe("4.1. State Branch Management (EARS-A1 to A5)", () => {
+    it("[EARS-A1] should create orphan branch if it doesn't exist", async () => {
       // Execute
       await syncModule.ensureStateBranch();
 
@@ -376,7 +377,7 @@ describe("FsSyncModule", () => {
       expect(mainCommit[0]?.hash).not.toBe(stateCommit[0]?.hash);
     });
 
-    it("[EARS-2] should create local branch from remote if it exists remotely", async () => {
+    it("[EARS-A2] should create local branch from remote if it exists remotely", async () => {
       // Setup: Create state branch on remote only
       const tempWorkDir = path.join(
         os.tmpdir(),
@@ -422,7 +423,7 @@ describe("FsSyncModule", () => {
       }
     });
 
-    it("[EARS-3] should attempt push if exists locally but not remotely", async () => {
+    it("[EARS-A3] should attempt push if exists locally but not remotely", async () => {
       // Setup: Create state branch locally
       await git.checkoutOrphanBranch("gitgov-state");
       await git.commitAllowEmpty("Init state");
@@ -444,7 +445,7 @@ describe("FsSyncModule", () => {
       expect(remoteExistsAfter).toBe(true);
     });
 
-    it("[EARS-4] should return branch name from configuration", async () => {
+    it("[EARS-A4] should return branch name from configuration", async () => {
       // Execute
       const branchName = await syncModule.getStateBranchName();
 
@@ -452,7 +453,7 @@ describe("FsSyncModule", () => {
       expect(branchName).toBe("gitgov-state");
     });
 
-    it('[EARS-4] should return "gitgov-state" as default if not configured', async () => {
+    it('[EARS-A4] should return "gitgov-state" as default if not configured', async () => {
       // Setup: Remove config
       const configPath = path.join(repoPath, ".gitgov", "config.json");
       fs.unlinkSync(configPath);
@@ -464,7 +465,7 @@ describe("FsSyncModule", () => {
       expect(branchName).toBe("gitgov-state");
     });
 
-    it("[EARS-5] should calculate file delta between branches", async () => {
+    it("[EARS-A5] should calculate file delta between branches", async () => {
       // Setup: Create gitgov-state branch
       await syncModule.ensureStateBranch();
 
@@ -483,16 +484,16 @@ describe("FsSyncModule", () => {
     });
   });
 
-  // ===== EARS 6-12, 41-48, 54-60: Push Operation =====
+  // ===== EARS-B1 to B24: Push Operation =====
 
-  describe("Push Operation (EARS 6-12, 41-48, 54-63)", () => {
+  describe("4.2. Push Operation (EARS-B1 to B24)", () => {
     beforeEach(async () => {
       // Ensure state branch exists for push tests
       await syncModule.ensureStateBranch();
       await git.checkoutBranch("main");
     });
 
-    it("[EARS-6] should verify integrity before push", async () => {
+    it("[EARS-B1] should verify integrity before push", async () => {
       // Create a task
       await createTestTask(repoPath, "task-100", '{"title": "Test"}');
 
@@ -505,7 +506,7 @@ describe("FsSyncModule", () => {
       expect(result.success).toBe(true);
     });
 
-    it("[EARS-7] should return error if integrity violations detected", async () => {
+    it("[EARS-B2] should return error if integrity violations detected", async () => {
       // Setup: Create invalid state (this is a placeholder - real implementation
       // would need actual integrity violations)
       // For now, we test that the audit runs
@@ -521,7 +522,7 @@ describe("FsSyncModule", () => {
       // expect(result.conflictInfo?.type).toBe("integrity_violation");
     });
 
-    it("[EARS-8] should abort if push executed from gitgov-state branch", async () => {
+    it("[EARS-B3] should abort if push executed from gitgov-state branch", async () => {
       // Setup: Switch to gitgov-state
       await git.checkoutBranch("gitgov-state");
 
@@ -533,7 +534,7 @@ describe("FsSyncModule", () => {
       ).rejects.toThrow(PushFromStateBranchError);
     });
 
-    it("[EARS-9] should calculate and apply delta after successful reconciliation", async () => {
+    it("[EARS-B4] should calculate and apply delta after successful reconciliation", async () => {
       // Setup: Create changes
       await createTestTask(repoPath, "task-200", '{"title": "New Task"}');
 
@@ -548,7 +549,7 @@ describe("FsSyncModule", () => {
       expect(result.commitHash).toBeTruthy();
     });
 
-    it("[EARS-10] should abort rebase and return conflict if conflict detected", async () => {
+    it("[EARS-B5] should abort rebase and return conflict if conflict detected", async () => {
       // SKIPPED: This test requires complex setup with conflicting changes
       // between main and gitgov-state branches to simulate a rebase conflict.
       // 
@@ -563,7 +564,7 @@ describe("FsSyncModule", () => {
       // but requires multi-branch conflict simulation which is complex to set up.
     }, 30000);
 
-    it("[EARS-11] should return without commit if no changes", async () => {
+    it("[EARS-B6] should return without commit if no changes", async () => {
       // Setup: First push to sync initial .gitgov/ to state branch
       const firstPush = await syncModule.pushState({
         actorId: "test-actor",
@@ -582,7 +583,7 @@ describe("FsSyncModule", () => {
       expect(result.commitHash).toBeNull();
     });
 
-    it("[EARS-12] should simulate operation when dryRun is true", async () => {
+    it("[EARS-B7] should simulate operation when dryRun is true", async () => {
       // Setup: Create changes
       await createTestTask(repoPath, "task-300", '{"title": "Dry Run"}');
 
@@ -599,7 +600,7 @@ describe("FsSyncModule", () => {
       expect(result.commitMessage).toBeTruthy(); // But message was prepared
     });
 
-    it("[EARS-41] should detect first push when .gitgov/ does not exist in gitgov-state", async () => {
+    it("[EARS-B8] should detect first push when .gitgov/ does not exist in gitgov-state", async () => {
       // Setup: .gitgov/ already exists in main from beforeEach
       // gitgov-state exists but is empty (no .gitgov/ there yet)
 
@@ -610,7 +611,7 @@ describe("FsSyncModule", () => {
 
       // Debug output if failed
       if (!result.success) {
-        console.log("[EARS-41 DEBUG] Push failed:", {
+        console.log("[EARS-B8 DEBUG] Push failed:", {
           error: result.error,
           conflictDetected: result.conflictDetected,
           conflictInfo: result.conflictInfo,
@@ -632,7 +633,7 @@ describe("FsSyncModule", () => {
       await git.checkoutBranch("main");
     });
 
-    it("[EARS-42] should copy only whitelisted files during push", async () => {
+    it("[EARS-B9] should copy only whitelisted files during push", async () => {
       // Setup: Create various files in .gitgov/, including non-whitelisted ones
       const gitgovDir = path.join(repoPath, ".gitgov");
 
@@ -661,7 +662,7 @@ describe("FsSyncModule", () => {
 
       // Debug output if failed
       if (!result.success) {
-        console.log("[EARS-42 DEBUG] Push failed:", {
+        console.log("[EARS-B9 DEBUG] Push failed:", {
           error: result.error,
           conflictDetected: result.conflictDetected,
           conflictInfo: result.conflictInfo,
@@ -689,7 +690,7 @@ describe("FsSyncModule", () => {
       await git.checkoutBranch("main");
     });
 
-    it("[EARS-43] should handle untracked .gitgov/ files with stash and temp directory", async () => {
+    it("[EARS-B10] should handle untracked .gitgov/ files with stash and temp directory", async () => {
       // Setup: Create .gitgov/ with mix of tracked and untracked files
       const gitgovDir = path.join(repoPath, ".gitgov");
 
@@ -751,7 +752,7 @@ describe("FsSyncModule", () => {
 
       // Debug output if failed
       if (!result.success) {
-        console.log("[EARS-43 DEBUG] Push failed:", {
+        console.log("[EARS-B10 DEBUG] Push failed:", {
           error: result.error,
           conflictDetected: result.conflictDetected,
           conflictInfo: result.conflictInfo,
@@ -810,7 +811,7 @@ describe("FsSyncModule", () => {
       // 3. The critical test is that files are RESTORED on main, not what's in gitgov-state
     });
 
-    it("[EARS-45] should NOT sync local-only files, keys, or backups to gitgov-state", async () => {
+    it("[EARS-B12] should NOT sync local-only files, keys, or backups to gitgov-state", async () => {
       // Setup: Create .gitgov/ with various file types
       const gitgovDir = path.join(repoPath, ".gitgov");
 
@@ -869,7 +870,7 @@ describe("FsSyncModule", () => {
       await git.checkoutBranch("main");
     });
 
-    it("[EARS-46] should preserve ALL local files after sync push (including keys, backups, local-only)", async () => {
+    it("[EARS-B13] should preserve ALL local files after sync push (including keys, backups, local-only)", async () => {
       // Setup: Create .gitgov/ with various file types (untracked)
       const gitgovDir = path.join(repoPath, ".gitgov");
 
@@ -940,7 +941,7 @@ describe("FsSyncModule", () => {
       expect(fs.readFileSync(path.join(gitgovDir, "gitgov"), "utf-8")).toBe(gitgovBinaryContent);
     });
 
-    it("[EARS-47] should remove old non-syncable files from gitgov-state on subsequent push", async () => {
+    it("[EARS-B14] should remove old non-syncable files from gitgov-state on subsequent push", async () => {
       // This test simulates a scenario where gitgov-state has old files from previous pushes
       // (before the current filtering logic) and verifies they are cleaned up on new push
 
@@ -1023,10 +1024,10 @@ describe("FsSyncModule", () => {
       expect(afterFiles).not.toContain("old.json.backup");
     });
 
-    it("[EARS-48] should NOT sync untracked worktree files (.session.json, gitgov) on subsequent push", async () => {
+    it("[EARS-B15] should NOT sync untracked worktree files (.session.json, gitgov) on subsequent push", async () => {
       // This test verifies the fix for the bug where untracked files from the worktree
       // were accidentally added to gitgov-state on subsequent pushes because git add
-      // ran AFTER the EARS-47 cleanup instead of BEFORE
+      // ran AFTER the EARS-B14 cleanup instead of BEFORE
 
       const gitgovDir = path.join(repoPath, ".gitgov");
 
@@ -1096,7 +1097,7 @@ describe("FsSyncModule", () => {
       expect(fs.existsSync(path.join(gitgovDir, "index.json"))).toBe(true);
     });
 
-    it("[EARS-54] WHEN push detects remote changes THEN implicit pull results SHALL be shown", async () => {
+    it("[EARS-B16] WHEN push detects remote changes THEN implicit pull results SHALL be shown", async () => {
       // Verifies that pushState reports implicit pull info (hasChanges, filesUpdated)
       // when remote had changes that were rebased during push reconciliation
 
@@ -1137,7 +1138,7 @@ describe("FsSyncModule", () => {
       expect(result.implicitPull?.filesUpdated).toBeGreaterThanOrEqual(1);
     });
 
-    it("[EARS-54-FIX] should call indexer.generateIndex() after implicit pull during push reconciliation", async () => {
+    it("[EARS-B17] should call indexer.generateIndex() after implicit pull during push reconciliation", async () => {
       // This test verifies the bug fix where implicit pull set reindexed:true
       // but never actually called the indexer
 
@@ -1172,8 +1173,8 @@ describe("FsSyncModule", () => {
       const indexerMock = createMockIndexerAdapter();
       const indexerSpy = jest.spyOn(indexerMock, 'generateIndex');
 
-      // Create FsSyncModule with spied indexer
-      const spiedFsSyncModule = new FsSyncModule({
+      // Create FsSyncStateModule with spied indexer
+      const spiedFsSyncStateModule = new FsSyncStateModule({
         git,
         config,
         identity: createMockIdentityAdapter(),
@@ -1182,7 +1183,7 @@ describe("FsSyncModule", () => {
       });
 
       // Execute push - this should do implicit pull and call indexer
-      const result = await spiedFsSyncModule.pushState({ actorId: "test-actor" });
+      const result = await spiedFsSyncStateModule.pushState({ actorId: "test-actor" });
 
       // Verify push succeeded
       expect(result.success).toBe(true);
@@ -1197,11 +1198,11 @@ describe("FsSyncModule", () => {
       }
     });
 
-    it("[EARS-56] should preserve newly pulled files from remote after implicit pull during push", async () => {
+    it("[EARS-B18] should preserve newly pulled files from remote after implicit pull during push", async () => {
       // This test verifies the bug fix where implicit pull brought new files from remote
       // but they were overwritten by the tempDir restore (which had old files)
       //
-      // The key difference from EARS-54-FIX: this test verifies the FILES are preserved,
+      // The key difference from EARS-B17: this test verifies the FILES are preserved,
       // not just that the indexer is called.
 
       const gitgovDir = path.join(repoPath, ".gitgov");
@@ -1255,7 +1256,7 @@ describe("FsSyncModule", () => {
       // Verify implicit pull was detected
       expect(result.implicitPull?.hasChanges).toBe(true);
 
-      // KEY ASSERTIONS for EARS-56:
+      // KEY ASSERTIONS for EARS-B18:
       // 1. The newly pulled files from remote should exist in the work tree
       expect(fs.existsSync(path.join(gitgovDir, "tasks/task-from-remote.json"))).toBe(true);
       expect(fs.existsSync(path.join(gitgovDir, "tasks/task-from-remote-2.json"))).toBe(true);
@@ -1273,7 +1274,7 @@ describe("FsSyncModule", () => {
       expect(remoteTaskContent.title).toBe("Task From Remote Machine");
     });
 
-    it("[EARS-57] should sync deleted files to gitgov-state when pushing", async () => {
+    it("[EARS-B19] should sync deleted files to gitgov-state when pushing", async () => {
       // This test verifies that when a user deletes a record locally,
       // the deletion is propagated to gitgov-state when pushing.
 
@@ -1309,7 +1310,7 @@ describe("FsSyncModule", () => {
       const secondPush = await syncModule.pushState({ actorId: "test-actor" });
       expect(secondPush.success).toBe(true);
 
-      // KEY ASSERTIONS for EARS-57:
+      // KEY ASSERTIONS for EARS-B19:
       // 1. The deleted file should NOT exist in gitgov-state
       await execAsync("git checkout gitgov-state", { cwd: repoPath });
       expect(fs.existsSync(path.join(gitgovDir, "tasks/task-delete.json"))).toBe(false);
@@ -1326,7 +1327,7 @@ describe("FsSyncModule", () => {
       await execAsync("git checkout main", { cwd: repoPath });
     });
 
-    it("[EARS-57-IMPLICIT] should sync deleted files even when implicit pull brings new files from remote", async () => {
+    it("[EARS-B20] should sync deleted files even when implicit pull brings new files from remote", async () => {
       // Verifies that locally deleted files are removed from gitgov-state
       // even when implicit pull brings new files from remote
 
@@ -1375,7 +1376,7 @@ describe("FsSyncModule", () => {
       await execAsync("git checkout main", { cwd: repoPath });
     });
 
-    it("[EARS-58] should regenerate index after implicit pull even when no local changes to push", async () => {
+    it("[EARS-B21] should regenerate index after implicit pull even when no local changes to push", async () => {
       // When push reconciles with remote changes via implicit pull but there are
       // NO new local changes to commit, it should still regenerate the index
 
@@ -1407,11 +1408,11 @@ describe("FsSyncModule", () => {
       await execAsync("git add .gitgov/tasks/task-1.json", { cwd: repoPath });
       await execAsync('git commit -m "Minor local update"', { cwd: repoPath });
 
-      // Create FsSyncModule with spied indexer
+      // Create FsSyncStateModule with spied indexer
       const indexerMock = createMockIndexerAdapter();
       const indexerSpy = jest.spyOn(indexerMock, 'generateIndex');
 
-      const spiedModule = new FsSyncModule({
+      const spiedModule = new FsSyncStateModule({
         git,
         config,
         identity: createMockIdentityAdapter(),
@@ -1431,7 +1432,7 @@ describe("FsSyncModule", () => {
       }
     });
 
-    it("[EARS-59] should preserve .key files during implicit pull (excluded patterns)", async () => {
+    it("[EARS-B22] should preserve .key files during implicit pull (excluded patterns)", async () => {
       // When implicit pull occurs during push, .key files must NOT be overwritten
       // by remote versions (which shouldn't exist, but safety net)
 
@@ -1450,7 +1451,7 @@ describe("FsSyncModule", () => {
       const firstPush = await syncModule.pushState({ actorId: "test-actor" });
       expect(firstPush.success).toBe(true);
 
-      // Verify .key was NOT pushed to gitgov-state (EARS-45 guarantee)
+      // Verify .key was NOT pushed to gitgov-state (EARS-B12 guarantee)
       await execAsync("git checkout gitgov-state", { cwd: repoPath });
       expect(fs.existsSync(path.join(gitgovDir, "actors/alice.key"))).toBe(false);
       await execAsync("git checkout main", { cwd: repoPath });
@@ -1478,7 +1479,7 @@ describe("FsSyncModule", () => {
       expect(keyContent).toBe("LOCAL_PRIVATE_KEY_CONTENT");
     });
 
-    it("[EARS-60] should detect conflict when same file modified locally and remotely", async () => {
+    it("[EARS-B23] should detect conflict when same file modified locally and remotely", async () => {
       // This tests the critical scenario:
       // 1. Machine A modifies task-1 (priority: critical) and pushes
       // 2. Machine B modifies same task-1 (priority: low) and tries to push
@@ -1530,7 +1531,7 @@ describe("FsSyncModule", () => {
       // Step 4: Push should detect conflict (GIT-NATIVE via rebase)
       const conflictPush = await syncModule.pushState({ actorId: "test-actor" });
 
-      // KEY ASSERTIONS for EARS-60 (Git-Native):
+      // KEY ASSERTIONS for EARS-B23 (Git-Native):
       expect(conflictPush.success).toBe(false);
       expect(conflictPush.conflictDetected).toBe(true);
       expect(conflictPush.conflictInfo?.type).toBe("rebase_conflict"); // Git-native conflict
@@ -1569,7 +1570,7 @@ describe("FsSyncModule", () => {
       await execAsync("git checkout main", { cwd: repoPath });
     });
 
-    it("[EARS-60] should NOT detect conflict when different files modified", async () => {
+    it("[EARS-B23] should NOT detect conflict when different files modified", async () => {
       // When Machine A modifies task-1 and Machine B modifies task-2,
       // there should be no conflict — implicit pull auto-merges
 
@@ -1618,7 +1619,7 @@ describe("FsSyncModule", () => {
       await execAsync("git checkout main", { cwd: repoPath });
     });
 
-    it("[EARS-60] should NOT detect conflict when same content", async () => {
+    it("[EARS-B23] should NOT detect conflict when same content", async () => {
       // Both machines have the same content - no conflict
 
       const gitgovDir = path.join(repoPath, ".gitgov");
@@ -1654,7 +1655,7 @@ describe("FsSyncModule", () => {
       expect(push.conflictDetected).toBe(false);
     });
 
-    it("[EARS-44] should fail with clear error when no remote configured for push", async () => {
+    it("[EARS-B11] should fail with clear error when no remote configured for push", async () => {
       // Setup: Create a repo with commits but WITHOUT remote
       const noRemoteRepoPath = path.join(
         os.tmpdir(),
@@ -1685,9 +1686,9 @@ describe("FsSyncModule", () => {
         await execAsync("git add .gitgov", { cwd: normalizedNoRemotePath });
         await execAsync('git commit -m "Add .gitgov"', { cwd: normalizedNoRemotePath });
 
-        // Create FsSyncModule for repo without remote
+        // Create FsSyncStateModule for repo without remote
         const noRemoteConfig = createConfigManager(normalizedNoRemotePath);
-        const noRemoteFsSyncModule = new FsSyncModule({
+        const noRemoteFsSyncStateModule = new FsSyncStateModule({
           git: noRemoteGit,
           config: noRemoteConfig,
           identity: createMockIdentityAdapter(),
@@ -1696,7 +1697,7 @@ describe("FsSyncModule", () => {
         });
 
         // Execute: Try to push without remote configured
-        const result = await noRemoteFsSyncModule.pushState({
+        const result = await noRemoteFsSyncStateModule.pushState({
           actorId: "test-actor",
         });
 
@@ -1711,7 +1712,7 @@ describe("FsSyncModule", () => {
       }
     });
 
-    it("[EARS-44] should fail with clear error when source branch has no commits", async () => {
+    it("[EARS-B11] should fail with clear error when source branch has no commits", async () => {
       // Setup: Create a repo WITH remote but WITHOUT commits
       const emptyRepoPath = path.join(
         os.tmpdir(),
@@ -1747,9 +1748,9 @@ describe("FsSyncModule", () => {
         fs.mkdirSync(gitgovDir, { recursive: true });
         fs.writeFileSync(path.join(gitgovDir, "config.json"), '{"projectId": "empty-test"}');
 
-        // Create FsSyncModule for empty repo
+        // Create FsSyncStateModule for empty repo
         const emptyConfig = createConfigManager(normalizedEmptyPath);
-        const emptyFsSyncModule = new FsSyncModule({
+        const emptyFsSyncStateModule = new FsSyncStateModule({
           git: emptyGit,
           config: emptyConfig,
           identity: createMockIdentityAdapter(),
@@ -1758,7 +1759,7 @@ describe("FsSyncModule", () => {
         });
 
         // Execute: Try to push from branch with no commits
-        const result = await emptyFsSyncModule.pushState({
+        const result = await emptyFsSyncStateModule.pushState({
           actorId: "test-actor",
         });
 
@@ -1774,10 +1775,10 @@ describe("FsSyncModule", () => {
       }
     });
 
-    it("[EARS-63] should unstage files after checkout from gitgov-state to prevent accidental commits", async () => {
+    it("[EARS-B24] should unstage files after checkout from gitgov-state to prevent accidental commits", async () => {
       // When pushState copies files from gitgov-state to working tree via
       // git checkout <branch> -- .gitgov/, those files end up staged.
-      // EARS-63 ensures they are unstaged (git reset HEAD .gitgov/) so they
+      // EARS-B24 ensures they are unstaged (git reset HEAD .gitgov/) so they
       // appear as working tree changes, not staged changes.
 
       const gitgovDir = path.join(repoPath, ".gitgov");
@@ -1819,15 +1820,15 @@ describe("FsSyncModule", () => {
     });
   });
 
-  // ===== EARS 13-16, 44, 49-52, 61-62: Pull Operation =====
+  // ===== EARS-C1 to C11: Pull Operation =====
 
-  describe("Pull Operation (EARS 13-16, 44, 49-52, 61-62)", () => {
+  describe("4.3. Pull Operation (EARS-C1 to C11)", () => {
     beforeEach(async () => {
       await syncModule.ensureStateBranch();
       await git.checkoutBranch("main");
     });
 
-    it("[EARS-13] should update local branch with remote changes using rebase", async () => {
+    it("[EARS-C1] should update local branch with remote changes using rebase", async () => {
       // Execute pull
       const result = await syncModule.pullState();
 
@@ -1835,7 +1836,7 @@ describe("FsSyncModule", () => {
       expect(result.success).toBe(true);
     });
 
-    it("[EARS-44] should fail with clear error when no remote configured for pull", async () => {
+    it("[EARS-C5] should fail with clear error when no remote configured for pull", async () => {
       // Setup: Create a repo with commits but WITHOUT remote
       const noRemoteRepoPath = path.join(
         os.tmpdir(),
@@ -1859,9 +1860,9 @@ describe("FsSyncModule", () => {
           execCommand: createExecCommand(normalizedNoRemotePath),
         });
 
-        // Create FsSyncModule for repo without remote
+        // Create FsSyncStateModule for repo without remote
         const noRemoteConfig = createConfigManager(normalizedNoRemotePath);
-        const noRemoteFsSyncModule = new FsSyncModule({
+        const noRemoteFsSyncStateModule = new FsSyncStateModule({
           git: noRemoteGit,
           config: noRemoteConfig,
           identity: createMockIdentityAdapter(),
@@ -1870,7 +1871,7 @@ describe("FsSyncModule", () => {
         });
 
         // Execute: Try to pull without remote configured
-        const result = await noRemoteFsSyncModule.pullState();
+        const result = await noRemoteFsSyncStateModule.pullState();
 
         // Verify: Should fail with clear error about no remote
         expect(result.success).toBe(false);
@@ -1883,7 +1884,7 @@ describe("FsSyncModule", () => {
       }
     });
 
-    it("[EARS-14] should pause rebase and return conflict if conflict detected", async () => {
+    it("[EARS-C2] should pause rebase and return conflict if conflict detected", async () => {
       // SKIPPED: This test requires complex setup with conflicting changes
       // during pullState() operation.
       //
@@ -1898,7 +1899,7 @@ describe("FsSyncModule", () => {
       // but requires remote simulation which is complex to set up in unit tests.
     });
 
-    it("[EARS-15] should invoke indexer.generateIndex() if there are new changes", async () => {
+    it("[EARS-C3] should invoke indexer.generateIndex() if there are new changes", async () => {
       // Reset mock to track calls
       mockIndexer.generateIndex.mockClear();
 
@@ -1916,7 +1917,7 @@ describe("FsSyncModule", () => {
       expect(mockIndexer.generateIndex).toHaveBeenCalledTimes(1);
     });
 
-    it("[EARS-16] should invoke indexer.generateIndex() when forceReindex is true", async () => {
+    it("[EARS-C4] should invoke indexer.generateIndex() when forceReindex is true", async () => {
       // Reset mock to track calls
       mockIndexer.generateIndex.mockClear();
 
@@ -1931,7 +1932,7 @@ describe("FsSyncModule", () => {
       expect(mockIndexer.generateIndex).toHaveBeenCalledTimes(1);
     });
 
-    it("[EARS-44] should fail with clear error when no remote configured", async () => {
+    it("[EARS-C5] should fail with clear error when no remote configured", async () => {
       // Setup: Create a repo WITHOUT remote
       const noRemoteRepoPath = path.join(
         os.tmpdir(),
@@ -1962,9 +1963,9 @@ describe("FsSyncModule", () => {
         await execAsync("git add .gitgov", { cwd: normalizedNoRemotePath });
         await execAsync('git commit -m "Add .gitgov"', { cwd: normalizedNoRemotePath });
 
-        // Create FsSyncModule for repo without remote
+        // Create FsSyncStateModule for repo without remote
         const noRemoteConfig = createConfigManager(normalizedNoRemotePath);
-        const noRemoteFsSyncModule = new FsSyncModule({
+        const noRemoteFsSyncStateModule = new FsSyncStateModule({
           git: noRemoteGit,
           config: noRemoteConfig,
           identity: createMockIdentityAdapter(),
@@ -1974,7 +1975,7 @@ describe("FsSyncModule", () => {
 
         // Execute: Try to pull without remote configured
         // Note: pullState returns error in result instead of throwing
-        const result = await noRemoteFsSyncModule.pullState();
+        const result = await noRemoteFsSyncStateModule.pullState();
 
         // Verify: Should fail with clear error about no remote
         expect(result.success).toBe(false);
@@ -1988,7 +1989,7 @@ describe("FsSyncModule", () => {
       }
     });
 
-    it("[EARS-44] should succeed with nothing to pull if gitgov-state exists locally but not remotely", async () => {
+    it("[EARS-C5] should succeed with nothing to pull if gitgov-state exists locally but not remotely", async () => {
       // Note: We need a fresh setup because beforeEach already creates and pushes gitgov-state
       // Setup: Create a fresh repo with remote where gitgov-state exists ONLY locally
       const localOnlyRepoPath = path.join(
@@ -2044,9 +2045,9 @@ describe("FsSyncModule", () => {
         const { stdout: remoteBranches } = await execAsync("git ls-remote --heads origin gitgov-state", { cwd: normalizedLocalOnlyPath });
         expect(remoteBranches.trim()).toBe("");
 
-        // Create FsSyncModule
+        // Create FsSyncStateModule
         const localOnlyConfig = createConfigManager(normalizedLocalOnlyPath);
-        const localOnlyFsSyncModule = new FsSyncModule({
+        const localOnlyFsSyncStateModule = new FsSyncStateModule({
           git: localOnlyGit,
           config: localOnlyConfig,
           identity: createMockIdentityAdapter(),
@@ -2055,7 +2056,7 @@ describe("FsSyncModule", () => {
         });
 
         // Execute: Pull when local exists but remote doesn't
-        const result = await localOnlyFsSyncModule.pullState();
+        const result = await localOnlyFsSyncStateModule.pullState();
 
         // Verify: Should succeed with nothing to pull (local-only mode)
         expect(result.success).toBe(true);
@@ -2068,7 +2069,7 @@ describe("FsSyncModule", () => {
       }
     });
 
-    it("[EARS-44] should fail with clear error if gitgov-state does not exist anywhere", async () => {
+    it("[EARS-C5] should fail with clear error if gitgov-state does not exist anywhere", async () => {
       // Setup: Create a repo with remote but WITHOUT gitgov-state anywhere
       const freshRepoPath = path.join(
         os.tmpdir(),
@@ -2110,9 +2111,9 @@ describe("FsSyncModule", () => {
         await execAsync("git add .gitgov", { cwd: normalizedFreshPath });
         await execAsync('git commit -m "Add .gitgov"', { cwd: normalizedFreshPath });
 
-        // Create FsSyncModule
+        // Create FsSyncStateModule
         const freshConfig = createConfigManager(normalizedFreshPath);
-        const freshFsSyncModule = new FsSyncModule({
+        const freshFsSyncStateModule = new FsSyncStateModule({
           git: freshGit,
           config: freshConfig,
           identity: createMockIdentityAdapter(),
@@ -2122,7 +2123,7 @@ describe("FsSyncModule", () => {
 
         // Execute: Try to pull when gitgov-state doesn't exist anywhere
         // Note: pullState returns error in result instead of throwing
-        const result = await freshFsSyncModule.pullState();
+        const result = await freshFsSyncStateModule.pullState();
 
         // Verify: Should fail with clear error about missing gitgov-state
         // Since .gitgov/ exists locally (committed to main), it suggests sync push instead of init
@@ -2137,7 +2138,7 @@ describe("FsSyncModule", () => {
       }
     });
 
-    it("[EARS-49] should preserve LOCAL_ONLY_FILES (.session.json, index.json, gitgov) after pull", async () => {
+    it("[EARS-C6] should preserve LOCAL_ONLY_FILES (.session.json, index.json, gitgov) after pull", async () => {
       // This test verifies the fix for the bug where pullState deleted LOCAL_ONLY_FILES
       // because it used `git checkout gitgov-state -- .gitgov/` which replaced the entire directory
 
@@ -2211,7 +2212,7 @@ describe("FsSyncModule", () => {
       expect(fs.existsSync(path.join(gitgovDir, "config.json"))).toBe(true);
     });
 
-    it("[EARS-50] should preserve ALL files after pull with NO changes (already up to date)", async () => {
+    it("[EARS-C7] should preserve ALL files after pull with NO changes (already up to date)", async () => {
       // This test verifies the fix for the bug where pullState with no new changes
       // would still delete files because switching branches modified .gitgov/
 
@@ -2225,7 +2226,7 @@ describe("FsSyncModule", () => {
       fs.writeFileSync(path.join(gitgovDir, "config.json"), '{"projectId": "test-50"}');
 
       await execAsync("git add .gitgov", { cwd: repoPath });
-      await execAsync('git commit -m "Add files for EARS-50"', { cwd: repoPath });
+      await execAsync('git commit -m "Add files for EARS-C7"', { cwd: repoPath });
 
       // Push to gitgov-state
       const pushResult = await syncModule.pushState({ actorId: "test-actor" });
@@ -2234,7 +2235,7 @@ describe("FsSyncModule", () => {
       // Step 2: Create LOCAL_ONLY_FILES
       const sessionContent = '{"actorId": "ears-50-session"}';
       const indexContent = '{"records": [], "version": 50}';
-      const gitgovBinaryContent = '#!/bin/bash\necho "EARS-50 binary"';
+      const gitgovBinaryContent = '#!/bin/bash\necho "EARS-C7 binary"';
 
       fs.writeFileSync(path.join(gitgovDir, ".session.json"), sessionContent);
       fs.writeFileSync(path.join(gitgovDir, "index.json"), indexContent);
@@ -2270,7 +2271,7 @@ describe("FsSyncModule", () => {
       expect(fs.readFileSync(path.join(gitgovDir, "gitgov"), "utf-8")).toBe(gitgovBinaryContent);
     });
 
-    it("[EARS-51] should handle pull when .gitgov/ is untracked on work branch (force checkout)", async () => {
+    it("[EARS-C8] should handle pull when .gitgov/ is untracked on work branch (force checkout)", async () => {
       // This test verifies the fix for the bug where pullState failed with
       // "Failed to checkout branch gitgov-state" when .gitgov/ was untracked
       // on the work branch but tracked on gitgov-state
@@ -2283,7 +2284,7 @@ describe("FsSyncModule", () => {
       fs.writeFileSync(path.join(gitgovDir, "config.json"), '{"projectId": "test-51"}');
 
       await execAsync("git add .gitgov", { cwd: repoPath });
-      await execAsync('git commit -m "Add .gitgov for EARS-51"', { cwd: repoPath });
+      await execAsync('git commit -m "Add .gitgov for EARS-C8"', { cwd: repoPath });
 
       // Push to gitgov-state
       const pushResult = await syncModule.pushState({ actorId: "test-actor" });
@@ -2292,7 +2293,7 @@ describe("FsSyncModule", () => {
       // Step 2: Add LOCAL_ONLY_FILES (these exist in worktree but not in gitgov-state)
       const sessionContent = '{"actorId": "ears-51-session", "important": "data"}';
       fs.writeFileSync(path.join(gitgovDir, ".session.json"), sessionContent);
-      fs.writeFileSync(path.join(gitgovDir, "gitgov"), '#!/bin/bash\necho "EARS-51"');
+      fs.writeFileSync(path.join(gitgovDir, "gitgov"), '#!/bin/bash\necho "EARS-C8"');
 
       // Step 3: Verify files exist before pull
       expect(fs.existsSync(path.join(gitgovDir, "tasks/task-51.json"))).toBe(true);
@@ -2312,7 +2313,7 @@ describe("FsSyncModule", () => {
       expect(fs.readFileSync(path.join(gitgovDir, ".session.json"), "utf-8")).toBe(sessionContent);
     });
 
-    it("[EARS-52] WHEN project is cloned fresh with existing gitgov-state THEN index.json SHALL be regenerated", async () => {
+    it("[EARS-C9] WHEN project is cloned fresh with existing gitgov-state THEN index.json SHALL be regenerated", async () => {
       // Bootstrap scenario: a freshly cloned project has gitgov-state
       // but no index.json locally. pullState should detect this and reindex.
 
@@ -2324,7 +2325,7 @@ describe("FsSyncModule", () => {
       fs.writeFileSync(path.join(gitgovDir, "config.json"), '{"projectId": "test-52"}');
 
       await execAsync("git add .gitgov", { cwd: repoPath });
-      await execAsync('git commit -m "Add .gitgov for EARS-52"', { cwd: repoPath });
+      await execAsync('git commit -m "Add .gitgov for EARS-C9"', { cwd: repoPath });
 
       const pushResult = await syncModule.pushState({ actorId: "test-actor" });
       expect(pushResult.success).toBe(true);
@@ -2343,7 +2344,7 @@ describe("FsSyncModule", () => {
       expect(pullResult.reindexed).toBe(true);
     });
 
-    it("[EARS-61] should detect conflict when local file modified and same file changed remotely", async () => {
+    it("[EARS-C10] should detect conflict when local file modified and same file changed remotely", async () => {
       // This tests the scenario:
       // 1. Machine A modifies task-1 and pushes to gitgov-state
       // 2. Machine B has modified the same task-1 locally (not pushed)
@@ -2354,10 +2355,10 @@ describe("FsSyncModule", () => {
       // Step 1: Setup - create initial task and push
       const initialTask = {
         id: "1234567890-task-ears-61",
-        title: "EARS-61 Test Task",
+        title: "EARS-C10 Test Task",
         status: "draft",
         priority: "medium",
-        description: "Initial description for EARS-61 test",
+        description: "Initial description for EARS-C10 test",
       };
 
       const taskPath = path.join(gitgovDir, "tasks/ears-61-task.json");
@@ -2365,7 +2366,7 @@ describe("FsSyncModule", () => {
       fs.writeFileSync(taskPath, JSON.stringify(initialTask, null, 2));
 
       await execAsync("git add .gitgov", { cwd: repoPath });
-      await execAsync('git commit -m "Add EARS-61 initial task"', { cwd: repoPath });
+      await execAsync('git commit -m "Add EARS-C10 initial task"', { cwd: repoPath });
 
       // Push initial state
       const pushResult1 = await syncModule.pushState({ actorId: "test-actor" });
@@ -2401,9 +2402,9 @@ describe("FsSyncModule", () => {
       expect(preservedTask.description).toBe("Modified locally by Machine B");
     });
 
-    it("[EARS-62] should overwrite local changes when force flag is set", async () => {
+    it("[EARS-C11] should overwrite local changes when force flag is set", async () => {
       // This tests the --force flag:
-      // 1. Same setup as EARS-61 (local and remote both modified same file)
+      // 1. Same setup as EARS-C10 (local and remote both modified same file)
       // 2. pullState with force: true - should SUCCEED and overwrite local changes
 
       const gitgovDir = path.join(repoPath, ".gitgov");
@@ -2411,10 +2412,10 @@ describe("FsSyncModule", () => {
       // Step 1: Setup - create initial task and push
       const initialTask = {
         id: "1234567890-task-ears-62",
-        title: "EARS-62 Test Task",
+        title: "EARS-C11 Test Task",
         status: "draft",
         priority: "medium",
-        description: "Initial description for EARS-62 test",
+        description: "Initial description for EARS-C11 test",
       };
 
       const taskPath = path.join(gitgovDir, "tasks/ears-62-task.json");
@@ -2422,7 +2423,7 @@ describe("FsSyncModule", () => {
       fs.writeFileSync(taskPath, JSON.stringify(initialTask, null, 2));
 
       await execAsync("git add .gitgov", { cwd: repoPath });
-      await execAsync('git commit -m "Add EARS-62 initial task"', { cwd: repoPath });
+      await execAsync('git commit -m "Add EARS-C11 initial task"', { cwd: repoPath });
 
       // Push initial state
       const pushResult1 = await syncModule.pushState({ actorId: "test-actor" });
@@ -2460,10 +2461,10 @@ describe("FsSyncModule", () => {
 
   });
 
-  // ===== EARS 17-23: Resolve Operation =====
+  // ===== EARS-D1 to D8: Resolve Operation =====
 
-  describe("Resolve Operation (EARS 17-23)", () => {
-    it("[EARS-17] should return error if no rebase in progress", async () => {
+  describe("4.4. Resolve Operation (EARS-D1 to D8)", () => {
+    it("[EARS-D1] should return error if no rebase in progress", async () => {
       // Execute without rebase in progress
       await expect(
         syncModule.resolveConflict({
@@ -2473,7 +2474,7 @@ describe("FsSyncModule", () => {
       ).rejects.toThrow(NoRebaseInProgressError);
     });
 
-    it("[EARS-18] should return error if conflict markers present", async () => {
+    it("[EARS-D2] should return error if conflict markers present", async () => {
       // SKIPPED: This test requires setting up a rebase with unresolved conflict markers
       // in .gitgov/ files, then attempting resolveConflict().
       //
@@ -2487,7 +2488,7 @@ describe("FsSyncModule", () => {
       // but requires complex rebase + marker simulation.
     });
 
-    it("[EARS-19] should update resolved records with new checksum and signature", async () => {
+    it("[EARS-D3] should update resolved records with new checksum and signature", async () => {
       // Setup: Create mock IdentityAdapter
       const mockIdentityAdapter: Partial<IIdentityAdapter> = {
         getCurrentActor: jest.fn().mockResolvedValue({
@@ -2522,7 +2523,7 @@ describe("FsSyncModule", () => {
         getActorPublicKey: jest.fn().mockResolvedValue("ed25519:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="),
       };
 
-      const syncModuleWithIdentity = new FsSyncModule({
+      const syncModuleWithIdentity = new FsSyncStateModule({
         git,
         config,
         identity: mockIdentityAdapter as IIdentityAdapter,
@@ -2531,12 +2532,12 @@ describe("FsSyncModule", () => {
       });
 
       // ========== CREATE REAL GIT CONFLICT ==========
-      console.log("[EARS-19 DEBUG] Starting conflict setup...");
+      console.log("[EARS-D3 DEBUG] Starting conflict setup...");
 
       // 1. Create initial task in main branch
       const taskPath = path.join(repoPath, ".gitgov/tasks/task-conflict.json");
       fs.mkdirSync(path.dirname(taskPath), { recursive: true });
-      console.log("[EARS-19 DEBUG] Created task directory");
+      console.log("[EARS-D3 DEBUG] Created task directory");
 
       const originalTask: TaskRecord = createTaskRecord({
         id: "1234567890-task-conflict",
@@ -2556,13 +2557,13 @@ describe("FsSyncModule", () => {
       fs.writeFileSync(taskPath, JSON.stringify(originalRecord, null, 2));
       await git.add([".gitgov/tasks/task-conflict.json"]);
       await git.commit("Add original task");
-      console.log("[EARS-19 DEBUG] Created original task in main");
+      console.log("[EARS-D3 DEBUG] Created original task in main");
 
       // 2. Create feature branch and modify task there
       await git.createBranch("feature-branch");
-      console.log("[EARS-19 DEBUG] Created feature-branch");
+      console.log("[EARS-D3 DEBUG] Created feature-branch");
       await git.checkoutBranch("feature-branch");
-      console.log("[EARS-19 DEBUG] Checked out feature-branch");
+      console.log("[EARS-D3 DEBUG] Checked out feature-branch");
 
       const featureTask: TaskRecord = createTaskRecord({
         ...originalTask,
@@ -2579,11 +2580,11 @@ describe("FsSyncModule", () => {
       fs.writeFileSync(taskPath, JSON.stringify(featureRecord, null, 2));
       await git.add([".gitgov/tasks/task-conflict.json"]);
       await git.commit("Update task in feature branch");
-      console.log("[EARS-19 DEBUG] Updated task in feature-branch");
+      console.log("[EARS-D3 DEBUG] Updated task in feature-branch");
 
       // 3. Go back to main and modify task differently (create divergence)
       await git.checkoutBranch("main");
-      console.log("[EARS-19 DEBUG] Checked out main");
+      console.log("[EARS-D3 DEBUG] Checked out main");
 
       const mainTask: TaskRecord = createTaskRecord({
         ...originalTask,
@@ -2600,26 +2601,26 @@ describe("FsSyncModule", () => {
       fs.writeFileSync(taskPath, JSON.stringify(mainRecord, null, 2));
       await git.add([".gitgov/tasks/task-conflict.json"]);
       await git.commit("Update task in main branch");
-      console.log("[EARS-19 DEBUG] Updated task in main");
+      console.log("[EARS-D3 DEBUG] Updated task in main");
 
       // 4. Try to rebase feature-branch onto main (will create REAL conflict)
       await git.checkoutBranch("feature-branch");
-      console.log("[EARS-19 DEBUG] Checked out feature-branch (before rebase)");
+      console.log("[EARS-D3 DEBUG] Checked out feature-branch (before rebase)");
       let rebaseConflict = false;
       try {
-        console.log("[EARS-19 DEBUG] Starting rebase (THIS MAY HANG)...");
+        console.log("[EARS-D3 DEBUG] Starting rebase (THIS MAY HANG)...");
         await git.rebase("main");
-        console.log("[EARS-19 DEBUG] Rebase completed WITHOUT conflict (unexpected!)");
+        console.log("[EARS-D3 DEBUG] Rebase completed WITHOUT conflict (unexpected!)");
       } catch (error) {
         // Expected: rebase will fail with conflict
-        console.log("[EARS-19 DEBUG] Rebase failed with conflict (EXPECTED):", error);
+        console.log("[EARS-D3 DEBUG] Rebase failed with conflict (EXPECTED):", error);
         rebaseConflict = true;
       }
 
-      console.log("[EARS-19 DEBUG] Verifying rebase state...");
+      console.log("[EARS-D3 DEBUG] Verifying rebase state...");
       expect(rebaseConflict).toBe(true);
       expect(await git.isRebaseInProgress()).toBe(true);
-      console.log("[EARS-19 DEBUG] Rebase conflict confirmed");
+      console.log("[EARS-D3 DEBUG] Rebase conflict confirmed");
 
       // 5. Manually resolve conflict by choosing a resolution
       const resolvedTask: TaskRecord = createTaskRecord({
@@ -2645,17 +2646,17 @@ describe("FsSyncModule", () => {
       };
       fs.writeFileSync(taskPath, JSON.stringify(resolvedRecord, null, 2));
       await git.add([".gitgov/tasks/task-conflict.json"]);
-      console.log("[EARS-19 DEBUG] Resolved conflict and staged file");
+      console.log("[EARS-D3 DEBUG] Resolved conflict and staged file");
 
       // ========== EXECUTE resolveConflict ==========
-      console.log("[EARS-19 DEBUG] Calling resolveConflict (THIS MAY HANG)...");
+      console.log("[EARS-D3 DEBUG] Calling resolveConflict (THIS MAY HANG)...");
       const result = await syncModuleWithIdentity.resolveConflict({
         actorId: "human:test-resolver",
         reason: "Manually resolved conflict by combining both versions",
       });
 
       // ========== VERIFY RESULTS ==========
-      console.log("[EARS-19 DEBUG] resolveConflict returned:", result);
+      console.log("[EARS-D3 DEBUG] resolveConflict returned:", result);
 
       // Verify: signRecord was called
       const signRecordMock = mockIdentityAdapter.signRecord as jest.MockedFunction<IIdentityAdapter['signRecord']>;
@@ -2690,9 +2691,9 @@ describe("FsSyncModule", () => {
       await git.checkoutBranch("main");
     });
 
-    // ========== EDGE CASE TESTS FOR EARS-19 ==========
+    // ========== EDGE CASE TESTS FOR EARS-D3 ==========
 
-    it("[EARS-19-EC1] should skip non-.gitgov files when resolving", async () => {
+    it("[EARS-D3-EC1] should skip non-.gitgov files when resolving", async () => {
       // Setup: Create mock IdentityAdapter
       const mockIdentityAdapter: Partial<IIdentityAdapter> = {
         getCurrentActor: jest.fn().mockResolvedValue({
@@ -2727,7 +2728,7 @@ describe("FsSyncModule", () => {
         getActorPublicKey: jest.fn().mockResolvedValue("ed25519:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="),
       };
 
-      const syncModuleWithIdentity = new FsSyncModule({
+      const syncModuleWithIdentity = new FsSyncStateModule({
         git,
         config,
         identity: mockIdentityAdapter as IIdentityAdapter,
@@ -2781,7 +2782,7 @@ describe("FsSyncModule", () => {
       await git.checkoutBranch("main");
     });
 
-    it("[EARS-19-EC2] should skip invalid JSON files when resolving", async () => {
+    it("[EARS-D3-EC2] should skip invalid JSON files when resolving", async () => {
       // Setup: Create mock IdentityAdapter
       const mockIdentityAdapter: Partial<IIdentityAdapter> = {
         getCurrentActor: jest.fn().mockResolvedValue({
@@ -2797,7 +2798,7 @@ describe("FsSyncModule", () => {
         getActorPublicKey: jest.fn().mockResolvedValue("ed25519:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="),
       };
 
-      const syncModuleWithIdentity = new FsSyncModule({
+      const syncModuleWithIdentity = new FsSyncStateModule({
         git,
         config,
         identity: mockIdentityAdapter as IIdentityAdapter,
@@ -2850,7 +2851,7 @@ describe("FsSyncModule", () => {
       await git.checkoutBranch("main");
     });
 
-    it("[EARS-19-EC3] should process multiple .gitgov records in one conflict", async () => {
+    it("[EARS-D3-EC3] should process multiple .gitgov records in one conflict", async () => {
       // Setup: Create mock IdentityAdapter
       const mockIdentityAdapter: Partial<IIdentityAdapter> = {
         getCurrentActor: jest.fn().mockResolvedValue({
@@ -2885,7 +2886,7 @@ describe("FsSyncModule", () => {
         getActorPublicKey: jest.fn().mockResolvedValue("ed25519:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="),
       };
 
-      const syncModuleWithIdentity = new FsSyncModule({
+      const syncModuleWithIdentity = new FsSyncStateModule({
         git,
         config,
         identity: mockIdentityAdapter as IIdentityAdapter,
@@ -2990,7 +2991,7 @@ describe("FsSyncModule", () => {
       await git.checkoutBranch("main");
     });
 
-    it("[EARS-19-EC4] should skip records without header/payload structure", async () => {
+    it("[EARS-D3-EC4] should skip records without header/payload structure", async () => {
       // Setup: Create mock IdentityAdapter
       const mockIdentityAdapter: Partial<IIdentityAdapter> = {
         getCurrentActor: jest.fn().mockResolvedValue({
@@ -3006,7 +3007,7 @@ describe("FsSyncModule", () => {
         getActorPublicKey: jest.fn().mockResolvedValue("ed25519:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="),
       };
 
-      const syncModuleWithIdentity = new FsSyncModule({
+      const syncModuleWithIdentity = new FsSyncStateModule({
         git,
         config,
         identity: mockIdentityAdapter as IIdentityAdapter,
@@ -3068,7 +3069,7 @@ describe("FsSyncModule", () => {
       await git.checkoutBranch("main");
     });
 
-    it("[EARS-19-EC5] should handle mix of valid and invalid records", async () => {
+    it("[EARS-D3-EC5] should handle mix of valid and invalid records", async () => {
       // Setup: Create mock IdentityAdapter
       const mockIdentityAdapter: Partial<IIdentityAdapter> = {
         getCurrentActor: jest.fn().mockResolvedValue({
@@ -3103,7 +3104,7 @@ describe("FsSyncModule", () => {
         getActorPublicKey: jest.fn().mockResolvedValue("ed25519:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="),
       };
 
-      const syncModuleWithIdentity = new FsSyncModule({
+      const syncModuleWithIdentity = new FsSyncStateModule({
         git,
         config,
         identity: mockIdentityAdapter as IIdentityAdapter,
@@ -3186,7 +3187,7 @@ describe("FsSyncModule", () => {
       await git.checkoutBranch("main");
     });
 
-    it("[EARS-19-EC6] should handle empty .gitgov directory during conflict", async () => {
+    it("[EARS-D3-EC6] should handle empty .gitgov directory during conflict", async () => {
       // Setup: Create mock IdentityAdapter
       const mockIdentityAdapter: Partial<IIdentityAdapter> = {
         getCurrentActor: jest.fn().mockResolvedValue({
@@ -3202,7 +3203,7 @@ describe("FsSyncModule", () => {
         getActorPublicKey: jest.fn().mockResolvedValue("ed25519:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="),
       };
 
-      const syncModuleWithIdentity = new FsSyncModule({
+      const syncModuleWithIdentity = new FsSyncStateModule({
         git,
         config,
         identity: mockIdentityAdapter as IIdentityAdapter,
@@ -3256,7 +3257,7 @@ describe("FsSyncModule", () => {
       await git.checkoutBranch("main");
     });
 
-    it("[EARS-19-EC7] should handle record with missing payloadChecksum field", async () => {
+    it("[EARS-D3-EC7] should handle record with missing payloadChecksum field", async () => {
       // Setup: Create mock IdentityAdapter
       const mockIdentityAdapter: Partial<IIdentityAdapter> = {
         getCurrentActor: jest.fn().mockResolvedValue({
@@ -3291,7 +3292,7 @@ describe("FsSyncModule", () => {
         getActorPublicKey: jest.fn().mockResolvedValue("ed25519:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="),
       };
 
-      const syncModuleWithIdentity = new FsSyncModule({
+      const syncModuleWithIdentity = new FsSyncStateModule({
         git,
         config,
         identity: mockIdentityAdapter as IIdentityAdapter,
@@ -3378,7 +3379,7 @@ describe("FsSyncModule", () => {
       await git.checkoutBranch("main");
     });
 
-    it("[EARS-20] should create rebase commit and signed resolution commit", async () => {
+    it("[EARS-D4] should create rebase commit and signed resolution commit", async () => {
       // Setup: Create a REAL conflict with .gitgov/*.json files
       const gitgovDir = path.join(repoPath, ".gitgov");
       const taskFile = path.join(gitgovDir, "tasks/task-20.json");
@@ -3434,14 +3435,14 @@ describe("FsSyncModule", () => {
       // may be the same if no additional changes needed after rebase --continue.
       // The important thing is that both are defined and resolution succeeded.
 
-      // Verify: Indexer was called after resolution (EARS-20)
+      // Verify: Indexer was called after resolution (EARS-D4)
       expect(mockIndexer.generateIndex).toHaveBeenCalled();
 
       // Cleanup: Go back to main branch
       await git.checkoutBranch("main");
     });
 
-    it("[EARS-21] should include actor-id and reason in signed resolution commit", async () => {
+    it("[EARS-D5] should include actor-id and reason in signed resolution commit", async () => {
       // Setup: Create a REAL conflict with .gitgov/*.json files
       const gitgovDir = path.join(repoPath, ".gitgov");
       const taskFile = path.join(gitgovDir, "tasks/task-21.json");
@@ -3506,13 +3507,13 @@ describe("FsSyncModule", () => {
       await git.checkoutBranch("main");
     });
 
-    it("[EARS-22] should correctly detect if rebase is in progress", async () => {
+    it("[EARS-D6] should correctly detect if rebase is in progress", async () => {
       // Verify no rebase initially
       const isInProgress = await syncModule.isRebaseInProgress();
       expect(isInProgress).toBe(false);
     });
 
-    it("[EARS-23] should detect conflict markers in files", async () => {
+    it("[EARS-D7] should detect conflict markers in files", async () => {
       // Setup: Create file with REAL conflict markers
       // Note: We build the conflict markers programmatically to avoid confusing editors
       const testFile = path.join(repoPath, "test-conflict.txt");
@@ -3543,7 +3544,7 @@ describe("FsSyncModule", () => {
       fs.unlinkSync(testFile);
     });
 
-    it("[EARS-60-RESOLVE] should complete file_conflict resolution with sync resolve", async () => {
+    it("[EARS-D8] should complete file_conflict resolution with sync resolve", async () => {
       // This tests the complete Git-native flow:
       // 1. Machine A and B modify same file
       // 2. Push triggers rebase which detects conflict natively
@@ -3585,7 +3586,7 @@ describe("FsSyncModule", () => {
         getActorPublicKey: jest.fn().mockResolvedValue("ed25519:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="),
       };
 
-      const syncModuleWithIdentity = new FsSyncModule({
+      const syncModuleWithIdentity = new FsSyncStateModule({
         git,
         config,
         identity: mockIdentityAdapter as IIdentityAdapter,
@@ -3699,11 +3700,11 @@ describe("FsSyncModule", () => {
   // They don't have specific EARS as they test infrastructure, not business logic.
 
   describe("Error Classes", () => {
-    it("should throw SyncError with correct message", () => {
-      const error = new SyncError("Test error message");
+    it("should throw SyncStateError with correct message", () => {
+      const error = new SyncStateError("Test error message");
       expect(error).toBeInstanceOf(Error);
       expect(error.message).toBe("Test error message");
-      expect(error.name).toBe("SyncError");
+      expect(error.name).toBe("SyncStateError");
     });
 
     it("should throw ConflictMarkersPresentError with file list", () => {
@@ -3735,14 +3736,14 @@ describe("FsSyncModule", () => {
     });
   });
 
-  // ===== EARS 24-31: Integrity and Audit =====
+  // ===== EARS-E1 to E8: Integrity and Audit =====
 
-  describe("Integrity and Audit (EARS 24-31)", () => {
+  describe("4.5. Integrity and Audit (EARS-E1 to E8)", () => {
     beforeEach(async () => {
       await syncModule.ensureStateBranch();
     });
 
-    it("[EARS-24] should analyze history to identify rebase commits without resolution", async () => {
+    it("[EARS-E1] should analyze history to identify rebase commits without resolution", async () => {
       // Execute
       const violations = await syncModule.verifyResolutionIntegrity();
 
@@ -3751,7 +3752,7 @@ describe("FsSyncModule", () => {
       expect(violations.length).toBe(0);
     });
 
-    it("[EARS-25] should return list of violations if found", async () => {
+    it("[EARS-E2] should return list of violations if found", async () => {
       // SKIPPED: This test requires creating actual audit violations in git history
       // (e.g., rebase commits without resolution commits).
       //
@@ -3766,7 +3767,7 @@ describe("FsSyncModule", () => {
       // but requires complex git history manipulation.
     });
 
-    it("[EARS-26] should return empty array if no violations", async () => {
+    it("[EARS-E3] should return empty array if no violations", async () => {
       // Execute
       const violations = await syncModule.verifyResolutionIntegrity();
 
@@ -3774,7 +3775,7 @@ describe("FsSyncModule", () => {
       expect(violations).toEqual([]);
     });
 
-    it("[EARS-27] should execute complete audit verification", async () => {
+    it("[EARS-E4] should execute complete audit verification", async () => {
       // Execute
       const report = await syncModule.auditState();
 
@@ -3785,7 +3786,7 @@ describe("FsSyncModule", () => {
       expect(report.summary).toContain("passed");
     });
 
-    it("[EARS-28] should verify valid signatures in modified records", async () => {
+    it("[EARS-E5] should verify valid signatures in modified records", async () => {
       // Setup: Create mock LintModule that simulates signature validation errors
       const lintSummary: LintSummary = {
         filesChecked: 2,
@@ -3825,8 +3826,8 @@ describe("FsSyncModule", () => {
         fix: jest.fn().mockResolvedValue({ summary: { fixed: 0, failed: 0, backupsCreated: 0 }, fixes: [] }),
       };
 
-      // Create FsSyncModule with LintModule mock
-      const syncModuleWithLint = new FsSyncModule({
+      // Create FsSyncStateModule with LintModule mock
+      const syncModuleWithLint = new FsSyncStateModule({
         git,
         config,
         identity: createMockIdentityAdapter(),
@@ -3918,7 +3919,7 @@ describe("FsSyncModule", () => {
       expect(invalidSigError?.message).toContain("Invalid signature");
     });
 
-    it("[EARS-29] should verify record checksums according to scope", async () => {
+    it("[EARS-E6] should verify record checksums according to scope", async () => {
       // Setup: Create mock LintModule
       const lintReportMock: LintReport = {
         summary: { filesChecked: 0, errors: 0, warnings: 0, fixable: 0, executionTime: 50 },
@@ -3932,7 +3933,7 @@ describe("FsSyncModule", () => {
         fix: jest.fn().mockResolvedValue({ summary: { fixed: 0, failed: 0, backupsCreated: 0 }, fixes: [] }),
       };
 
-      const syncModuleWithLint = new FsSyncModule({
+      const syncModuleWithLint = new FsSyncStateModule({
         git,
         config,
         identity: createMockIdentityAdapter(),
@@ -3952,7 +3953,7 @@ describe("FsSyncModule", () => {
       expect(mockLintModule.lint).toHaveBeenCalled();
     });
 
-    // Additional deep validation test for EARS-29 (checksum verification)
+    // Additional deep validation test for EARS-E6 (checksum verification)
     it("should detect invalid checksums in records", async () => {
       // Setup: Create mock LintModule that detects checksum errors
       const lintReportMock: LintReport = {
@@ -3976,7 +3977,7 @@ describe("FsSyncModule", () => {
         fix: jest.fn().mockResolvedValue({ summary: { fixed: 0, failed: 0, backupsCreated: 0 }, fixes: [] }),
       };
 
-      const syncModuleWithLint = new FsSyncModule({
+      const syncModuleWithLint = new FsSyncStateModule({
         git,
         config,
         identity: createMockIdentityAdapter(),
@@ -4039,7 +4040,7 @@ describe("FsSyncModule", () => {
       expect(checksumError?.validator).toBe("CHECKSUM_VERIFICATION");
     });
 
-    it("[EARS-30] should verify expected files according to scope", async () => {
+    it("[EARS-E7] should verify expected files according to scope", async () => {
       // Execute audit with file verification
       const report = await syncModule.auditState({
         verifyExpectedFiles: true,
@@ -4051,7 +4052,7 @@ describe("FsSyncModule", () => {
       // Note: File validation is now delegated to LintModule
     });
 
-    it("[EARS-31] should get structured diff of conflicts", async () => {
+    it("[EARS-E8] should get structured diff of conflicts", async () => {
       // Execute with no conflicts
       const diff = await syncModule.getConflictDiff();
 
@@ -4060,8 +4061,5 @@ describe("FsSyncModule", () => {
       expect(diff.message).toContain("No conflicted files");
     });
   });
-
-  // ===== EARS 32: Reserved =====
-  // EARS-32 is reserved for future functionality
 });
 

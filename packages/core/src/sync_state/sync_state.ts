@@ -1,27 +1,27 @@
 /**
- * ISyncModule - State Synchronization Interface
+ * ISyncStateModule - State Synchronization Interface
  *
  * Defines the contract for state synchronization between local working tree
  * and a shared state branch. Implementations handle the I/O specifics:
- * - FsSyncModule: Uses local filesystem + git CLI (packages/core/src/sync/fs/)
- * - Future: GithubSyncModule via GitHub API
+ * - FsSyncStateModule: Uses local filesystem + git CLI (packages/core/src/sync_state/fs/)
+ * - Future: GithubSyncStateModule via GitHub API
  *
- * @module sync
+ * @module sync_state
  */
 
 import type {
-  SyncPushOptions,
-  SyncPushResult,
-  SyncPullOptions,
-  SyncPullResult,
-  SyncResolveOptions,
-  SyncResolveResult,
+  SyncStatePushOptions,
+  SyncStatePushResult,
+  SyncStatePullOptions,
+  SyncStatePullResult,
+  SyncStateResolveOptions,
+  SyncStateResolveResult,
   AuditStateOptions,
   AuditStateReport,
   ConflictDiff,
   IntegrityViolation,
   StateDeltaFile,
-} from "./sync.types";
+} from "./sync_state.types";
 
 /**
  * State synchronization module interface.
@@ -29,7 +29,7 @@ import type {
  * Provides push/pull/resolve operations for syncing .gitgov/ records
  * with a shared state branch (e.g., gitgov-state).
  */
-export interface ISyncModule {
+export interface ISyncStateModule {
   /** Returns the configured state branch name (default: "gitgov-state") */
   getStateBranchName(): Promise<string>;
 
@@ -55,11 +55,11 @@ export interface ISyncModule {
   auditState(options?: AuditStateOptions): Promise<AuditStateReport>;
 
   /** Pushes local .gitgov/ state to the shared state branch */
-  pushState(options: SyncPushOptions): Promise<SyncPushResult>;
+  pushState(options: SyncStatePushOptions): Promise<SyncStatePushResult>;
 
   /** Pulls remote state changes into local .gitgov/ */
-  pullState(options?: SyncPullOptions): Promise<SyncPullResult>;
+  pullState(options?: SyncStatePullOptions): Promise<SyncStatePullResult>;
 
   /** Resolves a rebase conflict with signed resolution commit */
-  resolveConflict(options: SyncResolveOptions): Promise<SyncResolveResult>;
+  resolveConflict(options: SyncStateResolveOptions): Promise<SyncStateResolveResult>;
 }
