@@ -174,10 +174,10 @@
       ]
     },
     {
-      "id": "1752276000-exec-gdpr-audit-scan",
-      "taskId": "1752274500-task-gdpr-compliance",
+      "id": "1752276000-exec-source-audit-scan",
+      "taskId": "1752274500-task-audit-compliance",
       "type": "analysis",
-      "title": "GDPR Audit Scan - 2025-01-15",
+      "title": "Source Audit Scan - 2025-01-15",
       "result": "Escaneados 245 archivos. Encontrados 10 findings (3 critical, 4 high, 3 medium). Ver metadata para detalles estructurados.",
       "notes": "Scan ejecutado con RegexDetector + HeuristicDetector. LLM calls: 0 (tier free).",
       "references": [

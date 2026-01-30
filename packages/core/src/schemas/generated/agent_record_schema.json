@@ -120,7 +120,8 @@
               "type": "string",
               "enum": [
                 "POST",
-                "GET"
+                "GET",
+                "PUT"
               ],
               "default": "POST"
             },
@@ -165,6 +166,10 @@
               "type": "string",
               "format": "uri",
               "description": "MCP server endpoint"
+            },
+            "tool": {
+              "type": "string",
+              "description": "Name of the MCP tool to invoke. If not specified, defaults to agentId without 'agent:' prefix."
             },
             "auth": {
               "type": "object",
