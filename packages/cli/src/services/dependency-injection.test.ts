@@ -355,9 +355,9 @@ jest.doMock('@gitgov/core', () => {
       }))
     },
 
-    // 🎭 MOCK SYNC: Mock sync operations
-    Sync: {
-      SyncModule: Object.assign(
+    // 🎭 MOCK SYNC STATE: Mock sync state operations
+    SyncState: {
+      SyncStateModule: Object.assign(
         jest.fn().mockImplementation(() => ({
           pushState: jest.fn().mockResolvedValue({
             success: true,
@@ -544,6 +544,24 @@ jest.doMock('@gitgov/core/fs', () => ({
       fixes: []
     })
   })),
+  FsSyncStateModule: Object.assign(
+    jest.fn().mockImplementation(() => ({
+      pushState: jest.fn().mockResolvedValue({
+        success: true, filesSynced: 0, sourceBranch: 'main',
+        commitHash: 'mock-commit-hash', commitMessage: 'mock commit message', conflictDetected: false
+      }),
+      pullState: jest.fn().mockResolvedValue({
+        success: true, hasChanges: false, filesUpdated: 0, reindexed: false, conflictDetected: false
+      }),
+      resolveConflict: jest.fn().mockResolvedValue({ success: true }),
+      auditState: jest.fn().mockResolvedValue({ passed: true, scope: 'current', totalCommits: 0 }),
+      ensureStateBranch: jest.fn().mockResolvedValue(undefined),
+      getStateBranchName: jest.fn().mockResolvedValue('gitgov-state'),
+    })),
+    {
+      bootstrapFromStateBranch: jest.fn().mockResolvedValue({ success: false, error: 'State branch does not exist' })
+    }
+  ),
   GitModule: jest.fn().mockImplementation(() => ({
     getRepoRoot: jest.fn().mockResolvedValue('/tmp/test-gitgov'),
     getCurrentBranch: jest.fn().mockResolvedValue('main'),
@@ -606,7 +624,7 @@ import { DependencyInjectionService } from './dependency-injection';
 // Mocked module references (require once after doMock, use everywhere)
 const mockFs = require('fs');
 const corefs = require('@gitgov/core/fs');
-const { Config, Sync, Git, Adapters, KeyProvider, EventBus } = require('@gitgov/core');
+const { Git, Adapters, KeyProvider, EventBus } = require('@gitgov/core');
 
 describe('DependencyInjectionService', () => {
   let diService: DependencyInjectionService;
@@ -745,8 +763,8 @@ describe('DependencyInjectionService', () => {
       expect(lintModule).toBeDefined();
     });
 
-    it('[EARS-C7] should create SyncModule with all dependencies', async () => {
-      const syncModule = await diService.getSyncModule();
+    it('[EARS-C7] should create SyncStateModule with all dependencies', async () => {
+      const syncModule = await diService.getSyncStateModule();
 
       expect(syncModule).toBeDefined();
       expect(syncModule.pushState).toBeDefined();
@@ -770,8 +788,8 @@ describe('DependencyInjectionService', () => {
       const lint2 = await diService.getLintModule();
       expect(lint1).toBe(lint2);
 
-      const sync1 = await diService.getSyncModule();
-      const sync2 = await diService.getSyncModule();
+      const sync1 = await diService.getSyncStateModule();
+      const sync2 = await diService.getSyncStateModule();
       expect(sync1).toBe(sync2);
     });
 
@@ -804,13 +822,13 @@ describe('DependencyInjectionService', () => {
       mockFs.promises.access.mockRejectedValue(new Error('.gitgov directory not found'));
 
       // Mock bootstrap to succeed (gitgov-state branch exists)
-      Sync.SyncModule.bootstrapFromStateBranch.mockResolvedValue({ success: true });
+      corefs.FsSyncStateModule.bootstrapFromStateBranch.mockResolvedValue({ success: true });
 
       // Get the indexer adapter (this should trigger bootstrap + reindex)
       const indexerAdapter = await diService.getIndexerAdapter();
 
       // Verify bootstrap was called
-      expect(Sync.SyncModule.bootstrapFromStateBranch).toHaveBeenCalled();
+      expect(corefs.FsSyncStateModule.bootstrapFromStateBranch).toHaveBeenCalled();
 
 
       // Verify indexer.generateIndex() was called after bootstrap
@@ -822,13 +840,13 @@ describe('DependencyInjectionService', () => {
       mockFs.promises.access.mockResolvedValue(undefined);
 
       // Reset bootstrap mock
-      Sync.SyncModule.bootstrapFromStateBranch.mockClear();
+      corefs.FsSyncStateModule.bootstrapFromStateBranch.mockClear();
 
       // Get the indexer adapter (bootstrap should not be triggered)
       const indexerAdapter = await diService.getIndexerAdapter();
 
       // Verify bootstrap was NOT called
-      expect(Sync.SyncModule.bootstrapFromStateBranch).not.toHaveBeenCalled();
+      expect(corefs.FsSyncStateModule.bootstrapFromStateBranch).not.toHaveBeenCalled();
 
       // Verify indexer.generateIndex() was NOT called
       expect(indexerAdapter.generateIndex).not.toHaveBeenCalled();
@@ -844,7 +862,7 @@ describe('DependencyInjectionService', () => {
       mockFs.promises.access.mockRejectedValue(new Error('Directory not found'));
 
       // Mock bootstrap to fail (no gitgov-state branch either)
-      Sync.SyncModule.bootstrapFromStateBranch.mockResolvedValue({ success: false });
+      corefs.FsSyncStateModule.bootstrapFromStateBranch.mockResolvedValue({ success: false });
 
       // Mock GitModule
       const mockGitModule = new Git.GitModule({
@@ -866,7 +884,7 @@ describe('DependencyInjectionService', () => {
       mockFs.promises.access.mockRejectedValue(new Error('Directory not found'));
 
       // Mock bootstrap to fail (no gitgov-state branch either)
-      Sync.SyncModule.bootstrapFromStateBranch.mockResolvedValue({ success: false });
+      corefs.FsSyncStateModule.bootstrapFromStateBranch.mockResolvedValue({ success: false });
 
       // Mock GitModule
       const mockGitModule = new Git.GitModule({
