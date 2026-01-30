@@ -17,23 +17,24 @@
  * ```
  */
 
-// Interface and types only - NO implementation re-exports
+// Interfaces and handler types (from agent_runner.ts)
 export type {
-  // Core interface
   IAgentRunner,
   IAgentLoader,
-  // Execution types
+  ProtocolHandlerRegistry,
+  ProtocolHandler,
+  RuntimeHandlerRegistry,
+  RuntimeHandler,
+} from "./agent_runner";
+
+// Pure types (from agent_runner.types.ts)
+export type {
   RunOptions,
   AgentResponse,
   AgentOutput,
   AgentExecutionContext,
   AgentRunnerDependencies,
   AgentRunnerEvent,
-  // Registry types
-  ProtocolHandlerRegistry,
-  ProtocolHandler,
-  RuntimeHandlerRegistry,
-  RuntimeHandler,
   // Engine types (from protocol)
   Engine,
   EngineType,
@@ -55,4 +56,4 @@ export {
   EngineConfigError,
   MissingDependencyError,
   RuntimeNotFoundError,
-} from "./errors";
+} from "./agent_runner.errors";

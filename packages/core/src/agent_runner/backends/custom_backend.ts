@@ -10,12 +10,11 @@
  * Reference: agent_protocol.md §5.1.4
  */
 
+import type { ProtocolHandlerRegistry, ProtocolHandler } from "../agent_runner";
 import type {
   CustomEngine,
   AgentExecutionContext,
   AgentOutput,
-  ProtocolHandlerRegistry,
-  ProtocolHandler,
 } from "../agent_runner.types";
 
 /**
