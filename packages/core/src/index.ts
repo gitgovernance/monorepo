@@ -75,7 +75,7 @@ export type {
 export * as DiagramGenerator from "./diagram_generator";
 
 // Audit modules
-export * as PiiDetector from "./pii_detector";
+export * as FindingDetector from "./finding_detector";
 export * as SourceAuditor from "./source_auditor";
 
 // Agent runner
