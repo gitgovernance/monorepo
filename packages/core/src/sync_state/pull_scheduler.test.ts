@@ -7,7 +7,7 @@
  */
 
 import { PullScheduler } from "./pull_scheduler";
-import type { FsSyncStateModule } from "./fs/fs_sync_state";
+import type { FsSyncStateModule } from "./fs_sync/fs_sync_state";
 import type { ConfigManager } from "../config_manager";
 import type { SessionManager } from "../session_manager";
 import type { SyncStatePullResult } from "./sync_state.types";
