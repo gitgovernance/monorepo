@@ -56,18 +56,13 @@ describe('WorkflowMethodologyAdapter', () => {
     jest.clearAllMocks();
   });
 
-  describe('Constructor', () => {
-    it('[EARS-1] should initialize with default config when none provided', () => {
-      const adapter = WorkflowMethodologyAdapter.createDefault(mockFeedbackAdapter);
-      expect(adapter).toBeDefined();
-    });
-
-    it('[EARS-2] should use scrum config when specified', () => {
+  describe('Configuration Management (EARS-A1 to A2)', () => {
+    it('[EARS-A1] should use scrum config when specified', () => {
       const adapter = WorkflowMethodologyAdapter.createScrum(mockFeedbackAdapter);
       expect(adapter).toBeDefined();
     });
 
-    it('[EARS-3] should accept custom config object', () => {
+    it('[EARS-A2] should accept custom config object', () => {
       const customConfig = {
         version: '1.0.0',
         name: 'Custom Methodology',
@@ -87,7 +82,7 @@ describe('WorkflowMethodologyAdapter', () => {
     });
   });
 
-  describe('getTransitionRule', () => {
+  describe('Transition Rules (EARS-B1 to B8)', () => {
     let adapter: WorkflowMethodologyAdapter;
 
     beforeEach(() => {
@@ -162,7 +157,7 @@ describe('WorkflowMethodologyAdapter', () => {
       adapter = WorkflowMethodologyAdapter.createDefault(mockFeedbackAdapter);
     });
 
-    it('[EARS-4] should return transition rule for draft to review', async () => {
+    it('[EARS-B1] should return transition rule for draft to review', async () => {
       const context: ValidationContext = { task: createMockTask() };
       const rule = await adapter.getTransitionRule('draft', 'review', context);
 
@@ -181,7 +176,7 @@ describe('WorkflowMethodologyAdapter', () => {
       });
     });
 
-    it('[EARS-5] should return transition rule for review to ready', async () => {
+    it('[EARS-B2] should return transition rule for review to ready', async () => {
       const context: ValidationContext = { task: createMockTask() };
       const rule = await adapter.getTransitionRule('review', 'ready', context);
 
@@ -210,7 +205,7 @@ describe('WorkflowMethodologyAdapter', () => {
       });
     });
 
-    it('[EARS-6] should return transition rule for ready to active', async () => {
+    it('[EARS-B3] should return transition rule for ready to active', async () => {
       const context: ValidationContext = { task: createMockTask() };
       const rule = await adapter.getTransitionRule('ready', 'active', context);
 
@@ -223,7 +218,7 @@ describe('WorkflowMethodologyAdapter', () => {
       });
     });
 
-    it('[EARS-7] should return transition rule for active to done', async () => {
+    it('[EARS-B4] should return transition rule for active to done', async () => {
       const context: ValidationContext = { task: createMockTask() };
       const rule = await adapter.getTransitionRule('active', 'done', context);
 
@@ -242,7 +237,7 @@ describe('WorkflowMethodologyAdapter', () => {
       });
     });
 
-    it('[EARS-8] should return transition rule for done to archived', async () => {
+    it('[EARS-B5] should return transition rule for done to archived', async () => {
       const context: ValidationContext = { task: createMockTask() };
       const rule = await adapter.getTransitionRule('done', 'archived', context);
 
@@ -252,7 +247,7 @@ describe('WorkflowMethodologyAdapter', () => {
       });
     });
 
-    it('[EARS-8A] should return transition rule for active to paused', async () => {
+    it('[EARS-B6] should return transition rule for active to paused', async () => {
       const context: ValidationContext = { task: createMockTask() };
       const rule = await adapter.getTransitionRule('active', 'paused', context);
 
@@ -264,7 +259,7 @@ describe('WorkflowMethodologyAdapter', () => {
       });
     });
 
-    it('[EARS-8B] should return transition rule for paused to active (resume)', async () => {
+    it('[EARS-B7] should return transition rule for paused to active', async () => {
       const context: ValidationContext = { task: createMockTask() };
       const rule = await adapter.getTransitionRule('paused', 'active', context);
 
@@ -277,14 +272,14 @@ describe('WorkflowMethodologyAdapter', () => {
       });
     });
 
-    it('[EARS-9] should return null for invalid transition', async () => {
+    it('[EARS-B8] should return null for invalid transition', async () => {
       const context: ValidationContext = { task: createMockTask() };
       const rule = await adapter.getTransitionRule('archived', 'draft', context);
       expect(rule).toBeNull();
     });
   });
 
-  describe('validateSignature', () => {
+  describe('Signature Validation (EARS-C1 to C5)', () => {
     let adapter: WorkflowMethodologyAdapter;
 
     beforeEach(() => {
@@ -325,7 +320,7 @@ describe('WorkflowMethodologyAdapter', () => {
       adapter = WorkflowMethodologyAdapter.createDefault(mockFeedbackAdapter);
     });
 
-    it('[EARS-10] should validate signature with required capability role', async () => {
+    it('[EARS-C1] should validate signature with required capability role', async () => {
       const signature = createMockSignature('approver');
       const actor = createMockActor(['approver:product']);
       const context: ValidationContext = {
@@ -339,7 +334,7 @@ describe('WorkflowMethodologyAdapter', () => {
       expect(result).toBe(true);
     });
 
-    it('[EARS-11] should reject signature without required capability role', async () => {
+    it('[EARS-C2] should reject signature without required capability role', async () => {
       const signature = createMockSignature('approver');
       const actor = createMockActor(['invalid']); // Missing approver:* role
       const context: ValidationContext = {
@@ -353,7 +348,7 @@ describe('WorkflowMethodologyAdapter', () => {
       expect(result).toBe(false);
     });
 
-    it('[EARS-12] should reject signature with invalid signature role', async () => {
+    it('[EARS-C3] should reject signature with invalid signature role', async () => {
       const signature = createMockSignature('invalid-role');
       const actor = createMockActor(['approver:product']);
       const context: ValidationContext = {
@@ -367,7 +362,7 @@ describe('WorkflowMethodologyAdapter', () => {
       expect(result).toBe(false);
     });
 
-    it('[EARS-13] should validate signature with quality approver role', async () => {
+    it('[EARS-C4] should validate signature with quality approver role', async () => {
       const signature = createMockSignature('approver');
       const actor = createMockActor(['approver:quality']);
       const context: ValidationContext = {
@@ -381,7 +376,7 @@ describe('WorkflowMethodologyAdapter', () => {
       expect(result).toBe(true);
     });
 
-    it('[EARS-21] should reject signature when no actor in context', async () => {
+    it('[EARS-C5] should reject signature when no actor in context', async () => {
       const signature = createMockSignature('approver');
       const context: ValidationContext = {
         task: createMockTask(undefined, 'review'),
@@ -394,7 +389,7 @@ describe('WorkflowMethodologyAdapter', () => {
     });
   });
 
-  describe('validateCustomRules', () => {
+  describe('Custom Rules Engine (EARS-D1 to D8)', () => {
     let adapter: WorkflowMethodologyAdapter;
 
     beforeEach(() => {
@@ -420,7 +415,7 @@ describe('WorkflowMethodologyAdapter', () => {
       adapter = WorkflowMethodologyAdapter.createDefault(mockFeedbackAdapter);
     });
 
-    it('[EARS-14] should validate task assignment rule', async () => {
+    it('[EARS-D1] should validate task assignment rule', async () => {
       const context: ValidationContext = {
         task: createMockTask(),
         actor: createMockActor(),
@@ -437,7 +432,7 @@ describe('WorkflowMethodologyAdapter', () => {
       expect(result).toBe(true);
     });
 
-    it('[EARS-15] should validate sprint rule', async () => {
+    it('[EARS-D2] should validate sprint rule', async () => {
       const taskWithCycle = createMockTask(['sprint:q4'], 'draft');
       taskWithCycle.cycleIds = ['cycle-1']; // Add cycleIds for sprint validation
       const context: ValidationContext = {
@@ -445,15 +440,15 @@ describe('WorkflowMethodologyAdapter', () => {
         actor: createMockActor(),
         cycles: [{
           id: 'cycle-1',
+          title: 'Sprint 1',
           status: 'active',
-          // ... other required fields
-        } as any]
+        } as CycleRecord]
       };
       const result = await adapter.validateCustomRules(['task_must_be_in_active_sprint'], context);
       expect(result).toBe(true);
     });
 
-    it('[EARS-16] should reject unknown custom rule', async () => {
+    it('[EARS-D3] should reject unknown custom rule', async () => {
       const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
       const context: ValidationContext = { task: createMockTask(), actor: createMockActor() };
 
@@ -465,13 +460,13 @@ describe('WorkflowMethodologyAdapter', () => {
       consoleSpy.mockRestore();
     });
 
-    it('[EARS-17] should validate empty rules array', async () => {
+    it('[EARS-D4] should validate empty rules array', async () => {
       const context: ValidationContext = { task: createMockTask(), actor: createMockActor() };
       const result = await adapter.validateCustomRules([], context);
       expect(result).toBe(true);
     });
 
-    it('[EARS-18] should validate multiple rules', async () => {
+    it('[EARS-D5] should validate multiple rules', async () => {
       const taskWithCycle = createMockTask(['sprint:q4'], 'draft');
       taskWithCycle.cycleIds = ['cycle-1']; // Add cycleIds for sprint validation
       const context: ValidationContext = {
@@ -486,6 +481,7 @@ describe('WorkflowMethodologyAdapter', () => {
         } as FeedbackRecord],
         cycles: [{
           id: 'cycle-1',
+          title: 'Sprint 1',
           status: 'active',
         } as CycleRecord]
       };
@@ -495,38 +491,95 @@ describe('WorkflowMethodologyAdapter', () => {
       ], context);
       expect(result).toBe(true);
     });
+
+    it('[EARS-D6] should validate epic_complexity rule for decomposed epic', async () => {
+      const customAdapter = new WorkflowMethodologyAdapter({
+        config: {
+          version: '1.0.0', name: 'Test', state_transitions: {},
+          custom_rules: { 'epic_check': { description: 'Epic decomposed', validation: 'epic_complexity' } }
+        } as unknown as WorkflowMethodologyRecord,
+        feedbackAdapter: mockFeedbackAdapter
+      });
+      const epicTask = createMockTask(['epic:auth'], 'paused');
+      epicTask.cycleIds = ['cycle-child-1'];
+      const context: ValidationContext = { task: epicTask, actor: createMockActor() };
+      const result = await customAdapter.validateCustomRules(['epic_check'], context);
+      expect(result).toBe(true);
+    });
+
+    it('[EARS-D7] should pass epic_complexity rule for non-epic task', async () => {
+      const customAdapter = new WorkflowMethodologyAdapter({
+        config: {
+          version: '1.0.0', name: 'Test', state_transitions: {},
+          custom_rules: { 'epic_check': { description: 'Epic decomposed', validation: 'epic_complexity' } }
+        } as unknown as WorkflowMethodologyRecord,
+        feedbackAdapter: mockFeedbackAdapter
+      });
+      const normalTask = createMockTask(['feature'], 'draft');
+      const context: ValidationContext = { task: normalTask, actor: createMockActor() };
+      const result = await customAdapter.validateCustomRules(['epic_check'], context);
+      expect(result).toBe(true); // Rule doesn't apply to non-epics
+    });
+
+    it('[EARS-D8] should execute custom validation type', async () => {
+      const customAdapter = new WorkflowMethodologyAdapter({
+        config: {
+          version: '1.0.0', name: 'Test', state_transitions: {},
+          custom_rules: { 'run_custom_check': { description: 'Custom check', validation: 'custom' } }
+        } as unknown as WorkflowMethodologyRecord,
+        feedbackAdapter: mockFeedbackAdapter
+      });
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+      const context: ValidationContext = { task: createMockTask(), actor: createMockActor() };
+      const result = await customAdapter.validateCustomRules(['run_custom_check'], context);
+      expect(result).toBe(true);
+      expect(consoleSpy).toHaveBeenCalledWith("Custom rule 'run_custom_check' executed");
+      consoleSpy.mockRestore();
+    });
   });
 
-
-  describe('getViewConfig', () => {
+  describe('Available Transitions (EARS-E1 to E2)', () => {
     let adapter: WorkflowMethodologyAdapter;
 
     beforeEach(() => {
-      adapter = WorkflowMethodologyAdapter.createDefault(mockFeedbackAdapter); // Uses default config
-    });
-
-    it('[EARS-22] should return view config for valid view name', async () => {
-      const viewConfig = await adapter.getViewConfig('kanban-7col');
-
-      expect(viewConfig).toEqual({
-        columns: {
-          'Draft': ['draft'],
-          'Review': ['review'],
-          'Ready': ['ready'],
-          'Active': ['active'],
-          'Done': ['done'],
-          'Archived': ['archived'],
-          'Blocked': ['paused'],
-          'Cancelled': ['discarded']
-        },
-        theme: 'default',
-        layout: 'horizontal'
+      adapter = new WorkflowMethodologyAdapter({
+        config: {
+          version: '1.0.0',
+          name: 'Test Methodology',
+          state_transitions: {
+            review: {
+              from: ['draft'],
+              requires: { command: 'gitgov task submit' }
+            },
+            ready: {
+              from: ['review'],
+              requires: { command: 'gitgov task approve' }
+            },
+            active: {
+              from: ['ready'],
+              requires: { event: 'first_execution_record_created' }
+            }
+          },
+          custom_rules: {}
+        } as unknown as WorkflowMethodologyRecord,
+        feedbackAdapter: mockFeedbackAdapter
       });
     });
 
-    it('[EARS-23] should return null for non-existent view', async () => {
-      const viewConfig = await adapter.getViewConfig('non-existent-view');
-      expect(viewConfig).toBeNull();
+    it('[EARS-E1] should return available transitions from given state', async () => {
+      const transitions = await adapter.getAvailableTransitions('draft');
+
+      expect(transitions).toHaveLength(1);
+      expect(transitions[0]).toEqual({
+        to: 'review',
+        conditions: { command: 'gitgov task submit' }
+      });
+    });
+
+    it('[EARS-E2] should return empty array when no transitions exist', async () => {
+      const transitions = await adapter.getAvailableTransitions('archived');
+
+      expect(transitions).toEqual([]);
     });
   });
 

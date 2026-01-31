@@ -7,8 +7,8 @@ import type { Signature } from '../../types/embedded.types';
 import { Schemas } from '../../schemas';
 import { SchemaValidationCache } from '../../schemas/schema_cache';
 import type { IFeedbackAdapter } from '../feedback_adapter';
-import defaultConfig from './generated/workflow_methodology_default.json';
-import scrumConfig from './generated/workflow_methodology_scrum.json';
+import defaultConfig from './generated/kanban_workflow.json';
+import scrumConfig from './generated/scrum_workflow.json';
 
 type TaskStatus = TaskRecord['status'];
 
@@ -28,103 +28,10 @@ type TransitionRule = {
   conditions: NonNullable<NonNullable<WorkflowMethodologyRecord['state_transitions']>[string]>['requires'] | undefined;
 }
 
-// View configurations are implementation constants, not part of the protocol schema.
-// Theme and layout are sensible defaults for clients that need visual configuration.
-export const DEFAULT_VIEW_THEME = 'default' as const;
-export const DEFAULT_VIEW_LAYOUT = 'horizontal' as const;
-export type ViewTheme = 'default' | 'dark' | 'minimal' | 'corporate';
-export type ViewLayout = 'horizontal' | 'vertical' | 'grid';
-
-export type ViewConfig = {
-  columns: Record<string, string[]>;
-};
-
-export type ResolvedViewConfig = ViewConfig & {
-  theme: ViewTheme;
-  layout: ViewLayout;
-};
-
-export const DEFAULT_VIEW_CONFIGS: Record<string, ViewConfig> = {
-  'kanban-4col': {
-    columns: {
-      'Draft': ['draft'],
-      'In Progress': ['review', 'ready', 'active'],
-      'Review': ['done'],
-      'Done': ['archived'],
-      'Cancelled': ['discarded']
-    }
-  },
-  'kanban-7col': {
-    columns: {
-      'Draft': ['draft'],
-      'Review': ['review'],
-      'Ready': ['ready'],
-      'Active': ['active'],
-      'Done': ['done'],
-      'Archived': ['archived'],
-      'Blocked': ['paused'],
-      'Cancelled': ['discarded']
-    }
-  }
-};
-
-export const SCRUM_VIEW_CONFIGS: Record<string, ViewConfig> = {
-  'scrum-board': {
-    columns: {
-      'Product Backlog': ['draft'],
-      'Sprint Backlog': ['review', 'ready'],
-      'In Progress': ['active'],
-      'Done': ['done'],
-      'Retrospective': ['archived']
-    }
-  },
-  'scrum-detailed': {
-    columns: {
-      'Product Backlog': ['draft'],
-      'Groomed': ['review'],
-      'Sprint Ready': ['ready'],
-      'In Development': ['active'],
-      'Demo Ready': ['done'],
-      'Sprint Closed': ['archived'],
-      'Blocked': ['paused']
-    }
-  },
-  'scrum-product-owner': {
-    columns: {
-      'Backlog Items': ['draft'],
-      'Ready for Sprint': ['review'],
-      'Sprint Committed': ['ready'],
-      'In Development': ['active'],
-      'Ready for Review': ['done'],
-      'Released': ['archived'],
-      'Issues': ['paused', 'discarded']
-    }
-  },
-  'scrum-developer': {
-    columns: {
-      'To Do': ['ready'],
-      'In Progress': ['active'],
-      'Code Review': ['done'],
-      'Done': ['archived'],
-      'Blocked': ['paused']
-    }
-  },
-  'scrum-master-dashboard': {
-    columns: {
-      'Sprint Planning': ['draft', 'review'],
-      'Active Sprint': ['ready', 'active'],
-      'Sprint Review': ['done'],
-      'Retrospective': ['archived'],
-      'Impediments': ['paused', 'discarded']
-    }
-  }
-};
-
 export interface IWorkflowMethodology {
   getTransitionRule(from: TaskStatus, to: TaskStatus, context: ValidationContext): Promise<TransitionRule | null>;
   validateSignature(signature: Signature, context: ValidationContext): Promise<boolean>;
   validateCustomRules(rules: string[], context: ValidationContext): Promise<boolean>;
-  getViewConfig(viewName: string): Promise<ResolvedViewConfig | null>;
   getAvailableTransitions(from: TaskStatus): Promise<TransitionRule[]>;
 }
 
@@ -137,9 +44,6 @@ export interface WorkflowMethodologyAdapterDependencies {
 
   // Required: Cross-adapter dependencies (critical for custom rules)
   feedbackAdapter: IFeedbackAdapter; // Para assignment_required validation
-
-  // View configurations (implementation-level, not part of protocol schema)
-  viewConfigs?: Record<string, ViewConfig>;
 }
 
 /**
@@ -150,28 +54,24 @@ export interface WorkflowMethodologyAdapterDependencies {
  */
 export class WorkflowMethodologyAdapter implements IWorkflowMethodology {
   private config: WorkflowMethodologyRecord;
-  private viewConfigs: Record<string, ViewConfig>;
 
   constructor(dependencies: WorkflowMethodologyAdapterDependencies) {
     this.validateConfig(dependencies.config, dependencies.config.name || 'custom');
     this.config = dependencies.config;
-    this.viewConfigs = dependencies.viewConfigs || {};
   }
 
   // Factory methods para configuraciones predefinidas
   static createDefault(feedbackAdapter: IFeedbackAdapter): WorkflowMethodologyAdapter {
     return new WorkflowMethodologyAdapter({
       config: defaultConfig as unknown as WorkflowMethodologyRecord,
-      feedbackAdapter,
-      viewConfigs: DEFAULT_VIEW_CONFIGS
+      feedbackAdapter
     });
   }
 
   static createScrum(feedbackAdapter: IFeedbackAdapter): WorkflowMethodologyAdapter {
     return new WorkflowMethodologyAdapter({
       config: scrumConfig as unknown as WorkflowMethodologyRecord,
-      feedbackAdapter,
-      viewConfigs: SCRUM_VIEW_CONFIGS
+      feedbackAdapter
     });
   }
 
@@ -294,17 +194,6 @@ export class WorkflowMethodologyAdapter implements IWorkflowMethodology {
     }
 
     return true;
-  }
-
-  /**
-   * Gets view configuration for mapping states to visual columns.
-   * View configs are implementation constants, not part of the protocol schema.
-   * Returns resolved config with default theme and layout values.
-   */
-  async getViewConfig(viewName: string): Promise<ResolvedViewConfig | null> {
-    const viewConfig = this.viewConfigs[viewName];
-    if (!viewConfig) return null;
-    return { ...viewConfig, theme: DEFAULT_VIEW_THEME, layout: DEFAULT_VIEW_LAYOUT };
   }
 
   /**
