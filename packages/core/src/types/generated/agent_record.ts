@@ -63,7 +63,7 @@ export interface AgentRecord<TMetadata = object> {
          * HTTP endpoint for the agent
          */
         url: string;
-        method?: 'POST' | 'GET';
+        method?: 'POST' | 'GET' | 'PUT';
         /**
          * Authentication configuration for API requests
          */
@@ -89,6 +89,10 @@ export interface AgentRecord<TMetadata = object> {
          * MCP server endpoint
          */
         url: string;
+        /**
+         * Name of the MCP tool to invoke. If not specified, defaults to agentId without 'agent:' prefix.
+         */
+        tool?: string;
         /**
          * Authentication configuration for MCP server
          */
