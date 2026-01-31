@@ -36,7 +36,9 @@ const mockSyncModule = {
   checkConflictMarkers: jest.fn().mockResolvedValue([])
 };
 
-const mockConfigManager = {
+const mockConfigManager = {};
+
+const mockSessionManager = {
   loadSession: jest.fn(),
   updateActorState: jest.fn().mockResolvedValue(undefined)
 };
@@ -51,6 +53,7 @@ jest.mock('../../services/dependency-injection', () => ({
     getInstance: jest.fn().mockReturnValue({
       getSyncStateModule: jest.fn().mockResolvedValue(mockSyncModule),
       getConfigManager: jest.fn().mockResolvedValue(mockConfigManager),
+      getSessionManager: jest.fn().mockResolvedValue(mockSessionManager),
       getGitModule: jest.fn().mockResolvedValue(mockGitModule)
     })
   }
@@ -94,7 +97,7 @@ describe('SyncCommand - Unit Tests', () => {
     });
 
     // Setup default session mock
-    mockConfigManager.loadSession.mockResolvedValue({
+    mockSessionManager.loadSession.mockResolvedValue({
       lastSession: {
         actorId: 'human:test-user',
         timestamp: new Date().toISOString()
@@ -401,7 +404,7 @@ describe('SyncCommand - Unit Tests', () => {
       await syncCommand.executePush({});
 
       // Verify session update
-      expect(mockConfigManager.updateActorState).toHaveBeenCalledWith(
+      expect(mockSessionManager.updateActorState).toHaveBeenCalledWith(
         'human:test-user',
         expect.objectContaining({
           syncStatus: expect.objectContaining({
@@ -433,7 +436,7 @@ describe('SyncCommand - Unit Tests', () => {
       await syncCommand.executePush({});
 
       // Verify session update to conflict status
-      expect(mockConfigManager.updateActorState).toHaveBeenCalledWith(
+      expect(mockSessionManager.updateActorState).toHaveBeenCalledWith(
         'human:test-user',
         expect.objectContaining({
           syncStatus: expect.objectContaining({
@@ -463,7 +466,7 @@ describe('SyncCommand - Unit Tests', () => {
       await syncCommand.executePush({});
 
       // Verify pending status was set
-      expect(mockConfigManager.updateActorState).toHaveBeenCalledWith(
+      expect(mockSessionManager.updateActorState).toHaveBeenCalledWith(
         'human:test-user',
         expect.objectContaining({
           syncStatus: expect.objectContaining({
@@ -589,7 +592,7 @@ describe('SyncCommand - Unit Tests', () => {
       await syncCommand.executePull({});
 
       // Verify session update
-      expect(mockConfigManager.updateActorState).toHaveBeenCalledWith(
+      expect(mockSessionManager.updateActorState).toHaveBeenCalledWith(
         'human:test-user',
         expect.objectContaining({
           syncStatus: expect.objectContaining({
@@ -611,7 +614,7 @@ describe('SyncCommand - Unit Tests', () => {
       });
 
       // Mock session without actor
-      mockConfigManager.loadSession.mockResolvedValue({
+      mockSessionManager.loadSession.mockResolvedValue({
         lastSession: null,
         actorState: {}
       });
@@ -626,7 +629,7 @@ describe('SyncCommand - Unit Tests', () => {
       );
 
       // Verify session was NOT updated (graceful degradation)
-      expect(mockConfigManager.updateActorState).not.toHaveBeenCalled();
+      expect(mockSessionManager.updateActorState).not.toHaveBeenCalled();
       expect(mockProcessExit).not.toHaveBeenCalled();
     });
 
@@ -650,7 +653,7 @@ describe('SyncCommand - Unit Tests', () => {
       await syncCommand.executePull({});
 
       // Verify session update
-      expect(mockConfigManager.updateActorState).toHaveBeenCalledWith(
+      expect(mockSessionManager.updateActorState).toHaveBeenCalledWith(
         'human:test-user',
         expect.objectContaining({
           syncStatus: expect.objectContaining({
@@ -701,7 +704,7 @@ describe('SyncCommand - Unit Tests', () => {
       });
 
       // Mock session without actor
-      mockConfigManager.loadSession.mockResolvedValue({
+      mockSessionManager.loadSession.mockResolvedValue({
         lastSession: null,
         actorState: {}
       });
@@ -716,7 +719,7 @@ describe('SyncCommand - Unit Tests', () => {
       );
 
       // Verify session was NOT updated (graceful degradation)
-      expect(mockConfigManager.updateActorState).not.toHaveBeenCalled();
+      expect(mockSessionManager.updateActorState).not.toHaveBeenCalled();
     });
 
     it('[EARS-C10] should detect local changes conflict and show affected files during pull', async () => {
@@ -893,7 +896,7 @@ describe('SyncCommand - Unit Tests', () => {
       await syncCommand.executeResolve({ reason: 'Resolved' });
 
       // Verify session update (status only, no timestamps)
-      expect(mockConfigManager.updateActorState).toHaveBeenCalledWith(
+      expect(mockSessionManager.updateActorState).toHaveBeenCalledWith(
         'human:test-user',
         expect.objectContaining({
           syncStatus: expect.objectContaining({
@@ -903,7 +906,7 @@ describe('SyncCommand - Unit Tests', () => {
       );
 
       // Verify lastSyncPush and lastSyncPull are NOT set
-      const callArgs = mockConfigManager.updateActorState.mock.calls[0][1];
+      const callArgs = mockSessionManager.updateActorState.mock.calls[0][1];
       expect(callArgs.syncStatus).not.toHaveProperty('lastSyncPush');
       expect(callArgs.syncStatus).not.toHaveProperty('lastSyncPull');
     });
@@ -1111,7 +1114,7 @@ describe('SyncCommand - Unit Tests', () => {
       await syncCommand.executePush({});
 
       // Verify error was logged to session
-      expect(mockConfigManager.updateActorState).toHaveBeenCalledWith(
+      expect(mockSessionManager.updateActorState).toHaveBeenCalledWith(
         'human:test-user',
         expect.objectContaining({
           syncStatus: expect.objectContaining({
@@ -1129,7 +1132,7 @@ describe('SyncCommand - Unit Tests', () => {
       await syncCommand.executePull({});
 
       // Verify error was logged to session
-      expect(mockConfigManager.updateActorState).toHaveBeenCalledWith(
+      expect(mockSessionManager.updateActorState).toHaveBeenCalledWith(
         'human:test-user',
         expect.objectContaining({
           syncStatus: expect.objectContaining({
@@ -1149,7 +1152,7 @@ describe('SyncCommand - Unit Tests', () => {
       await syncCommand.executeResolve({ reason: 'Test resolution' });
 
       // Verify error was logged to session
-      expect(mockConfigManager.updateActorState).toHaveBeenCalledWith(
+      expect(mockSessionManager.updateActorState).toHaveBeenCalledWith(
         'human:test-user',
         expect.objectContaining({
           syncStatus: expect.objectContaining({
@@ -1167,7 +1170,7 @@ describe('SyncCommand - Unit Tests', () => {
       await syncCommand.executeAudit({});
 
       // Verify error was logged to session
-      expect(mockConfigManager.updateActorState).toHaveBeenCalledWith(
+      expect(mockSessionManager.updateActorState).toHaveBeenCalledWith(
         'human:test-user',
         expect.objectContaining({
           syncStatus: expect.objectContaining({
@@ -1193,7 +1196,7 @@ describe('SyncCommand - Unit Tests', () => {
       mockSyncModule.pushState.mockRejectedValue(originalError);
 
       // Mock updateActorState to fail (simulating session update error)
-      mockConfigManager.updateActorState.mockRejectedValue(
+      mockSessionManager.updateActorState.mockRejectedValue(
         new Error('Failed to update session')
       );
 
@@ -1207,7 +1210,7 @@ describe('SyncCommand - Unit Tests', () => {
       );
 
       // Verify session update was attempted (but failed gracefully)
-      expect(mockConfigManager.updateActorState).toHaveBeenCalled();
+      expect(mockSessionManager.updateActorState).toHaveBeenCalled();
 
       // Verify original error message is preserved (not session update error)
       const errorCalls = mockConsoleError.mock.calls;
@@ -1288,7 +1291,7 @@ describe('SyncCommand - Unit Tests', () => {
   describe('Error Handling', () => {
     it('should handle missing session gracefully', async () => {
       // Setup: No session
-      mockConfigManager.loadSession.mockResolvedValue(null);
+      mockSessionManager.loadSession.mockResolvedValue(null);
 
       // Execute
       await syncCommand.executePush({});
