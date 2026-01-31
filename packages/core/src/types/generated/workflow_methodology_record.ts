@@ -5,7 +5,7 @@
  */
 
 /**
- * Complete schema for workflow methodology configuration files that define state transitions, signatures, and custom rules
+ * Complete schema for workflow methodology configuration files that define state transitions, signatures, and view configurations
  */
 export interface WorkflowMethodologyRecord {
   /**
@@ -35,7 +35,10 @@ export interface WorkflowMethodologyRecord {
            *
            * @minItems 1
            */
-          from: [string, ...string[]];
+          from: [
+            'draft' | 'review' | 'ready' | 'active' | 'done' | 'archived' | 'paused' | 'discarded',
+            ...('draft' | 'review' | 'ready' | 'active' | 'done' | 'archived' | 'paused' | 'discarded')[]
+          ];
           requires: {
             /**
              * CLI command that triggers this transition
@@ -97,19 +100,50 @@ export interface WorkflowMethodologyRecord {
           /**
            * Validation type identifier
            */
-          validation: 'assignment_required' | 'sprint_capacity' | 'epic_complexity' | 'custom';
+          validation: 'assignment_required' | 'sprint_capacity' | 'epic_complexity' | 'custom' | 'javascript';
           /**
            * Optional parameters for the validation rule
            */
           parameters?: {};
           /**
-           * Inline validation expression for 'custom' validation type. Implementation determines the runtime and language. Must return boolean or Promise<boolean>.
+           * JavaScript function code for 'javascript' validation type. Must return Promise<boolean>
            */
-          expression?: string;
+          javascript_function?: string;
           /**
-           * Path to external module for custom validation (alternative to expression)
+           * Path to external module for custom validation (alternative to javascript_function)
            */
           module_path?: string;
+        }
+      | undefined;
+  };
+  /**
+   * Visual representation configurations for different view types
+   */
+  view_configs?: {
+    [k: string]:
+      | {
+          /**
+           * Column definitions mapping visual names to task states
+           */
+          columns: {
+            /**
+             * @minItems 1
+             */
+            [k: string]:
+              | [
+                  'draft' | 'review' | 'ready' | 'active' | 'done' | 'archived' | 'paused' | 'discarded',
+                  ...('draft' | 'review' | 'ready' | 'active' | 'done' | 'archived' | 'paused' | 'discarded')[]
+                ]
+              | undefined;
+          };
+          /**
+           * Visual theme for this view configuration
+           */
+          theme?: 'default' | 'dark' | 'minimal' | 'corporate';
+          /**
+           * Layout direction for the view
+           */
+          layout?: 'horizontal' | 'vertical' | 'grid';
         }
       | undefined;
   };
@@ -122,10 +156,27 @@ export interface WorkflowMethodologyRecord {
      */
     description?: string;
     /**
-     * References to agents required for this methodology. Agent details (engine, knowledge, etc.) live in their AgentRecord.
+     * List of agents required for this methodology
      */
     required_agents?: {
       [k: string]: unknown | undefined;
+    }[];
+    /**
+     * Automation rules linking triggers to agents
+     */
+    automation_rules?: {
+      /**
+       * Event or condition that triggers automation
+       */
+      trigger: string;
+      /**
+       * Agent ID that handles this automation
+       */
+      agent: string;
+      /**
+       * Specific action the agent should perform
+       */
+      action: string;
     }[];
   };
 }
