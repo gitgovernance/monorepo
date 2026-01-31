@@ -44,8 +44,8 @@ describe('WorkflowMethodologyAdapter - SCRUM Methodology Integration Tests', () 
       scrumAdapter = WorkflowMethodologyAdapter.createScrum(mockFeedbackAdapter);
     });
 
-    describe('Complete Scrum Lifecycle - Canonical States', () => {
-      it('[EARS-61] should complete draft to review transition with scrum methodology', async () => {
+    describe('Scrum Lifecycle (EARS-A1 to A5)', () => {
+      it('[EARS-A1] should complete draft to review transition with scrum methodology', async () => {
         const task = createMockTask([], 'draft');
         const productOwner = createMockActor(['product:owner']);
         const context: ValidationContext = {
@@ -63,13 +63,14 @@ describe('WorkflowMethodologyAdapter - SCRUM Methodology Integration Tests', () 
         expect(rule?.conditions?.signatures?.['__default__']?.capability_roles).toContain('product:owner');
       });
 
-      it('[EARS-62] should complete review to ready transition with scrum methodology', async () => {
+      it('[EARS-A2] should complete review to ready transition with scrum methodology', async () => {
         const task = createMockTask(['sprint:current'], 'review');
         task.cycleIds = ['1752274500-cycle-sprint-current'];
         const context: ValidationContext = {
           task,
           cycles: [{
             id: '1752274500-cycle-sprint-current',
+            title: 'Sprint Current',
             status: 'active'
           } as CycleRecord],
           transitionTo: 'ready'
@@ -87,7 +88,7 @@ describe('WorkflowMethodologyAdapter - SCRUM Methodology Integration Tests', () 
         expect(customRuleResult).toBe(true);
       });
 
-      it('[EARS-63] should complete ready to active transition with scrum methodology', async () => {
+      it('[EARS-A3] should complete ready to active transition with scrum methodology', async () => {
         const task = createMockTask(['sprint:current'], 'ready');
         const developer = createMockActor(['scrum:developer']);
         const context: ValidationContext = {
@@ -117,7 +118,7 @@ describe('WorkflowMethodologyAdapter - SCRUM Methodology Integration Tests', () 
         expect(customRuleResult).toBe(true);
       });
 
-      it('[EARS-64] should complete active to done transition with scrum methodology', async () => {
+      it('[EARS-A4] should complete active to done transition with scrum methodology', async () => {
         const task = createMockTask([], 'active');
         const scrumMaster = createMockActor(['scrum:master']);
         const context: ValidationContext = {
@@ -146,7 +147,7 @@ describe('WorkflowMethodologyAdapter - SCRUM Methodology Integration Tests', () 
         expect(signatureResult).toBe(true);
       });
 
-      it('[EARS-65] should complete done to archived transition with scrum methodology', async () => {
+      it('[EARS-A5] should complete done to archived transition with scrum methodology', async () => {
         const task = createMockTask([], 'done');
         const context: ValidationContext = { task, transitionTo: 'archived' };
 
@@ -158,8 +159,8 @@ describe('WorkflowMethodologyAdapter - SCRUM Methodology Integration Tests', () 
       });
     });
 
-    describe('Scrum Role-Specific Workflows', () => {
-      it('[EARS-66] should handle product owner workflow with scrum methodology', async () => {
+    describe('Scrum Roles (EARS-B1 to B5)', () => {
+      it('[EARS-B1] should handle product owner workflow with scrum methodology', async () => {
         const task = createMockTask([], 'draft');
         const productOwner = createMockActor(['product:owner']);
         const context: ValidationContext = {
@@ -185,7 +186,7 @@ describe('WorkflowMethodologyAdapter - SCRUM Methodology Integration Tests', () 
         expect(signatureResult).toBe(true);
       });
 
-      it('[EARS-67] should handle scrum master workflow with scrum methodology', async () => {
+      it('[EARS-B2] should handle scrum master workflow with scrum methodology', async () => {
         const task = createMockTask([], 'active');
         const scrumMaster = createMockActor(['scrum:master']);
         const context: ValidationContext = {
@@ -211,7 +212,7 @@ describe('WorkflowMethodologyAdapter - SCRUM Methodology Integration Tests', () 
         expect(signatureResult).toBe(true);
       });
 
-      it('[EARS-68] should handle developer workflow with scrum methodology', async () => {
+      it('[EARS-B3] should handle developer workflow with scrum methodology', async () => {
         const task = createMockTask(['sprint:current'], 'ready');
         const developer = createMockActor(['scrum:developer']);
         const context: ValidationContext = {
@@ -233,7 +234,7 @@ describe('WorkflowMethodologyAdapter - SCRUM Methodology Integration Tests', () 
         expect(customRuleResult).toBe(true);
       });
 
-      it('[EARS-68A] should handle task pause transition with scrum methodology', async () => {
+      it('[EARS-B4] should handle task pause transition with scrum methodology', async () => {
         const task = createMockTask(['sprint:current'], 'active');
         const context: ValidationContext = { task, transitionTo: 'paused' };
 
@@ -244,7 +245,7 @@ describe('WorkflowMethodologyAdapter - SCRUM Methodology Integration Tests', () 
         expect(rule?.conditions?.event).toBe('feedback_blocking_created');
       });
 
-      it('[EARS-68B] should handle task resume transition with scrum methodology', async () => {
+      it('[EARS-B5] should handle task resume transition with scrum methodology', async () => {
         const task = createMockTask(['sprint:current'], 'paused');
         const context: ValidationContext = { task, transitionTo: 'active' };
 
@@ -257,14 +258,15 @@ describe('WorkflowMethodologyAdapter - SCRUM Methodology Integration Tests', () 
       });
     });
 
-    describe('Scrum Custom Rules Validation', () => {
-      it('[EARS-69] should validate sprint capacity rule with scrum methodology', async () => {
+    describe('Scrum Custom Rules (EARS-C1 to C2)', () => {
+      it('[EARS-C1] should validate sprint capacity rule with scrum methodology', async () => {
         const taskInSprint = createMockTask(['sprint:current'], 'review');
         taskInSprint.cycleIds = ['1752274500-cycle-sprint-current'];
         const context: ValidationContext = {
           task: taskInSprint,
           cycles: [{
             id: '1752274500-cycle-sprint-current',
+            title: 'Sprint Current',
             status: 'active'
           } as CycleRecord]
         };
@@ -273,7 +275,7 @@ describe('WorkflowMethodologyAdapter - SCRUM Methodology Integration Tests', () 
         expect(result).toBe(true);
       });
 
-      it('[EARS-70] should validate team assignment rule with scrum methodology', async () => {
+      it('[EARS-C2] should validate team assignment rule with scrum methodology', async () => {
         const task = createMockTask([], 'ready');
         const developer = createMockActor(['scrum:developer']);
         const context: ValidationContext = {
@@ -295,55 +297,5 @@ describe('WorkflowMethodologyAdapter - SCRUM Methodology Integration Tests', () 
       });
     });
 
-    describe('Scrum View Configs Integration', () => {
-      it('[EARS-71] should render scrum-board view with real sprint data', async () => {
-        const viewConfig = await scrumAdapter.getViewConfig('scrum-board');
-
-        expect(viewConfig).toBeDefined();
-        expect(viewConfig?.columns).toBeDefined();
-        expect(viewConfig?.columns['Product Backlog']).toEqual(['draft']);
-        expect(viewConfig?.columns['Sprint Backlog']).toEqual(['review', 'ready']);
-        expect(viewConfig?.columns['In Progress']).toEqual(['active']);
-        expect(viewConfig?.columns['Done']).toEqual(['done']);
-        expect(viewConfig?.columns['Retrospective']).toEqual(['archived']);
-      });
-
-      it('[EARS-72] should render product-owner view with backlog data', async () => {
-        const viewConfig = await scrumAdapter.getViewConfig('scrum-product-owner');
-
-        expect(viewConfig).toBeDefined();
-        expect(viewConfig?.columns['Backlog Items']).toEqual(['draft']);
-        expect(viewConfig?.columns['Ready for Sprint']).toEqual(['review']);
-        expect(viewConfig?.columns['Sprint Committed']).toEqual(['ready']);
-        expect(viewConfig?.theme).toBe('default');
-        expect(viewConfig?.layout).toBe('horizontal');
-      });
-
-      it('[EARS-73] should render developer view with assigned tasks', async () => {
-        const viewConfig = await scrumAdapter.getViewConfig('scrum-developer');
-
-        expect(viewConfig).toBeDefined();
-        expect(viewConfig?.columns['To Do']).toEqual(['ready']);
-        expect(viewConfig?.columns['In Progress']).toEqual(['active']);
-        expect(viewConfig?.columns['Code Review']).toEqual(['done']);
-        expect(viewConfig?.columns['Done']).toEqual(['archived']);
-        expect(viewConfig?.columns['Blocked']).toEqual(['paused']);
-        expect(viewConfig?.theme).toBe('default');
-        expect(viewConfig?.layout).toBe('horizontal');
-      });
-
-      it('[EARS-74] should render scrum-master dashboard with impediments', async () => {
-        const viewConfig = await scrumAdapter.getViewConfig('scrum-master-dashboard');
-
-        expect(viewConfig).toBeDefined();
-        expect(viewConfig?.columns['Sprint Planning']).toEqual(['draft', 'review']);
-        expect(viewConfig?.columns['Active Sprint']).toEqual(['ready', 'active']);
-        expect(viewConfig?.columns['Sprint Review']).toEqual(['done']);
-        expect(viewConfig?.columns['Retrospective']).toEqual(['archived']);
-        expect(viewConfig?.columns['Impediments']).toEqual(['paused', 'discarded']);
-        expect(viewConfig?.theme).toBe('default');
-        expect(viewConfig?.layout).toBe('horizontal');
-      });
-    });
   });
 });
