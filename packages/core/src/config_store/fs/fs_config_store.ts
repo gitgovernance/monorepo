@@ -13,8 +13,8 @@
 import { promises as fs } from 'fs';
 import * as path from 'path';
 import type { ConfigStore } from '../config_store';
-import type { GitGovConfig } from '../../config_manager';
-import { ConfigManager } from '../../config_manager';
+import type { GitGovConfig } from '../../config_manager/config_manager.types';
+import { ConfigManager } from '../../config_manager/config_manager';
 
 /**
  * Filesystem-based ConfigStore implementation.

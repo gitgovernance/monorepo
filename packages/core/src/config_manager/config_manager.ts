@@ -12,7 +12,7 @@
  * @see packages/blueprints/03_products/protocol/10_appendices/config_file.md
  */
 
-import type { ConfigStore } from '../config_store';
+import type { ConfigStore } from '../config_store/config_store';
 import type {
   IConfigManager,
   GitGovConfig,
