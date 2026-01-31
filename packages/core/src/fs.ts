@@ -57,7 +57,7 @@ export {
 } from './utils/project_discovery';
 
 // FsSyncStateModule (filesystem-based state synchronization)
-export { FsSyncStateModule } from './sync_state/fs_sync';
+export { FsSyncStateModule } from './sync_state/fs';
 
 // FsWatcherStateModule (filesystem-based .gitgov/ watcher)
 export { FsWatcherStateModule } from './watcher_state/fs';
