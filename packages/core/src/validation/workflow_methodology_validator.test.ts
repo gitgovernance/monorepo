@@ -43,16 +43,6 @@ describe('WorkflowMethodologyValidator Module', () => {
         description: 'Task must have valid assignment',
         validation: 'assignment_required'
       }
-    },
-    view_configs: {
-      'kanban-7col': {
-        columns: {
-          'Active': ['active'],
-          'Done': ['done']
-        },
-        theme: 'corporate',
-        layout: 'vertical'
-      }
     }
   };
 

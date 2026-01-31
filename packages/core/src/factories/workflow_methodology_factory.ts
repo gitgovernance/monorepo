@@ -34,17 +34,6 @@ export function createWorkflowMethodologyConfig(
       }
     },
     custom_rules: payload.custom_rules,
-    view_configs: payload.view_configs || {
-      'kanban-4col': {
-        columns: {
-          'Draft': ['draft'],
-          'In Progress': ['review', 'ready', 'active'],
-          'Done': ['done', 'archived']
-        },
-        theme: 'minimal',
-        layout: 'horizontal'
-      }
-    },
     ...payload,
   } as WorkflowMethodologyRecord;
 
@@ -153,31 +142,6 @@ export async function createDefaultWorkflowMethodologyConfig(): Promise<Workflow
       'epic_promotion_required': {
         description: 'Complex tasks must be promoted to epic with child cycles',
         validation: 'epic_complexity'
-      }
-    },
-    view_configs: {
-      'kanban-4col': {
-        columns: {
-          'Draft': ['draft'],
-          'In Progress': ['review', 'ready', 'active'],
-          'Review': ['done'],
-          'Done': ['archived']
-        },
-        theme: 'minimal',
-        layout: 'horizontal'
-      },
-      'kanban-7col': {
-        columns: {
-          'Draft': ['draft'],
-          'Review': ['review'],
-          'Ready': ['ready'],
-          'Active': ['active'],
-          'Done': ['done'],
-          'Archived': ['archived'],
-          'Blocked': ['paused']
-        },
-        theme: 'corporate',
-        layout: 'vertical'
       }
     }
   });

@@ -155,16 +155,6 @@ describe('WorkflowMethodologyAdapter', () => {
             description: 'Task must have valid assignment',
             validation: 'assignment_required'
           }
-        },
-        view_configs: {
-          'kanban-7col': {
-            columns: {
-              'Active': ['active'],
-              'Done': ['done']
-            },
-            theme: 'corporate',
-            layout: 'vertical'
-          }
         }
       };
 
@@ -328,8 +318,7 @@ describe('WorkflowMethodologyAdapter', () => {
             }
           }
         },
-        custom_rules: {},
-        view_configs: {}
+        custom_rules: {}
       };
 
       mockFs.readFile.mockResolvedValue(JSON.stringify(mockConfig));
@@ -530,8 +519,8 @@ describe('WorkflowMethodologyAdapter', () => {
           'Blocked': ['paused'],
           'Cancelled': ['discarded']
         },
-        theme: 'corporate',
-        layout: 'vertical'
+        theme: 'default',
+        layout: 'horizontal'
       });
     });
 
