@@ -7,7 +7,7 @@
  * @module sync_state/pull_scheduler
  */
 
-import type { FsSyncStateModule } from "./fs/fs_sync_state";
+import type { ISyncStateModule } from "./sync_state";
 import type { ConfigManager } from "../config_manager/config_manager";
 import type { SessionManager } from "../session_manager/session_manager";
 
@@ -51,8 +51,8 @@ export interface PullSchedulerConfig {
  * Dependencies required by PullScheduler
  */
 export interface PullSchedulerDependencies {
-  /** FsSyncStateModule for pull operations */
-  syncModule: FsSyncStateModule;
+  /** ISyncStateModule for pull operations */
+  syncModule: ISyncStateModule;
   /** ConfigManager for loading project configuration */
   configManager: ConfigManager;
   /** SessionManager for loading session preferences */
@@ -80,7 +80,7 @@ export interface PullSchedulerDependencies {
  * ```
  */
 export class PullScheduler {
-  private syncModule: FsSyncStateModule;
+  private syncModule: ISyncStateModule;
   private configManager: ConfigManager;
   private sessionManager: SessionManager;
   private config: PullSchedulerConfig;
@@ -90,7 +90,7 @@ export class PullScheduler {
 
   constructor(dependencies: PullSchedulerDependencies) {
     if (!dependencies.syncModule) {
-      throw new Error("FsSyncStateModule is required for PullScheduler");
+      throw new Error("ISyncStateModule is required for PullScheduler");
     }
     if (!dependencies.configManager) {
       throw new Error("ConfigManager is required for PullScheduler");
