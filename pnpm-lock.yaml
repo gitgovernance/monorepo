@@ -38,6 +38,22 @@ importers:
         specifier: ^5.0.0
         version: 5.9.2
 
+  packages/agents/source-audit:
+    dependencies:
+      '@gitgov/core':
+        specifier: workspace:*
+        version: link:../../core
+    devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.13
+      esbuild:
+        specifier: ^0.19.0
+        version: 0.19.12
+      typescript:
+        specifier: ^5.0.0
+        version: 5.9.2
+
   packages/agents/test-echo:
     dependencies:
       '@gitgov/core':
