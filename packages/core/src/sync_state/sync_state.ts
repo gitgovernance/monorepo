@@ -3,7 +3,7 @@
  *
  * Defines the contract for state synchronization between local working tree
  * and a shared state branch. Implementations handle the I/O specifics:
- * - FsSyncStateModule: Uses local filesystem + git CLI (packages/core/src/sync_state/fs/)
+ * - FsSyncStateModule: Uses local filesystem + git CLI (packages/core/src/sync_state/fs_sync/)
  * - Future: GithubSyncStateModule via GitHub API
  *
  * @module sync_state
