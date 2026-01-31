@@ -9,7 +9,7 @@
  * @see packages/blueprints/03_products/protocol/10_appendices/session_state.md
  */
 
-import type { SessionStore } from '../session_store';
+import type { SessionStore } from '../session_store/session_store';
 import type {
   ISessionManager,
   GitGovSession,

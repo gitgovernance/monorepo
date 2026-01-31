@@ -8,8 +8,8 @@
  */
 
 import type { FsSyncStateModule } from "./fs/fs_sync_state";
-import type { ConfigManager } from "../config_manager";
-import type { SessionManager } from "../session_manager";
+import type { ConfigManager } from "../config_manager/config_manager";
+import type { SessionManager } from "../session_manager/session_manager";
 
 /**
  * Result of a pull operation executed by the scheduler

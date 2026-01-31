@@ -1,8 +1,8 @@
 import type { RecordStores } from '../../record_store';
 import type { IdentityAdapter } from '../identity_adapter';
 import type { FeedbackAdapter } from '../feedback_adapter';
-import type { ConfigManager } from '../../config_manager';
-import type { SessionManager } from '../../session_manager';
+import type { ConfigManager } from '../../config_manager/config_manager';
+import type { SessionManager } from '../../session_manager/session_manager';
 import type {
   TaskRecord,
   CycleRecord,

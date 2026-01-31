@@ -11,8 +11,8 @@
 import { promises as fs } from 'fs';
 import * as path from 'path';
 import type { SessionStore } from '../session_store';
-import type { GitGovSession } from '../../session_manager';
-import { SessionManager } from '../../session_manager';
+import type { GitGovSession } from '../../session_manager/session_manager.types';
+import { SessionManager } from '../../session_manager/session_manager';
 
 /**
  * Filesystem-based SessionStore implementation.
