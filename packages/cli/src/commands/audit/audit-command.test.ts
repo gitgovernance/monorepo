@@ -40,7 +40,7 @@ jest.mock('../../services/dependency-injection', () => ({
 
 import { AuditCommand, type AuditCommandOptions } from './audit-command';
 import { DependencyInjectionService } from '../../services/dependency-injection';
-import type { SourceAuditor, Config, FeedbackRecord, ActorRecord } from '@gitgov/core';
+import type { SourceAuditor, AuditState, FeedbackRecord, ActorRecord } from '@gitgov/core';
 
 // Mock console methods
 const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation();
@@ -68,8 +68,8 @@ let mockIdentityAdapter: {
 };
 
 let mockConfigManager: {
-  getAuditState: jest.MockedFunction<() => Promise<Config.AuditState>>;
-  updateAuditState: jest.MockedFunction<(state: Partial<Config.AuditState>) => Promise<void>>;
+  getAuditState: jest.MockedFunction<() => Promise<AuditState>>;
+  updateAuditState: jest.MockedFunction<(state: Partial<AuditState>) => Promise<void>>;
 };
 
 let mockGitModule: {

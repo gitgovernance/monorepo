@@ -1,7 +1,7 @@
 import { Command, Option } from 'commander';
 import { BaseCommand } from '../../base/base-command';
 import type { BaseCommandOptions } from '../../interfaces/command';
-import type { SourceAuditor, FindingDetector, Config } from '@gitgov/core';
+import type { SourceAuditor, FindingDetector, IConfigManager } from '@gitgov/core';
 
 // Types are imported from Core via the SourceAuditor namespace
 // Re-export for consumers of this command
@@ -60,7 +60,7 @@ const SEVERITY_ORDER = {
 const DEFAULT_THRESHOLD = SEVERITY_ORDER.critical;
 
 /**
- * Audit Command - Thin wrapper for @gitgov/core/source_auditor module
+ * Audit Command - Thin wrapper for @gitgov/core module
  *
  * Responsibilities (CLI only):
  * - Parse CLI arguments
@@ -199,7 +199,7 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
    */
   private async mapToAuditOptions(
     options: AuditCommandOptions,
-    configManager: Config.ConfigManager
+    configManager: IConfigManager
   ): Promise<SourceAuditor.AuditOptions> {
     const scope = await this.resolveScope(options, configManager);
 
@@ -218,7 +218,7 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
    */
   private async resolveScope(
     options: AuditCommandOptions,
-    configManager: Config.ConfigManager
+    configManager: IConfigManager
   ): Promise<SourceAuditor.ScopeConfig> {
     const baseInclude: string[] = ['**/*'];
     const baseExclude: string[] = [];

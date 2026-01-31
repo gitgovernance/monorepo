@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import { BaseCommand } from '../../base/base-command';
 import type { BaseCommandOptions } from '../../interfaces/command';
-import type { SyncState, Config } from '@gitgov/core';
+import type { ISyncStateModule, SyncStatePushResult, SyncStatePullResult, SyncStateResolveResult, AuditStateReport } from '@gitgov/core';
 import { promises as fs } from 'fs';
 import path from 'path';
 
@@ -71,9 +71,10 @@ export class SyncCommand extends BaseCommand {
       // Get dependencies
       const syncModule = await this.dependencyService.getSyncStateModule();
       const configManager = await this.dependencyService.getConfigManager();
+      const sessionManager = await this.dependencyService.getSessionManager();
 
       // Get actor ID from session
-      const session = await configManager.loadSession();
+      const session = await sessionManager.loadSession();
       if (!session || !session.lastSession?.actorId) {
         this.handleError('No active actor in session. Please initialize session first.', options);
         return;
@@ -106,7 +107,7 @@ export class SyncCommand extends BaseCommand {
       // [EARS-B3] Handle conflict detection
       if (pushResult.conflictDetected) {
         // [EARS-B8] Update session status to conflict
-        await configManager.updateActorState(actorId, {
+        await sessionManager.updateActorState(actorId, {
           syncStatus: { status: 'conflict' }
         });
 
@@ -133,7 +134,7 @@ export class SyncCommand extends BaseCommand {
 
       // [EARS-B7] Success - update session
       if (pushResult.success) {
-        await configManager.updateActorState(actorId, {
+        await sessionManager.updateActorState(actorId, {
           syncStatus: {
             lastSyncPush: new Date().toISOString(),
             status: 'synced'
@@ -144,7 +145,7 @@ export class SyncCommand extends BaseCommand {
       // [EARS-B9] Check if there are pending local changes
       const hasPendingChanges = await this.checkPendingChanges(syncModule, currentBranch);
       if (hasPendingChanges) {
-        await configManager.updateActorState(actorId, {
+        await sessionManager.updateActorState(actorId, {
           syncStatus: { status: 'pending' }
         });
       }
@@ -155,12 +156,12 @@ export class SyncCommand extends BaseCommand {
     } catch (error) {
       // [EARS-F1] Update lastError in syncStatus
       try {
-        const configManager = await this.dependencyService.getConfigManager();
-        const session = await configManager.loadSession();
+        const sessionManager = await this.dependencyService.getSessionManager();
+        const session = await sessionManager.loadSession();
         if (session?.lastSession?.actorId) {
           const errorMessage = error instanceof Error ? error.message : String(error);
           const timestamp = new Date().toISOString();
-          await configManager.updateActorState(session.lastSession.actorId, {
+          await sessionManager.updateActorState(session.lastSession.actorId, {
             syncStatus: {
               lastError: `[${timestamp}] sync push: ${errorMessage}`
             }
@@ -187,6 +188,7 @@ export class SyncCommand extends BaseCommand {
       // Get dependencies
       const syncModule = await this.dependencyService.getSyncStateModule();
       const configManager = await this.dependencyService.getConfigManager();
+      const sessionManager = await this.dependencyService.getSessionManager();
 
       // NOTE: Pull does NOT require an active actor (it's a read operation)
       // Only push requires an actor (for commit authorship)
@@ -206,9 +208,9 @@ export class SyncCommand extends BaseCommand {
       // This ensures we show detailed conflict info with affected files
       if (pullResult.conflictDetected) {
         // [EARS-C7] Update session status to conflict (if actor exists)
-        const session = await configManager.loadSession();
+        const session = await sessionManager.loadSession();
         if (session?.lastSession?.actorId) {
-          await configManager.updateActorState(session.lastSession.actorId, {
+          await sessionManager.updateActorState(session.lastSession.actorId, {
             syncStatus: { status: 'conflict' }
           });
         }
@@ -228,9 +230,9 @@ export class SyncCommand extends BaseCommand {
 
       // [EARS-C5] Success - update session (if actor exists)
       if (pullResult.success) {
-        const session = await configManager.loadSession();
+        const session = await sessionManager.loadSession();
         if (session?.lastSession?.actorId) {
-          await configManager.updateActorState(session.lastSession.actorId, {
+          await sessionManager.updateActorState(session.lastSession.actorId, {
             syncStatus: {
               lastSyncPull: new Date().toISOString(),
               status: 'synced'
@@ -245,12 +247,12 @@ export class SyncCommand extends BaseCommand {
     } catch (error) {
       // [EARS-F1] Update lastError in syncStatus
       try {
-        const configManager = await this.dependencyService.getConfigManager();
-        const session = await configManager.loadSession();
+        const sessionManager = await this.dependencyService.getSessionManager();
+        const session = await sessionManager.loadSession();
         if (session?.lastSession?.actorId) {
           const errorMessage = error instanceof Error ? error.message : String(error);
           const timestamp = new Date().toISOString();
-          await configManager.updateActorState(session.lastSession.actorId, {
+          await sessionManager.updateActorState(session.lastSession.actorId, {
             syncStatus: {
               lastError: `[${timestamp}] sync pull: ${errorMessage}`
             }
@@ -277,11 +279,12 @@ export class SyncCommand extends BaseCommand {
       // Get dependencies
       const syncModule = await this.dependencyService.getSyncStateModule();
       const configManager = await this.dependencyService.getConfigManager();
+      const sessionManager = await this.dependencyService.getSessionManager();
 
       // Get actor ID (use provided or current session)
       let actorId = options.actor;
       if (!actorId) {
-        const session = await configManager.loadSession();
+        const session = await sessionManager.loadSession();
         if (!session || !session.lastSession?.actorId) {
           this.handleError('No active actor in session. Use --actor flag or initialize session first.', options);
           return;
@@ -318,13 +321,13 @@ export class SyncCommand extends BaseCommand {
       // [EARS-D2, EARS-D3, EARS-D4] Execute resolve
       // SyncStateModule.resolveConflict() handles indexation internally
       const resolveResult = await syncModule.resolveConflict({
-        actorId,
+        actorId: actorId!,
         reason: options.reason
       });
 
       // [EARS-D5] Success - update session (status only, not timestamps)
       if (resolveResult.success) {
-        await configManager.updateActorState(actorId, {
+        await sessionManager.updateActorState(actorId, {
           syncStatus: { status: 'synced' }
         });
       }
@@ -335,12 +338,12 @@ export class SyncCommand extends BaseCommand {
     } catch (error) {
       // [EARS-F1] Update lastError in syncStatus
       try {
-        const configManager = await this.dependencyService.getConfigManager();
-        const session = await configManager.loadSession();
+        const sessionManager = await this.dependencyService.getSessionManager();
+        const session = await sessionManager.loadSession();
         if (session?.lastSession?.actorId) {
           const errorMessage = error instanceof Error ? error.message : String(error);
           const timestamp = new Date().toISOString();
-          await configManager.updateActorState(session.lastSession.actorId, {
+          await sessionManager.updateActorState(session.lastSession.actorId, {
             syncStatus: {
               lastError: `[${timestamp}] sync resolve: ${errorMessage}`
             }
@@ -391,12 +394,12 @@ export class SyncCommand extends BaseCommand {
     } catch (error) {
       // [EARS-F1] Update lastError in syncStatus
       try {
-        const configManager = await this.dependencyService.getConfigManager();
-        const session = await configManager.loadSession();
+        const sessionManager = await this.dependencyService.getSessionManager();
+        const session = await sessionManager.loadSession();
         if (session?.lastSession?.actorId) {
           const errorMessage = error instanceof Error ? error.message : String(error);
           const timestamp = new Date().toISOString();
-          await configManager.updateActorState(session.lastSession.actorId, {
+          await sessionManager.updateActorState(session.lastSession.actorId, {
             syncStatus: {
               lastError: `[${timestamp}] sync audit: ${errorMessage}`
             }
@@ -422,7 +425,7 @@ export class SyncCommand extends BaseCommand {
    * [EARS-B9] Check if there are pending local changes not published
    */
   private async checkPendingChanges(
-    syncModule: SyncState.ISyncStateModule,
+    syncModule: ISyncStateModule,
     sourceBranch: string
   ): Promise<boolean> {
     const delta = await syncModule.calculateStateDelta(sourceBranch);
@@ -478,7 +481,7 @@ export class SyncCommand extends BaseCommand {
   /**
    * [EARS-B3] Format conflict message for user guidance
    */
-  private formatConflictMessage(result: SyncState.SyncStatePushResult | SyncState.SyncStatePullResult): string {
+  private formatConflictMessage(result: SyncStatePushResult | SyncStatePullResult): string {
     if (!result.conflictInfo) {
       return 'Conflict detected during synchronization.';
     }
@@ -496,7 +499,7 @@ export class SyncCommand extends BaseCommand {
 ${result.conflictInfo.message}
 
 Affected files:
-${result.conflictInfo.affectedFiles.map(f => `  - ${f}`).join('\n')}
+${result.conflictInfo.affectedFiles.map((f: string) => `  - ${f}`).join('\n')}
 
 To resolve:
 ${steps.join('\n')}
@@ -506,7 +509,7 @@ ${steps.join('\n')}
   /**
    * Format push output
    */
-  private formatPushOutput(result: SyncState.SyncStatePushResult, options: SyncBaseOptions): void {
+  private formatPushOutput(result: SyncStatePushResult, options: SyncBaseOptions): void {
     const isJson = options.json || options.format === 'json';
 
     if (isJson) {
@@ -546,7 +549,7 @@ ${steps.join('\n')}
   /**
    * Format pull output
    */
-  private formatPullOutput(result: SyncState.SyncStatePullResult, options: SyncBaseOptions): void {
+  private formatPullOutput(result: SyncStatePullResult, options: SyncBaseOptions): void {
     const isJson = options.json || options.format === 'json';
 
     if (isJson) {
@@ -575,7 +578,7 @@ ${steps.join('\n')}
   /**
    * Format resolve output
    */
-  private formatResolveOutput(result: SyncState.SyncStateResolveResult, options: SyncBaseOptions): void {
+  private formatResolveOutput(result: SyncStateResolveResult, options: SyncBaseOptions): void {
     const isJson = options.json || options.format === 'json';
 
     if (isJson) {
@@ -602,7 +605,7 @@ ${steps.join('\n')}
   /**
    * [EARS-E2, EARS-E3] Format audit output
    */
-  private formatAuditOutput(result: SyncState.AuditStateReport, options: SyncBaseOptions): void {
+  private formatAuditOutput(result: AuditStateReport, options: SyncBaseOptions): void {
     const isJson = options.json || options.format === 'json';
 
     if (isJson) {
@@ -653,7 +656,7 @@ ${steps.join('\n')}
       // Show lint errors
       const lintReport = result.lintReport;
       if (lintReport && lintReport.results && lintReport.results.length > 0) {
-        const errors = lintReport.results.filter(r => r.level === 'error');
+        const errors = lintReport.results.filter((r: { level: string }) => r.level === 'error');
         if (errors.length > 0) {
           console.log('Lint Errors:');
           for (const error of errors) {

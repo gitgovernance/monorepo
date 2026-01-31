@@ -1,8 +1,5 @@
 import { DependencyInjectionService } from '../../services/dependency-injection';
-import type { Session } from '@gitgov/core';
-
-// Re-export type from Session namespace
-type SyncStatus = Session.SyncStatus;
+import type { SyncStatus } from '@gitgov/core';
 
 /**
  * Context Command Options interface
