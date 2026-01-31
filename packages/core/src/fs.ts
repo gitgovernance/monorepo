@@ -6,7 +6,7 @@
  */
 
 // Store
-export { FsRecordStore } from './record_store/fs';
+export { FsRecordStore, DEFAULT_ID_ENCODER } from './record_store/fs';
 
 // ConfigStore + ConfigManager Factories
 export {

@@ -1,6 +1,6 @@
 import * as path from 'path';
 import { Adapters, Config, Session, EventBus, Lint, Git, SyncState, SourceAuditor, FindingDetector, Runner, KeyProvider } from '@gitgov/core';
-import { FsRecordStore, FsFileLister, FsProjectInitializer, FsLintModule, FsSyncStateModule, GitModule, createAgentRunner, createConfigManager, findProjectRoot, findGitgovRoot, createSessionManager } from '@gitgov/core/fs';
+import { FsRecordStore, DEFAULT_ID_ENCODER, FsFileLister, FsProjectInitializer, FsLintModule, FsSyncStateModule, GitModule, createAgentRunner, createConfigManager, findProjectRoot, findGitgovRoot, createSessionManager } from '@gitgov/core/fs';
 import type { IFsLintModule } from '@gitgov/core/fs';
 import type {
   GitGovTaskRecord, GitGovCycleRecord, GitGovFeedbackRecord, GitGovExecutionRecord, GitGovChangelogRecord, GitGovActorRecord, GitGovAgentRecord,
@@ -130,8 +130,8 @@ export class DependencyInjectionService {
       feedbacks: new FsRecordStore<GitGovFeedbackRecord>({ basePath: path.join(projectRoot, '.gitgov', 'feedback') }),
       executions: new FsRecordStore<GitGovExecutionRecord>({ basePath: path.join(projectRoot, '.gitgov', 'executions') }),
       changelogs: new FsRecordStore<GitGovChangelogRecord>({ basePath: path.join(projectRoot, '.gitgov', 'changelogs') }),
-      actors: new FsRecordStore<GitGovActorRecord>({ basePath: path.join(projectRoot, '.gitgov', 'actors') }),
-      agents: new FsRecordStore<GitGovAgentRecord>({ basePath: path.join(projectRoot, '.gitgov', 'agents') }),
+      actors: new FsRecordStore<GitGovActorRecord>({ basePath: path.join(projectRoot, '.gitgov', 'actors'), idEncoder: DEFAULT_ID_ENCODER }),
+      agents: new FsRecordStore<GitGovAgentRecord>({ basePath: path.join(projectRoot, '.gitgov', 'agents'), idEncoder: DEFAULT_ID_ENCODER }),
     };
   }
 
