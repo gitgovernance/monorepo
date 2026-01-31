@@ -11,7 +11,7 @@
  * @example
  * ```typescript
  * // Import interface and types
- * import type { IGitModule } from '@gitgov/core/git';
+ * import type { IGitModule } from '@gitgov/core';
  *
  * // Import CLI implementation from fs entry point
  * import { LocalGitModule } from '@gitgov/core/fs';

@@ -6,7 +6,7 @@
  * - createAgentRunner(): Factory function for DI
  *
  * Note: LocalBackend is re-exported from backends/ for convenience.
- * Use @gitgov/core/backends for direct backend imports.
+ * Use @gitgov/core for direct backend imports.
  */
 export { FsAgentRunner } from './fs_agent_runner';
 export { LocalBackend } from '../backends';

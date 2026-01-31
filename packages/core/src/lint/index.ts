@@ -14,13 +14,13 @@
  * @example
  * ```typescript
  * // Pure LintModule (no I/O)
- * import { LintModule, type ILintModule } from '@gitgov/core/lint';
+ * import { LintModule, type ILintModule } from '@gitgov/core';
  *
  * const lintModule: ILintModule = new LintModule({ stores });
  * const results = lintModule.lintRecord(record, { recordId, entityType });
  *
  * // FsLintModule (with I/O)
- * import { FsLintModule, type IFsLintModule } from '@gitgov/core/lint';
+ * import { FsLintModule, type IFsLintModule } from '@gitgov/core';
  *
  * const fsLintModule: IFsLintModule = new FsLintModule({ lintModule, stores });
  * const report = await fsLintModule.lint({ path: '.gitgov/' });
