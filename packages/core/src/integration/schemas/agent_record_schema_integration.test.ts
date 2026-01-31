@@ -539,7 +539,7 @@ describe('AgentRecord Schema Integration Tests', () => {
         engine: {
           type: 'api' as const,
           url: 'https://api.example.com/agent',
-          method: 'PUT' as unknown as 'POST' | 'GET'
+          method: 'PATCH' as unknown as 'POST' | 'GET' | 'PUT'
         }
       };
 
