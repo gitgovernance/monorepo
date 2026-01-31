@@ -11,7 +11,7 @@ export * as Logger from "./logger";
 export * as ProjectInitializer from "./project_initializer";
 export * as Schemas from "./schemas";
 export * as Store from "./record_store";
-export * as Sync from "./sync";
+export * as SyncState from "./sync_state";
 // Type system exports
 export * as Validation from "./validation";
 export * as Records from "./types";
