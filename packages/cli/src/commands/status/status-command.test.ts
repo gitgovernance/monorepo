@@ -26,7 +26,7 @@ jest.mock('../../services/dependency-injection', () => ({
 import { StatusCommand } from './status-command';
 import { DependencyInjectionService } from '../../services/dependency-injection';
 import { Factories } from "@gitgov/core";
-import type { TaskRecord, CycleRecord, FeedbackRecord, ActorRecord, MetricsAdapter } from "@gitgov/core";
+import type { TaskRecord, CycleRecord, FeedbackRecord, ActorRecord, SystemStatus, ProductivityMetrics, CollaborationMetrics, TaskHealthReport } from "@gitgov/core";
 
 // Mock console methods to capture output
 const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation();
@@ -44,10 +44,10 @@ describe('StatusCommand - Complete Unit Tests', () => {
     getAllFeedback: jest.MockedFunction<() => Promise<FeedbackRecord[]>>;
   };
   let mockMetricsAdapter: {
-    getSystemStatus: jest.MockedFunction<() => Promise<MetricsAdapter.SystemStatus>>;
-    getProductivityMetrics: jest.MockedFunction<() => Promise<MetricsAdapter.ProductivityMetrics>>;
-    getCollaborationMetrics: jest.MockedFunction<() => Promise<MetricsAdapter.CollaborationMetrics>>;
-    getTaskHealth: jest.MockedFunction<(taskId: string) => Promise<MetricsAdapter.TaskHealthReport>>;
+    getSystemStatus: jest.MockedFunction<() => Promise<SystemStatus>>;
+    getProductivityMetrics: jest.MockedFunction<() => Promise<ProductivityMetrics>>;
+    getCollaborationMetrics: jest.MockedFunction<() => Promise<CollaborationMetrics>>;
+    getTaskHealth: jest.MockedFunction<(taskId: string) => Promise<TaskHealthReport>>;
   };
   let mockIndexerAdapter: {
     isIndexUpToDate: jest.MockedFunction<() => Promise<boolean>>;
@@ -70,7 +70,7 @@ describe('StatusCommand - Complete Unit Tests', () => {
   let sampleCycle: CycleRecord;
   let sampleFeedback: FeedbackRecord;
 
-  const sampleSystemStatus: MetricsAdapter.SystemStatus = {
+  const sampleSystemStatus: SystemStatus = {
     tasks: {
       total: 10,
       byStatus: { active: 3, done: 5, draft: 2 },
@@ -88,7 +88,7 @@ describe('StatusCommand - Complete Unit Tests', () => {
     }
   };
 
-  const sampleProductivityMetrics: MetricsAdapter.ProductivityMetrics = {
+  const sampleProductivityMetrics: ProductivityMetrics = {
     throughput: 10,
     leadTime: 5.5,
     cycleTime: 3.2,
@@ -96,7 +96,7 @@ describe('StatusCommand - Complete Unit Tests', () => {
     averageCompletionTime: 5.5
   };
 
-  const sampleCollaborationMetrics: MetricsAdapter.CollaborationMetrics = {
+  const sampleCollaborationMetrics: CollaborationMetrics = {
     activeAgents: 2,
     totalAgents: 5,
     agentUtilization: 40,
@@ -373,7 +373,7 @@ describe('StatusCommand - Complete Unit Tests', () => {
     });
 
     it('[EARS-16] should generate appropriate health alerts', async () => {
-      const unhealthySystemStatus: MetricsAdapter.SystemStatus = {
+      const unhealthySystemStatus: SystemStatus = {
         ...sampleSystemStatus,
         health: {
           overallScore: 30,

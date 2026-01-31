@@ -1,7 +1,7 @@
 import { Command, Option } from 'commander';
 import { BaseCommand } from '../../base/base-command';
 import type { BaseCommandOptions } from '../../interfaces/command';
-import type { Runner } from '@gitgov/core';
+import type { RunOptions, AgentResponse } from '@gitgov/core';
 
 /**
  * CLI-specific options for agent run command
@@ -48,7 +48,7 @@ export interface ShowCommandOptions extends BaseCommandOptions {
 }
 
 /**
- * Agent Command - Thin wrapper for @gitgov/core/runner module
+ * Agent Command - Thin wrapper for @gitgov/core module
  *
  * Responsibilities (CLI only):
  * - Parse CLI arguments
@@ -192,7 +192,7 @@ export class AgentCommand extends BaseCommand<RunCommandOptions> {
       }
 
       // Execute agent
-      const runOptions: Runner.RunOptions = {
+      const runOptions: RunOptions = {
         agentId,
         taskId,
         actorId: currentActor.id,
@@ -201,7 +201,7 @@ export class AgentCommand extends BaseCommand<RunCommandOptions> {
       if (options.tool) {
         runOptions.tool = options.tool;
       }
-      const response: Runner.AgentResponse = await runner.runOnce(runOptions);
+      const response: AgentResponse = await runner.runOnce(runOptions);
 
       // [EARS-D1, D2] Format output
       if (options.output === 'json') {
@@ -231,7 +231,7 @@ export class AgentCommand extends BaseCommand<RunCommandOptions> {
   /**
    * Format AgentResponse for text output
    */
-  private formatTextResponse(response: Runner.AgentResponse, options: RunCommandOptions): void {
+  private formatTextResponse(response: AgentResponse, options: RunCommandOptions): void {
     const statusIcon = response.status === 'success' ? '✅' : '❌';
     const statusText = response.status === 'success' ? 'success' : 'error';
 

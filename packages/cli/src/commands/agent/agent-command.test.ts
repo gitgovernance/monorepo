@@ -33,7 +33,7 @@ jest.mock('../../services/dependency-injection', () => ({
 
 import { AgentCommand, type RunCommandOptions, type ListCommandOptions, type ShowCommandOptions } from './agent-command';
 import { DependencyInjectionService } from '../../services/dependency-injection';
-import type { Runner, TaskRecord, ActorRecord, AgentRecord } from '@gitgov/core';
+import type { RunOptions, AgentResponse, TaskRecord, ActorRecord, AgentRecord } from '@gitgov/core';
 
 /**
  * Test-specific metadata type for agent mocks
@@ -53,7 +53,7 @@ const mockDI = jest.mocked(DependencyInjectionService);
 
 // Mock adapters and modules
 let mockAgentRunnerModule: {
-  runOnce: jest.MockedFunction<(opts: Runner.RunOptions) => Promise<Runner.AgentResponse>>;
+  runOnce: jest.MockedFunction<(opts: RunOptions) => Promise<AgentResponse>>;
 };
 
 let mockBacklogAdapter: {
@@ -96,7 +96,7 @@ describe('AgentCommand', () => {
   };
 
   // Mock successful AgentResponse
-  const mockSuccessResponse: Runner.AgentResponse = {
+  const mockSuccessResponse: AgentResponse = {
     runId: 'run-123-456',
     agentId: 'agent:test-echo',
     status: 'success',
@@ -111,7 +111,7 @@ describe('AgentCommand', () => {
   };
 
   // Mock error AgentResponse
-  const mockErrorResponse: Runner.AgentResponse = {
+  const mockErrorResponse: AgentResponse = {
     runId: 'run-123-456',
     agentId: 'agent:test-echo',
     status: 'error',

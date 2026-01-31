@@ -5,7 +5,8 @@ import type { IFsLintModule } from '@gitgov/core/fs';
 import type {
   GitGovTaskRecord, GitGovCycleRecord, GitGovFeedbackRecord, GitGovExecutionRecord, GitGovChangelogRecord, GitGovActorRecord, GitGovAgentRecord,
   // Adapter types
-  IIndexerAdapter, IndexData, IMetricsAdapter,
+  IIndexerAdapter, IndexData, IMetricsAdapter, IConfigManager, IIdentityAdapter, ISessionManager, IAgentRunner, IKeyProvider,
+  ISyncStateModule,
   // Lint types
   RecordStores as LintRecordStores,
   RecordStore,
@@ -23,13 +24,13 @@ export class DependencyInjectionService {
   private indexerAdapter: IIndexerAdapter | null = null;
   private backlogAdapter: Adapters.BacklogAdapter | null = null;
   private lintModule: IFsLintModule | null = null;
-  private syncModule: SyncState.ISyncStateModule | null = null;
+  private syncModule: ISyncStateModule | null = null;
   private sourceAuditorModule: SourceAuditor.SourceAuditorModule | null = null;
-  private agentRunnerModule: Runner.IAgentRunner | null = null;
-  private configManager: Config.ConfigManager | null = null;
-  private sessionManager: Session.SessionManager | null = null;
+  private agentRunnerModule: IAgentRunner | null = null;
+  private configManager: InstanceType<typeof Config.ConfigManager> | null = null;
+  private sessionManager: InstanceType<typeof Session.SessionManager> | null = null;
   private gitModule: Git.IGitModule | null = null;
-  private keyProvider: KeyProvider.KeyProvider | null = null;
+  private keyProvider: IKeyProvider | null = null;
   private projectRoot: string | null = null;
   private stores: {
     tasks: RecordStore<GitGovTaskRecord>;
@@ -316,7 +317,7 @@ export class DependencyInjectionService {
   /**
    * [EARS-C4] Creates and returns IdentityAdapter with all required dependencies
    */
-  async getIdentityAdapter(): Promise<Adapters.IdentityAdapter> {
+  async getIdentityAdapter(): Promise<InstanceType<typeof Adapters.IdentityAdapter>> {
     try {
       await this.initializeStores();
       if (!this.stores) {
@@ -615,7 +616,7 @@ export class DependencyInjectionService {
   /**
    * Creates and returns AgentRunnerModule with all required dependencies
    */
-  async getAgentRunnerModule(): Promise<Runner.IAgentRunner> {
+  async getAgentRunnerModule(): Promise<IAgentRunner> {
     if (this.agentRunnerModule) {
       return this.agentRunnerModule;
     }
@@ -676,7 +677,7 @@ export class DependencyInjectionService {
   /**
    * [EARS-C7] Creates and returns SyncStateModule with all required dependencies
    */
-  async getSyncStateModule(): Promise<SyncState.ISyncStateModule> {
+  async getSyncStateModule(): Promise<ISyncStateModule> {
     // [EARS-C8] Return cached instance
     if (this.syncModule) {
       return this.syncModule;
@@ -812,7 +813,7 @@ export class DependencyInjectionService {
   /**
    * [EARS-C9] Creates and returns ConfigManager instance
    */
-  async getConfigManager(): Promise<Config.ConfigManager> {
+  async getConfigManager(): Promise<InstanceType<typeof Config.ConfigManager>> {
     // [EARS-C8] Return cached instance
     if (this.configManager) {
       return this.configManager;
@@ -848,7 +849,7 @@ export class DependencyInjectionService {
   /**
    * [EARS-C10] Creates and returns SessionManager instance
    */
-  async getSessionManager(): Promise<Session.SessionManager> {
+  async getSessionManager(): Promise<InstanceType<typeof Session.SessionManager>> {
     // [EARS-C8] Return cached instance
     if (this.sessionManager) {
       return this.sessionManager;
@@ -881,7 +882,7 @@ export class DependencyInjectionService {
   /**
    * Get the KeyProvider instance (created during store initialization)
    */
-  getKeyProvider(): KeyProvider.KeyProvider {
+  getKeyProvider(): IKeyProvider {
     if (!this.keyProvider) {
       throw new Error("KeyProvider not initialized. Call initializeStores first.");
     }

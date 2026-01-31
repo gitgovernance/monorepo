@@ -1,11 +1,11 @@
 import { Command } from 'commander';
 import { IndexerCommand } from './indexer-command';
-import type { IndexerAdapter } from '@gitgov/core';
+import type { IIndexerAdapter } from '@gitgov/core';
 
 /**
  * Register indexer commands following GitGovernance CLI standard
  */
-export function registerIndexerCommands(program: Command, indexerAdapter: IndexerAdapter.IIndexerAdapter | null): void {
+export function registerIndexerCommands(program: Command, indexerAdapter: IIndexerAdapter | null): void {
   // Register indexer command
   program
     .command('indexer')

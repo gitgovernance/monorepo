@@ -1,10 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Box, Text, useInput, useApp, useStdout } from 'ink';
-import type { CycleRecord, FeedbackRecord, ActorRecord, MetricsAdapter, ActivityEvent } from '@gitgov/core';
+import type { CycleRecord, FeedbackRecord, ActorRecord, ActivityEvent, SystemStatus, ProductivityMetrics, CollaborationMetrics, EnrichedTaskRecord } from '@gitgov/core';
 import clipboard from 'clipboardy';
 
-// Import IndexerAdapter.EnrichedTaskRecord from IndexerAdapter
-import type { IndexerAdapter } from '@gitgov/core';
 
 // Task AI Prompt Template - Used when copying task to clipboard for AI agents
 const TASK_AI_PROMPT_TEMPLATE = (taskId: string): string => {
@@ -88,10 +86,10 @@ const resolveThemeName = (explicit?: ThemeName): ThemeName => {
 type SortMode = 'recent' | 'creation' | 'priority' | 'status';
 
 interface DashboardIntelligence {
-  systemHealth: MetricsAdapter.SystemStatus;
-  productivityMetrics: MetricsAdapter.ProductivityMetrics;
-  collaborationMetrics: MetricsAdapter.CollaborationMetrics;
-  tasks: IndexerAdapter.EnrichedTaskRecord[];
+  systemHealth: SystemStatus;
+  productivityMetrics: ProductivityMetrics;
+  collaborationMetrics: CollaborationMetrics;
+  tasks: EnrichedTaskRecord[];
   cycles: CycleRecord[];
   feedback: FeedbackRecord[];
   currentActor: ActorRecord;
@@ -190,7 +188,7 @@ export const DashboardTUI: React.FC<Props> = ({
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Sort tasks dynamically based on current sort mode
-  const sortTasks = useCallback((tasks: IndexerAdapter.EnrichedTaskRecord[]): IndexerAdapter.EnrichedTaskRecord[] => {
+  const sortTasks = useCallback((tasks: EnrichedTaskRecord[]): EnrichedTaskRecord[] => {
     switch (sortMode) {
       case 'recent':
         // Sort by last updated (most recent first) - DEFAULT
@@ -674,7 +672,7 @@ const RowView: React.FC<{
   viewConfig: ViewConfig;
   lastUpdate: Date;
   live?: boolean;
-  sortedTasks: IndexerAdapter.EnrichedTaskRecord[];
+  sortedTasks: EnrichedTaskRecord[];
   selectedIndex: number;
   sortMode: SortMode;
   getSortModeDisplay: (mode: SortMode) => string;
@@ -711,7 +709,7 @@ const RowView: React.FC<{
    * - 'creation': Shows author (who created the task)
    * - 'priority'/'status': Shows lastModifier (most recent activity)
    */
-  const getActorForSortMode = (task: IndexerAdapter.EnrichedTaskRecord, mode: SortMode): string => {
+  const getActorForSortMode = (task: EnrichedTaskRecord, mode: SortMode): string => {
     switch (mode) {
       case 'creation':
         // For creation date sort, show the author (creator)
@@ -906,7 +904,7 @@ const KanbanView: React.FC<{
   viewConfig: ViewConfig;
   lastUpdate: Date;
   live?: boolean;
-  sortedTasks: IndexerAdapter.EnrichedTaskRecord[];
+  sortedTasks: EnrichedTaskRecord[];
   selectedTaskId: string | null;
   sortMode: SortMode;
   getSortModeDisplay: (mode: SortMode) => string;
@@ -932,7 +930,7 @@ const KanbanView: React.FC<{
   };
 
   // Organize tasks by columns
-  const tasksByColumn: Record<string, IndexerAdapter.EnrichedTaskRecord[]> = {};
+  const tasksByColumn: Record<string, EnrichedTaskRecord[]> = {};
   if (viewConfig.columns) {
     for (const [columnName, statuses] of Object.entries(viewConfig.columns)) {
       tasksByColumn[columnName] = sortedTasks
@@ -1037,7 +1035,7 @@ const ScrumView: React.FC<{
   viewConfig: ViewConfig;
   lastUpdate: Date;
   live?: boolean;
-  sortedTasks: IndexerAdapter.EnrichedTaskRecord[];
+  sortedTasks: EnrichedTaskRecord[];
   selectedTaskId: string | null;
   sortMode: SortMode;
   getSortModeDisplay: (mode: SortMode) => string;
@@ -1074,7 +1072,7 @@ const ScrumView: React.FC<{
   const sprintProgress = Math.round((doneTasks / (activeTasks + doneTasks || 1)) * 100);
 
   // Organize tasks by scrum columns
-  const tasksByColumn: Record<string, IndexerAdapter.EnrichedTaskRecord[]> = {};
+  const tasksByColumn: Record<string, EnrichedTaskRecord[]> = {};
   if (viewConfig.columns) {
     for (const [columnName, statuses] of Object.entries(viewConfig.columns)) {
       tasksByColumn[columnName] = sortedTasks.filter(task =>
@@ -1235,7 +1233,7 @@ const renderMarkdown = (markdown: string, width: number, colors: DashboardTheme[
  * Task Detail Modal - Shows full task information
  */
 const TaskDetailModal: React.FC<{
-  task: IndexerAdapter.EnrichedTaskRecord;
+  task: EnrichedTaskRecord;
   theme: DashboardTheme;
   onClose: () => void;
 }> = ({ task, theme, onClose }) => {
@@ -1475,7 +1473,7 @@ const TaskDetailModal: React.FC<{
  * Delete Confirmation Modal - Confirms task deletion or shows error
  */
 const DeleteConfirmationModal: React.FC<{
-  task: IndexerAdapter.EnrichedTaskRecord;
+  task: EnrichedTaskRecord;
   error: string | null;
   theme: DashboardTheme;
   onConfirm: () => Promise<void>;
