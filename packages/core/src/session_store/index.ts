@@ -12,7 +12,7 @@
  * @example
  * ```typescript
  * // Import interface and types
- * import type { SessionStore } from '@gitgov/core/session_store';
+ * import type { SessionStore } from '@gitgov/core';
  *
  * // Import filesystem implementation from fs entry point
  * import { FsSessionStore } from '@gitgov/core/fs';

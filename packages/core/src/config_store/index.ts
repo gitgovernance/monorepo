@@ -12,7 +12,7 @@
  * @example
  * ```typescript
  * // Import interface and types
- * import type { ConfigStore } from '@gitgov/core/config_store';
+ * import type { ConfigStore } from '@gitgov/core';
  *
  * // Import filesystem implementation from fs entry point
  * import { FsConfigStore, createConfigManager } from '@gitgov/core/fs';
