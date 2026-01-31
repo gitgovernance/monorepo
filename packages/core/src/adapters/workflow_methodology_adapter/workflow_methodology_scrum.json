@@ -217,20 +217,25 @@
     "required_agents": [
       {
         "id": "agent:scrum-master",
+        "status": "active",
         "engine": {
           "type": "local",
           "entrypoint": "@gitgov/agent-scrum-master"
         },
         "triggers": [
           {
+            "type": "webhook",
             "event": "sprint_end_approaching",
             "action": "create_sprint_review_tasks"
           },
           {
+            "type": "scheduled",
+            "cron": "0 9 * * 1-5",
             "event": "daily_standup_time",
             "action": "generate_standup_report"
           },
           {
+            "type": "webhook",
             "event": "impediment_detected",
             "action": "escalate_to_product_owner"
           }
@@ -238,20 +243,38 @@
         "knowledge_dependencies": [
           "blueprints/scrum_ceremonies.md",
           "blueprints/impediment_resolution.md"
-        ]
+        ],
+        "prompt_engine_requirements": {
+          "roles": [
+            "scrum-master",
+            "facilitator"
+          ],
+          "skills": [
+            "agile-methodologies",
+            "impediment-resolution",
+            "sprint-planning"
+          ]
+        },
+        "metadata": {
+          "purpose": "scrum-ceremony-automation",
+          "framework": "native-gitgov"
+        }
       },
       {
         "id": "agent:product-owner-assistant",
+        "status": "active",
         "engine": {
           "type": "mcp",
           "url": "http://localhost:8080/product-owner-mcp"
         },
         "triggers": [
           {
+            "type": "webhook",
             "event": "backlog_grooming_needed",
             "action": "prioritize_product_backlog"
           },
           {
+            "type": "webhook",
             "event": "sprint_planning_started",
             "action": "assist_sprint_planning"
           }
@@ -259,7 +282,26 @@
         "knowledge_dependencies": [
           "blueprints/product_vision.md",
           "blueprints/user_stories_template.md"
-        ]
+        ],
+        "prompt_engine_requirements": {
+          "roles": [
+            "product-owner",
+            "backlog-manager"
+          ],
+          "skills": [
+            "product-strategy",
+            "user-story-refinement",
+            "priority-assessment"
+          ]
+        },
+        "metadata": {
+          "purpose": "product-backlog-automation",
+          "framework": "mcp-protocol",
+          "deployment": {
+            "type": "local-mcp-server",
+            "port": 8080
+          }
+        }
       }
     ],
     "automation_rules": [
