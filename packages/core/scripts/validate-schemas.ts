@@ -24,7 +24,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Paths
-const SCHEMAS_DIR = path.join(__dirname, '../src/schemas');
+const SCHEMAS_DIR = path.join(__dirname, '../src/schemas/generated');
 
 // JSON Schema meta-schema for validation
 const JSON_SCHEMA_META_SCHEMA = 'http://json-schema.org/draft-07/schema#';
@@ -81,7 +81,7 @@ const EXPECTED_SCHEMAS = [
   },
   {
     name: 'WorkflowMethodology',
-    file: 'workflow_methodology_schema.json',
+    file: 'workflow_methodology_record_schema.json',
     expectedTitle: 'WorkflowMethodologyRecord',
     description: 'Workflow methodology configuration'
   }
@@ -131,7 +131,11 @@ function validateJsonSchemaFormat(schema: any, schemaName: string, ajv: Ajv): bo
   console.log(`🔍 Validating JSON Schema format for ${schemaName}...`);
 
   try {
-    // Compile the schema to check if it's valid JSON Schema
+    // If schema was pre-loaded (has $id), validate via getSchema; otherwise compile
+    if (schema.$id && ajv.getSchema(schema.$id)) {
+      console.log(`✅ JSON Schema format OK for ${schemaName}`);
+      return true;
+    }
     ajv.compile(schema);
     console.log(`✅ JSON Schema format OK for ${schemaName}`);
     return true;
@@ -284,6 +288,23 @@ async function validateAllSchemas(): Promise<boolean> {
   let formatErrors = 0;
   let metadataErrors = 0;
   let referenceErrors = 0;
+
+  // Pre-load all schemas into Ajv so $ref cross-references resolve
+  for (const config of EXPECTED_SCHEMAS) {
+    const schemaPath = path.join(SCHEMAS_DIR, config.file);
+    if (fs.existsSync(schemaPath)) {
+      try {
+        const content = fs.readFileSync(schemaPath, 'utf8');
+        const parsed = JSON.parse(content);
+        if (parsed.$id) {
+          ajv.addSchema(parsed);
+          // Also register with ref: scheme used by EmbeddedMetadata $refs
+          const refId = `ref:${parsed.$id.replace('.json', '')}`;
+          ajv.addSchema(parsed, refId);
+        }
+      } catch { /* will be caught in syntax validation below */ }
+    }
+  }
 
   for (const config of EXPECTED_SCHEMAS) {
     const schemaPath = path.join(SCHEMAS_DIR, config.file);
