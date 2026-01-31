@@ -239,7 +239,7 @@ describe('createDefaultWorkflowMethodologyConfig', () => {
 
   });
 
-  it('[EARS-10] should create config that matches workflow_methodology_default.json structure', async () => {
+  it('[EARS-10] should create config that matches kanban_workflow.json structure', async () => {
     const config = await createDefaultWorkflowMethodologyConfig();
 
     // Verify structure matches what's expected by BacklogAdapter

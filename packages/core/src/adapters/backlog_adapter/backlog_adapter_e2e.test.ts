@@ -105,7 +105,6 @@ describe('BacklogAdapter - End-to-End Tests', () => {
           getTransitionRule: jest.fn(),
           validateSignature: jest.fn(),
           validateCustomRules: jest.fn(),
-          getViewConfig: jest.fn(),
           reloadConfig: jest.fn()
         } as unknown as WorkflowMethodologyAdapter,
         identity: {

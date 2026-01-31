@@ -3800,12 +3800,12 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
       expect(result.errors).toHaveLength(0);
     });
 
-    it('[EARS-1001] should validate real workflow_methodology_default.json file', () => {
+    it('[EARS-1001] should validate real kanban_workflow.json file', () => {
       // This is a critical sanity test: ensure the actual config file used in production is valid
       const fs = require('fs');
       const path = require('path');
 
-      const configPath = path.join(__dirname, '../../adapters/workflow_methodology_adapter/generated/workflow_methodology_default.json');
+      const configPath = path.join(__dirname, '../../adapters/workflow_methodology_adapter/generated/kanban_workflow.json');
       const configContent = fs.readFileSync(configPath, 'utf8');
       const realConfig = JSON.parse(configContent);
 
@@ -3813,7 +3813,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
       expect(result.isValid).toBe(true);
       if (!result.isValid) {
-        console.error('workflow_methodology_default.json validation errors:', result.errors);
+        console.error('kanban_workflow.json validation errors:', result.errors);
       }
       expect(result.errors).toHaveLength(0);
     });

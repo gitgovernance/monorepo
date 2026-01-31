@@ -25,10 +25,10 @@ const GENERATED_DIR = path.join(
   '../src/adapters/workflow_methodology_adapter/generated'
 );
 
-// Configuration files to sync
-const CONFIG_FILES = [
-  'workflow_methodology_default.json',
-  'workflow_methodology_scrum.json'
+// Configuration files to sync: [source relative to BLUEPRINTS_WORKFLOW_DIR, target filename in generated/]
+const CONFIG_FILES: [string, string][] = [
+  ['templates/kanban_workflow.json', 'kanban_workflow.json'],
+  ['templates/scrum_workflow.json', 'scrum_workflow.json']
 ];
 
 function syncWorkflowConfigs() {
@@ -39,9 +39,9 @@ function syncWorkflowConfigs() {
 
   const syncedConfigs: string[] = [];
 
-  for (const configFile of CONFIG_FILES) {
-    const sourcePath = path.join(BLUEPRINTS_WORKFLOW_DIR, configFile);
-    const targetPath = path.join(GENERATED_DIR, configFile);
+  for (const [sourceRelative, targetFile] of CONFIG_FILES) {
+    const sourcePath = path.join(BLUEPRINTS_WORKFLOW_DIR, sourceRelative);
+    const targetPath = path.join(GENERATED_DIR, targetFile);
 
     if (!fs.existsSync(sourcePath)) {
       console.warn(`⚠️  Configuration not found: ${sourcePath}`);
@@ -58,11 +58,11 @@ function syncWorkflowConfigs() {
       // Write to generated directory
       fs.writeFileSync(targetPath, configContent);
 
-      console.log(`✅ ${configFile} → adapters/workflow_methodology_adapter/generated/`);
-      syncedConfigs.push(configFile);
+      console.log(`✅ ${sourceRelative} → generated/${targetFile}`);
+      syncedConfigs.push(targetFile);
 
     } catch (error) {
-      console.error(`❌ Failed to sync ${configFile}:`, error);
+      console.error(`❌ Failed to sync ${sourceRelative}:`, error);
       process.exit(1);
     }
   }

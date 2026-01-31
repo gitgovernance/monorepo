@@ -154,7 +154,7 @@ describe('WorkflowMethodologyValidator Module', () => {
         name: 'Test Methodology',
         state_transitions: {
           review: {
-            from: ['invalid_state'],
+            from: ['INVALID_STATE'],
             requires: {}
           }
         }
