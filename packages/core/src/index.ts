@@ -40,10 +40,23 @@ export type {
   AllRecords,
   DerivedStates,
 } from "./adapters/indexer_adapter";
-export type { IMetricsAdapter, SystemStatus, ProductivityMetrics, CollaborationMetrics } from "./adapters/metrics_adapter";
+export type { IMetricsAdapter, SystemStatus, ProductivityMetrics, CollaborationMetrics, TaskHealthReport } from "./adapters/metrics_adapter";
+export type { IIdentityAdapter } from "./adapters/identity_adapter";
+
+// SyncState type exports
+export type { ISyncStateModule, SyncStatePushResult, SyncStatePullResult, SyncStateResolveResult, AuditStateReport } from "./sync_state";
+
+// AgentRunner type exports
+export type { IAgentRunner, RunOptions, AgentResponse } from "./agent_runner";
+
+// KeyProvider type exports
+export type { KeyProvider as IKeyProvider } from "./key_provider";
 
 // Lint type exports (pure types only - Fs types are in @gitgov/core/fs)
 export type { RecordStores, LintOptions, FixReport, LintResult, ValidatorType, LintReport, ILintModule } from "./lint";
+
+// Config type exports
+export type { IConfigManager, GitGovConfig, AuditState } from "./config_manager";
 
 // Session type exports
 export type { SyncStatus, ActorState, ISessionManager } from "./session_manager";
