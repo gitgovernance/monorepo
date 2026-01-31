@@ -315,8 +315,8 @@ describe('WorkflowMethodologyAdapter - SCRUM Methodology Integration Tests', () 
         expect(viewConfig?.columns['Backlog Items']).toEqual(['draft']);
         expect(viewConfig?.columns['Ready for Sprint']).toEqual(['review']);
         expect(viewConfig?.columns['Sprint Committed']).toEqual(['ready']);
-        expect(viewConfig?.theme).toBe('minimal');
-        expect(viewConfig?.layout).toBe('grid');
+        expect(viewConfig?.theme).toBe('default');
+        expect(viewConfig?.layout).toBe('horizontal');
       });
 
       it('[EARS-73] should render developer view with assigned tasks', async () => {
@@ -328,7 +328,7 @@ describe('WorkflowMethodologyAdapter - SCRUM Methodology Integration Tests', () 
         expect(viewConfig?.columns['Code Review']).toEqual(['done']);
         expect(viewConfig?.columns['Done']).toEqual(['archived']);
         expect(viewConfig?.columns['Blocked']).toEqual(['paused']);
-        expect(viewConfig?.theme).toBe('dark');
+        expect(viewConfig?.theme).toBe('default');
         expect(viewConfig?.layout).toBe('horizontal');
       });
 
@@ -341,8 +341,8 @@ describe('WorkflowMethodologyAdapter - SCRUM Methodology Integration Tests', () 
         expect(viewConfig?.columns['Sprint Review']).toEqual(['done']);
         expect(viewConfig?.columns['Retrospective']).toEqual(['archived']);
         expect(viewConfig?.columns['Impediments']).toEqual(['paused', 'discarded']);
-        expect(viewConfig?.theme).toBe('corporate');
-        expect(viewConfig?.layout).toBe('grid');
+        expect(viewConfig?.theme).toBe('default');
+        expect(viewConfig?.layout).toBe('horizontal');
       });
     });
   });

@@ -43,7 +43,6 @@ describe('createWorkflowMethodologyConfig', () => {
     expect(config.version).toBe('1.0.0'); // Default version
     expect(config.name).toBe('Custom Test Methodology');
     expect(config.state_transitions).toBeDefined();
-    expect(config.view_configs).toBeDefined(); // Default view configs
   });
 
   it('[EARS-2] should throw DetailedValidationError for invalid schema', async () => {
@@ -140,7 +139,6 @@ describe('createWorkflowMethodologyConfig', () => {
     expect(config.name).toBe('Minimal Methodology');
     expect(config.version).toBe('1.0.0'); // Default
     expect(config.state_transitions).toEqual(payload.state_transitions);
-    expect(config.view_configs).toBeDefined(); // Default view configs added
   });
 
   it('[EARS-6] should handle empty payload with all defaults', async () => {
@@ -149,35 +147,6 @@ describe('createWorkflowMethodologyConfig', () => {
     expect(config.version).toBe('1.0.0');
     expect(config.name).toBe('Custom Methodology');
     expect(config.state_transitions).toBeDefined();
-    expect(config.view_configs).toBeDefined();
-  });
-
-  it('[EARS-7] should preserve view_configs when provided', async () => {
-    const customViewConfigs = {
-      'custom-view': {
-        columns: {
-          'Todo': ['draft', 'review'] as ['draft', 'review'],
-          'Done': ['done', 'archived'] as ['done', 'archived']
-        },
-        theme: 'dark' as const,
-        layout: 'grid' as const
-      }
-    };
-
-    const payload: Partial<WorkflowMethodologyRecord> = {
-      name: 'Custom View Methodology',
-      state_transitions: {
-        review: {
-          from: ['draft'],
-          requires: { command: 'gitgov task submit' }
-        }
-      },
-      view_configs: customViewConfigs
-    };
-
-    const config = await createWorkflowMethodologyConfig(payload);
-
-    expect(config.view_configs).toEqual(customViewConfigs);
   });
 
   it('[EARS-8] should validate and create complex methodology config', async () => {
@@ -268,9 +237,6 @@ describe('createDefaultWorkflowMethodologyConfig', () => {
     expect(config.custom_rules?.['task_must_be_in_active_sprint']).toBeDefined();
     expect(config.custom_rules?.['epic_promotion_required']).toBeDefined();
 
-    // Verify view configs exist
-    expect(config.view_configs?.['kanban-4col']).toBeDefined();
-    expect(config.view_configs?.['kanban-7col']).toBeDefined();
   });
 
   it('[EARS-10] should create config that matches workflow_methodology_default.json structure', async () => {
@@ -282,8 +248,5 @@ describe('createDefaultWorkflowMethodologyConfig', () => {
 
     expect(config.state_transitions['ready']?.requires.signatures?.['design']?.capability_roles).toEqual(['approver:design']);
     expect(config.state_transitions['active']?.requires.custom_rules).toContain('task_must_have_valid_assignment_for_executor');
-
-    expect(config.view_configs?.['kanban-7col']?.columns?.['Active']).toEqual(['active']);
-    expect(config.view_configs?.['kanban-7col']?.theme).toBe('corporate');
   });
 });

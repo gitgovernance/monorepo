@@ -20,7 +20,10 @@ const BLUEPRINTS_WORKFLOW_DIR = path.join(
   __dirname,
   '../../blueprints/03_products/core/specs/adapters/workflow_methodology_adapter'
 );
-const ADAPTER_DIR = path.join(__dirname, '../src/adapters/workflow_methodology_adapter');
+const GENERATED_DIR = path.join(
+  __dirname,
+  '../src/adapters/workflow_methodology_adapter/generated'
+);
 
 // Configuration files to sync
 const CONFIG_FILES = [
@@ -31,14 +34,14 @@ const CONFIG_FILES = [
 function syncWorkflowConfigs() {
   console.log('🔄 Syncing workflow methodology configurations...');
 
-  // Ensure adapter directory exists
-  fs.mkdirSync(ADAPTER_DIR, { recursive: true });
+  // Ensure generated directory exists
+  fs.mkdirSync(GENERATED_DIR, { recursive: true });
 
   const syncedConfigs: string[] = [];
 
   for (const configFile of CONFIG_FILES) {
     const sourcePath = path.join(BLUEPRINTS_WORKFLOW_DIR, configFile);
-    const targetPath = path.join(ADAPTER_DIR, configFile);
+    const targetPath = path.join(GENERATED_DIR, configFile);
 
     if (!fs.existsSync(sourcePath)) {
       console.warn(`⚠️  Configuration not found: ${sourcePath}`);
@@ -52,10 +55,10 @@ function syncWorkflowConfigs() {
       // Validate it's valid JSON
       JSON.parse(configContent);
 
-      // Write to adapter directory
+      // Write to generated directory
       fs.writeFileSync(targetPath, configContent);
 
-      console.log(`✅ ${configFile} → adapters/workflow_methodology_adapter/`);
+      console.log(`✅ ${configFile} → adapters/workflow_methodology_adapter/generated/`);
       syncedConfigs.push(configFile);
 
     } catch (error) {
@@ -67,7 +70,7 @@ function syncWorkflowConfigs() {
   console.log(`🎉 Successfully synced ${syncedConfigs.length} workflow configurations!`);
 
   if (syncedConfigs.length > 0) {
-    console.log(`📁 Configurations available in: ${ADAPTER_DIR}`);
+    console.log(`📁 Configurations available in: ${GENERATED_DIR}`);
     console.log(`🔗 Synced files: ${syncedConfigs.join(', ')}`);
   }
 }

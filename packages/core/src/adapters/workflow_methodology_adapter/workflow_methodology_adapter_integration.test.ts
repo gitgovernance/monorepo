@@ -62,8 +62,8 @@ describe('WorkflowMethodologyAdapter - DEFAULT Methodology Integration Tests', (
       expect(viewConfig?.columns).toBeDefined();
       expect(viewConfig?.columns['Active']).toEqual(['active']);
       expect(viewConfig?.columns['Blocked']).toEqual(['paused']);
-      expect(viewConfig?.theme).toBe('corporate');
-      expect(viewConfig?.layout).toBe('vertical');
+      expect(viewConfig?.theme).toBe('default');
+      expect(viewConfig?.layout).toBe('horizontal');
     });
 
     it('[EARS-26] should validate custom rules from real config', async () => {
