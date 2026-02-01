@@ -26,7 +26,7 @@
   },
   "scripts": {
     "clean": "rm -rf dist",
-    "clean:generated": "rm -rf src/record_schemas/generated/* src/types/generated/* prompts/*",
+    "clean:generated": "rm -rf src/record_schemas/generated/* src/record_types/generated/* prompts/*",
     "sync:schemas": "tsx scripts/sync-schemas.ts",
     "sync:workflow-configs": "tsx scripts/sync-workflow-configs.ts",
     "sync:prompts": "tsx scripts/sync-prompts.ts",

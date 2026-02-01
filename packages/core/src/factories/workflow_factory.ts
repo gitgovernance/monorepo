@@ -1,4 +1,4 @@
-import type { WorkflowRecord } from "../types";
+import type { WorkflowRecord } from "../record_types";
 import {
   validateWorkflowConfigDetailed,
   validateWorkflowConfigBusinessRules

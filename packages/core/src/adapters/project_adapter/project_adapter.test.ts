@@ -1,8 +1,8 @@
 import { ProjectAdapter } from './index';
 import type { IConfigManager } from '../../config_manager';
-import type { TaskRecord } from '../../types';
-import type { CycleRecord } from '../../types';
-import type { ActorRecord } from '../../types';
+import type { TaskRecord } from '../../record_types';
+import type { CycleRecord } from '../../record_types';
+import type { ActorRecord } from '../../record_types';
 import type { IdentityAdapter } from '../identity_adapter';
 import type { BacklogAdapter } from '../backlog_adapter';
 import type { IProjectInitializer, EnvironmentValidation } from '../../project_initializer';

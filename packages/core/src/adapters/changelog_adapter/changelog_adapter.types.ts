@@ -1,6 +1,6 @@
 import type { RecordStores } from '../../record_store';
 import type { IdentityAdapter } from '../identity_adapter';
-import type { ChangelogRecord } from '../../types';
+import type { ChangelogRecord } from '../../record_types';
 import type { IEventStream } from '../../event_bus';
 
 /**

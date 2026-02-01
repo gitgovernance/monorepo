@@ -7,16 +7,16 @@ import type {
   SystemDailyTickEvent,
   CycleStatusChangedEvent
 } from '../../event_bus';
-import type { TaskRecord } from '../../types';
-import type { CycleRecord } from '../../types';
-import type { FeedbackRecord } from '../../types';
-import type { ChangelogRecord } from '../../types';
-import type { GitGovRecord } from '../../types';
-import type { ActorRecord } from '../../types';
-import type { Signature } from '../../types/embedded.types';
+import type { TaskRecord } from '../../record_types';
+import type { CycleRecord } from '../../record_types';
+import type { FeedbackRecord } from '../../record_types';
+import type { ChangelogRecord } from '../../record_types';
+import type { GitGovRecord } from '../../record_types';
+import type { ActorRecord } from '../../record_types';
+import type { Signature } from '../../record_types/embedded.types';
 import type { SystemStatus, TaskHealthReport } from '../metrics_adapter';
 import type { ValidationContext } from '../workflow_adapter';
-import type { WorkflowRecord } from '../../types';
+import type { WorkflowRecord } from '../../record_types';
 
 // Define the correct TransitionRule type based on the real implementation
 type TransitionRule = {

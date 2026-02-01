@@ -1,11 +1,11 @@
 import { WorkflowAdapter } from './index';
-import type { TaskRecord } from '../../types';
-import type { ActorRecord } from '../../types';
-import type { FeedbackRecord } from '../../types';
-import type { CycleRecord } from '../../types';
-import type { Signature } from '../../types/embedded.types';
+import type { TaskRecord } from '../../record_types';
+import type { ActorRecord } from '../../record_types';
+import type { FeedbackRecord } from '../../record_types';
+import type { CycleRecord } from '../../record_types';
+import type { Signature } from '../../record_types/embedded.types';
 import type { ValidationContext } from './index';
-import type { WorkflowRecord } from '../../types';
+import type { WorkflowRecord } from '../../record_types';
 import type { IFeedbackAdapter } from '../feedback_adapter';
 
 // Mock fs for file operations

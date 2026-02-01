@@ -3,8 +3,8 @@ import {
   isExecutionRecord,
   validateExecutionRecordDetailed
 } from './execution_validator';
-import type { ExecutionRecord } from '../types';
-import type { GitGovRecord, Signature } from '../types';
+import type { ExecutionRecord } from '../record_types';
+import type { GitGovRecord, Signature } from '../record_types';
 import { DetailedValidationError } from './common';
 
 // Mock dependencies

@@ -1,5 +1,5 @@
 import { IdentityAdapter } from './index';
-import type { ActorRecord, GitGovRecord, GitGovActorRecord } from '../../types';
+import type { ActorRecord, GitGovRecord, GitGovActorRecord } from '../../record_types';
 import type { RecordStore } from '../../record_store/record_store';
 import { createActorRecord } from '../../factories/actor_factory';
 import { validateFullActorRecord } from '../../validation/actor_validator';

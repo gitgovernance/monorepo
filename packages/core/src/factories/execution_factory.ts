@@ -1,4 +1,4 @@
-import type { ExecutionRecord, GitGovExecutionRecord } from '../types';
+import type { ExecutionRecord, GitGovExecutionRecord } from '../record_types';
 import { generateExecutionId } from '../utils/id_generator';
 import { validateExecutionRecordDetailed } from '../validation/execution_validator';
 import { validateEmbeddedMetadataDetailed } from '../validation/embedded_metadata_validator';

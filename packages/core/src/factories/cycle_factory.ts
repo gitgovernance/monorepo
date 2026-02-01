@@ -1,4 +1,4 @@
-import type { CycleRecord, GitGovCycleRecord } from "../types";
+import type { CycleRecord, GitGovCycleRecord } from "../record_types";
 import { validateCycleRecordDetailed } from "../validation/cycle_validator";
 import { validateEmbeddedMetadataDetailed } from "../validation/embedded_metadata_validator";
 import { DetailedValidationError } from "../validation/common";

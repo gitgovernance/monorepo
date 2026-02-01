@@ -1,6 +1,6 @@
 import type { ValidateFunction, ErrorObject } from "ajv";
-import type { EmbeddedMetadataRecord } from '../types/embedded.types';
-import type { GitGovRecordPayload } from '../types/common.types';
+import type { EmbeddedMetadataRecord } from '../record_types/embedded.types';
+import type { GitGovRecordPayload } from '../record_types/common.types';
 import type { ValidationResult } from './errors';
 import { SchemaValidationCache } from '../record_schemas/schema_cache';
 import { calculatePayloadChecksum } from '../crypto/checksum';

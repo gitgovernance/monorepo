@@ -1,5 +1,5 @@
-import type { EmbeddedMetadataRecord, GitGovRecordPayload } from '../types';
-import type { Signature, EmbeddedMetadataHeader } from '../types/embedded.types';
+import type { EmbeddedMetadataRecord, GitGovRecordPayload } from '../record_types';
+import type { Signature, EmbeddedMetadataHeader } from '../record_types/embedded.types';
 import { validateEmbeddedMetadataDetailed } from '../validation/embedded_metadata_validator';
 import { DetailedValidationError } from '../validation/common';
 import { calculatePayloadChecksum } from '../crypto/checksum';

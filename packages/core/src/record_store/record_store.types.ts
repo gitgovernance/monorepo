@@ -7,7 +7,7 @@ import type {
   GitGovExecutionRecord,
   GitGovFeedbackRecord,
   GitGovChangelogRecord,
-} from '../types';
+} from '../record_types';
 
 /**
  * RecordStores - Typed container for all stores

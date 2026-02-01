@@ -65,8 +65,8 @@ import type {
   GitGovFeedbackRecord,
   GitGovChangelogRecord,
   GitGovActorRecord,
-} from '../../types';
-import type { Signature } from '../../types/embedded.types';
+} from '../../record_types';
+import type { Signature } from '../../record_types/embedded.types';
 import { generateTaskId, generateCycleId } from '../../utils/id_generator';
 import { calculatePayloadChecksum } from '../../crypto/checksum';
 

@@ -1,6 +1,6 @@
 import type { ValidateFunction, ErrorObject } from "ajv";
-import type { TaskRecord } from "../types";
-import type { GitGovRecord } from "../types";
+import type { TaskRecord } from "../record_types";
+import type { GitGovRecord } from "../record_types";
 import { SchemaValidationCache } from "../record_schemas/schema_cache";
 import { Schemas } from '../record_schemas';
 import {

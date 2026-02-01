@@ -1,5 +1,5 @@
 import { createEmbeddedMetadataRecord, createTestSignature } from './embedded_metadata_factory';
-import type { ActorRecord, TaskRecord } from '../types';
+import type { ActorRecord, TaskRecord } from '../record_types';
 import { DetailedValidationError } from '../validation/common';
 
 // Mock the validator

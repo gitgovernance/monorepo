@@ -29,13 +29,13 @@ import type {
   TaskRecord,
   CycleRecord,
   GitGovRecordType
-} from "../types";
+} from "../record_types";
 import {
   isTaskPayload,
   isCyclePayload,
   isExecutionPayload
-} from "../types/type_guards";
-import type { Signature } from "../types/embedded.types";
+} from "../record_types/type_guards";
+import type { Signature } from "../record_types/embedded.types";
 import { DetailedValidationError } from "../validation/common";
 import { createLogger } from "../logger";
 import { calculatePayloadChecksum } from "../crypto/checksum";

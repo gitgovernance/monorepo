@@ -1,6 +1,6 @@
 import { createChangelogRecord } from './changelog_factory';
 import { DetailedValidationError } from '../validation/common';
-import type { ChangelogRecord } from '../types';
+import type { ChangelogRecord } from '../record_types';
 
 // Mock the validator
 jest.mock('../validation/changelog_validator', () => ({

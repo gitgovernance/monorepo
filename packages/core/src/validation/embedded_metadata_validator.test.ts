@@ -3,9 +3,9 @@ import {
   isEmbeddedMetadataRecord,
   validateEmbeddedMetadataDetailed
 } from './embedded_metadata_validator';
-import type { EmbeddedMetadataRecord } from '../types/embedded.types';
-import type { TaskRecord } from '../types';
-import type { Signature } from '../types/embedded.types';
+import type { EmbeddedMetadataRecord } from '../record_types/embedded.types';
+import type { TaskRecord } from '../record_types';
+import type { Signature } from '../record_types/embedded.types';
 import { DetailedValidationError, ChecksumMismatchError, SignatureVerificationError } from './common';
 
 // Mock dependencies

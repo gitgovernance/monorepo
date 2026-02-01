@@ -1,4 +1,4 @@
-import type { TaskRecord, GitGovTaskRecord } from "../types";
+import type { TaskRecord, GitGovTaskRecord } from "../record_types";
 import { validateTaskRecordDetailed } from "../validation/task_validator";
 import { validateEmbeddedMetadataDetailed } from "../validation/embedded_metadata_validator";
 import { DetailedValidationError } from "../validation/common";

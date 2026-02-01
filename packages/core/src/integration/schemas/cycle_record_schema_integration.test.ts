@@ -1,5 +1,5 @@
 import { validateCycleRecordDetailed } from '../../validation/cycle_validator';
-import type { CycleRecord } from '../../types';
+import type { CycleRecord } from '../../record_types';
 
 describe('CycleRecord Schema Integration Tests', () => {
   /**

@@ -1,4 +1,4 @@
-import type { ChangelogRecord, GitGovChangelogRecord } from '../types';
+import type { ChangelogRecord, GitGovChangelogRecord } from '../record_types';
 import { validateChangelogRecordDetailed } from '../validation/changelog_validator';
 import { validateEmbeddedMetadataDetailed } from '../validation/embedded_metadata_validator';
 import { DetailedValidationError } from '../validation/common';

@@ -4,7 +4,7 @@ import { validateFullAgentRecord } from '../../validation/agent_validator';
 import { signPayload } from '../../crypto/signatures';
 import { calculatePayloadChecksum } from '../../crypto/checksum';
 import type { RecordStore } from '../../record_store';
-import type { AgentRecord, ActorRecord, GitGovAgentRecord, Signature } from '../../types';
+import type { AgentRecord, ActorRecord, GitGovAgentRecord, Signature } from '../../record_types';
 import type { IEventStream, BaseEvent } from '../../event_bus';
 import type { IIdentityAdapter } from '../identity_adapter';
 import type { KeyProvider } from '../../key_provider/key_provider';

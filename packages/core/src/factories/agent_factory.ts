@@ -1,4 +1,4 @@
-import type { AgentRecord, GitGovAgentRecord } from "../types";
+import type { AgentRecord, GitGovAgentRecord } from "../record_types";
 import { validateAgentRecordDetailed } from "../validation/agent_validator";
 import { validateEmbeddedMetadataDetailed } from "../validation/embedded_metadata_validator";
 import { DetailedValidationError } from "../validation/common";

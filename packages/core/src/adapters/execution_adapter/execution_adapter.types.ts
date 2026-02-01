@@ -1,6 +1,6 @@
 import type { RecordStores } from '../../record_store';
 import type { IdentityAdapter } from '../identity_adapter';
-import type { ExecutionRecord } from '../../types';
+import type { ExecutionRecord } from '../../record_types';
 import type { IEventStream } from '../../event_bus';
 
 /**

@@ -1,6 +1,6 @@
 import { validateEmbeddedMetadataDetailed } from '../../validation/embedded_metadata_validator';
-import type { AgentRecord, TaskRecord, ExecutionRecord, ChangelogRecord, FeedbackRecord, CycleRecord, GitGovActorRecord } from '../../types';
-import type { Signature } from '../../types/embedded.types';
+import type { AgentRecord, TaskRecord, ExecutionRecord, ChangelogRecord, FeedbackRecord, CycleRecord, GitGovActorRecord } from '../../record_types';
+import type { Signature } from '../../record_types/embedded.types';
 
 describe('EmbeddedMetadata Schema Integration Tests (EARS 12-60)', () => {
   // Helper to create valid signature

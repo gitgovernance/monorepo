@@ -4,7 +4,7 @@
  */
 
 // Import GitGovError from models (common types)
-export { GitGovError } from '../types/common.types';
+export { GitGovError } from '../record_types/common.types';
 
 /**
  * Custom Error type for failures when a payload's checksum does not match

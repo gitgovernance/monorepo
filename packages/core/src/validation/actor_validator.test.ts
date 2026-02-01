@@ -1,8 +1,8 @@
 import { validateFullActorRecord, isActorRecord, validateActorRecordDetailed } from './actor_validator';
 import { DetailedValidationError } from './common';
 import { validateFullEmbeddedMetadataRecord } from './embedded_metadata_validator';
-import type { ActorRecord } from '../types';
-import type { GitGovRecord } from '../types';
+import type { ActorRecord } from '../record_types';
+import type { GitGovRecord } from '../record_types';
 
 // Mock the embedded metadata validator
 jest.mock('./embedded_metadata_validator');

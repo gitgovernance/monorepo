@@ -12,7 +12,7 @@ import type {
   GitGovExecutionRecord,
   GitGovActorRecord,
   Signature
-} from '../../types';
+} from '../../record_types';
 
 // Helper function to create mock task records
 function createMockTaskRecord(overrides: Partial<TaskRecord> = {}): GitGovTaskRecord {

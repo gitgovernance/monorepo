@@ -28,7 +28,7 @@ import type {
   FileSystem,
 } from './fs_lint.types';
 import type { IIndexerAdapter } from '../../adapters/indexer_adapter';
-import type { TaskRecord, GitGovTaskRecord, GitGovRecord } from '../../types';
+import type { TaskRecord, GitGovTaskRecord, GitGovRecord } from '../../record_types';
 import { DetailedValidationError } from '../../validation/common';
 import {
   createTaskRecord,

@@ -2,10 +2,10 @@ import { ChangelogAdapter } from './index';
 import { createChangelogRecord } from '../../factories/changelog_factory';
 import type { RecordStore } from '../../record_store';
 import { IdentityAdapter } from '../identity_adapter';
-import type { ChangelogRecord } from '../../types';
-import type { GitGovChangelogRecord, GitGovTaskRecord, GitGovCycleRecord } from '../../types';
+import type { ChangelogRecord } from '../../record_types';
+import type { GitGovChangelogRecord, GitGovTaskRecord, GitGovCycleRecord } from '../../record_types';
 import type { IEventStream } from '../../event_bus';
-import type { GitGovRecord, Signature } from '../../types';
+import type { GitGovRecord, Signature } from '../../record_types';
 
 // Mock dependencies
 jest.mock('../../factories/changelog_factory');

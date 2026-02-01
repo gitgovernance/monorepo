@@ -1,4 +1,4 @@
-import type { FeedbackRecord, GitGovFeedbackRecord } from '../types';
+import type { FeedbackRecord, GitGovFeedbackRecord } from '../record_types';
 import { generateFeedbackId } from '../utils/id_generator';
 import { validateFeedbackRecordDetailed } from '../validation/feedback_validator';
 import { validateEmbeddedMetadataDetailed } from '../validation/embedded_metadata_validator';

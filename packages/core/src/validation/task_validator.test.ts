@@ -3,8 +3,8 @@ import {
   validateTaskRecordDetailed,
   validateFullTaskRecord
 } from './task_validator';
-import type { TaskRecord } from '../types';
-import type { GitGovRecord } from '../types';
+import type { TaskRecord } from '../record_types';
+import type { GitGovRecord } from '../record_types';
 import { DetailedValidationError } from './common';
 
 describe('TaskValidator Module', () => {

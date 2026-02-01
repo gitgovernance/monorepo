@@ -3,7 +3,7 @@ import {
   validateWorkflowConfigDetailed,
   validateWorkflowConfigBusinessRules
 } from './workflow_validator';
-import type { WorkflowRecord } from '../types';
+import type { WorkflowRecord } from '../record_types';
 
 describe('WorkflowValidator Module', () => {
   const validWorkflowConfig: WorkflowRecord = {

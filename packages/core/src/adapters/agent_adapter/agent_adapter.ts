@@ -2,7 +2,7 @@ import type {
   AgentRecord,
   AgentPayload,
   GitGovAgentRecord,
-} from '../../types';
+} from '../../record_types';
 import type { RecordStores } from '../../record_store';
 import type { IEventStream, AgentRegisteredEvent } from '../../event_bus';
 import type { KeyProvider } from '../../key_provider/key_provider';

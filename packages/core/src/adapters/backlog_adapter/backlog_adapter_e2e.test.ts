@@ -24,7 +24,7 @@ import type {
   GitGovCycleRecord,
   GitGovFeedbackRecord,
   GitGovChangelogRecord,
-} from '../../types';
+} from '../../record_types';
 
 describe('BacklogAdapter - End-to-End Tests', () => {
   describe('[EARS-N6] "Startup Week Simulation" - The Ultimate Integration Test', () => {

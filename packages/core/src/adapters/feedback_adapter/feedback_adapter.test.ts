@@ -2,9 +2,9 @@ import { FeedbackAdapter } from './index';
 import { createFeedbackRecord } from '../../factories/feedback_factory';
 import type { RecordStore } from '../../record_store';
 import { IdentityAdapter } from '../identity_adapter';
-import type { FeedbackRecord, GitGovFeedbackRecord } from '../../types';
+import type { FeedbackRecord, GitGovFeedbackRecord } from '../../record_types';
 import type { IEventStream } from '../../event_bus';
-import type { GitGovRecord, Signature } from '../../types';
+import type { GitGovRecord, Signature } from '../../record_types';
 import { DetailedValidationError } from '../../validation/common';
 
 // Mock dependencies

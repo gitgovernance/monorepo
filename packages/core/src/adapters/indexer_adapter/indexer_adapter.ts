@@ -9,7 +9,7 @@ import type {
   GitGovExecutionRecord,
   GitGovChangelogRecord,
   GitGovActorRecord
-} from '../../types';
+} from '../../record_types';
 import type { ActivityEvent } from '../../event_bus';
 import type {
   AllRecords,

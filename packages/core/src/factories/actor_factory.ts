@@ -1,4 +1,4 @@
-import type { ActorRecord, GitGovActorRecord } from "../types";
+import type { ActorRecord, GitGovActorRecord } from "../record_types";
 import { validateActorRecordDetailed } from "../validation/actor_validator";
 import { validateEmbeddedMetadataDetailed } from "../validation/embedded_metadata_validator";
 import { generateActorId } from "../utils/id_generator";

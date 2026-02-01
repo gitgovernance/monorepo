@@ -4,7 +4,7 @@
  */
 
 // Import GitGovError from models (common types) - no circular dependencies
-import { GitGovError } from '../types/common.types';
+import { GitGovError } from '../record_types/common.types';
 
 // Re-export for backward compatibility
 export { GitGovError };

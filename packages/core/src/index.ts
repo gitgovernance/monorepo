@@ -14,7 +14,7 @@ export * as Store from "./record_store";
 export * as SyncState from "./sync_state";
 // Type system exports
 export * as Validation from "./validation";
-export * as Records from "./types";
+export * as Records from "./record_types";
 export * as EventBus from "./event_bus";
 
 // Direct type exports for verbatimModuleSyntax compatibility
@@ -27,7 +27,7 @@ export type {
   ExecutionRecord,
   ChangelogRecord,
   WorkflowRecord,
-} from "./types";
+} from "./record_types";
 
 // Adapter type exports (for CLI usage without namespace confusion)
 export type {
@@ -84,7 +84,7 @@ export type {
   Signature,
   EmbeddedMetadataRecord,
   CustomRecord,
-} from "./types";
+} from "./record_types";
 export * as DiagramGenerator from "./diagram_generator";
 
 // Audit modules

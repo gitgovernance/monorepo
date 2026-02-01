@@ -1,9 +1,9 @@
-import type { WorkflowRecord } from '../../types';
-import type { TaskRecord } from '../../types';
-import type { ActorRecord } from '../../types';
-import type { FeedbackRecord } from '../../types';
-import type { CycleRecord } from '../../types';
-import type { Signature } from '../../types/embedded.types';
+import type { WorkflowRecord } from '../../record_types';
+import type { TaskRecord } from '../../record_types';
+import type { ActorRecord } from '../../record_types';
+import type { FeedbackRecord } from '../../record_types';
+import type { CycleRecord } from '../../record_types';
+import type { Signature } from '../../record_types/embedded.types';
 import { Schemas } from '../../record_schemas';
 import { SchemaValidationCache } from '../../record_schemas/schema_cache';
 import type { IFeedbackAdapter } from '../feedback_adapter';

@@ -1,5 +1,5 @@
 import { validateChangelogRecordDetailed } from '../../validation/changelog_validator';
-import type { ChangelogRecord } from '../../types';
+import type { ChangelogRecord } from '../../record_types';
 
 describe('ChangelogRecord Schema Integration Tests', () => {
   /**

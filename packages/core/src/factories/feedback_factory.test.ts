@@ -1,7 +1,7 @@
 import { createFeedbackRecord } from './feedback_factory';
 import { generateFeedbackId } from '../utils/id_generator';
 import { DetailedValidationError } from '../validation/common';
-import type { FeedbackRecord } from '../types';
+import type { FeedbackRecord } from '../record_types';
 
 // Mock the validator
 jest.mock('../validation/feedback_validator', () => ({
