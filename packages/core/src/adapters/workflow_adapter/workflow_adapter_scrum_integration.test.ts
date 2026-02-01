@@ -1,4 +1,4 @@
-import { WorkflowMethodologyAdapter } from './index';
+import { WorkflowAdapter } from './index';
 import type { TaskRecord } from '../../types';
 import type { ActorRecord } from '../../types';
 import type { ValidationContext } from './index';
@@ -6,7 +6,7 @@ import type { CycleRecord } from '../../types';
 import type { FeedbackRecord } from '../../types';
 import type { IFeedbackAdapter } from '../feedback_adapter';
 
-describe('WorkflowMethodologyAdapter - SCRUM Methodology Integration Tests', () => {
+describe('WorkflowAdapter - SCRUM Methodology Integration Tests', () => {
   // Mock IFeedbackAdapter
   const mockFeedbackAdapter: IFeedbackAdapter = {
     create: jest.fn(),
@@ -37,11 +37,11 @@ describe('WorkflowMethodologyAdapter - SCRUM Methodology Integration Tests', () 
   });
 
   describe('SCRUM METHODOLOGY - Ciclo de Vida Completo', () => {
-    let scrumAdapter: WorkflowMethodologyAdapter;
+    let scrumAdapter: WorkflowAdapter;
 
     beforeEach(() => {
       // Use scrum methodology for integration tests
-      scrumAdapter = WorkflowMethodologyAdapter.createScrum(mockFeedbackAdapter);
+      scrumAdapter = WorkflowAdapter.createScrum(mockFeedbackAdapter);
     });
 
     describe('Scrum Lifecycle (EARS-A1 to A5)', () => {

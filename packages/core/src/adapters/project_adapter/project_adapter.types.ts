@@ -58,7 +58,7 @@ export type ProjectInitOptions = {
   actorName?: string;
   /** Email for bootstrap actor */
   actorEmail?: string;
-  /** Workflow methodology (future use) */
+  /** Workflow (future use) */
   methodology?: 'default' | 'scrum' | 'kanban';
   /** Skip environment validation (for testing) */
   skipValidation?: boolean;

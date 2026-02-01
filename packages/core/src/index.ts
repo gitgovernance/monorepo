@@ -26,7 +26,7 @@ export type {
   FeedbackRecord,
   ExecutionRecord,
   ChangelogRecord,
-  WorkflowMethodologyRecord,
+  WorkflowRecord,
 } from "./types";
 
 // Adapter type exports (for CLI usage without namespace confusion)
@@ -103,4 +103,4 @@ export * as IdentityAdapter from "./adapters/identity_adapter";
 export * as IndexerAdapter from "./adapters/indexer_adapter";
 export * as MetricsAdapter from "./adapters/metrics_adapter";
 export * as ProjectAdapter from "./adapters/project_adapter";
-export * as WorkflowMethodologyAdapter from "./adapters/workflow_methodology_adapter";
+export * as WorkflowAdapter from "./adapters/workflow_adapter";

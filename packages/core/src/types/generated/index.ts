@@ -12,4 +12,4 @@ export * from "./cycle_record";
 export * from "./execution_record";
 export * from "./feedback_record";
 export * from "./task_record";
-export * from "./workflow_methodology_record";
+export * from "./workflow_record";

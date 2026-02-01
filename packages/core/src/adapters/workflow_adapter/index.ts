@@ -1,4 +1,4 @@
-import type { WorkflowMethodologyRecord } from '../../types';
+import type { WorkflowRecord } from '../../types';
 import type { TaskRecord } from '../../types';
 import type { ActorRecord } from '../../types';
 import type { FeedbackRecord } from '../../types';
@@ -25,10 +25,10 @@ export type ValidationContext = {
 
 type TransitionRule = {
   to: TaskStatus;
-  conditions: NonNullable<NonNullable<WorkflowMethodologyRecord['state_transitions']>[string]>['requires'] | undefined;
+  conditions: NonNullable<NonNullable<WorkflowRecord['state_transitions']>[string]>['requires'] | undefined;
 }
 
-export interface IWorkflowMethodology {
+export interface IWorkflow {
   getTransitionRule(from: TaskStatus, to: TaskStatus, context: ValidationContext): Promise<TransitionRule | null>;
   validateSignature(signature: Signature, context: ValidationContext): Promise<boolean>;
   validateCustomRules(rules: string[], context: ValidationContext): Promise<boolean>;
@@ -36,47 +36,47 @@ export interface IWorkflowMethodology {
 }
 
 /**
- * WorkflowMethodologyAdapter Dependencies - Facade + Dependency Injection Pattern
+ * WorkflowAdapter Dependencies - Facade + Dependency Injection Pattern
  */
-export interface WorkflowMethodologyAdapterDependencies {
+export interface WorkflowAdapterDependencies {
   // Configuration Layer
-  config: WorkflowMethodologyRecord; // ✅ Direct config object (validated)
+  config: WorkflowRecord; // ✅ Direct config object (validated)
 
   // Required: Cross-adapter dependencies (critical for custom rules)
   feedbackAdapter: IFeedbackAdapter; // Para assignment_required validation
 }
 
 /**
- * WorkflowMethodologyAdapter - The Configurable Rules Engine
+ * WorkflowAdapter - The Configurable Rules Engine
  * 
  * Implements Facade + Dependency Injection Pattern for testeable and configurable orchestration.
  * Acts as Mediator between business rules and workflow validation.
  */
-export class WorkflowMethodologyAdapter implements IWorkflowMethodology {
-  private config: WorkflowMethodologyRecord;
+export class WorkflowAdapter implements IWorkflow {
+  private config: WorkflowRecord;
 
-  constructor(dependencies: WorkflowMethodologyAdapterDependencies) {
+  constructor(dependencies: WorkflowAdapterDependencies) {
     this.validateConfig(dependencies.config, dependencies.config.name || 'custom');
     this.config = dependencies.config;
   }
 
   // Factory methods para configuraciones predefinidas
-  static createDefault(feedbackAdapter: IFeedbackAdapter): WorkflowMethodologyAdapter {
-    return new WorkflowMethodologyAdapter({
-      config: defaultConfig as unknown as WorkflowMethodologyRecord,
+  static createDefault(feedbackAdapter: IFeedbackAdapter): WorkflowAdapter {
+    return new WorkflowAdapter({
+      config: defaultConfig as unknown as WorkflowRecord,
       feedbackAdapter
     });
   }
 
-  static createScrum(feedbackAdapter: IFeedbackAdapter): WorkflowMethodologyAdapter {
-    return new WorkflowMethodologyAdapter({
-      config: scrumConfig as unknown as WorkflowMethodologyRecord,
+  static createScrum(feedbackAdapter: IFeedbackAdapter): WorkflowAdapter {
+    return new WorkflowAdapter({
+      config: scrumConfig as unknown as WorkflowRecord,
       feedbackAdapter
     });
   }
 
-  private validateConfig(config: WorkflowMethodologyRecord, configName: string): void {
-    const validator = SchemaValidationCache.getValidatorFromSchema(Schemas.WorkflowMethodologyRecord);
+  private validateConfig(config: WorkflowRecord, configName: string): void {
+    const validator = SchemaValidationCache.getValidatorFromSchema(Schemas.WorkflowRecord);
     const isValid = validator(config);
 
     if (!isValid) {
@@ -88,7 +88,7 @@ export class WorkflowMethodologyAdapter implements IWorkflowMethodology {
   /**
    * Gets the current configuration (already loaded and validated)
    */
-  private getConfig(): WorkflowMethodologyRecord {
+  private getConfig(): WorkflowRecord {
     return this.config;
   }
 

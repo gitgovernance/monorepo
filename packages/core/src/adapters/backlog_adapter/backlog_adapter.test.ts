@@ -15,13 +15,13 @@ import type { GitGovRecord } from '../../types';
 import type { ActorRecord } from '../../types';
 import type { Signature } from '../../types/embedded.types';
 import type { SystemStatus, TaskHealthReport } from '../metrics_adapter';
-import type { ValidationContext } from '../workflow_methodology_adapter';
-import type { WorkflowMethodologyRecord } from '../../types';
+import type { ValidationContext } from '../workflow_adapter';
+import type { WorkflowRecord } from '../../types';
 
 // Define the correct TransitionRule type based on the real implementation
 type TransitionRule = {
   to: TaskRecord['status'];
-  conditions: NonNullable<NonNullable<WorkflowMethodologyRecord['state_transitions']>[string]>['requires'] | undefined;
+  conditions: NonNullable<NonNullable<WorkflowRecord['state_transitions']>[string]>['requires'] | undefined;
 };
 
 // Properly typed mock dependencies - NO ANY ALLOWED
@@ -74,7 +74,7 @@ type MockBacklogAdapterDependencies = {
     getSystemStatus: jest.MockedFunction<() => Promise<SystemStatus>>;
     getTaskHealth: jest.MockedFunction<(taskId: string) => Promise<TaskHealthReport>>;
   };
-  workflowMethodologyAdapter: {
+  workflowAdapter: {
     getTransitionRule: jest.MockedFunction<(from: TaskRecord['status'], to: TaskRecord['status'], context: ValidationContext) => Promise<TransitionRule | null>>;
     validateSignature: jest.MockedFunction<(signature: Signature, context: ValidationContext) => Promise<boolean>>;
     getAvailableTransitions: jest.MockedFunction<(status: TaskRecord['status']) => Promise<TransitionRule[]>>;
@@ -263,7 +263,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
           recommendations: []
         })
       },
-      workflowMethodologyAdapter: {
+      workflowAdapter: {
         getTransitionRule: jest.fn(),
         validateSignature: jest.fn(),
         getAvailableTransitions: jest.fn()
@@ -876,7 +876,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         roles: ['executor'],
         status: 'active'
       });
-      mockDependencies.workflowMethodologyAdapter.getTransitionRule.mockResolvedValue({
+      mockDependencies.workflowAdapter.getTransitionRule.mockResolvedValue({
         to: 'active',
         conditions: {}
       });
@@ -887,7 +887,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
 
       const result = await backlogAdapter.activateTask(taskId, 'human:developer');
 
-      expect(mockDependencies.workflowMethodologyAdapter.getTransitionRule).toHaveBeenCalledWith(
+      expect(mockDependencies.workflowAdapter.getTransitionRule).toHaveBeenCalledWith(
         'ready',
         'active',
         expect.objectContaining({
@@ -960,10 +960,10 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         roles: ['executor'],
         status: 'active'
       });
-      mockDependencies.workflowMethodologyAdapter.getTransitionRule.mockResolvedValue(null);
+      mockDependencies.workflowAdapter.getTransitionRule.mockResolvedValue(null);
 
       await expect(backlogAdapter.activateTask('1757687335-task-ready', 'human:developer'))
-        .rejects.toThrow('ProtocolViolationError: Workflow methodology rejected ready→active transition');
+        .rejects.toThrow('ProtocolViolationError: Workflow rejected ready→active transition');
     });
 
     it('[EARS-E5] should update activeTaskId in session when task is activated', async () => {
@@ -988,7 +988,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         roles: ['executor'],
         status: 'active'
       });
-      mockDependencies.workflowMethodologyAdapter.getTransitionRule.mockResolvedValue({
+      mockDependencies.workflowAdapter.getTransitionRule.mockResolvedValue({
         to: 'active',
         conditions: {}
       });
@@ -1029,7 +1029,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         roles: ['pauser'],
         status: 'active'
       });
-      mockDependencies.workflowMethodologyAdapter.getTransitionRule.mockResolvedValue({
+      mockDependencies.workflowAdapter.getTransitionRule.mockResolvedValue({
         to: 'paused',
         conditions: {}
       });
@@ -1040,7 +1040,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
 
       const result = await backlogAdapter.pauseTask(taskId, 'human:tech-lead', 'Waiting for external API approval');
 
-      expect(mockDependencies.workflowMethodologyAdapter.getTransitionRule).toHaveBeenCalledWith(
+      expect(mockDependencies.workflowAdapter.getTransitionRule).toHaveBeenCalledWith(
         'active',
         'paused',
         expect.objectContaining({
@@ -1117,10 +1117,10 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         roles: ['pauser'],
         status: 'active'
       });
-      mockDependencies.workflowMethodologyAdapter.getTransitionRule.mockResolvedValue(null);
+      mockDependencies.workflowAdapter.getTransitionRule.mockResolvedValue(null);
 
       await expect(backlogAdapter.pauseTask('1757687335-task-active', 'human:tech-lead'))
-        .rejects.toThrow('ProtocolViolationError: Workflow methodology rejected active→paused transition');
+        .rejects.toThrow('ProtocolViolationError: Workflow rejected active→paused transition');
     });
 
     it('[EARS-I4b] should add reason with PAUSED prefix in notes', async () => {
@@ -1149,7 +1149,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       // Mock dependencies
       mockDependencies.stores.tasks.get.mockResolvedValue(activeTask);
       mockDependencies.identity.getActor.mockResolvedValue(actor);
-      mockDependencies.workflowMethodologyAdapter.getTransitionRule.mockResolvedValue({
+      mockDependencies.workflowAdapter.getTransitionRule.mockResolvedValue({
         to: 'paused',
         conditions: undefined
       });
@@ -1189,7 +1189,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         roles: ['pauser'],
         status: 'active'
       });
-      mockDependencies.workflowMethodologyAdapter.getTransitionRule.mockResolvedValue({
+      mockDependencies.workflowAdapter.getTransitionRule.mockResolvedValue({
         to: 'paused',
         conditions: {}
       });
@@ -1238,7 +1238,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         lastActivity: Date.now(),
         recommendations: []
       });
-      mockDependencies.workflowMethodologyAdapter.getTransitionRule.mockResolvedValue({
+      mockDependencies.workflowAdapter.getTransitionRule.mockResolvedValue({
         to: 'active',
         conditions: {}
       });
@@ -1250,7 +1250,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       const result = await backlogAdapter.resumeTask(taskId, 'human:ops-lead');
 
       expect(mockDependencies.metricsAdapter.getTaskHealth).toHaveBeenCalledWith(taskId);
-      expect(mockDependencies.workflowMethodologyAdapter.getTransitionRule).toHaveBeenCalledWith(
+      expect(mockDependencies.workflowAdapter.getTransitionRule).toHaveBeenCalledWith(
         'paused',
         'active',
         expect.objectContaining({
@@ -1358,7 +1358,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         status: 'active'
       });
       mockDependencies.metricsAdapter.getTaskHealth.mockClear();
-      mockDependencies.workflowMethodologyAdapter.getTransitionRule.mockResolvedValue({
+      mockDependencies.workflowAdapter.getTransitionRule.mockResolvedValue({
         to: 'active',
         conditions: {}
       });
@@ -1421,7 +1421,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         lastActivity: Date.now(),
         recommendations: []
       });
-      mockDependencies.workflowMethodologyAdapter.getTransitionRule.mockResolvedValue({
+      mockDependencies.workflowAdapter.getTransitionRule.mockResolvedValue({
         to: 'active',
         conditions: {}
       });
@@ -1462,7 +1462,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         roles: ['approver:quality'],
         status: 'active'
       });
-      mockDependencies.workflowMethodologyAdapter.getTransitionRule.mockResolvedValue({
+      mockDependencies.workflowAdapter.getTransitionRule.mockResolvedValue({
         to: 'done',
         conditions: { signatures: { __default__: { role: 'approver', capability_roles: ['approver:quality'], min_approvals: 1 } } }
       });
@@ -1527,10 +1527,10 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         roles: ['approver:quality'],
         status: 'active'
       });
-      mockDependencies.workflowMethodologyAdapter.getTransitionRule.mockResolvedValue(null);
+      mockDependencies.workflowAdapter.getTransitionRule.mockResolvedValue(null);
 
       await expect(backlogAdapter.completeTask('1757687335-task-active', 'human:qa-lead'))
-        .rejects.toThrow('ProtocolViolationError: Workflow methodology rejected active→done transition');
+        .rejects.toThrow('ProtocolViolationError: Workflow rejected active→done transition');
     });
 
     it('[EARS-F5] should clear activeTaskId in session when task is completed', async () => {
@@ -1555,7 +1555,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         roles: ['approver:quality'],
         status: 'active'
       });
-      mockDependencies.workflowMethodologyAdapter.getTransitionRule.mockResolvedValue({
+      mockDependencies.workflowAdapter.getTransitionRule.mockResolvedValue({
         to: 'done',
         conditions: { signatures: { __default__: { role: 'approver', capability_roles: ['approver:quality'], min_approvals: 1 } } }
       });
@@ -1596,7 +1596,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         roles: ['approver:product'],
         status: 'active'
       });
-      mockDependencies.workflowMethodologyAdapter.getTransitionRule.mockResolvedValue({
+      mockDependencies.workflowAdapter.getTransitionRule.mockResolvedValue({
         to: 'discarded',
         conditions: { command: 'gitgov task cancel' }
       });
@@ -1627,7 +1627,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         roles: ['approver:quality'],
         status: 'active'
       });
-      mockDependencies.workflowMethodologyAdapter.getTransitionRule.mockResolvedValue({
+      mockDependencies.workflowAdapter.getTransitionRule.mockResolvedValue({
         to: 'discarded',
         conditions: { command: 'gitgov task cancel' }
       });
@@ -1681,7 +1681,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         roles: ['approver:product'],
         status: 'active'
       });
-      mockDependencies.workflowMethodologyAdapter.getTransitionRule.mockResolvedValue({
+      mockDependencies.workflowAdapter.getTransitionRule.mockResolvedValue({
         to: 'discarded',
         conditions: { command: 'gitgov task reject' }
       });
@@ -1717,7 +1717,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         roles: ['approver:quality'],
         status: 'active'
       } as ActorRecord);
-      mockDependencies.workflowMethodologyAdapter.getTransitionRule.mockResolvedValue({
+      mockDependencies.workflowAdapter.getTransitionRule.mockResolvedValue({
         to: 'discarded',
         conditions: { command: 'gitgov task reject' }
       });
@@ -1752,7 +1752,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         roles: ['approver:product'],
         status: 'active'
       });
-      mockDependencies.workflowMethodologyAdapter.getTransitionRule.mockResolvedValue({
+      mockDependencies.workflowAdapter.getTransitionRule.mockResolvedValue({
         to: 'discarded',
         conditions: { command: 'gitgov task cancel' }
       });
@@ -1800,7 +1800,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         roles: ['approver:product'],
         status: 'active'
       });
-      mockDependencies.workflowMethodologyAdapter.getTransitionRule.mockResolvedValue({
+      mockDependencies.workflowAdapter.getTransitionRule.mockResolvedValue({
         to: 'discarded',
         conditions: { command: 'gitgov task cancel' }
       });
@@ -2139,7 +2139,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         roles: ['executor'],
         status: 'active'
       });
-      mockDependencies.workflowMethodologyAdapter.getTransitionRule.mockResolvedValue({
+      mockDependencies.workflowAdapter.getTransitionRule.mockResolvedValue({
         to: 'active',
         conditions: {}
       });
@@ -2300,7 +2300,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         roles: ['author'],
         status: 'active'
       });
-      mockDependencies.workflowMethodologyAdapter.getTransitionRule.mockResolvedValue({
+      mockDependencies.workflowAdapter.getTransitionRule.mockResolvedValue({
         to: 'review',
         conditions: {}
       });
@@ -2665,7 +2665,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       // Mock dependencies
       mockDependencies.stores.tasks.get.mockResolvedValue(activeTask);
       mockDependencies.identity.getActor.mockResolvedValue(actor);
-      mockDependencies.workflowMethodologyAdapter.getTransitionRule.mockResolvedValue({
+      mockDependencies.workflowAdapter.getTransitionRule.mockResolvedValue({
         to: 'paused',
         conditions: undefined
       });
@@ -2678,7 +2678,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       // Assert
       expect(result.status).toBe('paused');
       expect(result.notes).toContain('[PAUSED] Waiting for external API approval');
-      expect(mockDependencies.workflowMethodologyAdapter.getTransitionRule).toHaveBeenCalledWith(
+      expect(mockDependencies.workflowAdapter.getTransitionRule).toHaveBeenCalledWith(
         'active',
         'paused',
         expect.objectContaining({

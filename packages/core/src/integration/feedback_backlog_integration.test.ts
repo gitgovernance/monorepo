@@ -64,7 +64,7 @@ import { IdentityAdapter } from '../adapters/identity_adapter';
 import { MetricsAdapter } from '../adapters/metrics_adapter';
 import { ConfigManager } from '../config_manager';
 import type { SessionManager } from '../session_manager';
-import { WorkflowMethodologyAdapter } from '../adapters/workflow_methodology_adapter';
+import { WorkflowAdapter } from '../adapters/workflow_adapter';
 import { MemoryRecordStore } from '../record_store/memory';
 import { EventBus } from '../event_bus/event_bus';
 import type {
@@ -150,8 +150,8 @@ describe('FeedbackAdapter <-> BacklogAdapter Integration (Real Event Communicati
       }
     });
 
-    // Create REAL WorkflowMethodologyAdapter
-    const workflowAdapter = WorkflowMethodologyAdapter.createDefault(feedbackAdapter);
+    // Create REAL WorkflowAdapter
+    const workflowAdapter = WorkflowAdapter.createDefault(feedbackAdapter);
 
     // Create REAL BacklogAdapter (will subscribe to events in constructor)
     backlogAdapter = new BacklogAdapter({
@@ -169,7 +169,7 @@ describe('FeedbackAdapter <-> BacklogAdapter Integration (Real Event Communicati
         create: jest.fn()
       } as any, // Mock ChangelogAdapter for now
       metricsAdapter, // REAL MetricsAdapter
-      workflowMethodologyAdapter: workflowAdapter,
+      workflowAdapter: workflowAdapter,
       identity: identityAdapter,
       eventBus, // SAME EventBus instance
       configManager: {

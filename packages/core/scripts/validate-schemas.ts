@@ -80,9 +80,9 @@ const EXPECTED_SCHEMAS = [
     description: 'Cycle records for strategic planning'
   },
   {
-    name: 'WorkflowMethodology',
-    file: 'workflow_methodology_record_schema.json',
-    expectedTitle: 'WorkflowMethodologyRecord',
+    name: 'Workflow',
+    file: 'workflow_record_schema.json',
+    expectedTitle: 'WorkflowRecord',
     description: 'Workflow methodology configuration'
   }
 ];

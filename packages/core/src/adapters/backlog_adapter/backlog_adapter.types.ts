@@ -8,7 +8,7 @@ import type {
   CycleRecord,
   ExecutionRecord,
 } from '../../types';
-import type { IWorkflowMethodology } from '../workflow_methodology_adapter';
+import type { IWorkflow } from '../workflow_adapter';
 import type {
   IEventStream,
   FeedbackCreatedEvent,
@@ -35,8 +35,8 @@ export type BacklogAdapterDependencies = {
   metricsAdapter: MetricsAdapter;
 
   // Business Rules Layer (Methodologies)
-  workflowMethodologyAdapter: IWorkflowMethodology;
-  planningMethodologyAdapter?: IWorkflowMethodology; // Future
+  workflowAdapter: IWorkflow;
+  planningMethodologyAdapter?: IWorkflow; // Future
 
   // Infrastructure Layer
   identity: IdentityAdapter;

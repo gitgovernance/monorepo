@@ -16,7 +16,7 @@ import { ChangelogAdapter } from '../changelog_adapter';
 import { MetricsAdapter } from '../metrics_adapter';
 import { ConfigManager } from '../../config_manager';
 import type { SessionManager } from '../../session_manager';
-import { WorkflowMethodologyAdapter } from '../workflow_methodology_adapter';
+import { WorkflowAdapter } from '../workflow_adapter';
 import { IdentityAdapter } from '../identity_adapter';
 import type { SystemDailyTickEvent, IEventStream } from '../../event_bus';
 import type {
@@ -101,12 +101,12 @@ describe('BacklogAdapter - End-to-End Tests', () => {
           getProductivityMetrics: jest.fn(),
           getCollaborationMetrics: jest.fn()
         } as unknown as MetricsAdapter,
-        workflowMethodologyAdapter: {
+        workflowAdapter: {
           getTransitionRule: jest.fn(),
           validateSignature: jest.fn(),
           validateCustomRules: jest.fn(),
           reloadConfig: jest.fn()
-        } as unknown as WorkflowMethodologyAdapter,
+        } as unknown as WorkflowAdapter,
         identity: {
           getActor: jest.fn(),
           signRecord: jest.fn().mockImplementation(async (record) => record),

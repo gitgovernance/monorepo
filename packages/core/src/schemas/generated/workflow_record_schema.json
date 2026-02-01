@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "workflow_methodology_schema.json",
-  "title": "WorkflowMethodologyRecord",
+  "$id": "workflow_schema.json",
+  "title": "WorkflowRecord",
   "description": "Complete schema for workflow methodology configuration files that define state transitions, signatures, and custom rules",
   "type": "object",
   "required": [

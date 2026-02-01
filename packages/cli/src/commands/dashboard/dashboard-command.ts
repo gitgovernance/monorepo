@@ -171,7 +171,7 @@ export class DashboardCommand {
    * [EARS-B1] [EARS-B2] [EARS-B3] [EARS-B4] [EARS-B5] Determines view configuration based on methodology and options
    */
   private async determineViewConfig(options: DashboardCommandOptions): Promise<ViewConfig> {
-    // Default view configurations (usando workflow_methodology_default.json)
+    // Default view configurations (usando workflow_default.json)
     const defaultViews: Record<string, ViewConfig> = {
       'row-based': {
         name: 'GitGovernancet',

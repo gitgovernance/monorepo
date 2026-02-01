@@ -39,7 +39,7 @@ describe('Schema Consistency Tests', () => {
       'changelog_record_schema.json',
       'feedback_record_schema.json',
       'cycle_record_schema.json',
-      'workflow_methodology_record_schema.json',
+      'workflow_record_schema.json',
     ];
 
     for (const schemaFile of expectedSchemas) {

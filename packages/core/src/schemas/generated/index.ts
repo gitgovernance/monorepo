@@ -13,7 +13,7 @@ import embeddedMetadataSchema from "./embedded_metadata_schema.json";
 import executionRecordSchema from "./execution_record_schema.json";
 import feedbackRecordSchema from "./feedback_record_schema.json";
 import taskRecordSchema from "./task_record_schema.json";
-import workflowMethodologyRecordSchema from "./workflow_methodology_record_schema.json";
+import workflowRecordSchema from "./workflow_record_schema.json";
 
 /**
  * All GitGovernance protocol schemas
@@ -27,7 +27,7 @@ export const Schemas = {
   ExecutionRecord: executionRecordSchema,
   FeedbackRecord: feedbackRecordSchema,
   TaskRecord: taskRecordSchema,
-  WorkflowMethodologyRecord: workflowMethodologyRecordSchema,
+  WorkflowRecord: workflowRecordSchema,
 } as const;
 
 /**
@@ -42,7 +42,7 @@ export type SchemaName =
   | "ExecutionRecord"
   | "FeedbackRecord"
   | "TaskRecord"
-  | "WorkflowMethodologyRecord";
+  | "WorkflowRecord";
 
 /**
  * Get a schema by name

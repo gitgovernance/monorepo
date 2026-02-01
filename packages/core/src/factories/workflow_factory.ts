@@ -1,20 +1,20 @@
-import type { WorkflowMethodologyRecord } from "../types";
+import type { WorkflowRecord } from "../types";
 import {
-  validateWorkflowMethodologyConfigDetailed,
-  validateWorkflowMethodologyConfigBusinessRules
-} from "../validation/workflow_methodology_validator";
+  validateWorkflowConfigDetailed,
+  validateWorkflowConfigBusinessRules
+} from "../validation/workflow_validator";
 import { DetailedValidationError } from "../validation/common";
 
 /**
- * Creates a new, fully-formed WorkflowMethodologyConfig with validation.
+ * Creates a new, fully-formed WorkflowConfig with validation.
  * Follows the same pattern as createTaskRecord, createActorRecord, etc.
  */
-export function createWorkflowMethodologyConfig(
-  payload: Partial<WorkflowMethodologyRecord>
-): WorkflowMethodologyRecord {
+export function createWorkflowConfig(
+  payload: Partial<WorkflowRecord>
+): WorkflowRecord {
 
   // Build config with defaults for optional fields
-  const config: WorkflowMethodologyRecord = {
+  const config: WorkflowRecord = {
     version: payload.version || '1.0.0',
     name: payload.name || 'Custom Methodology',
     description: payload.description,
@@ -35,18 +35,18 @@ export function createWorkflowMethodologyConfig(
     },
     custom_rules: payload.custom_rules,
     ...payload,
-  } as WorkflowMethodologyRecord;
+  } as WorkflowRecord;
 
   // Use validator to check schema compliance with detailed errors
-  const schemaValidation = validateWorkflowMethodologyConfigDetailed(config);
+  const schemaValidation = validateWorkflowConfigDetailed(config);
   if (!schemaValidation.isValid) {
-    throw new DetailedValidationError('WorkflowMethodologyConfig', schemaValidation.errors);
+    throw new DetailedValidationError('WorkflowConfig', schemaValidation.errors);
   }
 
   // Use business rules validator for additional validation
-  const businessRulesValidation = validateWorkflowMethodologyConfigBusinessRules(config);
+  const businessRulesValidation = validateWorkflowConfigBusinessRules(config);
   if (!businessRulesValidation.isValid) {
-    throw new DetailedValidationError('WorkflowMethodologyConfig (Business Rules)', businessRulesValidation.errors);
+    throw new DetailedValidationError('WorkflowConfig (Business Rules)', businessRulesValidation.errors);
   }
 
   return config;
@@ -55,8 +55,8 @@ export function createWorkflowMethodologyConfig(
 /**
  * Creates a default GitGovernance workflow methodology configuration
  */
-export async function createDefaultWorkflowMethodologyConfig(): Promise<WorkflowMethodologyRecord> {
-  return createWorkflowMethodologyConfig({
+export async function createDefaultWorkflowConfig(): Promise<WorkflowRecord> {
+  return createWorkflowConfig({
     version: '1.0.0',
     name: 'GitGovernance Default Methodology',
     description: 'Standard GitGovernance workflow with quality gates and agent collaboration',

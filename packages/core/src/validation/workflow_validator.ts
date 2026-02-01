@@ -1,30 +1,30 @@
 import type { ValidateFunction } from "ajv";
-import type { WorkflowMethodologyRecord } from "../types";
+import type { WorkflowRecord } from "../types";
 import { SchemaValidationCache } from "../schemas/schema_cache";
 import { Schemas } from '../schemas';
 
 // --- Schema Validation ---
-export function validateWorkflowMethodologyConfigSchema(
+export function validateWorkflowConfigSchema(
   data: unknown
 ): [boolean, ValidateFunction["errors"]] {
-  const validateSchema = SchemaValidationCache.getValidatorFromSchema(Schemas.WorkflowMethodologyRecord);
+  const validateSchema = SchemaValidationCache.getValidatorFromSchema(Schemas.WorkflowRecord);
   const isValid = validateSchema(data) as boolean;
   return [isValid, validateSchema.errors];
 }
 
 /**
- * Type guard to check if data is a valid WorkflowMethodologyConfig.
+ * Type guard to check if data is a valid WorkflowConfig.
  */
-export function isWorkflowMethodologyConfig(data: unknown): data is WorkflowMethodologyRecord {
-  const validateSchema = SchemaValidationCache.getValidatorFromSchema(Schemas.WorkflowMethodologyRecord);
+export function isWorkflowConfig(data: unknown): data is WorkflowRecord {
+  const validateSchema = SchemaValidationCache.getValidatorFromSchema(Schemas.WorkflowRecord);
   return validateSchema(data) as boolean;
 }
 
 /**
- * Validates a WorkflowMethodologyConfig and returns detailed validation result.
+ * Validates a WorkflowConfig and returns detailed validation result.
  * Use this in factories and adapters for comprehensive error reporting.
  */
-export function validateWorkflowMethodologyConfigDetailed(data: unknown): {
+export function validateWorkflowConfigDetailed(data: unknown): {
   isValid: boolean;
   errors: Array<{
     field: string;
@@ -32,7 +32,7 @@ export function validateWorkflowMethodologyConfigDetailed(data: unknown): {
     value: unknown;
   }>;
 } {
-  const [isValid, ajvErrors] = validateWorkflowMethodologyConfigSchema(data);
+  const [isValid, ajvErrors] = validateWorkflowConfigSchema(data);
 
   const formattedErrors = ajvErrors ? ajvErrors.map(error => ({
     field: error.instancePath || error.schemaPath || 'root',
@@ -50,8 +50,8 @@ export function validateWorkflowMethodologyConfigDetailed(data: unknown): {
  * Validates configuration structure and business rules
  * @param config The workflow methodology configuration to validate
  */
-export function validateWorkflowMethodologyConfigBusinessRules(
-  config: WorkflowMethodologyRecord
+export function validateWorkflowConfigBusinessRules(
+  config: WorkflowRecord
 ): {
   isValid: boolean;
   errors: Array<{
