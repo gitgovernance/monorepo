@@ -173,7 +173,7 @@ describe.each(backends)('BacklogAdapter Integration Tests with %s backend', (_na
   let backlogAdapter: BacklogAdapter;
   let stores: BacklogStores;
   let identityAdapter: IdentityAdapter;
-  let methodologyAdapter: WorkflowAdapter;
+  let workflowAdapter: WorkflowAdapter;
   let feedbackAdapter: IFeedbackAdapter;
 
   // Mock adapters accessible for spying in tests
@@ -218,7 +218,7 @@ describe.each(backends)('BacklogAdapter Integration Tests with %s backend', (_na
       sessionManager: mockIdentitySessionManager,
     });
 
-    // Create mock feedback adapter for methodology adapter
+    // Create mock feedback adapter for workflow adapter
     feedbackAdapter = {
       create: jest.fn(),
       resolve: jest.fn(),
@@ -228,7 +228,7 @@ describe.each(backends)('BacklogAdapter Integration Tests with %s backend', (_na
       getFeedbackThread: jest.fn(),
     };
 
-    methodologyAdapter = WorkflowAdapter.createDefault(feedbackAdapter);
+    workflowAdapter = WorkflowAdapter.createDefault(feedbackAdapter);
 
     // Config is loaded at construction, no need to reload
 
@@ -275,7 +275,7 @@ describe.each(backends)('BacklogAdapter Integration Tests with %s backend', (_na
 
     backlogAdapter = new BacklogAdapter({
       stores,
-      workflowAdapter: methodologyAdapter,
+      workflowAdapter: workflowAdapter,
       identity: identityAdapter,
       eventBus: eventBus,
       feedbackAdapter: mockFeedbackAdapter as unknown as FeedbackAdapter,
@@ -289,7 +289,7 @@ describe.each(backends)('BacklogAdapter Integration Tests with %s backend', (_na
 
   describe('Role-based Workflow Validation', () => {
     // The signature group is determined by the actor's roles, not the task's tags
-    it('[EARS-C4] should validate signature for design role with real methodology', async () => {
+    it('[EARS-C4] should validate signature for design role with real workflow', async () => {
       const task = createMockTaskRecord({
         id: 'task-design',
         status: 'review',
@@ -381,7 +381,7 @@ describe.each(backends)('BacklogAdapter Integration Tests with %s backend', (_na
 
   describe('End-to-End Task Lifecycle', () => {
     it('should support complete task lifecycle from creation to archival', async () => {
-      // This test verifies the complete flow works with real methodology
+      // This test verifies the complete flow works with real workflow
       const actor = {
         id: 'human:developer',
         type: 'human' as const,
