@@ -9,7 +9,7 @@ export * as FileLister from "./file_lister";
 export * as Lint from "./lint";
 export * as Logger from "./logger";
 export * as ProjectInitializer from "./project_initializer";
-export * as Schemas from "./schemas";
+export * as Schemas from "./record_schemas";
 export * as Store from "./record_store";
 export * as SyncState from "./sync_state";
 // Type system exports

@@ -24,7 +24,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Paths
-const SCHEMAS_DIR = path.join(__dirname, '../src/schemas/generated');
+const SCHEMAS_DIR = path.join(__dirname, '../src/record_schemas/generated');
 
 // JSON Schema meta-schema for validation
 const JSON_SCHEMA_META_SCHEMA = 'http://json-schema.org/draft-07/schema#';

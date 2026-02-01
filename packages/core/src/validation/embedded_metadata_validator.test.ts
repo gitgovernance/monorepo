@@ -9,13 +9,13 @@ import type { Signature } from '../types/embedded.types';
 import { DetailedValidationError, ChecksumMismatchError, SignatureVerificationError } from './common';
 
 // Mock dependencies
-jest.mock('../schemas/schema_cache');
+jest.mock('../record_schemas/schema_cache');
 jest.mock('../crypto/checksum');
 jest.mock('../crypto/signatures');
 jest.mock('../config_manager');
 
 describe('EmbeddedMetadata Validator', () => {
-  const mockSchemaValidationCache = require('../schemas/schema_cache').SchemaValidationCache;
+  const mockSchemaValidationCache = require('../record_schemas/schema_cache').SchemaValidationCache;
   const mockCalculatePayloadChecksum = require('../crypto/checksum').calculatePayloadChecksum;
   const mockVerifySignatures = require('../crypto/signatures').verifySignatures;
 
@@ -313,6 +313,6 @@ describe('EmbeddedMetadata Validator', () => {
     // - schemaChecksum format (pattern: ^[a-fA-F0-9]{64}$)
     // - signatures minItems: 1
     // - custom type requirements (oneOf logic)
-    // See: packages/core/src/schemas/generated/embedded_metadata_schema.json
+    // See: packages/core/src/record_schemas/generated/embedded_metadata_schema.json
   });
 });

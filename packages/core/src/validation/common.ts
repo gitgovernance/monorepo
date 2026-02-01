@@ -1,6 +1,6 @@
 /**
  * @deprecated Use specific error modules instead:
- * - Schema errors: import from '../schemas/errors'
+ * - Schema errors: import from '../record_schemas/errors'
  * - Validation errors: import from './errors'
  * 
  * This file re-exports all errors for backward compatibility.
@@ -11,7 +11,7 @@ export {
   GitGovError,
   SchemaValidationError,
   DetailedValidationError
-} from '../schemas/errors';
+} from '../record_schemas/errors';
 
 // Validation and common errors
 export {
