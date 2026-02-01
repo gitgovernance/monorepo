@@ -18,8 +18,8 @@ import type { GitGovConfig, IConfigManager } from '../../config_manager';
 import { DetailedValidationError } from '../../validation/common';
 import type { IdentityAdapter } from '../identity_adapter';
 import type { BacklogAdapter } from '../backlog_adapter';
-import { createTaskRecord } from '../../factories/task_factory';
-import { createCycleRecord } from '../../factories/cycle_factory';
+import { createTaskRecord } from '../../record_factories/task_factory';
+import { createCycleRecord } from '../../record_factories/cycle_factory';
 import type { IProjectInitializer, EnvironmentValidation } from '../../project_initializer';
 import type {
   ProjectAdapterDependencies,

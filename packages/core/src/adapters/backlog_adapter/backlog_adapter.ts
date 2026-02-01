@@ -1,5 +1,5 @@
-import { createTaskRecord } from '../../factories/task_factory';
-import { createCycleRecord } from '../../factories/cycle_factory';
+import { createTaskRecord } from '../../record_factories/task_factory';
+import { createCycleRecord } from '../../record_factories/cycle_factory';
 import type { RecordStores } from '../../record_store';
 import { IdentityAdapter } from '../identity_adapter';
 import { FeedbackAdapter } from '../feedback_adapter';

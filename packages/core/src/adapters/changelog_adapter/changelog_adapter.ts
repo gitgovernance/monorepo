@@ -1,4 +1,4 @@
-import { createChangelogRecord } from '../../factories/changelog_factory';
+import { createChangelogRecord } from '../../record_factories/changelog_factory';
 import type { RecordStores } from '../../record_store';
 import { IdentityAdapter } from '../identity_adapter';
 import { generateChangelogId } from '../../utils/id_generator';

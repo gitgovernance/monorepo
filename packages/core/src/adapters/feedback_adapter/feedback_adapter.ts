@@ -1,4 +1,4 @@
-import { createFeedbackRecord } from '../../factories/feedback_factory';
+import { createFeedbackRecord } from '../../record_factories/feedback_factory';
 import type { RecordStores } from '../../record_store/record_store.types';
 import { IdentityAdapter } from '../identity_adapter';
 import type { FeedbackRecord, GitGovFeedbackRecord } from '../../record_types';

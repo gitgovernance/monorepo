@@ -9,7 +9,7 @@ import type { KeyProvider } from '../../key_provider/key_provider';
 import type { IIdentityAdapter } from '../identity_adapter';
 import type { IAgentAdapter, AgentAdapterDependencies } from './agent_adapter.types';
 
-import { createAgentRecord } from '../../factories/agent_factory';
+import { createAgentRecord } from '../../record_factories/agent_factory';
 import { validateFullAgentRecord } from '../../validation/agent_validator';
 import { signPayload } from '../../crypto/signatures';
 import { calculatePayloadChecksum } from '../../crypto/checksum';

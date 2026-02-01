@@ -2,7 +2,7 @@ export * as Adapters from "./adapters";
 export * as Config from "./config_manager";
 export * as Session from "./session_manager";
 export * as Crypto from "./crypto";
-export * as Factories from "./factories";
+export * as Factories from "./record_factories";
 export * as Git from "./git";
 export * as KeyProvider from "./key_provider";
 export * as FileLister from "./file_lister";

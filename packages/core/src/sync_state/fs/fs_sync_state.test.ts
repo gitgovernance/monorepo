@@ -69,8 +69,8 @@ import {
 } from "../sync_state.errors";
 import { calculatePayloadChecksum } from "../../crypto/checksum";
 import type { ActorRecord, TaskRecord, Signature } from "../../record_types";
-import { createTaskRecord } from "../../factories/task_factory";
-import { createEmbeddedMetadataRecord } from "../../factories/embedded_metadata_factory";
+import { createTaskRecord } from "../../record_factories/task_factory";
+import { createEmbeddedMetadataRecord } from "../../record_factories/embedded_metadata_factory";
 import type { IIdentityAdapter } from "../../adapters/identity_adapter";
 import type { LintReport, LintResult, LintSummary } from "../../lint";
 import type { ILintModule } from "../../lint";

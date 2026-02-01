@@ -1,5 +1,5 @@
 import { ExecutionAdapter } from './index';
-import { createExecutionRecord } from '../../factories/execution_factory';
+import { createExecutionRecord } from '../../record_factories/execution_factory';
 import type { RecordStore } from '../../record_store';
 import { IdentityAdapter } from '../identity_adapter';
 import { publishEvent } from '../../event_bus';
@@ -9,7 +9,7 @@ import type { GitGovRecord, Signature } from '../../record_types';
 import { DetailedValidationError } from '../../validation/common';
 
 // Mock dependencies
-jest.mock('../../factories/execution_factory');
+jest.mock('../../record_factories/execution_factory');
 jest.mock('../identity_adapter');
 jest.mock('../../event_bus', () => ({
   ...jest.requireActual('../../event_bus'),

@@ -1,5 +1,5 @@
 import { ChangelogAdapter } from './index';
-import { createChangelogRecord } from '../../factories/changelog_factory';
+import { createChangelogRecord } from '../../record_factories/changelog_factory';
 import type { RecordStore } from '../../record_store';
 import { IdentityAdapter } from '../identity_adapter';
 import type { ChangelogRecord } from '../../record_types';
@@ -8,7 +8,7 @@ import type { IEventStream } from '../../event_bus';
 import type { GitGovRecord, Signature } from '../../record_types';
 
 // Mock dependencies
-jest.mock('../../factories/changelog_factory');
+jest.mock('../../record_factories/changelog_factory');
 jest.mock('../../record_store');
 jest.mock('../identity_adapter');
 jest.mock('../../event_bus', () => ({

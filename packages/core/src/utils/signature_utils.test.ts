@@ -6,8 +6,8 @@
  */
 import type { GitGovTaskRecord } from '../record_types';
 import type { Signature } from '../record_types/embedded.types';
-import { createTaskRecord } from '../factories/task_factory';
-import { createEmbeddedMetadataRecord, createTestSignature } from '../factories/embedded_metadata_factory';
+import { createTaskRecord } from '../record_factories/task_factory';
+import { createEmbeddedMetadataRecord, createTestSignature } from '../record_factories/embedded_metadata_factory';
 import {
   extractAuthor,
   extractLastModifier,

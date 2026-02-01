@@ -64,7 +64,7 @@ import {
   createAgentRecord,
   createEmbeddedMetadataRecord,
   createTestSignature
-} from '../factories';
+} from '../record_factories';
 import { generateChangelogId } from '../utils/id_generator';
 import type { Signature } from '../record_types/embedded.types';
 import { readdir } from 'fs/promises';
