@@ -102,6 +102,9 @@ type MockStore = {
   entries: jest.Mock;
   clear: jest.Mock;
   size: jest.Mock;
+  list: jest.Mock;
+  put: jest.Mock;
+  exists: jest.Mock;
 };
 
 type MockIndexerAdapter = {
@@ -271,15 +274,18 @@ function createMockAgentRecord(
  */
 function createMockStore(): MockStore {
   return {
-    get: jest.fn(),
+    get: jest.fn().mockResolvedValue(null),
     set: jest.fn(),
-    delete: jest.fn(),
+    delete: jest.fn().mockResolvedValue(undefined),
     has: jest.fn(),
     keys: jest.fn().mockReturnValue([]),
     values: jest.fn().mockReturnValue([]),
     entries: jest.fn().mockReturnValue([]),
     clear: jest.fn(),
-    size: jest.fn().mockReturnValue(0)
+    size: jest.fn().mockReturnValue(0),
+    list: jest.fn().mockResolvedValue([]),
+    put: jest.fn().mockResolvedValue(undefined),
+    exists: jest.fn().mockResolvedValue(false),
   };
 }
 
@@ -598,6 +604,102 @@ describe('LintModule + FsLintModule', () => {
       // Should stop after first error
       expect(report.results.length).toBeGreaterThan(0);
       expect(report.results[0]?.level).toBe('error');
+    });
+  });
+
+  // ==========================================================================
+  // Bloque B (Store Path): LintModule.lint() iterates stores directly
+  // Validates EARS-B3/B4 via the pure LintModule path (no FsLintModule)
+  // ==========================================================================
+
+  describe('Bloque B (Store Path): LintModule.lint() via stores', () => {
+    // [EARS-B3] LintModule.lint() accumulates all errors from stores
+    it('[EARS-B3] should accumulate all errors from stores by default', async () => {
+      // Populate tasks store with 3 invalid records (missing title → schema error)
+      const invalidRecord1 = {
+        header: { version: '1.0' as const, type: 'task' as const, payloadChecksum: 'bad1', signatures: [] },
+        payload: { id: 'task-1', status: 'draft', priority: 'medium', description: 'no title' }
+      };
+      const invalidRecord2 = {
+        header: { version: '1.0' as const, type: 'task' as const, payloadChecksum: 'bad2', signatures: [] },
+        payload: { id: 'task-2', status: 'draft', priority: 'medium', description: 'no title' }
+      };
+      const invalidRecord3 = {
+        header: { version: '1.0' as const, type: 'task' as const, payloadChecksum: 'bad3', signatures: [] },
+        payload: { id: 'task-3', status: 'draft', priority: 'medium', description: 'no title' }
+      };
+
+      mocks.stores.tasks.list.mockResolvedValue(['task-1', 'task-2', 'task-3']);
+      mocks.stores.tasks.get
+        .mockResolvedValueOnce(invalidRecord1)
+        .mockResolvedValueOnce(invalidRecord2)
+        .mockResolvedValueOnce(invalidRecord3);
+
+      const report = await lintModule.lint({ failFast: false });
+
+      // Should validate all 3 records and accumulate errors
+      expect(report.summary.filesChecked).toBe(3);
+      expect(report.results.length).toBeGreaterThanOrEqual(3);
+      expect(report.summary.errors).toBeGreaterThanOrEqual(3);
+    });
+
+    // [EARS-B4] LintModule.lint() stops at first error in failFast mode
+    it('[EARS-B4] should stop at first error from stores in failFast mode', async () => {
+      // Populate tasks store with 3 invalid records
+      const invalidRecord1 = {
+        header: { version: '1.0' as const, type: 'task' as const, payloadChecksum: 'bad1', signatures: [] },
+        payload: { id: 'task-1', status: 'draft', priority: 'medium', description: 'no title' }
+      };
+      const invalidRecord2 = {
+        header: { version: '1.0' as const, type: 'task' as const, payloadChecksum: 'bad2', signatures: [] },
+        payload: { id: 'task-2', status: 'draft', priority: 'medium', description: 'no title' }
+      };
+      const invalidRecord3 = {
+        header: { version: '1.0' as const, type: 'task' as const, payloadChecksum: 'bad3', signatures: [] },
+        payload: { id: 'task-3', status: 'draft', priority: 'medium', description: 'no title' }
+      };
+
+      mocks.stores.tasks.list.mockResolvedValue(['task-1', 'task-2', 'task-3']);
+      mocks.stores.tasks.get
+        .mockResolvedValueOnce(invalidRecord1)
+        .mockResolvedValueOnce(invalidRecord2)
+        .mockResolvedValueOnce(invalidRecord3);
+
+      const report = await lintModule.lint({ failFast: true });
+
+      // Should stop after first error — fewer results than 3
+      expect(report.results.length).toBeGreaterThan(0);
+      expect(report.results[0]?.level).toBe('error');
+      // filesChecked should still reflect total records collected from stores
+      // but errors should only be from the first record due to failFast
+      expect(report.summary.filesChecked).toBeLessThanOrEqual(3);
+    });
+
+    // Validates LintModule.lint() collects records from multiple stores
+    it('should collect and validate records from multiple stores', async () => {
+      const validTask = createMockTaskRecord({ title: 'Valid Task' });
+      const validCycle = createMockCycleRecord({ title: 'Valid Cycle' });
+
+      mocks.stores.tasks.list.mockResolvedValue([validTask.payload.id]);
+      mocks.stores.tasks.get.mockResolvedValue(validTask);
+      mocks.stores.cycles.list.mockResolvedValue([validCycle.payload.id]);
+      mocks.stores.cycles.get.mockResolvedValue(validCycle);
+
+      const report = await lintModule.lint();
+
+      expect(report.summary.filesChecked).toBe(2);
+      expect(report).toBeDefined();
+      expect(report.metadata.version).toBe('1.0.0');
+    });
+
+    // Validates LintModule.lint() returns empty report when stores are empty
+    it('should return empty report when all stores are empty', async () => {
+      // All stores return empty lists (default mock behavior)
+      const report = await lintModule.lint();
+
+      expect(report.summary.filesChecked).toBe(0);
+      expect(report.results).toHaveLength(0);
+      expect(report.summary.errors).toBe(0);
     });
   });
 

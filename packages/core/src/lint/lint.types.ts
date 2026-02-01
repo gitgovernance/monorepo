@@ -20,8 +20,8 @@ import type { GitGovRecord, GitGovRecordType } from "../types";
  * // Validate a single record (pure)
  * const results = lintModule.lintRecord(record, { recordId, entityType });
  *
- * // Validate multiple records
- * const report = await lintModule.lint(records, options);
+ * // Validate all records from stores
+ * const report = await lintModule.lint(options);
  *
  * // Fix a record (returns fixed record, no I/O)
  * const fixedRecord = lintModule.fixRecord(record, results, { keyId, privateKey });
@@ -42,15 +42,13 @@ export interface ILintModule {
   ): LintResult[];
 
   /**
-   * Validates multiple records.
-   * Uses stores for reference lookups (via RecordStore<T> interface).
+   * Validates all records from stores.
+   * Each implementation resolves its own data source.
    *
-   * @param records - Iterable of record entries to validate
    * @param options - Configuration options
    * @returns Consolidated lint report
    */
   lint(
-    records: Iterable<RecordEntry>,
     options?: Partial<LintOptions>
   ): Promise<LintReport>;
 

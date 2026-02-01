@@ -167,14 +167,13 @@ export class LintModule implements ILintModule {
   }
 
   /**
-   * Validates multiple records.
+   * Validates all records from stores.
+   * Iterates this.stores to collect records, then validates each one.
    *
-   * @param records - Iterable of record entries to validate
    * @param options - Configuration options
    * @returns Consolidated lint report
    */
   async lint(
-    records: Iterable<RecordEntry>,
     options?: Partial<LintOptions>
   ): Promise<LintReport> {
     const startTime = Date.now();
@@ -190,9 +189,31 @@ export class LintModule implements ILintModule {
     };
 
     const results: LintResult[] = [];
-    const recordArray = Array.from(records);
 
-    for (const entry of recordArray) {
+    // Collect all records from stores
+    const storeMap: Array<[Exclude<GitGovRecordType, 'custom'>, RecordStores[keyof RecordStores]]> = [
+      ['task', this.stores.tasks],
+      ['cycle', this.stores.cycles],
+      ['actor', this.stores.actors],
+      ['agent', this.stores.agents],
+      ['execution', this.stores.executions],
+      ['feedback', this.stores.feedbacks],
+      ['changelog', this.stores.changelogs],
+    ];
+
+    const recordEntries: RecordEntry[] = [];
+    for (const [type, store] of storeMap) {
+      if (!store) continue;
+      const ids = await store.list();
+      for (const id of ids) {
+        const record = await store.get(id);
+        if (record) {
+          recordEntries.push({ record, id, type });
+        }
+      }
+    }
+
+    for (const entry of recordEntries) {
       const context: LintRecordContext = {
         recordId: entry.id,
         entityType: entry.type,
@@ -230,7 +251,7 @@ export class LintModule implements ILintModule {
 
     return {
       summary: {
-        filesChecked: recordArray.length,
+        filesChecked: recordEntries.length,
         errors,
         warnings,
         fixable,
