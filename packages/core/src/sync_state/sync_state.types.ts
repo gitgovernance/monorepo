@@ -2,7 +2,7 @@ import type { IGitModule } from '../git';
 import type { ConfigManager } from "../config_manager";
 import type { IIdentityAdapter } from "../adapters/identity_adapter";
 import type { LintReport } from "../lint";
-import type { IFsLintModule } from "../lint/fs/fs_lint.types";
+import type { ILintModule } from "../lint";
 import type { IIndexerAdapter } from "../adapters/indexer_adapter";
 
 /**
@@ -16,7 +16,7 @@ export type SyncStateModuleDependencies = {
   /** Identity adapter for signature verification and signing (required) */
   identity: IIdentityAdapter;
   /** Lint module for record validation (required) */
-  lint: IFsLintModule;
+  lint: ILintModule;
   /** Indexer adapter for automatic re-indexing after pull/resolve (required) */
   indexer: IIndexerAdapter;
 }
