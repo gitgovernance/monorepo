@@ -249,7 +249,7 @@ jest.doMock('@gitgov/core', () => {
         }),
         getAllChangelogs: jest.fn().mockResolvedValue([])
       })),
-      WorkflowMethodologyAdapter: Object.assign(
+      WorkflowAdapter: Object.assign(
         jest.fn().mockImplementation(() => ({
           getTransitionRule: jest.fn().mockResolvedValue({
             to: 'active',

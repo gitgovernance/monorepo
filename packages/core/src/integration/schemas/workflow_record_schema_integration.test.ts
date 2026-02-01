@@ -1,12 +1,12 @@
-import { validateWorkflowMethodologyConfigDetailed } from '../../validation/workflow_methodology_validator';
-import type { WorkflowMethodologyRecord } from '../../types';
+import { validateWorkflowConfigDetailed } from '../../validation/workflow_validator';
+import type { WorkflowRecord } from '../../types';
 
-describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
+describe('WorkflowRecord Schema Integration Tests', () => {
   /**
-   * Helper function to create a minimal valid WorkflowMethodologyRecord for integration tests.
+   * Helper function to create a minimal valid WorkflowRecord for integration tests.
    * This is a plain object creation (not using the factory) to test the validator directly.
    */
-  const createValidWorkflowMethodologyRecord = (): WorkflowMethodologyRecord => ({
+  const createValidWorkflowRecord = (): WorkflowRecord => ({
     version: '1.0.0',
     name: 'Test Methodology',
     state_transitions: {
@@ -20,11 +20,11 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
   describe('Root Level & Required Fields (EARS 708-711)', () => {
     it('[EARS-708] should reject additional properties at root level', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         customField: 'not-allowed-because-additionalProperties-false'
-      } as WorkflowMethodologyRecord & { customField: string };
+      } as WorkflowRecord & { customField: string };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -33,10 +33,10 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
     });
 
     it('[EARS-709] should reject missing required field: version', () => {
-      const invalid = createValidWorkflowMethodologyRecord();
-      delete (invalid as Partial<WorkflowMethodologyRecord>).version;
+      const invalid = createValidWorkflowRecord();
+      delete (invalid as Partial<WorkflowRecord>).version;
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid as WorkflowMethodologyRecord);
+      const result = validateWorkflowConfigDetailed(invalid as WorkflowRecord);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -45,10 +45,10 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
     });
 
     it('[EARS-710] should reject missing required field: name', () => {
-      const invalid = createValidWorkflowMethodologyRecord();
-      delete (invalid as Partial<WorkflowMethodologyRecord>).name;
+      const invalid = createValidWorkflowRecord();
+      delete (invalid as Partial<WorkflowRecord>).name;
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid as WorkflowMethodologyRecord);
+      const result = validateWorkflowConfigDetailed(invalid as WorkflowRecord);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -57,10 +57,10 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
     });
 
     it('[EARS-711] should reject missing required field: state_transitions', () => {
-      const invalid = createValidWorkflowMethodologyRecord();
-      delete (invalid as Partial<WorkflowMethodologyRecord>).state_transitions;
+      const invalid = createValidWorkflowRecord();
+      delete (invalid as Partial<WorkflowRecord>).state_transitions;
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid as WorkflowMethodologyRecord);
+      const result = validateWorkflowConfigDetailed(invalid as WorkflowRecord);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -72,11 +72,11 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
   describe('Version Field Validations (EARS 712-722)', () => {
     it('[EARS-712] should reject version with invalid semver pattern', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         version: 'invalid-version'
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -86,11 +86,11 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-713] should accept version "1.0.0"', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         version: '1.0.0'
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -98,11 +98,11 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-714] should accept version "10.25.100"', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         version: '10.25.100'
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -110,11 +110,11 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-715] should reject non-string version', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         version: 123
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -124,11 +124,11 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-716] should reject version without patch "1.0"', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         version: '1.0'
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -138,11 +138,11 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-717] should reject version with \'v\' prefix "v1.0.0"', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         version: 'v1.0.0'
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -152,11 +152,11 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-718] should reject empty version', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         version: ''
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -166,11 +166,11 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-719] should reject version with non-numeric chars "1.0.0-alpha"', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         version: '1.0.0-alpha'
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -180,11 +180,11 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-720] should reject null version', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         version: null
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -194,11 +194,11 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-721] should accept version "0.0.0"', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         version: '0.0.0'
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -206,11 +206,11 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-722] should accept version "1.2.3"', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         version: '1.2.3'
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -220,11 +220,11 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
   describe('Name Field Validations (EARS 723-733)', () => {
     it('[EARS-723] should reject name with less than 1 char', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         name: ''
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -234,11 +234,11 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-724] should accept name with 1 or more chars', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         name: 'Test'
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -246,11 +246,11 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-725] should reject name exceeding maxLength 100', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         name: 'a'.repeat(101)
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -260,11 +260,11 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-726] should reject non-string name', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         name: 123
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -274,11 +274,11 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-727] should accept name with exactly 1 char', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         name: 'A'
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -286,11 +286,11 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-728] should accept name with exactly 100 chars', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         name: 'a'.repeat(100)
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -298,11 +298,11 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-729] should reject empty name', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         name: ''
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -312,11 +312,11 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-730] should reject name with 101 chars', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         name: 'a'.repeat(101)
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -326,11 +326,11 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-731] should accept name with special chars and spaces', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         name: 'My-Methodology_2024 (v2)'
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -338,11 +338,11 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-732] should reject null name', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         name: null
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -352,11 +352,11 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-733] should accept name with 50 chars', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         name: 'a'.repeat(50)
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -365,10 +365,10 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
   describe('Description Field Validations (EARS 734-742)', () => {
     it('[EARS-734] should accept missing description', () => {
-      const valid = createValidWorkflowMethodologyRecord();
+      const valid = createValidWorkflowRecord();
       // description is optional, so not including it should be valid
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -376,11 +376,11 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-735] should reject description exceeding maxLength 500', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         description: 'a'.repeat(501)
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -390,11 +390,11 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-736] should reject non-string description', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         description: 123
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -404,11 +404,11 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-737] should accept description with exactly 500 chars', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         description: 'a'.repeat(500)
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -416,11 +416,11 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-738] should reject description with 501 chars', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         description: 'a'.repeat(501)
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -430,11 +430,11 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-739] should accept empty description', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         description: ''
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -442,11 +442,11 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-740] should accept description with 250 chars', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         description: 'a'.repeat(250)
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -454,11 +454,11 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-741] should reject null description', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         description: null
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -468,11 +468,11 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-742] should accept description with special chars and multiline', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         description: 'Line 1\nLine 2\nSpecial chars: !@#$%^&*()'
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -482,11 +482,11 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
   describe('State Transitions Structure (EARS 743-755)', () => {
     it('[EARS-743] should reject state_transitions not being an object', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: 'not-an-object'
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -496,11 +496,11 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-744] should accept state_transitions as empty object', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {}
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -508,7 +508,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-745] should reject transition missing required field: from', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             requires: {}
@@ -516,7 +516,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -526,7 +526,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-746] should reject transition missing required field: requires', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: ['draft']
@@ -534,7 +534,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -544,7 +544,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-747] should reject transition with additional properties', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
@@ -554,7 +554,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -564,7 +564,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-748] should reject from not being an array', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: 'draft' as unknown as ['draft'],
@@ -573,7 +573,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -583,7 +583,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-749] should reject from as empty array', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: [],
@@ -592,7 +592,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -602,7 +602,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-750] should accept from with valid state "draft"', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: ['draft'],
@@ -611,7 +611,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -619,7 +619,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-751] should reject from with invalid state pattern value', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: ['Invalid-State'],
@@ -628,7 +628,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -638,7 +638,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-751B] should accept custom state in from (agent workflow)', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           analyzing: {
             from: ['idle'],
@@ -647,7 +647,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -655,7 +655,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-752] should accept from with multiple valid states', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           active: {
             from: ['ready', 'paused'],
@@ -664,7 +664,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -672,7 +672,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-753] should reject requires not being an object', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
@@ -681,7 +681,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -691,7 +691,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-754] should reject requires with additional properties', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
@@ -702,7 +702,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -712,7 +712,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-755] should accept requires as empty object', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: ['draft'],
@@ -721,7 +721,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -735,7 +735,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
   describe('Requires Field - Command & Event (EARS 756-763)', () => {
     it('[EARS-756] should accept requires.command as string', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: ['draft'],
@@ -746,7 +746,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -754,7 +754,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-757] should reject non-string requires.command', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
@@ -765,7 +765,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -775,7 +775,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-758] should reject null requires.command', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
@@ -786,7 +786,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -796,7 +796,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-759] should accept requires.event as string', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           active: {
             from: ['ready'],
@@ -807,7 +807,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -815,7 +815,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-760] should reject non-string requires.event', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           active: {
             from: ['ready'] as ['ready'],
@@ -826,7 +826,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -836,7 +836,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-761] should reject null requires.event', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           active: {
             from: ['ready'] as ['ready'],
@@ -847,7 +847,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -857,7 +857,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-762] should accept requires with both command and event', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: ['draft'],
@@ -869,7 +869,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -877,7 +877,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-763] should accept empty requires object', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: ['draft'],
@@ -886,7 +886,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -896,7 +896,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
   describe('Requires Field - Custom Rules Array (EARS 764-773)', () => {
     it('[EARS-764] should accept missing requires.custom_rules', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: ['draft'],
@@ -905,7 +905,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -913,7 +913,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-765] should reject non-array requires.custom_rules', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
@@ -924,7 +924,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -934,7 +934,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-766] should accept empty requires.custom_rules array', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: ['draft'],
@@ -945,7 +945,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -953,7 +953,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-767] should accept requires.custom_rules with string items', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: ['draft'],
@@ -964,7 +964,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -972,7 +972,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-768] should reject requires.custom_rules with non-string item', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
@@ -983,7 +983,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -993,7 +993,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-769] should reject null requires.custom_rules', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
@@ -1004,7 +1004,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -1014,7 +1014,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-770] should accept requires.custom_rules with multiple items', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: ['draft'],
@@ -1025,7 +1025,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -1033,7 +1033,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-771] should accept requires.custom_rules with empty string item', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: ['draft'],
@@ -1044,7 +1044,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -1052,7 +1052,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-772] should accept requires.custom_rules with 1 item', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: ['draft'],
@@ -1063,7 +1063,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -1071,7 +1071,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-773] should accept requires.custom_rules with 5 items', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: ['draft'],
@@ -1082,7 +1082,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -1092,7 +1092,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
   describe('Signatures Structure (EARS 774-810)', () => {
     it('[EARS-774] should reject requires.signatures not being an object', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
@@ -1103,7 +1103,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -1113,7 +1113,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-775] should accept requires.signatures as empty object', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
@@ -1124,7 +1124,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -1132,7 +1132,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-776] should reject requires.signatures as null', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
@@ -1143,7 +1143,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -1153,7 +1153,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-777] should reject signature group missing required field: role', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
@@ -1169,7 +1169,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -1179,7 +1179,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-778] should reject signature group missing required field: capability_roles', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
@@ -1195,7 +1195,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -1205,7 +1205,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-779] should reject signature group missing required field: min_approvals', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
@@ -1221,7 +1221,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -1231,7 +1231,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-780] should reject signature group with additional properties', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
@@ -1249,7 +1249,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -1259,7 +1259,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-781] should accept role as string in signatures', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
@@ -1276,7 +1276,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -1284,7 +1284,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-782] should reject role as non-string', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
@@ -1301,7 +1301,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -1311,7 +1311,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-783] should reject role as null', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
@@ -1328,7 +1328,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -1338,7 +1338,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-784] should accept role as empty string', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
@@ -1355,7 +1355,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -1363,7 +1363,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-785] should reject capability_roles not being an array', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
@@ -1380,7 +1380,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -1390,7 +1390,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-786] should reject capability_roles as empty array', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
@@ -1407,7 +1407,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -1417,7 +1417,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-787] should accept capability_roles with string items', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
@@ -1434,7 +1434,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -1442,7 +1442,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-788] should reject capability_roles with non-string item', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
@@ -1459,7 +1459,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -1469,7 +1469,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-789] should reject capability_roles as null', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
@@ -1486,7 +1486,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -1496,7 +1496,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-790] should accept capability_roles with 1 item', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
@@ -1513,7 +1513,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -1521,7 +1521,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-791] should accept capability_roles with multiple items', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
@@ -1538,7 +1538,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -1546,7 +1546,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-792] should accept min_approvals as integer >= 1', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
@@ -1563,7 +1563,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -1571,7 +1571,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-793] should reject min_approvals less than 1', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
@@ -1588,7 +1588,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -1598,7 +1598,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-794] should reject min_approvals as non-integer', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
@@ -1615,7 +1615,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -1625,7 +1625,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-795] should reject min_approvals as null', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
@@ -1642,7 +1642,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -1652,7 +1652,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-796] should reject min_approvals as decimal', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
@@ -1669,7 +1669,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -1679,7 +1679,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-797] should accept min_approvals with value 1', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
@@ -1696,7 +1696,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -1704,7 +1704,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-798] should accept min_approvals with value 10', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
@@ -1721,7 +1721,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -1729,7 +1729,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-799] should accept missing actor_type', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
@@ -1746,7 +1746,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -1754,7 +1754,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-800] should accept actor_type as "human"', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
@@ -1772,7 +1772,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -1780,7 +1780,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-801] should accept actor_type as "agent"', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
@@ -1798,7 +1798,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -1806,7 +1806,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-802] should reject actor_type with invalid enum value', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
@@ -1824,7 +1824,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -1834,7 +1834,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-803] should reject actor_type as non-string', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
@@ -1852,7 +1852,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -1862,7 +1862,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-804] should accept missing specific_actors', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
@@ -1879,7 +1879,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -1887,7 +1887,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-805] should reject specific_actors as non-array', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
@@ -1905,7 +1905,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -1915,7 +1915,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-806] should accept specific_actors as empty array', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
@@ -1933,7 +1933,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -1941,7 +1941,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-807] should accept specific_actors with string items', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
@@ -1959,7 +1959,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -1967,7 +1967,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-808] should reject specific_actors with non-string item', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
@@ -1985,7 +1985,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -1995,7 +1995,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-809] should reject specific_actors as null', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
@@ -2013,7 +2013,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -2023,7 +2023,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-810] should accept signatures with multiple signature groups', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
@@ -2050,7 +2050,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -2059,10 +2059,10 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
   describe('Custom Rules Structure (EARS 811-853)', () => {
     it('[EARS-811] should accept missing custom_rules', () => {
-      const valid = createValidWorkflowMethodologyRecord();
+      const valid = createValidWorkflowRecord();
       // custom_rules is optional
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -2070,11 +2070,11 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-812] should reject custom_rules not being an object', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         custom_rules: 'not-an-object' as unknown as {}
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -2084,11 +2084,11 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-813] should reject custom_rules as null', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         custom_rules: null as unknown as {}
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -2098,11 +2098,11 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-814] should accept custom_rules as empty object', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         custom_rules: {}
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -2110,7 +2110,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-815] should reject custom rule missing required field: description', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         custom_rules: {
           rule1: {
             validation: 'assignment_required' as 'assignment_required'
@@ -2118,7 +2118,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -2128,7 +2128,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-816] should reject custom rule missing required field: validation', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         custom_rules: {
           rule1: {
             description: 'Test rule'
@@ -2136,7 +2136,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -2146,7 +2146,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-817] should reject custom rule with additional properties', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         custom_rules: {
           rule1: {
             description: 'Test rule',
@@ -2156,7 +2156,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -2166,7 +2166,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-818] should accept description as string', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         custom_rules: {
           rule1: {
             description: 'Test rule description',
@@ -2175,7 +2175,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -2183,7 +2183,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-819] should reject description as non-string', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         custom_rules: {
           rule1: {
             description: 123 as unknown as string,
@@ -2192,7 +2192,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -2202,7 +2202,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-820] should reject description exceeding maxLength 200', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         custom_rules: {
           rule1: {
             description: 'a'.repeat(201),
@@ -2211,7 +2211,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -2221,7 +2221,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-821] should accept description with exactly 200 chars', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         custom_rules: {
           rule1: {
             description: 'a'.repeat(200),
@@ -2230,7 +2230,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -2238,7 +2238,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-822] should accept description as empty string', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         custom_rules: {
           rule1: {
             description: '',
@@ -2247,7 +2247,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -2255,7 +2255,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-823] should reject description as null', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         custom_rules: {
           rule1: {
             description: null as unknown as string,
@@ -2264,7 +2264,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -2274,7 +2274,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-824] should accept validation "assignment_required"', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         custom_rules: {
           rule1: {
             description: 'Test',
@@ -2283,7 +2283,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -2291,7 +2291,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-825] should accept validation "sprint_capacity"', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         custom_rules: {
           rule1: {
             description: 'Test',
@@ -2300,7 +2300,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -2308,7 +2308,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-826] should accept validation "epic_complexity"', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         custom_rules: {
           rule1: {
             description: 'Test',
@@ -2317,7 +2317,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -2325,7 +2325,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-827] should accept validation "custom"', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         custom_rules: {
           rule1: {
             description: 'Test',
@@ -2334,7 +2334,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -2342,7 +2342,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-829] should reject validation with invalid enum value', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         custom_rules: {
           rule1: {
             description: 'Test',
@@ -2351,7 +2351,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -2361,7 +2361,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-830] should reject validation as non-string', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         custom_rules: {
           rule1: {
             description: 'Test',
@@ -2370,7 +2370,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -2380,7 +2380,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-831] should reject validation as null', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         custom_rules: {
           rule1: {
             description: 'Test',
@@ -2389,7 +2389,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -2399,7 +2399,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-832] should accept missing parameters', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         custom_rules: {
           rule1: {
             description: 'Test',
@@ -2408,7 +2408,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -2416,7 +2416,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-833] should accept parameters as object', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         custom_rules: {
           rule1: {
             description: 'Test',
@@ -2426,7 +2426,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -2434,7 +2434,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-834] should reject parameters as non-object', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         custom_rules: {
           rule1: {
             description: 'Test',
@@ -2444,7 +2444,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -2454,7 +2454,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-835] should reject parameters as null', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         custom_rules: {
           rule1: {
             description: 'Test',
@@ -2464,7 +2464,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -2474,7 +2474,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-836] should accept parameters as empty object', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         custom_rules: {
           rule1: {
             description: 'Test',
@@ -2484,7 +2484,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -2492,7 +2492,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-837] should accept parameters with arbitrary properties', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         custom_rules: {
           rule1: {
             description: 'Test',
@@ -2506,7 +2506,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -2514,7 +2514,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-838] should accept missing expression', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         custom_rules: {
           rule1: {
             description: 'Test',
@@ -2523,7 +2523,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -2531,7 +2531,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-839] should accept expression as string', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         custom_rules: {
           rule1: {
             description: 'Test',
@@ -2541,7 +2541,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -2549,7 +2549,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-840] should reject expression as non-string', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         custom_rules: {
           rule1: {
             description: 'Test',
@@ -2559,7 +2559,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -2569,7 +2569,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-841] should reject expression as null', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         custom_rules: {
           rule1: {
             description: 'Test',
@@ -2579,7 +2579,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -2589,7 +2589,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-842] should accept expression as empty string', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         custom_rules: {
           rule1: {
             description: 'Test',
@@ -2599,7 +2599,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -2607,7 +2607,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-843] should accept expression with validation logic', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         custom_rules: {
           rule1: {
             description: 'Test',
@@ -2617,7 +2617,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -2625,7 +2625,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-844] should accept missing module_path', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         custom_rules: {
           rule1: {
             description: 'Test',
@@ -2634,7 +2634,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -2642,7 +2642,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-845] should accept module_path as string', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         custom_rules: {
           rule1: {
             description: 'Test',
@@ -2652,7 +2652,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -2660,7 +2660,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-846] should reject module_path as non-string', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         custom_rules: {
           rule1: {
             description: 'Test',
@@ -2670,7 +2670,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -2680,7 +2680,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-847] should reject module_path as null', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         custom_rules: {
           rule1: {
             description: 'Test',
@@ -2690,7 +2690,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -2700,7 +2700,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-848] should accept module_path as empty string', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         custom_rules: {
           rule1: {
             description: 'Test',
@@ -2710,7 +2710,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -2718,7 +2718,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-849] should accept module_path with relative path', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         custom_rules: {
           rule1: {
             description: 'Test',
@@ -2728,7 +2728,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -2736,7 +2736,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-850] should accept module_path with absolute path', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         custom_rules: {
           rule1: {
             description: 'Test',
@@ -2746,7 +2746,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -2754,7 +2754,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-851] should accept custom_rules with multiple rules', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         custom_rules: {
           rule1: {
             description: 'Rule 1',
@@ -2772,7 +2772,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -2780,7 +2780,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-852] should accept rule with both expression and module_path', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         custom_rules: {
           rule1: {
             description: 'Test',
@@ -2791,7 +2791,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -2799,7 +2799,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-853] should accept validation=custom with expression', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         custom_rules: {
           rule1: {
             description: 'Custom expression validation rule',
@@ -2809,7 +2809,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -2818,10 +2818,10 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
   describe('Agent Integration - Root Structure (EARS 889-899)', () => {
     it('[EARS-889] should accept missing agent_integration', () => {
-      const valid = createValidWorkflowMethodologyRecord();
+      const valid = createValidWorkflowRecord();
       // agent_integration is optional
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -2829,11 +2829,11 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-890] should reject agent_integration not being an object', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         agent_integration: 'not-an-object' as unknown as {}
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -2843,11 +2843,11 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-891] should reject agent_integration as null', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         agent_integration: null as unknown as {}
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -2857,11 +2857,11 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-892] should accept agent_integration as empty object', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         agent_integration: {}
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -2869,13 +2869,13 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-893] should reject agent_integration with additional properties', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         agent_integration: {
           customField: 'not-allowed'
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -2885,11 +2885,11 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-894] should accept missing description', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         agent_integration: {}
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -2897,13 +2897,13 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-895] should accept description as string', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         agent_integration: {
           description: 'Agent integration description'
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -2911,13 +2911,13 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-896] should reject description as non-string', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         agent_integration: {
           description: 123 as unknown as string
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -2927,13 +2927,13 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-897] should reject description exceeding maxLength 200', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         agent_integration: {
           description: 'a'.repeat(201)
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -2943,13 +2943,13 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-898] should accept description with exactly 200 chars', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         agent_integration: {
           description: 'a'.repeat(200)
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -2957,13 +2957,13 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-899] should reject description as null', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         agent_integration: {
           description: null as unknown as string
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -2975,11 +2975,11 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
   describe('Agent Integration - Required Agents Array (EARS 900-924)', () => {
     it('[EARS-900] should accept missing required_agents', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         agent_integration: {}
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -2987,13 +2987,13 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-901] should reject required_agents as non-array', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         agent_integration: {
           required_agents: 'not-an-array' as unknown as []
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -3003,13 +3003,13 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-902] should reject required_agents as null', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         agent_integration: {
           required_agents: null as unknown as []
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -3019,13 +3019,13 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-903] should accept required_agents as empty array', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         agent_integration: {
           required_agents: []
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -3033,7 +3033,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-904] should reject agent without id AND without required_roles (anyOf)', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         agent_integration: {
           required_agents: [{
             triggers: [{ event: 'task.created', action: 'review' }]
@@ -3041,7 +3041,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -3051,7 +3051,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-905] should reject agent missing required field: triggers', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         agent_integration: {
           required_agents: [{
             id: 'agent:test'
@@ -3059,7 +3059,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -3069,7 +3069,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-906] should reject agent with additional properties', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         agent_integration: {
           required_agents: [{
             id: 'agent:test',
@@ -3079,7 +3079,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -3089,7 +3089,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-907] should reject agent without id AND without required_roles (anyOf validation)', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         agent_integration: {
           required_agents: [{
             triggers: [{ event: 'task.created', action: 'review' }]
@@ -3097,7 +3097,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -3107,7 +3107,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-908] should accept agent with only id', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         agent_integration: {
           required_agents: [{
             id: 'agent:test',
@@ -3116,7 +3116,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -3124,7 +3124,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-909] should accept agent with only required_roles', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         agent_integration: {
           required_agents: [{
             required_roles: ['quality:reviewer'],
@@ -3133,7 +3133,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -3141,7 +3141,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-910] should accept agent with both id and required_roles', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         agent_integration: {
           required_agents: [{
             id: 'agent:test',
@@ -3151,7 +3151,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -3159,7 +3159,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-911] should reject required_roles as non-array', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         agent_integration: {
           required_agents: [{
             required_roles: 'not-an-array' as unknown as string[],
@@ -3168,7 +3168,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -3178,7 +3178,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-912] should reject required_roles as empty array', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         agent_integration: {
           required_agents: [{
             required_roles: [] as unknown as [string, ...string[]],
@@ -3187,7 +3187,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -3197,7 +3197,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-913] should accept required_roles with multiple roles', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         agent_integration: {
           required_agents: [{
             required_roles: ['quality:reviewer', 'approver:quality'],
@@ -3206,7 +3206,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -3214,7 +3214,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-914] should reject required_roles with invalid pattern', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         agent_integration: {
           required_agents: [{
             required_roles: ['Invalid_Role'] as string[],
@@ -3223,7 +3223,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -3233,7 +3233,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-915] should reject id not matching pattern', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         agent_integration: {
           required_agents: [{
             id: 'invalid-id-without-agent-prefix',
@@ -3242,7 +3242,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -3252,7 +3252,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-916] should accept id with valid pattern "agent:quality-reviewer"', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         agent_integration: {
           required_agents: [{
             id: 'agent:quality-reviewer',
@@ -3261,7 +3261,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -3269,7 +3269,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-917] should accept id with multiple levels "agent:camilo:cursor"', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         agent_integration: {
           required_agents: [{
             id: 'agent:camilo:cursor',
@@ -3278,7 +3278,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -3286,7 +3286,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-918] should reject id as non-string', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         agent_integration: {
           required_agents: [{
             id: 123 as unknown as string,
@@ -3295,7 +3295,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -3305,7 +3305,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-919] should reject id as null', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         agent_integration: {
           required_agents: [{
             id: null as unknown as string,
@@ -3314,7 +3314,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -3324,7 +3324,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-920] should reject id without "agent:" prefix', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         agent_integration: {
           required_agents: [{
             id: 'quality-reviewer',
@@ -3333,7 +3333,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -3343,7 +3343,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-921] should reject id with uppercase letters', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         agent_integration: {
           required_agents: [{
             id: 'agent:QualityReviewer',
@@ -3352,7 +3352,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -3362,7 +3362,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-922] should reject id with underscores', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         agent_integration: {
           required_agents: [{
             id: 'agent:quality_reviewer',
@@ -3371,7 +3371,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -3381,7 +3381,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-923] should accept multiple valid agent objects', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         agent_integration: {
           required_agents: [
             {
@@ -3396,7 +3396,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -3404,7 +3404,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-924] should accept required_roles with valid pattern', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         agent_integration: {
           required_agents: [{
             required_roles: ['quality:reviewer'],
@@ -3413,7 +3413,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -3423,7 +3423,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
   describe('Agent Integration - Triggers (EARS 953-962)', () => {
     it('[EARS-953] should reject agent missing required triggers', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         agent_integration: {
           required_agents: [{
             id: 'agent:test'
@@ -3431,7 +3431,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -3441,7 +3441,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-954] should reject triggers as non-array', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         agent_integration: {
           required_agents: [{
             id: 'agent:test',
@@ -3450,7 +3450,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -3460,7 +3460,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-955] should reject triggers as null', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         agent_integration: {
           required_agents: [{
             id: 'agent:test',
@@ -3469,7 +3469,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -3479,7 +3479,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-956] should accept triggers as empty array', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         agent_integration: {
           required_agents: [{
             id: 'agent:test',
@@ -3488,7 +3488,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -3496,7 +3496,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-957] should reject trigger missing field: event', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         agent_integration: {
           required_agents: [{
             id: 'agent:test',
@@ -3507,7 +3507,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -3517,7 +3517,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-958] should reject trigger missing field: action', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         agent_integration: {
           required_agents: [{
             id: 'agent:test',
@@ -3528,7 +3528,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -3538,7 +3538,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-959] should reject trigger with additional properties', () => {
       const invalid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         agent_integration: {
           required_agents: [{
             id: 'agent:test',
@@ -3551,7 +3551,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(invalid);
+      const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
@@ -3561,7 +3561,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-960] should accept event as string', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         agent_integration: {
           required_agents: [{
             id: 'agent:test',
@@ -3573,7 +3573,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -3581,7 +3581,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-961] should accept action as string', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         agent_integration: {
           required_agents: [{
             id: 'agent:test',
@@ -3593,7 +3593,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -3601,7 +3601,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-962] should accept multiple trigger objects', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         agent_integration: {
           required_agents: [{
             id: 'agent:test',
@@ -3613,7 +3613,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -3624,13 +3624,13 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
   describe('Agent Integration - Description (EARS 992)', () => {
     it('[EARS-992] should accept agent_integration with only description', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         agent_integration: {
           description: 'Agent integration for quality assurance'
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -3645,7 +3645,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         state_transitions: {}
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(minimal);
+      const result = validateWorkflowConfigDetailed(minimal);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -3686,7 +3686,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(full);
+      const result = validateWorkflowConfigDetailed(full);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -3694,7 +3694,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-995] should accept multiple state transitions', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         state_transitions: {
           review: { from: ['draft'] as ['draft'], requires: {} },
           ready: { from: ['review'] as ['review'], requires: {} },
@@ -3703,7 +3703,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -3711,7 +3711,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
 
     it('[EARS-996] should accept custom_rules referenced in requires', () => {
       const valid = {
-        ...createValidWorkflowMethodologyRecord(),
+        ...createValidWorkflowRecord(),
         custom_rules: {
           'assignment-check': {
             description: 'Verify task has assignee',
@@ -3728,7 +3728,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(valid);
+      const result = validateWorkflowConfigDetailed(valid);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -3794,7 +3794,7 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(gitgovExample);
+      const result = validateWorkflowConfigDetailed(gitgovExample);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -3805,11 +3805,11 @@ describe('WorkflowMethodologyRecord Schema Integration Tests', () => {
       const fs = require('fs');
       const path = require('path');
 
-      const configPath = path.join(__dirname, '../../adapters/workflow_methodology_adapter/generated/kanban_workflow.json');
+      const configPath = path.join(__dirname, '../../adapters/workflow_adapter/generated/kanban_workflow.json');
       const configContent = fs.readFileSync(configPath, 'utf8');
       const realConfig = JSON.parse(configContent);
 
-      const result = validateWorkflowMethodologyConfigDetailed(realConfig);
+      const result = validateWorkflowConfigDetailed(realConfig);
 
       expect(result.isValid).toBe(true);
       if (!result.isValid) {

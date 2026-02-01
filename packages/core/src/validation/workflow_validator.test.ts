@@ -1,12 +1,12 @@
 import {
-  isWorkflowMethodologyConfig,
-  validateWorkflowMethodologyConfigDetailed,
-  validateWorkflowMethodologyConfigBusinessRules
-} from './workflow_methodology_validator';
-import type { WorkflowMethodologyRecord } from '../types';
+  isWorkflowConfig,
+  validateWorkflowConfigDetailed,
+  validateWorkflowConfigBusinessRules
+} from './workflow_validator';
+import type { WorkflowRecord } from '../types';
 
-describe('WorkflowMethodologyValidator Module', () => {
-  const validWorkflowMethodologyConfig: WorkflowMethodologyRecord = {
+describe('WorkflowValidator Module', () => {
+  const validWorkflowConfig: WorkflowRecord = {
     version: '1.0.0',
     name: 'GitGovernance Default Methodology',
     description: 'Standard GitGovernance workflow with quality gates',
@@ -52,29 +52,29 @@ describe('WorkflowMethodologyValidator Module', () => {
     // Missing required 'version' field
   };
 
-  describe('isWorkflowMethodologyConfig', () => {
+  describe('isWorkflowConfig', () => {
     it('[EARS-1] should return true for valid workflow methodology config', () => {
-      const result = isWorkflowMethodologyConfig(validWorkflowMethodologyConfig);
+      const result = isWorkflowConfig(validWorkflowConfig);
       expect(result).toBe(true);
     });
 
     it('[EARS-2] should return false for invalid workflow methodology config', () => {
-      const result = isWorkflowMethodologyConfig(invalidConfigWithoutVersion);
+      const result = isWorkflowConfig(invalidConfigWithoutVersion);
       expect(result).toBe(false);
     });
 
     it('[EARS-3] should return false for null input', () => {
-      const result = isWorkflowMethodologyConfig(null);
+      const result = isWorkflowConfig(null);
       expect(result).toBe(false);
     });
 
     it('[EARS-4] should return false for undefined input', () => {
-      const result = isWorkflowMethodologyConfig(undefined);
+      const result = isWorkflowConfig(undefined);
       expect(result).toBe(false);
     });
 
     it('[EARS-5] should return false for non-object input', () => {
-      const result = isWorkflowMethodologyConfig('not an object');
+      const result = isWorkflowConfig('not an object');
       expect(result).toBe(false);
     });
   });
@@ -84,7 +84,7 @@ describe('WorkflowMethodologyValidator Module', () => {
       const { SchemaValidationCache } = require('../schemas/schema_cache');
       const cacheSpy = jest.spyOn(SchemaValidationCache, 'getValidatorFromSchema');
 
-      validateWorkflowMethodologyConfigDetailed(validWorkflowMethodologyConfig);
+      validateWorkflowConfigDetailed(validWorkflowConfig);
 
       expect(cacheSpy).toHaveBeenCalled();
       cacheSpy.mockRestore();
@@ -95,11 +95,11 @@ describe('WorkflowMethodologyValidator Module', () => {
       const cacheSpy = jest.spyOn(SchemaValidationCache, 'getValidatorFromSchema');
 
       // First call
-      validateWorkflowMethodologyConfigDetailed(validWorkflowMethodologyConfig);
+      validateWorkflowConfigDetailed(validWorkflowConfig);
       const firstCallResult = cacheSpy.mock.results[0];
 
       // Second call should reuse the same validator
-      validateWorkflowMethodologyConfigDetailed({ ...validWorkflowMethodologyConfig, name: 'Another Methodology' });
+      validateWorkflowConfigDetailed({ ...validWorkflowConfig, name: 'Another Methodology' });
       const secondCallResult = cacheSpy.mock.results[1];
 
       expect(cacheSpy).toHaveBeenCalledTimes(2);
@@ -109,8 +109,8 @@ describe('WorkflowMethodologyValidator Module', () => {
     });
 
     it('should produce identical results with or without cache', () => {
-      const result1 = validateWorkflowMethodologyConfigDetailed(validWorkflowMethodologyConfig);
-      const result2 = validateWorkflowMethodologyConfigDetailed(validWorkflowMethodologyConfig);
+      const result1 = validateWorkflowConfigDetailed(validWorkflowConfig);
+      const result2 = validateWorkflowConfigDetailed(validWorkflowConfig);
       expect(result1).toEqual(result2);
     });
 
@@ -127,16 +127,16 @@ describe('WorkflowMethodologyValidator Module', () => {
     });
   });
 
-  describe('validateWorkflowMethodologyConfigDetailed', () => {
+  describe('validateWorkflowConfigDetailed', () => {
     it('[EARS-6] should return valid result for correct config', () => {
-      const result = validateWorkflowMethodologyConfigDetailed(validWorkflowMethodologyConfig);
+      const result = validateWorkflowConfigDetailed(validWorkflowConfig);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toEqual([]);
     });
 
     it('[EARS-7] should return detailed errors for missing required fields', () => {
-      const result = validateWorkflowMethodologyConfigDetailed(invalidConfigWithoutVersion);
+      const result = validateWorkflowConfigDetailed(invalidConfigWithoutVersion);
 
       expect(result.isValid).toBe(false);
       expect(result.errors).toHaveLength(1);
@@ -160,7 +160,7 @@ describe('WorkflowMethodologyValidator Module', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(configWithInvalidFrom);
+      const result = validateWorkflowConfigDetailed(configWithInvalidFrom);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.length).toBeGreaterThan(0);
@@ -173,7 +173,7 @@ describe('WorkflowMethodologyValidator Module', () => {
         // Missing required state_transitions
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(configWithoutTransitions);
+      const result = validateWorkflowConfigDetailed(configWithoutTransitions);
 
       expect(result.isValid).toBe(false);
       expect(result.errors).toHaveLength(1);
@@ -187,7 +187,7 @@ describe('WorkflowMethodologyValidator Module', () => {
 
     it('[EARS-10] should validate complex config with all optional fields', () => {
       const complexConfig = {
-        ...validWorkflowMethodologyConfig,
+        ...validWorkflowConfig,
         custom_rules: {
           'complex_rule': {
             description: 'Complex validation rule',
@@ -200,16 +200,16 @@ describe('WorkflowMethodologyValidator Module', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigDetailed(complexConfig);
+      const result = validateWorkflowConfigDetailed(complexConfig);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toEqual([]);
     });
   });
 
-  describe('validateWorkflowMethodologyConfigBusinessRules', () => {
+  describe('validateWorkflowConfigBusinessRules', () => {
     it('[EARS-11] should validate business rules for valid config', () => {
-      const result = validateWorkflowMethodologyConfigBusinessRules(validWorkflowMethodologyConfig);
+      const result = validateWorkflowConfigBusinessRules(validWorkflowConfig);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toEqual([]);
@@ -217,7 +217,7 @@ describe('WorkflowMethodologyValidator Module', () => {
 
     it('[EARS-12] should detect invalid target states in transitions', () => {
       const configWithInvalidState = {
-        ...validWorkflowMethodologyConfig,
+        ...validWorkflowConfig,
         state_transitions: {
           invalid_state: {
             from: ['draft'] as ['draft'],
@@ -226,7 +226,7 @@ describe('WorkflowMethodologyValidator Module', () => {
         }
       } as any; // Use any to test validation behavior
 
-      const result = validateWorkflowMethodologyConfigBusinessRules(configWithInvalidState);
+      const result = validateWorkflowConfigBusinessRules(configWithInvalidState);
 
       expect(result.isValid).toBe(false);
       expect(result.errors).toHaveLength(1);
@@ -235,7 +235,7 @@ describe('WorkflowMethodologyValidator Module', () => {
 
     it('[EARS-13] should detect invalid source states in transitions', () => {
       const configWithInvalidFromState = {
-        ...validWorkflowMethodologyConfig,
+        ...validWorkflowConfig,
         state_transitions: {
           review: {
             from: ['invalid_from_state'] as ['invalid_from_state'],
@@ -244,7 +244,7 @@ describe('WorkflowMethodologyValidator Module', () => {
         }
       } as any; // Use any to test validation behavior
 
-      const result = validateWorkflowMethodologyConfigBusinessRules(configWithInvalidFromState);
+      const result = validateWorkflowConfigBusinessRules(configWithInvalidFromState);
 
       expect(result.isValid).toBe(false);
       expect(result.errors).toHaveLength(1);
@@ -253,7 +253,7 @@ describe('WorkflowMethodologyValidator Module', () => {
 
     it('[EARS-14] should detect undefined custom rules in transitions', () => {
       const configWithUndefinedCustomRule = {
-        ...validWorkflowMethodologyConfig,
+        ...validWorkflowConfig,
         state_transitions: {
           active: {
             from: ['ready'] as ['ready'],
@@ -264,7 +264,7 @@ describe('WorkflowMethodologyValidator Module', () => {
         }
       } as any; // Use any to test validation behavior
 
-      const result = validateWorkflowMethodologyConfigBusinessRules(configWithUndefinedCustomRule);
+      const result = validateWorkflowConfigBusinessRules(configWithUndefinedCustomRule);
 
       expect(result.isValid).toBe(false);
       expect(result.errors).toHaveLength(1);
@@ -273,7 +273,7 @@ describe('WorkflowMethodologyValidator Module', () => {
 
     it('[EARS-15] should detect invalid validation types in custom rules', () => {
       const configWithInvalidValidationType = {
-        ...validWorkflowMethodologyConfig,
+        ...validWorkflowConfig,
         custom_rules: {
           'bad_rule': {
             description: 'Rule with invalid validation type',
@@ -282,7 +282,7 @@ describe('WorkflowMethodologyValidator Module', () => {
         }
       };
 
-      const result = validateWorkflowMethodologyConfigBusinessRules(configWithInvalidValidationType);
+      const result = validateWorkflowConfigBusinessRules(configWithInvalidValidationType);
 
       expect(result.isValid).toBe(false);
       expect(result.errors).toHaveLength(1);
@@ -303,7 +303,7 @@ describe('WorkflowMethodologyValidator Module', () => {
         }
       } as any; // Use any to test validation behavior
 
-      const result = validateWorkflowMethodologyConfigBusinessRules(configWithoutCustomRules);
+      const result = validateWorkflowConfigBusinessRules(configWithoutCustomRules);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toEqual([]);

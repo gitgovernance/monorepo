@@ -42,7 +42,7 @@ import { FsRecordStore } from '../../record_store/fs';
 import type { RecordStores } from '../../record_store';
 import { createTestSignature } from '../../factories';
 import { IdentityAdapter } from '../identity_adapter';
-import { WorkflowMethodologyAdapter } from '../workflow_methodology_adapter';
+import { WorkflowAdapter } from '../workflow_adapter';
 import { FeedbackAdapter } from '../feedback_adapter';
 import { ExecutionAdapter } from '../execution_adapter';
 import type { IFeedbackAdapter } from '../feedback_adapter';
@@ -173,7 +173,7 @@ describe.each(backends)('BacklogAdapter Integration Tests with %s backend', (_na
   let backlogAdapter: BacklogAdapter;
   let stores: BacklogStores;
   let identityAdapter: IdentityAdapter;
-  let methodologyAdapter: WorkflowMethodologyAdapter;
+  let methodologyAdapter: WorkflowAdapter;
   let feedbackAdapter: IFeedbackAdapter;
 
   // Mock adapters accessible for spying in tests
@@ -228,7 +228,7 @@ describe.each(backends)('BacklogAdapter Integration Tests with %s backend', (_na
       getFeedbackThread: jest.fn(),
     };
 
-    methodologyAdapter = WorkflowMethodologyAdapter.createDefault(feedbackAdapter);
+    methodologyAdapter = WorkflowAdapter.createDefault(feedbackAdapter);
 
     // Config is loaded at construction, no need to reload
 
@@ -275,7 +275,7 @@ describe.each(backends)('BacklogAdapter Integration Tests with %s backend', (_na
 
     backlogAdapter = new BacklogAdapter({
       stores,
-      workflowMethodologyAdapter: methodologyAdapter,
+      workflowAdapter: methodologyAdapter,
       identity: identityAdapter,
       eventBus: eventBus,
       feedbackAdapter: mockFeedbackAdapter as unknown as FeedbackAdapter,

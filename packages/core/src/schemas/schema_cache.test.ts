@@ -44,7 +44,7 @@ describe('SchemaValidationCache', () => {
       expect(schemaNames).toContain('ChangelogRecord');
       expect(schemaNames).toContain('FeedbackRecord');
       expect(schemaNames).toContain('CycleRecord');
-      expect(schemaNames).toContain('WorkflowMethodologyRecord');
+      expect(schemaNames).toContain('WorkflowRecord');
       expect(schemaNames).toContain('EmbeddedMetadata');
 
       // Verify minimum number of schemas
@@ -196,7 +196,7 @@ describe('SchemaValidationCache', () => {
           invalid: { id: 'invalid' }
         },
         {
-          schema: Schemas.WorkflowMethodologyRecord,
+          schema: Schemas.WorkflowRecord,
           valid: {
             version: '1.0.0',
             name: 'Test Workflow',

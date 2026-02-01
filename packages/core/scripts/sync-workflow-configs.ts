@@ -1,9 +1,9 @@
 #!/usr/bin/env tsx
 /**
- * Sync workflow methodology configurations from blueprints to adapters
- * 
- * This script copies the canonical workflow methodology JSON files
- * from blueprints to the workflow_methodology_adapter directory
+ * Sync workflow configurations from blueprints to adapters
+ *
+ * This script copies the canonical workflow JSON files
+ * from blueprints to the workflow_adapter directory
  * so they can be packaged with the published npm package.
  */
 
@@ -18,11 +18,11 @@ const __dirname = path.dirname(__filename);
 // Paths
 const BLUEPRINTS_WORKFLOW_DIR = path.join(
   __dirname,
-  '../../blueprints/03_products/core/specs/adapters/workflow_methodology_adapter'
+  '../../blueprints/03_products/core/specs/adapters/workflow_adapter'
 );
 const GENERATED_DIR = path.join(
   __dirname,
-  '../src/adapters/workflow_methodology_adapter/generated'
+  '../src/adapters/workflow_adapter/generated'
 );
 
 // Configuration files to sync: [source relative to BLUEPRINTS_WORKFLOW_DIR, target filename in generated/]
@@ -32,7 +32,7 @@ const CONFIG_FILES: [string, string][] = [
 ];
 
 function syncWorkflowConfigs() {
-  console.log('🔄 Syncing workflow methodology configurations...');
+  console.log('🔄 Syncing workflow configurations...');
 
   // Ensure generated directory exists
   fs.mkdirSync(GENERATED_DIR, { recursive: true });

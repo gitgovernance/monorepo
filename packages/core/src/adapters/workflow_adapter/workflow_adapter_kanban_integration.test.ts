@@ -1,4 +1,4 @@
-import { WorkflowMethodologyAdapter } from './index';
+import { WorkflowAdapter } from './index';
 import type { TaskRecord } from '../../types';
 import type { ActorRecord } from '../../types';
 import type { ValidationContext } from './index';
@@ -6,7 +6,7 @@ import type { CycleRecord } from '../../types';
 import type { FeedbackRecord } from '../../types';
 import type { IFeedbackAdapter } from '../feedback_adapter';
 
-describe('WorkflowMethodologyAdapter - DEFAULT Methodology Integration Tests', () => {
+describe('WorkflowAdapter - DEFAULT Methodology Integration Tests', () => {
   // Mock IFeedbackAdapter
   const mockFeedbackAdapter: IFeedbackAdapter = {
     create: jest.fn(),
@@ -37,11 +37,11 @@ describe('WorkflowMethodologyAdapter - DEFAULT Methodology Integration Tests', (
   });
 
   // Shared adapter for all DEFAULT methodology tests
-  let adapter: WorkflowMethodologyAdapter;
+  let adapter: WorkflowAdapter;
 
   beforeEach(() => {
     // Use real default config for integration tests
-    adapter = WorkflowMethodologyAdapter.createDefault(mockFeedbackAdapter);
+    adapter = WorkflowAdapter.createDefault(mockFeedbackAdapter);
   });
 
   describe('Factory & Configuration (EARS-A1)', () => {

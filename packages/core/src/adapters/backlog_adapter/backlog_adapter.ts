@@ -12,7 +12,7 @@ import type {
   ActorRecord,
   GitGovRecord,
 } from '../../types';
-import type { IWorkflowMethodology } from '../workflow_methodology_adapter';
+import type { IWorkflow } from '../workflow_adapter';
 import type {
   IEventStream,
   TaskCreatedEvent,
@@ -48,7 +48,7 @@ export class BacklogAdapter implements IBacklogAdapter {
   private feedbackAdapter: FeedbackAdapter;
   private metricsAdapter: MetricsAdapter;
 
-  private workflowMethodologyAdapter: IWorkflowMethodology;
+  private workflowAdapter: IWorkflow;
   private identity: IdentityAdapter;
   private eventBus: IEventStream;
   // configManager is required in dependencies but not currently used
@@ -66,7 +66,7 @@ export class BacklogAdapter implements IBacklogAdapter {
     this.metricsAdapter = dependencies.metricsAdapter;
 
     // Business Rules & Infrastructure
-    this.workflowMethodologyAdapter = dependencies.workflowMethodologyAdapter;
+    this.workflowAdapter = dependencies.workflowAdapter;
     this.identity = dependencies.identity;
     this.eventBus = dependencies.eventBus;
     // Note: dependencies.configManager is accepted but not stored (reserved for future use)
@@ -197,7 +197,7 @@ export class BacklogAdapter implements IBacklogAdapter {
     const actor = await this.getActor(actorId);
 
     // Delegate to workflow methodology for validation
-    const transitionRule = await this.workflowMethodologyAdapter.getTransitionRule('draft', 'review', {
+    const transitionRule = await this.workflowAdapter.getTransitionRule('draft', 'review', {
       task,
       actor,
       signatures: taskRecord.header.signatures
@@ -274,7 +274,7 @@ export class BacklogAdapter implements IBacklogAdapter {
     };
 
     // 5. Delegate signature validation to methodology
-    const isValidSignature = await this.workflowMethodologyAdapter.validateSignature(tempSignature, context);
+    const isValidSignature = await this.workflowAdapter.validateSignature(tempSignature, context);
     if (!isValidSignature) {
       throw new Error(`ProtocolViolationError: Signature is not valid for this approval`);
     }
@@ -320,7 +320,7 @@ export class BacklogAdapter implements IBacklogAdapter {
       throw new Error(`ProtocolViolationError: Task is in '${task.status}' state. Cannot activate from this state.`);
     }
 
-    // 3. Validate transition with WorkflowMethodology
+    // 3. Validate transition with Workflow
     const context = {
       task,
       actor,
@@ -328,9 +328,9 @@ export class BacklogAdapter implements IBacklogAdapter {
       transitionTo: 'active' as TaskRecord['status']
     };
 
-    const transitionRule = await this.workflowMethodologyAdapter.getTransitionRule('ready', 'active', context);
+    const transitionRule = await this.workflowAdapter.getTransitionRule('ready', 'active', context);
     if (!transitionRule) {
-      throw new Error(`ProtocolViolationError: Workflow methodology rejected ready→active transition`);
+      throw new Error(`ProtocolViolationError: Workflow rejected ready→active transition`);
     }
 
     // 4. Update task status to 'active'
@@ -389,9 +389,9 @@ export class BacklogAdapter implements IBacklogAdapter {
       transitionTo: 'paused' as TaskRecord['status']
     };
 
-    const transitionRule = await this.workflowMethodologyAdapter.getTransitionRule('active', 'paused', context);
+    const transitionRule = await this.workflowAdapter.getTransitionRule('active', 'paused', context);
     if (!transitionRule) {
-      throw new Error('ProtocolViolationError: Workflow methodology rejected active→paused transition');
+      throw new Error('ProtocolViolationError: Workflow rejected active→paused transition');
     }
 
     // 4. Update task status to 'paused' and add reason to notes if provided
@@ -465,9 +465,9 @@ export class BacklogAdapter implements IBacklogAdapter {
       transitionTo: 'active' as TaskRecord['status']
     };
 
-    const transitionRule = await this.workflowMethodologyAdapter.getTransitionRule('paused', 'active', context);
+    const transitionRule = await this.workflowAdapter.getTransitionRule('paused', 'active', context);
     if (!transitionRule) {
-      throw new Error('ProtocolViolationError: Workflow methodology rejected paused→active transition');
+      throw new Error('ProtocolViolationError: Workflow rejected paused→active transition');
     }
 
     // 4. Update task status back to 'active'
@@ -517,7 +517,7 @@ export class BacklogAdapter implements IBacklogAdapter {
       throw new Error(`ProtocolViolationError: Task is in '${task.status}' state. Cannot complete from this state.`);
     }
 
-    // 3. Validate transition with WorkflowMethodology
+    // 3. Validate transition with Workflow
     const context = {
       task,
       actor,
@@ -525,9 +525,9 @@ export class BacklogAdapter implements IBacklogAdapter {
       transitionTo: 'done' as TaskRecord['status']
     };
 
-    const transitionRule = await this.workflowMethodologyAdapter.getTransitionRule('active', 'done', context);
+    const transitionRule = await this.workflowAdapter.getTransitionRule('active', 'done', context);
     if (!transitionRule) {
-      throw new Error(`ProtocolViolationError: Workflow methodology rejected active→done transition`);
+      throw new Error(`ProtocolViolationError: Workflow rejected active→done transition`);
     }
 
     // 4. Update task status to 'done'
@@ -582,7 +582,7 @@ export class BacklogAdapter implements IBacklogAdapter {
       throw new Error(`ProtocolViolationError: Task is in '${task.status}' state. Cannot cancel from this state. Only 'ready', 'active', and 'review' tasks can be cancelled.`);
     }
 
-    // 3. Validate transition with WorkflowMethodology
+    // 3. Validate transition with Workflow
     const context = {
       task,
       actor,
@@ -590,9 +590,9 @@ export class BacklogAdapter implements IBacklogAdapter {
       transitionTo: 'discarded' as TaskRecord['status']
     };
 
-    const transitionRule = await this.workflowMethodologyAdapter.getTransitionRule(task.status, 'discarded', context);
+    const transitionRule = await this.workflowAdapter.getTransitionRule(task.status, 'discarded', context);
     if (!transitionRule) {
-      throw new Error(`ProtocolViolationError: Workflow methodology rejected ${task.status}→discarded transition`);
+      throw new Error(`ProtocolViolationError: Workflow rejected ${task.status}→discarded transition`);
     }
 
     // 4. Update task status to 'discarded' and add cancellation/rejection reason
@@ -868,16 +868,16 @@ export class BacklogAdapter implements IBacklogAdapter {
         return;
       }
 
-      // EARS-36: Validate with WorkflowMethodology before transition
+      // EARS-36: Validate with Workflow before transition
       const actor = await this.getActor(event.payload.triggeredBy);
-      const transitionRule = await this.workflowMethodologyAdapter.getTransitionRule('ready', 'active', {
+      const transitionRule = await this.workflowAdapter.getTransitionRule('ready', 'active', {
         task,
         actor,
         signatures: []
       });
 
       if (!transitionRule) {
-        console.warn(`Workflow methodology rejected ready→active transition for task ${task.id}`);
+        console.warn(`Workflow rejected ready→active transition for task ${task.id}`);
         return;
       }
 
@@ -1085,7 +1085,7 @@ export class BacklogAdapter implements IBacklogAdapter {
    * Helper to get available transitions from current state
    */
   private async getAvailableTransitions(fromStatus: string): Promise<Array<{ from: string; to: string; requires?: { signatures?: Record<string, { role: string }> } }>> {
-    // This would normally be implemented using workflowMethodology.getAvailableTransitions()
+    // This would normally be implemented using workflow.getAvailableTransitions()
     // For now, implementing basic logic based on canonical workflow
     const transitions = [
       { from: 'review', to: 'ready', requires: { signatures: { __default__: { role: 'approver' } } } },

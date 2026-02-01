@@ -1,17 +1,17 @@
-import { WorkflowMethodologyAdapter } from './index';
+import { WorkflowAdapter } from './index';
 import type { TaskRecord } from '../../types';
 import type { ActorRecord } from '../../types';
 import type { FeedbackRecord } from '../../types';
 import type { CycleRecord } from '../../types';
 import type { Signature } from '../../types/embedded.types';
 import type { ValidationContext } from './index';
-import type { WorkflowMethodologyRecord } from '../../types';
+import type { WorkflowRecord } from '../../types';
 import type { IFeedbackAdapter } from '../feedback_adapter';
 
 // Mock fs for file operations
 jest.mock('fs/promises');
 
-describe('WorkflowMethodologyAdapter', () => {
+describe('WorkflowAdapter', () => {
   const mockFs = require('fs/promises');
 
   // Mock IFeedbackAdapter
@@ -58,7 +58,7 @@ describe('WorkflowMethodologyAdapter', () => {
 
   describe('Configuration Management (EARS-A1 to A2)', () => {
     it('[EARS-A1] should use scrum config when specified', () => {
-      const adapter = WorkflowMethodologyAdapter.createScrum(mockFeedbackAdapter);
+      const adapter = WorkflowAdapter.createScrum(mockFeedbackAdapter);
       expect(adapter).toBeDefined();
     });
 
@@ -74,8 +74,8 @@ describe('WorkflowMethodologyAdapter', () => {
         }
       };
 
-      const adapter = new WorkflowMethodologyAdapter({
-        config: customConfig as unknown as WorkflowMethodologyRecord,
+      const adapter = new WorkflowAdapter({
+        config: customConfig as unknown as WorkflowRecord,
         feedbackAdapter: mockFeedbackAdapter
       });
       expect(adapter).toBeDefined();
@@ -83,7 +83,7 @@ describe('WorkflowMethodologyAdapter', () => {
   });
 
   describe('Transition Rules (EARS-B1 to B8)', () => {
-    let adapter: WorkflowMethodologyAdapter;
+    let adapter: WorkflowAdapter;
 
     beforeEach(() => {
       // Mock config for unit tests
@@ -154,7 +154,7 @@ describe('WorkflowMethodologyAdapter', () => {
       };
 
       mockFs.readFile.mockResolvedValue(JSON.stringify(mockConfig));
-      adapter = WorkflowMethodologyAdapter.createDefault(mockFeedbackAdapter);
+      adapter = WorkflowAdapter.createDefault(mockFeedbackAdapter);
     });
 
     it('[EARS-B1] should return transition rule for draft to review', async () => {
@@ -280,7 +280,7 @@ describe('WorkflowMethodologyAdapter', () => {
   });
 
   describe('Signature Validation (EARS-C1 to C5)', () => {
-    let adapter: WorkflowMethodologyAdapter;
+    let adapter: WorkflowAdapter;
 
     beforeEach(() => {
       const mockConfig = {
@@ -317,7 +317,7 @@ describe('WorkflowMethodologyAdapter', () => {
       };
 
       mockFs.readFile.mockResolvedValue(JSON.stringify(mockConfig));
-      adapter = WorkflowMethodologyAdapter.createDefault(mockFeedbackAdapter);
+      adapter = WorkflowAdapter.createDefault(mockFeedbackAdapter);
     });
 
     it('[EARS-C1] should validate signature with required capability role', async () => {
@@ -390,7 +390,7 @@ describe('WorkflowMethodologyAdapter', () => {
   });
 
   describe('Custom Rules Engine (EARS-D1 to D8)', () => {
-    let adapter: WorkflowMethodologyAdapter;
+    let adapter: WorkflowAdapter;
 
     beforeEach(() => {
       // Mock config loading for validateCustomRules tests
@@ -412,7 +412,7 @@ describe('WorkflowMethodologyAdapter', () => {
       };
 
       mockFs.readFile.mockResolvedValue(JSON.stringify(mockConfig));
-      adapter = WorkflowMethodologyAdapter.createDefault(mockFeedbackAdapter);
+      adapter = WorkflowAdapter.createDefault(mockFeedbackAdapter);
     });
 
     it('[EARS-D1] should validate task assignment rule', async () => {
@@ -493,11 +493,11 @@ describe('WorkflowMethodologyAdapter', () => {
     });
 
     it('[EARS-D6] should validate epic_complexity rule for decomposed epic', async () => {
-      const customAdapter = new WorkflowMethodologyAdapter({
+      const customAdapter = new WorkflowAdapter({
         config: {
           version: '1.0.0', name: 'Test', state_transitions: {},
           custom_rules: { 'epic_check': { description: 'Epic decomposed', validation: 'epic_complexity' } }
-        } as unknown as WorkflowMethodologyRecord,
+        } as unknown as WorkflowRecord,
         feedbackAdapter: mockFeedbackAdapter
       });
       const epicTask = createMockTask(['epic:auth'], 'paused');
@@ -508,11 +508,11 @@ describe('WorkflowMethodologyAdapter', () => {
     });
 
     it('[EARS-D7] should pass epic_complexity rule for non-epic task', async () => {
-      const customAdapter = new WorkflowMethodologyAdapter({
+      const customAdapter = new WorkflowAdapter({
         config: {
           version: '1.0.0', name: 'Test', state_transitions: {},
           custom_rules: { 'epic_check': { description: 'Epic decomposed', validation: 'epic_complexity' } }
-        } as unknown as WorkflowMethodologyRecord,
+        } as unknown as WorkflowRecord,
         feedbackAdapter: mockFeedbackAdapter
       });
       const normalTask = createMockTask(['feature'], 'draft');
@@ -522,11 +522,11 @@ describe('WorkflowMethodologyAdapter', () => {
     });
 
     it('[EARS-D8] should execute custom validation type', async () => {
-      const customAdapter = new WorkflowMethodologyAdapter({
+      const customAdapter = new WorkflowAdapter({
         config: {
           version: '1.0.0', name: 'Test', state_transitions: {},
           custom_rules: { 'run_custom_check': { description: 'Custom check', validation: 'custom' } }
-        } as unknown as WorkflowMethodologyRecord,
+        } as unknown as WorkflowRecord,
         feedbackAdapter: mockFeedbackAdapter
       });
       const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
@@ -539,10 +539,10 @@ describe('WorkflowMethodologyAdapter', () => {
   });
 
   describe('Available Transitions (EARS-E1 to E2)', () => {
-    let adapter: WorkflowMethodologyAdapter;
+    let adapter: WorkflowAdapter;
 
     beforeEach(() => {
-      adapter = new WorkflowMethodologyAdapter({
+      adapter = new WorkflowAdapter({
         config: {
           version: '1.0.0',
           name: 'Test Methodology',
@@ -561,7 +561,7 @@ describe('WorkflowMethodologyAdapter', () => {
             }
           },
           custom_rules: {}
-        } as unknown as WorkflowMethodologyRecord,
+        } as unknown as WorkflowRecord,
         feedbackAdapter: mockFeedbackAdapter
       });
     });

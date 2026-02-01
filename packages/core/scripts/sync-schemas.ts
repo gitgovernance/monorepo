@@ -29,7 +29,7 @@ const SCHEMA_MAPPINGS = {
   '07_changelog': 'changelog_record_schema',
   '08_feedback': 'feedback_record_schema',
   '05_cycle': 'cycle_record_schema',
-  '09_workflow_methodology': 'workflow_methodology_record_schema',
+  '09_workflow': 'workflow_record_schema',
 };
 
 function syncSchemas() {

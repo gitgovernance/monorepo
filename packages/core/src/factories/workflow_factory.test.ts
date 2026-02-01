@@ -1,32 +1,32 @@
 import {
-  createWorkflowMethodologyConfig,
-  createDefaultWorkflowMethodologyConfig
-} from './workflow_methodology_factory';
-import type { WorkflowMethodologyRecord } from '../types';
+  createWorkflowConfig,
+  createDefaultWorkflowConfig
+} from './workflow_factory';
+import type { WorkflowRecord } from '../types';
 import { DetailedValidationError } from '../validation/common';
 
-// Manual mock for validateWorkflowMethodologyConfigDetailed
-jest.mock('../validation/workflow_methodology_validator', () => ({
-  validateWorkflowMethodologyConfigDetailed: jest.fn()
+// Manual mock for validateWorkflowConfigDetailed
+jest.mock('../validation/workflow_validator', () => ({
+  validateWorkflowConfigDetailed: jest.fn()
     .mockReturnValue({ isValid: true, errors: [] }),
-  validateWorkflowMethodologyConfigBusinessRules: jest.fn()
+  validateWorkflowConfigBusinessRules: jest.fn()
     .mockReturnValue({ isValid: true, errors: [] }),
 }));
 
-describe('createWorkflowMethodologyConfig', () => {
+describe('createWorkflowConfig', () => {
   beforeEach(() => {
     // Reset mocks to default success state before each test
     const {
-      validateWorkflowMethodologyConfigDetailed,
-      validateWorkflowMethodologyConfigBusinessRules
-    } = require('../validation/workflow_methodology_validator');
+      validateWorkflowConfigDetailed,
+      validateWorkflowConfigBusinessRules
+    } = require('../validation/workflow_validator');
 
-    (validateWorkflowMethodologyConfigDetailed as jest.Mock).mockReturnValue({ isValid: true, errors: [] });
-    (validateWorkflowMethodologyConfigBusinessRules as jest.Mock).mockReturnValue({ isValid: true, errors: [] });
+    (validateWorkflowConfigDetailed as jest.Mock).mockReturnValue({ isValid: true, errors: [] });
+    (validateWorkflowConfigBusinessRules as jest.Mock).mockReturnValue({ isValid: true, errors: [] });
   });
 
   it('[EARS-1] should create a valid workflow methodology config with defaults', async () => {
-    const payload: Partial<WorkflowMethodologyRecord> = {
+    const payload: Partial<WorkflowRecord> = {
       name: 'Custom Test Methodology',
       state_transitions: {
         review: {
@@ -38,7 +38,7 @@ describe('createWorkflowMethodologyConfig', () => {
       }
     };
 
-    const config = await createWorkflowMethodologyConfig(payload);
+    const config = await createWorkflowConfig(payload);
 
     expect(config.version).toBe('1.0.0'); // Default version
     expect(config.name).toBe('Custom Test Methodology');
@@ -46,8 +46,8 @@ describe('createWorkflowMethodologyConfig', () => {
   });
 
   it('[EARS-2] should throw DetailedValidationError for invalid schema', async () => {
-    const { validateWorkflowMethodologyConfigDetailed } = require('../validation/workflow_methodology_validator');
-    (validateWorkflowMethodologyConfigDetailed as jest.Mock).mockReturnValue({
+    const { validateWorkflowConfigDetailed } = require('../validation/workflow_validator');
+    (validateWorkflowConfigDetailed as jest.Mock).mockReturnValue({
       isValid: false,
       errors: [
         { field: 'name', message: 'must be a non-empty string', value: '' },
@@ -55,24 +55,24 @@ describe('createWorkflowMethodologyConfig', () => {
       ]
     });
 
-    const payload: Partial<WorkflowMethodologyRecord> = {
+    const payload: Partial<WorkflowRecord> = {
       name: '',
       // Missing state_transitions
     };
 
-    expect(() => createWorkflowMethodologyConfig(payload)).toThrow(DetailedValidationError);
+    expect(() => createWorkflowConfig(payload)).toThrow(DetailedValidationError);
   });
 
   it('[EARS-3] should throw DetailedValidationError for business rule violations', () => {
-    const { validateWorkflowMethodologyConfigBusinessRules } = require('../validation/workflow_methodology_validator');
-    (validateWorkflowMethodologyConfigBusinessRules as jest.Mock).mockReturnValue({
+    const { validateWorkflowConfigBusinessRules } = require('../validation/workflow_validator');
+    (validateWorkflowConfigBusinessRules as jest.Mock).mockReturnValue({
       isValid: false,
       errors: [
         { field: 'state_transitions.invalid_state', message: 'Invalid target state: invalid_state', value: 'invalid_state' }
       ]
     });
 
-    const payload: Partial<WorkflowMethodologyRecord> = {
+    const payload: Partial<WorkflowRecord> = {
       name: 'Test Methodology',
       state_transitions: {
         invalid_state: {
@@ -82,11 +82,11 @@ describe('createWorkflowMethodologyConfig', () => {
       } as any
     };
 
-    expect(() => createWorkflowMethodologyConfig(payload)).toThrow(DetailedValidationError);
+    expect(() => createWorkflowConfig(payload)).toThrow(DetailedValidationError);
   });
 
   it('[EARS-4] should preserve all provided fields', async () => {
-    const payload: Partial<WorkflowMethodologyRecord> = {
+    const payload: Partial<WorkflowRecord> = {
       version: '2.0.0',
       name: 'Advanced Methodology',
       description: 'Advanced workflow with custom rules',
@@ -113,7 +113,7 @@ describe('createWorkflowMethodologyConfig', () => {
       }
     };
 
-    const config = await createWorkflowMethodologyConfig(payload);
+    const config = await createWorkflowConfig(payload);
 
     expect(config.version).toBe('2.0.0');
     expect(config.name).toBe('Advanced Methodology');
@@ -122,7 +122,7 @@ describe('createWorkflowMethodologyConfig', () => {
   });
 
   it('[EARS-5] should create config with minimal required fields', async () => {
-    const payload: Partial<WorkflowMethodologyRecord> = {
+    const payload: Partial<WorkflowRecord> = {
       name: 'Minimal Methodology',
       state_transitions: {
         review: {
@@ -134,7 +134,7 @@ describe('createWorkflowMethodologyConfig', () => {
       }
     };
 
-    const config = await createWorkflowMethodologyConfig(payload);
+    const config = await createWorkflowConfig(payload);
 
     expect(config.name).toBe('Minimal Methodology');
     expect(config.version).toBe('1.0.0'); // Default
@@ -142,7 +142,7 @@ describe('createWorkflowMethodologyConfig', () => {
   });
 
   it('[EARS-6] should handle empty payload with all defaults', async () => {
-    const config = await createWorkflowMethodologyConfig({});
+    const config = await createWorkflowConfig({});
 
     expect(config.version).toBe('1.0.0');
     expect(config.name).toBe('Custom Methodology');
@@ -150,7 +150,7 @@ describe('createWorkflowMethodologyConfig', () => {
   });
 
   it('[EARS-8] should validate and create complex methodology config', async () => {
-    const complexPayload: Partial<WorkflowMethodologyRecord> = {
+    const complexPayload: Partial<WorkflowRecord> = {
       version: '1.5.0',
       name: 'Enterprise Methodology',
       description: 'Complex enterprise workflow with multiple approval gates',
@@ -195,7 +195,7 @@ describe('createWorkflowMethodologyConfig', () => {
       }
     };
 
-    const config = await createWorkflowMethodologyConfig(complexPayload);
+    const config = await createWorkflowConfig(complexPayload);
 
     expect(config.version).toBe('1.5.0');
     expect(config.name).toBe('Enterprise Methodology');
@@ -205,20 +205,20 @@ describe('createWorkflowMethodologyConfig', () => {
   });
 });
 
-describe('createDefaultWorkflowMethodologyConfig', () => {
+describe('createDefaultWorkflowConfig', () => {
   beforeEach(() => {
     // Reset mocks to default success state before each test
     const {
-      validateWorkflowMethodologyConfigDetailed,
-      validateWorkflowMethodologyConfigBusinessRules
-    } = require('../validation/workflow_methodology_validator');
+      validateWorkflowConfigDetailed,
+      validateWorkflowConfigBusinessRules
+    } = require('../validation/workflow_validator');
 
-    (validateWorkflowMethodologyConfigDetailed as jest.Mock).mockReturnValue({ isValid: true, errors: [] });
-    (validateWorkflowMethodologyConfigBusinessRules as jest.Mock).mockReturnValue({ isValid: true, errors: [] });
+    (validateWorkflowConfigDetailed as jest.Mock).mockReturnValue({ isValid: true, errors: [] });
+    (validateWorkflowConfigBusinessRules as jest.Mock).mockReturnValue({ isValid: true, errors: [] });
   });
 
   it('[EARS-9] should create default GitGovernance methodology config', async () => {
-    const config = await createDefaultWorkflowMethodologyConfig();
+    const config = await createDefaultWorkflowConfig();
 
     expect(config.version).toBe('1.0.0');
     expect(config.name).toBe('GitGovernance Default Methodology');
@@ -240,7 +240,7 @@ describe('createDefaultWorkflowMethodologyConfig', () => {
   });
 
   it('[EARS-10] should create config that matches kanban_workflow.json structure', async () => {
-    const config = await createDefaultWorkflowMethodologyConfig();
+    const config = await createDefaultWorkflowConfig();
 
     // Verify structure matches what's expected by BacklogAdapter
     expect(config.state_transitions['review']?.from).toEqual(['draft']);

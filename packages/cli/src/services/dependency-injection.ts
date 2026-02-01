@@ -273,8 +273,8 @@ export class DependencyInjectionService {
         }
       });
 
-      // Create WorkflowMethodologyAdapter
-      const workflowMethodologyAdapter = Adapters.WorkflowMethodologyAdapter.createDefault(feedbackAdapter);
+      // Create WorkflowAdapter
+      const workflowAdapter = Adapters.WorkflowAdapter.createDefault(feedbackAdapter);
 
       // Get ConfigManager for BacklogAdapter
       const configManager = await this.getConfigManager();
@@ -291,7 +291,7 @@ export class DependencyInjectionService {
         executionAdapter,
         changelogAdapter,
         metricsAdapter,
-        workflowMethodologyAdapter,
+        workflowAdapter,
         identity: identityAdapter,
         eventBus,
         configManager,

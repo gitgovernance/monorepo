@@ -61,7 +61,7 @@ export class SchemaValidationCache {
         'ExecutionRecord': 'ref:execution_record_schema',
         'FeedbackRecord': 'ref:feedback_record_schema',
         'TaskRecord': 'ref:task_record_schema',
-        'WorkflowMethodologyRecord': 'ref:workflow_methodology_record_schema'
+        'WorkflowRecord': 'ref:workflow_record_schema'
       };
 
       // Register schemas with correct aliases
