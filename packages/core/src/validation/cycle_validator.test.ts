@@ -107,7 +107,7 @@ describe('CycleValidator Module', () => {
 
   describe('Schema Cache Integration', () => {
     it('[EARS-7] should use schema cache for validation performance', () => {
-      const { SchemaValidationCache } = require('../schemas/schema_cache');
+      const { SchemaValidationCache } = require('../record_schemas/schema_cache');
       const cacheSpy = jest.spyOn(SchemaValidationCache, 'getValidatorFromSchema');
 
       validateCycleRecordDetailed(validCyclePayload);
@@ -117,7 +117,7 @@ describe('CycleValidator Module', () => {
     });
 
     it('[EARS-8] should reuse compiled validators from cache', () => {
-      const { SchemaValidationCache } = require('../schemas/schema_cache');
+      const { SchemaValidationCache } = require('../record_schemas/schema_cache');
       const cacheSpy = jest.spyOn(SchemaValidationCache, 'getValidatorFromSchema');
 
       // First call
@@ -145,14 +145,14 @@ describe('CycleValidator Module', () => {
     });
 
     it('[EARS-10] should support cache clearing', () => {
-      const { SchemaValidationCache } = require('../schemas/schema_cache');
+      const { SchemaValidationCache } = require('../record_schemas/schema_cache');
       // Verify clearCache method exists and can be called
       expect(SchemaValidationCache.clearCache).toBeDefined();
       expect(() => SchemaValidationCache.clearCache()).not.toThrow();
     });
 
     it('[EARS-11] should provide cache statistics', () => {
-      const { SchemaValidationCache } = require('../schemas/schema_cache');
+      const { SchemaValidationCache } = require('../record_schemas/schema_cache');
       // Verify getCacheStats method exists and returns stats
       const stats = SchemaValidationCache.getCacheStats();
       expect(stats).toBeDefined();

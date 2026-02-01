@@ -17,7 +17,7 @@ const __dirname = path.dirname(__filename);
 
 // Paths
 const BLUEPRINTS_PROTOCOL_DIR = path.join(__dirname, '../../blueprints/03_products/protocol');
-const CORE_SCHEMAS_DIR = path.join(__dirname, '../src/schemas/generated');
+const CORE_SCHEMAS_DIR = path.join(__dirname, '../src/record_schemas/generated');
 
 // Schema mappings (blueprint folder → output name)
 const SCHEMA_MAPPINGS = {

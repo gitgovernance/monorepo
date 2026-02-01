@@ -1,11 +1,11 @@
 import type { ValidateFunction, ErrorObject } from "ajv";
 import type { CycleRecord } from "../types";
 import type { GitGovRecord } from "../types";
-import { SchemaValidationCache } from "../schemas/schema_cache";
+import { SchemaValidationCache } from "../record_schemas/schema_cache";
 import { DetailedValidationError } from "./common";
 import type { ValidationResult } from './errors';
 import { validateFullEmbeddedMetadataRecord } from './embedded_metadata_validator';
-import { Schemas } from "../schemas";
+import { Schemas } from "../record_schemas";
 
 // --- Schema Validation ---
 const cycleSchema = Schemas.CycleRecord;

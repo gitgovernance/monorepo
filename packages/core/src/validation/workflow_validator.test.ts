@@ -81,7 +81,7 @@ describe('WorkflowValidator Module', () => {
 
   describe('Schema Cache Integration', () => {
     it('should use schema cache for validation performance', () => {
-      const { SchemaValidationCache } = require('../schemas/schema_cache');
+      const { SchemaValidationCache } = require('../record_schemas/schema_cache');
       const cacheSpy = jest.spyOn(SchemaValidationCache, 'getValidatorFromSchema');
 
       validateWorkflowConfigDetailed(validWorkflowConfig);
@@ -91,7 +91,7 @@ describe('WorkflowValidator Module', () => {
     });
 
     it('should reuse compiled validators from cache', () => {
-      const { SchemaValidationCache } = require('../schemas/schema_cache');
+      const { SchemaValidationCache } = require('../record_schemas/schema_cache');
       const cacheSpy = jest.spyOn(SchemaValidationCache, 'getValidatorFromSchema');
 
       // First call
@@ -115,12 +115,12 @@ describe('WorkflowValidator Module', () => {
     });
 
     it('should support cache clearing', () => {
-      const { SchemaValidationCache } = require('../schemas/schema_cache');
+      const { SchemaValidationCache } = require('../record_schemas/schema_cache');
       expect(() => SchemaValidationCache.clearCache()).not.toThrow();
     });
 
     it('should provide cache statistics', () => {
-      const { SchemaValidationCache } = require('../schemas/schema_cache');
+      const { SchemaValidationCache } = require('../record_schemas/schema_cache');
       const stats = SchemaValidationCache.getCacheStats();
       expect(stats).toBeDefined();
       expect(stats).toHaveProperty('cachedSchemas');

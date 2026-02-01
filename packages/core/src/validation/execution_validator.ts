@@ -2,10 +2,10 @@ import type { ValidateFunction, ErrorObject } from "ajv";
 import type { ExecutionRecord } from '../types';
 import type { GitGovRecord } from '../types';
 import type { ValidationResult } from './errors';
-import { SchemaValidationCache } from '../schemas/schema_cache';
+import { SchemaValidationCache } from '../record_schemas/schema_cache';
 import { DetailedValidationError } from './common';
 import { validateFullEmbeddedMetadataRecord } from './embedded_metadata_validator';
-import { Schemas } from '../schemas';
+import { Schemas } from '../record_schemas';
 
 /**
  * Schema-based validation for ExecutionRecord payload

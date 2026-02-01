@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 // Path to schemas (Jest runs in CommonJS mode)
-const SCHEMAS_DIR = path.join(__dirname, '../../schemas');
+const SCHEMAS_DIR = path.join(__dirname, '../../record_schemas');
 
 /**
  * Basic JSON Schema interface for testing

@@ -4,8 +4,8 @@ import type { GitGovRecord } from "../types";
 import { DetailedValidationError, SchemaValidationError } from "./common";
 import { validateFullEmbeddedMetadataRecord } from './embedded_metadata_validator';
 import type { ValidationResult } from './errors';
-import { SchemaValidationCache } from "../schemas/schema_cache";
-import { Schemas } from '../schemas';
+import { SchemaValidationCache } from "../record_schemas/schema_cache";
+import { Schemas } from '../record_schemas';
 import type { ActorRecord } from "../types";
 
 // --- Schema Validation ---

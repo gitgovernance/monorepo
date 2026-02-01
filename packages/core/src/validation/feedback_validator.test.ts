@@ -8,11 +8,11 @@ import type { GitGovRecord, Signature } from '../types';
 import { DetailedValidationError } from './common';
 
 // Mock dependencies
-jest.mock('../schemas/schema_cache');
+jest.mock('../record_schemas/schema_cache');
 jest.mock('./embedded_metadata_validator');
 
 describe('FeedbackRecord Validator', () => {
-  const mockSchemaValidationCache = require('../schemas/schema_cache').SchemaValidationCache;
+  const mockSchemaValidationCache = require('../record_schemas/schema_cache').SchemaValidationCache;
   const mockValidateEmbeddedMetadata = require('./embedded_metadata_validator').validateFullEmbeddedMetadataRecord;
 
   const createMockSignature = (): Signature => ({
