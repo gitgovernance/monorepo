@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Sync schemas from blueprints to core/src/schemas as JSON
+ * Sync schemas from blueprints to core/src/record_schemas as JSON
  * 
  * This script reads the canonical YAML schemas from blueprints
  * and converts them to JSON for direct import in TypeScript.
