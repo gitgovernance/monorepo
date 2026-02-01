@@ -36,7 +36,6 @@ export type BacklogAdapterDependencies = {
 
   // Business Rules Layer (Methodologies)
   workflowAdapter: IWorkflow;
-  planningMethodologyAdapter?: IWorkflow; // Future
 
   // Infrastructure Layer
   identity: IdentityAdapter;
