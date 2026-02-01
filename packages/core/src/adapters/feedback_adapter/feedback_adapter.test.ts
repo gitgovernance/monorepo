@@ -1,5 +1,5 @@
 import { FeedbackAdapter } from './index';
-import { createFeedbackRecord } from '../../factories/feedback_factory';
+import { createFeedbackRecord } from '../../record_factories/feedback_factory';
 import type { RecordStore } from '../../record_store';
 import { IdentityAdapter } from '../identity_adapter';
 import type { FeedbackRecord, GitGovFeedbackRecord } from '../../record_types';
@@ -8,7 +8,7 @@ import type { GitGovRecord, Signature } from '../../record_types';
 import { DetailedValidationError } from '../../validation/common';
 
 // Mock dependencies
-jest.mock('../../factories/feedback_factory');
+jest.mock('../../record_factories/feedback_factory');
 jest.mock('../../record_store');
 jest.mock('../identity_adapter');
 

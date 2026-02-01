@@ -8,19 +8,19 @@ import type { BacklogAdapter } from '../backlog_adapter';
 import type { IProjectInitializer, EnvironmentValidation } from '../../project_initializer';
 import { DetailedValidationError } from '../../validation/common';
 import { promises as fs, existsSync } from 'fs';
-import { createTaskRecord } from '../../factories/task_factory';
-import { createCycleRecord } from '../../factories/cycle_factory';
+import { createTaskRecord } from '../../record_factories/task_factory';
+import { createCycleRecord } from '../../record_factories/cycle_factory';
 
 // Mock the factories before importing
-jest.mock('../../factories/task_factory', () => ({
+jest.mock('../../record_factories/task_factory', () => ({
   createTaskRecord: jest.fn()
 }));
 
-jest.mock('../../factories/cycle_factory', () => ({
+jest.mock('../../record_factories/cycle_factory', () => ({
   createCycleRecord: jest.fn()
 }));
 
-jest.mock('../../factories/actor_factory', () => ({
+jest.mock('../../record_factories/actor_factory', () => ({
   createActorRecord: jest.fn()
 }));
 

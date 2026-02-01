@@ -1,5 +1,5 @@
 import { AgentAdapter } from './agent_adapter';
-import { createAgentRecord } from '../../factories/agent_factory';
+import { createAgentRecord } from '../../record_factories/agent_factory';
 import { validateFullAgentRecord } from '../../validation/agent_validator';
 import { signPayload } from '../../crypto/signatures';
 import { calculatePayloadChecksum } from '../../crypto/checksum';
@@ -10,7 +10,7 @@ import type { IIdentityAdapter } from '../identity_adapter';
 import type { KeyProvider } from '../../key_provider/key_provider';
 
 // Mock dependencies
-jest.mock('../../factories/agent_factory');
+jest.mock('../../record_factories/agent_factory');
 jest.mock('../../validation/agent_validator');
 jest.mock('../../crypto/signatures');
 jest.mock('../../crypto/checksum');

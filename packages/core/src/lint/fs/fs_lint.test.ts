@@ -34,7 +34,7 @@ import {
   createTaskRecord,
   createEmbeddedMetadataRecord,
   createTestSignature
-} from '../../factories';
+} from '../../record_factories';
 import { readdir } from 'fs/promises';
 
 // Mock signPayload to avoid real Ed25519 crypto operations in tests

@@ -40,7 +40,7 @@ import { BacklogAdapter } from './backlog_adapter';
 import { MemoryRecordStore } from '../../record_store/memory';
 import { FsRecordStore } from '../../record_store/fs';
 import type { RecordStores } from '../../record_store';
-import { createTestSignature } from '../../factories';
+import { createTestSignature } from '../../record_factories';
 import { IdentityAdapter } from '../identity_adapter';
 import { WorkflowAdapter } from '../workflow_adapter';
 import { FeedbackAdapter } from '../feedback_adapter';

@@ -14,7 +14,7 @@ import type {
 import type { KeyProvider } from '../../key_provider/key_provider';
 import type { IIdentityAdapter, IdentityAdapterDependencies } from './identity_adapter.types';
 
-import { createActorRecord } from '../../factories/actor_factory';
+import { createActorRecord } from '../../record_factories/actor_factory';
 import { validateFullActorRecord } from '../../validation/actor_validator';
 import { generateKeys, signPayload, generateMockSignature } from '../../crypto/signatures';
 import { calculatePayloadChecksum } from '../../crypto/checksum';

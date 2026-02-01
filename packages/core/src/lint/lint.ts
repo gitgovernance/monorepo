@@ -48,7 +48,7 @@ import {
   loadExecutionRecord,
   loadChangelogRecord,
   loadFeedbackRecord
-} from "../factories";
+} from "../record_factories";
 import { Schemas } from "../record_schemas/generated";
 
 const logger = createLogger("[Lint] ");

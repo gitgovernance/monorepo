@@ -72,7 +72,7 @@ import type {
   GitGovExecutionRecord, GitGovChangelogRecord, GitGovActorRecord
 } from '../record_types';
 import type { IEventStream } from '../event_bus';
-import { createTestSignature } from '../factories';
+import { createTestSignature } from '../record_factories';
 
 describe('FeedbackAdapter <-> BacklogAdapter Integration (Real Event Communication)', () => {
   let feedbackAdapter: FeedbackAdapter;

@@ -1,4 +1,4 @@
-import { createExecutionRecord } from '../../factories/execution_factory';
+import { createExecutionRecord } from '../../record_factories/execution_factory';
 import type { RecordStores } from '../../record_store';
 import { IdentityAdapter } from '../identity_adapter';
 import type { ExecutionRecord, GitGovExecutionRecord } from '../../record_types';

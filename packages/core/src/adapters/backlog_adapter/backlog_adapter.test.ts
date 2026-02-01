@@ -100,11 +100,11 @@ type MockBacklogAdapterDependencies = {
 };
 
 // Mock the factories before importing
-jest.mock('../../factories/task_factory', () => ({
+jest.mock('../../record_factories/task_factory', () => ({
   createTaskRecord: jest.fn()
 }));
 
-jest.mock('../../factories/cycle_factory', () => ({
+jest.mock('../../record_factories/cycle_factory', () => ({
   createCycleRecord: jest.fn()
 }));
 
@@ -333,7 +333,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       });
 
       // Mock the factory functions
-      const { createCycleRecord } = require('../../factories/cycle_factory');
+      const { createCycleRecord } = require('../../record_factories/cycle_factory');
       createCycleRecord.mockReturnValue(mockCycle.payload);
 
       mockDependencies.identity.signRecord.mockResolvedValue(mockCycle);
@@ -413,7 +413,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       mockDependencies.stores.cycles.put.mockResolvedValue(undefined);
 
       // Mock the factory function
-      const { createCycleRecord } = require('../../factories/cycle_factory');
+      const { createCycleRecord } = require('../../record_factories/cycle_factory');
       createCycleRecord.mockReturnValue(updatedCycle.payload);
 
       const result = await backlogAdapter.updateCycle('1757687335-cycle-test-cycle', { status: 'active' });
@@ -448,7 +448,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       mockDependencies.stores.cycles.put.mockResolvedValue(undefined);
 
       // Mock the factory function
-      const { createCycleRecord } = require('../../factories/cycle_factory');
+      const { createCycleRecord } = require('../../record_factories/cycle_factory');
       createCycleRecord.mockReturnValue(updatedCycle.payload);
 
       const result = await backlogAdapter.updateCycle(cycleId, { status: 'active' }, actorId);
@@ -478,7 +478,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       mockDependencies.stores.cycles.put.mockResolvedValue(undefined);
 
       // Mock the factory function
-      const { createCycleRecord } = require('../../factories/cycle_factory');
+      const { createCycleRecord } = require('../../record_factories/cycle_factory');
       createCycleRecord.mockReturnValue(updatedCycle.payload);
 
       const result = await backlogAdapter.updateCycle(cycleId, { status: 'completed' }, actorId);
@@ -800,7 +800,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       mockDependencies.stores.tasks.put.mockResolvedValue(undefined);
 
       // Mock the factory function
-      const { createTaskRecord } = require('../../factories/task_factory');
+      const { createTaskRecord } = require('../../record_factories/task_factory');
       createTaskRecord.mockReturnValue(updatedTask.payload);
 
       const result = await backlogAdapter.updateTask('1757687335-task-test-task', { title: 'Updated Title' }, 'human:editor');
@@ -837,7 +837,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       mockDependencies.stores.tasks.get.mockResolvedValue(originalTask);
       mockDependencies.stores.tasks.put.mockResolvedValue(undefined);
 
-      const { createTaskRecord } = require('../../factories/task_factory');
+      const { createTaskRecord } = require('../../record_factories/task_factory');
       createTaskRecord.mockReturnValue({
         ...originalTask.payload,
         title: 'Updated Title'
@@ -2319,7 +2319,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         status: 'planning'
       });
 
-      const { createCycleRecord } = require('../../factories/cycle_factory');
+      const { createCycleRecord } = require('../../record_factories/cycle_factory');
       createCycleRecord.mockReturnValue(mockCycle.payload);
 
       mockDependencies.identity.signRecord.mockResolvedValue(mockCycle);
@@ -2779,7 +2779,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       mockDependencies.stores.tasks.put.mockResolvedValue(undefined);
 
       // Mock factory to validate the merged payload
-      const { createTaskRecord } = require('../../factories/task_factory');
+      const { createTaskRecord } = require('../../record_factories/task_factory');
       createTaskRecord.mockReturnValue({
         ...originalTask.payload,
         title: 'Updated Title'

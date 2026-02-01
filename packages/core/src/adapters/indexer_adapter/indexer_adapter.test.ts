@@ -48,7 +48,7 @@ import type {
   Signature,
 } from '../../record_types';
 import type { MetricsAdapter } from '../metrics_adapter';
-import { createTaskRecord, createCycleRecord, createActorRecord, createExecutionRecord, createEmbeddedMetadataRecord, createTestSignature } from '../../factories';
+import { createTaskRecord, createCycleRecord, createActorRecord, createExecutionRecord, createEmbeddedMetadataRecord, createTestSignature } from '../../record_factories';
 
 /**
  * Helper to create VALIDATED task records using production factories.
