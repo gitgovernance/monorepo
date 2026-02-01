@@ -2,7 +2,7 @@
 /**
  * Compile JSON schemas to TypeScript types
  *
- * This script reads the JSON schemas from src/schemas/ (with $ref references)
+ * This script reads the JSON schemas from src/record_schemas/ (with $ref references)
  * and generates TypeScript types using json-schema-to-typescript.
  * It handles $ref resolution automatically.
  *
