@@ -70,7 +70,7 @@ import { EventBus } from '../event_bus/event_bus';
 import type {
   GitGovTaskRecord, GitGovFeedbackRecord, GitGovCycleRecord,
   GitGovExecutionRecord, GitGovChangelogRecord, GitGovActorRecord
-} from '../types';
+} from '../record_types';
 import type { IEventStream } from '../event_bus';
 import { createTestSignature } from '../factories';
 

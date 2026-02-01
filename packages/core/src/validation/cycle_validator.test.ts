@@ -3,8 +3,8 @@ import {
   validateCycleRecordDetailed,
   validateFullCycleRecord
 } from './cycle_validator';
-import type { CycleRecord } from '../types';
-import type { GitGovRecord } from '../types';
+import type { CycleRecord } from '../record_types';
+import type { GitGovRecord } from '../record_types';
 import { DetailedValidationError } from './common';
 
 describe('CycleValidator Module', () => {

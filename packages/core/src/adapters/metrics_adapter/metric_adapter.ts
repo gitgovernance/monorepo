@@ -1,5 +1,5 @@
 import type { RecordStores } from '../../record_store';
-import type { TaskRecord, CycleRecord, FeedbackRecord, ExecutionRecord, ActorRecord } from '../../types';
+import type { TaskRecord, CycleRecord, FeedbackRecord, ExecutionRecord, ActorRecord } from '../../record_types';
 import type { CollaborationMetrics, IMetricsAdapter, IPlatformApi, MetricsAdapterDependencies, ProductivityMetrics, SystemStatus, TaskHealthReport, TokenConsumption } from './metric_adapter.types';
 
 /**

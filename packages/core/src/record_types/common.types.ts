@@ -1,10 +1,10 @@
-import type { ActorRecord } from "../types";
-import type { AgentRecord } from "../types";
-import type { CycleRecord } from "../types";
-import type { TaskRecord } from "../types";
-import type { ExecutionRecord } from "../types";
-import type { ChangelogRecord } from "../types";
-import type { FeedbackRecord } from "../types";
+import type { ActorRecord } from "./";
+import type { AgentRecord } from "./";
+import type { CycleRecord } from "./";
+import type { TaskRecord } from "./";
+import type { ExecutionRecord } from "./";
+import type { ChangelogRecord } from "./";
+import type { FeedbackRecord } from "./";
 import type { EmbeddedMetadataRecord } from "./embedded.types";
 
 /**

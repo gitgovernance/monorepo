@@ -11,7 +11,7 @@ import type {
   ExecutionRecord,
   ActorRecord,
   GitGovRecord,
-} from '../../types';
+} from '../../record_types';
 import type { IWorkflow } from '../workflow_adapter';
 import type {
   IEventStream,

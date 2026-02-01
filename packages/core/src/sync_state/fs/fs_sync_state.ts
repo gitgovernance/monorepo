@@ -4,7 +4,7 @@ import type { IIdentityAdapter } from "../../adapters/identity_adapter";
 import type { ILintModule } from "../../lint";
 import type { IIndexerAdapter } from "../../adapters/indexer_adapter";
 import { createLogger } from "../../logger/logger";
-import type { EmbeddedMetadataRecord, GitGovRecordPayload } from "../../types";
+import type { EmbeddedMetadataRecord, GitGovRecordPayload } from "../../record_types";
 import {
   SyncStateError,
   PushFromStateBranchError,

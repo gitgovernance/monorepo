@@ -4,7 +4,7 @@ import type {
   FindingSeverity,
   DetectorName,
 } from "../finding_detector/types";
-import type { FeedbackRecord } from "../types";
+import type { FeedbackRecord } from "../record_types";
 import type { FindingDetectorModule } from "../finding_detector";
 import type { FileLister } from "../file_lister";
 import type { IGitModule } from '../git';

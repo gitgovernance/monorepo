@@ -1,6 +1,6 @@
 import type { RecordStore } from "../record_store/record_store";
 import type { IIndexerAdapter } from "../adapters/indexer_adapter";
-import type { GitGovRecord, GitGovRecordType } from "../types";
+import type { GitGovRecord, GitGovRecordType } from "../record_types";
 
 // ==================== Pure LintModule Interface ====================
 

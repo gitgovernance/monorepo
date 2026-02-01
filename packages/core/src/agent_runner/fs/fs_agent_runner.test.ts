@@ -12,7 +12,7 @@ import * as os from "os";
 import { FsAgentRunner, createFsAgentRunner } from "./fs_agent_runner";
 import type { IExecutionAdapter } from "../../adapters/execution_adapter";
 import type { IEventStream, BaseEvent } from "../../event_bus";
-import type { AgentRecord, ExecutionRecord } from "../../types";
+import type { AgentRecord, ExecutionRecord } from "../../record_types";
 import type { RuntimeHandlerRegistry } from "../agent_runner";
 
 describe("FsAgentRunner", () => {

@@ -1,5 +1,5 @@
 import { validateTaskRecordDetailed } from '../../validation/task_validator';
-import type { TaskRecord } from '../../types';
+import type { TaskRecord } from '../../record_types';
 
 describe('TaskRecord Schema Integration Tests', () => {
   /**

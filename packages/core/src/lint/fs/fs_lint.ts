@@ -72,8 +72,8 @@ import type {
   TaskRecord,
   CycleRecord,
   GitGovRecordType
-} from "../../types";
-import { isTaskPayload, isCyclePayload } from "../../types/type_guards";
+} from "../../record_types";
+import { isTaskPayload, isCyclePayload } from "../../record_types/type_guards";
 import { extractRecordIdFromPath, getEntityTypeFromPath, inferEntityTypeFromId } from "../../utils/id_parser";
 import { chunkArray } from "../../utils/array_utils";
 import { createLogger } from "../../logger";

@@ -1,5 +1,5 @@
 import { validateWorkflowConfigDetailed } from '../../validation/workflow_validator';
-import type { WorkflowRecord } from '../../types';
+import type { WorkflowRecord } from '../../record_types';
 
 describe('WorkflowRecord Schema Integration Tests', () => {
   /**

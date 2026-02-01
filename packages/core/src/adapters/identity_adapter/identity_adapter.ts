@@ -4,7 +4,7 @@ import type {
   GitGovActorRecord,
   ActorPayload,
   Signature,
-} from '../../types';
+} from '../../record_types';
 import type { RecordStores } from '../../record_store';
 import type {
   IEventStream,

@@ -38,7 +38,7 @@ export type BaseEvent = {
  * Task-related events
  * Uses Utility Types derived automatically from official TaskRecord
  */
-import type { TaskRecord } from '../types/generated/task_record';
+import type { TaskRecord } from '../record_types/generated/task_record';
 
 export type TaskCreatedEvent = BaseEvent & {
   type: 'task.created';
@@ -63,7 +63,7 @@ export type TaskStatusChangedEvent = BaseEvent & {
  * Cycle-related events
  * Uses Utility Types derived automatically from official CycleRecord
  */
-import type { CycleRecord } from '../types/generated/cycle_record';
+import type { CycleRecord } from '../record_types/generated/cycle_record';
 
 export type CycleCreatedEvent = BaseEvent & {
   type: 'cycle.created';
@@ -87,7 +87,7 @@ export type CycleStatusChangedEvent = BaseEvent & {
  * Execution-related events
  * Uses Utility Types derived automatically from official ExecutionRecord
  */
-import type { ExecutionRecord } from '../types/generated/execution_record';
+import type { ExecutionRecord } from '../record_types/generated/execution_record';
 
 export type ExecutionCreatedEvent = BaseEvent & {
   type: 'execution.created';
@@ -102,7 +102,7 @@ export type ExecutionCreatedEvent = BaseEvent & {
  * Feedback-related events
  * Uses Utility Types derived automatically from official FeedbackRecord
  */
-import type { FeedbackRecord } from '../types/generated/feedback_record';
+import type { FeedbackRecord } from '../record_types/generated/feedback_record';
 
 export type FeedbackCreatedEvent = BaseEvent & {
   type: 'feedback.created';
@@ -116,7 +116,7 @@ export type FeedbackCreatedEvent = BaseEvent & {
  * Changelog-related events
  * Uses Utility Types derived automatically from official ChangelogRecord
  */
-import type { ChangelogRecord } from '../types/generated/changelog_record';
+import type { ChangelogRecord } from '../record_types/generated/changelog_record';
 
 export type ChangelogCreatedEvent = BaseEvent & {
   type: 'changelog.created';
@@ -129,8 +129,8 @@ export type ChangelogCreatedEvent = BaseEvent & {
  * Identity-related events
  * Uses Utility Types derived automatically from official ActorRecord and AgentRecord
  */
-import type { ActorRecord } from '../types/generated/actor_record';
-import type { AgentRecord } from '../types/generated/agent_record';
+import type { ActorRecord } from '../record_types/generated/actor_record';
+import type { AgentRecord } from '../record_types/generated/agent_record';
 
 export type ActorCreatedEvent = BaseEvent & {
   type: 'identity.actor.created';

@@ -52,7 +52,7 @@ import type {
   GitGovFeedbackRecord,
   GitGovActorRecord,
   GitGovAgentRecord
-} from '../types';
+} from '../record_types';
 import { DetailedValidationError } from '../validation/common';
 import {
   createTaskRecord,
@@ -66,7 +66,7 @@ import {
   createTestSignature
 } from '../factories';
 import { generateChangelogId } from '../utils/id_generator';
-import type { Signature } from '../types/embedded.types';
+import type { Signature } from '../record_types/embedded.types';
 import { readdir } from 'fs/promises';
 
 // Mock signPayload to avoid real Ed25519 crypto operations in tests

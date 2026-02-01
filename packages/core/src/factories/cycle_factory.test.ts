@@ -1,5 +1,5 @@
 import { createCycleRecord } from './cycle_factory';
-import type { CycleRecord } from '../types';
+import type { CycleRecord } from '../record_types';
 import { DetailedValidationError } from '../validation/common';
 
 // Manual mock for validateCycleRecordDetailed

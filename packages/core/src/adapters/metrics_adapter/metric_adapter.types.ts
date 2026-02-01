@@ -1,5 +1,5 @@
 import type { RecordStores } from '../../record_store';
-import type { TaskRecord, FeedbackRecord, ExecutionRecord, ActorRecord } from '../../types';
+import type { TaskRecord, FeedbackRecord, ExecutionRecord, ActorRecord } from '../../record_types';
 
 /**
  * MetricsAdapter Dependencies - Facade + Dependency Injection Pattern

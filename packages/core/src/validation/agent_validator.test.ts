@@ -1,8 +1,8 @@
 import { validateFullAgentRecord, isAgentRecord, validateAgentRecordDetailed } from './agent_validator';
 import { DetailedValidationError } from './common';
 import { validateFullEmbeddedMetadataRecord } from './embedded_metadata_validator';
-import type { AgentRecord } from '../types';
-import type { GitGovRecord } from '../types';
+import type { AgentRecord } from '../record_types';
+import type { GitGovRecord } from '../record_types';
 
 // Mock the embedded metadata validator
 jest.mock('./embedded_metadata_validator');

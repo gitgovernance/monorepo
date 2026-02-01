@@ -1,6 +1,6 @@
 import type { RecordStores } from '../../record_store';
 import type { IIdentityAdapter } from '../identity_adapter';
-import type { AgentRecord, AgentPayload } from '../../types';
+import type { AgentRecord, AgentPayload } from '../../record_types';
 import type { IEventStream } from '../../event_bus';
 import type { KeyProvider } from '../../key_provider/key_provider';
 

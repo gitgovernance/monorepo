@@ -7,7 +7,7 @@ import type {
   TaskRecord,
   CycleRecord,
   ExecutionRecord,
-} from '../../types';
+} from '../../record_types';
 import type { IWorkflow } from '../workflow_adapter';
 import type {
   IEventStream,

@@ -1,7 +1,7 @@
 import { createExecutionRecord } from './execution_factory';
 import { generateExecutionId } from '../utils/id_generator';
 import { DetailedValidationError } from '../validation/common';
-import type { ExecutionRecord } from '../types';
+import type { ExecutionRecord } from '../record_types';
 
 // Mock the validator
 jest.mock('../validation/execution_validator', () => ({

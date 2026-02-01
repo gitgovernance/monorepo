@@ -17,7 +17,7 @@ import { tmpdir } from "os";
 import { realpathSync } from "fs";
 import { EventBus } from "../../event_bus";
 import type { BaseEvent } from "../../event_bus";
-import type { GitGovRecordPayload } from "../../types";
+import type { GitGovRecordPayload } from "../../record_types";
 import { calculatePayloadChecksum } from "../../crypto/checksum";
 import { FsWatcherStateModule } from "./fs_watcher_state";
 import { ProjectNotInitializedError } from "../watcher_state.errors";

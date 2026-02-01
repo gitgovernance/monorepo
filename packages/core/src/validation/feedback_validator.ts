@@ -1,6 +1,6 @@
 import type { ValidateFunction, ErrorObject } from "ajv";
-import type { FeedbackRecord } from '../types';
-import type { GitGovRecord } from '../types';
+import type { FeedbackRecord } from '../record_types';
+import type { GitGovRecord } from '../record_types';
 import type { ValidationResult } from './errors';
 import { SchemaValidationCache } from '../record_schemas/schema_cache';
 import { DetailedValidationError } from './common';

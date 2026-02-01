@@ -8,7 +8,7 @@ import type {
   GitGovExecutionRecord,
   GitGovChangelogRecord,
   GitGovActorRecord
-} from '../../types';
+} from '../../record_types';
 import type { SystemStatus, ProductivityMetrics, CollaborationMetrics } from '../metrics_adapter';
 import type { ActivityEvent } from '../../event_bus';
 

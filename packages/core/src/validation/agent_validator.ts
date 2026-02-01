@@ -1,12 +1,12 @@
 import type { ValidateFunction, ErrorObject } from "ajv";
-import type { AgentRecord } from "../types";
-import type { GitGovRecord } from "../types";
+import type { AgentRecord } from "../record_types";
+import type { GitGovRecord } from "../record_types";
 import { DetailedValidationError, SchemaValidationError } from "./common";
 import { validateFullEmbeddedMetadataRecord } from './embedded_metadata_validator';
 import type { ValidationResult } from './errors';
 import { SchemaValidationCache } from "../record_schemas/schema_cache";
 import { Schemas } from '../record_schemas';
-import type { ActorRecord } from "../types";
+import type { ActorRecord } from "../record_types";
 
 // --- Schema Validation ---
 export function validateAgentRecordSchema(

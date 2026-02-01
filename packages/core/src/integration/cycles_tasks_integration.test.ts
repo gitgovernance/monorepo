@@ -1,5 +1,5 @@
-import type { TaskRecord } from '../types';
-import type { CycleRecord } from '../types';
+import type { TaskRecord } from '../record_types';
+import type { CycleRecord } from '../record_types';
 import { createTaskRecord } from '../factories/task_factory';
 import { createCycleRecord } from '../factories/cycle_factory';
 import { validateTaskRecordDetailed } from '../validation/task_validator';

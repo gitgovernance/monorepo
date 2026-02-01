@@ -3,9 +3,9 @@ import { createExecutionRecord } from '../../factories/execution_factory';
 import type { RecordStore } from '../../record_store';
 import { IdentityAdapter } from '../identity_adapter';
 import { publishEvent } from '../../event_bus';
-import type { ExecutionRecord, GitGovExecutionRecord, GitGovTaskRecord } from '../../types';
+import type { ExecutionRecord, GitGovExecutionRecord, GitGovTaskRecord } from '../../record_types';
 import type { IEventStream } from '../../event_bus';
-import type { GitGovRecord, Signature } from '../../types';
+import type { GitGovRecord, Signature } from '../../record_types';
 import { DetailedValidationError } from '../../validation/common';
 
 // Mock dependencies

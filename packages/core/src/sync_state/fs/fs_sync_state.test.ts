@@ -68,7 +68,7 @@ import {
   UncommittedChangesError,
 } from "../sync_state.errors";
 import { calculatePayloadChecksum } from "../../crypto/checksum";
-import type { ActorRecord, TaskRecord, Signature } from "../../types";
+import type { ActorRecord, TaskRecord, Signature } from "../../record_types";
 import { createTaskRecord } from "../../factories/task_factory";
 import { createEmbeddedMetadataRecord } from "../../factories/embedded_metadata_factory";
 import type { IIdentityAdapter } from "../../adapters/identity_adapter";

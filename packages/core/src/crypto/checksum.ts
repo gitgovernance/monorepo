@@ -1,5 +1,5 @@
 import { createHash } from "crypto";
-import type { GitGovRecordPayload } from "../types";
+import type { GitGovRecordPayload } from "../record_types";
 
 /**
  * Recursively sorts the keys of an object, including nested objects.

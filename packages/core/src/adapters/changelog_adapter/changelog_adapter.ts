@@ -2,9 +2,9 @@ import { createChangelogRecord } from '../../factories/changelog_factory';
 import type { RecordStores } from '../../record_store';
 import { IdentityAdapter } from '../identity_adapter';
 import { generateChangelogId } from '../../utils/id_generator';
-import type { ChangelogRecord } from '../../types';
+import type { ChangelogRecord } from '../../record_types';
 import type { IEventStream, ChangelogCreatedEvent } from '../../event_bus';
-import type { GitGovRecord } from '../../types';
+import type { GitGovRecord } from '../../record_types';
 import type {
   IChangelogAdapter,
   ChangelogAdapterDependencies,

@@ -1,5 +1,5 @@
 import type { ValidateFunction } from "ajv";
-import type { WorkflowRecord } from "../types";
+import type { WorkflowRecord } from "../record_types";
 import { SchemaValidationCache } from "../record_schemas/schema_cache";
 import { Schemas } from '../record_schemas';
 

@@ -1,5 +1,5 @@
 import type { IFeedbackAdapter } from "../adapters/feedback_adapter";
-import type { FeedbackRecord } from "../types";
+import type { FeedbackRecord } from "../record_types";
 import type { WaiverMetadata, ActiveWaiver, IWaiverReader } from "./types";
 
 /**

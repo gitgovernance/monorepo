@@ -1,7 +1,7 @@
 import { createFeedbackRecord } from '../../factories/feedback_factory';
 import type { RecordStores } from '../../record_store/record_store.types';
 import { IdentityAdapter } from '../identity_adapter';
-import type { FeedbackRecord, GitGovFeedbackRecord } from '../../types';
+import type { FeedbackRecord, GitGovFeedbackRecord } from '../../record_types';
 import type { IEventStream, FeedbackCreatedEvent } from '../../event_bus';
 import type {
   IFeedbackAdapter,

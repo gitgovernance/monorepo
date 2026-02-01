@@ -46,7 +46,7 @@ import type {
   CycleRecord,
   ExecutionRecord,
   Signature,
-} from '../../types';
+} from '../../record_types';
 import type { MetricsAdapter } from '../metrics_adapter';
 import { createTaskRecord, createCycleRecord, createActorRecord, createExecutionRecord, createEmbeddedMetadataRecord, createTestSignature } from '../../factories';
 

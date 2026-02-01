@@ -3,8 +3,8 @@ import {
   isChangelogRecord,
   validateChangelogRecordDetailed
 } from './changelog_validator';
-import type { ChangelogRecord } from '../types';
-import type { GitGovRecord, Signature } from '../types';
+import type { ChangelogRecord } from '../record_types';
+import type { GitGovRecord, Signature } from '../record_types';
 import { DetailedValidationError } from './common';
 
 // Mock dependencies

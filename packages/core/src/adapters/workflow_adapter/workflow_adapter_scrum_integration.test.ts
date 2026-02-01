@@ -1,9 +1,9 @@
 import { WorkflowAdapter } from './index';
-import type { TaskRecord } from '../../types';
-import type { ActorRecord } from '../../types';
+import type { TaskRecord } from '../../record_types';
+import type { ActorRecord } from '../../record_types';
 import type { ValidationContext } from './index';
-import type { CycleRecord } from '../../types';
-import type { FeedbackRecord } from '../../types';
+import type { CycleRecord } from '../../record_types';
+import type { FeedbackRecord } from '../../record_types';
 import type { IFeedbackAdapter } from '../feedback_adapter';
 
 describe('WorkflowAdapter - SCRUM Methodology Integration Tests', () => {
