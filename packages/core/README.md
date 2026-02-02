@@ -172,11 +172,11 @@ YAML schemas -> JSON schemas (AJV) -> TypeScript types (generated/)
 Individual steps:
 
 ```bash
-pnpm sync:schemas          # YAML -> JSON
+pnpm sync                  # Sync from blueprints (schemas, configs, prompts)
 pnpm compile:types         # JSON -> TypeScript
 pnpm generate:indexes      # Generate barrel exports
 pnpm validate:schemas      # Validate all schemas
-pnpm prebuild              # Run full pipeline
+pnpm prebuild              # compile:types + generate:indexes
 ```
 
 Never edit files in `generated/`. Modify the source schema and regenerate.

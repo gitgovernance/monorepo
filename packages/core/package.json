@@ -6,8 +6,7 @@
   "main": "dist/src/index.js",
   "types": "dist/src/index.d.ts",
   "files": [
-    "dist",
-    "prompts"
+    "dist"
   ],
   "exports": {
     ".": {
@@ -33,7 +32,8 @@
     "compile:types": "tsx scripts/compile-json-to-types.ts",
     "generate:indexes": "tsx scripts/generate-indexes.ts",
     "validate:schemas": "tsx scripts/validate-schemas.ts",
-    "prebuild": "pnpm sync:schemas && pnpm sync:workflow-configs && pnpm sync:prompts && pnpm compile:types && pnpm generate:indexes",
+    "sync": "pnpm sync:schemas && pnpm sync:workflow-configs && pnpm sync:prompts",
+    "prebuild": "pnpm compile:types && pnpm generate:indexes",
     "build": "pnpm clean && tsup",
     "test": "jest",
     "test:coverage": "jest --coverage",

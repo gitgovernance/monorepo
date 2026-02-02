@@ -361,7 +361,7 @@ describe('FsProjectInitializer', () => {
       await initializer.copyAgentPrompt();
 
       expect(mockFs.copyFile).toHaveBeenCalledWith(
-        expect.stringContaining('gitgov_agent_prompt.md'),
+        expect.stringContaining('gitgov_agent.md'),
         path.join(testRoot, 'gitgov')
       );
     });
