@@ -15,7 +15,7 @@
  */
 
 import type { GitGovConfig, IConfigManager } from '../../config_manager';
-import { DetailedValidationError } from '../../validation/common';
+import { DetailedValidationError } from '../../record_validations/common';
 import type { IdentityAdapter } from '../identity_adapter';
 import type { BacklogAdapter } from '../backlog_adapter';
 import { createTaskRecord } from '../../record_factories/task_factory';

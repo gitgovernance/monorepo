@@ -53,7 +53,7 @@ import type {
   GitGovActorRecord,
   GitGovAgentRecord
 } from '../record_types';
-import { DetailedValidationError } from '../validation/common';
+import { DetailedValidationError } from '../record_validations/common';
 import {
   createTaskRecord,
   createCycleRecord,

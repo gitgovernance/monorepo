@@ -1,4 +1,4 @@
-import { validateFeedbackRecordDetailed } from '../../validation/feedback_validator';
+import { validateFeedbackRecordDetailed } from '../../record_validations/feedback_validator';
 import type { FeedbackRecord } from '../../record_types';
 
 describe('FeedbackRecord Schema Integration Tests', () => {

@@ -1,7 +1,7 @@
 import type { CycleRecord, GitGovCycleRecord } from "../record_types";
-import { validateCycleRecordDetailed } from "../validation/cycle_validator";
-import { validateEmbeddedMetadataDetailed } from "../validation/embedded_metadata_validator";
-import { DetailedValidationError } from "../validation/common";
+import { validateCycleRecordDetailed } from "../record_validations/cycle_validator";
+import { validateEmbeddedMetadataDetailed } from "../record_validations/embedded_metadata_validator";
+import { DetailedValidationError } from "../record_validations/common";
 import { generateCycleId } from "../utils/id_generator";
 
 /**

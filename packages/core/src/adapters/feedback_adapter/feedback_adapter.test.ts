@@ -5,7 +5,7 @@ import { IdentityAdapter } from '../identity_adapter';
 import type { FeedbackRecord, GitGovFeedbackRecord } from '../../record_types';
 import type { IEventStream } from '../../event_bus';
 import type { GitGovRecord, Signature } from '../../record_types';
-import { DetailedValidationError } from '../../validation/common';
+import { DetailedValidationError } from '../../record_validations/common';
 
 // Mock dependencies
 jest.mock('../../record_factories/feedback_factory');

@@ -1,6 +1,6 @@
 import type { TaskRecord } from '../record_types';
 import type { CycleRecord } from '../record_types';
-import { DetailedValidationError } from '../validation/common';
+import { DetailedValidationError } from '../record_validations/common';
 
 /**
  * Specialized module for validating graph input data

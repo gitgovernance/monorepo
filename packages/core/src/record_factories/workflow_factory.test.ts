@@ -3,10 +3,10 @@ import {
   createDefaultWorkflowConfig
 } from './workflow_factory';
 import type { WorkflowRecord } from '../record_types';
-import { DetailedValidationError } from '../validation/common';
+import { DetailedValidationError } from '../record_validations/common';
 
 // Manual mock for validateWorkflowConfigDetailed
-jest.mock('../validation/workflow_validator', () => ({
+jest.mock('../record_validations/workflow_validator', () => ({
   validateWorkflowConfigDetailed: jest.fn()
     .mockReturnValue({ isValid: true, errors: [] }),
   validateWorkflowConfigBusinessRules: jest.fn()
@@ -19,7 +19,7 @@ describe('createWorkflowConfig', () => {
     const {
       validateWorkflowConfigDetailed,
       validateWorkflowConfigBusinessRules
-    } = require('../validation/workflow_validator');
+    } = require('../record_validations/workflow_validator');
 
     (validateWorkflowConfigDetailed as jest.Mock).mockReturnValue({ isValid: true, errors: [] });
     (validateWorkflowConfigBusinessRules as jest.Mock).mockReturnValue({ isValid: true, errors: [] });
@@ -46,7 +46,7 @@ describe('createWorkflowConfig', () => {
   });
 
   it('[EARS-2] should throw DetailedValidationError for invalid schema', async () => {
-    const { validateWorkflowConfigDetailed } = require('../validation/workflow_validator');
+    const { validateWorkflowConfigDetailed } = require('../record_validations/workflow_validator');
     (validateWorkflowConfigDetailed as jest.Mock).mockReturnValue({
       isValid: false,
       errors: [
@@ -64,7 +64,7 @@ describe('createWorkflowConfig', () => {
   });
 
   it('[EARS-3] should throw DetailedValidationError for business rule violations', () => {
-    const { validateWorkflowConfigBusinessRules } = require('../validation/workflow_validator');
+    const { validateWorkflowConfigBusinessRules } = require('../record_validations/workflow_validator');
     (validateWorkflowConfigBusinessRules as jest.Mock).mockReturnValue({
       isValid: false,
       errors: [
@@ -211,7 +211,7 @@ describe('createDefaultWorkflowConfig', () => {
     const {
       validateWorkflowConfigDetailed,
       validateWorkflowConfigBusinessRules
-    } = require('../validation/workflow_validator');
+    } = require('../record_validations/workflow_validator');
 
     (validateWorkflowConfigDetailed as jest.Mock).mockReturnValue({ isValid: true, errors: [] });
     (validateWorkflowConfigBusinessRules as jest.Mock).mockReturnValue({ isValid: true, errors: [] });

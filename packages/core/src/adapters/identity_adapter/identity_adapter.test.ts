@@ -2,7 +2,7 @@ import { IdentityAdapter } from './index';
 import type { ActorRecord, GitGovRecord, GitGovActorRecord } from '../../record_types';
 import type { RecordStore } from '../../record_store/record_store';
 import { createActorRecord } from '../../record_factories/actor_factory';
-import { validateFullActorRecord } from '../../validation/actor_validator';
+import { validateFullActorRecord } from '../../record_validations/actor_validator';
 import { generateKeys, signPayload, generateMockSignature } from '../../crypto/signatures';
 import { calculatePayloadChecksum } from '../../crypto/checksum';
 import { generateActorId } from '../../utils/id_generator';
@@ -10,7 +10,7 @@ import type { ISessionManager } from '../../session_manager';
 
 // Mock all dependencies
 jest.mock('../../record_factories/actor_factory');
-jest.mock('../../validation/actor_validator');
+jest.mock('../../record_validations/actor_validator');
 jest.mock('../../crypto/signatures');
 jest.mock('../../crypto/checksum');
 jest.mock('../../utils/id_generator');

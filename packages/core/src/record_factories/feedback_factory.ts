@@ -1,8 +1,8 @@
 import type { FeedbackRecord, GitGovFeedbackRecord } from '../record_types';
 import { generateFeedbackId } from '../utils/id_generator';
-import { validateFeedbackRecordDetailed } from '../validation/feedback_validator';
-import { validateEmbeddedMetadataDetailed } from '../validation/embedded_metadata_validator';
-import { DetailedValidationError } from '../validation/common';
+import { validateFeedbackRecordDetailed } from '../record_validations/feedback_validator';
+import { validateEmbeddedMetadataDetailed } from '../record_validations/embedded_metadata_validator';
+import { DetailedValidationError } from '../record_validations/common';
 
 /**
  * Creates a complete FeedbackRecord with validation.

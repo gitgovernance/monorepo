@@ -1,7 +1,7 @@
 import type { ChangelogRecord, GitGovChangelogRecord } from '../record_types';
-import { validateChangelogRecordDetailed } from '../validation/changelog_validator';
-import { validateEmbeddedMetadataDetailed } from '../validation/embedded_metadata_validator';
-import { DetailedValidationError } from '../validation/common';
+import { validateChangelogRecordDetailed } from '../record_validations/changelog_validator';
+import { validateEmbeddedMetadataDetailed } from '../record_validations/embedded_metadata_validator';
+import { DetailedValidationError } from '../record_validations/common';
 
 /**
  * Creates a complete ChangelogRecord with validation (Protocol v2)

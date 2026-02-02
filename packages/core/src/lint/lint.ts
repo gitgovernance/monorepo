@@ -36,7 +36,7 @@ import {
   isExecutionPayload
 } from "../record_types/type_guards";
 import type { Signature } from "../record_types/embedded.types";
-import { DetailedValidationError } from "../validation/common";
+import { DetailedValidationError } from "../record_validations/common";
 import { createLogger } from "../logger";
 import { calculatePayloadChecksum } from "../crypto/checksum";
 import { signPayload } from "../crypto/signatures";

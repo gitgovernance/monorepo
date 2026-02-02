@@ -6,7 +6,7 @@ import type { ActorRecord } from '../../record_types';
 import type { IdentityAdapter } from '../identity_adapter';
 import type { BacklogAdapter } from '../backlog_adapter';
 import type { IProjectInitializer, EnvironmentValidation } from '../../project_initializer';
-import { DetailedValidationError } from '../../validation/common';
+import { DetailedValidationError } from '../../record_validations/common';
 import { promises as fs, existsSync } from 'fs';
 import { createTaskRecord } from '../../record_factories/task_factory';
 import { createCycleRecord } from '../../record_factories/cycle_factory';

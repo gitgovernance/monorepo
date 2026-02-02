@@ -1,16 +1,16 @@
 import { createActorRecord } from './actor_factory';
 import type { ActorRecord } from '../record_types';
-import { DetailedValidationError } from '../validation/common';
+import { DetailedValidationError } from '../record_validations/common';
 
 // Mock the validator to control test outcomes
-jest.mock('../validation/actor_validator', () => ({
+jest.mock('../record_validations/actor_validator', () => ({
   validateActorRecordDetailed: jest.fn(() => ({ isValid: true, errors: [] })),
 }));
 
 describe('createActorRecord', () => {
   beforeEach(() => {
     // Reset mock to default success state before each test
-    const { validateActorRecordDetailed } = require('../validation/actor_validator');
+    const { validateActorRecordDetailed } = require('../record_validations/actor_validator');
     (validateActorRecordDetailed as jest.Mock).mockReturnValue({ isValid: true, errors: [] });
   });
 
@@ -29,7 +29,7 @@ describe('createActorRecord', () => {
   });
 
   it('[EARS-1] should throw DetailedValidationError for missing/invalid fields', () => {
-    const { validateActorRecordDetailed } = require('../validation/actor_validator');
+    const { validateActorRecordDetailed } = require('../record_validations/actor_validator');
     (validateActorRecordDetailed as jest.Mock).mockReturnValue({
       isValid: false,
       errors: [
@@ -59,7 +59,7 @@ describe('createActorRecord', () => {
 
   it('[EARS-5] should throw DetailedValidationError if the created record fails validation', () => {
     // Override the mock for this specific test
-    const { validateActorRecordDetailed } = require('../validation/actor_validator');
+    const { validateActorRecordDetailed } = require('../record_validations/actor_validator');
     (validateActorRecordDetailed as jest.Mock).mockReturnValue({
       isValid: false,
       errors: [
@@ -153,7 +153,7 @@ describe('createActorRecord', () => {
     });
 
     it('[EARS-11] should throw DetailedValidationError when roles is missing', () => {
-      const { validateActorRecordDetailed } = require('../validation/actor_validator');
+      const { validateActorRecordDetailed } = require('../record_validations/actor_validator');
       (validateActorRecordDetailed as jest.Mock).mockReturnValue({
         isValid: false,
         errors: [
@@ -175,7 +175,7 @@ describe('createActorRecord', () => {
     });
 
     it('[EARS-11] should throw DetailedValidationError when roles is empty array', () => {
-      const { validateActorRecordDetailed } = require('../validation/actor_validator');
+      const { validateActorRecordDetailed } = require('../record_validations/actor_validator');
       (validateActorRecordDetailed as jest.Mock).mockReturnValue({
         isValid: false,
         errors: [

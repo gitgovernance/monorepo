@@ -1,10 +1,10 @@
 import { createFeedbackRecord } from './feedback_factory';
 import { generateFeedbackId } from '../utils/id_generator';
-import { DetailedValidationError } from '../validation/common';
+import { DetailedValidationError } from '../record_validations/common';
 import type { FeedbackRecord } from '../record_types';
 
 // Mock the validator
-jest.mock('../validation/feedback_validator', () => ({
+jest.mock('../record_validations/feedback_validator', () => ({
   validateFeedbackRecordDetailed: jest.fn()
 }));
 
@@ -14,7 +14,7 @@ jest.mock('../utils/id_generator', () => ({
 }));
 
 describe('FeedbackRecord Factory', () => {
-  const mockValidateFeedbackRecordDetailed = require('../validation/feedback_validator').validateFeedbackRecordDetailed;
+  const mockValidateFeedbackRecordDetailed = require('../record_validations/feedback_validator').validateFeedbackRecordDetailed;
   const mockGenerateFeedbackId = generateFeedbackId as jest.MockedFunction<typeof generateFeedbackId>;
 
   beforeEach(() => {
