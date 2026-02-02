@@ -194,4 +194,4 @@ This package is licensed under the [Apache License 2.0](https://opensource.org/l
 
 ---
 
-Built with care by the GitGovernance team.
+**Built with ❤️ by the GitGovernance team.**

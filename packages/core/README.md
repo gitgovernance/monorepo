@@ -192,4 +192,4 @@ This package is licensed under the [Mozilla Public License 2.0 (MPL-2.0)](https:
 
 ---
 
-Built with care by the GitGovernance team.
+**Built with ❤️ by the GitGovernance team.**
