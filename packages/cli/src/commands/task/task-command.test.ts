@@ -39,13 +39,13 @@ jest.mock('../../services/dependency-injection', () => ({
 
 import { TaskCommand } from './task-command';
 import { DependencyInjectionService } from '../../services/dependency-injection';
-import type { TaskRecord, ActorRecord, IndexerAdapter, GitGovTaskRecord } from '@gitgov/core';
+import type { TaskRecord, ActorRecord, EnrichedTaskRecord, IndexData, GitGovTaskRecord } from '@gitgov/core';
 import { Factories } from '@gitgov/core';
 
 // Test helper: Simple conversion to EnrichedTaskRecord for mocking
 // Note: This is NOT the real enrichment - the real one needs EmbeddedMetadata header
 // with signatures to calculate lastUpdated properly. This is just for unit tests.
-function enrichTaskForTest(task: TaskRecord): IndexerAdapter.EnrichedTaskRecord {
+function enrichTaskForTest(task: TaskRecord): EnrichedTaskRecord {
   // Extract timestamp from task ID (format: {timestamp}-{type}-{slug})
   const idTimestamp = parseInt(task.id.split('-')[0] || '0', 10);
   const defaultTimestamp = idTimestamp > 0 ? idTimestamp * 1000 : Date.now();
@@ -119,7 +119,7 @@ function createMockTaskRecord(
 function createMockIndexData(
   tasks: TaskRecord[],
   options?: { enrichedTasks?: TaskRecord[] }
-): IndexerAdapter.IndexData {
+): IndexData {
   // Always create enrichedTasks from tasks if not explicitly provided
   // This ensures the code can access task.status, task.priority, etc. directly
   const enrichedTasks = options?.enrichedTasks
@@ -206,7 +206,7 @@ describe('TaskCommand - Complete Unit Tests', () => {
   };
   let mockIndexerAdapter: {
     isIndexUpToDate: jest.MockedFunction<() => Promise<boolean>>;
-    getIndexData: jest.MockedFunction<() => Promise<IndexerAdapter.IndexData | null>>;
+    getIndexData: jest.MockedFunction<() => Promise<IndexData | null>>;
     generateIndex: jest.MockedFunction<() => Promise<void>>;
     invalidateCache: jest.MockedFunction<() => Promise<void>>;
   };

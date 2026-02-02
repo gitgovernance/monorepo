@@ -1,11 +1,13 @@
 import type {
-  GdprFinding,
+  Finding,
   FindingCategory,
   FindingSeverity,
   DetectorName,
-} from "../pii_detector/types";
-import type { FeedbackRecord } from "../types";
-import type { PiiDetectorModule } from "../pii_detector";
+} from "../finding_detector/types";
+import type { FeedbackRecord } from "../record_types";
+import type { FindingDetectorModule } from "../finding_detector";
+import type { FileLister } from "../file_lister";
+import type { IGitModule } from '../git';
 
 // ============================================================================
 // AUDIT TARGET TYPES
@@ -69,6 +71,32 @@ export type OutputFormat = "text" | "json" | "sarif";
 export type FailOnSeverity = "critical" | "high" | "medium" | "low" | "none";
 
 // ============================================================================
+// FILE CONTENT TYPES
+// ============================================================================
+
+/**
+ * Pre-loaded file content for direct audit mode.
+ * Allows auditing without FileLister (e.g., from API, memory, GitHub).
+ */
+export type FileContent = {
+  /** File path (used for finding location reporting) */
+  path: string;
+  /** File content as string */
+  content: string;
+};
+
+/**
+ * Input for direct audit mode via auditContents().
+ * No FileLister needed - files are pre-loaded.
+ */
+export type AuditContentsInput = {
+  /** Pre-loaded file contents to audit */
+  files: FileContent[];
+  /** Pre-loaded waivers (optional - if omitted, no waiver filtering) */
+  waivers?: ActiveWaiver[];
+};
+
+// ============================================================================
 // WAIVER TYPES
 // ============================================================================
 
@@ -76,7 +104,7 @@ export type FailOnSeverity = "critical" | "high" | "medium" | "low" | "none";
  * Metadata stored in FeedbackRecord for waivers.
  * Uses the generic metadata<T> field of FeedbackRecord.
  */
-export interface WaiverMetadata {
+export type WaiverMetadata = {
   /** SHA256 fingerprint for matching */
   fingerprint: string;
   /** Rule ID (e.g., "PII-001", "SEC-002") */
@@ -94,7 +122,7 @@ export interface WaiverMetadata {
 /**
  * Active waiver loaded from FeedbackRecord.
  */
-export interface ActiveWaiver {
+export type ActiveWaiver = {
   /** Fingerprint for matching with findings */
   fingerprint: string;
   /** Original rule ID */
@@ -106,9 +134,9 @@ export interface ActiveWaiver {
 }
 
 /**
- * Interface for loading active waivers.
+ * Type for loading active waivers.
  */
-export interface IWaiverReader {
+export type IWaiverReader = {
   /** Loads all active (non-expired) waivers */
   loadActiveWaivers(): Promise<ActiveWaiver[]>;
   /** Checks if a specific fingerprint has an active waiver */
@@ -118,7 +146,7 @@ export interface IWaiverReader {
 /**
  * Scope configuration for file selection.
  */
-export interface ScopeConfig {
+export type ScopeConfig = {
   /** Glob patterns to include */
   include: string[];
   /** Glob patterns to exclude */
@@ -130,7 +158,7 @@ export interface ScopeConfig {
 /**
  * Options for running an audit.
  */
-export interface AuditOptions {
+export type AuditOptions = {
   /** File include/exclude configuration */
   scope: ScopeConfig;
   /** Base directory for file scanning (defaults to cwd) */
@@ -140,7 +168,7 @@ export interface AuditOptions {
 /**
  * Aggregated summary of findings.
  */
-export interface AuditSummary {
+export type AuditSummary = {
   /** Total findings (post-waiver) */
   total: number;
   /** Count by severity */
@@ -154,7 +182,7 @@ export interface AuditSummary {
 /**
  * Waiver application status.
  */
-export interface WaiverStatus {
+export type WaiverStatus = {
   /** Findings with active waiver (excluded from result) */
   acknowledged: number;
   /** New findings without waiver */
@@ -164,9 +192,9 @@ export interface WaiverStatus {
 /**
  * Complete audit result.
  */
-export interface AuditResult {
+export type AuditResult = {
   /** Detected findings (post-waiver) */
-  findings: GdprFinding[];
+  findings: Finding[];
   /** Aggregated summary */
   summary: AuditSummary;
   /** Number of files scanned */
@@ -183,31 +211,39 @@ export interface AuditResult {
 
 /**
  * Injectable dependencies for SourceAuditorModule.
- * ScopeSelector and ScoringEngine are internal.
+ * ScopeSelector and ScoringEngine are internal components.
+ *
+ * Store Backends Epic: FileLister abstracts filesystem operations
+ * for serverless compatibility.
  */
-export interface SourceAuditorDependencies {
-  /** PII/secrets detection module */
-  piiDetector: PiiDetectorModule;
-  /** Waiver reader for loading active waivers */
-  waiverReader: IWaiverReader;
+export type SourceAuditorDependencies = {
+  /** Finding detection module */
+  findingDetector: FindingDetectorModule;
+  /** Waiver reader for loading active waivers (optional - not needed for auditContents()) */
+  waiverReader?: IWaiverReader;
+  /** File lister for reading files and listing by glob patterns (optional - not needed for auditContents()) */
+  fileLister?: FileLister;
+  /** Git module for incremental mode (optional - if not provided, changedSince is ignored) */
+  gitModule?: IGitModule;
 }
 
 /**
- * File reader interface for dependency injection.
+ * Dependencies for ScopeSelector internal component.
+ * Injected by SourceAuditorModule.
  */
-export interface IFileReader {
-  /** Reads file content as string */
-  readFile(path: string): Promise<string>;
-  /** Checks if file exists */
-  exists(path: string): Promise<boolean>;
+export type ScopeSelectorDependencies = {
+  /** File lister for glob patterns and reading files */
+  fileLister: FileLister;
+  /** Git module for incremental mode (optional) */
+  gitModule?: IGitModule;
 }
 
 /**
  * Options for creating a waiver.
  */
-export interface CreateWaiverOptions {
+export type CreateWaiverOptions = {
   /** Finding to waive */
-  finding: GdprFinding;
+  finding: Finding;
   /** ExecutionRecord where it was detected */
   executionId: string;
   /** Human-readable justification */

@@ -1,7 +1,7 @@
 import { generateKeyPair, sign, verify, createHash, randomBytes } from "crypto";
 import { promisify } from "util";
 import { calculatePayloadChecksum } from "./checksum";
-import type { GitGovRecordPayload, Signature } from "../types";
+import type { GitGovRecordPayload, Signature } from "../record_types";
 import { createLogger } from "../logger";
 const logger = createLogger("[CryptoModule] ");
 const generateKeyPairAsync = promisify(generateKeyPair);

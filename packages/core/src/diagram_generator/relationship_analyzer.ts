@@ -1,5 +1,5 @@
-import type { TaskRecord } from '../types';
-import type { CycleRecord } from '../types';
+import type { TaskRecord } from '../record_types';
+import type { CycleRecord } from '../record_types';
 import { GraphValidator } from './graph_validator';
 
 export interface DiagramNode {

@@ -8,8 +8,8 @@
  * @module signature_utils
  */
 
-import type { EmbeddedMetadataRecord } from '../types/embedded.types';
-import type { GitGovRecordPayload } from '../types/common.types';
+import type { EmbeddedMetadataRecord } from '../record_types/embedded.types';
+import type { GitGovRecordPayload } from '../record_types/common.types';
 
 /**
  * Result type for author/lastModifier extraction with timestamp.

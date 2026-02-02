@@ -1,3 +1,17 @@
+/**
+ * LintCommand Unit Tests
+ *
+ * Blueprint: packages/blueprints/03_products/cli/specs/lint_command.md
+ * All EARS prefixes map to lint_command.md §4.1-4.5
+ *
+ * EARS Coverage:
+ * - §4.1 CLI Argument Parsing & Module Integration (EARS-A1 to A8)
+ * - §4.2 Output Formatting - Text Mode (EARS-B1 to B2)
+ * - §4.3 Migration Detection Mode (EARS-C1)
+ * - §4.4 Output Formatting - JSON Mode & Exit Codes (EARS-D1 to D3)
+ * - §4.5 Output Summary & Limiting (EARS-E1 to E3)
+ */
+
 // Mock @gitgov/core with complete adapter mocks
 jest.doMock('@gitgov/core', () => ({
   Config: {
@@ -32,21 +46,19 @@ jest.mock('fs', () => ({
 import { LintCommand } from './lint-command';
 import { DependencyInjectionService } from '../../services/dependency-injection';
 import { promises as fs } from 'fs';
-import type { Lint, IdentityAdapter, ActorRecord } from '@gitgov/core';
+import type { ActorRecord, FixReport, LintOptions, LintReport, LintResult } from '@gitgov/core';
+import type { FsLintOptions, FsFixOptions } from '@gitgov/core/fs';
 
 // Mock console methods to capture output
 const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation();
 const mockConsoleError = jest.spyOn(console, 'error').mockImplementation();
 const mockProcessExit = jest.spyOn(process, 'exit').mockImplementation();
 
-// Get access to the mocked DependencyInjectionService
-const mockDI = jest.mocked(DependencyInjectionService);
-
 // Global references to the mock adapters for easy access in tests
 let mockLintModule: {
-  lint: jest.MockedFunction<(options?: Partial<Lint.FsLintOptions>) => Promise<Lint.LintReport>>;
-  lintFile: jest.MockedFunction<(filePath: string, options?: Partial<Lint.FsLintOptions>) => Promise<Lint.LintReport>>;
-  fix: jest.MockedFunction<(lintReport: Lint.LintReport, fixOptions?: Partial<Lint.FsFixOptions>) => Promise<Lint.FixReport>>;
+  lint: jest.MockedFunction<(options?: Partial<FsLintOptions>) => Promise<LintReport>>;
+  lintFile: jest.MockedFunction<(filePath: string, options?: Partial<FsLintOptions>) => Promise<LintReport>>;
+  fix: jest.MockedFunction<(lintReport: LintReport, fixOptions?: Partial<FsFixOptions>) => Promise<FixReport>>;
 };
 
 let mockIdentityAdapter: {
@@ -57,10 +69,14 @@ let mockIndexerAdapter: {
   generateIndex: jest.MockedFunction<() => Promise<{ success: boolean }>>;
 };
 
-describe('LintCommand - Complete Unit Tests', () => {
+let mockKeyProvider: {
+  getPrivateKey: jest.MockedFunction<(actorId: string) => Promise<string | null>>;
+};
+
+describe('LintCommand', () => {
   let lintCommand: LintCommand;
 
-  const mockLintReport: Lint.LintReport = {
+  const mockLintReport: LintReport = {
     summary: {
       filesChecked: 10,
       errors: 2,
@@ -96,12 +112,12 @@ describe('LintCommand - Complete Unit Tests', () => {
     ],
     metadata: {
       timestamp: new Date().toISOString(),
-      options: {} as Lint.LintOptions,
+      options: {} as LintOptions,
       version: '1.0.0'
     }
   };
 
-  const mockFixReport: Lint.FixReport = {
+  const mockFixReport: FixReport = {
     summary: {
       fixed: 2,
       failed: 0,
@@ -146,11 +162,16 @@ describe('LintCommand - Complete Unit Tests', () => {
       generateIndex: jest.fn().mockResolvedValue({ success: true })
     };
 
+    mockKeyProvider = {
+      getPrivateKey: jest.fn().mockResolvedValue('mock-private-key')
+    };
+
     // Create mock dependency service
     const mockDependencyService = {
       getLintModule: jest.fn().mockResolvedValue(mockLintModule),
       getIdentityAdapter: jest.fn().mockResolvedValue(mockIdentityAdapter),
-      getIndexerAdapter: jest.fn().mockResolvedValue(mockIndexerAdapter)
+      getIndexerAdapter: jest.fn().mockResolvedValue(mockIndexerAdapter),
+      getKeyProvider: jest.fn().mockReturnValue(mockKeyProvider)
     };
 
     // Mock singleton getInstance
@@ -168,7 +189,6 @@ describe('LintCommand - Complete Unit Tests', () => {
 
     // Mock fs.stat for file detection
     (fs.stat as jest.Mock).mockRejectedValue(new Error('Not a file'));
-    (fs.readFile as jest.Mock).mockResolvedValue('mock-private-key');
   });
 
   afterEach(() => {
@@ -179,11 +199,11 @@ describe('LintCommand - Complete Unit Tests', () => {
   });
 
   // ==========================================================================
-  // EARS 1-3, 10-14: CLI Argument Parsing & Module Integration
+  // EARS-A1 to A8: CLI Argument Parsing & Module Integration
   // ==========================================================================
 
-  describe('CLI Argument Parsing & Module Integration (EARS 1-3, 10-14)', () => {
-    it('[EARS-1] should use default options when no args provided', async () => {
+  describe('4.1. CLI Argument Parsing & Module Integration (EARS-A1 to A8)', () => {
+    it('[EARS-A1] should use default options when no args provided', async () => {
       await lintCommand.execute({});
 
       expect(mockLintModule.lint).toHaveBeenCalledWith({
@@ -194,7 +214,7 @@ describe('LintCommand - Complete Unit Tests', () => {
       });
     });
 
-    it('[EARS-2] should map CLI flags to LintOptions correctly', async () => {
+    it('[EARS-A2] should map CLI flags to LintOptions correctly', async () => {
       await lintCommand.execute({
         path: '.gitgov/custom',
         references: true,
@@ -211,7 +231,7 @@ describe('LintCommand - Complete Unit Tests', () => {
       });
     });
 
-    it('[EARS-3] should handle module initialization errors', async () => {
+    it('[EARS-A3] should handle module initialization errors', async () => {
       const error = new Error('LintModule initialization failed');
       const mockDependencyService = {
         getLintModule: jest.fn().mockRejectedValue(error),
@@ -228,7 +248,7 @@ describe('LintCommand - Complete Unit Tests', () => {
       expect(mockProcessExit).toHaveBeenCalledWith(1);
     });
 
-    it('[EARS-10] should detect file path and use lintFile for single files', async () => {
+    it('[EARS-A4] should detect file path and use lintFile for single files', async () => {
       await lintCommand.execute({
         path: '.gitgov/tasks/task1.json'
       });
@@ -242,7 +262,7 @@ describe('LintCommand - Complete Unit Tests', () => {
       expect(mockLintModule.lint).not.toHaveBeenCalled();
     });
 
-    it('[EARS-10] should detect file by checking filesystem when extension is not .json', async () => {
+    it('[EARS-A4] should detect file by checking filesystem when extension is not .json', async () => {
       (fs.stat as jest.Mock).mockResolvedValueOnce({ isFile: () => true });
 
       await lintCommand.execute({
@@ -253,7 +273,7 @@ describe('LintCommand - Complete Unit Tests', () => {
       expect(mockLintModule.lint).not.toHaveBeenCalled();
     });
 
-    it('[EARS-11] should filter results by excluded validator types', async () => {
+    it('[EARS-A5] should filter results by excluded validator types', async () => {
       await lintCommand.execute({
         excludeValidators: 'SCHEMA_VALIDATION,REFERENTIAL_INTEGRITY'
       });
@@ -265,7 +285,7 @@ describe('LintCommand - Complete Unit Tests', () => {
       expect(filteredResults.length).toBe(1); // Only SIGNATURE_STRUCTURE should remain
     });
 
-    it('[EARS-12] should group output by validator (default)', async () => {
+    it('[EARS-A6] should group output by validator (default)', async () => {
       await lintCommand.execute({
         groupBy: 'validator'
       });
@@ -276,7 +296,7 @@ describe('LintCommand - Complete Unit Tests', () => {
       expect(output).toContain('SIGNATURE_STRUCTURE');
     });
 
-    it('[EARS-12] should group output by file', async () => {
+    it('[EARS-A6] should group output by file', async () => {
       await lintCommand.execute({
         groupBy: 'file'
       });
@@ -287,7 +307,7 @@ describe('LintCommand - Complete Unit Tests', () => {
       expect(output).toContain('.gitgov/tasks/task2.json');
     });
 
-    it('[EARS-12] should show output without grouping when groupBy is none', async () => {
+    it('[EARS-A6] should show output without grouping when groupBy is none', async () => {
       await lintCommand.execute({
         groupBy: 'none'
       });
@@ -296,7 +316,7 @@ describe('LintCommand - Complete Unit Tests', () => {
       expect(mockConsoleLog).toHaveBeenCalled();
     });
 
-    it('[EARS-13] should fix only specified validator types when --fix-validators is provided', async () => {
+    it('[EARS-A7] should fix only specified validator types when --fix-validators is provided', async () => {
       await lintCommand.execute({
         fix: true,
         fixValidators: 'SIGNATURE_STRUCTURE'
@@ -310,7 +330,7 @@ describe('LintCommand - Complete Unit Tests', () => {
       );
     });
 
-    it('[EARS-14] should fix all fixable problems when --fix-validators is not provided', async () => {
+    it('[EARS-A8] should fix all fixable problems when --fix-validators is not provided', async () => {
       await lintCommand.execute({
         fix: true
       });
@@ -325,11 +345,11 @@ describe('LintCommand - Complete Unit Tests', () => {
   });
 
   // ==========================================================================
-  // EARS 4-5: Output Formatting - Text Mode
+  // EARS-B1 to B2: Output Formatting - Text Mode
   // ==========================================================================
 
-  describe('Output Formatting - Text Mode (EARS 4-5)', () => {
-    it('[EARS-4] should format text output with colors and structure', async () => {
+  describe('4.2. Output Formatting - Text Mode (EARS-B1 to B2)', () => {
+    it('[EARS-B1] should format text output with colors and structure', async () => {
       await lintCommand.execute({
         format: 'text'
       });
@@ -342,8 +362,8 @@ describe('LintCommand - Complete Unit Tests', () => {
       expect(output).toContain('Fixable:');
     });
 
-    it('[EARS-5] should suppress warnings in quiet mode', async () => {
-      const reportWithWarnings: Lint.LintReport = {
+    it('[EARS-B2] should suppress warnings in quiet mode', async () => {
+      const reportWithWarnings: LintReport = {
         ...mockLintReport,
         results: [
           {
@@ -370,12 +390,12 @@ describe('LintCommand - Complete Unit Tests', () => {
   });
 
   // ==========================================================================
-  // EARS-6: Migration Detection Mode
+  // EARS-C1: Migration Detection Mode
   // ==========================================================================
 
-  describe('Migration Detection Mode (EARS-6)', () => {
-    it('[EARS-6] should list legacy records without applying fixes', async () => {
-      const legacyReport: Lint.LintReport = {
+  describe('4.3. Migration Detection Mode (EARS-C1)', () => {
+    it('[EARS-C1] should list legacy records without applying fixes', async () => {
+      const legacyReport: LintReport = {
         ...mockLintReport,
         results: [
           {
@@ -412,11 +432,11 @@ describe('LintCommand - Complete Unit Tests', () => {
   });
 
   // ==========================================================================
-  // EARS 7-9: Output Formatting - JSON Mode & Exit Codes
+  // EARS-D1 to D3: Output Formatting - JSON Mode & Exit Codes
   // ==========================================================================
 
-  describe('Output Formatting - JSON Mode & Exit Codes (EARS 7-9)', () => {
-    it('[EARS-7] should output JSON format without modifications', async () => {
+  describe('4.4. Output Formatting - JSON Mode & Exit Codes (EARS-D1 to D3)', () => {
+    it('[EARS-D1] should output JSON format without modifications', async () => {
       await lintCommand.execute({
         format: 'json'
       });
@@ -431,8 +451,8 @@ describe('LintCommand - Complete Unit Tests', () => {
       expect(parsed.results).toBeDefined();
     });
 
-    it('[EARS-8] should exit with code 1 when errors present', async () => {
-      const reportWithErrors: Lint.LintReport = {
+    it('[EARS-D2] should exit with code 1 when errors present', async () => {
+      const reportWithErrors: LintReport = {
         ...mockLintReport,
         summary: {
           ...mockLintReport.summary,
@@ -446,8 +466,8 @@ describe('LintCommand - Complete Unit Tests', () => {
       expect(mockProcessExit).toHaveBeenCalledWith(1);
     });
 
-    it('[EARS-8] should exit with code 1 based on filtered report when exclude-validators is used', async () => {
-      const reportWithErrors: Lint.LintReport = {
+    it('[EARS-D2] should exit with code 1 based on filtered report when exclude-validators is used', async () => {
+      const reportWithErrors: LintReport = {
         ...mockLintReport,
         summary: {
           ...mockLintReport.summary,
@@ -483,8 +503,8 @@ describe('LintCommand - Complete Unit Tests', () => {
       expect(mockProcessExit).toHaveBeenCalledWith(1);
     });
 
-    it('[EARS-8] should exit with code 1 when fix fails', async () => {
-      const fixReportWithFailures: Lint.FixReport = {
+    it('[EARS-D2] should exit with code 1 when fix fails', async () => {
+      const fixReportWithFailures: FixReport = {
         ...mockFixReport,
         summary: {
           ...mockFixReport.summary,
@@ -500,8 +520,8 @@ describe('LintCommand - Complete Unit Tests', () => {
       expect(mockProcessExit).toHaveBeenCalledWith(1);
     });
 
-    it('[EARS-9] should exit with code 0 when no errors', async () => {
-      const reportNoErrors: Lint.LintReport = {
+    it('[EARS-D3] should exit with code 0 when no errors', async () => {
+      const reportNoErrors: LintReport = {
         ...mockLintReport,
         summary: {
           ...mockLintReport.summary,
@@ -516,8 +536,8 @@ describe('LintCommand - Complete Unit Tests', () => {
       expect(mockProcessExit).toHaveBeenCalledWith(0);
     });
 
-    it('[EARS-9] should exit with code 0 when all fixes succeed', async () => {
-      const fixReportSuccess: Lint.FixReport = {
+    it('[EARS-D3] should exit with code 0 when all fixes succeed', async () => {
+      const fixReportSuccess: FixReport = {
         ...mockFixReport,
         summary: {
           ...mockFixReport.summary,
@@ -535,11 +555,11 @@ describe('LintCommand - Complete Unit Tests', () => {
   });
 
   // ==========================================================================
-  // EARS 15-16: Output Summary & Limiting
+  // EARS-E1 to E3: Output Summary & Limiting
   // ==========================================================================
 
-  describe('Output Summary & Limiting (EARS 15-16)', () => {
-    it('[EARS-15] should show only summary when --summary flag is provided', async () => {
+  describe('4.5. Output Summary & Limiting (EARS-E1 to E3)', () => {
+    it('[EARS-E1] should show only summary when --summary flag is provided', async () => {
       await lintCommand.execute({
         summary: true
       });
@@ -554,7 +574,7 @@ describe('LintCommand - Complete Unit Tests', () => {
       expect(output).not.toContain('task1');
     });
 
-    it('[EARS-15] should show Validator Types breakdown in summary mode', async () => {
+    it('[EARS-E1] should show Validator Types breakdown in summary mode', async () => {
       await lintCommand.execute({
         summary: true
       });
@@ -565,10 +585,10 @@ describe('LintCommand - Complete Unit Tests', () => {
       expect(output).toContain('SIGNATURE_STRUCTURE');
     });
 
-    it('[EARS-16] should limit displayed errors/warnings when --max-errors is set', async () => {
-      const reportWithManyErrors: Lint.LintReport = {
+    it('[EARS-E2] should limit displayed errors/warnings when --max-errors is set', async () => {
+      const reportWithManyErrors: LintReport = {
         ...mockLintReport,
-        results: Array.from({ length: 10 }, (_, i): Lint.LintResult => ({
+        results: Array.from({ length: 10 }, (_, i): LintResult => ({
           level: 'error',
           filePath: `.gitgov/tasks/task${i}.json`,
           validator: 'SCHEMA_VALIDATION',
@@ -589,10 +609,10 @@ describe('LintCommand - Complete Unit Tests', () => {
       expect(output).toContain('use --max-errors 0 to see all');
     });
 
-    it('[EARS-16] should show all errors when --max-errors is 0', async () => {
-      const reportWithManyErrors: Lint.LintReport = {
+    it('[EARS-E2] should show all errors when --max-errors is 0', async () => {
+      const reportWithManyErrors: LintReport = {
         ...mockLintReport,
-        results: Array.from({ length: 5 }, (_, i): Lint.LintResult => ({
+        results: Array.from({ length: 5 }, (_, i): LintResult => ({
           level: 'error',
           filePath: `.gitgov/tasks/task${i}.json`,
           validator: 'SCHEMA_VALIDATION',
@@ -612,14 +632,14 @@ describe('LintCommand - Complete Unit Tests', () => {
       expect(output).not.toContain('more issue');
     });
 
-    it('[EARS-16] should show summary section when max-errors limits output', async () => {
-      const reportWithManyErrors: Lint.LintReport = {
+    it('[EARS-E2] should show summary section when max-errors limits output', async () => {
+      const reportWithManyErrors: LintReport = {
         ...mockLintReport,
         summary: {
           ...mockLintReport.summary,
           errors: 10
         },
-        results: Array.from({ length: 10 }, (_, i): Lint.LintResult => ({
+        results: Array.from({ length: 10 }, (_, i): LintResult => ({
           level: 'error',
           filePath: `.gitgov/tasks/task${i}.json`,
           validator: 'SCHEMA_VALIDATION',
@@ -639,50 +659,10 @@ describe('LintCommand - Complete Unit Tests', () => {
       expect(output).toContain('Summary:');
       expect(output).toContain('more issue');
     });
-  });
 
-  // ==========================================================================
-  // Additional Integration Tests
-  // ==========================================================================
-
-  describe('Fix Mode Integration', () => {
-    it('should load private key from .gitgov/actors/{actorId}.key when fixing', async () => {
-      await lintCommand.execute({
-        fix: true
-      });
-
-      expect(fs.readFile).toHaveBeenCalledWith(
-        expect.stringContaining('.gitgov/actors/human:test-user.key'),
-        'utf-8'
-      );
-    });
-
-    it('should handle missing private key gracefully when fixing', async () => {
-      (fs.readFile as jest.Mock).mockRejectedValueOnce(new Error('File not found'));
-
-      await lintCommand.execute({
-        fix: true
-      });
-
-      // Should continue with fix even if private key is missing
-      expect(mockLintModule.fix).toHaveBeenCalled();
-    });
-
-    it('should show fix report after applying fixes', async () => {
-      await lintCommand.execute({
-        fix: true
-      });
-
-      const output = mockConsoleLog.mock.calls.map(call => call[0]).join('\n');
-      expect(output).toContain('Fix Report:');
-      expect(output).toContain('Fixed:');
-      expect(output).toContain('Failed:');
-      expect(output).toContain('Backups created:');
-    });
-
-    it('[EARS-55] should regenerate index after fix when records are modified', async () => {
+    it('[EARS-E3] should regenerate index after fix when records are modified', async () => {
       // Mock fix report with successful fixes
-      const fixReportWithFixes: Lint.FixReport = {
+      const fixReportWithFixes: FixReport = {
         summary: {
           fixed: 3,
           failed: 0,
@@ -708,9 +688,9 @@ describe('LintCommand - Complete Unit Tests', () => {
       expect(mockIndexerAdapter.generateIndex).toHaveBeenCalled();
     });
 
-    it('[EARS-55] should NOT regenerate index when no records were fixed', async () => {
+    it('[EARS-E3] should NOT regenerate index when no records were fixed', async () => {
       // Mock fix report with no fixes (all failed or nothing to fix)
-      const fixReportNoFixes: Lint.FixReport = {
+      const fixReportNoFixes: FixReport = {
         summary: {
           fixed: 0,
           failed: 0,
@@ -728,9 +708,9 @@ describe('LintCommand - Complete Unit Tests', () => {
       expect(mockIndexerAdapter.generateIndex).not.toHaveBeenCalled();
     });
 
-    it('[EARS-55] should handle indexer errors gracefully during post-fix reindex', async () => {
+    it('[EARS-E3] should handle indexer errors gracefully during post-fix reindex', async () => {
       // Mock fix report with successful fixes
-      const fixReportWithFixes: Lint.FixReport = {
+      const fixReportWithFixes: FixReport = {
         summary: {
           fixed: 1,
           failed: 0,
@@ -751,9 +731,46 @@ describe('LintCommand - Complete Unit Tests', () => {
     });
   });
 
+  // ==========================================================================
+  // Additional Integration Tests
+  // ==========================================================================
+
+  describe('Fix Mode Integration', () => {
+    it('should load private key via KeyProvider when fixing', async () => {
+      await lintCommand.execute({
+        fix: true
+      });
+
+      expect(mockKeyProvider.getPrivateKey).toHaveBeenCalledWith('human:test-user');
+    });
+
+    it('should handle missing private key gracefully when fixing', async () => {
+      mockKeyProvider.getPrivateKey.mockRejectedValueOnce(new Error('Key not found'));
+
+      await lintCommand.execute({
+        fix: true
+      });
+
+      // Should continue with fix even if private key is missing
+      expect(mockLintModule.fix).toHaveBeenCalled();
+    });
+
+    it('should show fix report after applying fixes', async () => {
+      await lintCommand.execute({
+        fix: true
+      });
+
+      const output = mockConsoleLog.mock.calls.map(call => call[0]).join('\n');
+      expect(output).toContain('Fix Report:');
+      expect(output).toContain('Fixed:');
+      expect(output).toContain('Failed:');
+      expect(output).toContain('Backups created:');
+    });
+  });
+
   describe('Edge Cases', () => {
     it('should handle empty lint report', async () => {
-      const emptyReport: Lint.LintReport = {
+      const emptyReport: LintReport = {
         summary: {
           filesChecked: 0,
           errors: 0,
@@ -764,7 +781,7 @@ describe('LintCommand - Complete Unit Tests', () => {
         results: [],
         metadata: {
           timestamp: new Date().toISOString(),
-          options: {} as Lint.LintOptions,
+          options: {} as LintOptions,
           version: '1.0.0'
         }
       };

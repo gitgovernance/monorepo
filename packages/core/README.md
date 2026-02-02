@@ -22,7 +22,7 @@ import type {
 } from "@gitgov/core";
 
 // Extract classes from namespaces
-const { IdentityAdapter, BacklogAdapter, WorkflowMethodologyAdapter } =
+const { IdentityAdapter, BacklogAdapter, WorkflowAdapter } =
   Adapters;
 const { RecordStore } = Store;
 const { EventBus: EventBusClass } = EventBus;
@@ -41,7 +41,7 @@ const identity = new IdentityAdapter({
 });
 
 // 3. Setup workflow methodology
-const workflowMethodology = WorkflowMethodologyAdapter.createDefault();
+const workflow = WorkflowAdapter.createDefault();
 
 // 4. Setup BacklogAdapter with minimal dependencies for basic task creation
 const backlogAdapter = new BacklogAdapter({
@@ -49,7 +49,7 @@ const backlogAdapter = new BacklogAdapter({
   cycleStore,
   identity,
   eventBus,
-  workflowMethodologyAdapter: workflowMethodology,
+  workflowAdapter: workflow,
   // Optional dependencies (can be undefined for basic usage)
   feedbackStore: undefined,
   executionStore: undefined,
@@ -109,7 +109,7 @@ console.log({
 - **ExecutionAdapter**: Audit log for work execution (13 tests)
 - **FeedbackAdapter**: Structured communication and blocking management (21 tests)
 - **IdentityAdapter**: Cryptographic identity and agent management (25 tests)
-- **WorkflowMethodologyAdapter**: Configurable workflow validation engine (51 tests)
+- **WorkflowAdapter**: Configurable workflow validation engine (51 tests)
 - **IndexerAdapter**: Local cache optimization for performance (5 tests)
 
 ### Record System (8/8 Records)
@@ -126,7 +126,7 @@ console.log({
 
 - **Generic Store**: CRUD operations for all record types
 - **Integration Testing**: Cross-module validation framework
-- **WorkflowMethodologyAdapter**: Configurable workflow validation engine
+- **WorkflowAdapter**: Configurable workflow validation engine
 - **EventBusModule**: Event-driven architecture foundation with 9 event types
 - **DiagramGenerator**: Automatic Mermaid diagram generation with deduplication and data quality warnings
 - **Schema Generation Pipeline**: Automatic YAML→JSON→TypeScript transformation with build-time validation
@@ -140,7 +140,7 @@ graph TD
     subgraph "@gitgov/core"
         PA[ProjectAdapter] --> IA[IdentityAdapter];
         PA --> BA[BacklogAdapter];
-        PA --> WMA[WorkflowMethodologyAdapter];
+        PA --> WMA[WorkflowAdapter];
         PA --> CM[ConfigManager];
         PA --> F((Factories));
         IA --> F;
@@ -281,7 +281,7 @@ npm test -- --watch
 - **EventBusModule**: 32 tests (20 unit + 12 integration tests with cross-adapter scenarios)
 - **FeedbackAdapter**: 21 tests (EARS coverage with dual event emission + duplicate assignment prevention)
 - **ExecutionAdapter**: 13 tests (EARS coverage with performance validation)
-- **WorkflowMethodologyAdapter**: 51 tests (29 unit + 22 integration tests)
+- **WorkflowAdapter**: 51 tests (29 unit + 22 integration tests)
 - **Identity Domain**: 66 tests (Adapter + ActorRecord/AgentRecord factories & validators)
 - **Validation**: 62 tests (for Task, Cycle, Exec, CL, Feedback records + schema caching)
 - **Factories**: 40 tests (for Task, Cycle, Exec, CL, Feedback records)

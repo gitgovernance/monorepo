@@ -7,9 +7,12 @@ import * as os from 'os';
  * E2E Tests for Sync CLI Commands
  *
  * Tests the `gitgov sync` commands in various scenarios:
- * - EARS-52: Reindex after bootstrapFromStateBranch
- * - EARS-53: Auto-detect actor from .key files when session missing
- * - EARS-54: Show implicit pull results when push reconciles with remote
+ * - EARS-G1: Reindex after bootstrapFromStateBranch
+ * - EARS-G2: Auto-detect actor from .key files when session missing
+ * - EARS-G3: Show implicit pull results when push reconciles with remote
+ * - EARS-G4: Regenerate index when implicit pull occurs
+ * - EARS-G5: Preserve .key files during implicit pull
+ * - EARS-G6: Auto-merge when different files modified (no conflict)
  *
  * IMPORTANT: These tests verify CLI command execution in isolation.
  * Each test creates a fresh temp directory with appropriate git setup.
@@ -93,9 +96,9 @@ describe('Sync CLI Commands - E2E Tests', () => {
   };
 
   // ============================================================================
-  // EARS-52: Reindex after bootstrapFromStateBranch
+  // EARS-G1: Reindex after bootstrapFromStateBranch
   // ============================================================================
-  describe('EARS-52: Reindex after bootstrap from gitgov-state', () => {
+  describe('EARS-G1: Reindex after bootstrap from gitgov-state', () => {
     let testProjectRoot: string;
     let remotePath: string;
 
@@ -113,9 +116,9 @@ describe('Sync CLI Commands - E2E Tests', () => {
       process.chdir(originalCwd);
     });
 
-    it('[EARS-52] WHEN project is cloned fresh with existing gitgov-state THEN index.json SHALL be regenerated', () => {
+    it('[EARS-G1] WHEN project is cloned fresh with existing gitgov-state THEN index.json SHALL be regenerated', () => {
       // 1. Initialize GitGovernance and push to gitgov-state
-      runCliCommand(['init', '--name', 'EARS-52 Test', '--actor-name', 'Test User', '--quiet'], { cwd: testProjectRoot });
+      runCliCommand(['init', '--name', 'EARS-G1 Test', '--actor-name', 'Test User', '--quiet'], { cwd: testProjectRoot });
       runCliCommand(['sync', 'push'], { cwd: testProjectRoot });
 
       // 2. Verify gitgov-state exists remotely
@@ -139,15 +142,15 @@ describe('Sync CLI Commands - E2E Tests', () => {
       expect(fs.existsSync(path.join(clonePath, '.gitgov'))).toBe(true);
       expect(fs.existsSync(path.join(clonePath, '.gitgov', 'config.json'))).toBe(true);
 
-      // 7. Verify index.json was regenerated (EARS-52 requirement)
+      // 7. Verify index.json was regenerated (EARS-G1 requirement)
       expect(fs.existsSync(path.join(clonePath, '.gitgov', 'index.json'))).toBe(true);
     });
   });
 
   // ============================================================================
-  // EARS-53: Auto-detect actor from .key files when session missing
+  // EARS-G2: Auto-detect actor from .key files when session missing
   // ============================================================================
-  describe('EARS-53: Auto-detect actor from .key files', () => {
+  describe('EARS-G2: Auto-detect actor from .key files', () => {
     let testProjectRoot: string;
     let remotePath: string;
 
@@ -165,9 +168,9 @@ describe('Sync CLI Commands - E2E Tests', () => {
       process.chdir(originalCwd);
     });
 
-    it('[EARS-53] WHEN session.json is missing BUT .key file exists THEN actor SHALL be auto-detected', () => {
+    it('[EARS-G2] WHEN session.json is missing BUT .key file exists THEN actor SHALL be auto-detected', () => {
       // 1. Initialize GitGovernance
-      runCliCommand(['init', '--name', 'EARS-53 Test', '--actor-name', 'Test User', '--quiet'], { cwd: testProjectRoot });
+      runCliCommand(['init', '--name', 'EARS-G2 Test', '--actor-name', 'Test User', '--quiet'], { cwd: testProjectRoot });
 
       // 2. Delete session.json (simulating fresh machine or session loss)
       const sessionPath = path.join(testProjectRoot, '.gitgov', '.session.json');
@@ -194,9 +197,9 @@ describe('Sync CLI Commands - E2E Tests', () => {
   });
 
   // ============================================================================
-  // EARS-54: Show implicit pull results when push reconciles with remote
+  // EARS-G3: Show implicit pull results when push reconciles with remote
   // ============================================================================
-  describe('EARS-54: Show implicit pull results during push', () => {
+  describe('EARS-G3: Show implicit pull results during push', () => {
     let testProjectRoot: string;
     let remotePath: string;
 
@@ -214,9 +217,9 @@ describe('Sync CLI Commands - E2E Tests', () => {
       process.chdir(originalCwd);
     });
 
-    it('[EARS-54] WHEN push detects remote changes THEN implicit pull results SHALL be shown', () => {
+    it('[EARS-G3] WHEN push detects remote changes THEN implicit pull results SHALL be shown', () => {
       // 1. Initialize GitGovernance and push to gitgov-state
-      runCliCommand(['init', '--name', 'EARS-54 Test', '--actor-name', 'Test User', '--quiet'], { cwd: testProjectRoot });
+      runCliCommand(['init', '--name', 'EARS-G3 Test', '--actor-name', 'Test User', '--quiet'], { cwd: testProjectRoot });
       runCliCommand(['sync', 'push'], { cwd: testProjectRoot });
 
       // 2. Clone repo (simulating another machine)
@@ -279,9 +282,9 @@ describe('Sync CLI Commands - E2E Tests', () => {
       expect(allTasksContent).toContain('Local Task');
     });
 
-    it('[EARS-54-FIX] WHEN implicit pull occurs THEN index SHALL be regenerated', () => {
+    it('[EARS-G4] WHEN implicit pull occurs THEN index SHALL be regenerated', () => {
       // 1. Initialize GitGovernance and push to gitgov-state
-      runCliCommand(['init', '--name', 'EARS-54-FIX Test', '--actor-name', 'Test User', '--quiet'], { cwd: testProjectRoot });
+      runCliCommand(['init', '--name', 'EARS-G4 Test', '--actor-name', 'Test User', '--quiet'], { cwd: testProjectRoot });
       runCliCommand(['sync', 'push'], { cwd: testProjectRoot });
 
       // 2. Clone repo (simulating another machine)
@@ -346,9 +349,9 @@ describe('Sync CLI Commands - E2E Tests', () => {
   });
 
   // ============================================================================
-  // EARS-59: Preserve .key files during implicit pull
+  // EARS-G5: Preserve .key files during implicit pull
   // ============================================================================
-  describe('EARS-59: Preserve .key files during implicit pull', () => {
+  describe('EARS-G5: Preserve .key files during implicit pull', () => {
     let testProjectRoot: string;
     let remotePath: string;
 
@@ -366,9 +369,9 @@ describe('Sync CLI Commands - E2E Tests', () => {
       process.chdir(originalCwd);
     });
 
-    it('[EARS-59] WHEN implicit pull occurs THEN .key files SHALL be preserved', () => {
+    it('[EARS-G5] WHEN implicit pull occurs THEN .key files SHALL be preserved', () => {
       // 1. Initialize GitGovernance and push to gitgov-state
-      runCliCommand(['init', '--name', 'EARS-59 Test', '--actor-name', 'Test User', '--quiet'], { cwd: testProjectRoot });
+      runCliCommand(['init', '--name', 'EARS-G5 Test', '--actor-name', 'Test User', '--quiet'], { cwd: testProjectRoot });
       runCliCommand(['sync', 'push'], { cwd: testProjectRoot });
 
       // 2. Get the .key file content before any operations
@@ -421,9 +424,9 @@ describe('Sync CLI Commands - E2E Tests', () => {
   });
 
   // ============================================================================
-  // EARS-60: Auto-merge when different files modified (no conflict)
+  // EARS-G6: Auto-merge when different files modified (no conflict)
   // ============================================================================
-  describe('EARS-60: Auto-merge different files', () => {
+  describe('EARS-G6: Auto-merge different files', () => {
     let testProjectRoot: string;
     let remotePath: string;
 
@@ -441,9 +444,9 @@ describe('Sync CLI Commands - E2E Tests', () => {
       process.chdir(originalCwd);
     });
 
-    it('[EARS-60] WHEN different files modified on different machines THEN auto-merge SHALL succeed', () => {
+    it('[EARS-G6] WHEN different files modified on different machines THEN auto-merge SHALL succeed', () => {
       // 1. Initialize GitGovernance and push to gitgov-state
-      runCliCommand(['init', '--name', 'EARS-60 Test', '--actor-name', 'Test User', '--quiet'], { cwd: testProjectRoot });
+      runCliCommand(['init', '--name', 'EARS-G6 Test', '--actor-name', 'Test User', '--quiet'], { cwd: testProjectRoot });
 
       // Create initial task A
       runCliCommand(['task', 'new', 'Task A Initial', '-d', 'Initial task A'], { cwd: testProjectRoot });

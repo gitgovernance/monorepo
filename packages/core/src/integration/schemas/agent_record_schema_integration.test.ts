@@ -1,5 +1,5 @@
-import { validateAgentRecordDetailed } from '../../validation/agent_validator';
-import type { AgentRecord } from '../../types';
+import { validateAgentRecordDetailed } from '../../record_validations/agent_validator';
+import type { AgentRecord } from '../../record_types';
 
 describe('AgentRecord Schema Integration Tests', () => {
   /**
@@ -539,7 +539,7 @@ describe('AgentRecord Schema Integration Tests', () => {
         engine: {
           type: 'api' as const,
           url: 'https://api.example.com/agent',
-          method: 'PUT' as unknown as 'POST' | 'GET'
+          method: 'PATCH' as unknown as 'POST' | 'GET' | 'PUT'
         }
       };
 

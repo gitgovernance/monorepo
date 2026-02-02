@@ -29,14 +29,11 @@ export class FsFileLister implements FileLister {
 
   constructor(options: FsFileListerOptions) {
     this.cwd = options.cwd;
-    // Note: respectGitignore is accepted but currently a no-op
-    // Future enhancement: parse .gitignore and merge with ignore patterns
   }
 
   /**
    * [EARS-FL01] Lists files matching glob patterns.
    * [EARS-FFL01] Excludes files matching ignore patterns.
-   * [EARS-FFL02] Respects .gitignore if enabled.
    */
   async list(patterns: string[], options?: FileListOptions): Promise<string[]> {
     // [EARS-FFL04] Validate patterns don't contain path traversal
@@ -70,11 +67,6 @@ export class FsFileLister implements FileLister {
     if (options?.maxDepth !== undefined) {
       fgOptions.deep = options.maxDepth;
     }
-
-    // [EARS-FFL02] Respect .gitignore if enabled
-    // Note: fast-glob handles .gitignore via the 'ignore' option
-    // We set this as a future enhancement - currently a no-op
-    // To properly implement, we would read .gitignore and merge patterns
 
     return fg(patterns, fgOptions);
   }

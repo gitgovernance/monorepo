@@ -1,7 +1,9 @@
+// Blueprint: packages/blueprints/03_products/core/specs/modules/source_auditor/source_auditor_module.md
+// Sections: §4.7 (EARS-G1 to EARS-G5)
 import { WaiverWriter } from "./waiver_writer";
 import type { IFeedbackAdapter } from "../adapters/feedback_adapter";
-import type { GdprFinding } from "../pii_detector/types";
-import type { FeedbackRecord } from "../types";
+import type { Finding } from "../finding_detector/types";
+import type { FeedbackRecord } from "../record_types";
 
 describe("WaiverWriter", () => {
   let mockFeedbackAdapter: jest.Mocked<IFeedbackAdapter>;
@@ -19,7 +21,7 @@ describe("WaiverWriter", () => {
     writer = new WaiverWriter(mockFeedbackAdapter);
   });
 
-  const mockFinding: GdprFinding = {
+  const mockFinding: Finding = {
     id: "finding-1",
     ruleId: "PII-001",
     category: "pii-email",
@@ -107,7 +109,7 @@ describe("WaiverWriter", () => {
     });
 
     it("[EARS-G4] should create waivers for all findings in batch", async () => {
-      const findings: GdprFinding[] = [
+      const findings: Finding[] = [
         mockFinding,
         { ...mockFinding, id: "finding-2", fingerprint: "xyz789" },
       ];

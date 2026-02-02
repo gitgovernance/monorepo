@@ -1,5 +1,5 @@
 import { DependencyInjectionService } from '../../services/dependency-injection';
-import type { TaskRecord, FeedbackRecord, CycleRecord, ActorRecord, MetricsAdapter } from "@gitgov/core";
+import type { TaskRecord, FeedbackRecord, CycleRecord, ActorRecord, ProductivityMetrics, CollaborationMetrics } from "@gitgov/core";
 
 /**
  * Status Command Options interface
@@ -397,8 +397,8 @@ export class StatusCommand {
    */
   private renderGlobalDashboard(
     overview: SystemOverview,
-    productivityMetrics: MetricsAdapter.ProductivityMetrics | null,
-    collaborationMetrics: MetricsAdapter.CollaborationMetrics | null,
+    productivityMetrics: ProductivityMetrics | null,
+    collaborationMetrics: CollaborationMetrics | null,
     options: StatusCommandOptions
   ): void {
     console.log('📊 GitGovernance Project Status');

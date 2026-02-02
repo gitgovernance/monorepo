@@ -1,7 +1,7 @@
 import { Command, Option } from 'commander';
 import { BaseCommand } from '../../base/base-command';
 import type { BaseCommandOptions } from '../../interfaces/command';
-import type { Runner } from '@gitgov/core';
+import type { RunOptions, AgentResponse } from '@gitgov/core';
 
 /**
  * CLI-specific options for agent run command
@@ -48,7 +48,7 @@ export interface ShowCommandOptions extends BaseCommandOptions {
 }
 
 /**
- * Agent Command - Thin wrapper for @gitgov/core/runner module
+ * Agent Command - Thin wrapper for @gitgov/core module
  *
  * Responsibilities (CLI only):
  * - Parse CLI arguments
@@ -153,7 +153,7 @@ export class AgentCommand extends BaseCommand<RunCommandOptions> {
         }
       }
 
-      // Dry run mode
+      // [EARS-D6] Dry run mode
       if (options.dryRun) {
         if (options.output === 'json') {
           console.log(JSON.stringify({
@@ -185,13 +185,14 @@ export class AgentCommand extends BaseCommand<RunCommandOptions> {
           tags: ['agent', 'automated'],
         }, currentActor.id);
         taskId = task.id;
+        // [EARS-D3] Suppress output in quiet mode
         if (!options.quiet && options.output !== 'json') {
           console.log(`Created TaskRecord: ${taskId}`);
         }
       }
 
       // Execute agent
-      const runOptions: Runner.RunOptions = {
+      const runOptions: RunOptions = {
         agentId,
         taskId,
         actorId: currentActor.id,
@@ -200,16 +201,18 @@ export class AgentCommand extends BaseCommand<RunCommandOptions> {
       if (options.tool) {
         runOptions.tool = options.tool;
       }
-      const response: Runner.AgentResponse = await runner.runOnce(runOptions);
+      const response: AgentResponse = await runner.runOnce(runOptions);
 
-      // Format output
+      // [EARS-D1, D2] Format output
       if (options.output === 'json') {
+        // [EARS-D2] JSON output
         console.log(JSON.stringify(response, null, 2));
       } else {
+        // [EARS-D1] Text output with formatting
         this.formatTextResponse(response, options);
       }
 
-      // Exit code based on status
+      // [EARS-D4, D5] Exit code based on status
       process.exit(response.status === 'success' ? 0 : 1);
 
     } catch (error) {
@@ -228,7 +231,7 @@ export class AgentCommand extends BaseCommand<RunCommandOptions> {
   /**
    * Format AgentResponse for text output
    */
-  private formatTextResponse(response: Runner.AgentResponse, options: RunCommandOptions): void {
+  private formatTextResponse(response: AgentResponse, options: RunCommandOptions): void {
     const statusIcon = response.status === 'success' ? '✅' : '❌';
     const statusText = response.status === 'success' ? 'success' : 'error';
 
@@ -279,19 +282,18 @@ export class AgentCommand extends BaseCommand<RunCommandOptions> {
       // Load all agents
       const agents: Array<{ id: string; name: string; engine: string; description: string | undefined }> = [];
       for (const id of agentIds) {
-        const record = await agentStore.read(id);
-        if (record) {
-          const payload = record.payload;
-          const engineType = payload.engine.type;
+        const agent = await agentStore.get(id);
+        if (agent) {
+          const engineType = agent.payload.engine.type;
 
           // Filter by engine if specified
           if (options.engine && engineType !== options.engine) {
             continue;
           }
 
-          const meta = payload.metadata as Record<string, unknown> | undefined;
+          const meta = agent.payload.metadata as Record<string, unknown> | undefined;
           agents.push({
-            id: payload.id,
+            id: agent.payload.id,
             name: id.replace('agent-', ''),
             engine: engineType,
             description: meta?.['description'] as string | undefined,
@@ -340,9 +342,9 @@ export class AgentCommand extends BaseCommand<RunCommandOptions> {
 
       // Try to load the agent
       const agentId = name.startsWith('agent-') ? name : `agent-${name}`;
-      const record = await agentStore.read(agentId);
+      const agent = await agentStore.get(agentId);
 
-      if (!record) {
+      if (!agent) {
         if (options.json) {
           console.log(JSON.stringify({ success: false, error: `Agent not found: ${name}` }, null, 2));
         } else {
@@ -351,49 +353,38 @@ export class AgentCommand extends BaseCommand<RunCommandOptions> {
         process.exit(1);
       }
 
-      const payload = record.payload;
-      // Cast to any to access dynamic properties safely
-      const agentPayload = payload as any;
-      const engine = agentPayload.engine;
-      const metadata = agentPayload.metadata;
+      const engine = agent.payload.engine;
+      const metadata = agent.payload.metadata as Record<string, unknown> | undefined;
 
       // Output
       if (options.json) {
-        console.log(JSON.stringify(options.verbose ? record : payload, null, 2));
+        console.log(JSON.stringify(agent, null, 2));
       } else {
         console.log('\n' + '─'.repeat(60));
         console.log(`AGENT: ${name}`);
         console.log('─'.repeat(60));
-        console.log(`  ID:          ${payload.id}`);
-        console.log(`  Status:      ${payload.status || 'active'}`);
+        console.log(`  ID:          ${agent.payload.id}`);
+        console.log(`  Status:      ${agent.payload.status || 'active'}`);
 
-        if (metadata?.description) {
-          console.log(`  Description: ${metadata.description}`);
+        if (metadata && 'description' in metadata) {
+          console.log(`  Description: ${metadata['description']}`);
         }
 
         console.log('\n  Engine:');
-        console.log(`    Type: ${engine?.type || 'unknown'}`);
-        if (engine?.entrypoint) {
+        console.log(`    Type: ${engine.type}`);
+        if ('entrypoint' in engine && engine.entrypoint) {
           console.log(`    Entrypoint: ${engine.entrypoint}`);
         }
-        if (engine?.function) {
+        if ('function' in engine && engine.function) {
           console.log(`    Function: ${engine.function}`);
         }
-        if (engine?.url) {
+        if ('url' in engine && engine.url) {
           console.log(`    URL: ${engine.url}`);
         }
-        if (engine?.tool) {
-          console.log(`    Tool: ${engine.tool}`);
-        }
 
-        if (agentPayload.capabilities && agentPayload.capabilities.length > 0) {
-          console.log('\n  Capabilities:');
-          agentPayload.capabilities.forEach((cap: string) => console.log(`    - ${cap}`));
-        }
-
-        if (agentPayload.triggers && agentPayload.triggers.length > 0) {
+        if (agent.payload.triggers && agent.payload.triggers.length > 0) {
           console.log('\n  Triggers:');
-          agentPayload.triggers.forEach((t: any) => console.log(`    - ${t.type}${t.event ? `: ${t.event}` : ''}`));
+          agent.payload.triggers.forEach((t) => console.log(`    - ${t.type}${t['event'] ? `: ${t['event']}` : ''}`));
         }
 
         console.log('─'.repeat(60) + '\n');

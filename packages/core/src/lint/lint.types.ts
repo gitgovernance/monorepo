@@ -1,6 +1,6 @@
-import type { Store } from "../store/store";
+import type { RecordStore } from "../record_store/record_store";
 import type { IIndexerAdapter } from "../adapters/indexer_adapter";
-import type { GitGovRecord, GitGovRecordType } from "../types";
+import type { GitGovRecord, GitGovRecordType } from "../record_types";
 
 // ==================== Pure LintModule Interface ====================
 
@@ -20,8 +20,8 @@ import type { GitGovRecord, GitGovRecordType } from "../types";
  * // Validate a single record (pure)
  * const results = lintModule.lintRecord(record, { recordId, entityType });
  *
- * // Validate multiple records
- * const report = await lintModule.lint(records, options);
+ * // Validate all records from stores
+ * const report = await lintModule.lint(options);
  *
  * // Fix a record (returns fixed record, no I/O)
  * const fixedRecord = lintModule.fixRecord(record, results, { keyId, privateKey });
@@ -42,15 +42,13 @@ export interface ILintModule {
   ): LintResult[];
 
   /**
-   * Validates multiple records.
-   * Uses stores for reference lookups (via Store<T> interface).
+   * Validates all records from stores.
+   * Each implementation resolves its own data source.
    *
-   * @param records - Iterable of record entries to validate
    * @param options - Configuration options
    * @returns Consolidated lint report
    */
   lint(
-    records: Iterable<RecordEntry>,
     options?: Partial<LintOptions>
   ): Promise<LintReport>;
 
@@ -99,16 +97,16 @@ export interface LintRecordContext {
 
 /**
  * Stores for reference lookups (pure interface).
- * Uses generic Store<T> interface, not filesystem-specific RecordStore.
+ * Uses generic RecordStore<T> interface, not filesystem-specific RecordStore.
  */
 export interface RecordStores {
-  actors?: Store<GitGovRecord>;
-  agents?: Store<GitGovRecord>;
-  tasks?: Store<GitGovRecord>;
-  cycles?: Store<GitGovRecord>;
-  executions?: Store<GitGovRecord>;
-  feedbacks?: Store<GitGovRecord>;
-  changelogs?: Store<GitGovRecord>;
+  actors?: RecordStore<GitGovRecord>;
+  agents?: RecordStore<GitGovRecord>;
+  tasks?: RecordStore<GitGovRecord>;
+  cycles?: RecordStore<GitGovRecord>;
+  executions?: RecordStore<GitGovRecord>;
+  feedbacks?: RecordStore<GitGovRecord>;
+  changelogs?: RecordStore<GitGovRecord>;
 }
 
 /**
@@ -137,104 +135,6 @@ export interface FixRecordOptions {
   keyId?: string;
   /** Private key for signing (REQUIRED for signature fixes) */
   privateKey?: string;
-}
-
-// ==================== FsLintModule Interface ====================
-
-/**
- * Public interface for FsLintModule operations (with I/O).
- *
- * This interface wraps LintModule and adds filesystem operations:
- * - Directory scanning for record discovery
- * - File reading and parsing
- * - Backup creation and restoration
- * - File writing for fixes
- *
- * @example
- * ```typescript
- * const fsLintModule: IFsLintModule = new FsLintModule({
- *   lintModule,
- *   stores
- * });
- *
- * // Scan directory and validate all records
- * const report = await fsLintModule.lint({ path: '.gitgov/' });
- *
- * // Validate specific file
- * const fileReport = await fsLintModule.lintFile(filePath);
- *
- * // Fix with backups
- * const fixReport = await fsLintModule.fix(report, { createBackups: true });
- * ```
- */
-export interface IFsLintModule {
-  /**
-   * Scans directories and validates all records.
-   */
-  lint(options?: Partial<FsLintOptions>): Promise<LintReport>;
-
-  /**
-   * Validates a specific file.
-   */
-  lintFile(filePath: string, options?: Partial<FsLintOptions>): Promise<LintReport>;
-
-  /**
-   * Applies automatic repairs to files, creating backups.
-   */
-  fix(lintReport: LintReport, fixOptions?: Partial<FsFixOptions>): Promise<FixReport>;
-}
-
-/**
- * Dependencies for FsLintModule.
- */
-export interface FsLintModuleDependencies {
-  /** Core LintModule for pure validation (REQUIRED) */
-  lintModule: ILintModule;
-
-  /** Record stores for reference lookups (OPTIONAL) */
-  stores?: RecordStores;
-
-  /** Indexer adapter for reference resolution (OPTIONAL) */
-  indexerAdapter?: IIndexerAdapter;
-
-  /** FileSystem abstraction for I/O (OPTIONAL, default: Node.js fs) */
-  fileSystem?: FileSystem;
-}
-
-/**
- * Options for FsLintModule operations.
- * Extends LintOptions with filesystem-specific settings.
- */
-export interface FsLintOptions extends LintOptions {
-  /** Directory or file to validate (default: '.gitgov/') */
-  path?: string;
-
-  /** Validate file naming conventions (default: true) */
-  validateFileNaming?: boolean;
-}
-
-/**
- * Options for FsLintModule fix operation.
- * Extends FixRecordOptions with filesystem-specific settings.
- */
-export interface FsFixOptions extends FixRecordOptions {
-  /** Create backups before modifying files (default: true) */
-  createBackups?: boolean;
-
-  /** Dry-run mode that reports without applying changes (default: false) */
-  dryRun?: boolean;
-}
-
-/**
- * FileSystem interface for I/O operations.
- * Can be mocked for testing.
- */
-export interface FileSystem {
-  readFile(path: string, encoding: string): Promise<string>;
-  writeFile(path: string, content: string): Promise<void>;
-  exists(path: string): Promise<boolean>;
-  unlink(path: string): Promise<void>;
-  readdir?(path: string): Promise<string[]>;
 }
 
 // ==================== Shared Types ====================

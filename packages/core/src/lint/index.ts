@@ -14,21 +14,26 @@
  * @example
  * ```typescript
  * // Pure LintModule (no I/O)
- * import { LintModule, type ILintModule } from '@gitgov/core/lint';
+ * import { LintModule, type ILintModule } from '@gitgov/core';
  *
  * const lintModule: ILintModule = new LintModule({ stores });
  * const results = lintModule.lintRecord(record, { recordId, entityType });
  *
  * // FsLintModule (with I/O)
- * import { FsLintModule, type IFsLintModule } from '@gitgov/core/lint';
+ * import { FsLintModule, type IFsLintModule } from '@gitgov/core';
  *
  * const fsLintModule: IFsLintModule = new FsLintModule({ lintModule, stores });
  * const report = await fsLintModule.lint({ path: '.gitgov/' });
  * ```
  */
 
+/**
+ * Lint Module - Pure validation without I/O
+ *
+ * For filesystem operations, use @gitgov/core/fs which exports FsLintModule.
+ */
+
 export { LintModule } from "./lint";
-export { FsLintModule } from "./fs";
 
 export type {
   // Pure LintModule interfaces
@@ -39,13 +44,6 @@ export type {
   RecordStores,
   FixRecordOptions,
 
-  // FsLintModule interfaces
-  IFsLintModule,
-  FsLintModuleDependencies,
-  FsLintOptions,
-  FsFixOptions,
-  FileSystem,
-
   // Shared types
   LintOptions,
   LintReport,
@@ -54,5 +52,5 @@ export type {
   ValidatorType,
   ValidationContext,
   FixReport,
-  FixResult
+  FixResult,
 } from "./lint.types";

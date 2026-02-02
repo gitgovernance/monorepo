@@ -7,7 +7,7 @@
  * @module utils/id_parser
  */
 
-import type { GitGovRecordType } from '../types';
+import type { GitGovRecordType } from '../record_types';
 
 /**
  * Mapping from directory names to entity types.
