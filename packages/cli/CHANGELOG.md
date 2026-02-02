@@ -1,3 +1,164 @@
+## [2.0.0](https://github.com/gitgovernance/monorepo/compare/cli-v1.14.0...cli-v2.0.0) (2026-02-02)
+
+
+### ⚠ BREAKING CHANGES
+
+* **epic:** IndexerAdapter now requires cacheStore: Store<IndexData>
+instead of deprecated cacheStrategy/cachePath/cacheSize options.
+
+Core (Triad 1 - indexer_adapter):
+- Remove FileIndexerAdapter, use IndexerAdapter with Store<T>
+- Make cacheStore REQUIRED dependency (no backward compatibility)
+- Remove backup mechanism (EARS-14) - cache is regenerable data
+- Simplify cache operations via Store.put/get/delete/exists
+- Update all 77 tests to use mock cacheStore
+
+CLI (Triad 2 - indexer-command):
+- Remove cacheSize/cacheStrategy handling from output formatting
+- Update tests to match simplified report structure (34 tests)
+
+Store:
+- Export IndexData type for external usage
+
+Audit: Both triads verified coherent (Blueprint ↔ Code ↔ Tests)
+
+* feat(cli): add dependency_injection_module blueprint and update tests
+
+Triad 3 - DependencyInjectionService:
+- New blueprint following module_designer_v2 template
+- Update test EARS naming to block format (A1-A2, B1-B4, etc.)
+- Add EARS-F1 test for validation when .gitgov exists
+- 10 tests passing, 19 EARS total in blueprint
+
+EARS coverage:
+- Singleton (A1-A2): ✅ Complete
+- Store Init (B1-B4): 🟡 2/4
+- Adapter Factories (C1-C8): 🟡 2/8
+- Bootstrap Reindex (D1-D2): ✅ Complete
+- Error Handling (E1-E4): 🟡 2/4
+- Validation (F1-F2): ✅ Complete
+
+* test(cli): remove deprecated cache fields from test mocks
+
+Remove cacheStrategy and cacheSize from IndexGenerationReport mocks
+in dashboard and task command tests. These fields were removed as
+part of the Store abstraction migration.
+
+* refactor: migrate agent prompts to blueprints submodule
+
+- Move docs/gitgov_agent_prompt.md → blueprints/02_agents/design/gitgov_agent.md
+- Rename packages/core/prompts/gitgov_agent_prompt.md → gitgov_agent.md
+- Update sync-prompts.ts to use new location in blueprints
+
+This consolidates all agent definitions in the blueprints submodule.
+
+* docs(core,cli): standardize README sections
+
+- Add Contributing, Security, Community, License, Links sections to both
+- Remove redundant implementation status sections from CLI README
+- Align footer format across packages
+
+* chore: update blueprints submodule
+
+* refactor(core): normalize EARS IDs in ConfigManager triada
+
+Normalized all EARS IDs from numeric to letter-block format across
+Blueprint, Code, and Tests for better section association.
+
+Changes:
+- Blueprint: EARS-1..26, EARS-53 → EARS-A1..D3
+- Tests: Updated all 44 test EARS references
+- Code: EARS-53 → EARS-B9 (actor auto-detection)
+
+Triada coherence verified: Blueprint ↔ Code ↔ Tests aligned.
+
+* refactor(core,cli): migrate to createConfigManager factory function
+
+Updated all ConfigManager instantiation from constructor to factory
+function as part of ConfigStore abstraction migration.
+
+Changes:
+- IdentityAdapter: new ConfigManager() → createConfigManager()
+- ContextCommand: new Config.ConfigManager() → Config.createConfigManager()
+- SyncModule tests: new ConfigManager(path) → createConfigManager(path)
+- DependencyInjection: new Config.ConfigManager() → Config.createConfigManager()
+- Store exports: Added ConfigStore, FsConfigStore, MemoryConfigStore
+
+Tests verified: 2349 passed.
+
+* docs(epic): update Cycle 3 progress - ConfigManager completed
+
+* docs(sync_module): sync triada código ↔ tests
+
+Triada auditada y coherente:
+- 58/62 EARS implementados y testeados
+- 4 EARS skipped (requieren setup E2E complejo)
+
+* docs(id): sync triadas id_generator + id_parser
+
+id_generator:
+- EARS 1-6 coherentes (generacion de IDs)
+
+id_parser (nuevo):
+- EARS A1-E2 coherentes (parsing, validacion, inferencia)
+- Tests con prefijos [EARS-X]
+
+* chore: update blueprints submodule - Progressive Disclosure epic
+
+* refactor(lint): sync triada código ↔ tests - 37/37 EARS
+
+- Habilitado test EARS-F2 (registros legacy sin header/payload)
+- Arquitectura Store Backends: LintModule (puro) + FsLintModule (I/O)
+- Todos los tests pasando (58 tests)
+
+* chore(utils): update index exports
+
+* feat(core): add type_guards and array_utils modules
+
+* chore: update blueprints submodule - design docs improvements
+
+* refactor(cli): migrate to FsLintModule architecture
+
+- DependencyInjectionService uses FsLintModule (wrapper I/O)
+- LintCommand updated for FsLintOptions/FsFixOptions types
+- Tests updated for new API
+
+* docs(epic): Cycle 3 COMPLETADO - Store Backends
+
+* chore: add .gitmodules for blueprints submodule
+
+Adds proper submodule configuration for packages/blueprints.
+
+### 🚀 Features
+
+* **agents:** add GDPR audit agent with formatted output ([#80](https://github.com/gitgovernance/monorepo/issues/80)) ([6fe884c](https://github.com/gitgovernance/monorepo/commit/6fe884ca803e41892db95d1d452d87d47fc3bf43))
+* **core:** add generic metadata support to ExecutionRecord ([#76](https://github.com/gitgovernance/monorepo/issues/76)) ([97e1421](https://github.com/gitgovernance/monorepo/commit/97e1421ce87727daea144959359eee5b3d19c34a))
+* **core:** add generic metadata support to FeedbackRecord ([#77](https://github.com/gitgovernance/monorepo/issues/77)) ([fc657c1](https://github.com/gitgovernance/monorepo/commit/fc657c109432e394042d90f6d443916e85171ddd))
+* **epic:** Store Backends - Cycles 1-3 Complete ([#81](https://github.com/gitgovernance/monorepo/issues/81)) ([acedbe1](https://github.com/gitgovernance/monorepo/commit/acedbe1e5cb2b5cba4e4437ecc363169b2937c52))
+* gitgov agent command - run, list, show ([#79](https://github.com/gitgovernance/monorepo/issues/79)) ([e59ec64](https://github.com/gitgovernance/monorepo/commit/e59ec64bca414f5fa94a6a14eae93b17d884cd56))
+* gitgov audit - PII/secrets detection CLI ([#78](https://github.com/gitgovernance/monorepo/issues/78)) ([f47fbb5](https://github.com/gitgovernance/monorepo/commit/f47fbb554bb00c029c4ce649935033ab76c3eb99))
+
+
+### 🐛 Bug Fixes
+
+* **cli:** pin @gitgov/core dependency to ^2.0.0 ([1d7a662](https://github.com/gitgovernance/monorepo/commit/1d7a6629f1d1a69514f68af143b90b5eca3c9b85))
+* **core:** separate sync from prebuild and consolidate agent prompt ([5e9c9e1](https://github.com/gitgovernance/monorepo/commit/5e9c9e19828c139a5db32038d183a0750826c42b))
+
+
+### ♻️ Refactoring
+
+* **core:** remove legacy pre-rename directories and fix MockFileListerOptions ([3d0907b](https://github.com/gitgovernance/monorepo/commit/3d0907b24e7f9c51a9f7e39dd5b06c14a59fb910))
+* **core:** store backends epic — module renames, DI, triada sync ([317a764](https://github.com/gitgovernance/monorepo/commit/317a764855dafe4870a775368d3115410d315e1d))
+* **git:** update readme file ([e784a63](https://github.com/gitgovernance/monorepo/commit/e784a632b2bb31f395037fab994c9606dff23f20))
+* **git:** update readme file ([4060922](https://github.com/gitgovernance/monorepo/commit/406092232156ca4c7e12aae7b343747e48f5e59d))
+
+
+### 📚 Documentation
+
+* **core,cli:** rewrite package READMEs ([c63e73c](https://github.com/gitgovernance/monorepo/commit/c63e73c37c54ca4042bd2d50d3e1f83b96f39836))
+* **core,cli:** update closing line in READMEs ([0e7d24e](https://github.com/gitgovernance/monorepo/commit/0e7d24e133ad6724b23a3ff8593bfa2854477a7a))
+* rewrite monorepo README with updated test badges and conversational examples ([1fe14df](https://github.com/gitgovernance/monorepo/commit/1fe14df03c039d06d5c64e18576341d5a324d6f6))
+
 ## [1.14.0](https://github.com/gitgovernance/monorepo/compare/cli-v1.13.1...cli-v1.14.0) (2025-12-12)
 
 
