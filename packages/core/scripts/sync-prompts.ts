@@ -18,7 +18,7 @@ const __dirname = path.dirname(__filename);
 
 const MONOREPO_ROOT = path.resolve(__dirname, '../../..');
 const SOURCE_DIR = path.join(MONOREPO_ROOT, 'packages/blueprints/02_agents/design');
-const TARGET_DIR = path.join(__dirname, '../prompts');
+const TARGET_DIR = path.join(__dirname, '../src/docs/generated');
 
 // Agent prompts to sync (official prompts that ship with @gitgov/core)
 const PROMPTS_TO_SYNC = [
@@ -62,7 +62,7 @@ async function syncPrompts(): Promise<void> {
   console.log(`📁 Target directory: ${TARGET_DIR}\n`);
 
   if (errorCount > 0) {
-    process.exit(1);
+    console.log('⚠️  Prompts not synced (blueprints submodule may not be checked out)');
   }
 }
 

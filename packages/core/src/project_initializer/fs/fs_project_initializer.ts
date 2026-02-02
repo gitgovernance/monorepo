@@ -242,9 +242,9 @@ export class FsProjectInitializer implements IProjectInitializer {
     const targetPrompt = path.join(this.projectRoot, 'gitgov');
     const potentialSources: string[] = [];
 
-    // 1. Development scenario: search in monorepo prompts/
+    // 1. Development scenario: search in src/docs/generated/
     potentialSources.push(
-      path.join(process.cwd(), 'prompts/gitgov_agent_prompt.md')
+      path.join(process.cwd(), 'src/docs/generated/gitgov_agent.md')
     );
 
     // 2. NPM installation: use require.resolve
@@ -254,7 +254,7 @@ export class FsProjectInitializer implements IProjectInitializer {
         const require = createRequire(metaUrl);
         const pkgJsonPath = require.resolve('@gitgov/core/package.json');
         const pkgRoot = path.dirname(pkgJsonPath);
-        potentialSources.push(path.join(pkgRoot, 'prompts/gitgov_agent_prompt.md'));
+        potentialSources.push(path.join(pkgRoot, 'dist/src/docs/generated/gitgov_agent.md'));
       }
     } catch {
       // require.resolve failed - continue
@@ -266,7 +266,7 @@ export class FsProjectInitializer implements IProjectInitializer {
       if (metaUrl) {
         const __filename = fileURLToPath(metaUrl);
         const __dirname = path.dirname(__filename);
-        potentialSources.push(path.resolve(__dirname, '../../prompts/gitgov_agent_prompt.md'));
+        potentialSources.push(path.resolve(__dirname, '../../docs/generated/gitgov_agent.md'));
       }
     } catch {
       // import.meta not available - continue
