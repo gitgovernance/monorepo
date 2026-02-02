@@ -8,7 +8,7 @@
  */
 
 import picomatch from 'picomatch';
-import type { FileLister, FileListOptions, FileStats, MockFileListerOptions } from '../file_lister';
+import type { FileLister, FileListOptions, FileStats, MemoryFileListerOptions } from '../file_lister';
 import { FileListerError } from '../file_lister';
 
 /**
@@ -56,7 +56,7 @@ export class MockFileLister implements FileLister {
   /**
    * [EARS-MFL01] Constructs MockFileLister with provided files.
    */
-  constructor(options: MockFileListerOptions = {}) {
+  constructor(options: MemoryFileListerOptions = {}) {
     // [EARS-MFL01] Accept both Map and Record<string, string>
     if (options.files instanceof Map) {
       this.files = new Map(options.files);

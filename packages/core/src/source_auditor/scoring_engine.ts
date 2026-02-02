@@ -1,4 +1,4 @@
-import type { GdprFinding } from "../pii_detector/types";
+import type { Finding } from "../finding_detector/types";
 
 /**
  * Internal component for applying scoring rules to findings.
@@ -13,7 +13,7 @@ export class ScoringEngine {
    * @param findings - Findings to score
    * @returns Scored findings (same as input for now)
    */
-  score(findings: GdprFinding[]): GdprFinding[] {
+  score(findings: Finding[]): Finding[] {
     // Future: Apply weighted scoring based on:
     // - Severity weights
     // - Category priorities

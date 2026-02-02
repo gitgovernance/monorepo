@@ -5,7 +5,11 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { DependencyInjectionService } from '../../services/dependency-injection';
 // import DashboardTUI from '../../components/dashboard/DashboardTUI';
-import type { CycleRecord, FeedbackRecord, ActorRecord, TaskRecord, Adapters, EventBus } from '@gitgov/core';
+import type {
+  CycleRecord, FeedbackRecord, ActorRecord, TaskRecord,
+  SystemStatus, ProductivityMetrics, CollaborationMetrics, EnrichedTaskRecord,
+} from '@gitgov/core';
+import type { ActivityEvent } from '@gitgov/core';
 
 /**
  * Dashboard Command Options interface
@@ -31,14 +35,14 @@ export interface DashboardCommandOptions {
  * Dashboard Intelligence Data
  */
 interface DashboardIntelligence {
-  systemHealth: Adapters.SystemStatus;
-  productivityMetrics: Adapters.ProductivityMetrics;
-  collaborationMetrics: Adapters.CollaborationMetrics;
-  tasks: Adapters.EnrichedTaskRecord[]; // ENHANCED - Tasks with last modification info
+  systemHealth: SystemStatus;
+  productivityMetrics: ProductivityMetrics;
+  collaborationMetrics: CollaborationMetrics;
+  tasks: EnrichedTaskRecord[]; // ENHANCED - Tasks with last modification info
   cycles: CycleRecord[];
   feedback: FeedbackRecord[];
   currentActor: ActorRecord;
-  activityHistory: EventBus.ActivityEvent[]; // NUEVO - Activity history real
+  activityHistory: ActivityEvent[]; // NUEVO - Activity history real
 }
 
 /**
@@ -61,7 +65,7 @@ export class DashboardCommand {
   private dependencyService = DependencyInjectionService.getInstance();
 
   /**
-   * [EARS-1] Main execution method with 6-adapter convergence
+   * [EARS-A1] Main execution method with 6-adapter convergence
    */
   async execute(options: DashboardCommandOptions): Promise<void> {
     try {
@@ -89,7 +93,8 @@ export class DashboardCommand {
   }
 
   /**
-   * [EARS-1] Ensures cache is up to date with auto-indexation
+   * [EARS-A4] Ensures cache is up to date with auto-indexation
+   * [EARS-D3] Respects --quiet flag for silent operation
    */
   private async ensureCacheUpToDate(options: DashboardCommandOptions): Promise<void> {
     if (options.noCache) {
@@ -108,7 +113,9 @@ export class DashboardCommand {
   }
 
   /**
-   * [EARS-2] Gathers intelligence from all 6 adapters including activity history
+   * [EARS-A2] Gathers intelligence from all 6 adapters including activity history
+   * [EARS-A3] Uses pre-calculated metrics from IndexerAdapter cache
+   * [EARS-E1] Returns enrichedTasks with lastUpdated metadata from IndexerAdapter
    */
   private async gatherDashboardIntelligence(options: DashboardCommandOptions): Promise<DashboardIntelligence> {
     // Get all adapters (6-adapter convergence)
@@ -161,10 +168,10 @@ export class DashboardCommand {
   }
 
   /**
-   * [EARS-6] Determines view configuration based on methodology and options
+   * [EARS-B1] [EARS-B2] [EARS-B3] [EARS-B4] [EARS-B5] Determines view configuration based on methodology and options
    */
   private async determineViewConfig(options: DashboardCommandOptions): Promise<ViewConfig> {
-    // Default view configurations (usando workflow_methodology_default.json)
+    // Default view configurations (usando workflow_default.json)
     const defaultViews: Record<string, ViewConfig> = {
       'row-based': {
         name: 'GitGovernancet',
@@ -226,7 +233,10 @@ export class DashboardCommand {
   }
 
   /**
-   * [EARS-11] Launches interactive TUI dashboard with Ink/React (DEFAULT)
+   * [EARS-C1] [EARS-C2] Launches interactive TUI dashboard with Ink/React (DEFAULT)
+   * [EARS-C3] [EARS-C4] Keyboard shortcuts and manual refresh
+   * [EARS-C5] Error overlay handling
+   * [EARS-D3] Respects --quiet flag for silent operation
    */
   private async launchTUI(
     intelligence: DashboardIntelligence,
@@ -285,7 +295,7 @@ export class DashboardCommand {
 
 
   /**
-   * [EARS-16] Executes JSON output mode for automation
+   * [EARS-D1] Executes JSON output mode for automation
    */
   private async executeJsonOutput(options: DashboardCommandOptions): Promise<void> {
     const intelligence = await this.gatherDashboardIntelligence(options);
@@ -317,11 +327,11 @@ export class DashboardCommand {
     }, null, 2));
   }
 
-  // ===== TASK ENHANCEMENT FOR DYNAMIC ORDERING =====
+  // ===== TASK ENHANCEMENT FOR DYNAMIC ORDERING (EARS-E) =====
 
 
   /**
-   * Extracts timestamp from GitGovernance ID format (timestamp-type-slug)
+   * [EARS-E4] Extracts timestamp from GitGovernance ID format (timestamp-type-slug)
    */
   private extractTimestampFromId(id: string): number {
     const parts = id.split('-');
@@ -336,9 +346,9 @@ export class DashboardCommand {
   }
 
   /**
-   * Formats activity description for display in dashboard
+   * [EARS-E2] Formats activity description for display in dashboard
    */
-  private formatActivityDescription(activity: EventBus.ActivityEvent): string {
+  private formatActivityDescription(activity: ActivityEvent): string {
     const timeAgo = this.getTimeAgo(activity.timestamp);
 
     switch (activity.type) {
@@ -359,7 +369,7 @@ export class DashboardCommand {
   }
 
   /**
-   * Converts timestamp to human-readable "time ago" format
+   * [EARS-E4] Converts timestamp to human-readable "time ago" format
    */
   private getTimeAgo(timestamp: number): string {
     const now = Date.now();
@@ -462,7 +472,8 @@ export class DashboardCommand {
 
 
   /**
-   * Handles errors with user-friendly messages
+   * [EARS-A5] [EARS-C5] Handles errors with user-friendly messages and graceful degradation
+   * [EARS-D2] Shows technical details with --verbose flag
    */
   private handleError(error: unknown, options: DashboardCommandOptions): void {
     let message: string;

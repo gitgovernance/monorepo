@@ -1,7 +1,7 @@
 import { RelationshipAnalyzer, type RelationshipGraph } from './relationship_analyzer';
 import { MermaidRenderer, type DiagramOptions } from './mermaid_renderer';
-import type { TaskRecord } from '../types';
-import type { CycleRecord } from '../types';
+import type { TaskRecord } from '../record_types';
+import type { CycleRecord } from '../record_types';
 import { promises as fs } from "fs";
 import * as path from "path";
 

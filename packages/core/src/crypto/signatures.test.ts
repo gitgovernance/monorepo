@@ -1,12 +1,12 @@
 import { generateKeys, signPayload, verifySignatures, generateMockSignature } from './signatures';
-import type { GitGovRecord, GitGovRecordPayload, GitGovRecordType } from '../types';
-import type { ActorRecord } from '../types';
-import type { AgentRecord } from '../types';
-import type { TaskRecord } from '../types';
-import type { CycleRecord } from '../types';
-import type { ExecutionRecord } from '../types';
-import type { ChangelogRecord } from '../types';
-import type { FeedbackRecord } from '../types';
+import type { GitGovRecord, GitGovRecordPayload, GitGovRecordType } from '../record_types';
+import type { ActorRecord } from '../record_types';
+import type { AgentRecord } from '../record_types';
+import type { TaskRecord } from '../record_types';
+import type { CycleRecord } from '../record_types';
+import type { ExecutionRecord } from '../record_types';
+import type { ChangelogRecord } from '../record_types';
+import type { FeedbackRecord } from '../record_types';
 import { calculatePayloadChecksum } from './checksum';
 
 describe('Crypto Module (Signatures)', () => {

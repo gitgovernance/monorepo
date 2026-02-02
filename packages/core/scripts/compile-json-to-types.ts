@@ -2,7 +2,7 @@
 /**
  * Compile JSON schemas to TypeScript types
  *
- * This script reads the JSON schemas from src/schemas/ (with $ref references)
+ * This script reads the JSON schemas from src/record_schemas/ (with $ref references)
  * and generates TypeScript types using json-schema-to-typescript.
  * It handles $ref resolution automatically.
  *
@@ -20,8 +20,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Paths
-const SCHEMAS_DIR = path.join(__dirname, '../src/schemas/generated');
-const OUTPUT_DIR = path.join(__dirname, '../src/types/generated');
+const SCHEMAS_DIR = path.join(__dirname, '../src/record_schemas/generated');
+const OUTPUT_DIR = path.join(__dirname, '../src/record_types/generated');
 
 /**
  * Configuration for fields that should be converted to generic type parameters.

@@ -2,399 +2,196 @@
 
 [![NPM Version](https://img.shields.io/npm/v/@gitgov/cli)](https://www.npmjs.com/package/@gitgov/cli)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue.svg)](./tsconfig.json)
 
-`@gitgov/cli` is the canonical command-line interface for interacting with the GitGovernance ecosystem. It's a tool designed for efficient collaboration between humans and AI agents directly from the terminal.
-
-## Getting Started
-
-The recommended way to install `@gitgov/cli` is via `npm`.
-
-```bash
-# 1. Install from NPM
-# Requires Node.js >= 18
-npm install -g @gitgov/cli
-
-# 2. Initialize in your project repository
-cd my-project
-git init # If not already a Git repository
-gitgov init --name "My Project"
-
-# 3. See your project status
-gitgov status
-
-# 4. Launch the interactive dashboard
-gitgov dashboard
-```
-
-_For developer setup and other installation options, see the [Developer Guide](#developer-guide) below._
-
-## A CLI for Humans and Agents
-
-`gitgov` is designed with a dual purpose. It's a powerful tool for developers who work in the terminal, and becomes even more effective when operated by `@gitgov`, our AI agent.
-
-**You don't need to memorize commands.** Talk to the dashboard through the agent. Ask for project status, what to work on, or request new tasks in natural language. The agent translates your intent into precise commands, creating a conversational interface with your project.
-
-Built on **`AI-first = Prompt + Code`** - every command materializes formal specifications into working code. The CLI consumes logic from `@gitgov/core`, ensuring coherent collaboration between AI and humans.
+`@gitgov/cli` is the canonical command-line interface for the GitGovernance ecosystem. Designed for collaboration between humans and AI agents directly from the terminal.
 
 <img width="876" height="604" alt="GitGovernance TUI Dashboard" src="https://github.com/user-attachments/assets/016a4bef-d374-4963-aef3-19303650fb3a" />
 
-## Technology Stack
+**You don't need to memorize commands.** Talk to your repository through the agent. Ask for project status, what to work on, or request new tasks in natural language. The agent translates your intent into precise commands.
 
-- **Command Framework:** `Commander.js`
-- **TUI Framework:** `Ink` and `React` (for `gitgov dashboard`)
-- **Logic Engine:** `@gitgov/core`
+```
+You:    "What should I work on next?"
+Agent:  gitgov status --alerts → gitgov task list --status ready → "Task X is ready, want me to activate it?"
 
-## Developer Guide
+You:    "Create a task for the login bug"
+Agent:  gitgov task new "Fix login authentication bug" --priority high
 
-This guide is for contributors or those who want to run the CLI from the source code.
+You:    "How's the sprint going?"
+Agent:  gitgov status --all --cycles --health → "Sprint is 70% done, 3 tasks active, 1 blocked"
+```
 
-### 🔧 **For Developers:**
+## Install
 
 ```bash
-# 1. Main Setup:
+npm install -g @gitgov/cli
+```
+
+## Quick Start
+
+```bash
+cd my-project
+git init
+gitgov init --name "My Project"
+gitgov indexer
+gitgov status
+```
+
+## Commands
+
+```
+Usage: gitgov [options] [command]
+
+GitGovernance CLI - AI-first governance for intelligent work
+
+Commands:
+  init [options]         Initialize GitGovernance project
+  task|t                 Create and manage TaskRecords
+  cycle|c                Create and manage CycleRecords
+  status [options]       Show intelligent project status dashboard
+  dashboard [options]    Launch interactive TUI dashboard
+  indexer [options]      Control local cache system
+  diagram|d [options]    Generate workflow diagrams
+  lint [options] [path]  Validate GitGovernance records
+  audit [options]        Audit source code (PII/secrets, GDPR)
+  agent                  Manage and run GitGov agents
+  sync                   State synchronization (push/pull/resolve/audit)
+  context [options]      Query working context for agents and automation
+  push [options]         Alias for "gitgov sync push"
+  pull [options]         Alias for "gitgov sync pull"
+```
+
+Every command supports `--json`, `--verbose`, and `--quiet` flags. Run `gitgov <command> --help` for full details.
+
+### Task Workflow
+
+The core workflow for task management:
+
+```
+draft -> review -> ready -> active -> done -> archived
+
+  Create:    gitgov task new "Fix login bug"
+  Submit:    gitgov task submit <taskId>
+  Approve:   gitgov task approve <taskId>
+  Activate:  gitgov task activate <taskId>
+  Complete:  gitgov task complete <taskId>
+```
+
+15 subcommands: `new`, `list`, `show`, `submit`, `approve`, `activate`, `pause`, `resume`, `complete`, `cancel`, `reject`, `delete`, `assign`, `edit`, `promote`
+
+### Cycle Management
+
+Strategic planning with cycles:
+
+```
+  Create:    gitgov cycle new "Sprint Q1" -d "API focus"
+  Activate:  gitgov cycle activate <cycleId>
+  Add task:  gitgov cycle add-task <cycleId> --task <taskId>
+  Complete:  gitgov cycle complete <cycleId>
+```
+
+10 subcommands: `new`, `list`, `show`, `activate`, `complete`, `add-task`, `remove-task`, `move-task`, `edit`, `add-child`
+
+### Project Monitoring
+
+```bash
+gitgov status                          # Personal dashboard
+gitgov status --all --health --team    # Full project view
+gitgov status --alerts --json          # For automation
+gitgov dashboard                       # Interactive TUI (Ink/React)
+```
+
+### Sync
+
+```bash
+gitgov sync push --message "Sprint 1"  # Publish to gitgov-state branch
+gitgov sync pull                        # Pull remote changes
+gitgov sync audit                       # Verify integrity
+gitgov sync resolve --reason "..."      # Resolve conflicts
+```
+
+## Architecture
+
+```mermaid
+graph TD
+    subgraph "@gitgov/cli"
+        Commands["Commands (12)"]
+        Base["BaseCommand / SimpleCommand"]
+        DI["DependencyInjectionService"]
+        TUI["Ink/React TUI"]
+
+        Commands --> Base
+        Commands --> DI
+        TUI --> DI
+    end
+
+    subgraph "@gitgov/core"
+        Adapters["Adapters (10)"]
+        Stores["Stores"]
+    end
+
+    DI --> Adapters
+    DI --> Stores
+
+    style Commands fill:#e8f5e8,stroke:#4caf50,stroke-width:2px
+    style Adapters fill:#e3f2fd,stroke:#1976d2
+```
+
+The CLI is a thin UI layer. All business logic lives in `@gitgov/core`. Commands delegate to adapters via a dependency injection service.
+
+| Technology | Role |
+|------------|------|
+| Commander.js | Command framework (flags, subcommands, help) |
+| Ink + React | Interactive TUI (`gitgov dashboard`) |
+| @gitgov/core | Business logic (adapters, stores, validators) |
+| esbuild | Bundle to single `gitgov.mjs` for distribution |
+
+## Development
+
+```bash
+# Clone and setup
 git clone https://github.com/gitgovernance/monorepo.git
 cd monorepo && pnpm install
 
-# 2. Verify the CLI package:
+# Development
 cd packages/cli
-pnpm verify                  # Build and run all tests
+pnpm dev status          # Run commands directly via tsx
+pnpm dev task list       # Hot-reload development
+pnpm dev dashboard       # TUI development
+
+# Verify (build + test + pack)
+pnpm verify
+
+# Individual steps
+pnpm tsc --noEmit        # Type check
+pnpm build               # esbuild bundle
+pnpm test                # Jest tests
 ```
 
-### 🎯 **For Demos and E2E Testing (System-wide):**
+### Demo / E2E Testing
 
 ```bash
-# 1. Link the package to your system (one time):
 cd packages/cli
-pnpm build
-npm link
-
-# 2. Now use the `gitgov` command from any directory:
-cd /tmp/demo && git init
-gitgov init --name "Demo Project"
-gitgov status
-
-# 3. To unlink when you're done:
-npm unlink
-```
-
-### 🚀 **Alternative Installation: Standalone Binary**
-
-This method uses an installer script to download a self-contained executable with no external dependencies (like Node.js).
-
-```bash
-curl -sSL https://get.gitgovernance.com | sh
-```
-
-## Development Workflow
-
-### 🔧 **Main Development (pnpm):**
-
-```bash
-# Normal development from the GitGovernance project:
-cd packages/cli
-pnpm dev status              # Direct CLI development
-pnpm dev init               # Test commands
-pnpm dev dashboard          # TUI development
-
-# Run tests from anywhere in the project:
-pnpm verify                 # Build and run all tests
-pnpm build                  # Build TypeScript
-```
-
-### 🎯 **Demos and E2E Testing (using `npm link`):**
-
-This method allows you to use the `gitgov` command globally on your machine, pointing directly to your development code.
-
-```bash
-# 1. Link the package (one time from packages/cli):
 pnpm build && npm link
 
-# 2. Use from any external directory:
+# Use from any directory
 cd /tmp/demo && git init
-gitgov init --name "Demo Project"
+gitgov init --name "Demo"
 gitgov status
-gitgov dashboard
 
-# 3. When finished, unlink the package:
+# Cleanup
 npm unlink
 ```
-
-### 🚀 **Production:**
-
-```bash
-# Public installation via NPM (Recommended):
-npm install -g @gitgov/cli
-gitgov init --name "Production Project"
-```
-
-### 📋 **Command Summary:**
-
-| Command    | When to Use                            | From Where                |
-| ---------- | -------------------------------------- | ------------------------- |
-| `pnpm dev` | Daily development (hot-reload)         | `/packages/cli/`          |
-| `gitgov`   | Demos/E2E (after `npm link`)           | Any directory             |
-| `gitgov`   | Work on actual project (after install) | Any GitGovernance project |
-
-## Command Reference
-
-**AVAILABLE COMMANDS:**
-
-```bash
-# 0. Initialize a GitGovernance project (FIRST TIME)
-cd my-project
-git init  # If not already a Git repository
-gitgov init --name "My Project" --actor-name "Your Name"
-
-# 1. Generate the local cache (RECOMMENDED AFTER INIT)
-gitgov indexer
-
-# 3. Generate a workflow diagram
-gitgov diagram
-
-# 4. Manage tasks (Core Operations)
-gitgov task new "Implement user authentication"
-gitgov task list --status draft
-gitgov task show task-id-123 --verbose
-
-# 5. Full task workflow
-gitgov task submit task-id-123
-gitgov task approve task-id-123
-gitgov task activate task-id-123
-gitgov task complete task-id-123
-gitgov task assign task-id-123 --to human:developer
-
-# 5b. Task control workflow (pause/resume/cancel/reject/delete)
-gitgov task pause task-id-123 --reason "Waiting for approval"
-gitgov task resume task-id-123
-gitgov task cancel task-id-123 --reason "Priorities changed"
-gitgov task reject task-id-123 --reason "Requirements unclear"
-gitgov task delete task-id-123  # For draft tasks only
-
-# 6. Use watch mode for development
-gitgov diagram --watch
-
-# 7. View your daily personal dashboard
-gitgov status
-
-# 8. Monitor project health
-gitgov status --all --health --team
-
-# 9. Validate project integrity
-gitgov indexer --validate-only
-
-# 10. Interactive TUI Dashboard
-gitgov dashboard
-
-# 11. Troubleshoot cache issues
-gitgov indexer --force
-```
-
-**CORE COMMANDS COMPLETED:**
-
-```bash
-# Project Initialization (IMPLEMENTED)
-gitgov init --template=saas-mvp
-
-# All core commands are implemented
-gitgov indexer && gitgov status && gitgov dashboard
-```
-
-## Implementation Guidelines for Agents
-
-### **📋 Functional Commands - Real Examples**
-
-#### **Project Initialization (`gitgov init`)**
-
-```bash
-# Basic bootstrap (ideal for demos)
-gitgov init
-
-# Specific project with metadata
-gitgov init --name "GitGovernance CLI" --actor-name "Project Owner"
-
-# SaaS MVP template
-gitgov init --template=saas-mvp --methodology=scrum
-
-# Complete business setup
-gitgov init --name "Business Project" \
-  --template=saas-mvp \
-  --methodology=scrum \
-  --actor-name "Tech Lead" \
-  --verbose
-
-# For automation/CI
-gitgov init --name "CI Project" --no-cache --json --quiet
-```
-
-#### **Cache Control (`gitgov indexer`)**
-
-```bash
-# Generate initial cache (RECOMMENDED FIRST STEP)
-gitgov indexer
-
-# Verify project integrity
-gitgov indexer --validate-only
-
-# Fix cache issues
-gitgov indexer --force
-
-# For automation/scripts
-gitgov indexer --json --quiet
-```
-
-#### **Visualization (`gitgov diagram`)**
-
-```bash
-# Generate full diagram
-gitgov diagram
-
-# Interactive mode with auto-regeneration
-gitgov diagram --watch
-
-# Filter by specific entities
-gitgov diagram --cycle 1757687335-cycle-core-mvp
-gitgov diagram --task 1757687335-task-specific
-```
-
-#### **Task Management (`gitgov task`)**
-
-```bash
-# Create a new task
-gitgov task new "Implement OAuth2 authentication"
-
-# List tasks with filters
-gitgov task list --status draft --priority high
-
-# View full details
-gitgov task show 1757789000-task-example --verbose
-
-# Full workflow transitions
-gitgov task submit 1757789000-task-example
-gitgov task approve 1757789000-task-example
-gitgov task activate 1757789000-task-example
-gitgov task complete 1757789000-task-example
-
-# Task control (pause/resume/cancel/reject/delete)
-gitgov task pause 1757789000-task-example --reason "Blocked by dependency"
-gitgov task resume 1757789000-task-example
-gitgov task cancel 1757789000-task-example --reason "Priorities changed"
-gitgov task reject 1757789000-task-example --reason "Requirements unclear"
-gitgov task delete 1757789000-task-example  # Draft tasks only
-
-# Assignment management
-gitgov task assign 1757789000-task-example --to human:developer
-
-# Editing tasks
-gitgov task edit 1757789000-task-example --add-tags "urgent"
-
-# For automation
-gitgov task list --status done --json --quiet
-```
-
-#### **Strategic Planning (`gitgov cycle`)**
-
-```bash
-# Create a planning cycle
-gitgov cycle new "Sprint Backend Q1" -d "API performance focus"
-
-# List cycles with filters
-gitgov cycle list --status planning --has-tasks
-
-# Activate a cycle for work
-gitgov cycle activate cycle-id-123
-
-# Add tasks to a cycle (bidirectional linking)
-gitgov cycle add-task cycle-id-123 --task task-id-456
-
-# View cycle details
-gitgov cycle show cycle-id-123 --tasks --verbose
-
-# Complete a cycle
-gitgov cycle complete cycle-id-123
-
-# For automation
-gitgov cycle list --status completed --json --quiet
-```
-
-#### **Intelligent Dashboard (`gitgov status`)**
-
-```bash
-# Daily personal dashboard (RECOMMENDED)
-gitgov status
-
-# Global project view
-gitgov status --all
-
-# Only critical health and alerts
-gitgov status --health --alerts
-
-# Complete view with team metrics
-gitgov status --all --cycles --team --verbose
-
-# For automation/monitoring
-gitgov status --all --json
-
-# Scripting (only critical alerts)
-gitgov status --alerts --quiet
-
-# Debugging (bypass cache)
-gitgov status --from-source --verbose
-```
-
-#### **Interactive TUI (`gitgov dashboard`)**
-
-```bash
-# Interactive TUI with live mode
-gitgov dashboard
-
-# Specific views
-gitgov dashboard --template=row-based      # Your original vision
-gitgov dashboard --template=kanban-7col    # Kanban workflow
-gitgov dashboard --template=scrum-board    # Scrum ceremonies
-
-# Static mode (snapshot)
-gitgov dashboard --no-live
-
-# Custom refresh interval
-gitgov dashboard --refresh-interval=10
-
-# For automation
-gitgov dashboard --json --quiet
-```
-
-**Interactive Controls (in the TUI):**
-
-- **v**: Cycle views (Row → Kanban → Scrum → loop)
-- **1-3**: Direct view selection (1: Row, 2: Kanban, 3: Scrum)
-- **r**: Manual refresh, **?**: Help, **q**: Quit
-- **n,s,a,e,c**: Educational shortcuts (show CLI commands)
-
-## Contributing
-
-Contributions are welcome.
-
-- For local development, see **Developer Guide** above (pnpm setup, `pnpm verify`, `npm link` workflow).
-- Please open issues for bugs/feature requests and include reproduction steps.
-
-## Security
-
-If you believe you've found a security issue, please report it responsibly via a private channel (or GitHub Security Advisories if enabled) before opening a public issue.
-
-## Community
-
-- GitHub Discussions: questions, ideas, and architecture discussions
-- Discord: community chat
-- Twitter/X: project updates
 
 ## License
 
-This package (**@gitgov/cli**) is licensed under the **Apache License 2.0**.
+This package is licensed under the [Apache License 2.0](https://opensource.org/licenses/Apache-2.0).
 
 ## Links
 
-- GitHub org / monorepo: https://github.com/gitgovernance
-- NPM: https://www.npmjs.com/package/@gitgov/cli
+- **GitHub:** https://github.com/gitgovernance/monorepo/tree/main/packages/cli
+- **NPM:** https://www.npmjs.com/package/@gitgov/cli
 
 ---
 
-Built with ❤️ by the GitGovernance team.
+**Built with ❤️ by the GitGovernance team.**

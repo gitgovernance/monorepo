@@ -2,7 +2,7 @@
  * FsFileLister Tests
  *
  * Tests for the filesystem-based FileLister implementation.
- * All EARS prefixes map to file_lister_module.md blueprint.
+ * All EARS prefixes map to fs_file_lister_module.md blueprint.
  */
 
 import * as fs from 'fs/promises';
@@ -101,7 +101,7 @@ describe('FsFileLister', () => {
     });
   });
 
-  describe('4.2. FsFileLister Specifics (EARS-FFL01 to FFL04)', () => {
+  describe('4.2. FsFileLister Specifics (EARS-FFL01, FFL03 to FFL05)', () => {
     it('[EARS-FFL01] should exclude files matching ignore patterns', async () => {
       await createFile('src/index.ts');
       await createFile('src/generated/types.ts');

@@ -1,3 +1,16 @@
+/**
+ * AgentCommand Unit Tests
+ *
+ * Blueprint: packages/blueprints/03_products/cli/specs/agent_command.md
+ * All EARS prefixes map to agent_command.md §4.1-4.4
+ *
+ * EARS Coverage:
+ * - §4.1 Agent Run (EARS-A1 to A6)
+ * - §4.2 Agent List (EARS-B1 to B3)
+ * - §4.3 Agent Show (EARS-C1 to C3)
+ * - §4.4 Output & Exit Codes (EARS-D1 to D6)
+ */
+
 // Mock @gitgov/core
 jest.doMock('@gitgov/core', () => ({
   Config: {
@@ -20,7 +33,7 @@ jest.mock('../../services/dependency-injection', () => ({
 
 import { AgentCommand, type RunCommandOptions, type ListCommandOptions, type ShowCommandOptions } from './agent-command';
 import { DependencyInjectionService } from '../../services/dependency-injection';
-import type { Runner, TaskRecord, ActorRecord, AgentRecord } from '@gitgov/core';
+import type { RunOptions, AgentResponse, TaskRecord, ActorRecord, AgentRecord } from '@gitgov/core';
 
 /**
  * Test-specific metadata type for agent mocks
@@ -40,7 +53,7 @@ const mockDI = jest.mocked(DependencyInjectionService);
 
 // Mock adapters and modules
 let mockAgentRunnerModule: {
-  runOnce: jest.MockedFunction<(opts: Runner.RunOptions) => Promise<Runner.AgentResponse>>;
+  runOnce: jest.MockedFunction<(opts: RunOptions) => Promise<AgentResponse>>;
 };
 
 let mockBacklogAdapter: {
@@ -53,30 +66,37 @@ let mockIdentityAdapter: {
 
 let mockAgentStore: {
   list: jest.MockedFunction<() => Promise<string[]>>;
-  read: jest.MockedFunction<(id: string) => Promise<{ payload: AgentRecord<TestAgentMetadata> } | null>>;
+  get: jest.MockedFunction<(id: string) => Promise<AgentRecord<TestAgentMetadata> | null>>;
 };
 
 describe('AgentCommand', () => {
   let agentCommand: AgentCommand;
 
-  // Mock agent record with typed metadata
-  const mockAgentPayload: AgentRecord<TestAgentMetadata> = {
-    id: 'agent:test-echo',
-    status: 'active',
-    engine: {
-      type: 'local',
-      entrypoint: 'packages/agents/test-echo/dist/index.mjs',
-      function: 'runAgent',
+  // Mock agent record wrapped as GitGovAgentRecord (EmbeddedMetadataRecord<AgentRecord>)
+  const mockAgentRecord = {
+    header: {
+      version: '1.0' as const,
+      type: 'agent' as const,
+      signatures: [],
     },
-    metadata: {
-      description: 'Simple test agent that echoes input',
-      purpose: 'testing',
-    },
-    triggers: [{ type: 'manual' }],
+    payload: {
+      id: 'agent:test-echo',
+      status: 'active',
+      engine: {
+        type: 'local' as const,
+        entrypoint: 'packages/agents/test-echo/dist/index.mjs',
+        function: 'runAgent',
+      },
+      metadata: {
+        description: 'Simple test agent that echoes input',
+        purpose: 'testing',
+      },
+      triggers: [{ type: 'manual' as const }],
+    } satisfies AgentRecord<TestAgentMetadata>,
   };
 
   // Mock successful AgentResponse
-  const mockSuccessResponse: Runner.AgentResponse = {
+  const mockSuccessResponse: AgentResponse = {
     runId: 'run-123-456',
     agentId: 'agent:test-echo',
     status: 'success',
@@ -91,7 +111,7 @@ describe('AgentCommand', () => {
   };
 
   // Mock error AgentResponse
-  const mockErrorResponse: Runner.AgentResponse = {
+  const mockErrorResponse: AgentResponse = {
     runId: 'run-123-456',
     agentId: 'agent:test-echo',
     status: 'error',
@@ -139,16 +159,17 @@ describe('AgentCommand', () => {
 
     mockAgentStore = {
       list: jest.fn().mockResolvedValue(['agent-test-echo', 'agent-jira-manager']),
-      read: jest.fn().mockImplementation((id: string) => {
+      get: jest.fn().mockImplementation((id: string) => {
         if (id === 'agent-test-echo') {
-          return Promise.resolve({ payload: mockAgentPayload });
+          return Promise.resolve(mockAgentRecord);
         }
         if (id === 'agent-jira-manager') {
           return Promise.resolve({
+            header: mockAgentRecord.header,
             payload: {
-              ...mockAgentPayload,
+              ...mockAgentRecord.payload,
               id: 'agent:jira-manager',
-              engine: { type: 'api', url: 'https://api.example.com' },
+              engine: { type: 'api' as const, url: 'https://api.example.com' },
               metadata: { description: 'Jira integration agent' },
             },
           });
@@ -292,7 +313,7 @@ describe('AgentCommand', () => {
     it('[EARS-C1] should show agent details', async () => {
       await agentCommand.executeShow('test-echo', createShowOptions());
 
-      expect(mockAgentStore.read).toHaveBeenCalledWith('agent-test-echo');
+      expect(mockAgentStore.get).toHaveBeenCalledWith('agent-test-echo');
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('AGENT:'));
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('Engine:'));
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('local'));
@@ -301,11 +322,11 @@ describe('AgentCommand', () => {
     it('[EARS-C2] should include full schema in verbose mode', async () => {
       await agentCommand.executeShow('test-echo', createShowOptions({ verbose: true, json: true }));
 
-      // In verbose JSON mode, should include full record (header + payload)
+      // In verbose JSON mode, should include full agent record
       const jsonCall = mockConsoleLog.mock.calls.find(call => {
         try {
           const parsed = JSON.parse(call[0]);
-          return parsed.payload !== undefined;
+          return parsed.payload.id !== undefined && parsed.payload.engine !== undefined;
         } catch {
           return false;
         }

@@ -1,6 +1,16 @@
 import * as path from 'path';
-import { Adapters, Config, Store, EventBus, Lint, Git, Sync, SourceAuditor, PiiDetector, Runner, KeyProvider } from '@gitgov/core';
-import type { TaskRecord, CycleRecord, FeedbackRecord, ExecutionRecord, ChangelogRecord, ActorRecord, AgentRecord, GitGovRecordPayload, CustomRecord, GitGovRecord } from '@gitgov/core';
+import { Adapters, Config, Session, EventBus, Lint, Git, SyncState, SourceAuditor, FindingDetector, Runner, KeyProvider } from '@gitgov/core';
+import { FsRecordStore, DEFAULT_ID_ENCODER, FsFileLister, FsProjectInitializer, FsLintModule, FsSyncStateModule, GitModule, createAgentRunner, createConfigManager, findProjectRoot, findGitgovRoot, createSessionManager } from '@gitgov/core/fs';
+import type { IFsLintModule } from '@gitgov/core/fs';
+import type {
+  GitGovTaskRecord, GitGovCycleRecord, GitGovFeedbackRecord, GitGovExecutionRecord, GitGovChangelogRecord, GitGovActorRecord, GitGovAgentRecord,
+  // Adapter types
+  IIndexerAdapter, IndexData, IMetricsAdapter, IConfigManager, IIdentityAdapter, ISessionManager, IAgentRunner, IKeyProvider,
+  ISyncStateModule,
+  // Lint types
+  RecordStores as LintRecordStores,
+  RecordStore,
+} from '@gitgov/core';
 import { spawn } from 'child_process';
 
 /**
@@ -11,32 +21,40 @@ import { spawn } from 'child_process';
  */
 export class DependencyInjectionService {
   private static instance: DependencyInjectionService | null = null;
-  private indexerAdapter: Adapters.IIndexerAdapter | null = null;
+  private indexerAdapter: IIndexerAdapter | null = null;
   private backlogAdapter: Adapters.BacklogAdapter | null = null;
-  private lintModule: Lint.IFsLintModule | null = null;
-  private syncModule: Sync.SyncModule | null = null;
+  private lintModule: IFsLintModule | null = null;
+  private syncModule: ISyncStateModule | null = null;
   private sourceAuditorModule: SourceAuditor.SourceAuditorModule | null = null;
-  private agentRunnerModule: Runner.AgentRunnerModule | null = null;
-  private configManager: Config.ConfigManager | null = null;
-  private gitModule: Git.GitModule | null = null;
+  private agentRunnerModule: IAgentRunner | null = null;
+  private configManager: InstanceType<typeof Config.ConfigManager> | null = null;
+  private sessionManager: InstanceType<typeof Session.SessionManager> | null = null;
+  private gitModule: Git.IGitModule | null = null;
+  private keyProvider: IKeyProvider | null = null;
   private projectRoot: string | null = null;
   private stores: {
-    taskStore: Store.RecordStore<TaskRecord>;
-    cycleStore: Store.RecordStore<CycleRecord>;
-    feedbackStore: Store.RecordStore<FeedbackRecord>;
-    executionStore: Store.RecordStore<ExecutionRecord>;
-    changelogStore: Store.RecordStore<ChangelogRecord>;
-    actorStore: Store.RecordStore<ActorRecord>;
-    agentStore: Store.RecordStore<AgentRecord>;
+    tasks: RecordStore<GitGovTaskRecord>;
+    cycles: RecordStore<GitGovCycleRecord>;
+    feedbacks: RecordStore<GitGovFeedbackRecord>;
+    executions: RecordStore<GitGovExecutionRecord>;
+    changelogs: RecordStore<GitGovChangelogRecord>;
+    actors: RecordStore<GitGovActorRecord>;
+    agents: RecordStore<GitGovAgentRecord>;
   } | null = null;
 
-  /** [EARS-52] Tracks if bootstrap from gitgov-state occurred, requiring reindex */
+  /** [EARS-D1] Tracks if bootstrap from gitgov-state occurred, requiring reindex */
   private bootstrapOccurred: boolean = false;
+
+  /**
+   * When true, initializeStores() skips .gitgov discovery and bootstrap.
+   * Only set via setInitMode() — never via internal projectRoot assignments.
+   */
+  private initModeEnabled = false;
 
   private constructor() { }
 
   /**
-   * Singleton pattern to ensure single instance across CLI
+   * [EARS-A1] Singleton pattern to ensure single instance across CLI
    */
   static getInstance(): DependencyInjectionService {
     if (!DependencyInjectionService.instance) {
@@ -46,8 +64,18 @@ export class DependencyInjectionService {
   }
 
   /**
+   * Configure DI for init mode — sets projectRoot directly,
+   * bypassing .gitgov discovery and bootstrap.
+   * Only called by InitCommand before .gitgov/ exists.
+   */
+  setInitMode(projectRoot: string): void {
+    this.projectRoot = projectRoot;
+    this.initModeEnabled = true;
+  }
+
+  /**
    * Initialize stores (shared between adapters)
-   * 
+   *
    * Bootstrap flow:
    * 1. Try to find .gitgov/ directory
    * 2. If not found, check if gitgov-state branch exists
@@ -55,36 +83,41 @@ export class DependencyInjectionService {
    * 4. If neither exists, throw error (not initialized)
    */
   private async initializeStores(): Promise<void> {
+    // [EARS-B4] Return immediately if stores already initialized
     if (this.stores) {
-      return; // Already initialized
+      return;
     }
 
-    const { promises: fs } = await import('fs');
-    const { Factories } = await import('@gitgov/core');
-
-    // Get git module for potential bootstrap
-    const gitModule = await this.getGitModule();
-    const repoRoot = await gitModule.getRepoRoot();
-    const gitgovPath = path.join(repoRoot, '.gitgov');
-
-    // Check if .gitgov/ exists in filesystem
     let projectRoot: string;
-    try {
-      await fs.access(gitgovPath);
-      // .gitgov/ exists, use it
-      projectRoot = repoRoot;
-    } catch {
-      // .gitgov/ doesn't exist in filesystem
-      // Try bootstrap from gitgov-state using SyncModule static method (core logic)
-      const bootstrapResult = await Sync.SyncModule.bootstrapFromStateBranch(gitModule);
 
-      if (bootstrapResult.success) {
-        // [EARS-52] Bootstrap successful - mark for reindex
+    if (this.initModeEnabled && this.projectRoot) {
+      // Init mode: projectRoot pre-set via setInitMode(), skip discovery + bootstrap
+      projectRoot = this.projectRoot;
+    } else {
+      // Normal discovery flow
+      const { promises: fs } = await import('fs');
+
+      const gitModule = await this.getGitModule();
+      const repoRoot = await gitModule.getRepoRoot();
+      const gitgovPath = path.join(repoRoot, '.gitgov');
+
+      // [EARS-B1] Check if .gitgov/ exists in filesystem
+      try {
+        await fs.access(gitgovPath);
+        // [EARS-B1] .gitgov/ exists, create stores
         projectRoot = repoRoot;
-        this.bootstrapOccurred = true;
-      } else {
-        // Bootstrap failed - project not initialized
-        throw new Error("❌ GitGovernance not initialized. Run 'gitgov init' first.");
+      } catch {
+        // [EARS-B2] .gitgov/ doesn't exist — try bootstrap from gitgov-state
+        const bootstrapResult = await FsSyncStateModule.bootstrapFromStateBranch(gitModule);
+
+        if (bootstrapResult.success) {
+          // [EARS-B2, D1] Bootstrap successful - mark for reindex
+          projectRoot = repoRoot;
+          this.bootstrapOccurred = true;
+        } else {
+          // [EARS-B3] Neither .gitgov/ nor gitgov-state exist
+          throw new Error("❌ GitGovernance not initialized. Run 'gitgov init' first.");
+        }
       }
     }
 
@@ -92,20 +125,21 @@ export class DependencyInjectionService {
     this.projectRoot = projectRoot;
 
     this.stores = {
-      taskStore: new Store.RecordStore<TaskRecord>('tasks', Factories.loadTaskRecord, projectRoot),
-      cycleStore: new Store.RecordStore<CycleRecord>('cycles', Factories.loadCycleRecord, projectRoot),
-      feedbackStore: new Store.RecordStore<FeedbackRecord>('feedback', Factories.loadFeedbackRecord, projectRoot),
-      executionStore: new Store.RecordStore<ExecutionRecord>('executions', Factories.loadExecutionRecord, projectRoot),
-      changelogStore: new Store.RecordStore<ChangelogRecord>('changelogs', Factories.loadChangelogRecord, projectRoot),
-      actorStore: new Store.RecordStore<ActorRecord>('actors', Factories.loadActorRecord, projectRoot),
-      agentStore: new Store.RecordStore<AgentRecord>('agents', Factories.loadAgentRecord, projectRoot),
+      tasks: new FsRecordStore<GitGovTaskRecord>({ basePath: path.join(projectRoot, '.gitgov', 'tasks') }),
+      cycles: new FsRecordStore<GitGovCycleRecord>({ basePath: path.join(projectRoot, '.gitgov', 'cycles') }),
+      feedbacks: new FsRecordStore<GitGovFeedbackRecord>({ basePath: path.join(projectRoot, '.gitgov', 'feedback') }),
+      executions: new FsRecordStore<GitGovExecutionRecord>({ basePath: path.join(projectRoot, '.gitgov', 'executions') }),
+      changelogs: new FsRecordStore<GitGovChangelogRecord>({ basePath: path.join(projectRoot, '.gitgov', 'changelogs') }),
+      actors: new FsRecordStore<GitGovActorRecord>({ basePath: path.join(projectRoot, '.gitgov', 'actors'), idEncoder: DEFAULT_ID_ENCODER }),
+      agents: new FsRecordStore<GitGovAgentRecord>({ basePath: path.join(projectRoot, '.gitgov', 'agents'), idEncoder: DEFAULT_ID_ENCODER }),
     };
   }
 
   /**
-   * Creates and returns IndexerAdapter with all required dependencies
+   * [EARS-C1] Creates and returns IndexerAdapter with all required dependencies
    */
-  async getIndexerAdapter(): Promise<Adapters.IIndexerAdapter> {
+  async getIndexerAdapter(): Promise<IIndexerAdapter> {
+    // [EARS-C8] Return cached instance
     if (this.indexerAdapter) {
       return this.indexerAdapter;
     }
@@ -118,11 +152,13 @@ export class DependencyInjectionService {
 
       // Create Adapters.MetricsAdapter with dependencies
       const metricsAdapter = new Adapters.MetricsAdapter({
-        taskStore: this.stores.taskStore,
-        cycleStore: this.stores.cycleStore,
-        feedbackStore: this.stores.feedbackStore,
-        executionStore: this.stores.executionStore,
-        actorStore: this.stores.actorStore
+        stores: {
+          tasks: this.stores.tasks,
+          cycles: this.stores.cycles,
+          feedbacks: this.stores.feedbacks,
+          executions: this.stores.executions,
+          actors: this.stores.actors,
+        }
       });
 
       // Create IndexerAdapter with all dependencies
@@ -131,24 +167,25 @@ export class DependencyInjectionService {
         throw new Error("Project root not initialized");
       }
 
-      // Create FsStore for cache (backend-agnostic abstraction)
-      const cacheStore = new Store.FsStore<Adapters.IndexData>({
+      // Create FsRecordStore for cache (backend-agnostic abstraction)
+      const cacheStore = new FsRecordStore<IndexData>({
         basePath: path.join(this.projectRoot, '.gitgov'),
       });
 
       this.indexerAdapter = new Adapters.IndexerAdapter({
         metricsAdapter,
-        taskStore: this.stores.taskStore,
-        cycleStore: this.stores.cycleStore,
-        feedbackStore: this.stores.feedbackStore,
-        executionStore: this.stores.executionStore,
-        changelogStore: this.stores.changelogStore,
-        actorStore: this.stores.actorStore,
+        stores: {
+          tasks: this.stores.tasks,
+          cycles: this.stores.cycles,
+          feedbacks: this.stores.feedbacks,
+          executions: this.stores.executions,
+          changelogs: this.stores.changelogs,
+          actors: this.stores.actors,
+        },
         cacheStore,
       });
 
-      // [EARS-52] If bootstrap occurred, regenerate index immediately
-      // This ensures index.json is up-to-date after restoring .gitgov/ from gitgov-state
+      // [EARS-D1, D2] If bootstrap occurred, regenerate index; otherwise skip
       if (this.bootstrapOccurred) {
         try {
           await this.indexerAdapter.generateIndex();
@@ -162,20 +199,24 @@ export class DependencyInjectionService {
       return this.indexerAdapter;
 
     } catch (error) {
+      // [EARS-E1] Project not initialized
       if (error instanceof Error) {
         if (error.message.includes('Could not find project root')) {
           throw new Error("❌ GitGovernance not initialized. Run 'gitgov init' first.");
         }
+        // [EARS-E2] Cache system error with message
         throw new Error(`❌ Failed to initialize cache system: ${error.message}`);
       }
+      // [EARS-E4] Non-Error types
       throw new Error("❌ Unknown error initializing cache system.");
     }
   }
 
   /**
-   * Creates and returns Adapters.BacklogAdapter with all required dependencies
+   * [EARS-C2] Creates and returns Adapters.BacklogAdapter with all required dependencies
    */
   async getBacklogAdapter(): Promise<Adapters.BacklogAdapter> {
+    // [EARS-C8] Return cached instance
     if (this.backlogAdapter) {
       return this.backlogAdapter;
     }
@@ -190,86 +231,93 @@ export class DependencyInjectionService {
       const eventBus = new EventBus.EventBus();
 
       // Create KeyProvider for filesystem-based key storage
-      const keyProvider = new KeyProvider.FsKeyProvider({
+      this.keyProvider = new KeyProvider.FsKeyProvider({
         actorsDir: path.join(this.projectRoot!, '.gitgov', 'actors')
       });
 
       // Create IdentityAdapter with correct dependencies
       const identityAdapter = new Adapters.IdentityAdapter({
-        actorStore: this.stores.actorStore,
-        agentStore: this.stores.agentStore,
-        keyProvider,
-        eventBus
+        stores: { actors: this.stores.actors },
+        keyProvider: this.keyProvider,
+        sessionManager: await this.getSessionManager(),
+        eventBus,
       });
 
       // Create other adapters
       const feedbackAdapter = new Adapters.FeedbackAdapter({
-        feedbackStore: this.stores.feedbackStore,
+        stores: { feedbacks: this.stores.feedbacks },
         identity: identityAdapter,
         eventBus
       });
 
       const executionAdapter = new Adapters.ExecutionAdapter({
-        executionStore: this.stores.executionStore,
+        stores: { tasks: this.stores.tasks, executions: this.stores.executions },
         identity: identityAdapter,
         eventBus
       });
 
       const changelogAdapter = new Adapters.ChangelogAdapter({
-        changelogStore: this.stores.changelogStore,
+        stores: { changelogs: this.stores.changelogs, tasks: this.stores.tasks, cycles: this.stores.cycles },
         identity: identityAdapter,
         eventBus
       });
 
       // Create Adapters.MetricsAdapter
       const metricsAdapter = new Adapters.MetricsAdapter({
-        taskStore: this.stores.taskStore,
-        cycleStore: this.stores.cycleStore,
-        feedbackStore: this.stores.feedbackStore,
-        executionStore: this.stores.executionStore,
-        actorStore: this.stores.actorStore
+        stores: {
+          tasks: this.stores.tasks,
+          cycles: this.stores.cycles,
+          feedbacks: this.stores.feedbacks,
+          executions: this.stores.executions,
+          actors: this.stores.actors,
+        }
       });
 
-      // Create WorkflowMethodologyAdapter
-      const workflowMethodologyAdapter = Adapters.WorkflowMethodologyAdapter.createDefault(feedbackAdapter);
+      // Create WorkflowAdapter
+      const workflowAdapter = Adapters.WorkflowAdapter.createDefault(feedbackAdapter);
 
       // Get ConfigManager for BacklogAdapter
       const configManager = await this.getConfigManager();
 
       // Create Adapters.BacklogAdapter with all dependencies
       this.backlogAdapter = new Adapters.BacklogAdapter({
-        taskStore: this.stores.taskStore,
-        cycleStore: this.stores.cycleStore,
-        feedbackStore: this.stores.feedbackStore,
-        executionStore: this.stores.executionStore,
-        changelogStore: this.stores.changelogStore,
+        stores: {
+          tasks: this.stores.tasks,
+          cycles: this.stores.cycles,
+          feedbacks: this.stores.feedbacks,
+          changelogs: this.stores.changelogs,
+        },
         feedbackAdapter,
         executionAdapter,
         changelogAdapter,
         metricsAdapter,
-        workflowMethodologyAdapter,
+        workflowAdapter,
         identity: identityAdapter,
         eventBus,
-        configManager
+        configManager,
+        sessionManager: await this.getSessionManager(),
       });
 
       return this.backlogAdapter;
 
     } catch (error) {
+      // [EARS-E1] Project not initialized
       if (error instanceof Error) {
         if (error.message.includes('Could not find project root')) {
           throw new Error("❌ GitGovernance not initialized. Run 'gitgov init' first.");
         }
+        // [EARS-E3] Backlog system error with message
         throw new Error(`❌ Failed to initialize backlog system: ${error.message}`);
       }
+      // [EARS-E4] Non-Error types
       throw new Error("❌ Unknown error initializing backlog system.");
     }
   }
 
   /**
-   * Creates and returns IdentityAdapter with all required dependencies
+   * [EARS-C4] Creates and returns IdentityAdapter with all required dependencies
    */
-  async getIdentityAdapter(): Promise<Adapters.IdentityAdapter> {
+  async getIdentityAdapter(): Promise<InstanceType<typeof Adapters.IdentityAdapter>> {
     try {
       await this.initializeStores();
       if (!this.stores) {
@@ -286,10 +334,10 @@ export class DependencyInjectionService {
 
       // Create IdentityAdapter with dependencies
       return new Adapters.IdentityAdapter({
-        actorStore: this.stores.actorStore,
-        agentStore: this.stores.agentStore,
+        stores: { actors: this.stores.actors },
         keyProvider,
-        eventBus
+        sessionManager: await this.getSessionManager(),
+        eventBus,
       });
 
     } catch (error) {
@@ -304,7 +352,30 @@ export class DependencyInjectionService {
   }
 
   /**
-   * Creates and returns FeedbackAdapter with all required dependencies
+   * Creates and returns ProjectAdapter with all required dependencies.
+   * Used by InitCommand (via setInitMode) and potentially other commands.
+   */
+  async getProjectAdapter(): Promise<Adapters.ProjectAdapter> {
+    await this.initializeStores();
+    if (!this.projectRoot) {
+      throw new Error("Project root not initialized");
+    }
+
+    const identityAdapter = await this.getIdentityAdapter();
+    const backlogAdapter = await this.getBacklogAdapter();
+    const configManager = await this.getConfigManager();
+    const projectInitializer = new FsProjectInitializer(this.projectRoot);
+
+    return new Adapters.ProjectAdapter({
+      identityAdapter,
+      backlogAdapter,
+      configManager,
+      projectInitializer,
+    });
+  }
+
+  /**
+   * [EARS-C5] Creates and returns FeedbackAdapter with all required dependencies
    */
   async getFeedbackAdapter(): Promise<Adapters.FeedbackAdapter> {
     try {
@@ -321,15 +392,15 @@ export class DependencyInjectionService {
 
       // Create IdentityAdapter
       const identityAdapter = new Adapters.IdentityAdapter({
-        actorStore: this.stores.actorStore,
-        agentStore: this.stores.agentStore,
+        stores: { actors: this.stores.actors },
         keyProvider,
-        eventBus
+        sessionManager: await this.getSessionManager(),
+        eventBus,
       });
 
       // Create FeedbackAdapter with dependencies
       return new Adapters.FeedbackAdapter({
-        feedbackStore: this.stores.feedbackStore,
+        stores: { feedbacks: this.stores.feedbacks },
         identity: identityAdapter,
         eventBus
       });
@@ -346,9 +417,9 @@ export class DependencyInjectionService {
   }
 
   /**
-   * Creates and returns Adapters.MetricsAdapter with all required dependencies
+   * [EARS-C3] Creates and returns Adapters.MetricsAdapter with all required dependencies
    */
-  async getMetricsAdapter(): Promise<Adapters.MetricsAdapter> {
+  async getMetricsAdapter(): Promise<IMetricsAdapter> {
     try {
       await this.initializeStores();
       if (!this.stores) {
@@ -357,11 +428,13 @@ export class DependencyInjectionService {
 
       // Create Adapters.MetricsAdapter with dependencies
       return new Adapters.MetricsAdapter({
-        taskStore: this.stores.taskStore,
-        cycleStore: this.stores.cycleStore,
-        feedbackStore: this.stores.feedbackStore,
-        executionStore: this.stores.executionStore,
-        actorStore: this.stores.actorStore
+        stores: {
+          tasks: this.stores.tasks,
+          cycles: this.stores.cycles,
+          feedbacks: this.stores.feedbacks,
+          executions: this.stores.executions,
+          actors: this.stores.actors,
+        }
       });
 
     } catch (error) {
@@ -376,13 +449,14 @@ export class DependencyInjectionService {
   }
 
   /**
-   * Creates and returns FsLintModule with all required dependencies.
+   * [EARS-C6] Creates and returns FsLintModule with all required dependencies.
    *
    * Architecture (Store Backends Epic):
    * - LintModule (pure): Core validation logic without I/O
    * - FsLintModule (with I/O): Filesystem wrapper for CLI usage
    */
-  async getLintModule(): Promise<Lint.IFsLintModule> {
+  async getLintModule(): Promise<IFsLintModule> {
+    // [EARS-C8] Return cached instance
     if (this.lintModule) {
       return this.lintModule;
     }
@@ -399,14 +473,14 @@ export class DependencyInjectionService {
       // Create stores object for LintModule
       // RecordStore is compatible with Store<GitGovRecord> interface
       const lintStores = {
-        tasks: this.stores.taskStore,
-        cycles: this.stores.cycleStore,
-        actors: this.stores.actorStore,
-        agents: this.stores.agentStore,
-        executions: this.stores.executionStore,
-        feedbacks: this.stores.feedbackStore,
-        changelogs: this.stores.changelogStore,
-      } as unknown as Lint.RecordStores;
+        tasks: this.stores.tasks,
+        cycles: this.stores.cycles,
+        actors: this.stores.actors,
+        agents: this.stores.agents,
+        executions: this.stores.executions,
+        feedbacks: this.stores.feedbacks,
+        changelogs: this.stores.changelogs,
+      } as unknown as LintRecordStores;
 
       // Create pure LintModule (no I/O)
       const pureLintModule = new Lint.LintModule({
@@ -415,13 +489,15 @@ export class DependencyInjectionService {
       });
 
       // Create FsLintModule (with I/O) wrapping the pure module
-      this.lintModule = new Lint.FsLintModule({
+      const fsLint = new FsLintModule({
         lintModule: pureLintModule,
         stores: lintStores,
-        indexerAdapter
+        indexerAdapter,
+        projectRoot: this.projectRoot!,
       });
+      this.lintModule = fsLint;
 
-      return this.lintModule;
+      return fsLint;
 
     } catch (error) {
       if (error instanceof Error) {
@@ -448,17 +524,22 @@ export class DependencyInjectionService {
         throw new Error("Failed to initialize stores");
       }
 
-      // Create PiiDetectorModule (uses default config)
-      const piiDetector = new PiiDetector.PiiDetectorModule();
+      // Create FindingDetectorModule (uses default config)
+      const findingDetector = new FindingDetector.FindingDetectorModule();
 
       // Create WaiverReader with FeedbackAdapter
       const feedbackAdapter = await this.getFeedbackAdapter();
       const waiverReader = new SourceAuditor.WaiverReader(feedbackAdapter);
 
-      // Create SourceAuditorModule with dependencies
+      // Create FileLister for filesystem access
+      const projectRoot = await this.getProjectRoot();
+      const fileLister = new FsFileLister({ cwd: projectRoot });
+
+      // Create SourceAuditorModule with dependencies (including FileLister)
       this.sourceAuditorModule = new SourceAuditor.SourceAuditorModule({
-        piiDetector,
+        findingDetector,
         waiverReader,
+        fileLister,
       });
 
       return this.sourceAuditorModule;
@@ -508,15 +589,15 @@ export class DependencyInjectionService {
 
       // Create IdentityAdapter
       const identityAdapter = new Adapters.IdentityAdapter({
-        actorStore: this.stores.actorStore,
-        agentStore: this.stores.agentStore,
+        stores: { actors: this.stores.actors },
         keyProvider,
-        eventBus
+        sessionManager: await this.getSessionManager(),
+        eventBus,
       });
 
       // Create ExecutionAdapter with dependencies
       return new Adapters.ExecutionAdapter({
-        executionStore: this.stores.executionStore,
+        stores: { tasks: this.stores.tasks, executions: this.stores.executions },
         identity: identityAdapter,
         eventBus
       });
@@ -535,7 +616,7 @@ export class DependencyInjectionService {
   /**
    * Creates and returns AgentRunnerModule with all required dependencies
    */
-  async getAgentRunnerModule(): Promise<Runner.AgentRunnerModule> {
+  async getAgentRunnerModule(): Promise<IAgentRunner> {
     if (this.agentRunnerModule) {
       return this.agentRunnerModule;
     }
@@ -551,7 +632,7 @@ export class DependencyInjectionService {
       const eventBus = new EventBus.EventBus();
 
       // Create AgentRunnerModule with dependencies
-      this.agentRunnerModule = new Runner.AgentRunnerModule({
+      this.agentRunnerModule = createAgentRunner({
         gitgovPath: path.join(this.projectRoot, '.gitgov'),
         projectRoot: this.projectRoot,
         executionAdapter,
@@ -585,25 +666,24 @@ export class DependencyInjectionService {
   /**
    * Returns the agent store for listing agents
    */
-  async getAgentStore(): Promise<Store.RecordStore<AgentRecord>> {
+  async getAgentStore(): Promise<RecordStore<GitGovAgentRecord>> {
     await this.initializeStores();
     if (!this.stores) {
       throw new Error("Failed to initialize stores");
     }
-    return this.stores.agentStore;
+    return this.stores.agents;
   }
 
   /**
-   * Creates and returns SyncModule with all required dependencies
+   * [EARS-C7] Creates and returns SyncStateModule with all required dependencies
    */
-  async getSyncModule(): Promise<Sync.SyncModule> {
+  async getSyncStateModule(): Promise<ISyncStateModule> {
+    // [EARS-C8] Return cached instance
     if (this.syncModule) {
       return this.syncModule;
     }
 
     try {
-      // Import modules from namespaces
-      const { Sync, Git } = await import('@gitgov/core');
       const { spawn } = await import('child_process');
 
       // Initialize stores first (this sets projectRoot via bootstrap if needed)
@@ -645,13 +725,13 @@ export class DependencyInjectionService {
       };
 
       // Create GitModule with execCommand
-      const gitModule = new Git.GitModule({
+      const gitModule = new GitModule({
         repoRoot: this.projectRoot,
         execCommand
       });
 
-      // Create SyncModule with all dependencies
-      this.syncModule = new Sync.SyncModule({
+      // Create FsSyncStateModule with all dependencies
+      this.syncModule = new FsSyncStateModule({
         git: gitModule,
         config: configManager,
         identity: identityAdapter,
@@ -673,18 +753,19 @@ export class DependencyInjectionService {
   }
 
   /**
-   * Creates and returns ConfigManager instance
-   */
-  /**
    * Creates and returns GitModule
    */
-  async getGitModule(): Promise<Git.GitModule> {
+  async getGitModule(): Promise<Git.IGitModule> {
+    // [EARS-C8] Return cached instance
     if (this.gitModule) {
       return this.gitModule;
     }
 
     try {
-      const projectRoot = process.env['GITGOV_ORIGINAL_DIR'] || Config.ConfigManager.findProjectRoot() || process.cwd();
+      const projectRoot = findProjectRoot();
+      if (!projectRoot) {
+        throw new Error("Could not find project root");
+      }
 
       // Create execCommand function for GitModule
       const execCommand = (command: string, args: string[], options?: Git.ExecOptions) => {
@@ -711,12 +792,13 @@ export class DependencyInjectionService {
         });
       };
 
-      this.gitModule = new Git.GitModule({
+      const gm = new GitModule({
         repoRoot: projectRoot,
         execCommand
       });
+      this.gitModule = gm;
 
-      return this.gitModule;
+      return gm;
     } catch (error) {
       if (error instanceof Error) {
         if (error.message.includes('Could not find project root')) {
@@ -728,7 +810,11 @@ export class DependencyInjectionService {
     }
   }
 
-  async getConfigManager(): Promise<Config.ConfigManager> {
+  /**
+   * [EARS-C9] Creates and returns ConfigManager instance
+   */
+  async getConfigManager(): Promise<InstanceType<typeof Config.ConfigManager>> {
+    // [EARS-C8] Return cached instance
     if (this.configManager) {
       return this.configManager;
     }
@@ -736,13 +822,18 @@ export class DependencyInjectionService {
     try {
       // If projectRoot is not set yet, try to find it (this can happen when getConfigManager is called before initializeStores)
       if (!this.projectRoot) {
-        this.projectRoot = process.env['GITGOV_ORIGINAL_DIR'] || Config.ConfigManager.findGitgovRoot() || process.cwd();
+        const root = findGitgovRoot();
+        if (!root) {
+          throw new Error("Could not find project root");
+        }
+        this.projectRoot = root;
       }
 
       // Create ConfigManager instance using factory function
-      this.configManager = Config.createConfigManager(this.projectRoot);
+      const cm = createConfigManager(this.projectRoot);
+      this.configManager = cm;
 
-      return this.configManager;
+      return cm;
 
     } catch (error) {
       if (error instanceof Error) {
@@ -756,30 +847,79 @@ export class DependencyInjectionService {
   }
 
   /**
-   * Resets the singleton instance (useful for testing)
+   * [EARS-C10] Creates and returns SessionManager instance
+   */
+  async getSessionManager(): Promise<InstanceType<typeof Session.SessionManager>> {
+    // [EARS-C8] Return cached instance
+    if (this.sessionManager) {
+      return this.sessionManager;
+    }
+
+    try {
+      if (!this.projectRoot) {
+        const root = findGitgovRoot();
+        if (!root) {
+          throw new Error("Could not find project root");
+        }
+        this.projectRoot = root;
+      }
+
+      this.sessionManager = createSessionManager(this.projectRoot);
+
+      return this.sessionManager;
+
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message.includes('Could not find project root')) {
+          throw new Error("❌ GitGovernance not initialized. Run 'gitgov init' first.");
+        }
+        throw new Error(`❌ Failed to initialize session manager: ${error.message}`);
+      }
+      throw new Error("❌ Unknown error initializing session manager.");
+    }
+  }
+
+  /**
+   * Get the KeyProvider instance (created during store initialization)
+   */
+  getKeyProvider(): IKeyProvider {
+    if (!this.keyProvider) {
+      throw new Error("KeyProvider not initialized. Call initializeStores first.");
+    }
+    return this.keyProvider;
+  }
+
+  /**
+   * [EARS-A2] Resets the singleton instance (useful for testing)
    */
   static reset(): void {
     DependencyInjectionService.instance = null;
   }
 
   /**
-   * Validates that all required dependencies are available
+   * [EARS-F1, F2] Validates that all required dependencies are available
    */
   async validateDependencies(): Promise<boolean> {
     try {
-      // If projectRoot is not set yet, try to find it
+      // [EARS-F2] If projectRoot not found, return false
       if (!this.projectRoot) {
-        this.projectRoot = process.env['GITGOV_ORIGINAL_DIR'] || Config.ConfigManager.findGitgovRoot() || process.cwd();
+        const root = findGitgovRoot();
+        if (!root) {
+          return false;
+        }
+        this.projectRoot = root;
       }
 
-      // Check if .gitgov directory exists
+      // [EARS-F1] Check if .gitgov directory exists
       const { promises: fs } = await import('fs');
       const gitgovPath = `${this.projectRoot}/.gitgov`;
 
       try {
         await fs.access(gitgovPath);
+        // [EARS-F1] .gitgov exists → true
         return true;
       } catch {
+        // [EARS-F2] .gitgov not found → false
         return false;
       }
     } catch {

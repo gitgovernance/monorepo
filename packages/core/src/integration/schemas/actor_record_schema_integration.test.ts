@@ -1,5 +1,5 @@
-import { validateActorRecordDetailed } from '../../validation/actor_validator';
-import type { ActorRecord } from '../../types';
+import { validateActorRecordDetailed } from '../../record_validations/actor_validator';
+import type { ActorRecord } from '../../record_types';
 
 describe('ActorRecord Schema Integration Tests', () => {
   /**

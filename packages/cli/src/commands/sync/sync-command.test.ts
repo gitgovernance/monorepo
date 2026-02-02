@@ -4,7 +4,7 @@
  * Tests the CLI layer for sync commands (push, pull, resolve, audit)
  * using mocks to isolate from SyncModule implementation.
  * 
- * Integration tests for actual Git operations are in packages/core/src/sync/sync_module.test.ts
+ * Integration tests for actual Git operations are in packages/core/src/sync_state/fs/fs_sync_state.test.ts
  */
 
 // Mock @gitgov/core FIRST to avoid import.meta issues in Jest
@@ -36,7 +36,9 @@ const mockSyncModule = {
   checkConflictMarkers: jest.fn().mockResolvedValue([])
 };
 
-const mockConfigManager = {
+const mockConfigManager = {};
+
+const mockSessionManager = {
   loadSession: jest.fn(),
   updateActorState: jest.fn().mockResolvedValue(undefined)
 };
@@ -49,8 +51,9 @@ const mockGitModule = {
 jest.mock('../../services/dependency-injection', () => ({
   DependencyInjectionService: {
     getInstance: jest.fn().mockReturnValue({
-      getSyncModule: jest.fn().mockResolvedValue(mockSyncModule),
+      getSyncStateModule: jest.fn().mockResolvedValue(mockSyncModule),
       getConfigManager: jest.fn().mockResolvedValue(mockConfigManager),
+      getSessionManager: jest.fn().mockResolvedValue(mockSessionManager),
       getGitModule: jest.fn().mockResolvedValue(mockGitModule)
     })
   }
@@ -94,7 +97,7 @@ describe('SyncCommand - Unit Tests', () => {
     });
 
     // Setup default session mock
-    mockConfigManager.loadSession.mockResolvedValue({
+    mockSessionManager.loadSession.mockResolvedValue({
       lastSession: {
         actorId: 'human:test-user',
         timestamp: new Date().toISOString()
@@ -109,11 +112,11 @@ describe('SyncCommand - Unit Tests', () => {
   });
 
   // =====================================================================
-  // EARS 1-4: Verificación de Integridad y Pre-condiciones
+  // EARS-A1 a A4: Verificación de Integridad y Pre-condiciones
   // =====================================================================
 
-  describe('Pre-conditions (EARS 1-4)', () => {
-    it('[EARS-1] should delegate push to pushState (audit runs internally)', async () => {
+  describe('Pre-conditions (EARS-A1 a A4)', () => {
+    it('[EARS-A1] should delegate push to pushState (audit runs internally)', async () => {
       // Setup: pushState handles audit internally and returns success
       mockSyncModule.pushState.mockResolvedValue({
         success: true,
@@ -136,7 +139,7 @@ describe('SyncCommand - Unit Tests', () => {
       });
     });
 
-    it('[EARS-1] should handle audit failure returned by pushState', async () => {
+    it('[EARS-A1] should handle audit failure returned by pushState', async () => {
       // Setup: pushState returns error when internal audit fails
       mockSyncModule.pushState.mockResolvedValue({
         success: false,
@@ -161,7 +164,7 @@ describe('SyncCommand - Unit Tests', () => {
       );
     });
 
-    it('[EARS-2] should abort push if executed from gitgov-state branch', async () => {
+    it('[EARS-A2] should abort push if executed from gitgov-state branch', async () => {
       // Setup: Mock GitModule to return gitgov-state as current branch
       mockGitModule.getCurrentBranch.mockResolvedValue('gitgov-state');
       mockSyncModule.getStateBranchName.mockResolvedValue('gitgov-state');
@@ -174,7 +177,7 @@ describe('SyncCommand - Unit Tests', () => {
       expect(mockSyncModule.pushState).not.toHaveBeenCalled();
     });
 
-    it('[EARS-3] should verify no uncommitted changes before push or pull', async () => {
+    it('[EARS-A3] should verify no uncommitted changes before push or pull', async () => {
       // This is verified by SyncModule internally
       // CLI just needs to handle the error if thrown
 
@@ -196,7 +199,7 @@ describe('SyncCommand - Unit Tests', () => {
       expect(mockProcessExit).toHaveBeenCalledWith(1);
     });
 
-    it('[EARS-4] should verify rebase in progress before resolve', async () => {
+    it('[EARS-A4] should verify rebase in progress before resolve', async () => {
       // Setup: Mock GitModule to indicate no rebase
       mockGitModule.isRebaseInProgress.mockResolvedValue(false);
       mockSyncModule.isRebaseInProgress.mockResolvedValue(false);
@@ -214,19 +217,19 @@ describe('SyncCommand - Unit Tests', () => {
   });
 
   // =====================================================================
-  // EARS 5-7: Gestión de Rama gitgov-state (handled by SyncModule)
+  // EARS 5-7 (sync_state_module): Gestión de Rama gitgov-state (handled by SyncModule)
   // =====================================================================
-  // Note: EARS 5-7 are tested in sync_module.test.ts
+  // Note: EARS 5-7 are tested in sync_module.test.ts (not part of this triada)
   // CLI layer doesn't directly test branch management
 
   // =====================================================================
-  // EARS 8-12: Operación Push
+  // EARS-B1 a B9: Operación Push
   // =====================================================================
 
-  describe('Push Operation (EARS 8-12, 27, 29, 30)', () => {
+  describe('Push Operation (EARS-B1 a B9)', () => {
     // Note: Audit is now handled internally by pushState, not by CLI
 
-    it('[EARS-8] should calculate delta of files before push', async () => {
+    it('[EARS-B1] should calculate delta of files before push', async () => {
       // Setup
       mockSyncModule.pushState.mockResolvedValue({
         success: true,
@@ -249,7 +252,7 @@ describe('SyncCommand - Unit Tests', () => {
       );
     });
 
-    it('[EARS-9] should inform and exit without commit if no changes', async () => {
+    it('[EARS-B2] should inform and exit without commit if no changes', async () => {
       // Setup
       mockSyncModule.pushState.mockResolvedValue({
         success: true,
@@ -263,13 +266,13 @@ describe('SyncCommand - Unit Tests', () => {
       // Execute
       await syncCommand.executePush({});
 
-      // Verify output - [EARS-54] message updated to clarify "local" changes
+      // Verify output - [EARS-B5] message updated to clarify "local" changes
       expect(mockConsoleLog).toHaveBeenCalledWith(
         expect.stringContaining('No local changes to push')
       );
     });
 
-    it('[EARS-10] should abort rebase and guide user if conflicts detected', async () => {
+    it('[EARS-B3] should abort rebase and guide user if conflicts detected', async () => {
       // Setup
       mockSyncModule.pushState.mockResolvedValue({
         success: false,
@@ -302,7 +305,7 @@ describe('SyncCommand - Unit Tests', () => {
       );
     });
 
-    it('[EARS-11] should create commit and push to origin/gitgov-state', async () => {
+    it('[EARS-B4] should create commit and push to origin/gitgov-state', async () => {
       // Setup
       mockSyncModule.pushState.mockResolvedValue({
         success: true,
@@ -325,7 +328,7 @@ describe('SyncCommand - Unit Tests', () => {
       );
     });
 
-    it('[EARS-54] should display implicit pull results when push reconciles with remote', async () => {
+    it('[EARS-B5] should display implicit pull results when push reconciles with remote', async () => {
       // Setup - push result includes implicit pull results
       mockSyncModule.pushState.mockResolvedValue({
         success: true,
@@ -357,7 +360,7 @@ describe('SyncCommand - Unit Tests', () => {
       );
     });
 
-    it('[EARS-12] should simulate operation without changes when --dry-run is used', async () => {
+    it('[EARS-B6] should simulate operation without changes when --dry-run is used', async () => {
       // Setup
       mockSyncModule.pushState.mockResolvedValue({
         success: true,
@@ -384,7 +387,7 @@ describe('SyncCommand - Unit Tests', () => {
       );
     });
 
-    it('[EARS-27] should update lastSyncPush and status synced after successful push', async () => {
+    it('[EARS-B7] should update lastSyncPush and status synced after successful push', async () => {
       // Setup
       mockSyncModule.pushState.mockResolvedValue({
         success: true,
@@ -401,7 +404,7 @@ describe('SyncCommand - Unit Tests', () => {
       await syncCommand.executePush({});
 
       // Verify session update
-      expect(mockConfigManager.updateActorState).toHaveBeenCalledWith(
+      expect(mockSessionManager.updateActorState).toHaveBeenCalledWith(
         'human:test-user',
         expect.objectContaining({
           syncStatus: expect.objectContaining({
@@ -412,7 +415,7 @@ describe('SyncCommand - Unit Tests', () => {
       );
     });
 
-    it('[EARS-29] should update status conflict when conflict is detected', async () => {
+    it('[EARS-B8] should update status conflict when conflict is detected', async () => {
       // Setup
       mockSyncModule.pushState.mockResolvedValue({
         success: false,
@@ -433,7 +436,7 @@ describe('SyncCommand - Unit Tests', () => {
       await syncCommand.executePush({});
 
       // Verify session update to conflict status
-      expect(mockConfigManager.updateActorState).toHaveBeenCalledWith(
+      expect(mockSessionManager.updateActorState).toHaveBeenCalledWith(
         'human:test-user',
         expect.objectContaining({
           syncStatus: expect.objectContaining({
@@ -443,7 +446,7 @@ describe('SyncCommand - Unit Tests', () => {
       );
     });
 
-    it('[EARS-30] should update status pending when there are local changes not published', async () => {
+    it('[EARS-B9] should update status pending when there are local changes not published', async () => {
       // Setup
       mockSyncModule.pushState.mockResolvedValue({
         success: true,
@@ -463,7 +466,7 @@ describe('SyncCommand - Unit Tests', () => {
       await syncCommand.executePush({});
 
       // Verify pending status was set
-      expect(mockConfigManager.updateActorState).toHaveBeenCalledWith(
+      expect(mockSessionManager.updateActorState).toHaveBeenCalledWith(
         'human:test-user',
         expect.objectContaining({
           syncStatus: expect.objectContaining({
@@ -475,11 +478,11 @@ describe('SyncCommand - Unit Tests', () => {
   });
 
   // =====================================================================
-  // EARS 13-16, 28, 28.1, 29, 29.1, 44: Operación Pull
+  // EARS-C1 a C11: Operación Pull
   // =====================================================================
 
-  describe('Pull Operation (EARS 13-16, 28, 28.1, 29, 29.1, 44)', () => {
-    it('[EARS-13] should update local branch with remote changes using rebase', async () => {
+  describe('Pull Operation (EARS-C1 a C11)', () => {
+    it('[EARS-C1] should update local branch with remote changes using rebase', async () => {
       // Setup
       mockSyncModule.pullState.mockResolvedValue({
         success: true,
@@ -504,7 +507,7 @@ describe('SyncCommand - Unit Tests', () => {
       );
     });
 
-    it('[EARS-14] should pause rebase and guide user if conflicts detected', async () => {
+    it('[EARS-C2] should pause rebase and guide user if conflicts detected', async () => {
       // Setup
       mockSyncModule.pullState.mockResolvedValue({
         success: false,
@@ -534,7 +537,7 @@ describe('SyncCommand - Unit Tests', () => {
       );
     });
 
-    it('[EARS-15] should invoke syncModule.pullState() which auto-reindexes', async () => {
+    it('[EARS-C3] should invoke syncModule.pullState() which auto-reindexes', async () => {
       // Setup
       mockSyncModule.pullState.mockResolvedValue({
         success: true,
@@ -554,7 +557,7 @@ describe('SyncCommand - Unit Tests', () => {
       );
     });
 
-    it('[EARS-16] should invoke syncModule.pullState() with forceReindex flag', async () => {
+    it('[EARS-C4] should invoke syncModule.pullState() with forceReindex flag', async () => {
       // Setup
       mockSyncModule.pullState.mockResolvedValue({
         success: true,
@@ -575,7 +578,7 @@ describe('SyncCommand - Unit Tests', () => {
       );
     });
 
-    it('[EARS-28] should update lastSyncPull and status synced after successful pull', async () => {
+    it('[EARS-C5] should update lastSyncPull and status synced after successful pull', async () => {
       // Setup
       mockSyncModule.pullState.mockResolvedValue({
         success: true,
@@ -589,7 +592,7 @@ describe('SyncCommand - Unit Tests', () => {
       await syncCommand.executePull({});
 
       // Verify session update
-      expect(mockConfigManager.updateActorState).toHaveBeenCalledWith(
+      expect(mockSessionManager.updateActorState).toHaveBeenCalledWith(
         'human:test-user',
         expect.objectContaining({
           syncStatus: expect.objectContaining({
@@ -600,7 +603,7 @@ describe('SyncCommand - Unit Tests', () => {
       );
     });
 
-    it('[EARS-28.1] should complete pull successfully without updating session when no actor', async () => {
+    it('[EARS-C6] should complete pull successfully without updating session when no actor', async () => {
       // Setup: Pull succeeds but no actor in session
       mockSyncModule.pullState.mockResolvedValue({
         success: true,
@@ -611,7 +614,7 @@ describe('SyncCommand - Unit Tests', () => {
       });
 
       // Mock session without actor
-      mockConfigManager.loadSession.mockResolvedValue({
+      mockSessionManager.loadSession.mockResolvedValue({
         lastSession: null,
         actorState: {}
       });
@@ -626,11 +629,11 @@ describe('SyncCommand - Unit Tests', () => {
       );
 
       // Verify session was NOT updated (graceful degradation)
-      expect(mockConfigManager.updateActorState).not.toHaveBeenCalled();
+      expect(mockSessionManager.updateActorState).not.toHaveBeenCalled();
       expect(mockProcessExit).not.toHaveBeenCalled();
     });
 
-    it('[EARS-29] should update status conflict when conflict is detected during pull', async () => {
+    it('[EARS-C7] should update status conflict when conflict is detected during pull', async () => {
       // Setup
       mockSyncModule.pullState.mockResolvedValue({
         success: false,
@@ -650,7 +653,7 @@ describe('SyncCommand - Unit Tests', () => {
       await syncCommand.executePull({});
 
       // Verify session update
-      expect(mockConfigManager.updateActorState).toHaveBeenCalledWith(
+      expect(mockSessionManager.updateActorState).toHaveBeenCalledWith(
         'human:test-user',
         expect.objectContaining({
           syncStatus: expect.objectContaining({
@@ -660,7 +663,7 @@ describe('SyncCommand - Unit Tests', () => {
       );
     });
 
-    it('[EARS-44] should handle error from pullState and show clear message', async () => {
+    it('[EARS-C9] should handle error from pullState and show clear message', async () => {
       // Setup: Pull returns error (e.g., no remote configured)
       mockSyncModule.pullState.mockResolvedValue({
         success: false,
@@ -681,7 +684,7 @@ describe('SyncCommand - Unit Tests', () => {
       );
     });
 
-    it('[EARS-29.1] should handle conflict without updating session when no actor', async () => {
+    it('[EARS-C8] should handle conflict without updating session when no actor', async () => {
       // Setup: Conflict detected but no actor in session
       mockSyncModule.pullState.mockResolvedValue({
         success: false,
@@ -701,7 +704,7 @@ describe('SyncCommand - Unit Tests', () => {
       });
 
       // Mock session without actor
-      mockConfigManager.loadSession.mockResolvedValue({
+      mockSessionManager.loadSession.mockResolvedValue({
         lastSession: null,
         actorState: {}
       });
@@ -716,22 +719,73 @@ describe('SyncCommand - Unit Tests', () => {
       );
 
       // Verify session was NOT updated (graceful degradation)
-      expect(mockConfigManager.updateActorState).not.toHaveBeenCalled();
+      expect(mockSessionManager.updateActorState).not.toHaveBeenCalled();
+    });
+
+    it('[EARS-C10] should detect local changes conflict and show affected files during pull', async () => {
+      // Setup: Pull returns local_changes_conflict
+      mockSyncModule.pullState.mockResolvedValue({
+        success: false,
+        hasChanges: false,
+        filesUpdated: 0,
+        reindexed: false,
+        conflictDetected: true,
+        conflictInfo: {
+          type: 'local_changes_conflict',
+          affectedFiles: ['.gitgov/tasks/task-123.json'],
+          message: 'Local changes would be overwritten by pull',
+          resolutionSteps: [
+            "Run 'gitgov sync push' to push your local changes first",
+            "Or run 'gitgov sync pull --force' to overwrite local changes"
+          ]
+        }
+      });
+
+      // Execute
+      await syncCommand.executePull({});
+
+      // Verify conflict was detected and error shown
+      expect(mockProcessExit).toHaveBeenCalledWith(1);
+      expect(mockConsoleError).toHaveBeenCalledWith(
+        expect.stringContaining('Conflict')
+      );
+    });
+
+    it('[EARS-C11] should pass force flag to pullState when --force is used', async () => {
+      // Setup
+      mockSyncModule.pullState.mockResolvedValue({
+        success: true,
+        hasChanges: true,
+        filesUpdated: 2,
+        reindexed: true,
+        conflictDetected: false,
+        forcedOverwrites: ['.gitgov/tasks/task-123.json']
+      });
+
+      // Execute with force flag
+      await syncCommand.executePull({ force: true } as any);
+
+      // Verify force was passed to pullState
+      expect(mockSyncModule.pullState).toHaveBeenCalledWith(
+        expect.objectContaining({
+          force: true
+        })
+      );
     });
   });
 
   // =====================================================================
-  // EARS 17-20: Operación Resolve
+  // EARS-D1 a D5: Operación Resolve
   // =====================================================================
 
-  describe('Resolve Operation (EARS 17-20, 31)', () => {
+  describe('Resolve Operation (EARS-D1 a D5)', () => {
     beforeEach(() => {
       // Configure GitModule mock to indicate rebase in progress
       mockGitModule.isRebaseInProgress.mockResolvedValue(true);
       mockSyncModule.isRebaseInProgress.mockResolvedValue(true);
     });
 
-    it('[EARS-17] should abort if conflict markers are present', async () => {
+    it('[EARS-D1] should abort if conflict markers are present', async () => {
       // Setup: Mock file system to simulate conflict markers
       // Note: checkConflictMarkers is called internally by SyncModule
       const ConflictMarkersError = class extends Error {
@@ -752,7 +806,7 @@ describe('SyncCommand - Unit Tests', () => {
       expect(mockProcessExit).toHaveBeenCalledWith(1);
     });
 
-    it('[EARS-18] should create rebase commit and signed resolution commit', async () => {
+    it('[EARS-D2] should create rebase commit and signed resolution commit', async () => {
       // Setup
       mockSyncModule.resolveConflict.mockResolvedValue({
         success: true,
@@ -777,7 +831,7 @@ describe('SyncCommand - Unit Tests', () => {
       );
     });
 
-    it('[EARS-19] should include actor-id and reason in signed resolution commit', async () => {
+    it('[EARS-D3] should include actor-id and reason in signed resolution commit', async () => {
       // Setup
       const actorId = 'human:camilo';
       const reason = 'Kept our version because X reason';
@@ -806,7 +860,7 @@ describe('SyncCommand - Unit Tests', () => {
       );
     });
 
-    it('[EARS-20] should invoke syncModule.resolveConflict() which auto-reindexes', async () => {
+    it('[EARS-D4] should invoke syncModule.resolveConflict() which auto-reindexes', async () => {
       // Setup
       mockSyncModule.resolveConflict.mockResolvedValue({
         success: true,
@@ -827,7 +881,7 @@ describe('SyncCommand - Unit Tests', () => {
       );
     });
 
-    it('[EARS-31] should update status synced after resolve without modifying timestamps', async () => {
+    it('[EARS-D5] should update status synced after resolve without modifying timestamps', async () => {
       // Setup
       mockSyncModule.resolveConflict.mockResolvedValue({
         success: true,
@@ -842,7 +896,7 @@ describe('SyncCommand - Unit Tests', () => {
       await syncCommand.executeResolve({ reason: 'Resolved' });
 
       // Verify session update (status only, no timestamps)
-      expect(mockConfigManager.updateActorState).toHaveBeenCalledWith(
+      expect(mockSessionManager.updateActorState).toHaveBeenCalledWith(
         'human:test-user',
         expect.objectContaining({
           syncStatus: expect.objectContaining({
@@ -852,18 +906,18 @@ describe('SyncCommand - Unit Tests', () => {
       );
 
       // Verify lastSyncPush and lastSyncPull are NOT set
-      const callArgs = mockConfigManager.updateActorState.mock.calls[0][1];
+      const callArgs = mockSessionManager.updateActorState.mock.calls[0][1];
       expect(callArgs.syncStatus).not.toHaveProperty('lastSyncPush');
       expect(callArgs.syncStatus).not.toHaveProperty('lastSyncPull');
     });
   });
 
   // =====================================================================
-  // EARS 21-26: Operación Audit
+  // EARS-E1 a E6: Operación Audit
   // =====================================================================
 
-  describe('Audit Operation (EARS 21-26)', () => {
-    it('[EARS-21] should invoke auditState with options based on flags', async () => {
+  describe('Audit Operation (EARS-E1 a E6)', () => {
+    it('[EARS-E1] should invoke auditState with options based on flags', async () => {
       // Setup
       mockSyncModule.auditState.mockResolvedValue({
         passed: true,
@@ -892,7 +946,7 @@ describe('SyncCommand - Unit Tests', () => {
       });
     });
 
-    it('[EARS-22] should show success and exit code 0 if passed is true', async () => {
+    it('[EARS-E2] should show success and exit code 0 if passed is true', async () => {
       // Setup
       mockSyncModule.auditState.mockResolvedValue({
         passed: true,
@@ -914,7 +968,7 @@ describe('SyncCommand - Unit Tests', () => {
       expect(mockProcessExit).not.toHaveBeenCalled(); // Exit 0 (success)
     });
 
-    it('[EARS-23] should show detailed report and exit code 1 if failed', async () => {
+    it('[EARS-E3] should show detailed report and exit code 1 if failed', async () => {
       // Setup
       mockSyncModule.auditState.mockResolvedValue({
         passed: false,
@@ -959,7 +1013,7 @@ describe('SyncCommand - Unit Tests', () => {
       );
     });
 
-    it('[EARS-24] should skip verifications based on flags', async () => {
+    it('[EARS-E4] should skip verifications based on flags', async () => {
       // Setup
       mockSyncModule.auditState.mockResolvedValue({
         passed: true,
@@ -988,7 +1042,7 @@ describe('SyncCommand - Unit Tests', () => {
       });
     });
 
-    it('[EARS-25] should map --scope flag to scope option in auditState', async () => {
+    it('[EARS-E5] should map --scope flag to scope option in auditState', async () => {
       // Setup
       mockSyncModule.auditState.mockResolvedValue({
         passed: true,
@@ -1011,7 +1065,7 @@ describe('SyncCommand - Unit Tests', () => {
       );
     });
 
-    it('[EARS-26] should map --files-scope flag to expectedFilesScope', async () => {
+    it('[EARS-E6] should map --files-scope flag to expectedFilesScope', async () => {
       // Setup
       mockSyncModule.auditState.mockResolvedValue({
         passed: true,
@@ -1036,10 +1090,10 @@ describe('SyncCommand - Unit Tests', () => {
   });
 
   // =====================================================================
-  // EARS 32: Actualización de lastError en syncStatus
+  // EARS-F1 a F2: Actualización de lastError en syncStatus
   // =====================================================================
 
-  describe('Error Tracking (EARS 32)', () => {
+  describe('Error Tracking (EARS-F1 a F2)', () => {
     beforeEach(() => {
       mockSyncModule.auditState.mockResolvedValue({
         passed: true,
@@ -1052,7 +1106,7 @@ describe('SyncCommand - Unit Tests', () => {
       });
     });
 
-    it('[EARS-32] should update lastError in syncStatus when push fails', async () => {
+    it('[EARS-F1] should update lastError in syncStatus when push fails', async () => {
       // Setup
       mockSyncModule.pushState.mockRejectedValue(new Error('Network error during push'));
 
@@ -1060,7 +1114,7 @@ describe('SyncCommand - Unit Tests', () => {
       await syncCommand.executePush({});
 
       // Verify error was logged to session
-      expect(mockConfigManager.updateActorState).toHaveBeenCalledWith(
+      expect(mockSessionManager.updateActorState).toHaveBeenCalledWith(
         'human:test-user',
         expect.objectContaining({
           syncStatus: expect.objectContaining({
@@ -1070,7 +1124,7 @@ describe('SyncCommand - Unit Tests', () => {
       );
     });
 
-    it('[EARS-32] should update lastError in syncStatus when pull fails', async () => {
+    it('[EARS-F1] should update lastError in syncStatus when pull fails', async () => {
       // Setup
       mockSyncModule.pullState.mockRejectedValue(new Error('Git operation failed'));
 
@@ -1078,7 +1132,7 @@ describe('SyncCommand - Unit Tests', () => {
       await syncCommand.executePull({});
 
       // Verify error was logged to session
-      expect(mockConfigManager.updateActorState).toHaveBeenCalledWith(
+      expect(mockSessionManager.updateActorState).toHaveBeenCalledWith(
         'human:test-user',
         expect.objectContaining({
           syncStatus: expect.objectContaining({
@@ -1088,7 +1142,7 @@ describe('SyncCommand - Unit Tests', () => {
       );
     });
 
-    it('[EARS-32] should update lastError in syncStatus when resolve fails', async () => {
+    it('[EARS-F1] should update lastError in syncStatus when resolve fails', async () => {
       // Setup: Mock rebase in progress
       mockGitModule.isRebaseInProgress.mockResolvedValue(true);
       mockSyncModule.isRebaseInProgress.mockResolvedValue(true);
@@ -1098,7 +1152,7 @@ describe('SyncCommand - Unit Tests', () => {
       await syncCommand.executeResolve({ reason: 'Test resolution' });
 
       // Verify error was logged to session
-      expect(mockConfigManager.updateActorState).toHaveBeenCalledWith(
+      expect(mockSessionManager.updateActorState).toHaveBeenCalledWith(
         'human:test-user',
         expect.objectContaining({
           syncStatus: expect.objectContaining({
@@ -1108,7 +1162,7 @@ describe('SyncCommand - Unit Tests', () => {
       );
     });
 
-    it('[EARS-32] should update lastError in syncStatus when audit fails', async () => {
+    it('[EARS-F1] should update lastError in syncStatus when audit fails', async () => {
       // Setup
       mockSyncModule.auditState.mockRejectedValue(new Error('Unable to read state branch'));
 
@@ -1116,7 +1170,7 @@ describe('SyncCommand - Unit Tests', () => {
       await syncCommand.executeAudit({});
 
       // Verify error was logged to session
-      expect(mockConfigManager.updateActorState).toHaveBeenCalledWith(
+      expect(mockSessionManager.updateActorState).toHaveBeenCalledWith(
         'human:test-user',
         expect.objectContaining({
           syncStatus: expect.objectContaining({
@@ -1124,6 +1178,46 @@ describe('SyncCommand - Unit Tests', () => {
           })
         })
       );
+    });
+
+    it('[EARS-F2] should ignore session update errors and propagate original error', async () => {
+      // Setup: Push fails with network error
+      mockSyncModule.auditState.mockResolvedValue({
+        passed: true,
+        scope: 'current',
+        totalCommits: 10,
+        rebaseCommits: 0,
+        resolutionCommits: 0,
+        integrityViolations: [],
+        summary: 'All checks passed'
+      });
+
+      const originalError = new Error('Network error during push');
+      mockSyncModule.pushState.mockRejectedValue(originalError);
+
+      // Mock updateActorState to fail (simulating session update error)
+      mockSessionManager.updateActorState.mockRejectedValue(
+        new Error('Failed to update session')
+      );
+
+      // Execute
+      await syncCommand.executePush({});
+
+      // Verify original error is propagated (not masked by session update error)
+      expect(mockProcessExit).toHaveBeenCalledWith(1);
+      expect(mockConsoleError).toHaveBeenCalledWith(
+        expect.stringContaining('Push failed: Network error during push')
+      );
+
+      // Verify session update was attempted (but failed gracefully)
+      expect(mockSessionManager.updateActorState).toHaveBeenCalled();
+
+      // Verify original error message is preserved (not session update error)
+      const errorCalls = mockConsoleError.mock.calls;
+      const hasOriginalError = errorCalls.some(call =>
+        call[0].includes('Network error during push')
+      );
+      expect(hasOriginalError).toBe(true);
     });
   });
 
@@ -1197,7 +1291,7 @@ describe('SyncCommand - Unit Tests', () => {
   describe('Error Handling', () => {
     it('should handle missing session gracefully', async () => {
       // Setup: No session
-      mockConfigManager.loadSession.mockResolvedValue(null);
+      mockSessionManager.loadSession.mockResolvedValue(null);
 
       // Execute
       await syncCommand.executePush({});
@@ -1233,46 +1327,6 @@ describe('SyncCommand - Unit Tests', () => {
       expect(mockConsoleError).toHaveBeenCalledWith(
         expect.stringContaining('Push failed')
       );
-    });
-
-    it('[EARS-32.1] should ignore session update errors and propagate original error', async () => {
-      // Setup: Push fails with network error
-      mockSyncModule.auditState.mockResolvedValue({
-        passed: true,
-        scope: 'current',
-        totalCommits: 10,
-        rebaseCommits: 0,
-        resolutionCommits: 0,
-        integrityViolations: [],
-        summary: 'All checks passed'
-      });
-
-      const originalError = new Error('Network error during push');
-      mockSyncModule.pushState.mockRejectedValue(originalError);
-
-      // Mock updateActorState to fail (simulating session update error)
-      mockConfigManager.updateActorState.mockRejectedValue(
-        new Error('Failed to update session')
-      );
-
-      // Execute
-      await syncCommand.executePush({});
-
-      // Verify original error is propagated (not masked by session update error)
-      expect(mockProcessExit).toHaveBeenCalledWith(1);
-      expect(mockConsoleError).toHaveBeenCalledWith(
-        expect.stringContaining('Push failed: Network error during push')
-      );
-
-      // Verify session update was attempted (but failed gracefully)
-      expect(mockConfigManager.updateActorState).toHaveBeenCalled();
-
-      // Verify original error message is preserved (not session update error)
-      const errorCalls = mockConsoleError.mock.calls;
-      const hasOriginalError = errorCalls.some(call =>
-        call[0].includes('Network error during push')
-      );
-      expect(hasOriginalError).toBe(true);
     });
   });
 });

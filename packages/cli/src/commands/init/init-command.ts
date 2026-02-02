@@ -1,8 +1,7 @@
-import type { Adapters, TaskRecord, CycleRecord, ActorRecord, AgentRecord, FeedbackRecord, ExecutionRecord, ChangelogRecord } from '@gitgov/core';
-import { Git } from '@gitgov/core';
+import type { Adapters } from '@gitgov/core';
+import { DependencyInjectionService } from '../../services/dependency-injection';
 
 import * as pathUtils from 'path';
-import { spawn } from 'child_process';
 
 /**
  * Init Command Options interface
@@ -28,8 +27,10 @@ export interface InitCommandOptions {
  * Delegates all business logic to ProjectAdapter and focuses on UX excellence.
  */
 export class InitCommand {
+  private container = DependencyInjectionService.getInstance();
+
   /**
-   * [EARS-1] Main execution method with complete project bootstrap
+   * [EARS-A1] Main execution method with complete project bootstrap
    */
   async execute(options: InitCommandOptions): Promise<void> {
     try {
@@ -50,14 +51,17 @@ export class InitCommand {
       // 5. Delegate ALL business logic to ProjectAdapter
       progressTracker.start("🚀 Initializing GitGovernance Project...\n");
 
-      // Build ProjectInitOptions with only defined values
+      // [EARS-D1] Build ProjectInitOptions handling all flag combinations correctly
+      // [EARS-A2] Root cycle created via ProjectAdapter with project name
       const projectInitOptions: Adapters.ProjectInitOptions = {
         name: completeOptions.name!,
       };
 
+      // [EARS-A3] Process template when specified
       if (completeOptions.template) projectInitOptions.template = completeOptions.template;
       if (completeOptions.actorName) projectInitOptions.actorName = completeOptions.actorName;
       if (completeOptions.actorEmail) projectInitOptions.actorEmail = completeOptions.actorEmail;
+      // [EARS-A4] Configure methodology according to flag
       if (completeOptions.methodology) projectInitOptions.methodology = completeOptions.methodology;
       if (completeOptions.skipValidation) projectInitOptions.skipValidation = completeOptions.skipValidation;
       if (completeOptions.verbose) projectInitOptions.verbose = completeOptions.verbose;
@@ -78,7 +82,8 @@ export class InitCommand {
   // ===== PRIVATE HELPER METHODS =====
 
   /**
-   * [EARS-15] Validates environment before initialization
+   * [EARS-C5] Validates environment before initialization
+   * [EARS-B2] Shows validation errors with warnings and suggestions
    */
   private async validateEnvironment(options: InitCommandOptions): Promise<void> {
     const projectAdapter = await this.getProjectAdapter();
@@ -109,138 +114,17 @@ export class InitCommand {
   }
 
   /**
-   * Gets ProjectAdapter from dependency injection
+   * [EARS-B1] Gets ProjectAdapter for complete orchestration via DI.
+   * Uses setInitMode() to bypass .gitgov discovery (it doesn't exist yet).
    */
   private async getProjectAdapter(): Promise<Adapters.ProjectAdapter> {
-    // For init command, ALWAYS create adapter manually using current directory
-    // NEVER use DependencyInjectionService which searches for existing .gitgov
-    try {
-      const { Adapters, Store, Config, EventBus, KeyProvider } = await import('@gitgov/core');
-
-      // For init: Use original directory where user executed command
-      const projectRoot = process.env['GITGOV_ORIGINAL_DIR'] || process.cwd();
-      const eventBus = new EventBus.EventBus();
-
-      const { Factories } = await import('@gitgov/core');
-
-      // Create KeyProvider for filesystem-based key storage
-      const keyProvider = new KeyProvider.FsKeyProvider({
-        actorsDir: `${projectRoot}/.gitgov/actors`
-      });
-
-      const taskStore = new Store.RecordStore<TaskRecord>('tasks', Factories.loadTaskRecord, projectRoot);
-      const cycleStore = new Store.RecordStore<CycleRecord>('cycles', Factories.loadCycleRecord, projectRoot);
-      const actorStore = new Store.RecordStore<ActorRecord>('actors', Factories.loadActorRecord, projectRoot);
-      const agentStore = new Store.RecordStore<AgentRecord>('agents', Factories.loadAgentRecord, projectRoot);
-      const feedbackStore = new Store.RecordStore<FeedbackRecord>('feedback', Factories.loadFeedbackRecord, projectRoot);
-      const executionStore = new Store.RecordStore<ExecutionRecord>('executions', Factories.loadExecutionRecord, projectRoot);
-      const changelogStore = new Store.RecordStore<ChangelogRecord>('changelogs', Factories.loadChangelogRecord, projectRoot);
-
-      // Create adapters
-      const identityAdapter = new Adapters.IdentityAdapter({
-        actorStore,
-        agentStore,
-        keyProvider,
-        eventBus
-      });
-
-      // Create other adapters first
-      const feedbackAdapter = new Adapters.FeedbackAdapter({
-        feedbackStore,
-        identity: identityAdapter,
-        eventBus
-      });
-
-      const executionAdapter = new Adapters.ExecutionAdapter({
-        executionStore,
-        identity: identityAdapter,
-        eventBus
-      });
-
-      const changelogAdapter = new Adapters.ChangelogAdapter({
-        changelogStore,
-        identity: identityAdapter,
-        eventBus
-      });
-
-      const metricsAdapter = new Adapters.MetricsAdapter({
-        taskStore,
-        cycleStore,
-        feedbackStore,
-        executionStore,
-        actorStore,
-      });
-
-      const workflowMethodologyAdapter = Adapters.WorkflowMethodologyAdapter.createDefault(feedbackAdapter);
-
-      // Create ConfigManager (needed by BacklogAdapter)
-      const configManager = Config.createConfigManager(projectRoot);
-
-      const backlogAdapter = new Adapters.BacklogAdapter({
-        taskStore,
-        cycleStore,
-        feedbackStore,
-        executionStore,
-        changelogStore,
-        feedbackAdapter,
-        executionAdapter,
-        changelogAdapter,
-        metricsAdapter,
-        workflowMethodologyAdapter,
-        identity: identityAdapter,
-        eventBus,
-        configManager
-      });
-
-      // Create execCommand for GitModule
-      const execCommand = (command: string, args: string[], options?: any) => {
-        return new Promise<{ exitCode: number; stdout: string; stderr: string }>((resolve) => {
-          const proc = spawn(command, args, {
-            cwd: options?.cwd || projectRoot,
-            env: { ...process.env, ...options?.env },
-          });
-
-          let stdout = '';
-          let stderr = '';
-
-          proc.stdout?.on('data', (data) => { stdout += data.toString(); });
-          proc.stderr?.on('data', (data) => { stderr += data.toString(); });
-
-          proc.on('close', (code) => {
-            resolve({ exitCode: code || 0, stdout, stderr });
-          });
-
-          proc.on('error', (error) => {
-            resolve({ exitCode: 1, stdout, stderr: error.message });
-          });
-        });
-      };
-
-      // Create GitModule
-      const gitModule = new Git.GitModule({
-        repoRoot: projectRoot,
-        execCommand
-      });
-
-      // Note: SyncModule and LintModule are NOT needed for init
-      // LintModule was removed as unused (created for SyncModule which is also not needed)
-      // gitgov-state branch is created lazily on first "sync push"
-
-      const projectAdapter = new Adapters.ProjectAdapter({
-        identityAdapter,
-        backlogAdapter,
-        gitModule,
-        configManager,
-      });
-
-      return projectAdapter;
-    } catch (error) {
-      throw new Error(`Failed to create ProjectAdapter for init: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    this.container.setInitMode(process.cwd());
+    return this.container.getProjectAdapter();
   }
 
   /**
-   * Creates progress tracker for visual feedback
+   * [EARS-C1] Creates progress tracker for visual feedback with --verbose
+   * [EARS-C3] Respects --quiet flag for scripting
    */
   private createProgressTracker(options: InitCommandOptions) {
     return {
@@ -262,7 +146,8 @@ export class InitCommand {
   }
 
   /**
-   * Gathers missing information through interactive prompts
+   * [EARS-D3] Gathers missing information through interactive prompts
+   * [EARS-A5] Uses intelligent defaults from git config and directory name
    */
   private async gatherMissingInfo(options: InitCommandOptions): Promise<Required<Pick<InitCommandOptions, 'name' | 'actorName'>> & InitCommandOptions> {
     // Get project name
@@ -283,7 +168,7 @@ export class InitCommand {
    */
   private async getProjectNameDefault(): Promise<string> {
     // For project name, always use current directory, not search upward
-    const currentDir = process.env['GITGOV_ORIGINAL_DIR'] || process.cwd();
+    const currentDir = process.cwd();
     return pathUtils.basename(currentDir);
   }
 
@@ -302,7 +187,9 @@ export class InitCommand {
   }
 
   /**
-   * [EARS-14] Shows success output with visual impact
+   * [EARS-C4] Shows success output with visual impact
+   * [EARS-C2] Handles --json output for automation
+   * [EARS-B4] Shows performance metrics in output
    */
   private showSuccessOutput(result: Adapters.ProjectInitResult, options: InitCommandOptions): void {
     if (options.json) {
@@ -368,7 +255,9 @@ export class InitCommand {
   }
 
   /**
-   * Handles errors with user-friendly messages
+   * [EARS-D2] Handles errors with user-friendly messages and troubleshooting suggestions
+   * [EARS-B3] Captures adapter errors with specific context
+   * [EARS-B5] Shows rollback message when adapter fails
    */
   private handleError(error: unknown, options: InitCommandOptions): void {
     let message: string;

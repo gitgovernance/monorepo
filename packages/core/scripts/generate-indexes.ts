@@ -16,8 +16,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Paths
-const SCHEMAS_GENERATED_DIR = path.join(__dirname, '../src/schemas/generated');
-const TYPES_GENERATED_DIR = path.join(__dirname, '../src/types/generated');
+const SCHEMAS_GENERATED_DIR = path.join(__dirname, '../src/record_schemas/generated');
+const TYPES_GENERATED_DIR = path.join(__dirname, '../src/record_types/generated');
 
 /**
  * Convert filename to camelCase variable name

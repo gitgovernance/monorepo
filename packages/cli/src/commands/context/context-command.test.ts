@@ -1,11 +1,15 @@
-// Mock @gitgov/core FIRST to avoid import.meta issues in Jest
-jest.mock('@gitgov/core', () => ({
-  Config: {
-    ConfigManager: jest.fn(),
-    createConfigManager: jest.fn()
-  },
-  Records: {}
-}));
+/**
+ * ContextCommand Unit Tests
+ *
+ * Blueprint: packages/blueprints/03_products/cli/specs/context_command.md
+ * All EARS prefixes map to context_command.md §4.1-4.4
+ *
+ * EARS Coverage:
+ * - §4.1 Consulta de Contexto Básica (EARS-A1 to A4)
+ * - §4.2 Manejo de Valores Nulos y Edge Cases (EARS-B1 to B3)
+ * - §4.3 Manejo de Errores (EARS-C1 to C5)
+ * - §4.4 Edge Cases Adicionales (EARS-D1)
+ */
 
 // Mock DependencyInjectionService before importing
 jest.mock('../../services/dependency-injection', () => ({
@@ -16,7 +20,6 @@ jest.mock('../../services/dependency-injection', () => ({
 
 import { ContextCommand } from './context-command';
 import { DependencyInjectionService } from '../../services/dependency-injection';
-import { Config } from '@gitgov/core';
 import type { ActorRecord } from '@gitgov/core';
 
 // Mock console methods to capture output
@@ -24,22 +27,22 @@ const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation();
 const mockConsoleError = jest.spyOn(console, 'error').mockImplementation();
 const mockProcessExit = jest.spyOn(process, 'exit').mockImplementation();
 
-describe('ContextCommand - Complete Unit Tests', () => {
+describe('ContextCommand', () => {
   let contextCommand: ContextCommand;
-  let mockConfigManager: {
-    getActorContext: jest.MockedFunction<(actorId: string) => Promise<{
-      actorId: string;
-      activeCycleId: string | null;
-      activeTaskId: string | null;
-      rootCycle: string | null;
-      projectInfo: { id: string; name: string } | null;
-    }>>;
-  };
   let mockIdentityAdapter: {
     getCurrentActor: jest.MockedFunction<() => Promise<ActorRecord>>;
   };
+  let mockConfigManager: {
+    getProjectInfo: jest.MockedFunction<() => Promise<{ id: string; name: string } | null>>;
+    getRootCycle: jest.MockedFunction<() => Promise<string | null>>;
+  };
+  let mockSessionManager: {
+    getActorState: jest.MockedFunction<() => Promise<unknown>>;
+  };
   let mockDependencyService: {
     getIdentityAdapter: jest.MockedFunction<() => Promise<typeof mockIdentityAdapter>>;
+    getConfigManager: jest.MockedFunction<() => Promise<typeof mockConfigManager>>;
+    getSessionManager: jest.MockedFunction<() => Promise<typeof mockSessionManager>>;
   };
 
   const sampleActor: ActorRecord = {
@@ -50,74 +53,65 @@ describe('ContextCommand - Complete Unit Tests', () => {
     roles: ['developer']
   };
 
-  const sampleContext = {
-    actorId: 'human:test-user',
-    activeCycleId: '1757789000-cycle-test-cycle',
-    activeTaskId: '1757789000-task-test-task',
-    rootCycle: '1757789000-cycle-root',
-    projectInfo: {
-      id: 'test-project',
-      name: 'Test Project'
-    }
+  const sampleProjectInfo = {
+    id: 'test-project',
+    name: 'Test Project'
   };
 
-  const sampleContextNoActive = {
-    actorId: 'human:test-user',
-    activeCycleId: null,
-    activeTaskId: null,
-    rootCycle: '1757789000-cycle-root',
-    projectInfo: {
-      id: 'test-project',
-      name: 'Test Project'
-    }
+  const sampleActorState = {
+    activeCycleId: '1757789000-cycle-test-cycle',
+    activeTaskId: '1757789000-task-test-task',
+    syncStatus: null,
   };
 
   beforeEach(() => {
-    // Reset all mocks
     jest.clearAllMocks();
 
-    // Create mock ConfigManager
-    mockConfigManager = {
-      getActorContext: jest.fn()
-    };
-
-    // Create mock IdentityAdapter
     mockIdentityAdapter = {
       getCurrentActor: jest.fn()
     };
 
-    // Create mock dependency service
-    mockDependencyService = {
-      getIdentityAdapter: jest.fn().mockResolvedValue(mockIdentityAdapter)
+    mockConfigManager = {
+      getProjectInfo: jest.fn(),
+      getRootCycle: jest.fn(),
     };
 
-    // Mock DependencyInjectionService.getInstance()
+    mockSessionManager = {
+      getActorState: jest.fn(),
+    };
+
+    mockDependencyService = {
+      getIdentityAdapter: jest.fn().mockResolvedValue(mockIdentityAdapter),
+      getConfigManager: jest.fn().mockResolvedValue(mockConfigManager),
+      getSessionManager: jest.fn().mockResolvedValue(mockSessionManager),
+    };
+
     (DependencyInjectionService.getInstance as jest.Mock).mockReturnValue(mockDependencyService);
 
-    // Mock Config.createConfigManager factory function
-    (Config.createConfigManager as unknown as jest.Mock).mockReturnValue(mockConfigManager);
-
-    // Create ContextCommand
     contextCommand = new ContextCommand();
 
     // Setup default mock returns
     mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
-    mockConfigManager.getActorContext.mockResolvedValue(sampleContext);
+    mockConfigManager.getProjectInfo.mockResolvedValue(sampleProjectInfo);
+    mockConfigManager.getRootCycle.mockResolvedValue('1757789000-cycle-root');
+    mockSessionManager.getActorState.mockResolvedValue(sampleActorState);
   });
 
   afterEach(() => {
-    // Reset mocks after each test
     mockConsoleLog.mockClear();
     mockConsoleError.mockClear();
     mockProcessExit.mockClear();
   });
 
-  describe('Basic Context Query (EARS 1-4)', () => {
-    it('[EARS-1] should query context for current actor by default', async () => {
+  // ============================================================================
+  // §4.1. Consulta de Contexto Básica (EARS-A1 to A4)
+  // ============================================================================
+  describe('4.1. Consulta de Contexto Básica (EARS-A1 to A4)', () => {
+    it('[EARS-A1] should query context for current actor by default', async () => {
       await contextCommand.execute({});
 
       expect(mockIdentityAdapter.getCurrentActor).toHaveBeenCalled();
-      expect(mockConfigManager.getActorContext).toHaveBeenCalledWith('human:test-user');
+      expect(mockSessionManager.getActorState).toHaveBeenCalledWith('human:test-user');
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('👤 Actor: human:test-user'));
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('📁 Project: Test Project'));
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('🔗 Root Cycle: 1757789000-cycle-root'));
@@ -125,52 +119,43 @@ describe('ContextCommand - Complete Unit Tests', () => {
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('📋 Active Task: 1757789000-task-test-task'));
     });
 
-    it('[EARS-2] should output JSON format when --json flag is provided', async () => {
+    it('[EARS-A2] should output JSON format when --json flag is provided', async () => {
       await contextCommand.execute({ json: true });
 
-      expect(mockConfigManager.getActorContext).toHaveBeenCalledWith('human:test-user');
-      expect(mockConsoleLog).toHaveBeenCalledWith(
-        JSON.stringify(sampleContext, null, 2)
-      );
+      expect(mockSessionManager.getActorState).toHaveBeenCalledWith('human:test-user');
+      expect(mockConsoleLog.mock.calls[0]).toBeDefined();
+      const output = mockConsoleLog.mock.calls[0]![0];
+      const parsed = JSON.parse(output as string);
+
+      expect(parsed.actorId).toBe('human:test-user');
+      expect(parsed.projectInfo).toEqual(sampleProjectInfo);
+      expect(parsed.rootCycle).toBe('1757789000-cycle-root');
+      expect(parsed.activeCycleId).toBe('1757789000-cycle-test-cycle');
+      expect(parsed.activeTaskId).toBe('1757789000-task-test-task');
     });
 
-    it('[EARS-3] should query context for specific actor when --actor flag is provided', async () => {
-      const otherActorContext = {
-        actorId: 'agent:alice:cursor',
+    it('[EARS-A3] should query context for specific actor when --actor is provided', async () => {
+      mockSessionManager.getActorState.mockResolvedValue({
         activeCycleId: '1757789000-cycle-alice-cycle',
         activeTaskId: null,
-        rootCycle: '1757789000-cycle-root',
-        projectInfo: {
-          id: 'test-project',
-          name: 'Test Project'
-        }
-      };
-
-      mockConfigManager.getActorContext.mockResolvedValue(otherActorContext);
+        syncStatus: null,
+      });
 
       await contextCommand.execute({ actor: 'agent:alice:cursor' });
 
-      // Should NOT call getCurrentActor when --actor is provided
       expect(mockIdentityAdapter.getCurrentActor).not.toHaveBeenCalled();
-      expect(mockConfigManager.getActorContext).toHaveBeenCalledWith('agent:alice:cursor');
+      expect(mockSessionManager.getActorState).toHaveBeenCalledWith('agent:alice:cursor');
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('👤 Actor: agent:alice:cursor'));
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('⚡ Active Cycle: 1757789000-cycle-alice-cycle'));
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('📋 Active Task: none'));
     });
 
-    it('[EARS-4] should query context for specific actor with JSON output', async () => {
-      const otherActorContext = {
-        actorId: 'agent:bob:assistant',
+    it('[EARS-A4] should query context for specific actor with JSON output', async () => {
+      mockSessionManager.getActorState.mockResolvedValue({
         activeCycleId: null,
         activeTaskId: '1757789000-task-bob-task',
-        rootCycle: '1757789000-cycle-root',
-        projectInfo: {
-          id: 'test-project',
-          name: 'Test Project'
-        }
-      };
-
-      mockConfigManager.getActorContext.mockResolvedValue(otherActorContext);
+        syncStatus: null,
+      });
 
       await contextCommand.execute({
         actor: 'agent:bob:assistant',
@@ -178,16 +163,26 @@ describe('ContextCommand - Complete Unit Tests', () => {
       });
 
       expect(mockIdentityAdapter.getCurrentActor).not.toHaveBeenCalled();
-      expect(mockConfigManager.getActorContext).toHaveBeenCalledWith('agent:bob:assistant');
-      expect(mockConsoleLog).toHaveBeenCalledWith(
-        JSON.stringify(otherActorContext, null, 2)
-      );
+      expect(mockSessionManager.getActorState).toHaveBeenCalledWith('agent:bob:assistant');
+
+      expect(mockConsoleLog.mock.calls[0]).toBeDefined();
+      const output = mockConsoleLog.mock.calls[0]![0];
+      const parsed = JSON.parse(output as string);
+
+      expect(parsed.actorId).toBe('agent:bob:assistant');
+      expect(parsed.activeCycleId).toBeNull();
+      expect(parsed.activeTaskId).toBe('1757789000-task-bob-task');
+      expect(parsed.rootCycle).toBe('1757789000-cycle-root');
+      expect(parsed.projectInfo).toEqual(sampleProjectInfo);
     });
   });
 
-  describe('Null Values and Edge Cases (EARS 5-7)', () => {
-    it('[EARS-5] should display "none" for null values in human-readable output', async () => {
-      mockConfigManager.getActorContext.mockResolvedValue(sampleContextNoActive);
+  // ============================================================================
+  // §4.2. Manejo de Valores Nulos y Edge Cases (EARS-B1 to B3)
+  // ============================================================================
+  describe('4.2. Manejo de Valores Nulos y Edge Cases (EARS-B1 to B3)', () => {
+    it('[EARS-B1] should display "none" for null values in human-readable output', async () => {
+      mockSessionManager.getActorState.mockResolvedValue(null);
 
       await contextCommand.execute({});
 
@@ -195,8 +190,8 @@ describe('ContextCommand - Complete Unit Tests', () => {
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('📋 Active Task: none'));
     });
 
-    it('[EARS-5] should return null (not "none") for null values in JSON output', async () => {
-      mockConfigManager.getActorContext.mockResolvedValue(sampleContextNoActive);
+    it('[EARS-B1] should return null (not "none") for null values in JSON output', async () => {
+      mockSessionManager.getActorState.mockResolvedValue(null);
 
       await contextCommand.execute({ json: true });
 
@@ -210,35 +205,22 @@ describe('ContextCommand - Complete Unit Tests', () => {
       expect(parsed.activeTaskId).not.toBe('none');
     });
 
-    it('[EARS-6] should handle null projectInfo gracefully in human-readable output', async () => {
-      const contextWithoutProject = {
-        actorId: 'human:test-user',
-        activeCycleId: null,
-        activeTaskId: null,
-        rootCycle: null,
-        projectInfo: null
-      };
-
-      mockConfigManager.getActorContext.mockResolvedValue(contextWithoutProject);
+    it('[EARS-B2] should handle null projectInfo gracefully in human-readable output', async () => {
+      mockConfigManager.getProjectInfo.mockResolvedValue(null);
+      mockConfigManager.getRootCycle.mockResolvedValue(null);
+      mockSessionManager.getActorState.mockResolvedValue(null);
 
       await contextCommand.execute({});
 
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('👤 Actor: human:test-user'));
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('🔗 Root Cycle: none'));
-      // Should not log project info if null
       expect(mockConsoleLog).not.toHaveBeenCalledWith(expect.stringContaining('📁 Project:'));
     });
 
-    it('[EARS-6] should return null for projectInfo in JSON output', async () => {
-      const contextWithoutProject = {
-        actorId: 'human:test-user',
-        activeCycleId: null,
-        activeTaskId: null,
-        rootCycle: null,
-        projectInfo: null
-      };
-
-      mockConfigManager.getActorContext.mockResolvedValue(contextWithoutProject);
+    it('[EARS-B2] should return null for projectInfo in JSON output', async () => {
+      mockConfigManager.getProjectInfo.mockResolvedValue(null);
+      mockConfigManager.getRootCycle.mockResolvedValue(null);
+      mockSessionManager.getActorState.mockResolvedValue(null);
 
       await contextCommand.execute({ json: true });
 
@@ -249,19 +231,8 @@ describe('ContextCommand - Complete Unit Tests', () => {
       expect(parsed.projectInfo).toBeNull();
     });
 
-    it('[EARS-7] should handle context with only rootCycle in human-readable output (show "none" for missing values)', async () => {
-      const rootOnlyContext = {
-        actorId: 'human:test-user',
-        activeCycleId: null,
-        activeTaskId: null,
-        rootCycle: '1757789000-cycle-root',
-        projectInfo: {
-          id: 'test-project',
-          name: 'Test Project'
-        }
-      };
-
-      mockConfigManager.getActorContext.mockResolvedValue(rootOnlyContext);
+    it('[EARS-B3] should handle context with only rootCycle in human-readable output', async () => {
+      mockSessionManager.getActorState.mockResolvedValue(null);
 
       await contextCommand.execute({});
 
@@ -270,19 +241,8 @@ describe('ContextCommand - Complete Unit Tests', () => {
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('📋 Active Task: none'));
     });
 
-    it('[EARS-7] should handle context with only rootCycle in JSON output (return null for missing values)', async () => {
-      const rootOnlyContext = {
-        actorId: 'human:test-user',
-        activeCycleId: null,
-        activeTaskId: null,
-        rootCycle: '1757789000-cycle-root',
-        projectInfo: {
-          id: 'test-project',
-          name: 'Test Project'
-        }
-      };
-
-      mockConfigManager.getActorContext.mockResolvedValue(rootOnlyContext);
+    it('[EARS-B3] should handle context with only rootCycle in JSON output', async () => {
+      mockSessionManager.getActorState.mockResolvedValue(null);
 
       await contextCommand.execute({ json: true });
 
@@ -296,8 +256,11 @@ describe('ContextCommand - Complete Unit Tests', () => {
     });
   });
 
-  describe('Error Handling (EARS 8-12)', () => {
-    it('[EARS-8] should handle error when getCurrentActor fails', async () => {
+  // ============================================================================
+  // §4.3. Manejo de Errores (EARS-C1 to C5)
+  // ============================================================================
+  describe('4.3. Manejo de Errores (EARS-C1 to C5)', () => {
+    it('[EARS-C1] should handle error when getCurrentActor fails', async () => {
       const error = new Error('Failed to get current actor');
       mockIdentityAdapter.getCurrentActor.mockRejectedValue(error);
 
@@ -307,19 +270,19 @@ describe('ContextCommand - Complete Unit Tests', () => {
       expect(mockProcessExit).toHaveBeenCalledWith(1);
     });
 
-    it('[EARS-9] should handle error when getActorContext fails', async () => {
-      const error = new Error('Failed to get actor context');
-      mockConfigManager.getActorContext.mockRejectedValue(error);
+    it('[EARS-C2] should handle error when getActorState fails', async () => {
+      const error = new Error('Failed to get actor state');
+      mockSessionManager.getActorState.mockRejectedValue(error);
 
       await contextCommand.execute({});
 
-      expect(mockConsoleError).toHaveBeenCalledWith(expect.stringContaining('❌ Error: Failed to get actor context'));
+      expect(mockConsoleError).toHaveBeenCalledWith(expect.stringContaining('❌ Error: Failed to get actor state'));
       expect(mockProcessExit).toHaveBeenCalledWith(1);
     });
 
-    it('[EARS-10] should output error in JSON format when --json flag is provided', async () => {
+    it('[EARS-C3] should output error in JSON format when --json flag is provided', async () => {
       const error = new Error('Config file not found');
-      mockConfigManager.getActorContext.mockRejectedValue(error);
+      mockConfigManager.getProjectInfo.mockRejectedValue(error);
 
       await contextCommand.execute({ json: true });
 
@@ -332,8 +295,8 @@ describe('ContextCommand - Complete Unit Tests', () => {
       expect(mockProcessExit).toHaveBeenCalledWith(1);
     });
 
-    it('[EARS-11] should handle unknown error type gracefully', async () => {
-      mockConfigManager.getActorContext.mockRejectedValue('Unknown error string');
+    it('[EARS-C4] should handle unknown error type gracefully', async () => {
+      mockSessionManager.getActorState.mockRejectedValue('Unknown error string');
 
       await contextCommand.execute({});
 
@@ -341,33 +304,25 @@ describe('ContextCommand - Complete Unit Tests', () => {
       expect(mockProcessExit).toHaveBeenCalledWith(1);
     });
 
-    it('[EARS-12] should handle error when querying specific actor that does not exist', async () => {
+    it('[EARS-C5] should handle error when querying specific actor not found', async () => {
       const error = new Error('Actor not found in session');
-      mockConfigManager.getActorContext.mockRejectedValue(error);
+      mockSessionManager.getActorState.mockRejectedValue(error);
 
       await contextCommand.execute({ actor: 'agent:nonexistent:agent' });
 
       expect(mockIdentityAdapter.getCurrentActor).not.toHaveBeenCalled();
-      expect(mockConfigManager.getActorContext).toHaveBeenCalledWith('agent:nonexistent:agent');
+      expect(mockSessionManager.getActorState).toHaveBeenCalledWith('agent:nonexistent:agent');
       expect(mockConsoleError).toHaveBeenCalledWith(expect.stringContaining('❌ Error: Actor not found in session'));
       expect(mockProcessExit).toHaveBeenCalledWith(1);
     });
   });
 
-  describe('Additional Edge Cases (EARS 13)', () => {
-    it('[EARS-13] should handle empty actor state in human-readable output (show null values and rootCycle)', async () => {
-      const emptyContext = {
-        actorId: 'human:new-user',
-        activeCycleId: null,
-        activeTaskId: null,
-        rootCycle: '1757789000-cycle-root',
-        projectInfo: {
-          id: 'test-project',
-          name: 'Test Project'
-        }
-      };
-
-      mockConfigManager.getActorContext.mockResolvedValue(emptyContext);
+  // ============================================================================
+  // §4.4. Edge Cases Adicionales (EARS-D1)
+  // ============================================================================
+  describe('4.4. Edge Cases Adicionales (EARS-D1)', () => {
+    it('[EARS-D1] should handle empty actor state in human-readable output', async () => {
+      mockSessionManager.getActorState.mockResolvedValue(null);
 
       await contextCommand.execute({ actor: 'human:new-user' });
 
@@ -377,19 +332,8 @@ describe('ContextCommand - Complete Unit Tests', () => {
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('📋 Active Task: none'));
     });
 
-    it('[EARS-13] should handle empty actor state in JSON output (return null values and rootCycle)', async () => {
-      const emptyContext = {
-        actorId: 'human:new-user',
-        activeCycleId: null,
-        activeTaskId: null,
-        rootCycle: '1757789000-cycle-root',
-        projectInfo: {
-          id: 'test-project',
-          name: 'Test Project'
-        }
-      };
-
-      mockConfigManager.getActorContext.mockResolvedValue(emptyContext);
+    it('[EARS-D1] should handle empty actor state in JSON output', async () => {
+      mockSessionManager.getActorState.mockResolvedValue(null);
 
       await contextCommand.execute({ actor: 'human:new-user', json: true });
 
@@ -404,4 +348,3 @@ describe('ContextCommand - Complete Unit Tests', () => {
     });
   });
 });
-

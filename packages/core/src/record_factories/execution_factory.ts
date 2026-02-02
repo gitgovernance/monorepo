@@ -1,0 +1,74 @@
+import type { ExecutionRecord, GitGovExecutionRecord } from '../record_types';
+import { generateExecutionId } from '../utils/id_generator';
+import { validateExecutionRecordDetailed } from '../record_validations/execution_validator';
+import { validateEmbeddedMetadataDetailed } from '../record_validations/embedded_metadata_validator';
+import { DetailedValidationError } from '../record_validations/common';
+
+/**
+ * Creates a complete ExecutionRecord with validation.
+ *
+ * The factory is generic to preserve the metadata type for compile-time safety.
+ *
+ * @param payload - Partial ExecutionRecord payload with optional typed metadata
+ * @returns ExecutionRecord<TMetadata> - The validated ExecutionRecord with preserved metadata type
+ *
+ * @example
+ * interface AuditMetadata { scannedFiles: number; }
+ * const record = createExecutionRecord<AuditMetadata>({
+ *   taskId: '1752274500-task-audit',
+ *   result: 'Audit complete',
+ *   metadata: { scannedFiles: 245 }
+ * });
+ * // record.metadata?.scannedFiles is typed as number
+ */
+export function createExecutionRecord<TMetadata extends object = object>(
+  payload: Partial<ExecutionRecord<TMetadata>>
+): ExecutionRecord<TMetadata> {
+  const timestamp = Math.floor(Date.now() / 1000);
+
+  const execution = {
+    id: payload.id || generateExecutionId(payload.title || 'execution', timestamp),
+    taskId: payload.taskId || '',
+    result: payload.result || '',
+    type: payload.type,
+    title: payload.title,
+    notes: payload.notes,
+    references: payload.references,
+    metadata: payload.metadata,
+  } as ExecutionRecord<TMetadata>;
+
+  // Validate the complete execution record
+  const validation = validateExecutionRecordDetailed(execution);
+  if (!validation.isValid) {
+    throw new DetailedValidationError('ExecutionRecord', validation.errors);
+  }
+
+  return execution;
+}
+
+/**
+ * Loads and validates an existing ExecutionRecord from untrusted data.
+ * Used by RecordStore to validate records when reading from disk.
+ * Validates both header (embedded metadata) and payload (ExecutionRecord).
+ * 
+ * @param data - Unknown data to validate as GitGovExecutionRecord
+ * @returns GitGovExecutionRecord - The validated complete record
+ * @throws DetailedValidationError if validation fails
+ */
+export function loadExecutionRecord(data: unknown): GitGovExecutionRecord {
+  // First validate complete record structure (header + payload)
+  const embeddedValidation = validateEmbeddedMetadataDetailed(data);
+  if (!embeddedValidation.isValid) {
+    throw new DetailedValidationError('GitGovRecord (ExecutionRecord)', embeddedValidation.errors);
+  }
+
+  // Then validate specific ExecutionRecord payload
+  const record = data as GitGovExecutionRecord;
+  const payloadValidation = validateExecutionRecordDetailed(record.payload);
+  if (!payloadValidation.isValid) {
+    throw new DetailedValidationError('ExecutionRecord payload', payloadValidation.errors);
+  }
+
+  return record;
+}
+

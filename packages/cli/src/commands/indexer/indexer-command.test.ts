@@ -137,8 +137,8 @@ describe('IndexerCommand - Complete Unit Tests', () => {
     mockProcessExit.mockClear();
   });
 
-  describe('Core Index Generation (EARS 1-3)', () => {
-    it('[EARS-1] should generate index and show progress to user', async () => {
+  describe('Core Index Generation (EARS-A1 to A3)', () => {
+    it('[EARS-A1] should generate index and show progress to user', async () => {
       const mockReport: any = {
         success: true,
         recordsProcessed: 10,
@@ -165,7 +165,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
       expect(mockConsoleLog).toHaveBeenCalledWith("💡 Cache ready for fast queries in other commands");
     });
 
-    it('[EARS-2] should validate integrity without generating cache', async () => {
+    it('[EARS-A2] should validate integrity without generating cache', async () => {
       const mockReport: any = {
         status: 'valid',
         recordsScanned: 15,
@@ -186,7 +186,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
       expect(mockConsoleLog).toHaveBeenCalledWith("✅ Integrity check: VALID");
     });
 
-    it('[EARS-3] should invalidate cache before generating with force flag', async () => {
+    it('[EARS-A3] should invalidate cache before generating with force flag', async () => {
       const mockReport: any = {
         success: true,
         recordsProcessed: 8,
@@ -214,8 +214,8 @@ describe('IndexerCommand - Complete Unit Tests', () => {
     });
   });
 
-  describe('JSON Output Format (EARS 4)', () => {
-    it('[EARS-4] should format output as JSON when json flag is used', async () => {
+  describe('JSON Output Format (EARS-A4)', () => {
+    it('[EARS-A4] should format output as JSON when json flag is used', async () => {
       const mockReport: any = {
         success: true,
         recordsProcessed: 5,
@@ -248,7 +248,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
       expect(parsedOutput.recordsProcessed).toBe(5);
     });
 
-    it('[EARS-4] should format integrity report as JSON', async () => {
+    it('[EARS-A4] should format integrity report as JSON', async () => {
       const mockReport: any = {
         status: 'warnings',
         recordsScanned: 12,
@@ -280,8 +280,8 @@ describe('IndexerCommand - Complete Unit Tests', () => {
     });
   });
 
-  describe('Error Handling & Graceful Degradation (EARS 5)', () => {
-    it('[EARS-5] should handle IndexerAdapter errors gracefully', async () => {
+  describe('Error Handling & Graceful Degradation (EARS-A5)', () => {
+    it('[EARS-A5] should handle IndexerAdapter errors gracefully', async () => {
       const error = new Error('IndexerAdapter connection failed');
       mockIndexerAdapter.generateIndex.mockRejectedValue(error);
 
@@ -291,7 +291,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
       expect(mockProcessExit).toHaveBeenCalledWith(1);
     });
 
-    it('[EARS-5] should handle specific error types with user-friendly messages', async () => {
+    it('[EARS-A5] should handle specific error types with user-friendly messages', async () => {
       const error = new Error('ProjectRootError: .gitgov directory not found');
       mockIndexerAdapter.generateIndex.mockRejectedValue(error);
 
@@ -301,7 +301,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
       expect(mockProcessExit).toHaveBeenCalledWith(1);
     });
 
-    it('[EARS-5] should handle permission errors appropriately', async () => {
+    it('[EARS-A5] should handle permission errors appropriately', async () => {
       const error = new Error('PermissionError: Cannot write to cache file');
       mockIndexerAdapter.generateIndex.mockRejectedValue(error);
 
@@ -311,7 +311,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
       expect(mockProcessExit).toHaveBeenCalledWith(1);
     });
 
-    it('[EARS-5] should handle corrupted cache errors with recovery suggestion', async () => {
+    it('[EARS-A5] should handle corrupted cache errors with recovery suggestion', async () => {
       const error = new Error('CorruptedCacheError: Invalid cache format');
       mockIndexerAdapter.generateIndex.mockRejectedValue(error);
 
@@ -322,8 +322,8 @@ describe('IndexerCommand - Complete Unit Tests', () => {
     });
   });
 
-  describe('Verbose and Quiet Mode Output (EARS 7-8)', () => {
-    it('[EARS-7] should show detailed output with verbose flag', async () => {
+  describe('Verbose and Quiet Mode Output (EARS-B1 to B2)', () => {
+    it('[EARS-B1] should show detailed output with verbose flag', async () => {
       const mockReport: any = {
         success: true,
         recordsProcessed: 20,
@@ -349,7 +349,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
       expect(mockConsoleLog).toHaveBeenCalledWith("  Write time: 90ms");
     });
 
-    it('[EARS-8] should suppress output with quiet flag for scripting', async () => {
+    it('[EARS-B2] should suppress output with quiet flag for scripting', async () => {
       const mockReport: any = {
         success: true,
         recordsProcessed: 10,
@@ -374,7 +374,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
       expect(mockConsoleLog).not.toHaveBeenCalledWith("💡 Cache ready for fast queries in other commands");
     });
 
-    it('[EARS-8] should suppress validation output with quiet flag', async () => {
+    it('[EARS-B2] should suppress validation output with quiet flag', async () => {
       const mockReport: any = {
         status: 'valid',
         recordsScanned: 15,
@@ -393,30 +393,30 @@ describe('IndexerCommand - Complete Unit Tests', () => {
     });
   });
 
-  describe('Flag Conflict Detection (EARS 9)', () => {
-    it('[EARS-9] should detect conflicting flags and show clear error', async () => {
+  describe('Flag Conflict Detection (EARS-B3)', () => {
+    it('[EARS-B3] should detect conflicting flags and show clear error', async () => {
       await indexerCommand.execute({ validateOnly: true, force: true });
 
       expect(mockConsoleError).toHaveBeenCalledWith("❌ Cannot use --validate-only with --force. Choose one option.");
       expect(mockProcessExit).toHaveBeenCalledWith(1);
     });
 
-    it('[EARS-9] should detect quiet and verbose flag conflict', async () => {
+    it('[EARS-B3] should detect quiet and verbose flag conflict', async () => {
       await indexerCommand.execute({ quiet: true, verbose: true });
 
       expect(mockConsoleError).toHaveBeenCalledWith("❌ Cannot use --quiet with --verbose. Choose one option.");
       expect(mockProcessExit).toHaveBeenCalledWith(1);
     });
 
-    it('[EARS-9] should exit with code 2 for flag conflicts', async () => {
+    it('[EARS-B3] should exit with code 2 for flag conflicts', async () => {
       await indexerCommand.execute({ validateOnly: true, force: true });
 
       expect(mockProcessExit).toHaveBeenCalledWith(1); // Changed from 2 to 1 to match implementation
     });
   });
 
-  describe('Generation Statistics and Performance (EARS 6)', () => {
-    it('[EARS-6] should show generation stats and exit with code 0', async () => {
+  describe('Generation Statistics and Performance (EARS-A6)', () => {
+    it('[EARS-A6] should show generation stats and exit with code 0', async () => {
       const mockReport: any = {
         success: true,
         recordsProcessed: 25,
@@ -441,7 +441,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
       expect(mockProcessExit).not.toHaveBeenCalled(); // Success case doesn't call exit
     });
 
-    it('[EARS-6] should handle failed generation appropriately', async () => {
+    it('[EARS-A6] should handle failed generation appropriately', async () => {
       const mockReport: any = {
         success: false,
         recordsProcessed: 0,
@@ -468,8 +468,8 @@ describe('IndexerCommand - Complete Unit Tests', () => {
     });
   });
 
-  describe('Integrity Validation Details (EARS 10-12)', () => {
-    it('[EARS-10] should show integrity validation with errors and warnings', async () => {
+  describe('Integrity Validation Details (EARS-B4, C1, C2)', () => {
+    it('[EARS-E2] should show integrity validation with errors and warnings', async () => {
       const mockReport: any = {
         status: 'errors',
         recordsScanned: 18,
@@ -504,7 +504,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
       expect(mockConsoleLog).toHaveBeenCalledWith("🔍 Checksum failures: 1");
     });
 
-    it('[EARS-11] should handle missing IndexerAdapter configuration', async () => {
+    it('[EARS-C1] should handle missing IndexerAdapter configuration', async () => {
       const error = new Error('IndexerAdapter not configured properly');
       mockIndexerAdapter.generateIndex.mockRejectedValue(error);
 
@@ -514,7 +514,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
       expect(mockProcessExit).toHaveBeenCalledWith(1);
     });
 
-    it('[EARS-12] should suggest gitgov init when gitgov directory missing', async () => {
+    it('[EARS-C2] should suggest gitgov init when gitgov directory missing', async () => {
       const error = new Error('ProjectRootError: .gitgov directory not found');
       mockIndexerAdapter.validateIntegrity.mockRejectedValue(error);
 
@@ -525,8 +525,8 @@ describe('IndexerCommand - Complete Unit Tests', () => {
     });
   });
 
-  describe('Help and Documentation (EARS 10)', () => {
-    it('[EARS-10] should show complete help with examples and flag descriptions', async () => {
+  describe('Help and Documentation (EARS-B4)', () => {
+    it('[EARS-B4] should show complete help with examples and flag descriptions', async () => {
       // Note: --help is handled by Commander.js automatically
       // This test verifies that help behavior is properly configured
       // In a real CLI test, we would capture the help output, but since
@@ -538,8 +538,8 @@ describe('IndexerCommand - Complete Unit Tests', () => {
     });
   });
 
-  describe('Performance & Output Quality (EARS 13-18)', () => {
-    it('[EARS-13] should complete in under 1s for typical datasets', async () => {
+  describe('Performance & Output Quality (EARS-D1 to D6)', () => {
+    it('[EARS-D1] should complete in under 1s for typical datasets', async () => {
       const mockReport: any = {
         success: true,
         recordsProcessed: 400, // Typical dataset size
@@ -566,7 +566,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
       expect(mockConsoleLog).toHaveBeenCalledWith("⏱️  Generation time: 850ms");
     });
 
-    it('[EARS-14] should show performance breakdown with verbose flag', async () => {
+    it('[EARS-D2] should show performance breakdown with verbose flag', async () => {
       const mockReport: any = {
         success: true,
         recordsProcessed: 15,
@@ -593,7 +593,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
       expect(mockConsoleLog).toHaveBeenCalledWith("  Write time: 50ms");
     });
 
-    it('[EARS-15] should format errors as JSON with json flag', async () => {
+    it('[EARS-D3] should format errors as JSON with json flag', async () => {
       const error = new Error('Test indexer error');
       mockIndexerAdapter.generateIndex.mockRejectedValue(error);
 
@@ -611,7 +611,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
       expect(parsedOutput.error).toContain("❌ Indexer operation failed: Test indexer error");
     });
 
-    it('[EARS-16] should format cache size human-readable with 1 decimal precision', async () => {
+    it('[EARS-D4] should format cache size human-readable with 1 decimal precision', async () => {
       const mockReport: any = {
         success: true,
         recordsProcessed: 10,
@@ -633,7 +633,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
       expect(mockConsoleLog).toHaveBeenCalledWith("⏱️  Generation time: 200ms");
     });
 
-    it('[EARS-17] should handle zero records correctly', async () => {
+    it('[EARS-D5] should handle zero records correctly', async () => {
       const mockReport: any = {
         success: true,
         recordsProcessed: 0,
@@ -655,7 +655,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
       expect(mockConsoleLog).toHaveBeenCalledWith("📊 Records processed: 0");
     });
 
-    it('[EARS-18] should handle non-Error types gracefully with generic message', async () => {
+    it('[EARS-D6] should handle non-Error types gracefully with generic message', async () => {
       const nonErrorObject = 'String error instead of Error object';
       mockIndexerAdapter.generateIndex.mockRejectedValue(nonErrorObject);
 
@@ -667,8 +667,8 @@ describe('IndexerCommand - Complete Unit Tests', () => {
     });
   });
 
-  describe('Integration & Cache Behavior (EARS 19-22)', () => {
-    it('[EARS-19] should show specific errors with bullet points user-friendly', async () => {
+  describe('Integration & Cache Behavior (EARS-E1 to E4)', () => {
+    it('[EARS-E1] should show specific errors with bullet points user-friendly', async () => {
       const mockReport: any = {
         success: false,
         recordsProcessed: 5,
@@ -696,7 +696,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
       expect(mockConsoleError).toHaveBeenCalledWith("  • Missing dependency cycle-456");
     });
 
-    it('[EARS-20] should show warnings with distinctive icons and record details', async () => {
+    it('[EARS-E2] should show warnings with distinctive icons and record details', async () => {
       const mockReport: any = {
         status: 'warnings',
         recordsScanned: 20,
@@ -729,7 +729,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
       expect(mockConsoleLog).toHaveBeenCalledWith("  • missing_reference: Referenced actor not found (task-456)");
     });
 
-    it('[EARS-21] should show specific counts for checksum and signature failures', async () => {
+    it('[EARS-E3] should show specific counts for checksum and signature failures', async () => {
       const mockReport: any = {
         status: 'errors',
         recordsScanned: 25,
@@ -755,7 +755,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
       expect(mockConsoleLog).toHaveBeenCalledWith("🔐 Signature failures: 2");
     });
 
-    it('[EARS-22] should show stack trace in verbose error mode for troubleshooting', async () => {
+    it('[EARS-E4] should show stack trace in verbose error mode for troubleshooting', async () => {
       const error = new Error('Complex indexer error');
       error.stack = 'Error: Complex indexer error\n    at IndexerAdapter.generateIndex\n    at async IndexerCommand.execute';
       mockIndexerAdapter.generateIndex.mockRejectedValue(error);

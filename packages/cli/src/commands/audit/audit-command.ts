@@ -1,7 +1,7 @@
 import { Command, Option } from 'commander';
 import { BaseCommand } from '../../base/base-command';
 import type { BaseCommandOptions } from '../../interfaces/command';
-import type { SourceAuditor, PiiDetector, Config, Git } from '@gitgov/core';
+import type { SourceAuditor, FindingDetector, IConfigManager } from '@gitgov/core';
 
 // Types are imported from Core via the SourceAuditor namespace
 // Re-export for consumers of this command
@@ -60,7 +60,7 @@ const SEVERITY_ORDER = {
 const DEFAULT_THRESHOLD = SEVERITY_ORDER.critical;
 
 /**
- * Audit Command - Thin wrapper for @gitgov/core/source_auditor module
+ * Audit Command - Thin wrapper for @gitgov/core module
  *
  * Responsibilities (CLI only):
  * - Parse CLI arguments
@@ -199,7 +199,7 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
    */
   private async mapToAuditOptions(
     options: AuditCommandOptions,
-    configManager: Config.ConfigManager
+    configManager: IConfigManager
   ): Promise<SourceAuditor.AuditOptions> {
     const scope = await this.resolveScope(options, configManager);
 
@@ -218,7 +218,7 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
    */
   private async resolveScope(
     options: AuditCommandOptions,
-    configManager: Config.ConfigManager
+    configManager: IConfigManager
   ): Promise<SourceAuditor.ScopeConfig> {
     const baseInclude: string[] = ['**/*'];
     const baseExclude: string[] = [];
@@ -364,7 +364,7 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
    * Display findings grouped by the specified option
    * [EARS-C7]
    */
-  private displayGroupedFindings(findings: PiiDetector.GdprFinding[], groupBy: GroupByOption): void {
+  private displayGroupedFindings(findings: FindingDetector.Finding[], groupBy: GroupByOption): void {
     switch (groupBy) {
       case 'severity':
         this.displayBySeverity(findings);
@@ -382,7 +382,7 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
   /**
    * Display findings grouped by file (default)
    */
-  private displayByFile(findings: PiiDetector.GdprFinding[]): void {
+  private displayByFile(findings: FindingDetector.Finding[]): void {
     const byFile = this.groupByFile(findings);
     for (const [file, fileFindings] of Object.entries(byFile)) {
       console.log(`\x1b[1m${file}\x1b[0m`);
@@ -401,7 +401,7 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
   /**
    * Display findings grouped by severity
    */
-  private displayBySeverity(findings: PiiDetector.GdprFinding[]): void {
+  private displayBySeverity(findings: FindingDetector.Finding[]): void {
     const severities = ['critical', 'high', 'medium', 'low', 'info'] as const;
 
     for (const severity of severities) {
@@ -422,8 +422,8 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
   /**
    * Display findings grouped by category
    */
-  private displayByCategory(findings: PiiDetector.GdprFinding[]): void {
-    const byCategory: Record<string, PiiDetector.GdprFinding[]> = {};
+  private displayByCategory(findings: FindingDetector.Finding[]): void {
+    const byCategory: Record<string, FindingDetector.Finding[]> = {};
 
     for (const f of findings) {
       const cat = f.category || 'unknown';
@@ -556,7 +556,7 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
       }
 
       // [EARS-E1] Create waiver
-      // Note: WaiverWriter.createWaiver requires a GdprFinding object.
+      // Note: WaiverWriter.createWaiver requires a Finding object.
       // For CLI, we create a minimal waiver using FeedbackAdapter directly.
       const feedbackAdapter = await this.container.getFeedbackAdapter();
       const identityAdapter = await this.container.getIdentityAdapter();
@@ -594,8 +594,8 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
 
   // Helper methods
 
-  private groupByFile(findings: PiiDetector.GdprFinding[]): Record<string, PiiDetector.GdprFinding[]> {
-    const result: Record<string, PiiDetector.GdprFinding[]> = {};
+  private groupByFile(findings: FindingDetector.Finding[]): Record<string, FindingDetector.Finding[]> {
+    const result: Record<string, FindingDetector.Finding[]> = {};
     for (const f of findings) {
       const existing = result[f.file];
       if (existing) {
@@ -629,7 +629,7 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
     return colors[severity] ?? '\x1b[37m';
   }
 
-  private extractRules(findings: PiiDetector.GdprFinding[]): Array<{ id: string; name: string; shortDescription: { text: string } }> {
+  private extractRules(findings: FindingDetector.Finding[]): Array<{ id: string; name: string; shortDescription: { text: string } }> {
     const ruleMap = new Map<string, { id: string; name: string; shortDescription: { text: string } }>();
     for (const f of findings) {
       if (!ruleMap.has(f.ruleId)) {

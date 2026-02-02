@@ -3,7 +3,7 @@ dist/
 *.tsbuildinfo
 
 # Generated schemas (auto-synced from blueprints)
-src/schemas/*.json
+src/record_schemas/*.json
 
 # Test coverage
 coverage/

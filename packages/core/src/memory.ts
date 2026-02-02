@@ -6,12 +6,21 @@
  */
 
 // Store
-export { MemoryStore } from './store/memory';
+export { MemoryRecordStore } from './record_store/memory';
+
+// ConfigStore
+export { MemoryConfigStore } from './config_store/memory';
+
+// SessionStore
+export { MemorySessionStore } from './session_store/memory';
 
 // KeyProvider
 export { EnvKeyProvider, MockKeyProvider } from './key_provider/memory';
 export type { EnvKeyProviderOptions, MockKeyProviderOptions } from './key_provider/memory';
 
 // FileLister
-export { MockFileLister } from './file_lister/memory';
-export type { MockFileListerOptions } from './file_lister/memory';
+export { MemoryFileLister } from './file_lister/memory';
+export type { MemoryFileListerOptions } from './file_lister/memory';
+
+// GitModule
+export { MemoryGitModule } from './git/memory';

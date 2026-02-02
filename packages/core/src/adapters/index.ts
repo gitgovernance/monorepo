@@ -1,3 +1,4 @@
+export * from "./agent_adapter";
 export * from "./backlog_adapter";
 export * from "./changelog_adapter";
 export * from "./execution_adapter";
@@ -6,4 +7,4 @@ export * from "./identity_adapter";
 export * from "./indexer_adapter";
 export * from "./metrics_adapter";
 export * from "./project_adapter";
-export * from "./workflow_methodology_adapter";
+export * from "./workflow_adapter";

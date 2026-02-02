@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Sync schemas from blueprints to core/src/schemas as JSON
+ * Sync schemas from blueprints to core/src/record_schemas as JSON
  * 
  * This script reads the canonical YAML schemas from blueprints
  * and converts them to JSON for direct import in TypeScript.
@@ -17,7 +17,7 @@ const __dirname = path.dirname(__filename);
 
 // Paths
 const BLUEPRINTS_PROTOCOL_DIR = path.join(__dirname, '../../blueprints/03_products/protocol');
-const CORE_SCHEMAS_DIR = path.join(__dirname, '../src/schemas/generated');
+const CORE_SCHEMAS_DIR = path.join(__dirname, '../src/record_schemas/generated');
 
 // Schema mappings (blueprint folder → output name)
 const SCHEMA_MAPPINGS = {
@@ -29,7 +29,7 @@ const SCHEMA_MAPPINGS = {
   '07_changelog': 'changelog_record_schema',
   '08_feedback': 'feedback_record_schema',
   '05_cycle': 'cycle_record_schema',
-  '09_workflow_methodology': 'workflow_methodology_record_schema',
+  '09_workflow': 'workflow_record_schema',
 };
 
 function syncSchemas() {

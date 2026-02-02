@@ -1,16 +1,15 @@
 import { ChangelogAdapter } from './index';
-import { createChangelogRecord } from '../../factories/changelog_factory';
-import { RecordStore } from '../../store';
+import { createChangelogRecord } from '../../record_factories/changelog_factory';
+import type { RecordStore } from '../../record_store';
 import { IdentityAdapter } from '../identity_adapter';
-import type { ChangelogRecord } from '../../types';
-import type { TaskRecord } from '../../types';
-import type { CycleRecord } from '../../types';
+import type { ChangelogRecord } from '../../record_types';
+import type { GitGovChangelogRecord, GitGovTaskRecord, GitGovCycleRecord } from '../../record_types';
 import type { IEventStream } from '../../event_bus';
-import type { GitGovRecord, Signature } from '../../types';
+import type { GitGovRecord, Signature } from '../../record_types';
 
 // Mock dependencies
-jest.mock('../../factories/changelog_factory');
-jest.mock('../../store');
+jest.mock('../../record_factories/changelog_factory');
+jest.mock('../../record_store');
 jest.mock('../identity_adapter');
 jest.mock('../../event_bus', () => ({
   ...jest.requireActual('../../event_bus'),
@@ -45,43 +44,46 @@ function createMockChangelogRecord(overrides: Partial<ChangelogRecord> = {}): Gi
 
 describe('ChangelogAdapter', () => {
   let changelogAdapter: ChangelogAdapter;
-  let mockChangelogStore: jest.Mocked<RecordStore<ChangelogRecord>>;
-  let mockTaskStore: jest.Mocked<RecordStore<TaskRecord>>;
-  let mockCycleStore: jest.Mocked<RecordStore<CycleRecord>>;
+  let mockChangelogStore: jest.Mocked<RecordStore<GitGovChangelogRecord>>;
+  let mockTaskStore: jest.Mocked<RecordStore<GitGovTaskRecord>>;
+  let mockCycleStore: jest.Mocked<RecordStore<GitGovCycleRecord>>;
   let mockIdentityAdapter: jest.Mocked<IdentityAdapter>;
   let mockEventBus: jest.Mocked<IEventStream>;
 
   beforeEach(() => {
     // Mock RecordStore for changelog
     mockChangelogStore = {
-      write: jest.fn(),
-      read: jest.fn(),
-      list: jest.fn(),
-      delete: jest.fn(),
-    } as any;
+      put: jest.fn().mockResolvedValue(undefined),
+      get: jest.fn().mockResolvedValue(null),
+      list: jest.fn().mockResolvedValue([]),
+      delete: jest.fn().mockResolvedValue(undefined),
+      exists: jest.fn().mockResolvedValue(false),
+    } as unknown as jest.Mocked<RecordStore<GitGovChangelogRecord>>;
 
     // Mock RecordStore for tasks
     mockTaskStore = {
-      read: jest.fn(),
-      list: jest.fn(),
-      write: jest.fn(),
-      delete: jest.fn(),
-    } as any;
+      put: jest.fn().mockResolvedValue(undefined),
+      get: jest.fn().mockResolvedValue(null),
+      list: jest.fn().mockResolvedValue([]),
+      delete: jest.fn().mockResolvedValue(undefined),
+      exists: jest.fn().mockResolvedValue(false),
+    } as unknown as jest.Mocked<RecordStore<GitGovTaskRecord>>;
 
     // Mock RecordStore for cycles
     mockCycleStore = {
-      read: jest.fn(),
-      list: jest.fn(),
-      write: jest.fn(),
-      delete: jest.fn(),
-    } as any;
+      put: jest.fn().mockResolvedValue(undefined),
+      get: jest.fn().mockResolvedValue(null),
+      list: jest.fn().mockResolvedValue([]),
+      delete: jest.fn().mockResolvedValue(undefined),
+      exists: jest.fn().mockResolvedValue(false),
+    } as unknown as jest.Mocked<RecordStore<GitGovCycleRecord>>;
 
     // Mock IdentityAdapter
     mockIdentityAdapter = {
       signRecord: jest.fn(),
       getActor: jest.fn(),
       getCurrentActor: jest.fn(),
-    } as any;
+    } as unknown as jest.Mocked<IdentityAdapter>;
 
     // Mock EventBus
     mockEventBus = {
@@ -91,15 +93,13 @@ describe('ChangelogAdapter', () => {
       getSubscriptions: jest.fn(),
       clearSubscriptions: jest.fn(),
       waitForIdle: jest.fn().mockResolvedValue(undefined)
-    } as any;
+    } as jest.Mocked<IEventStream>;
 
     // Instantiate ChangelogAdapter with mocked dependencies
     changelogAdapter = new ChangelogAdapter({
-      changelogStore: mockChangelogStore,
+      stores: { changelogs: mockChangelogStore, tasks: mockTaskStore, cycles: mockCycleStore },
       identity: mockIdentityAdapter,
       eventBus: mockEventBus,
-      taskStore: mockTaskStore,
-      cycleStore: mockCycleStore,
     });
 
     // Reset mocks
@@ -107,7 +107,7 @@ describe('ChangelogAdapter', () => {
   });
 
   describe('create', () => {
-    it('[EARS-1] should create a changelog record with all required fields', async () => {
+    it('[EARS-A1] should create a changelog record with all required fields', async () => {
       const mockPayload: Partial<ChangelogRecord> = {
         id: '1752707800-changelog-test-deliverable',
         title: 'Test Deliverable v1.0',
@@ -119,18 +119,18 @@ describe('ChangelogAdapter', () => {
       const mockRecord = createMockChangelogRecord(mockPayload);
       (createChangelogRecord as jest.Mock).mockReturnValue(mockPayload);
       mockIdentityAdapter.signRecord.mockResolvedValue(mockRecord);
-      mockTaskStore.read.mockResolvedValue({ payload: { id: '1752274500-task-test-task' } } as any); // Mock task exists
+      mockTaskStore.get.mockResolvedValue({ payload: { id: '1752274500-task-test-task' } } as any); // Mock task exists
 
       const result = await changelogAdapter.create(mockPayload, 'human:developer');
 
       expect(createChangelogRecord).toHaveBeenCalledWith(mockPayload);
       expect(mockIdentityAdapter.signRecord).toHaveBeenCalled();
-      expect(mockChangelogStore.write).toHaveBeenCalled();
+      expect(mockChangelogStore.put).toHaveBeenCalled();
       expect(mockEventBus.publish).toHaveBeenCalled();
       expect(result).toEqual(mockPayload);
     });
 
-    it('[EARS-2] should throw error when title is missing', async () => {
+    it('[EARS-A2] should throw error when title is missing', async () => {
       const invalidPayload: Partial<ChangelogRecord> = {
         description: 'Test description with sufficient length',
         relatedTasks: ['task-1'],
@@ -140,7 +140,7 @@ describe('ChangelogAdapter', () => {
         .rejects.toThrow('title is required');
     });
 
-    it('[EARS-3] should throw error when description is too short', async () => {
+    it('[EARS-A3] should throw error when description is too short', async () => {
       const invalidPayload: Partial<ChangelogRecord> = {
         title: 'Test Title Here',
         description: 'Too short',
@@ -151,7 +151,7 @@ describe('ChangelogAdapter', () => {
         .rejects.toThrow('description is required and must be at least 20 characters');
     });
 
-    it('[EARS-4] should throw error when relatedTasks is empty', async () => {
+    it('[EARS-A4] should throw error when relatedTasks is empty', async () => {
       // Test runtime validation of empty array - cast through unknown for type safety
       const invalidPayload = {
         title: 'Test Title Here',
@@ -163,14 +163,14 @@ describe('ChangelogAdapter', () => {
         .rejects.toThrow('relatedTasks is required and must contain at least one task ID');
     });
 
-    it('[EARS-5] should validate task existence when taskStore is provided', async () => {
+    it('[EARS-A5] should validate task existence when taskStore is provided', async () => {
       const mockPayload: Partial<ChangelogRecord> = {
         title: 'Test Deliverable',
         description: 'Test description with sufficient length for validation',
         relatedTasks: ['non-existent-task'],
       };
 
-      mockTaskStore.read.mockResolvedValue(null);
+      mockTaskStore.get.mockResolvedValue(null);
 
       await expect(changelogAdapter.create(mockPayload, 'human:developer'))
         .rejects.toThrow('Task not found: non-existent-task');
@@ -178,18 +178,18 @@ describe('ChangelogAdapter', () => {
   });
 
   describe('getChangelog', () => {
-    it('[EARS-6] should return a changelog by ID', async () => {
+    it('[EARS-B1] should return a changelog by ID', async () => {
       const mockRecord = createMockChangelogRecord();
-      mockChangelogStore.read.mockResolvedValue(mockRecord);
+      mockChangelogStore.get.mockResolvedValue(mockRecord);
 
       const result = await changelogAdapter.getChangelog('1752707800-changelog-test-deliverable');
 
       expect(result).toEqual(mockRecord.payload);
-      expect(mockChangelogStore.read).toHaveBeenCalledWith('1752707800-changelog-test-deliverable');
+      expect(mockChangelogStore.get).toHaveBeenCalledWith('1752707800-changelog-test-deliverable');
     });
 
-    it('[EARS-7] should return null when changelog not found', async () => {
-      mockChangelogStore.read.mockResolvedValue(null);
+    it('[EARS-B2] should return null when changelog not found', async () => {
+      mockChangelogStore.get.mockResolvedValue(null);
 
       const result = await changelogAdapter.getChangelog('non-existent');
 
@@ -198,7 +198,7 @@ describe('ChangelogAdapter', () => {
   });
 
   describe('getChangelogsByTask', () => {
-    it('[EARS-8] should return changelogs that include specific task', async () => {
+    it('[EARS-C1] should return changelogs that include specific task', async () => {
       const mockRecord1 = createMockChangelogRecord({
         id: 'changelog-1',
         relatedTasks: ['task-1', 'task-2']
@@ -209,7 +209,7 @@ describe('ChangelogAdapter', () => {
       });
 
       mockChangelogStore.list.mockResolvedValue(['changelog-1', 'changelog-2']);
-      mockChangelogStore.read
+      mockChangelogStore.get
         .mockResolvedValueOnce(mockRecord1)
         .mockResolvedValueOnce(mockRecord2);
 
@@ -221,12 +221,12 @@ describe('ChangelogAdapter', () => {
   });
 
   describe('getAllChangelogs', () => {
-    it('[EARS-9] should return all changelogs', async () => {
+    it('[EARS-D1] should return all changelogs', async () => {
       const mockRecord1 = createMockChangelogRecord({ id: 'changelog-1' });
       const mockRecord2 = createMockChangelogRecord({ id: 'changelog-2' });
 
       mockChangelogStore.list.mockResolvedValue(['changelog-1', 'changelog-2']);
-      mockChangelogStore.read
+      mockChangelogStore.get
         .mockResolvedValueOnce(mockRecord1)
         .mockResolvedValueOnce(mockRecord2);
 
@@ -237,7 +237,7 @@ describe('ChangelogAdapter', () => {
   });
 
   describe('getRecentChangelogs', () => {
-    it('[EARS-10] should return recent changelogs sorted by completedAt', async () => {
+    it('[EARS-E1] should return recent changelogs sorted by completedAt', async () => {
       const mockRecord1 = createMockChangelogRecord({
         id: 'changelog-1',
         completedAt: 1752707900
@@ -248,7 +248,7 @@ describe('ChangelogAdapter', () => {
       });
 
       mockChangelogStore.list.mockResolvedValue(['changelog-1', 'changelog-2']);
-      mockChangelogStore.read
+      mockChangelogStore.get
         .mockResolvedValueOnce(mockRecord1)
         .mockResolvedValueOnce(mockRecord2);
 
@@ -260,7 +260,7 @@ describe('ChangelogAdapter', () => {
   });
 
   describe('getAllChangelogs with options', () => {
-    it('[EARS-11] should return all changelogs sorted by completedAt desc by default', async () => {
+    it('[EARS-D3] should return all changelogs sorted by completedAt desc by default', async () => {
       const mockRecord1 = createMockChangelogRecord({
         id: 'changelog-1',
         completedAt: 1752707800 // Older
@@ -275,7 +275,7 @@ describe('ChangelogAdapter', () => {
       });
 
       mockChangelogStore.list.mockResolvedValue(['changelog-1', 'changelog-2', 'changelog-3']);
-      mockChangelogStore.read
+      mockChangelogStore.get
         .mockResolvedValueOnce(mockRecord1)
         .mockResolvedValueOnce(mockRecord2)
         .mockResolvedValueOnce(mockRecord3);
@@ -288,7 +288,7 @@ describe('ChangelogAdapter', () => {
       expect(result[2]!.id).toBe('changelog-1'); // Oldest last
     });
 
-    it('[EARS-12] should filter changelogs by tags', async () => {
+    it('[EARS-D2] should filter changelogs by tags', async () => {
       const mockRecord1 = createMockChangelogRecord({
         id: 'changelog-1',
         tags: ['feature', 'ui']
@@ -303,7 +303,7 @@ describe('ChangelogAdapter', () => {
       });
 
       mockChangelogStore.list.mockResolvedValue(['changelog-1', 'changelog-2', 'changelog-3']);
-      mockChangelogStore.read
+      mockChangelogStore.get
         .mockResolvedValueOnce(mockRecord1)
         .mockResolvedValueOnce(mockRecord2)
         .mockResolvedValueOnce(mockRecord3);
@@ -316,7 +316,7 @@ describe('ChangelogAdapter', () => {
       expect(result.map(r => r.id)).not.toContain('changelog-2');
     });
 
-    it('[EARS-13] should apply limit to results', async () => {
+    it('[EARS-D4] should apply limit to results', async () => {
       const mockRecord1 = createMockChangelogRecord({
         id: 'changelog-1',
         completedAt: 1752707800
@@ -331,7 +331,7 @@ describe('ChangelogAdapter', () => {
       });
 
       mockChangelogStore.list.mockResolvedValue(['changelog-1', 'changelog-2', 'changelog-3']);
-      mockChangelogStore.read
+      mockChangelogStore.get
         .mockResolvedValueOnce(mockRecord1)
         .mockResolvedValueOnce(mockRecord2)
         .mockResolvedValueOnce(mockRecord3);
@@ -346,7 +346,7 @@ describe('ChangelogAdapter', () => {
   });
 
   describe('ID generation', () => {
-    it('[EARS-14] should generate correct ID from title using slug pattern', async () => {
+    it('[EARS-A6] should generate correct ID from title using slug pattern', async () => {
       const mockPayload: Partial<ChangelogRecord> = {
         title: 'Test Deliverable v1.0',
         description: 'Successfully delivered multiple features in this release',
@@ -357,7 +357,7 @@ describe('ChangelogAdapter', () => {
       const mockRecord = createMockChangelogRecord(mockPayload);
       (createChangelogRecord as jest.Mock).mockImplementation((payload) => payload);
       mockIdentityAdapter.signRecord.mockResolvedValue(mockRecord);
-      mockTaskStore.read.mockResolvedValue({ payload: { id: '1752274500-task-test-task' } } as any);
+      mockTaskStore.get.mockResolvedValue({ payload: { id: '1752274500-task-test-task' } } as any);
 
       const result = await changelogAdapter.create(mockPayload, 'human:developer');
 
@@ -369,7 +369,7 @@ describe('ChangelogAdapter', () => {
   });
 
   describe('Performance', () => {
-    it('[EARS-15] should execute in under 40ms for typical datasets', async () => {
+    it('[EARS-F1] should execute in under 40ms for typical datasets', async () => {
       // Create 100 mock records (typical dataset)
       const mockRecords = Array.from({ length: 100 }, (_, i) =>
         createMockChangelogRecord({
@@ -384,7 +384,7 @@ describe('ChangelogAdapter', () => {
 
       // Mock read calls
       for (const record of mockRecords) {
-        mockChangelogStore.read.mockResolvedValueOnce(record);
+        mockChangelogStore.get.mockResolvedValueOnce(record);
       }
 
       const startTime = Date.now();

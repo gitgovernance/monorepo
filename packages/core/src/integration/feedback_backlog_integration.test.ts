@@ -63,12 +63,16 @@ import { BacklogAdapter } from '../adapters/backlog_adapter';
 import { IdentityAdapter } from '../adapters/identity_adapter';
 import { MetricsAdapter } from '../adapters/metrics_adapter';
 import { ConfigManager } from '../config_manager';
-import { WorkflowMethodologyAdapter } from '../adapters/workflow_methodology_adapter';
-import { RecordStore } from '../store';
+import type { SessionManager } from '../session_manager';
+import { WorkflowAdapter } from '../adapters/workflow_adapter';
+import { MemoryRecordStore } from '../record_store/memory';
 import { EventBus } from '../event_bus/event_bus';
-import type { TaskRecord, FeedbackRecord, CycleRecord, ExecutionRecord, ChangelogRecord, ActorRecord, AgentRecord } from '../types';
+import type {
+  GitGovTaskRecord, GitGovFeedbackRecord, GitGovCycleRecord,
+  GitGovExecutionRecord, GitGovChangelogRecord, GitGovActorRecord
+} from '../record_types';
 import type { IEventStream } from '../event_bus';
-import { loadTaskRecord, loadFeedbackRecord, loadCycleRecord, loadExecutionRecord, loadChangelogRecord, loadActorRecord, loadAgentRecord, createTestSignature } from '../factories';
+import { createTestSignature } from '../record_factories';
 
 describe('FeedbackAdapter <-> BacklogAdapter Integration (Real Event Communication)', () => {
   let feedbackAdapter: FeedbackAdapter;
@@ -78,27 +82,24 @@ describe('FeedbackAdapter <-> BacklogAdapter Integration (Real Event Communicati
   let eventBus: IEventStream;
 
   // Real stores
-  let taskStore: RecordStore<TaskRecord>;
-  let feedbackStore: RecordStore<FeedbackRecord>;
-  let cycleStore: RecordStore<CycleRecord>;
-  let executionStore: RecordStore<ExecutionRecord>;
-  let changelogStore: RecordStore<ChangelogRecord>;
-  let actorStore: RecordStore<ActorRecord>;
-  let agentStore: RecordStore<AgentRecord>;
+  let taskStore: MemoryRecordStore<GitGovTaskRecord>;
+  let feedbackStore: MemoryRecordStore<GitGovFeedbackRecord>;
+  let cycleStore: MemoryRecordStore<GitGovCycleRecord>;
+  let executionStore: MemoryRecordStore<GitGovExecutionRecord>;
+  let changelogStore: MemoryRecordStore<GitGovChangelogRecord>;
+  let actorStore: MemoryRecordStore<GitGovActorRecord>;
 
   beforeEach(async () => {
     // Create REAL EventBus (no mock)
     eventBus = new EventBus();
 
-    // Create REAL stores with unique temp directories per test in /tmp/
-    const testRoot = `/tmp/gitgov-test-${Date.now()}`;
-    taskStore = new RecordStore<TaskRecord>('tasks', loadTaskRecord, testRoot);
-    feedbackStore = new RecordStore<FeedbackRecord>('feedback', loadFeedbackRecord, testRoot);
-    cycleStore = new RecordStore<CycleRecord>('cycles', loadCycleRecord, testRoot);
-    executionStore = new RecordStore<ExecutionRecord>('executions', loadExecutionRecord, testRoot);
-    changelogStore = new RecordStore<ChangelogRecord>('changelogs', loadChangelogRecord, testRoot);
-    actorStore = new RecordStore<ActorRecord>('actors', loadActorRecord, testRoot);
-    agentStore = new RecordStore<AgentRecord>('agents', loadAgentRecord, testRoot);
+    // Create REAL stores with MemoryRecordStore for integration tests
+    taskStore = new MemoryRecordStore<GitGovTaskRecord>();
+    feedbackStore = new MemoryRecordStore<GitGovFeedbackRecord>();
+    cycleStore = new MemoryRecordStore<GitGovCycleRecord>();
+    executionStore = new MemoryRecordStore<GitGovExecutionRecord>();
+    changelogStore = new MemoryRecordStore<GitGovChangelogRecord>();
+    actorStore = new MemoryRecordStore<GitGovActorRecord>();
 
     // Create mock KeyProvider for integration test
     const mockKeyProvider = {
@@ -108,38 +109,58 @@ describe('FeedbackAdapter <-> BacklogAdapter Integration (Real Event Communicati
       deletePrivateKey: jest.fn().mockResolvedValue(true),
     };
 
+    // Mock SessionManager for integration tests
+    const mockSessionManager = {
+      getActorState: jest.fn().mockResolvedValue({ actorId: 'human:test-dev' }),
+      updateActorState: jest.fn().mockResolvedValue(undefined),
+      loadSession: jest.fn().mockResolvedValue(null),
+      detectActorFromKeyFiles: jest.fn().mockResolvedValue('human:test-dev'),
+      getCloudSessionToken: jest.fn().mockResolvedValue(null),
+      getSyncPreferences: jest.fn().mockResolvedValue(null),
+      updateSyncPreferences: jest.fn().mockResolvedValue(undefined),
+      getLastSession: jest.fn().mockResolvedValue(null),
+    };
+
     // Create REAL IdentityAdapter
     identityAdapter = new IdentityAdapter({
-      actorStore,
-      agentStore,
+      stores: {
+        actors: actorStore,
+      },
       keyProvider: mockKeyProvider,
+      sessionManager: mockSessionManager,
     });
 
     // Create REAL FeedbackAdapter
     feedbackAdapter = new FeedbackAdapter({
-      feedbackStore,
+      stores: {
+        feedbacks: feedbackStore,
+      },
       identity: identityAdapter,
       eventBus // REAL EventBus
     });
 
     // Create REAL MetricsAdapter
     metricsAdapter = new MetricsAdapter({
-      taskStore,
-      cycleStore,
-      feedbackStore,
-      executionStore
+      stores: {
+        tasks: taskStore,
+        cycles: cycleStore,
+        feedbacks: feedbackStore,
+        executions: executionStore,
+        actors: actorStore,
+      }
     });
 
-    // Create REAL WorkflowMethodologyAdapter
-    const workflowAdapter = WorkflowMethodologyAdapter.createDefault(feedbackAdapter);
+    // Create REAL WorkflowAdapter
+    const workflowAdapter = WorkflowAdapter.createDefault(feedbackAdapter);
 
     // Create REAL BacklogAdapter (will subscribe to events in constructor)
     backlogAdapter = new BacklogAdapter({
-      taskStore,
-      cycleStore,
-      feedbackStore,
-      executionStore,
-      changelogStore,
+      stores: {
+        tasks: taskStore,
+        cycles: cycleStore,
+        feedbacks: feedbackStore,
+        changelogs: changelogStore,
+      },
       feedbackAdapter, // REAL FeedbackAdapter
       executionAdapter: {
         isFirstExecution: jest.fn()
@@ -148,12 +169,13 @@ describe('FeedbackAdapter <-> BacklogAdapter Integration (Real Event Communicati
         create: jest.fn()
       } as any, // Mock ChangelogAdapter for now
       metricsAdapter, // REAL MetricsAdapter
-      workflowMethodologyAdapter: workflowAdapter,
+      workflowAdapter: workflowAdapter,
       identity: identityAdapter,
       eventBus, // SAME EventBus instance
       configManager: {
-        updateActorState: jest.fn().mockResolvedValue(undefined)
-      } as unknown as ConfigManager
+        loadConfig: jest.fn().mockResolvedValue({})
+      } as unknown as ConfigManager,
+      sessionManager: mockSessionManager as unknown as SessionManager,
     });
 
     // Actor is already mocked in jest.doMock at the top
@@ -169,9 +191,9 @@ describe('FeedbackAdapter <-> BacklogAdapter Integration (Real Event Communicati
       }, 'human:test-dev');
 
       // Manually transition to active for testing
-      const taskRecord = await taskStore.read(task.id);
+      const taskRecord = await taskStore.get(task.id);
       if (taskRecord) {
-        await taskStore.write({
+        await taskStore.put(task.id, {
           ...taskRecord,
           payload: { ...taskRecord.payload, status: 'active' }
         });
@@ -208,9 +230,9 @@ describe('FeedbackAdapter <-> BacklogAdapter Integration (Real Event Communicati
         priority: 'high'
       }, 'human:test-dev');
 
-      const taskRecord = await taskStore.read(task.id);
+      const taskRecord = await taskStore.get(task.id);
       if (taskRecord) {
-        await taskStore.write({
+        await taskStore.put(task.id, {
           ...taskRecord,
           payload: { ...taskRecord.payload, status: 'active' }
         });
@@ -259,9 +281,9 @@ describe('FeedbackAdapter <-> BacklogAdapter Integration (Real Event Communicati
         priority: 'critical'
       }, 'human:test-dev');
 
-      const taskRecord = await taskStore.read(task.id);
+      const taskRecord = await taskStore.get(task.id);
       if (taskRecord) {
-        await taskStore.write({
+        await taskStore.put(task.id, {
           ...taskRecord,
           payload: { ...taskRecord.payload, status: 'active' }
         });

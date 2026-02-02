@@ -1,5 +1,5 @@
 import type { IFeedbackAdapter } from "../adapters/feedback_adapter";
-import type { GdprFinding } from "../pii_detector/types";
+import type { Finding } from "../finding_detector/types";
 import type { WaiverMetadata, CreateWaiverOptions } from "./types";
 
 /**
@@ -7,7 +7,7 @@ import type { WaiverMetadata, CreateWaiverOptions } from "./types";
  * Uses FeedbackAdapter for signature and event handling.
  */
 export class WaiverWriter {
-  constructor(private feedbackAdapter: IFeedbackAdapter) {}
+  constructor(private feedbackAdapter: IFeedbackAdapter) { }
 
   /**
    * Creates a waiver for a specific finding.
@@ -52,7 +52,7 @@ export class WaiverWriter {
    * Creates waivers in batch for multiple findings.
    */
   async createWaiversBatch(
-    findings: GdprFinding[],
+    findings: Finding[],
     executionId: string,
     justification: string,
     actorId: string

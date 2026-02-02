@@ -4,10 +4,10 @@
  * Covers EARS-49 to EARS-69: Generic signature extraction helpers with graceful degradation
  * See: packages/blueprints/03_products/core/specs/adapters/indexer_adapter.md (Section 4.2)
  */
-import type { GitGovTaskRecord } from '../types';
-import type { Signature } from '../types/embedded.types';
-import { createTaskRecord } from '../factories/task_factory';
-import { createEmbeddedMetadataRecord, createTestSignature } from '../factories/embedded_metadata_factory';
+import type { GitGovTaskRecord } from '../record_types';
+import type { Signature } from '../record_types/embedded.types';
+import { createTaskRecord } from '../record_factories/task_factory';
+import { createEmbeddedMetadataRecord, createTestSignature } from '../record_factories/embedded_metadata_factory';
 import {
   extractAuthor,
   extractLastModifier,

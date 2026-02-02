@@ -1,11 +1,12 @@
-import * as fs from "fs/promises";
-import * as path from "path";
-import type { GdprFinding, DetectorName } from "../pii_detector/types";
+import type { Finding, DetectorName } from "../finding_detector/types";
 import type {
   SourceAuditorDependencies,
+  ScopeSelectorDependencies,
   AuditOptions,
   AuditResult,
   AuditSummary,
+  AuditContentsInput,
+  FileContent,
   ActiveWaiver,
 } from "./types";
 import { ScopeSelector } from "./scope_selector";
@@ -16,69 +17,70 @@ const BATCH_SIZE = 100;
 /**
  * Source Auditor Module - Main audit pipeline for source code.
  *
- * Pipeline: Scope -> Detect -> Filter -> Score -> Output
+ * Two entry points:
+ * - auditContents(): Pure mode - receives FileContent[] directly (no I/O)
+ * - audit(): FileLister mode - discovers and reads files, then delegates to auditContents()
  *
- * Orchestrates the complete flow: file selection, PII/secrets detection,
- * waiver filtering, scoring, and structured result generation.
+ * Pipeline: Detect -> Filter -> Score -> Output
+ *
+ * Store Backends Epic: FileLister abstracts file access for serverless compatibility.
+ * auditContents() enables direct mode without any FileLister (API, pre-loaded, etc.)
  */
 export class SourceAuditorModule {
-  private scopeSelector: ScopeSelector;
+  private scopeSelector?: ScopeSelector;
   private scoringEngine: ScoringEngine;
 
   /**
    * Creates module instance with injected dependencies.
-   * ScopeSelector and ScoringEngine are internal components.
+   * Only findingDetector is required. fileLister/waiverReader are needed only for audit().
    */
   constructor(private deps: SourceAuditorDependencies) {
-    this.scopeSelector = new ScopeSelector();
+    // Only create ScopeSelector if FileLister is available (needed for audit())
+    if (deps.fileLister) {
+      const scopeDeps: ScopeSelectorDependencies = {
+        fileLister: deps.fileLister,
+      };
+      if (deps.gitModule) {
+        scopeDeps.gitModule = deps.gitModule;
+      }
+      this.scopeSelector = new ScopeSelector(scopeDeps);
+    }
     this.scoringEngine = new ScoringEngine();
   }
 
   /**
-   * Executes complete source code audit.
-   * Pipeline: Scope -> Detect -> Filter -> Score -> Output
+   * Pure audit mode - receives pre-loaded file contents directly.
+   * No FileLister or I/O needed.
+   *
+   * Use cases:
+   * - API/serverless: files fetched from GitHub API, S3, etc.
+   * - Testing: files created in memory
+   * - Direct: caller already has file contents
    */
-  async audit(options: AuditOptions): Promise<AuditResult> {
+  async auditContents(input: AuditContentsInput): Promise<AuditResult> {
     const startTime = Date.now();
-    const baseDir = options.baseDir || process.cwd();
 
-    // Step 1: Scope Selection
-    const files = await this.scopeSelector.selectFiles(options.scope, baseDir);
-
-    if (files.length === 0) {
+    if (input.files.length === 0) {
       return this.createEmptyResult(startTime);
     }
 
-    // Step 2: Load Waivers
-    let waivers: ActiveWaiver[] = [];
-    try {
-      waivers = await this.deps.waiverReader.loadActiveWaivers();
-    } catch {
-      // Graceful degradation: continue without waivers
-    }
+    // Step 1: Detection on pre-loaded content
+    const { findings, scannedLines, detectors } = await this.runDetectionOnContents(input.files);
 
-    // Step 3: Detection
-    const { findings, scannedLines, detectors } = await this.runDetection(
-      files,
-      baseDir
-    );
+    // Step 2: Filter by Waivers (if provided)
+    const waivers = input.waivers ?? [];
+    const { newFindings, acknowledgedCount } = this.filterByWaivers(findings, waivers);
 
-    // Step 4: Filter by Waivers
-    const { newFindings, acknowledgedCount } = this.filterByWaivers(
-      findings,
-      waivers
-    );
-
-    // Step 5: Scoring
+    // Step 3: Scoring
     const scoredFindings = this.scoringEngine.score(newFindings);
 
-    // Step 6: Generate Result
+    // Step 4: Generate Result
     const duration = Date.now() - startTime;
 
     return {
       findings: scoredFindings,
       summary: this.calculateSummary(scoredFindings),
-      scannedFiles: files.length,
+      scannedFiles: input.files.length,
       scannedLines,
       duration,
       detectors: [...new Set(detectors)],
@@ -90,32 +92,80 @@ export class SourceAuditorModule {
   }
 
   /**
-   * Runs detection on all files, processing in batches for large file counts.
+   * FileLister-based audit - discovers files via scope selection, reads them,
+   * then delegates to auditContents().
+   *
+   * Requires fileLister in dependencies. Use auditContents() for direct mode.
    */
-  private async runDetection(
-    files: string[],
-    baseDir: string
+  async audit(options: AuditOptions): Promise<AuditResult> {
+    if (!this.deps.fileLister || !this.scopeSelector) {
+      throw new Error('FileLister required for audit(). Use auditContents() for direct mode.');
+    }
+
+    const startTime = Date.now();
+    const baseDir = options.baseDir || process.cwd();
+
+    // Step 1: Scope Selection
+    const filePaths = await this.scopeSelector.selectFiles(options.scope, baseDir);
+
+    if (filePaths.length === 0) {
+      return this.createEmptyResult(startTime);
+    }
+
+    // Step 2: Read file contents via FileLister
+    const files: FileContent[] = [];
+    for (const filePath of filePaths) {
+      try {
+        const content = await this.deps.fileLister.read(filePath);
+        files.push({ path: filePath, content });
+      } catch {
+        // Graceful degradation: skip unreadable files
+        continue;
+      }
+    }
+
+    // Step 3: Load Waivers
+    let waivers: ActiveWaiver[] = [];
+    if (this.deps.waiverReader) {
+      try {
+        waivers = await this.deps.waiverReader.loadActiveWaivers();
+      } catch {
+        // Graceful degradation: continue without waivers
+      }
+    }
+
+    // Step 4: Delegate to pure pipeline
+    const result = await this.auditContents({ files, waivers });
+
+    // Adjust duration to include scope selection + file reading
+    return {
+      ...result,
+      duration: Date.now() - startTime,
+    };
+  }
+
+  /**
+   * Runs detection on pre-loaded file contents, processing in batches.
+   */
+  private async runDetectionOnContents(
+    files: FileContent[]
   ): Promise<{
-    findings: GdprFinding[];
+    findings: Finding[];
     scannedLines: number;
     detectors: DetectorName[];
   }> {
-    const allFindings: GdprFinding[] = [];
+    const allFindings: Finding[] = [];
     const detectors: DetectorName[] = [];
     let scannedLines = 0;
 
-    // Process in batches if > 1000 files
     const batches = this.createBatches(files, files.length > 1000 ? BATCH_SIZE : files.length);
 
     for (const batch of batches) {
       for (const file of batch) {
-        const filePath = path.join(baseDir, file);
-
         try {
-          const content = await fs.readFile(filePath, "utf-8");
-          scannedLines += content.split("\n").length;
+          scannedLines += file.content.split("\n").length;
 
-          const fileFindings = await this.deps.piiDetector.detect(content, file);
+          const fileFindings = await this.deps.findingDetector.detect(file.content, file.path);
 
           for (const finding of fileFindings) {
             allFindings.push(finding);
@@ -124,7 +174,7 @@ export class SourceAuditorModule {
             }
           }
         } catch {
-          // Graceful degradation: skip unreadable files
+          // Graceful degradation: skip files that fail detection
           continue;
         }
       }
@@ -149,9 +199,9 @@ export class SourceAuditorModule {
    * @returns new findings and count of acknowledged
    */
   private filterByWaivers(
-    findings: GdprFinding[],
+    findings: Finding[],
     waivers: ActiveWaiver[]
-  ): { newFindings: GdprFinding[]; acknowledgedCount: number } {
+  ): { newFindings: Finding[]; acknowledgedCount: number } {
     const waiverFingerprints = new Set(waivers.map((w) => w.fingerprint));
     const newFindings = findings.filter(
       (f) => !waiverFingerprints.has(f.fingerprint)
@@ -163,7 +213,7 @@ export class SourceAuditorModule {
   /**
    * Calculates summary of findings by severity, category, and detector.
    */
-  private calculateSummary(findings: GdprFinding[]): AuditSummary {
+  private calculateSummary(findings: Finding[]): AuditSummary {
     const summary: AuditSummary = {
       total: findings.length,
       bySeverity: { critical: 0, high: 0, medium: 0, low: 0, info: 0 },

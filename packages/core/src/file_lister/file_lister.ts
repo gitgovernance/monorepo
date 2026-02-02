@@ -8,74 +8,12 @@
  * @module file_lister
  */
 
-/**
- * Error codes for FileLister operations.
- */
-export type FileListerErrorCode =
-  | 'FILE_NOT_FOUND'
-  | 'READ_ERROR'
-  | 'PERMISSION_DENIED'
-  | 'INVALID_PATH';
+import type { FileListOptions, FileStats } from './file_lister.types';
 
-/**
- * Error thrown when file operations fail.
- */
-export class FileListerError extends Error {
-  constructor(
-    message: string,
-    public readonly code: FileListerErrorCode,
-    public readonly filePath?: string
-  ) {
-    super(message);
-    this.name = 'FileListerError';
-  }
-}
-
-/**
- * Options for file listing.
- */
-export interface FileListOptions {
-  /** Glob patterns to ignore (e.g., ['node_modules/**']) */
-  ignore?: string[];
-  /** Only return files (not directories). Default: true */
-  onlyFiles?: boolean;
-  /** Return absolute paths instead of relative. Default: false */
-  absolute?: boolean;
-  /** Maximum depth to traverse. Default: unlimited */
-  maxDepth?: number;
-}
-
-/**
- * File statistics returned by stat().
- */
-export interface FileStats {
-  /** File size in bytes */
-  size: number;
-  /** Last modification time as timestamp (ms since epoch) */
-  mtime: number;
-  /** Whether it's a file (not directory) */
-  isFile: boolean;
-}
-
-/**
- * Options for FsFileLister.
- */
-export interface FsFileListerOptions {
-  /** Base directory for all operations */
-  cwd: string;
-  /** Whether to automatically respect .gitignore. Default: false */
-  respectGitignore?: boolean;
-}
-
-/**
- * Options for MockFileLister.
- */
-export interface MockFileListerOptions {
-  /** Map of filePath -> content */
-  files?: Map<string, string> | Record<string, string>;
-  /** Map of filePath -> stats (optional, generated if not provided) */
-  stats?: Map<string, FileStats>;
-}
+// Re-export types and errors for barrel consumers
+export type { FileListOptions, FileStats, FsFileListerOptions, MemoryFileListerOptions } from './file_lister.types';
+export { FileListerError } from './file_lister.errors';
+export type { FileListerErrorCode } from './file_lister.errors';
 
 /**
  * Interface for listing and reading files.
@@ -88,8 +26,8 @@ export interface MockFileListerOptions {
  * const lister = new FsFileLister({ cwd: '/path/to/project' });
  *
  * // Memory backend (testing)
- * import { MockFileLister } from '@gitgov/core/memory';
- * const lister = new MockFileLister({ files: { 'src/index.ts': 'code...' } });
+ * import { MemoryFileLister } from '@gitgov/core/memory';
+ * const lister = new MemoryFileLister({ files: { 'src/index.ts': 'code...' } });
  *
  * // Usage
  * const files = await lister.list(['**\/*.ts']);

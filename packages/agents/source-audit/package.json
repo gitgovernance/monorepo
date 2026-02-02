@@ -1,0 +1,18 @@
+{
+  "name": "@gitgov/agent-source-audit",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "dist/index.mjs",
+  "scripts": {
+    "build": "esbuild index.ts --bundle --platform=node --format=esm --target=node20 --outfile=dist/index.mjs --external:@gitgov/core",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@gitgov/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "esbuild": "^0.19.0",
+    "typescript": "^5.0.0"
+  }
+}

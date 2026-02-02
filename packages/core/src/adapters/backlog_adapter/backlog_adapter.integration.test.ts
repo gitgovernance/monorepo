@@ -36,32 +36,37 @@ jest.doMock('../identity_adapter', () => ({
   }))
 }));
 
-import { BacklogAdapter } from './index';
-import { RecordStore } from '../../store';
-import { loadTaskRecord, loadCycleRecord, loadActorRecord, loadAgentRecord, createTestSignature } from '../../factories';
+import { BacklogAdapter } from './backlog_adapter';
+import { MemoryRecordStore } from '../../record_store/memory';
+import { FsRecordStore } from '../../record_store/fs';
+import type { RecordStores } from '../../record_store';
+import { createTestSignature } from '../../record_factories';
 import { IdentityAdapter } from '../identity_adapter';
-import { WorkflowMethodologyAdapter } from '../workflow_methodology_adapter';
+import { WorkflowAdapter } from '../workflow_adapter';
 import { FeedbackAdapter } from '../feedback_adapter';
 import { ExecutionAdapter } from '../execution_adapter';
 import type { IFeedbackAdapter } from '../feedback_adapter';
 import { ChangelogAdapter } from '../changelog_adapter';
 import { MetricsAdapter } from '../metrics_adapter';
 import { ConfigManager } from '../../config_manager';
+import type { SessionManager } from '../../session_manager';
 import { eventBus } from '../../event_bus';
 import type {
   FeedbackCreatedEvent,
   ChangelogCreatedEvent,
   SystemDailyTickEvent
 } from '../../event_bus';
-import type { TaskRecord } from '../../types';
-import type { CycleRecord } from '../../types';
-import type { FeedbackRecord } from '../../types';
-import type { ExecutionRecord } from '../../types';
-import type { ChangelogRecord } from '../../types';
-import type { ActorRecord } from '../../types';
-import type { AgentRecord } from '../../types';
-import type { GitGovRecord } from '../../types';
-import type { Signature } from '../../types/embedded.types';
+import type {
+  TaskRecord,
+  CycleRecord,
+  GitGovRecord,
+  GitGovTaskRecord,
+  GitGovCycleRecord,
+  GitGovFeedbackRecord,
+  GitGovChangelogRecord,
+  GitGovActorRecord,
+} from '../../record_types';
+import type { Signature } from '../../record_types/embedded.types';
 import { generateTaskId, generateCycleId } from '../../utils/id_generator';
 import { calculatePayloadChecksum } from '../../crypto/checksum';
 
@@ -141,23 +146,49 @@ function createMockCycleRecord(payload: Partial<CycleRecord>): GitGovRecord & { 
   };
 }
 
-describe('BacklogAdapter Integration Tests', () => {
+// Store factory type for describe.each
+type BacklogStores = Required<Pick<RecordStores, 'tasks' | 'cycles' | 'feedbacks' | 'changelogs'>>;
+type StoreFactory = () => BacklogStores;
+
+// Backend configurations for testing
+const backends: [string, StoreFactory][] = [
+  ['Memory', () => ({
+    tasks: new MemoryRecordStore<GitGovTaskRecord>(),
+    cycles: new MemoryRecordStore<GitGovCycleRecord>(),
+    feedbacks: new MemoryRecordStore<GitGovFeedbackRecord>(),
+    changelogs: new MemoryRecordStore<GitGovChangelogRecord>(),
+  })],
+  ['Fs', () => {
+    const basePath = `/tmp/gitgov-test-${Date.now()}`;
+    return {
+      tasks: new FsRecordStore<GitGovTaskRecord>({ basePath: `${basePath}/tasks`, createIfMissing: true }),
+      cycles: new FsRecordStore<GitGovCycleRecord>({ basePath: `${basePath}/cycles`, createIfMissing: true }),
+      feedbacks: new FsRecordStore<GitGovFeedbackRecord>({ basePath: `${basePath}/feedbacks`, createIfMissing: true }),
+      changelogs: new FsRecordStore<GitGovChangelogRecord>({ basePath: `${basePath}/changelogs`, createIfMissing: true }),
+    };
+  }],
+];
+
+describe.each(backends)('BacklogAdapter Integration Tests with %s backend', (_name, createStores) => {
   let backlogAdapter: BacklogAdapter;
-  let taskStore: RecordStore<TaskRecord>;
-  let cycleStore: RecordStore<CycleRecord>;
+  let stores: BacklogStores;
   let identityAdapter: IdentityAdapter;
-  let methodologyAdapter: WorkflowMethodologyAdapter;
+  let workflowAdapter: WorkflowAdapter;
   let feedbackAdapter: IFeedbackAdapter;
 
-  beforeEach(async () => {
-    // Use real WorkflowMethodologyAdapter with default configuration
+  // Mock adapters accessible for spying in tests
+  let mockFeedbackAdapter: IFeedbackAdapter;
+  let mockMetricsAdapter: MetricsAdapter;
+  let mockChangelogAdapter: ChangelogAdapter;
+  let mockExecutionAdapter: ExecutionAdapter;
+  let mockConfigManager: ConfigManager;
 
-    // Create stores in /tmp/ to avoid polluting .gitgov/
-    const testRoot = `/tmp/gitgov-test-${Date.now()}`;
+  beforeEach(async () => {
+    // Create stores using the backend factory
+    stores = createStores();
 
     // Create mock stores for IdentityAdapter constructor
-    const mockActorStore = new RecordStore<ActorRecord>('actors', loadActorRecord, testRoot);
-    const mockAgentStore = new RecordStore<AgentRecord>('agents', loadAgentRecord, testRoot);
+    const mockActorStore = new MemoryRecordStore<GitGovActorRecord>();
 
     // Create mock KeyProvider for integration test
     const mockKeyProvider = {
@@ -167,18 +198,27 @@ describe('BacklogAdapter Integration Tests', () => {
       deletePrivateKey: jest.fn().mockResolvedValue(true),
     };
 
+    const mockIdentitySessionManager = {
+      getActorState: jest.fn().mockResolvedValue({ actorId: 'human:test-user' }),
+      updateActorState: jest.fn().mockResolvedValue(undefined),
+      loadSession: jest.fn().mockResolvedValue(null),
+      detectActorFromKeyFiles: jest.fn().mockResolvedValue('human:test-user'),
+      getCloudSessionToken: jest.fn().mockResolvedValue(null),
+      getSyncPreferences: jest.fn().mockResolvedValue(null),
+      updateSyncPreferences: jest.fn().mockResolvedValue(undefined),
+      getLastSession: jest.fn().mockResolvedValue(null),
+    };
+
     // Create identity adapter - will be mocked by jest.doMock
     identityAdapter = new IdentityAdapter({
-      actorStore: mockActorStore,
-      agentStore: mockAgentStore,
+      stores: {
+        actors: mockActorStore,
+      },
       keyProvider: mockKeyProvider,
+      sessionManager: mockIdentitySessionManager,
     });
 
-    // Create stores with identity for validation
-    taskStore = new RecordStore<TaskRecord>('tasks', loadTaskRecord, testRoot);
-    cycleStore = new RecordStore<CycleRecord>('cycles', loadCycleRecord, testRoot);
-
-    // Create mock feedback adapter for methodology adapter
+    // Create mock feedback adapter for workflow adapter
     feedbackAdapter = {
       create: jest.fn(),
       resolve: jest.fn(),
@@ -188,73 +228,68 @@ describe('BacklogAdapter Integration Tests', () => {
       getFeedbackThread: jest.fn(),
     };
 
-    methodologyAdapter = WorkflowMethodologyAdapter.createDefault(feedbackAdapter);
+    workflowAdapter = WorkflowAdapter.createDefault(feedbackAdapter);
 
     // Config is loaded at construction, no need to reload
 
+    // Create mock adapters with proper typing
+    mockFeedbackAdapter = {
+      create: jest.fn(),
+      resolve: jest.fn(),
+      getFeedback: jest.fn(),
+      getFeedbackByEntity: jest.fn(),
+      getAllFeedback: jest.fn()
+    } as unknown as IFeedbackAdapter;
+
+    mockExecutionAdapter = {
+      create: jest.fn(),
+      getExecution: jest.fn(),
+      getExecutionsByTask: jest.fn(),
+      getAllExecutions: jest.fn()
+    } as unknown as ExecutionAdapter;
+
+    mockChangelogAdapter = {
+      create: jest.fn(),
+      getChangelog: jest.fn(),
+      getChangelogsByEntity: jest.fn(),
+      getAllChangelogs: jest.fn(),
+      getRecentChangelogs: jest.fn()
+    } as unknown as ChangelogAdapter;
+
+    mockMetricsAdapter = {
+      getSystemStatus: jest.fn(),
+      getTaskHealth: jest.fn(),
+      getProductivityMetrics: jest.fn(),
+      getCollaborationMetrics: jest.fn()
+    } as unknown as MetricsAdapter;
+
+    mockConfigManager = {
+      loadConfig: jest.fn().mockResolvedValue({})
+    } as unknown as ConfigManager;
+
+    const mockSessionManager = {
+      updateActorState: jest.fn().mockResolvedValue(undefined),
+      loadSession: jest.fn().mockResolvedValue(null),
+      getActorState: jest.fn().mockResolvedValue(null),
+    } as unknown as SessionManager;
+
     backlogAdapter = new BacklogAdapter({
-      taskStore,
-      cycleStore,
-      workflowMethodologyAdapter: methodologyAdapter,
+      stores,
+      workflowAdapter: workflowAdapter,
       identity: identityAdapter,
       eventBus: eventBus,
-      // The following adapters are mocked as they are not the focus of these integration tests
-      feedbackStore: {
-        list: jest.fn().mockResolvedValue([]),
-        read: jest.fn().mockResolvedValue(null),
-        write: jest.fn().mockResolvedValue(undefined),
-        delete: jest.fn().mockResolvedValue(undefined),
-        exists: jest.fn().mockResolvedValue(false)
-      } as unknown as RecordStore<FeedbackRecord>,
-      executionStore: {
-        list: jest.fn().mockResolvedValue([]),
-        read: jest.fn().mockResolvedValue(null),
-        write: jest.fn().mockResolvedValue(undefined),
-        delete: jest.fn().mockResolvedValue(undefined),
-        exists: jest.fn().mockResolvedValue(false)
-      } as unknown as RecordStore<ExecutionRecord>,
-      changelogStore: {
-        list: jest.fn().mockResolvedValue([]),
-        read: jest.fn().mockResolvedValue(null),
-        write: jest.fn().mockResolvedValue(undefined),
-        delete: jest.fn().mockResolvedValue(undefined),
-        exists: jest.fn().mockResolvedValue(false)
-      } as unknown as RecordStore<ChangelogRecord>,
-      feedbackAdapter: {
-        create: jest.fn(),
-        resolve: jest.fn(),
-        getFeedback: jest.fn(),
-        getFeedbackByEntity: jest.fn(),
-        getAllFeedback: jest.fn()
-      } as unknown as FeedbackAdapter,
-      executionAdapter: {
-        create: jest.fn(),
-        getExecution: jest.fn(),
-        getExecutionsByTask: jest.fn(),
-        getAllExecutions: jest.fn()
-      } as unknown as ExecutionAdapter,
-      changelogAdapter: {
-        create: jest.fn(),
-        getChangelog: jest.fn(),
-        getChangelogsByEntity: jest.fn(),
-        getAllChangelogs: jest.fn(),
-        getRecentChangelogs: jest.fn()
-      } as unknown as ChangelogAdapter,
-      metricsAdapter: {
-        getSystemStatus: jest.fn(),
-        getTaskHealth: jest.fn(),
-        getProductivityMetrics: jest.fn(),
-        getCollaborationMetrics: jest.fn()
-      } as unknown as MetricsAdapter,
-      configManager: {
-        updateActorState: jest.fn().mockResolvedValue(undefined)
-      } as unknown as ConfigManager,
+      feedbackAdapter: mockFeedbackAdapter as unknown as FeedbackAdapter,
+      executionAdapter: mockExecutionAdapter,
+      changelogAdapter: mockChangelogAdapter,
+      metricsAdapter: mockMetricsAdapter,
+      configManager: mockConfigManager,
+      sessionManager: mockSessionManager,
     });
   });
 
   describe('Role-based Workflow Validation', () => {
     // The signature group is determined by the actor's roles, not the task's tags
-    it('[EARS-24] should validate signature for design role with real methodology', async () => {
+    it('[EARS-C4] should validate signature for design role with real workflow', async () => {
       const task = createMockTaskRecord({
         id: 'task-design',
         status: 'review',
@@ -281,9 +316,9 @@ describe('BacklogAdapter Integration Tests', () => {
       };
 
       // Mock the stores and identity adapter
-      jest.spyOn(taskStore, 'read').mockResolvedValue(task);
+      jest.spyOn(stores.tasks, 'get').mockResolvedValue(task);
       jest.spyOn(identityAdapter, 'signRecord').mockImplementation(async (record) => record);
-      jest.spyOn(taskStore, 'write').mockResolvedValue(undefined);
+      jest.spyOn(stores.tasks, 'put').mockResolvedValue(undefined);
 
       // Both design and product approvers can approve (using their respective signature groups)
       jest.spyOn(identityAdapter, 'getActor').mockResolvedValue(designApprover);
@@ -298,7 +333,7 @@ describe('BacklogAdapter Integration Tests', () => {
   });
 
   describe('Task-Cycle Bidirectional Linking', () => {
-    it('[EARS-32] should create and maintain bidirectional links between tasks and cycles', async () => {
+    it('[EARS-L1] should create and maintain bidirectional links between tasks and cycles', async () => {
       const task = createMockTaskRecord({
         id: 'task-123',
         status: 'draft',
@@ -314,33 +349,39 @@ describe('BacklogAdapter Integration Tests', () => {
       });
 
       // Mock the stores
-      jest.spyOn(taskStore, 'read').mockResolvedValue(task);
-      jest.spyOn(cycleStore, 'read').mockResolvedValue(cycle);
+      jest.spyOn(stores.tasks, 'get').mockResolvedValue(task);
+      jest.spyOn(stores.cycles, 'get').mockResolvedValue(cycle);
 
-      const writeTaskSpy = jest.spyOn(taskStore, 'write').mockResolvedValue(undefined);
-      const writeCycleSpy = jest.spyOn(cycleStore, 'write').mockResolvedValue(undefined);
+      const writeTaskSpy = jest.spyOn(stores.tasks, 'put').mockResolvedValue(undefined);
+      const writeCycleSpy = jest.spyOn(stores.cycles, 'put').mockResolvedValue(undefined);
 
       // Execute the bidirectional linking
       await backlogAdapter.addTaskToCycle('cycle-123', 'task-123');
 
       // Verify both records were updated with bidirectional links
-      expect(writeCycleSpy).toHaveBeenCalledWith(expect.objectContaining({
-        payload: expect.objectContaining({
-          taskIds: expect.arrayContaining(['task-123'])
+      expect(writeCycleSpy).toHaveBeenCalledWith(
+        'cycle-123',
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            taskIds: expect.arrayContaining(['task-123'])
+          })
         })
-      }));
+      );
 
-      expect(writeTaskSpy).toHaveBeenCalledWith(expect.objectContaining({
-        payload: expect.objectContaining({
-          cycleIds: expect.arrayContaining(['cycle-123'])
+      expect(writeTaskSpy).toHaveBeenCalledWith(
+        'task-123',
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            cycleIds: expect.arrayContaining(['cycle-123'])
+          })
         })
-      }));
+      );
     });
   });
 
   describe('End-to-End Task Lifecycle', () => {
     it('should support complete task lifecycle from creation to archival', async () => {
-      // This test verifies the complete flow works with real methodology
+      // This test verifies the complete flow works with real workflow
       const actor = {
         id: 'human:developer',
         type: 'human' as const,
@@ -353,7 +394,7 @@ describe('BacklogAdapter Integration Tests', () => {
       // Mock stores and identity
       jest.spyOn(identityAdapter, 'getActor').mockResolvedValue(actor);
       jest.spyOn(identityAdapter, 'signRecord').mockImplementation(async (record) => record);
-      jest.spyOn(taskStore, 'write').mockResolvedValue(undefined);
+      jest.spyOn(stores.tasks, 'put').mockResolvedValue(undefined);
 
       let currentTask = createMockTaskRecord({
         id: 'task-123',
@@ -362,7 +403,7 @@ describe('BacklogAdapter Integration Tests', () => {
       });
 
       // Mock read to return the current state of the task
-      jest.spyOn(taskStore, 'read').mockImplementation(async () => currentTask);
+      jest.spyOn(stores.tasks, 'get').mockImplementation(async () => currentTask);
 
       // 1. Submit task (draft -> review)
       await backlogAdapter.submitTask('task-123', 'human:developer');
@@ -383,7 +424,7 @@ describe('BacklogAdapter Integration Tests', () => {
   });
 
   describe('Integration Test Scenarios - The Five Critical Flows', () => {
-    it('[EARS-39] "The Perfect Task Journey" - Complete task lifecycle with all adapters', async () => {
+    it('[EARS-N1] "The Perfect Task Journey" - Complete task lifecycle with all adapters', async () => {
       // Setup: Create a complete task journey from draft to archived
       const actor = {
         id: 'human:developer',
@@ -403,8 +444,8 @@ describe('BacklogAdapter Integration Tests', () => {
       // Mock all the stores and adapters
       jest.spyOn(identityAdapter, 'getActor').mockResolvedValue(actor);
       jest.spyOn(identityAdapter, 'signRecord').mockImplementation(async (record) => record);
-      jest.spyOn(taskStore, 'write').mockResolvedValue(undefined);
-      jest.spyOn(taskStore, 'read').mockImplementation(async () => currentTask);
+      jest.spyOn(stores.tasks, 'put').mockResolvedValue(undefined);
+      jest.spyOn(stores.tasks, 'get').mockImplementation(async () => currentTask);
 
       // Step 1: Submit task (draft -> review)
       await backlogAdapter.submitTask('1757687335-task-journey', 'human:developer');
@@ -422,7 +463,7 @@ describe('BacklogAdapter Integration Tests', () => {
       console.log('✅ Perfect Task Journey completed successfully');
     });
 
-    it('[EARS-40] "The Blocking Crisis" - Complete feedback blocking and resolution flow', async () => {
+    it('[EARS-N2] "The Blocking Crisis" - Complete feedback blocking and resolution flow', async () => {
       const taskId = '1757687335-task-crisis';
       const feedbackId = '1757687335-feedback-blocking-crisis';
 
@@ -430,25 +471,30 @@ describe('BacklogAdapter Integration Tests', () => {
         id: taskId,
         status: 'active'
       });
-      const mockFeedback = {
-        id: feedbackId,
+      const mockFeedback: GitGovFeedbackRecord = {
+        header: {
+          version: '1.0',
+          type: 'feedback',
+          payloadChecksum: 'mock-checksum',
+          signatures: [{ keyId: 'human:test', role: 'author', notes: '', signature: 'mock', timestamp: Date.now() }]
+        },
         payload: {
+          id: feedbackId,
+          entityType: 'task',
           entityId: taskId,
-          type: 'blocking'
+          type: 'blocking',
+          status: 'open',
+          content: 'Blocking issue'
         }
       };
 
       // Setup mocks for blocking crisis
-      const mockFeedbackStore = backlogAdapter['feedbackStore'] as any;
-      const mockTaskStore = backlogAdapter['taskStore'] as any;
-      const mockMetricsAdapter = backlogAdapter['metricsAdapter'] as any;
-
-      jest.spyOn(mockFeedbackStore, 'read').mockResolvedValue(mockFeedback);
-      jest.spyOn(mockTaskStore, 'read').mockResolvedValue(mockTask);
-      jest.spyOn(mockTaskStore, 'write').mockResolvedValue(undefined);
+      jest.spyOn(stores.feedbacks, 'get').mockResolvedValue(mockFeedback);
+      jest.spyOn(stores.tasks, 'get').mockResolvedValue(mockTask);
+      jest.spyOn(stores.tasks, 'put').mockResolvedValue(undefined);
       jest.spyOn(mockMetricsAdapter, 'getTaskHealth')
-        .mockResolvedValueOnce({ blockingFeedbacks: 1 }) // Still blocked
-        .mockResolvedValueOnce({ blockingFeedbacks: 0 }); // No more blocks
+        .mockResolvedValueOnce({ taskId: 'task', healthScore: 50, timeInCurrentStage: 0, stalenessIndex: 0, blockingFeedbacks: 1, lastActivity: Date.now(), recommendations: [] })
+        .mockResolvedValueOnce({ taskId: 'task', healthScore: 100, timeInCurrentStage: 0, stalenessIndex: 0, blockingFeedbacks: 0, lastActivity: Date.now(), recommendations: [] });
 
       // Crisis: Blocking feedback created
       const blockingEvent = {
@@ -471,7 +517,7 @@ describe('BacklogAdapter Integration Tests', () => {
         id: taskId,
         status: 'paused'
       });
-      jest.spyOn(mockTaskStore, 'read').mockResolvedValue(pausedTask);
+      jest.spyOn(stores.tasks, 'get').mockResolvedValue(pausedTask);
 
       // Resolution: New feedback created that resolves the blocking feedback (immutable pattern)
       const resolutionFeedbackId = `${Date.now()}-feedback-resolution`;
@@ -492,7 +538,7 @@ describe('BacklogAdapter Integration Tests', () => {
       } as FeedbackCreatedEvent;
 
       // Mock getFeedback to return the original blocking feedback
-      jest.spyOn(feedbackAdapter as any, 'getFeedback').mockResolvedValue({
+      jest.spyOn(mockFeedbackAdapter, 'getFeedback').mockResolvedValue({
         id: feedbackId,
         entityType: 'task',
         entityId: taskId,
@@ -506,7 +552,7 @@ describe('BacklogAdapter Integration Tests', () => {
       console.log('✅ Blocking Crisis handled successfully');
     });
 
-    it('[EARS-41] "The Automated Archivist" - Complete archival flow with ChangelogAdapter', async () => {
+    it('[EARS-N3] "The Automated Archivist" - Complete archival flow with ChangelogAdapter', async () => {
       const taskId = '1757687335-task-archival';
       const changelogId = '1757687335-changelog-archival';
 
@@ -514,8 +560,13 @@ describe('BacklogAdapter Integration Tests', () => {
         id: taskId,
         status: 'done'
       });
-      const mockChangelog = {
-        id: changelogId,
+      const mockChangelog: GitGovChangelogRecord = {
+        header: {
+          version: '1.0',
+          type: 'changelog',
+          payloadChecksum: 'mock-checksum',
+          signatures: [{ keyId: 'human:test', role: 'author', notes: '', signature: 'mock', timestamp: Date.now() }]
+        },
         payload: {
           id: changelogId,
           title: 'Task Archival Completed',
@@ -527,12 +578,9 @@ describe('BacklogAdapter Integration Tests', () => {
       };
 
       // Setup mocks for archival
-      const mockChangelogStore = backlogAdapter['changelogStore'] as any;
-      const mockTaskStore = backlogAdapter['taskStore'] as any;
-
-      jest.spyOn(mockChangelogStore, 'read').mockResolvedValue(mockChangelog);
-      jest.spyOn(mockTaskStore, 'read').mockResolvedValue(mockTask);
-      jest.spyOn(mockTaskStore, 'write').mockResolvedValue(undefined);
+      jest.spyOn(stores.changelogs, 'get').mockResolvedValue(mockChangelog);
+      jest.spyOn(stores.tasks, 'get').mockResolvedValue(mockTask);
+      jest.spyOn(stores.tasks, 'put').mockResolvedValue(undefined);
 
       const archivalEvent = {
         type: 'changelog.created',
@@ -548,7 +596,8 @@ describe('BacklogAdapter Integration Tests', () => {
 
       await backlogAdapter.handleChangelogCreated(archivalEvent);
 
-      expect(mockTaskStore.write).toHaveBeenCalledWith(
+      expect(stores.tasks.put).toHaveBeenCalledWith(
+        taskId,
         expect.objectContaining({
           payload: expect.objectContaining({
             status: 'archived'
@@ -559,7 +608,7 @@ describe('BacklogAdapter Integration Tests', () => {
       console.log('✅ Automated Archivist completed successfully');
     });
 
-    it('[EARS-42] "The Proactive System" - Daily audit with MetricsAdapter and automated warnings', async () => {
+    it('[EARS-N4] "The Proactive System" - Daily audit with MetricsAdapter and automated warnings', async () => {
       const mockSystemStatus = {
         tasks: { total: 10, byStatus: { active: 5 }, byPriority: {} },
         cycles: { total: 2, active: 1, completed: 1 },
@@ -577,12 +626,16 @@ describe('BacklogAdapter Integration Tests', () => {
       };
 
       // Setup mocks for proactive system
-      const mockMetricsAdapter = backlogAdapter['metricsAdapter'] as any;
-      const mockFeedbackAdapter = backlogAdapter['feedbackAdapter'] as any;
-
       jest.spyOn(mockMetricsAdapter, 'getSystemStatus').mockResolvedValue(mockSystemStatus);
       jest.spyOn(mockMetricsAdapter, 'getTaskHealth').mockResolvedValue(mockTaskHealth);
-      jest.spyOn(mockFeedbackAdapter, 'create').mockResolvedValue({ id: 'warning-feedback' });
+      jest.spyOn(mockFeedbackAdapter, 'create').mockResolvedValue({
+        id: 'warning-feedback',
+        entityType: 'task',
+        entityId: 'task-at-risk',
+        type: 'suggestion',
+        status: 'open',
+        content: 'Warning feedback'
+      });
 
       // Mock getAllTasks to return at-risk tasks
       jest.spyOn(backlogAdapter, 'getAllTasks').mockResolvedValue([
@@ -613,7 +666,7 @@ describe('BacklogAdapter Integration Tests', () => {
       console.log('✅ Proactive System audit completed successfully');
     });
 
-    it('[EARS-43] "The Multi-Adapter Orchestra" - All adapters working together seamlessly', async () => {
+    it('[EARS-N5] "The Multi-Adapter Orchestra" - All adapters working together seamlessly', async () => {
       // This test validates that multiple adapters coordinate without conflicts
       const orchestrationStart = Date.now();
 
@@ -628,18 +681,24 @@ describe('BacklogAdapter Integration Tests', () => {
         cycleIds: [cycleId]
       });
 
-      // Setup comprehensive mocks
-      const stores = {
-        taskStore: backlogAdapter['taskStore'] as any,
-        cycleStore: backlogAdapter['cycleStore'] as any,
-        feedbackStore: backlogAdapter['feedbackStore'] as any
-      };
-
-      jest.spyOn(stores.taskStore, 'read').mockResolvedValue(mockTask);
-      jest.spyOn(stores.taskStore, 'write').mockResolvedValue(undefined);
-      jest.spyOn(stores.feedbackStore, 'read').mockResolvedValue({
-        id: feedbackId,
-        payload: { entityId: taskId, type: 'suggestion' }
+      // Setup mocks on stores from beforeEach
+      jest.spyOn(stores.tasks, 'get').mockResolvedValue(mockTask);
+      jest.spyOn(stores.tasks, 'put').mockResolvedValue(undefined);
+      jest.spyOn(stores.feedbacks, 'get').mockResolvedValue({
+        header: {
+          version: '1.0',
+          type: 'feedback',
+          payloadChecksum: 'mock-checksum',
+          signatures: [{ keyId: 'human:test', role: 'author', notes: '', signature: 'mock', timestamp: Date.now() }]
+        },
+        payload: {
+          id: feedbackId,
+          entityType: 'task',
+          entityId: taskId,
+          type: 'suggestion',
+          status: 'open',
+          content: 'Suggestion feedback'
+        }
       });
 
       // Test multiple operations in sequence
