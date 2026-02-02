@@ -1,9 +1,9 @@
 import { createCycleRecord } from './cycle_factory';
 import type { CycleRecord } from '../record_types';
-import { DetailedValidationError } from '../validation/common';
+import { DetailedValidationError } from '../record_validations/common';
 
 // Manual mock for validateCycleRecordDetailed
-jest.mock('../validation/cycle_validator', () => ({
+jest.mock('../record_validations/cycle_validator', () => ({
   validateCycleRecordDetailed: jest.fn()
     .mockReturnValue({ isValid: true, errors: [] }),
 }));
@@ -11,7 +11,7 @@ jest.mock('../validation/cycle_validator', () => ({
 describe('createCycleRecord', () => {
   beforeEach(() => {
     // Reset mock to default success state before each test
-    const { validateCycleRecordDetailed } = require('../validation/cycle_validator');
+    const { validateCycleRecordDetailed } = require('../record_validations/cycle_validator');
     (validateCycleRecordDetailed as jest.Mock).mockReturnValue({ isValid: true, errors: [] });
   });
 
@@ -32,7 +32,7 @@ describe('createCycleRecord', () => {
   });
 
   it('[EARS-1] should throw DetailedValidationError for missing/invalid fields', async () => {
-    const { validateCycleRecordDetailed } = require('../validation/cycle_validator');
+    const { validateCycleRecordDetailed } = require('../record_validations/cycle_validator');
     (validateCycleRecordDetailed as jest.Mock).mockReturnValue({
       isValid: false,
       errors: [
@@ -62,7 +62,7 @@ describe('createCycleRecord', () => {
   });
 
   it('[EARS-5] should throw DetailedValidationError if the created record fails validation', async () => {
-    const { validateCycleRecordDetailed } = require('../validation/cycle_validator');
+    const { validateCycleRecordDetailed } = require('../record_validations/cycle_validator');
     (validateCycleRecordDetailed as jest.Mock).mockReturnValue({
       isValid: false,
       errors: [
@@ -133,7 +133,7 @@ describe('createCycleRecord', () => {
 
   describe('CycleRecord Specific Factory Operations (EARS 19-21)', () => {
     it('[EARS-19] should throw DetailedValidationError for invalid status', async () => {
-      const { validateCycleRecordDetailed } = require('../validation/cycle_validator');
+      const { validateCycleRecordDetailed } = require('../record_validations/cycle_validator');
       (validateCycleRecordDetailed as jest.Mock).mockReturnValue({
         isValid: false,
         errors: [
@@ -153,7 +153,7 @@ describe('createCycleRecord', () => {
     });
 
     it('[EARS-20] should throw DetailedValidationError for invalid taskIds pattern', async () => {
-      const { validateCycleRecordDetailed } = require('../validation/cycle_validator');
+      const { validateCycleRecordDetailed } = require('../record_validations/cycle_validator');
       (validateCycleRecordDetailed as jest.Mock).mockReturnValue({
         isValid: false,
         errors: [

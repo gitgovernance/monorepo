@@ -1,10 +1,10 @@
 import { createExecutionRecord } from './execution_factory';
 import { generateExecutionId } from '../utils/id_generator';
-import { DetailedValidationError } from '../validation/common';
+import { DetailedValidationError } from '../record_validations/common';
 import type { ExecutionRecord } from '../record_types';
 
 // Mock the validator
-jest.mock('../validation/execution_validator', () => ({
+jest.mock('../record_validations/execution_validator', () => ({
   validateExecutionRecordDetailed: jest.fn()
 }));
 
@@ -14,7 +14,7 @@ jest.mock('../utils/id_generator', () => ({
 }));
 
 describe('ExecutionRecord Factory', () => {
-  const mockValidateExecutionRecordDetailed = require('../validation/execution_validator').validateExecutionRecordDetailed;
+  const mockValidateExecutionRecordDetailed = require('../record_validations/execution_validator').validateExecutionRecordDetailed;
   const mockGenerateExecutionId = generateExecutionId as jest.MockedFunction<typeof generateExecutionId>;
 
   beforeEach(() => {

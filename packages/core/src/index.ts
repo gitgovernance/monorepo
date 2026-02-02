@@ -13,7 +13,7 @@ export * as Schemas from "./record_schemas";
 export * as Store from "./record_store";
 export * as SyncState from "./sync_state";
 // Type system exports
-export * as Validation from "./validation";
+export * as Validation from "./record_validations";
 export * as Records from "./record_types";
 export * as EventBus from "./event_bus";
 

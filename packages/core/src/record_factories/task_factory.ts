@@ -1,7 +1,7 @@
 import type { TaskRecord, GitGovTaskRecord } from "../record_types";
-import { validateTaskRecordDetailed } from "../validation/task_validator";
-import { validateEmbeddedMetadataDetailed } from "../validation/embedded_metadata_validator";
-import { DetailedValidationError } from "../validation/common";
+import { validateTaskRecordDetailed } from "../record_validations/task_validator";
+import { validateEmbeddedMetadataDetailed } from "../record_validations/embedded_metadata_validator";
+import { DetailedValidationError } from "../record_validations/common";
 import { generateTaskId } from "../utils/id_generator";
 
 /**

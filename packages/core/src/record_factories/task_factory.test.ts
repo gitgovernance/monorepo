@@ -1,9 +1,9 @@
 import { createTaskRecord } from './task_factory';
 import type { TaskRecord } from '../record_types';
-import { DetailedValidationError } from '../validation/common';
+import { DetailedValidationError } from '../record_validations/common';
 
 // Manual mock for validateTaskRecordDetailed
-jest.mock('../validation/task_validator', () => ({
+jest.mock('../record_validations/task_validator', () => ({
   validateTaskRecordDetailed: jest.fn()
     .mockReturnValue({ isValid: true, errors: [] }),
 }));
@@ -11,7 +11,7 @@ jest.mock('../validation/task_validator', () => ({
 describe('createTaskRecord', () => {
   beforeEach(() => {
     // Reset mock to default success state before each test
-    const { validateTaskRecordDetailed } = require('../validation/task_validator');
+    const { validateTaskRecordDetailed } = require('../record_validations/task_validator');
     (validateTaskRecordDetailed as jest.Mock).mockReturnValue({ isValid: true, errors: [] });
   });
 
@@ -34,7 +34,7 @@ describe('createTaskRecord', () => {
   });
 
   it('[EARS-1] should throw DetailedValidationError for missing/invalid fields', async () => {
-    const { validateTaskRecordDetailed } = require('../validation/task_validator');
+    const { validateTaskRecordDetailed } = require('../record_validations/task_validator');
     (validateTaskRecordDetailed as jest.Mock).mockReturnValue({
       isValid: false,
       errors: [
@@ -65,7 +65,7 @@ describe('createTaskRecord', () => {
   });
 
   it('[EARS-5] should throw DetailedValidationError if the created record fails validation', async () => {
-    const { validateTaskRecordDetailed } = require('../validation/task_validator');
+    const { validateTaskRecordDetailed } = require('../record_validations/task_validator');
     (validateTaskRecordDetailed as jest.Mock).mockReturnValue({
       isValid: false,
       errors: [
@@ -136,7 +136,7 @@ describe('createTaskRecord', () => {
 
   describe('TaskRecord Specific Factory Operations (EARS 15-18)', () => {
     it('[EARS-15] should throw DetailedValidationError for invalid status', async () => {
-      const { validateTaskRecordDetailed } = require('../validation/task_validator');
+      const { validateTaskRecordDetailed } = require('../record_validations/task_validator');
       (validateTaskRecordDetailed as jest.Mock).mockReturnValue({
         isValid: false,
         errors: [
@@ -157,7 +157,7 @@ describe('createTaskRecord', () => {
     });
 
     it('[EARS-16] should throw DetailedValidationError for invalid priority', async () => {
-      const { validateTaskRecordDetailed } = require('../validation/task_validator');
+      const { validateTaskRecordDetailed } = require('../record_validations/task_validator');
       (validateTaskRecordDetailed as jest.Mock).mockReturnValue({
         isValid: false,
         errors: [
@@ -190,7 +190,7 @@ describe('createTaskRecord', () => {
     });
 
     it('[EARS-18] should throw DetailedValidationError for title shorter than 3 characters', async () => {
-      const { validateTaskRecordDetailed } = require('../validation/task_validator');
+      const { validateTaskRecordDetailed } = require('../record_validations/task_validator');
       (validateTaskRecordDetailed as jest.Mock).mockReturnValue({
         isValid: false,
         errors: [

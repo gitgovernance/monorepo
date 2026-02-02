@@ -1,7 +1,7 @@
 import type { AgentRecord, GitGovAgentRecord } from "../record_types";
-import { validateAgentRecordDetailed } from "../validation/agent_validator";
-import { validateEmbeddedMetadataDetailed } from "../validation/embedded_metadata_validator";
-import { DetailedValidationError } from "../validation/common";
+import { validateAgentRecordDetailed } from "../record_validations/agent_validator";
+import { validateEmbeddedMetadataDetailed } from "../record_validations/embedded_metadata_validator";
+import { DetailedValidationError } from "../record_validations/common";
 
 /**
  * Creates a new, fully-formed AgentRecord with validation.

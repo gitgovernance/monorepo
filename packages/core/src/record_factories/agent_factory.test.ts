@@ -1,16 +1,16 @@
 import { createAgentRecord } from './agent_factory';
 import type { AgentRecord } from '../record_types';
-import { DetailedValidationError } from '../validation/common';
+import { DetailedValidationError } from '../record_validations/common';
 
 // Mock the validator to control test outcomes
-jest.mock('../validation/agent_validator', () => ({
+jest.mock('../record_validations/agent_validator', () => ({
   validateAgentRecordDetailed: jest.fn(() => ({ isValid: true, errors: [] })),
 }));
 
 describe('createAgentRecord', () => {
   beforeEach(() => {
     // Reset mock to default success state before each test
-    const { validateAgentRecordDetailed } = require('../validation/agent_validator');
+    const { validateAgentRecordDetailed } = require('../record_validations/agent_validator');
     (validateAgentRecordDetailed as jest.Mock).mockReturnValue({ isValid: true, errors: [] });
   });
 
@@ -34,7 +34,7 @@ describe('createAgentRecord', () => {
   });
 
   it('[EARS-1] should throw DetailedValidationError for invalid id (empty string)', async () => {
-    const { validateAgentRecordDetailed } = require('../validation/agent_validator');
+    const { validateAgentRecordDetailed } = require('../record_validations/agent_validator');
     (validateAgentRecordDetailed as jest.Mock).mockReturnValue({
       isValid: false,
       errors: [
@@ -49,7 +49,7 @@ describe('createAgentRecord', () => {
   });
 
   it('[EARS-1] should throw DetailedValidationError for missing engine properties', async () => {
-    const { validateAgentRecordDetailed } = require('../validation/agent_validator');
+    const { validateAgentRecordDetailed } = require('../record_validations/agent_validator');
     (validateAgentRecordDetailed as jest.Mock).mockReturnValue({
       isValid: false,
       errors: [
@@ -66,7 +66,7 @@ describe('createAgentRecord', () => {
 
   it('[EARS-5] should throw DetailedValidationError if the created record fails validation', async () => {
     // Override the mock for this specific test
-    const { validateAgentRecordDetailed } = require('../validation/agent_validator');
+    const { validateAgentRecordDetailed } = require('../record_validations/agent_validator');
     (validateAgentRecordDetailed as jest.Mock).mockReturnValue({
       isValid: false,
       errors: [
@@ -131,7 +131,7 @@ describe('createAgentRecord', () => {
 
   describe('AgentRecord Specific Factory Operations (EARS 12-14)', () => {
     it('[EARS-14] should throw DetailedValidationError when engine is missing', async () => {
-      const { validateAgentRecordDetailed } = require('../validation/agent_validator');
+      const { validateAgentRecordDetailed } = require('../record_validations/agent_validator');
       (validateAgentRecordDetailed as jest.Mock).mockReturnValue({
         isValid: false,
         errors: [

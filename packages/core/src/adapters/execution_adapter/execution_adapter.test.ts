@@ -6,7 +6,7 @@ import { publishEvent } from '../../event_bus';
 import type { ExecutionRecord, GitGovExecutionRecord, GitGovTaskRecord } from '../../record_types';
 import type { IEventStream } from '../../event_bus';
 import type { GitGovRecord, Signature } from '../../record_types';
-import { DetailedValidationError } from '../../validation/common';
+import { DetailedValidationError } from '../../record_validations/common';
 
 // Mock dependencies
 jest.mock('../../record_factories/execution_factory');

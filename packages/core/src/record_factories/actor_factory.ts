@@ -1,8 +1,8 @@
 import type { ActorRecord, GitGovActorRecord } from "../record_types";
-import { validateActorRecordDetailed } from "../validation/actor_validator";
-import { validateEmbeddedMetadataDetailed } from "../validation/embedded_metadata_validator";
+import { validateActorRecordDetailed } from "../record_validations/actor_validator";
+import { validateEmbeddedMetadataDetailed } from "../record_validations/embedded_metadata_validator";
 import { generateActorId } from "../utils/id_generator";
-import { DetailedValidationError } from "../validation/common";
+import { DetailedValidationError } from "../record_validations/common";
 
 /**
  * Creates a new, fully-formed ActorRecord with validation.

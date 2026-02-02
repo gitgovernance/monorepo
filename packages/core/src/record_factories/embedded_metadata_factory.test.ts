@@ -1,14 +1,14 @@
 import { createEmbeddedMetadataRecord, createTestSignature } from './embedded_metadata_factory';
 import type { ActorRecord, TaskRecord } from '../record_types';
-import { DetailedValidationError } from '../validation/common';
+import { DetailedValidationError } from '../record_validations/common';
 
 // Mock the validator
-jest.mock('../validation/embedded_metadata_validator', () => ({
+jest.mock('../record_validations/embedded_metadata_validator', () => ({
   validateEmbeddedMetadataDetailed: jest.fn()
 }));
 
 describe('EmbeddedMetadata Factory', () => {
-  const mockValidateEmbeddedMetadataDetailed = require('../validation/embedded_metadata_validator').validateEmbeddedMetadataDetailed;
+  const mockValidateEmbeddedMetadataDetailed = require('../record_validations/embedded_metadata_validator').validateEmbeddedMetadataDetailed;
 
   beforeEach(() => {
     jest.clearAllMocks();

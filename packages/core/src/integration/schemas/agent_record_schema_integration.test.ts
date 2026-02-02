@@ -1,4 +1,4 @@
-import { validateAgentRecordDetailed } from '../../validation/agent_validator';
+import { validateAgentRecordDetailed } from '../../record_validations/agent_validator';
 import type { AgentRecord } from '../../record_types';
 
 describe('AgentRecord Schema Integration Tests', () => {

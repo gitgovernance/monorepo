@@ -2,8 +2,8 @@ import type { TaskRecord } from '../record_types';
 import type { CycleRecord } from '../record_types';
 import { createTaskRecord } from '../record_factories/task_factory';
 import { createCycleRecord } from '../record_factories/cycle_factory';
-import { validateTaskRecordDetailed } from '../validation/task_validator';
-import { validateCycleRecordDetailed } from '../validation/cycle_validator';
+import { validateTaskRecordDetailed } from '../record_validations/task_validator';
+import { validateCycleRecordDetailed } from '../record_validations/cycle_validator';
 
 describe('Cycles ↔ Tasks Integration', () => {
   describe('Bidirectional Relationship Validation', () => {

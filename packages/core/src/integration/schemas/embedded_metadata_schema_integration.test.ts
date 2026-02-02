@@ -1,4 +1,4 @@
-import { validateEmbeddedMetadataDetailed } from '../../validation/embedded_metadata_validator';
+import { validateEmbeddedMetadataDetailed } from '../../record_validations/embedded_metadata_validator';
 import type { AgentRecord, TaskRecord, ExecutionRecord, ChangelogRecord, FeedbackRecord, CycleRecord, GitGovActorRecord } from '../../record_types';
 import type { Signature } from '../../record_types/embedded.types';
 

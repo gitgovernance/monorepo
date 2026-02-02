@@ -2,8 +2,8 @@ import type { WorkflowRecord } from "../record_types";
 import {
   validateWorkflowConfigDetailed,
   validateWorkflowConfigBusinessRules
-} from "../validation/workflow_validator";
-import { DetailedValidationError } from "../validation/common";
+} from "../record_validations/workflow_validator";
+import { DetailedValidationError } from "../record_validations/common";
 
 /**
  * Creates a new, fully-formed WorkflowConfig with validation.

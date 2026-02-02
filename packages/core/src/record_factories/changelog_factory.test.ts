@@ -1,14 +1,14 @@
 import { createChangelogRecord } from './changelog_factory';
-import { DetailedValidationError } from '../validation/common';
+import { DetailedValidationError } from '../record_validations/common';
 import type { ChangelogRecord } from '../record_types';
 
 // Mock the validator
-jest.mock('../validation/changelog_validator', () => ({
+jest.mock('../record_validations/changelog_validator', () => ({
   validateChangelogRecordDetailed: jest.fn()
 }));
 
 describe('ChangelogRecord Factory', () => {
-  const mockValidateChangelogRecordDetailed = require('../validation/changelog_validator').validateChangelogRecordDetailed;
+  const mockValidateChangelogRecordDetailed = require('../record_validations/changelog_validator').validateChangelogRecordDetailed;
 
   beforeEach(() => {
     jest.clearAllMocks();

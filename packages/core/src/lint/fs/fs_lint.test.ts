@@ -29,7 +29,7 @@ import type {
 } from './fs_lint.types';
 import type { IIndexerAdapter } from '../../adapters/indexer_adapter';
 import type { TaskRecord, GitGovTaskRecord, GitGovRecord } from '../../record_types';
-import { DetailedValidationError } from '../../validation/common';
+import { DetailedValidationError } from '../../record_validations/common';
 import {
   createTaskRecord,
   createEmbeddedMetadataRecord,

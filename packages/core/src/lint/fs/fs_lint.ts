@@ -87,7 +87,7 @@ import {
   loadChangelogRecord,
   loadFeedbackRecord
 } from "../../record_factories";
-import { DetailedValidationError } from "../../validation/common";
+import { DetailedValidationError } from "../../record_validations/common";
 
 const logger = createLogger("[FsLint] ");
 

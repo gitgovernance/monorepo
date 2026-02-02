@@ -1,4 +1,4 @@
-import { validateExecutionRecordDetailed } from '../../validation/execution_validator';
+import { validateExecutionRecordDetailed } from '../../record_validations/execution_validator';
 import type { ExecutionRecord } from '../../record_types';
 
 describe('ExecutionRecord Schema Integration Tests', () => {

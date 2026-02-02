@@ -8,7 +8,7 @@
  * 3. Complete (no broken $ref references)
  * 4. Consistent with our naming conventions
  * 
- * Note: Integration testing with src/validation is handled in the test suite.
+ * Note: Integration testing with src/record_validations is handled in the test suite.
  */
 
 import * as fs from 'fs';
@@ -17,7 +17,7 @@ import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
 import { fileURLToPath } from 'url';
 
-// No imports from src/validation - this script only validates JSON Schema format
+// No imports from src/record_validations - this script only validates JSON Schema format
 
 // ESM equivalent of __dirname
 const __filename = fileURLToPath(import.meta.url);
@@ -354,7 +354,7 @@ async function validateAllSchemas(): Promise<boolean> {
 
   if (allValid) {
     console.log('🎉 All schemas are valid JSON Schemas!');
-    console.log('💡 Run tests to verify integration with src/validation');
+    console.log('💡 Run tests to verify integration with src/record_validations');
   } else {
     const totalErrors = syntaxErrors + formatErrors + metadataErrors + referenceErrors;
     console.log(`❌ Found ${totalErrors} validation errors`);
