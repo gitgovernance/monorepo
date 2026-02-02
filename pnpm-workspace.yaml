@@ -2,3 +2,14 @@ packages:
   - packages/core
   - packages/cli
   - packages/agents/*
+  - packages/saas-api
+  - packages/saas-web
+  - packages/saas-worker
+
+onlyBuiltDependencies:
+  - '@prisma/client'
+  - '@prisma/engines'
+  - '@swc/core'
+  - esbuild
+  - prisma
+  - sharp
