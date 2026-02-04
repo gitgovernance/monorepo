@@ -1,4 +1,3 @@
-// Blueprint: packages/blueprints/03_products/core/specs/modules/finding_detector/finding_detector_module.md
 // Sections: §4.4 (EARS-19), §4.5 (EARS-25)
 import { HttpLlmDetector } from "./http_llm_detector";
 

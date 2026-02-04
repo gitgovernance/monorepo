@@ -1,4 +1,3 @@
-// Blueprint: packages/blueprints/03_products/core/specs/modules/finding_detector/finding_detector_module.md
 // Sections: §4.2 (EARS-13), §4.3 (EARS-14 to EARS-17), §4.4 (EARS-18, EARS-20 to EARS-22), §4.5 (EARS-24)
 import { FindingDetectorModule } from "./finding_detector";
 import { RegexDetector } from "./detectors/regex_detector";

@@ -1,9 +1,6 @@
 /**
  * InitCommand Unit Tests
  *
- * Blueprint: packages/blueprints/03_products/cli/specs/init_command.md
- * All EARS prefixes map to init_command.md §4.1-4.4
- *
  * EARS Coverage:
  * - §4.1 Bootstrap Core Functionality (EARS-A1 to A5)
  * - §4.2 ProjectAdapter Integration (EARS-B1 to B5)

@@ -3,9 +3,6 @@
  *
  * Handles persistence of .session.json to the local filesystem.
  * Session files are machine-local and NOT versioned in Git.
- *
- * @see packages/blueprints/03_products/core/specs/modules/session_store_module/fs_session_store_module.md
- * @see packages/blueprints/03_products/protocol/10_appendices/session_state.md
  */
 
 import { promises as fs } from 'fs';

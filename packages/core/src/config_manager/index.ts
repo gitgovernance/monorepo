@@ -3,8 +3,6 @@
  *
  * Provides typed access to GitGovernance project configuration (config.json).
  * Configuration is versioned in Git and shared between collaborators.
- *
- * @see packages/blueprints/03_products/protocol/10_appendices/config_file.md
  */
 
 // Types

@@ -1,9 +1,6 @@
 /**
  * AuditCommand Unit Tests
  *
- * Blueprint: packages/blueprints/03_products/cli/specs/audit_command.md
- * All EARS prefixes map to audit_command.md §4.1-4.6
- *
  * EARS Coverage:
  * - §4.1 CLI Argument Parsing & Module Integration (EARS-A1 to A4)
  * - §4.2 Scope Resolution (EARS-B1 to B4)

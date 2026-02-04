@@ -2,7 +2,6 @@
  * FsWatcherStateModule — Unit Tests
  *
  * All EARS prefixes map to:
- *   packages/blueprints/03_products/core/specs/modules/watcher_state_module/fs_watcher_state_module.md
  *
  * §4.1 Lifecycle        → EARS-1, EARS-2
  * §4.2 Event Emission   → EARS-3, EARS-4

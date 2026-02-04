@@ -8,9 +8,6 @@
  * NOTE: Session state (.session.json) is handled by SessionStore, not ConfigStore.
  * This separation allows different backends for config (immutable, versioned)
  * vs session (ephemeral, local).
- *
- * @see packages/blueprints/03_products/core/specs/modules/config_session_module.md
- * @see packages/blueprints/03_products/protocol/10_appendices/config_file.md
  */
 
 import type { GitGovConfig } from '../config_manager';

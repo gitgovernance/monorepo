@@ -1,4 +1,3 @@
-// Blueprint: packages/blueprints/03_products/core/specs/modules/source_auditor/source_auditor_module.md
 // Sections: §2.3 (Internal Component - ScoringEngine)
 import { ScoringEngine } from "./scoring_engine";
 import type { Finding } from "../finding_detector/types";

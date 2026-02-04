@@ -5,9 +5,6 @@
  * access is not available or not desired.
  *
  * NOTE: Session state is handled by MemorySessionStore, not this class.
- *
- * @see packages/blueprints/03_products/core/specs/modules/config_store_module/memory_config_store_module.md
- * @see packages/blueprints/03_products/protocol/10_appendices/config_file.md
  */
 
 import type { ConfigStore } from '../config_store';

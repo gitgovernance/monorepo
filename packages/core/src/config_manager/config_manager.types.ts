@@ -1,7 +1,5 @@
 /**
  * ConfigManager Types
- *
- * @see packages/blueprints/03_products/protocol/10_appendices/config_file.md
  */
 
 /**

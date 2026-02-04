@@ -1,4 +1,3 @@
-// Blueprint: packages/blueprints/03_products/core/specs/modules/finding_detector/finding_detector_module.md
 // Sections: §4.2 (EARS-10 to EARS-12)
 import { HeuristicDetector } from "./heuristic_detector";
 
