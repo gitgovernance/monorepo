@@ -3,6 +3,7 @@ node_modules
 companies
 book
 dist
+generated
 coverage
 tmp
 bin
