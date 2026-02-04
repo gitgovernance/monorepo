@@ -1,3 +1,10 @@
+## [2.1.1](https://github.com/gitgovernance/monorepo/compare/core-v2.1.0...core-v2.1.1) (2026-02-04)
+
+
+### ♻️ Refactoring
+
+* **workflow:** remove view_configs, fix sync script paths, update private submodule ([63d15ee](https://github.com/gitgovernance/monorepo/commit/63d15ee7e0cbd4bc532c3b33f2f14421651acb86))
+
 ## [2.1.0](https://github.com/gitgovernance/monorepo/compare/core-v2.0.0...core-v2.1.0) (2026-02-04)
 
 
