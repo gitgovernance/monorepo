@@ -1,3 +1,15 @@
+## [2.1.0](https://github.com/gitgovernance/monorepo/compare/core-v2.0.0...core-v2.1.0) (2026-02-04)
+
+
+### ✨ Features
+
+* consolidate private packages into single submodule ([b1f032b](https://github.com/gitgovernance/monorepo/commit/b1f032b59d0a4963e72f4115114b5fa2308b10a6))
+
+
+### 🐛 Bug Fixes
+
+* **cli:** pin @gitgov/core dependency to ^2.0.0 ([1d7a662](https://github.com/gitgovernance/monorepo/commit/1d7a6629f1d1a69514f68af143b90b5eca3c9b85))
+
 ## [2.0.0](https://github.com/gitgovernance/monorepo/compare/core-v1.13.0...core-v2.0.0) (2026-02-02)
 
 
