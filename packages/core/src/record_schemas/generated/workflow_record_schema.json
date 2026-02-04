@@ -163,39 +163,6 @@
         }
       }
     },
-    "view_configs": {
-      "type": "object",
-      "description": "Optional view configurations for board/kanban rendering",
-      "additionalProperties": {
-        "type": "object",
-        "required": [
-          "columns"
-        ],
-        "additionalProperties": false,
-        "properties": {
-          "columns": {
-            "type": "object",
-            "description": "Column definitions mapping display names to state arrays",
-            "additionalProperties": {
-              "type": "array",
-              "items": {
-                "type": "string",
-                "pattern": "^[a-z][a-z0-9_]{0,49}$"
-              },
-              "minItems": 1
-            }
-          },
-          "theme": {
-            "type": "string",
-            "description": "Visual theme for the board"
-          },
-          "layout": {
-            "type": "string",
-            "description": "Layout orientation for the board"
-          }
-        }
-      }
-    },
     "agent_integration": {
       "type": "object",
       "description": "Optional agent automation configuration for methodology",
