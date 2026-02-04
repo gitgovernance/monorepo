@@ -1,7 +1,5 @@
 /**
  * SessionManager Types
- *
- * @see packages/blueprints/03_products/protocol/10_appendices/session_state.md
  */
 
 /**

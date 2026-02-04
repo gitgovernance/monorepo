@@ -1,8 +1,6 @@
 /**
  * DependencyInjectionService Unit Tests
  *
- * Blueprint: packages/blueprints/03_products/cli/specs/dependency_injection_module.md
- * All EARS prefixes map to dependency_injection_module.md §4.1-4.6
  *
  * EARS Coverage:
  * - §4.1 Singleton Pattern (EARS-A1 to A2)

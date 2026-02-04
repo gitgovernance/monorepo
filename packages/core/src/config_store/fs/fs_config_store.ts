@@ -5,9 +5,6 @@
  *
  * NOTE: Session state (.session.json) is handled by FsSessionStore.
  * NOTE: Project discovery utilities are in src/utils/project_discovery.ts
- *
- * @see packages/blueprints/03_products/core/specs/modules/config_store_module/fs_config_store_module.md
- * @see packages/blueprints/03_products/protocol/10_appendices/config_file.md
  */
 
 import { promises as fs } from 'fs';

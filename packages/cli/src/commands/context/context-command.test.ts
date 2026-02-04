@@ -1,9 +1,6 @@
 /**
  * ContextCommand Unit Tests
  *
- * Blueprint: packages/blueprints/03_products/cli/specs/context_command.md
- * All EARS prefixes map to context_command.md §4.1-4.4
- *
  * EARS Coverage:
  * - §4.1 Consulta de Contexto Básica (EARS-A1 to A4)
  * - §4.2 Manejo de Valores Nulos y Edge Cases (EARS-B1 to B3)

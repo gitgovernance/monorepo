@@ -1,4 +1,3 @@
-// Blueprint: packages/blueprints/03_products/core/specs/modules/source_auditor/source_auditor_module.md
 // Sections: §4.1 (EARS-A1 to EARS-A5)
 import * as fs from "fs";
 import * as path from "path";

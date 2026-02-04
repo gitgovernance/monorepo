@@ -7,8 +7,6 @@
  * Implementations:
  * - FsSessionStore: Filesystem-based (production)
  * - MemorySessionStore: In-memory (tests, serverless)
- *
- * @see packages/blueprints/03_products/protocol/10_appendices/session_state.md
  */
 
 import type { GitGovSession } from '../session_manager';

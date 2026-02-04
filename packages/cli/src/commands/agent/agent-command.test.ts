@@ -1,9 +1,6 @@
 /**
  * AgentCommand Unit Tests
  *
- * Blueprint: packages/blueprints/03_products/cli/specs/agent_command.md
- * All EARS prefixes map to agent_command.md §4.1-4.4
- *
  * EARS Coverage:
  * - §4.1 Agent Run (EARS-A1 to A6)
  * - §4.2 Agent List (EARS-B1 to B3)

@@ -5,8 +5,6 @@
  * Session state is ephemeral, machine-local, and NOT versioned in Git.
  *
  * Uses SessionStore abstraction for backend-agnostic persistence.
- *
- * @see packages/blueprints/03_products/protocol/10_appendices/session_state.md
  */
 
 import type { SessionStore } from '../session_store/session_store';

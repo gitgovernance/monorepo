@@ -1,8 +1,6 @@
 /**
  * Source Audit Agent
  *
- * Blueprint: packages/blueprints/03_products/agents/source-audit/source_audit_agent.md
- *
  * Scans source code for sensitive data (PII, secrets, API keys).
  * Uses SourceAuditorModule for detection.
  */

@@ -1,9 +1,6 @@
 /**
  * LintCommand Unit Tests
  *
- * Blueprint: packages/blueprints/03_products/cli/specs/lint_command.md
- * All EARS prefixes map to lint_command.md §4.1-4.5
- *
  * EARS Coverage:
  * - §4.1 CLI Argument Parsing & Module Integration (EARS-A1 to A8)
  * - §4.2 Output Formatting - Text Mode (EARS-B1 to B2)

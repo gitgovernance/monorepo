@@ -1,7 +1,8 @@
-![License: MPL-2.0](https://img.shields.io/badge/Core_License-MPL--2.0-blue.svg)
+![License: Apache-2.0](https://img.shields.io/badge/Protocol-Apache--2.0-blue.svg)
+![License: MPL-2.0](https://img.shields.io/badge/Core-MPL--2.0-blue.svg)
 ![core npm version](https://img.shields.io/npm/v/@gitgov/core?color=orange&label=Core%20npm)
 ![Tests](https://img.shields.io/badge/Core-2507%20tests-success)
-![License: Apache-2.0](https://img.shields.io/badge/CLI_License-Apache--2.0-blue.svg)
+![License: Apache-2.0](https://img.shields.io/badge/CLI-Apache--2.0-blue.svg)
 ![cli npm version](https://img.shields.io/npm/v/@gitgov/cli?color=orange&label=CLI%20npm)
 ![Tests](https://img.shields.io/badge/CLI-403%20tests-success)
 
@@ -66,6 +67,7 @@ Agent:  "Sprint is 70% done, 3 tasks active, 1 blocked."
 
 | Package | License | Purpose | Documentation |
 |:--------|:--------|:--------|:--------------|
+| **Protocol** | Apache 2.0 | The **Standard** -- RFCs, schemas, and normative specifications. | [`protocol/`](packages/private/packages/blueprints/03_products/protocol/unified/) |
 | **`@gitgov/core`** | MPL-2.0 | The **Engine** -- Type-safe SDK for business logic, records, validation, storage, adapters. | [`README.md`](packages/core/README.md) |
 | **`@gitgov/cli`** | Apache 2.0 | The **Tool** -- Command-line interface for humans and AI agents. | [`README.md`](packages/cli/README.md) |
 
@@ -77,10 +79,11 @@ Agent:  "Sprint is 70% done, 3 tasks active, 1 blocked."
 
 ## License
 
+- **Protocol Specs (RFCs, Schemas)**: [Apache License 2.0](https://opensource.org/licenses/Apache-2.0)
 - **`@gitgov/core`**: [Mozilla Public License 2.0 (MPL-2.0)](https://opensource.org/licenses/MPL-2.0)
 - **`@gitgov/cli`**: [Apache License 2.0](https://opensource.org/licenses/Apache-2.0)
 
-Both packages are designed for maximum adoption and community contribution while maintaining the integrity of the core protocol.
+The protocol specification is licensed permissively to maximize adoption as an open standard. The core SDK uses weak copyleft to protect shared improvements while allowing commercial integration.
 
 ---
 

@@ -1,4 +1,3 @@
-// Blueprint: packages/blueprints/03_products/core/specs/modules/source_auditor/source_auditor_module.md
 // Sections: §4.6 (EARS-F1 to EARS-F7)
 import { WaiverReader } from "./waiver_reader";
 import type { IFeedbackAdapter } from "../adapters/feedback_adapter";

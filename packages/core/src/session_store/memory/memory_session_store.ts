@@ -3,8 +3,6 @@
  *
  * Useful for testing and serverless environments where filesystem
  * access is not available or not desired.
- *
- * @see packages/blueprints/03_products/protocol/10_appendices/session_state.md
  */
 
 import type { SessionStore } from '../session_store';

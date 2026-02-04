@@ -7,9 +7,6 @@
  * Uses ConfigStore abstraction for backend-agnostic persistence.
  *
  * NOTE: Session state (.session.json) is handled by SessionManager, not ConfigManager.
- *
- * @see packages/blueprints/03_products/core/specs/modules/config_session_module.md
- * @see packages/blueprints/03_products/protocol/10_appendices/config_file.md
  */
 
 import type { ConfigStore } from '../config_store/config_store';
