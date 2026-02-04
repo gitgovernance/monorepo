@@ -17,7 +17,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const MONOREPO_ROOT = path.resolve(__dirname, '../../..');
-const SOURCE_DIR = path.join(MONOREPO_ROOT, 'packages/blueprints/02_agents/design');
+const SOURCE_DIR = path.join(MONOREPO_ROOT, 'packages/private/packages/blueprints/02_agents/design');
 const TARGET_DIR = path.join(__dirname, '../src/docs/generated');
 
 // Agent prompts to sync (official prompts that ship with @gitgov/core)
