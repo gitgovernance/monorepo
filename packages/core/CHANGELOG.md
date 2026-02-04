@@ -1,3 +1,10 @@
+## [2.1.2](https://github.com/gitgovernance/monorepo/compare/core-v2.1.1...core-v2.1.2) (2026-02-04)
+
+
+### 🐛 Bug Fixes
+
+* **core:** update sync-prompts.ts path to private/packages/blueprints ([f0ea727](https://github.com/gitgovernance/monorepo/commit/f0ea7271ff1ca6b9e0b6a9aa059ca35df77dc6e9))
+
 ## [2.1.1](https://github.com/gitgovernance/monorepo/compare/core-v2.1.0...core-v2.1.1) (2026-02-04)
 
 
