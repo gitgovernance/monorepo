@@ -18,7 +18,7 @@ const __dirname = path.dirname(__filename);
 // Paths
 const BLUEPRINTS_WORKFLOW_DIR = path.join(
   __dirname,
-  '../../blueprints/03_products/core/specs/adapters/workflow_adapter'
+  '../../private/packages/blueprints/03_products/core/specs/adapters/workflow_adapter'
 );
 const GENERATED_DIR = path.join(
   __dirname,

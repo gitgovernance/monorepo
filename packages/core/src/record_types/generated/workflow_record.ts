@@ -114,32 +114,6 @@ export interface WorkflowRecord {
       | undefined;
   };
   /**
-   * Optional view configurations for board/kanban rendering
-   */
-  view_configs?: {
-    [k: string]:
-      | {
-          /**
-           * Column definitions mapping display names to state arrays
-           */
-          columns: {
-            /**
-             * @minItems 1
-             */
-            [k: string]: [string, ...string[]] | undefined;
-          };
-          /**
-           * Visual theme for the board
-           */
-          theme?: string;
-          /**
-           * Layout orientation for the board
-           */
-          layout?: string;
-        }
-      | undefined;
-  };
-  /**
    * Optional agent automation configuration for methodology
    */
   agent_integration?: {
