@@ -1,6 +1,12 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import type { RecordStore } from '../record_store';
+import { DEFAULT_ID_ENCODER } from '../record_store';
+import type { IdEncoder } from '../record_store';
+
+// Re-export for backward compatibility
+export { DEFAULT_ID_ENCODER };
+export type { IdEncoder };
 
 /**
  * Serializer for FsRecordStore - allows custom serialization
@@ -9,26 +15,6 @@ export interface Serializer {
   stringify: (value: unknown) => string;
   parse: <T>(text: string) => T;
 }
-
-/**
- * IdEncoder for transforming IDs to filesystem-safe filenames
- * Useful for characters not allowed in filesystem (e.g., `:` on Windows)
- */
-export interface IdEncoder {
-  /** Transform ID to filename-safe string */
-  encode: (id: string) => string;
-  /** Recover original ID from filename */
-  decode: (encoded: string) => string;
-}
-
-/**
- * Default encoder: `:` → `_` (for IDs like "human:camilo")
- * Reversible because IDs cannot contain `_` (see id_generator.ts)
- */
-export const DEFAULT_ID_ENCODER: IdEncoder = {
-  encode: (id: string) => id.replace(/:/g, '_'),
-  decode: (encoded: string) => encoded.replace(/_/g, ':'),
-};
 
 /**
  * Options for FsRecordStore
@@ -123,6 +109,12 @@ export class FsRecordStore<T> implements RecordStore<T> {
     }
     const content = this.serializer.stringify(value);
     await fs.writeFile(filePath, content, 'utf-8');
+  }
+
+  async putMany(entries: Array<{ id: string; value: T }>): Promise<void> {
+    for (const { id, value } of entries) {
+      await this.put(id, value);
+    }
   }
 
   async delete(id: string): Promise<void> {

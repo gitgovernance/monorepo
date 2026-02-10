@@ -69,7 +69,7 @@ export type { EnvironmentValidation } from "./project_initializer";
 export type { ProjectInitResult } from "./adapters/project_adapter";
 
 // Store type exports
-export type { RecordStore } from "./record_store";
+export type { RecordStore, IdEncoder } from "./record_store";
 export type {
   GitGovTaskRecord,
   GitGovCycleRecord,

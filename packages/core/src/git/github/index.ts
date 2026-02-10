@@ -1,11 +1,17 @@
 /**
  * GitHub Git Module - GitHub REST API implementation
  *
- * Status: PLACEHOLDER - Not yet implemented
- * For future SaaS implementation.
+ * Status: PLACEHOLDER - Category A methods throw notImplemented()
+ * Category B (no-ops) and Category C (not supported) are implemented.
  *
  * @module git/github
  */
 
 export { GitHubGitModule } from './github_git_module';
-export type { GitHubGitModuleConfig } from './github_git_module';
+export type {
+  GitHubGitModuleOptions,
+  StagingEntry,
+  GitHubRefResponse,
+  GitHubCommitResponse,
+  GitHubCompareResponse,
+} from './github_git_module.types';

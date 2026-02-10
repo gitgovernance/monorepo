@@ -1,28 +1,59 @@
 /**
- * RecordStore<T> - Generic interface for record persistence
+ * IdEncoder for transforming IDs to storage-safe filenames.
+ * Useful for characters not allowed in filesystem (e.g., `:` on Windows)
+ * or URL-unsafe characters in remote backends.
+ */
+export interface IdEncoder {
+  /** Transform ID to storage-safe string */
+  encode: (id: string) => string;
+  /** Recover original ID from encoded string */
+  decode: (encoded: string) => string;
+}
+
+/**
+ * Default encoder: `:` → `_` (for IDs like "human:camilo")
+ * Reversible because IDs cannot contain `_` (see id_generator.ts)
+ */
+export const DEFAULT_ID_ENCODER: IdEncoder = {
+  encode: (id: string) => id.replace(/:/g, '_'),
+  decode: (encoded: string) => encoded.replace(/_/g, ':'),
+};
+
+/**
+ * RecordStore<V, R, O> - Generic interface for record persistence
  *
  * Abstracts CRUD operations without assuming storage backend.
  * Each implementation decides how to persist (fs, memory, db, remote).
+ *
+ * @typeParam V - Value type (the record being stored)
+ * @typeParam R - Return type for write operations (default: void for local, GitHubWriteResult for GitHub)
+ * @typeParam O - Options type for write operations (default: void for local, GitHubWriteOpts for GitHub)
  */
-export interface RecordStore<T> {
+export interface RecordStore<V, R = void, O = void> {
   /**
    * Gets a record by ID
    * @returns The record or null if it doesn't exist
    */
-  get(id: string): Promise<T | null>;
+  get(id: string): Promise<V | null>;
 
   /**
    * Persists a record
    * @param id - Unique identifier
    * @param value - The record to persist
    */
-  put(id: string, value: T): Promise<void>;
+  put(id: string, value: V, ...opts: O extends void ? [] : [opts?: O]): Promise<R>;
+
+  /**
+   * Persists multiple records in a single operation.
+   * Local backends iterate sequentially; GitHub backend uses atomic commits.
+   */
+  putMany(entries: Array<{ id: string; value: V }>, ...opts: O extends void ? [] : [opts?: O]): Promise<R>;
 
   /**
    * Deletes a record
    * @param id - Identifier of the record to delete
    */
-  delete(id: string): Promise<void>;
+  delete(id: string, ...opts: O extends void ? [] : [opts?: O]): Promise<R>;
 
   /**
    * Lists all record IDs

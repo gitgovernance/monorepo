@@ -52,6 +52,12 @@ export class MemoryRecordStore<T> implements RecordStore<T> {
     this.data.set(id, this.clone(value));
   }
 
+  async putMany(entries: Array<{ id: string; value: T }>): Promise<void> {
+    for (const { id, value } of entries) {
+      await this.put(id, value);
+    }
+  }
+
   async delete(id: string): Promise<void> {
     this.data.delete(id);
   }

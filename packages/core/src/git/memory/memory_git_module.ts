@@ -364,8 +364,11 @@ export class MemoryGitModule implements IGitModule {
     }
   }
 
-  async add(filePaths: string[], _options?: { force?: boolean }): Promise<void> {
+  async add(filePaths: string[], options?: { force?: boolean; contentMap?: Record<string, string> }): Promise<void> {
     for (const path of filePaths) {
+      if (options?.contentMap?.[path] !== undefined) {
+        this.state.files.set(path, options.contentMap[path]);
+      }
       if (!this.state.stagedFiles.includes(path)) {
         this.state.stagedFiles.push(path);
       }
