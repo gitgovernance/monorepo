@@ -21,6 +21,10 @@
       "types": "./dist/src/memory.d.ts",
       "import": "./dist/src/memory.js"
     },
+    "./github": {
+      "types": "./dist/src/github.d.ts",
+      "import": "./dist/src/github.js"
+    },
     "./package.json": "./package.json"
   },
   "scripts": {
