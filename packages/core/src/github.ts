@@ -8,37 +8,14 @@
  * Usage:
  *   import { GitHubFileLister, GitHubRecordStore, GitHubGitModule, GitHubConfigStore } from '@gitgov/core/github';
  *
- * Each implementation receives a `fetchFn` for testability (default: globalThis.fetch).
+ * Each implementation receives an `Octokit` instance for testability and shared auth/base-URL config.
  */
+
+// ==================== Re-exports: Octokit (types only) ====================
+
+export type { Octokit, RestEndpointMethodTypes } from '@octokit/rest';
 
 // ==================== Shared Types ====================
-
-/**
- * HTTP fetch function signature for dependency injection (testability).
- * Defaults to globalThis.fetch in production.
- * In tests, inject a mock function to avoid real HTTP calls.
- */
-export type GitHubFetchFn = (url: string, init?: RequestInit) => Promise<Response>;
-
-/**
- * Response from GitHub Contents API for a single file.
- * Used by FileLister, RecordStore, and ConfigStore.
- * @see https://docs.github.com/en/rest/repos/contents
- */
-export type GitHubContentsResponse = {
-  /** File name */
-  name: string;
-  /** File path relative to repo root */
-  path: string;
-  /** SHA of the blob */
-  sha: string;
-  /** File size in bytes */
-  size: number;
-  /** Base64-encoded file content (null if >1MB) */
-  content: string | null;
-  /** Content encoding ('base64') */
-  encoding: string;
-};
 
 /**
  * Error codes for GitHub API errors.
@@ -72,20 +49,85 @@ export class GitHubApiError extends Error {
   }
 }
 
+/**
+ * Type guard: checks if an error is an Octokit RequestError (duck-typing).
+ * Avoids runtime import of ESM-only @octokit/request-error.
+ */
+export function isOctokitRequestError(error: unknown): error is { status: number; message: string } {
+  return (
+    error instanceof Error &&
+    typeof (error as unknown as Record<string, unknown>)['status'] === 'number'
+  );
+}
+
+/**
+ * Maps Octokit RequestError (and unknown errors) to GitHubApiError.
+ * Shared utility used by all GitHub backend modules.
+ */
+export function mapOctokitError(error: unknown, context: string): GitHubApiError {
+  if (isOctokitRequestError(error)) {
+    const status = error.status;
+
+    if (status === 401 || status === 403) {
+      return new GitHubApiError(
+        `Permission denied: ${context}`,
+        'PERMISSION_DENIED',
+        status,
+      );
+    }
+    if (status === 404) {
+      return new GitHubApiError(
+        `Not found: ${context}`,
+        'NOT_FOUND',
+        status,
+      );
+    }
+    if (status === 409) {
+      return new GitHubApiError(
+        `Conflict: ${context}`,
+        'CONFLICT',
+        status,
+      );
+    }
+    if (status === 422) {
+      return new GitHubApiError(
+        `Validation failed: ${context}`,
+        'CONFLICT',
+        status,
+      );
+    }
+    if (status >= 500) {
+      return new GitHubApiError(
+        `Server error (${status}): ${context}`,
+        'SERVER_ERROR',
+        status,
+      );
+    }
+
+    return new GitHubApiError(
+      `GitHub API error (${status}): ${context}`,
+      'SERVER_ERROR',
+      status,
+    );
+  }
+
+  // Network / unknown errors
+  const message = error instanceof Error ? error.message : String(error);
+  return new GitHubApiError(`Network error: ${message}`, 'NETWORK_ERROR');
+}
+
 // ==================== Module Exports ====================
 
 // FileLister
 export { GitHubFileLister } from './file_lister/github';
 export type {
   GitHubFileListerOptions,
-  GitHubTreeEntry,
 } from './file_lister/github';
 
 // RecordStore
 export { GitHubRecordStore } from './record_store/github';
 export type {
   GitHubRecordStoreOptions,
-  GitHubCreateUpdateResponse,
   GitHubWriteResult,
   GitHubWriteOpts,
 } from './record_store/github';
@@ -95,15 +137,11 @@ export { GitHubGitModule } from './git/github';
 export type {
   GitHubGitModuleOptions,
   StagingEntry,
-  GitHubRefResponse,
-  GitHubCommitResponse,
-  GitHubCompareResponse,
 } from './git/github';
 
 // ConfigStore
 export { GitHubConfigStore } from './config_store/github';
 export type {
   GitHubConfigStoreOptions,
-  GitHubSaveResponse,
   GitHubSaveResult,
 } from './config_store/github';
