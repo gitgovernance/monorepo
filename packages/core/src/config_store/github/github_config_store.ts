@@ -13,9 +13,9 @@
 
 import type { ConfigStore } from '../config_store';
 import type { GitGovConfig } from '../../config_manager/config_manager.types';
-import type { GitHubFetchFn, GitHubContentsResponse } from '../../github/github.types';
+import type { GitHubFetchFn, GitHubContentsResponse } from '../../github';
 import type { GitHubConfigStoreOptions, GitHubSaveResponse, GitHubSaveResult } from './github_config_store.types';
-import { GitHubApiError } from '../../github/github.types';
+import { GitHubApiError } from '../../github';
 
 /**
  * GitHub Contents API-backed ConfigStore implementation.
@@ -72,10 +72,16 @@ export class GitHubConfigStore implements ConfigStore<GitHubSaveResult> {
   async loadConfig(): Promise<GitGovConfig | null> {
     const url = `${this.apiBaseUrl}/repos/${this.owner}/${this.repo}/contents/${this.basePath}/config.json?ref=${this.ref}`;
 
-    const response = await this.fetchFn(url, {
-      method: 'GET',
-      headers: this.buildHeaders(),
-    });
+    let response: Response;
+    try {
+      response = await this.fetchFn(url, {
+        method: 'GET',
+        headers: this.buildHeaders(),
+      });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new GitHubApiError(`Network error: ${message}`, 'NETWORK_ERROR');
+    }
 
     if (response.status === 404) {
       return null;
@@ -130,21 +136,27 @@ export class GitHubConfigStore implements ConfigStore<GitHubSaveResult> {
     const url = `${this.apiBaseUrl}/repos/${this.owner}/${this.repo}/contents/${this.basePath}/config.json`;
     const content = Buffer.from(JSON.stringify(config, null, 2)).toString('base64');
 
-    const body: Record<string, string> = {
+    const reqBody: Record<string, string> = {
       message: 'chore(config): update gitgov config.json',
       content,
       branch: this.ref,
     };
 
     if (this.cachedSha) {
-      body['sha'] = this.cachedSha;
+      reqBody['sha'] = this.cachedSha;
     }
 
-    const response = await this.fetchFn(url, {
-      method: 'PUT',
-      headers: this.buildHeaders(),
-      body: JSON.stringify(body),
-    });
+    let response: Response;
+    try {
+      response = await this.fetchFn(url, {
+        method: 'PUT',
+        headers: this.buildHeaders(),
+        body: JSON.stringify(reqBody),
+      });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new GitHubApiError(`Network error: ${message}`, 'NETWORK_ERROR');
+    }
 
     if (response.status === 401 || response.status === 403) {
       throw new GitHubApiError(

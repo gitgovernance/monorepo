@@ -14,7 +14,7 @@
 import picomatch from 'picomatch';
 import type { FileLister, FileListOptions, FileStats } from '../file_lister';
 import { FileListerError } from '../file_lister';
-import type { GitHubFetchFn, GitHubContentsResponse } from '../../github/github.types';
+import type { GitHubFetchFn, GitHubContentsResponse } from '../../github';
 import type { GitHubFileListerOptions, GitHubTreeEntry } from './github_file_lister.types';
 
 /**

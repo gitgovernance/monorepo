@@ -1,8 +1,8 @@
-import type { RecordStore, IdEncoder } from '../record_store.js';
-import type { GitHubFetchFn, GitHubContentsResponse } from '../../github/github.types.js';
-import type { GitHubRecordStoreOptions, GitHubCreateUpdateResponse, GitHubWriteResult, GitHubWriteOpts } from './github_record_store.types.js';
-import type { IGitModule } from '../../git/index.js';
-import { GitHubApiError } from '../../github/github.types.js';
+import type { RecordStore, IdEncoder } from '../record_store';
+import type { GitHubFetchFn, GitHubContentsResponse } from '../../github';
+import type { GitHubRecordStoreOptions, GitHubCreateUpdateResponse, GitHubWriteResult, GitHubWriteOpts } from './github_record_store.types';
+import type { IGitModule } from '../../git/index';
+import { GitHubApiError } from '../../github';
 
 /**
  * GitHubRecordStore<V> - GitHub Contents API implementation of RecordStore<V, GitHubWriteResult, GitHubWriteOpts>
@@ -35,8 +35,10 @@ export class GitHubRecordStore<V> implements RecordStore<V, GitHubWriteResult, G
   /** SHA cache keyed by full file path (basePath/encoded + extension) */
   private readonly shaCache: Map<string, string> = new Map();
 
-  // TODO: Store gitModule and use in putMany() for atomic commits once GitHubGitModule Cat A is implemented
-  constructor(options: GitHubRecordStoreOptions, fetchFn?: GitHubFetchFn, _gitModule?: IGitModule) {
+  /** IGitModule dependency for putMany() atomic commits. Optional — only needed for putMany(). */
+  private readonly gitModule: IGitModule | undefined;
+
+  constructor(options: GitHubRecordStoreOptions, fetchFn?: GitHubFetchFn, gitModule?: IGitModule) {
     this.owner = options.owner;
     this.repo = options.repo;
     this.token = options.token;
@@ -46,6 +48,7 @@ export class GitHubRecordStore<V> implements RecordStore<V, GitHubWriteResult, G
     this.apiBaseUrl = options.apiBaseUrl ?? 'https://api.github.com';
     this.idEncoder = options.idEncoder;
     this.fetchFn = fetchFn ?? globalThis.fetch.bind(globalThis);
+    this.gitModule = gitModule;
   }
 
   /**
@@ -122,16 +125,45 @@ export class GitHubRecordStore<V> implements RecordStore<V, GitHubWriteResult, G
   }
 
   /**
-   * Persists multiple records in a single operation.
-   * Currently delegates to sequential put() calls.
-   * Future: use GitHubGitModule staging buffer for atomic commits.
+   * [EARS-A11, EARS-A12, EARS-B8] Persists multiple records in a single atomic commit.
+   * Uses GitHubGitModule staging buffer: add() with contentMap, then commit().
+   * Empty entries array returns { commitSha: undefined } without API calls.
+   * Requires gitModule dependency — throws if not injected.
    */
   async putMany(entries: Array<{ id: string; value: V }>, opts?: GitHubWriteOpts): Promise<GitHubWriteResult> {
-    let lastResult: GitHubWriteResult = {};
-    for (const { id, value } of entries) {
-      lastResult = await this.put(id, value, opts);
+    // [EARS-A12] Empty entries → no-op
+    if (entries.length === 0) {
+      return {};
     }
-    return lastResult;
+
+    // [EARS-B8] Requires gitModule for atomic commits
+    if (!this.gitModule) {
+      throw new Error('putMany requires IGitModule dependency for atomic commits');
+    }
+
+    // Validate all IDs upfront
+    for (const { id } of entries) {
+      this.validateId(id);
+    }
+
+    // Build contentMap: filePath → JSON content
+    const contentMap: Record<string, string> = {};
+    const filePaths: string[] = [];
+
+    for (const { id, value } of entries) {
+      const filePath = this.buildFilePath(id);
+      contentMap[filePath] = JSON.stringify(value, null, 2);
+      filePaths.push(filePath);
+    }
+
+    // Stage all files via gitModule
+    await this.gitModule.add(filePaths, { contentMap });
+
+    // Atomic commit
+    const message = opts?.commitMessage ?? `putMany ${entries.length} records`;
+    const commitSha = await this.gitModule.commit(message);
+
+    return { commitSha };
   }
 
   /**

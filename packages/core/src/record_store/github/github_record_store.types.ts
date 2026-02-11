@@ -1,4 +1,4 @@
-import type { IdEncoder } from '../record_store.js';
+import type { IdEncoder } from '../record_store';
 
 /**
  * Options for GitHubRecordStore
