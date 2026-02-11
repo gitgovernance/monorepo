@@ -11,7 +11,4 @@ export { GitHubGitModule } from './github_git_module';
 export type {
   GitHubGitModuleOptions,
   StagingEntry,
-  GitHubRefResponse,
-  GitHubCommitResponse,
-  GitHubCompareResponse,
 } from './github_git_module.types';

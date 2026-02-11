@@ -2,35 +2,22 @@
  * GitHubConfigStore Types
  *
  * Configuration types for the GitHub-backed ConfigStore implementation.
- * Used by GitHubConfigStore to interact with the GitHub Contents API
- * for reading/writing config.json in a remote repository.
+ * Auth (token) and base URL are configured via the Octokit instance.
  */
 
 /**
  * Options for constructing a GitHubConfigStore instance.
+ * Auth and API base URL are configured on the Octokit instance, not here.
  */
 export type GitHubConfigStoreOptions = {
   /** GitHub repository owner (user or organization) */
   owner: string;
   /** GitHub repository name */
   repo: string;
-  /** GitHub personal access token or installation token */
-  token: string;
-  /** Git ref (branch) to read/write from. Default: 'main' */
+  /** Branch to read from / write to (default: 'gitgov-state'). Must be a branch name for saves. */
   ref?: string;
-  /** Base path within the repo for GitGovernance files. Default: '.gitgov' */
+  /** Base path within the repo (default: '.gitgov') */
   basePath?: string;
-  /** GitHub API base URL. Default: 'https://api.github.com' */
-  apiBaseUrl?: string;
-};
-
-/**
- * Response from GitHub Contents API PUT (create/update file).
- * Subset of the full response relevant to ConfigStore operations.
- */
-export type GitHubSaveResponse = {
-  commit: { sha: string; message: string };
-  content: { sha: string; path: string; size: number };
 };
 
 /**
@@ -38,6 +25,10 @@ export type GitHubSaveResponse = {
  * Contains the commit SHA from the GitHub API response.
  */
 export type GitHubSaveResult = {
-  /** SHA of the commit created by the save operation */
+  /**
+   * SHA of the commit created by the save operation.
+   * Always present — saveConfig either creates a commit (success) or throws (failure).
+   * Contrast with GitHubWriteResult.commitSha which is optional (idempotent delete).
+   */
   commitSha: string;
 };

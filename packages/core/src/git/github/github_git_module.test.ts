@@ -1,7 +1,7 @@
 /**
  * GitHubGitModule Unit Tests
  *
- * Tests GitHubGitModule implementation of IGitModule using GitHub REST API.
+ * Tests GitHubGitModule implementation of IGitModule using GitHub REST API via Octokit.
  *
  * All EARS prefixes map to the github_git_module blueprint.
  *
@@ -15,48 +15,93 @@
 
 import { GitHubGitModule } from './github_git_module';
 import type { GitHubGitModuleOptions } from './github_git_module.types';
-import type { GitHubFetchFn } from '../../github';
+import type { Octokit } from '@octokit/rest';
 import { GitError, FileNotFoundError, BranchNotFoundError, BranchAlreadyExistsError } from '../errors';
 
 // ==================== Test Helpers ====================
 
+type MockOctokit = Octokit & {
+  rest: {
+    repos: {
+      getContent: jest.MockedFunction<any>;
+      compareCommits: jest.MockedFunction<any>;
+      listCommits: jest.MockedFunction<any>;
+      getCommit: jest.MockedFunction<any>;
+      getBranch: jest.MockedFunction<any>;
+      listBranches: jest.MockedFunction<any>;
+    };
+    git: {
+      getRef: jest.MockedFunction<any>;
+      getBlob: jest.MockedFunction<any>;
+      createRef: jest.MockedFunction<any>;
+      getCommit: jest.MockedFunction<any>;
+      createBlob: jest.MockedFunction<any>;
+      createTree: jest.MockedFunction<any>;
+      createCommit: jest.MockedFunction<any>;
+      updateRef: jest.MockedFunction<any>;
+    };
+  };
+};
+
+function createMockOctokit(): MockOctokit {
+  return {
+    rest: {
+      repos: {
+        getContent: jest.fn(),
+        compareCommits: jest.fn(),
+        listCommits: jest.fn(),
+        getCommit: jest.fn(),
+        getBranch: jest.fn(),
+        listBranches: jest.fn(),
+      },
+      git: {
+        getRef: jest.fn(),
+        getBlob: jest.fn(),
+        createRef: jest.fn(),
+        getCommit: jest.fn(),
+        createBlob: jest.fn(),
+        createTree: jest.fn(),
+        createCommit: jest.fn(),
+        updateRef: jest.fn(),
+      },
+    },
+  } as unknown as MockOctokit;
+}
+
+function createOctokitError(status: number, message = 'Error'): Error & { status: number } {
+  const error = new Error(message) as Error & { status: number };
+  error.status = status;
+  return error;
+}
+
 const defaultOptions: GitHubGitModuleOptions = {
   owner: 'test-org',
   repo: 'test-repo',
-  token: 'ghp_test_token_123',
-  defaultBranch: 'main',
-  apiBaseUrl: 'https://api.github.com',
+  defaultBranch: 'gitgov-state',
 };
-
-function createMockResponse(status: number, body: unknown): Response {
-  return {
-    status,
-    ok: status >= 200 && status < 300,
-    json: jest.fn().mockResolvedValue(body),
-    text: jest.fn().mockResolvedValue(JSON.stringify(body)),
-    headers: new Headers(),
-  } as unknown as Response;
-}
 
 function createContentsResponse(content: string, sha = 'file-sha-123') {
   return {
-    name: 'test-file',
-    path: 'test-file',
-    sha,
-    size: content.length,
-    content: Buffer.from(content).toString('base64'),
-    encoding: 'base64',
+    data: {
+      name: 'test-file',
+      path: 'test-file',
+      sha,
+      size: content.length,
+      type: 'file' as const,
+      content: Buffer.from(content).toString('base64'),
+      encoding: 'base64',
+    },
   };
 }
 
 /** Helper to mock the full 6-step commit transaction */
-function mockCommitTransaction(mockFetch: jest.Mock, options?: {
+function mockCommitTransaction(mockOctokit: MockOctokit, options?: {
   currentSha?: string;
   treeSha?: string;
   blobSha?: string;
   newTreeSha?: string;
   newCommitSha?: string;
-  patchStatus?: number;
+  patchError?: Error;
 }) {
   const {
     currentSha = 'current-sha-abc',
@@ -64,44 +109,48 @@ function mockCommitTransaction(mockFetch: jest.Mock, options?: {
     blobSha = 'blob-sha-ghi',
     newTreeSha = 'new-tree-sha-jkl',
     newCommitSha = 'new-commit-sha-mno',
-    patchStatus = 200,
+    patchError,
   } = options ?? {};
 
   // Step 1: GET ref
-  mockFetch.mockResolvedValueOnce(createMockResponse(200, {
-    object: { sha: currentSha },
-  }));
-  // Step 2: GET commit
-  mockFetch.mockResolvedValueOnce(createMockResponse(200, {
-    tree: { sha: treeSha },
-  }));
+  mockOctokit.rest.git.getRef.mockResolvedValue({
+    data: { object: { sha: currentSha } },
+  });
+  // Step 2: GET commit (git.getCommit)
+  mockOctokit.rest.git.getCommit.mockResolvedValue({
+    data: { tree: { sha: treeSha } },
+  });
   // Step 3: POST blob
-  mockFetch.mockResolvedValueOnce(createMockResponse(201, {
-    sha: blobSha,
-  }));
+  mockOctokit.rest.git.createBlob.mockResolvedValue({
+    data: { sha: blobSha },
+  });
   // Step 4: POST tree
-  mockFetch.mockResolvedValueOnce(createMockResponse(201, {
-    sha: newTreeSha,
-  }));
+  mockOctokit.rest.git.createTree.mockResolvedValue({
+    data: { sha: newTreeSha },
+  });
   // Step 5: POST commit
-  mockFetch.mockResolvedValueOnce(createMockResponse(201, {
-    sha: newCommitSha,
-  }));
+  mockOctokit.rest.git.createCommit.mockResolvedValue({
+    data: { sha: newCommitSha },
+  });
   // Step 6: PATCH ref
-  mockFetch.mockResolvedValueOnce(createMockResponse(patchStatus, {
-    object: { sha: newCommitSha },
-  }));
+  if (patchError) {
+    mockOctokit.rest.git.updateRef.mockRejectedValue(patchError);
+  } else {
+    mockOctokit.rest.git.updateRef.mockResolvedValue({
+      data: { object: { sha: newCommitSha } },
+    });
+  }
 }
 
 // ==================== Tests ====================
 
 describe('GitHubGitModule', () => {
-  let mockFetch: jest.Mock<ReturnType<GitHubFetchFn>, Parameters<GitHubFetchFn>>;
+  let mockOctokit: MockOctokit;
   let git: GitHubGitModule;
 
   beforeEach(() => {
-    mockFetch = jest.fn();
-    git = new GitHubGitModule(defaultOptions, mockFetch);
+    mockOctokit = createMockOctokit();
+    git = new GitHubGitModule(defaultOptions, mockOctokit);
   });
 
   // ==================== 4.1. Read Operations — Content & Refs (EARS-A1 to A6) ====================
@@ -109,66 +158,83 @@ describe('GitHubGitModule', () => {
   describe('4.1. Read Operations — Content & Refs (EARS-A1 to A6)', () => {
     it('[EARS-A1] should return file content decoded from base64', async () => {
       const fileContent = '{"key": "value"}';
-      mockFetch.mockResolvedValue(createMockResponse(200, createContentsResponse(fileContent)));
+      mockOctokit.rest.repos.getContent.mockResolvedValue(createContentsResponse(fileContent));
 
       const result = await git.getFileContent('abc123', '.gitgov/config.json');
 
       expect(result).toBe(fileContent);
     });
 
-    it('[EARS-A1] should fetch correct URL with owner/repo/path/ref', async () => {
-      mockFetch.mockResolvedValue(createMockResponse(200, createContentsResponse('content')));
+    it('[EARS-A1] should call Octokit getContent with correct params', async () => {
+      mockOctokit.rest.repos.getContent.mockResolvedValue(createContentsResponse('content'));
 
       await git.getFileContent('sha-123', '.gitgov/config.json');
 
-      const [url] = mockFetch.mock.calls[0]!;
-      expect(url).toBe('https://api.github.com/repos/test-org/test-repo/contents/.gitgov/config.json?ref=sha-123');
+      expect(mockOctokit.rest.repos.getContent).toHaveBeenCalledWith({
+        owner: 'test-org',
+        repo: 'test-repo',
+        path: '.gitgov/config.json',
+        ref: 'sha-123',
+      });
     });
 
     it('[EARS-A2] should fallback to Blobs API when content is null', async () => {
       const largeContent = 'large file content';
       // Contents API returns null content
-      mockFetch.mockResolvedValueOnce(createMockResponse(200, {
-        ...createContentsResponse(largeContent, 'large-sha'),
-        content: null,
-      }));
+      mockOctokit.rest.repos.getContent.mockResolvedValue({
+        data: {
+          ...createContentsResponse(largeContent, 'large-sha').data,
+          content: null,
+        },
+      });
       // Blobs API returns actual content
-      mockFetch.mockResolvedValueOnce(createMockResponse(200, {
-        sha: 'large-sha',
-        content: Buffer.from(largeContent).toString('base64'),
-        encoding: 'base64',
-      }));
+      mockOctokit.rest.git.getBlob.mockResolvedValue({
+        data: {
+          sha: 'large-sha',
+          content: Buffer.from(largeContent).toString('base64'),
+          encoding: 'base64',
+        },
+      });
 
       const result = await git.getFileContent('sha-123', 'large-file.bin');
 
       expect(result).toBe(largeContent);
-      expect(mockFetch).toHaveBeenCalledTimes(2);
-      const [blobUrl] = mockFetch.mock.calls[1]!;
-      expect(blobUrl).toContain('/git/blobs/large-sha');
+      expect(mockOctokit.rest.git.getBlob).toHaveBeenCalledWith({
+        owner: 'test-org',
+        repo: 'test-repo',
+        file_sha: 'large-sha',
+      });
     });
 
     it('[EARS-A3] should return commit SHA from refs endpoint', async () => {
-      mockFetch.mockResolvedValue(createMockResponse(200, {
-        ref: 'refs/heads/main',
-        object: { type: 'commit', sha: 'abc123def456' },
-      }));
+      mockOctokit.rest.git.getRef.mockResolvedValue({
+        data: {
+          ref: 'refs/heads/main',
+          object: { type: 'commit', sha: 'abc123def456' },
+        },
+      });
 
       const sha = await git.getCommitHash('main');
 
       expect(sha).toBe('abc123def456');
-      const [url] = mockFetch.mock.calls[0]!;
-      expect(url).toContain('/git/refs/heads/main');
+      expect(mockOctokit.rest.git.getRef).toHaveBeenCalledWith({
+        owner: 'test-org',
+        repo: 'test-repo',
+        ref: 'heads/main',
+      });
     });
 
     it('[EARS-A4] should return ChangedFile array from compare endpoint', async () => {
-      mockFetch.mockResolvedValue(createMockResponse(200, {
-        commits: [],
-        files: [
-          { filename: '.gitgov/config.json', status: 'modified' },
-          { filename: '.gitgov/actors/camilo.json', status: 'added' },
-          { filename: 'src/index.ts', status: 'removed' },
-        ],
-      }));
+      mockOctokit.rest.repos.compareCommits.mockResolvedValue({
+        data: {
+          commits: [],
+          files: [
+            { filename: '.gitgov/config.json', status: 'modified' },
+            { filename: '.gitgov/actors/camilo.json', status: 'added' },
+            { filename: 'src/index.ts', status: 'removed' },
+          ],
+        },
+      });
 
       const result = await git.getChangedFiles('sha-1', 'sha-2', '');
 
@@ -180,13 +246,15 @@ describe('GitHubGitModule', () => {
     });
 
     it('[EARS-A4] should filter changed files by pathFilter', async () => {
-      mockFetch.mockResolvedValue(createMockResponse(200, {
-        commits: [],
-        files: [
-          { filename: '.gitgov/config.json', status: 'modified' },
-          { filename: 'src/index.ts', status: 'modified' },
-        ],
-      }));
+      mockOctokit.rest.repos.compareCommits.mockResolvedValue({
+        data: {
+          commits: [],
+          files: [
+            { filename: '.gitgov/config.json', status: 'modified' },
+            { filename: 'src/index.ts', status: 'modified' },
+          ],
+        },
+      });
 
       const result = await git.getChangedFiles('sha-1', 'sha-2', '.gitgov/');
 
@@ -196,17 +264,19 @@ describe('GitHubGitModule', () => {
     });
 
     it('[EARS-A5] should return CommitInfo array with pagination', async () => {
-      mockFetch.mockResolvedValue(createMockResponse(200, [
-        {
-          sha: 'commit-1',
-          commit: {
-            message: 'first commit',
-            author: { name: 'Camilo', email: 'cam@test.com', date: '2026-01-01T00:00:00Z' },
-            tree: { sha: 'tree-1' },
+      mockOctokit.rest.repos.listCommits.mockResolvedValue({
+        data: [
+          {
+            sha: 'commit-1',
+            commit: {
+              message: 'first commit',
+              author: { name: 'Camilo', email: 'cam@test.com', date: '2026-01-01T00:00:00Z' },
+              tree: { sha: 'tree-1' },
+            },
+            parents: [],
           },
-          parents: [],
-        },
-      ]));
+        ],
+      });
 
       const result = await git.getCommitHistory('main', { maxCount: 5, pathFilter: '.gitgov/' });
 
@@ -217,21 +287,27 @@ describe('GitHubGitModule', () => {
         date: '2026-01-01T00:00:00Z',
       }]);
 
-      const [url] = mockFetch.mock.calls[0]!;
-      expect(url).toContain('per_page=5');
-      expect(url).toContain('path=.gitgov%2F');
+      expect(mockOctokit.rest.repos.listCommits).toHaveBeenCalledWith({
+        owner: 'test-org',
+        repo: 'test-repo',
+        sha: 'main',
+        per_page: 5,
+        path: '.gitgov/',
+      });
     });
 
     it('[EARS-A6] should return commit message from commits endpoint', async () => {
-      mockFetch.mockResolvedValue(createMockResponse(200, {
-        sha: 'commit-sha',
-        commit: {
-          message: 'feat: add new feature\n\nDetailed description',
-          author: { name: 'Camilo', email: 'cam@test.com', date: '2026-01-01T00:00:00Z' },
-          tree: { sha: 'tree-sha' },
+      mockOctokit.rest.repos.getCommit.mockResolvedValue({
+        data: {
+          sha: 'commit-sha',
+          commit: {
+            message: 'feat: add new feature\n\nDetailed description',
+            author: { name: 'Camilo', email: 'cam@test.com', date: '2026-01-01T00:00:00Z' },
+            tree: { sha: 'tree-sha' },
+          },
+          parents: [],
         },
-        parents: [],
-      }));
+      });
 
       const msg = await git.getCommitMessage('commit-sha');
 
@@ -243,7 +319,7 @@ describe('GitHubGitModule', () => {
 
   describe('4.2. Read Operations — Branches & Discovery (EARS-B1 to B4)', () => {
     it('[EARS-B1] should return true when branch exists (HTTP 200)', async () => {
-      mockFetch.mockResolvedValue(createMockResponse(200, { name: 'main' }));
+      mockOctokit.rest.repos.getBranch.mockResolvedValue({ data: { name: 'main' } });
 
       const exists = await git.branchExists('main');
 
@@ -251,7 +327,7 @@ describe('GitHubGitModule', () => {
     });
 
     it('[EARS-B1] should return false when branch does not exist (HTTP 404)', async () => {
-      mockFetch.mockResolvedValue(createMockResponse(404, { message: 'Not Found' }));
+      mockOctokit.rest.repos.getBranch.mockRejectedValue(createOctokitError(404));
 
       const exists = await git.branchExists('nonexistent');
 
@@ -259,11 +335,13 @@ describe('GitHubGitModule', () => {
     });
 
     it('[EARS-B2] should return array of branch names', async () => {
-      mockFetch.mockResolvedValue(createMockResponse(200, [
-        { name: 'main' },
-        { name: 'develop' },
-        { name: 'feature/test' },
-      ]));
+      mockOctokit.rest.repos.listBranches.mockResolvedValue({
+        data: [
+          { name: 'main' },
+          { name: 'develop' },
+          { name: 'feature/test' },
+        ],
+      });
 
       const branches = await git.listRemoteBranches('origin');
 
@@ -271,29 +349,31 @@ describe('GitHubGitModule', () => {
     });
 
     it('[EARS-B3] should return CommitInfo array from compare endpoint', async () => {
-      mockFetch.mockResolvedValue(createMockResponse(200, {
-        commits: [
-          {
-            sha: 'commit-a',
-            commit: {
-              message: 'commit A',
-              author: { name: 'Dev', email: 'dev@test.com', date: '2026-01-01T00:00:00Z' },
-              tree: { sha: 'tree-a' },
+      mockOctokit.rest.repos.compareCommits.mockResolvedValue({
+        data: {
+          commits: [
+            {
+              sha: 'commit-a',
+              commit: {
+                message: 'commit A',
+                author: { name: 'Dev', email: 'dev@test.com', date: '2026-01-01T00:00:00Z' },
+                tree: { sha: 'tree-a' },
+              },
+              parents: [],
             },
-            parents: [],
-          },
-          {
-            sha: 'commit-b',
-            commit: {
-              message: 'commit B',
-              author: { name: 'Dev', email: 'dev@test.com', date: '2026-01-02T00:00:00Z' },
-              tree: { sha: 'tree-b' },
+            {
+              sha: 'commit-b',
+              commit: {
+                message: 'commit B',
+                author: { name: 'Dev', email: 'dev@test.com', date: '2026-01-02T00:00:00Z' },
+                tree: { sha: 'tree-b' },
+              },
+              parents: [],
             },
-            parents: [],
-          },
-        ],
-        files: [{ filename: '.gitgov/config.json', status: 'modified' }],
-      }));
+          ],
+          files: [{ filename: '.gitgov/config.json', status: 'modified' }],
+        },
+      });
 
       const result = await git.getCommitHistoryRange('sha-from', 'sha-to');
 
@@ -303,26 +383,28 @@ describe('GitHubGitModule', () => {
     });
 
     it('[EARS-B3] should respect options.maxCount and options.pathFilter', async () => {
-      mockFetch.mockResolvedValue(createMockResponse(200, {
-        commits: [
-          {
-            sha: 'c1',
-            commit: { message: 'c1', author: { name: 'D', email: 'd@t.com', date: '2026-01-01T00:00:00Z' }, tree: { sha: 't1' } },
-            parents: [],
-          },
-          {
-            sha: 'c2',
-            commit: { message: 'c2', author: { name: 'D', email: 'd@t.com', date: '2026-01-02T00:00:00Z' }, tree: { sha: 't2' } },
-            parents: [],
-          },
-          {
-            sha: 'c3',
-            commit: { message: 'c3', author: { name: 'D', email: 'd@t.com', date: '2026-01-03T00:00:00Z' }, tree: { sha: 't3' } },
-            parents: [],
-          },
-        ],
-        files: [{ filename: '.gitgov/config.json', status: 'modified' }],
-      }));
+      mockOctokit.rest.repos.compareCommits.mockResolvedValue({
+        data: {
+          commits: [
+            {
+              sha: 'c1',
+              commit: { message: 'c1', author: { name: 'D', email: 'd@t.com', date: '2026-01-01T00:00:00Z' }, tree: { sha: 't1' } },
+              parents: [],
+            },
+            {
+              sha: 'c2',
+              commit: { message: 'c2', author: { name: 'D', email: 'd@t.com', date: '2026-01-02T00:00:00Z' }, tree: { sha: 't2' } },
+              parents: [],
+            },
+            {
+              sha: 'c3',
+              commit: { message: 'c3', author: { name: 'D', email: 'd@t.com', date: '2026-01-03T00:00:00Z' }, tree: { sha: 't3' } },
+              parents: [],
+            },
+          ],
+          files: [{ filename: '.gitgov/config.json', status: 'modified' }],
+        },
+      });
 
       const result = await git.getCommitHistoryRange('sha-from', 'sha-to', { maxCount: 2 });
 
@@ -335,7 +417,7 @@ describe('GitHubGitModule', () => {
       const result = await git.getCommitHash(sha);
 
       expect(result).toBe(sha);
-      expect(mockFetch).not.toHaveBeenCalled();
+      expect(mockOctokit.rest.git.getRef).not.toHaveBeenCalled();
     });
   });
 
@@ -343,8 +425,7 @@ describe('GitHubGitModule', () => {
 
   describe('4.3. Write Operations — Staging & Commit (EARS-C1 to C7)', () => {
     it('[EARS-C1] should read existing file content via getFileContent and add to staging buffer', async () => {
-      // Mock getFileContent response
-      mockFetch.mockResolvedValue(createMockResponse(200, createContentsResponse('file content')));
+      mockOctokit.rest.repos.getContent.mockResolvedValue(createContentsResponse('file content'));
 
       await git.add(['.gitgov/config.json']);
 
@@ -359,8 +440,8 @@ describe('GitHubGitModule', () => {
 
       const staged = await git.getStagedFiles();
       expect(staged).toContain('.gitgov/config.json');
-      // Should NOT have called fetch (content was provided directly)
-      expect(mockFetch).not.toHaveBeenCalled();
+      // Should NOT have called getContent (content was provided directly)
+      expect(mockOctokit.rest.repos.getContent).not.toHaveBeenCalled();
     });
 
     it('[EARS-C2] should mark file paths as deleted in staging buffer', async () => {
@@ -370,17 +451,22 @@ describe('GitHubGitModule', () => {
       expect(staged).toContain('.gitgov/old-file.json');
     });
 
-    it('[EARS-C3] should execute atomic commit via 5 API calls', async () => {
+    it('[EARS-C3] should execute atomic commit via 6 Octokit calls', async () => {
       // Add a file to staging buffer
       await git.add(['file.json'], { contentMap: { 'file.json': '{"data": true}' } });
 
-      mockCommitTransaction(mockFetch);
+      mockCommitTransaction(mockOctokit);
 
       const commitSha = await git.commit('test commit', { name: 'Bot', email: 'bot@test.com' });
 
       expect(commitSha).toBe('new-commit-sha-mno');
-      // 6 calls: ref, commit, blob, tree, commit, patch ref
-      expect(mockFetch).toHaveBeenCalledTimes(6);
+      // 6 calls: getRef, getCommit, createBlob, createTree, createCommit, updateRef
+      expect(mockOctokit.rest.git.getRef).toHaveBeenCalledTimes(1);
+      expect(mockOctokit.rest.git.getCommit).toHaveBeenCalledTimes(1);
+      expect(mockOctokit.rest.git.createBlob).toHaveBeenCalledTimes(1);
+      expect(mockOctokit.rest.git.createTree).toHaveBeenCalledTimes(1);
+      expect(mockOctokit.rest.git.createCommit).toHaveBeenCalledTimes(1);
+      expect(mockOctokit.rest.git.updateRef).toHaveBeenCalledTimes(1);
     });
 
     it('[EARS-C3] should create blobs for each staged file', async () => {
@@ -388,58 +474,37 @@ describe('GitHubGitModule', () => {
         contentMap: { 'a.json': 'content-a', 'b.json': 'content-b' },
       });
 
-      // Step 1: GET ref
-      mockFetch.mockResolvedValueOnce(createMockResponse(200, { object: { sha: 'current-sha' } }));
-      // Step 2: GET commit
-      mockFetch.mockResolvedValueOnce(createMockResponse(200, { tree: { sha: 'tree-sha' } }));
-      // Step 3a: POST blob for a.json
-      mockFetch.mockResolvedValueOnce(createMockResponse(201, { sha: 'blob-a' }));
-      // Step 3b: POST blob for b.json
-      mockFetch.mockResolvedValueOnce(createMockResponse(201, { sha: 'blob-b' }));
-      // Step 4: POST tree
-      mockFetch.mockResolvedValueOnce(createMockResponse(201, { sha: 'new-tree' }));
-      // Step 5: POST commit
-      mockFetch.mockResolvedValueOnce(createMockResponse(201, { sha: 'new-commit' }));
-      // Step 6: PATCH ref
-      mockFetch.mockResolvedValueOnce(createMockResponse(200, { object: { sha: 'new-commit' } }));
+      mockCommitTransaction(mockOctokit);
+      // createBlob needs to return different SHAs for each call
+      mockOctokit.rest.git.createBlob
+        .mockResolvedValueOnce({ data: { sha: 'blob-a' } })
+        .mockResolvedValueOnce({ data: { sha: 'blob-b' } });
 
       await git.commit('multi file commit');
 
-      // 7 calls total: ref + commit + 2 blobs + tree + commit + ref
-      expect(mockFetch).toHaveBeenCalledTimes(7);
+      expect(mockOctokit.rest.git.createBlob).toHaveBeenCalledTimes(2);
     });
 
     it('[EARS-C3] should create tree with added and deleted entries', async () => {
       await git.add(['add.json'], { contentMap: { 'add.json': 'new content' } });
       await git.rm(['delete.json']);
 
-      // Step 1: GET ref
-      mockFetch.mockResolvedValueOnce(createMockResponse(200, { object: { sha: 'current-sha' } }));
-      // Step 2: GET commit
-      mockFetch.mockResolvedValueOnce(createMockResponse(200, { tree: { sha: 'tree-sha' } }));
-      // Step 3: POST blob for add.json (skip delete.json — no blob needed)
-      mockFetch.mockResolvedValueOnce(createMockResponse(201, { sha: 'blob-add' }));
-      // Step 4: POST tree
-      mockFetch.mockResolvedValueOnce(createMockResponse(201, { sha: 'new-tree' }));
-      // Step 5: POST commit
-      mockFetch.mockResolvedValueOnce(createMockResponse(201, { sha: 'new-commit' }));
-      // Step 6: PATCH ref
-      mockFetch.mockResolvedValueOnce(createMockResponse(200, { object: { sha: 'new-commit' } }));
+      mockCommitTransaction(mockOctokit);
 
       await git.commit('add and delete');
 
       // Verify tree creation includes both add (with sha) and delete (sha: null)
-      const treeCall = mockFetch.mock.calls[3]!;
-      const treeBody = JSON.parse(treeCall[1]?.body as string);
-      expect(treeBody.tree).toEqual(expect.arrayContaining([
-        expect.objectContaining({ path: 'add.json', sha: 'blob-add' }),
+      const treeCall = mockOctokit.rest.git.createTree.mock.calls[0]!;
+      const treeArg = treeCall[0];
+      expect(treeArg.tree).toEqual(expect.arrayContaining([
+        expect.objectContaining({ path: 'add.json', sha: 'blob-sha-ghi' }),
         expect.objectContaining({ path: 'delete.json', sha: null }),
       ]));
     });
 
     it('[EARS-C4] should clear staging buffer after successful commit', async () => {
       await git.add(['file.json'], { contentMap: { 'file.json': 'content' } });
-      mockCommitTransaction(mockFetch);
+      mockCommitTransaction(mockOctokit);
 
       await git.commit('test commit');
 
@@ -452,37 +517,33 @@ describe('GitHubGitModule', () => {
       await expect(git.commit('empty commit')).rejects.toThrow(/staging buffer is empty/);
     });
 
-    it('[EARS-C6] should create branch via POST to git/refs', async () => {
+    it('[EARS-C6] should create branch via Octokit git.createRef', async () => {
       // First: resolve startPoint SHA
-      mockFetch.mockResolvedValueOnce(createMockResponse(200, {
-        object: { sha: 'start-sha-123' },
-      }));
+      mockOctokit.rest.git.getRef.mockResolvedValue({
+        data: { object: { sha: 'start-sha-123' } },
+      });
       // Then: create branch
-      mockFetch.mockResolvedValueOnce(createMockResponse(201, {
-        ref: 'refs/heads/new-branch',
-        object: { sha: 'start-sha-123' },
-      }));
+      mockOctokit.rest.git.createRef.mockResolvedValue({
+        data: { ref: 'refs/heads/new-branch', object: { sha: 'start-sha-123' } },
+      });
 
       await git.createBranch('new-branch', 'main');
 
-      const createCall = mockFetch.mock.calls[1]!;
-      const [url, init] = createCall;
-      expect(url).toContain('/git/refs');
-      expect(init?.method).toBe('POST');
-      const body = JSON.parse(init?.body as string);
-      expect(body.ref).toBe('refs/heads/new-branch');
-      expect(body.sha).toBe('start-sha-123');
+      expect(mockOctokit.rest.git.createRef).toHaveBeenCalledWith({
+        owner: 'test-org',
+        repo: 'test-repo',
+        ref: 'refs/heads/new-branch',
+        sha: 'start-sha-123',
+      });
     });
 
     it('[EARS-C6] should throw BranchAlreadyExistsError for HTTP 422', async () => {
       // Resolve startPoint SHA
-      mockFetch.mockResolvedValueOnce(createMockResponse(200, {
-        object: { sha: 'start-sha' },
-      }));
+      mockOctokit.rest.git.getRef.mockResolvedValue({
+        data: { object: { sha: 'start-sha' } },
+      });
       // Create branch fails with 422
-      mockFetch.mockResolvedValueOnce(createMockResponse(422, {
-        message: 'Reference already exists',
-      }));
+      mockOctokit.rest.git.createRef.mockRejectedValue(createOctokitError(422, 'Reference already exists'));
 
       await expect(git.createBranch('existing-branch', 'main'))
         .rejects.toThrow(BranchAlreadyExistsError);
@@ -505,7 +566,7 @@ describe('GitHubGitModule', () => {
   describe('4.4. No-ops & Not Supported (EARS-D1 to D5)', () => {
     it('[EARS-D1] should return sensible defaults for no-op methods', async () => {
       expect(await git.getRepoRoot()).toBe('github://test-org/test-repo');
-      expect(await git.getCurrentBranch()).toBe('main');
+      expect(await git.getCurrentBranch()).toBe('gitgov-state');
       expect(await git.isRemoteConfigured('origin')).toBe(true);
       expect(await git.getBranchRemote('main')).toBe('origin');
       expect(await git.getConflictedFiles()).toEqual([]);
@@ -522,15 +583,25 @@ describe('GitHubGitModule', () => {
 
     it('[EARS-D1] should delegate commitAllowEmpty to commit', async () => {
       await git.add(['file.json'], { contentMap: { 'file.json': 'content' } });
-      mockCommitTransaction(mockFetch);
+      mockCommitTransaction(mockOctokit);
 
       const sha = await git.commitAllowEmpty('test commit');
 
       expect(sha).toBe('new-commit-sha-mno');
     });
 
+    it('[EARS-D1] should allow commitAllowEmpty with empty staging buffer', async () => {
+      // No files added — buffer is empty
+      mockCommitTransaction(mockOctokit);
+
+      const sha = await git.commitAllowEmpty('empty commit');
+
+      expect(sha).toBe('new-commit-sha-mno');
+      expect(mockOctokit.rest.git.createBlob).not.toHaveBeenCalled();
+    });
+
     it('[EARS-D2] should update activeRef on checkoutBranch', async () => {
-      expect(await git.getCurrentBranch()).toBe('main');
+      expect(await git.getCurrentBranch()).toBe('gitgov-state');
 
       await git.checkoutBranch('develop');
 
@@ -563,21 +634,21 @@ describe('GitHubGitModule', () => {
 
   describe('4.5. Error Handling (EARS-E1 to E5)', () => {
     it('[EARS-E1] should throw FileNotFoundError for HTTP 404 on file ops', async () => {
-      mockFetch.mockResolvedValue(createMockResponse(404, { message: 'Not Found' }));
+      mockOctokit.rest.repos.getContent.mockRejectedValue(createOctokitError(404));
 
       await expect(git.getFileContent('sha-123', 'missing.json'))
         .rejects.toThrow(FileNotFoundError);
     });
 
     it('[EARS-E2] should throw BranchNotFoundError for HTTP 404 on branch ops', async () => {
-      mockFetch.mockResolvedValue(createMockResponse(404, { message: 'Not Found' }));
+      mockOctokit.rest.git.getRef.mockRejectedValue(createOctokitError(404));
 
       await expect(git.getCommitHash('nonexistent-branch'))
         .rejects.toThrow(BranchNotFoundError);
     });
 
     it('[EARS-E3] should throw GitError for HTTP 401 or 403', async () => {
-      mockFetch.mockResolvedValue(createMockResponse(403, { message: 'Forbidden' }));
+      mockOctokit.rest.repos.getContent.mockRejectedValue(createOctokitError(403));
 
       await expect(git.getFileContent('sha', 'file.json')).rejects.toThrow(GitError);
       await expect(git.getFileContent('sha', 'file.json')).rejects.toThrow(/authentication\/permission error/);
@@ -585,31 +656,54 @@ describe('GitHubGitModule', () => {
 
     it('[EARS-E4] should throw appropriate error for HTTP 422', async () => {
       // createBranch 422 → BranchAlreadyExistsError
-      mockFetch.mockResolvedValueOnce(createMockResponse(200, { object: { sha: 'sha' } }));
-      mockFetch.mockResolvedValueOnce(createMockResponse(422, { message: 'Reference already exists' }));
+      mockOctokit.rest.git.getRef.mockResolvedValue({
+        data: { object: { sha: 'sha' } },
+      });
+      mockOctokit.rest.git.createRef.mockRejectedValue(createOctokitError(422, 'Reference already exists'));
 
       await expect(git.createBranch('existing', 'main')).rejects.toThrow(BranchAlreadyExistsError);
     });
 
-    it('[EARS-E4] should throw GitError with non-fast-forward message on PATCH ref 422', async () => {
+    it('[EARS-E4] should throw GitError with non-fast-forward message on updateRef 422', async () => {
       await git.add(['file.json'], { contentMap: { 'file.json': 'content' } });
 
-      mockCommitTransaction(mockFetch, { patchStatus: 422 });
+      mockCommitTransaction(mockOctokit, {
+        patchError: createOctokitError(422, 'Update is not a fast forward'),
+      });
 
       await expect(git.commit('test')).rejects.toThrow(GitError);
       await expect(async () => {
         // Re-add because previous commit attempt cleared nothing (it threw)
         await git.add(['file.json'], { contentMap: { 'file.json': 'content' } });
-        mockCommitTransaction(mockFetch, { patchStatus: 422 });
+        mockCommitTransaction(mockOctokit, {
+          patchError: createOctokitError(422, 'Update is not a fast forward'),
+        });
         await git.commit('test');
       }).rejects.toThrow(/non-fast-forward/);
     });
 
     it('[EARS-E5] should throw GitError for network failures', async () => {
-      mockFetch.mockRejectedValue(new Error('ECONNREFUSED'));
+      mockOctokit.rest.repos.getContent.mockRejectedValue(new TypeError('fetch failed'));
 
       await expect(git.getFileContent('sha', 'file.json')).rejects.toThrow(GitError);
       await expect(git.getFileContent('sha', 'file.json')).rejects.toThrow(/network error/);
+    });
+
+    it('[EARS-E3] should translate HTTP 403 to GitError during commit transaction', async () => {
+      await git.add(['file.json'], { contentMap: { 'file.json': 'content' } });
+      // Step 1 (getRef) fails with 403
+      mockOctokit.rest.git.getRef.mockRejectedValue(createOctokitError(403));
+
+      await expect(git.commit('test')).rejects.toThrow(GitError);
+      await expect(git.commit('test')).rejects.toThrow(/authentication\/permission error/);
+    });
+
+    it('[EARS-E5] should translate network error to GitError during commit transaction', async () => {
+      await git.add(['file.json'], { contentMap: { 'file.json': 'content' } });
+      mockOctokit.rest.git.getRef.mockRejectedValue(new TypeError('fetch failed'));
+
+      await expect(git.commit('test')).rejects.toThrow(GitError);
+      await expect(git.commit('test')).rejects.toThrow(/network error/);
     });
   });
 });

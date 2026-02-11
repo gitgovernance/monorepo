@@ -1,33 +1,22 @@
 import type { IdEncoder } from '../record_store';
 
 /**
- * Options for GitHubRecordStore
+ * Options for GitHubRecordStore.
+ * Auth and API base URL are configured on the Octokit instance, not here.
  */
 export type GitHubRecordStoreOptions = {
   /** GitHub repository owner (user or org) */
   owner: string;
   /** GitHub repository name */
   repo: string;
-  /** Personal access token or GitHub App token */
-  token: string;
-  /** Branch ref (default: 'main') */
+  /** Branch ref (default: 'gitgov-state') */
   ref?: string;
   /** Base directory path in the repo (e.g., '.gitgov/actors') */
   basePath: string;
   /** File extension for records (default: '.json') */
   extension?: string;
-  /** GitHub API base URL (default: 'https://api.github.com') */
-  apiBaseUrl?: string;
   /** ID encoder for filename-safe IDs (default: undefined = no encoding) */
   idEncoder?: IdEncoder;
-};
-
-/**
- * Response from GitHub Contents API for create/update operations
- */
-export type GitHubCreateUpdateResponse = {
-  commit: { sha: string; message: string };
-  content: { sha: string; path: string; size: number };
 };
 
 /**

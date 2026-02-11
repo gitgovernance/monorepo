@@ -5,7 +5,8 @@ export type FileListerErrorCode =
   | 'FILE_NOT_FOUND'
   | 'READ_ERROR'
   | 'PERMISSION_DENIED'
-  | 'INVALID_PATH';
+  | 'INVALID_PATH'
+  | 'NETWORK_ERROR';
 
 /**
  * Error thrown when file operations fail.

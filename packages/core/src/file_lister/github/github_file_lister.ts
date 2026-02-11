@@ -12,28 +12,18 @@
  */
 
 import picomatch from 'picomatch';
+import type { Octokit } from '@octokit/rest';
 import type { FileLister, FileListOptions, FileStats } from '../file_lister';
 import { FileListerError } from '../file_lister';
-import type { GitHubFetchFn, GitHubContentsResponse } from '../../github';
-import type { GitHubFileListerOptions, GitHubTreeEntry } from './github_file_lister.types';
+import { isOctokitRequestError } from '../../github';
+import type { GitHubFileListerOptions } from './github_file_lister.types';
 
-/**
- * Response shape from the GitHub Git Trees API.
- */
-type GitHubTreeResponse = {
-  sha: string;
-  tree: GitHubTreeEntry[];
-  truncated: boolean;
-};
-
-/**
- * Response shape from the GitHub Git Blobs API.
- */
-type GitHubBlobResponse = {
-  sha: string;
-  content: string;
-  encoding: string;
-  size: number;
+/** Tree entry shape from Octokit git.getTree response */
+type TreeEntry = {
+  path?: string;
+  type?: string;
+  sha?: string;
+  size?: number;
 };
 
 /**
@@ -46,13 +36,14 @@ type GitHubBlobResponse = {
  *
  * @example
  * ```typescript
+ * import { Octokit } from '@octokit/rest';
+ * const octokit = new Octokit({ auth: 'ghp_xxx' });
  * const lister = new GitHubFileLister({
  *   owner: 'myorg',
  *   repo: 'myrepo',
- *   token: 'ghp_xxx',
- *   ref: 'main',
+ *   ref: 'gitgov-state',
  *   basePath: '.gitgov',
- * });
+ * }, octokit);
  *
  * const files = await lister.list(['**\/*.ts']);
  * const content = await lister.read('config.json');
@@ -61,23 +52,19 @@ type GitHubBlobResponse = {
 export class GitHubFileLister implements FileLister {
   private readonly owner: string;
   private readonly repo: string;
-  private readonly token: string;
   private readonly ref: string;
   private readonly basePath: string;
-  private readonly apiBaseUrl: string;
-  private readonly fetchFn: GitHubFetchFn;
+  private readonly octokit: Octokit;
 
   /** Cached tree entries from the Trees API */
-  private treeCache: GitHubTreeEntry[] | null = null;
+  private treeCache: TreeEntry[] | null = null;
 
-  constructor(options: GitHubFileListerOptions, fetchFn?: GitHubFetchFn) {
+  constructor(options: GitHubFileListerOptions, octokit: Octokit) {
     this.owner = options.owner;
     this.repo = options.repo;
-    this.token = options.token;
-    this.ref = options.ref ?? 'HEAD';
+    this.ref = options.ref ?? 'gitgov-state';
     this.basePath = options.basePath ?? '';
-    this.apiBaseUrl = options.apiBaseUrl ?? 'https://api.github.com';
-    this.fetchFn = fetchFn ?? globalThis.fetch;
+    this.octokit = octokit;
   }
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -101,6 +88,7 @@ export class GitHubFileLister implements FileLister {
     const relativePaths: string[] = [];
 
     for (const blob of blobs) {
+      if (!blob.path) continue;
       if (prefix && !blob.path.startsWith(prefix)) {
         continue;
       }
@@ -122,50 +110,45 @@ export class GitHubFileLister implements FileLister {
    */
   async exists(filePath: string): Promise<boolean> {
     const fullPath = this.buildFullPath(filePath);
-    const url = this.buildUrl(`/repos/${this.owner}/${this.repo}/contents/${fullPath}?ref=${this.ref}`);
 
     try {
-      const response = await this.fetchFn(url, {
-        method: 'GET',
-        headers: this.buildHeaders(),
+      const { data } = await this.octokit.rest.repos.getContent({
+        owner: this.owner,
+        repo: this.repo,
+        path: fullPath,
+        ref: this.ref,
       });
-
-      if (response.status === 200) {
-        return true;
-      }
-
-      if (response.status === 404) {
+      // [EARS-A2] Verify it's a file, not a directory
+      if (Array.isArray(data) || data.type !== 'file') {
         return false;
       }
-
-      if (response.status === 401 || response.status === 403) {
+      return true;
+    } catch (error: unknown) {
+      if (isOctokitRequestError(error)) {
+        if (error.status === 404) return false;
+        if (error.status === 401 || error.status === 403) {
+          throw new FileListerError(
+            `Permission denied: ${filePath}`,
+            'PERMISSION_DENIED',
+            filePath,
+          );
+        }
+        if (error.status >= 500) {
+          throw new FileListerError(
+            `GitHub API server error (${error.status}): ${filePath}`,
+            'READ_ERROR',
+            filePath,
+          );
+        }
         throw new FileListerError(
-          `Permission denied: ${filePath}`,
-          'PERMISSION_DENIED',
-          filePath,
-        );
-      }
-
-      if (response.status >= 500) {
-        throw new FileListerError(
-          `GitHub API server error (${response.status}): ${filePath}`,
+          `Unexpected GitHub API response (${error.status}): ${filePath}`,
           'READ_ERROR',
           filePath,
         );
       }
-
-      throw new FileListerError(
-        `Unexpected GitHub API response (${response.status}): ${filePath}`,
-        'READ_ERROR',
-        filePath,
-      );
-    } catch (error: unknown) {
-      if (error instanceof FileListerError) {
-        throw error;
-      }
       throw new FileListerError(
         `Network error checking file: ${filePath}`,
-        'READ_ERROR',
+        'NETWORK_ERROR',
         filePath,
       );
     }
@@ -178,42 +161,66 @@ export class GitHubFileLister implements FileLister {
    */
   async read(filePath: string): Promise<string> {
     const fullPath = this.buildFullPath(filePath);
-    const url = this.buildUrl(`/repos/${this.owner}/${this.repo}/contents/${fullPath}?ref=${this.ref}`);
 
-    let response: Response;
     try {
-      response = await this.fetchFn(url, {
-        method: 'GET',
-        headers: this.buildHeaders(),
+      const { data } = await this.octokit.rest.repos.getContent({
+        owner: this.owner,
+        repo: this.repo,
+        path: fullPath,
+        ref: this.ref,
       });
+
+      if (Array.isArray(data) || data.type !== 'file') {
+        throw new FileListerError(
+          `Not a file: ${filePath}`,
+          'READ_ERROR',
+          filePath,
+        );
+      }
+
+      // [EARS-B2] Decode base64 content
+      if (data.content !== null && data.content !== undefined) {
+        return Buffer.from(data.content, 'base64').toString('utf-8');
+      }
+
+      // [EARS-B7] Content is null (file >1MB), fallback to Blobs API
+      return this.readViaBlobs(data.sha, filePath);
     } catch (error: unknown) {
+      if (error instanceof FileListerError) throw error;
+      if (isOctokitRequestError(error)) {
+        if (error.status === 404) {
+          throw new FileListerError(
+            `File not found: ${filePath}`,
+            'FILE_NOT_FOUND',
+            filePath,
+          );
+        }
+        if (error.status === 401 || error.status === 403) {
+          throw new FileListerError(
+            `Permission denied: ${filePath}`,
+            'PERMISSION_DENIED',
+            filePath,
+          );
+        }
+        if (error.status >= 500) {
+          throw new FileListerError(
+            `GitHub API server error (${error.status}): ${filePath}`,
+            'READ_ERROR',
+            filePath,
+          );
+        }
+        throw new FileListerError(
+          `Unexpected GitHub API response (${error.status}): ${filePath}`,
+          'READ_ERROR',
+          filePath,
+        );
+      }
       throw new FileListerError(
         `Network error reading file: ${filePath}`,
-        'READ_ERROR',
+        'NETWORK_ERROR',
         filePath,
       );
     }
-
-    this.handleErrorResponse(response, filePath);
-
-    let data: GitHubContentsResponse;
-    try {
-      data = await response.json() as GitHubContentsResponse;
-    } catch {
-      throw new FileListerError(
-        `Unexpected response format reading file: ${filePath}`,
-        'READ_ERROR',
-        filePath,
-      );
-    }
-
-    // [EARS-B2] Decode base64 content
-    if (data.content !== null && data.content !== undefined) {
-      return Buffer.from(data.content, 'base64').toString('utf-8');
-    }
-
-    // [EARS-B7] Content is null (file >1MB), fallback to Blobs API
-    return this.readViaBlobs(data.sha, filePath);
   }
 
   /**
@@ -222,62 +229,69 @@ export class GitHubFileLister implements FileLister {
    */
   async stat(filePath: string): Promise<FileStats> {
     const fullPath = this.buildFullPath(filePath);
-    const url = this.buildUrl(`/repos/${this.owner}/${this.repo}/contents/${fullPath}?ref=${this.ref}`);
 
-    let response: Response;
     try {
-      response = await this.fetchFn(url, {
-        method: 'GET',
-        headers: this.buildHeaders(),
+      const { data } = await this.octokit.rest.repos.getContent({
+        owner: this.owner,
+        repo: this.repo,
+        path: fullPath,
+        ref: this.ref,
       });
+
+      if (Array.isArray(data) || data.type !== 'file') {
+        throw new FileListerError(
+          `Not a file: ${filePath}`,
+          'READ_ERROR',
+          filePath,
+        );
+      }
+
+      return {
+        size: data.size,
+        mtime: 0,
+        isFile: true,
+      };
     } catch (error: unknown) {
+      if (error instanceof FileListerError) throw error;
+      if (isOctokitRequestError(error)) {
+        if (error.status === 404) {
+          throw new FileListerError(
+            `File not found: ${filePath}`,
+            'FILE_NOT_FOUND',
+            filePath,
+          );
+        }
+        if (error.status === 401 || error.status === 403) {
+          throw new FileListerError(
+            `Permission denied: ${filePath}`,
+            'PERMISSION_DENIED',
+            filePath,
+          );
+        }
+        if (error.status >= 500) {
+          throw new FileListerError(
+            `GitHub API server error (${error.status}): ${filePath}`,
+            'READ_ERROR',
+            filePath,
+          );
+        }
+        throw new FileListerError(
+          `Unexpected GitHub API response (${error.status}): ${filePath}`,
+          'READ_ERROR',
+          filePath,
+        );
+      }
       throw new FileListerError(
         `Network error getting file stats: ${filePath}`,
-        'READ_ERROR',
+        'NETWORK_ERROR',
         filePath,
       );
     }
-
-    this.handleErrorResponse(response, filePath);
-
-    let data: GitHubContentsResponse;
-    try {
-      data = await response.json() as GitHubContentsResponse;
-    } catch {
-      throw new FileListerError(
-        `Unexpected response format for stat: ${filePath}`,
-        'READ_ERROR',
-        filePath,
-      );
-    }
-
-    return {
-      size: data.size,
-      mtime: 0,
-      isFile: true,
-    };
   }
 
   // ═══════════════════════════════════════════════════════════════════════
   // Private Helpers
   // ═══════════════════════════════════════════════════════════════════════
-
-  /**
-   * Builds the full API URL from a path.
-   */
-  private buildUrl(path: string): string {
-    return `${this.apiBaseUrl}${path}`;
-  }
-
-  /**
-   * Builds the standard headers for GitHub API requests.
-   */
-  private buildHeaders(): Record<string, string> {
-    return {
-      'Authorization': `Bearer ${this.token}`,
-      'Accept': 'application/vnd.github.v3+json',
-    };
-  }
 
   /**
    * Builds the full file path including basePath prefix.
@@ -290,156 +304,104 @@ export class GitHubFileLister implements FileLister {
   }
 
   /**
-   * Handles common error responses from GitHub API.
-   * Throws appropriate FileListerError for non-200 responses.
-   */
-  private handleErrorResponse(response: Response, filePath: string): void {
-    if (response.ok) {
-      return;
-    }
-
-    if (response.status === 404) {
-      throw new FileListerError(
-        `File not found: ${filePath}`,
-        'FILE_NOT_FOUND',
-        filePath,
-      );
-    }
-
-    if (response.status === 401 || response.status === 403) {
-      throw new FileListerError(
-        `Permission denied: ${filePath}`,
-        'PERMISSION_DENIED',
-        filePath,
-      );
-    }
-
-    if (response.status >= 500) {
-      throw new FileListerError(
-        `GitHub API server error (${response.status}): ${filePath}`,
-        'READ_ERROR',
-        filePath,
-      );
-    }
-
-    throw new FileListerError(
-      `Unexpected GitHub API response (${response.status}): ${filePath}`,
-      'READ_ERROR',
-      filePath,
-    );
-  }
-
-  /**
    * [EARS-B6] Fetches and caches the full repository tree.
    * [EARS-C3] Throws READ_ERROR if the tree response is truncated.
    */
-  private async fetchTree(): Promise<GitHubTreeEntry[]> {
+  private async fetchTree(): Promise<TreeEntry[]> {
     if (this.treeCache !== null) {
       return this.treeCache;
     }
 
-    const url = this.buildUrl(
-      `/repos/${this.owner}/${this.repo}/git/trees/${this.ref}?recursive=1`
-    );
-
-    let response: Response;
     try {
-      response = await this.fetchFn(url, {
-        method: 'GET',
-        headers: this.buildHeaders(),
+      const { data } = await this.octokit.rest.git.getTree({
+        owner: this.owner,
+        repo: this.repo,
+        tree_sha: this.ref,
+        recursive: '1',
       });
+
+      // [EARS-C3] Truncated tree means we cannot reliably list all files
+      if (data.truncated) {
+        throw new FileListerError(
+          'Repository tree is truncated; too many files to list via Trees API',
+          'READ_ERROR',
+        );
+      }
+
+      this.treeCache = data.tree;
+      return this.treeCache;
     } catch (error: unknown) {
+      if (error instanceof FileListerError) throw error;
+      if (isOctokitRequestError(error)) {
+        if (error.status === 404) {
+          throw new FileListerError(
+            'Repository or ref not found',
+            'FILE_NOT_FOUND',
+          );
+        }
+        if (error.status === 401 || error.status === 403) {
+          throw new FileListerError(
+            'Permission denied accessing repository tree',
+            'PERMISSION_DENIED',
+          );
+        }
+        if (error.status >= 500) {
+          throw new FileListerError(
+            `GitHub API server error (${error.status}) fetching tree`,
+            'READ_ERROR',
+          );
+        }
+        throw new FileListerError(
+          `Unexpected GitHub API response (${error.status}) fetching tree`,
+          'READ_ERROR',
+        );
+      }
       throw new FileListerError(
         'Network error fetching repository tree',
-        'READ_ERROR',
+        'NETWORK_ERROR',
       );
     }
-
-    if (response.status === 404) {
-      throw new FileListerError(
-        'Repository or ref not found',
-        'FILE_NOT_FOUND',
-      );
-    }
-
-    if (response.status === 401 || response.status === 403) {
-      throw new FileListerError(
-        'Permission denied accessing repository tree',
-        'PERMISSION_DENIED',
-      );
-    }
-
-    if (response.status >= 500) {
-      throw new FileListerError(
-        `GitHub API server error (${response.status}) fetching tree`,
-        'READ_ERROR',
-      );
-    }
-
-    if (!response.ok) {
-      throw new FileListerError(
-        `Unexpected GitHub API response (${response.status}) fetching tree`,
-        'READ_ERROR',
-      );
-    }
-
-    let data: GitHubTreeResponse;
-    try {
-      data = await response.json() as GitHubTreeResponse;
-    } catch {
-      throw new FileListerError(
-        'Unexpected response format from Trees API',
-        'READ_ERROR',
-      );
-    }
-
-    // [EARS-C3] Truncated tree means we cannot reliably list all files
-    if (data.truncated) {
-      throw new FileListerError(
-        'Repository tree is truncated; too many files to list via Trees API',
-        'READ_ERROR',
-      );
-    }
-
-    this.treeCache = data.tree;
-    return this.treeCache;
   }
 
   /**
    * [EARS-B7] Reads file content via the Blobs API (fallback for >1MB files).
    */
   private async readViaBlobs(sha: string, filePath: string): Promise<string> {
-    const url = this.buildUrl(
-      `/repos/${this.owner}/${this.repo}/git/blobs/${sha}`
-    );
-
-    let response: Response;
     try {
-      response = await this.fetchFn(url, {
-        method: 'GET',
-        headers: this.buildHeaders(),
+      const { data } = await this.octokit.rest.git.getBlob({
+        owner: this.owner,
+        repo: this.repo,
+        file_sha: sha,
       });
+
+      return Buffer.from(data.content, 'base64').toString('utf-8');
     } catch (error: unknown) {
+      if (isOctokitRequestError(error)) {
+        if (error.status === 404) {
+          throw new FileListerError(
+            `File not found: ${filePath}`,
+            'FILE_NOT_FOUND',
+            filePath,
+          );
+        }
+        if (error.status === 401 || error.status === 403) {
+          throw new FileListerError(
+            `Permission denied: ${filePath}`,
+            'PERMISSION_DENIED',
+            filePath,
+          );
+        }
+        throw new FileListerError(
+          `GitHub API error (${error.status}): ${filePath}`,
+          'READ_ERROR',
+          filePath,
+        );
+      }
       throw new FileListerError(
         `Network error reading blob for file: ${filePath}`,
-        'READ_ERROR',
+        'NETWORK_ERROR',
         filePath,
       );
     }
-
-    this.handleErrorResponse(response, filePath);
-
-    let data: GitHubBlobResponse;
-    try {
-      data = await response.json() as GitHubBlobResponse;
-    } catch {
-      throw new FileListerError(
-        `Unexpected response format from Blobs API: ${filePath}`,
-        'READ_ERROR',
-        filePath,
-      );
-    }
-
-    return Buffer.from(data.content, 'base64').toString('utf-8');
   }
 }

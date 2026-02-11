@@ -2,7 +2,7 @@
  * GitHubGitModule - GitHub REST API implementation of IGitModule
  *
  * Implements IGitModule for SaaS environments where direct filesystem
- * and git CLI are not available. Uses GitHub REST API for all operations.
+ * and git CLI are not available. Uses GitHub REST API via Octokit for all operations.
  *
  * Method categories:
  * - Category A (Implement): Real API calls — getFileContent, getCommitHash, etc.
@@ -14,6 +14,7 @@
  * @module git/github
  */
 
+import type { Octokit } from '@octokit/rest';
 import type { IGitModule } from '..';
 import type {
   ExecOptions,
@@ -23,21 +24,15 @@ import type {
   ChangedFile,
   CommitAuthor,
 } from '../types';
-import type { GitHubFetchFn, GitHubContentsResponse } from '../../github';
-import type {
-  GitHubGitModuleOptions,
-  GitHubCommitResponse,
-  GitHubCompareResponse,
-} from './github_git_module.types';
+import { isOctokitRequestError } from '../../github';
+import type { GitHubGitModuleOptions } from './github_git_module.types';
 import { GitError, FileNotFoundError, BranchNotFoundError, BranchAlreadyExistsError } from '../errors';
 
 export class GitHubGitModule implements IGitModule {
   private readonly owner: string;
   private readonly repo: string;
-  private readonly token: string;
   private readonly defaultBranch: string;
-  private readonly apiBaseUrl: string;
-  private readonly fetchFn: GitHubFetchFn;
+  private readonly octokit: Octokit;
 
   /** Staging buffer: path → content (null = delete) */
   private stagingBuffer: Map<string, string | null> = new Map();
@@ -45,51 +40,17 @@ export class GitHubGitModule implements IGitModule {
   /** Active ref for operations (can be changed via checkoutBranch) */
   private activeRef: string;
 
-  constructor(options: GitHubGitModuleOptions, fetchFn?: GitHubFetchFn) {
+  constructor(options: GitHubGitModuleOptions, octokit: Octokit) {
     this.owner = options.owner;
     this.repo = options.repo;
-    this.token = options.token;
-    this.defaultBranch = options.defaultBranch ?? 'main';
-    this.apiBaseUrl = options.apiBaseUrl ?? 'https://api.github.com';
-    this.fetchFn = fetchFn ?? globalThis.fetch;
+    this.defaultBranch = options.defaultBranch ?? 'gitgov-state';
+    this.octokit = octokit;
     this.activeRef = this.defaultBranch;
   }
 
   // ═══════════════════════════════════════════════════════════════
   // PRIVATE HELPERS
   // ═══════════════════════════════════════════════════════════════
-
-  /** Build authenticated URL for GitHub API endpoints */
-  protected buildUrl(path: string): string {
-    return `${this.apiBaseUrl}/repos/${this.owner}/${this.repo}/${path}`;
-  }
-
-  /** Make authenticated request to GitHub API with error handling */
-  protected async apiFetch(path: string, init?: RequestInit): Promise<Response> {
-    try {
-      return await this.fetchFn(this.buildUrl(path), {
-        ...init,
-        headers: {
-          Authorization: `Bearer ${this.token}`,
-          Accept: 'application/vnd.github.v3+json',
-          'Content-Type': 'application/json',
-          ...init?.headers,
-        },
-      });
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      throw new GitError(`network error: ${message}`);
-    }
-  }
-
-  /** Check for auth/permission errors */
-  private checkAuthError(response: Response, context: string): void {
-    if (response.status === 401 || response.status === 403) {
-      throw new GitError(
-        `authentication/permission error (${response.status}): ${context}`
-      );
-    }
-  }
 
   /** Category C: Not supported via GitHub API */
   private notSupported(method: string): never {
@@ -107,36 +68,48 @@ export class GitHubGitModule implements IGitModule {
    * [EARS-A2] Fallback to Blobs API for files >1MB
    */
   async getFileContent(commitHash: string, filePath: string): Promise<string> {
-    const response = await this.apiFetch(
-      `contents/${filePath}?ref=${commitHash}`
-    );
+    try {
+      const { data } = await this.octokit.rest.repos.getContent({
+        owner: this.owner,
+        repo: this.repo,
+        path: filePath,
+        ref: commitHash,
+      });
 
-    this.checkAuthError(response, `getFileContent ${filePath}`);
+      if (Array.isArray(data) || data.type !== 'file') {
+        throw new GitError(`Not a file: ${filePath}`);
+      }
 
-    if (response.status === 404) {
-      throw new FileNotFoundError(filePath, commitHash);
+      // [EARS-A1] Decode base64 content
+      if (data.content !== null && data.content !== undefined) {
+        return Buffer.from(data.content, 'base64').toString('utf-8');
+      }
+
+      // [EARS-A2] Content is null (file >1MB), fallback to Blobs API
+      const { data: blobData } = await this.octokit.rest.git.getBlob({
+        owner: this.owner,
+        repo: this.repo,
+        file_sha: data.sha,
+      });
+
+      return Buffer.from(blobData.content, 'base64').toString('utf-8');
+    } catch (error: unknown) {
+      if (error instanceof GitError) throw error;
+      if (isOctokitRequestError(error)) {
+        if (error.status === 404) {
+          throw new FileNotFoundError(filePath, commitHash);
+        }
+        if (error.status === 401 || error.status === 403) {
+          throw new GitError(`authentication/permission error (${error.status}): getFileContent ${filePath}`);
+        }
+        if (error.status >= 500) {
+          throw new GitError(`GitHub server error (${error.status}): getFileContent ${filePath}`);
+        }
+        throw new GitError(`GitHub API error (${error.status}): getFileContent ${filePath}`);
+      }
+      const msg = error instanceof Error ? error.message : String(error);
+      throw new GitError(`network error: ${msg}`);
     }
-
-    if (response.status >= 500) {
-      throw new GitError(`GitHub server error (${response.status}): getFileContent ${filePath}`);
-    }
-
-    const data = await response.json() as GitHubContentsResponse;
-
-    // [EARS-A1] Decode base64 content
-    if (data.content !== null && data.content !== undefined) {
-      return Buffer.from(data.content, 'base64').toString('utf-8');
-    }
-
-    // [EARS-A2] Content is null (file >1MB), fallback to Blobs API
-    const blobResponse = await this.apiFetch(`git/blobs/${data.sha}`);
-
-    if (!blobResponse.ok) {
-      throw new GitError(`Failed to read blob for ${filePath}: HTTP ${blobResponse.status}`);
-    }
-
-    const blobData = await blobResponse.json() as { content: string; encoding: string };
-    return Buffer.from(blobData.content, 'base64').toString('utf-8');
   }
 
   /**
@@ -149,20 +122,28 @@ export class GitHubGitModule implements IGitModule {
       return ref;
     }
 
-    const response = await this.apiFetch(`git/refs/heads/${ref}`);
-
-    this.checkAuthError(response, `getCommitHash ${ref}`);
-
-    if (response.status === 404) {
-      throw new BranchNotFoundError(ref);
+    try {
+      const { data } = await this.octokit.rest.git.getRef({
+        owner: this.owner,
+        repo: this.repo,
+        ref: `heads/${ref}`,
+      });
+      return data.object.sha;
+    } catch (error: unknown) {
+      if (isOctokitRequestError(error)) {
+        if (error.status === 404) {
+          throw new BranchNotFoundError(ref);
+        }
+        if (error.status === 401 || error.status === 403) {
+          throw new GitError(`authentication/permission error (${error.status}): getCommitHash ${ref}`);
+        }
+        if (error.status >= 500) {
+          throw new GitError(`GitHub server error (${error.status}): getCommitHash ${ref}`);
+        }
+      }
+      const msg = error instanceof Error ? error.message : String(error);
+      throw new GitError(`network error: ${msg}`);
     }
-
-    if (response.status >= 500) {
-      throw new GitError(`GitHub server error (${response.status}): getCommitHash ${ref}`);
-    }
-
-    const data = await response.json() as { object: { sha: string } };
-    return data.object.sha;
   }
 
   /**
@@ -173,37 +154,42 @@ export class GitHubGitModule implements IGitModule {
     toCommit: string,
     pathFilter: string
   ): Promise<ChangedFile[]> {
-    const response = await this.apiFetch(
-      `compare/${fromCommit}...${toCommit}`
-    );
+    try {
+      const { data } = await this.octokit.rest.repos.compareCommits({
+        owner: this.owner,
+        repo: this.repo,
+        base: fromCommit,
+        head: toCommit,
+      });
 
-    this.checkAuthError(response, `getChangedFiles ${fromCommit}...${toCommit}`);
+      const statusMap: Record<string, 'A' | 'M' | 'D'> = {
+        added: 'A',
+        modified: 'M',
+        removed: 'D',
+        renamed: 'M',
+      };
 
-    if (response.status >= 500) {
-      throw new GitError(`GitHub server error (${response.status}): getChangedFiles`);
+      const files: ChangedFile[] = (data.files ?? [])
+        .map(f => ({
+          status: statusMap[f.status] ?? ('M' as const),
+          file: f.filename,
+        }))
+        .filter(f => !pathFilter || f.file.startsWith(pathFilter));
+
+      return files;
+    } catch (error: unknown) {
+      if (isOctokitRequestError(error)) {
+        if (error.status === 401 || error.status === 403) {
+          throw new GitError(`authentication/permission error (${error.status}): getChangedFiles ${fromCommit}...${toCommit}`);
+        }
+        if (error.status >= 500) {
+          throw new GitError(`GitHub server error (${error.status}): getChangedFiles`);
+        }
+        throw new GitError(`Failed to compare ${fromCommit}...${toCommit}: HTTP ${error.status}`);
+      }
+      const msg = error instanceof Error ? error.message : String(error);
+      throw new GitError(`network error: ${msg}`);
     }
-
-    if (!response.ok) {
-      throw new GitError(`Failed to compare ${fromCommit}...${toCommit}: HTTP ${response.status}`);
-    }
-
-    const data = await response.json() as GitHubCompareResponse;
-
-    const statusMap: Record<string, 'A' | 'M' | 'D'> = {
-      added: 'A',
-      modified: 'M',
-      removed: 'D',
-      renamed: 'M',
-    };
-
-    const files: ChangedFile[] = data.files
-      .map(f => ({
-        status: statusMap[f.status] ?? 'M' as const,
-        file: f.filename,
-      }))
-      .filter(f => !pathFilter || f.file.startsWith(pathFilter));
-
-    return files;
   }
 
   /**
@@ -213,34 +199,34 @@ export class GitHubGitModule implements IGitModule {
     branch: string,
     options?: GetCommitHistoryOptions
   ): Promise<CommitInfo[]> {
-    const params = new URLSearchParams({ sha: branch });
-    if (options?.maxCount) {
-      params.set('per_page', String(options.maxCount));
+    try {
+      const { data } = await this.octokit.rest.repos.listCommits({
+        owner: this.owner,
+        repo: this.repo,
+        sha: branch,
+        ...(options?.maxCount !== undefined && { per_page: options.maxCount }),
+        ...(options?.pathFilter !== undefined && { path: options.pathFilter }),
+      });
+
+      return data.map(c => ({
+        hash: c.sha,
+        message: c.commit.message,
+        author: `${c.commit.author?.name ?? 'unknown'} <${c.commit.author?.email ?? 'unknown'}>`,
+        date: c.commit.author?.date ?? '',
+      }));
+    } catch (error: unknown) {
+      if (isOctokitRequestError(error)) {
+        if (error.status === 401 || error.status === 403) {
+          throw new GitError(`authentication/permission error (${error.status}): getCommitHistory ${branch}`);
+        }
+        if (error.status >= 500) {
+          throw new GitError(`GitHub server error (${error.status}): getCommitHistory`);
+        }
+        throw new GitError(`Failed to get commit history: HTTP ${error.status}`);
+      }
+      const msg = error instanceof Error ? error.message : String(error);
+      throw new GitError(`network error: ${msg}`);
     }
-    if (options?.pathFilter) {
-      params.set('path', options.pathFilter);
-    }
-
-    const response = await this.apiFetch(`commits?${params.toString()}`);
-
-    this.checkAuthError(response, `getCommitHistory ${branch}`);
-
-    if (response.status >= 500) {
-      throw new GitError(`GitHub server error (${response.status}): getCommitHistory`);
-    }
-
-    if (!response.ok) {
-      throw new GitError(`Failed to get commit history: HTTP ${response.status}`);
-    }
-
-    const data = await response.json() as GitHubCommitResponse[];
-
-    return data.map(c => ({
-      hash: c.sha,
-      message: c.commit.message,
-      author: `${c.commit.author.name} <${c.commit.author.email}>`,
-      date: c.commit.author.date,
-    }));
   }
 
   /**
@@ -251,61 +237,74 @@ export class GitHubGitModule implements IGitModule {
     toHash: string,
     options?: GetCommitHistoryOptions
   ): Promise<CommitInfo[]> {
-    const response = await this.apiFetch(`compare/${fromHash}...${toHash}`);
+    try {
+      const { data } = await this.octokit.rest.repos.compareCommits({
+        owner: this.owner,
+        repo: this.repo,
+        base: fromHash,
+        head: toHash,
+      });
 
-    this.checkAuthError(response, `getCommitHistoryRange ${fromHash}...${toHash}`);
+      let commits: CommitInfo[] = data.commits.map(c => ({
+        hash: c.sha,
+        message: c.commit.message,
+        author: `${c.commit.author?.name ?? 'unknown'} <${c.commit.author?.email ?? 'unknown'}>`,
+        date: c.commit.author?.date ?? '',
+      }));
 
-    if (response.status >= 500) {
-      throw new GitError(`GitHub server error (${response.status}): getCommitHistoryRange`);
+      if (options?.pathFilter) {
+        const changedPaths = new Set((data.files ?? []).map(f => f.filename));
+        commits = commits.filter(() =>
+          Array.from(changedPaths).some(f => f.startsWith(options.pathFilter!))
+        );
+      }
+
+      if (options?.maxCount) {
+        commits = commits.slice(0, options.maxCount);
+      }
+
+      return commits;
+    } catch (error: unknown) {
+      if (isOctokitRequestError(error)) {
+        if (error.status === 401 || error.status === 403) {
+          throw new GitError(`authentication/permission error (${error.status}): getCommitHistoryRange ${fromHash}...${toHash}`);
+        }
+        if (error.status >= 500) {
+          throw new GitError(`GitHub server error (${error.status}): getCommitHistoryRange`);
+        }
+        throw new GitError(`Failed to get commit range: HTTP ${error.status}`);
+      }
+      const msg = error instanceof Error ? error.message : String(error);
+      throw new GitError(`network error: ${msg}`);
     }
-
-    if (!response.ok) {
-      throw new GitError(`Failed to get commit range: HTTP ${response.status}`);
-    }
-
-    const data = await response.json() as GitHubCompareResponse;
-
-    let commits: CommitInfo[] = data.commits.map(c => ({
-      hash: c.sha,
-      message: c.commit.message,
-      author: `${c.commit.author.name} <${c.commit.author.email}>`,
-      date: c.commit.author.date,
-    }));
-
-    if (options?.pathFilter) {
-      const changedPaths = new Set(data.files.map(f => f.filename));
-      commits = commits.filter(c =>
-        c.files?.some(f => f.startsWith(options.pathFilter!)) ??
-        // If no file info, include commit if any changed file matches
-        Array.from(changedPaths).some(f => f.startsWith(options.pathFilter!))
-      );
-    }
-
-    if (options?.maxCount) {
-      commits = commits.slice(0, options.maxCount);
-    }
-
-    return commits;
   }
 
   /**
    * [EARS-A6] Get commit message via Commits API
    */
   async getCommitMessage(commitHash: string): Promise<string> {
-    const response = await this.apiFetch(`commits/${commitHash}`);
-
-    this.checkAuthError(response, `getCommitMessage ${commitHash}`);
-
-    if (response.status === 404) {
-      throw new GitError(`Commit not found: ${commitHash}`);
+    try {
+      const { data } = await this.octokit.rest.repos.getCommit({
+        owner: this.owner,
+        repo: this.repo,
+        ref: commitHash,
+      });
+      return data.commit.message;
+    } catch (error: unknown) {
+      if (isOctokitRequestError(error)) {
+        if (error.status === 404) {
+          throw new GitError(`Commit not found: ${commitHash}`);
+        }
+        if (error.status === 401 || error.status === 403) {
+          throw new GitError(`authentication/permission error (${error.status}): getCommitMessage ${commitHash}`);
+        }
+        if (error.status >= 500) {
+          throw new GitError(`GitHub server error (${error.status}): getCommitMessage`);
+        }
+      }
+      const msg = error instanceof Error ? error.message : String(error);
+      throw new GitError(`network error: ${msg}`);
     }
-
-    if (response.status >= 500) {
-      throw new GitError(`GitHub server error (${response.status}): getCommitMessage`);
-    }
-
-    const data = await response.json() as GitHubCommitResponse;
-    return data.commit.message;
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -316,19 +315,24 @@ export class GitHubGitModule implements IGitModule {
    * [EARS-B1] Check if branch exists via Branches API
    */
   async branchExists(branchName: string): Promise<boolean> {
-    const response = await this.apiFetch(`branches/${branchName}`);
-
-    this.checkAuthError(response, `branchExists ${branchName}`);
-
-    if (response.status === 200) {
+    try {
+      await this.octokit.rest.repos.getBranch({
+        owner: this.owner,
+        repo: this.repo,
+        branch: branchName,
+      });
       return true;
+    } catch (error: unknown) {
+      if (isOctokitRequestError(error)) {
+        if (error.status === 404) return false;
+        if (error.status === 401 || error.status === 403) {
+          throw new GitError(`authentication/permission error (${error.status}): branchExists ${branchName}`);
+        }
+        throw new GitError(`Failed to check branch: HTTP ${error.status}`);
+      }
+      const msg = error instanceof Error ? error.message : String(error);
+      throw new GitError(`network error: ${msg}`);
     }
-
-    if (response.status === 404) {
-      return false;
-    }
-
-    throw new GitError(`Failed to check branch: HTTP ${response.status}`);
   }
 
   /**
@@ -336,20 +340,25 @@ export class GitHubGitModule implements IGitModule {
    * remoteName is ignored — repo itself is the implicit remote
    */
   async listRemoteBranches(_remoteName: string): Promise<string[]> {
-    const response = await this.apiFetch('branches');
-
-    this.checkAuthError(response, 'listRemoteBranches');
-
-    if (response.status >= 500) {
-      throw new GitError(`GitHub server error (${response.status}): listRemoteBranches`);
+    try {
+      const { data } = await this.octokit.rest.repos.listBranches({
+        owner: this.owner,
+        repo: this.repo,
+      });
+      return data.map(b => b.name);
+    } catch (error: unknown) {
+      if (isOctokitRequestError(error)) {
+        if (error.status === 401 || error.status === 403) {
+          throw new GitError(`authentication/permission error (${error.status}): listRemoteBranches`);
+        }
+        if (error.status >= 500) {
+          throw new GitError(`GitHub server error (${error.status}): listRemoteBranches`);
+        }
+        throw new GitError(`Failed to list branches: HTTP ${error.status}`);
+      }
+      const msg = error instanceof Error ? error.message : String(error);
+      throw new GitError(`network error: ${msg}`);
     }
-
-    if (!response.ok) {
-      throw new GitError(`Failed to list branches: HTTP ${response.status}`);
-    }
-
-    const data = await response.json() as Array<{ name: string }>;
-    return data.map(b => b.name);
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -386,65 +395,63 @@ export class GitHubGitModule implements IGitModule {
       ? await this.getCommitHash(startPoint)
       : await this.getCommitHash(this.activeRef);
 
-    const response = await this.apiFetch('git/refs', {
-      method: 'POST',
-      body: JSON.stringify({
+    try {
+      await this.octokit.rest.git.createRef({
+        owner: this.owner,
+        repo: this.repo,
         ref: `refs/heads/${branchName}`,
         sha,
-      }),
-    });
-
-    this.checkAuthError(response, `createBranch ${branchName}`);
-
-    if (response.status === 422) {
-      throw new BranchAlreadyExistsError(branchName);
-    }
-
-    if (!response.ok) {
-      throw new GitError(`Failed to create branch ${branchName}: HTTP ${response.status}`);
+      });
+    } catch (error: unknown) {
+      if (isOctokitRequestError(error)) {
+        if (error.status === 422) {
+          throw new BranchAlreadyExistsError(branchName);
+        }
+        if (error.status === 401 || error.status === 403) {
+          throw new GitError(`authentication/permission error (${error.status}): createBranch ${branchName}`);
+        }
+        throw new GitError(`Failed to create branch ${branchName}: HTTP ${error.status}`);
+      }
+      const msg = error instanceof Error ? error.message : String(error);
+      throw new GitError(`network error: ${msg}`);
     }
   }
 
   /**
-   * [EARS-C3] Commit staged changes via 5-step atomic transaction
-   * [EARS-C4] Clears staging buffer after successful commit
-   * [EARS-C5] Throws if staging buffer is empty
+   * Internal commit implementation shared by commit() and commitAllowEmpty().
    *
-   * Steps:
-   * 1. GET ref SHA (current commit)
-   * 2. GET commit tree SHA
-   * 3. POST blobs for each staged file
-   * 4. POST new tree
-   * 5. POST new commit
-   * 6. PATCH ref (update branch)
+   * [EARS-C3] 6-step atomic transaction
+   * [EARS-C4] Clears staging buffer after successful commit
+   * [EARS-C5] Throws if staging buffer is empty (unless allowEmpty)
    */
-  async commit(message: string, author?: CommitAuthor): Promise<string> {
-    // [EARS-C5] Empty buffer check
-    if (this.stagingBuffer.size === 0) {
+  private async commitInternal(message: string, author?: CommitAuthor, allowEmpty = false): Promise<string> {
+    // [EARS-C5] Empty buffer check (skipped for commitAllowEmpty)
+    if (!allowEmpty && this.stagingBuffer.size === 0) {
       throw new GitError('Nothing to commit: staging buffer is empty');
     }
 
+    try {
     // Step 1: GET current ref SHA
-    const refResponse = await this.apiFetch(`git/refs/heads/${this.activeRef}`);
-    if (!refResponse.ok) {
-      throw new GitError(`Failed to get ref for ${this.activeRef}: HTTP ${refResponse.status}`);
-    }
-    const refData = await refResponse.json() as { object: { sha: string } };
+    const { data: refData } = await this.octokit.rest.git.getRef({
+      owner: this.owner,
+      repo: this.repo,
+      ref: `heads/${this.activeRef}`,
+    });
     const currentSha = refData.object.sha;
 
     // Step 2: GET commit to obtain tree SHA
-    const commitResponse = await this.apiFetch(`git/commits/${currentSha}`);
-    if (!commitResponse.ok) {
-      throw new GitError(`Failed to get commit ${currentSha}: HTTP ${commitResponse.status}`);
-    }
-    const commitData = await commitResponse.json() as { tree: { sha: string } };
+    const { data: commitData } = await this.octokit.rest.git.getCommit({
+      owner: this.owner,
+      repo: this.repo,
+      commit_sha: currentSha,
+    });
     const treeSha = commitData.tree.sha;
 
     // Step 3: POST blobs for each staged file (adds/updates only, not deletes)
     const treeEntries: Array<{
       path: string;
-      mode: string;
-      type: string;
+      mode: '100644';
+      type: 'blob';
       sha: string | null;
     }> = [];
 
@@ -459,19 +466,13 @@ export class GitHubGitModule implements IGitModule {
         });
       } else {
         // Create blob
-        const blobResponse = await this.apiFetch('git/blobs', {
-          method: 'POST',
-          body: JSON.stringify({
-            content: Buffer.from(content).toString('base64'),
-            encoding: 'base64',
-          }),
+        const { data: blobData } = await this.octokit.rest.git.createBlob({
+          owner: this.owner,
+          repo: this.repo,
+          content: Buffer.from(content).toString('base64'),
+          encoding: 'base64',
         });
 
-        if (!blobResponse.ok) {
-          throw new GitError(`Failed to create blob for ${path}: HTTP ${blobResponse.status}`);
-        }
-
-        const blobData = await blobResponse.json() as { sha: string };
         treeEntries.push({
           path,
           mode: '100644',
@@ -482,66 +483,82 @@ export class GitHubGitModule implements IGitModule {
     }
 
     // Step 4: POST new tree
-    const treeResponse = await this.apiFetch('git/trees', {
-      method: 'POST',
-      body: JSON.stringify({
-        base_tree: treeSha,
-        tree: treeEntries,
-      }),
+    const { data: treeData } = await this.octokit.rest.git.createTree({
+      owner: this.owner,
+      repo: this.repo,
+      base_tree: treeSha,
+      tree: treeEntries as any,
     });
-
-    if (!treeResponse.ok) {
-      throw new GitError(`Failed to create tree: HTTP ${treeResponse.status}`);
-    }
-
-    const treeData = await treeResponse.json() as { sha: string };
     const newTreeSha = treeData.sha;
 
     // Step 5: POST new commit
-    const newCommitBody: Record<string, unknown> = {
+    const commitParams: {
+      owner: string;
+      repo: string;
+      message: string;
+      tree: string;
+      parents: string[];
+      author?: { name: string; email: string; date: string };
+    } = {
+      owner: this.owner,
+      repo: this.repo,
       message,
       tree: newTreeSha,
       parents: [currentSha],
     };
 
     if (author) {
-      newCommitBody['author'] = {
+      commitParams.author = {
         name: author.name,
         email: author.email,
         date: new Date().toISOString(),
       };
     }
 
-    const newCommitResponse = await this.apiFetch('git/commits', {
-      method: 'POST',
-      body: JSON.stringify(newCommitBody),
-    });
-
-    if (!newCommitResponse.ok) {
-      throw new GitError(`Failed to create commit: HTTP ${newCommitResponse.status}`);
-    }
-
-    const newCommitData = await newCommitResponse.json() as { sha: string };
+    const { data: newCommitData } = await this.octokit.rest.git.createCommit(commitParams);
     const newCommitSha = newCommitData.sha;
 
     // Step 6: PATCH ref to point to new commit
-    const patchResponse = await this.apiFetch(`git/refs/heads/${this.activeRef}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ sha: newCommitSha }),
-    });
-
-    if (patchResponse.status === 422) {
-      throw new GitError('non-fast-forward update rejected');
-    }
-
-    if (!patchResponse.ok) {
-      throw new GitError(`Failed to update ref: HTTP ${patchResponse.status}`);
+    try {
+      await this.octokit.rest.git.updateRef({
+        owner: this.owner,
+        repo: this.repo,
+        ref: `heads/${this.activeRef}`,
+        sha: newCommitSha,
+      });
+    } catch (error: unknown) {
+      if (isOctokitRequestError(error) && error.status === 422) {
+        throw new GitError('non-fast-forward update rejected');
+      }
+      throw error;
     }
 
     // [EARS-C4] Clear staging buffer after successful commit
     this.stagingBuffer.clear();
 
     return newCommitSha;
+    } catch (error: unknown) {
+      if (error instanceof GitError) throw error;
+      if (isOctokitRequestError(error)) {
+        if (error.status === 401 || error.status === 403) {
+          throw new GitError(`authentication/permission error (${error.status}): commit`);
+        }
+        if (error.status >= 500) {
+          throw new GitError(`GitHub server error (${error.status}): commit`);
+        }
+        throw new GitError(`GitHub API error (${error.status}): commit`);
+      }
+      const msg = error instanceof Error ? error.message : String(error);
+      throw new GitError(`network error: ${msg}`);
+    }
+  }
+
+  /**
+   * [EARS-C3] Commit staged changes via 6-step atomic transaction
+   * [EARS-C5] Throws if staging buffer is empty
+   */
+  async commit(message: string, author?: CommitAuthor): Promise<string> {
+    return this.commitInternal(message, author, false);
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -665,9 +682,9 @@ export class GitHubGitModule implements IGitModule {
     // No-op
   }
 
-  /** [EARS-D1] Delegates to commit */
+  /** [EARS-D1] Delegates to commitInternal, allowing empty staging buffer */
   async commitAllowEmpty(message: string, author?: CommitAuthor): Promise<string> {
-    return this.commit(message, author);
+    return this.commitInternal(message, author, true);
   }
 
   // ═══════════════════════════════════════════════════════════════

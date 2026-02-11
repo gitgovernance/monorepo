@@ -1,7 +1,7 @@
 /**
  * GitHubConfigStore - GitHub Contents API implementation of ConfigStore
  *
- * Persists config.json to a GitHub repository via the Contents API.
+ * Persists config.json to a GitHub repository via Octokit.
  * Used by SaaS/server-side environments where the project lives on GitHub
  * and direct filesystem access is not available.
  *
@@ -11,53 +11,28 @@
  * - Caches blob SHA from loadConfig for subsequent saveConfig (optimistic concurrency).
  */
 
+import type { Octokit } from '@octokit/rest';
 import type { ConfigStore } from '../config_store';
 import type { GitGovConfig } from '../../config_manager/config_manager.types';
-import type { GitHubFetchFn, GitHubContentsResponse } from '../../github';
-import type { GitHubConfigStoreOptions, GitHubSaveResponse, GitHubSaveResult } from './github_config_store.types';
-import { GitHubApiError } from '../../github';
+import type { GitHubConfigStoreOptions, GitHubSaveResult } from './github_config_store.types';
+import { mapOctokitError, isOctokitRequestError } from '../../github';
 
-/**
- * GitHub Contents API-backed ConfigStore implementation.
- *
- * Reads and writes `.gitgov/config.json` (or custom basePath) from a GitHub
- * repository using the Contents API. Implements fail-safe pattern: returns
- * null on 404 or invalid JSON instead of throwing.
- *
- * @example
- * ```typescript
- * const store = new GitHubConfigStore({
- *   owner: 'my-org',
- *   repo: 'my-project',
- *   token: 'ghp_...',
- * });
- * const config = await store.loadConfig();
- * if (config) {
- *   config.projectName = 'Updated';
- *   await store.saveConfig(config);
- * }
- * ```
- */
 export class GitHubConfigStore implements ConfigStore<GitHubSaveResult> {
   private readonly owner: string;
   private readonly repo: string;
-  private readonly token: string;
   private readonly ref: string;
   private readonly basePath: string;
-  private readonly apiBaseUrl: string;
-  private readonly fetchFn: GitHubFetchFn;
+  private readonly octokit: Octokit;
 
   /** Cached blob SHA from the last loadConfig call, used for PUT updates */
   private cachedSha: string | null = null;
 
-  constructor(options: GitHubConfigStoreOptions, fetchFn?: GitHubFetchFn) {
+  constructor(options: GitHubConfigStoreOptions, octokit: Octokit) {
     this.owner = options.owner;
     this.repo = options.repo;
-    this.token = options.token;
-    this.ref = options.ref ?? 'main';
+    this.ref = options.ref ?? 'gitgov-state';
     this.basePath = options.basePath ?? '.gitgov';
-    this.apiBaseUrl = options.apiBaseUrl ?? 'https://api.github.com';
-    this.fetchFn = fetchFn ?? globalThis.fetch.bind(globalThis);
+    this.octokit = octokit;
   }
 
   /**
@@ -70,55 +45,41 @@ export class GitHubConfigStore implements ConfigStore<GitHubSaveResult> {
    * [EARS-B2] Caches SHA from response for subsequent saveConfig.
    */
   async loadConfig(): Promise<GitGovConfig | null> {
-    const url = `${this.apiBaseUrl}/repos/${this.owner}/${this.repo}/contents/${this.basePath}/config.json?ref=${this.ref}`;
+    const path = `${this.basePath}/config.json`;
 
-    let response: Response;
     try {
-      response = await this.fetchFn(url, {
-        method: 'GET',
-        headers: this.buildHeaders(),
+      const { data } = await this.octokit.rest.repos.getContent({
+        owner: this.owner,
+        repo: this.repo,
+        path,
+        ref: this.ref,
       });
+
+      // getContent can return array (directory) — we expect a file
+      if (Array.isArray(data) || data.type !== 'file') {
+        return null;
+      }
+
+      // Decode base64 content
+      if (!data.content) {
+        return null;
+      }
+
+      // Cache SHA for subsequent saveConfig (only when content is present)
+      this.cachedSha = data.sha;
+
+      try {
+        const decoded = Buffer.from(data.content, 'base64').toString('utf-8');
+        return JSON.parse(decoded) as GitGovConfig;
+      } catch {
+        // Invalid JSON - fail-safe
+        return null;
+      }
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      throw new GitHubApiError(`Network error: ${message}`, 'NETWORK_ERROR');
-    }
-
-    if (response.status === 404) {
-      return null;
-    }
-
-    if (response.status === 401 || response.status === 403) {
-      throw new GitHubApiError(
-        `Permission denied accessing ${this.owner}/${this.repo} config`,
-        'PERMISSION_DENIED',
-        response.status,
-      );
-    }
-
-    if (response.status >= 500) {
-      throw new GitHubApiError(
-        `GitHub server error (${response.status})`,
-        'SERVER_ERROR',
-        response.status,
-      );
-    }
-
-    const body = (await response.json()) as GitHubContentsResponse;
-
-    // Cache SHA for subsequent saveConfig
-    this.cachedSha = body.sha;
-
-    // Decode base64 content
-    if (!body.content) {
-      return null;
-    }
-
-    try {
-      const decoded = Buffer.from(body.content, 'base64').toString('utf-8');
-      return JSON.parse(decoded) as GitGovConfig;
-    } catch {
-      // Invalid JSON - fail-safe
-      return null;
+      if (isOctokitRequestError(error) && error.status === 404) {
+        return null;
+      }
+      throw mapOctokitError(error, `loadConfig ${this.owner}/${this.repo}/${path}`);
     }
   }
 
@@ -133,71 +94,28 @@ export class GitHubConfigStore implements ConfigStore<GitHubSaveResult> {
    * [EARS-C3] Throws SERVER_ERROR on 5xx.
    */
   async saveConfig(config: GitGovConfig): Promise<GitHubSaveResult> {
-    const url = `${this.apiBaseUrl}/repos/${this.owner}/${this.repo}/contents/${this.basePath}/config.json`;
+    const path = `${this.basePath}/config.json`;
     const content = Buffer.from(JSON.stringify(config, null, 2)).toString('base64');
 
-    const reqBody: Record<string, string> = {
-      message: 'chore(config): update gitgov config.json',
-      content,
-      branch: this.ref,
-    };
-
-    if (this.cachedSha) {
-      reqBody['sha'] = this.cachedSha;
-    }
-
-    let response: Response;
     try {
-      response = await this.fetchFn(url, {
-        method: 'PUT',
-        headers: this.buildHeaders(),
-        body: JSON.stringify(reqBody),
+      const { data } = await this.octokit.rest.repos.createOrUpdateFileContents({
+        owner: this.owner,
+        repo: this.repo,
+        path,
+        message: 'chore(config): update gitgov config.json',
+        content,
+        branch: this.ref,
+        ...(this.cachedSha ? { sha: this.cachedSha } : {}),
       });
+
+      // Update cached SHA for subsequent saves
+      if (data.content?.sha) {
+        this.cachedSha = data.content.sha;
+      }
+
+      return { commitSha: data.commit.sha! };
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      throw new GitHubApiError(`Network error: ${message}`, 'NETWORK_ERROR');
+      throw mapOctokitError(error, `saveConfig ${this.owner}/${this.repo}/${path}`);
     }
-
-    if (response.status === 401 || response.status === 403) {
-      throw new GitHubApiError(
-        `Permission denied writing to ${this.owner}/${this.repo} config`,
-        'PERMISSION_DENIED',
-        response.status,
-      );
-    }
-
-    if (response.status === 409) {
-      throw new GitHubApiError(
-        `Conflict writing config.json (SHA mismatch)`,
-        'CONFLICT',
-        response.status,
-      );
-    }
-
-    if (response.status >= 500) {
-      throw new GitHubApiError(
-        `GitHub server error (${response.status})`,
-        'SERVER_ERROR',
-        response.status,
-      );
-    }
-
-    const result = (await response.json()) as GitHubSaveResponse;
-
-    // Update cached SHA for subsequent saves
-    this.cachedSha = result.content.sha;
-
-    return { commitSha: result.commit.sha };
-  }
-
-  /**
-   * Build common HTTP headers for GitHub API requests.
-   */
-  private buildHeaders(): Record<string, string> {
-    return {
-      'Authorization': `Bearer ${this.token}`,
-      'Accept': 'application/vnd.github.v3+json',
-      'Content-Type': 'application/json',
-    };
   }
 }
