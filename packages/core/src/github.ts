@@ -134,10 +134,7 @@ export type {
 
 // GitModule
 export { GitHubGitModule } from './git/github';
-export type {
-  GitHubGitModuleOptions,
-  StagingEntry,
-} from './git/github';
+export type { GitHubGitModuleOptions } from './git/github';
 
 // ConfigStore
 export { GitHubConfigStore } from './config_store/github';

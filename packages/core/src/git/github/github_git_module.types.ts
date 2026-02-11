@@ -17,14 +17,3 @@ export type GitHubGitModuleOptions = {
   /** Default branch name (default: 'gitgov-state') */
   defaultBranch?: string;
 };
-
-/**
- * Internal staging buffer entry.
- * content = string means add/update, content = null means delete.
- */
-export type StagingEntry = {
-  /** File path relative to repo root */
-  path: string;
-  /** File content (null = delete) */
-  content: string | null;
-};

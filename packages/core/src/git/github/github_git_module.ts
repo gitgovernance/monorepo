@@ -487,7 +487,7 @@ export class GitHubGitModule implements IGitModule {
       owner: this.owner,
       repo: this.repo,
       base_tree: treeSha,
-      tree: treeEntries as any,
+      tree: treeEntries,
     });
     const newTreeSha = treeData.sha;
 
