@@ -1,7 +1,7 @@
 ![License: Apache-2.0](https://img.shields.io/badge/Protocol-Apache--2.0-blue.svg)
 ![License: MPL-2.0](https://img.shields.io/badge/Core-MPL--2.0-blue.svg)
 ![core npm version](https://img.shields.io/npm/v/@gitgov/core?color=orange&label=Core%20npm)
-![Tests](https://img.shields.io/badge/Core-2507%20tests-success)
+![Tests](https://img.shields.io/badge/Core-2628%20tests-success)
 ![License: Apache-2.0](https://img.shields.io/badge/CLI-Apache--2.0-blue.svg)
 ![cli npm version](https://img.shields.io/npm/v/@gitgov/cli?color=orange&label=CLI%20npm)
 ![Tests](https://img.shields.io/badge/CLI-403%20tests-success)
