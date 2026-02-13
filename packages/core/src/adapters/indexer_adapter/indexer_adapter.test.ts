@@ -200,6 +200,7 @@ function createMockCacheStore(): jest.Mocked<RecordStore<IndexData>> {
     put: jest.fn().mockImplementation(async (_key: string, data: IndexData) => {
       cachedData = data;
     }),
+    putMany: jest.fn().mockResolvedValue(undefined),
     delete: jest.fn().mockImplementation(async () => {
       cachedData = null;
     }),
@@ -229,6 +230,7 @@ describe('IndexerAdapter', () => {
       tasks: {
         get: jest.fn(),
         put: jest.fn().mockResolvedValue(undefined),
+        putMany: jest.fn().mockResolvedValue(undefined),
         delete: jest.fn().mockResolvedValue(undefined),
         list: jest.fn(),
         exists: jest.fn().mockResolvedValue(false),
@@ -236,6 +238,7 @@ describe('IndexerAdapter', () => {
       cycles: {
         get: jest.fn(),
         put: jest.fn().mockResolvedValue(undefined),
+        putMany: jest.fn().mockResolvedValue(undefined),
         delete: jest.fn().mockResolvedValue(undefined),
         list: jest.fn(),
         exists: jest.fn().mockResolvedValue(false),
@@ -243,6 +246,7 @@ describe('IndexerAdapter', () => {
       actors: {
         get: jest.fn(),
         put: jest.fn().mockResolvedValue(undefined),
+        putMany: jest.fn().mockResolvedValue(undefined),
         delete: jest.fn().mockResolvedValue(undefined),
         list: jest.fn(),
         exists: jest.fn().mockResolvedValue(false),
@@ -250,6 +254,7 @@ describe('IndexerAdapter', () => {
       feedbacks: {
         get: jest.fn().mockResolvedValue(null),
         put: jest.fn().mockResolvedValue(undefined),
+        putMany: jest.fn().mockResolvedValue(undefined),
         delete: jest.fn().mockResolvedValue(undefined),
         list: jest.fn().mockResolvedValue([]),
         exists: jest.fn().mockResolvedValue(false),
@@ -257,6 +262,7 @@ describe('IndexerAdapter', () => {
       executions: {
         get: jest.fn().mockResolvedValue(null),
         put: jest.fn().mockResolvedValue(undefined),
+        putMany: jest.fn().mockResolvedValue(undefined),
         delete: jest.fn().mockResolvedValue(undefined),
         list: jest.fn().mockResolvedValue([]),
         exists: jest.fn().mockResolvedValue(false),
@@ -264,6 +270,7 @@ describe('IndexerAdapter', () => {
       changelogs: {
         get: jest.fn().mockResolvedValue(null),
         put: jest.fn().mockResolvedValue(undefined),
+        putMany: jest.fn().mockResolvedValue(undefined),
         delete: jest.fn().mockResolvedValue(undefined),
         list: jest.fn().mockResolvedValue([]),
         exists: jest.fn().mockResolvedValue(false),
@@ -711,6 +718,7 @@ describe('IndexerAdapter', () => {
       const corruptedCacheStore: jest.Mocked<RecordStore<IndexData>> = {
         get: jest.fn().mockRejectedValue(new Error('Invalid JSON data')),
         put: jest.fn().mockResolvedValue(undefined),
+        putMany: jest.fn().mockResolvedValue(undefined),
         delete: jest.fn().mockResolvedValue(undefined),
         exists: jest.fn().mockResolvedValue(true), // Cache exists but is corrupted
         list: jest.fn().mockResolvedValue([]),

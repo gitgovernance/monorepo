@@ -1024,7 +1024,7 @@ export class LocalGitModule implements IGitModule {
    * await gitModule.add([".gitgov/tasks/123.json"]);
    * await gitModule.add([".gitgov"], { force: true }); // Add ignored files
    */
-  async add(filePaths: string[], options?: { force?: boolean }): Promise<void> {
+  async add(filePaths: string[], options?: { force?: boolean; contentMap?: Record<string, string> }): Promise<void> {
     const args = ['add'];
     if (options?.force) {
       args.push('--force');

@@ -69,7 +69,14 @@ export type { EnvironmentValidation } from "./project_initializer";
 export type { ProjectInitResult } from "./adapters/project_adapter";
 
 // Store type exports
-export type { RecordStore } from "./record_store";
+export type { RecordStore, IdEncoder } from "./record_store";
+
+// ConfigStore type export (interface only — implementations in @gitgov/core/github and @gitgov/core/fs)
+export type { ConfigStore } from "./config_store";
+
+// FileLister interface export (renamed to avoid tsup namespace/interface name collision)
+// Use IFileLister when importing the interface directly; FileLister namespace for errors/subtypes
+export type { FileLister as IFileLister } from "./file_lister";
 export type {
   GitGovTaskRecord,
   GitGovCycleRecord,

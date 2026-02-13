@@ -35,7 +35,7 @@ import type { GitGovConfig } from '../config_manager';
  * store.setConfig({ protocolVersion: '1.0', ... });
  * ```
  */
-export interface ConfigStore {
+export interface ConfigStore<R = void> {
   /**
    * Load project configuration from config.json
    *
@@ -47,8 +47,9 @@ export interface ConfigStore {
    * Save project configuration to config.json
    *
    * @param config - Configuration to persist
+   * @returns Void for local backends; GitHubSaveResult for GitHub backend
    */
-  saveConfig(config: GitGovConfig): Promise<void>;
+  saveConfig(config: GitGovConfig): Promise<R>;
 }
 
 /**

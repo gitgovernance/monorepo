@@ -5,6 +5,7 @@ export default defineConfig({
     'src/index.ts',   // @gitgov/core - interfaces + types
     'src/fs.ts',      // @gitgov/core/fs - all fs implementations
     'src/memory.ts',  // @gitgov/core/memory - all memory implementations
+    'src/github.ts',  // @gitgov/core/github - GitHub API implementations
   ],
   format: ['esm'],
   dts: true,
@@ -13,6 +14,6 @@ export default defineConfig({
   outDir: 'dist/src',
   splitting: false,
   treeshake: true,
-  external: ['fast-glob'],
+  external: ['fast-glob', 'picomatch'],
 });
 

@@ -16,6 +16,8 @@ pnpm add @gitgov/core
 
 The SDK uses dependency injection. Each adapter receives its dependencies via constructor.
 
+### Filesystem Backend (CLI, local development)
+
 ```typescript
 import { Adapters, Store, EventBus } from '@gitgov/core';
 import { FsRecordStore } from '@gitgov/core/fs';
@@ -42,6 +44,40 @@ const task = await backlog.createTask(
 );
 ```
 
+### GitHub API Backend
+
+For SaaS, Forge apps, or GitHub Actions — no filesystem needed:
+
+```typescript
+import { Octokit } from '@octokit/rest';
+import {
+  GitHubRecordStore,
+  GitHubConfigStore,
+  GitHubGitModule,
+  GitHubFileLister,
+} from '@gitgov/core/github';
+import type { TaskRecord } from '@gitgov/core';
+
+const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
+const repoOpts = { owner: 'my-org', repo: 'my-repo', basePath: '.gitgov/tasks' };
+
+const taskStore = new GitHubRecordStore<TaskRecord>(repoOpts, octokit);
+
+// Read — returns parsed JSON, caches SHA for subsequent writes
+const task = await taskStore.get('task-001');
+
+// Write — returns { commitSha } from the created commit
+const result = await taskStore.put('task-002', newTask);
+
+// Atomic batch — single commit for N records (requires GitHubGitModule)
+const gitModule = new GitHubGitModule({ owner: 'my-org', repo: 'my-repo' }, octokit);
+const batchStore = new GitHubRecordStore<TaskRecord>(repoOpts, octokit, gitModule);
+await batchStore.putMany([
+  { id: 'task-003', value: task3 },
+  { id: 'task-004', value: task4 },
+]);
+```
+
 ## Architecture
 
 ```mermaid
@@ -56,11 +92,18 @@ graph LR
         Modules --> Records
     end
 
-    subgraph "@gitgov/core/fs — I/O"
+    subgraph "@gitgov/core/fs — Local I/O"
         FsStore["FsRecordStore"]
         FsGit["LocalGitModule"]
         FsLint["FsLintModule"]
         FsOther["FsKeyProvider, FsFileLister, ..."]
+    end
+
+    subgraph "@gitgov/core/github — GitHub API"
+        GhStore["GitHubRecordStore"]
+        GhGit["GitHubGitModule"]
+        GhConfig["GitHubConfigStore"]
+        GhFiles["GitHubFileLister"]
     end
 
     subgraph "@gitgov/core/memory — Testing"
@@ -70,25 +113,29 @@ graph LR
     end
 
     Adapters -.->|DI| FsStore
+    Adapters -.->|DI| GhStore
     Adapters -.->|DI| MemStore
 
     CLI["@gitgov/cli"] --> Adapters
     SaaS["@gitgov/saas-api"] --> Adapters
+    Forge["Forge Apps"] --> Adapters
 
     style Adapters fill:#e8f5e8,stroke:#4caf50,stroke-width:2px
     style FsStore fill:#e3f2fd,stroke:#1976d2
+    style GhStore fill:#f3e5f5,stroke:#7b1fa2
     style MemStore fill:#fff3e0,stroke:#f57c00
 ```
 
-### 3 Export Paths
+### 4 Export Paths
 
 | Import | Contents | I/O |
 |--------|----------|-----|
 | `@gitgov/core` | Interfaces, types, pure logic, factories, validators | No |
-| `@gitgov/core/fs` | Filesystem implementations (FsRecordStore, LocalGitModule, FsLintModule, ...) | Yes |
+| `@gitgov/core/fs` | Filesystem implementations (FsRecordStore, LocalGitModule, FsLintModule, ...) | Local |
+| `@gitgov/core/github` | GitHub API implementations (GitHubRecordStore, GitHubGitModule, GitHubConfigStore, GitHubFileLister) | Remote |
 | `@gitgov/core/memory` | In-memory implementations for testing (MemoryRecordStore, MemoryGitModule, ...) | No |
 
-The root import (`@gitgov/core`) never imports `fs`, `path`, or `child_process`.
+The root import (`@gitgov/core`) never imports `fs`, `path`, `child_process`, or `@octokit/rest`.
 
 ### Record Symmetry
 
@@ -128,8 +175,8 @@ Adapters are orchestrators that compose modules. All receive dependencies via co
 | `record_factories/` | Factories with defaults for creating records |
 | `record_validations/` | Business validators (above schema) |
 | `record_schemas/` | JSON Schemas + schema cache + errors |
-| `record_store/` | `RecordStore<T>` interface (impl in fs/memory) |
-| `config_store/` | Storage for project config.json |
+| `record_store/` | `RecordStore<V, R, O>` interface (impl in fs/memory/github) |
+| `config_store/` | Storage for project config.json (impl in fs/github) |
 | `config_manager/` | Typed access to config.json (versioned in git) |
 | `session_store/` | Storage for .session.json |
 | `session_manager/` | Typed access to .session.json (ephemeral, not versioned) |

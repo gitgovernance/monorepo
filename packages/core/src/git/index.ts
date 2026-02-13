@@ -85,7 +85,7 @@ export interface IGitModule {
   pullRebase(remote: string, branchName: string): Promise<void>;
   resetHard(target: string): Promise<void>;
   checkoutFilesFromBranch(sourceBranch: string, filePaths: string[]): Promise<void>;
-  add(filePaths: string[], options?: { force?: boolean }): Promise<void>;
+  add(filePaths: string[], options?: { force?: boolean; contentMap?: Record<string, string> }): Promise<void>;
   rm(filePaths: string[]): Promise<void>;
   commit(message: string, author?: CommitAuthor): Promise<string>;
   commitAllowEmpty(message: string, author?: CommitAuthor): Promise<string>;

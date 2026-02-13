@@ -1,5 +1,6 @@
 // Core interfaces - backend-agnostic
-export * from './record_store';
+export { DEFAULT_ID_ENCODER } from './record_store';
+export type { RecordStore, IdEncoder } from './record_store';
 export * from './record_store.types';
 
 // NOTE: Implementations are exported via subpaths:

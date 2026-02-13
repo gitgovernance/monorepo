@@ -1,11 +1,12 @@
 /**
- * GitHub Git Module - GitHub REST API implementation
+ * GitHub Git Module - GitHub REST API implementation of IGitModule
  *
- * Status: PLACEHOLDER - Not yet implemented
- * For future SaaS implementation.
+ * Category A (14 methods): Real Octokit API calls + staging utilities
+ * Category B (21 methods): No-ops with sensible defaults
+ * Category C (6 methods): Not supported — throw GitError
  *
  * @module git/github
  */
 
 export { GitHubGitModule } from './github_git_module';
-export type { GitHubGitModuleConfig } from './github_git_module';
+export type { GitHubGitModuleOptions } from './github_git_module.types';
