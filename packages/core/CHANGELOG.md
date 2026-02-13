@@ -1,3 +1,10 @@
+## [2.2.0](https://github.com/gitgovernance/monorepo/compare/core-v2.1.2...core-v2.2.0) (2026-02-13)
+
+
+### ✨ Features
+
+* **core:** GitHub API backends with Octokit DI ([#91](https://github.com/gitgovernance/monorepo/issues/91)) ([b2cc265](https://github.com/gitgovernance/monorepo/commit/b2cc2651b3a5ff9ae13f321f1838b83c09e9effb))
+
 ## [2.1.2](https://github.com/gitgovernance/monorepo/compare/core-v2.1.1...core-v2.1.2) (2026-02-04)
 
 
