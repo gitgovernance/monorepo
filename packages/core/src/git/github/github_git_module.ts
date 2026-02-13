@@ -116,7 +116,7 @@ export class GitHubGitModule implements IGitModule {
    * [EARS-A3] Get commit SHA from branch via Refs API
    * [EARS-B4] Return SHA directly if already a 40-char hex
    */
-  async getCommitHash(ref: string = 'HEAD'): Promise<string> {
+  async getCommitHash(ref: string = this.activeRef): Promise<string> {
     // [EARS-B4] If ref is already a 40-char hex SHA, return directly
     if (/^[0-9a-f]{40}$/i.test(ref)) {
       return ref;
