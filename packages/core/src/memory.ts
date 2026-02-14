@@ -24,3 +24,6 @@ export type { MemoryFileListerOptions } from './file_lister/memory';
 
 // GitModule
 export { MemoryGitModule } from './git/memory';
+
+// RecordProjection (in-memory for testing)
+export { MemoryRecordProjection } from './record_projection/memory';

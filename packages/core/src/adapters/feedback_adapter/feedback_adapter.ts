@@ -209,7 +209,7 @@ export class FeedbackAdapter implements IFeedbackAdapter {
    *
    * Description: Gets all FeedbackRecords in the system for complete indexation.
    * Implementation: Complete read from record store without filters.
-   * Usage: Invoked by `gitgov feedback list` and by MetricsAdapter for calculations.
+   * Usage: Invoked by `gitgov feedback list` and by RecordMetrics for calculations.
    * Returns: Complete array of all FeedbackRecords.
    */
   async getAllFeedback(): Promise<FeedbackRecord[]> {

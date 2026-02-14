@@ -109,12 +109,12 @@ describe('DashboardCommand - EARS Compliance Tests', () => {
   let mockFeedbackAdapter: {
     getAllFeedback: jest.MockedFunction<() => Promise<FeedbackRecord[]>>;
   };
-  let mockMetricsAdapter: {
+  let mockRecordMetrics: {
     getSystemStatus: jest.MockedFunction<() => Promise<SystemStatus>>;
     getProductivityMetrics: jest.MockedFunction<() => Promise<ProductivityMetrics>>;
     getCollaborationMetrics: jest.MockedFunction<() => Promise<CollaborationMetrics>>;
   };
-  let mockIndexerAdapter: {
+  let mockProjector: {
     getIndexData: jest.MockedFunction<() => Promise<IndexData | null>>;
     generateIndex: jest.MockedFunction<() => Promise<IndexGenerationReport>>;
     isIndexUpToDate: jest.MockedFunction<() => Promise<boolean>>;
@@ -126,8 +126,8 @@ describe('DashboardCommand - EARS Compliance Tests', () => {
   let mockDependencyService: {
     getBacklogAdapter: jest.MockedFunction<() => Promise<typeof mockBacklogAdapter>>;
     getFeedbackAdapter: jest.MockedFunction<() => Promise<typeof mockFeedbackAdapter>>;
-    getMetricsAdapter: jest.MockedFunction<() => Promise<typeof mockMetricsAdapter>>;
-    getIndexerAdapter: jest.MockedFunction<() => Promise<typeof mockIndexerAdapter>>;
+    getRecordMetrics: jest.MockedFunction<() => Promise<typeof mockRecordMetrics>>;
+    getRecordProjector: jest.MockedFunction<() => Promise<typeof mockProjector>>;
     getIdentityAdapter: jest.MockedFunction<() => Promise<typeof mockIdentityAdapter>>;
   };
 
@@ -218,13 +218,13 @@ describe('DashboardCommand - EARS Compliance Tests', () => {
       getAllFeedback: jest.fn()
     };
 
-    mockMetricsAdapter = {
+    mockRecordMetrics = {
       getSystemStatus: jest.fn(),
       getProductivityMetrics: jest.fn(),
       getCollaborationMetrics: jest.fn()
     };
 
-    mockIndexerAdapter = {
+    mockProjector = {
       getIndexData: jest.fn(),
       generateIndex: jest.fn(),
       isIndexUpToDate: jest.fn(),
@@ -239,8 +239,8 @@ describe('DashboardCommand - EARS Compliance Tests', () => {
     mockDependencyService = {
       getBacklogAdapter: jest.fn().mockResolvedValue(mockBacklogAdapter),
       getFeedbackAdapter: jest.fn().mockResolvedValue(mockFeedbackAdapter),
-      getMetricsAdapter: jest.fn().mockResolvedValue(mockMetricsAdapter),
-      getIndexerAdapter: jest.fn().mockResolvedValue(mockIndexerAdapter),
+      getRecordMetrics: jest.fn().mockResolvedValue(mockRecordMetrics),
+      getRecordProjector: jest.fn().mockResolvedValue(mockProjector),
       getIdentityAdapter: jest.fn().mockResolvedValue(mockIdentityAdapter)
     };
 
@@ -255,10 +255,10 @@ describe('DashboardCommand - EARS Compliance Tests', () => {
     mockBacklogAdapter.getAllTasks.mockResolvedValue([sampleTask]);
     mockBacklogAdapter.getAllCycles.mockResolvedValue([sampleCycle]);
     mockFeedbackAdapter.getAllFeedback.mockResolvedValue([sampleFeedback]);
-    mockMetricsAdapter.getSystemStatus.mockResolvedValue(sampleSystemStatus);
-    mockMetricsAdapter.getProductivityMetrics.mockResolvedValue(sampleProductivityMetrics);
-    mockMetricsAdapter.getCollaborationMetrics.mockResolvedValue(sampleCollaborationMetrics);
-    mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(true);
+    mockRecordMetrics.getSystemStatus.mockResolvedValue(sampleSystemStatus);
+    mockRecordMetrics.getProductivityMetrics.mockResolvedValue(sampleProductivityMetrics);
+    mockRecordMetrics.getCollaborationMetrics.mockResolvedValue(sampleCollaborationMetrics);
+    mockProjector.isIndexUpToDate.mockResolvedValue(true);
   });
 
   afterEach(() => {
@@ -305,18 +305,18 @@ describe('DashboardCommand - EARS Compliance Tests', () => {
       };
 
       // First call returns null (cache invalidated), second call returns data
-      mockIndexerAdapter.getIndexData
+      mockProjector.getIndexData
         .mockResolvedValueOnce(null) // Cache invalidated
         .mockResolvedValueOnce(indexDataWithActivity); // After regeneration
 
-      mockIndexerAdapter.generateIndex.mockResolvedValue(mockGenerationReport);
+      mockProjector.generateIndex.mockResolvedValue(mockGenerationReport);
 
       // Act: Call gatherDashboardIntelligence (private method via JSON mode)
       await dashboardCommand.execute({ json: true });
 
       // Assert: Should call generateIndex when indexData is null
-      expect(mockIndexerAdapter.getIndexData).toHaveBeenCalledTimes(2);
-      expect(mockIndexerAdapter.generateIndex).toHaveBeenCalledTimes(1);
+      expect(mockProjector.getIndexData).toHaveBeenCalledTimes(2);
+      expect(mockProjector.generateIndex).toHaveBeenCalledTimes(1);
     });
 
     it('[EARS-E1] should preserve activity history even when cache is regenerated', async () => {
@@ -366,11 +366,11 @@ describe('DashboardCommand - EARS Compliance Tests', () => {
       };
 
       // Mock cache miss and regeneration
-      mockIndexerAdapter.getIndexData
+      mockProjector.getIndexData
         .mockResolvedValueOnce(null)
         .mockResolvedValueOnce(indexDataWithActivity);
 
-      mockIndexerAdapter.generateIndex.mockResolvedValue(mockGenerationReport);
+      mockProjector.generateIndex.mockResolvedValue(mockGenerationReport);
 
       // Capture JSON output
       const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
@@ -391,7 +391,7 @@ describe('DashboardCommand - EARS Compliance Tests', () => {
   describe('EARS-E4: Timestamp Consistency & Performance', () => {
     it('[EARS-E4] should use 1 second refresh interval by default (demo optimization)', async () => {
       // Arrange: Mock successful cache
-      mockIndexerAdapter.getIndexData.mockResolvedValue(sampleIndexData);
+      mockProjector.getIndexData.mockResolvedValue(sampleIndexData);
 
       // Mock Ink render to capture props
       const { render } = require('ink');
@@ -411,7 +411,7 @@ describe('DashboardCommand - EARS Compliance Tests', () => {
 
     it('[EARS-E4] should respect custom refresh interval when provided', async () => {
       // Arrange: Mock successful cache
-      mockIndexerAdapter.getIndexData.mockResolvedValue(sampleIndexData);
+      mockProjector.getIndexData.mockResolvedValue(sampleIndexData);
 
       const { render } = require('ink');
       const mockRender = render as jest.Mock;
@@ -444,12 +444,12 @@ describe('DashboardCommand - EARS Compliance Tests', () => {
         }
       };
 
-      mockIndexerAdapter.getIndexData
+      mockProjector.getIndexData
         .mockResolvedValueOnce(null)
         .mockResolvedValueOnce(sampleIndexData);
 
       // Mock fast regeneration
-      mockIndexerAdapter.generateIndex.mockResolvedValue(mockGenerationReport);
+      mockProjector.generateIndex.mockResolvedValue(mockGenerationReport);
 
       // Act: Measure execution time
       const startTime = Date.now();
@@ -458,7 +458,7 @@ describe('DashboardCommand - EARS Compliance Tests', () => {
 
       // Assert: Should be fast enough for demo (under 200ms total)
       expect(executionTime).toBeLessThan(200);
-      expect(mockIndexerAdapter.generateIndex).toHaveBeenCalledTimes(1);
+      expect(mockProjector.generateIndex).toHaveBeenCalledTimes(1);
       expect(mockGenerationReport.generationTime).toBeLessThan(100);
     });
   });
@@ -522,11 +522,11 @@ describe('DashboardCommand - EARS Compliance Tests', () => {
       };
 
       // Mock complete flow: cache miss -> regeneration -> success
-      mockIndexerAdapter.getIndexData
+      mockProjector.getIndexData
         .mockResolvedValueOnce(null) // Cache invalidated
         .mockResolvedValueOnce(completeIndexData); // After regeneration
 
-      mockIndexerAdapter.generateIndex.mockResolvedValue(mockGenerationReport);
+      mockProjector.generateIndex.mockResolvedValue(mockGenerationReport);
 
       const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
 
@@ -534,8 +534,8 @@ describe('DashboardCommand - EARS Compliance Tests', () => {
       await dashboardCommand.execute({ json: true });
 
       // Assert: Should complete successfully with activity history
-      expect(mockIndexerAdapter.getIndexData).toHaveBeenCalledTimes(2);
-      expect(mockIndexerAdapter.generateIndex).toHaveBeenCalledTimes(1);
+      expect(mockProjector.getIndexData).toHaveBeenCalledTimes(2);
+      expect(mockProjector.generateIndex).toHaveBeenCalledTimes(1);
       expect(consoleSpy).toHaveBeenCalledWith(
         expect.stringContaining('"success": true')
       );

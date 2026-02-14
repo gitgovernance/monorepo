@@ -22,7 +22,7 @@ import type {
   LintRecordContext,
   RecordStores
 } from "./lint.types";
-import type { IIndexerAdapter } from "../adapters/indexer_adapter";
+import type { IRecordProjector } from "../record_projection";
 import type {
   GitGovRecord,
   GitGovRecordPayload,
@@ -78,7 +78,7 @@ const ENTITY_TO_SCHEMA: Record<string, keyof typeof Schemas> = {
  */
 export class LintModule implements ILintModule {
   private readonly stores: RecordStores;
-  private readonly indexerAdapter: IIndexerAdapter | null;
+  private readonly projector: IRecordProjector | null;
 
   /**
    * Constructor for pure LintModule.
@@ -87,10 +87,10 @@ export class LintModule implements ILintModule {
    */
   constructor(dependencies?: LintModuleDependencies) {
     this.stores = dependencies?.stores ?? {};
-    this.indexerAdapter = dependencies?.indexerAdapter ?? null;
+    this.projector = dependencies?.projector ?? null;
 
-    if (!this.indexerAdapter) {
-      logger.warn("indexerAdapter not provided, reference validation will be limited");
+    if (!this.projector) {
+      logger.warn("projector not provided, reference validation will be limited");
     }
   }
 

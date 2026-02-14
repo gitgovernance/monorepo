@@ -27,7 +27,7 @@ describe('CycleCommand - Complete Unit Tests', () => {
     moveTasksBetweenCycles: jest.MockedFunction<(targetCycleId: string, taskIds: string[], sourceCycleId: string) => Promise<void>>;
     getTask: jest.MockedFunction<(taskId: string) => Promise<TaskRecord | null>>;
   };
-  let mockIndexerAdapter: {
+  let mockProjector: {
     isIndexUpToDate: jest.MockedFunction<() => Promise<boolean>>;
     getIndexData: jest.MockedFunction<() => Promise<{ cycles: GitGovCycleRecord[]; metadata: { generatedAt: string } } | null>>;
     generateIndex: jest.MockedFunction<() => Promise<void>>;
@@ -89,7 +89,7 @@ describe('CycleCommand - Complete Unit Tests', () => {
       getTask: jest.fn()
     };
 
-    mockIndexerAdapter = {
+    mockProjector = {
       isIndexUpToDate: jest.fn(),
       getIndexData: jest.fn(),
       generateIndex: jest.fn(),
@@ -104,7 +104,7 @@ describe('CycleCommand - Complete Unit Tests', () => {
     // Create mock dependency service
     const mockDependencyService = {
       getBacklogAdapter: jest.fn().mockResolvedValue(mockBacklogAdapter),
-      getIndexerAdapter: jest.fn().mockResolvedValue(mockIndexerAdapter),
+      getRecordProjector: jest.fn().mockResolvedValue(mockProjector),
       getIdentityAdapter: jest.fn().mockResolvedValue(mockIdentityAdapter)
     };
 
@@ -126,7 +126,7 @@ describe('CycleCommand - Complete Unit Tests', () => {
     it('[EARS-1] should open editor and create cycle with BacklogAdapter', async () => {
       mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
       mockBacklogAdapter.createCycle.mockResolvedValue(sampleCycle);
-      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+      mockProjector.invalidateCache.mockResolvedValue();
 
       await cycleCommand.executeNew('Test Cycle', { description: 'Test description' });
 
@@ -136,36 +136,36 @@ describe('CycleCommand - Complete Unit Tests', () => {
         status: 'planning',
         tags: []
       }, 'human:test-user');
-      expect(mockIndexerAdapter.invalidateCache).toHaveBeenCalled();
+      expect(mockProjector.invalidateCache).toHaveBeenCalled();
       expect(mockConsoleLog).toHaveBeenCalledWith('✅ Cycle created: 1757792000-cycle-test-cycle');
     });
 
-    it('[EARS-2] should verify cache freshness and use IndexerAdapter for performance', async () => {
-      mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(true);
-      mockIndexerAdapter.getIndexData.mockResolvedValue({
+    it('[EARS-2] should verify cache freshness and use RecordProjector for performance', async () => {
+      mockProjector.isIndexUpToDate.mockResolvedValue(true);
+      mockProjector.getIndexData.mockResolvedValue({
         cycles: [createMockGitGovCycleRecord(sampleCycle)],
         metadata: { generatedAt: new Date().toISOString() }
       });
 
       await cycleCommand.executeList({});
 
-      expect(mockIndexerAdapter.isIndexUpToDate).toHaveBeenCalled();
-      expect(mockIndexerAdapter.getIndexData).toHaveBeenCalled();
+      expect(mockProjector.isIndexUpToDate).toHaveBeenCalled();
+      expect(mockProjector.getIndexData).toHaveBeenCalled();
       expect(mockBacklogAdapter.getAllCycles).not.toHaveBeenCalled(); // Should use cache
       expect(mockConsoleLog).toHaveBeenCalledWith('🎯 Found 1 cycle(s):');
     });
 
     it('[EARS-3] should show cycle from cache with task hierarchy and metadata', async () => {
-      mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(true);
-      mockIndexerAdapter.getIndexData.mockResolvedValue({
+      mockProjector.isIndexUpToDate.mockResolvedValue(true);
+      mockProjector.getIndexData.mockResolvedValue({
         cycles: [createMockGitGovCycleRecord(sampleCycle)],
         metadata: { generatedAt: new Date().toISOString() }
       });
 
       await cycleCommand.executeShow('1757792000-cycle-test-cycle', {});
 
-      expect(mockIndexerAdapter.isIndexUpToDate).toHaveBeenCalled();
-      expect(mockIndexerAdapter.getIndexData).toHaveBeenCalled();
+      expect(mockProjector.isIndexUpToDate).toHaveBeenCalled();
+      expect(mockProjector.getIndexData).toHaveBeenCalled();
       expect(mockConsoleLog).toHaveBeenCalledWith('🎯 Cycle: 1757792000-cycle-test-cycle');
       expect(mockConsoleLog).toHaveBeenCalledWith('📝 Title: Test Cycle');
     });
@@ -175,12 +175,12 @@ describe('CycleCommand - Complete Unit Tests', () => {
       mockBacklogAdapter.getCycle.mockResolvedValue(sampleCycle);
       mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
       mockBacklogAdapter.updateCycle.mockResolvedValue(activeCycle);
-      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+      mockProjector.invalidateCache.mockResolvedValue();
 
       await cycleCommand.executeActivate('1757792000-cycle-test-cycle', {});
 
       expect(mockBacklogAdapter.updateCycle).toHaveBeenCalledWith('1757792000-cycle-test-cycle', { status: 'active' });
-      expect(mockIndexerAdapter.invalidateCache).toHaveBeenCalled();
+      expect(mockProjector.invalidateCache).toHaveBeenCalled();
       expect(mockConsoleLog).toHaveBeenCalledWith('✅ Cycle activated: 1757792000-cycle-test-cycle');
     });
 
@@ -190,12 +190,12 @@ describe('CycleCommand - Complete Unit Tests', () => {
       mockBacklogAdapter.getCycle.mockResolvedValue(activeCycle);
       mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
       mockBacklogAdapter.updateCycle.mockResolvedValue(completedCycle);
-      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+      mockProjector.invalidateCache.mockResolvedValue();
 
       await cycleCommand.executeComplete('1757792000-cycle-test-cycle', {});
 
       expect(mockBacklogAdapter.updateCycle).toHaveBeenCalledWith('1757792000-cycle-test-cycle', { status: 'completed' });
-      expect(mockIndexerAdapter.invalidateCache).toHaveBeenCalled();
+      expect(mockProjector.invalidateCache).toHaveBeenCalled();
       expect(mockConsoleLog).toHaveBeenCalledWith('✅ Cycle completed: 1757792000-cycle-test-cycle');
     });
   });
@@ -207,27 +207,27 @@ describe('CycleCommand - Complete Unit Tests', () => {
       mockBacklogAdapter.getCycle.mockResolvedValue(sampleCycle);
       mockBacklogAdapter.getTask.mockResolvedValue(sampleTask as TaskRecord);
       mockBacklogAdapter.addTaskToCycle.mockResolvedValue();
-      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+      mockProjector.invalidateCache.mockResolvedValue();
 
       await cycleCommand.executeAddTask('1757792000-cycle-test-cycle', { task: 'task-123' });
 
       expect(mockBacklogAdapter.addTaskToCycle).toHaveBeenCalledWith('1757792000-cycle-test-cycle', 'task-123');
-      expect(mockIndexerAdapter.invalidateCache).toHaveBeenCalled();
+      expect(mockProjector.invalidateCache).toHaveBeenCalled();
       expect(mockConsoleLog).toHaveBeenCalledWith('✅ Tasks added to cycle: 1757792000-cycle-test-cycle');
     });
 
     it('[EARS-9] should auto-regenerate cache when obsolete in read commands', async () => {
-      mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(false);
-      mockIndexerAdapter.generateIndex.mockResolvedValue();
-      mockIndexerAdapter.getIndexData.mockResolvedValue({
+      mockProjector.isIndexUpToDate.mockResolvedValue(false);
+      mockProjector.generateIndex.mockResolvedValue();
+      mockProjector.getIndexData.mockResolvedValue({
         cycles: [createMockGitGovCycleRecord(sampleCycle)],
         metadata: { generatedAt: new Date().toISOString() }
       });
 
       await cycleCommand.executeList({});
 
-      expect(mockIndexerAdapter.isIndexUpToDate).toHaveBeenCalled();
-      expect(mockIndexerAdapter.generateIndex).toHaveBeenCalled();
+      expect(mockProjector.isIndexUpToDate).toHaveBeenCalled();
+      expect(mockProjector.generateIndex).toHaveBeenCalled();
       expect(mockConsoleLog).toHaveBeenCalledWith('🔄 Updating cache...');
     });
 
@@ -240,14 +240,14 @@ describe('CycleCommand - Complete Unit Tests', () => {
         .mockResolvedValueOnce(parentCycle) // For parent validation
         .mockResolvedValueOnce(childCycle); // For child validation
       mockBacklogAdapter.updateCycle.mockResolvedValue(updatedParent);
-      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+      mockProjector.invalidateCache.mockResolvedValue();
 
       await cycleCommand.executeAddChild('1757792000-cycle-test-cycle', { child: 'child-cycle-123' });
 
       expect(mockBacklogAdapter.updateCycle).toHaveBeenCalledWith('1757792000-cycle-test-cycle', {
         childCycleIds: ['child-cycle-123']
       });
-      expect(mockIndexerAdapter.invalidateCache).toHaveBeenCalled();
+      expect(mockProjector.invalidateCache).toHaveBeenCalled();
       expect(mockConsoleLog).toHaveBeenCalledWith('✅ Child cycles added to parent: 1757792000-cycle-test-cycle');
     });
 
@@ -255,7 +255,7 @@ describe('CycleCommand - Complete Unit Tests', () => {
       mockBacklogAdapter.getCycle.mockResolvedValue(sampleCycle);
       mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
       mockBacklogAdapter.updateCycle.mockResolvedValue({ ...sampleCycle, title: 'Updated Title' });
-      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+      mockProjector.invalidateCache.mockResolvedValue();
 
       await cycleCommand.executeEdit('1757792000-cycle-test-cycle', { title: 'Updated Title' });
 
@@ -266,11 +266,11 @@ describe('CycleCommand - Complete Unit Tests', () => {
     it('[EARS-10] should invalidate cache after cycle modifications', async () => {
       mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
       mockBacklogAdapter.createCycle.mockResolvedValue(sampleCycle);
-      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+      mockProjector.invalidateCache.mockResolvedValue();
 
       await cycleCommand.executeNew('Test Cycle', { description: 'Test' });
 
-      expect(mockIndexerAdapter.invalidateCache).toHaveBeenCalled();
+      expect(mockProjector.invalidateCache).toHaveBeenCalled();
     });
   });
 
@@ -278,7 +278,7 @@ describe('CycleCommand - Complete Unit Tests', () => {
     it('[EARS-11] should return structured JSON output with json flag', async () => {
       mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
       mockBacklogAdapter.createCycle.mockResolvedValue(sampleCycle);
-      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+      mockProjector.invalidateCache.mockResolvedValue();
 
       await cycleCommand.executeNew('Test Cycle', { description: 'Test', json: true });
 
@@ -293,8 +293,8 @@ describe('CycleCommand - Complete Unit Tests', () => {
     });
 
     it('[EARS-12] should show additional details with verbose flag', async () => {
-      mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(true);
-      mockIndexerAdapter.getIndexData.mockResolvedValue({
+      mockProjector.isIndexUpToDate.mockResolvedValue(true);
+      mockProjector.getIndexData.mockResolvedValue({
         cycles: [createMockGitGovCycleRecord(sampleCycle)],
         metadata: { generatedAt: new Date().toISOString() }
       });
@@ -306,9 +306,9 @@ describe('CycleCommand - Complete Unit Tests', () => {
     });
 
     it('[EARS-13] should suppress output with quiet flag for scripting', async () => {
-      mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(false);
-      mockIndexerAdapter.generateIndex.mockResolvedValue();
-      mockIndexerAdapter.getIndexData.mockResolvedValue({
+      mockProjector.isIndexUpToDate.mockResolvedValue(false);
+      mockProjector.generateIndex.mockResolvedValue();
+      mockProjector.getIndexData.mockResolvedValue({
         cycles: [createMockGitGovCycleRecord(sampleCycle)],
         metadata: { generatedAt: new Date().toISOString() }
       });
@@ -321,8 +321,8 @@ describe('CycleCommand - Complete Unit Tests', () => {
 
     it('[EARS-14] should detect conflicting flags and show clear error', async () => {
       // Test with conflicting quiet and verbose flags
-      mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(true);
-      mockIndexerAdapter.getIndexData.mockResolvedValue({
+      mockProjector.isIndexUpToDate.mockResolvedValue(true);
+      mockProjector.getIndexData.mockResolvedValue({
         cycles: [],
         metadata: { generatedAt: new Date().toISOString() }
       });
@@ -355,8 +355,8 @@ describe('CycleCommand - Complete Unit Tests', () => {
     });
 
     it('should handle cycle not found in show command', async () => {
-      mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(true);
-      mockIndexerAdapter.getIndexData.mockResolvedValue({
+      mockProjector.isIndexUpToDate.mockResolvedValue(true);
+      mockProjector.getIndexData.mockResolvedValue({
         cycles: [],
         metadata: { generatedAt: new Date().toISOString() }
       });
@@ -417,21 +417,21 @@ describe('CycleCommand - Complete Unit Tests', () => {
 
   describe('Auto-indexation and Cache Behavior', () => {
     it('should use cache when up to date', async () => {
-      mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(true);
-      mockIndexerAdapter.getIndexData.mockResolvedValue({
+      mockProjector.isIndexUpToDate.mockResolvedValue(true);
+      mockProjector.getIndexData.mockResolvedValue({
         cycles: [createMockGitGovCycleRecord(sampleCycle)],
         metadata: { generatedAt: new Date().toISOString() }
       });
 
       await cycleCommand.executeList({});
 
-      expect(mockIndexerAdapter.generateIndex).not.toHaveBeenCalled();
+      expect(mockProjector.generateIndex).not.toHaveBeenCalled();
       expect(mockBacklogAdapter.getAllCycles).not.toHaveBeenCalled();
     });
 
     it('should fallback to direct access when cache fails', async () => {
-      mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(true);
-      mockIndexerAdapter.getIndexData.mockResolvedValue(null);
+      mockProjector.isIndexUpToDate.mockResolvedValue(true);
+      mockProjector.getIndexData.mockResolvedValue(null);
       mockBacklogAdapter.getAllCycles.mockResolvedValue([sampleCycle]);
 
       await cycleCommand.executeList({});
@@ -444,7 +444,7 @@ describe('CycleCommand - Complete Unit Tests', () => {
 
       await cycleCommand.executeList({ fromSource: true });
 
-      expect(mockIndexerAdapter.isIndexUpToDate).not.toHaveBeenCalled();
+      expect(mockProjector.isIndexUpToDate).not.toHaveBeenCalled();
       expect(mockBacklogAdapter.getAllCycles).toHaveBeenCalled();
     });
   });
@@ -457,8 +457,8 @@ describe('CycleCommand - Complete Unit Tests', () => {
         { ...sampleCycle, id: 'cycle-3', status: 'completed' as const }
       ];
 
-      mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(true);
-      mockIndexerAdapter.getIndexData.mockResolvedValue({
+      mockProjector.isIndexUpToDate.mockResolvedValue(true);
+      mockProjector.getIndexData.mockResolvedValue({
         cycles: cycles.map(c => createMockGitGovCycleRecord(c)),
         metadata: { generatedAt: new Date().toISOString() }
       });
@@ -476,8 +476,8 @@ describe('CycleCommand - Complete Unit Tests', () => {
         { ...sampleCycle, id: 'cycle-3', status: 'completed' as const }
       ];
 
-      mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(true);
-      mockIndexerAdapter.getIndexData.mockResolvedValue({
+      mockProjector.isIndexUpToDate.mockResolvedValue(true);
+      mockProjector.getIndexData.mockResolvedValue({
         cycles: cycles.map(c => createMockGitGovCycleRecord(c)),
         metadata: { generatedAt: new Date().toISOString() }
       });
@@ -494,7 +494,7 @@ describe('CycleCommand - Complete Unit Tests', () => {
       mockBacklogAdapter.getCycle.mockResolvedValue(emptyCycle);
       mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
       mockBacklogAdapter.updateCycle.mockResolvedValue({ ...emptyCycle, status: 'active' as const });
-      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+      mockProjector.invalidateCache.mockResolvedValue();
 
       await cycleCommand.executeActivate('1757792000-cycle-test-cycle', {});
 
@@ -508,12 +508,12 @@ describe('CycleCommand - Complete Unit Tests', () => {
       const taskIds = ['task-123', 'task-456'];
 
       mockBacklogAdapter.removeTasksFromCycle.mockResolvedValue();
-      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+      mockProjector.invalidateCache.mockResolvedValue();
 
       await cycleCommand.executeRemoveTask(cycleId, { task: 'task-123,task-456' });
 
       expect(mockBacklogAdapter.removeTasksFromCycle).toHaveBeenCalledWith(cycleId, taskIds);
-      expect(mockIndexerAdapter.invalidateCache).toHaveBeenCalled();
+      expect(mockProjector.invalidateCache).toHaveBeenCalled();
       expect(mockConsoleLog).toHaveBeenCalledWith(`✅ Tasks removed from cycle: ${cycleId}`);
       expect(mockConsoleLog).toHaveBeenCalledWith(`📋 Removed tasks: ${taskIds.join(', ')}`);
     });
@@ -523,12 +523,12 @@ describe('CycleCommand - Complete Unit Tests', () => {
       const taskId = 'task-123';
 
       mockBacklogAdapter.removeTasksFromCycle.mockResolvedValue();
-      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+      mockProjector.invalidateCache.mockResolvedValue();
 
       await cycleCommand.executeRemoveTask(cycleId, { task: taskId });
 
       expect(mockBacklogAdapter.removeTasksFromCycle).toHaveBeenCalledWith(cycleId, [taskId]);
-      expect(mockIndexerAdapter.invalidateCache).toHaveBeenCalled();
+      expect(mockProjector.invalidateCache).toHaveBeenCalled();
     });
 
     it('[EARS-11] should return JSON output for remove-task with --json flag', async () => {
@@ -536,7 +536,7 @@ describe('CycleCommand - Complete Unit Tests', () => {
       const taskIds = ['task-123', 'task-456'];
 
       mockBacklogAdapter.removeTasksFromCycle.mockResolvedValue();
-      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+      mockProjector.invalidateCache.mockResolvedValue();
 
       await cycleCommand.executeRemoveTask(cycleId, { task: 'task-123,task-456', json: true });
 
@@ -568,7 +568,7 @@ describe('CycleCommand - Complete Unit Tests', () => {
       const taskIds = ['task-123', 'task-456'];
 
       mockBacklogAdapter.moveTasksBetweenCycles.mockResolvedValue();
-      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+      mockProjector.invalidateCache.mockResolvedValue();
 
       await cycleCommand.executeMoveTask(targetCycleId, {
         task: 'task-123,task-456',
@@ -580,7 +580,7 @@ describe('CycleCommand - Complete Unit Tests', () => {
         taskIds,
         sourceCycleId
       );
-      expect(mockIndexerAdapter.invalidateCache).toHaveBeenCalled();
+      expect(mockProjector.invalidateCache).toHaveBeenCalled();
       expect(mockConsoleLog).toHaveBeenCalledWith('✅ Tasks moved successfully');
       expect(mockConsoleLog).toHaveBeenCalledWith(`📤 From cycle: ${sourceCycleId}`);
       expect(mockConsoleLog).toHaveBeenCalledWith(`📥 To cycle: ${targetCycleId}`);
@@ -593,7 +593,7 @@ describe('CycleCommand - Complete Unit Tests', () => {
       const taskId = 'task-123';
 
       mockBacklogAdapter.moveTasksBetweenCycles.mockResolvedValue();
-      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+      mockProjector.invalidateCache.mockResolvedValue();
 
       await cycleCommand.executeMoveTask(targetCycleId, {
         task: taskId,
@@ -605,7 +605,7 @@ describe('CycleCommand - Complete Unit Tests', () => {
         [taskId],
         sourceCycleId
       );
-      expect(mockIndexerAdapter.invalidateCache).toHaveBeenCalled();
+      expect(mockProjector.invalidateCache).toHaveBeenCalled();
     });
 
     it('[EARS-12] should return JSON output for move-task with --json flag', async () => {
@@ -614,7 +614,7 @@ describe('CycleCommand - Complete Unit Tests', () => {
       const taskIds = ['task-123', 'task-456'];
 
       mockBacklogAdapter.moveTasksBetweenCycles.mockResolvedValue();
-      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+      mockProjector.invalidateCache.mockResolvedValue();
 
       await cycleCommand.executeMoveTask(targetCycleId, {
         task: 'task-123,task-456',
@@ -666,7 +666,7 @@ describe('CycleCommand - Complete Unit Tests', () => {
       const taskIds = ['task-123', 'task-456'];
 
       mockBacklogAdapter.removeTasksFromCycle.mockResolvedValue();
-      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+      mockProjector.invalidateCache.mockResolvedValue();
 
       // Task IDs with extra whitespace
       await cycleCommand.executeRemoveTask(cycleId, { task: ' task-123 , task-456 ' });
@@ -680,7 +680,7 @@ describe('CycleCommand - Complete Unit Tests', () => {
       const taskIds = ['task-123', 'task-456'];
 
       mockBacklogAdapter.moveTasksBetweenCycles.mockResolvedValue();
-      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+      mockProjector.invalidateCache.mockResolvedValue();
 
       // Task IDs with extra whitespace
       await cycleCommand.executeMoveTask(targetCycleId, {

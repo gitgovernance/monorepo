@@ -2,7 +2,7 @@ import type { IGitModule } from '../../git';
 import type { ConfigManager } from "../../config_manager";
 import type { IIdentityAdapter } from "../../adapters/identity_adapter";
 import type { ILintModule } from "../../lint";
-import type { IIndexerAdapter } from "../../adapters/indexer_adapter";
+import type { IRecordProjector } from "../../record_projection";
 import { createLogger } from "../../logger/logger";
 import type { EmbeddedMetadataRecord, GitGovRecordPayload } from "../../record_types";
 import {
@@ -242,7 +242,7 @@ export class FsSyncStateModule implements ISyncStateModule {
   private config: ConfigManager;
   private identity: IIdentityAdapter;
   private lint: ILintModule;
-  private indexer: IIndexerAdapter;
+  private indexer: IRecordProjector;
 
   /**
    * Constructor with dependency injection
@@ -262,7 +262,7 @@ export class FsSyncStateModule implements ISyncStateModule {
       throw new Error("LintModule is required for SyncStateModule");
     }
     if (!dependencies.indexer) {
-      throw new Error("IndexerAdapter is required for SyncStateModule");
+      throw new Error("RecordProjector is required for SyncStateModule");
     }
 
     this.git = dependencies.git;
@@ -2391,7 +2391,7 @@ gitgov
       // [EARS-C3, EARS-C4, EARS-C9] Invoke indexer AFTER file restoration is complete
       // This ensures the index reflects the latest pulled files, not the old saved index.json
       if (shouldReindex) {
-        logger.info("Invoking IndexerAdapter.generateIndex() after pull...");
+        logger.info("Invoking RecordProjector.generateIndex() after pull...");
         try {
           await this.indexer.generateIndex();
           logger.info("Index regenerated successfully");
@@ -2742,7 +2742,7 @@ gitgov
     }
 
     // 10. Re-index after conflict resolution (EARS-D4)
-    logger.info("Invoking IndexerAdapter.generateIndex() after conflict resolution...");
+    logger.info("Invoking RecordProjector.generateIndex() after conflict resolution...");
     try {
       await this.indexer.generateIndex();
       logger.info("Index regenerated successfully after conflict resolution");

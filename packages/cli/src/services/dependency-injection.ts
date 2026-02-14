@@ -1,11 +1,11 @@
 import * as path from 'path';
-import { Adapters, Config, Session, EventBus, Lint, Git, SyncState, SourceAuditor, FindingDetector, Runner, KeyProvider } from '@gitgov/core';
-import { FsRecordStore, DEFAULT_ID_ENCODER, FsFileLister, FsProjectInitializer, FsLintModule, FsSyncStateModule, GitModule, createAgentRunner, createConfigManager, findProjectRoot, findGitgovRoot, createSessionManager } from '@gitgov/core/fs';
+import { Adapters, Config, Session, EventBus, Lint, Git, SyncState, SourceAuditor, FindingDetector, Runner, KeyProvider, RecordProjection, RecordMetrics } from '@gitgov/core';
+import { FsRecordStore, DEFAULT_ID_ENCODER, FsFileLister, FsProjectInitializer, FsLintModule, FsSyncStateModule, GitModule, createAgentRunner, createConfigManager, findProjectRoot, findGitgovRoot, createSessionManager, FsRecordProjection } from '@gitgov/core/fs';
 import type { IFsLintModule } from '@gitgov/core/fs';
 import type {
   GitGovTaskRecord, GitGovCycleRecord, GitGovFeedbackRecord, GitGovExecutionRecord, GitGovChangelogRecord, GitGovActorRecord, GitGovAgentRecord,
-  // Adapter types
-  IIndexerAdapter, IndexData, IMetricsAdapter, IConfigManager, IIdentityAdapter, ISessionManager, IAgentRunner, IKeyProvider,
+  // Module types
+  IRecordProjector, IRecordMetrics, IConfigManager, IIdentityAdapter, ISessionManager, IAgentRunner, IKeyProvider,
   ISyncStateModule,
   // Lint types
   RecordStores as LintRecordStores,
@@ -21,7 +21,7 @@ import { spawn } from 'child_process';
  */
 export class DependencyInjectionService {
   private static instance: DependencyInjectionService | null = null;
-  private indexerAdapter: IIndexerAdapter | null = null;
+  private projector: IRecordProjector | null = null;
   private backlogAdapter: Adapters.BacklogAdapter | null = null;
   private lintModule: IFsLintModule | null = null;
   private syncModule: ISyncStateModule | null = null;
@@ -136,12 +136,12 @@ export class DependencyInjectionService {
   }
 
   /**
-   * [EARS-C1] Creates and returns IndexerAdapter with all required dependencies
+   * [EARS-C1] Creates and returns RecordProjector with all required dependencies
    */
-  async getIndexerAdapter(): Promise<IIndexerAdapter> {
+  async getRecordProjector(): Promise<IRecordProjector> {
     // [EARS-C8] Return cached instance
-    if (this.indexerAdapter) {
-      return this.indexerAdapter;
+    if (this.projector) {
+      return this.projector;
     }
 
     try {
@@ -150,8 +150,8 @@ export class DependencyInjectionService {
         throw new Error("Failed to initialize stores");
       }
 
-      // Create Adapters.MetricsAdapter with dependencies
-      const metricsAdapter = new Adapters.MetricsAdapter({
+      // Create RecordMetrics with dependencies
+      const recordMetrics = new RecordMetrics.RecordMetrics({
         stores: {
           tasks: this.stores.tasks,
           cycles: this.stores.cycles,
@@ -161,19 +161,18 @@ export class DependencyInjectionService {
         }
       });
 
-      // Create IndexerAdapter with all dependencies
       // Use the projectRoot determined during initializeStores (which includes bootstrap)
       if (!this.projectRoot) {
         throw new Error("Project root not initialized");
       }
 
-      // Create FsRecordStore for cache (backend-agnostic abstraction)
-      const cacheStore = new FsRecordStore<IndexData>({
+      // Create FsRecordProjection for CLI (writes to .gitgov/index.json)
+      const sink = new FsRecordProjection({
         basePath: path.join(this.projectRoot, '.gitgov'),
       });
 
-      this.indexerAdapter = new Adapters.IndexerAdapter({
-        metricsAdapter,
+      this.projector = new RecordProjection.RecordProjector({
+        recordMetrics,
         stores: {
           tasks: this.stores.tasks,
           cycles: this.stores.cycles,
@@ -182,13 +181,13 @@ export class DependencyInjectionService {
           changelogs: this.stores.changelogs,
           actors: this.stores.actors,
         },
-        cacheStore,
+        sink,
       });
 
       // [EARS-D1, D2] If bootstrap occurred, regenerate index; otherwise skip
       if (this.bootstrapOccurred) {
         try {
-          await this.indexerAdapter.generateIndex();
+          await this.projector.generateIndex();
           this.bootstrapOccurred = false; // Reset flag after reindex
         } catch (reindexError) {
           // Non-critical: log warning but don't fail
@@ -196,7 +195,7 @@ export class DependencyInjectionService {
         }
       }
 
-      return this.indexerAdapter;
+      return this.projector;
 
     } catch (error) {
       // [EARS-E1] Project not initialized
@@ -262,8 +261,8 @@ export class DependencyInjectionService {
         eventBus
       });
 
-      // Create Adapters.MetricsAdapter
-      const metricsAdapter = new Adapters.MetricsAdapter({
+      // Create RecordMetrics
+      const recordMetrics = new RecordMetrics.RecordMetrics({
         stores: {
           tasks: this.stores.tasks,
           cycles: this.stores.cycles,
@@ -290,7 +289,7 @@ export class DependencyInjectionService {
         feedbackAdapter,
         executionAdapter,
         changelogAdapter,
-        metricsAdapter,
+        metricsAdapter: recordMetrics,
         workflowAdapter,
         identity: identityAdapter,
         eventBus,
@@ -417,17 +416,17 @@ export class DependencyInjectionService {
   }
 
   /**
-   * [EARS-C3] Creates and returns Adapters.MetricsAdapter with all required dependencies
+   * [EARS-C3] Creates and returns RecordMetrics with all required dependencies
    */
-  async getMetricsAdapter(): Promise<IMetricsAdapter> {
+  async getRecordMetrics(): Promise<IRecordMetrics> {
     try {
       await this.initializeStores();
       if (!this.stores) {
         throw new Error("Failed to initialize stores");
       }
 
-      // Create Adapters.MetricsAdapter with dependencies
-      return new Adapters.MetricsAdapter({
+      // Create RecordMetrics with dependencies
+      return new RecordMetrics.RecordMetrics({
         stores: {
           tasks: this.stores.tasks,
           cycles: this.stores.cycles,
@@ -467,8 +466,8 @@ export class DependencyInjectionService {
         throw new Error("Failed to initialize stores");
       }
 
-      // Get indexer adapter for reference validation
-      const indexerAdapter = await this.getIndexerAdapter();
+      // Get projector for reference validation
+      const projector = await this.getRecordProjector();
 
       // Create stores object for LintModule
       // RecordStore is compatible with Store<GitGovRecord> interface
@@ -485,14 +484,14 @@ export class DependencyInjectionService {
       // Create pure LintModule (no I/O)
       const pureLintModule = new Lint.LintModule({
         stores: lintStores,
-        indexerAdapter
+        projector
       });
 
       // Create FsLintModule (with I/O) wrapping the pure module
       const fsLint = new FsLintModule({
         lintModule: pureLintModule,
         stores: lintStores,
-        indexerAdapter,
+        projector,
         projectRoot: this.projectRoot!,
       });
       this.lintModule = fsLint;
@@ -694,7 +693,7 @@ export class DependencyInjectionService {
       }
 
       // Get required dependencies
-      const indexerAdapter = await this.getIndexerAdapter();
+      const projector = await this.getRecordProjector();
       const configManager = await this.getConfigManager();
       const identityAdapter = await this.getIdentityAdapter();
       const lintModule = await this.getLintModule();
@@ -736,7 +735,7 @@ export class DependencyInjectionService {
         config: configManager,
         identity: identityAdapter,
         lint: lintModule,
-        indexer: indexerAdapter
+        indexer: projector
       });
 
       return this.syncModule;

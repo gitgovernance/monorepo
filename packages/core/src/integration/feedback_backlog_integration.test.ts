@@ -61,7 +61,7 @@ jest.doMock('../adapters/identity_adapter', () => ({
 import { FeedbackAdapter } from '../adapters/feedback_adapter';
 import { BacklogAdapter } from '../adapters/backlog_adapter';
 import { IdentityAdapter } from '../adapters/identity_adapter';
-import { MetricsAdapter } from '../adapters/metrics_adapter';
+import { RecordMetrics } from '../record_metrics';
 import { ConfigManager } from '../config_manager';
 import type { SessionManager } from '../session_manager';
 import { WorkflowAdapter } from '../adapters/workflow_adapter';
@@ -78,7 +78,7 @@ describe('FeedbackAdapter <-> BacklogAdapter Integration (Real Event Communicati
   let feedbackAdapter: FeedbackAdapter;
   let backlogAdapter: BacklogAdapter;
   let identityAdapter: IdentityAdapter;
-  let metricsAdapter: MetricsAdapter;
+  let metricsAdapter: RecordMetrics;
   let eventBus: IEventStream;
 
   // Real stores
@@ -139,8 +139,8 @@ describe('FeedbackAdapter <-> BacklogAdapter Integration (Real Event Communicati
       eventBus // REAL EventBus
     });
 
-    // Create REAL MetricsAdapter
-    metricsAdapter = new MetricsAdapter({
+    // Create REAL RecordMetrics
+    metricsAdapter = new RecordMetrics({
       stores: {
         tasks: taskStore,
         cycles: cycleStore,
@@ -168,7 +168,7 @@ describe('FeedbackAdapter <-> BacklogAdapter Integration (Real Event Communicati
       changelogAdapter: {
         create: jest.fn()
       } as any, // Mock ChangelogAdapter for now
-      metricsAdapter, // REAL MetricsAdapter
+      metricsAdapter, // REAL RecordMetrics
       workflowAdapter: workflowAdapter,
       identity: identityAdapter,
       eventBus, // SAME EventBus instance

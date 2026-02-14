@@ -29,18 +29,21 @@ export type {
   WorkflowRecord,
 } from "./record_types";
 
-// Adapter type exports (for CLI usage without namespace confusion)
+// RecordProjection type exports (projection engine)
 export type {
-  IIndexerAdapter,
-  IndexerAdapterDependencies,
+  IRecordProjector,
+  RecordProjectorDependencies,
+  IRecordProjection,
+  ProjectionContext,
   IndexData,
   IndexGenerationReport,
   IntegrityReport,
   EnrichedTaskRecord,
   AllRecords,
   DerivedStates,
-} from "./adapters/indexer_adapter";
-export type { IMetricsAdapter, SystemStatus, ProductivityMetrics, CollaborationMetrics, TaskHealthReport } from "./adapters/metrics_adapter";
+} from "./record_projection";
+// RecordMetrics type exports (calculation engine)
+export type { IRecordMetrics, RecordMetricsDependencies, SystemStatus, ProductivityMetrics, CollaborationMetrics, TaskHealthReport } from "./record_metrics";
 export type { IIdentityAdapter } from "./adapters/identity_adapter";
 
 // SyncState type exports
@@ -101,13 +104,15 @@ export * as SourceAuditor from "./source_auditor";
 // Agent runner
 export * as Runner from "./agent_runner";
 
+// Renamed modules (promoted from adapters/)
+export * as RecordProjection from "./record_projection";
+export * as RecordMetrics from "./record_metrics";
+
 // adapters
 export * as BacklogAdapter from "./adapters/backlog_adapter";
 export * as ChangelogAdapter from "./adapters/changelog_adapter";
 export * as ExecutionAdapter from "./adapters/execution_adapter";
 export * as FeedbackAdapter from "./adapters/feedback_adapter";
 export * as IdentityAdapter from "./adapters/identity_adapter";
-export * as IndexerAdapter from "./adapters/indexer_adapter";
-export * as MetricsAdapter from "./adapters/metrics_adapter";
 export * as ProjectAdapter from "./adapters/project_adapter";
 export * as WorkflowAdapter from "./adapters/workflow_adapter";

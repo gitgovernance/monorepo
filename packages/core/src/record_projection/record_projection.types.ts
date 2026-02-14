@@ -1,5 +1,5 @@
-import type { RecordStore, RecordStores } from '../../record_store';
-import type { MetricsAdapter } from '../metrics_adapter';
+import type { RecordStores } from '../record_store';
+import type { RecordMetrics } from '../record_metrics';
 import type {
   TaskRecord,
   GitGovTaskRecord,
@@ -8,9 +8,9 @@ import type {
   GitGovExecutionRecord,
   GitGovChangelogRecord,
   GitGovActorRecord
-} from '../../record_types';
-import type { SystemStatus, ProductivityMetrics, CollaborationMetrics } from '../metrics_adapter';
-import type { ActivityEvent } from '../../event_bus';
+} from '../record_types';
+import type { SystemStatus, ProductivityMetrics, CollaborationMetrics } from '../record_metrics';
+import type { ActivityEvent } from '../event_bus';
 
 /**
  * Collection of all records with full GitGov metadata (headers + payloads).
@@ -58,7 +58,7 @@ export type DerivedStateSets = {
  * Enhanced Task Record with complete intelligence layer.
  * Calculated by enrichTaskRecord() with relationships, metrics, and derived states.
  *
- * @see indexer_adapter.md Section 3.6 - EnrichedTaskRecord Specification (EARS 25-48)
+ * @see record_projection.md Section 3.6 - EnrichedTaskRecord Specification (EARS 25-48)
  */
 export type EnrichedTaskRecord = TaskRecord & {
   derivedState: {
@@ -163,21 +163,46 @@ export type IndexGenerationReport = {
 };
 
 /**
- * IndexerAdapter Dependencies - Facade + Dependency Injection Pattern.
- *
- * @see indexer_adapter.md Section 2 - Architecture
+ * Context for projection operations.
+ * Provides metadata about the projection target.
  */
-export type IndexerAdapterDependencies = {
-  metricsAdapter: MetricsAdapter;
-  stores: Required<Pick<RecordStores, 'tasks' | 'cycles' | 'feedbacks' | 'executions' | 'changelogs' | 'actors'>>;
-  cacheStore: RecordStore<IndexData>;
+export type ProjectionContext = {
+  repoIdentifier?: string;
+  lastCommitHash?: string;
 };
 
 /**
- * IndexerAdapter Interface - The Cache Engine.
+ * IRecordProjection - Driver pattern for projection output.
+ *
+ * Abstracts where IndexData is persisted. Implementations:
+ * - FsRecordProjection: writes to .gitgov/index.json (CLI)
+ * - MemoryRecordProjection: in-memory Map (tests)
+ * - PrismaRecordProjection: stores as JSON blob via Prisma-compatible client (SaaS)
  */
-export interface IIndexerAdapter {
+export interface IRecordProjection {
+  persist(data: IndexData, context: ProjectionContext): Promise<void>;
+  read(context: ProjectionContext): Promise<IndexData | null>;
+  exists(context: ProjectionContext): Promise<boolean>;
+  clear(context: ProjectionContext): Promise<void>;
+}
+
+/**
+ * RecordProjector Dependencies - Facade + Dependency Injection Pattern.
+ *
+ * @see record_projection.md Section 2 - Architecture
+ */
+export type RecordProjectorDependencies = {
+  recordMetrics: RecordMetrics;
+  stores: Required<Pick<RecordStores, 'tasks' | 'cycles' | 'feedbacks' | 'executions' | 'changelogs' | 'actors'>>;
+  sink?: IRecordProjection;
+};
+
+/**
+ * RecordProjector Interface - The Projection Engine.
+ */
+export interface IRecordProjector {
   generateIndex(): Promise<IndexGenerationReport>;
+  computeProjection(opts?: { lastCommitHash?: string }): Promise<IndexData>;
   getIndexData(): Promise<IndexData | null>;
   validateIntegrity(): Promise<IntegrityReport>;
   calculateDerivedStates(allRecords: AllRecords): Promise<DerivedStates>;

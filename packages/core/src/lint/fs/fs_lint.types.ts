@@ -13,7 +13,7 @@ import type {
   FixRecordOptions,
   FixReport,
 } from '../lint.types';
-import type { IIndexerAdapter } from '../../adapters/indexer_adapter';
+import type { IRecordProjector } from '../../record_projection';
 
 /**
  * Public interface for FsLintModule operations (with I/O).
@@ -72,8 +72,8 @@ export interface FsLintModuleDependencies {
   /** Record stores for reference lookups (OPTIONAL) */
   stores?: RecordStores;
 
-  /** Indexer adapter for reference resolution (OPTIONAL) */
-  indexerAdapter?: IIndexerAdapter;
+  /** Record projector for reference resolution (OPTIONAL) */
+  projector?: IRecordProjector;
 
   /** FileSystem abstraction for I/O (OPTIONAL, default: Node.js fs) */
   fileSystem?: FileSystem;

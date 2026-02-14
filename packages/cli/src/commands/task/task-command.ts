@@ -133,7 +133,7 @@ export interface TaskDeleteOptions {
  * TaskCommand - Core Operational Interface
  * 
  * Implements the heart of GitGovernance CLI following the blueprint specification.
- * Delegates all business logic to BacklogAdapter and uses IndexerAdapter for performance.
+ * Delegates all business logic to BacklogAdapter and uses RecordProjector for performance.
  */
 export class TaskCommand extends BaseCommand<BaseCommandOptions> {
 
@@ -311,7 +311,7 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
     try {
       // 1. Get dependencies
       const backlogAdapter = await this.dependencyService.getBacklogAdapter();
-      const indexerAdapter = await this.dependencyService.getIndexerAdapter();
+      const projector = await this.dependencyService.getRecordProjector();
 
       // 2. Input validation
       if (!title || title.trim().length === 0) {
@@ -366,7 +366,7 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
       }
 
       // 8. Cache invalidation
-      await indexerAdapter.invalidateCache();
+      await projector.invalidateCache();
 
       // 9. Output feedback
       if (options.json) {
@@ -398,24 +398,24 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
     try {
       // 1. Get dependencies
       const backlogAdapter = await this.dependencyService.getBacklogAdapter();
-      const indexerAdapter = await this.dependencyService.getIndexerAdapter();
+      const projector = await this.dependencyService.getRecordProjector();
 
       // Use any[] to allow both TaskRecord and EnrichedTaskRecord
       let tasks: any[] = [];
 
       // 2. Auto-indexation strategy (unless --from-source)
       if (!options.fromSource) {
-        const isUpToDate = await indexerAdapter.isIndexUpToDate();
+        const isUpToDate = await projector.isIndexUpToDate();
 
         if (!isUpToDate) {
           if (!options.quiet) {
             console.log("🔄 Updating cache...");
           }
-          await indexerAdapter.generateIndex();
+          await projector.generateIndex();
         }
 
         // 3. Use cache for performance
-        const indexData = await indexerAdapter.getIndexData();
+        const indexData = await projector.getIndexData();
         if (indexData) {
           // Use enrichedTasks when available (has lastUpdated for sorting)
           tasks = indexData.enrichedTasks && indexData.enrichedTasks.length > 0
@@ -488,20 +488,20 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
     try {
       // 1. Get dependencies
       const backlogAdapter = await this.dependencyService.getBacklogAdapter();
-      const indexerAdapter = await this.dependencyService.getIndexerAdapter();
+      const projector = await this.dependencyService.getRecordProjector();
 
       let task: TaskRecord | null = null;
 
       // 2. Auto-indexation strategy (unless --from-source)
       if (!options.fromSource) {
-        const isUpToDate = await indexerAdapter.isIndexUpToDate();
+        const isUpToDate = await projector.isIndexUpToDate();
 
         if (!isUpToDate) {
-          await indexerAdapter.generateIndex();
+          await projector.generateIndex();
         }
 
         // Use cache first
-        const indexData = await indexerAdapter.getIndexData();
+        const indexData = await projector.getIndexData();
         if (indexData) {
           const foundTask = indexData.tasks.find((t) => t.payload.id === taskId);
           task = foundTask ? foundTask.payload : null;
@@ -549,7 +549,7 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
     try {
       // 1. Get dependencies
       const backlogAdapter = await this.dependencyService.getBacklogAdapter();
-      const indexerAdapter = await this.dependencyService.getIndexerAdapter();
+      const projector = await this.dependencyService.getRecordProjector();
 
       // 2. Get current actor (simplified for MVP)
       const identityAdapter = await this.dependencyService.getIdentityAdapter();
@@ -560,7 +560,7 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
       const updatedTask = await backlogAdapter.submitTask(taskId, actorId);
 
       // 4. Cache invalidation
-      await indexerAdapter.invalidateCache();
+      await projector.invalidateCache();
 
       // 5. Output feedback
       if (options.json) {
@@ -587,7 +587,7 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
     try {
       // 1. Get dependencies
       const backlogAdapter = await this.dependencyService.getBacklogAdapter();
-      const indexerAdapter = await this.dependencyService.getIndexerAdapter();
+      const projector = await this.dependencyService.getRecordProjector();
 
       // 2. Get current actor (simplified for MVP)
       const identityAdapter = await this.dependencyService.getIdentityAdapter();
@@ -598,7 +598,7 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
       const updatedTask = await backlogAdapter.approveTask(taskId, actorId);
 
       // 4. Cache invalidation
-      await indexerAdapter.invalidateCache();
+      await projector.invalidateCache();
 
       // 5. Output feedback
       if (options.json) {
@@ -626,7 +626,7 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
     try {
       // 1. Get dependencies
       const backlogAdapter = await this.dependencyService.getBacklogAdapter();
-      const indexerAdapter = await this.dependencyService.getIndexerAdapter();
+      const projector = await this.dependencyService.getRecordProjector();
 
       // 2. Get current actor
       const identityAdapter = await this.dependencyService.getIdentityAdapter();
@@ -637,7 +637,7 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
       const updatedTask = await backlogAdapter.activateTask(taskId, actorId);
 
       // 4. Cache invalidation
-      await indexerAdapter.invalidateCache();
+      await projector.invalidateCache();
 
       // 5. Output feedback
       if (options.json) {
@@ -665,7 +665,7 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
     try {
       // 1. Get dependencies
       const backlogAdapter = await this.dependencyService.getBacklogAdapter();
-      const indexerAdapter = await this.dependencyService.getIndexerAdapter();
+      const projector = await this.dependencyService.getRecordProjector();
 
       // 2. Resolve current actor
       const identityAdapter = await this.dependencyService.getIdentityAdapter();
@@ -676,7 +676,7 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
       const pausedTask = await backlogAdapter.pauseTask(taskId, actorId, options.reason);
 
       // 4. Cache invalidation to keep listings accurate
-      await indexerAdapter.invalidateCache();
+      await projector.invalidateCache();
 
       // 5. Output feedback according to flags
       if (options.json) {
@@ -708,7 +708,7 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
     try {
       // 1. Get dependencies
       const backlogAdapter = await this.dependencyService.getBacklogAdapter();
-      const indexerAdapter = await this.dependencyService.getIndexerAdapter();
+      const projector = await this.dependencyService.getRecordProjector();
 
       // 2. Resolve current actor
       const identityAdapter = await this.dependencyService.getIdentityAdapter();
@@ -719,7 +719,7 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
       const resumedTask = await backlogAdapter.resumeTask(taskId, actorId, Boolean(options.force));
 
       // 4. Cache invalidation to keep listings accurate
-      await indexerAdapter.invalidateCache();
+      await projector.invalidateCache();
 
       // 5. Output feedback according to flags
       if (options.json) {
@@ -749,7 +749,7 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
     try {
       // 1. Get dependencies
       const backlogAdapter = await this.dependencyService.getBacklogAdapter();
-      const indexerAdapter = await this.dependencyService.getIndexerAdapter();
+      const projector = await this.dependencyService.getRecordProjector();
 
       // 2. Get current actor
       const identityAdapter = await this.dependencyService.getIdentityAdapter();
@@ -760,7 +760,7 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
       const updatedTask = await backlogAdapter.completeTask(taskId, actorId);
 
       // 4. Cache invalidation
-      await indexerAdapter.invalidateCache();
+      await projector.invalidateCache();
 
       // 5. Output feedback
       if (options.json) {
@@ -788,7 +788,7 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
     try {
       // 1. Get dependencies
       const backlogAdapter = await this.dependencyService.getBacklogAdapter();
-      const indexerAdapter = await this.dependencyService.getIndexerAdapter();
+      const projector = await this.dependencyService.getRecordProjector();
 
       // 2. Get current actor
       const identityAdapter = await this.dependencyService.getIdentityAdapter();
@@ -799,7 +799,7 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
       const updatedTask = await backlogAdapter.discardTask(taskId, actorId, options.reason);
 
       // 4. Cache invalidation
-      await indexerAdapter.invalidateCache();
+      await projector.invalidateCache();
 
       // 5. Output feedback
       if (options.json) {
@@ -831,7 +831,7 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
     try {
       // 1. Get dependencies
       const backlogAdapter = await this.dependencyService.getBacklogAdapter();
-      const indexerAdapter = await this.dependencyService.getIndexerAdapter();
+      const projector = await this.dependencyService.getRecordProjector();
 
       // 2. Get current actor
       const identityAdapter = await this.dependencyService.getIdentityAdapter();
@@ -842,7 +842,7 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
       const updatedTask = await backlogAdapter.discardTask(taskId, actorId, options.reason);
 
       // 4. Cache invalidation
-      await indexerAdapter.invalidateCache();
+      await projector.invalidateCache();
 
       // 5. Output feedback
       if (options.json) {
@@ -874,7 +874,7 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
     try {
       // 1. Get dependencies
       const backlogAdapter = await this.dependencyService.getBacklogAdapter();
-      const indexerAdapter = await this.dependencyService.getIndexerAdapter();
+      const projector = await this.dependencyService.getRecordProjector();
 
       // 2. Get current actor
       const identityAdapter = await this.dependencyService.getIdentityAdapter();
@@ -885,7 +885,7 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
       await backlogAdapter.deleteTask(taskId, actorId);
 
       // 4. Cache invalidation
-      await indexerAdapter.invalidateCache();
+      await projector.invalidateCache();
 
       // 5. Output feedback
       if (options.json) {
@@ -913,7 +913,7 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
     try {
       // 1. Get dependencies
       const backlogAdapter = await this.dependencyService.getBacklogAdapter();
-      const indexerAdapter = await this.dependencyService.getIndexerAdapter();
+      const projector = await this.dependencyService.getRecordProjector();
       const identityAdapter = await this.dependencyService.getIdentityAdapter();
 
       // 2. Validate task and actor exist
@@ -945,7 +945,7 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
       const feedbackRecord = await feedbackAdapter.create(assignmentPayload, currentActor.id);
 
       // 6. Cache invalidation
-      await indexerAdapter.invalidateCache();
+      await projector.invalidateCache();
 
       // 7. Output feedback
       if (options.json) {
@@ -975,7 +975,7 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
     try {
       // 1. Get dependencies
       const backlogAdapter = await this.dependencyService.getBacklogAdapter();
-      const indexerAdapter = await this.dependencyService.getIndexerAdapter();
+      const projector = await this.dependencyService.getRecordProjector();
       const identityAdapter = await this.dependencyService.getIdentityAdapter();
 
       // 2. Get current task
@@ -1030,7 +1030,7 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
       const updatedTask = await backlogAdapter.updateTask(taskId, updatePayload, currentActor.id);
 
       // 7. Cache invalidation
-      await indexerAdapter.invalidateCache();
+      await projector.invalidateCache();
 
       // 8. Output feedback
       if (options.json) {

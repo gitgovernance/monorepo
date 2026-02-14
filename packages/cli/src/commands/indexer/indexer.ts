@@ -1,11 +1,11 @@
 import { Command } from 'commander';
 import { IndexerCommand } from './indexer-command';
-import type { IIndexerAdapter } from '@gitgov/core';
+import type { IRecordProjector } from '@gitgov/core';
 
 /**
  * Register indexer commands following GitGovernance CLI standard
  */
-export function registerIndexerCommands(program: Command, indexerAdapter: IIndexerAdapter | null): void {
+export function registerIndexerCommands(program: Command, projector: IRecordProjector | null): void {
   // Register indexer command
   program
     .command('indexer')
@@ -21,7 +21,7 @@ export function registerIndexerCommands(program: Command, indexerAdapter: IIndex
         command.help();
       }
 
-      if (!indexerAdapter) {
+      if (!projector) {
         console.error("❌ GitGovernance not initialized. Run 'gitgov init' first.");
         process.exit(1);
       }

@@ -14,7 +14,7 @@ import type { ChangelogRecord } from '../../record_types';
 import type { GitGovRecord } from '../../record_types';
 import type { ActorRecord } from '../../record_types';
 import type { Signature } from '../../record_types/embedded.types';
-import type { SystemStatus, TaskHealthReport } from '../metrics_adapter';
+import type { SystemStatus, TaskHealthReport } from '../../record_metrics';
 import type { ValidationContext } from '../workflow_adapter';
 import type { WorkflowRecord } from '../../record_types';
 

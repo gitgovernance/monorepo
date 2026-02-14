@@ -204,7 +204,7 @@ describe('TaskCommand - Complete Unit Tests', () => {
     activateTask: jest.MockedFunction<(taskId: string, actorId: string) => Promise<TaskRecord>>;
     completeTask: jest.MockedFunction<(taskId: string, actorId: string) => Promise<TaskRecord>>;
   };
-  let mockIndexerAdapter: {
+  let mockProjector: {
     isIndexUpToDate: jest.MockedFunction<() => Promise<boolean>>;
     getIndexData: jest.MockedFunction<() => Promise<IndexData | null>>;
     generateIndex: jest.MockedFunction<() => Promise<void>>;
@@ -257,7 +257,7 @@ describe('TaskCommand - Complete Unit Tests', () => {
       completeTask: jest.fn()
     };
 
-    mockIndexerAdapter = {
+    mockProjector = {
       isIndexUpToDate: jest.fn(),
       getIndexData: jest.fn(),
       generateIndex: jest.fn(),
@@ -276,7 +276,7 @@ describe('TaskCommand - Complete Unit Tests', () => {
     // Create mock dependency service
     const mockDependencyService = {
       getBacklogAdapter: jest.fn().mockResolvedValue(mockBacklogAdapter),
-      getIndexerAdapter: jest.fn().mockResolvedValue(mockIndexerAdapter),
+      getRecordProjector: jest.fn().mockResolvedValue(mockProjector),
       getIdentityAdapter: jest.fn().mockResolvedValue(mockIdentityAdapter),
       getFeedbackAdapter: jest.fn().mockResolvedValue(mockFeedbackAdapter)
     };
@@ -299,7 +299,7 @@ describe('TaskCommand - Complete Unit Tests', () => {
     it('[EARS-1] should open editor and create task with BacklogAdapter', async () => {
       mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
       mockBacklogAdapter.createTask.mockResolvedValue(sampleTask);
-      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+      mockProjector.invalidateCache.mockResolvedValue();
 
       await taskCommand.executeNew('Test Task', { description: 'Test description' });
 
@@ -310,7 +310,7 @@ describe('TaskCommand - Complete Unit Tests', () => {
         tags: [],
         references: []
       }, 'human:test-user');
-      expect(mockIndexerAdapter.invalidateCache).toHaveBeenCalled();
+      expect(mockProjector.invalidateCache).toHaveBeenCalled();
       expect(mockConsoleLog).toHaveBeenCalledWith('✅ Task created: 1757789000-task-test-task');
     });
 
@@ -333,7 +333,7 @@ The solution involves multiple steps...`;
 
       mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
       mockBacklogAdapter.createTask.mockResolvedValue(sampleTask);
-      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+      mockProjector.invalidateCache.mockResolvedValue();
 
       await taskCommand.executeNew('Test Task', { descriptionFile: 'description.md' });
 
@@ -344,7 +344,7 @@ The solution involves multiple steps...`;
         tags: [],
         references: []
       }, 'human:test-user');
-      expect(mockIndexerAdapter.invalidateCache).toHaveBeenCalled();
+      expect(mockProjector.invalidateCache).toHaveBeenCalled();
       expect(mockConsoleLog).toHaveBeenCalledWith('✅ Task created: 1757789000-task-test-task');
     });
 
@@ -415,7 +415,7 @@ The solution involves multiple steps...`;
 
       mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
       mockBacklogAdapter.createTask.mockResolvedValue(sampleTask);
-      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+      mockProjector.invalidateCache.mockResolvedValue();
 
       await taskCommand.executeNew('Test Task', { descriptionFile: relativePath });
 
@@ -441,7 +441,7 @@ The solution involves multiple steps...`;
 
       mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
       mockBacklogAdapter.createTask.mockResolvedValue(sampleTask);
-      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+      mockProjector.invalidateCache.mockResolvedValue();
 
       await taskCommand.executeNew('Test Task', { descriptionFile: absolutePath });
 
@@ -482,7 +482,7 @@ const test = "value";
 
       mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
       mockBacklogAdapter.createTask.mockResolvedValue(sampleTask);
-      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+      mockProjector.invalidateCache.mockResolvedValue();
 
       await taskCommand.executeNew('Test Task', { descriptionFile: 'complex.md' });
 
@@ -520,7 +520,7 @@ const test = "value";
 
       mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
       mockBacklogAdapter.createTask.mockResolvedValue(sampleTask);
-      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+      mockProjector.invalidateCache.mockResolvedValue();
 
       await taskCommand.executeNew('Test Task', {
         descriptionFile: '/tmp/test-cleanup.md',
@@ -547,7 +547,7 @@ const test = "value";
 
       mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
       mockBacklogAdapter.createTask.mockResolvedValue(sampleTask);
-      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+      mockProjector.invalidateCache.mockResolvedValue();
 
       await taskCommand.executeNew('Test Task', {
         descriptionFile: '/tmp/readonly.md',
@@ -576,7 +576,7 @@ const test = "value";
 
       mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
       mockBacklogAdapter.createTask.mockResolvedValue(sampleTask);
-      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+      mockProjector.invalidateCache.mockResolvedValue();
 
       await taskCommand.executeNew('Test Task', {
         descriptionFile: '/tmp/quiet-test.md',
@@ -589,30 +589,30 @@ const test = "value";
       expect(mockConsoleWarn).not.toHaveBeenCalled();
     });
 
-    it('[EARS-2] should verify cache freshness and use IndexerAdapter for performance', async () => {
-      mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(true);
-      mockIndexerAdapter.getIndexData.mockResolvedValue(
+    it('[EARS-2] should verify cache freshness and use RecordProjector for performance', async () => {
+      mockProjector.isIndexUpToDate.mockResolvedValue(true);
+      mockProjector.getIndexData.mockResolvedValue(
         createMockIndexData([sampleTask])
       );
 
       await taskCommand.executeList({});
 
-      expect(mockIndexerAdapter.isIndexUpToDate).toHaveBeenCalled();
-      expect(mockIndexerAdapter.getIndexData).toHaveBeenCalled();
+      expect(mockProjector.isIndexUpToDate).toHaveBeenCalled();
+      expect(mockProjector.getIndexData).toHaveBeenCalled();
       expect(mockBacklogAdapter.getAllTasks).not.toHaveBeenCalled(); // Should use cache
       expect(mockConsoleLog).toHaveBeenCalledWith('📋 Found 1 task(s):');
     });
 
     it('[EARS-3] should show task from cache with derived states and metadata', async () => {
-      mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(true);
-      mockIndexerAdapter.getIndexData.mockResolvedValue(
+      mockProjector.isIndexUpToDate.mockResolvedValue(true);
+      mockProjector.getIndexData.mockResolvedValue(
         createMockIndexData([sampleTask])
       );
 
       await taskCommand.executeShow('1757789000-task-test-task', {});
 
-      expect(mockIndexerAdapter.isIndexUpToDate).toHaveBeenCalled();
-      expect(mockIndexerAdapter.getIndexData).toHaveBeenCalled();
+      expect(mockProjector.isIndexUpToDate).toHaveBeenCalled();
+      expect(mockProjector.getIndexData).toHaveBeenCalled();
       expect(mockConsoleLog).toHaveBeenCalledWith('📋 Task: 1757789000-task-test-task');
       expect(mockConsoleLog).toHaveBeenCalledWith('📝 Title: Test Task');
     });
@@ -621,12 +621,12 @@ const test = "value";
       const updatedTask = { ...sampleTask, status: 'review' as const };
       mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
       mockBacklogAdapter.submitTask.mockResolvedValue(updatedTask);
-      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+      mockProjector.invalidateCache.mockResolvedValue();
 
       await taskCommand.executeSubmit('1757789000-task-test-task', {});
 
       expect(mockBacklogAdapter.submitTask).toHaveBeenCalledWith('1757789000-task-test-task', 'human:test-user');
-      expect(mockIndexerAdapter.invalidateCache).toHaveBeenCalled();
+      expect(mockProjector.invalidateCache).toHaveBeenCalled();
       expect(mockConsoleLog).toHaveBeenCalledWith('✅ Task submitted: 1757789000-task-test-task');
     });
 
@@ -634,12 +634,12 @@ const test = "value";
       const approvedTask = { ...sampleTask, status: 'ready' as const };
       mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
       mockBacklogAdapter.approveTask.mockResolvedValue(approvedTask);
-      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+      mockProjector.invalidateCache.mockResolvedValue();
 
       await taskCommand.executeApprove('1757789000-task-test-task', {});
 
       expect(mockBacklogAdapter.approveTask).toHaveBeenCalledWith('1757789000-task-test-task', 'human:test-user');
-      expect(mockIndexerAdapter.invalidateCache).toHaveBeenCalled();
+      expect(mockProjector.invalidateCache).toHaveBeenCalled();
       expect(mockConsoleLog).toHaveBeenCalledWith('✅ Task approved: 1757789000-task-test-task');
     });
   });
@@ -653,7 +653,7 @@ const test = "value";
       mockIdentityAdapter.getActor.mockResolvedValue(assigneeActor);
       mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
       mockFeedbackAdapter.create.mockResolvedValue(feedbackRecord as any);
-      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+      mockProjector.invalidateCache.mockResolvedValue();
 
       await taskCommand.executeAssign('1757789000-task-test-task', { to: 'human:assignee' });
 
@@ -665,14 +665,14 @@ const test = "value";
         content: 'Assigned to Test User',
         assignee: 'human:assignee'
       }, 'human:test-user');
-      expect(mockIndexerAdapter.invalidateCache).toHaveBeenCalled();
+      expect(mockProjector.invalidateCache).toHaveBeenCalled();
     });
 
     it('[EARS-11] should validate immutability before editing description and pass actorId', async () => {
       mockBacklogAdapter.getTask.mockResolvedValue(sampleTask);
       mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
       mockBacklogAdapter.updateTask.mockResolvedValue({ ...sampleTask, description: 'Updated' });
-      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+      mockProjector.invalidateCache.mockResolvedValue();
 
       await taskCommand.executeEdit('1757789000-task-test-task', { description: 'Updated description' });
 
@@ -689,7 +689,7 @@ const test = "value";
       mockBacklogAdapter.getTask.mockResolvedValue(sampleTask);
       mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
       mockBacklogAdapter.updateTask.mockResolvedValue({ ...sampleTask, priority: 'critical' as const });
-      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+      mockProjector.invalidateCache.mockResolvedValue();
 
       await taskCommand.executeEdit('1757789000-task-test-task', { priority: 'critical' });
 
@@ -716,27 +716,27 @@ const test = "value";
     });
 
     it('[EARS-9] should auto-regenerate cache when obsolete in read commands', async () => {
-      mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(false);
-      mockIndexerAdapter.generateIndex.mockResolvedValue({} as any);
-      mockIndexerAdapter.getIndexData.mockResolvedValue(
+      mockProjector.isIndexUpToDate.mockResolvedValue(false);
+      mockProjector.generateIndex.mockResolvedValue({} as any);
+      mockProjector.getIndexData.mockResolvedValue(
         createMockIndexData([sampleTask])
       );
 
       await taskCommand.executeList({});
 
-      expect(mockIndexerAdapter.isIndexUpToDate).toHaveBeenCalled();
-      expect(mockIndexerAdapter.generateIndex).toHaveBeenCalled();
+      expect(mockProjector.isIndexUpToDate).toHaveBeenCalled();
+      expect(mockProjector.generateIndex).toHaveBeenCalled();
       expect(mockConsoleLog).toHaveBeenCalledWith('🔄 Updating cache...');
     });
 
     it('[EARS-10] should invalidate cache after task modifications', async () => {
       mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
       mockBacklogAdapter.createTask.mockResolvedValue(sampleTask);
-      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+      mockProjector.invalidateCache.mockResolvedValue();
 
       await taskCommand.executeNew('Test Task', { description: 'Test' });
 
-      expect(mockIndexerAdapter.invalidateCache).toHaveBeenCalled();
+      expect(mockProjector.invalidateCache).toHaveBeenCalled();
     });
   });
 
@@ -744,7 +744,7 @@ const test = "value";
     it('[EARS-11] should return structured JSON output with json flag', async () => {
       mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
       mockBacklogAdapter.createTask.mockResolvedValue(sampleTask);
-      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+      mockProjector.invalidateCache.mockResolvedValue();
 
       await taskCommand.executeNew('Test Task', { description: 'Test', json: true });
 
@@ -759,8 +759,8 @@ const test = "value";
     });
 
     it('[EARS-12] should show additional details with verbose flag', async () => {
-      mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(true);
-      mockIndexerAdapter.getIndexData.mockResolvedValue(
+      mockProjector.isIndexUpToDate.mockResolvedValue(true);
+      mockProjector.getIndexData.mockResolvedValue(
         createMockIndexData([sampleTask])
       );
 
@@ -771,9 +771,9 @@ const test = "value";
     });
 
     it('[EARS-13] should suppress output with quiet flag for scripting', async () => {
-      mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(false);
-      mockIndexerAdapter.generateIndex.mockResolvedValue({} as any);
-      mockIndexerAdapter.getIndexData.mockResolvedValue(
+      mockProjector.isIndexUpToDate.mockResolvedValue(false);
+      mockProjector.generateIndex.mockResolvedValue({} as any);
+      mockProjector.getIndexData.mockResolvedValue(
         createMockIndexData([sampleTask])
       );
 
@@ -785,8 +785,8 @@ const test = "value";
 
     it('[EARS-14] should detect conflicting flags and show clear error', async () => {
       // Test conflicting flags in list command
-      mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(true);
-      mockIndexerAdapter.getIndexData.mockResolvedValue(
+      mockProjector.isIndexUpToDate.mockResolvedValue(true);
+      mockProjector.getIndexData.mockResolvedValue(
         createMockIndexData([])
       );
 
@@ -816,12 +816,12 @@ const test = "value";
 
       mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
       mockBacklogAdapter.pauseTask.mockResolvedValue(pausedTask);
-      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+      mockProjector.invalidateCache.mockResolvedValue();
 
       await taskCommand.executePause('1757789000-task-test-task', { reason: 'Waiting for API approval' });
 
       expect(mockBacklogAdapter.pauseTask).toHaveBeenCalledWith('1757789000-task-test-task', 'human:test-user', 'Waiting for API approval');
-      expect(mockIndexerAdapter.invalidateCache).toHaveBeenCalled();
+      expect(mockProjector.invalidateCache).toHaveBeenCalled();
       expect(mockConsoleLog).toHaveBeenCalledWith('⏸️  Task paused: 1757789000-task-test-task');
     });
 
@@ -842,12 +842,12 @@ const test = "value";
 
       mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
       mockBacklogAdapter.pauseTask.mockResolvedValue(pausedTask);
-      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+      mockProjector.invalidateCache.mockResolvedValue();
 
       await taskCommand.executePause('1757789000-task-test-task', {});
 
       expect(mockBacklogAdapter.pauseTask).toHaveBeenCalledWith('1757789000-task-test-task', 'human:test-user', undefined);
-      expect(mockIndexerAdapter.invalidateCache).toHaveBeenCalled();
+      expect(mockProjector.invalidateCache).toHaveBeenCalled();
       expect(mockConsoleLog).toHaveBeenCalledWith('⏸️  Task paused: 1757789000-task-test-task');
     });
   });
@@ -858,12 +858,12 @@ const test = "value";
 
       mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
       mockBacklogAdapter.resumeTask.mockResolvedValue(resumedTask);
-      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+      mockProjector.invalidateCache.mockResolvedValue();
 
       await taskCommand.executeResume('1757789000-task-test-task', {});
 
       expect(mockBacklogAdapter.resumeTask).toHaveBeenCalledWith('1757789000-task-test-task', 'human:test-user', false);
-      expect(mockIndexerAdapter.invalidateCache).toHaveBeenCalled();
+      expect(mockProjector.invalidateCache).toHaveBeenCalled();
       expect(mockConsoleLog).toHaveBeenCalledWith('✅ Task resumed: 1757789000-task-test-task');
     });
 
@@ -884,7 +884,7 @@ const test = "value";
 
       mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
       mockBacklogAdapter.resumeTask.mockResolvedValue(resumedTask);
-      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+      mockProjector.invalidateCache.mockResolvedValue();
 
       await taskCommand.executeResume('1757789000-task-test-task', { force: true });
 
@@ -898,19 +898,19 @@ const test = "value";
     it('[EARS-10A] should delegate to deleteTask() for draft task deletion', async () => {
       mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
       mockBacklogAdapter.deleteTask.mockResolvedValue();
-      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+      mockProjector.invalidateCache.mockResolvedValue();
 
       await taskCommand.executeDelete('1757789000-task-test-task', {});
 
       expect(mockBacklogAdapter.deleteTask).toHaveBeenCalledWith('1757789000-task-test-task', 'human:test-user');
-      expect(mockIndexerAdapter.invalidateCache).toHaveBeenCalled();
+      expect(mockProjector.invalidateCache).toHaveBeenCalled();
       expect(mockConsoleLog).toHaveBeenCalledWith('🗑️  Task deleted: 1757789000-task-test-task');
     });
 
     it('[EARS-32] should delete draft task file directly without discarded state', async () => {
       mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
       mockBacklogAdapter.deleteTask.mockResolvedValue();
-      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+      mockProjector.invalidateCache.mockResolvedValue();
 
       await taskCommand.executeDelete('1757789000-task-test-task', {});
 
@@ -963,7 +963,7 @@ const test = "value";
 
       mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
       mockBacklogAdapter.discardTask.mockResolvedValue(discardedTask);
-      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+      mockProjector.invalidateCache.mockResolvedValue();
 
       await taskCommand.executeCancel('1757789000-task-test-task', { reason: 'No longer needed' });
 
@@ -982,7 +982,7 @@ const test = "value";
 
       mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
       mockBacklogAdapter.discardTask.mockResolvedValue(discardedTask);
-      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+      mockProjector.invalidateCache.mockResolvedValue();
 
       await taskCommand.executeReject('1757789000-task-test-task', { reason: 'Does not meet requirements' });
 
@@ -1001,7 +1001,7 @@ const test = "value";
 
       mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
       mockBacklogAdapter.discardTask.mockResolvedValue(discardedTask);
-      mockIndexerAdapter.invalidateCache.mockResolvedValue();
+      mockProjector.invalidateCache.mockResolvedValue();
 
       await taskCommand.executeCancel('1757789000-task-test-task', {});
 
@@ -1022,8 +1022,8 @@ const test = "value";
     });
 
     it('should handle task not found in show command', async () => {
-      mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(true);
-      mockIndexerAdapter.getIndexData.mockResolvedValue(
+      mockProjector.isIndexUpToDate.mockResolvedValue(true);
+      mockProjector.getIndexData.mockResolvedValue(
         createMockIndexData([])
       );
       mockBacklogAdapter.getTask.mockResolvedValue(null);
@@ -1073,20 +1073,20 @@ const test = "value";
 
   describe('Auto-indexation and Cache Behavior', () => {
     it('should use cache when up to date', async () => {
-      mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(true);
-      mockIndexerAdapter.getIndexData.mockResolvedValue(
+      mockProjector.isIndexUpToDate.mockResolvedValue(true);
+      mockProjector.getIndexData.mockResolvedValue(
         createMockIndexData([sampleTask])
       );
 
       await taskCommand.executeList({});
 
-      expect(mockIndexerAdapter.generateIndex).not.toHaveBeenCalled();
+      expect(mockProjector.generateIndex).not.toHaveBeenCalled();
       expect(mockBacklogAdapter.getAllTasks).not.toHaveBeenCalled();
     });
 
     it('should fallback to direct access when cache fails', async () => {
-      mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(true);
-      mockIndexerAdapter.getIndexData.mockResolvedValue(null);
+      mockProjector.isIndexUpToDate.mockResolvedValue(true);
+      mockProjector.getIndexData.mockResolvedValue(null);
       mockBacklogAdapter.getAllTasks.mockResolvedValue([sampleTask]);
 
       await taskCommand.executeList({});
@@ -1099,7 +1099,7 @@ const test = "value";
 
       await taskCommand.executeList({ fromSource: true });
 
-      expect(mockIndexerAdapter.isIndexUpToDate).not.toHaveBeenCalled();
+      expect(mockProjector.isIndexUpToDate).not.toHaveBeenCalled();
       expect(mockBacklogAdapter.getAllTasks).toHaveBeenCalled();
     });
   });
@@ -1112,8 +1112,8 @@ const test = "value";
         { ...sampleTask, status: 'done' as const }
       ];
 
-      mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(true);
-      mockIndexerAdapter.getIndexData.mockResolvedValue(
+      mockProjector.isIndexUpToDate.mockResolvedValue(true);
+      mockProjector.getIndexData.mockResolvedValue(
         createMockIndexData(tasks)
       );
 
@@ -1162,15 +1162,15 @@ const test = "value";
       const task1 = { ...sampleTask, id: '1757789001-task-old', status: 'done' as const, lastUpdated: 1000 };
       const task2 = { ...sampleTask, id: '1757789002-task-new', status: 'done' as const, lastUpdated: 2000 };
 
-      mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(true);
-      mockIndexerAdapter.getIndexData.mockResolvedValue(
+      mockProjector.isIndexUpToDate.mockResolvedValue(true);
+      mockProjector.getIndexData.mockResolvedValue(
         createMockIndexData([task1, task2], { enrichedTasks: [task1, task2] })
       );
 
       // Simulate passing options that would come from Commander.js after -- filtering
       await taskCommand.executeList({ status: 'done', limit: 1 });
 
-      expect(mockIndexerAdapter.getIndexData).toHaveBeenCalled();
+      expect(mockProjector.getIndexData).toHaveBeenCalled();
       // Should show only 1 task (limit applied)
       expect(mockConsoleLog).toHaveBeenCalledWith('📋 Found 1 task(s):');
     });
@@ -1179,8 +1179,8 @@ const test = "value";
       const doneTask = { ...sampleTask, id: '1757789001-task-done', status: 'done' as const };
       const activeTask = { ...sampleTask, id: '1757789002-task-active', status: 'active' as const };
 
-      mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(true);
-      mockIndexerAdapter.getIndexData.mockResolvedValue(
+      mockProjector.isIndexUpToDate.mockResolvedValue(true);
+      mockProjector.getIndexData.mockResolvedValue(
         createMockIndexData([doneTask, activeTask])
       );
 
@@ -1197,8 +1197,8 @@ const test = "value";
       const task2 = { ...sampleTask, id: '1757789002-task-2', status: 'done' as const, priority: 'low' as const };
       const task3 = { ...sampleTask, id: '1757789003-task-3', status: 'active' as const, priority: 'high' as const };
 
-      mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(true);
-      mockIndexerAdapter.getIndexData.mockResolvedValue(
+      mockProjector.isIndexUpToDate.mockResolvedValue(true);
+      mockProjector.getIndexData.mockResolvedValue(
         createMockIndexData([task1, task2, task3])
       );
 
@@ -1216,8 +1216,8 @@ const test = "value";
       const task2 = { ...sampleTask, id: '1757789002-task-middle', lastUpdated: 2000 };
       const task3 = { ...sampleTask, id: '1757789003-task-newest', lastUpdated: 3000 };
 
-      mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(true);
-      mockIndexerAdapter.getIndexData.mockResolvedValue(
+      mockProjector.isIndexUpToDate.mockResolvedValue(true);
+      mockProjector.getIndexData.mockResolvedValue(
         createMockIndexData([task1, task2, task3], { enrichedTasks: [task1, task2, task3] })
       );
 
@@ -1237,8 +1237,8 @@ const test = "value";
       const task2 = { ...sampleTask, id: '1757789002-task-middle', lastUpdated: 2000 };
       const task3 = { ...sampleTask, id: '1757789003-task-newest', lastUpdated: 3000 };
 
-      mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(true);
-      mockIndexerAdapter.getIndexData.mockResolvedValue(
+      mockProjector.isIndexUpToDate.mockResolvedValue(true);
+      mockProjector.getIndexData.mockResolvedValue(
         createMockIndexData([task1, task2, task3], { enrichedTasks: [task1, task2, task3] })
       );
 
@@ -1259,8 +1259,8 @@ const test = "value";
       const task2 = { ...sampleTask, id: '1757789002-task-middle', lastUpdated: 2000 };
       const task3 = { ...sampleTask, id: '1757789003-task-newest', lastUpdated: 3000 };
 
-      mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(true);
-      mockIndexerAdapter.getIndexData.mockResolvedValue(
+      mockProjector.isIndexUpToDate.mockResolvedValue(true);
+      mockProjector.getIndexData.mockResolvedValue(
         createMockIndexData([task3, task1, task2], { enrichedTasks: [task3, task1, task2] })
       );
 
@@ -1281,8 +1281,8 @@ const test = "value";
       const task2 = { ...sampleTask, id: '1757789003-task-new' }; // No lastUpdated
       const task3 = { ...sampleTask, id: '1757789002-task-mid' }; // No lastUpdated
 
-      mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(true);
-      mockIndexerAdapter.getIndexData.mockResolvedValue(
+      mockProjector.isIndexUpToDate.mockResolvedValue(true);
+      mockProjector.getIndexData.mockResolvedValue(
         createMockIndexData([task1, task2, task3])
       );
 
@@ -1304,8 +1304,8 @@ const test = "value";
       const task3 = { ...sampleTask, id: '1757789003-task-3', status: 'done' as const, lastUpdated: 3000 };
       const task4 = { ...sampleTask, id: '1757789004-task-4', status: 'done' as const, lastUpdated: 4000 };
 
-      mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(true);
-      mockIndexerAdapter.getIndexData.mockResolvedValue(
+      mockProjector.isIndexUpToDate.mockResolvedValue(true);
+      mockProjector.getIndexData.mockResolvedValue(
         createMockIndexData([task1, task2, task3, task4], { enrichedTasks: [task1, task2, task3, task4] })
       );
 
@@ -1328,8 +1328,8 @@ const test = "value";
       const task1 = { ...sampleTask, id: '1757789001-task-old', lastUpdated: 1000 };
       const task2 = { ...sampleTask, id: '1757789002-task-new', lastUpdated: 2000 };
 
-      mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(true);
-      mockIndexerAdapter.getIndexData.mockResolvedValue(
+      mockProjector.isIndexUpToDate.mockResolvedValue(true);
+      mockProjector.getIndexData.mockResolvedValue(
         createMockIndexData([task1, task2], { enrichedTasks: [task1, task2] })
       );
 

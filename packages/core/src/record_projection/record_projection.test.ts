@@ -1,5 +1,5 @@
 // Mock IdentityAdapter before importing
-jest.doMock('../identity_adapter', () => ({
+jest.doMock('../adapters/identity_adapter', () => ({
   IdentityAdapter: jest.fn().mockImplementation(() => ({
     getActorPublicKey: jest.fn().mockResolvedValue('mock-public-key'),
     getActor: jest.fn(),
@@ -19,8 +19,8 @@ jest.doMock('../identity_adapter', () => ({
 }));
 
 // Mock crypto module for signature verification
-jest.mock('../../crypto', () => {
-  const actual = jest.requireActual('../../crypto');
+jest.mock('../crypto', () => {
+  const actual = jest.requireActual('../crypto');
   return {
     ...actual,
     verifySignatures: jest.fn().mockResolvedValue(true), // Default: signatures are valid
@@ -28,12 +28,12 @@ jest.mock('../../crypto', () => {
 });
 
 // Mock dependencies
-jest.mock('../../record_store');
+jest.mock('../record_store');
 
-import { IndexerAdapter } from './index';
-import type { AllRecords, IndexData } from './index';
-import type { RecordStore } from '../../record_store';
-import { verifySignatures, calculatePayloadChecksum } from '../../crypto';
+import { RecordProjector } from './index';
+import type { AllRecords, IndexData, IRecordProjection } from './index';
+import type { RecordStore } from '../record_store';
+import { verifySignatures, calculatePayloadChecksum } from '../crypto';
 import type {
   GitGovActorRecord,
   GitGovCycleRecord,
@@ -46,9 +46,9 @@ import type {
   CycleRecord,
   ExecutionRecord,
   Signature,
-} from '../../record_types';
-import type { MetricsAdapter } from '../metrics_adapter';
-import { createTaskRecord, createCycleRecord, createActorRecord, createExecutionRecord, createEmbeddedMetadataRecord, createTestSignature } from '../../record_factories';
+} from '../record_types';
+import type { RecordMetrics } from '../record_metrics';
+import { createTaskRecord, createCycleRecord, createActorRecord, createExecutionRecord, createEmbeddedMetadataRecord, createTestSignature } from '../record_factories';
 
 /**
  * Helper to create VALIDATED task records using production factories.
@@ -189,28 +189,26 @@ async function createMockExecutionRecord(
 }
 
 /**
- * Creates a mock RecordStore<IndexData> for testing.
- * Uses in-memory storage to simulate cache operations.
+ * Creates a mock IRecordProjection for testing.
+ * Uses in-memory storage to simulate record projection operations.
  */
-function createMockCacheStore(): jest.Mocked<RecordStore<IndexData>> {
+function createMockSink(): jest.Mocked<IRecordProjection> {
   let cachedData: IndexData | null = null;
 
   return {
-    get: jest.fn().mockImplementation(async () => cachedData),
-    put: jest.fn().mockImplementation(async (_key: string, data: IndexData) => {
+    persist: jest.fn().mockImplementation(async (data: IndexData) => {
       cachedData = data;
     }),
-    putMany: jest.fn().mockResolvedValue(undefined),
-    delete: jest.fn().mockImplementation(async () => {
+    read: jest.fn().mockImplementation(async () => cachedData),
+    exists: jest.fn().mockImplementation(async () => cachedData !== null),
+    clear: jest.fn().mockImplementation(async () => {
       cachedData = null;
     }),
-    exists: jest.fn().mockImplementation(async () => cachedData !== null),
-    list: jest.fn().mockResolvedValue([]),
-  } as jest.Mocked<RecordStore<IndexData>>;
+  } as jest.Mocked<IRecordProjection>;
 }
 
-describe('IndexerAdapter', () => {
-  let indexerAdapter: IndexerAdapter;
+describe('RecordProjector', () => {
+  let recordProjector: RecordProjector;
   let mockStores: {
     tasks: jest.Mocked<RecordStore<GitGovTaskRecord>>;
     cycles: jest.Mocked<RecordStore<GitGovCycleRecord>>;
@@ -219,8 +217,8 @@ describe('IndexerAdapter', () => {
     executions: jest.Mocked<RecordStore<GitGovExecutionRecord>>;
     changelogs: jest.Mocked<RecordStore<GitGovChangelogRecord>>;
   };
-  let mockCacheStore: jest.Mocked<RecordStore<IndexData>>;
-  let mockMetricsAdapter: jest.Mocked<Pick<MetricsAdapter, 'getSystemStatus' | 'getProductivityMetrics' | 'getCollaborationMetrics' | 'getTaskHealth'>>;
+  let mockSink: jest.Mocked<IRecordProjection>;
+  let mockRecordMetrics: jest.Mocked<Pick<RecordMetrics, 'getSystemStatus' | 'getProductivityMetrics' | 'getCollaborationMetrics' | 'getTaskHealth'>>;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -277,8 +275,8 @@ describe('IndexerAdapter', () => {
       } as jest.Mocked<RecordStore<GitGovChangelogRecord>>,
     };
 
-    // Create mock MetricsAdapter
-    mockMetricsAdapter = {
+    // Create mock RecordMetrics
+    mockRecordMetrics = {
       getSystemStatus: jest.fn().mockResolvedValue({
         tasks: { total: 1, byStatus: { draft: 1 }, byPriority: { medium: 1 } },
         cycles: { total: 1, active: 0, completed: 0 },
@@ -307,7 +305,7 @@ describe('IndexerAdapter', () => {
         lastActivity: Date.now(),
         recommendations: []
       })
-    } as jest.Mocked<Pick<MetricsAdapter, 'getSystemStatus' | 'getProductivityMetrics' | 'getCollaborationMetrics' | 'getTaskHealth'>>;
+    } as jest.Mocked<Pick<RecordMetrics, 'getSystemStatus' | 'getProductivityMetrics' | 'getCollaborationMetrics' | 'getTaskHealth'>>;
 
     // Setup default mock responses
     mockStores.tasks.list.mockResolvedValue(['1757687335-task-test']);
@@ -328,20 +326,20 @@ describe('IndexerAdapter', () => {
       displayName: 'Test User'
     }) as unknown as GitGovActorRecord);
 
-    // Create mock cache store
-    mockCacheStore = createMockCacheStore();
+    // Create mock projection sink
+    mockSink = createMockSink();
 
-    indexerAdapter = new IndexerAdapter({
-      metricsAdapter: mockMetricsAdapter as unknown as MetricsAdapter,
+    recordProjector = new RecordProjector({
+      recordMetrics: mockRecordMetrics as unknown as RecordMetrics,
       stores: mockStores,
-      cacheStore: mockCacheStore,
+      sink: mockSink,
     });
   });
 
   describe('Core Cache Operations (Block A)', () => {
     it('[EARS-A1] should generate complete index with all required fields', async () => {
-      const report = await indexerAdapter.generateIndex();
-      const indexData = await indexerAdapter.getIndexData();
+      const report = await recordProjector.generateIndex();
+      const indexData = await recordProjector.getIndexData();
 
       // Validate generation report
       expect(report.success).toBe(true);
@@ -361,8 +359,8 @@ describe('IndexerAdapter', () => {
     });
 
     it('[EARS-A1] should include complete metadata (generatedAt, lastCommitHash, integrityStatus, etc)', async () => {
-      await indexerAdapter.generateIndex();
-      const indexData = await indexerAdapter.getIndexData();
+      await recordProjector.generateIndex();
+      const indexData = await recordProjector.getIndexData();
 
       const metadata = indexData?.metadata;
       expect(metadata).toBeDefined();
@@ -395,17 +393,17 @@ describe('IndexerAdapter', () => {
       expect(metadata?.generationTime).toBeGreaterThanOrEqual(0);
     });
 
-    it('[EARS-A1] should include all metrics from MetricsAdapter (system, productivity, collaboration)', async () => {
-      await indexerAdapter.generateIndex();
-      const indexData = await indexerAdapter.getIndexData();
+    it('[EARS-A1] should include all metrics from RecordMetrics (system, productivity, collaboration)', async () => {
+      await recordProjector.generateIndex();
+      const indexData = await recordProjector.getIndexData();
 
       const metrics = indexData?.metrics;
       expect(metrics).toBeDefined();
 
-      // Verify MetricsAdapter was called
-      expect(mockMetricsAdapter.getSystemStatus).toHaveBeenCalledTimes(1);
-      expect(mockMetricsAdapter.getProductivityMetrics).toHaveBeenCalledTimes(1);
-      expect(mockMetricsAdapter.getCollaborationMetrics).toHaveBeenCalledTimes(1);
+      // Verify RecordMetrics was called
+      expect(mockRecordMetrics.getSystemStatus).toHaveBeenCalledTimes(1);
+      expect(mockRecordMetrics.getProductivityMetrics).toHaveBeenCalledTimes(1);
+      expect(mockRecordMetrics.getCollaborationMetrics).toHaveBeenCalledTimes(1);
 
       // Verify metrics is an object (combination of SystemStatus + ProductivityMetrics + CollaborationMetrics)
       expect(typeof metrics).toBe('object');
@@ -426,8 +424,8 @@ describe('IndexerAdapter', () => {
     });
 
     it('[EARS-A1] should include derivedStates with all arrays (stalled, atRisk, clarification, blocked)', async () => {
-      await indexerAdapter.generateIndex();
-      const indexData = await indexerAdapter.getIndexData();
+      await recordProjector.generateIndex();
+      const indexData = await recordProjector.getIndexData();
 
       const derivedStates = indexData?.derivedStates;
       expect(derivedStates).toBeDefined();
@@ -447,8 +445,8 @@ describe('IndexerAdapter', () => {
     });
 
     it('[EARS-A1] should include activityHistory array with events', async () => {
-      await indexerAdapter.generateIndex();
-      const indexData = await indexerAdapter.getIndexData();
+      await recordProjector.generateIndex();
+      const indexData = await recordProjector.getIndexData();
 
       const activityHistory = indexData?.activityHistory;
       expect(activityHistory).toBeDefined();
@@ -468,8 +466,8 @@ describe('IndexerAdapter', () => {
     });
 
     it('[EARS-A1] should include tasks array with full GitGovTaskRecord (headers + payloads)', async () => {
-      await indexerAdapter.generateIndex();
-      const indexData = await indexerAdapter.getIndexData();
+      await recordProjector.generateIndex();
+      const indexData = await recordProjector.getIndexData();
 
       const tasks = indexData?.tasks;
       expect(tasks).toBeDefined();
@@ -493,8 +491,8 @@ describe('IndexerAdapter', () => {
     });
 
     it('[EARS-A1] should include enrichedTasks array with calculated fields', async () => {
-      await indexerAdapter.generateIndex();
-      const indexData = await indexerAdapter.getIndexData();
+      await recordProjector.generateIndex();
+      const indexData = await recordProjector.getIndexData();
 
       const enrichedTasks = indexData?.enrichedTasks;
       expect(enrichedTasks).toBeDefined();
@@ -516,8 +514,8 @@ describe('IndexerAdapter', () => {
     });
 
     it('[EARS-A1] should include cycles array with full GitGovCycleRecord (headers + payloads)', async () => {
-      await indexerAdapter.generateIndex();
-      const indexData = await indexerAdapter.getIndexData();
+      await recordProjector.generateIndex();
+      const indexData = await recordProjector.getIndexData();
 
       const cycles = indexData?.cycles;
       expect(cycles).toBeDefined();
@@ -534,8 +532,8 @@ describe('IndexerAdapter', () => {
     });
 
     it('[EARS-A1] should include actors array with full GitGovActorRecord (headers + payloads)', async () => {
-      await indexerAdapter.generateIndex();
-      const indexData = await indexerAdapter.getIndexData();
+      await recordProjector.generateIndex();
+      const indexData = await recordProjector.getIndexData();
 
       const actors = indexData?.actors;
       expect(actors).toBeDefined();
@@ -552,8 +550,8 @@ describe('IndexerAdapter', () => {
     });
 
     it('[EARS-A1] should include feedback array with full GitGovFeedbackRecord (headers + payloads)', async () => {
-      await indexerAdapter.generateIndex();
-      const indexData = await indexerAdapter.getIndexData();
+      await recordProjector.generateIndex();
+      const indexData = await recordProjector.getIndexData();
 
       const feedback = indexData?.feedback;
       expect(feedback).toBeDefined();
@@ -572,11 +570,11 @@ describe('IndexerAdapter', () => {
 
     it('[EARS-A2] should return data from cache in under 10ms', async () => {
       // Generate cache first
-      await indexerAdapter.generateIndex();
+      await recordProjector.generateIndex();
 
       // Measure cache read performance (EARS-A2: < 10ms requirement)
       const startTime = performance.now();
-      const indexData = await indexerAdapter.getIndexData();
+      const indexData = await recordProjector.getIndexData();
       const endTime = performance.now();
       const readTime = endTime - startTime;
 
@@ -591,12 +589,12 @@ describe('IndexerAdapter', () => {
     });
 
     it('[EARS-A3] should return null without cache', async () => {
-      // Test with fresh adapter (empty cache store)
-      const emptyCacheStore = createMockCacheStore();
-      const freshAdapter = new IndexerAdapter({
-        metricsAdapter: mockMetricsAdapter as unknown as MetricsAdapter,
+      // Test with fresh adapter (empty sink)
+      const emptySink = createMockSink();
+      const freshAdapter = new RecordProjector({
+        recordMetrics: mockRecordMetrics as unknown as RecordMetrics,
         stores: mockStores,
-        cacheStore: emptyCacheStore,
+        sink: emptySink,
       });
 
       const result = await freshAdapter.getIndexData();
@@ -604,7 +602,7 @@ describe('IndexerAdapter', () => {
     });
 
     it('[EARS-A4] should validate integrity of all records', async () => {
-      const report = await indexerAdapter.validateIntegrity();
+      const report = await recordProjector.validateIntegrity();
 
       expect(report.status).toBe('valid');
       expect(report.recordsScanned).toBe(2); // 1 task + 1 cycle (actors not included in validation yet)
@@ -627,7 +625,7 @@ describe('IndexerAdapter', () => {
 
       mockStores.tasks.get.mockResolvedValueOnce(validTask);
 
-      const report = await indexerAdapter.validateIntegrity();
+      const report = await recordProjector.validateIntegrity();
 
       expect(report.status).toBe('errors');
       expect(report.errorsFound.length).toBeGreaterThan(0);
@@ -636,77 +634,77 @@ describe('IndexerAdapter', () => {
 
     it('[EARS-A5] should determine cache freshness correctly', async () => {
       // Generate cache first
-      await indexerAdapter.generateIndex();
+      await recordProjector.generateIndex();
 
       // Should be fresh immediately after generation
-      const isUpToDate = await indexerAdapter.isIndexUpToDate();
+      const isUpToDate = await recordProjector.isIndexUpToDate();
       expect(isUpToDate).toBe(true);
     });
 
     it('[EARS-A6] should invalidate cache successfully', async () => {
       // Generate cache first
-      await indexerAdapter.generateIndex();
-      let indexData = await indexerAdapter.getIndexData();
+      await recordProjector.generateIndex();
+      let indexData = await recordProjector.getIndexData();
       expect(indexData).not.toBeNull();
 
       // Invalidate cache
-      await indexerAdapter.invalidateCache();
+      await recordProjector.invalidateCache();
 
       // Verify cache is invalidated by checking freshness
-      const isUpToDate = await indexerAdapter.isIndexUpToDate();
+      const isUpToDate = await recordProjector.isIndexUpToDate();
       expect(isUpToDate).toBe(false);
     });
   });
 
-  describe('MetricsAdapter Integration', () => {
-    it('should delegate all calculations to MetricsAdapter without duplicating logic', async () => {
-      const report = await indexerAdapter.generateIndex();
+  describe('RecordMetrics Integration', () => {
+    it('should delegate all calculations to RecordMetrics without duplicating logic', async () => {
+      const report = await recordProjector.generateIndex();
 
       expect(report.success).toBe(true);
-      expect(mockMetricsAdapter.getSystemStatus).toHaveBeenCalledTimes(1);
-      expect(mockMetricsAdapter.getProductivityMetrics).toHaveBeenCalledTimes(1);
-      expect(mockMetricsAdapter.getCollaborationMetrics).toHaveBeenCalledTimes(1);
+      expect(mockRecordMetrics.getSystemStatus).toHaveBeenCalledTimes(1);
+      expect(mockRecordMetrics.getProductivityMetrics).toHaveBeenCalledTimes(1);
+      expect(mockRecordMetrics.getCollaborationMetrics).toHaveBeenCalledTimes(1);
     });
 
-    it('[EARS-C5] should handle MetricsAdapter errors gracefully', async () => {
-      mockMetricsAdapter.getSystemStatus.mockRejectedValue(new Error('MetricsAdapter error'));
+    it('[EARS-C5] should handle RecordMetrics errors gracefully', async () => {
+      mockRecordMetrics.getSystemStatus.mockRejectedValue(new Error('RecordMetrics error'));
 
-      const report = await indexerAdapter.generateIndex();
+      const report = await recordProjector.generateIndex();
 
       expect(report.success).toBe(false);
-      expect(report.errors).toContain('MetricsAdapter error');
+      expect(report.errors).toContain('RecordMetrics error');
     });
   });
 
   describe('Error Handling & Graceful Degradation (Block C)', () => {
-    it('[EARS-C4] should handle cacheStore write errors gracefully', async () => {
+    it('[EARS-C4] should handle sink write errors gracefully', async () => {
       // Step 1: Generate initial valid cache
-      const report1 = await indexerAdapter.generateIndex();
+      const report1 = await recordProjector.generateIndex();
       expect(report1.success).toBe(true);
 
       // Step 2: Verify initial cache exists and is valid
-      const initialCache = await indexerAdapter.getIndexData();
+      const initialCache = await recordProjector.getIndexData();
       expect(initialCache).not.toBeNull();
 
-      // Step 3: Mock cacheStore.put to fail on next call
-      mockCacheStore.put.mockRejectedValueOnce(new Error('Simulated write error'));
+      // Step 3: Mock sink.persist to fail on next call
+      mockSink.persist.mockRejectedValueOnce(new Error('Simulated write error'));
 
       // Step 4: Attempt to generate index again (should fail)
-      const report2 = await indexerAdapter.generateIndex();
+      const report2 = await recordProjector.generateIndex();
       expect(report2.success).toBe(false);
       expect(report2.errors).toContain('Simulated write error');
 
-      // Step 5: Verify cacheStore.put was called (Store handles atomicity internally)
-      expect(mockCacheStore.put).toHaveBeenCalled();
+      // Step 5: Verify sink.persist was called
+      expect(mockSink.persist).toHaveBeenCalled();
     });
 
     it('[EARS-C2] should generate index with all required stores', async () => {
       // Test with all stores (all are now required)
-      const fullCacheStore = createMockCacheStore();
-      const fullAdapter = new IndexerAdapter({
-        metricsAdapter: mockMetricsAdapter as unknown as MetricsAdapter,
+      const fullSink = createMockSink();
+      const fullAdapter = new RecordProjector({
+        recordMetrics: mockRecordMetrics as unknown as RecordMetrics,
         stores: mockStores,
-        cacheStore: fullCacheStore,
+        sink: fullSink,
       });
 
       const report = await fullAdapter.generateIndex();
@@ -714,20 +712,18 @@ describe('IndexerAdapter', () => {
     });
 
     it('[EARS-C3] should return null and log warning for corrupted cache', async () => {
-      // Step 1: Create cache store that throws error (simulating corruption)
-      const corruptedCacheStore: jest.Mocked<RecordStore<IndexData>> = {
-        get: jest.fn().mockRejectedValue(new Error('Invalid JSON data')),
-        put: jest.fn().mockResolvedValue(undefined),
-        putMany: jest.fn().mockResolvedValue(undefined),
-        delete: jest.fn().mockResolvedValue(undefined),
+      // Step 1: Create sink that throws error (simulating corruption)
+      const corruptedSink: jest.Mocked<IRecordProjection> = {
+        read: jest.fn().mockRejectedValue(new Error('Invalid JSON data')),
+        persist: jest.fn().mockResolvedValue(undefined),
         exists: jest.fn().mockResolvedValue(true), // Cache exists but is corrupted
-        list: jest.fn().mockResolvedValue([]),
+        clear: jest.fn().mockResolvedValue(undefined),
       };
 
-      const corruptedAdapter = new IndexerAdapter({
-        metricsAdapter: mockMetricsAdapter as unknown as MetricsAdapter,
+      const corruptedAdapter = new RecordProjector({
+        recordMetrics: mockRecordMetrics as unknown as RecordMetrics,
         stores: mockStores,
-        cacheStore: corruptedCacheStore,
+        sink: corruptedSink,
       });
 
       // Step 2: Mock console.warn to capture warning messages
@@ -761,7 +757,7 @@ describe('IndexerAdapter', () => {
       expect(recordCount).toBeLessThan(500); // EARS-C1: Phase 1 constraint (0-500 records)
 
       const startTime = Date.now();
-      const report = await indexerAdapter.generateIndex();
+      const report = await recordProjector.generateIndex();
       const endTime = Date.now();
 
       expect(report.success).toBe(true);
@@ -773,7 +769,7 @@ describe('IndexerAdapter', () => {
     });
 
     it('should provide detailed performance metrics', async () => {
-      const report = await indexerAdapter.generateIndex();
+      const report = await recordProjector.generateIndex();
 
       expect(report.performance).toHaveProperty('readTime');
       expect(report.performance).toHaveProperty('calculationTime');
@@ -784,26 +780,26 @@ describe('IndexerAdapter', () => {
   describe('Cache Lifecycle Management', () => {
     it('should handle complete cache lifecycle', async () => {
       // 1. Generate cache
-      const report = await indexerAdapter.generateIndex();
+      const report = await recordProjector.generateIndex();
       expect(report.success).toBe(true);
 
       // 2. Verify cache data
-      const indexData = await indexerAdapter.getIndexData();
+      const indexData = await recordProjector.getIndexData();
       expect(indexData).not.toBeNull();
       expect(indexData?.tasks).toHaveLength(1);
 
       // 3. Validate integrity
-      const integrityReport = await indexerAdapter.validateIntegrity();
+      const integrityReport = await recordProjector.validateIntegrity();
       expect(integrityReport.status).toBe('valid');
 
       // 4. Check freshness
-      const isUpToDate = await indexerAdapter.isIndexUpToDate();
+      const isUpToDate = await recordProjector.isIndexUpToDate();
       expect(isUpToDate).toBe(true);
     });
 
     it('[EARS-C6] should detect when cache becomes stale', async () => {
       // Generate initial cache
-      await indexerAdapter.generateIndex();
+      await recordProjector.generateIndex();
 
       // Simulate new record with newer timestamp
       const newerTimestamp = Math.floor(Date.now() / 1000) + 100;
@@ -817,7 +813,7 @@ describe('IndexerAdapter', () => {
       mockStores.tasks.get.mockResolvedValue(newerTask);
 
       // Cache should now be stale and suggest regeneration
-      const isUpToDate = await indexerAdapter.isIndexUpToDate();
+      const isUpToDate = await recordProjector.isIndexUpToDate();
       expect(isUpToDate).toBe(false);
     });
   });
@@ -845,10 +841,10 @@ describe('IndexerAdapter', () => {
       mockStores.tasks.get.mockResolvedValue(realisticTask);
       mockStores.cycles.get.mockResolvedValue(realisticCycle);
 
-      const report = await indexerAdapter.generateIndex();
+      const report = await recordProjector.generateIndex();
       expect(report.success).toBe(true);
 
-      const indexData = await indexerAdapter.getIndexData();
+      const indexData = await recordProjector.getIndexData();
       expect(indexData?.tasks[0]?.payload.status).toBe('active');
       expect(indexData?.cycles[0]?.payload.status).toBe('active');
     });
@@ -859,18 +855,18 @@ describe('IndexerAdapter', () => {
       mockStores.cycles.list.mockResolvedValue([]);
       mockStores.actors.list.mockResolvedValue([]);
 
-      mockMetricsAdapter.getSystemStatus.mockResolvedValue({
+      mockRecordMetrics.getSystemStatus.mockResolvedValue({
         tasks: { total: 0, byStatus: {}, byPriority: {} },
         cycles: { total: 0, active: 0, completed: 0 },
         health: { overallScore: 100, blockedTasks: 0, staleTasks: 0 }
       });
 
-      const report = await indexerAdapter.generateIndex();
+      const report = await recordProjector.generateIndex();
 
       expect(report.success).toBe(true);
       expect(report.recordsProcessed).toBe(0);
 
-      const indexData = await indexerAdapter.getIndexData();
+      const indexData = await recordProjector.getIndexData();
       expect(indexData?.tasks).toHaveLength(0);
       expect(indexData?.cycles).toHaveLength(0);
       expect(indexData?.actors).toHaveLength(0);
@@ -879,8 +875,8 @@ describe('IndexerAdapter', () => {
 
   describe('DerivedStates Calculation (Block B)', () => {
     it('[EARS-B1] should apply derived data protocol rules', async () => {
-      await indexerAdapter.generateIndex();
-      const indexData = await indexerAdapter.getIndexData();
+      await recordProjector.generateIndex();
+      const indexData = await recordProjector.getIndexData();
 
       const enrichedTask = indexData?.enrichedTasks?.[0];
       expect(enrichedTask?.derivedState).toBeDefined();
@@ -894,8 +890,8 @@ describe('IndexerAdapter', () => {
     });
 
     it('[EARS-B2] should mark stalled tasks as isStalled', async () => {
-      await indexerAdapter.generateIndex();
-      const indexData = await indexerAdapter.getIndexData();
+      await recordProjector.generateIndex();
+      const indexData = await recordProjector.getIndexData();
 
       const enrichedTask = indexData?.enrichedTasks?.[0];
       expect(enrichedTask?.derivedState.isStalled).toBeDefined();
@@ -903,8 +899,8 @@ describe('IndexerAdapter', () => {
     });
 
     it('[EARS-B3] should mark tasks with questions as needsClarification', async () => {
-      await indexerAdapter.generateIndex();
-      const indexData = await indexerAdapter.getIndexData();
+      await recordProjector.generateIndex();
+      const indexData = await recordProjector.getIndexData();
 
       const enrichedTask = indexData?.enrichedTasks?.[0];
       expect(enrichedTask?.derivedState.needsClarification).toBeDefined();
@@ -921,8 +917,8 @@ describe('IndexerAdapter', () => {
       mockStores.tasks.list.mockResolvedValue(['1757687335-task-blocked']);
       mockStores.tasks.get.mockResolvedValue(taskWithDeps);
 
-      await indexerAdapter.generateIndex();
-      const indexData = await indexerAdapter.getIndexData();
+      await recordProjector.generateIndex();
+      const indexData = await recordProjector.getIndexData();
 
       const enrichedTask = indexData?.enrichedTasks?.[0];
       expect(enrichedTask?.derivedState.isBlockedByDependency).toBeDefined();
@@ -932,8 +928,8 @@ describe('IndexerAdapter', () => {
 
   describe('Activity History (Blocks D-E)', () => {
     it('[EARS-D1] should calculate activity history from record timestamps', async () => {
-      await indexerAdapter.generateIndex();
-      const indexData = await indexerAdapter.getIndexData();
+      await recordProjector.generateIndex();
+      const indexData = await recordProjector.getIndexData();
 
       expect(indexData?.activityHistory).toBeDefined();
       expect(Array.isArray(indexData?.activityHistory)).toBe(true);
@@ -966,7 +962,7 @@ describe('IndexerAdapter', () => {
       };
 
       // Call calculateActivityHistory directly (not via generateIndex)
-      const activityHistory = await indexerAdapter.calculateActivityHistory(allRecords);
+      const activityHistory = await recordProjector.calculateActivityHistory(allRecords);
 
       // Validate structure
       expect(activityHistory).toBeDefined();
@@ -993,8 +989,8 @@ describe('IndexerAdapter', () => {
     });
 
     it('[EARS-D2] should include last 15 events ordered chronologically', async () => {
-      await indexerAdapter.generateIndex();
-      const indexData = await indexerAdapter.getIndexData();
+      await recordProjector.generateIndex();
+      const indexData = await recordProjector.getIndexData();
 
       const activityHistory = indexData?.activityHistory || [];
       expect(activityHistory.length).toBeLessThanOrEqual(15);
@@ -1011,9 +1007,9 @@ describe('IndexerAdapter', () => {
       }
     });
 
-    it('[EARS-E1] should calculate lastUpdated using file timestamps and related records', async () => {
-      await indexerAdapter.generateIndex();
-      const indexData = await indexerAdapter.getIndexData();
+    it('[EARS-E1] should calculate lastUpdated using signature timestamps and related records', async () => {
+      await recordProjector.generateIndex();
+      const indexData = await recordProjector.getIndexData();
 
       const enrichedTask = indexData?.enrichedTasks?.[0];
       expect(enrichedTask?.lastUpdated).toBeDefined();
@@ -1052,7 +1048,7 @@ describe('IndexerAdapter', () => {
       };
 
       // Call calculateLastUpdated directly (not via generateIndex)
-      const result = await indexerAdapter.calculateLastUpdated(taskRecord, allRecords);
+      const result = await recordProjector.calculateLastUpdated(taskRecord, allRecords);
 
       // Validate structure
       expect(result).toBeDefined();
@@ -1068,8 +1064,8 @@ describe('IndexerAdapter', () => {
     });
 
     it('[EARS-E2] should consider related executions feedback and changelogs', async () => {
-      await indexerAdapter.generateIndex();
-      const indexData = await indexerAdapter.getIndexData();
+      await recordProjector.generateIndex();
+      const indexData = await recordProjector.getIndexData();
 
       const enrichedTask = indexData?.enrichedTasks?.[0];
       // lastActivityType should reflect the most recent activity type
@@ -1078,8 +1074,8 @@ describe('IndexerAdapter', () => {
     });
 
     it('[EARS-E3] should return most recent timestamp for dynamic sorting', async () => {
-      await indexerAdapter.generateIndex();
-      const indexData = await indexerAdapter.getIndexData();
+      await recordProjector.generateIndex();
+      const indexData = await recordProjector.getIndexData();
 
       const enrichedTask = indexData?.enrichedTasks?.[0];
       expect(enrichedTask?.lastUpdated).toBeDefined();
@@ -1098,8 +1094,8 @@ describe('IndexerAdapter', () => {
       mockStores.tasks.get.mockResolvedValue(testTask);
 
       // Generate index which calls calculateLastUpdated internally
-      await indexerAdapter.generateIndex();
-      const indexData = await indexerAdapter.getIndexData();
+      await recordProjector.generateIndex();
+      const indexData = await recordProjector.getIndexData();
 
       const enrichedTask = indexData?.enrichedTasks?.[0];
 
@@ -1117,16 +1113,16 @@ describe('IndexerAdapter', () => {
     });
 
     it('[EARS-E5] should use timestamps in milliseconds for consistency', async () => {
-      await indexerAdapter.generateIndex();
-      const indexData = await indexerAdapter.getIndexData();
+      await recordProjector.generateIndex();
+      const indexData = await recordProjector.getIndexData();
 
       const enrichedTask = indexData?.enrichedTasks?.[0];
       expect(enrichedTask?.lastUpdated).toBeGreaterThan(1000000000000); // Should be in milliseconds (13 digits min)
     });
 
     it('[EARS-E6] should detect significant modifications after 60s threshold', async () => {
-      await indexerAdapter.generateIndex();
-      const indexData = await indexerAdapter.getIndexData();
+      await recordProjector.generateIndex();
+      const indexData = await recordProjector.getIndexData();
 
       const enrichedTask = indexData?.enrichedTasks?.[0];
       // lastActivityType should reflect if there was a modification vs creation
@@ -1138,8 +1134,8 @@ describe('IndexerAdapter', () => {
     describe('Activity Metadata (Block F)', () => {
       it('[EARS-F1] should enrich tasks with lastUpdated lastActivityType and recentActivity', async () => {
         // Generate index which calls enrichTaskRecord internally
-        await indexerAdapter.generateIndex();
-        const indexData = await indexerAdapter.getIndexData();
+        await recordProjector.generateIndex();
+        const indexData = await recordProjector.getIndexData();
 
         expect(indexData?.enrichedTasks).toBeDefined();
         expect(indexData?.enrichedTasks?.length).toBeGreaterThan(0);
@@ -1151,8 +1147,8 @@ describe('IndexerAdapter', () => {
       });
 
       it('[EARS-F2] should include enrichedTasks in IndexData for dashboard consumption', async () => {
-        await indexerAdapter.generateIndex();
-        const indexData = await indexerAdapter.getIndexData();
+        await recordProjector.generateIndex();
+        const indexData = await recordProjector.getIndexData();
 
         expect(indexData).toHaveProperty('enrichedTasks');
         expect(Array.isArray(indexData?.enrichedTasks)).toBe(true);
@@ -1171,8 +1167,8 @@ describe('IndexerAdapter', () => {
         mockStores.tasks.list.mockResolvedValue(['1757687335-task-with-author']);
         mockStores.tasks.get.mockResolvedValue(taskWithSignatures);
 
-        await indexerAdapter.generateIndex();
-        const indexData = await indexerAdapter.getIndexData();
+        await recordProjector.generateIndex();
+        const indexData = await recordProjector.getIndexData();
 
         const enrichedTask = indexData?.enrichedTasks?.[0];
         expect(enrichedTask?.relationships.author).toBeDefined();
@@ -1208,8 +1204,8 @@ describe('IndexerAdapter', () => {
         mockStores.tasks.list.mockResolvedValue(['1757687335-task-multi-sig']);
         mockStores.tasks.get.mockResolvedValue(taskWithMultipleSignatures);
 
-        await indexerAdapter.generateIndex();
-        const indexData = await indexerAdapter.getIndexData();
+        await recordProjector.generateIndex();
+        const indexData = await recordProjector.getIndexData();
 
         const enrichedTask = indexData?.enrichedTasks?.[0];
         expect(enrichedTask?.relationships.lastModifier).toBeDefined();
@@ -1245,7 +1241,7 @@ describe('IndexerAdapter', () => {
         mockStores.tasks.get.mockResolvedValue(taskWithoutProperSignatures as unknown as GitGovTaskRecord);
 
         // Should not throw error
-        await expect(indexerAdapter.generateIndex()).resolves.toBeDefined();
+        await expect(recordProjector.generateIndex()).resolves.toBeDefined();
       });
 
       it('[EARS-K2] should continue enrichment with undefined author lastModifier', async () => {
@@ -1273,8 +1269,8 @@ describe('IndexerAdapter', () => {
         mockStores.tasks.list.mockResolvedValue(['1757687335-task-no-author']);
         mockStores.tasks.get.mockResolvedValue(taskWithoutProperSignatures as unknown as GitGovTaskRecord);
 
-        await indexerAdapter.generateIndex();
-        const indexData = await indexerAdapter.getIndexData();
+        await recordProjector.generateIndex();
+        const indexData = await recordProjector.getIndexData();
 
         const enrichedTask = indexData?.enrichedTasks?.[0];
         expect(enrichedTask).toBeDefined();
@@ -1288,8 +1284,8 @@ describe('IndexerAdapter', () => {
 
     describe('Metrics Calculation (Block G)', () => {
       it('[EARS-G3] should count and store the number of task executions', async () => {
-        await indexerAdapter.generateIndex();
-        const indexData = await indexerAdapter.getIndexData();
+        await recordProjector.generateIndex();
+        const indexData = await recordProjector.getIndexData();
 
         const enrichedTask = indexData?.enrichedTasks?.[0];
         expect(enrichedTask?.metrics).toBeDefined();
@@ -1297,16 +1293,16 @@ describe('IndexerAdapter', () => {
       });
 
       it('[EARS-G4] should count and store open blocking feedbacks', async () => {
-        await indexerAdapter.generateIndex();
-        const indexData = await indexerAdapter.getIndexData();
+        await recordProjector.generateIndex();
+        const indexData = await recordProjector.getIndexData();
 
         const enrichedTask = indexData?.enrichedTasks?.[0];
         expect(enrichedTask?.metrics.blockingFeedbackCount).toBeGreaterThanOrEqual(0);
       });
 
       it('[EARS-G5] should count and store open questions', async () => {
-        await indexerAdapter.generateIndex();
-        const indexData = await indexerAdapter.getIndexData();
+        await recordProjector.generateIndex();
+        const indexData = await recordProjector.getIndexData();
 
         const enrichedTask = indexData?.enrichedTasks?.[0];
         expect(enrichedTask?.metrics.openQuestionCount).toBeGreaterThanOrEqual(0);
@@ -1322,8 +1318,8 @@ describe('IndexerAdapter', () => {
         mockStores.tasks.list.mockResolvedValue(['1757687335-task-done']);
         mockStores.tasks.get.mockResolvedValue(doneTask);
 
-        await indexerAdapter.generateIndex();
-        const indexData = await indexerAdapter.getIndexData();
+        await recordProjector.generateIndex();
+        const indexData = await recordProjector.getIndexData();
 
         const enrichedTask = indexData?.enrichedTasks?.[0];
         if (enrichedTask?.status === 'done') {
@@ -1332,8 +1328,8 @@ describe('IndexerAdapter', () => {
       });
 
       it('[EARS-G7] should determine and store the release status of the task', async () => {
-        await indexerAdapter.generateIndex();
-        const indexData = await indexerAdapter.getIndexData();
+        await recordProjector.generateIndex();
+        const indexData = await recordProjector.getIndexData();
 
         const enrichedTask = indexData?.enrichedTasks?.[0];
         expect(enrichedTask?.release).toBeDefined();
@@ -1371,8 +1367,8 @@ describe('IndexerAdapter', () => {
         mockStores.tasks.list.mockResolvedValue(['1757687335-task-modified']);
         mockStores.tasks.get.mockResolvedValue(taskWithModifier);
 
-        await indexerAdapter.generateIndex();
-        const indexData = await indexerAdapter.getIndexData();
+        await recordProjector.generateIndex();
+        const indexData = await recordProjector.getIndexData();
 
         const enrichedTask = indexData?.enrichedTasks?.[0];
         expect(enrichedTask?.relationships.lastModifier).toBeDefined();
@@ -1396,8 +1392,8 @@ describe('IndexerAdapter', () => {
         mockStores.cycles.list.mockResolvedValue(['1757687335-cycle-test']);
         mockStores.cycles.get.mockResolvedValue(cycle);
 
-        await indexerAdapter.generateIndex();
-        const indexData = await indexerAdapter.getIndexData();
+        await recordProjector.generateIndex();
+        const indexData = await recordProjector.getIndexData();
 
         const enrichedTask = indexData?.enrichedTasks?.[0];
         expect(enrichedTask?.relationships.cycles).toBeDefined();
@@ -1407,8 +1403,8 @@ describe('IndexerAdapter', () => {
       });
 
       it('[EARS-I1] should extract assignedTo from related feedback', async () => {
-        await indexerAdapter.generateIndex();
-        const indexData = await indexerAdapter.getIndexData();
+        await recordProjector.generateIndex();
+        const indexData = await recordProjector.getIndexData();
 
         const enrichedTask = indexData?.enrichedTasks?.[0];
         expect(enrichedTask?.relationships.assignedTo).toBeDefined();
@@ -1432,8 +1428,8 @@ describe('IndexerAdapter', () => {
         mockStores.tasks.list.mockResolvedValue(['1757687335-task-all-refs']);
         mockStores.tasks.get.mockResolvedValue(taskWithAllRefs);
 
-        await indexerAdapter.generateIndex();
-        const indexData = await indexerAdapter.getIndexData();
+        await recordProjector.generateIndex();
+        const indexData = await recordProjector.getIndexData();
 
         const enrichedTask = indexData?.enrichedTasks?.[0];
         const dependsOn = enrichedTask?.relationships.dependsOn || [];
@@ -1506,8 +1502,8 @@ describe('IndexerAdapter', () => {
           .mockResolvedValueOnce(activeTask)
           .mockResolvedValueOnce(mainTask);
 
-        await indexerAdapter.generateIndex();
-        const indexData = await indexerAdapter.getIndexData();
+        await recordProjector.generateIndex();
+        const indexData = await recordProjector.getIndexData();
 
         // Find the main task in enriched tasks
         const enrichedMainTask = indexData?.enrichedTasks?.find(t => t.id === '1757687339-task-main');
@@ -1526,8 +1522,8 @@ describe('IndexerAdapter', () => {
       });
 
       it('[EARS-I3] should extract blockedBy by scanning references from other tasks', async () => {
-        await indexerAdapter.generateIndex();
-        const indexData = await indexerAdapter.getIndexData();
+        await recordProjector.generateIndex();
+        const indexData = await recordProjector.getIndexData();
 
         const enrichedTask = indexData?.enrichedTasks?.[0];
         expect(enrichedTask?.relationships.blockedBy).toBeDefined();
@@ -1561,8 +1557,8 @@ describe('IndexerAdapter', () => {
           throw new Error('Cycle not found');
         });
 
-        await indexerAdapter.generateIndex();
-        const indexData = await indexerAdapter.getIndexData();
+        await recordProjector.generateIndex();
+        const indexData = await recordProjector.getIndexData();
 
         const enrichedTask = indexData?.enrichedTasks?.[0];
         expect(enrichedTask?.relationships.cycles).toBeDefined();
@@ -1582,8 +1578,8 @@ describe('IndexerAdapter', () => {
         mockStores.tasks.list.mockResolvedValue(['1757687335-task-no-cycles']);
         mockStores.tasks.get.mockResolvedValue(taskWithoutCycles);
 
-        await indexerAdapter.generateIndex();
-        const indexData = await indexerAdapter.getIndexData();
+        await recordProjector.generateIndex();
+        const indexData = await recordProjector.getIndexData();
 
         const enrichedTask = indexData?.enrichedTasks?.[0];
         expect(enrichedTask?.relationships.cycles).toBeDefined();
@@ -1594,8 +1590,8 @@ describe('IndexerAdapter', () => {
 
     describe('Derived States (Block J)', () => {
       it('[EARS-J1] should calculate healthScore using multi-factor algorithm', async () => {
-        await indexerAdapter.generateIndex();
-        const indexData = await indexerAdapter.getIndexData();
+        await recordProjector.generateIndex();
+        const indexData = await recordProjector.getIndexData();
 
         const enrichedTask = indexData?.enrichedTasks?.[0];
         expect(enrichedTask?.derivedState.healthScore).toBeDefined();
@@ -1604,8 +1600,8 @@ describe('IndexerAdapter', () => {
       });
 
       it('[EARS-J2] should calculate timeInCurrentStage in days', async () => {
-        await indexerAdapter.generateIndex();
-        const indexData = await indexerAdapter.getIndexData();
+        await recordProjector.generateIndex();
+        const indexData = await recordProjector.getIndexData();
 
         const enrichedTask = indexData?.enrichedTasks?.[0];
         expect(enrichedTask?.derivedState.timeInCurrentStage).toBeDefined();
@@ -1613,8 +1609,8 @@ describe('IndexerAdapter', () => {
       });
 
       it('[EARS-J3] should REUSE pre-calculated DerivedStates (NOT recalculate per-task)', async () => {
-        await indexerAdapter.generateIndex();
-        const indexData = await indexerAdapter.getIndexData();
+        await recordProjector.generateIndex();
+        const indexData = await recordProjector.getIndexData();
 
         // Verify system-wide derivedStates exist
         expect(indexData?.derivedStates).toBeDefined();
@@ -1649,12 +1645,12 @@ describe('IndexerAdapter', () => {
       });
 
       it('[EARS-J4] should mark isStalled correctly based on staleness rules', async () => {
-        await indexerAdapter.generateIndex();
-        const indexData = await indexerAdapter.getIndexData();
+        await recordProjector.generateIndex();
+        const indexData = await recordProjector.getIndexData();
 
         const enrichedTask = indexData?.enrichedTasks?.[0];
         expect(enrichedTask?.derivedState.isStalled).toBeDefined();
-        // Actual staleness logic is determined by MetricsAdapter/DerivedStates
+        // Actual staleness logic is determined by RecordMetrics/DerivedStates
         expect(typeof enrichedTask?.derivedState.isStalled).toBe('boolean');
       });
 
@@ -1668,8 +1664,8 @@ describe('IndexerAdapter', () => {
         mockStores.tasks.list.mockResolvedValue(['1757687335-task-high-priority']);
         mockStores.tasks.get.mockResolvedValue(highPriorityTask);
 
-        await indexerAdapter.generateIndex();
-        const indexData = await indexerAdapter.getIndexData();
+        await recordProjector.generateIndex();
+        const indexData = await recordProjector.getIndexData();
 
         const enrichedTask = indexData?.enrichedTasks?.[0];
         expect(enrichedTask?.derivedState.isAtRisk).toBeDefined();
@@ -1677,8 +1673,8 @@ describe('IndexerAdapter', () => {
       });
 
       it('[EARS-J6] should mark needsClarification when open questions exist', async () => {
-        await indexerAdapter.generateIndex();
-        const indexData = await indexerAdapter.getIndexData();
+        await recordProjector.generateIndex();
+        const indexData = await recordProjector.getIndexData();
 
         const enrichedTask = indexData?.enrichedTasks?.[0];
         expect(enrichedTask?.derivedState.needsClarification).toBeDefined();
@@ -1713,7 +1709,7 @@ describe('IndexerAdapter', () => {
     });
 
     it('[EARS-R1] should verify checksums for all records', async () => {
-      const report = await indexerAdapter.validateIntegrity();
+      const report = await recordProjector.validateIntegrity();
 
       // All records should have valid checksums
       expect(report.checksumFailures).toBe(0);
@@ -1732,7 +1728,7 @@ describe('IndexerAdapter', () => {
       mockStores.tasks.list.mockResolvedValue(['1757687335-task-corrupted']);
       mockStores.tasks.get.mockResolvedValue(corruptedTask);
 
-      const report = await indexerAdapter.validateIntegrity();
+      const report = await recordProjector.validateIntegrity();
 
       expect(report.checksumFailures).toBeGreaterThan(0);
       expect(report.status).toBe('errors');
@@ -1745,7 +1741,7 @@ describe('IndexerAdapter', () => {
     });
 
     it('[EARS-R3] should continue validation for valid checksums', async () => {
-      const report = await indexerAdapter.validateIntegrity();
+      const report = await recordProjector.validateIntegrity();
 
       // Valid checksums should not generate errors
       const checksumErrors = report.errorsFound.filter(e => e.type === 'checksum_failure');
@@ -1754,7 +1750,7 @@ describe('IndexerAdapter', () => {
     });
 
     it('[EARS-S1] should verify all signatures using crypto module', async () => {
-      const report = await indexerAdapter.validateIntegrity();
+      const report = await recordProjector.validateIntegrity();
 
       // All records should have valid signatures
       expect(report.signatureFailures).toBe(0);
@@ -1776,7 +1772,7 @@ describe('IndexerAdapter', () => {
       // Mock verifySignatures to return false for this specific test
       (verifySignatures as jest.Mock).mockResolvedValueOnce(false);
 
-      const report = await indexerAdapter.validateIntegrity();
+      const report = await recordProjector.validateIntegrity();
 
       expect(report.signatureFailures).toBeGreaterThan(0);
       expect(report.status).toBe('errors');
@@ -1795,7 +1791,7 @@ describe('IndexerAdapter', () => {
       // Mock verifySignatures to return false (actor not found means invalid signature)
       (verifySignatures as jest.Mock).mockResolvedValueOnce(false);
 
-      const report = await indexerAdapter.validateIntegrity();
+      const report = await recordProjector.validateIntegrity();
 
       // Unknown actors should cause signature failures
       expect(report.signatureFailures).toBeGreaterThan(0);
@@ -1804,13 +1800,13 @@ describe('IndexerAdapter', () => {
 
     it('[EARS-S3] should handle missing actor gracefully during signature verification', async () => {
       // Create adapter with actor store that returns null (actor not found)
-      const testCacheStore = createMockCacheStore();
+      const testSink = createMockSink();
       mockStores.actors.get.mockResolvedValue(null); // Actor not found
 
-      const adapterWithMissingActor = new IndexerAdapter({
-        metricsAdapter: mockMetricsAdapter as unknown as MetricsAdapter,
+      const adapterWithMissingActor = new RecordProjector({
+        recordMetrics: mockRecordMetrics as unknown as RecordMetrics,
         stores: mockStores,
-        cacheStore: testCacheStore,
+        sink: testSink,
       });
 
       // Mock verifySignatures to return false (actor not found means cannot verify)
@@ -1847,7 +1843,7 @@ describe('IndexerAdapter', () => {
       mockStores.tasks.list.mockResolvedValue(['1757687335-task-valid']);
       mockStores.tasks.get.mockResolvedValue(validTask);
 
-      const report = await indexerAdapter.validateIntegrity();
+      const report = await recordProjector.validateIntegrity();
 
       // CRITICAL: Must detect the tampering
       expect(report.checksumFailures).toBe(1);
@@ -1896,7 +1892,7 @@ describe('IndexerAdapter', () => {
         .mockResolvedValueOnce(task2)
         .mockResolvedValueOnce(task3);
 
-      const report = await indexerAdapter.validateIntegrity();
+      const report = await recordProjector.validateIntegrity();
 
       // All valid tasks should pass
       expect(report.checksumFailures).toBe(0);
@@ -1940,7 +1936,7 @@ describe('IndexerAdapter', () => {
         .mockResolvedValueOnce(tamperedTask1)
         .mockResolvedValueOnce(tamperedTask2);
 
-      const report = await indexerAdapter.validateIntegrity();
+      const report = await recordProjector.validateIntegrity();
 
       // Should detect exactly 2 checksum failures
       expect(report.checksumFailures).toBe(2);
@@ -1978,7 +1974,7 @@ describe('IndexerAdapter', () => {
       mockStores.tasks.list.mockResolvedValue(['1757687335-task-empty']);
       mockStores.tasks.get.mockResolvedValue(taskWithEmptyFields);
 
-      const report = await indexerAdapter.validateIntegrity();
+      const report = await recordProjector.validateIntegrity();
 
       // Checksum should still be calculated correctly even with empty fields
       // (schema validation is a separate concern and will catch invalid data)
@@ -1997,7 +1993,7 @@ describe('IndexerAdapter', () => {
       mockStores.tasks.list.mockResolvedValue(['1757687335-task-unicode']);
       mockStores.tasks.get.mockResolvedValue(taskWithUnicode);
 
-      const report = await indexerAdapter.validateIntegrity();
+      const report = await recordProjector.validateIntegrity();
 
       // Unicode in title/description should be handled correctly by checksum
       // (tags have stricter validation: only a-z, 0-9, hyphens, colons)
@@ -2023,7 +2019,7 @@ describe('IndexerAdapter', () => {
       mockStores.cycles.list.mockResolvedValue(['1757687335-cycle-tampered']);
       mockStores.cycles.get.mockResolvedValue(tamperedCycle);
 
-      const report = await indexerAdapter.validateIntegrity();
+      const report = await recordProjector.validateIntegrity();
 
       // Should detect cycle tampering, not task
       expect(report.checksumFailures).toBe(1);

@@ -1,7 +1,7 @@
-import type { RecordStore, RecordStores } from '../../record_store';
-import { MetricsAdapter } from '../metrics_adapter';
-import { extractAuthor, extractLastModifier } from '../../utils/signature_utils';
-import { calculatePayloadChecksum, verifySignatures } from '../../crypto';
+import type { RecordStores } from '../record_store';
+import { RecordMetrics } from '../record_metrics';
+import { extractAuthor, extractLastModifier } from '../utils/signature_utils';
+import { calculatePayloadChecksum, verifySignatures } from '../crypto';
 import type {
   GitGovTaskRecord,
   GitGovCycleRecord,
@@ -9,43 +9,130 @@ import type {
   GitGovExecutionRecord,
   GitGovChangelogRecord,
   GitGovActorRecord
-} from '../../record_types';
-import type { ActivityEvent } from '../../event_bus';
+} from '../record_types';
+import type { ActivityEvent } from '../event_bus';
 import type {
   AllRecords,
   DerivedStates,
   DerivedStateSets,
   EnrichedTaskRecord,
   IndexData,
-  IndexerAdapterDependencies,
+  IRecordProjection,
+  ProjectionContext,
+  RecordProjectorDependencies,
   IntegrityError,
   IntegrityWarning,
   IntegrityReport,
   IndexGenerationReport,
-  IIndexerAdapter,
-} from './indexer_adapter.types';
+  IRecordProjector,
+} from './record_projection.types';
 
 /**
- * IndexerAdapter - Backend-agnostic cache implementation.
+ * RecordProjector - Backend-agnostic projection engine.
  *
- * Uses RecordStore<IndexData> abstraction for cache operations.
- * Caller chooses implementation: FsRecordStore, MemoryRecordStore, etc.
+ * Uses IRecordProjection driver pattern for output.
+ * Caller chooses implementation: FsRecordProjection, MemoryRecordProjection, PrismaRecordProjection, etc.
  *
- * @see indexer_adapter.md Section 2 - Architecture
+ * @see record_projection.md Section 2 - Architecture
  */
-export class IndexerAdapter implements IIndexerAdapter {
-  private metricsAdapter: MetricsAdapter;
+export class RecordProjector implements IRecordProjector {
+  private recordMetrics: RecordMetrics;
   private stores: Required<Pick<RecordStores, 'tasks' | 'cycles' | 'feedbacks' | 'executions' | 'changelogs' | 'actors'>>;
-  private cacheStore: RecordStore<IndexData>;
+  private sink: IRecordProjection | undefined;
 
-  constructor(dependencies: IndexerAdapterDependencies) {
-    this.metricsAdapter = dependencies.metricsAdapter;
+  constructor(dependencies: RecordProjectorDependencies) {
+    this.recordMetrics = dependencies.recordMetrics;
     this.stores = dependencies.stores;
-    this.cacheStore = dependencies.cacheStore;
+    this.sink = dependencies.sink;
   }
 
   /**
-   * [EARS-1] Generates complete index from raw Records with MetricsAdapter integration
+   * [EARS-U1] Pure computation: projects raw Records into IndexData without I/O.
+   * [EARS-U2] Uses opts.lastCommitHash if provided, otherwise falls back to getGitCommitHash().
+   * [EARS-U7] Output is identical to what generateIndex() would produce.
+   */
+  async computeProjection(opts?: { lastCommitHash?: string }): Promise<IndexData> {
+    // 1. Read all stores (Phase 1: Read everything into memory)
+    const [tasks, cycles, actors] = await Promise.all([
+      this.readAllTasks(),
+      this.readAllCycles(),
+      this.readAllActors()
+    ]);
+
+    // 2. Delegate calculations to RecordMetrics
+    const [systemStatus, productivityMetrics, collaborationMetrics] = await Promise.all([
+      this.recordMetrics.getSystemStatus(),
+      this.recordMetrics.getProductivityMetrics(),
+      this.recordMetrics.getCollaborationMetrics()
+    ]);
+
+    // 3. Calculate activity history
+    const allRecords: AllRecords = {
+      tasks,
+      cycles,
+      feedback: await this.readAllFeedback(),
+      executions: await this.readAllExecutions(),
+      changelogs: await this.readAllChangelogs(),
+      actors
+    };
+
+    const activityHistory = await this.calculateActivityHistory(allRecords);
+
+    // 3.5. Calculate system-wide derived states (EARS 7-10)
+    const derivedStates = await this.calculateDerivedStates(allRecords);
+
+    // 3.6. Convert DerivedStates arrays to DerivedStateSets for O(1) lookup performance
+    const derivedStateSets: DerivedStateSets = {
+      stalledTasks: new Set(derivedStates.stalledTasks),
+      atRiskTasks: new Set(derivedStates.atRiskTasks),
+      needsClarificationTasks: new Set(derivedStates.needsClarificationTasks),
+      blockedByDependencyTasks: new Set(derivedStates.blockedByDependencyTasks)
+    };
+
+    // 3.7. Enrich tasks with complete intelligence layer (EARS-43: pass pre-calculated derivedStates)
+    const enrichedTasks = await Promise.all(
+      tasks.map(task => this.enrichTaskRecord(task, allRecords, derivedStateSets))
+    );
+
+    // 3.8. Validate integrity to populate integrityStatus (EARS-4 integration)
+    const integrityReport = await this.validateIntegrity();
+
+    // [EARS-U2] Use provided lastCommitHash or fall back to getGitCommitHash()
+    const lastCommitHash = opts?.lastCommitHash ?? await this.getGitCommitHash();
+
+    // 4. Build IndexData structure
+    const indexData: IndexData = {
+      metadata: {
+        generatedAt: new Date().toISOString(),
+        lastCommitHash,
+        integrityStatus: integrityReport.status,
+        recordCounts: {
+          tasks: tasks.length,
+          cycles: cycles.length,
+          actors: actors.length,
+          feedback: allRecords.feedback.length,
+          executions: allRecords.executions.length,
+          changelogs: allRecords.changelogs.length
+        },
+        generationTime: 0 // Will be set by caller if needed
+      },
+      metrics: { ...systemStatus, ...productivityMetrics, ...collaborationMetrics },
+      derivedStates,
+      activityHistory,
+      tasks,
+      enrichedTasks,
+      cycles,
+      actors,
+      feedback: allRecords.feedback
+    };
+
+    return indexData;
+  }
+
+  /**
+   * [EARS-1] Generates complete index from raw Records with RecordMetrics integration.
+   * [EARS-U3] Delegates computation to computeProjection().
+   * [EARS-U4] Skips persist and sets writeTime=0 when no sink is configured.
    */
   async generateIndex(): Promise<IndexGenerationReport> {
     const startTime = performance.now();
@@ -56,98 +143,30 @@ export class IndexerAdapter implements IIndexerAdapter {
     };
 
     try {
-      // 1. Read all stores (Phase 1: Read everything into memory)
-      const readStart = performance.now();
+      // [EARS-U3] Delegate to computeProjection() for all computation
+      const readAndCalcStart = performance.now();
+      const indexData = await this.computeProjection();
+      performance_metrics.readTime = performance.now() - readAndCalcStart;
 
-      const [tasks, cycles, actors] = await Promise.all([
-        this.readAllTasks(),
-        this.readAllCycles(),
-        this.readAllActors()
-      ]);
-
-      performance_metrics.readTime = performance.now() - readStart;
-
-      // 2. Delegate calculations to MetricsAdapter
-      const calcStart = performance.now();
-
-      const [systemStatus, productivityMetrics, collaborationMetrics] = await Promise.all([
-        this.metricsAdapter.getSystemStatus(),
-        this.metricsAdapter.getProductivityMetrics(),
-        this.metricsAdapter.getCollaborationMetrics()
-      ]);
-
-      performance_metrics.calculationTime = performance.now() - calcStart;
-
-      // 3. Calculate activity history
-      const allRecords: AllRecords = {
-        tasks,
-        cycles,
-        feedback: await this.readAllFeedback(),
-        executions: await this.readAllExecutions(),
-        changelogs: await this.readAllChangelogs(),
-        actors
-      };
-
-      const activityHistory = await this.calculateActivityHistory(allRecords);
-
-      // 3.5. Calculate system-wide derived states (EARS 7-10)
-      const derivedStates = await this.calculateDerivedStates(allRecords);
-
-      // 3.6. Convert DerivedStates arrays to DerivedStateSets for O(1) lookup performance
-      const derivedStateSets: DerivedStateSets = {
-        stalledTasks: new Set(derivedStates.stalledTasks),
-        atRiskTasks: new Set(derivedStates.atRiskTasks),
-        needsClarificationTasks: new Set(derivedStates.needsClarificationTasks),
-        blockedByDependencyTasks: new Set(derivedStates.blockedByDependencyTasks)
-      };
-
-      // 3.7. Enrich tasks with complete intelligence layer (EARS-43: pass pre-calculated derivedStates)
-      const enrichedTasks = await Promise.all(
-        tasks.map(task => this.enrichTaskRecord(task, allRecords, derivedStateSets))
-      );
-
-      // 3.8. Validate integrity to populate integrityStatus (EARS-4 integration)
-      const integrityReport = await this.validateIntegrity();
-
-      // 4. Build IndexData structure
-      const indexData: IndexData = {
-        metadata: {
-          generatedAt: new Date().toISOString(),
-          lastCommitHash: await this.getGitCommitHash(),
-          integrityStatus: integrityReport.status, // Populated from validateIntegrity() (EARS-4)
-          recordCounts: {
-            tasks: tasks.length,
-            cycles: cycles.length,
-            actors: actors.length,
-            feedback: allRecords.feedback.length,
-            executions: allRecords.executions.length,
-            changelogs: allRecords.changelogs.length
-          },
-          generationTime: 0 // Will be set below
-        },
-        metrics: { ...systemStatus, ...productivityMetrics, ...collaborationMetrics },
-        derivedStates, // System-wide derived states for analytics
-        activityHistory, // Activity stream for dashboard
-        tasks, // Keep full records with headers (source of truth)
-        enrichedTasks, // Tasks with intelligence layer
-        cycles, // Keep full records with headers
-        actors, // Keep full records with headers
-        feedback: allRecords.feedback // Optional - Phase 1B+ raw feedback records
-      };
-
-      // 4. Write cache using Store abstraction
+      // Persist to sink if available (EARS-U4: skip if no sink)
       const writeStart = performance.now();
-      await this.writeCacheFile(indexData);
+      await this.persistToSink(indexData, {
+        lastCommitHash: indexData.metadata.lastCommitHash
+      });
       performance_metrics.writeTime = performance.now() - writeStart;
 
       const totalTime = performance.now() - startTime;
       indexData.metadata.generationTime = totalTime;
 
+      const taskCount = indexData.metadata.recordCounts['tasks'] || 0;
+      const cycleCount = indexData.metadata.recordCounts['cycles'] || 0;
+      const actorCount = indexData.metadata.recordCounts['actors'] || 0;
+
       return {
         success: true,
-        recordsProcessed: tasks.length + cycles.length + actors.length,
-        metricsCalculated: 3, // systemStatus + productivity + collaboration
-        derivedStatesApplied: Object.values(derivedStates).reduce((sum, arr) => sum + arr.length, 0), // Total tasks with derived states
+        recordsProcessed: taskCount + cycleCount + actorCount,
+        metricsCalculated: 3,
+        derivedStatesApplied: Object.values(indexData.derivedStates).reduce((sum, arr) => sum + arr.length, 0),
         generationTime: totalTime,
         errors: [],
         performance: performance_metrics
@@ -171,9 +190,12 @@ export class IndexerAdapter implements IIndexerAdapter {
    * [EARS-13] Returns null and logs warning if cache is corrupted
    */
   async getIndexData(): Promise<IndexData | null> {
+    // [EARS-U6] Cache methods require a sink
+    if (!this.sink) {
+      throw new Error('Cannot read index data: no projection sink configured');
+    }
     try {
-      // Use Store abstraction for backend-agnostic cache access
-      const indexData = await this.cacheStore.get('index');
+      const indexData = await this.sink.read({});
       if (!indexData) {
         return null; // EARS-3: Return null without cache
       }
@@ -334,15 +356,18 @@ export class IndexerAdapter implements IIndexerAdapter {
    * Uses metadata.generatedAt from cached data (backend-agnostic)
    */
   async isIndexUpToDate(): Promise<boolean> {
+    // [EARS-U6] Cache methods require a sink
+    if (!this.sink) {
+      throw new Error('Cannot check index freshness: no projection sink configured');
+    }
     try {
-      // Check if cache exists using Store abstraction
-      const cacheExists = await this.cacheStore.exists('index');
+      const cacheExists = await this.sink.exists({});
       if (!cacheExists) {
         return false;
       }
 
       // Get cache generation timestamp from metadata (backend-agnostic)
-      const indexData = await this.cacheStore.get('index');
+      const indexData = await this.sink.read({});
       if (!indexData) {
         return false;
       }
@@ -371,10 +396,14 @@ export class IndexerAdapter implements IIndexerAdapter {
    * [EARS-6] Invalidates local cache by removing cache
    */
   async invalidateCache(): Promise<void> {
+    // [EARS-U6] Cache methods require a sink
+    if (!this.sink) {
+      throw new Error('Cannot invalidate cache: no projection sink configured');
+    }
     try {
-      const cacheExists = await this.cacheStore.exists('index');
+      const cacheExists = await this.sink.exists({});
       if (cacheExists) {
-        await this.cacheStore.delete('index');
+        await this.sink.clear({});
       }
     } catch (error) {
       throw new Error(`Failed to invalidate cache: ${error instanceof Error ? error.message : String(error)}`);
@@ -487,12 +516,15 @@ export class IndexerAdapter implements IIndexerAdapter {
   }
 
   /**
-   * Writes cache data using Store abstraction
-   * [EARS-14] Store implementation handles atomicity internally
+   * Persists IndexData to sink if available.
+   * [EARS-U4] No-op when sink is undefined (writeTime=0).
+   * [EARS-14] Sink implementation handles atomicity internally.
    */
-  private async writeCacheFile(indexData: IndexData): Promise<void> {
-    // Store abstraction handles atomicity internally
-    await this.cacheStore.put('index', indexData);
+  private async persistToSink(indexData: IndexData, context: ProjectionContext): Promise<void> {
+    if (!this.sink) {
+      return; // EARS-U4: skip persist, writeTime=0
+    }
+    await this.sink.persist(indexData, context);
   }
 
   /**

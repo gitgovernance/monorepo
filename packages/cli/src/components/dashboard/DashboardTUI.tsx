@@ -524,7 +524,7 @@ export const DashboardTUI: React.FC<Props> = ({
           const diService = DependencyInjectionService.getInstance();
           const backlogAdapter = await diService.getBacklogAdapter();
           const identityAdapter = await diService.getIdentityAdapter();
-          const indexerAdapter = await diService.getIndexerAdapter();
+          const projector = await diService.getRecordProjector();
 
           const currentActor = await identityAdapter.getCurrentActor();
 
@@ -532,7 +532,7 @@ export const DashboardTUI: React.FC<Props> = ({
           await backlogAdapter.deleteTask(selectedTask.id, currentActor.id);
 
           // Invalidate cache
-          await indexerAdapter.invalidateCache();
+          await projector.invalidateCache();
 
           // Close modal and refresh
           setShowDeleteModal(false);

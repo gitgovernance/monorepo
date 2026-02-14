@@ -2,7 +2,7 @@
  * FileLister Interface
  *
  * Abstracts file listing and reading operations for serverless compatibility.
- * Enables modules like ScopeSelector and IndexerAdapter to work without
+ * Enables modules like ScopeSelector and RecordProjector to work without
  * direct filesystem dependencies.
  *
  * @module file_lister

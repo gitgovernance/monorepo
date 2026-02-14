@@ -3,7 +3,7 @@ import { createCycleRecord } from '../../record_factories/cycle_factory';
 import type { RecordStores } from '../../record_store';
 import { IdentityAdapter } from '../identity_adapter';
 import { FeedbackAdapter } from '../feedback_adapter';
-import { MetricsAdapter, type SystemStatus, type TaskHealthReport } from '../metrics_adapter';
+import { RecordMetrics, type SystemStatus, type TaskHealthReport } from '../../record_metrics';
 import { SessionManager } from '../../session_manager';
 import type {
   TaskRecord,
@@ -46,7 +46,7 @@ export class BacklogAdapter implements IBacklogAdapter {
   private stores: Required<Pick<RecordStores, 'tasks' | 'cycles' | 'feedbacks' | 'changelogs'>>;
 
   private feedbackAdapter: FeedbackAdapter;
-  private metricsAdapter: MetricsAdapter;
+  private metricsAdapter: RecordMetrics;
 
   private workflowAdapter: IWorkflow;
   private identity: IdentityAdapter;
@@ -959,7 +959,7 @@ export class BacklogAdapter implements IBacklogAdapter {
    */
   async handleDailyTick(_event: SystemDailyTickEvent): Promise<void> {
     try {
-      // EARS-38: Use MetricsAdapter for proactive auditing
+      // EARS-38: Use RecordMetrics for proactive auditing
       const systemStatus = await this.metricsAdapter.getSystemStatus();
 
       // Get all active tasks for health analysis
@@ -1054,14 +1054,14 @@ export class BacklogAdapter implements IBacklogAdapter {
   // ===== PHASE 4: STUBS AND POLISH (DELEGATE TO ADAPTERS) =====
 
   /**
-   * Gets system status by delegating to MetricsAdapter
+   * Gets system status by delegating to RecordMetrics
    */
   async getSystemStatus(): Promise<SystemStatus> {
     return await this.metricsAdapter.getSystemStatus();
   }
 
   /**
-   * Gets task health by delegating to MetricsAdapter
+   * Gets task health by delegating to RecordMetrics
    */
   async getTaskHealth(taskId: string): Promise<TaskHealthReport> {
     return await this.metricsAdapter.getTaskHealth(taskId);

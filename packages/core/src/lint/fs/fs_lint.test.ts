@@ -27,7 +27,7 @@ import type {
   FsLintModuleDependencies,
   FileSystem,
 } from './fs_lint.types';
-import type { IIndexerAdapter } from '../../adapters/indexer_adapter';
+import type { IRecordProjector } from '../../record_projection';
 import type { TaskRecord, GitGovTaskRecord, GitGovRecord } from '../../record_types';
 import { DetailedValidationError } from '../../record_validations/common';
 import {
@@ -71,7 +71,7 @@ type MockStore = {
   size: jest.Mock;
 };
 
-type MockIndexerAdapter = {
+type MockRecordProjector = {
   buildIndex: jest.Mock;
   getIndex: jest.Mock;
   getRecordsByType: jest.Mock;
@@ -136,7 +136,7 @@ function createMockDependencies(projectRoot: string = '/tmp/test-project'): {
     actors: MockStore;
     agents: MockStore;
   };
-  indexerAdapter: MockIndexerAdapter;
+  projector: MockRecordProjector;
   fileSystem: MockFileSystem;
   lintModuleDeps: LintModuleDependencies;
   fsLintModuleDeps: FsLintModuleDependencies;
@@ -151,7 +151,7 @@ function createMockDependencies(projectRoot: string = '/tmp/test-project'): {
     agents: createMockStore()
   };
 
-  const indexerAdapter: MockIndexerAdapter = {
+  const projector: MockRecordProjector = {
     buildIndex: jest.fn(),
     getIndex: jest.fn(),
     getRecordsByType: jest.fn(),
@@ -167,7 +167,7 @@ function createMockDependencies(projectRoot: string = '/tmp/test-project'): {
 
   const lintModuleDeps: LintModuleDependencies = {
     stores: stores as unknown as import('../lint.types').RecordStores,
-    indexerAdapter: indexerAdapter as unknown as IIndexerAdapter
+    projector: projector as unknown as IRecordProjector
   };
 
   const lintModule = new LintModule(lintModuleDeps);
@@ -176,11 +176,11 @@ function createMockDependencies(projectRoot: string = '/tmp/test-project'): {
     projectRoot,
     lintModule,
     stores: stores as unknown as import('../lint.types').RecordStores,
-    indexerAdapter: indexerAdapter as unknown as IIndexerAdapter,
+    projector: projector as unknown as IRecordProjector,
     fileSystem: fileSystem as FileSystem
   };
 
-  return { stores, indexerAdapter, fileSystem, lintModuleDeps, fsLintModuleDeps };
+  return { stores, projector, fileSystem, lintModuleDeps, fsLintModuleDeps };
 }
 
 /**

@@ -206,7 +206,7 @@ export type EventSubscription = {
 }
 
 /**
- * Activity Event for IndexerAdapter activity tracking
+ * Activity Event for RecordProjector activity tracking
  * Uses discriminated unions for type-safe metadata per event type
  */
 export type ActivityEvent =

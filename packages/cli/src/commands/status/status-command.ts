@@ -126,13 +126,13 @@ export class StatusCommand {
     let collaborationMetrics = null;
 
     if (options.health || options.verbose) {
-      const metricsAdapter = await this.dependencyService.getMetricsAdapter();
-      productivityMetrics = await metricsAdapter.getProductivityMetrics();
+      const recordMetrics = await this.dependencyService.getRecordMetrics();
+      productivityMetrics = await recordMetrics.getProductivityMetrics();
     }
 
     if (options.team || options.verbose) {
-      const metricsAdapter = await this.dependencyService.getMetricsAdapter();
-      collaborationMetrics = await metricsAdapter.getCollaborationMetrics();
+      const recordMetrics = await this.dependencyService.getRecordMetrics();
+      collaborationMetrics = await recordMetrics.getCollaborationMetrics();
     }
 
     // 3. Output rendering
@@ -156,14 +156,14 @@ export class StatusCommand {
       return; // Skip cache when using direct source
     }
 
-    const indexerAdapter = await this.dependencyService.getIndexerAdapter();
-    const isUpToDate = await indexerAdapter.isIndexUpToDate();
+    const projector = await this.dependencyService.getRecordProjector();
+    const isUpToDate = await projector.isIndexUpToDate();
 
     if (!isUpToDate) {
       if (!options.quiet) {
         console.log("🔄 Updating cache for optimal dashboard performance...");
       }
-      await indexerAdapter.generateIndex();
+      await projector.generateIndex();
     }
   }
 
@@ -222,8 +222,8 @@ export class StatusCommand {
    */
   private async getSystemHealthSummary(): Promise<{ healthScore: number; alerts: Array<{ type: string; message: string; severity: 'low' | 'medium' | 'high' | 'critical' }> }> {
     try {
-      const metricsAdapter = await this.dependencyService.getMetricsAdapter();
-      const systemStatus = await metricsAdapter.getSystemStatus();
+      const recordMetrics = await this.dependencyService.getRecordMetrics();
+      const systemStatus = await recordMetrics.getSystemStatus();
 
       // Generate alerts based on system health
       const alerts = [];
@@ -249,7 +249,7 @@ export class StatusCommand {
         alerts: alerts
       };
     } catch (error) {
-      // Graceful degradation if MetricsAdapter fails
+      // Graceful degradation if RecordMetrics fails
       return {
         healthScore: 0,
         alerts: [{

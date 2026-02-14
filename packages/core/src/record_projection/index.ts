@@ -5,13 +5,15 @@ export type {
   DerivedStateSets,
   EnrichedTaskRecord,
   IndexData,
-  IndexerAdapterDependencies,
+  RecordProjectorDependencies,
   IntegrityError,
   IntegrityWarning,
   IntegrityReport,
   IndexGenerationReport,
-  IIndexerAdapter,
-} from './indexer_adapter.types';
+  IRecordProjector,
+  IRecordProjection,
+  ProjectionContext,
+} from './record_projection.types';
 
 // Implementation
-export { IndexerAdapter } from './indexer_adapter';
+export { RecordProjector } from './record_projection';

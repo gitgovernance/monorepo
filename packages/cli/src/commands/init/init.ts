@@ -17,7 +17,7 @@ export function registerInitCommands(program: Command): void {
     .option('-a, --actor-name <name>', 'Actor display name (default: git user.name)')
     .option('-e, --actor-email <email>', 'Actor email (default: git user.email)')
     .option('-f, --force', 'Re-initialize forcefully (requires confirmation)')
-    .option('--no-cache', 'Skip IndexerAdapter initialization (faster init)')
+    .option('--no-cache', 'Skip RecordProjector initialization (faster init)')
     .option('--skip-validation', 'Skip environment validation (advanced users)')
     .option('--json', 'Output in JSON format for automation')
     .option('-v, --verbose', 'Show detailed bootstrap process')

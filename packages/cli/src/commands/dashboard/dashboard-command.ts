@@ -101,36 +101,36 @@ export class DashboardCommand {
       return; // Skip cache when using direct source
     }
 
-    const indexerAdapter = await this.dependencyService.getIndexerAdapter();
-    const isUpToDate = await indexerAdapter.isIndexUpToDate();
+    const projector = await this.dependencyService.getRecordProjector();
+    const isUpToDate = await projector.isIndexUpToDate();
 
     if (!isUpToDate) {
       if (!options.quiet) {
         console.log("🔄 Updating intelligence cache for dashboard...");
       }
-      await indexerAdapter.generateIndex();
+      await projector.generateIndex();
     }
   }
 
   /**
    * [EARS-A2] Gathers intelligence from all 6 adapters including activity history
-   * [EARS-A3] Uses pre-calculated metrics from IndexerAdapter cache
-   * [EARS-E1] Returns enrichedTasks with lastUpdated metadata from IndexerAdapter
+   * [EARS-A3] Uses pre-calculated metrics from RecordProjector cache
+   * [EARS-E1] Returns enrichedTasks with lastUpdated metadata from RecordProjector
    */
   private async gatherDashboardIntelligence(options: DashboardCommandOptions): Promise<DashboardIntelligence> {
     // Get all adapters (6-adapter convergence)
     const backlogAdapter = await this.dependencyService.getBacklogAdapter();
-    const metricsAdapter = await this.dependencyService.getMetricsAdapter();
+    const recordMetrics = await this.dependencyService.getRecordMetrics();
     const feedbackAdapter = await this.dependencyService.getFeedbackAdapter();
     const identityAdapter = await this.dependencyService.getIdentityAdapter();
-    const indexerAdapter = await this.dependencyService.getIndexerAdapter();
+    const projector = await this.dependencyService.getRecordProjector();
 
     // Get index data with immediate regeneration if missing (DEMO OPTIMIZATION)
-    let indexData = await indexerAdapter.getIndexData();
+    let indexData = await projector.getIndexData();
     if (!indexData) {
       // Immediate regeneration for demo - keeps activity stream alive (~100ms)
-      await indexerAdapter.generateIndex();
-      indexData = await indexerAdapter.getIndexData();
+      await projector.generateIndex();
+      indexData = await projector.getIndexData();
     }
 
     // Gather data from all adapters simultaneously
@@ -143,16 +143,16 @@ export class DashboardCommand {
       feedback,
       currentActor
     ] = await Promise.all([
-      metricsAdapter.getSystemStatus(),
-      metricsAdapter.getProductivityMetrics(),
-      metricsAdapter.getCollaborationMetrics(),
+      recordMetrics.getSystemStatus(),
+      recordMetrics.getProductivityMetrics(),
+      recordMetrics.getCollaborationMetrics(),
       backlogAdapter.getAllTasks(),
       backlogAdapter.getAllCycles(),
       feedbackAdapter.getAllFeedback(),
       identityAdapter.getCurrentActor()
     ]);
 
-    // NUEVO - Use enriched tasks from IndexerAdapter (with lastUpdated metadata)
+    // NUEVO - Use enriched tasks from RecordProjector (with lastUpdated metadata)
     const enhancedTasks = indexData?.enrichedTasks || [];
 
     return {
@@ -428,19 +428,19 @@ export class DashboardCommand {
   // ===== HELPER METHODS USANDO ADAPTERS (NO DUPLICAR LÓGICA) =====
 
   /**
-   * Gets tasks created today using MetricsAdapter
+   * Gets tasks created today using RecordMetrics
    */
   private async getTasksToday(tasks: TaskRecord[]): Promise<number> {
-    const metricsAdapter = await this.dependencyService.getMetricsAdapter();
-    return metricsAdapter.calculateTasksCreatedToday(tasks);
+    const recordMetrics = await this.dependencyService.getRecordMetrics();
+    return recordMetrics.calculateTasksCreatedToday(tasks);
   }
 
   /**
-   * Gets derived state for task using MetricsAdapter logic
+   * Gets derived state for task using RecordMetrics logic
    */
   private async getDerivedState(task: TaskRecord): Promise<string | null> {
-    const metricsAdapter = await this.dependencyService.getMetricsAdapter();
-    const timeInStage = metricsAdapter.calculateTimeInCurrentStage(task);
+    const recordMetrics = await this.dependencyService.getRecordMetrics();
+    const timeInStage = recordMetrics.calculateTimeInCurrentStage(task);
 
     if (task.status === 'paused') return '💤';
     if (task.status === 'active' && timeInStage > 7) return '⚡';

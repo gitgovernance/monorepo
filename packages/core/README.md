@@ -84,16 +84,19 @@ await batchStore.putMany([
 graph LR
     subgraph "@gitgov/core — Pure Logic"
         Adapters["Adapters (10)"]
-        Modules["Modules (24)"]
+        Modules["Modules (26)"]
         Records["Record System"]
+        Projection["RecordProjector + IRecordProjection"]
 
         Adapters --> Modules
         Adapters --> Records
         Modules --> Records
+        Modules --> Projection
     end
 
     subgraph "@gitgov/core/fs — Local I/O"
         FsStore["FsRecordStore"]
+        FsProjection["FsRecordProjection"]
         FsGit["LocalGitModule"]
         FsLint["FsLintModule"]
         FsOther["FsKeyProvider, FsFileLister, ..."]
@@ -108,13 +111,21 @@ graph LR
 
     subgraph "@gitgov/core/memory — Testing"
         MemStore["MemoryRecordStore"]
+        MemProjection["MemoryRecordProjection"]
         MemGit["MemoryGitModule"]
         MemOther["MockKeyProvider, MemoryFileLister"]
+    end
+
+    subgraph "@gitgov/core/prisma — Database"
+        PrismaProjection["PrismaRecordProjection"]
     end
 
     Adapters -.->|DI| FsStore
     Adapters -.->|DI| GhStore
     Adapters -.->|DI| MemStore
+    Projection -.->|sink| FsProjection
+    Projection -.->|sink| MemProjection
+    Projection -.->|sink| PrismaProjection
 
     CLI["@gitgov/cli"] --> Adapters
     SaaS["@gitgov/saas-api"] --> Adapters
@@ -124,18 +135,20 @@ graph LR
     style FsStore fill:#e3f2fd,stroke:#1976d2
     style GhStore fill:#f3e5f5,stroke:#7b1fa2
     style MemStore fill:#fff3e0,stroke:#f57c00
+    style PrismaProjection fill:#fce4ec,stroke:#c62828
 ```
 
-### 4 Export Paths
+### 5 Export Paths
 
 | Import | Contents | I/O |
 |--------|----------|-----|
 | `@gitgov/core` | Interfaces, types, pure logic, factories, validators | No |
-| `@gitgov/core/fs` | Filesystem implementations (FsRecordStore, LocalGitModule, FsLintModule, ...) | Local |
+| `@gitgov/core/fs` | Filesystem implementations (FsRecordStore, FsRecordProjection, LocalGitModule, FsLintModule, ...) | Local |
 | `@gitgov/core/github` | GitHub API implementations (GitHubRecordStore, GitHubGitModule, GitHubConfigStore, GitHubFileLister) | Remote |
-| `@gitgov/core/memory` | In-memory implementations for testing (MemoryRecordStore, MemoryGitModule, ...) | No |
+| `@gitgov/core/memory` | In-memory implementations for testing (MemoryRecordStore, MemoryRecordProjection, MemoryGitModule, ...) | No |
+| `@gitgov/core/prisma` | Database-backed implementations via Prisma-compatible client (PrismaRecordProjection) | Remote |
 
-The root import (`@gitgov/core`) never imports `fs`, `path`, `child_process`, or `@octokit/rest`.
+The root import (`@gitgov/core`) never imports `fs`, `path`, `child_process`, `@octokit/rest`, or `@prisma/client`.
 
 ### Record Symmetry
 
@@ -176,6 +189,8 @@ Adapters are orchestrators that compose modules. All receive dependencies via co
 | `record_validations/` | Business validators (above schema) |
 | `record_schemas/` | JSON Schemas + schema cache + errors |
 | `record_store/` | `RecordStore<V, R, O>` interface (impl in fs/memory/github) |
+| `record_projection/` | `IRecordProjection` interface + RecordProjector engine (drivers: fs/memory/prisma) |
+| `record_metrics/` | RecordMetrics calculation engine (system status, productivity, collaboration) |
 | `config_store/` | Storage for project config.json (impl in fs/github) |
 | `config_manager/` | Typed access to config.json (versioned in git) |
 | `session_store/` | Storage for .session.json |

@@ -65,3 +65,7 @@ export { FsWatcherStateModule } from './watcher_state/fs';
 // AgentRunner (filesystem-based agent execution)
 export { FsAgentRunner, createAgentRunner } from './agent_runner/fs';
 export type { FsAgentRunnerDependencies } from './agent_runner/fs';
+
+// RecordProjection (filesystem-based index.json persistence)
+export { FsRecordProjection } from './record_projection/fs';
+export type { FsRecordProjectionOptions } from './record_projection/fs';

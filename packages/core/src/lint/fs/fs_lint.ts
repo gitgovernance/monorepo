@@ -66,7 +66,7 @@ import type {
   LintRecordContext,
   FixRecordOptions,
 } from "../lint.types";
-// Note: IIndexerAdapter is in FsLintModuleDependencies but passed to LintModule, not used directly
+// Note: IRecordProjector is in FsLintModuleDependencies but passed to LintModule, not used directly
 import type {
   GitGovRecord,
   TaskRecord,
@@ -117,7 +117,7 @@ export class FsLintModule implements IFsLintModule {
     }
     this.projectRoot = dependencies.projectRoot;
     this.lintModule = dependencies.lintModule;
-    // Note: indexerAdapter is passed to LintModule, not used directly here
+    // Note: projector is passed to LintModule, not used directly here
 
     // FileSystem with fallback to Node.js fs
     this.fileSystem = dependencies.fileSystem ?? {

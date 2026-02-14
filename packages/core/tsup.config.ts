@@ -6,6 +6,7 @@ export default defineConfig({
     'src/fs.ts',      // @gitgov/core/fs - all fs implementations
     'src/memory.ts',  // @gitgov/core/memory - all memory implementations
     'src/github.ts',  // @gitgov/core/github - GitHub API implementations
+    'src/prisma.ts',  // @gitgov/core/prisma - Prisma-compatible DB implementations
   ],
   format: ['esm'],
   dts: true,
