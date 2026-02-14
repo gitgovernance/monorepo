@@ -1,3 +1,17 @@
+## [2.3.0](https://github.com/gitgovernance/monorepo/compare/core-v2.2.0...core-v2.3.0) (2026-02-14)
+
+
+### ✨ Features
+
+* **core:** add PrismaRecordProjection driver via @gitgov/core/prisma ([814dd3a](https://github.com/gitgovernance/monorepo/commit/814dd3a7fb10cacd01e02d38220b44bebbc7b2bc))
+* **core:** rename indexer_adapter → record_projector + metrics_adapter → record_metrics ([e30e86b](https://github.com/gitgovernance/monorepo/commit/e30e86b5d3df9ce9cd74c33d7bfc0c546bc1cd9b))
+* **core:** rename record_projector → record_projection + ProjectionSink → RecordProjection ([ffc0ea3](https://github.com/gitgovernance/monorepo/commit/ffc0ea34b416f4e1970184fa149b23b6e1e30790))
+
+
+### 🐛 Bug Fixes
+
+* **core:** align record_projection docs and test name with implementation ([b63cc38](https://github.com/gitgovernance/monorepo/commit/b63cc38640e802d4995a73e8f7a1f2f6beab93a7))
+
 ## [2.2.0](https://github.com/gitgovernance/monorepo/compare/core-v2.1.2...core-v2.2.0) (2026-02-13)
 
 
