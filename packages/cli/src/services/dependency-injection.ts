@@ -1,6 +1,6 @@
 import * as path from 'path';
-import { Adapters, Config, Session, EventBus, Lint, Git, SyncState, SourceAuditor, FindingDetector, Runner, KeyProvider, RecordProjector, RecordMetrics } from '@gitgov/core';
-import { FsRecordStore, DEFAULT_ID_ENCODER, FsFileLister, FsProjectInitializer, FsLintModule, FsSyncStateModule, GitModule, createAgentRunner, createConfigManager, findProjectRoot, findGitgovRoot, createSessionManager, FsProjectionSink } from '@gitgov/core/fs';
+import { Adapters, Config, Session, EventBus, Lint, Git, SyncState, SourceAuditor, FindingDetector, Runner, KeyProvider, RecordProjection, RecordMetrics } from '@gitgov/core';
+import { FsRecordStore, DEFAULT_ID_ENCODER, FsFileLister, FsProjectInitializer, FsLintModule, FsSyncStateModule, GitModule, createAgentRunner, createConfigManager, findProjectRoot, findGitgovRoot, createSessionManager, FsRecordProjection } from '@gitgov/core/fs';
 import type { IFsLintModule } from '@gitgov/core/fs';
 import type {
   GitGovTaskRecord, GitGovCycleRecord, GitGovFeedbackRecord, GitGovExecutionRecord, GitGovChangelogRecord, GitGovActorRecord, GitGovAgentRecord,
@@ -166,12 +166,12 @@ export class DependencyInjectionService {
         throw new Error("Project root not initialized");
       }
 
-      // Create FsProjectionSink for CLI (writes to .gitgov/index.json)
-      const sink = new FsProjectionSink({
+      // Create FsRecordProjection for CLI (writes to .gitgov/index.json)
+      const sink = new FsRecordProjection({
         basePath: path.join(this.projectRoot, '.gitgov'),
       });
 
-      this.projector = new RecordProjector.RecordProjector({
+      this.projector = new RecordProjection.RecordProjector({
         recordMetrics,
         stores: {
           tasks: this.stores.tasks,

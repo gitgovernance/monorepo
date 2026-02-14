@@ -1,5 +1,5 @@
 import type { RecordStore } from "../record_store/record_store";
-import type { IRecordProjector } from "../record_projector";
+import type { IRecordProjector } from "../record_projection";
 import type { GitGovRecord, GitGovRecordType } from "../record_types";
 
 // ==================== Pure LintModule Interface ====================

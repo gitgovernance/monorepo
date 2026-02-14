@@ -36,7 +36,7 @@ import type {
   FileSystem,
   IFsLintModule,
 } from './fs/fs_lint.types';
-import type { IRecordProjector } from '../record_projector';
+import type { IRecordProjector } from '../record_projection';
 import type {
   TaskRecord,
   CycleRecord,

@@ -58,7 +58,7 @@ export type DerivedStateSets = {
  * Enhanced Task Record with complete intelligence layer.
  * Calculated by enrichTaskRecord() with relationships, metrics, and derived states.
  *
- * @see record_projector.md Section 3.6 - EnrichedTaskRecord Specification (EARS 25-48)
+ * @see record_projection.md Section 3.6 - EnrichedTaskRecord Specification (EARS 25-48)
  */
 export type EnrichedTaskRecord = TaskRecord & {
   derivedState: {
@@ -172,14 +172,14 @@ export type ProjectionContext = {
 };
 
 /**
- * IProjectionSink - Driver pattern for projection output.
+ * IRecordProjection - Driver pattern for projection output.
  *
  * Abstracts where IndexData is persisted. Implementations:
- * - FsProjectionSink: writes to .gitgov/index.json (CLI)
- * - MemoryProjectionSink: in-memory Map (tests)
- * - PrismaProjectionSink: decomposes into Prisma tables (SaaS)
+ * - FsRecordProjection: writes to .gitgov/index.json (CLI)
+ * - MemoryRecordProjection: in-memory Map (tests)
+ * - PrismaRecordProjection: decomposes into Prisma tables (SaaS)
  */
-export interface IProjectionSink {
+export interface IRecordProjection {
   persist(data: IndexData, context: ProjectionContext): Promise<void>;
   read(context: ProjectionContext): Promise<IndexData | null>;
   exists(context: ProjectionContext): Promise<boolean>;
@@ -189,12 +189,12 @@ export interface IProjectionSink {
 /**
  * RecordProjector Dependencies - Facade + Dependency Injection Pattern.
  *
- * @see record_projector.md Section 2 - Architecture
+ * @see record_projection.md Section 2 - Architecture
  */
 export type RecordProjectorDependencies = {
   recordMetrics: RecordMetrics;
   stores: Required<Pick<RecordStores, 'tasks' | 'cycles' | 'feedbacks' | 'executions' | 'changelogs' | 'actors'>>;
-  sink?: IProjectionSink;
+  sink?: IRecordProjection;
 };
 
 /**

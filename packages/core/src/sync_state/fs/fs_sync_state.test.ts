@@ -74,7 +74,7 @@ import { createEmbeddedMetadataRecord } from "../../record_factories/embedded_me
 import type { IIdentityAdapter } from "../../adapters/identity_adapter";
 import type { LintReport, LintResult, LintSummary } from "../../lint";
 import type { ILintModule } from "../../lint";
-import type { IRecordProjector } from "../../record_projector";
+import type { IRecordProjector } from "../../record_projection";
 
 const execAsync = promisify(exec);
 

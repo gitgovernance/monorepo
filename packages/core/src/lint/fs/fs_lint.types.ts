@@ -13,7 +13,7 @@ import type {
   FixRecordOptions,
   FixReport,
 } from '../lint.types';
-import type { IRecordProjector } from '../../record_projector';
+import type { IRecordProjector } from '../../record_projection';
 
 /**
  * Public interface for FsLintModule operations (with I/O).

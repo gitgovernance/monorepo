@@ -1,12 +1,12 @@
-import type { IProjectionSink, IndexData, ProjectionContext } from '../record_projector.types';
+import type { IRecordProjection, IndexData, ProjectionContext } from '../record_projection.types';
 
 /**
- * MemoryProjectionSink - In-memory IProjectionSink for testing.
+ * MemoryRecordProjection - In-memory IRecordProjection for testing.
  *
  * Stores IndexData in a Map keyed by context.repoIdentifier.
  * Used exclusively in tests to avoid filesystem I/O.
  */
-export class MemoryProjectionSink implements IProjectionSink {
+export class MemoryRecordProjection implements IRecordProjection {
   private storage = new Map<string, IndexData>();
 
   async persist(data: IndexData, context: ProjectionContext): Promise<void> {

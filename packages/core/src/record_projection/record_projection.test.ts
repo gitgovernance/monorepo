@@ -31,7 +31,7 @@ jest.mock('../crypto', () => {
 jest.mock('../record_store');
 
 import { RecordProjector } from './index';
-import type { AllRecords, IndexData, IProjectionSink } from './index';
+import type { AllRecords, IndexData, IRecordProjection } from './index';
 import type { RecordStore } from '../record_store';
 import { verifySignatures, calculatePayloadChecksum } from '../crypto';
 import type {
@@ -189,10 +189,10 @@ async function createMockExecutionRecord(
 }
 
 /**
- * Creates a mock IProjectionSink for testing.
- * Uses in-memory storage to simulate projection sink operations.
+ * Creates a mock IRecordProjection for testing.
+ * Uses in-memory storage to simulate record projection operations.
  */
-function createMockSink(): jest.Mocked<IProjectionSink> {
+function createMockSink(): jest.Mocked<IRecordProjection> {
   let cachedData: IndexData | null = null;
 
   return {
@@ -204,7 +204,7 @@ function createMockSink(): jest.Mocked<IProjectionSink> {
     clear: jest.fn().mockImplementation(async () => {
       cachedData = null;
     }),
-  } as jest.Mocked<IProjectionSink>;
+  } as jest.Mocked<IRecordProjection>;
 }
 
 describe('RecordProjector', () => {
@@ -217,7 +217,7 @@ describe('RecordProjector', () => {
     executions: jest.Mocked<RecordStore<GitGovExecutionRecord>>;
     changelogs: jest.Mocked<RecordStore<GitGovChangelogRecord>>;
   };
-  let mockSink: jest.Mocked<IProjectionSink>;
+  let mockSink: jest.Mocked<IRecordProjection>;
   let mockRecordMetrics: jest.Mocked<Pick<RecordMetrics, 'getSystemStatus' | 'getProductivityMetrics' | 'getCollaborationMetrics' | 'getTaskHealth'>>;
 
   beforeEach(() => {
@@ -713,7 +713,7 @@ describe('RecordProjector', () => {
 
     it('[EARS-C3] should return null and log warning for corrupted cache', async () => {
       // Step 1: Create sink that throws error (simulating corruption)
-      const corruptedSink: jest.Mocked<IProjectionSink> = {
+      const corruptedSink: jest.Mocked<IRecordProjection> = {
         read: jest.fn().mockRejectedValue(new Error('Invalid JSON data')),
         persist: jest.fn().mockResolvedValue(undefined),
         exists: jest.fn().mockResolvedValue(true), // Cache exists but is corrupted

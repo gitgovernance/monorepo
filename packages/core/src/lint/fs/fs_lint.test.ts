@@ -27,7 +27,7 @@ import type {
   FsLintModuleDependencies,
   FileSystem,
 } from './fs_lint.types';
-import type { IRecordProjector } from '../../record_projector';
+import type { IRecordProjector } from '../../record_projection';
 import type { TaskRecord, GitGovTaskRecord, GitGovRecord } from '../../record_types';
 import { DetailedValidationError } from '../../record_validations/common';
 import {

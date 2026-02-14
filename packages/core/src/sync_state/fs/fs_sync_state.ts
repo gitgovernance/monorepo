@@ -2,7 +2,7 @@ import type { IGitModule } from '../../git';
 import type { ConfigManager } from "../../config_manager";
 import type { IIdentityAdapter } from "../../adapters/identity_adapter";
 import type { ILintModule } from "../../lint";
-import type { IRecordProjector } from "../../record_projector";
+import type { IRecordProjector } from "../../record_projection";
 import { createLogger } from "../../logger/logger";
 import type { EmbeddedMetadataRecord, GitGovRecordPayload } from "../../record_types";
 import {

@@ -1,5 +1,5 @@
-import { MemoryProjectionSink } from './memory_projection_sink';
-import type { IndexData, ProjectionContext } from '../record_projector.types';
+import { MemoryRecordProjection } from './memory_record_projection';
+import type { IndexData, ProjectionContext } from '../record_projection.types';
 
 /**
  * Creates a minimal valid IndexData for testing.
@@ -44,14 +44,14 @@ function createMockIndexData(overrides: Partial<IndexData> = {}): IndexData {
   } as IndexData;
 }
 
-describe('MemoryProjectionSink', () => {
-  let sink: MemoryProjectionSink;
+describe('MemoryRecordProjection', () => {
+  let sink: MemoryRecordProjection;
 
   beforeEach(() => {
-    sink = new MemoryProjectionSink();
+    sink = new MemoryRecordProjection();
   });
 
-  describe('4.1. Core IProjectionSink Operations (EARS-A1 a A4)', () => {
+  describe('4.1. Core IRecordProjection Operations (EARS-A1 a A4)', () => {
     it('[EARS-A1] should store IndexData in Map by repoIdentifier', async () => {
       const data = createMockIndexData();
       const context: ProjectionContext = { repoIdentifier: 'repo-1' };
@@ -122,7 +122,7 @@ describe('MemoryProjectionSink', () => {
     });
   });
 
-  describe('4.2. MemoryProjectionSink-Specific Behavior (EARS-B1 a B2)', () => {
+  describe('4.2. MemoryRecordProjection-Specific Behavior (EARS-B1 a B2)', () => {
     it('[EARS-B1] should return true when data exists for context', async () => {
       const data = createMockIndexData();
       await sink.persist(data, { repoIdentifier: 'exists-repo' });

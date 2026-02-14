@@ -17,7 +17,7 @@ import type {
   DerivedStateSets,
   EnrichedTaskRecord,
   IndexData,
-  IProjectionSink,
+  IRecordProjection,
   ProjectionContext,
   RecordProjectorDependencies,
   IntegrityError,
@@ -25,20 +25,20 @@ import type {
   IntegrityReport,
   IndexGenerationReport,
   IRecordProjector,
-} from './record_projector.types';
+} from './record_projection.types';
 
 /**
  * RecordProjector - Backend-agnostic projection engine.
  *
- * Uses IProjectionSink driver pattern for output.
- * Caller chooses implementation: FsProjectionSink, MemoryProjectionSink, PrismaProjectionSink, etc.
+ * Uses IRecordProjection driver pattern for output.
+ * Caller chooses implementation: FsRecordProjection, MemoryRecordProjection, PrismaRecordProjection, etc.
  *
- * @see record_projector.md Section 2 - Architecture
+ * @see record_projection.md Section 2 - Architecture
  */
 export class RecordProjector implements IRecordProjector {
   private recordMetrics: RecordMetrics;
   private stores: Required<Pick<RecordStores, 'tasks' | 'cycles' | 'feedbacks' | 'executions' | 'changelogs' | 'actors'>>;
-  private sink: IProjectionSink | undefined;
+  private sink: IRecordProjection | undefined;
 
   constructor(dependencies: RecordProjectorDependencies) {
     this.recordMetrics = dependencies.recordMetrics;

@@ -11,9 +11,9 @@ export type {
   IntegrityReport,
   IndexGenerationReport,
   IRecordProjector,
-  IProjectionSink,
+  IRecordProjection,
   ProjectionContext,
-} from './record_projector.types';
+} from './record_projection.types';
 
 // Implementation
-export { RecordProjector } from './record_projector';
+export { RecordProjector } from './record_projection';

@@ -22,7 +22,7 @@ import type {
   LintRecordContext,
   RecordStores
 } from "./lint.types";
-import type { IRecordProjector } from "../record_projector";
+import type { IRecordProjector } from "../record_projection";
 import type {
   GitGovRecord,
   GitGovRecordPayload,

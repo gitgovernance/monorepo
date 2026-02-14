@@ -140,7 +140,7 @@ jest.doMock('@gitgov/core', () => {
     },
 
     // 🎭 MOCK RECORD_PROJECTOR: Separate namespace (moved from Adapters)
-    RecordProjector: {
+    RecordProjection: {
       RecordProjector: jest.fn().mockImplementation(() => ({
         generateIndex: jest.fn().mockResolvedValue({
           recordsProcessed: 146,
@@ -520,7 +520,7 @@ jest.doMock('@gitgov/core', () => {
 
 // Mock @gitgov/core/fs — standalone functions + filesystem classes
 jest.doMock('@gitgov/core/fs', () => ({
-  FsProjectionSink: jest.fn().mockImplementation(() => ({
+  FsRecordProjection: jest.fn().mockImplementation(() => ({
     persist: jest.fn().mockResolvedValue(undefined),
     read: jest.fn().mockResolvedValue(null),
     exists: jest.fn().mockResolvedValue(false),
@@ -636,7 +636,7 @@ import { DependencyInjectionService } from './dependency-injection';
 // Mocked module references (require once after doMock, use everywhere)
 const mockFs = require('fs');
 const corefs = require('@gitgov/core/fs');
-const { Git, Adapters, KeyProvider, EventBus, RecordProjector, RecordMetrics } = require('@gitgov/core');
+const { Git, Adapters, KeyProvider, EventBus, RecordProjection, RecordMetrics } = require('@gitgov/core');
 
 describe('DependencyInjectionService', () => {
   let diService: DependencyInjectionService;
@@ -918,7 +918,7 @@ describe('DependencyInjectionService', () => {
       mockFs.promises.access.mockResolvedValue(undefined);
 
       // Mock RecordProjector constructor to throw
-      RecordProjector.RecordProjector.mockImplementationOnce(() => {
+      RecordProjection.RecordProjector.mockImplementationOnce(() => {
         throw new Error('Connection failed');
       });
 
@@ -942,7 +942,7 @@ describe('DependencyInjectionService', () => {
       mockFs.promises.access.mockResolvedValue(undefined);
 
       // Mock RecordProjector to throw a string instead of Error
-      RecordProjector.RecordProjector.mockImplementationOnce(() => {
+      RecordProjection.RecordProjector.mockImplementationOnce(() => {
         throw 'String error instead of Error object';
       });
 

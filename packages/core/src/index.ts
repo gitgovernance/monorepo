@@ -29,11 +29,11 @@ export type {
   WorkflowRecord,
 } from "./record_types";
 
-// RecordProjector type exports (projection engine)
+// RecordProjection type exports (projection engine)
 export type {
   IRecordProjector,
   RecordProjectorDependencies,
-  IProjectionSink,
+  IRecordProjection,
   ProjectionContext,
   IndexData,
   IndexGenerationReport,
@@ -41,7 +41,7 @@ export type {
   EnrichedTaskRecord,
   AllRecords,
   DerivedStates,
-} from "./record_projector";
+} from "./record_projection";
 // RecordMetrics type exports (calculation engine)
 export type { IRecordMetrics, RecordMetricsDependencies, SystemStatus, ProductivityMetrics, CollaborationMetrics, TaskHealthReport } from "./record_metrics";
 export type { IIdentityAdapter } from "./adapters/identity_adapter";
@@ -105,7 +105,7 @@ export * as SourceAuditor from "./source_auditor";
 export * as Runner from "./agent_runner";
 
 // Renamed modules (promoted from adapters/)
-export * as RecordProjector from "./record_projector";
+export * as RecordProjection from "./record_projection";
 export * as RecordMetrics from "./record_metrics";
 
 // adapters

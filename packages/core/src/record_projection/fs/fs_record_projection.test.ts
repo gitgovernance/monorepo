@@ -1,8 +1,8 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
-import { FsProjectionSink } from './fs_projection_sink';
-import type { IndexData, ProjectionContext } from '../record_projector.types';
+import { FsRecordProjection } from './fs_record_projection';
+import type { IndexData, ProjectionContext } from '../record_projection.types';
 
 /**
  * Creates a minimal valid IndexData for testing.
@@ -47,21 +47,21 @@ function createMockIndexData(overrides: Partial<IndexData> = {}): IndexData {
   } as IndexData;
 }
 
-describe('FsProjectionSink', () => {
+describe('FsRecordProjection', () => {
   let tmpDir: string;
-  let sink: FsProjectionSink;
+  let sink: FsRecordProjection;
   const context: ProjectionContext = {};
 
   beforeEach(async () => {
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'fs-sink-test-'));
-    sink = new FsProjectionSink({ basePath: tmpDir });
+    sink = new FsRecordProjection({ basePath: tmpDir });
   });
 
   afterEach(async () => {
     await fs.rm(tmpDir, { recursive: true, force: true });
   });
 
-  describe('4.1. Core IProjectionSink Operations (EARS-A1 a A5)', () => {
+  describe('4.1. Core IRecordProjection Operations (EARS-A1 a A5)', () => {
     it('[EARS-A1] should write IndexData as JSON atomically', async () => {
       const data = createMockIndexData();
 
@@ -90,7 +90,7 @@ describe('FsProjectionSink', () => {
 
     it('[EARS-A2] should create directory recursively if missing', async () => {
       const nestedDir = path.join(tmpDir, 'deep', 'nested', '.gitgov');
-      const nestedSink = new FsProjectionSink({ basePath: nestedDir });
+      const nestedSink = new FsRecordProjection({ basePath: nestedDir });
       const data = createMockIndexData();
 
       await nestedSink.persist(data, context);
@@ -131,7 +131,7 @@ describe('FsProjectionSink', () => {
     });
   });
 
-  describe('4.2. FsProjectionSink-Specific Behavior (EARS-B1 a B3)', () => {
+  describe('4.2. FsRecordProjection-Specific Behavior (EARS-B1 a B3)', () => {
     it('[EARS-B1] should return true when index.json exists', async () => {
       const data = createMockIndexData();
       await sink.persist(data, context);

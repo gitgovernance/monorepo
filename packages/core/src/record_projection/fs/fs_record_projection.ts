@@ -1,21 +1,21 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import type { IProjectionSink, IndexData, ProjectionContext } from '../record_projector.types';
+import type { IRecordProjection, IndexData, ProjectionContext } from '../record_projection.types';
 
-export type FsProjectionSinkOptions = {
+export type FsRecordProjectionOptions = {
   basePath: string;
 };
 
 /**
- * FsProjectionSink - Filesystem IProjectionSink for CLI.
+ * FsRecordProjection - Filesystem IRecordProjection for CLI.
  *
  * Writes IndexData as JSON to .gitgov/index.json using atomic write
  * (write to temp file + rename) to prevent corruption on crash.
  */
-export class FsProjectionSink implements IProjectionSink {
+export class FsRecordProjection implements IRecordProjection {
   private readonly indexPath: string;
 
-  constructor(options: FsProjectionSinkOptions) {
+  constructor(options: FsRecordProjectionOptions) {
     this.indexPath = path.join(options.basePath, 'index.json');
   }
 

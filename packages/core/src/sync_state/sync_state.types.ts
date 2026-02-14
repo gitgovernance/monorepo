@@ -3,7 +3,7 @@ import type { ConfigManager } from "../config_manager";
 import type { IIdentityAdapter } from "../adapters/identity_adapter";
 import type { LintReport } from "../lint";
 import type { ILintModule } from "../lint";
-import type { IRecordProjector } from "../record_projector";
+import type { IRecordProjector } from "../record_projection";
 
 /**
  * SyncStateModule Dependencies
