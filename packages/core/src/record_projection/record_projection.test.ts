@@ -1007,7 +1007,7 @@ describe('RecordProjector', () => {
       }
     });
 
-    it('[EARS-E1] should calculate lastUpdated using file timestamps and related records', async () => {
+    it('[EARS-E1] should calculate lastUpdated using signature timestamps and related records', async () => {
       await recordProjector.generateIndex();
       const indexData = await recordProjector.getIndexData();
 
