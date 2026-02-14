@@ -51,7 +51,7 @@ export interface SyncAuditOptions extends SyncBaseOptions {
  * Architecture:
  * - CLI acts as presentation layer
  * - SyncStateModule handles all business logic (including indexation)
- * - No direct calls to IndexerAdapter (handled internally by SyncStateModule)
+ * - No direct calls to RecordProjector (handled internally by SyncStateModule)
  */
 export class SyncCommand extends BaseCommand {
 

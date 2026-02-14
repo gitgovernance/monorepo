@@ -19,7 +19,7 @@ import type {
 } from '../../event_bus';
 import type { ExecutionAdapter } from '../execution_adapter';
 import type { ChangelogAdapter } from '../changelog_adapter';
-import type { MetricsAdapter, SystemStatus, TaskHealthReport } from '../metrics_adapter';
+import type { RecordMetrics, SystemStatus, TaskHealthReport } from '../../record_metrics';
 
 /**
  * BacklogAdapter Dependencies - Facade + Dependency Injection Pattern
@@ -32,7 +32,7 @@ export type BacklogAdapterDependencies = {
   feedbackAdapter: FeedbackAdapter;
   executionAdapter: ExecutionAdapter;
   changelogAdapter: ChangelogAdapter;
-  metricsAdapter: MetricsAdapter;
+  metricsAdapter: RecordMetrics;
 
   // Business Rules Layer (Methodologies)
   workflowAdapter: IWorkflow;

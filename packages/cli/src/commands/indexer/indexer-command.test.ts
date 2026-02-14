@@ -17,8 +17,8 @@ jest.doMock('@gitgov/core', () => ({
     }))
   },
   Adapters: {
-    IIndexerAdapter: jest.fn(),
-    IndexerAdapter: jest.fn().mockImplementation(() => ({
+    IRecordProjector: jest.fn(),
+    RecordProjector: jest.fn().mockImplementation(() => ({
       generateIndex: jest.fn().mockResolvedValue({
         success: true,
         recordsProcessed: 10,
@@ -37,7 +37,7 @@ jest.doMock('@gitgov/core', () => ({
       }),
       invalidateCache: jest.fn().mockResolvedValue(undefined)
     })),
-    MetricsAdapter: jest.fn().mockImplementation(() => ({})),
+    RecordMetrics: jest.fn().mockImplementation(() => ({})),
     IdentityAdapter: jest.fn().mockImplementation(() => ({})),
     FeedbackAdapter: jest.fn().mockImplementation(() => ({})),
     ProjectAdapter: jest.fn().mockImplementation(() => ({})),
@@ -52,7 +52,7 @@ jest.doMock('@gitgov/core', () => ({
   }
 }));
 
-// Mock IndexerAdapter will be created inside the jest.mock factory
+// Mock RecordProjector will be created inside the jest.mock factory
 
 // Mock DependencyInjectionService to return our controllable mock
 jest.mock('../../services/dependency-injection', () => {
@@ -66,7 +66,7 @@ jest.mock('../../services/dependency-injection', () => {
   return {
     DependencyInjectionService: {
       getInstance: jest.fn().mockReturnValue({
-        getIndexerAdapter: jest.fn().mockResolvedValue(mockAdapter)
+        getRecordProjector: jest.fn().mockResolvedValue(mockAdapter)
       })
     }
   };
@@ -82,10 +82,10 @@ const mockProcessExit = jest.spyOn(process, 'exit').mockImplementation();
 
 // Get access to the mocked DependencyInjectionService
 const mockDI = jest.mocked(DependencyInjectionService);
-let mockGetIndexerAdapter: jest.MockedFunction<any>;
+let mockGetRecordProjector: jest.MockedFunction<any>;
 
 // Global reference to the mock adapter for easy access in tests
-let mockIndexerAdapter: any;
+let mockProjector: any;
 
 describe('IndexerCommand - Complete Unit Tests', () => {
   let indexerCommand: IndexerCommand;
@@ -99,11 +99,11 @@ describe('IndexerCommand - Complete Unit Tests', () => {
 
     // Get the mocked adapter from DI
     const diInstance = mockDI.getInstance();
-    mockGetIndexerAdapter = diInstance.getIndexerAdapter as jest.MockedFunction<any>;
+    mockGetRecordProjector = diInstance.getRecordProjector as jest.MockedFunction<any>;
 
     // Set up default successful responses
-    mockIndexerAdapter = await mockGetIndexerAdapter();
-    mockIndexerAdapter.generateIndex.mockResolvedValue({
+    mockProjector = await mockGetRecordProjector();
+    mockProjector.generateIndex.mockResolvedValue({
       success: true,
       recordsProcessed: 10,
       metricsCalculated: 5,
@@ -117,7 +117,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
       }
     });
 
-    mockIndexerAdapter.validateIntegrity.mockResolvedValue({
+    mockProjector.validateIntegrity.mockResolvedValue({
       status: 'valid',
       recordsScanned: 10,
       errorsFound: [],
@@ -127,7 +127,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
       validationTime: 150
     });
 
-    mockIndexerAdapter.invalidateCache.mockResolvedValue(undefined);
+    mockProjector.invalidateCache.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -154,11 +154,11 @@ describe('IndexerCommand - Complete Unit Tests', () => {
         }
       };
 
-      mockIndexerAdapter.generateIndex.mockResolvedValue(mockReport);
+      mockProjector.generateIndex.mockResolvedValue(mockReport);
 
       await indexerCommand.execute({});
 
-      expect(mockIndexerAdapter.generateIndex).toHaveBeenCalledTimes(1);
+      expect(mockProjector.generateIndex).toHaveBeenCalledTimes(1);
       expect(mockConsoleLog).toHaveBeenCalledWith("🔄 Generating index...");
       expect(mockConsoleLog).toHaveBeenCalledWith("✅ Index generated successfully!");
       expect(mockConsoleLog).toHaveBeenCalledWith("📊 Records processed: 10");
@@ -176,12 +176,12 @@ describe('IndexerCommand - Complete Unit Tests', () => {
         signatureFailures: 0
       };
 
-      mockIndexerAdapter.validateIntegrity.mockResolvedValue(mockReport);
+      mockProjector.validateIntegrity.mockResolvedValue(mockReport);
 
       await indexerCommand.execute({ validateOnly: true });
 
-      expect(mockIndexerAdapter.validateIntegrity).toHaveBeenCalledTimes(1);
-      expect(mockIndexerAdapter.generateIndex).not.toHaveBeenCalled();
+      expect(mockProjector.validateIntegrity).toHaveBeenCalledTimes(1);
+      expect(mockProjector.generateIndex).not.toHaveBeenCalled();
       expect(mockConsoleLog).toHaveBeenCalledWith("🔍 Validating cache integrity...");
       expect(mockConsoleLog).toHaveBeenCalledWith("✅ Integrity check: VALID");
     });
@@ -202,13 +202,13 @@ describe('IndexerCommand - Complete Unit Tests', () => {
         }
       };
 
-      mockIndexerAdapter.invalidateCache.mockResolvedValue();
-      mockIndexerAdapter.generateIndex.mockResolvedValue(mockReport);
+      mockProjector.invalidateCache.mockResolvedValue();
+      mockProjector.generateIndex.mockResolvedValue(mockReport);
 
       await indexerCommand.execute({ force: true });
 
-      expect(mockIndexerAdapter.invalidateCache).toHaveBeenCalledTimes(1);
-      expect(mockIndexerAdapter.generateIndex).toHaveBeenCalledTimes(1);
+      expect(mockProjector.invalidateCache).toHaveBeenCalledTimes(1);
+      expect(mockProjector.generateIndex).toHaveBeenCalledTimes(1);
       expect(mockConsoleLog).toHaveBeenCalledWith("🗑️  Invalidating existing cache...");
       expect(mockConsoleLog).toHaveBeenCalledWith("🔄 Generating fresh index...");
     });
@@ -231,11 +231,11 @@ describe('IndexerCommand - Complete Unit Tests', () => {
         }
       };
 
-      mockIndexerAdapter.generateIndex.mockResolvedValue(mockReport);
+      mockProjector.generateIndex.mockResolvedValue(mockReport);
 
       await indexerCommand.execute({ json: true });
 
-      expect(mockIndexerAdapter.generateIndex).toHaveBeenCalledTimes(1);
+      expect(mockProjector.generateIndex).toHaveBeenCalledTimes(1);
 
       // Verify JSON output was logged
       const jsonOutput = mockConsoleLog.mock.calls.find(call =>
@@ -265,7 +265,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
         signatureFailures: 0
       };
 
-      mockIndexerAdapter.validateIntegrity.mockResolvedValue(mockReport);
+      mockProjector.validateIntegrity.mockResolvedValue(mockReport);
 
       await indexerCommand.execute({ validateOnly: true, json: true });
 
@@ -281,19 +281,19 @@ describe('IndexerCommand - Complete Unit Tests', () => {
   });
 
   describe('Error Handling & Graceful Degradation (EARS-A5)', () => {
-    it('[EARS-A5] should handle IndexerAdapter errors gracefully', async () => {
-      const error = new Error('IndexerAdapter connection failed');
-      mockIndexerAdapter.generateIndex.mockRejectedValue(error);
+    it('[EARS-A5] should handle RecordProjector errors gracefully', async () => {
+      const error = new Error('RecordProjector connection failed');
+      mockProjector.generateIndex.mockRejectedValue(error);
 
       await indexerCommand.execute({});
 
-      expect(mockConsoleError).toHaveBeenCalledWith("❌ Indexer operation failed: IndexerAdapter connection failed");
+      expect(mockConsoleError).toHaveBeenCalledWith("❌ Indexer operation failed: RecordProjector connection failed");
       expect(mockProcessExit).toHaveBeenCalledWith(1);
     });
 
     it('[EARS-A5] should handle specific error types with user-friendly messages', async () => {
       const error = new Error('ProjectRootError: .gitgov directory not found');
-      mockIndexerAdapter.generateIndex.mockRejectedValue(error);
+      mockProjector.generateIndex.mockRejectedValue(error);
 
       await indexerCommand.execute({});
 
@@ -303,7 +303,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
 
     it('[EARS-A5] should handle permission errors appropriately', async () => {
       const error = new Error('PermissionError: Cannot write to cache file');
-      mockIndexerAdapter.generateIndex.mockRejectedValue(error);
+      mockProjector.generateIndex.mockRejectedValue(error);
 
       await indexerCommand.execute({});
 
@@ -313,7 +313,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
 
     it('[EARS-A5] should handle corrupted cache errors with recovery suggestion', async () => {
       const error = new Error('CorruptedCacheError: Invalid cache format');
-      mockIndexerAdapter.generateIndex.mockRejectedValue(error);
+      mockProjector.generateIndex.mockRejectedValue(error);
 
       await indexerCommand.execute({});
 
@@ -339,7 +339,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
         }
       };
 
-      mockIndexerAdapter.generateIndex.mockResolvedValue(mockReport);
+      mockProjector.generateIndex.mockResolvedValue(mockReport);
 
       await indexerCommand.execute({ verbose: true });
 
@@ -365,7 +365,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
         }
       };
 
-      mockIndexerAdapter.generateIndex.mockResolvedValue(mockReport);
+      mockProjector.generateIndex.mockResolvedValue(mockReport);
 
       await indexerCommand.execute({ quiet: true });
 
@@ -385,7 +385,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
         signatureFailures: 0
       };
 
-      mockIndexerAdapter.validateIntegrity.mockResolvedValue(mockReport);
+      mockProjector.validateIntegrity.mockResolvedValue(mockReport);
 
       await indexerCommand.execute({ validateOnly: true, quiet: true });
 
@@ -430,7 +430,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
         }
       };
 
-      mockIndexerAdapter.generateIndex.mockResolvedValue(mockReport);
+      mockProjector.generateIndex.mockResolvedValue(mockReport);
 
       await indexerCommand.execute({});
 
@@ -457,7 +457,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
         }
       };
 
-      mockIndexerAdapter.generateIndex.mockResolvedValue(mockReport);
+      mockProjector.generateIndex.mockResolvedValue(mockReport);
 
       await indexerCommand.execute({});
 
@@ -492,7 +492,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
         signatureFailures: 0
       };
 
-      mockIndexerAdapter.validateIntegrity.mockResolvedValue(mockReport);
+      mockProjector.validateIntegrity.mockResolvedValue(mockReport);
 
       await indexerCommand.execute({ validateOnly: true });
 
@@ -504,19 +504,19 @@ describe('IndexerCommand - Complete Unit Tests', () => {
       expect(mockConsoleLog).toHaveBeenCalledWith("🔍 Checksum failures: 1");
     });
 
-    it('[EARS-C1] should handle missing IndexerAdapter configuration', async () => {
-      const error = new Error('IndexerAdapter not configured properly');
-      mockIndexerAdapter.generateIndex.mockRejectedValue(error);
+    it('[EARS-C1] should handle missing RecordProjector configuration', async () => {
+      const error = new Error('RecordProjector not configured properly');
+      mockProjector.generateIndex.mockRejectedValue(error);
 
       await indexerCommand.execute({});
 
-      expect(mockConsoleError).toHaveBeenCalledWith("❌ Indexer operation failed: IndexerAdapter not configured properly");
+      expect(mockConsoleError).toHaveBeenCalledWith("❌ Indexer operation failed: RecordProjector not configured properly");
       expect(mockProcessExit).toHaveBeenCalledWith(1);
     });
 
     it('[EARS-C2] should suggest gitgov init when gitgov directory missing', async () => {
       const error = new Error('ProjectRootError: .gitgov directory not found');
-      mockIndexerAdapter.validateIntegrity.mockRejectedValue(error);
+      mockProjector.validateIntegrity.mockRejectedValue(error);
 
       await indexerCommand.execute({ validateOnly: true });
 
@@ -555,7 +555,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
         }
       };
 
-      mockIndexerAdapter.generateIndex.mockResolvedValue(mockReport);
+      mockProjector.generateIndex.mockResolvedValue(mockReport);
 
       const startTime = Date.now();
       await indexerCommand.execute({});
@@ -582,7 +582,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
         }
       };
 
-      mockIndexerAdapter.generateIndex.mockResolvedValue(mockReport);
+      mockProjector.generateIndex.mockResolvedValue(mockReport);
 
       await indexerCommand.execute({ verbose: true });
 
@@ -595,7 +595,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
 
     it('[EARS-D3] should format errors as JSON with json flag', async () => {
       const error = new Error('Test indexer error');
-      mockIndexerAdapter.generateIndex.mockRejectedValue(error);
+      mockProjector.generateIndex.mockRejectedValue(error);
 
       await indexerCommand.execute({ json: true });
 
@@ -625,7 +625,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
         }
       };
 
-      mockIndexerAdapter.generateIndex.mockResolvedValue(mockReport);
+      mockProjector.generateIndex.mockResolvedValue(mockReport);
 
       await indexerCommand.execute({});
 
@@ -647,7 +647,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
         }
       };
 
-      mockIndexerAdapter.generateIndex.mockResolvedValue(mockReport);
+      mockProjector.generateIndex.mockResolvedValue(mockReport);
 
       await indexerCommand.execute({});
 
@@ -657,7 +657,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
 
     it('[EARS-D6] should handle non-Error types gracefully with generic message', async () => {
       const nonErrorObject = 'String error instead of Error object';
-      mockIndexerAdapter.generateIndex.mockRejectedValue(nonErrorObject);
+      mockProjector.generateIndex.mockRejectedValue(nonErrorObject);
 
       await indexerCommand.execute({});
 
@@ -684,7 +684,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
         }
       };
 
-      mockIndexerAdapter.generateIndex.mockResolvedValue(mockReport);
+      mockProjector.generateIndex.mockResolvedValue(mockReport);
 
       await indexerCommand.execute({});
 
@@ -718,7 +718,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
         signatureFailures: 0
       };
 
-      mockIndexerAdapter.validateIntegrity.mockResolvedValue(mockReport);
+      mockProjector.validateIntegrity.mockResolvedValue(mockReport);
 
       await indexerCommand.execute({ validateOnly: true });
 
@@ -746,7 +746,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
         signatureFailures: 2
       };
 
-      mockIndexerAdapter.validateIntegrity.mockResolvedValue(mockReport);
+      mockProjector.validateIntegrity.mockResolvedValue(mockReport);
 
       await indexerCommand.execute({ validateOnly: true });
 
@@ -757,8 +757,8 @@ describe('IndexerCommand - Complete Unit Tests', () => {
 
     it('[EARS-E4] should show stack trace in verbose error mode for troubleshooting', async () => {
       const error = new Error('Complex indexer error');
-      error.stack = 'Error: Complex indexer error\n    at IndexerAdapter.generateIndex\n    at async IndexerCommand.execute';
-      mockIndexerAdapter.generateIndex.mockRejectedValue(error);
+      error.stack = 'Error: Complex indexer error\n    at RecordProjector.generateIndex\n    at async IndexerCommand.execute';
+      mockProjector.generateIndex.mockRejectedValue(error);
 
       await indexerCommand.execute({ verbose: true });
 
@@ -770,7 +770,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
   describe('Helper Methods and Edge Cases', () => {
     it('should handle unknown error types', async () => {
       const error = 'Unknown string error';
-      mockIndexerAdapter.generateIndex.mockRejectedValue(error);
+      mockProjector.generateIndex.mockRejectedValue(error);
 
       await indexerCommand.execute({});
 
@@ -781,7 +781,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
     it('should show technical details in verbose error mode', async () => {
       const error = new Error('Detailed error message');
       error.stack = 'Error stack trace here';
-      mockIndexerAdapter.generateIndex.mockRejectedValue(error);
+      mockProjector.generateIndex.mockRejectedValue(error);
 
       await indexerCommand.execute({ verbose: true });
 
@@ -790,7 +790,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
 
     it('should format JSON error output', async () => {
       const error = new Error('Test error');
-      mockIndexerAdapter.generateIndex.mockRejectedValue(error);
+      mockProjector.generateIndex.mockRejectedValue(error);
 
       await indexerCommand.execute({ json: true });
 

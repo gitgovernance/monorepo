@@ -1,27 +1,12 @@
-import type { RecordStores } from '../../record_store';
-import type { TaskRecord, FeedbackRecord, ExecutionRecord, ActorRecord } from '../../record_types';
+import type { RecordStores } from '../record_store';
+import type { TaskRecord, FeedbackRecord, ExecutionRecord, ActorRecord } from '../record_types';
 
 /**
- * MetricsAdapter Dependencies - Facade + Dependency Injection Pattern
+ * RecordMetrics Dependencies - Facade + Dependency Injection Pattern
  */
-export type MetricsAdapterDependencies = {
+export type RecordMetricsDependencies = {
   // Data Layer (Read-Only)
   stores: Required<Pick<RecordStores, 'tasks' | 'cycles' | 'feedbacks' | 'executions' | 'actors'>>;
-
-  // Optional: Platform API for Premium metrics (Tier 4)
-  platformApi?: IPlatformApi;
-}
-
-// Platform API interface (Tier 4 - Future)
-export interface IPlatformApi {
-  getTokenConsumption(timeframe: string): Promise<TokenConsumption[]>;
-}
-
-export type TokenConsumption = {
-  agentId: string;
-  tokens: number;
-  cost: number;
-  timestamp: number;
 }
 
 // Return types specific to the adapter
@@ -46,7 +31,7 @@ export type SystemStatus = {
 export type TaskHealthReport = {
   taskId: string;
   healthScore: number; // 0-100
-  timeInCurrentStage: number; // días
+  timeInCurrentStage: number; // days
   stalenessIndex: number; // 0-10
   blockingFeedbacks: number;
   lastActivity: number; // timestamp
@@ -54,11 +39,11 @@ export type TaskHealthReport = {
 };
 
 export type ProductivityMetrics = {
-  throughput: number; // tareas/semana
-  leadTime: number; // días promedio
-  cycleTime: number; // días promedio
+  throughput: number; // tasks/week
+  leadTime: number; // average days
+  cycleTime: number; // average days
   tasksCompleted7d: number; // count
-  averageCompletionTime: number; // días
+  averageCompletionTime: number; // days
 };
 
 export type CollaborationMetrics = {
@@ -70,9 +55,9 @@ export type CollaborationMetrics = {
 };
 
 /**
- * MetricsAdapter Interface - The System Analyst
+ * RecordMetrics Interface - The System Analyst
  */
-export interface IMetricsAdapter {
+export interface IRecordMetrics {
   // Public API methods
   getSystemStatus(): Promise<SystemStatus>;
   getTaskHealth(taskId: string): Promise<TaskHealthReport>;

@@ -74,7 +74,7 @@ import { createEmbeddedMetadataRecord } from "../../record_factories/embedded_me
 import type { IIdentityAdapter } from "../../adapters/identity_adapter";
 import type { LintReport, LintResult, LintSummary } from "../../lint";
 import type { ILintModule } from "../../lint";
-import type { IIndexerAdapter } from "../../adapters/indexer_adapter";
+import type { IRecordProjector } from "../../record_projector";
 
 const execAsync = promisify(exec);
 
@@ -118,9 +118,9 @@ function createMockLintModule(): ILintModule {
 }
 
 /**
- * Test Helper: Creates a default mock IndexerAdapter
+ * Test Helper: Creates a default mock RecordProjector
  */
-function createMockIndexerAdapter(): jest.Mocked<IIndexerAdapter> {
+function createMockRecordProjector(): jest.Mocked<IRecordProjector> {
   return {
     generateIndex: jest.fn().mockResolvedValue({
       success: true,
@@ -133,7 +133,7 @@ function createMockIndexerAdapter(): jest.Mocked<IIndexerAdapter> {
     isIndexUpToDate: jest.fn().mockResolvedValue(true),
     invalidateCache: jest.fn().mockResolvedValue(undefined),
     calculateActivityHistory: jest.fn().mockResolvedValue([]),
-  } as unknown as jest.Mocked<IIndexerAdapter>;
+  } as unknown as jest.Mocked<IRecordProjector>;
 }
 
 /**
@@ -304,7 +304,7 @@ describe("FsSyncStateModule", () => {
   let remoteRepoPath: string;
   let git: LocalGitModule;
   let config: ConfigManager;
-  let mockIndexer: jest.Mocked<IIndexerAdapter>;
+  let mockIndexer: jest.Mocked<IRecordProjector>;
   let syncModule: FsSyncStateModule;
 
   beforeEach(async () => {
@@ -328,7 +328,7 @@ describe("FsSyncStateModule", () => {
     });
 
     config = createConfigManager(repoPath);
-    mockIndexer = createMockIndexerAdapter();
+    mockIndexer = createMockRecordProjector();
     syncModule = new FsSyncStateModule({
       git,
       config,
@@ -1165,7 +1165,7 @@ describe("FsSyncStateModule", () => {
       await execAsync('git commit -m "Local change"', { cwd: repoPath });
 
       // Track indexer calls before push
-      const indexerMock = createMockIndexerAdapter();
+      const indexerMock = createMockRecordProjector();
       const indexerSpy = jest.spyOn(indexerMock, 'generateIndex');
 
       // Create FsSyncStateModule with spied indexer
@@ -1404,7 +1404,7 @@ describe("FsSyncStateModule", () => {
       await execAsync('git commit -m "Minor local update"', { cwd: repoPath });
 
       // Create FsSyncStateModule with spied indexer
-      const indexerMock = createMockIndexerAdapter();
+      const indexerMock = createMockRecordProjector();
       const indexerSpy = jest.spyOn(indexerMock, 'generateIndex');
 
       const spiedModule = new FsSyncStateModule({
@@ -1688,7 +1688,7 @@ describe("FsSyncStateModule", () => {
           config: noRemoteConfig,
           identity: createMockIdentityAdapter(),
           lint: createMockLintModule(),
-          indexer: createMockIndexerAdapter(),
+          indexer: createMockRecordProjector(),
         });
 
         // Execute: Try to push without remote configured
@@ -1750,7 +1750,7 @@ describe("FsSyncStateModule", () => {
           config: emptyConfig,
           identity: createMockIdentityAdapter(),
           lint: createMockLintModule(),
-          indexer: createMockIndexerAdapter(),
+          indexer: createMockRecordProjector(),
         });
 
         // Execute: Try to push from branch with no commits
@@ -1862,7 +1862,7 @@ describe("FsSyncStateModule", () => {
           config: noRemoteConfig,
           identity: createMockIdentityAdapter(),
           lint: createMockLintModule(),
-          indexer: createMockIndexerAdapter(),
+          indexer: createMockRecordProjector(),
         });
 
         // Execute: Try to pull without remote configured
@@ -1965,7 +1965,7 @@ describe("FsSyncStateModule", () => {
           config: noRemoteConfig,
           identity: createMockIdentityAdapter(),
           lint: createMockLintModule(),
-          indexer: createMockIndexerAdapter(),
+          indexer: createMockRecordProjector(),
         });
 
         // Execute: Try to pull without remote configured
@@ -2047,7 +2047,7 @@ describe("FsSyncStateModule", () => {
           config: localOnlyConfig,
           identity: createMockIdentityAdapter(),
           lint: createMockLintModule(),
-          indexer: createMockIndexerAdapter(),
+          indexer: createMockRecordProjector(),
         });
 
         // Execute: Pull when local exists but remote doesn't
@@ -2113,7 +2113,7 @@ describe("FsSyncStateModule", () => {
           config: freshConfig,
           identity: createMockIdentityAdapter(),
           lint: createMockLintModule(),
-          indexer: createMockIndexerAdapter(),
+          indexer: createMockRecordProjector(),
         });
 
         // Execute: Try to pull when gitgov-state doesn't exist anywhere
@@ -2523,7 +2523,7 @@ describe("FsSyncStateModule", () => {
         config,
         identity: mockIdentityAdapter as IIdentityAdapter,
         lint: createMockLintModule(),
-        indexer: createMockIndexerAdapter(),
+        indexer: createMockRecordProjector(),
       });
 
       // ========== CREATE REAL GIT CONFLICT ==========
@@ -2728,7 +2728,7 @@ describe("FsSyncStateModule", () => {
         config,
         identity: mockIdentityAdapter as IIdentityAdapter,
         lint: createMockLintModule(),
-        indexer: createMockIndexerAdapter(),
+        indexer: createMockRecordProjector(),
       });
 
       // Create simple conflict (non-.gitgov file)
@@ -2798,7 +2798,7 @@ describe("FsSyncStateModule", () => {
         config,
         identity: mockIdentityAdapter as IIdentityAdapter,
         lint: createMockLintModule(),
-        indexer: createMockIndexerAdapter(),
+        indexer: createMockRecordProjector(),
       });
 
       // Create conflict with INVALID JSON
@@ -2886,7 +2886,7 @@ describe("FsSyncStateModule", () => {
         config,
         identity: mockIdentityAdapter as IIdentityAdapter,
         lint: createMockLintModule(),
-        indexer: createMockIndexerAdapter(),
+        indexer: createMockRecordProjector(),
       });
 
       // Create TWO conflicting tasks
@@ -3007,7 +3007,7 @@ describe("FsSyncStateModule", () => {
         config,
         identity: mockIdentityAdapter as IIdentityAdapter,
         lint: createMockLintModule(),
-        indexer: createMockIndexerAdapter(),
+        indexer: createMockRecordProjector(),
       });
 
       // Create conflict with legacy format (no embedded metadata)
@@ -3104,7 +3104,7 @@ describe("FsSyncStateModule", () => {
         config,
         identity: mockIdentityAdapter as IIdentityAdapter,
         lint: createMockLintModule(),
-        indexer: createMockIndexerAdapter(),
+        indexer: createMockRecordProjector(),
       });
 
       // Create TWO files: one valid, one invalid
@@ -3203,7 +3203,7 @@ describe("FsSyncStateModule", () => {
         config,
         identity: mockIdentityAdapter as IIdentityAdapter,
         lint: createMockLintModule(),
-        indexer: createMockIndexerAdapter(),
+        indexer: createMockRecordProjector(),
       });
 
       // Create conflict in .gitkeep (common in empty .gitgov dirs)
@@ -3292,7 +3292,7 @@ describe("FsSyncStateModule", () => {
         config,
         identity: mockIdentityAdapter as IIdentityAdapter,
         lint: createMockLintModule(),
-        indexer: createMockIndexerAdapter(),
+        indexer: createMockRecordProjector(),
       });
 
       // Create task with MISSING payloadChecksum
@@ -3586,7 +3586,7 @@ describe("FsSyncStateModule", () => {
         config,
         identity: mockIdentityAdapter as IIdentityAdapter,
         lint: createMockLintModule(),
-        indexer: createMockIndexerAdapter(),
+        indexer: createMockRecordProjector(),
       });
 
       // Step 1: Setup initial task
@@ -3827,7 +3827,7 @@ describe("FsSyncStateModule", () => {
         config,
         identity: createMockIdentityAdapter(),
         lint: mockLintModule,
-        indexer: createMockIndexerAdapter(),
+        indexer: createMockRecordProjector(),
       });
 
       // Setup: Create Task payloads using factory
@@ -3933,7 +3933,7 @@ describe("FsSyncStateModule", () => {
         config,
         identity: createMockIdentityAdapter(),
         lint: mockLintModule,
-        indexer: createMockIndexerAdapter(),
+        indexer: createMockRecordProjector(),
       });
 
       // Execute audit with checksum verification
@@ -3977,7 +3977,7 @@ describe("FsSyncStateModule", () => {
         config,
         identity: createMockIdentityAdapter(),
         lint: mockLintModule,
-        indexer: createMockIndexerAdapter(),
+        indexer: createMockRecordProjector(),
       });
 
       // Create a valid ActorRecord payload

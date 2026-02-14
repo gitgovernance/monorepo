@@ -3,7 +3,7 @@ import type { ConfigManager } from "../config_manager";
 import type { IIdentityAdapter } from "../adapters/identity_adapter";
 import type { LintReport } from "../lint";
 import type { ILintModule } from "../lint";
-import type { IIndexerAdapter } from "../adapters/indexer_adapter";
+import type { IRecordProjector } from "../record_projector";
 
 /**
  * SyncStateModule Dependencies
@@ -17,8 +17,8 @@ export type SyncStateModuleDependencies = {
   identity: IIdentityAdapter;
   /** Lint module for record validation (required) */
   lint: ILintModule;
-  /** Indexer adapter for automatic re-indexing after pull/resolve (required) */
-  indexer: IIndexerAdapter;
+  /** Record projector for automatic re-indexing after pull/resolve (required) */
+  indexer: IRecordProjector;
 }
 
 /**

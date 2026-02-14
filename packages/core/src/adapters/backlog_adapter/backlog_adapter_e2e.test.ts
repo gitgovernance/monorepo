@@ -13,7 +13,7 @@ import type { RecordStore } from '../../record_store';
 import { FeedbackAdapter } from '../feedback_adapter';
 import { ExecutionAdapter } from '../execution_adapter';
 import { ChangelogAdapter } from '../changelog_adapter';
-import { MetricsAdapter } from '../metrics_adapter';
+import { RecordMetrics } from '../../record_metrics';
 import { ConfigManager } from '../../config_manager';
 import type { SessionManager } from '../../session_manager';
 import { WorkflowAdapter } from '../workflow_adapter';
@@ -100,7 +100,7 @@ describe('BacklogAdapter - End-to-End Tests', () => {
           }),
           getProductivityMetrics: jest.fn(),
           getCollaborationMetrics: jest.fn()
-        } as unknown as MetricsAdapter,
+        } as unknown as RecordMetrics,
         workflowAdapter: {
           getTransitionRule: jest.fn(),
           validateSignature: jest.fn(),

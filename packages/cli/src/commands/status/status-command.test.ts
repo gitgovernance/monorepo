@@ -3,17 +3,17 @@ jest.doMock('@gitgov/core', () => ({
   Adapters: {
     BacklogAdapter: jest.fn().mockImplementation(() => ({})),
     IdentityAdapter: jest.fn().mockImplementation(() => ({})),
-    MetricsAdapter: jest.fn().mockImplementation(() => ({}))
+    RecordMetrics: jest.fn().mockImplementation(() => ({}))
   },
   Factories: {
-    createMetricsAdapter: jest.fn(),
+    createRecordMetrics: jest.fn(),
     createActorRecord: jest.fn().mockImplementation((data) => Promise.resolve(data)),
     createTaskRecord: jest.fn().mockImplementation((data) => Promise.resolve(data)),
     createCycleRecord: jest.fn().mockImplementation((data) => Promise.resolve(data)),
     createFeedbackRecord: jest.fn().mockImplementation((data) => Promise.resolve(data))
   },
   Records: {},
-  MetricsAdapter: jest.fn().mockImplementation(() => ({}))
+  RecordMetrics: jest.fn().mockImplementation(() => ({}))
 }));
 
 // Mock DependencyInjectionService before importing
@@ -43,13 +43,13 @@ describe('StatusCommand - Complete Unit Tests', () => {
   let mockFeedbackAdapter: {
     getAllFeedback: jest.MockedFunction<() => Promise<FeedbackRecord[]>>;
   };
-  let mockMetricsAdapter: {
+  let mockRecordMetrics: {
     getSystemStatus: jest.MockedFunction<() => Promise<SystemStatus>>;
     getProductivityMetrics: jest.MockedFunction<() => Promise<ProductivityMetrics>>;
     getCollaborationMetrics: jest.MockedFunction<() => Promise<CollaborationMetrics>>;
     getTaskHealth: jest.MockedFunction<(taskId: string) => Promise<TaskHealthReport>>;
   };
-  let mockIndexerAdapter: {
+  let mockProjector: {
     isIndexUpToDate: jest.MockedFunction<() => Promise<boolean>>;
     generateIndex: jest.MockedFunction<() => Promise<void>>;
   };
@@ -59,8 +59,8 @@ describe('StatusCommand - Complete Unit Tests', () => {
   let mockDependencyService: {
     getBacklogAdapter: jest.MockedFunction<() => Promise<typeof mockBacklogAdapter>>;
     getFeedbackAdapter: jest.MockedFunction<() => Promise<typeof mockFeedbackAdapter>>;
-    getMetricsAdapter: jest.MockedFunction<() => Promise<typeof mockMetricsAdapter>>;
-    getIndexerAdapter: jest.MockedFunction<() => Promise<typeof mockIndexerAdapter>>;
+    getRecordMetrics: jest.MockedFunction<() => Promise<typeof mockRecordMetrics>>;
+    getRecordProjector: jest.MockedFunction<() => Promise<typeof mockProjector>>;
     getIdentityAdapter: jest.MockedFunction<() => Promise<typeof mockIdentityAdapter>>;
   };
 
@@ -157,14 +157,14 @@ describe('StatusCommand - Complete Unit Tests', () => {
       getAllFeedback: jest.fn()
     };
 
-    mockMetricsAdapter = {
+    mockRecordMetrics = {
       getSystemStatus: jest.fn(),
       getProductivityMetrics: jest.fn(),
       getCollaborationMetrics: jest.fn(),
       getTaskHealth: jest.fn()
     };
 
-    mockIndexerAdapter = {
+    mockProjector = {
       isIndexUpToDate: jest.fn(),
       generateIndex: jest.fn()
     };
@@ -177,8 +177,8 @@ describe('StatusCommand - Complete Unit Tests', () => {
     mockDependencyService = {
       getBacklogAdapter: jest.fn().mockResolvedValue(mockBacklogAdapter),
       getFeedbackAdapter: jest.fn().mockResolvedValue(mockFeedbackAdapter),
-      getMetricsAdapter: jest.fn().mockResolvedValue(mockMetricsAdapter),
-      getIndexerAdapter: jest.fn().mockResolvedValue(mockIndexerAdapter),
+      getRecordMetrics: jest.fn().mockResolvedValue(mockRecordMetrics),
+      getRecordProjector: jest.fn().mockResolvedValue(mockProjector),
       getIdentityAdapter: jest.fn().mockResolvedValue(mockIdentityAdapter)
     };
 
@@ -194,10 +194,10 @@ describe('StatusCommand - Complete Unit Tests', () => {
     mockBacklogAdapter.getAllTasks.mockResolvedValue([sampleTask]);
     mockBacklogAdapter.getAllCycles.mockResolvedValue([sampleCycle]);
     mockFeedbackAdapter.getAllFeedback.mockResolvedValue([sampleFeedback]);
-    mockMetricsAdapter.getSystemStatus.mockResolvedValue(sampleSystemStatus);
-    mockMetricsAdapter.getProductivityMetrics.mockResolvedValue(sampleProductivityMetrics);
-    mockMetricsAdapter.getCollaborationMetrics.mockResolvedValue(sampleCollaborationMetrics);
-    mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(true);
+    mockRecordMetrics.getSystemStatus.mockResolvedValue(sampleSystemStatus);
+    mockRecordMetrics.getProductivityMetrics.mockResolvedValue(sampleProductivityMetrics);
+    mockRecordMetrics.getCollaborationMetrics.mockResolvedValue(sampleCollaborationMetrics);
+    mockProjector.isIndexUpToDate.mockResolvedValue(true);
   });
 
   afterEach(() => {
@@ -244,7 +244,7 @@ describe('StatusCommand - Complete Unit Tests', () => {
     it('[EARS-3] should show productivity metrics with --health flag', async () => {
       await statusCommand.execute({ all: true, health: true });
 
-      expect(mockMetricsAdapter.getProductivityMetrics).toHaveBeenCalled();
+      expect(mockRecordMetrics.getProductivityMetrics).toHaveBeenCalled();
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('📈 Productivity Metrics:'));
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('Throughput: 10 tasks/week'));
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('Lead Time: 5.5 days'));
@@ -253,7 +253,7 @@ describe('StatusCommand - Complete Unit Tests', () => {
     it('[EARS-4] should show collaboration metrics with --team flag', async () => {
       await statusCommand.execute({ all: true, team: true });
 
-      expect(mockMetricsAdapter.getCollaborationMetrics).toHaveBeenCalled();
+      expect(mockRecordMetrics.getCollaborationMetrics).toHaveBeenCalled();
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('🤖 Collaboration Metrics:'));
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('Active Agents: 2/5'));
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('Agent Utilization: 40.0%'));
@@ -262,8 +262,8 @@ describe('StatusCommand - Complete Unit Tests', () => {
     it('[EARS-5] should show all metrics with --verbose flag', async () => {
       await statusCommand.execute({ all: true, verbose: true });
 
-      expect(mockMetricsAdapter.getProductivityMetrics).toHaveBeenCalled();
-      expect(mockMetricsAdapter.getCollaborationMetrics).toHaveBeenCalled();
+      expect(mockRecordMetrics.getProductivityMetrics).toHaveBeenCalled();
+      expect(mockRecordMetrics.getCollaborationMetrics).toHaveBeenCalled();
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('📈 Productivity Metrics:'));
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('🤖 Collaboration Metrics:'));
     });
@@ -271,29 +271,29 @@ describe('StatusCommand - Complete Unit Tests', () => {
 
   describe('Auto-Indexation Strategy (EARS 6-8)', () => {
     it('[EARS-6] should update cache when index is outdated', async () => {
-      mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(false);
+      mockProjector.isIndexUpToDate.mockResolvedValue(false);
 
       await statusCommand.execute({});
 
-      expect(mockIndexerAdapter.isIndexUpToDate).toHaveBeenCalled();
-      expect(mockIndexerAdapter.generateIndex).toHaveBeenCalled();
+      expect(mockProjector.isIndexUpToDate).toHaveBeenCalled();
+      expect(mockProjector.generateIndex).toHaveBeenCalled();
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('🔄 Updating cache'));
     });
 
     it('[EARS-7] should skip cache update when index is up to date', async () => {
-      mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(true);
+      mockProjector.isIndexUpToDate.mockResolvedValue(true);
 
       await statusCommand.execute({});
 
-      expect(mockIndexerAdapter.isIndexUpToDate).toHaveBeenCalled();
-      expect(mockIndexerAdapter.generateIndex).not.toHaveBeenCalled();
+      expect(mockProjector.isIndexUpToDate).toHaveBeenCalled();
+      expect(mockProjector.generateIndex).not.toHaveBeenCalled();
     });
 
     it('[EARS-8] should bypass cache with --from-source flag', async () => {
       await statusCommand.execute({ fromSource: true });
 
-      expect(mockIndexerAdapter.isIndexUpToDate).not.toHaveBeenCalled();
-      expect(mockIndexerAdapter.generateIndex).not.toHaveBeenCalled();
+      expect(mockProjector.isIndexUpToDate).not.toHaveBeenCalled();
+      expect(mockProjector.generateIndex).not.toHaveBeenCalled();
     });
   });
 
@@ -367,7 +367,7 @@ describe('StatusCommand - Complete Unit Tests', () => {
     it('[EARS-15] should show system health score and alerts', async () => {
       await statusCommand.execute({});
 
-      expect(mockMetricsAdapter.getSystemStatus).toHaveBeenCalled();
+      expect(mockRecordMetrics.getSystemStatus).toHaveBeenCalled();
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('⚡ System Health: 🟡 75%'));
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('🚨 Alerts:'));
     });
@@ -381,7 +381,7 @@ describe('StatusCommand - Complete Unit Tests', () => {
           staleTasks: 10
         }
       };
-      mockMetricsAdapter.getSystemStatus.mockResolvedValue(unhealthySystemStatus);
+      mockRecordMetrics.getSystemStatus.mockResolvedValue(unhealthySystemStatus);
 
       await statusCommand.execute({});
 
@@ -391,7 +391,7 @@ describe('StatusCommand - Complete Unit Tests', () => {
     });
 
     it('[EARS-17] should handle metrics adapter failures gracefully', async () => {
-      mockMetricsAdapter.getSystemStatus.mockRejectedValue(new Error('Metrics unavailable'));
+      mockRecordMetrics.getSystemStatus.mockRejectedValue(new Error('Metrics unavailable'));
 
       await statusCommand.execute({});
 
@@ -402,7 +402,7 @@ describe('StatusCommand - Complete Unit Tests', () => {
 
   describe('CLI Consistency & Flags (EARS 18-20)', () => {
     it('[EARS-18] should suppress cache messages with --quiet flag', async () => {
-      mockIndexerAdapter.isIndexUpToDate.mockResolvedValue(false);
+      mockProjector.isIndexUpToDate.mockResolvedValue(false);
 
       await statusCommand.execute({ quiet: true });
 
@@ -477,10 +477,10 @@ describe('StatusCommand - Complete Unit Tests', () => {
       // Verify that all adapters are called through their methods
       expect(mockBacklogAdapter.getAllTasks).toHaveBeenCalled();
       expect(mockBacklogAdapter.getAllCycles).toHaveBeenCalled();
-      expect(mockMetricsAdapter.getSystemStatus).toHaveBeenCalled();
-      expect(mockMetricsAdapter.getProductivityMetrics).toHaveBeenCalled();
-      expect(mockMetricsAdapter.getCollaborationMetrics).toHaveBeenCalled();
-      expect(mockIndexerAdapter.isIndexUpToDate).toHaveBeenCalled();
+      expect(mockRecordMetrics.getSystemStatus).toHaveBeenCalled();
+      expect(mockRecordMetrics.getProductivityMetrics).toHaveBeenCalled();
+      expect(mockRecordMetrics.getCollaborationMetrics).toHaveBeenCalled();
+      expect(mockProjector.isIndexUpToDate).toHaveBeenCalled();
     });
 
     it('[EARS-26] should handle partial adapter failures gracefully', async () => {

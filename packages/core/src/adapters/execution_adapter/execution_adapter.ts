@@ -105,7 +105,7 @@ export class ExecutionAdapter implements IExecutionAdapter {
    *
    * Description: Gets all ExecutionRecords associated with a specific Task.
    * Implementation: Reads all records and filters by matching taskId.
-   * Usage: Invoked by `gitgov exec list` and MetricsAdapter for staleness calculations.
+   * Usage: Invoked by `gitgov exec list` and RecordMetrics for staleness calculations.
    * Returns: Array of ExecutionRecords filtered for the task.
    */
   async getExecutionsByTask(taskId: string): Promise<ExecutionRecord[]> {
@@ -127,7 +127,7 @@ export class ExecutionAdapter implements IExecutionAdapter {
    *
    * Description: Gets all ExecutionRecords in the system for complete indexation.
    * Implementation: Complete read from record store without filters.
-   * Usage: Invoked by `gitgov exec list --all` and MetricsAdapter for general calculations.
+   * Usage: Invoked by `gitgov exec list --all` and RecordMetrics for general calculations.
    * Returns: Complete array of all ExecutionRecords.
    */
   async getAllExecutions(): Promise<ExecutionRecord[]> {

@@ -139,9 +139,9 @@ jest.doMock('@gitgov/core', () => {
       loadAgentRecord: jest.fn((data) => data)
     },
 
-    // 🎭 MOCK ADAPTERS: Mock business logic behavior with valid data
-    Adapters: {
-      IndexerAdapter: jest.fn().mockImplementation(() => ({
+    // 🎭 MOCK RECORD_PROJECTOR: Separate namespace (moved from Adapters)
+    RecordProjector: {
+      RecordProjector: jest.fn().mockImplementation(() => ({
         generateIndex: jest.fn().mockResolvedValue({
           recordsProcessed: 146,
           generatedAt: Date.now()
@@ -157,26 +157,11 @@ jest.doMock('@gitgov/core', () => {
           lastGenerated: Date.now()
         })
       })),
-      BacklogAdapter: jest.fn().mockImplementation(() => ({
-        createTask: jest.fn().mockImplementation((payload) =>
-          Promise.resolve(createValidTaskRecord(payload))
-        ),
-        getAllTasks: jest.fn().mockResolvedValue([]),
-        getTask: jest.fn().mockResolvedValue(null),
-        submitTask: jest.fn().mockImplementation((taskId) =>
-          Promise.resolve(createValidTaskRecord({ id: taskId, status: 'review' }))
-        ),
-        approveTask: jest.fn().mockImplementation((taskId) =>
-          Promise.resolve(createValidTaskRecord({ id: taskId, status: 'ready' }))
-        ),
-        activateTask: jest.fn().mockImplementation((taskId) =>
-          Promise.resolve(createValidTaskRecord({ id: taskId, status: 'active' }))
-        ),
-        completeTask: jest.fn().mockImplementation((taskId) =>
-          Promise.resolve(createValidTaskRecord({ id: taskId, status: 'done' }))
-        )
-      })),
-      MetricsAdapter: jest.fn().mockImplementation(() => ({
+    },
+
+    // 🎭 MOCK RECORD_METRICS: Separate namespace (moved from Adapters)
+    RecordMetrics: {
+      RecordMetrics: jest.fn().mockImplementation(() => ({
         getSystemStatus: jest.fn().mockResolvedValue({
           health: {
             overallScore: 85,
@@ -198,6 +183,29 @@ jest.doMock('@gitgov/core', () => {
           leadTime: 5.2,
           cycleTime: 3.1
         })
+      })),
+    },
+
+    // 🎭 MOCK ADAPTERS: Mock business logic behavior with valid data
+    Adapters: {
+      BacklogAdapter: jest.fn().mockImplementation(() => ({
+        createTask: jest.fn().mockImplementation((payload) =>
+          Promise.resolve(createValidTaskRecord(payload))
+        ),
+        getAllTasks: jest.fn().mockResolvedValue([]),
+        getTask: jest.fn().mockResolvedValue(null),
+        submitTask: jest.fn().mockImplementation((taskId) =>
+          Promise.resolve(createValidTaskRecord({ id: taskId, status: 'review' }))
+        ),
+        approveTask: jest.fn().mockImplementation((taskId) =>
+          Promise.resolve(createValidTaskRecord({ id: taskId, status: 'ready' }))
+        ),
+        activateTask: jest.fn().mockImplementation((taskId) =>
+          Promise.resolve(createValidTaskRecord({ id: taskId, status: 'active' }))
+        ),
+        completeTask: jest.fn().mockImplementation((taskId) =>
+          Promise.resolve(createValidTaskRecord({ id: taskId, status: 'done' }))
+        )
       })),
       IdentityAdapter: jest.fn().mockImplementation(() => ({
         getActor: jest.fn().mockResolvedValue({
@@ -512,6 +520,12 @@ jest.doMock('@gitgov/core', () => {
 
 // Mock @gitgov/core/fs — standalone functions + filesystem classes
 jest.doMock('@gitgov/core/fs', () => ({
+  FsProjectionSink: jest.fn().mockImplementation(() => ({
+    persist: jest.fn().mockResolvedValue(undefined),
+    read: jest.fn().mockResolvedValue(null),
+    exists: jest.fn().mockResolvedValue(false),
+    clear: jest.fn().mockResolvedValue(undefined),
+  })),
   FsRecordStore: jest.fn().mockImplementation(() => ({
     get: jest.fn().mockResolvedValue(null),
     put: jest.fn().mockResolvedValue(undefined),
@@ -622,7 +636,7 @@ import { DependencyInjectionService } from './dependency-injection';
 // Mocked module references (require once after doMock, use everywhere)
 const mockFs = require('fs');
 const corefs = require('@gitgov/core/fs');
-const { Git, Adapters, KeyProvider, EventBus } = require('@gitgov/core');
+const { Git, Adapters, KeyProvider, EventBus, RecordProjector, RecordMetrics } = require('@gitgov/core');
 
 describe('DependencyInjectionService', () => {
   let diService: DependencyInjectionService;
@@ -680,10 +694,10 @@ describe('DependencyInjectionService', () => {
       mockFs.promises.access.mockResolvedValue(undefined);
 
       // Getting any adapter triggers initializeStores
-      const indexerAdapter = await diService.getIndexerAdapter();
+      const projector = await diService.getRecordProjector();
 
       // Verify stores were created by checking adapter was created successfully
-      expect(indexerAdapter).toBeDefined();
+      expect(projector).toBeDefined();
 
       // Verify FsRecordStore constructor was called for each store type
       expect(corefs.FsRecordStore).toHaveBeenCalled();
@@ -696,7 +710,7 @@ describe('DependencyInjectionService', () => {
       mockFs.promises.access.mockResolvedValue(undefined);
 
       // First call - initializes stores
-      await diService.getIndexerAdapter();
+      await diService.getRecordProjector();
 
       // Clear mock call counts
       const callCountAfterFirst = corefs.FsRecordStore.mock.calls.length;
@@ -713,10 +727,10 @@ describe('DependencyInjectionService', () => {
   // §4.3. Adapter Factories (EARS-C1 to C10)
   // ============================================================================
   describe('4.3. Adapter Factories (EARS-C1 to C10)', () => {
-    it('[EARS-C1] should create IndexerAdapter with all dependencies', async () => {
-      const indexerAdapter = await diService.getIndexerAdapter();
-      expect(indexerAdapter).toBeDefined();
-      expect(indexerAdapter.generateIndex).toBeDefined();
+    it('[EARS-C1] should create RecordProjector with all dependencies', async () => {
+      const projector = await diService.getRecordProjector();
+      expect(projector).toBeDefined();
+      expect(projector.generateIndex).toBeDefined();
     });
 
     it('[EARS-C2] should create BacklogAdapter with all dependencies', async () => {
@@ -725,11 +739,11 @@ describe('DependencyInjectionService', () => {
       expect(backlogAdapter.createTask).toBeDefined();
     });
 
-    it('[EARS-C3] should create MetricsAdapter with stores', async () => {
-      const metricsAdapter = await diService.getMetricsAdapter();
+    it('[EARS-C3] should create RecordMetrics with stores', async () => {
+      const recordMetrics = await diService.getRecordMetrics();
 
-      expect(metricsAdapter).toBeDefined();
-      expect(metricsAdapter.getSystemStatus).toBeDefined();
+      expect(recordMetrics).toBeDefined();
+      expect(recordMetrics.getSystemStatus).toBeDefined();
     });
 
     it('[EARS-C4] should create IdentityAdapter with KeyProvider and EventBus', async () => {
@@ -755,7 +769,7 @@ describe('DependencyInjectionService', () => {
       expect(Adapters.IdentityAdapter).toHaveBeenCalled();
     });
 
-    it('[EARS-C6] should create LintModule with IndexerAdapter', async () => {
+    it('[EARS-C6] should create LintModule with RecordProjector', async () => {
       const lintModule = await diService.getLintModule();
 
       expect(lintModule).toBeDefined();
@@ -771,8 +785,8 @@ describe('DependencyInjectionService', () => {
 
     it('[EARS-C8] should return cached instance on subsequent calls', async () => {
       // First call creates new instance
-      const indexer1 = await diService.getIndexerAdapter();
-      const indexer2 = await diService.getIndexerAdapter();
+      const indexer1 = await diService.getRecordProjector();
+      const indexer2 = await diService.getRecordProjector();
 
       // Should be same instance (cached)
       expect(indexer1).toBe(indexer2);
@@ -823,14 +837,14 @@ describe('DependencyInjectionService', () => {
       corefs.FsSyncStateModule.bootstrapFromStateBranch.mockResolvedValue({ success: true });
 
       // Get the indexer adapter (this should trigger bootstrap + reindex)
-      const indexerAdapter = await diService.getIndexerAdapter();
+      const projector = await diService.getRecordProjector();
 
       // Verify bootstrap was called
       expect(corefs.FsSyncStateModule.bootstrapFromStateBranch).toHaveBeenCalled();
 
 
       // Verify indexer.generateIndex() was called after bootstrap
-      expect(indexerAdapter.generateIndex).toHaveBeenCalledTimes(1);
+      expect(projector.generateIndex).toHaveBeenCalledTimes(1);
     });
 
     it('[EARS-D2] should NOT call generateIndex() when .gitgov/ already exists (no bootstrap)', async () => {
@@ -841,13 +855,13 @@ describe('DependencyInjectionService', () => {
       corefs.FsSyncStateModule.bootstrapFromStateBranch.mockClear();
 
       // Get the indexer adapter (bootstrap should not be triggered)
-      const indexerAdapter = await diService.getIndexerAdapter();
+      const projector = await diService.getRecordProjector();
 
       // Verify bootstrap was NOT called
       expect(corefs.FsSyncStateModule.bootstrapFromStateBranch).not.toHaveBeenCalled();
 
       // Verify indexer.generateIndex() was NOT called
-      expect(indexerAdapter.generateIndex).not.toHaveBeenCalled();
+      expect(projector.generateIndex).not.toHaveBeenCalled();
     });
   });
 
@@ -855,7 +869,7 @@ describe('DependencyInjectionService', () => {
   // §4.5. Error Handling (EARS-E1 to E4)
   // ============================================================================
   describe('4.5. Error Handling (EARS-E1 to E4)', () => {
-    it('[EARS-E1] should throw error when project root not found (IndexerAdapter)', async () => {
+    it('[EARS-E1] should throw error when project root not found (RecordProjector)', async () => {
       // Mock fs.access to reject (no .gitgov directory)
       mockFs.promises.access.mockRejectedValue(new Error('Directory not found'));
 
@@ -873,7 +887,7 @@ describe('DependencyInjectionService', () => {
       // Override getGitModule to return our mock
       diService.getGitModule = jest.fn().mockResolvedValue(mockGitModule);
 
-      await expect(diService.getIndexerAdapter())
+      await expect(diService.getRecordProjector())
         .rejects.toThrow("❌ GitGovernance not initialized. Run 'gitgov init' first.");
     });
 
@@ -903,12 +917,12 @@ describe('DependencyInjectionService', () => {
       // Mock fs.access to succeed
       mockFs.promises.access.mockResolvedValue(undefined);
 
-      // Mock IndexerAdapter constructor to throw
-      Adapters.IndexerAdapter.mockImplementationOnce(() => {
+      // Mock RecordProjector constructor to throw
+      RecordProjector.RecordProjector.mockImplementationOnce(() => {
         throw new Error('Connection failed');
       });
 
-      await expect(diService.getIndexerAdapter())
+      await expect(diService.getRecordProjector())
         .rejects.toThrow('❌ Failed to initialize cache system: Connection failed');
     });
 
@@ -927,12 +941,12 @@ describe('DependencyInjectionService', () => {
     it('[EARS-E4] should handle non-Error types gracefully', async () => {
       mockFs.promises.access.mockResolvedValue(undefined);
 
-      // Mock IndexerAdapter to throw a string instead of Error
-      Adapters.IndexerAdapter.mockImplementationOnce(() => {
+      // Mock RecordProjector to throw a string instead of Error
+      RecordProjector.RecordProjector.mockImplementationOnce(() => {
         throw 'String error instead of Error object';
       });
 
-      await expect(diService.getIndexerAdapter())
+      await expect(diService.getRecordProjector())
         .rejects.toThrow('❌ Unknown error initializing cache system.');
     });
   });

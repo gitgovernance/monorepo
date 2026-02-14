@@ -1,20 +1,18 @@
-import type { RecordStores } from '../../record_store';
-import type { TaskRecord, CycleRecord, FeedbackRecord, ExecutionRecord, ActorRecord } from '../../record_types';
-import type { CollaborationMetrics, IMetricsAdapter, IPlatformApi, MetricsAdapterDependencies, ProductivityMetrics, SystemStatus, TaskHealthReport, TokenConsumption } from './metric_adapter.types';
+import type { RecordStores } from '../record_store';
+import type { TaskRecord, CycleRecord, FeedbackRecord, ExecutionRecord, ActorRecord } from '../record_types';
+import type { CollaborationMetrics, IRecordMetrics, RecordMetricsDependencies, ProductivityMetrics, SystemStatus, TaskHealthReport } from './record_metrics.types';
 
 /**
- * MetricsAdapter - The System Analyst
- * 
+ * RecordMetrics - The System Analyst
+ *
  * Implements Facade + Dependency Injection Pattern for testeable and configurable orchestration.
  * Acts as Mediator between analytics system and multi-store data sources.
  */
-export class MetricsAdapter implements IMetricsAdapter {
+export class RecordMetrics implements IRecordMetrics {
   private stores: Required<Pick<RecordStores, 'tasks' | 'cycles' | 'feedbacks' | 'executions' | 'actors'>>;
-  private platformApi: IPlatformApi | undefined;
 
-  constructor(dependencies: MetricsAdapterDependencies) {
+  constructor(dependencies: RecordMetricsDependencies) {
     this.stores = dependencies.stores;
-    this.platformApi = dependencies.platformApi; // Graceful degradation
   }
 
   // ===== PUBLIC API METHODS =====
@@ -474,7 +472,7 @@ export class MetricsAdapter implements IMetricsAdapter {
 
     try {
       // For MVP, use approximation based on creation time
-      // In complete implementation, would track actual active → done transitions
+      // In complete implementation, would track actual active -> done transitions
       const cycleTimes = activeTasks.map(task => {
         // Approximate cycle time as 30% of total time (active phase)
         const creationTime = this.getTimestampFromId(task.id);
@@ -576,7 +574,7 @@ export class MetricsAdapter implements IMetricsAdapter {
     return counts;
   }
 
-  // ===== TIER 3-4: NOT IMPLEMENTED (FUTURE) =====
+  // ===== TIER 3: NOT IMPLEMENTED (FUTURE) =====
 
   /**
    * [EARS-C3] Throws NotImplementedError for Tier 3 functions.
@@ -613,46 +611,25 @@ export class MetricsAdapter implements IMetricsAdapter {
     throw new Error('NotImplementedError: Tier 3 metrics not implemented yet');
   }
 
-  /**
-   * [EARS-C4] Returns null for Premium metrics without Platform API.
-   */
-  calculateCostBurnRate(_consumption: TokenConsumption[]): number {
-    if (!this.platformApi) {
-      console.warn('Platform API not available for premium metrics');
-      return 0;
-    }
+  // ===== TIER 4: NOT IMPLEMENTED (FUTURE - Premium) =====
+
+  calculateCostBurnRate(): number {
     throw new Error('NotImplementedError: Tier 4 premium metrics not implemented yet');
   }
 
-  calculateTokenConsumption(_consumption: TokenConsumption[]): number {
-    if (!this.platformApi) {
-      console.warn('Platform API not available for premium metrics');
-      return 0;
-    }
+  calculateTokenConsumption(): number {
     throw new Error('NotImplementedError: Tier 4 premium metrics not implemented yet');
   }
 
-  calculateTokenConsumptionByAgent(_consumption: TokenConsumption[]): Record<string, number> {
-    if (!this.platformApi) {
-      console.warn('Platform API not available for premium metrics');
-      return {};
-    }
+  calculateTokenConsumptionByAgent(): Record<string, number> {
     throw new Error('NotImplementedError: Tier 4 premium metrics not implemented yet');
   }
 
-  calculateAiAccuracyRate(_tasks: TaskRecord[], _feedback: FeedbackRecord[]): number {
-    if (!this.platformApi) {
-      console.warn('Platform API not available for premium metrics');
-      return 0;
-    }
+  calculateAiAccuracyRate(): number {
     throw new Error('NotImplementedError: Tier 4 premium metrics not implemented yet');
   }
 
-  calculateAgentExecutionTime(_executions: ExecutionRecord[]): number {
-    if (!this.platformApi) {
-      console.warn('Platform API not available for premium metrics');
-      return 0;
-    }
+  calculateAgentExecutionTime(): number {
     throw new Error('NotImplementedError: Tier 4 premium metrics not implemented yet');
   }
 }

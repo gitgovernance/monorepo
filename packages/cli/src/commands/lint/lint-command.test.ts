@@ -62,7 +62,7 @@ let mockIdentityAdapter: {
   getCurrentActor: jest.MockedFunction<() => Promise<ActorRecord>>;
 };
 
-let mockIndexerAdapter: {
+let mockProjector: {
   generateIndex: jest.MockedFunction<() => Promise<{ success: boolean }>>;
 };
 
@@ -155,7 +155,7 @@ describe('LintCommand', () => {
       getCurrentActor: jest.fn()
     };
 
-    mockIndexerAdapter = {
+    mockProjector = {
       generateIndex: jest.fn().mockResolvedValue({ success: true })
     };
 
@@ -167,7 +167,7 @@ describe('LintCommand', () => {
     const mockDependencyService = {
       getLintModule: jest.fn().mockResolvedValue(mockLintModule),
       getIdentityAdapter: jest.fn().mockResolvedValue(mockIdentityAdapter),
-      getIndexerAdapter: jest.fn().mockResolvedValue(mockIndexerAdapter),
+      getRecordProjector: jest.fn().mockResolvedValue(mockProjector),
       getKeyProvider: jest.fn().mockReturnValue(mockKeyProvider)
     };
 
@@ -682,7 +682,7 @@ describe('LintCommand', () => {
       });
 
       // Key assertion: indexer.generateIndex() should be called when fixes were applied
-      expect(mockIndexerAdapter.generateIndex).toHaveBeenCalled();
+      expect(mockProjector.generateIndex).toHaveBeenCalled();
     });
 
     it('[EARS-E3] should NOT regenerate index when no records were fixed', async () => {
@@ -702,7 +702,7 @@ describe('LintCommand', () => {
       });
 
       // Key assertion: indexer.generateIndex() should NOT be called when no fixes
-      expect(mockIndexerAdapter.generateIndex).not.toHaveBeenCalled();
+      expect(mockProjector.generateIndex).not.toHaveBeenCalled();
     });
 
     it('[EARS-E3] should handle indexer errors gracefully during post-fix reindex', async () => {
@@ -718,13 +718,13 @@ describe('LintCommand', () => {
       mockLintModule.fix.mockResolvedValueOnce(fixReportWithFixes);
 
       // Make indexer fail
-      mockIndexerAdapter.generateIndex.mockRejectedValueOnce(new Error('Index generation failed'));
+      mockProjector.generateIndex.mockRejectedValueOnce(new Error('Index generation failed'));
 
       // Should not throw - errors are handled gracefully
       await expect(lintCommand.execute({ fix: true })).resolves.not.toThrow();
 
       // Verify indexer was called but error was handled
-      expect(mockIndexerAdapter.generateIndex).toHaveBeenCalled();
+      expect(mockProjector.generateIndex).toHaveBeenCalled();
     });
   });
 

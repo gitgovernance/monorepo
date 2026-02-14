@@ -267,8 +267,8 @@ export class LintCommand extends BaseCommand {
         this.logger.info('🔄 Regenerating index after fix...');
       }
       try {
-        const indexerAdapter = await this.container.getIndexerAdapter();
-        await indexerAdapter.generateIndex();
+        const projector = await this.container.getRecordProjector();
+        await projector.generateIndex();
         if (!quiet) {
           this.logger.info('✅ Index regenerated');
         }

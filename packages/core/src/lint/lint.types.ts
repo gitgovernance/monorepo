@@ -1,5 +1,5 @@
 import type { RecordStore } from "../record_store/record_store";
-import type { IIndexerAdapter } from "../adapters/indexer_adapter";
+import type { IRecordProjector } from "../record_projector";
 import type { GitGovRecord, GitGovRecordType } from "../record_types";
 
 // ==================== Pure LintModule Interface ====================
@@ -121,7 +121,7 @@ export interface LintModuleDependencies {
    * Indexing adapter for advanced reference resolution (OPTIONAL)
    * If not present, reference validations will be limited.
    */
-  indexerAdapter?: IIndexerAdapter;
+  projector?: IRecordProjector;
 }
 
 /**

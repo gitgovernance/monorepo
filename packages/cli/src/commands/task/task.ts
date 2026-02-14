@@ -122,7 +122,7 @@ EXAMPLES:
     .description('Show complete TaskRecord details with health analysis')
     .alias('s')
     .option('--from-source', 'Read directly from Record (includes signatures)')
-    .option('-h, --health', 'Include health analysis using MetricsAdapter')
+    .option('-h, --health', 'Include health analysis using RecordMetrics')
     .option('--history', 'Include history of executions and feedback')
     .option('-f, --format <format>', 'Output format (json, text)', 'text')
     .option('--json', 'Output in structured JSON format')

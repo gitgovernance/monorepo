@@ -47,7 +47,7 @@ import { FeedbackAdapter } from '../feedback_adapter';
 import { ExecutionAdapter } from '../execution_adapter';
 import type { IFeedbackAdapter } from '../feedback_adapter';
 import { ChangelogAdapter } from '../changelog_adapter';
-import { MetricsAdapter } from '../metrics_adapter';
+import { RecordMetrics } from '../../record_metrics';
 import { ConfigManager } from '../../config_manager';
 import type { SessionManager } from '../../session_manager';
 import { eventBus } from '../../event_bus';
@@ -178,7 +178,7 @@ describe.each(backends)('BacklogAdapter Integration Tests with %s backend', (_na
 
   // Mock adapters accessible for spying in tests
   let mockFeedbackAdapter: IFeedbackAdapter;
-  let mockMetricsAdapter: MetricsAdapter;
+  let mockMetricsAdapter: RecordMetrics;
   let mockChangelogAdapter: ChangelogAdapter;
   let mockExecutionAdapter: ExecutionAdapter;
   let mockConfigManager: ConfigManager;
@@ -261,7 +261,7 @@ describe.each(backends)('BacklogAdapter Integration Tests with %s backend', (_na
       getTaskHealth: jest.fn(),
       getProductivityMetrics: jest.fn(),
       getCollaborationMetrics: jest.fn()
-    } as unknown as MetricsAdapter;
+    } as unknown as RecordMetrics;
 
     mockConfigManager = {
       loadConfig: jest.fn().mockResolvedValue({})
@@ -608,7 +608,7 @@ describe.each(backends)('BacklogAdapter Integration Tests with %s backend', (_na
       console.log('✅ Automated Archivist completed successfully');
     });
 
-    it('[EARS-N4] "The Proactive System" - Daily audit with MetricsAdapter and automated warnings', async () => {
+    it('[EARS-N4] "The Proactive System" - Daily audit with RecordMetrics and automated warnings', async () => {
       const mockSystemStatus = {
         tasks: { total: 10, byStatus: { active: 5 }, byPriority: {} },
         cycles: { total: 2, active: 1, completed: 1 },

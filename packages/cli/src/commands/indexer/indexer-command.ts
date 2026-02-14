@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 import { SimpleCommand } from '../../base/base-command';
-import type { IIndexerAdapter, IndexGenerationReport, IntegrityReport } from '@gitgov/core';
+import type { IRecordProjector, IndexGenerationReport, IntegrityReport } from '@gitgov/core';
 import type { BaseCommandOptions } from '../../interfaces/command';
 
 /**
@@ -15,11 +15,11 @@ export interface IndexerCommandOptions extends BaseCommandOptions {
  * IndexerCommand - Cache Control CLI Interface
  * 
  * Pure CLI implementation (NO Ink) that delegates all business logic
- * to the IndexerAdapter from @gitgov/core.
+ * to the RecordProjector from @gitgov/core.
  * 
  * Responsibilities:
  * - Parse CLI flags and validate combinations
- * - Delegate to IndexerAdapter methods
+ * - Delegate to RecordProjector methods
  * - Format output (text/JSON) for user consumption
  * - Handle errors with user-friendly messages
  * - Provide progress feedback during operations
@@ -49,18 +49,18 @@ export class IndexerCommand extends SimpleCommand<IndexerCommandOptions> {
   async execute(options: IndexerCommandOptions): Promise<void> {
     try {
       // Get indexer adapter from dependency injection
-      const indexerAdapter = await this.dependencyService.getIndexerAdapter();
+      const projector = await this.dependencyService.getRecordProjector();
 
       // 1. Validate flag combinations
       this.validateOptions(options);
 
       // 2. Execute appropriate operation based on flags
       if (options.validateOnly) {
-        await this.executeValidateOnly(indexerAdapter, options);
+        await this.executeValidateOnly(projector, options);
       } else if (options.force) {
-        await this.executeForceRegeneration(indexerAdapter, options);
+        await this.executeForceRegeneration(projector, options);
       } else {
-        await this.executeGeneration(indexerAdapter, options);
+        await this.executeGeneration(projector, options);
       }
 
     } catch (error) {
@@ -73,42 +73,42 @@ export class IndexerCommand extends SimpleCommand<IndexerCommandOptions> {
   /**
    * [EARS-A2] Validates integrity without regenerating cache
    */
-  private async executeValidateOnly(indexerAdapter: IIndexerAdapter, options: IndexerCommandOptions): Promise<void> {
+  private async executeValidateOnly(projector: IRecordProjector, options: IndexerCommandOptions): Promise<void> {
     if (!options.quiet) {
       console.log("🔍 Validating cache integrity...");
     }
 
-    const report = await indexerAdapter.validateIntegrity();
+    const report = await projector.validateIntegrity();
     this.formatIntegrityReport(report, options);
   }
 
   /**
    * [EARS-A3] Forces cache invalidation before regeneration
    */
-  private async executeForceRegeneration(indexerAdapter: IIndexerAdapter, options: IndexerCommandOptions): Promise<void> {
+  private async executeForceRegeneration(projector: IRecordProjector, options: IndexerCommandOptions): Promise<void> {
     if (!options.quiet) {
       console.log("🗑️  Invalidating existing cache...");
     }
 
-    await indexerAdapter.invalidateCache();
+    await projector.invalidateCache();
 
     if (!options.quiet) {
       console.log("🔄 Generating fresh index...");
     }
 
-    const report = await indexerAdapter.generateIndex();
+    const report = await projector.generateIndex();
     this.formatGenerationReport(report, options);
   }
 
   /**
    * [EARS-A1] Standard cache generation
    */
-  private async executeGeneration(indexerAdapter: IIndexerAdapter, options: IndexerCommandOptions): Promise<void> {
+  private async executeGeneration(projector: IRecordProjector, options: IndexerCommandOptions): Promise<void> {
     if (!options.quiet) {
       console.log("🔄 Generating index...");
     }
 
-    const report = await indexerAdapter.generateIndex();
+    const report = await projector.generateIndex();
     this.formatGenerationReport(report, options);
   }
 

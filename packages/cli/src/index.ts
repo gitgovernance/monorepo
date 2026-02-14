@@ -42,10 +42,10 @@ async function setupCommands() {
 
     // Setup adapters dependency injection
     const diService = DependencyInjectionService.getInstance();
-    const indexerAdapter = await diService.getIndexerAdapter();
+    const projector = await diService.getRecordProjector();
 
     // Register indexer commands with dependencies
-    registerIndexerCommands(program, indexerAdapter);
+    registerIndexerCommands(program, projector);
 
     // Register task commands
     registerTaskCommands(program);

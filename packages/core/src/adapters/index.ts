@@ -4,7 +4,5 @@ export * from "./changelog_adapter";
 export * from "./execution_adapter";
 export * from "./feedback_adapter";
 export * from "./identity_adapter";
-export * from "./indexer_adapter";
-export * from "./metrics_adapter";
 export * from "./project_adapter";
 export * from "./workflow_adapter";

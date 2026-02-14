@@ -36,7 +36,7 @@ import type {
   FileSystem,
   IFsLintModule,
 } from './fs/fs_lint.types';
-import type { IIndexerAdapter } from '../adapters/indexer_adapter';
+import type { IRecordProjector } from '../record_projector';
 import type {
   TaskRecord,
   CycleRecord,
@@ -107,7 +107,7 @@ type MockStore = {
   exists: jest.Mock;
 };
 
-type MockIndexerAdapter = {
+type MockRecordProjector = {
   buildIndex: jest.Mock;
   getIndex: jest.Mock;
   getRecordsByType: jest.Mock;
@@ -306,7 +306,7 @@ function createMockDependencies(projectRoot: string = '/tmp/test-project'): {
     actors: MockStore;
     agents: MockStore;
   };
-  indexerAdapter: MockIndexerAdapter;
+  projector: MockRecordProjector;
   fileSystem: MockFileSystem;
   lintModuleDeps: LintModuleDependencies;
   fsLintModuleDeps: FsLintModuleDependencies;
@@ -321,7 +321,7 @@ function createMockDependencies(projectRoot: string = '/tmp/test-project'): {
     agents: createMockStore()
   };
 
-  const indexerAdapter: MockIndexerAdapter = {
+  const projector: MockRecordProjector = {
     buildIndex: jest.fn(),
     getIndex: jest.fn(),
     getRecordsByType: jest.fn(),
@@ -339,7 +339,7 @@ function createMockDependencies(projectRoot: string = '/tmp/test-project'): {
   // Note: With exactOptionalPropertyTypes, we cast stores to RecordStores directly
   const lintModuleDeps: LintModuleDependencies = {
     stores: stores as unknown as import('./lint.types').RecordStores,
-    indexerAdapter: indexerAdapter as unknown as IIndexerAdapter
+    projector: projector as unknown as IRecordProjector
   };
 
   // Create the pure LintModule instance
@@ -350,11 +350,11 @@ function createMockDependencies(projectRoot: string = '/tmp/test-project'): {
     projectRoot,
     lintModule,
     stores: stores as unknown as import('./lint.types').RecordStores,
-    indexerAdapter: indexerAdapter as unknown as IIndexerAdapter,
+    projector: projector as unknown as IRecordProjector,
     fileSystem: fileSystem as FileSystem
   };
 
-  return { stores, indexerAdapter, fileSystem, lintModuleDeps, fsLintModuleDeps };
+  return { stores, projector, fileSystem, lintModuleDeps, fsLintModuleDeps };
 }
 
 /**
@@ -477,8 +477,8 @@ describe('LintModule + FsLintModule', () => {
       expect(fsMod.fix).toBeDefined();
     });
 
-    // [EARS-A2] LintModule should work without indexerAdapter (degraded mode)
-    it('[EARS-A2] should work without indexerAdapter with degradation', () => {
+    // [EARS-A2] LintModule should work without projector (degraded mode)
+    it('[EARS-A2] should work without projector with degradation', () => {
       const deps: LintModuleDependencies = {
         stores: mocks.stores as unknown as import('./lint.types').RecordStores
       };

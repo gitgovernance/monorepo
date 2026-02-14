@@ -1,5 +1,5 @@
-import { MetricsAdapter } from './index';
-import type { RecordStore } from '../../record_store';
+import { RecordMetrics } from './index';
+import type { RecordStore } from '../record_store';
 import type {
   TaskRecord,
   CycleRecord,
@@ -12,7 +12,7 @@ import type {
   GitGovExecutionRecord,
   GitGovActorRecord,
   Signature
-} from '../../record_types';
+} from '../record_types';
 
 // Helper function to create mock task records
 function createMockTaskRecord(overrides: Partial<TaskRecord> = {}): GitGovTaskRecord {
@@ -150,8 +150,8 @@ function createMockActorRecord(overrides: Partial<ActorRecord> = {}): GitGovActo
   };
 }
 
-describe('MetricsAdapter', () => {
-  let metricsAdapter: MetricsAdapter;
+describe('RecordMetrics', () => {
+  let recordMetrics: RecordMetrics;
   let mockTaskStore: jest.Mocked<RecordStore<GitGovTaskRecord>>;
   let mockCycleStore: jest.Mocked<RecordStore<GitGovCycleRecord>>;
   let mockFeedbackStore: jest.Mocked<RecordStore<GitGovFeedbackRecord>>;
@@ -203,7 +203,7 @@ describe('MetricsAdapter', () => {
     } as unknown as jest.Mocked<RecordStore<GitGovActorRecord>>;
 
     // Create adapter with all dependencies
-    metricsAdapter = new MetricsAdapter({
+    recordMetrics = new RecordMetrics({
       stores: {
         tasks: mockTaskStore,
         cycles: mockCycleStore,
@@ -232,7 +232,7 @@ describe('MetricsAdapter', () => {
         .mockResolvedValueOnce(createMockCycleRecord({ id: 'cycle-1', status: 'active' }))
         .mockResolvedValueOnce(createMockCycleRecord({ id: 'cycle-2', status: 'completed' }));
 
-      const result = await metricsAdapter.getSystemStatus();
+      const result = await recordMetrics.getSystemStatus();
 
       expect(result.tasks.total).toBe(3);
       expect(result.cycles.total).toBe(2);
@@ -247,7 +247,7 @@ describe('MetricsAdapter', () => {
       mockFeedbackStore.list.mockResolvedValue([]);
       mockExecutionStore.list.mockResolvedValue([]);
 
-      const result = await metricsAdapter.getTaskHealth(`${timestamp}-task-test-task`);
+      const result = await recordMetrics.getTaskHealth(`${timestamp}-task-test-task`);
 
       expect(result.taskId).toBe(`${timestamp}-task-test-task`);
       expect(result.healthScore).toBeGreaterThanOrEqual(0);
@@ -260,7 +260,7 @@ describe('MetricsAdapter', () => {
     it('[EARS-A3] should throw RecordNotFoundError for non-existent task', async () => {
       mockTaskStore.get.mockResolvedValue(null);
 
-      await expect(metricsAdapter.getTaskHealth('non-existent-task'))
+      await expect(recordMetrics.getTaskHealth('non-existent-task'))
         .rejects.toThrow('RecordNotFoundError: Task not found: non-existent-task');
     });
 
@@ -277,7 +277,7 @@ describe('MetricsAdapter', () => {
       mockCycleStore.list.mockResolvedValue([]);
 
       const startTime = Date.now();
-      await metricsAdapter.getSystemStatus();
+      await recordMetrics.getSystemStatus();
       const endTime = Date.now();
 
       expect(endTime - startTime).toBeLessThan(100);
@@ -289,7 +289,7 @@ describe('MetricsAdapter', () => {
       const twoDaysAgo = Math.floor(Date.now() / 1000) - (2 * 24 * 60 * 60);
       const task = createMockTaskRecord({ id: `${twoDaysAgo}-task-test` }).payload;
 
-      const result = metricsAdapter.calculateTimeInCurrentStage(task);
+      const result = recordMetrics.calculateTimeInCurrentStage(task);
 
       expect(result).toBeCloseTo(2, 1); // Approximately 2 days
     });
@@ -300,7 +300,7 @@ describe('MetricsAdapter', () => {
         createMockTaskRecord().payload
       ];
 
-      const result = metricsAdapter.calculateStalenessIndex(tasks);
+      const result = recordMetrics.calculateStalenessIndex(tasks);
 
       expect(result).toBeGreaterThanOrEqual(0);
     });
@@ -319,7 +319,7 @@ describe('MetricsAdapter', () => {
         }).payload
       ];
 
-      const result = metricsAdapter.calculateBlockingFeedbackAge(feedbacks);
+      const result = recordMetrics.calculateBlockingFeedbackAge(feedbacks);
 
       expect(result).toBeCloseTo(3, 1); // Approximately 3 days
     });
@@ -332,7 +332,7 @@ describe('MetricsAdapter', () => {
         createMockTaskRecord({ status: 'paused' }).payload     // 0 points
       ];
 
-      const result = metricsAdapter.calculateHealth(tasks);
+      const result = recordMetrics.calculateHealth(tasks);
 
       expect(result).toBe(70); // (100 + 100 + 80 + 0) / (4*100) * 100 = 70%
     });
@@ -345,7 +345,7 @@ describe('MetricsAdapter', () => {
         createMockTaskRecord({ status: 'done' }).payload
       ];
 
-      const result = metricsAdapter.calculateBacklogDistribution(tasks);
+      const result = recordMetrics.calculateBacklogDistribution(tasks);
 
       expect(result['draft']).toBe(50); // 2/4 = 50%
       expect(result['active']).toBe(25); // 1/4 = 25%
@@ -363,7 +363,7 @@ describe('MetricsAdapter', () => {
         createMockTaskRecord({ id: `${today}-task-today-2` }).payload
       ];
 
-      const result = metricsAdapter.calculateTasksCreatedToday(tasks);
+      const result = recordMetrics.calculateTasksCreatedToday(tasks);
 
       expect(result).toBe(2); // Only tasks from today
     });
@@ -379,8 +379,8 @@ describe('MetricsAdapter', () => {
         createMockTaskRecord({ status: 'done' }).payload,
       ];
 
-      const healthBefore = metricsAdapter.calculateHealth(tasksBeforeArchiving);
-      const healthAfter = metricsAdapter.calculateHealth(tasksAfterArchiving);
+      const healthBefore = recordMetrics.calculateHealth(tasksBeforeArchiving);
+      const healthAfter = recordMetrics.calculateHealth(tasksAfterArchiving);
 
       // Health should remain the same: both done and archived = 100%
       expect(healthBefore).toBe(100);
@@ -401,7 +401,7 @@ describe('MetricsAdapter', () => {
         createMockTaskRecord({ status: 'active' }).payload
       ];
 
-      const result = metricsAdapter.calculateThroughput(tasks);
+      const result = recordMetrics.calculateThroughput(tasks);
 
       expect(result).toBe(2); // Only tasks completed in last 7 days
     });
@@ -413,7 +413,7 @@ describe('MetricsAdapter', () => {
         createMockTaskRecord({ status: 'active' }).payload // Should be filtered out
       ];
 
-      const result = metricsAdapter.calculateLeadTime(tasks);
+      const result = recordMetrics.calculateLeadTime(tasks);
 
       expect(result).toBeGreaterThanOrEqual(0);
     });
@@ -424,7 +424,7 @@ describe('MetricsAdapter', () => {
         createMockTaskRecord({ status: 'done' }).payload
       ];
 
-      const result = metricsAdapter.calculateCycleTime(tasks);
+      const result = recordMetrics.calculateCycleTime(tasks);
 
       expect(result).toBeGreaterThanOrEqual(0);
     });
@@ -442,7 +442,7 @@ describe('MetricsAdapter', () => {
         createMockExecutionRecord({ id: `${now}-exec-recent-2` }).payload
       ];
 
-      const result = metricsAdapter.calculateActiveAgents(actors, executions);
+      const result = recordMetrics.calculateActiveAgents(actors, executions);
 
       expect(result).toBeGreaterThanOrEqual(0);
     });
@@ -460,7 +460,7 @@ describe('MetricsAdapter', () => {
         .mockResolvedValueOnce(createMockTaskRecord(mockTasks[0]))
         .mockResolvedValueOnce(createMockTaskRecord(mockTasks[1]));
 
-      const result = await metricsAdapter.getProductivityMetrics();
+      const result = await recordMetrics.getProductivityMetrics();
 
       expect(result.throughput).toBeGreaterThanOrEqual(0);
       expect(result.leadTime).toBeGreaterThanOrEqual(0);
@@ -474,7 +474,7 @@ describe('MetricsAdapter', () => {
       mockExecutionStore.list.mockResolvedValue(['exec-1']);
       mockExecutionStore.get.mockResolvedValue(createMockExecutionRecord());
 
-      const result = await metricsAdapter.getCollaborationMetrics();
+      const result = await recordMetrics.getCollaborationMetrics();
 
       expect(result.activeAgents).toBeGreaterThanOrEqual(0);
       expect(result.totalAgents).toBeGreaterThanOrEqual(0);
@@ -492,8 +492,8 @@ describe('MetricsAdapter', () => {
       mockExecutionStore.get.mockResolvedValue(createMockExecutionRecord());
 
       const startTime = Date.now();
-      await metricsAdapter.getProductivityMetrics();
-      await metricsAdapter.getCollaborationMetrics();
+      await recordMetrics.getProductivityMetrics();
+      await recordMetrics.getCollaborationMetrics();
       const endTime = Date.now();
 
       expect(endTime - startTime).toBeLessThan(200);
@@ -503,47 +503,49 @@ describe('MetricsAdapter', () => {
 
   describe('Block C: Error Handling (EARS-C1 to EARS-C4)', () => {
     it('[EARS-C1] should validate input and throw InvalidDataError for invalid data', () => {
-      expect(() => metricsAdapter.calculateHealth('invalid' as unknown as TaskRecord[]))
+      expect(() => recordMetrics.calculateHealth('invalid' as unknown as TaskRecord[]))
         .toThrow('InvalidDataError: tasks must be an array');
 
-      expect(() => metricsAdapter.calculateBlockingFeedbackAge('invalid' as unknown as FeedbackRecord[]))
+      expect(() => recordMetrics.calculateBlockingFeedbackAge('invalid' as unknown as FeedbackRecord[]))
         .toThrow('InvalidDataError: feedback must be an array');
     });
 
     it('[EARS-C2] should return 0 for empty datasets', () => {
-      const result = metricsAdapter.calculateHealth([]);
+      const result = recordMetrics.calculateHealth([]);
       expect(result).toBe(0);
 
-      const distributionResult = metricsAdapter.calculateBacklogDistribution([]);
+      const distributionResult = recordMetrics.calculateBacklogDistribution([]);
       expect(distributionResult).toEqual({});
     });
 
     it('[EARS-C3] should throw NotImplementedError for unimplemented tiers', () => {
       const tasks = [createMockTaskRecord().payload];
 
-      expect(() => metricsAdapter.calculateQuality(tasks))
+      expect(() => recordMetrics.calculateQuality(tasks))
         .toThrow('NotImplementedError: Tier 3 metrics not implemented yet');
 
-      expect(() => metricsAdapter.calculateReworkRate(tasks))
+      expect(() => recordMetrics.calculateReworkRate(tasks))
         .toThrow('NotImplementedError: Tier 3 metrics not implemented yet');
     });
 
-    it('[EARS-C4] should return null for premium metrics without platform API', () => {
-      const result1 = metricsAdapter.calculateCostBurnRate([]);
-      const result2 = metricsAdapter.calculateTokenConsumption([]);
-      const result3 = metricsAdapter.calculateTokenConsumptionByAgent([]);
+    it('[EARS-C4] should throw NotImplementedError for Tier 4 premium metrics', () => {
+      expect(() => recordMetrics.calculateCostBurnRate())
+        .toThrow('NotImplementedError: Tier 4 premium metrics not implemented yet');
 
-      expect(result1).toBe(0);
-      expect(result2).toBe(0);
-      expect(result3).toEqual({});
+      expect(() => recordMetrics.calculateTokenConsumption())
+        .toThrow('NotImplementedError: Tier 4 premium metrics not implemented yet');
+
+      expect(() => recordMetrics.calculateTokenConsumptionByAgent())
+        .toThrow('NotImplementedError: Tier 4 premium metrics not implemented yet');
     });
+
   });
 
   describe('Block F: Mathematical Robustness & Edge Cases (EARS-F1 to EARS-F6)', () => {
     it('[EARS-F1] should use creation timestamp as fallback without signatures', () => {
       const task = createMockTaskRecord().payload;
 
-      const result = metricsAdapter.calculateTimeInCurrentStage(task);
+      const result = recordMetrics.calculateTimeInCurrentStage(task);
 
       expect(result).toBeGreaterThanOrEqual(0);
     });
@@ -555,7 +557,7 @@ describe('MetricsAdapter', () => {
         createMockTaskRecord({ status: 'done' }).payload
       ];
 
-      const result = metricsAdapter.calculateLeadTime(tasks);
+      const result = recordMetrics.calculateLeadTime(tasks);
 
       expect(result).toBeGreaterThanOrEqual(0);
       // Should only consider the 2 'done' tasks
@@ -567,7 +569,7 @@ describe('MetricsAdapter', () => {
         createMockTaskRecord({ status: 'review' }).payload
       ];
 
-      const result = metricsAdapter.calculateCycleTime(tasks);
+      const result = recordMetrics.calculateCycleTime(tasks);
 
       expect(result).toBe(0); // No tasks were ever active
     });
@@ -575,7 +577,7 @@ describe('MetricsAdapter', () => {
     it('[EARS-F4] should validate timestamps and throw error for invalid data', () => {
       const invalidTask = createMockTaskRecord({ id: 'invalid-id-format' }).payload;
 
-      expect(() => metricsAdapter.calculateTimeInCurrentStage(invalidTask))
+      expect(() => recordMetrics.calculateTimeInCurrentStage(invalidTask))
         .toThrow('InvalidDataError');
     });
 
@@ -586,7 +588,7 @@ describe('MetricsAdapter', () => {
         { ...createMockTaskRecord().payload, status: 'invalid-status' as unknown as TaskRecord['status'] }
       ];
 
-      const result = metricsAdapter.calculateBacklogDistribution(tasks);
+      const result = recordMetrics.calculateBacklogDistribution(tasks);
 
       // Should only count valid tasks (2 out of 3)
       expect(result['draft']).toBe(50); // 1/2 = 50%
@@ -594,13 +596,13 @@ describe('MetricsAdapter', () => {
     });
 
     it('[EARS-F6] should return 0 for division by zero', () => {
-      const result = metricsAdapter.calculateHealth([]);
+      const result = recordMetrics.calculateHealth([]);
       expect(result).toBe(0);
 
-      const leadTimeResult = metricsAdapter.calculateLeadTime([]);
+      const leadTimeResult = recordMetrics.calculateLeadTime([]);
       expect(leadTimeResult).toBe(0);
 
-      const cycleTimeResult = metricsAdapter.calculateCycleTime([]);
+      const cycleTimeResult = recordMetrics.calculateCycleTime([]);
       expect(cycleTimeResult).toBe(0);
     });
   });
@@ -612,9 +614,9 @@ describe('MetricsAdapter', () => {
       );
 
       const startTime = Date.now();
-      metricsAdapter.calculateHealth(largeTasks);
-      metricsAdapter.calculateBacklogDistribution(largeTasks);
-      metricsAdapter.calculateTasksCreatedToday(largeTasks);
+      recordMetrics.calculateHealth(largeTasks);
+      recordMetrics.calculateBacklogDistribution(largeTasks);
+      recordMetrics.calculateTasksCreatedToday(largeTasks);
       const endTime = Date.now();
 
       expect(endTime - startTime).toBeLessThan(50); // Should be very fast for pure calculations
@@ -640,8 +642,8 @@ describe('MetricsAdapter', () => {
       mockFeedbackStore.list.mockResolvedValue([]);
       mockExecutionStore.list.mockResolvedValue([]);
 
-      const systemStatus = await metricsAdapter.getSystemStatus();
-      const taskHealth = await metricsAdapter.getTaskHealth(task1Id);
+      const systemStatus = await recordMetrics.getSystemStatus();
+      const taskHealth = await recordMetrics.getTaskHealth(task1Id);
 
       expect(systemStatus.tasks.total).toBe(2);
       expect(taskHealth.taskId).toBe(task1Id);
