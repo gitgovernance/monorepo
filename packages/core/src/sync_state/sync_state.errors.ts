@@ -124,6 +124,22 @@ export class ActorIdentityMismatchError extends SyncStateError {
 }
 
 /**
+ * Error thrown when worktree cannot be created or repaired.
+ * Used by FsWorktreeSyncStateModule for worktree lifecycle failures.
+ */
+export class WorktreeSetupError extends SyncStateError {
+  constructor(
+    public reason: string,
+    public worktreePath: string,
+    public underlyingError?: Error,
+  ) {
+    super(`Failed to setup worktree at ${worktreePath}: ${reason}`);
+    this.name = 'WorktreeSetupError';
+    Object.setPrototypeOf(this, WorktreeSetupError.prototype);
+  }
+}
+
+/**
  * Error thrown when uncommitted changes exist in state branch
  */
 export class UncommittedChangesError extends SyncStateError {
@@ -209,5 +225,11 @@ export function isActorIdentityMismatchError(
   error: unknown
 ): error is ActorIdentityMismatchError {
   return error instanceof ActorIdentityMismatchError;
+}
+
+export function isWorktreeSetupError(
+  error: unknown
+): error is WorktreeSetupError {
+  return error instanceof WorktreeSetupError;
 }
 

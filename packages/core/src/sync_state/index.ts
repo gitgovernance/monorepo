@@ -52,4 +52,6 @@ export {
   isStateBranchSetupError,
   isCryptoModuleRequiredError,
   isActorIdentityMismatchError,
+  WorktreeSetupError,
+  isWorktreeSetupError,
 } from "./sync_state.errors";
