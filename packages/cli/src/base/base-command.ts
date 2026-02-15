@@ -83,6 +83,24 @@ export abstract class BaseCommand<TOptions extends BaseCommandOptions = BaseComm
   }
 
   /**
+   * Guard: require active actor identity for write operations.
+   * Returns actor ID or exits with user-friendly error message.
+   */
+  protected async requireActor(options: TOptions): Promise<{ actorId: string }> {
+    try {
+      const identityAdapter = await this.dependencyService.getIdentityAdapter();
+      const currentActor = await identityAdapter.getCurrentActor();
+      return { actorId: currentActor.id };
+    } catch {
+      this.handleError(
+        'No active identity. Run `gitgov actor new -t human -n "Your Name" -r developer` to create one.',
+        options
+      );
+      throw new Error('unreachable');
+    }
+  }
+
+  /**
    * Handle successful output consistently
    */
   protected handleSuccess(data: any, options: TOptions, message?: string): void {
@@ -97,9 +115,6 @@ export abstract class BaseCommand<TOptions extends BaseCommandOptions = BaseComm
     } else {
       if (message && !isQuiet) {
         console.log(`✅ ${message}`);
-      }
-      if (data && !isQuiet) {
-        console.log(data);
       }
     }
   }

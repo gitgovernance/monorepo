@@ -54,7 +54,8 @@ jest.mock('../../services/dependency-injection', () => ({
       getSyncStateModule: jest.fn().mockResolvedValue(mockSyncModule),
       getConfigManager: jest.fn().mockResolvedValue(mockConfigManager),
       getSessionManager: jest.fn().mockResolvedValue(mockSessionManager),
-      getGitModule: jest.fn().mockResolvedValue(mockGitModule)
+      getGitModule: jest.fn().mockResolvedValue(mockGitModule),
+      wasBootstrapped: jest.fn().mockReturnValue(false)
     })
   }
 }));
@@ -1300,7 +1301,7 @@ describe('SyncCommand - Unit Tests', () => {
       expect(mockProcessExit).toHaveBeenCalledWith(1);
 
       expect(mockConsoleError).toHaveBeenCalledWith(
-        expect.stringContaining('No active actor in session')
+        expect.stringContaining('No active identity')
       );
     });
 

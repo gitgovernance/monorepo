@@ -24,6 +24,7 @@ import {
   ActorIdentityMismatchError,
   ConflictMarkersPresentError,
   NoRebaseInProgressError,
+  RebaseAlreadyInProgressError,
 } from '../sync_state.errors';
 import type { IIdentityAdapter } from '../../adapters/identity_adapter';
 import type { LintReport } from '../../lint';
@@ -435,10 +436,10 @@ describe('FsWorktreeSyncStateModule', () => {
   });
 
   // ═══════════════════════════════════════════════
-  // 4.2. Push Operations (WTSYNC-B1 to B14)
+  // 4.2. Push Operations (WTSYNC-B1 to B15)
   // ═══════════════════════════════════════════════
 
-  describe('4.2. Push Operations (WTSYNC-B1 to B14)', () => {
+  describe('4.2. Push Operations (WTSYNC-B1 to B15)', () => {
     async function setupPushTest(): Promise<{
       repoPath: string;
       remotePath: string;
@@ -586,6 +587,23 @@ describe('FsWorktreeSyncStateModule', () => {
       // add/add conflict on same file is guaranteed during rebase
       expect(result.conflictDetected).toBe(true);
       expect(result.conflictInfo?.type).toBe('rebase_conflict');
+    });
+
+    it('[WTSYNC-B15] should throw RebaseAlreadyInProgressError when rebase is already in progress', async () => {
+      const { repoPath, remotePath } = await setupRepoWithRemote();
+      cleanupPaths.push(repoPath, remotePath);
+      await setupStateBranch(repoPath);
+
+      const { module } = createModule(repoPath);
+      await module.ensureWorktree();
+
+      // Create a rebase conflict (leaves rebase in progress)
+      const { cloneDir } = await setupRebaseConflict(remotePath, module.getWorktreePath());
+      cleanupPaths.push(cloneDir);
+
+      // Push should refuse while rebase is in progress
+      await expect(module.pushState({ actorId: 'test-actor' }))
+        .rejects.toThrow(RebaseAlreadyInProgressError);
     });
 
     it('[WTSYNC-B8] should include implicitPull info when rebase brings remote changes', async () => {
@@ -748,10 +766,10 @@ describe('FsWorktreeSyncStateModule', () => {
   });
 
   // ═══════════════════════════════════════════════
-  // 4.3. Pull Operations (WTSYNC-C1 to C8)
+  // 4.3. Pull Operations (WTSYNC-C1 to C9)
   // ═══════════════════════════════════════════════
 
-  describe('4.3. Pull Operations (WTSYNC-C1 to C8)', () => {
+  describe('4.3. Pull Operations (WTSYNC-C1 to C9)', () => {
     async function setupPullTest(): Promise<{
       repoPath: string;
       remotePath: string;
@@ -855,6 +873,23 @@ describe('FsWorktreeSyncStateModule', () => {
       expect(result.conflictInfo?.type).toBe('rebase_conflict');
     });
 
+    it('[WTSYNC-C9] should throw RebaseAlreadyInProgressError when rebase is already in progress', async () => {
+      const { repoPath, remotePath } = await setupRepoWithRemote();
+      cleanupPaths.push(repoPath, remotePath);
+      await setupStateBranch(repoPath);
+
+      const { module } = createModule(repoPath);
+      await module.ensureWorktree();
+
+      // Create a rebase conflict (leaves rebase in progress)
+      const { cloneDir } = await setupRebaseConflict(remotePath, module.getWorktreePath());
+      cleanupPaths.push(cloneDir);
+
+      // Pull should refuse while rebase is in progress
+      await expect(module.pullState())
+        .rejects.toThrow(RebaseAlreadyInProgressError);
+    });
+
     it('[WTSYNC-C5] should re-index records after successful pull with changes', async () => {
       const { module, remotePath, indexer } = await setupPullTest();
 
@@ -907,6 +942,61 @@ describe('FsWorktreeSyncStateModule', () => {
       // Force pull should succeed (even though file was untracked, not committed)
       const result = await module.pullState({ force: true });
       expect(result.success).toBe(true);
+    });
+
+    it('[WTSYNC-C7] should preserve LOCAL_ONLY files (.session.json, index.json, .key) when force is true', async () => {
+      const { module, remotePath } = await setupPullTest();
+      const worktreePath = module.getWorktreePath();
+
+      // Create LOCAL_ONLY files in the worktree
+      fs.writeFileSync(
+        path.join(worktreePath, '.gitgov', '.session.json'),
+        JSON.stringify({ lastSession: { actorId: 'test-actor', timestamp: new Date().toISOString() } })
+      );
+      fs.writeFileSync(
+        path.join(worktreePath, '.gitgov', 'index.json'),
+        JSON.stringify({ version: 1, records: [] })
+      );
+      fs.mkdirSync(path.join(worktreePath, '.gitgov', 'actors'), { recursive: true });
+      fs.writeFileSync(
+        path.join(worktreePath, '.gitgov', 'actors', 'test-actor.key'),
+        'private-key-content'
+      );
+
+      // Create a local syncable change (will be discarded by force)
+      fs.writeFileSync(
+        path.join(worktreePath, '.gitgov', 'tasks', 'local-change.json'),
+        JSON.stringify({ id: 'local-change' })
+      );
+
+      // Push a remote change to trigger actual pull
+      const tempClone = path.join(os.tmpdir(), `gitgov-wt-force-local-${Date.now()}`);
+      cleanupPaths.push(tempClone);
+      await execAsync(`git clone ${remotePath} ${tempClone}`);
+      await execAsync('git config user.name "Other"', { cwd: tempClone });
+      await execAsync('git config user.email "other@test.com"', { cwd: tempClone });
+      await execAsync('git checkout gitgov-state', { cwd: tempClone });
+      fs.writeFileSync(
+        path.join(tempClone, '.gitgov', 'tasks', 'remote-task.json'),
+        JSON.stringify({ id: 'remote-task' })
+      );
+      await execAsync('git add .gitgov/tasks/remote-task.json', { cwd: tempClone });
+      await execAsync('git commit -m "remote: add task"', { cwd: tempClone });
+      await execAsync('git push origin gitgov-state', { cwd: tempClone });
+
+      // Force pull — should discard local changes but PRESERVE local-only files
+      const result = await module.pullState({ force: true });
+      expect(result.success).toBe(true);
+
+      // LOCAL_ONLY files must still exist
+      expect(fs.existsSync(path.join(worktreePath, '.gitgov', '.session.json'))).toBe(true);
+      expect(fs.existsSync(path.join(worktreePath, '.gitgov', 'index.json'))).toBe(true);
+      expect(fs.existsSync(path.join(worktreePath, '.gitgov', 'actors', 'test-actor.key'))).toBe(true);
+
+      // Verify content was not corrupted
+      const sessionContent = JSON.parse(fs.readFileSync(path.join(worktreePath, '.gitgov', '.session.json'), 'utf-8'));
+      expect(sessionContent.lastSession.actorId).toBe('test-actor');
+      expect(fs.readFileSync(path.join(worktreePath, '.gitgov', 'actors', 'test-actor.key'), 'utf-8')).toBe('private-key-content');
     });
 
     it('[WTSYNC-C8] should return hasChanges false when no remote changes exist', async () => {

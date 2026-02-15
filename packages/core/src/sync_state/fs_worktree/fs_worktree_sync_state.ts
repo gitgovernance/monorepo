@@ -27,6 +27,7 @@ import { createLogger } from '../../logger/logger';
 import {
   ConflictMarkersPresentError,
   NoRebaseInProgressError,
+  RebaseAlreadyInProgressError,
   ActorIdentityMismatchError,
   WorktreeSetupError,
   StateBranchSetupError,
@@ -227,6 +228,11 @@ export class FsWorktreeSyncStateModule implements ISyncStateModule {
     const { actorId, dryRun = false, force = false } = options;
     const log = (msg: string) => logger.debug(`[pushState] ${msg}`);
 
+    // Guard: refuse push if rebase is in progress (mirrors git behavior)
+    if (await this.isRebaseInProgress()) {
+      throw new RebaseAlreadyInProgressError();
+    }
+
     // [WTSYNC-B1] Verify actor identity
     const currentActor = await this.deps.identity.getCurrentActor();
     if (currentActor.id !== actorId) {
@@ -289,7 +295,18 @@ export class FsWorktreeSyncStateModule implements ISyncStateModule {
     // [WTSYNC-B6/B13] Reconcile with remote (unless force)
     let implicitPull: { hasChanges: boolean; filesUpdated: number; reindexed: boolean } | undefined;
 
+    // Check if remote branch exists (first push = no remote branch yet)
+    let remoteBranchExists = false;
     if (!force) {
+      try {
+        await this.execGit(['ls-remote', '--exit-code', 'origin', this.stateBranchName]);
+        remoteBranchExists = true;
+      } catch {
+        // Remote branch doesn't exist — first push, skip reconciliation
+      }
+    }
+
+    if (!force && remoteBranchExists) {
       try {
         const beforeHash = commitHash;
         await this.execInWorktree(['pull', '--rebase', 'origin', this.stateBranchName]);
@@ -368,15 +385,22 @@ export class FsWorktreeSyncStateModule implements ISyncStateModule {
     const { forceReindex = false, force = false } = options ?? {};
     const log = (msg: string) => logger.debug(`[pullState] ${msg}`);
 
+    // Guard: refuse pull if rebase is in progress (mirrors git behavior)
+    if (await this.isRebaseInProgress()) {
+      throw new RebaseAlreadyInProgressError();
+    }
+
     // [WTSYNC-C1] Ensure worktree
     await this.ensureWorktree();
 
     // [WTSYNC-C6] Check for local uncommitted changes (unless force)
     if (!force) {
-      const statusRaw = await this.execInWorktree(['status', '--porcelain', '.gitgov/']);
+      const statusRaw = await this.execInWorktree(['status', '--porcelain', '-uall', '.gitgov/']);
       const statusLines = statusRaw.split('\n').filter(line => line.length >= 4);
-      if (statusLines.length > 0) {
-        const affectedFiles = statusLines.map(l => l.slice(3));
+      // Only consider syncable files (ignore local-only files like index.json, .session.json)
+      const syncableChanges = statusLines.filter(l => shouldSyncFile(l.slice(3)));
+      if (syncableChanges.length > 0) {
+        const affectedFiles = syncableChanges.map(l => l.slice(3));
         return {
           success: false,
           hasChanges: false,
@@ -861,7 +885,11 @@ export class FsWorktreeSyncStateModule implements ISyncStateModule {
   /** Calculate file delta (uncommitted changes in worktree) */
   private async calculateFileDelta(): Promise<StateDeltaFile[]> {
     try {
-      const status = await this.execInWorktree(['status', '--porcelain', '.gitgov/']);
+      // -uall: list individual files (not collapsed directories)
+      // --ignored=traditional: detect files even if .gitgov/ is in .gitignore (stale worktrees)
+      const status = await this.execInWorktree([
+        'status', '--porcelain', '-uall', '--ignored=traditional', '.gitgov/',
+      ]);
       return this.parseStatusOutput(status);
     } catch {
       return [];
@@ -885,8 +913,8 @@ export class FsWorktreeSyncStateModule implements ISyncStateModule {
         // Deleted files: use git rm to stage the deletion
         await this.execInWorktree(['rm', '--', file.file]);
       } else {
-        // Added/Modified files: use git add
-        await this.execInWorktree(['add', '--', file.file]);
+        // Added/Modified files: use git add -f (.gitgov/ may be in .gitignore by design)
+        await this.execInWorktree(['add', '-f', '--', file.file]);
       }
       log(`Staged (${file.status}): ${file.file}`);
       stagedCount++;
@@ -953,8 +981,8 @@ export class FsWorktreeSyncStateModule implements ISyncStateModule {
       const xy = line.slice(0, 2);
       const file = line.slice(3);
       let statusChar: 'A' | 'M' | 'D';
-      if (xy.includes('?')) {
-        statusChar = 'A'; // Untracked = new file
+      if (xy.includes('?') || xy.includes('!')) {
+        statusChar = 'A'; // Untracked or ignored = new file to add
       } else if (xy.includes('D')) {
         statusChar = 'D';
       } else {

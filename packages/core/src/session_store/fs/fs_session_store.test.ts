@@ -180,7 +180,7 @@ describe('FsSessionStore', () => {
       const result = await store.detectActorFromKeyFiles();
 
       expect(result).toBe('human:camilo-v2');
-      expect(mockedFs.readdir).toHaveBeenCalledWith('/test/project/.gitgov/actors');
+      expect(mockedFs.readdir).toHaveBeenCalledWith('/test/project/.gitgov/keys');
     });
 
     it('[EARS-C2] WHEN detectActorFromKeyFiles is invoked with multiple .key files, THE SYSTEM SHALL return first', async () => {
@@ -204,7 +204,7 @@ describe('FsSessionStore', () => {
       expect(result).toBeNull();
     });
 
-    it('[EARS-C4] WHEN detectActorFromKeyFiles is invoked without actors directory, THE SYSTEM SHALL return null', async () => {
+    it('[EARS-C4] WHEN detectActorFromKeyFiles is invoked without keys directory, THE SYSTEM SHALL return null', async () => {
       const store = new FsSessionStore(projectRoot);
       mockedFs.readdir.mockRejectedValue(new Error('ENOENT'));
 

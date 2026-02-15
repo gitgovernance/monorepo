@@ -40,7 +40,7 @@ export class KeyProviderError extends Error {
  * @example
  * ```typescript
  * // Filesystem backend (development)
- * const provider = new FsKeyProvider({ actorsDir: '.gitgov/actors' });
+ * const provider = new FsKeyProvider({ keysDir: '.gitgov/keys' });
  *
  * // Environment backend (serverless)
  * const provider = new EnvKeyProvider({ prefix: 'GITGOV_KEY_' });

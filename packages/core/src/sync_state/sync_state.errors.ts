@@ -140,6 +140,21 @@ export class WorktreeSetupError extends SyncStateError {
 }
 
 /**
+ * Error thrown when attempting pull/push while a rebase is already in progress.
+ * Mirrors git behavior: git refuses pull/push/commit/checkout during active rebase.
+ */
+export class RebaseAlreadyInProgressError extends SyncStateError {
+  constructor() {
+    super(
+      `A rebase is already in progress. ` +
+      `Resolve the conflict with 'gitgov sync resolve --reason "..."' before pulling or pushing.`
+    );
+    this.name = "RebaseAlreadyInProgressError";
+    Object.setPrototypeOf(this, RebaseAlreadyInProgressError.prototype);
+  }
+}
+
+/**
  * Error thrown when uncommitted changes exist in state branch
  */
 export class UncommittedChangesError extends SyncStateError {
@@ -231,5 +246,11 @@ export function isWorktreeSetupError(
   error: unknown
 ): error is WorktreeSetupError {
   return error instanceof WorktreeSetupError;
+}
+
+export function isRebaseAlreadyInProgressError(
+  error: unknown
+): error is RebaseAlreadyInProgressError {
+  return error instanceof RebaseAlreadyInProgressError;
 }
 

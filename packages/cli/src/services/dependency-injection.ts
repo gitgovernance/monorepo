@@ -226,7 +226,7 @@ export class DependencyInjectionService {
       if (this.bootstrapOccurred) {
         try {
           await this.projector.generateIndex();
-          this.bootstrapOccurred = false; // Reset flag after reindex
+          // Note: bootstrapOccurred NOT reset — consumer commands (sync pull) check it via wasBootstrapped()
         } catch (reindexError) {
           // Non-critical: log warning but don't fail
           console.warn('⚠️  Warning: Failed to regenerate index after bootstrap');
@@ -269,7 +269,7 @@ export class DependencyInjectionService {
 
       // Create KeyProvider for filesystem-based key storage
       this.keyProvider = new KeyProvider.FsKeyProvider({
-        actorsDir: path.join(this.projectRoot!, '.gitgov', 'actors')
+        keysDir: path.join(this.projectRoot!, '.gitgov', 'keys')
       });
 
       // Create IdentityAdapter with correct dependencies
@@ -366,7 +366,7 @@ export class DependencyInjectionService {
 
       // Create KeyProvider for filesystem-based key storage
       const keyProvider = new KeyProvider.FsKeyProvider({
-        actorsDir: path.join(this.projectRoot!, '.gitgov', 'actors')
+        keysDir: path.join(this.projectRoot!, '.gitgov', 'keys')
       });
 
       // Create IdentityAdapter with dependencies
@@ -401,7 +401,7 @@ export class DependencyInjectionService {
     const identityAdapter = await this.getIdentityAdapter();
     const backlogAdapter = await this.getBacklogAdapter();
     const configManager = await this.getConfigManager();
-    const projectInitializer = new FsProjectInitializer(this.projectRoot);
+    const projectInitializer = new FsProjectInitializer(this.projectRoot, this.repoRoot ?? undefined);
 
     return new Adapters.ProjectAdapter({
       identityAdapter,
@@ -424,7 +424,7 @@ export class DependencyInjectionService {
       // Create EventBus and KeyProvider
       const eventBus = new EventBus.EventBus();
       const keyProvider = new KeyProvider.FsKeyProvider({
-        actorsDir: path.join(this.projectRoot!, '.gitgov', 'actors')
+        keysDir: path.join(this.projectRoot!, '.gitgov', 'keys')
       });
 
       // Create IdentityAdapter
@@ -621,7 +621,7 @@ export class DependencyInjectionService {
       // Create EventBus and KeyProvider
       const eventBus = new EventBus.EventBus();
       const keyProvider = new KeyProvider.FsKeyProvider({
-        actorsDir: path.join(this.projectRoot!, '.gitgov', 'actors')
+        keysDir: path.join(this.projectRoot!, '.gitgov', 'keys')
       });
 
       // Create IdentityAdapter
@@ -941,6 +941,14 @@ export class DependencyInjectionService {
       throw new Error("KeyProvider not initialized. Call initializeStores first.");
     }
     return this.keyProvider;
+  }
+
+  /**
+   * [EARS-G1] Expose bootstrap state for consumer commands.
+   * Returns true when bootstrap from remote gitgov-state occurred during this process.
+   */
+  wasBootstrapped(): boolean {
+    return this.bootstrapOccurred;
   }
 
   /**

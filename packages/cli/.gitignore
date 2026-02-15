@@ -1,7 +1,7 @@
 
 # GitGovernance
 .gitgov/.session.json
-.gitgov/actors/*.key
+.gitgov/keys/*.key
 
 # Build artifacts
 build/

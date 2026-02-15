@@ -316,7 +316,7 @@ export const SYNC_ALLOWED_EXTENSIONS = ['.json'] as const;
  * These are excluded from gitgov-state branch
  */
 export const SYNC_EXCLUDED_PATTERNS = [
-  /\.key$/,           // Private keys (e.g., actors/*.key)
+  /\.key$/,           // Private keys (e.g., keys/*.key)
   /\.backup$/,        // Backup files from lint
   /\.backup-\d+$/,    // Numbered backup files
   /\.tmp$/,           // Temporary files

@@ -71,10 +71,13 @@ export class SyncCommand extends BaseCommand {
       const configManager = await this.dependencyService.getConfigManager();
       const sessionManager = await this.dependencyService.getSessionManager();
 
-      // Get actor ID from session
+      // [E2E-SYNC-W6] Get actor ID from session — fail with actionable message if missing
       const session = await sessionManager.loadSession();
       if (!session || !session.lastSession?.actorId) {
-        this.handleError('No active actor in session. Please initialize session first.', options);
+        this.handleError(
+          'No active identity. Run `gitgov actor new -t human -n "Your Name" -r developer` to create one.',
+          options
+        );
         return;
       }
       const actorId = session.lastSession.actorId;
@@ -242,6 +245,15 @@ export class SyncCommand extends BaseCommand {
       // Format output
       this.formatPullOutput(pullResult, options);
 
+      // [E2E-SYNC-W5] Show onboarding guidance on first bootstrap pull
+      if (this.dependencyService.wasBootstrapped()) {
+        const session = await sessionManager.loadSession();
+        if (!session?.lastSession?.actorId) {
+          console.log('\n💡 State pulled successfully. To contribute, create your identity:');
+          console.log('   gitgov actor new -t human -n "Your Name" -r developer\n');
+        }
+      }
+
     } catch (error) {
       // [EARS-F1] Update lastError in syncStatus
       try {
@@ -284,7 +296,10 @@ export class SyncCommand extends BaseCommand {
       if (!actorId) {
         const session = await sessionManager.loadSession();
         if (!session || !session.lastSession?.actorId) {
-          this.handleError('No active actor in session. Use --actor flag or initialize session first.', options);
+          this.handleError(
+            'No active identity. Run `gitgov actor new -t human -n "Your Name" -r developer` to create one.',
+            options
+          );
           return;
         }
         actorId = session.lastSession.actorId;
