@@ -125,8 +125,7 @@ export class FsWorktreeSyncStateModule implements ISyncStateModule {
     this.deps = deps;
     this.repoRoot = config.repoRoot;
     this.stateBranchName = config.stateBranchName ?? DEFAULT_STATE_BRANCH;
-    const worktreeDirName = config.worktreeDirName ?? WORKTREE_DIR_NAME;
-    this.worktreePath = path.join(this.repoRoot, worktreeDirName);
+    this.worktreePath = config.worktreePath ?? path.join(this.repoRoot, WORKTREE_DIR_NAME);
     this.gitgovPath = path.join(this.worktreePath, '.gitgov');
   }
 
@@ -331,8 +330,8 @@ export class FsWorktreeSyncStateModule implements ISyncStateModule {
             affectedFiles,
             message: 'Rebase conflict detected during push reconciliation',
             resolutionSteps: [
-              'Edit conflicted files in .gitgov-worktree/.gitgov/',
-              'Run `gitgov sync resolve` with a reason',
+              `Edit conflicted files in ${this.worktreePath}/.gitgov/`,
+              'Run `gitgov sync resolve --reason "..."` to finalize',
             ],
           },
           error: 'Rebase conflict during push',
@@ -452,8 +451,8 @@ export class FsWorktreeSyncStateModule implements ISyncStateModule {
             affectedFiles,
             message: 'Rebase conflict detected during pull',
             resolutionSteps: [
-              'Edit conflicted files in .gitgov-worktree/.gitgov/',
-              'Run `gitgov sync resolve` with a reason',
+              `Edit conflicted files in ${this.worktreePath}/.gitgov/`,
+              'Run `gitgov sync resolve --reason "..."` to finalize',
             ],
           },
           error: 'Rebase conflict during pull',

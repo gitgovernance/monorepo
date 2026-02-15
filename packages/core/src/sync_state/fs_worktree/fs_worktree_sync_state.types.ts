@@ -14,8 +14,8 @@ export type FsWorktreeSyncStateConfig = {
   repoRoot: string;
   /** State branch name (default: "gitgov-state") */
   stateBranchName?: string;
-  /** Worktree directory name (default: ".gitgov-worktree") */
-  worktreeDirName?: string;
+  /** Absolute path to worktree. Default: path.join(repoRoot, '.gitgov-worktree') */
+  worktreePath?: string;
 };
 
 /**

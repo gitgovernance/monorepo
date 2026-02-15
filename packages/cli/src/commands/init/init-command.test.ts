@@ -564,4 +564,32 @@ describe('InitCommand', () => {
       expect(mockConsoleLog).toHaveBeenCalledWith('   ✅ 8 tasks created');
     });
   });
+
+  // ============================================================================
+  // §4.5. Worktree Integration (CLIINT-B1, CLIINT-B3)
+  // ============================================================================
+  describe('4.5. Worktree Integration (CLIINT-B1 to B3)', () => {
+    it('[CLIINT-B1] should display worktree path in success output', async () => {
+      await initCommand.execute({ name: 'Test Project' });
+
+      expect(mockConsoleLog).toHaveBeenCalledWith(
+        expect.stringContaining('~/.gitgov/worktrees/<id>/.gitgov/')
+      );
+    });
+
+    it('[CLIINT-B3] should not reference .gitgov/ as repo-local in success output', async () => {
+      await initCommand.execute({ name: 'Test Project' });
+
+      // The structure line should reference ~/.gitgov/, not just .gitgov/
+      const structureCall = mockConsoleLog.mock.calls.find(
+        call => typeof call[0] === 'string' && call[0].includes('Project Structure Created')
+      );
+      expect(structureCall).toBeDefined();
+
+      // The next call after "Project Structure Created" should show ~/.gitgov path
+      const structureIndex = mockConsoleLog.mock.calls.indexOf(structureCall!);
+      const pathLine = mockConsoleLog.mock.calls[structureIndex + 1];
+      expect(pathLine?.[0]).toContain('~/.gitgov/');
+    });
+  });
 });

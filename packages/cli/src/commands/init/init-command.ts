@@ -2,6 +2,9 @@ import type { Adapters } from '@gitgov/core';
 import { DependencyInjectionService } from '../../services/dependency-injection';
 
 import * as pathUtils from 'path';
+import * as os from 'os';
+import { createHash } from 'crypto';
+import { existsSync, promises as fsPromises } from 'fs';
 
 /**
  * Init Command Options interface
@@ -114,12 +117,49 @@ export class InitCommand {
   }
 
   /**
-   * [EARS-B1] Gets ProjectAdapter for complete orchestration via DI.
-   * Uses setInitMode() to bypass .gitgov discovery (it doesn't exist yet).
+   * [EARS-B1, CLIINT-B1] Gets ProjectAdapter for complete orchestration via DI.
+   * Creates worktree at ~/.gitgov/worktrees/<hash>/ before initializing.
    */
   private async getProjectAdapter(): Promise<Adapters.ProjectAdapter> {
-    this.container.setInitMode(process.cwd());
+    const projectRoot = process.cwd();
+
+    // [CLIINT-B1] Create worktree BEFORE FsProjectInitializer runs
+    await this.ensureWorktreeForInit(projectRoot);
+
+    this.container.setInitMode(projectRoot);
     return this.container.getProjectAdapter();
+  }
+
+  /**
+   * [CLIINT-B1] Create worktree at ~/.gitgov/worktrees/<hash>/ for init.
+   * Creates orphan gitgov-state branch if needed, then creates worktree.
+   */
+  private async ensureWorktreeForInit(repoRoot: string): Promise<void> {
+    const hash = createHash('sha256').update(repoRoot).digest('hex').slice(0, 12);
+    const worktreePath = pathUtils.join(os.homedir(), '.gitgov', 'worktrees', hash);
+
+    // Idempotent: skip if worktree already exists
+    if (existsSync(worktreePath)) return;
+
+    // Ensure ~/.gitgov/worktrees/ exists
+    await fsPromises.mkdir(pathUtils.join(os.homedir(), '.gitgov', 'worktrees'), { recursive: true });
+
+    // Create orphan gitgov-state branch if it doesn't exist
+    const { execSync } = await import('child_process');
+    try {
+      execSync('git rev-parse --verify gitgov-state', { cwd: repoRoot, stdio: 'pipe' });
+    } catch {
+      // Branch doesn't exist — create orphan
+      const emptyTree = execSync('git hash-object -t tree /dev/null', { cwd: repoRoot, encoding: 'utf8' }).trim();
+      const commitHash = execSync(
+        `git commit-tree ${emptyTree} -m "gitgov: initialize state branch"`,
+        { cwd: repoRoot, encoding: 'utf8' },
+      ).trim();
+      execSync(`git update-ref refs/heads/gitgov-state ${commitHash}`, { cwd: repoRoot, stdio: 'pipe' });
+    }
+
+    // Create worktree at ~/.gitgov/worktrees/<hash>/
+    execSync(`git worktree add "${worktreePath}" gitgov-state`, { cwd: repoRoot, stdio: 'pipe' });
   }
 
   /**
@@ -212,7 +252,7 @@ export class InitCommand {
       console.log("✅ GitGovernance initialized successfully!\n");
 
       console.log("🏗️  Project Structure Created:");
-      console.log("   📁 .gitgov/");
+      console.log("   📁 ~/.gitgov/worktrees/<id>/.gitgov/");
       console.log("   ├── 📁 actors/     (1 ActorRecord created)");
       console.log("   ├── 📁 cycles/     (1 Root Cycle created)");
       console.log("   ├── 📁 tasks/      (ready for work)");
