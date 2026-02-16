@@ -1,3 +1,14 @@
+## [2.4.0](https://github.com/gitgovernance/monorepo/compare/core-v2.3.0...core-v2.4.0) (2026-02-16)
+
+
+### ✨ Features
+
+* **cli:** add actor commands + move key storage to .gitgov/keys/ ([cd7f035](https://github.com/gitgovernance/monorepo/commit/cd7f035fa26aef7e0b051ce689599867a29cc874))
+* **cli:** add sync status intelligence to dashboard + update pull messaging ([ee27a34](https://github.com/gitgovernance/monorepo/commit/ee27a346fb269936ae11ed181e52c227ed2716e8))
+* **cli:** integrate worktree-based sync into DI, init, and sync commands ([0dcf92d](https://github.com/gitgovernance/monorepo/commit/0dcf92d5e2bc751e2ce7c555a96b10c57345244f))
+* **core:** add FsWorktreeSyncStateModule — worktree-based ISyncStateModule ([b487902](https://github.com/gitgovernance/monorepo/commit/b48790232693f30d65c50d43245658a4a4c728e9))
+* **core:** auto-commit before pull + preserve LOCAL_ONLY on force pull ([8e0cea6](https://github.com/gitgovernance/monorepo/commit/8e0cea6c9e997ac41bac547a3993011d8ea2dc20))
+
 ## [2.3.0](https://github.com/gitgovernance/monorepo/compare/core-v2.2.0...core-v2.3.0) (2026-02-14)
 
 
