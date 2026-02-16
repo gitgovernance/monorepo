@@ -748,7 +748,7 @@ describe('SyncCommand - Unit Tests', () => {
       // Verify conflict was detected and error shown
       expect(mockProcessExit).toHaveBeenCalledWith(1);
       expect(mockConsoleError).toHaveBeenCalledWith(
-        expect.stringContaining('Conflict')
+        expect.stringContaining('Local changes not yet pushed')
       );
     });
 

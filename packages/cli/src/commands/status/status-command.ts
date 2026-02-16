@@ -27,6 +27,15 @@ interface PersonalWorkSummary {
 }
 
 /**
+ * Sync Status for unpushed changes
+ */
+interface SyncStatus {
+  unpushedChanges: Array<{ status: 'A' | 'M' | 'D'; file: string }>;
+  rebaseInProgress: boolean;
+  available: boolean;
+}
+
+/**
  * System Overview Summary
  */
 interface SystemOverview {
@@ -84,11 +93,15 @@ export class StatusCommand {
     const identityAdapter = await this.dependencyService.getIdentityAdapter();
     const currentActor = await identityAdapter.getCurrentActor();
 
-    // 2. Get personal work summary
-    const personalWork = await this.getPersonalWorkSummary(currentActor.id);
+    // 2. Get personal work summary, system health, and sync status in parallel
+    const [personalWork, systemHealth, syncStatus] = await Promise.all([
+      this.getPersonalWorkSummary(currentActor.id),
+      this.getSystemHealthSummary(),
+      this.getSyncStatus()
+    ]);
 
-    // 3. Get system health overview
-    const systemHealth = await this.getSystemHealthSummary();
+    // 3. Add sync suggestions to personal work
+    this.addSyncSuggestions(personalWork.suggestedActions, syncStatus);
 
     // 4. Output rendering
     if (options.json) {
@@ -107,10 +120,20 @@ export class StatusCommand {
           overallScore: systemHealth.healthScore,
           alerts: systemHealth.alerts
         },
+        syncStatus: {
+          unpushedChanges: syncStatus.unpushedChanges.length,
+          changesByType: {
+            added: syncStatus.unpushedChanges.filter(f => f.status === 'A').length,
+            modified: syncStatus.unpushedChanges.filter(f => f.status === 'M').length,
+            deleted: syncStatus.unpushedChanges.filter(f => f.status === 'D').length
+          },
+          rebaseInProgress: syncStatus.rebaseInProgress,
+          available: syncStatus.available
+        },
         recommendations: personalWork.suggestedActions
       }, null, 2));
     } else {
-      this.renderPersonalDashboard(currentActor, personalWork, systemHealth, options);
+      this.renderPersonalDashboard(currentActor, personalWork, systemHealth, syncStatus, options);
     }
   }
 
@@ -118,8 +141,11 @@ export class StatusCommand {
    * [EARS-9] Global dashboard with system overview
    */
   private async executeGlobalDashboard(options: StatusCommandOptions): Promise<void> {
-    // 1. Get system overview
-    const systemOverview = await this.getSystemOverview();
+    // 1. Get system overview and sync status in parallel
+    const [systemOverview, syncStatus] = await Promise.all([
+      this.getSystemOverview(),
+      this.getSyncStatus()
+    ]);
 
     // 2. Get additional metrics if requested
     let productivityMetrics = null;
@@ -140,11 +166,21 @@ export class StatusCommand {
       console.log(JSON.stringify({
         success: true,
         systemOverview: systemOverview,
+        syncStatus: {
+          unpushedChanges: syncStatus.unpushedChanges.length,
+          changesByType: {
+            added: syncStatus.unpushedChanges.filter(f => f.status === 'A').length,
+            modified: syncStatus.unpushedChanges.filter(f => f.status === 'M').length,
+            deleted: syncStatus.unpushedChanges.filter(f => f.status === 'D').length
+          },
+          rebaseInProgress: syncStatus.rebaseInProgress,
+          available: syncStatus.available
+        },
         productivityMetrics: productivityMetrics,
         collaborationMetrics: collaborationMetrics
       }, null, 2));
     } else {
-      this.renderGlobalDashboard(systemOverview, productivityMetrics, collaborationMetrics, options);
+      this.renderGlobalDashboard(systemOverview, syncStatus, productivityMetrics, collaborationMetrics, options);
     }
   }
 
@@ -164,6 +200,23 @@ export class StatusCommand {
         console.log("🔄 Updating cache for optimal dashboard performance...");
       }
       await projector.generateIndex();
+    }
+  }
+
+  /**
+   * [EARS-28] Gets sync status with unpushed changes
+   * [EARS-30] Graceful degradation when sync module unavailable
+   */
+  private async getSyncStatus(): Promise<SyncStatus> {
+    try {
+      const syncModule = await this.dependencyService.getSyncStateModule();
+      const [unpushedChanges, rebaseInProgress] = await Promise.all([
+        syncModule.getPendingChanges(),
+        syncModule.isRebaseInProgress()
+      ]);
+      return { unpushedChanges, rebaseInProgress, available: true };
+    } catch {
+      return { unpushedChanges: [], rebaseInProgress: false, available: false };
     }
   }
 
@@ -323,12 +376,56 @@ export class StatusCommand {
   }
 
   /**
+   * Adds sync-related suggestions to the suggestions array
+   */
+  private addSyncSuggestions(suggestions: string[], syncStatus: SyncStatus): void {
+    if (!syncStatus.available) return;
+
+    if (syncStatus.rebaseInProgress) {
+      suggestions.push("Run 'gitgov sync resolve' to resolve sync conflict");
+    } else if (syncStatus.unpushedChanges.length > 0) {
+      suggestions.push(`Run 'gitgov sync push' to publish ${syncStatus.unpushedChanges.length} local change(s)`);
+    }
+  }
+
+  /**
+   * [EARS-28] Renders sync status section
+   * [EARS-29] Shows conflict warning when rebase in progress
+   */
+  private renderSyncStatus(syncStatus: SyncStatus): void {
+    if (!syncStatus.available) return;
+
+    if (syncStatus.rebaseInProgress) {
+      console.log('🔄 Sync Status: ⚠️  Conflict in progress');
+      console.log('  💡 Run: gitgov sync resolve');
+    } else if (syncStatus.unpushedChanges.length > 0) {
+      const added = syncStatus.unpushedChanges.filter(f => f.status === 'A').length;
+      const modified = syncStatus.unpushedChanges.filter(f => f.status === 'M').length;
+      const deleted = syncStatus.unpushedChanges.filter(f => f.status === 'D').length;
+      const parts: string[] = [];
+      if (added > 0) parts.push(`${added} added`);
+      if (modified > 0) parts.push(`${modified} modified`);
+      if (deleted > 0) parts.push(`${deleted} deleted`);
+      console.log(`🔄 Sync: ${syncStatus.unpushedChanges.length} unpushed changes (${parts.join(', ')})`);
+      for (const change of syncStatus.unpushedChanges) {
+        const icon = change.status === 'A' ? '  + ' : change.status === 'M' ? '  ~ ' : '  - ';
+        console.log(`${icon}${change.file}`);
+      }
+      console.log('  💡 Run: gitgov sync push');
+    } else {
+      console.log('🔄 Sync: Up to date ✓');
+    }
+    console.log('');
+  }
+
+  /**
    * Renders personal dashboard view
    */
   private renderPersonalDashboard(
     actor: ActorRecord,
     personalWork: PersonalWorkSummary,
     systemHealth: { healthScore: number; alerts: Array<{ type: string; message: string; severity: string }> },
+    syncStatus: SyncStatus,
     options: StatusCommandOptions
   ): void {
     console.log(`👤 Actor: ${actor.displayName} (${actor.id})`);
@@ -383,6 +480,9 @@ export class StatusCommand {
     }
     console.log('');
 
+    // Sync Status section
+    this.renderSyncStatus(syncStatus);
+
     // Suggested Actions
     if (personalWork.suggestedActions.length > 0) {
       console.log('💡 Suggested Actions:');
@@ -397,6 +497,7 @@ export class StatusCommand {
    */
   private renderGlobalDashboard(
     overview: SystemOverview,
+    syncStatus: SyncStatus,
     productivityMetrics: ProductivityMetrics | null,
     collaborationMetrics: CollaborationMetrics | null,
     options: StatusCommandOptions
@@ -451,6 +552,10 @@ export class StatusCommand {
         console.log(`  ${alertIcon} ${alert.message}`);
       });
     }
+
+    // Sync Status section
+    console.log('');
+    this.renderSyncStatus(syncStatus);
   }
 
   // ===== HELPER METHODS =====

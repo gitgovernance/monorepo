@@ -74,10 +74,8 @@ export class SyncCommand extends BaseCommand {
       // [E2E-SYNC-W6] Get actor ID from session — fail with actionable message if missing
       const session = await sessionManager.loadSession();
       if (!session || !session.lastSession?.actorId) {
-        this.handleError(
-          'No active identity. Run `gitgov actor new -t human -n "Your Name" -r developer` to create one.',
-          options
-        );
+        const message = await this.buildNoIdentityMessage();
+        this.handleError(message, options);
         return;
       }
       const actorId = session.lastSession.actorId;
@@ -296,10 +294,8 @@ export class SyncCommand extends BaseCommand {
       if (!actorId) {
         const session = await sessionManager.loadSession();
         if (!session || !session.lastSession?.actorId) {
-          this.handleError(
-            'No active identity. Run `gitgov actor new -t human -n "Your Name" -r developer` to create one.',
-            options
-          );
+          const message = await this.buildNoIdentityMessage();
+          this.handleError(message, options);
           return;
         }
         actorId = session.lastSession.actorId;
@@ -475,7 +471,27 @@ export class SyncCommand extends BaseCommand {
       return `  ${absolutePath}`;
     });
 
+    const isLocalChangesConflict = result.conflictInfo.type === 'local_changes_conflict';
     const isPush = 'filesSynced' in result;
+
+    if (isLocalChangesConflict) {
+      return `
+⚠️  Local changes not yet pushed
+
+${result.conflictInfo.message}
+
+Affected files:
+${affectedFiles.join('\n')}
+
+To resolve:
+1. Run: gitgov push    (push your local changes first)
+2. Then: gitgov pull   (pull remote changes after pushing)
+
+Or if you want to discard your local changes:
+  Run: gitgov pull --force
+      `.trim();
+    }
+
     const steps = isPush
       ? [
           '1. Run: gitgov sync pull',
