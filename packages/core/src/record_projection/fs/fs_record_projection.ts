@@ -1,10 +1,7 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import type { IRecordProjection, IndexData, ProjectionContext } from '../record_projection.types';
-
-export type FsRecordProjectionOptions = {
-  basePath: string;
-};
+import type { FsRecordProjectionOptions } from './fs_record_projection.types';
 
 /**
  * FsRecordProjection - Filesystem IRecordProjection for CLI.
