@@ -4,6 +4,7 @@ module.exports = {
   testEnvironment: 'node',
   setupFiles: ['<rootDir>/jest.env.js'],
   testPathIgnorePatterns: ['/node_modules/', '/dist/'],
+  maxWorkers: '50%',
 
   testTimeout: 30000,
 };
