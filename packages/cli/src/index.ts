@@ -13,6 +13,7 @@ import { registerLintCommand } from './commands/lint/lint';
 import { registerAuditCommand } from './commands/audit/audit';
 import { registerAgentCommand } from './commands/agent/agent';
 import { registerSyncCommands } from './commands/sync/sync';
+import { registerActorCommands } from './commands/actor';
 import { DependencyInjectionService } from './services/dependency-injection';
 import packageJson from '../package.json' assert { type: 'json' };
 
@@ -39,6 +40,9 @@ async function setupCommands() {
     // Register sync commands EARLY (before indexer) so they're available for bootstrap
     // This allows "gitgov sync pull" to work even when .gitgov/ doesn't exist yet
     registerSyncCommands(program);
+
+    // Register actor commands EARLY so "gitgov actor new" works on clone (after pull)
+    registerActorCommands(program);
 
     // Setup adapters dependency injection
     const diService = DependencyInjectionService.getInstance();

@@ -124,6 +124,37 @@ export class ActorIdentityMismatchError extends SyncStateError {
 }
 
 /**
+ * Error thrown when worktree cannot be created or repaired.
+ * Used by FsWorktreeSyncStateModule for worktree lifecycle failures.
+ */
+export class WorktreeSetupError extends SyncStateError {
+  constructor(
+    public reason: string,
+    public worktreePath: string,
+    public underlyingError?: Error,
+  ) {
+    super(`Failed to setup worktree at ${worktreePath}: ${reason}`);
+    this.name = 'WorktreeSetupError';
+    Object.setPrototypeOf(this, WorktreeSetupError.prototype);
+  }
+}
+
+/**
+ * Error thrown when attempting pull/push while a rebase is already in progress.
+ * Mirrors git behavior: git refuses pull/push/commit/checkout during active rebase.
+ */
+export class RebaseAlreadyInProgressError extends SyncStateError {
+  constructor() {
+    super(
+      `A rebase is already in progress. ` +
+      `Resolve the conflict with 'gitgov sync resolve --reason "..."' before pulling or pushing.`
+    );
+    this.name = "RebaseAlreadyInProgressError";
+    Object.setPrototypeOf(this, RebaseAlreadyInProgressError.prototype);
+  }
+}
+
+/**
  * Error thrown when uncommitted changes exist in state branch
  */
 export class UncommittedChangesError extends SyncStateError {
@@ -209,5 +240,17 @@ export function isActorIdentityMismatchError(
   error: unknown
 ): error is ActorIdentityMismatchError {
   return error instanceof ActorIdentityMismatchError;
+}
+
+export function isWorktreeSetupError(
+  error: unknown
+): error is WorktreeSetupError {
+  return error instanceof WorktreeSetupError;
+}
+
+export function isRebaseAlreadyInProgressError(
+  error: unknown
+): error is RebaseAlreadyInProgressError {
+  return error instanceof RebaseAlreadyInProgressError;
 }
 

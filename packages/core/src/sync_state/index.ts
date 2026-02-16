@@ -38,6 +38,7 @@ export {
   IntegrityViolationError,
   ConflictMarkersPresentError,
   NoRebaseInProgressError,
+  RebaseAlreadyInProgressError,
   StateBranchSetupError,
   UncommittedChangesError,
   CryptoModuleRequiredError,
@@ -49,7 +50,10 @@ export {
   isConflictMarkersPresentError,
   isUncommittedChangesError,
   isNoRebaseInProgressError,
+  isRebaseAlreadyInProgressError,
   isStateBranchSetupError,
   isCryptoModuleRequiredError,
   isActorIdentityMismatchError,
+  WorktreeSetupError,
+  isWorktreeSetupError,
 } from "./sync_state.errors";

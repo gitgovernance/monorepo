@@ -1,4 +1,5 @@
 import { execSync } from 'child_process';
+import { createHash } from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -6,10 +7,10 @@ import * as os from 'os';
 /**
  * E2E Tests for Task Delete CLI Command
  * Tests the `gitgov task delete` command in isolation (not Dashboard TUI)
- * 
+ *
  * IMPORTANT: These tests verify CLI command execution only.
  * For Dashboard TUI interactive testing, see: dashboard-tui-interactive.test.ts
- * 
+ *
  * TESTING STRATEGY:
  * - Test CLI command `gitgov task delete <taskId>` directly via execSync
  * - Verify task files are deleted from filesystem
@@ -20,6 +21,7 @@ describe('Task Delete CLI Command - E2E Tests', () => {
   let tempDir: string;
   let originalCwd: string;
   let testProjectRoot: string;
+  let worktreeBasePath: string;
 
   beforeAll(() => {
     originalCwd = process.cwd();
@@ -29,12 +31,34 @@ describe('Task Delete CLI Command - E2E Tests', () => {
 
   afterAll(() => {
     process.chdir(originalCwd);
+    cleanupWorktree(testProjectRoot, worktreeBasePath);
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
   beforeEach(() => {
     setupTestProject();
   });
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+  });
+
+  // Helper to compute worktree base path (matches DI.getWorktreeBasePath)
+  const getWorktreeBasePath = (repoPath: string): string => {
+    const resolvedPath = fs.realpathSync(repoPath);
+    const hash = createHash('sha256').update(resolvedPath).digest('hex').slice(0, 12);
+    return path.join(os.homedir(), '.gitgov', 'worktrees', hash);
+  };
+
+  // Helper to clean up worktree
+  const cleanupWorktree = (repoPath: string, wtPath: string) => {
+    if (wtPath && fs.existsSync(wtPath)) {
+      try { execSync(`git worktree remove "${wtPath}" --force`, { cwd: repoPath, stdio: 'pipe' }); } catch {}
+      if (fs.existsSync(wtPath)) {
+        fs.rmSync(wtPath, { recursive: true, force: true });
+      }
+    }
+  };
 
   // Helper function to execute CLI command
   const runCliCommand = (args: string[], options: { expectError?: boolean; cwd?: string; input?: string } = {}) => {
@@ -72,15 +96,16 @@ describe('Task Delete CLI Command - E2E Tests', () => {
 
   // Helper function to set up test project structure
   const setupTestProject = () => {
-    // Create a fresh test project structure in temp directory
+    // Clean up worktree from previous test
     if (fs.existsSync(testProjectRoot)) {
+      cleanupWorktree(testProjectRoot, getWorktreeBasePath(testProjectRoot));
       fs.rmSync(testProjectRoot, { recursive: true, force: true });
     }
     fs.mkdirSync(testProjectRoot, { recursive: true });
     process.chdir(testProjectRoot);
 
     // Initialize git repo (required for project root detection)
-    execSync('git init', { cwd: testProjectRoot, stdio: 'pipe' });
+    execSync('git init --initial-branch=main', { cwd: testProjectRoot, stdio: 'pipe' });
     execSync('git config user.name "Test User"', { cwd: testProjectRoot, stdio: 'pipe' });
     execSync('git config user.email "test@example.com"', { cwd: testProjectRoot, stdio: 'pipe' });
 
@@ -94,8 +119,12 @@ describe('Task Delete CLI Command - E2E Tests', () => {
     if (fs.existsSync(bareRepoPath)) {
       fs.rmSync(bareRepoPath, { recursive: true, force: true });
     }
-    execSync(`git init --bare ${bareRepoPath}`, { cwd: testProjectRoot, stdio: 'pipe' });
-    execSync(`git remote add origin ${bareRepoPath}`, { cwd: testProjectRoot, stdio: 'pipe' });
+    execSync(`git init --bare --initial-branch=main "${bareRepoPath}"`, { cwd: testProjectRoot, stdio: 'pipe' });
+    execSync(`git remote add origin "${bareRepoPath}"`, { cwd: testProjectRoot, stdio: 'pipe' });
+    execSync('git push -u origin main', { cwd: testProjectRoot, stdio: 'pipe' });
+
+    // Compute worktree base path (gitgov init will create .gitgov here)
+    worktreeBasePath = getWorktreeBasePath(testProjectRoot);
 
     // ✅ Use real CLI command instead of manual file creation
     // This is E2E testing done right: test the actual user workflow
@@ -117,12 +146,11 @@ describe('Task Delete CLI Command - E2E Tests', () => {
   };
 
   /**
-   * Create test task records
+   * Create test task records in the worktree .gitgov/tasks/ directory
    * NOTE: Actor is already created by gitgov init, we only create test tasks
    */
   const createTestRecords = () => {
-    const gitgovDir = path.join(testProjectRoot, '.gitgov');
-    const tasksDir = path.join(gitgovDir, 'tasks');
+    const tasksDir = path.join(worktreeBasePath, '.gitgov', 'tasks');
 
     // gitgov init already created:
     // ✅ Actor record (with real keypair and signatures)
@@ -222,7 +250,7 @@ describe('Task Delete CLI Command - E2E Tests', () => {
   describe('Dashboard Delete Integration (EARS-49A to EARS-54A)', () => {
     /**
      * [EARS-49A] Dashboard debe mostrar modal de confirmación al presionar 'd' en task draft
-     * 
+     *
      * NOTE: This test is PENDING because testing interactive TUI requires Ink testing utilities.
      * For now, we document the expected behavior and test the underlying integration.
      */
@@ -238,13 +266,13 @@ describe('Task Delete CLI Command - E2E Tests', () => {
 
     /**
      * [EARS-50A] should execute deleteTask successfully for draft task
-     * 
+     *
      * Tests CLI command `gitgov task delete <taskId>` for draft tasks.
      * Verifies physical deletion from filesystem.
      */
     it('[EARS-50A] should execute deleteTask successfully for draft task', () => {
-      // Verify draft task exists before delete
-      const draftTaskPath = path.join(testProjectRoot, '.gitgov/tasks/1756365289-task-draft.json');
+      // Verify draft task exists before delete (in worktree)
+      const draftTaskPath = path.join(worktreeBasePath, '.gitgov/tasks/1756365289-task-draft.json');
       expect(fs.existsSync(draftTaskPath)).toBe(true);
 
       // Execute delete command directly (simulates what dashboard does)
@@ -259,7 +287,7 @@ describe('Task Delete CLI Command - E2E Tests', () => {
 
     /**
      * [EARS-51A] should show educational error for non-draft task deletion
-     * 
+     *
      * Tests CLI command error messages when attempting to delete non-draft tasks.
      * Verifies educational error messages guide users to correct commands.
      */
@@ -281,7 +309,7 @@ describe('Task Delete CLI Command - E2E Tests', () => {
 
     /**
      * [EARS-52A] Dashboard debe bloquear todas las teclas excepto y/n/ESC cuando modal está abierto
-     * 
+     *
      * NOTE: This test is PENDING because it requires interactive TUI testing.
      * This behavior is implemented in DashboardTUI.tsx but needs Ink testing utilities to verify.
      */
@@ -297,13 +325,13 @@ describe('Task Delete CLI Command - E2E Tests', () => {
 
     /**
      * [EARS-53A] Dashboard debe cancelar delete al presionar 'n' o 'ESC' sin ejecutar deleteTask
-     * 
+     *
      * NOTE: This test is PENDING because it requires interactive TUI testing.
      * We verify that cancelling doesn't delete the task.
      */
     it('[EARS-53A] should not delete task when operation is cancelled', () => {
-      // Verify draft task exists
-      const draftTaskPath = path.join(testProjectRoot, '.gitgov/tasks/1756365289-task-draft.json');
+      // Verify draft task exists (in worktree)
+      const draftTaskPath = path.join(worktreeBasePath, '.gitgov/tasks/1756365289-task-draft.json');
       expect(fs.existsSync(draftTaskPath)).toBe(true);
 
       // If we don't execute the delete command, the task should remain
@@ -315,7 +343,7 @@ describe('Task Delete CLI Command - E2E Tests', () => {
 
     /**
      * [EARS-54A] should invalidate cache after successful delete
-     * 
+     *
      * Tests that cache is invalidated after delete command.
      * Verifies deleted task no longer appears in subsequent commands.
      */
@@ -338,7 +366,7 @@ describe('Task Delete CLI Command - E2E Tests', () => {
     // SKIP: Requires full gitgov init setup with IdentityAdapter initialization
     it.skip('should integrate deleteTask with dashboard workflow', () => {
       // Verify we have tasks
-      const tasksDir = path.join(testProjectRoot, '.gitgov/tasks');
+      const tasksDir = path.join(worktreeBasePath, '.gitgov/tasks');
       const taskFiles = fs.readdirSync(tasksDir);
       expect(taskFiles.length).toBeGreaterThan(0);
 
@@ -366,8 +394,8 @@ describe('Task Delete CLI Command - E2E Tests', () => {
     });
 
     it('should handle invalid project structure', () => {
-      // Remove .gitgov directory
-      const gitgovDir = path.join(testProjectRoot, '.gitgov');
+      // Remove .gitgov directory from worktree
+      const gitgovDir = path.join(worktreeBasePath, '.gitgov');
       fs.rmSync(gitgovDir, { recursive: true, force: true });
 
       const result = runCliCommand(['task', 'delete', '1756365289-task-draft'], { expectError: true });
@@ -381,26 +409,26 @@ describe('Task Delete CLI Command - E2E Tests', () => {
     /**
      * These tests document the IDEAL testing approach for dashboard TUI.
      * Implementation requires Ink testing utilities or similar.
-     * 
+     *
      * Reference: https://github.com/vadimdemedes/ink#testing
      */
     it.skip('[FUTURE] should test full interactive delete flow with keyboard simulation', async () => {
       // TODO: Implement using Ink's render() + testing utilities
-      // 
+      //
       // const { lastFrame, stdin } = render(<DashboardTUI {...props} />);
-      // 
+      //
       // // Navigate to draft task
       // stdin.write('j'); // Move down
-      // 
+      //
       // // Open delete modal
       // stdin.write('d');
-      // 
+      //
       // // Verify modal is shown
       // expect(lastFrame()).toContain('Confirm Task Deletion');
-      // 
+      //
       // // Confirm deletion
       // stdin.write('y');
-      // 
+      //
       // // Verify task was deleted
       // await waitFor(() => {
       //   expect(lastFrame()).not.toContain('Draft Task for Delete');
@@ -409,16 +437,16 @@ describe('Task Delete CLI Command - E2E Tests', () => {
 
     it.skip('[FUTURE] should test modal input blocking with keyboard simulation', async () => {
       // TODO: Implement using Ink's render() + testing utilities
-      // 
+      //
       // const { lastFrame, stdin } = render(<DashboardTUI {...props} />);
-      // 
+      //
       // // Open delete modal
       // stdin.write('d');
-      // 
+      //
       // // Try to use blocked keys
       // stdin.write('n'); // Should NOT execute "new task"
       // stdin.write('v'); // Should NOT change view
-      // 
+      //
       // // Verify modal is still open (keys were blocked)
       // expect(lastFrame()).toContain('Confirm Task Deletion');
     });
@@ -451,4 +479,3 @@ describe('Task Delete CLI Command - E2E Tests', () => {
     });
   });
 });
-

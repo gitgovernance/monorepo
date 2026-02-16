@@ -2,8 +2,6 @@ import { Command } from 'commander';
 import { BaseCommand } from '../../base/base-command';
 import type { BaseCommandOptions } from '../../interfaces/command';
 import type { ISyncStateModule, SyncStatePushResult, SyncStatePullResult, SyncStateResolveResult, AuditStateReport } from '@gitgov/core';
-import { promises as fs } from 'fs';
-import path from 'path';
 
 /**
  * SyncCommand Options - CLI flags and arguments for sync subcommands
@@ -73,10 +71,11 @@ export class SyncCommand extends BaseCommand {
       const configManager = await this.dependencyService.getConfigManager();
       const sessionManager = await this.dependencyService.getSessionManager();
 
-      // Get actor ID from session
+      // [E2E-SYNC-W6] Get actor ID from session — fail with actionable message if missing
       const session = await sessionManager.loadSession();
       if (!session || !session.lastSession?.actorId) {
-        this.handleError('No active actor in session. Please initialize session first.', options);
+        const message = await this.buildNoIdentityMessage();
+        this.handleError(message, options);
         return;
       }
       const actorId = session.lastSession.actorId;
@@ -112,7 +111,7 @@ export class SyncCommand extends BaseCommand {
         });
 
         this.handleError(
-          this.formatConflictMessage(pushResult),
+          await this.formatConflictMessage(pushResult),
           options
         );
         return;
@@ -216,7 +215,7 @@ export class SyncCommand extends BaseCommand {
         }
 
         this.handleError(
-          this.formatConflictMessage(pullResult),
+          await this.formatConflictMessage(pullResult),
           options
         );
         return;
@@ -243,6 +242,15 @@ export class SyncCommand extends BaseCommand {
 
       // Format output
       this.formatPullOutput(pullResult, options);
+
+      // [E2E-SYNC-W5] Show onboarding guidance on first bootstrap pull
+      if (this.dependencyService.wasBootstrapped()) {
+        const session = await sessionManager.loadSession();
+        if (!session?.lastSession?.actorId) {
+          console.log('\n💡 State pulled successfully. To contribute, create your identity:');
+          console.log('   gitgov actor new -t human -n "Your Name" -r developer\n');
+        }
+      }
 
     } catch (error) {
       // [EARS-F1] Update lastError in syncStatus
@@ -286,15 +294,15 @@ export class SyncCommand extends BaseCommand {
       if (!actorId) {
         const session = await sessionManager.loadSession();
         if (!session || !session.lastSession?.actorId) {
-          this.handleError('No active actor in session. Use --actor flag or initialize session first.', options);
+          const message = await this.buildNoIdentityMessage();
+          this.handleError(message, options);
           return;
         }
         actorId = session.lastSession.actorId;
       }
 
-      // [EARS-A4] Verify rebase is in progress
-      const gitModule = await this.dependencyService.getGitModule();
-      const isRebaseInProgress = await gitModule.isRebaseInProgress();
+      // [EARS-A4, CLIINT-C1] Verify rebase is in progress (delegated to syncModule)
+      const isRebaseInProgress = await syncModule.isRebaseInProgress();
 
       if (!isRebaseInProgress) {
         this.handleError(
@@ -304,8 +312,8 @@ export class SyncCommand extends BaseCommand {
         return;
       }
 
-      // [EARS-D1] Check for conflict markers
-      const hasConflictMarkers = await this.checkConflictMarkers();
+      // [EARS-D1, CLIINT-C1] Check for conflict markers (delegated to syncModule)
+      const hasConflictMarkers = await this.checkConflictMarkersViaSyncModule(syncModule);
       if (hasConflictMarkers) {
         this.handleError(
           'Conflict markers detected in .gitgov/ files. Please resolve conflicts manually before running resolve.',
@@ -433,73 +441,76 @@ export class SyncCommand extends BaseCommand {
   }
 
   /**
-   * [EARS-D1] Check for conflict markers in .gitgov/ files
+   * [EARS-D1, CLIINT-C1] Check for conflict markers via syncModule (worktree-aware)
    */
-  private async checkConflictMarkers(): Promise<boolean> {
-    const gitgovDir = path.join(process.cwd(), '.gitgov');
-
-    try {
-      const files = await this.getAllFilesRecursively(gitgovDir);
-
-      for (const file of files) {
-        const content = await fs.readFile(file, 'utf-8');
-        if (
-          content.includes('<<<<<<<') ||
-          content.includes('=======') ||
-          content.includes('>>>>>>>')
-        ) {
-          return true;
-        }
-      }
-
-      return false;
-    } catch (error) {
-      // If directory doesn't exist or can't be read, assume no conflicts
-      return false;
-    }
+  private async checkConflictMarkersViaSyncModule(syncModule: ISyncStateModule): Promise<boolean> {
+    const markers = await syncModule.checkConflictMarkers([]);
+    return markers.length > 0;
   }
 
   /**
-   * Recursively get all files in a directory
+   * [EARS-B3] Format conflict message with absolute clickable paths
    */
-  private async getAllFilesRecursively(dir: string): Promise<string[]> {
-    const entries = await fs.readdir(dir, { withFileTypes: true });
-    const files: string[] = [];
-
-    for (const entry of entries) {
-      const fullPath = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        files.push(...await this.getAllFilesRecursively(fullPath));
-      } else {
-        files.push(fullPath);
-      }
-    }
-
-    return files;
-  }
-
-  /**
-   * [EARS-B3] Format conflict message for user guidance
-   */
-  private formatConflictMessage(result: SyncStatePushResult | SyncStatePullResult): string {
+  private async formatConflictMessage(result: SyncStatePushResult | SyncStatePullResult): Promise<string> {
     if (!result.conflictInfo) {
       return 'Conflict detected during synchronization.';
     }
 
-    const steps = result.conflictInfo.resolutionSteps || [
-      '1. Run: gitgov sync pull',
-      '2. Resolve conflicts manually in .gitgov/ files',
-      '3. Run: gitgov sync resolve --reason "..."',
-      '4. Try again: gitgov sync push'
-    ];
+    // Get worktree base path for absolute file paths (Cmd+click in terminal)
+    let worktreeBasePath = '';
+    try {
+      worktreeBasePath = await this.dependencyService.getProjectRoot();
+    } catch {
+      // Fallback: show relative paths if DI not initialized
+    }
+
+    const affectedFiles = result.conflictInfo.affectedFiles.map((f: string) => {
+      const absolutePath = worktreeBasePath
+        ? `${worktreeBasePath}/${f}`
+        : f;
+      return `  ${absolutePath}`;
+    });
+
+    const isLocalChangesConflict = result.conflictInfo.type === 'local_changes_conflict';
+    const isPush = 'filesSynced' in result;
+
+    if (isLocalChangesConflict) {
+      return `
+⚠️  Local changes not yet pushed
+
+${result.conflictInfo.message}
+
+Affected files:
+${affectedFiles.join('\n')}
+
+To resolve:
+1. Run: gitgov push    (push your local changes first)
+2. Then: gitgov pull   (pull remote changes after pushing)
+
+Or if you want to discard your local changes:
+  Run: gitgov pull --force
+      `.trim();
+    }
+
+    const steps = isPush
+      ? [
+          '1. Run: gitgov sync pull',
+          '2. Edit the conflicted files above (remove <<<<<<< ======= >>>>>>> markers)',
+          '3. Run: gitgov sync resolve --reason "describe what you resolved"',
+          '4. Try again: gitgov sync push',
+        ]
+      : [
+          '1. Edit the conflicted files above (remove <<<<<<< ======= >>>>>>> markers)',
+          '2. Run: gitgov sync resolve --reason "describe what you resolved"',
+        ];
 
     return `
 ⚠️  Conflict detected in gitgov-state
 
 ${result.conflictInfo.message}
 
-Affected files:
-${result.conflictInfo.affectedFiles.map((f: string) => `  - ${f}`).join('\n')}
+Conflicted files:
+${affectedFiles.join('\n')}
 
 To resolve:
 ${steps.join('\n')}

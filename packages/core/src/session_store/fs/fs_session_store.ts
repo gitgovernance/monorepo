@@ -28,11 +28,11 @@ import { SessionManager } from '../../session_manager/session_manager';
  */
 export class FsSessionStore implements SessionStore {
   private readonly sessionPath: string;
-  private readonly actorsPath: string;
+  private readonly keysPath: string;
 
   constructor(projectRootPath: string) {
     this.sessionPath = path.join(projectRootPath, '.gitgov', '.session.json');
-    this.actorsPath = path.join(projectRootPath, '.gitgov', 'actors');
+    this.keysPath = path.join(projectRootPath, '.gitgov', 'keys');
   }
 
   /**
@@ -65,12 +65,12 @@ export class FsSessionStore implements SessionStore {
   }
 
   /**
-   * Detect actor from .key files in .gitgov/actors/
+   * Detect actor from .key files in .gitgov/keys/
    *
    * [EARS-C1] Returns actor ID from first .key file
    * [EARS-C2] Returns first .key file alphabetically if multiple exist
    * [EARS-C3] Returns null if no .key files exist
-   * [EARS-C4] Returns null if actors directory doesn't exist
+   * [EARS-C4] Returns null if keys directory doesn't exist
    * [EARS-C5] Ignores non-.key files
    * [EARS-C6] Returns null for empty directory
    *
@@ -78,7 +78,7 @@ export class FsSessionStore implements SessionStore {
    */
   async detectActorFromKeyFiles(): Promise<string | null> {
     try {
-      const files = await fs.readdir(this.actorsPath);
+      const files = await fs.readdir(this.keysPath);
 
       // Find all .key files
       const keyFiles = files.filter(f => f.endsWith('.key'));

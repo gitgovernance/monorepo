@@ -59,6 +59,9 @@ export {
 // FsSyncStateModule (filesystem-based state synchronization)
 export { FsSyncStateModule } from './sync_state/fs';
 
+// FsWorktreeSyncStateModule (worktree-based state synchronization)
+export { FsWorktreeSyncStateModule } from './sync_state/fs_worktree';
+
 // FsWatcherStateModule (filesystem-based .gitgov/ watcher)
 export { FsWatcherStateModule } from './watcher_state/fs';
 

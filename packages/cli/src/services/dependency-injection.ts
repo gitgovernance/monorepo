@@ -1,6 +1,8 @@
 import * as path from 'path';
-import { Adapters, Config, Session, EventBus, Lint, Git, SyncState, SourceAuditor, FindingDetector, Runner, KeyProvider, RecordProjection, RecordMetrics } from '@gitgov/core';
-import { FsRecordStore, DEFAULT_ID_ENCODER, FsFileLister, FsProjectInitializer, FsLintModule, FsSyncStateModule, GitModule, createAgentRunner, createConfigManager, findProjectRoot, findGitgovRoot, createSessionManager, FsRecordProjection } from '@gitgov/core/fs';
+import * as os from 'os';
+import { createHash } from 'crypto';
+import { Adapters, Config, Session, EventBus, Lint, Git, SourceAuditor, FindingDetector, Runner, KeyProvider, RecordProjection, RecordMetrics } from '@gitgov/core';
+import { FsRecordStore, DEFAULT_ID_ENCODER, FsFileLister, FsProjectInitializer, FsLintModule, FsWorktreeSyncStateModule, GitModule, createAgentRunner, createConfigManager, findProjectRoot, createSessionManager, FsRecordProjection } from '@gitgov/core/fs';
 import type { IFsLintModule } from '@gitgov/core/fs';
 import type {
   GitGovTaskRecord, GitGovCycleRecord, GitGovFeedbackRecord, GitGovExecutionRecord, GitGovChangelogRecord, GitGovActorRecord, GitGovAgentRecord,
@@ -31,6 +33,7 @@ export class DependencyInjectionService {
   private sessionManager: InstanceType<typeof Session.SessionManager> | null = null;
   private gitModule: Git.IGitModule | null = null;
   private keyProvider: IKeyProvider | null = null;
+  private repoRoot: string | null = null;
   private projectRoot: string | null = null;
   private stores: {
     tasks: RecordStore<GitGovTaskRecord>;
@@ -63,13 +66,20 @@ export class DependencyInjectionService {
     return DependencyInjectionService.instance;
   }
 
+  /** Compute worktree base path from repo root */
+  static getWorktreeBasePath(repoRoot: string): string {
+    const hash = createHash('sha256').update(repoRoot).digest('hex').slice(0, 12);
+    return path.join(os.homedir(), '.gitgov', 'worktrees', hash);
+  }
+
   /**
-   * Configure DI for init mode — sets projectRoot directly,
+   * Configure DI for init mode — sets projectRoot to worktree path,
    * bypassing .gitgov discovery and bootstrap.
    * Only called by InitCommand before .gitgov/ exists.
    */
   setInitMode(projectRoot: string): void {
-    this.projectRoot = projectRoot;
+    this.repoRoot = projectRoot;
+    this.projectRoot = DependencyInjectionService.getWorktreeBasePath(projectRoot);
     this.initModeEnabled = true;
   }
 
@@ -94,31 +104,27 @@ export class DependencyInjectionService {
       // Init mode: projectRoot pre-set via setInitMode(), skip discovery + bootstrap
       projectRoot = this.projectRoot;
     } else {
-      // Normal discovery flow
-      const { promises: fs } = await import('fs');
+      // Normal discovery flow: worktree at ~/.gitgov/worktrees/<hash>/
+      const { promises: fsPromises } = await import('fs');
 
       const gitModule = await this.getGitModule();
       const repoRoot = await gitModule.getRepoRoot();
-      const gitgovPath = path.join(repoRoot, '.gitgov');
+      const worktreeBasePath = DependencyInjectionService.getWorktreeBasePath(repoRoot);
+      const gitgovPath = path.join(worktreeBasePath, '.gitgov');
 
-      // [EARS-B1] Check if .gitgov/ exists in filesystem
+      // [CLIINT-A1] Check if worktree .gitgov/ exists
       try {
-        await fs.access(gitgovPath);
-        // [EARS-B1] .gitgov/ exists, create stores
-        projectRoot = repoRoot;
+        await fsPromises.access(gitgovPath);
+        // Worktree exists with .gitgov
+        projectRoot = worktreeBasePath;
       } catch {
-        // [EARS-B2] .gitgov/ doesn't exist — try bootstrap from gitgov-state
-        const bootstrapResult = await FsSyncStateModule.bootstrapFromStateBranch(gitModule);
-
-        if (bootstrapResult.success) {
-          // [EARS-B2, D1] Bootstrap successful - mark for reindex
-          projectRoot = repoRoot;
-          this.bootstrapOccurred = true;
-        } else {
-          // [EARS-B3] Neither .gitgov/ nor gitgov-state exist
-          throw new Error("❌ GitGovernance not initialized. Run 'gitgov init' first.");
-        }
+        // Bootstrap: create worktree at ~/.gitgov/worktrees/<hash>/
+        await this.bootstrapWorktree(gitModule, repoRoot, worktreeBasePath);
+        projectRoot = worktreeBasePath;
+        this.bootstrapOccurred = true;
       }
+
+      this.repoRoot = repoRoot;
     }
 
     // Save projectRoot for other methods
@@ -133,6 +139,38 @@ export class DependencyInjectionService {
       actors: new FsRecordStore<GitGovActorRecord>({ basePath: path.join(projectRoot, '.gitgov', 'actors'), idEncoder: DEFAULT_ID_ENCODER }),
       agents: new FsRecordStore<GitGovAgentRecord>({ basePath: path.join(projectRoot, '.gitgov', 'agents'), idEncoder: DEFAULT_ID_ENCODER }),
     };
+  }
+
+  /**
+   * [CLIINT-A1] Bootstrap worktree from gitgov-state branch.
+   * Creates a git worktree at ~/.gitgov/worktrees/<hash>/ pointing to gitgov-state.
+   */
+  private async bootstrapWorktree(
+    gitModule: Git.IGitModule,
+    repoRoot: string,
+    worktreeBasePath: string,
+  ): Promise<void> {
+    const { promises: fsPromises } = await import('fs');
+
+    // Ensure ~/.gitgov/worktrees/ exists
+    await fsPromises.mkdir(path.join(os.homedir(), '.gitgov', 'worktrees'), { recursive: true });
+
+    // Check if gitgov-state branch exists locally
+    const branchExists = await gitModule.branchExists('gitgov-state');
+    if (!branchExists) {
+      // Check remote
+      const remoteBranches = await gitModule.listRemoteBranches('origin');
+      if (remoteBranches.includes('gitgov-state') || remoteBranches.includes('origin/gitgov-state')) {
+        // Create local tracking branch
+        await gitModule.exec('git', ['branch', 'gitgov-state', 'origin/gitgov-state']);
+      } else {
+        // Neither exists — not initialized
+        throw new Error("❌ GitGovernance not initialized. Run 'gitgov init' first.");
+      }
+    }
+
+    // Create worktree
+    await gitModule.exec('git', ['worktree', 'add', worktreeBasePath, 'gitgov-state']);
   }
 
   /**
@@ -188,7 +226,7 @@ export class DependencyInjectionService {
       if (this.bootstrapOccurred) {
         try {
           await this.projector.generateIndex();
-          this.bootstrapOccurred = false; // Reset flag after reindex
+          // Note: bootstrapOccurred NOT reset — consumer commands (sync pull) check it via wasBootstrapped()
         } catch (reindexError) {
           // Non-critical: log warning but don't fail
           console.warn('⚠️  Warning: Failed to regenerate index after bootstrap');
@@ -231,7 +269,7 @@ export class DependencyInjectionService {
 
       // Create KeyProvider for filesystem-based key storage
       this.keyProvider = new KeyProvider.FsKeyProvider({
-        actorsDir: path.join(this.projectRoot!, '.gitgov', 'actors')
+        keysDir: path.join(this.projectRoot!, '.gitgov', 'keys')
       });
 
       // Create IdentityAdapter with correct dependencies
@@ -328,7 +366,7 @@ export class DependencyInjectionService {
 
       // Create KeyProvider for filesystem-based key storage
       const keyProvider = new KeyProvider.FsKeyProvider({
-        actorsDir: path.join(this.projectRoot!, '.gitgov', 'actors')
+        keysDir: path.join(this.projectRoot!, '.gitgov', 'keys')
       });
 
       // Create IdentityAdapter with dependencies
@@ -363,7 +401,7 @@ export class DependencyInjectionService {
     const identityAdapter = await this.getIdentityAdapter();
     const backlogAdapter = await this.getBacklogAdapter();
     const configManager = await this.getConfigManager();
-    const projectInitializer = new FsProjectInitializer(this.projectRoot);
+    const projectInitializer = new FsProjectInitializer(this.projectRoot, this.repoRoot ?? undefined);
 
     return new Adapters.ProjectAdapter({
       identityAdapter,
@@ -386,7 +424,7 @@ export class DependencyInjectionService {
       // Create EventBus and KeyProvider
       const eventBus = new EventBus.EventBus();
       const keyProvider = new KeyProvider.FsKeyProvider({
-        actorsDir: path.join(this.projectRoot!, '.gitgov', 'actors')
+        keysDir: path.join(this.projectRoot!, '.gitgov', 'keys')
       });
 
       // Create IdentityAdapter
@@ -583,7 +621,7 @@ export class DependencyInjectionService {
       // Create EventBus and KeyProvider
       const eventBus = new EventBus.EventBus();
       const keyProvider = new KeyProvider.FsKeyProvider({
-        actorsDir: path.join(this.projectRoot!, '.gitgov', 'actors')
+        keysDir: path.join(this.projectRoot!, '.gitgov', 'keys')
       });
 
       // Create IdentityAdapter
@@ -652,7 +690,7 @@ export class DependencyInjectionService {
   }
 
   /**
-   * Returns the project root path (after initialization)
+   * Returns the project root path (worktree base path, after initialization)
    */
   async getProjectRoot(): Promise<string> {
     await this.initializeStores();
@@ -660,6 +698,17 @@ export class DependencyInjectionService {
       throw new Error("Project root not initialized");
     }
     return this.projectRoot;
+  }
+
+  /**
+   * Returns the actual git repository root path (after initialization)
+   */
+  async getRepoRoot(): Promise<string> {
+    await this.initializeStores();
+    if (!this.repoRoot) {
+      throw new Error("Repo root not initialized");
+    }
+    return this.repoRoot;
   }
 
   /**
@@ -698,10 +747,11 @@ export class DependencyInjectionService {
       const identityAdapter = await this.getIdentityAdapter();
       const lintModule = await this.getLintModule();
 
-      // Create execCommand function for GitModule
+      // Create execCommand function for GitModule — default cwd is repoRoot
+      const repoRoot = this.repoRoot || this.projectRoot;
       const execCommand = (command: string, args: string[], options?: Git.ExecOptions) => {
         return new Promise<{ exitCode: number; stdout: string; stderr: string }>((resolve) => {
-          const cwd = options?.cwd || this.projectRoot || process.cwd();
+          const cwd = options?.cwd || repoRoot || process.cwd();
           const proc = spawn(command, args, {
             cwd,
             env: { ...process.env, ...options?.env },
@@ -723,20 +773,23 @@ export class DependencyInjectionService {
         });
       };
 
-      // Create GitModule with execCommand
+      // Create GitModule with execCommand — uses repoRoot for git operations
       const gitModule = new GitModule({
-        repoRoot: this.projectRoot,
+        repoRoot: repoRoot!,
         execCommand
       });
 
-      // Create FsSyncStateModule with all dependencies
-      this.syncModule = new FsSyncStateModule({
-        git: gitModule,
-        config: configManager,
-        identity: identityAdapter,
-        lint: lintModule,
-        indexer: projector
-      });
+      // [CLIINT-A2] Create FsWorktreeSyncStateModule with repoRoot + worktreePath
+      this.syncModule = new FsWorktreeSyncStateModule(
+        {
+          git: gitModule,
+          config: configManager,
+          identity: identityAdapter,
+          lint: lintModule,
+          indexer: projector,
+        },
+        { repoRoot: repoRoot!, worktreePath: this.projectRoot! },
+      );
 
       return this.syncModule;
 
@@ -819,13 +872,14 @@ export class DependencyInjectionService {
     }
 
     try {
-      // If projectRoot is not set yet, try to find it (this can happen when getConfigManager is called before initializeStores)
+      // If projectRoot is not set yet, compute worktree path from repo root
       if (!this.projectRoot) {
-        const root = findGitgovRoot();
+        const root = findProjectRoot();
         if (!root) {
           throw new Error("Could not find project root");
         }
-        this.projectRoot = root;
+        this.repoRoot = root;
+        this.projectRoot = DependencyInjectionService.getWorktreeBasePath(root);
       }
 
       // Create ConfigManager instance using factory function
@@ -856,11 +910,12 @@ export class DependencyInjectionService {
 
     try {
       if (!this.projectRoot) {
-        const root = findGitgovRoot();
+        const root = findProjectRoot();
         if (!root) {
           throw new Error("Could not find project root");
         }
-        this.projectRoot = root;
+        this.repoRoot = root;
+        this.projectRoot = DependencyInjectionService.getWorktreeBasePath(root);
       }
 
       this.sessionManager = createSessionManager(this.projectRoot);
@@ -889,6 +944,14 @@ export class DependencyInjectionService {
   }
 
   /**
+   * [EARS-G1] Expose bootstrap state for consumer commands.
+   * Returns true when bootstrap from remote gitgov-state occurred during this process.
+   */
+  wasBootstrapped(): boolean {
+    return this.bootstrapOccurred;
+  }
+
+  /**
    * [EARS-A2] Resets the singleton instance (useful for testing)
    */
   static reset(): void {
@@ -900,25 +963,24 @@ export class DependencyInjectionService {
    */
   async validateDependencies(): Promise<boolean> {
     try {
-      // [EARS-F2] If projectRoot not found, return false
+      // [CLIINT-A3] If projectRoot not found, compute worktree path
       if (!this.projectRoot) {
-        const root = findGitgovRoot();
+        const root = findProjectRoot();
         if (!root) {
           return false;
         }
-        this.projectRoot = root;
+        this.repoRoot = root;
+        this.projectRoot = DependencyInjectionService.getWorktreeBasePath(root);
       }
 
-      // [EARS-F1] Check if .gitgov directory exists
-      const { promises: fs } = await import('fs');
-      const gitgovPath = `${this.projectRoot}/.gitgov`;
+      // [CLIINT-A3] Check if worktree .gitgov directory exists
+      const { promises: fsPromises } = await import('fs');
+      const gitgovPath = path.join(this.projectRoot, '.gitgov');
 
       try {
-        await fs.access(gitgovPath);
-        // [EARS-F1] .gitgov exists → true
+        await fsPromises.access(gitgovPath);
         return true;
       } catch {
-        // [EARS-F2] .gitgov not found → false
         return false;
       }
     } catch {

@@ -250,6 +250,7 @@ describe('FsProjectInitializer', () => {
       const expectedDirs = [
         '.gitgov',
         '.gitgov/actors',
+        '.gitgov/keys',
         '.gitgov/cycles',
         '.gitgov/tasks',
         '.gitgov/executions',
@@ -264,8 +265,8 @@ describe('FsProjectInitializer', () => {
         );
       }
 
-      // Total: 1 (.gitgov) + 6 subdirectories = 7 calls
-      expect(mockFs.mkdir).toHaveBeenCalledTimes(7);
+      // Total: 1 (.gitgov) + 7 subdirectories = 8 calls
+      expect(mockFs.mkdir).toHaveBeenCalledTimes(8);
     });
 
     it('[EARS-FPI02] should check for config.json existence', async () => {

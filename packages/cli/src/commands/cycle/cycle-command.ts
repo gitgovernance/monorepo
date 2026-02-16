@@ -157,9 +157,7 @@ export class CycleCommand extends BaseCommand<BaseCommandOptions> {
       // Note: Using only fields from actual CycleRecord schema
 
       // 4. Get current actor dynamically
-      const identityAdapter = await this.dependencyService.getIdentityAdapter();
-      const currentActor = await identityAdapter.getCurrentActor();
-      const actorId = currentActor.id;
+      const { actorId } = await this.requireActor(options);
 
       // 5. Delegate to BacklogAdapter (uses cycle_factory internally)
       const cycle = await backlogAdapter.createCycle(payload, actorId);
@@ -387,8 +385,7 @@ export class CycleCommand extends BaseCommand<BaseCommandOptions> {
       }
 
       // 5. Get current actor
-      const identityAdapter = await this.dependencyService.getIdentityAdapter();
-      const currentActor = await identityAdapter.getCurrentActor();
+      const { actorId } = await this.requireActor(options);
 
       // 6. Delegate to BacklogAdapter
       const updatedCycle = await backlogAdapter.updateCycle(cycleId, { status: 'active' });
@@ -403,12 +400,12 @@ export class CycleCommand extends BaseCommand<BaseCommandOptions> {
           cycleId: updatedCycle.id,
           oldStatus: 'planning',
           newStatus: updatedCycle.status,
-          activatedBy: currentActor.id
+          activatedBy: actorId
         }, null, 2));
       } else {
         console.log(`✅ Cycle activated: ${cycleId}`);
         console.log(`📊 Status: planning → ${updatedCycle.status}`);
-        console.log(`✍️  Activated by: ${currentActor.displayName}`);
+        console.log(`✍️  Activated by: ${actorId}`);
       }
 
     } catch (error) {
@@ -443,8 +440,7 @@ export class CycleCommand extends BaseCommand<BaseCommandOptions> {
       }
 
       // 5. Get current actor
-      const identityAdapter = await this.dependencyService.getIdentityAdapter();
-      const currentActor = await identityAdapter.getCurrentActor();
+      const { actorId } = await this.requireActor(options);
 
       // 6. Delegate to BacklogAdapter
       const updatedCycle = await backlogAdapter.updateCycle(cycleId, { status: 'completed' });
@@ -459,12 +455,12 @@ export class CycleCommand extends BaseCommand<BaseCommandOptions> {
           cycleId: updatedCycle.id,
           oldStatus: 'active',
           newStatus: updatedCycle.status,
-          completedBy: currentActor.id
+          completedBy: actorId
         }, null, 2));
       } else {
         console.log(`✅ Cycle completed: ${cycleId}`);
         console.log(`📊 Status: active → ${updatedCycle.status}`);
-        console.log(`✍️  Completed by: ${currentActor.displayName}`);
+        console.log(`✍️  Completed by: ${actorId}`);
       }
 
     } catch (error) {
@@ -603,7 +599,6 @@ export class CycleCommand extends BaseCommand<BaseCommandOptions> {
       // 1. Get dependencies
       const backlogAdapter = await this.dependencyService.getBacklogAdapter();
       const projector = await this.dependencyService.getRecordProjector();
-      const identityAdapter = await this.dependencyService.getIdentityAdapter();
 
       // 2. Get current cycle
       const currentCycle = await backlogAdapter.getCycle(cycleId);
@@ -642,7 +637,7 @@ export class CycleCommand extends BaseCommand<BaseCommandOptions> {
       }
 
       // 5. Get current actor
-      const currentActor = await identityAdapter.getCurrentActor();
+      const { actorId } = await this.requireActor(options);
 
       // 6. Delegate to BacklogAdapter (uses cycle_factory internally)
       const updatedCycle = await backlogAdapter.updateCycle(cycleId, updatePayload);
@@ -656,12 +651,12 @@ export class CycleCommand extends BaseCommand<BaseCommandOptions> {
           success: true,
           cycleId: updatedCycle.id,
           updatedFields: Object.keys(updatePayload),
-          updatedBy: currentActor.id
+          updatedBy: actorId
         }, null, 2));
       } else {
         console.log(`✅ Cycle updated: ${cycleId}`);
         console.log(`📝 Updated fields: ${Object.keys(updatePayload).join(', ')}`);
-        console.log(`✍️  Updated by: ${currentActor.displayName}`);
+        console.log(`✍️  Updated by: ${actorId}`);
       }
 
     } catch (error) {

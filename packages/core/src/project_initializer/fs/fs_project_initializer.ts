@@ -15,6 +15,7 @@ const logger = createLogger('[FsProjectInitializer] ');
  */
 const GITGOV_DIRECTORIES = [
   'actors',
+  'keys',
   'cycles',
   'tasks',
   'executions',
@@ -49,9 +50,11 @@ const GITGOV_DIRECTORIES = [
  */
 export class FsProjectInitializer implements IProjectInitializer {
   private readonly projectRoot: string;
+  private readonly repoRoot: string;
 
-  constructor(projectRoot: string) {
+  constructor(projectRoot: string, repoRoot?: string) {
     this.projectRoot = projectRoot;
+    this.repoRoot = repoRoot ?? projectRoot;
   }
 
   // ==================== IProjectInitializer Interface Methods ====================
@@ -239,7 +242,7 @@ export class FsProjectInitializer implements IProjectInitializer {
    * Copies the @gitgov agent prompt to project root for IDE access.
    */
   async copyAgentPrompt(): Promise<void> {
-    const targetPrompt = path.join(this.projectRoot, 'gitgov');
+    const targetPrompt = path.join(this.repoRoot, 'gitgov');
     const potentialSources: string[] = [];
 
     // 1. Development scenario: search in src/docs/generated/
@@ -294,7 +297,7 @@ export class FsProjectInitializer implements IProjectInitializer {
    * Sets up .gitignore for GitGovernance files.
    */
   async setupGitIntegration(): Promise<void> {
-    const gitignorePath = path.join(this.projectRoot, '.gitignore');
+    const gitignorePath = path.join(this.repoRoot, '.gitignore');
     const gitignoreContent = `
 # GitGovernance
 # Ignore entire .gitgov/ directory (state lives in gitgov-state branch)

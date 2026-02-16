@@ -1,7 +1,7 @@
 /**
  * FsKeyProvider - Filesystem-based KeyProvider implementation
  *
- * Stores private keys alongside actor records in .gitgov/actors/{actorId}.key
+ * Stores private keys in .gitgov/keys/{actorId}.key
  * Used in development and CLI environments.
  *
  * @module key_provider/fs/fs_key_provider
@@ -16,8 +16,8 @@ import { KeyProviderError } from '../key_provider';
  * Options for FsKeyProvider.
  */
 export interface FsKeyProviderOptions {
-  /** Directory where key files are stored (same as actors: .gitgov/actors) */
-  actorsDir: string;
+  /** Directory where key files are stored (e.g., .gitgov/keys) */
+  keysDir: string;
   /** File extension for key files (default: '.key') */
   extension?: string;
   /** File permissions for key files (default: 0o600 - owner read/write only) */
@@ -26,22 +26,22 @@ export interface FsKeyProviderOptions {
 
 /**
  * Filesystem-based KeyProvider implementation.
- * Keys are stored alongside actor records with .key extension.
+ * Keys are stored in a dedicated directory with .key extension.
  *
  * @example
  * ```typescript
- * const provider = new FsKeyProvider({ actorsDir: '.gitgov/actors' });
+ * const provider = new FsKeyProvider({ keysDir: '.gitgov/keys' });
  * await provider.setPrivateKey('actor:human:alice', 'base64PrivateKey...');
  * const key = await provider.getPrivateKey('actor:human:alice');
  * ```
  */
 export class FsKeyProvider implements KeyProvider {
-  private readonly actorsDir: string;
+  private readonly keysDir: string;
   private readonly extension: string;
   private readonly fileMode: number;
 
   constructor(options: FsKeyProviderOptions) {
-    this.actorsDir = options.actorsDir;
+    this.keysDir = options.keysDir;
     this.extension = options.extension ?? '.key';
     this.fileMode = options.fileMode ?? 0o600;
   }
@@ -79,8 +79,8 @@ export class FsKeyProvider implements KeyProvider {
 
   /**
    * [EARS-KP03] Stores a private key for an actor.
-   * [EARS-FKP01] Creates actorsDir if not exists.
-   * [EARS-FKP02] Writes key to {actorsDir}/{actorId}.key.
+   * [EARS-FKP01] Creates keysDir if not exists.
+   * [EARS-FKP02] Writes key to {keysDir}/{actorId}.key.
    * [EARS-FKP03] Sets secure file permissions (0600).
    */
   async setPrivateKey(actorId: string, privateKey: string): Promise<void> {
@@ -88,9 +88,9 @@ export class FsKeyProvider implements KeyProvider {
 
     try {
       // [EARS-FKP01] Ensure directory exists
-      await fs.mkdir(this.actorsDir, { recursive: true });
+      await fs.mkdir(this.keysDir, { recursive: true });
 
-      // [EARS-FKP02] Write key to {actorsDir}/{actorId}.key
+      // [EARS-FKP02] Write key to {keysDir}/{actorId}.key
       await fs.writeFile(keyPath, privateKey, 'utf-8');
 
       // [EARS-FKP03] Set secure file permissions (owner read/write only)
@@ -148,7 +148,7 @@ export class FsKeyProvider implements KeyProvider {
   private getKeyPath(actorId: string): string {
     // Sanitize actorId to prevent path traversal attacks
     const sanitized = this.sanitizeActorId(actorId);
-    return path.join(this.actorsDir, `${sanitized}${this.extension}`);
+    return path.join(this.keysDir, `${sanitized}${this.extension}`);
   }
 
   /**

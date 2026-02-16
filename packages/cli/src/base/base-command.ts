@@ -83,6 +83,60 @@ export abstract class BaseCommand<TOptions extends BaseCommandOptions = BaseComm
   }
 
   /**
+   * Guard: require active actor identity for write operations.
+   * Returns actor ID or exits with user-friendly error message.
+   */
+  protected async requireActor(options: TOptions): Promise<{ actorId: string }> {
+    try {
+      const identityAdapter = await this.dependencyService.getIdentityAdapter();
+      const currentActor = await identityAdapter.getCurrentActor();
+      return { actorId: currentActor.id };
+    } catch {
+      const message = await this.buildNoIdentityMessage();
+      this.handleError(message, options);
+      throw new Error('unreachable');
+    }
+  }
+
+  /**
+   * Build contextual "no identity" error message.
+   * If actor records exist (but no key), suggests rotate-key.
+   * If no actors exist, suggests actor new.
+   */
+  protected async buildNoIdentityMessage(): Promise<string> {
+    try {
+      const projectRoot = await this.dependencyService.getProjectRoot();
+      const { promises: fsPromises } = await import('fs');
+      const path = await import('path');
+      const actorsDir = path.join(projectRoot, '.gitgov', 'actors');
+      const files = await fsPromises.readdir(actorsDir);
+      const actorFiles = files.filter((f: string) => f.endsWith('.json'));
+
+      if (actorFiles.length > 0) {
+        // Actors exist but no key — suggest rotate-key
+        const actorIds = actorFiles.map((f: string) => f.replace('.json', '').replace(/_/g, ':'));
+        const actorList = actorIds.map((id: string) => `  - ${id}`).join('\n');
+        return [
+          'No active identity. You have actor(s) but no private key on this machine.',
+          '',
+          'Existing actors:',
+          actorList,
+          '',
+          'To generate a new key for an existing actor:',
+          `  gitgov actor rotate-key ${actorIds[0]}`,
+          '',
+          'Or to create a new actor:',
+          '  gitgov actor new -t human -n "Your Name" -r developer',
+        ].join('\n');
+      }
+    } catch {
+      // Fall through to generic message
+    }
+
+    return 'No active identity. Run `gitgov actor new -t human -n "Your Name" -r developer` to create one.';
+  }
+
+  /**
    * Handle successful output consistently
    */
   protected handleSuccess(data: any, options: TOptions, message?: string): void {
@@ -97,9 +151,6 @@ export abstract class BaseCommand<TOptions extends BaseCommandOptions = BaseComm
     } else {
       if (message && !isQuiet) {
         console.log(`✅ ${message}`);
-      }
-      if (data && !isQuiet) {
-        console.log(data);
       }
     }
   }

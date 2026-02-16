@@ -56,12 +56,17 @@ describe('StatusCommand - Complete Unit Tests', () => {
   let mockIdentityAdapter: {
     getCurrentActor: jest.MockedFunction<() => Promise<ActorRecord>>;
   };
+  let mockSyncStateModule: {
+    getPendingChanges: jest.MockedFunction<() => Promise<Array<{ status: 'A' | 'M' | 'D'; file: string }>>>;
+    isRebaseInProgress: jest.MockedFunction<() => Promise<boolean>>;
+  };
   let mockDependencyService: {
     getBacklogAdapter: jest.MockedFunction<() => Promise<typeof mockBacklogAdapter>>;
     getFeedbackAdapter: jest.MockedFunction<() => Promise<typeof mockFeedbackAdapter>>;
     getRecordMetrics: jest.MockedFunction<() => Promise<typeof mockRecordMetrics>>;
     getRecordProjector: jest.MockedFunction<() => Promise<typeof mockProjector>>;
     getIdentityAdapter: jest.MockedFunction<() => Promise<typeof mockIdentityAdapter>>;
+    getSyncStateModule: jest.MockedFunction<() => Promise<typeof mockSyncStateModule>>;
   };
 
   // Sample data using factories
@@ -173,13 +178,19 @@ describe('StatusCommand - Complete Unit Tests', () => {
       getCurrentActor: jest.fn()
     };
 
+    mockSyncStateModule = {
+      getPendingChanges: jest.fn(),
+      isRebaseInProgress: jest.fn()
+    };
+
     // Create mock dependency service
     mockDependencyService = {
       getBacklogAdapter: jest.fn().mockResolvedValue(mockBacklogAdapter),
       getFeedbackAdapter: jest.fn().mockResolvedValue(mockFeedbackAdapter),
       getRecordMetrics: jest.fn().mockResolvedValue(mockRecordMetrics),
       getRecordProjector: jest.fn().mockResolvedValue(mockProjector),
-      getIdentityAdapter: jest.fn().mockResolvedValue(mockIdentityAdapter)
+      getIdentityAdapter: jest.fn().mockResolvedValue(mockIdentityAdapter),
+      getSyncStateModule: jest.fn().mockResolvedValue(mockSyncStateModule)
     };
 
     // Mock DependencyInjectionService.getInstance()
@@ -198,6 +209,8 @@ describe('StatusCommand - Complete Unit Tests', () => {
     mockRecordMetrics.getProductivityMetrics.mockResolvedValue(sampleProductivityMetrics);
     mockRecordMetrics.getCollaborationMetrics.mockResolvedValue(sampleCollaborationMetrics);
     mockProjector.isIndexUpToDate.mockResolvedValue(true);
+    mockSyncStateModule.getPendingChanges.mockResolvedValue([]);
+    mockSyncStateModule.isRebaseInProgress.mockResolvedValue(false);
   });
 
   afterEach(() => {
@@ -503,6 +516,96 @@ describe('StatusCommand - Complete Unit Tests', () => {
       // Verify that the same actor ID is used across all adapter calls
       expect(mockBacklogAdapter.getTasksAssignedToActor).toHaveBeenCalledWith('human:test-user');
       expect(mockIdentityAdapter.getCurrentActor).toHaveBeenCalled();
+    });
+  });
+
+  describe('Sync Status Intelligence (EARS 28-30)', () => {
+    it('[EARS-28] should show sync status with unpushed changes count', async () => {
+      mockSyncStateModule.getPendingChanges.mockResolvedValue([
+        { status: 'A', file: '.gitgov/tasks/task-1.yaml' },
+        { status: 'A', file: '.gitgov/tasks/task-2.yaml' },
+        { status: 'M', file: '.gitgov/actors/actor-1.yaml' }
+      ]);
+
+      await statusCommand.execute({});
+
+      expect(mockDependencyService.getSyncStateModule).toHaveBeenCalled();
+      expect(mockSyncStateModule.getPendingChanges).toHaveBeenCalled();
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('🔄 Sync: 3 unpushed changes (2 added, 1 modified)'));
+      // Verify individual file names are listed
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('+ .gitgov/tasks/task-1.yaml'));
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('+ .gitgov/tasks/task-2.yaml'));
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('~ .gitgov/actors/actor-1.yaml'));
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('💡 Run: gitgov sync push'));
+      // Verify suggestion is added
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining("Run 'gitgov sync push' to publish 3 local change(s)"));
+    });
+
+    it('[EARS-29] should show conflict warning when rebase in progress', async () => {
+      mockSyncStateModule.isRebaseInProgress.mockResolvedValue(true);
+
+      await statusCommand.execute({});
+
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('🔄 Sync Status: ⚠️  Conflict in progress'));
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('💡 Run: gitgov sync resolve'));
+      // Verify suggestion is added
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining("Run 'gitgov sync resolve' to resolve sync conflict"));
+    });
+
+    it('[EARS-30] should omit sync section when sync module unavailable', async () => {
+      mockDependencyService.getSyncStateModule.mockRejectedValue(new Error('Sync not available'));
+
+      await statusCommand.execute({});
+
+      // Should NOT contain any sync-related output
+      const allLogCalls = mockConsoleLog.mock.calls.map(call => call[0]);
+      const hasSyncOutput = allLogCalls.some(msg => typeof msg === 'string' && msg.includes('🔄 Sync'));
+      expect(hasSyncOutput).toBe(false);
+
+      // Dashboard should still render without errors
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('👤 Actor: Test User'));
+    });
+
+    it('[EARS-28] should include syncStatus in JSON output', async () => {
+      mockSyncStateModule.getPendingChanges.mockResolvedValue([
+        { status: 'A', file: '.gitgov/tasks/task-1.yaml' },
+        { status: 'D', file: '.gitgov/tasks/task-old.yaml' }
+      ]);
+
+      await statusCommand.execute({ json: true });
+
+      const jsonOutput = JSON.parse(mockConsoleLog.mock.calls[0]![0]);
+      expect(jsonOutput.syncStatus).toEqual({
+        unpushedChanges: 2,
+        changesByType: { added: 1, modified: 0, deleted: 1 },
+        rebaseInProgress: false,
+        available: true
+      });
+    });
+
+    it('[EARS-28] should show up-to-date sync status when no changes', async () => {
+      mockSyncStateModule.getPendingChanges.mockResolvedValue([]);
+      mockSyncStateModule.isRebaseInProgress.mockResolvedValue(false);
+
+      await statusCommand.execute({});
+
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('🔄 Sync: Up to date ✓'));
+    });
+
+    it('[EARS-28] should include syncStatus in global dashboard JSON output', async () => {
+      mockSyncStateModule.getPendingChanges.mockResolvedValue([
+        { status: 'M', file: '.gitgov/config.yaml' }
+      ]);
+
+      await statusCommand.execute({ all: true, json: true });
+
+      const jsonOutput = JSON.parse(mockConsoleLog.mock.calls[0]![0]);
+      expect(jsonOutput.syncStatus).toEqual({
+        unpushedChanges: 1,
+        changesByType: { added: 0, modified: 1, deleted: 0 },
+        rebaseInProgress: false,
+        available: true
+      });
     });
   });
 });

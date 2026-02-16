@@ -15,7 +15,8 @@
 // Mock fs promises
 jest.doMock('fs', () => ({
   promises: {
-    access: jest.fn().mockResolvedValue(undefined)
+    access: jest.fn().mockResolvedValue(undefined),
+    mkdir: jest.fn().mockResolvedValue(undefined),
   }
 }));
 
@@ -556,24 +557,26 @@ jest.doMock('@gitgov/core/fs', () => ({
       fixes: []
     })
   })),
-  FsSyncStateModule: Object.assign(
-    jest.fn().mockImplementation(() => ({
-      pushState: jest.fn().mockResolvedValue({
-        success: true, filesSynced: 0, sourceBranch: 'main',
-        commitHash: 'mock-commit-hash', commitMessage: 'mock commit message', conflictDetected: false
-      }),
-      pullState: jest.fn().mockResolvedValue({
-        success: true, hasChanges: false, filesUpdated: 0, reindexed: false, conflictDetected: false
-      }),
-      resolveConflict: jest.fn().mockResolvedValue({ success: true }),
-      auditState: jest.fn().mockResolvedValue({ passed: true, scope: 'current', totalCommits: 0 }),
-      ensureStateBranch: jest.fn().mockResolvedValue(undefined),
-      getStateBranchName: jest.fn().mockResolvedValue('gitgov-state'),
-    })),
-    {
-      bootstrapFromStateBranch: jest.fn().mockResolvedValue({ success: false, error: 'State branch does not exist' })
-    }
-  ),
+  FsWorktreeSyncStateModule: jest.fn().mockImplementation(() => ({
+    pushState: jest.fn().mockResolvedValue({
+      success: true, filesSynced: 0, sourceBranch: 'main',
+      commitHash: 'mock-commit-hash', commitMessage: 'mock commit message', conflictDetected: false
+    }),
+    pullState: jest.fn().mockResolvedValue({
+      success: true, hasChanges: false, filesUpdated: 0, reindexed: false, conflictDetected: false
+    }),
+    resolveConflict: jest.fn().mockResolvedValue({ success: true }),
+    auditState: jest.fn().mockResolvedValue({ passed: true, scope: 'current', totalCommits: 0 }),
+    ensureStateBranch: jest.fn().mockResolvedValue(undefined),
+    ensureWorktree: jest.fn().mockResolvedValue(undefined),
+    getStateBranchName: jest.fn().mockResolvedValue('gitgov-state'),
+    getWorktreePath: jest.fn().mockReturnValue('/mock/worktree/path'),
+    isRebaseInProgress: jest.fn().mockResolvedValue(false),
+    checkConflictMarkers: jest.fn().mockResolvedValue([]),
+    calculateStateDelta: jest.fn().mockResolvedValue([]),
+    getConflictDiff: jest.fn().mockResolvedValue({ files: [], message: '', resolutionSteps: [] }),
+    verifyResolutionIntegrity: jest.fn().mockResolvedValue([]),
+  })),
   GitModule: jest.fn().mockImplementation(() => ({
     getRepoRoot: jest.fn().mockResolvedValue('/tmp/test-gitgov'),
     getCurrentBranch: jest.fn().mockResolvedValue('main'),
@@ -623,6 +626,7 @@ jest.doMock('@gitgov/core/fs', () => ({
     saveSession: jest.fn().mockResolvedValue(undefined),
     updateActorState: jest.fn().mockResolvedValue(undefined)
   })),
+  DEFAULT_ID_ENCODER: { encode: (id: string) => id, decode: (encoded: string) => encoded },
   findProjectRoot: jest.fn().mockReturnValue('/tmp/test-gitgov'),
   findGitgovRoot: jest.fn().mockReturnValue('/tmp/test-gitgov'),
   createSessionManager: jest.fn().mockReturnValue({
@@ -640,7 +644,9 @@ const { Git, Adapters, KeyProvider, EventBus, RecordProjection, RecordMetrics } 
 
 describe('DependencyInjectionService', () => {
   let diService: DependencyInjectionService;
-  const mockProjectRoot = '/tmp/test-gitgov';
+  const mockRepoRoot = '/tmp/test-gitgov';
+  // Worktree base path is computed from repoRoot via sha256 hash
+  const mockWorktreeBasePath = DependencyInjectionService.getWorktreeBasePath(mockRepoRoot);
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -649,10 +655,10 @@ describe('DependencyInjectionService', () => {
     DependencyInjectionService.reset();
 
     // Reset @gitgov/core/fs function mocks to default
-    corefs.findProjectRoot.mockReturnValue(mockProjectRoot);
-    corefs.findGitgovRoot.mockReturnValue(mockProjectRoot);
+    corefs.findProjectRoot.mockReturnValue(mockRepoRoot);
+    corefs.findGitgovRoot.mockReturnValue(mockRepoRoot);
 
-    // Reset fs.access mock to success by default
+    // Reset fs.access mock to success by default (worktree .gitgov exists)
     mockFs.promises.access.mockResolvedValue(undefined);
 
     // Create fresh instance
@@ -775,12 +781,15 @@ describe('DependencyInjectionService', () => {
       expect(lintModule).toBeDefined();
     });
 
-    it('[EARS-C7] should create SyncStateModule with all dependencies', async () => {
+    it('[EARS-C7] should create FsWorktreeSyncStateModule with repoRoot and worktreePath', async () => {
       const syncModule = await diService.getSyncStateModule();
 
       expect(syncModule).toBeDefined();
       expect(syncModule.pushState).toBeDefined();
       expect(syncModule.pullState).toBeDefined();
+
+      // Verify FsWorktreeSyncStateModule was instantiated
+      expect(corefs.FsWorktreeSyncStateModule).toHaveBeenCalled();
     });
 
     it('[EARS-C8] should return cached instance on subsequent calls', async () => {
@@ -805,23 +814,23 @@ describe('DependencyInjectionService', () => {
       expect(sync1).toBe(sync2);
     });
 
-    it('[EARS-C9] should create ConfigManager with projectRoot', async () => {
+    it('[EARS-C9] should create ConfigManager with worktree base path', async () => {
       const configManager = await diService.getConfigManager();
 
       expect(configManager).toBeDefined();
       expect(configManager.loadConfig).toBeDefined();
 
-      // Verify createConfigManager was called with projectRoot
-      expect(corefs.createConfigManager).toHaveBeenCalledWith(mockProjectRoot);
+      // Verify createConfigManager was called with worktree base path
+      expect(corefs.createConfigManager).toHaveBeenCalledWith(mockWorktreeBasePath);
     });
 
-    it('[EARS-C10] should create SessionManager with projectRoot', async () => {
+    it('[EARS-C10] should create SessionManager with worktree base path', async () => {
       const sessionManager = await diService.getSessionManager();
 
       expect(sessionManager).toBeDefined();
 
-      // Verify createSessionManager was called with projectRoot
-      expect(corefs.createSessionManager).toHaveBeenCalledWith(mockProjectRoot);
+      // Verify createSessionManager was called with worktree base path
+      expect(corefs.createSessionManager).toHaveBeenCalledWith(mockWorktreeBasePath);
     });
   });
 
@@ -829,36 +838,40 @@ describe('DependencyInjectionService', () => {
   // §4.4. Bootstrap Reindex (EARS-D1 to D2)
   // ============================================================================
   describe('4.4. Bootstrap Reindex (EARS-D1 to D2)', () => {
-    it('[EARS-D1] should call generateIndex() after successful bootstrap from gitgov-state', async () => {
-      // Mock fs.access to reject (no .gitgov directory exists in filesystem)
+    it('[EARS-D1] should call generateIndex() after successful worktree bootstrap', async () => {
+      // Mock fs.access to reject (no worktree .gitgov directory exists)
       mockFs.promises.access.mockRejectedValue(new Error('.gitgov directory not found'));
 
-      // Mock bootstrap to succeed (gitgov-state branch exists)
-      corefs.FsSyncStateModule.bootstrapFromStateBranch.mockResolvedValue({ success: true });
+      // Mock GitModule to simulate worktree bootstrap
+      const mockGitModule = new Git.GitModule({
+        repoRoot: mockRepoRoot,
+        execCommand: jest.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' })
+      });
+      mockGitModule.getRepoRoot = jest.fn().mockResolvedValue(mockRepoRoot);
+      mockGitModule.branchExists = jest.fn().mockResolvedValue(true);
+      mockGitModule.exec = jest.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
 
-      // Get the indexer adapter (this should trigger bootstrap + reindex)
+      diService.getGitModule = jest.fn().mockResolvedValue(mockGitModule);
+
+      // Get the projector (this should trigger bootstrap + reindex)
       const projector = await diService.getRecordProjector();
 
-      // Verify bootstrap was called
-      expect(corefs.FsSyncStateModule.bootstrapFromStateBranch).toHaveBeenCalled();
-
+      // Verify worktree creation was attempted via git exec
+      expect(mockGitModule.exec).toHaveBeenCalledWith(
+        'git',
+        expect.arrayContaining(['worktree', 'add']),
+      );
 
       // Verify indexer.generateIndex() was called after bootstrap
       expect(projector.generateIndex).toHaveBeenCalledTimes(1);
     });
 
-    it('[EARS-D2] should NOT call generateIndex() when .gitgov/ already exists (no bootstrap)', async () => {
-      // Mock fs.access to succeed (directory exists)
+    it('[EARS-D2] should NOT call generateIndex() when worktree .gitgov/ already exists', async () => {
+      // Mock fs.access to succeed (worktree .gitgov exists)
       mockFs.promises.access.mockResolvedValue(undefined);
 
-      // Reset bootstrap mock
-      corefs.FsSyncStateModule.bootstrapFromStateBranch.mockClear();
-
-      // Get the indexer adapter (bootstrap should not be triggered)
+      // Get the projector (bootstrap should not be triggered)
       const projector = await diService.getRecordProjector();
-
-      // Verify bootstrap was NOT called
-      expect(corefs.FsSyncStateModule.bootstrapFromStateBranch).not.toHaveBeenCalled();
 
       // Verify indexer.generateIndex() was NOT called
       expect(projector.generateIndex).not.toHaveBeenCalled();
@@ -869,44 +882,38 @@ describe('DependencyInjectionService', () => {
   // §4.5. Error Handling (EARS-E1 to E4)
   // ============================================================================
   describe('4.5. Error Handling (EARS-E1 to E4)', () => {
-    it('[EARS-E1] should throw error when project root not found (RecordProjector)', async () => {
-      // Mock fs.access to reject (no .gitgov directory)
+    it('[EARS-E1] should throw error when worktree bootstrap fails (RecordProjector)', async () => {
+      // Mock fs.access to reject (no worktree .gitgov directory)
       mockFs.promises.access.mockRejectedValue(new Error('Directory not found'));
 
-      // Mock bootstrap to fail (no gitgov-state branch either)
-      corefs.FsSyncStateModule.bootstrapFromStateBranch.mockResolvedValue({ success: false });
-
-      // Mock GitModule
+      // Mock GitModule — branch doesn't exist locally or remotely
       const mockGitModule = new Git.GitModule({
-        repoRoot: process.cwd(),
+        repoRoot: mockRepoRoot,
         execCommand: jest.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' })
       });
       mockGitModule.branchExists = jest.fn().mockResolvedValue(false);
-      mockGitModule.getRepoRoot = jest.fn().mockResolvedValue(process.cwd());
+      mockGitModule.listRemoteBranches = jest.fn().mockResolvedValue([]);
+      mockGitModule.getRepoRoot = jest.fn().mockResolvedValue(mockRepoRoot);
 
-      // Override getGitModule to return our mock
       diService.getGitModule = jest.fn().mockResolvedValue(mockGitModule);
 
       await expect(diService.getRecordProjector())
         .rejects.toThrow("❌ GitGovernance not initialized. Run 'gitgov init' first.");
     });
 
-    it('[EARS-E1] should throw error when project root not found (BacklogAdapter)', async () => {
-      // Mock fs.access to reject (no .gitgov directory)
+    it('[EARS-E1] should throw error when worktree bootstrap fails (BacklogAdapter)', async () => {
+      // Mock fs.access to reject (no worktree .gitgov directory)
       mockFs.promises.access.mockRejectedValue(new Error('Directory not found'));
 
-      // Mock bootstrap to fail (no gitgov-state branch either)
-      corefs.FsSyncStateModule.bootstrapFromStateBranch.mockResolvedValue({ success: false });
-
-      // Mock GitModule
+      // Mock GitModule — branch doesn't exist locally or remotely
       const mockGitModule = new Git.GitModule({
-        repoRoot: process.cwd(),
+        repoRoot: mockRepoRoot,
         execCommand: jest.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' })
       });
       mockGitModule.branchExists = jest.fn().mockResolvedValue(false);
-      mockGitModule.getRepoRoot = jest.fn().mockResolvedValue(process.cwd());
+      mockGitModule.listRemoteBranches = jest.fn().mockResolvedValue([]);
+      mockGitModule.getRepoRoot = jest.fn().mockResolvedValue(mockRepoRoot);
 
-      // Override getGitModule to return our mock
       diService.getGitModule = jest.fn().mockResolvedValue(mockGitModule);
 
       await expect(diService.getBacklogAdapter())
@@ -965,8 +972,8 @@ describe('DependencyInjectionService', () => {
     });
 
     it('[EARS-F2] should return false when project root not found', async () => {
-      // Mock findGitgovRoot to return null
-      corefs.findGitgovRoot.mockReturnValue(null);
+      // Mock findProjectRoot to return null
+      corefs.findProjectRoot.mockReturnValue(null);
 
       // Reset projectRoot by creating a fresh instance
       DependencyInjectionService.reset();

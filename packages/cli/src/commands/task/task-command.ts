@@ -345,9 +345,7 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
       };
 
       // 4. Get current actor dynamically
-      const identityAdapter = await this.dependencyService.getIdentityAdapter();
-      const currentActor = await identityAdapter.getCurrentActor();
-      const actorId = currentActor.id;
+      const { actorId } = await this.requireActor(options);
 
       // 5. Delegate to BacklogAdapter (uses task_factory internally)
       const task = await backlogAdapter.createTask(payload, actorId);
@@ -551,10 +549,8 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
       const backlogAdapter = await this.dependencyService.getBacklogAdapter();
       const projector = await this.dependencyService.getRecordProjector();
 
-      // 2. Get current actor (simplified for MVP)
-      const identityAdapter = await this.dependencyService.getIdentityAdapter();
-      const currentActor = await identityAdapter.getCurrentActor();
-      const actorId = currentActor.id;
+      // 2. Get current actor
+      const { actorId } = await this.requireActor(options);
 
       // 3. Delegate to BacklogAdapter
       const updatedTask = await backlogAdapter.submitTask(taskId, actorId);
@@ -589,10 +585,8 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
       const backlogAdapter = await this.dependencyService.getBacklogAdapter();
       const projector = await this.dependencyService.getRecordProjector();
 
-      // 2. Get current actor (simplified for MVP)
-      const identityAdapter = await this.dependencyService.getIdentityAdapter();
-      const currentActor = await identityAdapter.getCurrentActor();
-      const actorId = currentActor.id;
+      // 2. Get current actor
+      const { actorId } = await this.requireActor(options);
 
       // 3. Delegate to BacklogAdapter
       const updatedTask = await backlogAdapter.approveTask(taskId, actorId);
@@ -629,9 +623,7 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
       const projector = await this.dependencyService.getRecordProjector();
 
       // 2. Get current actor
-      const identityAdapter = await this.dependencyService.getIdentityAdapter();
-      const currentActor = await identityAdapter.getCurrentActor();
-      const actorId = currentActor.id;
+      const { actorId } = await this.requireActor(options);
 
       // 3. Delegate to BacklogAdapter
       const updatedTask = await backlogAdapter.activateTask(taskId, actorId);
@@ -650,7 +642,7 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
       } else {
         console.log(`✅ Task activated: ${taskId}`);
         console.log(`📊 Status: ready → active`);
-        console.log(`✍️  Activated by: ${currentActor.displayName} (${actorId})`);
+        console.log(`✍️  Activated by: ${actorId}`);
       }
 
     } catch (error) {
@@ -668,9 +660,7 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
       const projector = await this.dependencyService.getRecordProjector();
 
       // 2. Resolve current actor
-      const identityAdapter = await this.dependencyService.getIdentityAdapter();
-      const currentActor = await identityAdapter.getCurrentActor();
-      const actorId = currentActor.id;
+      const { actorId } = await this.requireActor(options);
 
       // 3. Pause task (active → paused)
       const pausedTask = await backlogAdapter.pauseTask(taskId, actorId, options.reason);
@@ -690,7 +680,7 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
       } else {
         console.log(`⏸️  Task paused: ${taskId}`);
         console.log(`📊 Status: active → paused`);
-        console.log(`✍️  Paused by: ${currentActor.displayName} (${actorId})`);
+        console.log(`✍️  Paused by: ${actorId}`);
         if (options.reason) {
           console.log(`📝 Reason: ${options.reason}`);
         }
@@ -711,9 +701,7 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
       const projector = await this.dependencyService.getRecordProjector();
 
       // 2. Resolve current actor
-      const identityAdapter = await this.dependencyService.getIdentityAdapter();
-      const currentActor = await identityAdapter.getCurrentActor();
-      const actorId = currentActor.id;
+      const { actorId } = await this.requireActor(options);
 
       // 3. Resume task (paused → active)
       const resumedTask = await backlogAdapter.resumeTask(taskId, actorId, Boolean(options.force));
@@ -734,7 +722,7 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
         console.log(`✅ Task resumed: ${taskId}`);
         console.log(`📊 Status: paused → active`);
         const forceSuffix = options.force ? ' [force]' : '';
-        console.log(`✍️  Resumed by: ${currentActor.displayName} (${actorId})${forceSuffix}`);
+        console.log(`✍️  Resumed by: ${actorId}${forceSuffix}`);
       }
 
     } catch (error) {
@@ -752,9 +740,7 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
       const projector = await this.dependencyService.getRecordProjector();
 
       // 2. Get current actor
-      const identityAdapter = await this.dependencyService.getIdentityAdapter();
-      const currentActor = await identityAdapter.getCurrentActor();
-      const actorId = currentActor.id;
+      const { actorId } = await this.requireActor(options);
 
       // 3. Delegate to BacklogAdapter
       const updatedTask = await backlogAdapter.completeTask(taskId, actorId);
@@ -773,7 +759,7 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
       } else {
         console.log(`✅ Task completed: ${taskId}`);
         console.log(`📊 Status: active → done`);
-        console.log(`✍️  Completed by: ${currentActor.displayName} (${actorId})`);
+        console.log(`✍️  Completed by: ${actorId}`);
       }
 
     } catch (error) {
@@ -791,9 +777,7 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
       const projector = await this.dependencyService.getRecordProjector();
 
       // 2. Get current actor
-      const identityAdapter = await this.dependencyService.getIdentityAdapter();
-      const currentActor = await identityAdapter.getCurrentActor();
-      const actorId = currentActor.id;
+      const { actorId } = await this.requireActor(options);
 
       // 3. Delegate to BacklogAdapter
       const updatedTask = await backlogAdapter.discardTask(taskId, actorId, options.reason);
@@ -813,7 +797,7 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
       } else {
         console.log(`❌ Task cancelled: ${taskId}`);
         console.log(`📊 Status: ${updatedTask.status === 'discarded' ? 'ready/active → discarded' : 'cancelled'}`);
-        console.log(`✍️  Cancelled by: ${currentActor.displayName} (${actorId})`);
+        console.log(`✍️  Cancelled by: ${actorId}`);
         if (options.reason) {
           console.log(`📝 Reason: ${options.reason}`);
         }
@@ -834,9 +818,7 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
       const projector = await this.dependencyService.getRecordProjector();
 
       // 2. Get current actor
-      const identityAdapter = await this.dependencyService.getIdentityAdapter();
-      const currentActor = await identityAdapter.getCurrentActor();
-      const actorId = currentActor.id;
+      const { actorId } = await this.requireActor(options);
 
       // 3. Delegate to BacklogAdapter (same method as cancel, but from review state)
       const updatedTask = await backlogAdapter.discardTask(taskId, actorId, options.reason);
@@ -856,7 +838,7 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
       } else {
         console.log(`🚫 Task rejected: ${taskId}`);
         console.log(`📊 Status: review → discarded`);
-        console.log(`✍️  Rejected by: ${currentActor.displayName} (${actorId})`);
+        console.log(`✍️  Rejected by: ${actorId}`);
         if (options.reason) {
           console.log(`📝 Reason: ${options.reason}`);
         }
@@ -877,9 +859,7 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
       const projector = await this.dependencyService.getRecordProjector();
 
       // 2. Get current actor
-      const identityAdapter = await this.dependencyService.getIdentityAdapter();
-      const currentActor = await identityAdapter.getCurrentActor();
-      const actorId = currentActor.id;
+      const { actorId } = await this.requireActor(options);
 
       // 3. Delegate to BacklogAdapter
       await backlogAdapter.deleteTask(taskId, actorId);
@@ -898,7 +878,7 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
       } else {
         console.log(`🗑️  Task deleted: ${taskId}`);
         console.log(`📊 Status: draft → deleted`);
-        console.log(`✍️  Deleted by: ${currentActor.displayName} (${actorId})`);
+        console.log(`✍️  Deleted by: ${actorId}`);
       }
 
     } catch (error) {
@@ -928,7 +908,8 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
       }
 
       // 3. Get current actor
-      const currentActor = await identityAdapter.getCurrentActor();
+      const { actorId: currentActorId } = await this.requireActor(options);
+      const currentActor = await identityAdapter.getActor(currentActorId);
 
       // 4. Create assignment feedback (using factory pattern)
       const assignmentPayload = {
@@ -942,7 +923,7 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
 
       // 5. Delegate to FeedbackAdapter (uses feedback_factory internally)
       const feedbackAdapter = await this.dependencyService.getFeedbackAdapter();
-      const feedbackRecord = await feedbackAdapter.create(assignmentPayload, currentActor.id);
+      const feedbackRecord = await feedbackAdapter.create(assignmentPayload, currentActorId);
 
       // 6. Cache invalidation
       await projector.invalidateCache();
@@ -954,13 +935,13 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
           taskId: taskId,
           assignedTo: options.to,
           feedbackId: feedbackRecord.id,
-          assignedBy: currentActor.id
+          assignedBy: currentActorId
         }, null, 2));
       } else {
         console.log(`✅ Task assigned: ${taskId}`);
         console.log(`👤 Assigned to: ${assigneeActor.displayName} (${options.to})`);
         console.log(`📝 Assignment feedback: ${feedbackRecord.id}`);
-        console.log(`✍️  Assigned by: ${currentActor.displayName}`);
+        console.log(`✍️  Assigned by: ${currentActor?.displayName || currentActorId}`);
       }
 
     } catch (error) {
@@ -976,7 +957,6 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
       // 1. Get dependencies
       const backlogAdapter = await this.dependencyService.getBacklogAdapter();
       const projector = await this.dependencyService.getRecordProjector();
-      const identityAdapter = await this.dependencyService.getIdentityAdapter();
 
       // 2. Get current task
       const currentTask = await backlogAdapter.getTask(taskId);
@@ -1024,10 +1004,10 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
       }
 
       // 5. Get current actor
-      const currentActor = await identityAdapter.getCurrentActor();
+      const { actorId } = await this.requireActor(options);
 
       // 6. Delegate to BacklogAdapter (uses task_factory internally)
-      const updatedTask = await backlogAdapter.updateTask(taskId, updatePayload, currentActor.id);
+      const updatedTask = await backlogAdapter.updateTask(taskId, updatePayload, actorId);
 
       // 7. Cache invalidation
       await projector.invalidateCache();
@@ -1038,12 +1018,12 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
           success: true,
           taskId: updatedTask.id,
           updatedFields: Object.keys(updatePayload),
-          updatedBy: currentActor.id
+          updatedBy: actorId
         }, null, 2));
       } else {
         console.log(`✅ Task updated: ${taskId}`);
         console.log(`📝 Updated fields: ${Object.keys(updatePayload).join(', ')}`);
-        console.log(`✍️  Updated by: ${currentActor.displayName}`);
+        console.log(`✍️  Updated by: ${actorId}`);
       }
 
     } catch (error) {
