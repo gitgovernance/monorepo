@@ -39,6 +39,9 @@ export interface ISyncStateModule {
   /** Calculates the file delta between source branch and state branch */
   calculateStateDelta(sourceBranch: string): Promise<StateDeltaFile[]>;
 
+  /** Returns pending local changes not yet synced to the state branch */
+  getPendingChanges(): Promise<StateDeltaFile[]>;
+
   /** Checks if a rebase operation is currently in progress */
   isRebaseInProgress(): Promise<boolean>;
 

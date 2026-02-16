@@ -256,9 +256,10 @@ export class FsWorktreeSyncStateModule implements ISyncStateModule {
       };
     }
 
-    // [WTSYNC-B3] Calculate delta (changed files in worktree)
-    const delta = await this.calculateFileDelta();
-    log(`Delta: ${delta.length} changed files`);
+    // [WTSYNC-B3] Calculate delta (changed files in worktree, filtered by syncable)
+    const rawDelta = await this.calculateFileDelta();
+    const delta = rawDelta.filter(f => shouldSyncFile(f.file));
+    log(`Delta: ${delta.length} syncable files (${rawDelta.length} total)`);
 
     if (delta.length === 0) {
       return {
@@ -393,38 +394,33 @@ export class FsWorktreeSyncStateModule implements ISyncStateModule {
     // [WTSYNC-C1] Ensure worktree
     await this.ensureWorktree();
 
-    // [WTSYNC-C6] Check for local uncommitted changes (unless force)
+    // [WTSYNC-C6] Auto-commit local changes before pull (like git add+commit before pull --rebase)
+    // Only stage syncable files — LOCAL_ONLY and excluded files must NOT be committed
     if (!force) {
       const statusRaw = await this.execInWorktree(['status', '--porcelain', '-uall', '.gitgov/']);
       const statusLines = statusRaw.split('\n').filter(line => line.length >= 4);
-      // Only consider syncable files (ignore local-only files like index.json, .session.json)
       const syncableChanges = statusLines.filter(l => shouldSyncFile(l.slice(3)));
       if (syncableChanges.length > 0) {
-        const affectedFiles = syncableChanges.map(l => l.slice(3));
-        return {
-          success: false,
-          hasChanges: false,
-          filesUpdated: 0,
-          reindexed: false,
-          conflictDetected: true,
-          conflictInfo: {
-            type: 'local_changes_conflict',
-            affectedFiles,
-            message: 'Local uncommitted changes would be overwritten by pull',
-            resolutionSteps: [
-              'Commit local changes with `gitgov sync push`',
-              'Or use `force: true` to overwrite local changes',
-            ],
-          },
-          error: 'Local changes would be overwritten',
-        };
+        log(`Auto-committing ${syncableChanges.length} local changes before pull`);
+        for (const line of syncableChanges) {
+          const filePath = line.slice(3);
+          await this.execInWorktree(['add', '-f', '--', filePath]);
+        }
+        await this.execInWorktree(['commit', '-m', 'state: Auto-commit local changes before pull']);
       }
     }
 
-    // [WTSYNC-C7] Force: discard local changes
+    // [WTSYNC-C7] Force: discard local changes but preserve LOCAL_ONLY and excluded files
     if (force) {
       try {
         await this.execInWorktree(['checkout', '.gitgov/']);
+        // Clean untracked syncable files, preserving LOCAL_ONLY files and excluded patterns (.key, .backup, etc.)
+        await this.execInWorktree([
+          'clean', '-fd',
+          ...LOCAL_ONLY_FILES.flatMap(f => ['-e', f]),
+          '-e', '*.key', '-e', '*.backup', '-e', '*.backup-*', '-e', '*.tmp', '-e', '*.bak',
+          '.gitgov/',
+        ]);
         log('Force: discarded local changes');
       } catch {
         // No changes to discard
@@ -611,6 +607,13 @@ export class FsWorktreeSyncStateModule implements ISyncStateModule {
         error instanceof Error ? error : undefined,
       );
     }
+  }
+
+  /** Returns pending syncable changes not yet pushed (filters by shouldSyncFile) */
+  async getPendingChanges(): Promise<StateDeltaFile[]> {
+    await this.ensureWorktree();
+    const allChanges = await this.calculateFileDelta();
+    return allChanges.filter(f => shouldSyncFile(f.file));
   }
 
   /** Calculate delta between source and worktree state branch */

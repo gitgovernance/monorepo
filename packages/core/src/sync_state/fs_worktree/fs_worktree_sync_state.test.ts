@@ -916,32 +916,134 @@ describe('FsWorktreeSyncStateModule', () => {
       expect(indexer.generateIndex).toHaveBeenCalled();
     });
 
-    it('[WTSYNC-C6] should detect local changes conflict when uncommitted changes exist', async () => {
-      const { module } = await setupPullTest();
+    it('[WTSYNC-C6] should auto-commit local syncable changes before pull', async () => {
+      const { module, remotePath } = await setupPullTest();
       const worktreePath = module.getWorktreePath();
 
-      // Create uncommitted change in worktree
+      // MODIFY a tracked file (config.json) — git pull --rebase REFUSES with unstaged tracked changes
+      // This proves auto-commit is necessary: without it, pull would fail
+      const configPath = path.join(worktreePath, '.gitgov', 'config.json');
+      const originalConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      const modifiedConfig = { ...originalConfig, projectName: 'Modified By Local' };
+      fs.writeFileSync(configPath, JSON.stringify(modifiedConfig, null, 2));
+
+      // Also create a new untracked syncable file
       fs.writeFileSync(
-        path.join(worktreePath, '.gitgov', 'tasks', 'uncommitted.json'),
-        JSON.stringify({ id: 'uncommitted' })
+        path.join(worktreePath, '.gitgov', 'tasks', 'local-task.json'),
+        JSON.stringify({ id: 'local-task' })
       );
 
+      // Push a DIFFERENT change from remote (no conflict with config.json)
+      const tempClone = path.join(os.tmpdir(), `gitgov-wt-autocommit-${Date.now()}`);
+      cleanupPaths.push(tempClone);
+
+      await execAsync(`git clone ${remotePath} ${tempClone}`);
+      await execAsync('git config user.name "Other"', { cwd: tempClone });
+      await execAsync('git config user.email "other@test.com"', { cwd: tempClone });
+      await execAsync('git checkout gitgov-state', { cwd: tempClone });
+
+      fs.writeFileSync(
+        path.join(tempClone, '.gitgov', 'tasks', 'remote-task.json'),
+        JSON.stringify({ id: 'remote-task' })
+      );
+      await execAsync('git add .gitgov/tasks/remote-task.json', { cwd: tempClone });
+      await execAsync('git commit -m "remote: add task"', { cwd: tempClone });
+      await execAsync('git push origin gitgov-state', { cwd: tempClone });
+
+      // Pull should auto-commit local changes (tracked mod + untracked new) then rebase
       const result = await module.pullState();
-      expect(result.conflictDetected).toBe(true);
-      expect(result.conflictInfo?.type).toBe('local_changes_conflict');
+      expect(result.success).toBe(true);
+      expect(result.hasChanges).toBe(true);
+
+      // Modified config.json should have our local change (auto-committed, survived rebase)
+      const finalConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      expect(finalConfig.projectName).toBe('Modified By Local');
+
+      // New local file should still exist (was auto-committed, not lost)
+      expect(fs.existsSync(
+        path.join(worktreePath, '.gitgov', 'tasks', 'local-task.json')
+      )).toBe(true);
+
+      // Remote file should also exist (pulled in)
+      expect(fs.existsSync(
+        path.join(worktreePath, '.gitgov', 'tasks', 'remote-task.json')
+      )).toBe(true);
+    });
+
+    it('[WTSYNC-C6] should NOT commit LOCAL_ONLY files during auto-commit', async () => {
+      const { module, remotePath } = await setupPullTest();
+      const worktreePath = module.getWorktreePath();
+
+      // Create LOCAL_ONLY files alongside syncable changes
+      fs.writeFileSync(
+        path.join(worktreePath, '.gitgov', '.session.json'),
+        JSON.stringify({ actorId: 'local-only' })
+      );
+      fs.writeFileSync(
+        path.join(worktreePath, '.gitgov', 'index.json'),
+        JSON.stringify({ records: [] })
+      );
+
+      // Modify tracked syncable file to trigger auto-commit
+      const configPath = path.join(worktreePath, '.gitgov', 'config.json');
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      fs.writeFileSync(configPath, JSON.stringify({ ...config, modified: true }, null, 2));
+
+      // Push remote change to force a real pull
+      const tempClone = path.join(os.tmpdir(), `gitgov-wt-localonly-${Date.now()}`);
+      cleanupPaths.push(tempClone);
+      await execAsync(`git clone ${remotePath} ${tempClone}`);
+      await execAsync('git config user.name "Other"', { cwd: tempClone });
+      await execAsync('git config user.email "other@test.com"', { cwd: tempClone });
+      await execAsync('git checkout gitgov-state', { cwd: tempClone });
+      fs.writeFileSync(
+        path.join(tempClone, '.gitgov', 'tasks', 'remote-task.json'),
+        JSON.stringify({ id: 'remote-task' })
+      );
+      await execAsync('git add .gitgov/tasks/remote-task.json', { cwd: tempClone });
+      await execAsync('git commit -m "remote: add task"', { cwd: tempClone });
+      await execAsync('git push origin gitgov-state', { cwd: tempClone });
+
+      // Pull triggers auto-commit of syncable changes only
+      const result = await module.pullState();
+      expect(result.success).toBe(true);
+
+      // Verify LOCAL_ONLY files are NOT in git history (never committed to the branch)
+      const { stdout: gitFiles } = await execAsync(
+        'git ls-tree -r --name-only HEAD -- .gitgov/',
+        { cwd: worktreePath }
+      );
+      expect(gitFiles).not.toContain('.session.json');
+      expect(gitFiles).not.toContain('index.json');
+
+      // But they should still exist on disk (untracked)
+      expect(fs.existsSync(path.join(worktreePath, '.gitgov', '.session.json'))).toBe(true);
+      expect(fs.existsSync(path.join(worktreePath, '.gitgov', 'index.json'))).toBe(true);
     });
 
     it('[WTSYNC-C7] should discard local changes when force is true', async () => {
       const { module } = await setupPullTest();
       const worktreePath = module.getWorktreePath();
 
-      // Create uncommitted change
-      const uncommittedPath = path.join(worktreePath, '.gitgov', 'tasks', 'to-discard.json');
-      fs.writeFileSync(uncommittedPath, JSON.stringify({ id: 'discard' }));
+      // Create untracked syncable file (should be cleaned by force)
+      const untrackedPath = path.join(worktreePath, '.gitgov', 'tasks', 'to-discard.json');
+      fs.writeFileSync(untrackedPath, JSON.stringify({ id: 'discard' }));
 
-      // Force pull should succeed (even though file was untracked, not committed)
+      // Modify a tracked file (should be reverted by checkout)
+      const configPath = path.join(worktreePath, '.gitgov', 'config.json');
+      const originalConfig = fs.readFileSync(configPath, 'utf-8');
+      fs.writeFileSync(configPath, JSON.stringify({ ...JSON.parse(originalConfig), modified: true }, null, 2));
+
+      // Force pull should succeed
       const result = await module.pullState({ force: true });
       expect(result.success).toBe(true);
+
+      // Untracked syncable file must be gone (cleaned)
+      expect(fs.existsSync(untrackedPath)).toBe(false);
+
+      // Tracked file must be restored to original (checkout reverted it)
+      const restoredConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      expect(restoredConfig.modified).toBeUndefined();
     });
 
     it('[WTSYNC-C7] should preserve LOCAL_ONLY files (.session.json, index.json, .key) when force is true', async () => {
@@ -993,10 +1095,13 @@ describe('FsWorktreeSyncStateModule', () => {
       expect(fs.existsSync(path.join(worktreePath, '.gitgov', 'index.json'))).toBe(true);
       expect(fs.existsSync(path.join(worktreePath, '.gitgov', 'actors', 'test-actor.key'))).toBe(true);
 
-      // Verify content was not corrupted
+      // Verify LOCAL_ONLY content was not corrupted
       const sessionContent = JSON.parse(fs.readFileSync(path.join(worktreePath, '.gitgov', '.session.json'), 'utf-8'));
       expect(sessionContent.lastSession.actorId).toBe('test-actor');
       expect(fs.readFileSync(path.join(worktreePath, '.gitgov', 'actors', 'test-actor.key'), 'utf-8')).toBe('private-key-content');
+
+      // Syncable untracked file must be gone (discarded by force)
+      expect(fs.existsSync(path.join(worktreePath, '.gitgov', 'tasks', 'local-change.json'))).toBe(false);
     });
 
     it('[WTSYNC-C8] should return hasChanges false when no remote changes exist', async () => {

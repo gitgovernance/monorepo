@@ -590,6 +590,15 @@ gitgov
     }
   }
 
+  /** Returns pending local changes not yet synced (delegates to calculateStateDelta) */
+  async getPendingChanges(): Promise<StateDeltaFile[]> {
+    try {
+      return await this.calculateStateDelta('HEAD');
+    } catch {
+      return [];
+    }
+  }
+
   /**
    * Calculates the file delta in .gitgov/ between the current branch and gitgov-state.
    *
