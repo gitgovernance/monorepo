@@ -1,6 +1,8 @@
 # @gitgov/mcp-server
 
-MCP server that exposes GitGovernance operations as tools for AI agents. Works with Claude Code, Cursor, Windsurf, and any MCP-compatible client.
+MCP server that exposes [GitGovernance](https://github.com/gitgovernance) operations as tools for AI agents. Works with Claude Code, Cursor, Windsurf, and any MCP-compatible client.
+
+36 tools, 3 prompts, dynamic `gitgov://` resources. Stdio and HTTP transports.
 
 ## Requirements
 
@@ -23,7 +25,7 @@ pnpm add @gitgov/mcp-server
 
 ### Claude Code
 
-Add to your `~/.claude/claude_code_config.json`:
+Add to `~/.claude/claude_code_config.json`:
 
 ```json
 {
@@ -51,9 +53,11 @@ Add to your MCP config:
 
 ### HTTP Mode
 
+For web services or remote clients:
+
 ```bash
 gitgov-mcp --port 3100
-# Server listens on http://localhost:3100/mcp
+# Listens on http://localhost:3100/mcp (StreamableHTTP transport)
 ```
 
 ## Tools (36)
@@ -162,20 +166,22 @@ pnpm --filter @gitgov/mcp-server build
 
 ```
 src/
-  index.ts              Server entry point (stdio + HTTP)
-  server/               McpServer wrapper + types
-  di/                   Dependency injection (lazy init)
+  index.ts                    Entry point (stdio + HTTP transport)
+  server/                     McpServer wrapper + types
+  di/                         Dependency injection (lazy singleton)
   tools/
-    read/               9 read-only tools
-    task/               7 task lifecycle tools
-    feedback/           3 feedback tools
-    cycle/              8 cycle management tools
-    sync/               4 sync tools
-    audit/              5 audit + identity tools
-  prompts/              3 prompt handlers
-  resources/            gitgov:// resource handler
-  integration/          Level 2 integration tests
-  e2e/                  Level 3 E2E tests
+    read/                     9 read-only tools (status, context, lint, list/show)
+    task/                     7 task lifecycle tools (CRUD + state transitions)
+    feedback/                 3 feedback tools (create, list, resolve)
+    cycle/                    8 cycle management tools (CRUD + task linking)
+    sync/                     4 sync tools (push, pull, resolve, audit)
+    audit/                    5 tools (audit scan/waive + agent_run + actor_new)
+  prompts/                    3 prompt handlers
+  resources/                  gitgov:// resource handler
+  integration/
+    protocol/                 Level 2: InMemoryTransport tests (47 tests)
+    core/                     Level 2: real DI + filesystem tests (32 tests)
+  e2e/                        Level 3: real server process tests (15 tests)
 ```
 
 ## License
