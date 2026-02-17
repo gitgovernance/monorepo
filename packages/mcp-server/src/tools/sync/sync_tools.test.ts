@@ -37,7 +37,7 @@ describe('Sync Tools', () => {
   describe('4.3. Sync (MSRV-K1 to MSRV-K5)', () => {
     it('[MSRV-K1] should dry-run push without modifying state', async () => {
       const di = createMockDi();
-      const c = (di as any)._container;
+      const c = di._container;
       c.syncModule.pushState.mockResolvedValue({ success: true, dryRun: true, filesChanged: 0, preview: ['file1.json', 'file2.json'] });
 
       const result = await syncPushTool.handler({ dryRun: true }, di);
@@ -57,7 +57,7 @@ describe('Sync Tools', () => {
 
       expect(result.isError).toBeUndefined();
       expect(data.success).toBe(true);
-      expect((di as any)._container.syncModule.pushState).toHaveBeenCalledWith(
+      expect(di._container.syncModule.pushState).toHaveBeenCalledWith(
         expect.objectContaining({ actorId: 'actor-1' }),
       );
     });
@@ -79,7 +79,7 @@ describe('Sync Tools', () => {
 
       expect(result.isError).toBeUndefined();
       expect(data.resolved).toBe(true);
-      expect((di as any)._container.syncModule.resolveConflict).toHaveBeenCalledWith(
+      expect(di._container.syncModule.resolveConflict).toHaveBeenCalledWith(
         expect.objectContaining({ reason: 'Manual merge preferred', actorId: 'actor-1' }),
       );
     });

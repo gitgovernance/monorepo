@@ -23,7 +23,7 @@ function parseResult(result: { content: Array<{ text: string }>; isError?: boole
 }
 
 // Mock store factory
-function createMockStore<T>(records: Map<string, { header: object; payload: T }> = new Map()) {
+function createMockStore(records: ReadonlyMap<string, unknown> = new Map()) {
   return {
     list: vi.fn().mockResolvedValue(Array.from(records.keys())),
     get: vi.fn().mockImplementation(async (id: string) => records.get(id) ?? null),
@@ -142,7 +142,7 @@ describe('Read Tools', () => {
       const container = createMockContainer({
         stores: {
           ...createMockContainer().stores,
-          actors: createMockStore(actorRecords as any),
+          actors: createMockStore(actorRecords),
         },
       });
 
@@ -256,7 +256,7 @@ describe('Read Tools', () => {
   });
 
   describe('4.2. Task List and Show (MSRV-D1 to MSRV-D5)', () => {
-    let taskRecords: Map<string, { header: object; payload: any }>;
+    let taskRecords: ReadonlyMap<string, unknown>;
     let container: McpDiContainer;
 
     beforeEach(() => {
@@ -278,7 +278,7 @@ describe('Read Tools', () => {
       container = createMockContainer({
         stores: {
           ...createMockContainer().stores,
-          tasks: createMockStore(taskRecords as any),
+          tasks: createMockStore(taskRecords),
         },
       });
     });
@@ -299,7 +299,7 @@ describe('Read Tools', () => {
       const data = parseResult(result);
 
       expect(data.total).toBe(2);
-      expect(data.tasks.every((t: any) => t.status === 'active')).toBe(true);
+      expect(data.tasks.every((t: { status: string }) => t.status === 'active')).toBe(true);
     });
 
     it('[MSRV-D3] should return full task detail by ID', async () => {
@@ -329,7 +329,7 @@ describe('Read Tools', () => {
       const data = parseResult(result);
 
       expect(data.total).toBe(2);
-      expect(data.tasks.every((t: any) => t.cycleIds.includes('cycle-1'))).toBe(true);
+      expect(data.tasks.every((t: { cycleIds: string[] }) => t.cycleIds.includes('cycle-1'))).toBe(true);
     });
   });
 
@@ -349,7 +349,7 @@ describe('Read Tools', () => {
       const container = createMockContainer({
         stores: {
           ...createMockContainer().stores,
-          cycles: createMockStore(cycleRecords as any),
+          cycles: createMockStore(cycleRecords),
         },
       });
 
@@ -386,8 +386,8 @@ describe('Read Tools', () => {
       const container = createMockContainer({
         stores: {
           ...createMockContainer().stores,
-          cycles: createMockStore(cycleRecords as any),
-          tasks: createMockStore(taskRecords as any),
+          cycles: createMockStore(cycleRecords),
+          tasks: createMockStore(taskRecords),
         },
       });
 
@@ -419,7 +419,7 @@ describe('Read Tools', () => {
       const container = createMockContainer({
         stores: {
           ...createMockContainer().stores,
-          agents: createMockStore(agentRecords as any),
+          agents: createMockStore(agentRecords),
         },
       });
 
@@ -449,7 +449,7 @@ describe('Read Tools', () => {
       const container = createMockContainer({
         stores: {
           ...createMockContainer().stores,
-          agents: createMockStore(agentRecords as any),
+          agents: createMockStore(agentRecords),
         },
       });
 

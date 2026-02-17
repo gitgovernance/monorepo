@@ -60,7 +60,7 @@ describe('Cycle Tools', () => {
 
     it('[MSRV-I3] should complete an active cycle', async () => {
       const di = createMockDi();
-      const c = (di as any)._container;
+      const c = di._container;
       c.backlogAdapter.updateCycle.mockResolvedValue({ id: 'cycle-1', title: 'Sprint 1', status: 'completed' });
       const result = await cycleCompleteTool.handler({ cycleId: 'cycle-1' }, di);
       const data = parseResult(result);
@@ -70,7 +70,7 @@ describe('Cycle Tools', () => {
 
     it('[MSRV-I4] should edit only specified fields', async () => {
       const di = createMockDi();
-      const c = (di as any)._container;
+      const c = di._container;
       c.backlogAdapter.updateCycle.mockResolvedValue({ id: 'cycle-1', title: 'New Title', status: 'active' });
       const result = await cycleEditTool.handler({ cycleId: 'cycle-1', title: 'New Title' }, di);
       const data = parseResult(result);
@@ -81,7 +81,7 @@ describe('Cycle Tools', () => {
 
     it('[MSRV-I5] should return error on invalid cycle transition', async () => {
       const di = createMockDi();
-      const c = (di as any)._container;
+      const c = di._container;
       c.backlogAdapter.updateCycle.mockRejectedValue(new Error('Invalid state transition'));
       const result = await cycleActivateTool.handler({ cycleId: 'cycle-1' }, di);
       expect(result.isError).toBe(true);
@@ -97,7 +97,7 @@ describe('Cycle Tools', () => {
       const data = parseResult(result);
       expect(result.isError).toBeUndefined();
       expect(data.linked).toBe(true);
-      expect((di as any)._container.backlogAdapter.addTaskToCycle).toHaveBeenCalledWith('cycle-1', 'task-1');
+      expect(di._container.backlogAdapter.addTaskToCycle).toHaveBeenCalledWith('cycle-1', 'task-1');
     });
 
     it('[MSRV-J2] should unlink task from cycle', async () => {
@@ -106,7 +106,7 @@ describe('Cycle Tools', () => {
       const data = parseResult(result);
       expect(result.isError).toBeUndefined();
       expect(data.unlinked).toBe(true);
-      expect((di as any)._container.backlogAdapter.removeTasksFromCycle).toHaveBeenCalledWith('cycle-1', ['task-1']);
+      expect(di._container.backlogAdapter.removeTasksFromCycle).toHaveBeenCalledWith('cycle-1', ['task-1']);
     });
 
     it('[MSRV-J3] should move task between cycles atomically', async () => {
@@ -117,13 +117,13 @@ describe('Cycle Tools', () => {
       const data = parseResult(result);
       expect(result.isError).toBeUndefined();
       expect(data.moved).toBe(true);
-      expect((di as any)._container.backlogAdapter.moveTasksBetweenCycles)
+      expect(di._container.backlogAdapter.moveTasksBetweenCycles)
         .toHaveBeenCalledWith('cycle-2', ['task-1'], 'cycle-1');
     });
 
     it('[MSRV-J4] should add child cycle to parent', async () => {
       const di = createMockDi();
-      const c = (di as any)._container;
+      const c = di._container;
       c.backlogAdapter.getCycle
         .mockResolvedValueOnce({ id: 'parent', title: 'Parent', status: 'active', childCycleIds: [] })
         .mockResolvedValueOnce({ id: 'child', title: 'Child', status: 'planning' });
@@ -140,7 +140,7 @@ describe('Cycle Tools', () => {
 
     it('[MSRV-J5] should return error when moving task with unknown cycle', async () => {
       const di = createMockDi();
-      const c = (di as any)._container;
+      const c = di._container;
       c.backlogAdapter.moveTasksBetweenCycles.mockRejectedValue(new Error('Cycle not found: unknown-cycle'));
       const result = await cycleMoveTaskTool.handler({
         taskId: 'task-1', fromCycleId: 'unknown-cycle', toCycleId: 'cycle-2',

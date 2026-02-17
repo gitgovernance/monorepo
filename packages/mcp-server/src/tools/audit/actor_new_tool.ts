@@ -34,7 +34,6 @@ export const actorNewTool: McpToolDefinition<ActorNewInput> = {
           id: input.id,
           type: input.type,
           displayName: input.displayName,
-          publicKey: '',
           roles: (input.roles && input.roles.length > 0 ? input.roles : ['contributor']) as [string, ...string[]],
         },
         currentActor.id,

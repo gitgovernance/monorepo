@@ -85,7 +85,7 @@ describe('Task Tools', () => {
 
     it('[MSRV-F2] should link task to cycleIds when provided', async () => {
       const di = createMockDi();
-      const container = (di as any)._container;
+      const container = di._container;
       container.backlogAdapter.createTask.mockResolvedValue({
         id: 'task-2',
         title: 'Feature',
@@ -109,7 +109,7 @@ describe('Task Tools', () => {
 
     it('[MSRV-F3] should delete a draft task', async () => {
       const di = createMockDi();
-      const container = (di as any)._container;
+      const container = di._container;
       container.backlogAdapter.getTask.mockResolvedValue({
         id: 'task-1', status: 'draft', title: 'Draft task',
       });
@@ -124,7 +124,7 @@ describe('Task Tools', () => {
 
     it('[MSRV-F4] should reject deletion of non-draft tasks', async () => {
       const di = createMockDi();
-      const container = (di as any)._container;
+      const container = di._container;
       container.backlogAdapter.getTask.mockResolvedValue({
         id: 'task-1', status: 'active', title: 'Active task',
       });
@@ -194,7 +194,7 @@ describe('Task Tools', () => {
 
     it('[MSRV-G5] should return isError when transition is invalid', async () => {
       const di = createMockDi();
-      const container = (di as any)._container;
+      const container = di._container;
       container.backlogAdapter.submitTask.mockRejectedValue(
         new Error('Invalid state transition: cannot submit task in active state'),
       );
@@ -210,7 +210,7 @@ describe('Task Tools', () => {
   describe('4.3. Task Assign (MSRV-H1 to MSRV-H2)', () => {
     it('[MSRV-H1] should assign actor to task when both exist', async () => {
       const di = createMockDi();
-      const container = (di as any)._container;
+      const container = di._container;
       container.backlogAdapter.getTask.mockResolvedValue({
         id: 'task-1', status: 'active', title: 'Active task',
       });
@@ -233,7 +233,7 @@ describe('Task Tools', () => {
 
     it('[MSRV-H2] should return error when actor does not exist', async () => {
       const di = createMockDi();
-      const container = (di as any)._container;
+      const container = di._container;
       container.backlogAdapter.getTask.mockResolvedValue({
         id: 'task-1', status: 'active', title: 'Active task',
       });

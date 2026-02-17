@@ -67,7 +67,7 @@ describe('Feedback Tools', () => {
       expect(data.type).toBe('suggestion');
       expect(data.status).toBe('open');
 
-      const container = (di as any)._container;
+      const container = di._container;
       expect(container.feedbackAdapter.create).toHaveBeenCalledWith(
         expect.objectContaining({
           entityType: 'task',
@@ -81,7 +81,7 @@ describe('Feedback Tools', () => {
 
     it('[MSRV-H4] should filter feedbacks by entityId', async () => {
       const di = createMockDi();
-      const container = (di as any)._container;
+      const container = di._container;
       container.feedbackAdapter.getFeedbackByEntity.mockResolvedValue([
         { id: 'fb-1', entityType: 'task', entityId: 'task-1', type: 'suggestion', status: 'open', content: 'A' },
         { id: 'fb-2', entityType: 'task', entityId: 'task-1', type: 'blocking', status: 'open', content: 'B' },
@@ -98,7 +98,7 @@ describe('Feedback Tools', () => {
 
     it('[MSRV-H5] should resolve a pending feedback', async () => {
       const di = createMockDi();
-      const container = (di as any)._container;
+      const container = di._container;
       container.feedbackAdapter.getFeedback.mockResolvedValue({
         id: 'fb-1', status: 'open', type: 'suggestion',
       });
@@ -117,7 +117,7 @@ describe('Feedback Tools', () => {
 
     it('[MSRV-H6] should return error when resolving already-resolved feedback', async () => {
       const di = createMockDi();
-      const container = (di as any)._container;
+      const container = di._container;
       container.feedbackAdapter.getFeedback.mockResolvedValue({
         id: 'fb-1', status: 'resolved', type: 'suggestion',
       });
