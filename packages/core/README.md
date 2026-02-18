@@ -107,6 +107,7 @@ graph LR
         GhGit["GitHubGitModule"]
         GhConfig["GitHubConfigStore"]
         GhFiles["GitHubFileLister"]
+        GhSync["GithubSyncStateModule"]
     end
 
     subgraph "@gitgov/core/memory — Testing"
@@ -144,7 +145,7 @@ graph LR
 |--------|----------|-----|
 | `@gitgov/core` | Interfaces, types, pure logic, factories, validators | No |
 | `@gitgov/core/fs` | Filesystem implementations (FsRecordStore, FsRecordProjection, LocalGitModule, FsLintModule, ...) | Local |
-| `@gitgov/core/github` | GitHub API implementations (GitHubRecordStore, GitHubGitModule, GitHubConfigStore, GitHubFileLister) | Remote |
+| `@gitgov/core/github` | GitHub API implementations (GitHubRecordStore, GitHubGitModule, GitHubConfigStore, GitHubFileLister, GithubSyncStateModule) | Remote |
 | `@gitgov/core/memory` | In-memory implementations for testing (MemoryRecordStore, MemoryRecordProjection, MemoryGitModule, ...) | No |
 | `@gitgov/core/prisma` | Database-backed implementations via Prisma-compatible client (PrismaRecordProjection) | Remote |
 
