@@ -36,9 +36,8 @@ export class McpServer {
   }
 
   /** Registra un tool handler */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  registerTool(definition: McpToolDefinition<any>): void {
-    this.tools.set(definition.name, definition as McpToolDefinition);
+  registerTool<T>(definition: McpToolDefinition<T>): void {
+    this.tools.set(definition.name, definition as unknown as McpToolDefinition);
   }
 
   /** Registra el resource handler (list + read) */
@@ -145,8 +144,7 @@ export class McpServer {
       })),
     }));
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    this.server.setRequestHandler(GetPromptRequestSchema, async (request): Promise<any> => {
+    this.server.setRequestHandler(GetPromptRequestSchema, async (request) => {
       const prompt = this.prompts.get(request.params.name);
       if (!prompt) {
         throw new Error(`Unknown prompt: ${request.params.name}`);
@@ -154,7 +152,11 @@ export class McpServer {
       if (!this.di) {
         throw new Error('DI container not initialized');
       }
-      return await prompt.handler(request.params.arguments ?? {}, this.di);
+      const result = await prompt.handler(request.params.arguments ?? {}, this.di);
+      return {
+        description: result.description,
+        messages: result.messages,
+      };
     });
   }
 

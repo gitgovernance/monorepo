@@ -4,7 +4,8 @@ import { planSprintPrompt, reviewMyTasksPrompt, preparePrSummaryPrompt, getAllPr
 import { McpServer } from '../server/mcp_server.js';
 
 /**
- * MCP Prompts tests — Block O (MSRV-O1 to MSRV-O3) + Block P (MSRV-P3)
+ * MCP Prompts tests — Block O (MSRV-O1 to MSRV-O4)
+ * Blueprint: specs/resources/mcp_resources_prompts.md
  */
 
 function createMockDi() {
@@ -41,7 +42,7 @@ function createMockDi() {
 }
 
 describe('MCP Prompts', () => {
-  describe('4.2. Prompts (MSRV-O1 to MSRV-O3)', () => {
+  describe('4.2. Prompts (MSRV-O1 to MSRV-O4)', () => {
     it('[MSRV-O1] should return all available prompt templates via getAllPrompts', () => {
       const prompts = getAllPrompts();
       expect(prompts).toHaveLength(3);
@@ -87,7 +88,7 @@ describe('MCP Prompts', () => {
       expect(text).toContain('Fix bug');
     });
 
-    it('should generate PR summary for a given cycle', async () => {
+    it('[MSRV-O4] should generate PR summary for a given cycle', async () => {
       const di = createMockDi();
       const result = await preparePrSummaryPrompt.handler({ cycleId: 'cycle-1' }, di);
 
@@ -98,7 +99,7 @@ describe('MCP Prompts', () => {
       expect(text).toContain('Add tests'); // done task
     });
 
-    it('should handle missing cycle in PR summary', async () => {
+    it('[MSRV-O4] should handle missing cycle in PR summary', async () => {
       const di = createMockDi();
       const result = await preparePrSummaryPrompt.handler({ cycleId: 'nonexistent' }, di);
 
@@ -107,8 +108,8 @@ describe('MCP Prompts', () => {
     });
   });
 
-  describe('4.3. Transport parity (MSRV-P3)', () => {
-    it('[MSRV-P3] should register prompts on the server with same count as getAllPrompts', () => {
+  describe('Prompt registration', () => {
+    it('should register prompts on the server with same count as getAllPrompts', () => {
       const server = new McpServer({ name: 'test', version: '1.0.0' });
       const prompts = getAllPrompts();
       for (const prompt of prompts) {

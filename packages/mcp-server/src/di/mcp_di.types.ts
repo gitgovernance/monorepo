@@ -13,6 +13,10 @@ import type {
   IAgentRunner,
   ISyncStateModule,
   IIdentityAdapter,
+  IBacklogAdapter,
+  IFeedbackAdapter,
+  IExecutionAdapter,
+  SourceAuditor,
 } from '@gitgov/core';
 import type { IFsLintModule } from '@gitgov/core/fs';
 
@@ -26,10 +30,7 @@ export interface McpDiConfig {
 
 /**
  * Container con todos los servicios instanciados y listos.
- *
- * Adapter types use the concrete classes from @gitgov/core.
- * Due to tsup bundling constraints, some adapter types are inferred
- * from the DI implementation rather than declared with named interfaces.
+ * All fields use typed interfaces from @gitgov/core.
  */
 export interface McpDiContainer {
   stores: {
@@ -42,24 +43,14 @@ export interface McpDiContainer {
     agents: RecordStore<GitGovAgentRecord>;
   };
 
-  /**
-   * Adapter types use concrete class instances from @gitgov/core.
-   * Due to tsup bundling constraints, some adapter interfaces aren't
-   * accessible via `import type`. We use Record<string, unknown> here
-   * and cast at usage sites.
-   */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  backlogAdapter: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  feedbackAdapter: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  executionAdapter: any;
+  backlogAdapter: IBacklogAdapter;
+  feedbackAdapter: IFeedbackAdapter;
+  executionAdapter: IExecutionAdapter;
   identityAdapter: IIdentityAdapter;
 
   lintModule: IFsLintModule;
   syncModule: ISyncStateModule;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  sourceAuditorModule: any;
+  sourceAuditorModule: SourceAuditor.SourceAuditorModule;
   agentRunner: IAgentRunner;
   projector: IRecordProjector;
 

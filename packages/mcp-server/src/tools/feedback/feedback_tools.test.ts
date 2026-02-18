@@ -8,6 +8,7 @@ import { McpServer } from '../../server/mcp_server.js';
 
 /**
  * Feedback Tools tests — Block H continuation (MSRV-H3 to MSRV-H7)
+ * Blueprint: mcp_tools_feedback.md §4.1
  */
 
 function parseResult(result: { content: Array<{ text: string }>; isError?: boolean }) {
@@ -46,7 +47,7 @@ function createMockDi(overrides: Record<string, unknown> = {}) {
 }
 
 describe('Feedback Tools', () => {
-  describe('4.4. Feedback (MSRV-H3 to MSRV-H7)', () => {
+  describe('4.1. Feedback Operations (MSRV-H3 to MSRV-H7)', () => {
     it('[MSRV-H3] should create a FeedbackRecord linked to an entity', async () => {
       const di = createMockDi();
       const result = await feedbackCreateTool.handler(
@@ -113,6 +114,18 @@ describe('Feedback Tools', () => {
       expect(data.id).toBe('fb-1');
       expect(data.status).toBe('resolved');
       expect(data.previousStatus).toBe('open');
+    });
+
+    it('should return NOT_FOUND error when feedback does not exist', async () => {
+      const di = createMockDi();
+      // Default mock returns null for getFeedback
+
+      const result = await feedbackResolveTool.handler({ feedbackId: 'fb-nonexistent' }, di);
+
+      expect(result.isError).toBe(true);
+      const data = parseResult(result);
+      expect(data.code).toBe('NOT_FOUND');
+      expect(data.error).toContain('fb-nonexistent');
     });
 
     it('[MSRV-H6] should return error when resolving already-resolved feedback', async () => {

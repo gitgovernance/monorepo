@@ -62,7 +62,6 @@ import type { TempGitgovProject } from './mcp_core_integration.types.js';
 type AnyData = Record<string, unknown>;
 
 /** Call a tool handler and parse the result */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function callHandler<T = AnyData>(
   tool: { handler: (input: any, di: McpDependencyInjectionService) => Promise<ToolResult> },
   input: Record<string, unknown>,
@@ -723,16 +722,10 @@ describe('MCP Core Integration', () => {
 
       const { data, isError } = await callHandler(auditScanTool, {}, di);
 
-      // The auditor runs against real git — either returns findings or errors gracefully
-      if (!isError) {
-        expect(data.findings).toBeDefined();
-        expect(data.summary).toBeDefined();
-      } else {
-        // Source auditor may require specific git history structure;
-        // verify it returns a well-formed error
-        expect(data.code).toBe('AUDIT_SCAN_ERROR');
-        expect(data.error).toBeDefined();
-      }
+      expect(isError).toBe(false);
+      expect(data.findings).toBeDefined();
+      expect(Array.isArray(data.findings)).toBe(true);
+      expect(data.summary).toBeDefined();
     });
 
     it('[MSRV-CE4] should create waiver feedback record on disk', async () => {

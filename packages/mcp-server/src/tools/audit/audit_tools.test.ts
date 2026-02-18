@@ -58,25 +58,25 @@ function createMockDi() {
 
 describe('Audit + Agent + Actor Tools', () => {
   describe('4.1. Audit (MSRV-L1 to MSRV-L5)', () => {
-    it('[MSRV-L1] should scan repository with target code and return structured findings', async () => {
+    it('[MSRV-L1] should scan repository with default scope and return structured findings', async () => {
       const di = createMockDi();
-      const result = await auditScanTool.handler({ target: 'code' }, di);
+      const result = await auditScanTool.handler({}, di);
       const data = parseResult(result);
 
       expect(result.isError).toBeUndefined();
       expect(data.findings).toHaveLength(1);
       expect(di._container.sourceAuditorModule.audit).toHaveBeenCalledWith(
-        expect.objectContaining({ target: 'code' }),
+        expect.objectContaining({ scope: { include: ['**/*'], exclude: [], changedSince: undefined } }),
       );
     });
 
-    it('[MSRV-L2] should scan only uncommitted changes when scope is diff', async () => {
+    it('[MSRV-L2] should pass changedSince to core for incremental scanning', async () => {
       const di = createMockDi();
-      const result = await auditScanTool.handler({ target: 'code', scope: 'diff' }, di);
+      const result = await auditScanTool.handler({ changedSince: 'abc123' }, di);
 
       expect(result.isError).toBeUndefined();
       expect(di._container.sourceAuditorModule.audit).toHaveBeenCalledWith(
-        expect.objectContaining({ scope: 'diff' }),
+        expect.objectContaining({ scope: { include: ['**/*'], exclude: [], changedSince: 'abc123' } }),
       );
     });
 

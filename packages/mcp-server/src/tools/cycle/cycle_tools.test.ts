@@ -11,6 +11,8 @@ import { cycleAddChildTool } from './cycle_add_child_tool.js';
 
 /**
  * Cycle Tools tests — Blocks I, J (MSRV-I1 to MSRV-J5)
+ *
+ * Blueprint: specs/tools/cycle/mcp_tools_cycle.md
  */
 
 function parseResult(result: { content: Array<{ text: string }>; isError?: boolean }) {
@@ -76,7 +78,7 @@ describe('Cycle Tools', () => {
       const data = parseResult(result);
       expect(result.isError).toBeUndefined();
       expect(data.title).toBe('New Title');
-      expect(c.backlogAdapter.updateCycle).toHaveBeenCalledWith('cycle-1', { title: 'New Title' }, 'actor-1');
+      expect(c.backlogAdapter.updateCycle).toHaveBeenCalledWith('cycle-1', { title: 'New Title' });
     });
 
     it('[MSRV-I5] should return error on invalid cycle transition', async () => {
@@ -134,7 +136,7 @@ describe('Cycle Tools', () => {
       expect(result.isError).toBeUndefined();
       expect(data.linked).toBe(true);
       expect(c.backlogAdapter.updateCycle).toHaveBeenCalledWith(
-        'parent', { childCycleIds: ['child'] }, 'actor-1',
+        'parent', { childCycleIds: ['child'] },
       );
     });
 

@@ -17,7 +17,7 @@ export const auditWaiveListTool: McpToolDefinition<AuditWaiveListInput> = {
   handler: async (input: AuditWaiveListInput, di: McpDependencyInjectionService) => {
     try {
       const { feedbackAdapter } = await di.getContainer();
-      const allFeedback = await feedbackAdapter.getAllFeedback() as Array<Record<string, unknown>>;
+      const allFeedback = await feedbackAdapter.getAllFeedback();
 
       // Waivers are feedback records with type 'approval' and entityType 'execution'
       let waivers = allFeedback.filter(

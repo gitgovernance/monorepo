@@ -8,7 +8,8 @@ import { createResourceHandler } from '../resources/index.js';
 import { getAllPrompts } from '../prompts/index.js';
 
 /**
- * McpServer tests — Block A (MSRV-A1 to MSRV-A5) + Block P (MSRV-P1, MSRV-P2, MSRV-P3)
+ * McpServer tests — Block A (MSRV-A1 to MSRV-A5) + Block P (MSRV-P1 to MSRV-P3) + Block E (MSRV-E1 to MSRV-E7)
+ * All EARS prefixes map to mcp_server_spec.md
  */
 
 function createServer() {
@@ -145,7 +146,7 @@ describe('McpServer', () => {
     });
   });
 
-  describe('4.3. HTTP Transport + Capabilities (MSRV-P1 to MSRV-P3)', () => {
+  describe('4.2. HTTP Transport + Capabilities (MSRV-P1 to MSRV-P3)', () => {
     it('[MSRV-P1] should expose connectTransport method for HTTP transport', () => {
       const server = createServer();
       expect(typeof server.connectTransport).toBe('function');
@@ -167,29 +168,172 @@ describe('McpServer', () => {
     });
 
     it('[MSRV-P3] should execute same tool logic regardless of transport', async () => {
-      // Tool logic is transport-agnostic — same handler runs for stdio and HTTP
       const handler = vi.fn().mockResolvedValue({
-        content: [{ type: 'text', text: JSON.stringify({ ok: true }) }],
+        content: [{ type: 'text', text: JSON.stringify({ transport: 'agnostic' }) }],
       } satisfies ToolResult);
 
       const tool = createMockTool('gitgov_transport_test', handler);
+      const server = createServer();
+      server.registerTool(tool);
+      server.setDI(createMockDi());
 
-      // Create two server instances
-      const stdioServer = createServer();
-      stdioServer.registerTool(tool);
+      // Dispatch via InMemoryTransport (simulates any transport, including HTTP)
+      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+      await server.connectTransport(serverTransport);
 
-      const httpServer = createServer();
-      httpServer.registerTool(tool);
+      const client = new Client({ name: 'test-client', version: '1.0.0' });
+      await client.connect(clientTransport);
 
-      // Both register the exact same handler
-      const di = createMockDi();
-      const result1 = await tool.handler({ foo: 'from-stdio' }, di);
-      const result2 = await tool.handler({ foo: 'from-http' }, di);
+      const result = await client.callTool({ name: 'gitgov_transport_test', arguments: { foo: 'test' } });
 
-      // Same handler, same logic, same result shape
-      expect(JSON.parse(result1.content[0].text)).toEqual({ ok: true });
-      expect(JSON.parse(result2.content[0].text)).toEqual({ ok: true });
-      expect(handler).toHaveBeenCalledTimes(2);
+      // Same handler produces same result regardless of transport
+      const textContent = result.content as Array<{ type: string; text: string }>;
+      expect(JSON.parse(textContent[0].text)).toEqual({ transport: 'agnostic' });
+      expect(result.isError).toBeFalsy();
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(handler.mock.calls[0][0]).toEqual({ foo: 'test' });
+
+      await client.close();
+    });
+  });
+
+  describe('4.3. Error Boundary (MSRV-E1 to MSRV-E7)', () => {
+    it('[MSRV-E1] should return error when DI container is not set', async () => {
+      const server = createServer();
+      server.registerTool(createMockTool('gitgov_test'));
+      // DI not set intentionally
+
+      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+      await server.connectTransport(serverTransport);
+
+      const client = new Client({ name: 'test-client', version: '1.0.0' });
+      await client.connect(clientTransport);
+
+      const result = await client.callTool({ name: 'gitgov_test', arguments: {} });
+
+      expect(result.isError).toBe(true);
+      const textContent = result.content as Array<{ type: string; text: string }>;
+      const parsed = JSON.parse(textContent[0].text);
+      expect(parsed.error).toContain('DI container not initialized');
+
+      await client.close();
+    });
+
+    it('[MSRV-E2] should wrap handler exceptions in error result', async () => {
+      const handler = vi.fn().mockRejectedValue(new Error('Something broke'));
+      const tool = createMockTool('gitgov_failing', handler);
+
+      const server = createServer();
+      server.registerTool(tool);
+      server.setDI(createMockDi());
+
+      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+      await server.connectTransport(serverTransport);
+
+      const client = new Client({ name: 'test-client', version: '1.0.0' });
+      await client.connect(clientTransport);
+
+      const result = await client.callTool({ name: 'gitgov_failing', arguments: {} });
+
+      expect(result.isError).toBe(true);
+      const textContent = result.content as Array<{ type: string; text: string }>;
+      const parsed = JSON.parse(textContent[0].text);
+      expect(parsed.error).toContain('Tool execution failed');
+      expect(parsed.error).toContain('Something broke');
+
+      await client.close();
+    });
+
+    it('[MSRV-E3] should return empty resources when no handler is registered', async () => {
+      const server = createServer();
+      server.setDI(createMockDi());
+
+      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+      await server.connectTransport(serverTransport);
+
+      const client = new Client({ name: 'test-client', version: '1.0.0' });
+      await client.connect(clientTransport);
+
+      const result = await client.listResources();
+      expect(result.resources).toEqual([]);
+
+      await client.close();
+    });
+
+    it('[MSRV-E4] should return empty resources when handler throws', async () => {
+      const server = createServer();
+      server.registerResourceHandler({
+        list: vi.fn().mockRejectedValue(new Error('list failed')),
+        read: vi.fn(),
+      } as unknown as McpResourceHandler);
+      server.setDI(createMockDi());
+
+      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+      await server.connectTransport(serverTransport);
+
+      const client = new Client({ name: 'test-client', version: '1.0.0' });
+      await client.connect(clientTransport);
+
+      const result = await client.listResources();
+      expect(result.resources).toEqual([]);
+
+      await client.close();
+    });
+
+    it('[MSRV-E5] should throw when reading resources without handler', async () => {
+      const server = createServer();
+      server.setDI(createMockDi());
+
+      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+      await server.connectTransport(serverTransport);
+
+      const client = new Client({ name: 'test-client', version: '1.0.0' });
+      await client.connect(clientTransport);
+
+      await expect(
+        client.readResource({ uri: 'gitgov://test' }),
+      ).rejects.toThrow();
+
+      await client.close();
+    });
+
+    it('[MSRV-E6] should throw for unknown prompt name', async () => {
+      const server = createServer();
+      server.setDI(createMockDi());
+
+      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+      await server.connectTransport(serverTransport);
+
+      const client = new Client({ name: 'test-client', version: '1.0.0' });
+      await client.connect(clientTransport);
+
+      await expect(
+        client.getPrompt({ name: 'nonexistent' }),
+      ).rejects.toThrow();
+
+      await client.close();
+    });
+
+    it('[MSRV-E7] should throw when DI is not set for prompt handler', async () => {
+      const server = createServer();
+      server.registerPrompt({
+        name: 'test-prompt',
+        description: 'Test',
+        handler: vi.fn(),
+      });
+      // DI not set intentionally
+
+      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+      await server.connectTransport(serverTransport);
+
+      const client = new Client({ name: 'test-client', version: '1.0.0' });
+      await client.connect(clientTransport);
+
+      await expect(
+        client.getPrompt({ name: 'test-prompt' }),
+      ).rejects.toThrow();
+
+      await client.close();
     });
   });
 });

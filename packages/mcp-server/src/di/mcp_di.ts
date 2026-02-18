@@ -54,7 +54,7 @@ export class McpDependencyInjectionService {
   }
 
   /**
-   * [EARS-B4] Retorna la misma instancia en llamadas subsecuentes (singleton).
+   * [MSRV-B4] Retorna la misma instancia en llamadas subsecuentes (singleton).
    */
   async getContainer(): Promise<McpDiContainer> {
     if (this.container) return this.container;
@@ -72,16 +72,16 @@ export class McpDependencyInjectionService {
     const projectRoot = this.config.projectRoot;
     const gitgovPath = path.join(projectRoot, '.gitgov');
 
-    // [EARS-B2] Check if .gitgov/ exists
+    // [MSRV-B2] Check if .gitgov/ exists
     const gitgovExists = await this.directoryExists(gitgovPath);
 
     if (!gitgovExists) {
-      // [EARS-B2] Try bootstrap from gitgov-state branch
+      // [MSRV-B2] Try bootstrap from gitgov-state branch
       const gitModule = this.createGitModule(projectRoot);
       const bootstrapResult = await FsSyncStateModule.bootstrapFromStateBranch(gitModule);
 
       if (!bootstrapResult.success) {
-        // [EARS-B3] Neither .gitgov/ nor gitgov-state exist
+        // [MSRV-B3] Neither .gitgov/ nor gitgov-state exist
         throw new Error(
           'GitGovernance not initialized. .gitgov/ directory not found and bootstrap from gitgov-state branch failed.',
         );

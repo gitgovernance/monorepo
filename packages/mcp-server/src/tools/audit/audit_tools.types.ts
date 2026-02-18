@@ -3,9 +3,9 @@
  */
 
 export interface AuditScanInput {
-  target?: 'code' | 'jira' | 'gitgov';
-  scope?: 'diff' | 'full' | 'baseline';
-  detector?: 'regex' | 'heuristic' | 'llm';
+  include?: string[];
+  exclude?: string[];
+  changedSince?: string;
 }
 
 export interface AuditWaiveInput {

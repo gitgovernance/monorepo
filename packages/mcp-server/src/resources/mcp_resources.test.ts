@@ -4,6 +4,7 @@ import { createResourceHandler, parseResourceUri } from './mcp_resources.js';
 
 /**
  * MCP Resources tests — Block N (MSRV-N1 to MSRV-N3)
+ * Blueprint: specs/resources/mcp_resources_prompts.md
  */
 
 function createMockDi() {

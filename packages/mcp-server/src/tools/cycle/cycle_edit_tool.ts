@@ -20,13 +20,12 @@ export const cycleEditTool: McpToolDefinition<CycleEditInput> = {
   },
   handler: async (input: CycleEditInput, di: McpDependencyInjectionService) => {
     try {
-      const { backlogAdapter, identityAdapter } = await di.getContainer();
-      const actor = await identityAdapter.getCurrentActor();
+      const { backlogAdapter } = await di.getContainer();
       const updates: Record<string, unknown> = {};
       if (input.title !== undefined) updates.title = input.title;
       if (input.tags !== undefined) updates.tags = input.tags;
       if (input.notes !== undefined) updates.notes = input.notes;
-      const cycle = await backlogAdapter.updateCycle(input.cycleId, updates, actor.id);
+      const cycle = await backlogAdapter.updateCycle(input.cycleId, updates);
       return successResult({ id: cycle.id, title: cycle.title, status: cycle.status });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

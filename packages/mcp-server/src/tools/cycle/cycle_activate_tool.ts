@@ -15,9 +15,8 @@ export const cycleActivateTool: McpToolDefinition<CycleTransitionInput> = {
   },
   handler: async (input: CycleTransitionInput, di: McpDependencyInjectionService) => {
     try {
-      const { backlogAdapter, identityAdapter } = await di.getContainer();
-      const actor = await identityAdapter.getCurrentActor();
-      const cycle = await backlogAdapter.updateCycle(input.cycleId, { status: 'active' }, actor.id);
+      const { backlogAdapter } = await di.getContainer();
+      const cycle = await backlogAdapter.updateCycle(input.cycleId, { status: 'active' });
       return successResult({ id: cycle.id, title: cycle.title, status: cycle.status, previousStatus: 'planning' });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

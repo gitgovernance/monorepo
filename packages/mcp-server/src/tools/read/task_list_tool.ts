@@ -10,7 +10,7 @@ import { successResult, errorResult } from '../helpers.js';
 export const taskListTool: McpToolDefinition<TaskListInput> = {
   name: 'gitgov_task_list',
   description:
-    'List tasks from the GitGovernance backlog. Supports filtering by status, priority, assignee, cycleIds, tags, stalled/atRisk flags, and pagination.',
+    'List tasks from the GitGovernance backlog. Supports filtering by status, priority, cycleIds, tags, stalled/atRisk flags, and pagination.',
   inputSchema: {
     type: 'object',
     properties: {

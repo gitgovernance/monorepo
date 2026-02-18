@@ -3,7 +3,7 @@ import type { McpDependencyInjectionService } from '../../di/mcp_di.js';
 import type { SyncAuditInput } from './sync_tools.types.js';
 import { successResult, errorResult } from '../helpers.js';
 
-/** gitgov_sync_audit [MSRV-K5 related] */
+/** gitgov_sync_audit [MSRV-K6] */
 export const syncAuditTool: McpToolDefinition<SyncAuditInput> = {
   name: 'gitgov_sync_audit',
   description: 'Audit the gitgov-state branch for integrity: signatures, checksums, structure.',

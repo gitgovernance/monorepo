@@ -4,4 +4,10 @@ export type {
   ToolResult,
   ToolHandler,
   McpToolDefinition,
+  McpResourceEntry,
+  McpResourceContent,
+  McpResourceHandler,
+  McpPromptArgument,
+  McpPromptResult,
+  McpPromptDefinition,
 } from './mcp_server.types.js';

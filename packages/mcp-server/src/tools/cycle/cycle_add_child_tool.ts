@@ -18,8 +18,7 @@ export const cycleAddChildTool: McpToolDefinition<CycleAddChildInput> = {
   },
   handler: async (input: CycleAddChildInput, di: McpDependencyInjectionService) => {
     try {
-      const { backlogAdapter, identityAdapter } = await di.getContainer();
-      const actor = await identityAdapter.getCurrentActor();
+      const { backlogAdapter } = await di.getContainer();
 
       // Get parent cycle, add child to childCycleIds
       const parent = await backlogAdapter.getCycle(input.parentCycleId);
@@ -37,7 +36,6 @@ export const cycleAddChildTool: McpToolDefinition<CycleAddChildInput> = {
         await backlogAdapter.updateCycle(
           input.parentCycleId,
           { childCycleIds: [...existingChildren, input.childCycleId] },
-          actor.id,
         );
       }
 

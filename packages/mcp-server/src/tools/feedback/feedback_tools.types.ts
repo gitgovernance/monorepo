@@ -13,7 +13,7 @@ export interface FeedbackCreateInput {
 
 export interface FeedbackListInput {
   entityId?: string;
-  type?: string;
+  type?: 'blocking' | 'suggestion' | 'question' | 'approval' | 'clarification' | 'assignment';
   status?: 'open' | 'acknowledged' | 'resolved' | 'wontfix';
   limit?: number;
 }

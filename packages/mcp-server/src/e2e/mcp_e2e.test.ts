@@ -4,7 +4,7 @@ import * as fs from 'fs/promises';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { createTempGitgovProject } from '../integration/core/core_test_helpers.js';
-import { spawnMcpServer, callE2eTool } from './e2e_test_helpers.js';
+import { spawnMcpServer, createE2eContext, callE2eTool } from './e2e_test_helpers.js';
 import type { E2eToolResult } from './mcp_e2e.types.js';
 
 /**
@@ -118,7 +118,7 @@ describe('MCP E2E', () => {
       });
 
       const elapsed = Date.now() - startTime;
-      expect(elapsed).toBeLessThan(2000);
+      expect(elapsed).toBeLessThan(1000);
 
       await project2.cleanup();
     }, 10000);
@@ -129,25 +129,18 @@ describe('MCP E2E', () => {
   // ─────────────────────────────────────────────────
 
   describe('4.2. Full Task Workflow via stdio (MSRV-EB1 to EB4)', () => {
-    let projectRoot: string;
     let client: Client;
-    let cleanupProject: () => Promise<void>;
-    let cleanupServer: () => Promise<void>;
+    let cleanup: () => Promise<void>;
     let createdTaskId: string;
 
     beforeAll(async () => {
-      const project = await createTempGitgovProject();
-      projectRoot = project.projectRoot;
-      cleanupProject = project.cleanup;
-
-      const server = await spawnMcpServer(projectRoot);
-      client = server.client;
-      cleanupServer = server.cleanup;
+      const ctx = await createE2eContext();
+      client = ctx.client;
+      cleanup = ctx.cleanup;
     }, 10000);
 
     afterAll(async () => {
-      await cleanupServer();
-      await cleanupProject();
+      await cleanup();
     });
 
     it('[MSRV-EB1] should create task via stdio and return ID', async () => {
@@ -219,18 +212,14 @@ describe('MCP E2E', () => {
 
   describe('4.3. Cycle & Feedback Workflow via stdio (MSRV-EC1 to EC3)', () => {
     let client: Client;
-    let cleanupProject: () => Promise<void>;
-    let cleanupServer: () => Promise<void>;
+    let cleanup: () => Promise<void>;
     let seedTaskId: string;
     let seedCycleId: string;
 
     beforeAll(async () => {
-      const project = await createTempGitgovProject();
-      cleanupProject = project.cleanup;
-
-      const server = await spawnMcpServer(project.projectRoot);
-      client = server.client;
-      cleanupServer = server.cleanup;
+      const ctx = await createE2eContext();
+      client = ctx.client;
+      cleanup = ctx.cleanup;
 
       // Seed a task for linking
       const { data: task } = await callE2eTool(client, 'gitgov_task_new', {
@@ -241,8 +230,7 @@ describe('MCP E2E', () => {
     }, 10000);
 
     afterAll(async () => {
-      await cleanupServer();
-      await cleanupProject();
+      await cleanup();
     });
 
     it('[MSRV-EC1] should create cycle, add task, and activate via stdio', async () => {
@@ -312,17 +300,13 @@ describe('MCP E2E', () => {
 
   describe('4.4. Resources, Prompts & Error Handling (MSRV-ED1 to ED4)', () => {
     let client: Client;
-    let cleanupProject: () => Promise<void>;
-    let cleanupServer: () => Promise<void>;
+    let cleanup: () => Promise<void>;
     let seedTaskId: string;
 
     beforeAll(async () => {
-      const project = await createTempGitgovProject();
-      cleanupProject = project.cleanup;
-
-      const server = await spawnMcpServer(project.projectRoot);
-      client = server.client;
-      cleanupServer = server.cleanup;
+      const ctx = await createE2eContext();
+      client = ctx.client;
+      cleanup = ctx.cleanup;
 
       // Create a task for resource tests
       const { data: task } = await callE2eTool(client, 'gitgov_task_new', {
@@ -333,8 +317,7 @@ describe('MCP E2E', () => {
     }, 10000);
 
     afterAll(async () => {
-      await cleanupServer();
-      await cleanupProject();
+      await cleanup();
     });
 
     it('[MSRV-ED1] should list gitgov:// URIs for created records via stdio', async () => {

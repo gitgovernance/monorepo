@@ -35,12 +35,9 @@ export const feedbackListTool: McpToolDefinition<FeedbackListInput> = {
       const { feedbackAdapter } = container;
 
       // Get feedbacks — if entityId provided, use entity filter
-      let feedbacks: Array<Record<string, unknown>>;
-      if (input.entityId) {
-        feedbacks = await feedbackAdapter.getFeedbackByEntity(input.entityId);
-      } else {
-        feedbacks = await feedbackAdapter.getAllFeedback();
-      }
+      let feedbacks = input.entityId
+        ? await feedbackAdapter.getFeedbackByEntity(input.entityId)
+        : await feedbackAdapter.getAllFeedback();
 
       // Apply additional filters
       let filtered = feedbacks;

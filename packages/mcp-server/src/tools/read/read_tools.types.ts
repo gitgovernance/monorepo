@@ -75,8 +75,6 @@ export interface TaskListInput {
 
 export interface TaskShowInput {
   taskId: string;
-  includeHistory?: boolean;
-  includeHealth?: boolean;
 }
 
 // --- Cycles ---

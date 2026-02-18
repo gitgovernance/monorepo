@@ -18,14 +18,6 @@ export const taskShowTool: McpToolDefinition<TaskShowInput> = {
         type: 'string',
         description: 'The task ID to retrieve.',
       },
-      includeHistory: {
-        type: 'boolean',
-        description: 'Include task history/transitions (default: false).',
-      },
-      includeHealth: {
-        type: 'boolean',
-        description: 'Include health score and risk indicators (default: false).',
-      },
     },
     required: ['taskId'],
     additionalProperties: false,

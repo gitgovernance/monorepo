@@ -6,13 +6,13 @@ import { successResult, errorResult } from '../helpers.js';
 /** gitgov_audit_scan [MSRV-L1, MSRV-L2, MSRV-L5] */
 export const auditScanTool: McpToolDefinition<AuditScanInput> = {
   name: 'gitgov_audit_scan',
-  description: 'Scan the repository for security/governance findings. Supports target, scope, and detector configuration.',
+  description: 'Scan the repository for security/governance findings. Supports include/exclude glob patterns and incremental mode via changedSince.',
   inputSchema: {
     type: 'object',
     properties: {
-      target: { type: 'string', enum: ['code', 'jira', 'gitgov'], description: 'Scan target (default: code).' },
-      scope: { type: 'string', enum: ['diff', 'full', 'baseline'], description: 'Scan scope (default: full).' },
-      detector: { type: 'string', enum: ['regex', 'heuristic', 'llm'], description: 'Detection engine (default: regex).' },
+      include: { type: 'array', items: { type: 'string' }, description: 'Glob patterns to include (default: ["**/*"]).' },
+      exclude: { type: 'array', items: { type: 'string' }, description: 'Glob patterns to exclude (default: []).' },
+      changedSince: { type: 'string', description: 'Commit SHA — only scan files changed since this commit.' },
     },
     additionalProperties: false,
   },
@@ -20,9 +20,11 @@ export const auditScanTool: McpToolDefinition<AuditScanInput> = {
     try {
       const { sourceAuditorModule } = await di.getContainer();
       const result = await sourceAuditorModule.audit({
-        target: input.target ?? 'code',
-        scope: input.scope ?? 'full',
-        detector: input.detector ?? 'regex',
+        scope: {
+          include: input.include ?? ['**/*'],
+          exclude: input.exclude ?? [],
+          changedSince: input.changedSince,
+        },
       });
       return successResult(result);
     } catch (error) {
