@@ -152,7 +152,7 @@ MCP clients can browse and read these via the standard resources protocol.
 # Run locally with tsx
 pnpm --filter @gitgov/mcp-server dev
 
-# Run tests (180 tests across 3 levels)
+# Run tests (184 tests across 3 levels)
 pnpm --filter @gitgov/mcp-server test
 
 # Type check

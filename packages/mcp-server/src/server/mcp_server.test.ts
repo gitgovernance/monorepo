@@ -8,7 +8,7 @@ import { createResourceHandler } from '../resources/index.js';
 import { getAllPrompts } from '../prompts/index.js';
 
 /**
- * McpServer tests — Block A (MSRV-A1 to MSRV-A5) + Block P (MSRV-P1 to MSRV-P3) + Block E (MSRV-E1 to MSRV-E7)
+ * McpServer tests — Block A (MSRV-A1 to MSRV-A5) + Block P (MSRV-P1 to MSRV-P3) + Block W (MSRV-W1 to MSRV-W7)
  * All EARS prefixes map to mcp_server_spec.md
  */
 
@@ -197,8 +197,8 @@ describe('McpServer', () => {
     });
   });
 
-  describe('4.3. Error Boundary (MSRV-E1 to MSRV-E7)', () => {
-    it('[MSRV-E1] should return error when DI container is not set', async () => {
+  describe('4.3. Error Boundary (MSRV-W1 to MSRV-W7)', () => {
+    it('[MSRV-W1] should return error when DI container is not set', async () => {
       const server = createServer();
       server.registerTool(createMockTool('gitgov_test'));
       // DI not set intentionally
@@ -219,7 +219,7 @@ describe('McpServer', () => {
       await client.close();
     });
 
-    it('[MSRV-E2] should wrap handler exceptions in error result', async () => {
+    it('[MSRV-W2] should wrap handler exceptions in error result', async () => {
       const handler = vi.fn().mockRejectedValue(new Error('Something broke'));
       const tool = createMockTool('gitgov_failing', handler);
 
@@ -244,7 +244,7 @@ describe('McpServer', () => {
       await client.close();
     });
 
-    it('[MSRV-E3] should return empty resources when no handler is registered', async () => {
+    it('[MSRV-W3] should return empty resources when no handler is registered', async () => {
       const server = createServer();
       server.setDI(createMockDi());
 
@@ -260,7 +260,7 @@ describe('McpServer', () => {
       await client.close();
     });
 
-    it('[MSRV-E4] should return empty resources when handler throws', async () => {
+    it('[MSRV-W4] should return empty resources when handler throws', async () => {
       const server = createServer();
       server.registerResourceHandler({
         list: vi.fn().mockRejectedValue(new Error('list failed')),
@@ -280,7 +280,7 @@ describe('McpServer', () => {
       await client.close();
     });
 
-    it('[MSRV-E5] should throw when reading resources without handler', async () => {
+    it('[MSRV-W5] should throw when reading resources without handler', async () => {
       const server = createServer();
       server.setDI(createMockDi());
 
@@ -297,7 +297,7 @@ describe('McpServer', () => {
       await client.close();
     });
 
-    it('[MSRV-E6] should throw for unknown prompt name', async () => {
+    it('[MSRV-W6] should throw for unknown prompt name', async () => {
       const server = createServer();
       server.setDI(createMockDi());
 
@@ -314,7 +314,7 @@ describe('McpServer', () => {
       await client.close();
     });
 
-    it('[MSRV-E7] should throw when DI is not set for prompt handler', async () => {
+    it('[MSRV-W7] should throw when DI is not set for prompt handler', async () => {
       const server = createServer();
       server.registerPrompt({
         name: 'test-prompt',
