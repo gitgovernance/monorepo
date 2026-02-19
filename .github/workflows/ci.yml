@@ -25,7 +25,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - name: Typecheck core
-        run: pnpm --filter @gitgov/core exec tsc -- --noEmit
+        run: pnpm --filter @gitgov/core exec -- tsc --noEmit
 
       - name: Typecheck mcp-server
         run: pnpm --filter @gitgov/mcp-server run typecheck
@@ -47,8 +47,11 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Configure git defaults
-        run: git config --global init.defaultBranch main
+      - name: Configure git for tests
+        run: |
+          git config --global init.defaultBranch main
+          git config --global user.email "ci@gitgovernance.dev"
+          git config --global user.name "CI"
 
       - name: Build core (required by guardrail tests)
         run: pnpm --filter @gitgov/core run build
