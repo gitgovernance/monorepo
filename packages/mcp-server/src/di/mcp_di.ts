@@ -120,7 +120,7 @@ export class McpDependencyInjectionService {
     const configManager = createConfigManager(projectRoot);
     const sessionManager = createSessionManager(projectRoot);
     const keyProvider = new FsKeyProvider({
-      actorsDir: path.join(gitgovPath, 'actors'),
+      keysDir: path.join(gitgovPath, 'keys'),
     });
 
     // --- Identity (base for all adapters) ---
