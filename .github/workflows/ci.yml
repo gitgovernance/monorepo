@@ -24,6 +24,9 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      - name: Build core (required for mcp-server type resolution)
+        run: pnpm --filter @gitgov/core run build
+
       - name: Typecheck core
         run: pnpm --filter @gitgov/core exec -- tsc --noEmit
 
