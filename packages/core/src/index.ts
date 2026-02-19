@@ -45,6 +45,9 @@ export type {
 // RecordMetrics type exports (calculation engine)
 export type { IRecordMetrics, RecordMetricsDependencies, SystemStatus, ProductivityMetrics, CollaborationMetrics, TaskHealthReport } from "./record_metrics";
 export type { IIdentityAdapter } from "./adapters/identity_adapter";
+export type { IBacklogAdapter } from "./adapters/backlog_adapter";
+export type { IFeedbackAdapter } from "./adapters/feedback_adapter";
+export type { IExecutionAdapter } from "./adapters/execution_adapter";
 
 // SyncState type exports
 export type { ISyncStateModule, SyncStatePushResult, SyncStatePullResult, SyncStateResolveResult, AuditStateReport } from "./sync_state";

@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main, "epic/*"]
+  push:
+    branches: [main]
+
+jobs:
+  typecheck:
+    name: Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build core (required for mcp-server type resolution)
+        run: pnpm --filter @gitgov/core run build
+
+      - name: Typecheck core
+        run: pnpm --filter @gitgov/core exec -- tsc --noEmit
+
+      - name: Typecheck mcp-server
+        run: pnpm --filter @gitgov/mcp-server run typecheck
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Configure git for tests
+        run: |
+          git config --global init.defaultBranch main
+          git config --global user.email "ci@gitgovernance.dev"
+          git config --global user.name "CI"
+
+      - name: Build core (required by guardrail tests)
+        run: pnpm --filter @gitgov/core run build
+
+      - name: Test core
+        run: pnpm --filter @gitgov/core run test
+
+      - name: Test mcp-server
+        run: pnpm --filter @gitgov/mcp-server run test
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: [typecheck]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build core
+        run: pnpm --filter @gitgov/core run build
+
+      - name: Build mcp-server
+        run: pnpm --filter @gitgov/mcp-server run build
