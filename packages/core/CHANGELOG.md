@@ -1,3 +1,27 @@
+## [2.5.0](https://github.com/gitgovernance/monorepo/compare/core-v2.4.0...core-v2.5.0) (2026-02-19)
+
+
+### ✨ Features
+
+* **mcp-server:** add @gitgov/mcp-server package with 36 tools ([f350130](https://github.com/gitgovernance/monorepo/commit/f350130a1656aa067b0326113ef81f5042373960))
+* **mcp-server:** add 3-level test pyramid (175 tests) + coherence fixes ([2bd92f6](https://github.com/gitgovernance/monorepo/commit/2bd92f68c911a2de430de04a70e7fd4b8dfe7211))
+
+
+### 🐛 Bug Fixes
+
+* **ci:** add git user config and fix tsc exec syntax ([a4a5023](https://github.com/gitgovernance/monorepo/commit/a4a5023da447332b7b6add05e889e7e6b74e68d7))
+* **ci:** align Node.js version to 24 per .nvmrc ([d6e7eee](https://github.com/gitgovernance/monorepo/commit/d6e7eeef914ff17784485cdfb4d46dd572379fc2))
+* **ci:** build core before typecheck for type resolution ([388f8cf](https://github.com/gitgovernance/monorepo/commit/388f8cfe1e5b79fc8977afa3facc9cdc5fea1a7b))
+* **ci:** resolve 3 CI failures — typecheck, git defaults, build order ([54278f3](https://github.com/gitgovernance/monorepo/commit/54278f3f1093ee9c12a2e7348208e74c5fae6e87))
+* **mcp-server:** align FsKeyProvider with core v2.4.0 API ([d26bdba](https://github.com/gitgovernance/monorepo/commit/d26bdba3ecffcb6ebd55efd5563e4c774d914faa))
+* **mcp-server:** remove all `any` types, fix type mismatches, EARS coherence ([5472926](https://github.com/gitgovernance/monorepo/commit/5472926b4d193e49e8d651d373ca2c3e7ec73761))
+* **mcp-server:** resolve MSRV-E naming collision, update test counts ([a73fe2d](https://github.com/gitgovernance/monorepo/commit/a73fe2de76593da614bda8ccf81100c0fa48bbec))
+
+
+### 📝 Documentation
+
+* **mcp-server:** improve README coherence with implementation ([f94fc4f](https://github.com/gitgovernance/monorepo/commit/f94fc4f48c89f8c3b85bf47b1d16557d9ca29d5f))
+
 ## [2.4.0](https://github.com/gitgovernance/monorepo/compare/core-v2.3.0...core-v2.4.0) (2026-02-16)
 
 
