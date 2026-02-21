@@ -48,6 +48,7 @@ export type { IIdentityAdapter } from "./adapters/identity_adapter";
 export type { IBacklogAdapter } from "./adapters/backlog_adapter";
 export type { IFeedbackAdapter } from "./adapters/feedback_adapter";
 export type { IExecutionAdapter } from "./adapters/execution_adapter";
+export type { IAgentAdapter } from "./adapters/agent_adapter";
 
 // SyncState type exports
 export type { ISyncStateModule, SyncStatePushResult, SyncStatePullResult, SyncStateResolveResult, AuditStateReport } from "./sync_state";

@@ -79,7 +79,7 @@ export class ProjectAdapter implements IProjectAdapter {
       // 3. Trust Root Creation via IdentityAdapter [EARS-B1]
       const actor = await this.identityAdapter.createActor(
         {
-          type: 'human' as const,
+          type: (options.type ?? 'human') as 'human' | 'agent',
           displayName: options.actorName || 'Project Owner',
           roles: [
             'admin',

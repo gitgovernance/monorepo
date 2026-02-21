@@ -48,6 +48,8 @@ Commands:
   init [options]         Initialize GitGovernance project
   task|t                 Create and manage TaskRecords
   cycle|c                Create and manage CycleRecords
+  exec|x                Record proof-of-work via ExecutionRecords
+  feedback|fb            Create structured, immutable FeedbackRecords
   status [options]       Show intelligent project status dashboard
   dashboard [options]    Launch interactive TUI dashboard
   indexer [options]      Control local cache system
@@ -55,6 +57,7 @@ Commands:
   lint [options] [path]  Validate GitGovernance records
   audit [options]        Audit source code (PII/secrets, GDPR)
   agent                  Manage and run GitGov agents
+  actor                  Manage project actors (identity)
   sync                   State synchronization (push/pull/resolve/audit)
   context [options]      Query working context for agents and automation
   push [options]         Alias for "gitgov sync push"
@@ -78,6 +81,30 @@ draft -> review -> ready -> active -> done -> archived
 ```
 
 15 subcommands: `new`, `list`, `show`, `submit`, `approve`, `activate`, `pause`, `resume`, `complete`, `cancel`, `reject`, `delete`, `assign`, `edit`, `promote`
+
+### Execution Tracking
+
+Record proof-of-work against tasks:
+
+```
+  Create:    gitgov exec new <taskId> --result "OAuth handler implemented"
+  List:      gitgov exec list <taskId>
+  Show:      gitgov exec show <executionId>
+```
+
+3 subcommands: `new`, `list`, `show`
+
+Execution types: `analysis`, `progress` (default), `blocker`, `completion`, `info`, `correction`
+
+### Feedback
+
+Create structured, immutable feedback linked to any entity:
+
+```
+  Create:    gitgov feedback --entity-type task --entity-id <id> --type approval --content "LGTM"
+```
+
+Feedback types: `blocking`, `suggestion`, `question`, `approval`, `clarification`, `assignment`
 
 ### Cycle Management
 
@@ -115,7 +142,7 @@ gitgov sync resolve --reason "..."      # Resolve conflicts
 ```mermaid
 graph TD
     subgraph "@gitgov/cli"
-        Commands["Commands (12)"]
+        Commands["Commands (16)"]
         Base["BaseCommand / SimpleCommand"]
         DI["DependencyInjectionService"]
         TUI["Ink/React TUI"]

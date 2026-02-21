@@ -11,6 +11,7 @@ import { existsSync, promises as fsPromises } from 'fs';
  */
 export interface InitCommandOptions {
   name?: string;
+  type?: 'human' | 'agent';
   template?: string;
   methodology?: 'default' | 'scrum' | 'kanban';
   actorName?: string;
@@ -60,6 +61,8 @@ export class InitCommand {
         name: completeOptions.name!,
       };
 
+      // [EARS-A6, EARS-A7] Pass actor type to ProjectAdapter
+      if (completeOptions.type) projectInitOptions.type = completeOptions.type;
       // [EARS-A3] Process template when specified
       if (completeOptions.template) projectInitOptions.template = completeOptions.template;
       if (completeOptions.actorName) projectInitOptions.actorName = completeOptions.actorName;

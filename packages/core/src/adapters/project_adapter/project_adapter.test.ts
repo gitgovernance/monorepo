@@ -342,6 +342,49 @@ describe('ProjectAdapter', () => {
       expect(mockProjectInitializer.validateEnvironment).toHaveBeenCalled();
     });
 
+    it('should pass type to IdentityAdapter when --type agent specified', async () => {
+      const mockAgentActor = createMockActorRecord({ id: 'agent:ci-bot', type: 'agent' });
+      const mockCycle = createMockCycleRecord();
+
+      mockIdentityAdapter.createActor.mockResolvedValueOnce(mockAgentActor);
+      mockBacklogAdapter.createCycle.mockResolvedValueOnce(mockCycle);
+
+      const result = await projectAdapter.initializeProject({
+        name: 'Agent Project',
+        type: 'agent',
+        actorName: 'CI Bot',
+      });
+
+      expect(result.success).toBe(true);
+      expect(mockIdentityAdapter.createActor).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'agent',
+          displayName: 'CI Bot',
+        }),
+        'bootstrap'
+      );
+    });
+
+    it('should default to type human when type not specified', async () => {
+      const mockActor = createMockActorRecord();
+      const mockCycle = createMockCycleRecord();
+
+      mockIdentityAdapter.createActor.mockResolvedValueOnce(mockActor);
+      mockBacklogAdapter.createCycle.mockResolvedValueOnce(mockCycle);
+
+      await projectAdapter.initializeProject({
+        name: 'Human Project',
+        actorName: 'Test User',
+      });
+
+      expect(mockIdentityAdapter.createActor).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'human',
+        }),
+        'bootstrap'
+      );
+    });
+
     it('[EARS-A6] should return ProjectInitResult with complete metadata', async () => {
       const mockActor = createMockActorRecord();
       const mockCycle = createMockCycleRecord();

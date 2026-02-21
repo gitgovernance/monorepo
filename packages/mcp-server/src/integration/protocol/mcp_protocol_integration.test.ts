@@ -11,7 +11,7 @@ import type { MockContainer } from './protocol_test_helpers.js';
 /**
  * MCP Protocol Integration Tests — Level 1.
  *
- * All 36 tools + resources + prompts tested through the real MCP protocol
+ * All 40 tools + resources + prompts tested through the real MCP protocol
  * via InMemoryTransport + Client. DI is mocked — the focus is the protocol layer.
  *
  * Blueprint: specs/integration/mcp_protocol_integration.md
@@ -562,11 +562,11 @@ describe('MCP Protocol Integration', () => {
       expect(data.error).toBeDefined();
     });
 
-    it('[MSRV-PG4] should list exactly 36 tools via MCP protocol', async () => {
+    it('[MSRV-PG4] should list exactly 43 tools via MCP protocol', async () => {
       const result = await client.listTools();
 
       expect(result.tools).toBeDefined();
-      expect(result.tools.length).toBe(36);
+      expect(result.tools.length).toBe(43);
 
       // Each tool should have name, description, and inputSchema
       for (const tool of result.tools) {

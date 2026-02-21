@@ -16,7 +16,9 @@ import type {
   IBacklogAdapter,
   IFeedbackAdapter,
   IExecutionAdapter,
+  IAgentAdapter,
   SourceAuditor,
+  WorkflowAdapter,
 } from '@gitgov/core';
 import type { IFsLintModule } from '@gitgov/core/fs';
 
@@ -47,6 +49,8 @@ export interface McpDiContainer {
   feedbackAdapter: IFeedbackAdapter;
   executionAdapter: IExecutionAdapter;
   identityAdapter: IIdentityAdapter;
+  agentAdapter: IAgentAdapter;
+  workflowAdapter: WorkflowAdapter.IWorkflow;
 
   lintModule: IFsLintModule;
   syncModule: ISyncStateModule;

@@ -7,11 +7,14 @@ import * as os from 'os';
 /**
  * E2E Tests for Init CLI Command - Edge Cases
  *
+ * Blueprint: init_command.md §4.5
+ *
  * Tests the `gitgov init` command in various repository scenarios:
- * - CASE 1: Repo without remote
+ * - CASE 1: Repo without remote (EARS-E1 to E5)
  * - CASE 2A: Repo with remote, without gitgov-state pre-created
- * - CASE 2B: Repo with remote but without commits in main
- * - CASE 3: Repo with empty gitgov-state branch pre-created
+ * - CASE 2B: Repo with remote but without commits in main (EARS-E6, E7)
+ * - CASE 3: Repo with empty gitgov-state branch pre-created (EARS-E8, E9)
+ * - Clone scenario: Bootstrap from existing gitgov-state (EARS-E10, E11)
  *
  * IMPORTANT: These tests verify CLI command execution in isolation.
  * Each test creates a fresh temp directory with appropriate git setup.
@@ -125,7 +128,7 @@ describe('Init CLI Command - Edge Cases E2E Tests', () => {
       cleanupWorktree(testProjectRoot, worktreeBasePath);
     });
 
-    it('[EARS-INIT-1] WHEN repo has no remote configured THE SYSTEM SHALL initialize successfully locally', () => {
+    it('[EARS-E1] WHEN repo has no remote configured THE SYSTEM SHALL initialize successfully locally', () => {
       const result = runCliCommand(['init', '--name', 'No Remote Project', '--actor-name', 'Test User', '--quiet'], { cwd: testProjectRoot });
 
       expect(result.success).toBe(true);
@@ -133,7 +136,7 @@ describe('Init CLI Command - Edge Cases E2E Tests', () => {
       expect(fs.existsSync(path.join(worktreeBasePath, '.gitgov', 'config.json'))).toBe(true);
     });
 
-    it('[EARS-INIT-2] WHEN repo has no remote THE SYSTEM SHALL create gitgov-state locally but NOT push', () => {
+    it('[EARS-E2] WHEN repo has no remote THE SYSTEM SHALL create gitgov-state locally but NOT push', () => {
       runCliCommand(['init', '--name', 'No Remote Project', '--actor-name', 'Test User', '--quiet'], { cwd: testProjectRoot });
 
       // With worktree mode, gitgov-state IS created locally for the worktree
@@ -142,7 +145,7 @@ describe('Init CLI Command - Edge Cases E2E Tests', () => {
       expect(branches.trim()).toContain('gitgov-state');
     });
 
-    it('[EARS-INIT-3] WHEN sync push is attempted without remote THE SYSTEM SHALL fail with clear error', () => {
+    it('[EARS-E3] WHEN sync push is attempted without remote THE SYSTEM SHALL fail with clear error', () => {
       runCliCommand(['init', '--name', 'No Remote Project', '--actor-name', 'Test User', '--quiet'], { cwd: testProjectRoot });
 
       // Ensure we're on main branch
@@ -156,7 +159,7 @@ describe('Init CLI Command - Edge Cases E2E Tests', () => {
       expect(pushResult.error || pushResult.output).toMatch(/No remote|remote.*configured|git remote add|does not appear to be a git repository/i);
     });
 
-    it('[EARS-INIT-4] WHEN sync pull is attempted without remote THE SYSTEM SHALL fail with clear error', () => {
+    it('[EARS-E4] WHEN sync pull is attempted without remote THE SYSTEM SHALL fail with clear error', () => {
       runCliCommand(['init', '--name', 'No Remote Pull Project', '--actor-name', 'Test User', '--quiet'], { cwd: testProjectRoot });
 
       // Ensure we're on main branch
@@ -168,7 +171,7 @@ describe('Init CLI Command - Edge Cases E2E Tests', () => {
       expect(pullResult.success).toBe(false);
     });
 
-    it('[EARS-INIT-5] WHEN remote is added later THEN sync push SHALL create gitgov-state with files', () => {
+    it('[EARS-E5] WHEN remote is added later THEN sync push SHALL create gitgov-state with files', () => {
       // This is the complete Case 1 flow: init without remote, add remote later, then sync push
 
       // 1. Init without remote
@@ -233,7 +236,7 @@ describe('Init CLI Command - Edge Cases E2E Tests', () => {
       cleanupWorktree(testProjectRoot, worktreeBasePath);
     });
 
-    it('[EARS-INIT-4] WHEN remote exists but gitgov-state does not THE SYSTEM SHALL init without creating gitgov-state (lazy)', () => {
+    it('WHEN remote exists but gitgov-state does not THE SYSTEM SHALL init without creating gitgov-state (lazy)', () => {
       const result = runCliCommand(['init', '--name', 'New Remote Project', '--actor-name', 'Test User', '--quiet'], { cwd: testProjectRoot });
 
       expect(result.success).toBe(true);
@@ -245,7 +248,7 @@ describe('Init CLI Command - Edge Cases E2E Tests', () => {
       expect(remoteBranches.trim()).toBe('');
     });
 
-    it('[EARS-INIT-5] WHEN init completes THE SYSTEM SHALL allow sync push to create remote gitgov-state', () => {
+    it('WHEN init completes THE SYSTEM SHALL allow sync push to create remote gitgov-state', () => {
       runCliCommand(['init', '--name', 'New Remote Project', '--actor-name', 'Test User', '--quiet'], { cwd: testProjectRoot });
 
       const pushResult = runCliCommand(['sync', 'push'], { cwd: testProjectRoot });
@@ -256,7 +259,7 @@ describe('Init CLI Command - Edge Cases E2E Tests', () => {
       expect(remoteBranches.trim()).toContain('gitgov-state');
     });
 
-    it('[EARS-INIT-6] WHEN sync push completes THE gitgov-state branch SHALL contain .gitgov files', () => {
+    it('WHEN sync push completes THE gitgov-state branch SHALL contain .gitgov files', () => {
       // This is Case 2A complete verification: remote exists from start
       runCliCommand(['init', '--name', 'Case2A Files', '--actor-name', 'Test User', '--quiet'], { cwd: testProjectRoot });
 
@@ -300,7 +303,7 @@ describe('Init CLI Command - Edge Cases E2E Tests', () => {
       cleanupWorktree(testProjectRoot, worktreeBasePath);
     });
 
-    it('[EARS-INIT-6] WHEN repo has no commits THE SYSTEM SHALL succeed with local .gitgov', () => {
+    it('[EARS-E6] WHEN repo has no commits THE SYSTEM SHALL succeed with local .gitgov', () => {
       // Init should succeed even without commits on main
       const result = runCliCommand(['init', '--name', 'Empty Main Project', '--actor-name', 'Test User', '--quiet'], { cwd: testProjectRoot });
 
@@ -315,7 +318,7 @@ describe('Init CLI Command - Edge Cases E2E Tests', () => {
       expect(pushResult.success).toBe(true);
     });
 
-    it('[EARS-INIT-7] WHEN user creates initial commit THEN init THE SYSTEM SHALL succeed', () => {
+    it('[EARS-E7] WHEN user creates initial commit THEN init THE SYSTEM SHALL succeed', () => {
       // Create an initial commit first
       fs.writeFileSync(path.join(testProjectRoot, 'README.md'), '# Test Project\n');
       execSync('git add README.md', { cwd: testProjectRoot, stdio: 'pipe' });
@@ -370,7 +373,7 @@ describe('Init CLI Command - Edge Cases E2E Tests', () => {
       cleanupWorktree(testProjectRoot, worktreeBasePath);
     });
 
-    it('[EARS-INIT-8] WHEN gitgov-state exists but is empty THE SYSTEM SHALL bootstrap from it or init fresh', () => {
+    it('[EARS-E8] WHEN gitgov-state exists but is empty THE SYSTEM SHALL bootstrap from it or init fresh', () => {
       const result = runCliCommand(['init', '--name', 'Bootstrap Project', '--actor-name', 'Test User', '--quiet'], { cwd: testProjectRoot });
 
       expect(result.success).toBe(true);
@@ -378,7 +381,7 @@ describe('Init CLI Command - Edge Cases E2E Tests', () => {
       expect(fs.existsSync(path.join(worktreeBasePath, '.gitgov', 'config.json'))).toBe(true);
     });
 
-    it('[EARS-INIT-9] WHEN bootstrapping from empty state THE SYSTEM SHALL update gitgov-state with new config', () => {
+    it('[EARS-E9] WHEN bootstrapping from empty state THE SYSTEM SHALL update gitgov-state with new config', () => {
       runCliCommand(['init', '--name', 'Bootstrap Project', '--actor-name', 'Test User', '--quiet'], { cwd: testProjectRoot });
 
       // Ensure we're on main branch (init may leave us on gitgov-state in some edge cases)
@@ -440,7 +443,7 @@ describe('Init CLI Command - Edge Cases E2E Tests', () => {
       cleanupWorktree(cloneRepoPath, cloneWt);
     });
 
-    it('[EARS-INIT-10] WHEN cloning repo with gitgov-state THE SYSTEM SHALL allow pull without init', () => {
+    it('[EARS-E10] WHEN cloning repo with gitgov-state THE SYSTEM SHALL allow pull without init', () => {
       // After clone, .gitgov should NOT exist (it's gitignored)
       expect(fs.existsSync(path.join(cloneRepoPath, '.gitgov'))).toBe(false);
 
@@ -453,7 +456,7 @@ describe('Init CLI Command - Edge Cases E2E Tests', () => {
       expect(fs.existsSync(path.join(cloneWorktreePath, '.gitgov', 'config.json'))).toBe(true);
     });
 
-    it('[EARS-INIT-11] WHEN pull completes on clone THE SYSTEM SHALL allow read commands', () => {
+    it('[EARS-E11] WHEN pull completes on clone THE SYSTEM SHALL allow read commands', () => {
       // Pull without init
       runCliCommand(['sync', 'pull', '--json'], { cwd: cloneRepoPath });
 

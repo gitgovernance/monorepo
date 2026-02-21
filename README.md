@@ -4,7 +4,9 @@
 ![Tests](https://img.shields.io/badge/Core-2628%20tests-success)
 ![License: Apache-2.0](https://img.shields.io/badge/CLI-Apache--2.0-blue.svg)
 ![cli npm version](https://img.shields.io/npm/v/@gitgov/cli?color=orange&label=CLI%20npm)
-![Tests](https://img.shields.io/badge/CLI-403%20tests-success)
+![Tests](https://img.shields.io/badge/CLI-450%20tests-success)
+![License: Apache-2.0](https://img.shields.io/badge/MCP--Server-Apache--2.0-blue.svg)
+![Tests](https://img.shields.io/badge/MCP--Server-199%20tests-success)
 
 # GitGovernance
 
@@ -70,6 +72,7 @@ Agent:  "Sprint is 70% done, 3 tasks active, 1 blocked."
 | **Protocol** | Apache 2.0 | The **Standard** -- RFCs, schemas, and normative specifications. | [`protocol/`](packages/private/packages/blueprints/03_products/protocol/unified/) |
 | **`@gitgov/core`** | MPL-2.0 | The **Engine** -- Type-safe SDK for business logic, records, validation, storage, adapters. | [`README.md`](packages/core/README.md) |
 | **`@gitgov/cli`** | Apache 2.0 | The **Tool** -- Command-line interface for humans and AI agents. | [`README.md`](packages/cli/README.md) |
+| **`@gitgov/mcp-server`** | Apache 2.0 | The **Bridge** -- MCP server exposing 43 tools for AI agents (Claude Code, Cursor, Windsurf). | [`README.md`](packages/mcp-server/README.md) |
 
 ## Community
 
@@ -82,8 +85,9 @@ Agent:  "Sprint is 70% done, 3 tasks active, 1 blocked."
 - **Protocol Specs (RFCs, Schemas)**: [Apache License 2.0](https://opensource.org/licenses/Apache-2.0)
 - **`@gitgov/core`**: [Mozilla Public License 2.0 (MPL-2.0)](https://opensource.org/licenses/MPL-2.0)
 - **`@gitgov/cli`**: [Apache License 2.0](https://opensource.org/licenses/Apache-2.0)
+- **`@gitgov/mcp-server`**: [Apache License 2.0](https://opensource.org/licenses/Apache-2.0)
 
-The protocol specification is licensed permissively to maximize adoption as an open standard. The core SDK uses weak copyleft to protect shared improvements while allowing commercial integration.
+The protocol specification is licensed permissively to maximize adoption as an open standard. The core SDK uses weak copyleft to protect shared improvements while allowing commercial integration. The CLI and MCP server are permissively licensed to maximize distribution as adoption tools.
 
 ---
 
