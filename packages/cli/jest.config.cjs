@@ -7,11 +7,12 @@ module.exports = {
   moduleNameMapper: {
     '^@gitgov/core$': '<rootDir>/../core/src/index.ts',
     '^@gitgov/core/fs$': '<rootDir>/../core/src/fs.ts',
-    '^@gitgov/core/memory$': '<rootDir>/../core/src/memory.ts'
+    '^@gitgov/core/memory$': '<rootDir>/../core/src/memory.ts',
   },
   transform: {
     '^.+\\.tsx?$': ['ts-jest', {
       tsconfig: 'tsconfig.cjs.json'
-    }]
+    }],
+    '^.+\\.js$': ['ts-jest', { tsconfig: { allowJs: true } }]
   }
 };

@@ -142,3 +142,7 @@ export type {
   GitHubConfigStoreOptions,
   GitHubSaveResult,
 } from './config_store/github';
+
+// SyncState
+export { GithubSyncStateModule } from './sync_state/github_sync_state';
+export type { GithubSyncStateDependencies } from './sync_state/github_sync_state';

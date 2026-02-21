@@ -2,4 +2,5 @@ packages:
   - packages/core
   - packages/cli
   - packages/mcp-server
+  - packages/e2e
   - packages/agents/*

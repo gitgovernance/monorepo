@@ -31,6 +31,9 @@ export type {
   PullSchedulerResult,
 } from "./pull_scheduler";
 
+// Constants
+export { DEFAULT_STATE_BRANCH } from "./fs_worktree/fs_worktree_sync_state.types";
+
 // Errors
 export {
   SyncStateError,

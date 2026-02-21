@@ -1,0 +1,169 @@
+// GitGovernance Core — Prisma Schema (E2E testing)
+// These 6 tables are the output of RecordProjector → PrismaRecordProjection.
+// Core owns these models conceptually; saas-api duplicates them alongside its own models.
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+// ──────────────────────────────────────────
+// Gitgov Projection Tables
+// Decomposed IndexData from @gitgov/core RecordProjector.
+// PrismaRecordProjection persists enriched data into
+// queryable tables instead of a single JSON blob.
+// ──────────────────────────────────────────
+
+model GitgovMeta {
+  id                String   @id @default(cuid())
+  repoId            String
+  projectionType    String   @default("index")
+  lastCommitHash    String?
+  generatedAt       String
+  integrityStatus   String
+  recordCountsJson  Json
+  generationTime    Float
+  derivedStatesJson Json
+  metricsJson       Json
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([repoId, projectionType])
+}
+
+model GitgovTask {
+  id             String @id @default(cuid())
+  repoId         String
+  projectionType String @default("index")
+  recordId       String
+
+  // TaskRecord payload (queryable)
+  title       String
+  status      String
+  priority    String
+  description String
+  tags        String[]
+  references  String[]
+  cycleIds    String[]
+  notes       String?
+
+  // derivedState (queryable)
+  isStalled             Boolean
+  isAtRisk              Boolean
+  needsClarification    Boolean
+  isBlockedByDependency Boolean
+  healthScore           Float
+  timeInCurrentStage    Float
+
+  // metrics (queryable)
+  executionCount        Int
+  blockingFeedbackCount Int
+  openQuestionCount     Int
+  timeToResolution      Float?
+
+  // release (queryable)
+  isReleased         Boolean
+  lastReleaseVersion String?
+
+  // activity (queryable)
+  lastUpdated      Float
+  lastActivityType String
+  recentActivity   String?
+
+  // JSONB (complex nested)
+  relationshipsJson Json
+  headerJson        Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([repoId, projectionType, recordId])
+  @@index([repoId, projectionType])
+  @@index([repoId, status])
+  @@index([repoId, isStalled])
+  @@index([repoId, healthScore])
+}
+
+model GitgovCycle {
+  id             String   @id @default(cuid())
+  repoId         String
+  projectionType String   @default("index")
+  recordId       String
+  title          String
+  status         String
+  taskIds        String[]
+  childCycleIds  String[]
+  tags           String[]
+  notes          String?
+  headerJson     Json
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([repoId, projectionType, recordId])
+  @@index([repoId, projectionType])
+  @@index([repoId, status])
+}
+
+model GitgovActor {
+  id             String   @id @default(cuid())
+  repoId         String
+  projectionType String   @default("index")
+  recordId       String
+  actorType      String
+  displayName    String
+  publicKey      String
+  roles          String[]
+  status         String?
+  supersededBy   String?
+  headerJson     Json
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([repoId, projectionType, recordId])
+  @@index([repoId, projectionType])
+}
+
+model GitgovFeedback {
+  id                 String   @id @default(cuid())
+  repoId             String
+  projectionType     String   @default("index")
+  recordId           String
+  entityType         String
+  entityId           String
+  feedbackType       String
+  status             String
+  content            String
+  assignee           String?
+  resolvesFeedbackId String?
+  metadataJson       Json?
+  headerJson         Json
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([repoId, projectionType, recordId])
+  @@index([repoId, projectionType])
+  @@index([repoId, entityId])
+  @@index([repoId, feedbackType, status])
+}
+
+model GitgovActivity {
+  id             String   @id @default(cuid())
+  repoId         String
+  projectionType String   @default("index")
+  timestamp      Float
+  eventType      String
+  entityId       String
+  entityTitle    String
+  actorId        String?
+  metadataJson   Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([repoId, projectionType])
+  @@index([repoId, timestamp(sort: Desc)])
+}

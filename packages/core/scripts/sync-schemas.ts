@@ -16,21 +16,20 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Paths
-const BLUEPRINTS_PROTOCOL_DIR = path.join(__dirname, '../../private/packages/blueprints/03_products/protocol');
+const BLUEPRINTS_SCHEMAS_DIR = path.join(__dirname, '../../private/packages/blueprints/02_protocol/schemas');
 const CORE_SCHEMAS_DIR = path.join(__dirname, '../src/record_schemas/generated');
 
-// Schema mappings (blueprint folder → output name)
-const SCHEMA_MAPPINGS = {
-  '01_embedded': 'embedded_metadata_schema',
-  '02_actor': 'actor_record_schema',
-  '03_agent': 'agent_record_schema',
-  '04_task': 'task_record_schema',
-  '06_execution': 'execution_record_schema',
-  '07_changelog': 'changelog_record_schema',
-  '08_feedback': 'feedback_record_schema',
-  '05_cycle': 'cycle_record_schema',
-  '09_workflow': 'workflow_record_schema',
-};
+// Schema names to sync from blueprints/02_protocol/schemas/
+const SCHEMA_NAMES = [
+  'embedded_metadata_schema',
+  'actor_record_schema',
+  'agent_record_schema',
+  'task_record_schema',
+  'execution_record_schema',
+  'feedback_record_schema',
+  'cycle_record_schema',
+  'workflow_record_schema',
+];
 
 function syncSchemas() {
   console.log('🔄 Syncing schemas from blueprints to core...');
@@ -40,9 +39,9 @@ function syncSchemas() {
 
   const syncedSchemas: string[] = [];
 
-  // Process each schema mapping
-  for (const [blueprintFolder, schemaName] of Object.entries(SCHEMA_MAPPINGS)) {
-    const yamlPath = path.join(BLUEPRINTS_PROTOCOL_DIR, blueprintFolder, `${schemaName}.yaml`);
+  // Process each schema
+  for (const schemaName of SCHEMA_NAMES) {
+    const yamlPath = path.join(BLUEPRINTS_SCHEMAS_DIR, `${schemaName}.yaml`);
     const jsonPath = path.join(CORE_SCHEMAS_DIR, `${schemaName}.json`);
 
     if (!fs.existsSync(yamlPath)) {
@@ -66,7 +65,7 @@ function syncSchemas() {
       // Write as JSON
       fs.writeFileSync(jsonPath, JSON.stringify(schemaObject, null, 2));
 
-      console.log(`✅ ${blueprintFolder}/${schemaName}.yaml → schemas/${schemaName}.json`);
+      console.log(`✅ ${schemaName}.yaml → generated/${schemaName}.json`);
       syncedSchemas.push(schemaName);
 
     } catch (error) {

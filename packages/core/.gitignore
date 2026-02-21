@@ -2,6 +2,9 @@
 dist/
 *.tsbuildinfo
 
+# Prisma generated client (E2E tests)
+generated/
+
 # Generated schemas (auto-synced from blueprints)
 src/record_schemas/*.json
 
