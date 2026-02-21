@@ -184,11 +184,11 @@ describe('Audit + Agent + Actor Tools', () => {
       expect(data.code).toBe('DUPLICATE_ACTOR');
     });
 
-    it('[MSRV-M5] should expose exactly 36 tools after Cycle 4', () => {
+    it('[MSRV-M5] should expose exactly 43 tools after Cycle 4 + interface_completeness', () => {
       const server = new McpServer({ name: 'test', version: '1.0.0' });
       registerAllTools(server);
-      // 9 read + 7 task + 3 feedback + 8 cycle + 4 sync + 3 audit + 1 agent + 1 actor = 36
-      expect(server.getToolCount()).toBe(36);
+      // 9 read + 7 task + 3 feedback + 8 cycle + 4 sync + 3 audit + 1 agent + 1 actor + 3 execution + 1 agent_new + 1 workflow + 2 identity = 43
+      expect(server.getToolCount()).toBe(43);
     });
   });
 });

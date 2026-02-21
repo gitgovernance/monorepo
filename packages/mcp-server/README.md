@@ -2,7 +2,7 @@
 
 MCP server that exposes [GitGovernance](https://github.com/gitgovernance) operations as tools for AI agents. Works with Claude Code, Cursor, Windsurf, and any MCP-compatible client.
 
-36 tools, 3 prompts, dynamic `gitgov://` resources. Stdio and HTTP transports.
+43 tools, 3 prompts, dynamic `gitgov://` resources. Stdio and HTTP transports.
 
 ## Requirements
 
@@ -60,7 +60,7 @@ gitgov-mcp --port 3100
 # Listens on http://localhost:3100/mcp (StreamableHTTP transport)
 ```
 
-## Tools (36)
+## Tools (43)
 
 ### Read-Only (9)
 
@@ -118,7 +118,30 @@ gitgov-mcp --port 3100
 | `gitgov_sync_resolve` | Resolve sync conflicts |
 | `gitgov_sync_audit` | Audit state consistency |
 
-### Audit & Identity (5)
+### Execution (3)
+
+| Tool | Description |
+|---|---|
+| `gitgov_execution_create` | Create an execution record linked to a task (proof of work) |
+| `gitgov_execution_list` | List executions, optionally filtered by task and type |
+| `gitgov_execution_show` | Show full details of an execution record |
+
+### Identity (4)
+
+| Tool | Description |
+|---|---|
+| `gitgov_actor_new` | Register a new actor (human or agent) |
+| `gitgov_actor_list` | List all actors, optionally filtered by type |
+| `gitgov_actor_show` | Show detailed actor information by ID |
+| `gitgov_agent_new` | Create an AgentRecord for an actor of type agent |
+
+### Workflow (1)
+
+| Tool | Description |
+|---|---|
+| `gitgov_workflow_transitions` | Get available task status transitions from a given status |
+
+### Audit (4)
 
 | Tool | Description |
 |---|---|
@@ -126,7 +149,6 @@ gitgov-mcp --port 3100
 | `gitgov_audit_waive` | Waive an audit finding |
 | `gitgov_audit_waive_list` | List active waivers |
 | `gitgov_agent_run` | Execute a registered agent |
-| `gitgov_actor_new` | Register a new actor |
 
 ## Prompts (3)
 
@@ -152,7 +174,7 @@ MCP clients can browse and read these via the standard resources protocol.
 # Run locally with tsx
 pnpm --filter @gitgov/mcp-server dev
 
-# Run tests (184 tests across 3 levels)
+# Run tests (199 tests across 3 levels)
 pnpm --filter @gitgov/mcp-server test
 
 # Type check
@@ -174,6 +196,10 @@ src/
     task/                     7 task lifecycle tools (CRUD + state transitions)
     feedback/                 3 feedback tools (create, list, resolve)
     cycle/                    8 cycle management tools (CRUD + task linking)
+    execution/                3 execution tools (create, list, show)
+    identity/                 2 identity tools (actor_list, actor_show)
+    workflow/                 1 workflow tool (transitions query)
+    agent/                    1 tool (agent_new)
     sync/                     4 sync tools (push, pull, resolve, audit)
     audit/                    5 tools (audit scan/waive + agent_run + actor_new)
   prompts/                    3 prompt handlers

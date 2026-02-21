@@ -77,9 +77,9 @@ describe('MCP E2E', () => {
       expect(prompts.prompts.length).toBeGreaterThan(0);
     });
 
-    it('[MSRV-EA3] should list exactly 36 tools via tools/list', async () => {
+    it('[MSRV-EA3] should list exactly 43 tools via tools/list', async () => {
       const { tools } = await client.listTools();
-      expect(tools.length).toBe(36);
+      expect(tools.length).toBe(43);
 
       // Verify some key tool names exist
       const names = tools.map((t) => t.name);

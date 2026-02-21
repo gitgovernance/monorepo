@@ -47,6 +47,14 @@ import {
   agentRunTool,
   actorNewTool,
 } from './audit/index.js';
+import {
+  executionCreateTool,
+  executionListTool,
+  executionShowTool,
+} from './execution/index.js';
+import { agentNewTool } from './agent/index.js';
+import { workflowTransitionsTool } from './workflow/index.js';
+import { actorListTool, actorShowTool } from './identity/index.js';
 
 /**
  * Registers all MCP tools on the server.
@@ -100,4 +108,17 @@ export function registerAllTools(server: McpServer): void {
   server.registerTool(auditWaiveListTool);
   server.registerTool(agentRunTool);
   server.registerTool(actorNewTool);
+
+  // Epic interface_completeness: 3 execution tools
+  server.registerTool(executionCreateTool);
+  server.registerTool(executionListTool);
+  server.registerTool(executionShowTool);
+
+  // Epic interface_completeness: 1 agent creation tool
+  server.registerTool(agentNewTool);
+
+  // Epic interface_completeness: 1 workflow + 2 identity tools
+  server.registerTool(workflowTransitionsTool);
+  server.registerTool(actorListTool);
+  server.registerTool(actorShowTool);
 }

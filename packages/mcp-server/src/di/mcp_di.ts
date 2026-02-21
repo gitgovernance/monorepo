@@ -246,6 +246,14 @@ export class McpDependencyInjectionService {
       gitModule,
     });
 
+    // --- Agent Adapter ---
+    const agentAdapter = new Adapters.AgentAdapter({
+      stores: { agents: stores.agents },
+      identity: identityAdapter,
+      keyProvider,
+      eventBus,
+    });
+
     // --- Agent Runner ---
     const agentRunner = new FsAgentRunner({
       projectRoot,
@@ -260,6 +268,8 @@ export class McpDependencyInjectionService {
       feedbackAdapter,
       executionAdapter,
       identityAdapter,
+      agentAdapter,
+      workflowAdapter,
       lintModule,
       syncModule,
       sourceAuditorModule,
