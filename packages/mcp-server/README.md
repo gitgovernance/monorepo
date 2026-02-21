@@ -1,5 +1,7 @@
 # @gitgov/mcp-server
 
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+
 MCP server that exposes [GitGovernance](https://github.com/gitgovernance) operations as tools for AI agents. Works with Claude Code, Cursor, Windsurf, and any MCP-compatible client.
 
 43 tools, 3 prompts, dynamic `gitgov://` resources. Stdio and HTTP transports.
@@ -212,4 +214,4 @@ src/
 
 ## License
 
-Apache-2.0
+This package is licensed under the [Apache License 2.0](https://opensource.org/licenses/Apache-2.0).
