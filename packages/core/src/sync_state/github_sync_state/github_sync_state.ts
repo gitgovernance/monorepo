@@ -460,6 +460,14 @@ export class GithubSyncStateModule implements ISyncStateModule {
       }));
   }
 
+  /**
+   * Always empty — no local pending changes in API mode.
+   * In API mode there is no local filesystem; all state is remote.
+   */
+  async getPendingChanges(): Promise<StateDeltaFile[]> {
+    return [];
+  }
+
   // ==================== Block E: Conflict Handling ====================
 
   /**
