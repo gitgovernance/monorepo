@@ -52,6 +52,8 @@ export interface ProjectAdapterDependencies {
 export type ProjectInitOptions = {
   /** Project name (will be slugified for projectId) */
   name: string;
+  /** Actor type for bootstrap trust root. Default: 'human' */
+  type?: 'human' | 'agent';
   /** Path to JSON template file for initial cycles/tasks */
   template?: string;
   /** Display name for bootstrap actor */

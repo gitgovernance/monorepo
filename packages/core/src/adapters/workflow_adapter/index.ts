@@ -23,7 +23,7 @@ export type ValidationContext = {
   transitionTo?: TaskStatus;
 }
 
-type TransitionRule = {
+export type TransitionRule = {
   to: TaskStatus;
   conditions: NonNullable<NonNullable<WorkflowRecord['state_transitions']>[string]>['requires'] | undefined;
 }
