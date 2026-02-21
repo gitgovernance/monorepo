@@ -28,7 +28,7 @@ jest.mock('../../services/dependency-injection', () => ({
   }
 }));
 
-import { AgentCommand, type RunCommandOptions, type ListCommandOptions, type ShowCommandOptions } from './agent-command';
+import { AgentCommand, type RunCommandOptions, type ListCommandOptions, type ShowCommandOptions, type AgentNewOptions } from './agent-command';
 import { DependencyInjectionService } from '../../services/dependency-injection';
 import type { RunOptions, AgentResponse, TaskRecord, ActorRecord, AgentRecord } from '@gitgov/core';
 
@@ -64,6 +64,11 @@ let mockIdentityAdapter: {
 let mockAgentStore: {
   list: jest.MockedFunction<() => Promise<string[]>>;
   get: jest.MockedFunction<(id: string) => Promise<AgentRecord<TestAgentMetadata> | null>>;
+};
+
+let mockAgentAdapter: {
+  createAgentRecord: jest.MockedFunction<(payload: Partial<AgentRecord>) => Promise<AgentRecord>>;
+  getAgentRecord: jest.MockedFunction<(agentId: string) => Promise<AgentRecord | null>>;
 };
 
 describe('AgentCommand', () => {
@@ -154,6 +159,15 @@ describe('AgentCommand', () => {
       getCurrentActor: jest.fn().mockResolvedValue(mockActor),
     };
 
+    mockAgentAdapter = {
+      createAgentRecord: jest.fn().mockResolvedValue({
+        id: 'agent:test-echo',
+        status: 'active',
+        engine: { type: 'local' },
+      }),
+      getAgentRecord: jest.fn().mockResolvedValue(null),
+    };
+
     mockAgentStore = {
       list: jest.fn().mockResolvedValue(['agent-test-echo', 'agent-jira-manager']),
       get: jest.fn().mockImplementation((id: string) => {
@@ -181,6 +195,7 @@ describe('AgentCommand', () => {
       getBacklogAdapter: jest.fn().mockResolvedValue(mockBacklogAdapter),
       getIdentityAdapter: jest.fn().mockResolvedValue(mockIdentityAdapter),
       getAgentStore: jest.fn().mockResolvedValue(mockAgentStore),
+      getAgentAdapter: jest.fn().mockResolvedValue(mockAgentAdapter),
     } as unknown as DependencyInjectionService);
 
     agentCommand = new AgentCommand();
@@ -398,6 +413,49 @@ describe('AgentCommand', () => {
       // Should show dry-run info
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('DRY RUN'));
       expect(mockProcessExit).toHaveBeenCalledWith(0);
+    });
+  });
+
+  describe('4.5. Agent New (ICOMP-C7 to ICOMP-C9)', () => {
+    it('[ICOMP-C7] should create AgentRecord via adapter', async () => {
+      await agentCommand.executeNew('agent:test-echo', { engineType: 'local' } as AgentNewOptions);
+
+      expect(mockAgentAdapter.createAgentRecord).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'agent:test-echo',
+          engine: { type: 'local' },
+        }),
+      );
+
+      expect(mockConsoleLog).toHaveBeenCalledWith(
+        expect.stringContaining('AgentRecord created'),
+      );
+    });
+
+    it('[ICOMP-C8] should error when actor does not exist or is not agent type', async () => {
+      mockAgentAdapter.createAgentRecord.mockRejectedValue(
+        new Error('No ActorRecord found with id agent:nonexistent or type is not agent'),
+      );
+
+      await agentCommand.executeNew('agent:nonexistent', { engineType: 'mcp' } as AgentNewOptions);
+
+      expect(mockConsoleError).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to create agent'),
+      );
+      expect(mockProcessExit).toHaveBeenCalledWith(1);
+    });
+
+    it('[ICOMP-C9] should output JSON when --json is provided', async () => {
+      await agentCommand.executeNew('agent:test-echo', { engineType: 'local', json: true } as AgentNewOptions);
+
+      const outputCall = mockConsoleLog.mock.calls.find(call =>
+        typeof call[0] === 'string' && call[0].includes('"success"'),
+      );
+      expect(outputCall).toBeDefined();
+      const output = JSON.parse(outputCall![0]);
+      expect(output.success).toBe(true);
+      expect(output.data.id).toBe('agent:test-echo');
+      expect(output.data.engine).toEqual({ type: 'local' });
     });
   });
 });

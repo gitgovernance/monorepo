@@ -651,6 +651,46 @@ export class DependencyInjectionService {
   }
 
   /**
+   * Creates and returns AgentAdapter with all required dependencies
+   */
+  async getAgentAdapter(): Promise<Adapters.AgentAdapter> {
+    try {
+      await this.initializeStores();
+      if (!this.stores) {
+        throw new Error("Failed to initialize stores");
+      }
+
+      const eventBus = new EventBus.EventBus();
+      const keyProvider = new KeyProvider.FsKeyProvider({
+        keysDir: path.join(this.projectRoot!, '.gitgov', 'keys')
+      });
+
+      const identityAdapter = new Adapters.IdentityAdapter({
+        stores: { actors: this.stores.actors },
+        keyProvider,
+        sessionManager: await this.getSessionManager(),
+        eventBus,
+      });
+
+      return new Adapters.AgentAdapter({
+        stores: { agents: this.stores.agents },
+        identity: identityAdapter,
+        keyProvider,
+        eventBus,
+      });
+
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message.includes('Could not find project root')) {
+          throw new Error("❌ GitGovernance not initialized. Run 'gitgov init' first.");
+        }
+        throw new Error(`❌ Failed to initialize agent adapter: ${error.message}`);
+      }
+      throw new Error("❌ Unknown error initializing agent adapter.");
+    }
+  }
+
+  /**
    * Creates and returns AgentRunnerModule with all required dependencies
    */
   async getAgentRunnerModule(): Promise<IAgentRunner> {

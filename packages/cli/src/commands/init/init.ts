@@ -12,6 +12,7 @@ export function registerInitCommands(program: Command): void {
     .command('init')
     .description('Initialize GitGovernance project with complete bootstrap')
     .option('-n, --name <name>', 'Project name (default: directory name)')
+    .option('--type <type>', 'Actor type: human (default) or agent', 'human')
     .option('-t, --template <name>', 'Project template (basic, saas-mvp, ai-product, enterprise) - optional')
     .option('-m, --methodology <method>', 'Workflow methodology (default, scrum, kanban)', 'default')
     .option('-a, --actor-name <name>', 'Actor display name (default: git user.name)')

@@ -2,6 +2,7 @@ import { Command, Option } from 'commander';
 import { BaseCommand } from '../../base/base-command';
 import type { BaseCommandOptions } from '../../interfaces/command';
 import type { RunOptions, AgentResponse } from '@gitgov/core';
+import type { AgentRecord } from '@gitgov/core';
 
 /**
  * CLI-specific options for agent run command
@@ -48,6 +49,15 @@ export interface ShowCommandOptions extends BaseCommandOptions {
 }
 
 /**
+ * CLI-specific options for agent new command
+ * EARS: ICOMP-C7..C9
+ */
+export interface AgentNewOptions extends BaseCommandOptions {
+  /** Engine type */
+  engineType: 'local' | 'api' | 'mcp' | 'custom';
+}
+
+/**
  * Agent Command - Thin wrapper for @gitgov/core module
  *
  * Responsibilities (CLI only):
@@ -72,6 +82,19 @@ export class AgentCommand extends BaseCommand<RunCommandOptions> {
     const agentCmd = program
       .command('agent')
       .description(this.description);
+
+    // Subcommand: new
+    agentCmd
+      .command('new <actorId>')
+      .alias('n')
+      .description('Create a new AgentRecord for an actor of type agent')
+      .addOption(new Option('-e, --engine-type <type>', 'Execution engine type').choices(['local', 'api', 'mcp', 'custom']).makeOptionMandatory())
+      .option('--json', 'Output as JSON', false)
+      .option('-v, --verbose', 'Verbose output', false)
+      .option('-q, --quiet', 'Quiet output', false)
+      .action(async (actorId: string, options: AgentNewOptions) => {
+        await this.executeNew(actorId, options);
+      });
 
     // Subcommand: run
     agentCmd
@@ -116,6 +139,50 @@ export class AgentCommand extends BaseCommand<RunCommandOptions> {
       .action(async (name: string, options: ShowCommandOptions) => {
         await this.executeShow(name, options);
       });
+  }
+
+  /**
+   * Execute agent new subcommand
+   * [ICOMP-C7 to C9]
+   */
+  async executeNew(actorId: string, options: AgentNewOptions): Promise<void> {
+    try {
+      const agentAdapter = await this.container.getAgentAdapter();
+
+      // [ICOMP-C7] Create AgentRecord via adapter
+      // Engine is a discriminated union — adapter validates required fields per type
+      const agent = await agentAdapter.createAgentRecord({
+        id: actorId,
+        engine: { type: options.engineType } as AgentRecord['engine'],
+      });
+
+      // [ICOMP-C9] Output
+      if (options.json) {
+        console.log(JSON.stringify({
+          success: true,
+          data: {
+            id: agent.id,
+            actorId: agent.id,
+            engine: agent.engine,
+          }
+        }, null, 2));
+      } else if (!options.quiet) {
+        console.log(`✅ AgentRecord created: ${agent.id}`);
+        console.log(`   Engine: ${agent.engine.type}`);
+      }
+
+    } catch (error) {
+      // [ICOMP-C8] Error handling
+      const message = error instanceof Error ? error.message : String(error);
+
+      if (options.json) {
+        console.log(JSON.stringify({ success: false, error: message, exitCode: 1 }, null, 2));
+      } else {
+        console.error(`❌ Failed to create agent: ${message}`);
+      }
+
+      process.exit(1);
+    }
   }
 
   /**

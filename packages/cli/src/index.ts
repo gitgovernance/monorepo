@@ -14,6 +14,8 @@ import { registerAuditCommand } from './commands/audit/audit';
 import { registerAgentCommand } from './commands/agent/agent';
 import { registerSyncCommands } from './commands/sync/sync';
 import { registerActorCommands } from './commands/actor';
+import { registerExecCommands } from './commands/exec';
+import { registerFeedbackCommands } from './commands/feedback';
 import { DependencyInjectionService } from './services/dependency-injection';
 import packageJson from '../package.json' assert { type: 'json' };
 
@@ -71,6 +73,12 @@ async function setupCommands() {
 
     // Register agent commands
     registerAgentCommand(program);
+
+    // Register exec commands (execution proof-of-work)
+    registerExecCommands(program);
+
+    // Register feedback commands (structured collaboration)
+    registerFeedbackCommands(program);
   } catch (error) {
     // Handle initialization errors gracefully
     if (error instanceof Error) {

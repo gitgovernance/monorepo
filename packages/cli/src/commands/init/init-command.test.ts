@@ -194,6 +194,34 @@ describe('InitCommand', () => {
         })
       );
     });
+
+    it('[EARS-A6] should create actor with type=\'agent\' when --type agent', async () => {
+      await initCommand.execute({
+        name: 'Agent Project',
+        type: 'agent',
+        actorName: 'CI Bot',
+      });
+
+      expect(mockProjectAdapter.initializeProject).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'agent',
+          name: 'Agent Project',
+          actorName: 'CI Bot',
+        })
+      );
+    });
+
+    it('[EARS-A7] should create actor with type=\'human\' by default', async () => {
+      await initCommand.execute({
+        name: 'Human Project',
+        actorName: 'Camilo',
+      });
+
+      // type should NOT be set (undefined) — ProjectAdapter defaults to 'human'
+      const callArgs = mockProjectAdapter.initializeProject.mock.calls[0]?.[0];
+      expect(callArgs?.type).toBeUndefined();
+      expect(callArgs?.name).toBe('Human Project');
+    });
   });
 
   // ============================================================================

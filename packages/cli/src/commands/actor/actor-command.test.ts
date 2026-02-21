@@ -60,8 +60,8 @@ describe('ActorCommand', () => {
     mockProcessExit.mockClear();
   });
 
-  describe('4.1. Actor Creation (EARS-1)', () => {
-    it('[EARS-1] WHEN actor new is executed with valid flags THE SYSTEM SHALL create ActorRecord with keys', async () => {
+  describe('4.1. Actor Creation (ICOMP-C4 to ICOMP-C6)', () => {
+    it('[ICOMP-C4] WHEN actor new is executed with valid flags THE SYSTEM SHALL create ActorRecord with keys', async () => {
       mockIdentityAdapter.createActor.mockResolvedValue(sampleActor);
 
       await actorCommand.executeNew({
@@ -94,7 +94,7 @@ describe('ActorCommand', () => {
       expect(output.data.roles).toEqual(['developer']);
     });
 
-    it('[EARS-1b] WHEN actor new is executed with invalid type THE SYSTEM SHALL fail with error', async () => {
+    it('[ICOMP-C5] WHEN actor new is executed with invalid type THE SYSTEM SHALL fail with error', async () => {
       mockIdentityAdapter.createActor.mockRejectedValue(
         new Error('ActorRecord requires type and displayName')
       );
@@ -109,6 +109,30 @@ describe('ActorCommand', () => {
         expect.stringContaining('Failed to create actor')
       );
       expect(mockProcessExit).toHaveBeenCalledWith(1);
+    });
+
+    it('[ICOMP-C6] WHEN --json flag is provided THE SYSTEM SHALL output JSON with success and data fields', async () => {
+      mockIdentityAdapter.createActor.mockResolvedValue(sampleActor);
+
+      await actorCommand.executeNew({
+        type: 'human',
+        name: 'Test User',
+        role: ['developer'],
+        json: true
+      });
+
+      expect(mockConsoleLog).toHaveBeenCalled();
+      const outputCall = mockConsoleLog.mock.calls.find(call =>
+        typeof call[0] === 'string' && call[0].includes('"success"')
+      );
+      expect(outputCall).toBeDefined();
+      const output = JSON.parse(outputCall![0]);
+      expect(output.success).toBe(true);
+      expect(output.data).toBeDefined();
+      expect(output.data.actorId).toBeDefined();
+      expect(output.data.type).toBeDefined();
+      expect(output.data.displayName).toBeDefined();
+      expect(output.data.roles).toBeDefined();
     });
   });
 
