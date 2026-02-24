@@ -1,3 +1,10 @@
+## [2.7.1](https://github.com/gitgovernance/monorepo/compare/core-v2.7.0...core-v2.7.1) (2026-02-24)
+
+
+### ♻️ Refactoring
+
+* **core:** remove custom record type from protocol ([#97](https://github.com/gitgovernance/monorepo/issues/97)) ([f5bde2a](https://github.com/gitgovernance/monorepo/commit/f5bde2a69978a567684a1f951e32be09f6742cc7)), closes [#98](https://github.com/gitgovernance/monorepo/issues/98)
+
 ## [2.7.0](https://github.com/gitgovernance/monorepo/compare/core-v2.6.0...core-v2.7.0) (2026-02-24)
 
 
