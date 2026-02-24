@@ -11,6 +11,5 @@ export { PrismaRecordProjection } from './record_projection/prisma';
 export type {
   PrismaRecordProjectionOptions,
   ProjectionClient,
-  ProjectionDelegate,
   JsonValue,
 } from './record_projection/prisma';
