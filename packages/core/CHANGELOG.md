@@ -1,3 +1,10 @@
+## [2.7.0](https://github.com/gitgovernance/monorepo/compare/core-v2.6.0...core-v2.7.0) (2026-02-24)
+
+
+### ✨ Features
+
+* **core:** saas-base cycle 3 — prisma projection, sync state, webhooks, E2E ([#93](https://github.com/gitgovernance/monorepo/issues/93)) ([fd1a2be](https://github.com/gitgovernance/monorepo/commit/fd1a2bea53f98ef79bb793fe53627e9b8780c2b6))
+
 ## [2.6.0](https://github.com/gitgovernance/monorepo/compare/core-v2.5.0...core-v2.6.0) (2026-02-21)
 
 
