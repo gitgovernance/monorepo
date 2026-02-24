@@ -6,15 +6,29 @@ import { generateTaskId } from "../utils/id_generator";
 
 /**
  * Creates a new, fully-formed TaskRecord with validation.
+ *
+ * The factory is generic to preserve the metadata type for compile-time safety.
+ *
+ * @param payload - Partial TaskRecord payload with optional typed metadata
+ * @returns TaskRecord<TMetadata> - The validated TaskRecord with preserved metadata type
+ *
+ * @example
+ * interface EpicMeta { jira: string; storyPoints: number; }
+ * const record = createTaskRecord<EpicMeta>({
+ *   title: 'Implement OAuth',
+ *   description: 'Full OAuth2 implementation',
+ *   metadata: { jira: 'AUTH-42', storyPoints: 5 }
+ * });
+ * // record.metadata?.jira is typed as string
  */
-export function createTaskRecord(
-  payload: Partial<TaskRecord>
-): TaskRecord {
+export function createTaskRecord<TMetadata extends object = object>(
+  payload: Partial<TaskRecord<TMetadata>>
+): TaskRecord<TMetadata> {
   // Generate timestamp for ID if not provided
   const timestamp = Math.floor(Date.now() / 1000);
 
   // Build task with defaults for optional fields
-  const task: TaskRecord = {
+  const task = {
     id: payload.id || generateTaskId(payload.title || '', timestamp),
     title: payload.title || '',
     status: payload.status || 'draft',
@@ -24,8 +38,8 @@ export function createTaskRecord(
     cycleIds: payload.cycleIds,
     references: payload.references,
     notes: payload.notes,
-    ...payload,
-  } as TaskRecord;
+    metadata: payload.metadata,
+  } as TaskRecord<TMetadata>;
 
   // Use validator to check complete schema with detailed errors
   const validation = validateTaskRecordDetailed(task);
