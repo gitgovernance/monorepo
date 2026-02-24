@@ -5,42 +5,20 @@
  */
 
 /**
- * Canonical schema for agent operational manifests.
+ * Canonical schema for agent operational manifests — the work contract that defines how an agent is invoked.
  */
 export interface AgentRecord<TMetadata = object> {
   /**
-   * Unique identifier for the agent, linking to an ActorRecord.
+   * Unique identifier for the agent, linking 1:1 to an ActorRecord of type agent.
    */
   id: string;
+  /**
+   * Operational status. An archived agent cannot be invoked.
+   */
   status?: 'active' | 'archived';
   /**
-   * Optional list of triggers that activate the agent.
-   * Additional fields are allowed and depend on trigger type:
-   * - webhook triggers: 'event' (event identifier), 'filter' (condition)
-   * - scheduled triggers: 'cron' (cron expression)
-   * - manual triggers: 'command' (example CLI command)
-   *
+   * Invocation specification — defines how the agent is executed. Uses oneOf with 4 variants: local, api, mcp, custom.
    */
-  triggers?: {
-    /**
-     * Type of trigger that activates the agent
-     */
-    type: 'manual' | 'webhook' | 'scheduled';
-    [k: string]: unknown | undefined;
-  }[];
-  knowledge_dependencies?: string[];
-  prompt_engine_requirements?: {
-    roles?: string[];
-    skills?: string[];
-  };
-  /**
-   * Optional framework-specific or deployment-specific metadata for agent extensions.
-   * Common use cases: framework identification (langchain, google-adk), deployment info (provider, image, region),
-   * cost tracking (cost_per_invocation, currency), tool capabilities, maintainer info.
-   * This field does NOT affect agent execution - it is purely informational.
-   *
-   */
-  metadata?: TMetadata;
   engine:
     | {
         type: 'local';
@@ -63,6 +41,9 @@ export interface AgentRecord<TMetadata = object> {
          * HTTP endpoint for the agent
          */
         url: string;
+        /**
+         * HTTP method
+         */
         method?: 'POST' | 'GET' | 'PUT';
         /**
          * Authentication configuration for API requests
@@ -90,7 +71,7 @@ export interface AgentRecord<TMetadata = object> {
          */
         url: string;
         /**
-         * Name of the MCP tool to invoke. If not specified, defaults to agentId without 'agent:' prefix.
+         * Name of the MCP tool to invoke. If omitted, the agent has access to all tools on the server.
          */
         tool?: string;
         /**
@@ -123,4 +104,35 @@ export interface AgentRecord<TMetadata = object> {
          */
         config?: {};
       };
+  /**
+   * Optional list of triggers that activate the agent.
+   * Additional fields are allowed and depend on trigger type:
+   * - manual: 'command' (example CLI command)
+   * - webhook: 'event' (event identifier), 'filter' (condition)
+   * - scheduled: 'cron' (cron expression)
+   *
+   */
+  triggers?: {
+    /**
+     * Type of trigger that activates the agent
+     */
+    type: 'manual' | 'webhook' | 'scheduled';
+    [k: string]: unknown | undefined;
+  }[];
+  knowledge_dependencies?: string[];
+  /**
+   * Requirements for prompt composition — roles and skills the agent needs.
+   */
+  prompt_engine_requirements?: {
+    roles?: string[];
+    skills?: string[];
+  };
+  /**
+   * Optional framework-specific or deployment-specific metadata.
+   * Common use cases: framework identification (langchain, google-adk), deployment info,
+   * cost tracking, tool capabilities, maintainer info.
+   * This field does NOT affect agent execution — it is purely informational.
+   *
+   */
+  metadata?: TMetadata;
 }

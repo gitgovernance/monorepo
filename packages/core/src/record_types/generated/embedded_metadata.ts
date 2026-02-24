@@ -7,7 +7,7 @@
 /**
  * Canonical schema for the wrapper structure of all GitGovernance records.
  */
-export type EmbeddedMetadataRecord = {
+export interface EmbeddedMetadataRecord {
   header: {
     /**
      * Version of the embedded metadata format.
@@ -16,13 +16,13 @@ export type EmbeddedMetadataRecord = {
     /**
      * The type of the record contained in the payload.
      */
-    type: 'actor' | 'agent' | 'task' | 'execution' | 'changelog' | 'feedback' | 'cycle' | 'custom';
+    type: 'actor' | 'agent' | 'task' | 'execution' | 'feedback' | 'cycle' | 'workflow' | 'custom';
     /**
-     * Optional URL to a custom schema for the payload.
+     * URL to a custom schema for the payload. Required when type is 'custom'.
      */
     schemaUrl?: string;
     /**
-     * Optional SHA-256 checksum of the custom schema.
+     * SHA-256 checksum of the custom schema. Required when type is 'custom'.
      */
     schemaChecksum?: string;
     /**
@@ -37,11 +37,11 @@ export type EmbeddedMetadataRecord = {
     signatures: [
       {
         /**
-         * The Actor ID of the signer (must match ActorRecord.id pattern).
+         * The Actor ID of the signer. Supports scoped identifiers (e.g. agent:camilo:cursor).
          */
         keyId: string;
         /**
-         * The context role of the signature (e.g., 'author', 'reviewer', 'auditor', or 'custom:*').
+         * The context role of the signature (e.g., 'author', 'reviewer', or 'custom:*').
          */
         role: string;
         /**
@@ -59,11 +59,11 @@ export type EmbeddedMetadataRecord = {
       },
       ...{
         /**
-         * The Actor ID of the signer (must match ActorRecord.id pattern).
+         * The Actor ID of the signer. Supports scoped identifiers (e.g. agent:camilo:cursor).
          */
         keyId: string;
         /**
-         * The context role of the signature (e.g., 'author', 'reviewer', 'auditor', or 'custom:*').
+         * The context role of the signature (e.g., 'author', 'reviewer', or 'custom:*').
          */
         role: string;
         /**
@@ -85,6 +85,4 @@ export type EmbeddedMetadataRecord = {
    * The specific record data, validated against the schema defined by header.type.
    */
   payload: {};
-} & {
-  [k: string]: unknown | undefined;
-};
+}

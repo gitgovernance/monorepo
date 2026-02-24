@@ -5,7 +5,7 @@
  */
 
 /**
- * Canonical schema for actor records as defined in actor_protocol.md
+ * Canonical schema for actor records as defined in 02_actor.md
  */
 export interface ActorRecord {
   /**

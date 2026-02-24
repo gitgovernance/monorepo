@@ -90,7 +90,7 @@ describe('CycleRecord Schema Integration Tests', () => {
       expect(result.isValid).toBe(true);
     });
 
-    it('[EARS-281] should reject id exceeding maxLength 70', () => {
+    it('[EARS-281] should reject id exceeding maxLength 67', () => {
       const invalid = {
         ...createValidCycleRecord(),
         id: '1234567890-cycle-' + 'a'.repeat(60) // exceeds 70 total
@@ -104,7 +104,7 @@ describe('CycleRecord Schema Integration Tests', () => {
       )).toBe(true);
     });
 
-    it('[EARS-282] should accept id with maxLength 70', () => {
+    it('[EARS-282] should accept id with maxLength 67', () => {
       const valid = {
         ...createValidCycleRecord(),
         id: '1234567890-cycle-' + 'a'.repeat(50) // 17 + 50 = 67 chars (pattern limits slug to 50)
@@ -305,7 +305,7 @@ describe('CycleRecord Schema Integration Tests', () => {
       )).toBe(true);
     });
 
-    it('[EARS-298] should reject taskIds item exceeding maxLength 70', () => {
+    it('[EARS-298] should reject taskIds item exceeding maxLength 66', () => {
       const invalid = {
         ...createValidCycleRecord(),
         taskIds: ['1234567890-task-' + 'a'.repeat(60)] // exceeds 70
@@ -421,7 +421,7 @@ describe('CycleRecord Schema Integration Tests', () => {
       )).toBe(true);
     });
 
-    it('[EARS-307] should reject childCycleIds item exceeding maxLength 70', () => {
+    it('[EARS-307] should reject childCycleIds item exceeding maxLength 67', () => {
       const invalid = {
         ...createValidCycleRecord(),
         childCycleIds: ['1234567890-cycle-' + 'a'.repeat(60)] // exceeds 70
@@ -618,29 +618,29 @@ describe('CycleRecord Schema Integration Tests', () => {
       expect(result.isValid).toBe(true);
     });
 
-    it('[EARS-322] should accept empty notes string (minLength 0)', () => {
-      const valid = {
-        ...createValidCycleRecord(),
-        notes: ''
-      };
-
-      const result = validateCycleRecordDetailed(valid);
-
-      expect(result.isValid).toBe(true);
-    });
-
-    it('[EARS-323] should reject notes exceeding maxLength 10000', () => {
+    it('[EARS-322] should reject empty notes string (minLength 1)', () => {
       const invalid = {
         ...createValidCycleRecord(),
-        notes: 'a'.repeat(10001)
+        notes: ''
       };
 
       const result = validateCycleRecordDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
-        e.field.includes('notes') && (e.message.includes('more than') || e.message.includes('maxLength'))
+        e.field.includes('notes') && (e.message.includes('fewer than') || e.message.includes('minLength'))
       )).toBe(true);
+    });
+
+    it('[EARS-323] should accept notes with no upper length limit', () => {
+      const valid = {
+        ...createValidCycleRecord(),
+        notes: 'a'.repeat(50000)
+      };
+
+      const result = validateCycleRecordDetailed(valid);
+
+      expect(result.isValid).toBe(true);
     });
 
     it('[EARS-324] should reject notes with non-string type', () => {
@@ -714,7 +714,7 @@ describe('CycleRecord Schema Integration Tests', () => {
       expect(result.isValid).toBe(true);
     });
 
-    it('[EARS-330] should accept taskIds item with exactly 70 chars', () => {
+    it('[EARS-330] should accept taskIds item with exactly 66 chars', () => {
       const valid = {
         ...createValidCycleRecord(),
         taskIds: ['1234567890-task-' + 'a'.repeat(50)] // 16 + 50 = 66 chars (pattern limits slug to 50)
@@ -725,7 +725,7 @@ describe('CycleRecord Schema Integration Tests', () => {
       expect(result.isValid).toBe(true);
     });
 
-    it('[EARS-331] should accept childCycleIds item with exactly 70 chars', () => {
+    it('[EARS-331] should accept childCycleIds item with exactly 67 chars', () => {
       const valid = {
         ...createValidCycleRecord(),
         childCycleIds: ['1234567890-cycle-' + 'a'.repeat(50)] // 17 + 50 = 67 chars (pattern limits slug to 50)
@@ -747,10 +747,10 @@ describe('CycleRecord Schema Integration Tests', () => {
       expect(result.isValid).toBe(true);
     });
 
-    it('[EARS-333] should accept notes with exactly 10000 characters', () => {
+    it('[EARS-333] should accept notes with large content (no upper limit)', () => {
       const valid = {
         ...createValidCycleRecord(),
-        notes: 'a'.repeat(10000)
+        notes: 'a'.repeat(50000)
       };
 
       const result = validateCycleRecordDetailed(valid);
@@ -787,8 +787,7 @@ describe('CycleRecord Schema Integration Tests', () => {
         ...createValidCycleRecord(),
         taskIds: [],
         childCycleIds: [],
-        tags: [],
-        notes: ''
+        tags: []
       };
 
       const result = validateCycleRecordDetailed(valid);
@@ -1149,6 +1148,198 @@ describe('CycleRecord Schema Integration Tests', () => {
       const result = validateCycleRecordDetailed(valid);
 
       expect(result.isValid).toBe(true);
+    });
+  });
+
+  describe('Metadata Field Validations (EARS 1036-1047)', () => {
+    it('[EARS-1036] should accept missing metadata', () => {
+      const valid = createValidCycleRecord();
+
+      const result = validateCycleRecordDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+    });
+
+    it('[EARS-1037] should accept empty metadata object', () => {
+      const valid = {
+        ...createValidCycleRecord(),
+        metadata: {}
+      };
+
+      const result = validateCycleRecordDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+    });
+
+    it('[EARS-1038] should accept metadata with simple key-value pairs', () => {
+      const valid = {
+        ...createValidCycleRecord(),
+        metadata: {
+          sprint: 24,
+          velocity: 42,
+          team: 'backend'
+        }
+      };
+
+      const result = validateCycleRecordDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+    });
+
+    it('[EARS-1039] should accept metadata with nested objects', () => {
+      const valid = {
+        ...createValidCycleRecord(),
+        metadata: {
+          epic: true,
+          files: {
+            overview: 'epics/auth/overview.md',
+            roadmap: 'epics/auth/roadmap.md',
+            implementation_plan: 'epics/auth/implementation_plan.md'
+          },
+          okr: {
+            objective: 'growth-q4',
+            keyResult: 'KR-3'
+          }
+        }
+      };
+
+      const result = validateCycleRecordDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+    });
+
+    it('[EARS-1040] should accept metadata with arrays', () => {
+      const valid = {
+        ...createValidCycleRecord(),
+        metadata: {
+          milestones: ['design-complete', 'beta-release', 'ga'],
+          contributors: [
+            { id: 'human:dev-1', role: 'lead' },
+            { id: 'agent:copilot', role: 'assistant' }
+          ]
+        }
+      };
+
+      const result = validateCycleRecordDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+    });
+
+    it('[EARS-1041] should reject non-object metadata (string)', () => {
+      const invalid = {
+        ...createValidCycleRecord(),
+        metadata: 'not-an-object' as unknown as object
+      };
+
+      const result = validateCycleRecordDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.field.includes('metadata') && e.message.includes('object')
+      )).toBe(true);
+    });
+
+    it('[EARS-1042] should reject non-object metadata (number)', () => {
+      const invalid = {
+        ...createValidCycleRecord(),
+        metadata: 123 as unknown as object
+      };
+
+      const result = validateCycleRecordDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.field.includes('metadata') && e.message.includes('object')
+      )).toBe(true);
+    });
+
+    it('[EARS-1043] should reject non-object metadata (array)', () => {
+      const invalid = {
+        ...createValidCycleRecord(),
+        metadata: ['not', 'an', 'object'] as unknown as object
+      };
+
+      const result = validateCycleRecordDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.field.includes('metadata') && e.message.includes('object')
+      )).toBe(true);
+    });
+
+    it('[EARS-1044] should reject null metadata', () => {
+      const invalid = {
+        ...createValidCycleRecord(),
+        metadata: null as unknown as object
+      };
+
+      const result = validateCycleRecordDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.field.includes('metadata')
+      )).toBe(true);
+    });
+
+    it('[EARS-1045] should accept metadata with epic lifecycle structure', () => {
+      const valid = {
+        ...createValidCycleRecord(),
+        metadata: {
+          epic: true,
+          phase: 'active',
+          velocity: 42,
+          team: 'backend',
+          files: {
+            overview: 'epics/auth/overview.md',
+            roadmap: 'epics/auth/roadmap.md',
+            implementation_plan: 'epics/auth/implementation_plan.md'
+          }
+        }
+      };
+
+      const result = validateCycleRecordDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+    });
+
+    it('[EARS-1046] should accept metadata with mixed value types', () => {
+      const valid = {
+        ...createValidCycleRecord(),
+        metadata: {
+          stringValue: 'hello',
+          numberValue: 42,
+          booleanValue: true,
+          nullValue: null,
+          arrayValue: [1, 2, 3],
+          objectValue: { nested: 'object' }
+        }
+      };
+
+      const result = validateCycleRecordDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+    });
+
+    it('[EARS-1047] should accept CycleRecord with all fields including metadata', () => {
+      const valid: CycleRecord = {
+        id: '1754400000-cycle-q4-auth-epic',
+        title: 'Q4 2025 — Auth Epic',
+        status: 'active',
+        taskIds: ['1752274500-task-implement-oauth'],
+        childCycleIds: ['1754400000-cycle-sprint-24'],
+        tags: ['epic:auth', 'roadmap:q4'],
+        notes: 'Full cycle with all optional fields and metadata.',
+        metadata: {
+          epic: true,
+          phase: 'active',
+          files: { overview: 'overview.md', roadmap: 'roadmap.md' }
+        }
+      };
+
+      const result = validateCycleRecordDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
     });
   });
 });

@@ -5,17 +5,13 @@
  */
 
 /**
- * Complete schema for workflow methodology configuration files that define state transitions, signatures, and custom rules
+ * Schema for workflow methodology configuration that defines named state transitions, signatures, and custom rules.
  */
 export interface WorkflowRecord {
   /**
-   * JSON Schema reference
+   * Unique identifier for the workflow record (10 timestamp + 1 dash + 8 'workflow' + 1 dash + max 50 slug = 70 max)
    */
-  $schema?: string;
-  /**
-   * Semantic version of the methodology configuration
-   */
-  version: string;
+  id: string;
   /**
    * Human-readable name of the methodology
    */
@@ -25,7 +21,7 @@ export interface WorkflowRecord {
    */
   description?: string;
   /**
-   * Defines valid state transitions and their requirements
+   * Map of named transitions to their rules. Keys are transition names (e.g., submit, approve, activate, resume), not target states.
    */
   state_transitions: {
     [k: string]:
@@ -36,17 +32,21 @@ export interface WorkflowRecord {
            * @minItems 1
            */
           from: [string, ...string[]];
+          /**
+           * Target state for this transition
+           */
+          to: string;
           requires: {
             /**
-             * CLI command that triggers this transition
+             * CLI command that triggers this transition (Command Gate)
              */
             command?: string;
             /**
-             * System event that triggers this transition
+             * System event that triggers this transition (Event Gate)
              */
             event?: string;
             /**
-             * Signature requirements keyed by role (e.g., 'approver:quality', 'developer:backend')
+             * Signature group requirements (Signature Gate)
              */
             signatures?: {
               [k: string]:
@@ -70,7 +70,7 @@ export interface WorkflowRecord {
                      */
                     actor_type?: 'human' | 'agent';
                     /**
-                     * Optional: specific actors that can sign
+                     * Optional: restrict to specific actor IDs
                      */
                     specific_actors?: string[];
                   }
@@ -103,7 +103,7 @@ export interface WorkflowRecord {
            */
           parameters?: {};
           /**
-           * Inline validation expression for 'custom' validation type. Implementation determines the runtime and language. Must return boolean or Promise<boolean>.
+           * Inline validation expression for 'custom' type. Must return boolean.
            */
           expression?: string;
           /**
@@ -114,7 +114,7 @@ export interface WorkflowRecord {
       | undefined;
   };
   /**
-   * Optional agent automation configuration for methodology
+   * Optional agent automation configuration
    */
   agent_integration?: {
     /**
@@ -122,7 +122,7 @@ export interface WorkflowRecord {
      */
     description?: string;
     /**
-     * References to agents required for this methodology. Agent details (engine, knowledge, etc.) live in their AgentRecord.
+     * Agents required for this methodology
      */
     required_agents?: {
       [k: string]: unknown | undefined;

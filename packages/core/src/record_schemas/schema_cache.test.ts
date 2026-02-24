@@ -41,7 +41,6 @@ describe('SchemaValidationCache', () => {
       expect(schemaNames).toContain('AgentRecord');
       expect(schemaNames).toContain('TaskRecord');
       expect(schemaNames).toContain('ExecutionRecord');
-      expect(schemaNames).toContain('ChangelogRecord');
       expect(schemaNames).toContain('FeedbackRecord');
       expect(schemaNames).toContain('CycleRecord');
       expect(schemaNames).toContain('WorkflowRecord');
@@ -158,18 +157,6 @@ describe('SchemaValidationCache', () => {
             type: 'progress',
             title: 'Test Execution',
             result: 'Test execution completed successfully with all requirements met.'
-          },
-          invalid: { id: 'invalid' }
-        },
-        {
-          schema: Schemas.ChangelogRecord,
-          valid: {
-            id: '1234567890-changelog-test-entry',
-            title: 'Task Completion',
-            description: 'Successfully completed task implementation with all requirements',
-            relatedTasks: ['1234567890-task-test-implementation'],
-            completedAt: 1234567890,
-            version: 'v1.0.0'
           },
           invalid: { id: 'invalid' }
         },

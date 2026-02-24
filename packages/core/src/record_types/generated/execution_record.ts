@@ -5,57 +5,43 @@
  */
 
 /**
- * Canonical schema for execution log records - the universal event stream
+ * Canonical schema for execution log records - the universal event stream.
  */
 export interface ExecutionRecord<TMetadata = object> {
   /**
-   * Unique identifier for the execution log entry (10 timestamp + 1 dash + 4 'exec' + 1 dash + max 50 slug = 66 max)
+   * Unique identifier for the execution log entry.
    */
   id: string;
   /**
-   * ID of the parent task this execution belongs to (10 timestamp + 1 dash + 4 'task' + 1 dash + max 50 slug = 66 max)
+   * ID of the parent task this execution belongs to.
    */
   taskId: string;
   /**
-   * Semantic classification of the execution event
+   * Semantic classification of the execution event. Standard types: analysis, progress, blocker, completion, info, correction. Custom types use the 'custom:' prefix (e.g. custom:deployment, custom:rollback). Implementations that encounter an unrecognized custom type must treat it as 'info'.
+   *
    */
-  type: 'analysis' | 'progress' | 'blocker' | 'completion' | 'info' | 'correction';
+  type: string;
   /**
-   * Human-readable title for the execution (used to generate ID)
+   * Human-readable title for the execution (used to generate ID slug).
    */
   title: string;
   /**
-   * The tangible, verifiable output or result of the execution.
-   * This is the "WHAT" - evidence of work or event summary.
+   * The tangible, verifiable output or result of the execution. This is the "WHAT" - evidence of work or event summary.
    *
    */
   result: string;
   /**
-   * Optional narrative, context and decisions behind the execution.
-   * This is the "HOW" and "WHY" - the story behind the result.
+   * Optional narrative, context and decisions behind the execution. This is the "HOW" and "WHY" - the story behind the result.
    *
    */
   notes?: string;
   /**
-   * Optional list of typed references to relevant commits, files, PRs, or external documents.
-   * Should use typed prefixes for clarity and trazabilidad (see execution_protocol_appendix.md):
-   * - commit:     Git commit SHA
-   * - pr:         Pull Request number
-   * - file:       File path (relative to repo root)
-   * - url:        External URL
-   * - issue:      GitHub Issue number
-   * - task:       TaskRecord ID
-   * - exec:       ExecutionRecord ID (for corrections or dependencies)
-   * - changelog:  ChangelogRecord ID
+   * Optional list of typed references to relevant commits, files, PRs, or external documents. Standard prefixes: commit:, pr:, issue:, file:, url:, task:, exec:.
    *
    */
   references?: string[];
   /**
-   * Optional structured data for machine consumption.
-   * Use this field for data that needs to be programmatically processed (e.g., audit findings,
-   * performance metrics, scan results). This complements result (human-readable WHAT) and
-   * notes (narrative HOW/WHY) by providing structured, queryable data.
-   * Common use cases: audit findings arrays, performance metrics, tool outputs, scan summaries.
+   * Optional structured data for machine consumption. Use this field for data that needs to be programmatically processed (e.g., audit findings, performance metrics, scan results). Complements result (WHAT) and notes (HOW/WHY) with structured, queryable data.
    *
    */
   metadata?: TMetadata;

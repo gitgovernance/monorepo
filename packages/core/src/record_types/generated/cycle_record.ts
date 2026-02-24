@@ -5,27 +5,27 @@
  */
 
 /**
- * Canonical schema for cycle records - strategic grouping of work
+ * Canonical schema for cycle records — strategic grouping of work into sprints, milestones, or roadmaps.
  */
-export interface CycleRecord {
+export interface CycleRecord<TMetadata = object> {
   /**
-   * Unique identifier for the cycle (10 timestamp + 1 dash + 5 'cycle' + 1 dash + max 50 slug = 67 max)
+   * Unique identifier for the cycle (10 timestamp + 1 dash + 5 'cycle' + 1 dash + max 50 slug = 67 max).
    */
   id: string;
   /**
-   * Human-readable title for the cycle (e.g., 'Sprint 24', 'Auth v2.0', 'Q4 2025')
+   * Human-readable title for the cycle (e.g., 'Sprint 24', 'Auth v2.0', 'Q4 2025').
    */
   title: string;
   /**
-   * The lifecycle status of the cycle
+   * The lifecycle status of the cycle.
    */
   status: 'planning' | 'active' | 'completed' | 'archived';
   /**
-   * Optional array of Task IDs that belong to this cycle. Can be empty for cycles that only contain child cycles. (10 timestamp + 1 dash + 4 'task' + 1 dash + max 50 slug = 66 max)
+   * Optional array of Task IDs that belong to this cycle. Bidirectional with TaskRecord.cycleIds. Can be empty for container cycles.
    */
   taskIds?: string[];
   /**
-   * Optional array of Cycle IDs that are children of this cycle, allowing for hierarchies (e.g., Q1 containing Sprint 1, Sprint 2, Sprint 3). (10 timestamp + 1 dash + 5 'cycle' + 1 dash + max 50 slug = 67 max)
+   * Optional array of child Cycle IDs for hierarchical composition (e.g., Q1 containing Sprint 1, Sprint 2, Sprint 3).
    */
   childCycleIds?: string[];
   /**
@@ -33,7 +33,13 @@ export interface CycleRecord {
    */
   tags?: string[];
   /**
-   * Optional description of the cycle's goals, objectives, and context
+   * Optional description of the cycle's goals, objectives, and context.
    */
   notes?: string;
+  /**
+   * Optional structured data for machine consumption.
+   * Use this field for tool-specific or integration-specific data that needs to be programmatically processed.
+   *
+   */
+  metadata?: TMetadata;
 }

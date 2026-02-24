@@ -22,21 +22,21 @@
             "agent",
             "task",
             "execution",
-            "changelog",
             "feedback",
             "cycle",
+            "workflow",
             "custom"
           ],
           "description": "The type of the record contained in the payload."
         },
         "schemaUrl": {
           "type": "string",
-          "description": "Optional URL to a custom schema for the payload."
+          "description": "URL to a custom schema for the payload. Required when type is 'custom'."
         },
         "schemaChecksum": {
           "type": "string",
           "pattern": "^[a-fA-F0-9]{64}$",
-          "description": "Optional SHA-256 checksum of the custom schema."
+          "description": "SHA-256 checksum of the custom schema. Required when type is 'custom'."
         },
         "payloadChecksum": {
           "type": "string",
@@ -52,14 +52,14 @@
               "keyId": {
                 "type": "string",
                 "pattern": "^(human|agent)(:[a-z0-9-]+)+$",
-                "description": "The Actor ID of the signer (must match ActorRecord.id pattern)."
+                "description": "The Actor ID of the signer. Supports scoped identifiers (e.g. agent:camilo:cursor)."
               },
               "role": {
                 "type": "string",
                 "pattern": "^([a-z-]+|custom:[a-z0-9-]+)$",
                 "minLength": 1,
                 "maxLength": 50,
-                "description": "The context role of the signature (e.g., 'author', 'reviewer', 'auditor', or 'custom:*')."
+                "description": "The context role of the signature (e.g., 'author', 'reviewer', or 'custom:*')."
               },
               "notes": {
                 "type": "string",
@@ -74,6 +74,7 @@
               },
               "timestamp": {
                 "type": "integer",
+                "minimum": 1600000000,
                 "description": "Unix timestamp of the signature."
               }
             },
@@ -107,276 +108,27 @@
     "payload"
   ],
   "additionalProperties": false,
-  "oneOf": [
-    {
-      "if": {
+  "if": {
+    "properties": {
+      "header": {
+        "type": "object",
         "properties": {
-          "header": {
-            "type": "object",
-            "properties": {
-              "type": {
-                "const": "actor"
-              }
-            }
+          "type": {
+            "const": "custom"
           }
         }
-      },
-      "then": {
-        "properties": {
-          "payload": {
-            "$ref": "ref:actor_record_schema"
-          }
-        }
-      },
-      "else": false
-    },
-    {
-      "if": {
-        "properties": {
-          "header": {
-            "type": "object",
-            "properties": {
-              "type": {
-                "const": "agent"
-              }
-            }
-          }
-        }
-      },
-      "then": {
-        "properties": {
-          "payload": {
-            "$ref": "ref:agent_record_schema"
-          }
-        }
-      },
-      "else": false
-    },
-    {
-      "if": {
-        "properties": {
-          "header": {
-            "type": "object",
-            "properties": {
-              "type": {
-                "const": "task"
-              }
-            }
-          }
-        }
-      },
-      "then": {
-        "properties": {
-          "payload": {
-            "$ref": "ref:task_record_schema"
-          }
-        }
-      },
-      "else": false
-    },
-    {
-      "if": {
-        "properties": {
-          "header": {
-            "type": "object",
-            "properties": {
-              "type": {
-                "const": "execution"
-              }
-            }
-          }
-        }
-      },
-      "then": {
-        "properties": {
-          "payload": {
-            "$ref": "ref:execution_record_schema"
-          }
-        }
-      },
-      "else": false
-    },
-    {
-      "if": {
-        "properties": {
-          "header": {
-            "type": "object",
-            "properties": {
-              "type": {
-                "const": "changelog"
-              }
-            }
-          }
-        }
-      },
-      "then": {
-        "properties": {
-          "payload": {
-            "$ref": "ref:changelog_record_schema"
-          }
-        }
-      },
-      "else": false
-    },
-    {
-      "if": {
-        "properties": {
-          "header": {
-            "type": "object",
-            "properties": {
-              "type": {
-                "const": "feedback"
-              }
-            }
-          }
-        }
-      },
-      "then": {
-        "properties": {
-          "payload": {
-            "$ref": "ref:feedback_record_schema"
-          }
-        }
-      },
-      "else": false
-    },
-    {
-      "if": {
-        "properties": {
-          "header": {
-            "type": "object",
-            "properties": {
-              "type": {
-                "const": "cycle"
-              }
-            }
-          }
-        }
-      },
-      "then": {
-        "properties": {
-          "payload": {
-            "$ref": "ref:cycle_record_schema"
-          }
-        }
-      },
-      "else": false
-    },
-    {
-      "if": {
-        "properties": {
-          "header": {
-            "type": "object",
-            "properties": {
-              "type": {
-                "const": "custom"
-              }
-            }
-          }
-        }
-      },
-      "then": {
-        "properties": {
-          "header": {
-            "type": "object",
-            "required": [
-              "schemaUrl",
-              "schemaChecksum"
-            ]
-          }
-        }
-      },
-      "else": false
+      }
     }
-  ],
-  "examples": [
-    {
+  },
+  "then": {
+    "properties": {
       "header": {
-        "version": "1.0",
-        "type": "task",
-        "payloadChecksum": "a1b2c3d4e5f6...",
-        "signatures": [
-          {
-            "keyId": "human:lead-dev",
-            "role": "author",
-            "notes": "Initial task creation for OAuth 2.0 implementation",
-            "signature": "...",
-            "timestamp": 1752274500
-          }
-        ]
-      },
-      "payload": {
-        "id": "1752274500-task-implementar-auth",
-        "status": "pending",
-        "priority": "high",
-        "description": "Implementar autenticación OAuth 2.0.",
-        "tags": [
-          "skill:go",
-          "area:backend"
-        ]
-      }
-    },
-    {
-      "header": {
-        "version": "1.0",
-        "type": "execution",
-        "payloadChecksum": "b2c3d4e5f6a1...",
-        "signatures": [
-          {
-            "keyId": "agent:cursor",
-            "role": "author",
-            "notes": "OAuth 2.0 flow completed with GitHub provider integration",
-            "signature": "...",
-            "timestamp": 1752274600
-          },
-          {
-            "keyId": "human:camilo",
-            "role": "reviewer",
-            "notes": "Reviewed and tested locally. LGTM.",
-            "signature": "...",
-            "timestamp": 1752274650
-          }
-        ]
-      },
-      "payload": {
-        "id": "1752274600-exec-implement-oauth",
-        "taskId": "1752274500-task-implement-oauth",
-        "type": "progress",
-        "title": "OAuth 2.0 flow implemented",
-        "result": "Completed the OAuth 2.0 authentication flow..."
-      }
-    },
-    {
-      "header": {
-        "version": "1.0",
-        "type": "actor",
-        "payloadChecksum": "c3d4e5f6a1b2...",
-        "signatures": [
-          {
-            "keyId": "human:admin",
-            "role": "author",
-            "notes": "New developer onboarded to team",
-            "signature": "...",
-            "timestamp": 1752274700
-          },
-          {
-            "keyId": "agent:aion",
-            "role": "auditor",
-            "notes": "Actor verification: 10/10. Credentials validated.",
-            "signature": "...",
-            "timestamp": 1752274705
-          }
-        ]
-      },
-      "payload": {
-        "id": "human:new-developer",
-        "type": "human",
-        "displayName": "New Developer",
-        "publicKey": "...",
-        "roles": [
-          "developer"
+        "type": "object",
+        "required": [
+          "schemaUrl",
+          "schemaChecksum"
         ]
       }
     }
-  ]
+  }
 }

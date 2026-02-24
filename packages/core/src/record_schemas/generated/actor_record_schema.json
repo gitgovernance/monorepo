@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "actor_record_schema.json",
   "title": "ActorRecord",
-  "description": "Canonical schema for actor records as defined in actor_protocol.md",
+  "description": "Canonical schema for actor records as defined in 02_actor.md",
   "additionalProperties": false,
   "type": "object",
   "required": [

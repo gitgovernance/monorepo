@@ -1,24 +1,21 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "workflow_schema.json",
+  "$id": "workflow_record_schema.json",
   "title": "WorkflowRecord",
-  "description": "Complete schema for workflow methodology configuration files that define state transitions, signatures, and custom rules",
+  "description": "Schema for workflow methodology configuration that defines named state transitions, signatures, and custom rules.",
   "type": "object",
   "required": [
-    "version",
+    "id",
     "name",
     "state_transitions"
   ],
   "additionalProperties": false,
   "properties": {
-    "$schema": {
+    "id": {
       "type": "string",
-      "description": "JSON Schema reference"
-    },
-    "version": {
-      "type": "string",
-      "pattern": "^\\d+\\.\\d+\\.\\d+$",
-      "description": "Semantic version of the methodology configuration"
+      "pattern": "^\\d{10}-workflow-[a-z0-9-]{1,50}$",
+      "maxLength": 70,
+      "description": "Unique identifier for the workflow record (10 timestamp + 1 dash + 8 'workflow' + 1 dash + max 50 slug = 70 max)"
     },
     "name": {
       "type": "string",
@@ -33,11 +30,15 @@
     },
     "state_transitions": {
       "type": "object",
-      "description": "Defines valid state transitions and their requirements",
+      "description": "Map of named transitions to their rules. Keys are transition names (e.g., submit, approve, activate, resume), not target states.",
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9_]{0,49}$"
+      },
       "additionalProperties": {
         "type": "object",
         "required": [
           "from",
+          "to",
           "requires"
         ],
         "additionalProperties": false,
@@ -51,21 +52,26 @@
             "minItems": 1,
             "description": "Valid source states for this transition"
           },
+          "to": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,49}$",
+            "description": "Target state for this transition"
+          },
           "requires": {
             "type": "object",
             "additionalProperties": false,
             "properties": {
               "command": {
                 "type": "string",
-                "description": "CLI command that triggers this transition"
+                "description": "CLI command that triggers this transition (Command Gate)"
               },
               "event": {
                 "type": "string",
-                "description": "System event that triggers this transition"
+                "description": "System event that triggers this transition (Event Gate)"
               },
               "signatures": {
                 "type": "object",
-                "description": "Signature requirements keyed by role (e.g., 'approver:quality', 'developer:backend')",
+                "description": "Signature group requirements (Signature Gate)",
                 "additionalProperties": {
                   "type": "object",
                   "required": [
@@ -105,7 +111,7 @@
                       "items": {
                         "type": "string"
                       },
-                      "description": "Optional: specific actors that can sign"
+                      "description": "Optional: restrict to specific actor IDs"
                     }
                   }
                 }
@@ -154,7 +160,7 @@
           },
           "expression": {
             "type": "string",
-            "description": "Inline validation expression for 'custom' validation type. Implementation determines the runtime and language. Must return boolean or Promise<boolean>."
+            "description": "Inline validation expression for 'custom' type. Must return boolean."
           },
           "module_path": {
             "type": "string",
@@ -165,7 +171,7 @@
     },
     "agent_integration": {
       "type": "object",
-      "description": "Optional agent automation configuration for methodology",
+      "description": "Optional agent automation configuration",
       "additionalProperties": false,
       "properties": {
         "description": {
@@ -175,7 +181,7 @@
         },
         "required_agents": {
           "type": "array",
-          "description": "References to agents required for this methodology. Agent details (engine, knowledge, etc.) live in their AgentRecord.",
+          "description": "Agents required for this methodology",
           "items": {
             "type": "object",
             "required": [
@@ -197,8 +203,8 @@
             "properties": {
               "id": {
                 "type": "string",
-                "pattern": "^agent:[a-z0-9:-]+$",
-                "description": "Specific agent ID. References an existing AgentRecord."
+                "pattern": "^agent(:[a-z0-9-]+)+$",
+                "description": "Specific agent ID (references an AgentRecord)"
               },
               "required_roles": {
                 "type": "array",
@@ -207,11 +213,11 @@
                   "pattern": "^[a-z0-9-]+(:[a-z0-9-]+)*$"
                 },
                 "minItems": 1,
-                "description": "Required capability roles. Matches any agent with these roles (from ActorRecord)."
+                "description": "Required capability roles (matches any agent with these roles)"
               },
               "triggers": {
                 "type": "array",
-                "description": "When this agent activates within this methodology",
+                "description": "Events that activate this agent",
                 "items": {
                   "type": "object",
                   "required": [
@@ -240,181 +246,5 @@
         }
       }
     }
-  },
-  "examples": [
-    {
-      "version": "1.0.0",
-      "name": "Simple Kanban",
-      "description": "Basic workflow for small teams",
-      "state_transitions": {
-        "review": {
-          "from": [
-            "draft"
-          ],
-          "requires": {
-            "command": "gitgov task submit"
-          }
-        },
-        "ready": {
-          "from": [
-            "review"
-          ],
-          "requires": {
-            "command": "gitgov task approve",
-            "signatures": {
-              "__default__": {
-                "role": "approver",
-                "capability_roles": [
-                  "approver:product"
-                ],
-                "min_approvals": 1
-              }
-            }
-          }
-        },
-        "active": {
-          "from": [
-            "ready"
-          ],
-          "requires": {
-            "event": "first_execution_record_created"
-          }
-        },
-        "done": {
-          "from": [
-            "active"
-          ],
-          "requires": {
-            "command": "gitgov task complete"
-          }
-        }
-      }
-    },
-    {
-      "version": "1.0.0",
-      "name": "GitGovernance Default Methodology",
-      "description": "Standard GitGovernance workflow with quality gates and agent collaboration",
-      "state_transitions": {
-        "review": {
-          "from": [
-            "draft"
-          ],
-          "requires": {
-            "command": "gitgov task submit",
-            "signatures": {
-              "__default__": {
-                "role": "submitter",
-                "capability_roles": [
-                  "author"
-                ],
-                "min_approvals": 1
-              }
-            }
-          }
-        },
-        "ready": {
-          "from": [
-            "review"
-          ],
-          "requires": {
-            "command": "gitgov task approve",
-            "signatures": {
-              "__default__": {
-                "role": "approver",
-                "capability_roles": [
-                  "approver:product"
-                ],
-                "min_approvals": 1
-              },
-              "design": {
-                "role": "approver",
-                "capability_roles": [
-                  "approver:design"
-                ],
-                "min_approvals": 1
-              },
-              "quality": {
-                "role": "approver",
-                "capability_roles": [
-                  "approver:quality"
-                ],
-                "min_approvals": 1
-              }
-            }
-          }
-        },
-        "active": {
-          "from": [
-            "ready",
-            "paused"
-          ],
-          "requires": {
-            "event": "first_execution_record_created",
-            "custom_rules": [
-              "task_must_have_valid_assignment_for_executor"
-            ]
-          }
-        },
-        "done": {
-          "from": [
-            "active"
-          ],
-          "requires": {
-            "command": "gitgov task complete",
-            "signatures": {
-              "__default__": {
-                "role": "approver",
-                "capability_roles": [
-                  "approver:quality"
-                ],
-                "min_approvals": 1
-              }
-            }
-          }
-        },
-        "archived": {
-          "from": [
-            "done"
-          ],
-          "requires": {
-            "event": "changelog_record_created"
-          }
-        },
-        "paused": {
-          "from": [
-            "active",
-            "review"
-          ],
-          "requires": {
-            "event": "feedback_blocking_created"
-          }
-        },
-        "discarded": {
-          "from": [
-            "ready",
-            "active"
-          ],
-          "requires": {
-            "command": "gitgov task cancel",
-            "signatures": {
-              "__default__": {
-                "role": "canceller",
-                "capability_roles": [
-                  "approver:product",
-                  "approver:quality"
-                ],
-                "min_approvals": 1
-              }
-            }
-          }
-        }
-      },
-      "custom_rules": {
-        "task_must_have_valid_assignment_for_executor": {
-          "description": "Task must have a valid assignment before execution can begin",
-          "validation": "assignment_required"
-        }
-      }
-    }
-  ]
+  }
 }
