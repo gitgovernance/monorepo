@@ -198,16 +198,17 @@ describe('SchemaValidationCache', () => {
         {
           schema: Schemas.WorkflowRecord,
           valid: {
-            version: '1.0.0',
+            id: '1234567890-workflow-test-workflow',
             name: 'Test Workflow',
             state_transitions: {
-              'draft': {
+              'submit': {
                 from: ['draft'],
+                to: 'ready',
                 requires: { command: 'gitgov task submit' }
               }
             }
           },
-          invalid: { version: 'invalid' }
+          invalid: { id: 'invalid' }
         }
       ];
 
