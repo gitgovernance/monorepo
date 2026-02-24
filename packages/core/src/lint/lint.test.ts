@@ -11,16 +11,18 @@
  * FsLintModule EARS (see fs_lint_module.md):
  * - File Discovery, File Naming, Backup Operations, etc.
  *
- * LintModule EARS (Bloques A-I):
- * - Bloque A: Initialization & Dependencies (EARS-A1, A2, A3)
- * - Bloque B: Core Lint Operations (EARS-B1, B2, B3, B4)
+ * LintModule EARS (Bloques A-K):
+ * - Bloque A: Initialization & Dependencies (EARS-A1, A2, A3, A4)
+ * - Bloque B: Core Lint Operations (EARS-B1, B2, B3, B4, B5, B6)
  * - Bloque C: Store Validation (EARS-C1, C2, C3, C4)
  * - Bloque D: Timestamp Validation (EARS-D1, D2)
- * - Bloque E: Reference Validation (EARS-E1 a E6)
+ * - Bloque E: Reference Validation (EARS-E1 a E7)
  * - Bloque F: Auto-Fix Operations (EARS-F1 a F12)
  * - Bloque G: Performance & Concurrency (EARS-G1, G2, G3)
  * - Bloque H: Error Handling & Recovery (EARS-H1, H2)
  * - Bloque I: Schema Version Detection (EARS-I1)
+ * - Bloque J: Integration Scenarios (EARS-J1, J2, J3)
+ * - Bloque K: Multi-Record Type Coverage (EARS-K1 a K8)
  */
 
 import { LintModule } from './index';
@@ -469,8 +471,8 @@ describe('LintModule + FsLintModule', () => {
       expect(pureLintModule.fixRecord).toBeDefined();
     });
 
-    // FsLintModule requires lintModule (not an EARS - FsLintModule specific behavior)
-    it('FsLintModule should throw error without lintModule', () => {
+    // [EARS-A4]
+    it('[EARS-A4] FsLintModule should throw error without lintModule', () => {
       expect(() => new FsLintModule({} as FsLintModuleDependencies)).toThrow();
     });
 
@@ -525,17 +527,7 @@ describe('LintModule + FsLintModule', () => {
         return [];
       }) as typeof readdir);
 
-      // Mock file with EmbeddedMetadataRecord structure but invalid payload
-      const invalidRecord = {
-        header: {
-          version: '1.0' as const,
-          type: 'task' as const,
-          payloadChecksum: 'abc123',
-          signatures: [createTestSignature('test-actor', 'author', 'Test')]
-        },
-        payload: { id: 'invalid-task', status: 'draft', priority: 'medium', description: 'Test' } // Missing 'title'
-      };
-      mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify(invalidRecord));
+      // Mock file read to reject with validation error (simulates loader failure)
       mocks.fileSystem.readFile.mockRejectedValue(validationError);
 
       const report = await fsLintModule.lint({ path: `${testRoot}/.gitgov/` });
@@ -555,7 +547,6 @@ describe('LintModule + FsLintModule', () => {
       // Mock filesystem discovery: return one task file
       mockFilesystemDiscovery(mockReaddir, [{ id: recordId, type: 'task' }]);
 
-      mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify(mockRecord));
       mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify(mockRecord));
 
       const report = await fsLintModule.lint({
@@ -580,7 +571,6 @@ describe('LintModule + FsLintModule', () => {
         return [];
       }) as typeof readdir);
 
-      mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify({ id: 'task-1', title: null }));
       mocks.fileSystem.readFile.mockRejectedValue(
         new DetailedValidationError('TaskRecord', [
           { field: 'title', message: 'Invalid', value: null }
@@ -604,7 +594,6 @@ describe('LintModule + FsLintModule', () => {
         return [];
       }) as typeof readdir);
 
-      mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify({ id: 'task-1', title: null }));
       mocks.fileSystem.readFile.mockRejectedValue(
         new DetailedValidationError('TaskRecord', [
           { field: 'title', message: 'Invalid', value: null }
@@ -620,12 +609,11 @@ describe('LintModule + FsLintModule', () => {
   });
 
   // ==========================================================================
-  // Bloque B (Store Path): LintModule.lint() iterates stores directly
-  // Validates EARS-B3/B4 via the pure LintModule path (no FsLintModule)
+  // LintModule.lint() via stores (supplementary — canonical B3/B4 above)
   // ==========================================================================
 
-  describe('Bloque B (Store Path): LintModule.lint() via stores', () => {
-    // [EARS-B3] LintModule.lint() accumulates all errors from stores
+  describe('LintModule.lint() via stores', () => {
+    // [EARS-B3] (additional test via lint() batch path)
     it('[EARS-B3] should accumulate all errors from stores by default', async () => {
       // Populate tasks store with 3 invalid records (missing title → schema error)
       const invalidRecord1 = {
@@ -655,7 +643,7 @@ describe('LintModule + FsLintModule', () => {
       expect(report.summary.errors).toBeGreaterThanOrEqual(3);
     });
 
-    // [EARS-B4] LintModule.lint() stops at first error in failFast mode
+    // [EARS-B4] (additional test via lint() batch path)
     it('[EARS-B4] should stop at first error from stores in failFast mode', async () => {
       // Populate tasks store with 3 invalid records
       const invalidRecord1 = {
@@ -687,8 +675,8 @@ describe('LintModule + FsLintModule', () => {
       expect(report.summary.filesChecked).toBeLessThanOrEqual(3);
     });
 
-    // Validates LintModule.lint() collects records from multiple stores
-    it('should collect and validate records from multiple stores', async () => {
+    // [EARS-B5]
+    it('[EARS-B5] should collect and validate records from multiple stores', async () => {
       const validTask = createMockTaskRecord({ title: 'Valid Task' });
       const validCycle = createMockCycleRecord({ title: 'Valid Cycle' });
 
@@ -704,8 +692,8 @@ describe('LintModule + FsLintModule', () => {
       expect(report.metadata.version).toBe('1.0.0');
     });
 
-    // Validates LintModule.lint() returns empty report when stores are empty
-    it('should return empty report when all stores are empty', async () => {
+    // [EARS-B6]
+    it('[EARS-B6] should return empty report when all stores are empty', async () => {
       // All stores return empty lists (default mock behavior)
       const report = await lintModule.lint();
 
@@ -733,8 +721,6 @@ describe('LintModule + FsLintModule', () => {
 
       mockFilesystemDiscovery(mockReaddir, [{ id: recordId, type: 'task' }]);
       mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify(mockRecord));
-      // Loader will be called internally, recordStore.read may be called as fallback
-      mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify(mockRecord));
 
       const report = await fsLintModule.lint({ path: `${testRoot}/.gitgov/` });
 
@@ -751,7 +737,6 @@ describe('LintModule + FsLintModule', () => {
       ]);
 
       mockFilesystemDiscovery(mockReaddir, [{ id: 'bad-task', type: 'task' }]);
-      mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify({ id: 'bad-task', status: 'invalid-status' }));
       mocks.fileSystem.readFile.mockRejectedValue(schemaError);
 
       const report = await fsLintModule.lint({ path: `${testRoot}/.gitgov/` });
@@ -769,7 +754,6 @@ describe('LintModule + FsLintModule', () => {
 
       mockFilesystemDiscovery(mockReaddir, [{ id: recordId, type: 'task' }]);
       mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify(mockRecord));
-      mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify(mockRecord));
 
       const report = await fsLintModule.lint({ path: `${testRoot}/.gitgov/` });
 
@@ -783,7 +767,6 @@ describe('LintModule + FsLintModule', () => {
       ]);
 
       mockFilesystemDiscovery(mockReaddir, [{ id: 'bad-checksum', type: 'task' }]);
-      mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify({ id: 'bad-checksum', header: { payloadChecksum: 'wrong' } }));
       mocks.fileSystem.readFile.mockRejectedValue(embeddedError);
 
       const report = await fsLintModule.lint({ path: `${testRoot}/.gitgov/` });
@@ -810,7 +793,6 @@ describe('LintModule + FsLintModule', () => {
       const recordId = mockRecord.payload.id;
 
       mockFilesystemDiscovery(mockReaddir, [{ id: recordId, type: 'task' }]);
-      mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify(mockRecord));
       mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify(mockRecord));
 
       const report = await fsLintModule.lint({
@@ -1097,6 +1079,56 @@ describe('LintModule + FsLintModule', () => {
       expect(softDeleteWarnings[0]?.level).toBe('warning');
       expect(softDeleteWarnings[0]?.entity.type).toBe('execution');
     });
+
+    // [EARS-E7]
+    it('[EARS-E7] should expose lintRecordReferences as public method', () => {
+      const module = new LintModule(mocks.lintModuleDeps);
+
+      // Valid references → no results
+      const validRecord = createMockTaskRecord({
+        references: ['task:123', 'file:README.md', 'url:https://example.com']
+      });
+      const validResults = module.lintRecordReferences(validRecord, {
+        recordId: validRecord.payload.id,
+        entityType: 'task',
+        filePath: 'tasks/test.json'
+      });
+      expect(validResults).toEqual([]);
+
+      // Unknown prefix → warning
+      const unknownRecord = createMockTaskRecord({
+        references: ['unknown:value', 'no-colon']
+      });
+      const unknownResults = module.lintRecordReferences(unknownRecord, {
+        recordId: unknownRecord.payload.id,
+        entityType: 'task',
+        filePath: 'tasks/test.json'
+      });
+      expect(unknownResults).toHaveLength(2);
+      expect(unknownResults.every(r => r.level === 'warning')).toBe(true);
+      expect(unknownResults.every(r => r.validator === 'REFERENTIAL_INTEGRITY')).toBe(true);
+
+      // Empty value after known prefix → error
+      const emptyRecord = createMockTaskRecord({
+        references: ['file:', 'task:']
+      });
+      const emptyResults = module.lintRecordReferences(emptyRecord, {
+        recordId: emptyRecord.payload.id,
+        entityType: 'task',
+        filePath: 'tasks/test.json'
+      });
+      expect(emptyResults).toHaveLength(2);
+      expect(emptyResults.every(r => r.level === 'error')).toBe(true);
+
+      // Empty/no references → no results
+      const noRefRecord = createMockTaskRecord({ references: [] });
+      const noRefResults = module.lintRecordReferences(noRefRecord, {
+        recordId: noRefRecord.payload.id,
+        entityType: 'task',
+        filePath: 'tasks/test.json'
+      });
+      expect(noRefResults).toEqual([]);
+    });
   });
 
   // ==========================================================================
@@ -1157,8 +1189,8 @@ describe('LintModule + FsLintModule', () => {
       expect(mocks.fileSystem.writeFile).toHaveBeenCalled();
     });
 
-    // Test for fixing additional properties in payload
-    it('should remove additional properties from payload when fixing EMBEDDED_METADATA_STRUCTURE', async () => {
+    // [EARS-F2] (additional test — remove additional properties from payload)
+    it('[EARS-F2] should remove additional properties from payload when fixing EMBEDDED_METADATA_STRUCTURE', async () => {
       const lintReport: LintReport = {
         summary: { filesChecked: 1, errors: 1, warnings: 0, fixable: 1, executionTime: 100 },
         results: [{
@@ -1944,7 +1976,6 @@ describe('LintModule + FsLintModule', () => {
 
       mockFilesystemDiscovery(mockReaddir, recordIds.map(id => ({ id, type: 'task' as const })));
       mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify(mockRecord));
-      mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify(mockRecord));
 
       const startTime = Date.now();
       const report = await fsLintModule.lint({
@@ -1966,7 +1997,6 @@ describe('LintModule + FsLintModule', () => {
 
       mockFilesystemDiscovery(mockReaddir, recordIds.map(id => ({ id, type: 'task' as const })));
       mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify(mockRecord));
-      mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify(mockRecord));
 
       const startTime = Date.now();
       const report = await fsLintModule.lint({
@@ -1985,7 +2015,6 @@ describe('LintModule + FsLintModule', () => {
       const mockRecord = createMockTaskRecord();
 
       mockFilesystemDiscovery(mockReaddir, recordIds.map(id => ({ id, type: 'task' as const })));
-      mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify(mockRecord));
       mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify(mockRecord));
 
       const report = await fsLintModule.lint({
@@ -2012,10 +2041,9 @@ describe('LintModule + FsLintModule', () => {
         { id: 'task-1', type: 'task' },
         { id: 'task-2', type: 'task' }
       ]);
-      mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify({ id: 'task-1' }));
       mocks.fileSystem.readFile
         .mockRejectedValueOnce(new Error('Random validator error'))
-        .mockResolvedValueOnce(createMockTaskRecord());
+        .mockResolvedValueOnce(JSON.stringify(createMockTaskRecord()));
 
       const report = await fsLintModule.lint({ path: `${testRoot}/.gitgov/` });
 
@@ -2027,7 +2055,6 @@ describe('LintModule + FsLintModule', () => {
     // [EARS-H2]
     it('[EARS-H2] should handle file read errors gracefully', async () => {
       mockFilesystemDiscovery(mockReaddir, [{ id: 'corrupt-file', type: 'task' }]);
-      mocks.fileSystem.readFile.mockRejectedValue(new Error('File read error: corrupt'));
       mocks.fileSystem.readFile.mockRejectedValue(new Error('File read error: corrupt'));
 
       const report = await fsLintModule.lint({ path: `${testRoot}/.gitgov/` });
@@ -2061,7 +2088,6 @@ describe('LintModule + FsLintModule', () => {
       ]);
 
       mockFilesystemDiscovery(mockReaddir, [{ id: 'outdated-task', type: 'task' }]);
-      mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify({ id: 'outdated-task', legacyField: 'value' }));
       mocks.fileSystem.readFile.mockRejectedValue(schemaError);
 
       const report = await fsLintModule.lint({ path: `${testRoot}/.gitgov/` });
@@ -2079,12 +2105,13 @@ describe('LintModule + FsLintModule', () => {
   // Additional Integration Tests
   // ==========================================================================
 
-  describe('Integration Scenarios', () => {
+  describe('Bloque J: Integration Scenarios (EARS-J1 a J3)', () => {
     beforeEach(() => {
       lintModule = new LintModule(mocks.lintModuleDeps);
     });
 
-    it('should handle lintFile() for single file validation', async () => {
+    // [EARS-J1]
+    it('[EARS-J1] should handle lintFile() for single file validation', async () => {
       const mockRecord = createMockTaskRecord();
       mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify(mockRecord));
 
@@ -2098,29 +2125,30 @@ describe('LintModule + FsLintModule', () => {
 
     // Note: EARS-F1 (Filter oneOf errors) is in fs/index.test.ts
 
-    it('should provide detailed context in error messages', async () => {
+    // [EARS-J2]
+    it('[EARS-J2] should provide detailed context in error messages', async () => {
       const error = new DetailedValidationError('TaskRecord', [
         { field: 'priority', message: 'Invalid enum', value: 'urgent' }
       ]);
 
       mockFilesystemDiscovery(mockReaddir, [{ id: 'bad-priority', type: 'task' }]);
-      mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify({ id: 'bad-priority', priority: 'urgent' }));
       mocks.fileSystem.readFile.mockRejectedValue(error);
 
       const report = await fsLintModule.lint({ path: `${testRoot}/.gitgov/` });
 
-      const firstResult = report.results[0];
-      if (firstResult && firstResult.context) {
-        expect(firstResult.context).toBeDefined();
-      }
+      expect(report.results.length).toBeGreaterThan(0);
+      const resultWithContext = report.results.find(r => r.context);
+      expect(resultWithContext).toBeDefined();
+      expect(resultWithContext!.context).toBeDefined();
+      expect(resultWithContext!.context!.field).toBeDefined();
     });
 
-    it('should respect validation flags', async () => {
+    // [EARS-J3]
+    it('[EARS-J3] should respect validation flags', async () => {
       const mockRecord = createMockTaskRecord();
       const recordId = mockRecord.payload.id;
 
       mockFilesystemDiscovery(mockReaddir, [{ id: recordId, type: 'task' }]);
-      mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify(mockRecord));
       mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify(mockRecord));
 
       const report = await fsLintModule.lint({
@@ -2130,8 +2158,14 @@ describe('LintModule + FsLintModule', () => {
         validateFileNaming: false
       });
 
-      // Should only do base validation from recordStore
       expect(report.summary.filesChecked).toBe(1);
+      // Verify that reference and actor validators were NOT invoked
+      const refErrors = report.results.filter(r => r.validator === 'REFERENTIAL_INTEGRITY');
+      const actorErrors = report.results.filter(r => r.validator === 'ACTOR_RESOLUTION');
+      const namingErrors = report.results.filter(r => r.validator === 'FILE_NAMING_CONVENTION');
+      expect(refErrors.length).toBe(0);
+      expect(actorErrors.length).toBe(0);
+      expect(namingErrors.length).toBe(0);
     });
   });
 
@@ -2139,18 +2173,18 @@ describe('LintModule + FsLintModule', () => {
   // Multi-Record Type Validation Tests
   // ==========================================================================
 
-  describe('Multi-Record Type Validation', () => {
+  describe('Bloque K: Multi-Record Type Coverage (EARS-K1 a K8)', () => {
     beforeEach(() => {
       lintModule = new LintModule(mocks.lintModuleDeps);
     });
 
-    it('should validate TaskRecord correctly', async () => {
+    // [EARS-K1]
+    it('[EARS-K1] should validate TaskRecord correctly', async () => {
       const mockTask = createMockTaskRecord();
       const recordId = mockTask.payload.id;
 
       mockFilesystemDiscovery(mockReaddir, [{ id: recordId, type: 'task' }]);
       mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify(mockTask));
-      mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify(mockTask));
 
       const report = await fsLintModule.lint({ path: `${testRoot}/.gitgov/` });
 
@@ -2158,13 +2192,13 @@ describe('LintModule + FsLintModule', () => {
       expect(report.summary.errors).toBe(0);
     });
 
-    it('should validate CycleRecord correctly', async () => {
+    // [EARS-K2]
+    it('[EARS-K2] should validate CycleRecord correctly', async () => {
       const mockCycle = createMockCycleRecord();
       const recordId = mockCycle.payload.id;
 
       mockFilesystemDiscovery(mockReaddir, [{ id: recordId, type: 'cycle' }]);
       mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify(mockCycle));
-      mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify(mockCycle));
 
       const report = await fsLintModule.lint({ path: `${testRoot}/.gitgov/` });
 
@@ -2172,13 +2206,13 @@ describe('LintModule + FsLintModule', () => {
       expect(report.summary.errors).toBe(0);
     });
 
-    it('should validate ExecutionRecord correctly', async () => {
+    // [EARS-K3]
+    it('[EARS-K3] should validate ExecutionRecord correctly', async () => {
       const mockExecution = createMockExecutionRecord();
       const recordId = mockExecution.payload.id;
 
       mockFilesystemDiscovery(mockReaddir, [{ id: recordId, type: 'execution' }]);
       mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify(mockExecution));
-      mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify(mockExecution));
 
       const report = await fsLintModule.lint({ path: `${testRoot}/.gitgov/` });
 
@@ -2186,13 +2220,13 @@ describe('LintModule + FsLintModule', () => {
       expect(report.summary.errors).toBe(0);
     });
 
-    it('should validate ChangelogRecord correctly', async () => {
+    // [EARS-K4]
+    it('[EARS-K4] should validate ChangelogRecord correctly', async () => {
       const mockChangelog = createMockChangelogRecord();
       const recordId = mockChangelog.payload.id;
 
       mockFilesystemDiscovery(mockReaddir, [{ id: recordId, type: 'changelog' }]);
       mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify(mockChangelog));
-      mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify(mockChangelog));
 
       const report = await fsLintModule.lint({ path: `${testRoot}/.gitgov/` });
 
@@ -2200,13 +2234,13 @@ describe('LintModule + FsLintModule', () => {
       expect(report.summary.errors).toBe(0);
     });
 
-    it('should validate FeedbackRecord correctly', async () => {
+    // [EARS-K5]
+    it('[EARS-K5] should validate FeedbackRecord correctly', async () => {
       const mockFeedback = createMockFeedbackRecord();
       const recordId = mockFeedback.payload.id;
 
       mockFilesystemDiscovery(mockReaddir, [{ id: recordId, type: 'feedback' }]);
       mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify(mockFeedback));
-      mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify(mockFeedback));
 
       const report = await fsLintModule.lint({ path: `${testRoot}/.gitgov/` });
 
@@ -2214,13 +2248,13 @@ describe('LintModule + FsLintModule', () => {
       expect(report.summary.errors).toBe(0);
     });
 
-    it('should validate ActorRecord correctly', async () => {
+    // [EARS-K6]
+    it('[EARS-K6] should validate ActorRecord correctly', async () => {
       const mockActor = createMockActorRecord();
       const recordId = mockActor.payload.id;
 
       mockFilesystemDiscovery(mockReaddir, [{ id: recordId, type: 'actor' }]);
       mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify(mockActor));
-      mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify(mockActor));
 
       const report = await fsLintModule.lint({
         path: `${testRoot}/.gitgov/`,
@@ -2231,13 +2265,13 @@ describe('LintModule + FsLintModule', () => {
       expect(report.summary.errors).toBe(0);
     });
 
-    it('should validate AgentRecord correctly', async () => {
+    // [EARS-K7]
+    it('[EARS-K7] should validate AgentRecord correctly', async () => {
       const mockAgent = createMockAgentRecord();
       const recordId = mockAgent.payload.id;
 
       mockFilesystemDiscovery(mockReaddir, [{ id: recordId, type: 'agent' }]);
       mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify(mockAgent));
-      mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify(mockAgent));
 
       const report = await fsLintModule.lint({
         path: `${testRoot}/.gitgov/`,
@@ -2248,7 +2282,8 @@ describe('LintModule + FsLintModule', () => {
       expect(report.summary.errors).toBe(0);
     });
 
-    it('should validate mixed record types in single lint run', async () => {
+    // [EARS-K8]
+    it('[EARS-K8] should validate mixed record types in single lint run', async () => {
       const mockTask = createMockTaskRecord();
       const mockCycle = createMockCycleRecord();
       const mockExecution = createMockExecutionRecord();

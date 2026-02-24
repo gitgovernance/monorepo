@@ -154,6 +154,13 @@ export class FsLintModule implements IFsLintModule {
   }
 
   /**
+   * Delegates to LintModule.lintRecordReferences() for prefix validation.
+   */
+  lintRecordReferences(record: GitGovRecord, context: LintRecordContext): LintResult[] {
+    return this.lintModule.lintRecordReferences(record, context);
+  }
+
+  /**
    * Delegates to LintModule.fixRecord() for pure fix.
    */
   fixRecord(record: GitGovRecord, results: LintResult[], options: FixRecordOptions): GitGovRecord {
@@ -443,6 +450,16 @@ export class FsLintModule implements IFsLintModule {
       if (options.validateFileNaming) {
         const namingResults = this.validateFileNaming(record, recordId, filePath, entityType);
         results.push(...namingResults);
+      }
+
+      // [EARS-D2] Reference prefix validation (pure, no stores needed)
+      if (options.validateReferences) {
+        const refResults = this.lintModule.lintRecordReferences(record, {
+          recordId,
+          entityType,
+          filePath
+        });
+        results.push(...refResults);
       }
 
     } catch (error) {

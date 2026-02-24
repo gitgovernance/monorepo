@@ -53,6 +53,19 @@ export interface ILintModule {
   ): Promise<LintReport>;
 
   /**
+   * Validates typed references by prefix (pure, no I/O).
+   * Returns warnings for unknown prefixes, errors for empty values.
+   *
+   * @param record - The GitGovRecord object to validate
+   * @param context - Context with recordId and entityType
+   * @returns Array of lint results for reference issues
+   */
+  lintRecordReferences(
+    record: GitGovRecord,
+    context: LintRecordContext
+  ): LintResult[];
+
+  /**
    * Applies fixes to a record and returns the fixed version.
    * Does NOT write to disk - returns modified object.
    *
