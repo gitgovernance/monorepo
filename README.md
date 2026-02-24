@@ -69,7 +69,7 @@ Agent:  "Sprint is 70% done, 3 tasks active, 1 blocked."
 
 | Package | License | Purpose | Documentation |
 |:--------|:--------|:--------|:--------------|
-| **Protocol** | Apache 2.0 | The **Standard** -- RFCs, schemas, and normative specifications. | [`protocol/`](packages/private/packages/blueprints/03_products/protocol/unified/) |
+| **Protocol** | Apache 2.0 | The **Standard** -- RFCs, schemas, and normative specifications. | [`protocol/`](packages/private/packages/blueprints/02_protocol/) |
 | **`@gitgov/core`** | MPL-2.0 | The **Engine** -- Type-safe SDK for business logic, records, validation, storage, adapters. | [`README.md`](packages/core/README.md) |
 | **`@gitgov/cli`** | Apache 2.0 | The **Tool** -- Command-line interface for humans and AI agents. | [`README.md`](packages/cli/README.md) |
 | **`@gitgov/mcp-server`** | Apache 2.0 | The **Bridge** -- MCP server exposing 43 tools for AI agents (Claude Code, Cursor, Windsurf). | [`README.md`](packages/mcp-server/README.md) |

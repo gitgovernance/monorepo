@@ -176,8 +176,7 @@ export type ProjectionContext = {
  *
  * Abstracts where IndexData is persisted. Implementations:
  * - FsRecordProjection: writes to .gitgov/index.json (CLI)
- * - MemoryRecordProjection: in-memory Map (tests)
- * - PrismaRecordProjection: stores as JSON blob via Prisma-compatible client (SaaS)
+ * - PrismaRecordProjection: decomposes into 6 queryable Prisma tables (SaaS)
  */
 export interface IRecordProjection {
   persist(data: IndexData, context: ProjectionContext): Promise<void>;

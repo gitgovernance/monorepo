@@ -1,8 +1,10 @@
-import React from 'react';
-import { render } from 'ink-testing-library';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+
+// ink-testing-library@4 is ESM-only — lazy-import when tests are unskipped
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+let render: typeof import('ink-testing-library')['render'];
 
 /**
  * E2E Tests for Dashboard TUI - REAL Interactive Testing

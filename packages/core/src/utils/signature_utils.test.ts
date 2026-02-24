@@ -1,7 +1,7 @@
 /**
  * Tests for Signature Extraction Utilities
  * 
- * Covers EARS-49 to EARS-69: Generic signature extraction helpers with graceful degradation
+ * Covers EARS-L1 to EARS-Q2: Generic signature extraction helpers with graceful degradation
  */
 import type { GitGovTaskRecord } from '../record_types';
 import type { Signature } from '../record_types/embedded.types';
@@ -40,8 +40,8 @@ async function createValidTaskRecord(keyIds: string[]): Promise<GitGovTaskRecord
   return await createEmbeddedMetadataRecord(taskPayload, { signatures });
 }
 
-describe('extractAuthor', () => {
-  it('[EARS-49] should extract author from first signature with timestamp', async () => {
+describe('4.2. extractAuthor (EARS-L1 a L4)', () => {
+  it('[EARS-L1] should extract author from first signature with timestamp', async () => {
     const record = await createValidTaskRecord(['human:camilo', 'agent:architect']);
 
     const author = extractAuthor(record);
@@ -51,7 +51,7 @@ describe('extractAuthor', () => {
     expect(author?.timestamp).toBeGreaterThan(0);
   });
 
-  it('[EARS-50] should return undefined for record without signatures', async () => {
+  it('[EARS-L2] should return undefined for record without signatures', async () => {
     const validRecord = await createValidTaskRecord(['human:test']);
 
     const corruptedRecord = {
@@ -67,7 +67,7 @@ describe('extractAuthor', () => {
     expect(author).toBeUndefined();
   });
 
-  it('[EARS-51] should handle single signature record', async () => {
+  it('[EARS-L3] should handle single signature record', async () => {
     const record = await createValidTaskRecord(['human:alice']);
 
     const author = extractAuthor(record);
@@ -77,7 +77,7 @@ describe('extractAuthor', () => {
     expect(author?.timestamp).toBeGreaterThan(0);
   });
 
-  it('[EARS-52] should return first signature even with multiple signatures', async () => {
+  it('[EARS-L4] should return first signature even with multiple signatures', async () => {
     const record = await createValidTaskRecord(['human:first', 'human:second', 'human:third']);
 
     const author = extractAuthor(record);
@@ -86,8 +86,8 @@ describe('extractAuthor', () => {
   });
 });
 
-describe('extractLastModifier', () => {
-  it('[EARS-53] should extract last modifier from last signature with timestamp', async () => {
+describe('4.2. extractLastModifier (EARS-M1 a M4)', () => {
+  it('[EARS-M1] should extract last modifier from last signature with timestamp', async () => {
     const record = await createValidTaskRecord(['human:camilo', 'agent:architect']);
 
     const lastModifier = extractLastModifier(record);
@@ -97,7 +97,7 @@ describe('extractLastModifier', () => {
     expect(lastModifier?.timestamp).toBeGreaterThan(0);
   });
 
-  it('[EARS-54] should return undefined for record without signatures', async () => {
+  it('[EARS-M2] should return undefined for record without signatures', async () => {
     const validRecord = await createValidTaskRecord(['human:test']);
 
     const corruptedRecord = {
@@ -113,7 +113,7 @@ describe('extractLastModifier', () => {
     expect(lastModifier).toBeUndefined();
   });
 
-  it('[EARS-55] should return same as author if only one signature', async () => {
+  it('[EARS-M3] should return same as author if only one signature', async () => {
     const record = await createValidTaskRecord(['human:alice']);
 
     const lastModifier = extractLastModifier(record);
@@ -123,7 +123,7 @@ describe('extractLastModifier', () => {
     expect(lastModifier?.actorId).toBe('human:alice');
   });
 
-  it('[EARS-56] should return last signature with multiple modifiers', async () => {
+  it('[EARS-M4] should return last signature with multiple modifiers', async () => {
     const record = await createValidTaskRecord(['human:first', 'human:second', 'human:third']);
 
     const lastModifier = extractLastModifier(record);
@@ -132,8 +132,8 @@ describe('extractLastModifier', () => {
   });
 });
 
-describe('extractContributors', () => {
-  it('[EARS-57] should extract unique contributor keyIds', async () => {
+describe('4.2. extractContributors (EARS-N1 a N4)', () => {
+  it('[EARS-N1] should extract unique contributor keyIds', async () => {
     const record = await createValidTaskRecord(['human:alice', 'human:bob', 'human:charlie']);
 
     const contributors = extractContributors(record);
@@ -144,7 +144,7 @@ describe('extractContributors', () => {
     expect(contributors).toContain('human:charlie');
   });
 
-  it('[EARS-58] should deduplicate repeated contributors', async () => {
+  it('[EARS-N2] should deduplicate repeated contributors', async () => {
     const record = await createValidTaskRecord(['human:alice', 'human:bob', 'human:alice', 'human:bob']);
 
     const contributors = extractContributors(record);
@@ -154,7 +154,7 @@ describe('extractContributors', () => {
     expect(contributors).toContain('human:bob');
   });
 
-  it('[EARS-59] should return empty array for no signatures', async () => {
+  it('[EARS-N3] should return empty array for no signatures', async () => {
     const validRecord = await createValidTaskRecord(['human:test']);
 
     const corruptedRecord = {
@@ -170,7 +170,7 @@ describe('extractContributors', () => {
     expect(contributors).toEqual([]);
   });
 
-  it('[EARS-60] should handle single contributor', async () => {
+  it('[EARS-N4] should handle single contributor', async () => {
     const record = await createValidTaskRecord(['human:solo']);
 
     const contributors = extractContributors(record);
@@ -179,8 +179,8 @@ describe('extractContributors', () => {
   });
 });
 
-describe('extractLastSignatureTimestamp', () => {
-  it('[EARS-61] should return timestamp of last signature', async () => {
+describe('4.2. extractLastSignatureTimestamp (EARS-O1 a O3)', () => {
+  it('[EARS-O1] should return timestamp of last signature', async () => {
     const record = await createValidTaskRecord(['human:alice', 'human:bob']);
 
     const timestamp = extractLastSignatureTimestamp(record);
@@ -188,7 +188,7 @@ describe('extractLastSignatureTimestamp', () => {
     expect(timestamp).toBeGreaterThan(0);
   });
 
-  it('[EARS-62] should return undefined for no signatures', async () => {
+  it('[EARS-O2] should return undefined for no signatures', async () => {
     const validRecord = await createValidTaskRecord(['human:test']);
 
     const corruptedRecord = {
@@ -204,7 +204,7 @@ describe('extractLastSignatureTimestamp', () => {
     expect(timestamp).toBeUndefined();
   });
 
-  it('[EARS-63] should return same timestamp as author for single signature', async () => {
+  it('[EARS-O3] should return same timestamp as author for single signature', async () => {
     const record = await createValidTaskRecord(['human:alice']);
 
     const timestamp = extractLastSignatureTimestamp(record);
@@ -214,8 +214,8 @@ describe('extractLastSignatureTimestamp', () => {
   });
 });
 
-describe('getSignatureCount', () => {
-  it('[EARS-64] should return correct signature count', async () => {
+describe('4.2. getSignatureCount (EARS-P1 a P4)', () => {
+  it('[EARS-P1] should return correct signature count', async () => {
     const record = await createValidTaskRecord(['human:a', 'human:b', 'human:c']);
 
     const count = getSignatureCount(record);
@@ -223,7 +223,7 @@ describe('getSignatureCount', () => {
     expect(count).toBe(3);
   });
 
-  it('[EARS-65] should return 0 for no signatures', async () => {
+  it('[EARS-P2] should return 0 for no signatures', async () => {
     const validRecord = await createValidTaskRecord(['human:test']);
 
     const corruptedRecord = {
@@ -239,7 +239,7 @@ describe('getSignatureCount', () => {
     expect(count).toBe(0);
   });
 
-  it('[EARS-66] should return 1 for single signature', async () => {
+  it('[EARS-P3] should return 1 for single signature', async () => {
     const record = await createValidTaskRecord(['human:solo']);
 
     const count = getSignatureCount(record);
@@ -247,7 +247,7 @@ describe('getSignatureCount', () => {
     expect(count).toBe(1);
   });
 
-  it('[EARS-67] should count all signatures including duplicates', async () => {
+  it('[EARS-P4] should count all signatures including duplicates', async () => {
     const record = await createValidTaskRecord(['human:alice', 'human:alice', 'human:alice']);
 
     const count = getSignatureCount(record);
@@ -256,8 +256,8 @@ describe('getSignatureCount', () => {
   });
 });
 
-describe('Integration: All functions together', () => {
-  it('[EARS-68] should work together for typical task workflow', async () => {
+describe('4.2. Integration (EARS-Q1 a Q2)', () => {
+  it('[EARS-Q1] should work together for typical task workflow', async () => {
     const record = await createValidTaskRecord(['human:product-owner', 'human:developer', 'agent:code-reviewer', 'human:product-owner']);
 
     const author = extractAuthor(record);
@@ -281,7 +281,7 @@ describe('Integration: All functions together', () => {
     expect(signatureCount).toBe(4);
   });
 
-  it('[EARS-69] should handle corrupted/legacy records gracefully', async () => {
+  it('[EARS-Q2] should handle corrupted/legacy records gracefully', async () => {
     const validRecord = await createValidTaskRecord(['human:test']);
 
     const corruptedRecord = {

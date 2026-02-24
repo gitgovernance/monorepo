@@ -133,7 +133,7 @@ export class DependencyInjectionService {
     this.stores = {
       tasks: new FsRecordStore<GitGovTaskRecord>({ basePath: path.join(projectRoot, '.gitgov', 'tasks') }),
       cycles: new FsRecordStore<GitGovCycleRecord>({ basePath: path.join(projectRoot, '.gitgov', 'cycles') }),
-      feedbacks: new FsRecordStore<GitGovFeedbackRecord>({ basePath: path.join(projectRoot, '.gitgov', 'feedback') }),
+      feedbacks: new FsRecordStore<GitGovFeedbackRecord>({ basePath: path.join(projectRoot, '.gitgov', 'feedbacks') }),
       executions: new FsRecordStore<GitGovExecutionRecord>({ basePath: path.join(projectRoot, '.gitgov', 'executions') }),
       changelogs: new FsRecordStore<GitGovChangelogRecord>({ basePath: path.join(projectRoot, '.gitgov', 'changelogs') }),
       actors: new FsRecordStore<GitGovActorRecord>({ basePath: path.join(projectRoot, '.gitgov', 'actors'), idEncoder: DEFAULT_ID_ENCODER }),
