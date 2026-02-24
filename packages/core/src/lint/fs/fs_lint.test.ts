@@ -305,8 +305,13 @@ describe('FsLintModule', () => {
         validateFileNaming: true
       });
 
-      expect(report).toBeDefined();
-      expect(report.summary.filesChecked).toBe(1);
+      // When filename matches entity ID, no FILE_NAMING_CONVENTION errors should appear
+      const filenameErrors = report.results.filter(
+        (r: LintResult) =>
+          r.validator === 'FILE_NAMING_CONVENTION' &&
+          r.message.includes('does not match entity ID')
+      );
+      expect(filenameErrors.length).toBe(0);
     });
   });
 
@@ -382,14 +387,24 @@ describe('FsLintModule', () => {
 
       mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify(invalidRecord));
 
+      const failFilePath = `${testRoot}/.gitgov/tasks/fail-fix.json`;
+
       const fixReport = await fsLintModule.fix(lintReport, {
         createBackups: true,
         keyId: 'system:migrator',
         privateKey: 'test-key'
       });
 
-      expect(fixReport.summary.failed).toBeGreaterThan(0);
+      // Fix should be recorded as failed
+      expect(fixReport.summary.failed).toBe(1);
+      expect(fixReport.summary.fixed).toBe(0);
+
+      // Three writes: backup creation, failed fix attempt, backup restore
       expect(mocks.fileSystem.writeFile).toHaveBeenCalledTimes(3);
+
+      // The third writeFile call must restore to the original file path (not the backup path)
+      const thirdWriteCall = mocks.fileSystem.writeFile.mock.calls[2];
+      expect(thirdWriteCall?.[0]).toBe(failFilePath);
     });
   });
 
@@ -478,9 +493,11 @@ describe('FsLintModule', () => {
         r.message.includes('#/oneOf/')
       );
 
-      if (additionalPropsErrors.length > 0) {
-        expect(oneOfErrors.length).toBe(0);
-      }
+      // The record has an extra property 'lala', so additional property errors must be present
+      expect(additionalPropsErrors.length).toBeGreaterThan(0);
+
+      // Redundant oneOf/if-then-else errors must be filtered out when additionalProperties errors exist
+      expect(oneOfErrors.length).toBe(0);
     });
   });
 });

@@ -122,27 +122,18 @@ describe('EmbeddedMetadata Schema Integration Tests (EARS 12-60)', () => {
       expect(result.errors.some(e => e.message.includes('type'))).toBe(true);
     });
 
-    it('[EARS-19] should accept all 8 valid header.type enum values', () => {
+    it('[EARS-19] should accept all 7 valid header.type enum values', () => {
       // This test verifies that all enum values are accepted in header.type
       // Full payload validation is tested in EARS-44 through EARS-50
-      const validTypes = ['actor', 'agent', 'task', 'execution', 'changelog', 'feedback', 'cycle', 'custom'];
+      const validTypes = ['actor', 'agent', 'task', 'execution', 'changelog', 'feedback', 'cycle'];
 
       for (const type of validTypes) {
         // Create complete EmbeddedMetadata records with proper payloads for each type
-        const valid = type === 'actor' ? createValidEmbeddedMetadata() :
-          type === 'custom' ? {
-            header: {
-              ...createValidHeader(),
-              type: 'custom',
-              schemaUrl: 'https://example.com/schema.json',
-              schemaChecksum: 'a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456'
-            },
-            payload: { id: 'test', data: 'anything' }
-          } : createValidEmbeddedMetadata();
+        const valid = createValidEmbeddedMetadata();
 
-        // For non-actor/non-custom types, just update the header.type to test enum acceptance
+        // For non-actor types, just update the header.type to test enum acceptance
         // (The oneOf will fail but that's not what we're testing here - we're testing enum)
-        if (!['actor', 'custom'].includes(type)) {
+        if (type !== 'actor') {
           valid.header.type = type;
         }
 
@@ -260,73 +251,72 @@ describe('EmbeddedMetadata Schema Integration Tests (EARS 12-60)', () => {
     });
   });
 
-  describe('Header Conditional Validation (EARS 28-31)', () => {
-    it('[EARS-28] should reject missing schemaUrl when header.type is "custom"', () => {
+  describe('Header Conditional Validation (EARS 28-31) — custom type removed', () => {
+    it('[EARS-28] should reject "custom" as an invalid header.type', () => {
       const invalid = createValidEmbeddedMetadata();
       invalid.header.type = 'custom';
-      // schemaUrl missing
 
       const result = validateEmbeddedMetadataDetailed(invalid);
       expect(result.isValid).toBe(false);
-      expect(result.errors.some(e => e.message.includes('schemaUrl'))).toBe(true);
+      expect(result.errors.length).toBeGreaterThan(0);
     });
 
-    it('[EARS-29] should reject missing schemaChecksum when header.type is "custom"', () => {
+    it('[EARS-29] should reject additional properties like schemaUrl in header', () => {
       const invalid: Record<string, unknown> = {
         header: {
           version: '1.0',
-          type: 'custom',
+          type: 'actor',
           payloadChecksum: 'a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456',
           signatures: [createValidSignature()],
           schemaUrl: 'https://example.com/schema.json'
-          // schemaChecksum missing
         },
-        payload: { id: 'test' }
+        payload: {
+          id: 'human:test-user',
+          type: 'human',
+          displayName: 'Test User',
+          publicKey: 'abcdefghijklmnopqrstuvwxyz0123456789ABCDEF==',
+          roles: ['developer:backend']
+        }
       };
 
       const result = validateEmbeddedMetadataDetailed(invalid);
       expect(result.isValid).toBe(false);
-      expect(result.errors.some(e => e.message.includes('schemaChecksum'))).toBe(true);
+      expect(result.errors.some(e => e.message.includes('additional properties'))).toBe(true);
     });
 
-    it('[EARS-30] should accept header.type "custom" with schemaUrl and schemaChecksum', () => {
-      const valid: Record<string, unknown> = {
+    it('[EARS-30] should reject additional properties like schemaChecksum in header', () => {
+      const invalid: Record<string, unknown> = {
         header: {
           version: '1.0',
-          type: 'custom',
+          type: 'actor',
           payloadChecksum: 'a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456',
           signatures: [createValidSignature()],
-          schemaUrl: 'https://example.com/schema.json',
           schemaChecksum: 'a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456'
         },
-        payload: { id: 'test' }
+        payload: {
+          id: 'human:test-user',
+          type: 'human',
+          displayName: 'Test User',
+          publicKey: 'abcdefghijklmnopqrstuvwxyz0123456789ABCDEF==',
+          roles: ['developer:backend']
+        }
       };
+
+      const result = validateEmbeddedMetadataDetailed(invalid);
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e => e.message.includes('additional properties'))).toBe(true);
+    });
+
+    it('[EARS-31] should accept valid header without schemaUrl or schemaChecksum', () => {
+      const valid = createValidEmbeddedMetadata();
 
       const result = validateEmbeddedMetadataDetailed(valid);
       expect(result.isValid).toBe(true);
       expect(result.errors).toEqual([]);
     });
-
-    it('[EARS-31] should reject invalid header.schemaChecksum pattern', () => {
-      const invalid: Record<string, unknown> = {
-        header: {
-          version: '1.0',
-          type: 'custom',
-          payloadChecksum: 'a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456',
-          signatures: [createValidSignature()],
-          schemaUrl: 'https://example.com/schema.json',
-          schemaChecksum: 'invalid-checksum'
-        },
-        payload: { id: 'test' }
-      };
-
-      const result = validateEmbeddedMetadataDetailed(invalid);
-      expect(result.isValid).toBe(false);
-      expect(result.errors.some(e => e.message.includes('schemaChecksum') || e.field.includes('schemaChecksum'))).toBe(true);
-    });
   });
 
-  describe('Signatures Array Item Validation (EARS 32-53)', () => {
+  describe('Signatures Array Item Validation (EARS 32-52)', () => {
     it('[EARS-32] should reject signature item missing required field: keyId', () => {
       const invalid: Record<string, unknown> = {
         header: {
@@ -599,7 +589,7 @@ describe('EmbeddedMetadata Schema Integration Tests (EARS 12-60)', () => {
       expect(result.errors.some(e => e.message.includes('role') || e.field.includes('role'))).toBe(true);
     });
 
-    it('[EARS-46] should accept signature.role with exactly 1 character (minLength boundary)', () => {
+    it('[EARS-46] should accept signature.role with exactly 1 character', () => {
       const valid = createValidEmbeddedMetadata();
       if (valid.header.signatures[0]) {
         valid.header.signatures[0].role = 'a';  // Exactly minLength: 1
@@ -643,7 +633,7 @@ describe('EmbeddedMetadata Schema Integration Tests (EARS 12-60)', () => {
       expect(result.errors.some(e => e.message.includes('signature') || e.field.includes('signature'))).toBe(true);
     });
 
-    it('[EARS-50] should accept signature.signature with valid Ed25519 base64 pattern (88 chars)', () => {
+    it('[EARS-50] should accept signature.signature with valid Ed25519 base64 pattern', () => {
       const valid = createValidEmbeddedMetadata();
       // createValidSignature() already uses a valid 88-char signature, so we just verify it passes
 

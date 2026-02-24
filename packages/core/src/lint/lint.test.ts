@@ -69,6 +69,18 @@ import { generateChangelogId } from '../utils/id_generator';
 import type { Signature } from '../record_types/embedded.types';
 import { readdir } from 'fs/promises';
 
+// Mock record_factories: expose loadTaskRecord as a jest.fn() so tests can override it
+// (e.g. EARS-D2 needs to bypass schema validation to test temporal validation logic).
+// All other exports delegate to the real implementation by default.
+jest.mock('../record_factories', () => {
+  const actual = jest.requireActual('../record_factories') as Record<string, unknown>;
+  const realLoadTaskRecord = actual['loadTaskRecord'] as (...a: unknown[]) => unknown;
+  return {
+    ...actual,
+    loadTaskRecord: jest.fn((...args: unknown[]) => realLoadTaskRecord(...args))
+  };
+});
+
 // Mock signPayload to avoid real Ed25519 crypto operations in tests
 jest.mock('../crypto/signatures', () => ({
   ...jest.requireActual('../crypto/signatures'),
@@ -558,7 +570,7 @@ describe('LintModule + FsLintModule', () => {
     });
 
     // [EARS-B3]
-    it('[EARS-B3] should accumulate all errors by default', async () => {
+    it('[EARS-B3] should accumulate all errors from stores by default', async () => {
       // Mock filesystem discovery: return three task files
       mockReaddir.mockImplementation((async (dirPath: unknown) => {
         const pathStr = typeof dirPath === 'string' ? dirPath : String(dirPath);
@@ -582,7 +594,7 @@ describe('LintModule + FsLintModule', () => {
     });
 
     // [EARS-B4]
-    it('[EARS-B4] should stop at first error in failFast mode', async () => {
+    it('[EARS-B4] should stop at first error from stores in failFast mode', async () => {
       // Mock filesystem discovery: return three task files
       mockReaddir.mockImplementation((async (dirPath: unknown) => {
         const pathStr = typeof dirPath === 'string' ? dirPath : String(dirPath);
@@ -814,27 +826,40 @@ describe('LintModule + FsLintModule', () => {
     });
 
     // [EARS-D2]
-    it('[EARS-D2] should report error for invalid timestamps', async () => {
-      // Note: TaskRecord doesn't have timestamp fields, so temporal validation
-      // would apply to records that do have them (like ExecutionRecord with executionDate).
-      // For TaskRecord, we test that validation passes when conventions are correct.
+    it('[EARS-D2] should report error for invalid timestamps', () => {
+      // Current record schemas use additionalProperties:false and do not include
+      // createdAt/updatedAt fields, so injecting timestamps would fail schema validation
+      // before validateTimestamps() runs.
+      // Solution: override loadTaskRecord for this one call (via the jest.fn mock declared
+      // at the top of this file) to be a no-op, letting validateTimestamps() execute.
+      const mockedModule = require('../record_factories') as { loadTaskRecord: jest.Mock };
+      mockedModule.loadTaskRecord.mockImplementationOnce(() => {
+        // no-op: bypass schema validation so validateTimestamps() can run
+      });
+
       const mockRecord = createMockTaskRecord();
       const recordId = mockRecord.payload.id;
 
-      mockFilesystemDiscovery(mockReaddir, [{ id: recordId, type: 'task' }]);
-      mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify(mockRecord));
-      mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify(mockRecord));
+      // Build a record with createdAt > updatedAt (invalid ordering)
+      const recordWithBadTimestamps = {
+        header: mockRecord.header,
+        payload: {
+          ...mockRecord.payload,
+          createdAt: 2000000000,   // later than updatedAt — invalid ordering
+          updatedAt: 1000000000    // earlier than createdAt
+        }
+      } as unknown as import('../record_types').GitGovRecord;
 
-      const report = await fsLintModule.lint({
-        path: `${testRoot}/.gitgov/`,
-        validateFileNaming: true
+      const results = lintModule.lintRecord(recordWithBadTimestamps, {
+        recordId,
+        entityType: 'task',
+        filePath: `${testRoot}/.gitgov/tasks/${recordId}.json`
       });
 
-      // TaskRecord without timestamp fields should not have temporal errors
-      const temporalErrors = report.results.filter(
-        (r: LintResult) => r.validator === 'TEMPORAL_CONSISTENCY'
-      );
-      expect(temporalErrors.length).toBe(0);
+      const temporalErrors = results.filter(r => r.validator === 'TEMPORAL_CONSISTENCY');
+      expect(temporalErrors.length).toBeGreaterThan(0);
+      expect(temporalErrors[0]?.level).toBe('error');
+      expect(temporalErrors[0]?.fixable).toBe(false);
     });
   });
 
@@ -849,138 +874,228 @@ describe('LintModule + FsLintModule', () => {
 
     // [EARS-E1]
     it('[EARS-E1] should validate taskId reference exists', async () => {
-      const mockExecution = createMockTaskRecord({
-        title: 'Execution Test Task'
+      // Use LintModule (pure) directly so validateReferences actually runs via lint()
+      // Create an execution record whose taskId does NOT exist in the tasks store
+      const mockExecution = createMockExecutionRecord();
+      const executionId = mockExecution.payload.id;
+      const executionStore = createMockStore();
+      executionStore.list.mockResolvedValue([executionId]);
+      executionStore.get.mockResolvedValue(mockExecution);
+
+      // Tasks store is empty — referenced taskId will not be found
+      const tasksStore = createMockStore();
+      tasksStore.list.mockResolvedValue([]);
+      tasksStore.get.mockResolvedValue(null);
+
+      const pureModule = new LintModule({
+        stores: { executions: executionStore, tasks: tasksStore } as unknown as import('./lint.types').RecordStores
       });
-      const recordId = mockExecution.payload.id;
 
-      // Mock filesystem discovery instead of recordStore.list
-      mockFilesystemDiscovery(mockReaddir, [{ id: recordId, type: 'task' }]);
-      mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify(mockExecution));
+      const report = await pureModule.lint({ validateReferences: true });
 
-      const report = await fsLintModule.lint({
-        path: `${testRoot}/.gitgov/`,
-        validateReferences: true
-      });
-
-      expect(report).toBeDefined();
+      // The execution record was checked
+      expect(report.summary.filesChecked).toBe(1);
+      // A REFERENTIAL_INTEGRITY warning should appear because the referenced taskId doesn't exist
+      const refErrors = report.results.filter(r => r.validator === 'REFERENTIAL_INTEGRITY');
+      expect(refErrors.length).toBeGreaterThan(0);
+      expect(refErrors[0]?.level).toBe('warning');
+      expect(refErrors[0]?.entity.type).toBe('execution');
     });
 
     // [EARS-E2]
     it('[EARS-E2] should validate typed references by prefix', async () => {
-      const mockTask = createMockTaskRecord({
-        references: ['task:123', 'file:README.md', 'url:https://example.com']
+      // Sub-case 1: valid prefixed references → no warnings or errors from prefix validation
+      const validTask = createMockTaskRecord({
+        references: ['task:123', 'file:README.md', 'url:https://example.com', 'commit:abc123', 'pr:42', 'cycle:456', 'adapter:my-adapter']
       });
-      const recordId = mockTask.payload.id;
+      const validRecordId = validTask.payload.id;
+      const validTaskStore = createMockStore();
+      validTaskStore.list.mockResolvedValue([validRecordId]);
+      validTaskStore.get.mockResolvedValue(validTask);
 
-      mockFilesystemDiscovery(mockReaddir, [{ id: recordId, type: 'task' }]);
-      mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify(mockTask));
-      mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify(mockTask));
+      // Use pure LintModule directly with a store that returns the task
+      const pureModule = new LintModule({ stores: { tasks: validTaskStore as never } });
+      const validReport = await pureModule.lint({ validateReferences: true });
+      const prefixFindings = validReport.results.filter(
+        (r: LintResult) => r.validator === 'REFERENTIAL_INTEGRITY' && r.message.includes('unknown prefix')
+      );
+      expect(prefixFindings.length).toBe(0);
 
-      const report = await fsLintModule.lint({
-        path: `${testRoot}/.gitgov/`,
-        validateReferences: true
+      // Sub-case 2: reference with unknown prefix → warning
+      const unknownPrefixTask = createMockTaskRecord({
+        references: ['unknown:some-value', 'gibberish']
       });
+      const unknownRecordId = unknownPrefixTask.payload.id;
+      const unknownTaskStore = createMockStore();
+      unknownTaskStore.list.mockResolvedValue([unknownRecordId]);
+      unknownTaskStore.get.mockResolvedValue(unknownPrefixTask);
 
-      // Valid typed references should not generate errors
-      expect(report).toBeDefined();
+      const unknownModule = new LintModule({ stores: { tasks: unknownTaskStore as never } });
+      const unknownReport = await unknownModule.lint({ validateReferences: true });
+      const unknownPrefixWarnings = unknownReport.results.filter(
+        (r: LintResult) => r.validator === 'REFERENTIAL_INTEGRITY' && r.level === 'warning' && r.message.includes('unknown prefix')
+      );
+      expect(unknownPrefixWarnings.length).toBe(2);
+
+      // Sub-case 3: known prefix with empty value after colon → error
+      const emptyValueTask = createMockTaskRecord({
+        references: ['file:']
+      });
+      const emptyRecordId = emptyValueTask.payload.id;
+      const emptyTaskStore = createMockStore();
+      emptyTaskStore.list.mockResolvedValue([emptyRecordId]);
+      emptyTaskStore.get.mockResolvedValue(emptyValueTask);
+
+      const emptyModule = new LintModule({ stores: { tasks: emptyTaskStore as never } });
+      const emptyReport = await emptyModule.lint({ validateReferences: true });
+      const emptyValueErrors = emptyReport.results.filter(
+        (r: LintResult) => r.validator === 'REFERENTIAL_INTEGRITY' && r.level === 'error' && r.message.includes('no value after it')
+      );
+      expect(emptyValueErrors.length).toBe(1);
     });
 
     // [EARS-E3]
     it('[EARS-E3] should validate actorIds exist in actors dir', async () => {
+      // Use LintModule (pure) directly so validateActors actually runs via lint()
+      // The task record signature has keyId 'human:developer' — actors store returns null
       const mockRecord = createMockTaskRecord();
       const recordId = mockRecord.payload.id;
 
-      mockFilesystemDiscovery(mockReaddir, [{ id: recordId, type: 'task' }]);
-      mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify(mockRecord));
-      mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify(mockRecord));
+      const tasksStore = createMockStore();
+      tasksStore.list.mockResolvedValue([recordId]);
+      tasksStore.get.mockResolvedValue(mockRecord);
 
-      const report = await fsLintModule.lint({
-        path: `${testRoot}/.gitgov/`,
-        validateActors: true
+      // Actors store returns null for all lookups — actor not found
+      const actorsStore = createMockStore();
+      actorsStore.get.mockResolvedValue(null);
+
+      const pureModule = new LintModule({
+        stores: { tasks: tasksStore, actors: actorsStore } as unknown as import('./lint.types').RecordStores
       });
 
-      expect(report).toBeDefined();
+      const report = await pureModule.lint({ validateActors: true });
+
+      // Record was processed
+      expect(report.summary.filesChecked).toBe(1);
+      // ACTOR_RESOLUTION warning should appear because the keyId in the signature is not found
+      const actorWarnings = report.results.filter(r => r.validator === 'ACTOR_RESOLUTION');
+      expect(actorWarnings.length).toBeGreaterThan(0);
+      expect(actorWarnings[0]?.level).toBe('warning');
+      expect(actorWarnings[0]?.entity.type).toBe('task');
     });
 
     // [EARS-E4]
     it('[EARS-E4] should warn about orphaned references', async () => {
-      const mockTask = createMockTaskRecord({
-        references: ['task:nonexistent']
-      });
-      const recordId = mockTask.payload.id;
+      // Use LintModule (pure) directly with an ExecutionRecord whose taskId doesn't exist
+      // This exercises the REFERENTIAL_INTEGRITY validator for orphaned taskId references
+      const orphanExecution = createMockExecutionRecord();
+      const executionId = orphanExecution.payload.id;
 
-      mockFilesystemDiscovery(mockReaddir, [{ id: recordId, type: 'task' }]);
-      mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify(mockTask));
-      mocks.fileSystem.readFile
-        .mockResolvedValueOnce(mockTask)
-        .mockResolvedValueOnce(null);  // Referenced task doesn't exist
+      const executionStore = createMockStore();
+      executionStore.list.mockResolvedValue([executionId]);
+      executionStore.get.mockResolvedValue(orphanExecution);
 
-      const report = await fsLintModule.lint({
-        path: `${testRoot}/.gitgov/`,
-        validateReferences: true
+      // Tasks store is empty — the referenced taskId is orphaned
+      const tasksStore = createMockStore();
+      tasksStore.list.mockResolvedValue([]);
+      tasksStore.get.mockResolvedValue(null);
+
+      const pureModule = new LintModule({
+        stores: { executions: executionStore, tasks: tasksStore } as unknown as import('./lint.types').RecordStores
       });
+
+      const report = await pureModule.lint({ validateReferences: true });
 
       const refErrors = report.results.filter(
         (r: LintResult) => r.validator === 'REFERENTIAL_INTEGRITY'
       );
-      // May not have errors if reference validation is not enabled
-      expect(refErrors).toBeDefined();
+      // Orphaned reference should produce at least one REFERENTIAL_INTEGRITY warning
+      expect(refErrors.length).toBeGreaterThan(0);
+      expect(refErrors[0]?.level).toBe('warning');
+      expect(refErrors[0]?.message).toContain(orphanExecution.payload.taskId);
     });
 
     // [EARS-E5]
     it('[EARS-E5] should validate bidirectional consistency', async () => {
-      // Create task with valid cycle ID format
-      const mockTask = createMockTaskRecord({
+      // Use LintModule (pure) directly to exercise bidirectional reference validation
+      // Task references cycleId, but the cycle does NOT list this task in its taskIds
+
+      // Create a cycle with empty taskIds
+      const mockCycle = createMockCycleRecord({
+        title: 'Cycle Without Task',
+        taskIds: []  // deliberately empty — bidirectional inconsistency
+      });
+      const cycleId = mockCycle.payload.id;
+
+      // Create task that references the cycle
+      const taskWithCycleRef = createMockTaskRecord({
         title: 'Task With Cycle',
-        cycleIds: ['1234567890-cycle-test']
+        cycleIds: [cycleId]
       });
-      const recordId = mockTask.payload.id;
+      const taskWithCycleRefId = taskWithCycleRef.payload.id;
 
-      mockFilesystemDiscovery(mockReaddir, [{ id: recordId, type: 'task' }]);
-      mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify(mockTask));
-      mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify(mockTask));
+      const tasksStore = createMockStore();
+      tasksStore.list.mockResolvedValue([taskWithCycleRefId]);
+      tasksStore.get.mockResolvedValue(taskWithCycleRef);
 
-      const report = await fsLintModule.lint({
-        path: `${testRoot}/.gitgov/`,
-        validateReferences: true
+      const cyclesStore = createMockStore();
+      cyclesStore.list.mockResolvedValue([cycleId]);
+      cyclesStore.get.mockResolvedValue(mockCycle);  // cycle.taskIds does not include the task
+
+      const pureModule = new LintModule({
+        stores: { tasks: tasksStore, cycles: cyclesStore } as unknown as import('./lint.types').RecordStores
       });
 
-      expect(report).toBeDefined();
+      const report = await pureModule.lint({ validateReferences: true });
+
+      // The task was processed
+      expect(report.summary.filesChecked).toBeGreaterThanOrEqual(1);
+      // BIDIRECTIONAL_CONSISTENCY warning should appear because cycle doesn't list the task
+      const bidirWarnings = report.results.filter(r => r.validator === 'BIDIRECTIONAL_CONSISTENCY');
+      expect(bidirWarnings.length).toBeGreaterThan(0);
+      expect(bidirWarnings[0]?.level).toBe('warning');
+      expect(bidirWarnings[0]?.fixable).toBe(true);
     });
 
     // [EARS-E6]
     it('[EARS-E6] should warn about discarded entity references', async () => {
-      // Create discarded task first to get its valid ID
+      // Use LintModule (pure) directly to exercise SOFT_DELETE_DETECTION
+      // An ExecutionRecord references a taskId whose task has status 'discarded'
       const discardedTask = createMockTaskRecord({
         title: 'Discarded Task',
         status: 'discarded'
       });
       const discardedTaskId = discardedTask.payload.id;
 
-      // Create task that references the discarded one
-      const mockTask = createMockTaskRecord({
-        title: 'Task With Discarded Ref',
-        references: [`task:${discardedTaskId}`]
-      });
-      const recordId = mockTask.payload.id;
+      // Create an execution that explicitly references the discarded task
+      const mockExecution = createMockExecutionRecord({ taskId: discardedTaskId });
+      const executionId = mockExecution.payload.id;
 
-      mockFilesystemDiscovery(mockReaddir, [{ id: recordId, type: 'task' }]);
-      mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify(mockTask));
-      mocks.fileSystem.readFile
-        .mockResolvedValueOnce(mockTask)
-        .mockResolvedValueOnce(discardedTask);
+      const executionStore = createMockStore();
+      executionStore.list.mockResolvedValue([executionId]);
+      executionStore.get.mockResolvedValue(mockExecution);
 
-      const report = await fsLintModule.lint({
-        path: `${testRoot}/.gitgov/`,
-        validateReferences: true
+      // Tasks store returns the discarded task when looked up
+      const tasksStore = createMockStore();
+      tasksStore.list.mockResolvedValue([discardedTaskId]);
+      tasksStore.get.mockImplementation(async (id: string) => {
+        if (id === discardedTaskId) return discardedTask;
+        return null;
       });
 
+      const pureModule = new LintModule({
+        stores: { executions: executionStore, tasks: tasksStore } as unknown as import('./lint.types').RecordStores
+      });
+
+      const report = await pureModule.lint({ validateReferences: true });
+
+      // SOFT_DELETE_DETECTION warning should appear because referenced task is discarded
       const softDeleteWarnings = report.results.filter(
         (r: LintResult) => r.validator === 'SOFT_DELETE_DETECTION'
       );
-      // May not have warnings if reference validation is not enabled
-      expect(softDeleteWarnings).toBeDefined();
+      expect(softDeleteWarnings.length).toBeGreaterThan(0);
+      expect(softDeleteWarnings[0]?.level).toBe('warning');
+      expect(softDeleteWarnings[0]?.entity.type).toBe('execution');
     });
   });
 
@@ -1167,8 +1282,8 @@ describe('LintModule + FsLintModule', () => {
       const mockCycle = createMockTaskRecord({ title: 'Cycle 1' });
 
       mocks.fileSystem.readFile
-        .mockResolvedValueOnce(mockTask)
-        .mockResolvedValueOnce(mockCycle);
+        .mockResolvedValueOnce(JSON.stringify(mockTask))
+        .mockResolvedValueOnce(JSON.stringify(mockCycle));
       mocks.fileSystem.writeFile.mockResolvedValue(undefined);
 
       const fixReport = await fsLintModule.fix(lintReport, {
@@ -1176,7 +1291,13 @@ describe('LintModule + FsLintModule', () => {
         keyId: 'system:migrator'
       });
 
-      expect(fixReport).toBeDefined();
+      // FixReport should have the expected structure
+      expect(typeof fixReport.summary.fixed).toBe('number');
+      expect(typeof fixReport.summary.failed).toBe('number');
+      expect(typeof fixReport.summary.backupsCreated).toBe('number');
+      expect(Array.isArray(fixReport.fixes)).toBe(true);
+      // The fix was attempted for the BIDIRECTIONAL_CONSISTENCY result
+      expect(fixReport.summary.fixed + fixReport.summary.failed).toBe(1);
     });
 
     // Note: EARS-C1 (create backups) is in fs/index.test.ts
@@ -1358,18 +1479,24 @@ describe('LintModule + FsLintModule', () => {
       expect(fixReport.summary.fixed).toBe(1);
       expect(fixReport.summary.failed).toBe(0);
 
-      // Verify the written content has notes field
+      // Verify the written content has notes field added
       const writtenContent = JSON.parse(mocks.fileSystem.writeFile.mock.calls[0][1]);
       expect(writtenContent.header.signatures[0].notes).toBeDefined();
       expect(typeof writtenContent.header.signatures[0].notes).toBe('string');
+      expect(writtenContent.header.signatures[0].notes.length).toBeGreaterThan(0);
 
-      // Note: The current implementation regenerates the signature when notes is missing
-      // This is because needsRegeneration = needsNotes (line 1583)
-      // EARS-40 specifies it should NOT regenerate, but the code does regenerate
-      // The test verifies the current behavior, which may need to be adjusted
-      // The code preserves the original keyId from the signature or uses the one from options
-      expect(writtenContent.header.signatures[0].keyId).toBeDefined();
+      // [EARS-F10] The signature value MUST be preserved — not regenerated
+      // When the only problem is a missing 'notes' field, the existing cryptographic
+      // signature must remain unchanged.
+      expect(writtenContent.header.signatures[0].signature).toBe(originalSignature);
+
+      // Verify other signature fields are preserved
+      expect(writtenContent.header.signatures[0].keyId).toBe('human:developer');
       expect(writtenContent.header.signatures[0].role).toBe('author');
+
+      // Verify signPayload was NOT called (no regeneration should happen)
+      const { signPayload: mockSignPayload } = await import('../crypto/signatures');
+      expect(mockSignPayload).not.toHaveBeenCalled();
     });
 
     // [EARS-F7]

@@ -16,15 +16,7 @@ export type EmbeddedMetadataRecord = {
     /**
      * The type of the record contained in the payload.
      */
-    type: 'actor' | 'agent' | 'task' | 'execution' | 'changelog' | 'feedback' | 'cycle' | 'custom';
-    /**
-     * Optional URL to a custom schema for the payload.
-     */
-    schemaUrl?: string;
-    /**
-     * Optional SHA-256 checksum of the custom schema.
-     */
-    schemaChecksum?: string;
+    type: 'actor' | 'agent' | 'task' | 'execution' | 'changelog' | 'feedback' | 'cycle';
     /**
      * SHA-256 checksum of the canonically serialized payload.
      */

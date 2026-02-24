@@ -10,11 +10,6 @@
 import type { GitGovRecordType } from '../record_types';
 
 /**
- * Types of GitGov entities (excludes 'custom').
- */
-export type GitGovEntityType = Exclude<GitGovRecordType, 'custom'>;
-
-/**
  * Parsed result of a timestamp-based record ID.
  */
 export interface ParsedTimestampedId {
@@ -34,7 +29,7 @@ export interface ParsedActorId {
 /**
  * Mapping from directory names to entity types.
  */
-export const DIR_TO_TYPE: Record<string, GitGovEntityType> = {
+export const DIR_TO_TYPE: Record<string, GitGovRecordType> = {
   'tasks': 'task',
   'cycles': 'cycle',
   'executions': 'execution',
@@ -47,10 +42,10 @@ export const DIR_TO_TYPE: Record<string, GitGovEntityType> = {
 /**
  * Mapping from entity types to directory names (inverse of DIR_TO_TYPE).
  */
-export const TYPE_TO_DIR: Record<GitGovEntityType, string> =
+export const TYPE_TO_DIR: Record<GitGovRecordType, string> =
   Object.fromEntries(
     Object.entries(DIR_TO_TYPE).map(([dir, type]) => [type, dir]),
-  ) as Record<GitGovEntityType, string>;
+  ) as Record<GitGovRecordType, string>;
 
 /**
  * Valid directory names for GitGov records.
@@ -84,7 +79,7 @@ export function extractRecordIdFromPath(filePath: string): string {
  * getEntityTypeFromPath('.gitgov/actors/human_dev.json') // 'actor'
  * getEntityTypeFromPath('/some/other/path.json') // null
  */
-export function getEntityTypeFromPath(filePath: string): GitGovEntityType | null {
+export function getEntityTypeFromPath(filePath: string): GitGovRecordType | null {
   const pathParts = filePath.split('/');
   const typeDirIndex = pathParts.findIndex(part => VALID_DIRS.includes(part));
 
@@ -117,7 +112,7 @@ export function getEntityTypeFromPath(filePath: string): GitGovEntityType | null
  * inferEntityTypeFromId('agent:code-reviewer') // 'agent'
  * inferEntityTypeFromId('1234567890-task-implement-auth') // 'task'
  */
-export function inferEntityTypeFromId(recordId: string): GitGovEntityType {
+export function inferEntityTypeFromId(recordId: string): GitGovRecordType {
   // Execution patterns
   if (recordId.match(/^\d+-exec-/) || recordId.includes('-execution-')) {
     return 'execution';

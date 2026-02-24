@@ -85,13 +85,13 @@ describe('EmbeddedMetadata Factory', () => {
 
     it('[EARS-5] should allow overriding header type', async () => {
       const result = createEmbeddedMetadataRecord(validActorPayload, {
-        header: { type: 'custom' }
+        header: { type: 'task' }
       });
 
-      expect(result.header.type).toBe('custom');
+      expect(result.header.type).toBe('task');
     });
 
-    it('[EARS-6] should use default version 1.0', async () => {
+    it('[EARS-6] should always use version 1.0', async () => {
       const result = createEmbeddedMetadataRecord(validActorPayload);
 
       expect(result.header.version).toBe('1.0');
@@ -116,18 +116,11 @@ describe('EmbeddedMetadata Factory', () => {
       expect(result.header.payloadChecksum).not.toBe('a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456');
     });
 
-    it('[EARS-9] should include schemaUrl and schemaChecksum for custom type', async () => {
-      const result = createEmbeddedMetadataRecord(validActorPayload, {
-        header: {
-          type: 'custom',
-          schemaUrl: 'https://example.com/schema.json',
-          schemaChecksum: 'abc123def456789012345678901234567890abcdef1234567890abcdef123456'
-        }
-      });
+    it('[EARS-9] should not include schemaUrl or schemaChecksum', async () => {
+      const result = createEmbeddedMetadataRecord(validActorPayload);
 
-      expect(result.header.type).toBe('custom');
-      expect(result.header).toHaveProperty('schemaUrl', 'https://example.com/schema.json');
-      expect(result.header).toHaveProperty('schemaChecksum', 'abc123def456789012345678901234567890abcdef1234567890abcdef123456');
+      expect(result.header).not.toHaveProperty('schemaUrl');
+      expect(result.header).not.toHaveProperty('schemaChecksum');
     });
 
     it('[EARS-10] should throw DetailedValidationError when validation fails', () => {
@@ -154,7 +147,7 @@ describe('EmbeddedMetadata Factory', () => {
       ).toThrow('EmbeddedMetadataRecord');
     });
 
-    it('[EARS-11] should calculate real SHA-256 checksum of payload', async () => {
+    it('[EARS-11] should produce deterministic checksum for identical payloads', async () => {
       const result = createEmbeddedMetadataRecord(validActorPayload);
 
       // Checksum should be 64 hex characters (SHA-256)

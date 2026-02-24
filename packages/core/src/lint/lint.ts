@@ -191,7 +191,7 @@ export class LintModule implements ILintModule {
     const results: LintResult[] = [];
 
     // Collect all records from stores
-    const storeMap: Array<[Exclude<GitGovRecordType, 'custom'>, RecordStores[keyof RecordStores]]> = [
+    const storeMap: Array<[GitGovRecordType, RecordStores[keyof RecordStores]]> = [
       ['task', this.stores.tasks],
       ['cycle', this.stores.cycles],
       ['actor', this.stores.actors],
@@ -305,7 +305,7 @@ export class LintModule implements ILintModule {
           break;
 
         case "SIGNATURE_STRUCTURE":
-          fixedRecord = this.fixSignature(fixedRecord, result, options);
+          fixedRecord = this.fixSignature(fixedRecord, result, options, fixableResults);
           break;
 
         // BIDIRECTIONAL_CONSISTENCY requires modifying OTHER records
@@ -328,7 +328,7 @@ export class LintModule implements ILintModule {
    * Validates record with appropriate loader based on entity type.
    * @private
    */
-  private validateWithLoader(record: GitGovRecord, entityType: Exclude<GitGovRecordType, 'custom'>): void {
+  private validateWithLoader(record: GitGovRecord, entityType: GitGovRecordType): void {
     // Re-validate the record through its loader to ensure schema compliance
     const rawRecord = JSON.parse(JSON.stringify(record));
 
@@ -366,7 +366,7 @@ export class LintModule implements ILintModule {
     record: GitGovRecord,
     recordId: string,
     filePath: string,
-    entityType: Exclude<GitGovRecordType, 'custom'>
+    entityType: GitGovRecordType
   ): LintResult[] {
     const results: LintResult[] = [];
 
@@ -430,6 +430,54 @@ export class LintModule implements ILintModule {
   }
 
   /**
+   * [EARS-E2] Validates typed references by prefix.
+   * Valid prefixes: file:, task:, cycle:, adapter:, url:, commit:, pr:
+   * Reports a warning for unknown prefixes and an error for empty values after known prefix.
+   * Pure — does not resolve actual references.
+   * @private
+   */
+  private validateTypedReferencesByPrefix(
+    references: string[],
+    recordId: string,
+    filePath: string,
+    entityType: GitGovRecordType
+  ): LintResult[] {
+    const VALID_PREFIXES = ['file:', 'task:', 'cycle:', 'adapter:', 'url:', 'commit:', 'pr:'];
+    const results: LintResult[] = [];
+
+    for (const ref of references) {
+      const matchedPrefix = VALID_PREFIXES.find(p => ref.startsWith(p));
+
+      if (!matchedPrefix) {
+        results.push({
+          level: "warning",
+          filePath,
+          validator: "REFERENTIAL_INTEGRITY",
+          message: `Reference '${ref}' has an unknown prefix. Valid prefixes: ${VALID_PREFIXES.join(', ')}`,
+          entity: { type: entityType, id: recordId },
+          fixable: false,
+          context: { field: "references", actual: ref, expected: "reference with valid prefix" }
+        });
+      } else {
+        const value = ref.slice(matchedPrefix.length);
+        if (!value) {
+          results.push({
+            level: "error",
+            filePath,
+            validator: "REFERENTIAL_INTEGRITY",
+            message: `Reference '${ref}' has prefix '${matchedPrefix}' but no value after it`,
+            entity: { type: entityType, id: recordId },
+            fixable: false,
+            context: { field: "references", actual: ref, expected: `${matchedPrefix}<non-empty-value>` }
+          });
+        }
+      }
+    }
+
+    return results;
+  }
+
+  /**
    * [EARS-E1] through [EARS-E6] Validates references.
    * Uses Store<T> for lookups.
    * @private
@@ -438,10 +486,22 @@ export class LintModule implements ILintModule {
     record: GitGovRecord,
     recordId: string,
     filePath: string,
-    entityType: Exclude<GitGovRecordType, 'custom'>
+    entityType: GitGovRecordType
   ): Promise<LintResult[]> {
     const results: LintResult[] = [];
     const payload = record.payload;
+
+    // [EARS-E2] Validate typed references by prefix
+    const payloadWithRefs = payload as { references?: string[] };
+    if (Array.isArray(payloadWithRefs.references) && payloadWithRefs.references.length > 0) {
+      const prefixResults = this.validateTypedReferencesByPrefix(
+        payloadWithRefs.references,
+        recordId,
+        filePath,
+        entityType
+      );
+      results.push(...prefixResults);
+    }
 
     // Get appropriate store for lookups
     const taskStore = this.stores.tasks;
@@ -541,7 +601,7 @@ export class LintModule implements ILintModule {
     record: GitGovRecord,
     recordId: string,
     filePath: string,
-    entityType: Exclude<GitGovRecordType, 'custom'>
+    entityType: GitGovRecordType
   ): Promise<LintResult[]> {
     const results: LintResult[] = [];
     const actorStore = this.stores.actors;
@@ -667,7 +727,7 @@ export class LintModule implements ILintModule {
     }
 
     const cleaned: Record<string, unknown> = {};
-    const payloadRecord = payload as Record<string, unknown>;
+    const payloadRecord = payload as unknown as Record<string, unknown>;
 
     for (const key of validKeys) {
       if (key in payloadRecord) {
@@ -675,7 +735,7 @@ export class LintModule implements ILintModule {
       }
     }
 
-    return cleaned as GitGovRecordPayload;
+    return cleaned as unknown as GitGovRecordPayload;
   }
 
   /**
@@ -695,31 +755,89 @@ export class LintModule implements ILintModule {
   }
 
   /**
-   * Fixes signature structure issues.
-   * @private
-   */
-  /**
-   * [EARS-F9] Fixes signature structure issues.
+   * [EARS-F9] [EARS-F10] Fixes signature structure issues.
    *
    * Preserves valid keyId and role from existing signature if present,
    * only using options.keyId as fallback when no existing signature exists.
+   *
+   * [EARS-F10] When the ONLY problem is a missing `notes` field (no other
+   * signature errors exist for this record), adds `notes` WITHOUT regenerating
+   * the signature — preserving the existing cryptographic value.
    *
    * @private
    */
   private fixSignature(
     record: GitGovRecord,
     result: LintResult,
-    options: FixRecordOptions
+    options: FixRecordOptions,
+    allResults?: LintResult[]
   ): GitGovRecord {
     if (!options.privateKey) {
       throw new Error("privateKey is required to fix signature");
     }
 
+    const existingSig = record.header?.signatures?.[0];
+
+    // [EARS-F10] Detect if the ONLY signature issue is a missing 'notes' field.
+    // Conditions for notes-only path:
+    //   1. The current error is about missing 'notes'.
+    //   2. No other SIGNATURE_STRUCTURE errors exist for the same entity.
+    //   3. The existing signature has a valid signature value (matches base64/88-char pattern).
+    const isOnlyMissingNotes = ((): boolean => {
+      // Current error must be about missing 'notes'
+      if (!result.message.includes("must have required property 'notes'")) {
+        return false;
+      }
+
+      // There must be no other SIGNATURE_STRUCTURE errors for this entity
+      if (allResults) {
+        const otherSigErrors = allResults.filter(
+          r =>
+            r !== result &&
+            r.validator === 'SIGNATURE_STRUCTURE' &&
+            r.entity.id === result.entity.id &&
+            r.fixable
+        );
+        if (otherSigErrors.length > 0) {
+          return false;
+        }
+      }
+
+      // The existing signature value must be valid (base64, 88 chars)
+      const sigValue = existingSig?.signature;
+      if (!sigValue || !/^[A-Za-z0-9+/]{86}==$/.test(sigValue)) {
+        return false;
+      }
+
+      return true;
+    })();
+
+    if (isOnlyMissingNotes && existingSig) {
+      // [EARS-F10] Notes-only fix: add 'notes' without regenerating the signature
+      const fixedSig: Signature = {
+        keyId: existingSig.keyId,
+        role: existingSig.role,
+        notes: 'Signature notes added by lint fix',
+        signature: existingSig.signature,
+        timestamp: existingSig.timestamp
+      };
+
+      const payloadChecksum = calculatePayloadChecksum(record.payload);
+      return {
+        header: {
+          ...record.header,
+          payloadChecksum,
+          signatures: [fixedSig]
+        },
+        payload: record.payload
+      };
+    }
+
+    // Full regeneration path (EARS-F7, F8, F9, etc.)
     const payloadChecksum = calculatePayloadChecksum(record.payload);
 
     // [EARS-F9] Preserve existing signature metadata if valid
     // Priority: existing signature > options > fallback
-    const existingSig = record.header?.signatures?.[0];
     const keyId = existingSig?.keyId || options.keyId || result.entity.id;
     const role = existingSig?.role || 'author';
     const notes = existingSig?.notes || 'Signature regenerated by lint fix';
