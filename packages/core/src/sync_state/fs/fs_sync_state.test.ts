@@ -3818,6 +3818,7 @@ describe("FsSyncStateModule", () => {
       const mockLintModule: ILintModule = {
         lint: jest.fn().mockResolvedValue(lintReportMock),
         lintRecord: jest.fn().mockReturnValue([]),
+        lintRecordReferences: jest.fn().mockReturnValue([]),
         fixRecord: jest.fn().mockImplementation((record) => record),
       };
 
@@ -3925,6 +3926,7 @@ describe("FsSyncStateModule", () => {
       const mockLintModule: ILintModule = {
         lint: jest.fn().mockResolvedValue(lintReportMock),
         lintRecord: jest.fn().mockReturnValue([]),
+        lintRecordReferences: jest.fn().mockReturnValue([]),
         fixRecord: jest.fn().mockImplementation((record) => record),
       };
 
@@ -3969,6 +3971,7 @@ describe("FsSyncStateModule", () => {
       const mockLintModule: ILintModule = {
         lint: jest.fn().mockResolvedValue(lintReportMock),
         lintRecord: jest.fn().mockReturnValue([]),
+        lintRecordReferences: jest.fn().mockReturnValue([]),
         fixRecord: jest.fn().mockImplementation((record) => record),
       };
 

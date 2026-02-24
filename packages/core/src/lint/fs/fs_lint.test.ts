@@ -8,7 +8,7 @@
  * - EARS-A: File Discovery (EARS-A1)
  * - EARS-B: File Naming Validation (EARS-B1, EARS-B2)
  * - EARS-C: Backup Operations (EARS-C1, EARS-C2)
- * - EARS-D: Delegation to Core (EARS-D1)
+ * - EARS-D: Delegation to Core (EARS-D1, EARS-D2)
  * - EARS-E: Schema Version Detection (EARS-E1)
  * - EARS-F: Error Filtering (EARS-F1)
  *
@@ -432,6 +432,33 @@ describe('FsLintModule', () => {
       );
 
       lintRecordSpy.mockRestore();
+    });
+
+    // [EARS-D2] FsLintModule: Delegation to LintModule.lintRecordReferences()
+    it('[EARS-D2] should delegate reference prefix validation to LintModule.lintRecordReferences()', async () => {
+      const mockRecord = createMockTaskRecord({
+        references: ['unknown:value', 'task:']
+      });
+      const recordId = mockRecord.payload.id;
+
+      mockFilesystemDiscovery(mockReaddir, [{ id: recordId, type: 'task' }]);
+      mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify(mockRecord));
+
+      const lintRefSpy = jest.spyOn(lintModule, 'lintRecordReferences');
+
+      await fsLintModule.lint({
+        path: `${testRoot}/.gitgov/`,
+        validateFileNaming: false,
+        validateReferences: true
+      });
+
+      expect(lintRefSpy).toHaveBeenCalled();
+      expect(lintRefSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ header: expect.any(Object), payload: expect.any(Object) }),
+        expect.objectContaining({ recordId, entityType: 'task' })
+      );
+
+      lintRefSpy.mockRestore();
     });
   });
 

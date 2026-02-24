@@ -167,6 +167,26 @@ export class LintModule implements ILintModule {
   }
 
   /**
+   * Validates typed references by prefix (pure, no I/O).
+   * Delegates to private validateTypedReferencesByPrefix.
+   */
+  lintRecordReferences(
+    record: GitGovRecord,
+    context: LintRecordContext
+  ): LintResult[] {
+    const payload = record.payload as { references?: string[] };
+    if (!Array.isArray(payload.references) || payload.references.length === 0) {
+      return [];
+    }
+    return this.validateTypedReferencesByPrefix(
+      payload.references,
+      context.recordId,
+      context.filePath || `unknown/${context.recordId}.json`,
+      context.entityType
+    );
+  }
+
+  /**
    * Validates all records from stores.
    * Iterates this.stores to collect records, then validates each one.
    *
