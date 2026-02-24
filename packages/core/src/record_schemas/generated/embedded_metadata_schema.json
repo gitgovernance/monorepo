@@ -24,19 +24,9 @@
             "execution",
             "changelog",
             "feedback",
-            "cycle",
-            "custom"
+            "cycle"
           ],
           "description": "The type of the record contained in the payload."
-        },
-        "schemaUrl": {
-          "type": "string",
-          "description": "Optional URL to a custom schema for the payload."
-        },
-        "schemaChecksum": {
-          "type": "string",
-          "pattern": "^[a-fA-F0-9]{64}$",
-          "description": "Optional SHA-256 checksum of the custom schema."
         },
         "payloadChecksum": {
           "type": "string",
@@ -257,32 +247,6 @@
         "properties": {
           "payload": {
             "$ref": "ref:cycle_record_schema"
-          }
-        }
-      },
-      "else": false
-    },
-    {
-      "if": {
-        "properties": {
-          "header": {
-            "type": "object",
-            "properties": {
-              "type": {
-                "const": "custom"
-              }
-            }
-          }
-        }
-      },
-      "then": {
-        "properties": {
-          "header": {
-            "type": "object",
-            "required": [
-              "schemaUrl",
-              "schemaChecksum"
-            ]
           }
         }
       },

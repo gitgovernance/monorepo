@@ -53,6 +53,19 @@ export interface ILintModule {
   ): Promise<LintReport>;
 
   /**
+   * Validates typed references by prefix (pure, no I/O).
+   * Returns warnings for unknown prefixes, errors for empty values.
+   *
+   * @param record - The GitGovRecord object to validate
+   * @param context - Context with recordId and entityType
+   * @returns Array of lint results for reference issues
+   */
+  lintRecordReferences(
+    record: GitGovRecord,
+    context: LintRecordContext
+  ): LintResult[];
+
+  /**
    * Applies fixes to a record and returns the fixed version.
    * Does NOT write to disk - returns modified object.
    *
@@ -78,7 +91,7 @@ export interface RecordEntry {
   /** Record ID */
   id: string;
   /** Entity type */
-  type: Exclude<GitGovRecordType, 'custom'>;
+  type: GitGovRecordType;
   /** Optional file path for error reporting (FsLintModule provides this) */
   filePath?: string;
 }
@@ -90,7 +103,7 @@ export interface LintRecordContext {
   /** Record ID */
   recordId: string;
   /** Entity type */
-  entityType: Exclude<GitGovRecordType, 'custom'>;
+  entityType: GitGovRecordType;
   /** Optional file path for error reporting */
   filePath?: string;
 }
@@ -276,7 +289,6 @@ export interface LintResult {
 export type ValidatorType =
   | "SCHEMA_VALIDATION"
   | "REFERENTIAL_INTEGRITY"
-  | "TYPED_REFERENCE"
   | "BIDIRECTIONAL_CONSISTENCY"
   | "EMBEDDED_METADATA_STRUCTURE"
   | "CHECKSUM_VERIFICATION"
