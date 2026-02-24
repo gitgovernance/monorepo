@@ -46,8 +46,8 @@ function syncSchemas() {
     const jsonPath = path.join(CORE_SCHEMAS_DIR, `${schemaName}.json`);
 
     if (!fs.existsSync(yamlPath)) {
-      console.warn(`⚠️  Schema not found: ${yamlPath}`);
-      continue;
+      console.error(`❌ Schema not found: ${yamlPath}`);
+      process.exit(1);
     }
 
     try {
