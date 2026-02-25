@@ -5,7 +5,6 @@ import type { AgentRecord } from '../record_types';
 import type { TaskRecord } from '../record_types';
 import type { CycleRecord } from '../record_types';
 import type { ExecutionRecord } from '../record_types';
-import type { ChangelogRecord } from '../record_types';
 import type { FeedbackRecord } from '../record_types';
 import { calculatePayloadChecksum } from './checksum';
 
@@ -69,18 +68,6 @@ describe('Crypto Module (Signatures)', () => {
         id: '1752275500-exec-test-execution', taskId: '1752274500-task-test-task',
         result: 'Successfully implemented the feature', type: 'progress'
       } as ExecutionRecord
-    },
-    {
-      name: 'ChangelogRecord',
-      type: 'changelog',
-      payload: {
-        id: '1752707800-changelog-task-test-task',
-        title: 'Test Task Completion',
-        description: 'Successfully completed the test task with all requirements',
-        relatedTasks: ['1752274500-task-test-task'],
-        completedAt: 1752707800,
-        version: 'v1.0.0'
-      } as ChangelogRecord
     },
     {
       name: 'FeedbackRecord',
@@ -331,42 +318,6 @@ describe('Crypto Module (Signatures)', () => {
           signatures: [signature],
         },
         payload: executionPayload,
-      } as GitGovRecord;
-      await expect(verifySignatures(record, getActorPublicKey)).resolves.toBe(false);
-    });
-  });
-
-  describe('Security Failure Cases (ChangelogRecord)', () => {
-    const changelogPayload: ChangelogRecord = {
-      id: '1752707800-changelog-task-test-task',
-      title: 'Test Task Completion',
-      description: 'Successfully completed the test task with all requirements',
-      relatedTasks: ['1752274500-task-test-task'],
-      completedAt: 1752707800,
-      version: 'v1.0.0'
-    };
-
-    it('[EARS-4] should FAIL verification if a ChangelogRecord payload is tampered with', async () => {
-      const signature = signPayload(changelogPayload, mainActorKeys.privateKey, mainActor.id, 'author', 'Changelog record signature');
-      const tamperedPayload = { ...changelogPayload, description: 'TAMPERED DESCRIPTION' }; // Tamper description
-      const record = {
-        header: {
-          version: '1.0', type: 'changelog', payloadChecksum: calculatePayloadChecksum(tamperedPayload),
-          signatures: [signature],
-        },
-        payload: tamperedPayload,
-      } as GitGovRecord;
-      await expect(verifySignatures(record, getActorPublicKey)).resolves.toBe(false);
-    });
-
-    it('[EARS-6] should FAIL verification if the signature is from a malicious (unknown) actor', async () => {
-      const signature = signPayload(changelogPayload, maliciousActorKeys.privateKey, 'actor:malicious', 'author', 'Malicious signature attempt');
-      const record = {
-        header: {
-          version: '1.0', type: 'changelog', payloadChecksum: calculatePayloadChecksum(changelogPayload),
-          signatures: [signature],
-        },
-        payload: changelogPayload,
       } as GitGovRecord;
       await expect(verifySignatures(record, getActorPublicKey)).resolves.toBe(false);
     });

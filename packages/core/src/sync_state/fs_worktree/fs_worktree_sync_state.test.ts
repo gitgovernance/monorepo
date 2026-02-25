@@ -225,7 +225,7 @@ async function setupStateBranch(repoPath: string): Promise<void> {
   // Create .gitgov structure (add .gitkeep to each dir so git tracks them)
   const gitgovDir = path.join(repoPath, '.gitgov');
   fs.mkdirSync(gitgovDir, { recursive: true });
-  for (const dir of ['tasks', 'cycles', 'actors', 'agents', 'feedbacks', 'executions', 'changelogs', 'workflows']) {
+  for (const dir of ['tasks', 'cycles', 'actors', 'agents', 'feedbacks', 'executions', 'workflows']) {
     fs.mkdirSync(path.join(gitgovDir, dir), { recursive: true });
     fs.writeFileSync(path.join(gitgovDir, dir, '.gitkeep'), '');
   }

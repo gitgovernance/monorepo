@@ -294,7 +294,6 @@ export const SYNC_DIRECTORIES = [
   'agents',
   'feedbacks',
   'executions',
-  'changelogs',
   'workflows',
 ] as const;
 

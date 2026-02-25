@@ -3,7 +3,6 @@ import {
   generateTaskId,
   generateCycleId,
   generateExecutionId,
-  generateChangelogId,
   generateFeedbackId
 } from './id_generator';
 
@@ -33,36 +32,6 @@ describe('ID Generators', () => {
   describe('generateExecutionId', () => {
     it('[EARS-4] should create a valid execution ID', () => {
       expect(generateExecutionId('Commit changes', 99999)).toBe('99999-exec-commit-changes');
-    });
-  });
-
-  describe('generateChangelogId', () => {
-    it('[EARS-5] should create a valid changelog ID from title (Protocol v2.0.0)', () => {
-      expect(generateChangelogId('Authentication System v1.0', 1752707800))
-        .toBe('1752707800-changelog-authentication-system-v10');
-    });
-
-    it('[EARS-5] should create changelog ID following official pattern', () => {
-      expect(generateChangelogId('Sprint 24 API Performance', 1752707900))
-        .toBe('1752707900-changelog-sprint-24-api-performance');
-    });
-
-    it('[EARS-5] should sanitize special characters in changelog ID', () => {
-      expect(generateChangelogId('Hotfix: Critical Payment Timeout!', 1752708000))
-        .toBe('1752708000-changelog-hotfix-critical-payment-timeout');
-    });
-
-    it('[EARS-5] should limit slug length to 50 characters', () => {
-      const longTitle = 'This is an extremely long changelog title that should be truncated to fit within the maximum allowed length';
-      const result = generateChangelogId(longTitle, 88888);
-      const slug = result.split('-changelog-')[1];
-      expect(slug!.length).toBeLessThanOrEqual(50);
-    });
-
-    it('[EARS-5] should match official schema pattern', () => {
-      const result = generateChangelogId('Test Deliverable', 1752707800);
-      // Pattern from schema: "^\d{10}-changelog-[a-z0-9-]{1,50}$"
-      expect(result).toMatch(/^\d{10}-changelog-[a-z0-9-]{1,50}$/);
     });
   });
 

@@ -5,7 +5,6 @@ import type {
   CycleCreatedEvent,
   ExecutionCreatedEvent,
   FeedbackCreatedEvent,
-  ChangelogCreatedEvent,
   SystemDailyTickEvent
 } from './types';
 
@@ -28,13 +27,11 @@ describe('EventBus Integration Tests', () => {
     const backlogAdapterHandler = jest.fn();
     const executionAdapterHandler = jest.fn();
     const feedbackAdapterHandler = jest.fn();
-    const changelogAdapterHandler = jest.fn();
 
     // Simulate adapter subscriptions
     eventBus.subscribe<TaskCreatedEvent>('task.created', backlogAdapterHandler);
     eventBus.subscribe<ExecutionCreatedEvent>('execution.created', executionAdapterHandler);
     eventBus.subscribe<FeedbackCreatedEvent>('feedback.created', feedbackAdapterHandler);
-    eventBus.subscribe<ChangelogCreatedEvent>('changelog.created', changelogAdapterHandler);
 
     // 1. Task is created (emitted by BacklogAdapter)
     const taskCreatedEvent: TaskCreatedEvent = {
@@ -81,39 +78,21 @@ describe('EventBus Integration Tests', () => {
     };
     eventBus.publish(feedbackCreatedEvent);
 
-    // 4. Changelog is created (emitted by ChangelogAdapter)
-    const changelogCreatedEvent: ChangelogCreatedEvent = {
-      type: 'changelog.created',
-      timestamp: Date.now(),
-      source: 'changelog_adapter',
-      payload: {
-        changelogId: 'changelog:integration-test-abc',
-        relatedTasks: ['task:integration-test-123'],
-        title: 'Integration test changelog',
-        version: 'v1.0.0'
-      }
-    };
-    eventBus.publish(changelogCreatedEvent);
-
     // Verify all handlers received their respective events
     expect(backlogAdapterHandler).toHaveBeenCalledWith(taskCreatedEvent);
     expect(executionAdapterHandler).toHaveBeenCalledWith(executionCreatedEvent);
     expect(feedbackAdapterHandler).toHaveBeenCalledWith(feedbackCreatedEvent);
-    expect(changelogAdapterHandler).toHaveBeenCalledWith(changelogCreatedEvent);
   });
 
   it('[EARS-2] should handle task status change workflow across adapters', () => {
     const backlogHandler = jest.fn();
     const executionHandler = jest.fn();
-    const changelogHandler = jest.fn();
 
-    // BacklogAdapter listens to execution and changelog events
+    // BacklogAdapter listens to execution events
     eventBus.subscribe<ExecutionCreatedEvent>('execution.created', backlogHandler);
-    eventBus.subscribe<ChangelogCreatedEvent>('changelog.created', backlogHandler);
 
     // Other adapters listen to task status changes
     eventBus.subscribe<TaskStatusChangedEvent>('task.status.changed', executionHandler);
-    eventBus.subscribe<TaskStatusChangedEvent>('task.status.changed', changelogHandler);
 
     // 1. Task status changes from draft → review
     const statusChangeEvent1: TaskStatusChangedEvent = {
@@ -159,27 +138,10 @@ describe('EventBus Integration Tests', () => {
     };
     eventBus.publish(statusChangeEvent2);
 
-    // 4. Changelog created triggers task status change done → archived
-    const changelogEvent: ChangelogCreatedEvent = {
-      type: 'changelog.created',
-      timestamp: Date.now(),
-      source: 'changelog_adapter',
-      payload: {
-        changelogId: 'changelog:status-workflow-789',
-        relatedTasks: ['task:status-workflow-123'],
-        title: 'Task status workflow completed',
-        version: 'v1.0.0'
-      }
-    };
-    eventBus.publish(changelogEvent);
-
     // Verify event flow
     expect(backlogHandler).toHaveBeenCalledWith(executionEvent);
-    expect(backlogHandler).toHaveBeenCalledWith(changelogEvent);
     expect(executionHandler).toHaveBeenCalledWith(statusChangeEvent1);
     expect(executionHandler).toHaveBeenCalledWith(statusChangeEvent2);
-    expect(changelogHandler).toHaveBeenCalledWith(statusChangeEvent1);
-    expect(changelogHandler).toHaveBeenCalledWith(statusChangeEvent2);
   });
 
   it('[EARS-3] should handle cycle hierarchy events with parent-child relationships', () => {
@@ -329,7 +291,6 @@ describe('EventBus Integration Tests', () => {
     eventBus.subscribe<TaskCreatedEvent>('task.created', orderTracker('task.created'));
     eventBus.subscribe<TaskStatusChangedEvent>('task.status.changed', orderTracker('task.status.changed'));
     eventBus.subscribe<ExecutionCreatedEvent>('execution.created', orderTracker('execution.created'));
-    eventBus.subscribe<ChangelogCreatedEvent>('changelog.created', orderTracker('changelog.created'));
 
     const taskId = 'task:order-test-123';
 
@@ -362,20 +323,12 @@ describe('EventBus Integration Tests', () => {
       payload: { taskId, oldStatus: 'ready', newStatus: 'active', actorId: 'human:test-user' }
     } as TaskStatusChangedEvent);
 
-    eventBus.publish({
-      type: 'changelog.created',
-      timestamp: Date.now(),
-      source: 'changelog_adapter',
-      payload: { changelogId: 'changelog:order-test-789', taskId, actorId: 'human:test-user' }
-    } as ChangelogCreatedEvent);
-
     // Verify events were processed in order
     expect(eventOrder).toEqual([
       `task.created:${taskId}`,
       `task.status.changed:${taskId}`,
       `execution.created:${taskId}`,
       `task.status.changed:${taskId}`,
-      `changelog.created:${taskId}`
     ]);
   });
 
@@ -519,7 +472,6 @@ describe('EventBus Integration Tests', () => {
     eventBus.subscribe<TaskStatusChangedEvent>('task.status.changed', metricsHandler);
     eventBus.subscribe<ExecutionCreatedEvent>('execution.created', backlogHandler);
     eventBus.subscribe<FeedbackCreatedEvent>('feedback.created', backlogHandler);
-    eventBus.subscribe<ChangelogCreatedEvent>('changelog.created', backlogHandler);
 
     // Complex workflow simulation
     const taskId = 'task:complex-coordination-123';
@@ -550,17 +502,9 @@ describe('EventBus Integration Tests', () => {
       payload: { feedbackId: 'feedback:complex-123', entityType: 'task', entityId: taskId, feedbackType: 'review', actorId: 'human:test-user' }
     } as FeedbackCreatedEvent);
 
-    // 4. Task completed
-    eventBus.publish({
-      type: 'changelog.created',
-      timestamp: Date.now(),
-      source: 'changelog_adapter',
-      payload: { changelogId: 'changelog:complex-123', taskId, actorId: 'human:test-user' }
-    } as ChangelogCreatedEvent);
-
     // Verify all coordination happened correctly
     expect(metricsHandler).toHaveBeenCalledTimes(1); // task.created
-    expect(backlogHandler).toHaveBeenCalledTimes(5); // 3 executions + 1 feedback + 1 changelog
+    expect(backlogHandler).toHaveBeenCalledTimes(4); // 3 executions + 1 feedback
   });
 
   it('[EARS-13] should handle async cross-adapter coordination with waitForIdle', async () => {
