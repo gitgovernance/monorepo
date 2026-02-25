@@ -27,8 +27,8 @@
     },
     "type": {
       "type": "string",
-      "pattern": "^(analysis|progress|blocker|completion|info|correction|custom:[a-z0-9-]+)$",
-      "description": "Semantic classification of the execution event. Standard types: analysis, progress, blocker, completion, info, correction. Custom types use the 'custom:' prefix (e.g. custom:deployment, custom:rollback). Implementations that encounter an unrecognized custom type must treat it as 'info'.\n"
+      "pattern": "^(analysis|decision|progress|blocker|completion|correction|info|custom:[a-z0-9-]+(:[a-z0-9-]+)*)$",
+      "description": "Classifies what happened in this execution event. Primitive types cover the fundamental kinds of events that occur during any collaborative work. Extend with 'custom:' for your domain.\nPrimitive types:\n  - analysis: Investigation, research, or evaluation before acting.\n  - decision: A choice that changes the direction of work.\n  - progress: Incremental advancement of work.\n  - blocker: An impediment preventing further progress.\n  - completion: Work on the task is finished.\n  - correction: A fix to something previously done incorrectly.\n  - info: Informational note or status update.\n\nCustom types use the 'custom:' prefix for industry-specific extensions. Software development examples:\n  - custom:review (code review, design review, QA)\n  - custom:deployment (deploy to staging/production)\n  - custom:rollback (revert a deployment or change)\n  - custom:release (version release, PR merge to main)\n  - custom:hotfix (emergency fix in production)\nImplementations that encounter an unrecognized custom type MUST treat it as 'info' for display purposes.\n"
     },
     "title": {
       "type": "string",

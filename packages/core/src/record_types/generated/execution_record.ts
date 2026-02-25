@@ -17,7 +17,23 @@ export interface ExecutionRecord<TMetadata = object> {
    */
   taskId: string;
   /**
-   * Semantic classification of the execution event. Standard types: analysis, progress, blocker, completion, info, correction. Custom types use the 'custom:' prefix (e.g. custom:deployment, custom:rollback). Implementations that encounter an unrecognized custom type must treat it as 'info'.
+   * Classifies what happened in this execution event. Primitive types cover the fundamental kinds of events that occur during any collaborative work. Extend with 'custom:' for your domain.
+   * Primitive types:
+   *   - analysis: Investigation, research, or evaluation before acting.
+   *   - decision: A choice that changes the direction of work.
+   *   - progress: Incremental advancement of work.
+   *   - blocker: An impediment preventing further progress.
+   *   - completion: Work on the task is finished.
+   *   - correction: A fix to something previously done incorrectly.
+   *   - info: Informational note or status update.
+   *
+   * Custom types use the 'custom:' prefix for industry-specific extensions. Software development examples:
+   *   - custom:review (code review, design review, QA)
+   *   - custom:deployment (deploy to staging/production)
+   *   - custom:rollback (revert a deployment or change)
+   *   - custom:release (version release, PR merge to main)
+   *   - custom:hotfix (emergency fix in production)
+   * Implementations that encounter an unrecognized custom type MUST treat it as 'info' for display purposes.
    *
    */
   type: string;
