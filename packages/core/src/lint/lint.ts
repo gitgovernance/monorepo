@@ -46,7 +46,6 @@ import {
   loadAgentRecord,
   loadCycleRecord,
   loadExecutionRecord,
-  loadChangelogRecord,
   loadFeedbackRecord
 } from "../record_factories";
 import { Schemas } from "../record_schemas/generated";
@@ -63,7 +62,6 @@ const ENTITY_TO_SCHEMA: Record<string, keyof typeof Schemas> = {
   agent: 'AgentRecord',
   cycle: 'CycleRecord',
   execution: 'ExecutionRecord',
-  changelog: 'ChangelogRecord',
   feedback: 'FeedbackRecord',
 };
 
@@ -198,7 +196,6 @@ export class LintModule implements ILintModule {
       ['agent', this.stores.agents],
       ['execution', this.stores.executions],
       ['feedback', this.stores.feedbacks],
-      ['changelog', this.stores.changelogs],
     ];
 
     const recordEntries: RecordEntry[] = [];
@@ -347,9 +344,6 @@ export class LintModule implements ILintModule {
         break;
       case 'execution':
         loadExecutionRecord(rawRecord);
-        break;
-      case 'changelog':
-        loadChangelogRecord(rawRecord);
         break;
       case 'feedback':
         loadFeedbackRecord(rawRecord);

@@ -106,7 +106,6 @@ export interface RecordStores {
   cycles?: RecordStore<GitGovRecord>;
   executions?: RecordStore<GitGovRecord>;
   feedbacks?: RecordStore<GitGovRecord>;
-  changelogs?: RecordStore<GitGovRecord>;
 }
 
 /**
@@ -252,7 +251,7 @@ export interface LintResult {
 
   /** Información de la entidad GitGovernance afectada */
   entity: {
-    type: "actor" | "agent" | "task" | "cycle" | "execution" | "changelog" | "feedback";
+    type: "actor" | "agent" | "task" | "cycle" | "execution" | "feedback";
     id: string;
   };
 

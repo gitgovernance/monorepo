@@ -41,14 +41,12 @@ import type {
   TaskRecord,
   CycleRecord,
   ExecutionRecord,
-  ChangelogRecord,
   FeedbackRecord,
   ActorRecord,
   AgentRecord,
   GitGovTaskRecord,
   GitGovCycleRecord,
   GitGovExecutionRecord,
-  GitGovChangelogRecord,
   GitGovFeedbackRecord,
   GitGovActorRecord,
   GitGovAgentRecord
@@ -58,14 +56,12 @@ import {
   createTaskRecord,
   createCycleRecord,
   createExecutionRecord,
-  createChangelogRecord,
   createFeedbackRecord,
   createActorRecord,
   createAgentRecord,
   createEmbeddedMetadataRecord,
   createTestSignature
 } from '../record_factories';
-import { generateChangelogId } from '../utils/id_generator';
 import type { Signature } from '../record_types/embedded.types';
 import { readdir } from 'fs/promises';
 
@@ -183,30 +179,6 @@ function createMockExecutionRecord(
 }
 
 /**
- * Helper to create VALIDATED changelog records using production factories.
- */
-function createMockChangelogRecord(
-  overrides: Partial<ChangelogRecord> = {},
-  keyId: string = 'human:developer'
-): GitGovChangelogRecord {
-  // Need at least one relatedTask for validation
-  const taskRecord = createMockTaskRecord({ title: 'Related Task' });
-  const timestamp = Math.floor(Date.now() / 1000);
-  const title = overrides.title || 'Test Changelog';
-  const payload = createChangelogRecord({
-    id: overrides.id || generateChangelogId(title, timestamp),
-    title,
-    description: 'Test changelog description',
-    relatedTasks: [taskRecord.payload.id],
-    completedAt: timestamp,
-    version: '1.0.0',
-    ...overrides
-  });
-  const signature = createTestSignature(keyId, 'author', 'Test signature');
-  return createEmbeddedMetadataRecord(payload, { signatures: [signature] }) as GitGovChangelogRecord;
-}
-
-/**
  * Helper to create VALIDATED feedback records using production factories.
  */
 function createMockFeedbackRecord(
@@ -301,7 +273,6 @@ function createMockDependencies(projectRoot: string = '/tmp/test-project'): {
     tasks: MockStore;
     cycles: MockStore;
     executions: MockStore;
-    changelogs: MockStore;
     feedbacks: MockStore;
     actors: MockStore;
     agents: MockStore;
@@ -315,7 +286,6 @@ function createMockDependencies(projectRoot: string = '/tmp/test-project'): {
     tasks: createMockStore(),
     cycles: createMockStore(),
     executions: createMockStore(),
-    changelogs: createMockStore(),
     feedbacks: createMockStore(),
     actors: createMockStore(),
     agents: createMockStore()
@@ -363,13 +333,12 @@ function createMockDependencies(projectRoot: string = '/tmp/test-project'): {
  */
 function mockFilesystemDiscovery(
   mockReaddir: jest.MockedFunction<typeof readdir>,
-  files: Array<{ id: string; type: 'task' | 'cycle' | 'execution' | 'changelog' | 'feedback' | 'actor' | 'agent' }>
+  files: Array<{ id: string; type: 'task' | 'cycle' | 'execution' | 'feedback' | 'actor' | 'agent' }>
 ): void {
   const filesByDir: Record<string, string[]> = {
     tasks: [],
     cycles: [],
     executions: [],
-    changelogs: [],
     feedbacks: [],
     actors: [],
     agents: []
@@ -380,7 +349,6 @@ function mockFilesystemDiscovery(
       task: 'tasks',
       cycle: 'cycles',
       execution: 'executions',
-      changelog: 'changelogs',
       feedback: 'feedbacks',
       actor: 'actors',
       agent: 'agents'
@@ -2052,20 +2020,6 @@ describe('LintModule + FsLintModule', () => {
       mockFilesystemDiscovery(mockReaddir, [{ id: recordId, type: 'execution' }]);
       mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify(mockExecution));
       mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify(mockExecution));
-
-      const report = await fsLintModule.lint({ path: `${testRoot}/.gitgov/` });
-
-      expect(report.summary.filesChecked).toBe(1);
-      expect(report.summary.errors).toBe(0);
-    });
-
-    it('should validate ChangelogRecord correctly', async () => {
-      const mockChangelog = createMockChangelogRecord();
-      const recordId = mockChangelog.payload.id;
-
-      mockFilesystemDiscovery(mockReaddir, [{ id: recordId, type: 'changelog' }]);
-      mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify(mockChangelog));
-      mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify(mockChangelog));
 
       const report = await fsLintModule.lint({ path: `${testRoot}/.gitgov/` });
 

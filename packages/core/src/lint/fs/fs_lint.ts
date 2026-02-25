@@ -84,7 +84,6 @@ import {
   loadAgentRecord,
   loadCycleRecord,
   loadExecutionRecord,
-  loadChangelogRecord,
   loadFeedbackRecord
 } from "../../record_factories";
 import { DetailedValidationError } from "../../record_validations/common";
@@ -188,7 +187,7 @@ export class FsLintModule implements IFsLintModule {
 
     // Suppress console.warn during lint
     const originalWarn = console.warn;
-    console.warn = () => {};
+    console.warn = () => { };
 
     try {
       // 1. Discovery: Find all records
@@ -265,7 +264,7 @@ export class FsLintModule implements IFsLintModule {
     };
 
     const originalWarn = console.warn;
-    console.warn = () => {};
+    console.warn = () => { };
 
     try {
       const results = await this.lintSingleRecord(recordId, opts, entityType);
@@ -426,7 +425,6 @@ export class FsLintModule implements IFsLintModule {
         case 'agent': record = loadAgentRecord(raw); break;
         case 'cycle': record = loadCycleRecord(raw); break;
         case 'execution': record = loadExecutionRecord(raw); break;
-        case 'changelog': record = loadChangelogRecord(raw); break;
         case 'feedback': record = loadFeedbackRecord(raw); break;
         default: record = raw as GitGovRecord;
       }
@@ -508,8 +506,7 @@ export class FsLintModule implements IFsLintModule {
 
     const dirNameMap: Record<Exclude<GitGovRecordType, 'custom'>, string> = {
       'task': 'tasks', 'cycle': 'cycles', 'execution': 'executions',
-      'changelog': 'changelogs', 'feedback': 'feedbacks',
-      'actor': 'actors', 'agent': 'agents'
+      'feedback': 'feedbacks', 'actor': 'actors', 'agent': 'agents'
     };
 
     // [EARS-B1] Validate correct directory
@@ -551,13 +548,13 @@ export class FsLintModule implements IFsLintModule {
   private async discoverAllRecordsWithTypes(_path?: string): Promise<Array<{ id: string; type: Exclude<GitGovRecordType, 'custom'> }>> {
     // Note: _path parameter is deprecated, projectRoot is now injected via constructor
     const recordTypes: Array<Exclude<GitGovRecordType, 'custom'>> = [
-      'actor', 'agent', 'cycle', 'task', 'execution', 'changelog', 'feedback'
+      'actor', 'agent', 'cycle', 'task', 'execution', 'feedback'
     ];
     const allRecords: Array<{ id: string; type: Exclude<GitGovRecordType, 'custom'> }> = [];
 
     const dirNameMap: Record<Exclude<GitGovRecordType, 'custom'>, string> = {
       'task': 'tasks', 'cycle': 'cycles', 'execution': 'executions',
-      'changelog': 'changelogs', 'feedback': 'feedbacks',
+      'feedback': 'feedbacks',
       'actor': 'actors', 'agent': 'agents'
     };
 
@@ -583,8 +580,7 @@ export class FsLintModule implements IFsLintModule {
   private getFilePath(recordId: string, entityType: Exclude<GitGovRecordType, 'custom'>): string {
     const dirNameMap: Record<Exclude<GitGovRecordType, 'custom'>, string> = {
       'task': 'tasks', 'cycle': 'cycles', 'execution': 'executions',
-      'changelog': 'changelogs', 'feedback': 'feedbacks',
-      'actor': 'actors', 'agent': 'agents'
+      'feedback': 'feedbacks', 'actor': 'actors', 'agent': 'agents'
     };
     const dirName = dirNameMap[entityType];
     const safeId = recordId.replace(/:/g, '_');
