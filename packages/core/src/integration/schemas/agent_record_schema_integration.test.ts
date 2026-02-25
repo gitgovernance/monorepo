@@ -14,15 +14,18 @@ describe('AgentRecord Schema Integration Tests', () => {
   });
 
   describe('Root Level & Required Fields (EARS 106-108)', () => {
-    it('[EARS-106] should accept additional properties at root level', () => {
-      const valid = {
+    it('[EARS-106] should reject additional properties at root level', () => {
+      const invalid = {
         ...createValidAgentRecord(),
-        customField: 'allowed because no additionalProperties: false at root'
+        customField: 'not-allowed-because-additionalProperties-false'
       } as AgentRecord & { customField: string };
 
-      const result = validateAgentRecordDetailed(valid);
+      const result = validateAgentRecordDetailed(invalid);
 
-      expect(result.isValid).toBe(true);
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.message.includes('additional') || e.message.includes('should NOT have additional properties')
+      )).toBe(true);
     });
 
     it('[EARS-107] should reject missing required field: id', () => {

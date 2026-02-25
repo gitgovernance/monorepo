@@ -367,7 +367,7 @@ describe('ExecutionRecord Schema Integration Tests', () => {
       expect(result.isValid).toBe(true);
     });
 
-    it('[EARS-391] should reject type with invalid enum value', () => {
+    it('[EARS-391] should reject type with invalid pattern', () => {
       const invalid = {
         ...createValidExecutionRecord(),
         type: 'invalid-type' as unknown as 'progress'
@@ -377,7 +377,7 @@ describe('ExecutionRecord Schema Integration Tests', () => {
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
-        e.field.includes('type') && (e.message.includes('enum') || e.message.includes('must be equal to one of'))
+        e.field.includes('type') && e.message.includes('pattern')
       )).toBe(true);
     });
 
@@ -405,7 +405,7 @@ describe('ExecutionRecord Schema Integration Tests', () => {
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
-        e.field.includes('type') && (e.message.includes('enum') || e.message.includes('must be equal to one of'))
+        e.field.includes('type') && e.message.includes('pattern')
       )).toBe(true);
     });
 
@@ -419,7 +419,7 @@ describe('ExecutionRecord Schema Integration Tests', () => {
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
-        e.field.includes('type') && (e.message.includes('enum') || e.message.includes('must be equal to one of'))
+        e.field.includes('type') && e.message.includes('pattern')
       )).toBe(true);
     });
   });
@@ -541,18 +541,15 @@ describe('ExecutionRecord Schema Integration Tests', () => {
       expect(result.isValid).toBe(true);
     });
 
-    it('[EARS-404] should reject result exceeding maxLength 22000', () => {
-      const invalid = {
+    it('[EARS-404] should accept result with 22001 chars (no maxLength)', () => {
+      const valid = {
         ...createValidExecutionRecord(),
         result: 'a'.repeat(22001)
       };
 
-      const result = validateExecutionRecordDetailed(invalid);
+      const result = validateExecutionRecordDetailed(valid);
 
-      expect(result.isValid).toBe(false);
-      expect(result.errors.some(e =>
-        e.field.includes('result') && e.message.includes('more than')
-      )).toBe(true);
+      expect(result.isValid).toBe(true);
     });
 
     it('[EARS-405] should reject non-string result', () => {
@@ -605,18 +602,15 @@ describe('ExecutionRecord Schema Integration Tests', () => {
       )).toBe(true);
     });
 
-    it('[EARS-409] should reject result with 22001 chars', () => {
-      const invalid = {
+    it('[EARS-409] should accept result with 22001 chars (no maxLength)', () => {
+      const valid = {
         ...createValidExecutionRecord(),
         result: 'a'.repeat(22001)
       };
 
-      const result = validateExecutionRecordDetailed(invalid);
+      const result = validateExecutionRecordDetailed(valid);
 
-      expect(result.isValid).toBe(false);
-      expect(result.errors.some(e =>
-        e.field.includes('result') && e.message.includes('more than')
-      )).toBe(true);
+      expect(result.isValid).toBe(true);
     });
 
     it('[EARS-410] should accept result with 11000 chars', () => {
@@ -652,18 +646,15 @@ describe('ExecutionRecord Schema Integration Tests', () => {
       expect(result.isValid).toBe(true);
     });
 
-    it('[EARS-413] should reject notes exceeding maxLength 6500', () => {
-      const invalid = {
+    it('[EARS-413] should accept notes with 6501 chars (no maxLength)', () => {
+      const valid = {
         ...createValidExecutionRecord(),
         notes: 'a'.repeat(6501)
       };
 
-      const result = validateExecutionRecordDetailed(invalid);
+      const result = validateExecutionRecordDetailed(valid);
 
-      expect(result.isValid).toBe(false);
-      expect(result.errors.some(e =>
-        e.field.includes('notes') && e.message.includes('more than')
-      )).toBe(true);
+      expect(result.isValid).toBe(true);
     });
 
     it('[EARS-414] should reject non-string notes', () => {
@@ -705,18 +696,15 @@ describe('ExecutionRecord Schema Integration Tests', () => {
       expect(result.isValid).toBe(true);
     });
 
-    it('[EARS-417] should reject notes with 6501 chars', () => {
-      const invalid = {
+    it('[EARS-417] should accept notes with 6501 chars (no maxLength)', () => {
+      const valid = {
         ...createValidExecutionRecord(),
         notes: 'a'.repeat(6501)
       };
 
-      const result = validateExecutionRecordDetailed(invalid);
+      const result = validateExecutionRecordDetailed(valid);
 
-      expect(result.isValid).toBe(false);
-      expect(result.errors.some(e =>
-        e.field.includes('notes') && e.message.includes('more than')
-      )).toBe(true);
+      expect(result.isValid).toBe(true);
     });
   });
 
@@ -819,15 +807,18 @@ describe('ExecutionRecord Schema Integration Tests', () => {
       )).toBe(true);
     });
 
-    it('[EARS-426] should accept references with empty string item', () => {
-      const valid = {
+    it('[EARS-426] should reject references with empty string item', () => {
+      const invalid = {
         ...createValidExecutionRecord(),
         references: ['']
       };
 
-      const result = validateExecutionRecordDetailed(valid);
+      const result = validateExecutionRecordDetailed(invalid);
 
-      expect(result.isValid).toBe(true);
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.field.includes('references') && e.message.includes('fewer')
+      )).toBe(true);
     });
 
     it('[EARS-427] should accept references with typed prefixes', () => {
@@ -881,7 +872,6 @@ describe('ExecutionRecord Schema Integration Tests', () => {
           'issue:789',
           'task:1234567890-task-test',
           'exec:1234567890-exec-other',
-          'changelog:1234567890-changelog-v1'
         ]
       };
 
@@ -1207,7 +1197,6 @@ describe('ExecutionRecord Schema Integration Tests', () => {
         references: [
           'task:1234567890-task-parent-task',
           'exec:1234567890-exec-previous-execution',
-          'changelog:1234567890-changelog-release-notes'
         ]
       };
 

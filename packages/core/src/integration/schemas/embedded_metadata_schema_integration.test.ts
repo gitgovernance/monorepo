@@ -1,5 +1,5 @@
 import { validateEmbeddedMetadataDetailed } from '../../record_validations/embedded_metadata_validator';
-import type { AgentRecord, TaskRecord, ExecutionRecord, ChangelogRecord, FeedbackRecord, CycleRecord, GitGovActorRecord } from '../../record_types';
+import type { AgentRecord, TaskRecord, ExecutionRecord, FeedbackRecord, CycleRecord, GitGovActorRecord } from '../../record_types';
 import type { Signature } from '../../record_types/embedded.types';
 
 describe('EmbeddedMetadata Schema Integration Tests (EARS 12-60)', () => {
@@ -88,9 +88,9 @@ describe('EmbeddedMetadata Schema Integration Tests (EARS 12-60)', () => {
       expect(result.errors.some(e => e.message.includes('version'))).toBe(true);
     });
 
-    it('[EARS-16] should reject invalid header.version value not in enum', () => {
+    it('[EARS-16] should reject invalid header.version value not matching pattern', () => {
       const invalid = createValidEmbeddedMetadata();
-      (invalid.header.version as string) = '2.0'; // Invalid enum value
+      (invalid.header.version as string) = 'v1.0'; // Invalid: pattern is ^\d+\.\d+$
 
       const result = validateEmbeddedMetadataDetailed(invalid);
       expect(result.isValid).toBe(false);
@@ -125,7 +125,7 @@ describe('EmbeddedMetadata Schema Integration Tests (EARS 12-60)', () => {
     it('[EARS-19] should accept all 8 valid header.type enum values', () => {
       // This test verifies that all enum values are accepted in header.type
       // Full payload validation is tested in EARS-44 through EARS-50
-      const validTypes = ['actor', 'agent', 'task', 'execution', 'changelog', 'feedback', 'cycle', 'custom'];
+      const validTypes = ['actor', 'agent', 'task', 'execution', 'feedback', 'cycle', 'workflow', 'custom'];
 
       for (const type of validTypes) {
         // Create complete EmbeddedMetadata records with proper payloads for each type
@@ -664,15 +664,15 @@ describe('EmbeddedMetadata Schema Integration Tests (EARS 12-60)', () => {
       expect(result.errors).toEqual([]);
     });
 
-    it('[EARS-52] should accept signature.timestamp with value 0 (Unix epoch)', () => {
-      const valid = createValidEmbeddedMetadata();
-      if (valid.header.signatures[0]) {
-        valid.header.signatures[0].timestamp = 0;  // Unix epoch
+    it('[EARS-52] should reject signature.timestamp below minimum 1600000000', () => {
+      const invalid = createValidEmbeddedMetadata();
+      if (invalid.header.signatures[0]) {
+        invalid.header.signatures[0].timestamp = 0;  // Below minimum: 1600000000
       }
 
-      const result = validateEmbeddedMetadataDetailed(valid);
-      expect(result.isValid).toBe(true);
-      expect(result.errors).toEqual([]);
+      const result = validateEmbeddedMetadataDetailed(invalid);
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e => e.message.includes('timestamp') || e.field.includes('timestamp'))).toBe(true);
     });
   });
 
@@ -754,26 +754,6 @@ describe('EmbeddedMetadata Schema Integration Tests (EARS 12-60)', () => {
       expect(result.errors).toEqual([]);
     });
 
-    it('[EARS-57] should validate payload against ChangelogRecord schema when header.type=log', () => {
-      const changelogPayload: ChangelogRecord = {
-        id: '1234567890-changelog-test',
-        title: 'Test Changelog Entry Title',  // minLength: 10
-        description: 'This is a test description for the changelog record with sufficient length',  // minLength: 20
-        relatedTasks: ['1234567890-task-test'],
-        completedAt: 1234567890,
-        version: 'v1.0.0'
-      };
-
-      const valid: Record<string, unknown> = {
-        header: createValidHeader('changelog'),
-        payload: changelogPayload
-      };
-
-      const result = validateEmbeddedMetadataDetailed(valid);
-      expect(result.isValid).toBe(true);
-      expect(result.errors).toEqual([]);
-    });
-
     it('[EARS-58] should validate payload against FeedbackRecord schema when header.type=feed', () => {
       const feedbackPayload: FeedbackRecord = {
         id: '1234567890-feedback-test',
@@ -812,12 +792,13 @@ describe('EmbeddedMetadata Schema Integration Tests (EARS 12-60)', () => {
       expect(result.errors).toEqual([]);
     });
 
-    it('[EARS-60] should reject payload that doesn\'t match the schema specified by header.type', () => {
+    it('[EARS-60] should reject mismatched payload when allOf conditional validation is active', () => {
+      // allOf conditional payload validation validates payload against the schema
+      // corresponding to header.type (RFC-01 §6.2 Schema Gate).
       const invalid: Record<string, unknown> = {
         header: createValidHeader('actor'),
         payload: {
-          // Invalid ActorRecord - missing required fields
-          id: 'invalid-actor'
+          id: 'any-payload-accepted'
         }
       };
 
