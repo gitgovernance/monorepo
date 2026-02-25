@@ -7,7 +7,6 @@
 
 import actorRecordSchema from "./actor_record_schema.json";
 import agentRecordSchema from "./agent_record_schema.json";
-import changelogRecordSchema from "./changelog_record_schema.json";
 import cycleRecordSchema from "./cycle_record_schema.json";
 import embeddedMetadataSchema from "./embedded_metadata_schema.json";
 import executionRecordSchema from "./execution_record_schema.json";
@@ -21,7 +20,6 @@ import workflowRecordSchema from "./workflow_record_schema.json";
 export const Schemas = {
   ActorRecord: actorRecordSchema,
   AgentRecord: agentRecordSchema,
-  ChangelogRecord: changelogRecordSchema,
   CycleRecord: cycleRecordSchema,
   EmbeddedMetadata: embeddedMetadataSchema,
   ExecutionRecord: executionRecordSchema,
@@ -36,7 +34,6 @@ export const Schemas = {
 export type SchemaName = 
   | "ActorRecord"
   | "AgentRecord"
-  | "ChangelogRecord"
   | "CycleRecord"
   | "EmbeddedMetadata"
   | "ExecutionRecord"
