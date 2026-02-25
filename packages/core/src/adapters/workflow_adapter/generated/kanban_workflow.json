@@ -1,12 +1,13 @@
 {
-  "version": "1.0.0",
+  "id": "1700000000-workflow-default-methodology",
   "name": "GitGovernance Default Methodology",
   "description": "Standard GitGovernance workflow with quality gates and agent collaboration",
   "state_transitions": {
-    "review": {
+    "submit": {
       "from": [
         "draft"
       ],
+      "to": "review",
       "requires": {
         "command": "gitgov task submit",
         "signatures": {
@@ -20,10 +21,11 @@
         }
       }
     },
-    "ready": {
+    "approve": {
       "from": [
         "review"
       ],
+      "to": "ready",
       "requires": {
         "command": "gitgov task approve",
         "signatures": {
@@ -51,11 +53,12 @@
         }
       }
     },
-    "active": {
+    "activate": {
       "from": [
         "ready",
         "paused"
       ],
+      "to": "active",
       "requires": {
         "event": "first_execution_record_created",
         "custom_rules": [
@@ -63,10 +66,11 @@
         ]
       }
     },
-    "done": {
+    "complete": {
       "from": [
         "active"
       ],
+      "to": "done",
       "requires": {
         "command": "gitgov task complete",
         "signatures": {
@@ -80,28 +84,31 @@
         }
       }
     },
-    "archived": {
+    "archive": {
       "from": [
         "done"
       ],
+      "to": "archived",
       "requires": {
-        "event": "changelog_record_created"
+        "command": "gitgov task archive"
       }
     },
-    "paused": {
+    "pause": {
       "from": [
         "active",
         "review"
       ],
+      "to": "paused",
       "requires": {
         "event": "feedback_blocking_created"
       }
     },
-    "discarded": {
+    "cancel": {
       "from": [
         "ready",
         "active"
       ],
+      "to": "discarded",
       "requires": {
         "command": "gitgov task cancel",
         "signatures": {

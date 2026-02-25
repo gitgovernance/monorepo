@@ -1,12 +1,13 @@
 {
-  "version": "1.0.0",
+  "id": "1700000000-workflow-scrum-framework",
   "name": "Scrum Framework",
   "description": "Agile Scrum methodology with sprint-based workflow and defined roles",
   "state_transitions": {
-    "review": {
+    "submit": {
       "from": [
         "draft"
       ],
+      "to": "review",
       "requires": {
         "command": "gitgov task submit",
         "signatures": {
@@ -20,10 +21,11 @@
         }
       }
     },
-    "ready": {
+    "approve": {
       "from": [
         "review"
       ],
+      "to": "ready",
       "requires": {
         "command": "gitgov task approve",
         "custom_rules": [
@@ -31,11 +33,12 @@
         ]
       }
     },
-    "active": {
+    "activate": {
       "from": [
         "ready",
         "paused"
       ],
+      "to": "active",
       "requires": {
         "event": "sprint_started",
         "custom_rules": [
@@ -43,10 +46,11 @@
         ]
       }
     },
-    "done": {
+    "complete": {
       "from": [
         "active"
       ],
+      "to": "done",
       "requires": {
         "command": "gitgov task complete",
         "signatures": {
@@ -60,19 +64,21 @@
         }
       }
     },
-    "archived": {
+    "archive": {
       "from": [
         "done"
       ],
+      "to": "archived",
       "requires": {
-        "event": "changelog_record_created"
+        "command": "gitgov task archive"
       }
     },
-    "paused": {
+    "pause": {
       "from": [
         "active",
         "review"
       ],
+      "to": "paused",
       "requires": {
         "event": "feedback_blocking_created"
       }

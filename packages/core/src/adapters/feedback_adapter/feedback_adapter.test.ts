@@ -145,7 +145,7 @@ describe('FeedbackAdapter', () => {
       const invalidPayload = { entityType: 'invalid', entityId: 'task-123', content: 'test' } as Partial<FeedbackRecord> & { entityType: 'invalid' };
 
       await expect(feedbackAdapter.create(invalidPayload, mockActorId))
-        .rejects.toThrow('InvalidEntityTypeError: entityType must be task, execution, changelog, feedback, or cycle');
+        .rejects.toThrow('InvalidEntityTypeError: entityType must be task, execution, feedback, or cycle');
     });
 
     it('[EARS-A5] should prevent duplicate assignment to same actor', async () => {

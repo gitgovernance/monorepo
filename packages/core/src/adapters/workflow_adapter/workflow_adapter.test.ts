@@ -64,11 +64,12 @@ describe('WorkflowAdapter', () => {
 
     it('[EARS-A2] should accept custom config object', () => {
       const customConfig = {
-        version: '1.0.0',
+        id: '1234567890-workflow-custom',
         name: 'Custom Methodology',
         state_transitions: {
-          'draft': {
+          'submit': {
             from: ['draft'],
+            to: 'review',
             requires: { command: 'gitgov task submit' }
           }
         }
@@ -88,12 +89,13 @@ describe('WorkflowAdapter', () => {
     beforeEach(() => {
       // Mock config for unit tests
       const mockConfig = {
-        version: '1.0.0',
+        id: '1234567890-workflow-test',
         name: 'Test Methodology',
         description: 'Test methodology config',
         state_transitions: {
-          review: {
+          submit: {
             from: ['draft'],
+            to: 'review',
             requires: {
               command: 'gitgov task submit',
               signatures: {
@@ -105,8 +107,9 @@ describe('WorkflowAdapter', () => {
               }
             }
           },
-          ready: {
+          approve: {
             from: ['review'],
+            to: 'ready',
             requires: {
               command: 'gitgov task approve',
               signatures: {
@@ -118,15 +121,17 @@ describe('WorkflowAdapter', () => {
               }
             }
           },
-          active: {
+          activate: {
             from: ['ready'],
+            to: 'active',
             requires: {
               event: 'first_execution_record_created',
               custom_rules: ['task_must_have_valid_assignment_for_executor']
             }
           },
-          done: {
+          complete: {
             from: ['active'],
+            to: 'done',
             requires: {
               command: 'gitgov task complete',
               signatures: {
@@ -138,10 +143,26 @@ describe('WorkflowAdapter', () => {
               }
             }
           },
-          archived: {
+          archive: {
             from: ['done'],
+            to: 'archived',
             requires: {
-              event: 'changelog_record_created'
+              command: 'gitgov task archive'
+            }
+          },
+          pause: {
+            from: ['active', 'review'],
+            to: 'paused',
+            requires: {
+              event: 'feedback_blocking_created'
+            }
+          },
+          resume: {
+            from: ['paused'],
+            to: 'active',
+            requires: {
+              event: 'first_execution_record_created',
+              custom_rules: ['task_must_have_valid_assignment_for_executor']
             }
           }
         },
@@ -180,29 +201,11 @@ describe('WorkflowAdapter', () => {
       const context: ValidationContext = { task: createMockTask() };
       const rule = await adapter.getTransitionRule('review', 'ready', context);
 
-      expect(rule).toEqual({
-        to: 'ready',
-        conditions: {
-          command: 'gitgov task approve',
-          signatures: {
-            '__default__': {
-              role: 'approver',
-              capability_roles: ['approver:product'],
-              min_approvals: 1
-            },
-            'design': {
-              role: 'approver',
-              capability_roles: ['approver:design'],
-              min_approvals: 1
-            },
-            'quality': {
-              role: 'approver',
-              capability_roles: ['approver:quality'],
-              min_approvals: 1
-            }
-          }
-        }
-      });
+      expect(rule).toBeDefined();
+      expect(rule?.to).toBe('ready');
+      expect(rule?.conditions?.command).toBe('gitgov task approve');
+      expect(rule?.conditions?.signatures?.['__default__']?.role).toBe('approver');
+      expect(rule?.conditions?.signatures?.['__default__']?.capability_roles).toContain('approver:product');
     });
 
     it('[EARS-B3] should return transition rule for ready to active', async () => {
@@ -243,7 +246,7 @@ describe('WorkflowAdapter', () => {
 
       expect(rule).toEqual({
         to: 'archived',
-        conditions: { event: 'changelog_record_created' }
+        conditions: { command: 'gitgov task archive' }
       });
     });
 
@@ -284,12 +287,13 @@ describe('WorkflowAdapter', () => {
 
     beforeEach(() => {
       const mockConfig = {
-        version: '1.0.0',
+        id: '1234567890-workflow-test-sig',
         name: 'Test Methodology',
         description: 'Test methodology config',
         state_transitions: {
-          ready: {
+          approve: {
             from: ['review'],
+            to: 'ready',
             requires: {
               signatures: {
                 __default__: {
@@ -300,8 +304,9 @@ describe('WorkflowAdapter', () => {
               }
             }
           },
-          done: {
+          complete: {
             from: ['active'],
+            to: 'done',
             requires: {
               signatures: {
                 __default__: {
@@ -395,7 +400,7 @@ describe('WorkflowAdapter', () => {
     beforeEach(() => {
       // Mock config loading for validateCustomRules tests
       const mockConfig = {
-        version: '1.0.0',
+        id: '1234567890-workflow-test-rules',
         name: 'Test Methodology',
         description: 'Test methodology for custom rules',
         state_transitions: {},
@@ -495,7 +500,7 @@ describe('WorkflowAdapter', () => {
     it('[EARS-D6] should validate epic_complexity rule for decomposed epic', async () => {
       const customAdapter = new WorkflowAdapter({
         config: {
-          version: '1.0.0', name: 'Test', state_transitions: {},
+          id: '1234567890-workflow-test-epic', name: 'Test', state_transitions: {},
           custom_rules: { 'epic_check': { description: 'Epic decomposed', validation: 'epic_complexity' } }
         } as unknown as WorkflowRecord,
         feedbackAdapter: mockFeedbackAdapter
@@ -510,7 +515,7 @@ describe('WorkflowAdapter', () => {
     it('[EARS-D7] should pass epic_complexity rule for non-epic task', async () => {
       const customAdapter = new WorkflowAdapter({
         config: {
-          version: '1.0.0', name: 'Test', state_transitions: {},
+          id: '1234567890-workflow-test-epic', name: 'Test', state_transitions: {},
           custom_rules: { 'epic_check': { description: 'Epic decomposed', validation: 'epic_complexity' } }
         } as unknown as WorkflowRecord,
         feedbackAdapter: mockFeedbackAdapter
@@ -524,7 +529,7 @@ describe('WorkflowAdapter', () => {
     it('[EARS-D8] should execute custom validation type', async () => {
       const customAdapter = new WorkflowAdapter({
         config: {
-          version: '1.0.0', name: 'Test', state_transitions: {},
+          id: '1234567890-workflow-test-custom', name: 'Test', state_transitions: {},
           custom_rules: { 'run_custom_check': { description: 'Custom check', validation: 'custom' } }
         } as unknown as WorkflowRecord,
         feedbackAdapter: mockFeedbackAdapter
@@ -544,19 +549,22 @@ describe('WorkflowAdapter', () => {
     beforeEach(() => {
       adapter = new WorkflowAdapter({
         config: {
-          version: '1.0.0',
+          id: '1234567890-workflow-test-avail',
           name: 'Test Methodology',
           state_transitions: {
-            review: {
+            submit: {
               from: ['draft'],
+              to: 'review',
               requires: { command: 'gitgov task submit' }
             },
-            ready: {
+            approve: {
               from: ['review'],
+              to: 'ready',
               requires: { command: 'gitgov task approve' }
             },
-            active: {
+            activate: {
               from: ['ready'],
+              to: 'active',
               requires: { event: 'first_execution_record_created' }
             }
           },

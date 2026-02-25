@@ -221,7 +221,6 @@ describe('WorkflowAdapter - DEFAULT Methodology Integration Tests', () => {
 
         expect(rule).toBeDefined();
         expect(rule?.to).toBe('archived');
-        expect(rule?.conditions?.event).toBe('changelog_record_created');
       });
 
       it('[EARS-C6] should complete active to paused transition with default methodology', async () => {

@@ -155,7 +155,7 @@ describe('WorkflowAdapter - SCRUM Methodology Integration Tests', () => {
 
         expect(rule).toBeDefined();
         expect(rule?.to).toBe('archived');
-        expect(rule?.conditions?.event).toBe('changelog_record_created');
+        expect(rule?.conditions?.command).toBe('gitgov task archive');
       });
     });
 
