@@ -10,9 +10,26 @@
 import type { GitGovRecordType } from '../record_types';
 
 /**
+ * Parsed result of a timestamp-based record ID.
+ */
+export interface ParsedTimestampedId {
+  timestamp: number;
+  prefix: string;
+  slug: string;
+}
+
+/**
+ * Parsed result of an actor ID.
+ */
+export interface ParsedActorId {
+  type: 'human' | 'agent';
+  slug: string;
+}
+
+/**
  * Mapping from directory names to entity types.
  */
-const DIR_TO_TYPE: Record<string, GitGovRecordType> = {
+export const DIR_TO_TYPE: Record<string, GitGovRecordType> = {
   'tasks': 'task',
   'cycles': 'cycle',
   'executions': 'execution',
@@ -20,6 +37,14 @@ const DIR_TO_TYPE: Record<string, GitGovRecordType> = {
   'actors': 'actor',
   'agents': 'agent'
 };
+
+/**
+ * Mapping from entity types to directory names (inverse of DIR_TO_TYPE).
+ */
+export const TYPE_TO_DIR: Record<GitGovRecordType, string> =
+  Object.fromEntries(
+    Object.entries(DIR_TO_TYPE).map(([dir, type]) => [type, dir]),
+  ) as Record<GitGovRecordType, string>;
 
 /**
  * Valid directory names for GitGov records.
@@ -135,7 +160,7 @@ export const VALID_PREFIXES = ['task', 'cycle', 'exec', 'feedback'] as const;
  * parseTimestampedId('1234567890-task-implement-auth')
  * // { timestamp: 1234567890, prefix: 'task', slug: 'implement-auth' }
  */
-export function parseTimestampedId(id: string): { timestamp: number; prefix: string; slug: string } | null {
+export function parseTimestampedId(id: string): ParsedTimestampedId | null {
   if (typeof id !== 'string') return null;
   const match = id.match(/^(\d+)-(\w+)-(.+)$/);
   if (!match || !match[1] || !match[2] || !match[3]) {
@@ -158,7 +183,7 @@ export function parseTimestampedId(id: string): { timestamp: number; prefix: str
  * parseActorId('human:camilo-velandia') // { type: 'human', slug: 'camilo-velandia' }
  * parseActorId('agent:code-reviewer') // { type: 'agent', slug: 'code-reviewer' }
  */
-export function parseActorId(id: string): { type: 'human' | 'agent'; slug: string } | null {
+export function parseActorId(id: string): ParsedActorId | null {
   if (typeof id !== 'string') return null;
   const parts = id.split(':');
   if (parts.length < 2 || (parts[0] !== 'human' && parts[0] !== 'agent')) {
