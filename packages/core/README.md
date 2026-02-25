@@ -115,7 +115,7 @@ await batchStore.putMany([
 ```mermaid
 graph LR
     subgraph "@gitgov/core — Pure Logic"
-        Adapters["Adapters (10)"]
+        Adapters["Adapters (9)"]
         Modules["Modules (26)"]
         Records["Record System"]
         Projection["RecordProjector + IRecordProjection"]
@@ -193,7 +193,7 @@ Every record type has 4 parallel artifacts:
 | Validator | `record_validations/`       | Business rules on the record                |
 | Schema    | `record_schemas/generated/` | JSON Schema for AJV validation              |
 
-The 8 records: **Actor, Agent, Task, Cycle, Execution, Feedback, Workflow**
+The 7 records: **Actor, Agent, Task, Cycle, Execution, Feedback, Workflow**
 
 ## Adapters
 
