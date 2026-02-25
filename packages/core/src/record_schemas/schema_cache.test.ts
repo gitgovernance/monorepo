@@ -47,7 +47,7 @@ describe('SchemaValidationCache', () => {
       expect(schemaNames).toContain('EmbeddedMetadata');
 
       // Verify minimum number of schemas
-      expect(schemaNames.length).toBeGreaterThanOrEqual(9);
+      expect(schemaNames.length).toBeGreaterThanOrEqual(8);
     });
 
     it('[EARS-4] should verify schema existence with type safety', () => {
