@@ -117,6 +117,7 @@
       "then": {
         "properties": {
           "entityId": {
+            "type": "string",
             "pattern": "^(human|agent)(:[a-z0-9-]+)+$"
           }
         }
@@ -136,6 +137,7 @@
       "then": {
         "properties": {
           "entityId": {
+            "type": "string",
             "pattern": "^agent(:[a-z0-9-]+)+$"
           }
         }
@@ -155,6 +157,7 @@
       "then": {
         "properties": {
           "entityId": {
+            "type": "string",
             "pattern": "^\\d{10}-task-[a-z0-9-]{1,50}$"
           }
         }
@@ -174,6 +177,7 @@
       "then": {
         "properties": {
           "entityId": {
+            "type": "string",
             "pattern": "^\\d{10}-exec-[a-z0-9-]{1,50}$"
           }
         }
@@ -193,6 +197,7 @@
       "then": {
         "properties": {
           "entityId": {
+            "type": "string",
             "pattern": "^\\d{10}-feedback-[a-z0-9-]{1,50}$"
           }
         }
@@ -212,6 +217,7 @@
       "then": {
         "properties": {
           "entityId": {
+            "type": "string",
             "pattern": "^\\d{10}-cycle-[a-z0-9-]{1,50}$"
           }
         }
@@ -231,6 +237,7 @@
       "then": {
         "properties": {
           "entityId": {
+            "type": "string",
             "pattern": "^\\d{10}-workflow-[a-z0-9-]{1,50}$"
           }
         }

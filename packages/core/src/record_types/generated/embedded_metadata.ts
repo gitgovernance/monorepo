@@ -7,12 +7,14 @@
 /**
  * Canonical schema for the wrapper structure of all GitGovernance records.
  */
-export interface EmbeddedMetadataRecord {
+export type EmbeddedMetadataRecord = {
+  [k: string]: unknown | undefined;
+} & {
   header: {
     /**
-     * Version of the embedded metadata format.
+     * Protocol version in MAJOR.MINOR format (e.g. "1.1", "2.0").
      */
-    version: '1.0';
+    version: string;
     /**
      * The type of the record contained in the payload.
      */
@@ -85,4 +87,4 @@ export interface EmbeddedMetadataRecord {
    * The specific record data, validated against the schema defined by header.type.
    */
   payload: {};
-}
+};

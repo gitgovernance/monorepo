@@ -89,13 +89,19 @@ function addGenericParameters(
     .map(g => `${g.genericName} = ${g.defaultType}`)
     .join(', ');
 
-  // Replace interface declaration to add generic parameter
-  // Match: "export interface InterfaceName {"
+  // Replace interface or type declaration to add generic parameter
+  // Match: "export interface InterfaceName {" or "export type InterfaceName = {"
   const interfaceRegex = new RegExp(
     `(export interface ${interfaceName})\\s*\\{`,
     'g'
   );
   result = result.replace(interfaceRegex, `$1<${genericParams}> {`);
+
+  const typeRegex = new RegExp(
+    `(export type ${interfaceName})\\s*=`,
+    'g'
+  );
+  result = result.replace(typeRegex, `$1<${genericParams}> =`);
 
   // Replace each generic field's type
   for (const field of genericFields) {

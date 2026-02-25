@@ -107,7 +107,23 @@
     "metadata": {
       "type": "object",
       "additionalProperties": true,
-      "description": "Optional structured data for machine consumption.\nUse this field for tool-specific or integration-specific data that needs to be programmatically processed.\n"
+      "description": "Optional structured data for machine consumption.\nUse this field for domain-specific data that needs to be programmatically processed.\nExtends the strategic grouping with structured, queryable attributes.\nCommon use cases: epic lifecycle, sprint configuration, OKR tracking, budget allocation.\n",
+      "examples": [
+        {
+          "epic": true,
+          "phase": "active",
+          "files": {
+            "overview": "overview.md",
+            "roadmap": "roadmap.md",
+            "plan": "implementation_plan.md"
+          }
+        },
+        {
+          "sprint": 24,
+          "velocity": 42,
+          "team": "backend"
+        }
+      ]
     }
   },
   "examples": [

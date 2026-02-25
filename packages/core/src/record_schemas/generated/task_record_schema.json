@@ -97,7 +97,20 @@
     "metadata": {
       "type": "object",
       "additionalProperties": true,
-      "description": "Optional structured data for machine consumption.\nUse this field for tool-specific or integration-specific data that needs to be programmatically processed.\n"
+      "description": "Optional structured data for machine consumption.\nUse this field for domain-specific data that needs to be programmatically processed.\nComplements tags (classification) and notes (free text) with structured, queryable data.\nCommon use cases: epic metadata, external tool references, agent metrics, compliance tags.\n",
+      "examples": [
+        {
+          "epic": true,
+          "phase": "implementation",
+          "files": {
+            "overview": "overview.md"
+          }
+        },
+        {
+          "jira": "AUTH-42",
+          "storyPoints": 5
+        }
+      ]
     }
   },
   "examples": [

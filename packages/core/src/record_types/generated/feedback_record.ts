@@ -7,7 +7,7 @@
 /**
  * Canonical schema for feedback records — the structured conversation about work.
  */
-export type FeedbackRecord = {
+export type FeedbackRecord<TMetadata = object> = {
   [k: string]: unknown | undefined;
 } & {
   /**

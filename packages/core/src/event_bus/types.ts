@@ -113,19 +113,6 @@ export type FeedbackCreatedEvent = BaseEvent & {
 }
 
 /**
- * Changelog-related events
- * Uses Utility Types derived automatically from official ChangelogRecord
- */
-import type { ChangelogRecord } from '../record_types/generated/changelog_record';
-
-export type ChangelogCreatedEvent = BaseEvent & {
-  type: 'changelog.created';
-  payload: Pick<ChangelogRecord, 'relatedTasks' | 'title' | 'version'> & {
-    changelogId: string; // Alias for ChangelogRecord id
-  };
-}
-
-/**
  * Identity-related events
  * Uses Utility Types derived automatically from official ActorRecord and AgentRecord
  */
@@ -177,7 +164,6 @@ export type GitGovEvent =
   | CycleStatusChangedEvent
   | ExecutionCreatedEvent
   | FeedbackCreatedEvent
-  | ChangelogCreatedEvent
   | ActorCreatedEvent
   | ActorRevokedEvent
   | AgentRegisteredEvent
@@ -241,16 +227,6 @@ export type ActivityEvent =
       type?: string;
       assignee?: string;
       resolution?: string;
-    };
-  }
-  | {
-    timestamp: number;
-    type: "changelog_created";
-    entityId: string;
-    entityTitle: string;
-    actorId?: string;
-    metadata?: {
-      version?: string;
     };
   }
   | {

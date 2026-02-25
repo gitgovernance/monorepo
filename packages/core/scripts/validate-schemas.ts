@@ -62,12 +62,6 @@ const EXPECTED_SCHEMAS = [
     description: 'Execution records for task executions'
   },
   {
-    name: 'ChangelogRecord',
-    file: 'changelog_record_schema.json',
-    expectedTitle: 'ChangelogRecord',
-    description: 'Changelog records for tracking changes'
-  },
-  {
     name: 'FeedbackRecord',
     file: 'feedback_record_schema.json',
     expectedTitle: 'FeedbackRecord',

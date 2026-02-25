@@ -4,7 +4,6 @@ import {
   isExecutionPayload,
   isActorPayload,
   isAgentPayload,
-  isChangelogPayload,
   isFeedbackPayload
 } from './type_guards';
 import type { GitGovRecordPayload } from './index';
@@ -150,33 +149,6 @@ describe('Type Guards', () => {
     });
   });
 
-  describe('isChangelogPayload', () => {
-    it('should return true for valid ChangelogRecord', () => {
-      const changelog: GitGovRecordPayload = {
-        id: '1234567890-changelog-test-release',
-        title: 'Test Release v1.0.0',
-        description: 'This is a test release with many improvements and fixes.',
-        relatedTasks: ['1234567890-task-implement-feature'],
-        completedAt: 1234567890
-      };
-      expect(isChangelogPayload(changelog)).toBe(true);
-    });
-
-    it('should return false for TaskRecord', () => {
-      const task: GitGovRecordPayload = {
-        id: '1234567890-task-test',
-        title: 'Test Task',
-        status: 'draft',
-        priority: 'medium',
-        description: 'A test task with enough characters.',
-        tags: [],
-        cycleIds: [],
-        references: []
-      };
-      expect(isChangelogPayload(task)).toBe(false);
-    });
-  });
-
   describe('isFeedbackPayload', () => {
     it('should return true for valid FeedbackRecord', () => {
       const feedback: GitGovRecordPayload = {
@@ -188,17 +160,6 @@ describe('Type Guards', () => {
         content: 'This implementation needs to be reviewed before merging.'
       };
       expect(isFeedbackPayload(feedback)).toBe(true);
-    });
-
-    it('should return false for ChangelogRecord', () => {
-      const changelog: GitGovRecordPayload = {
-        id: '1234567890-changelog-test-release',
-        title: 'Test Release v1.0.0',
-        description: 'This is a test release with many improvements and fixes.',
-        relatedTasks: ['1234567890-task-implement-feature'],
-        completedAt: 1234567890
-      };
-      expect(isFeedbackPayload(changelog)).toBe(false);
     });
   });
 });

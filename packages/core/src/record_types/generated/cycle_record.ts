@@ -38,7 +38,9 @@ export interface CycleRecord<TMetadata = object> {
   notes?: string;
   /**
    * Optional structured data for machine consumption.
-   * Use this field for tool-specific or integration-specific data that needs to be programmatically processed.
+   * Use this field for domain-specific data that needs to be programmatically processed.
+   * Extends the strategic grouping with structured, queryable attributes.
+   * Common use cases: epic lifecycle, sprint configuration, OKR tracking, budget allocation.
    *
    */
   metadata?: TMetadata;

@@ -46,7 +46,9 @@ export interface TaskRecord<TMetadata = object> {
   notes?: string;
   /**
    * Optional structured data for machine consumption.
-   * Use this field for tool-specific or integration-specific data that needs to be programmatically processed.
+   * Use this field for domain-specific data that needs to be programmatically processed.
+   * Complements tags (classification) and notes (free text) with structured, queryable data.
+   * Common use cases: epic metadata, external tool references, agent metrics, compliance tags.
    *
    */
   metadata?: TMetadata;

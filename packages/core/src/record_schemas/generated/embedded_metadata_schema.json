@@ -10,10 +10,8 @@
       "properties": {
         "version": {
           "type": "string",
-          "enum": [
-            "1.0"
-          ],
-          "description": "Version of the embedded metadata format."
+          "pattern": "^\\d+\\.\\d+$",
+          "description": "Protocol version in MAJOR.MINOR format (e.g. \"1.1\", \"2.0\")."
         },
         "type": {
           "type": "string",
@@ -31,6 +29,7 @@
         },
         "schemaUrl": {
           "type": "string",
+          "format": "uri",
           "description": "URL to a custom schema for the payload. Required when type is 'custom'."
         },
         "schemaChecksum": {
@@ -108,27 +107,252 @@
     "payload"
   ],
   "additionalProperties": false,
-  "if": {
-    "properties": {
-      "header": {
-        "type": "object",
+  "allOf": [
+    {
+      "if": {
         "properties": {
-          "type": {
-            "const": "custom"
+          "header": {
+            "properties": {
+              "type": {
+                "const": "custom"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "header": {
+            "type": "object",
+            "required": [
+              "schemaUrl",
+              "schemaChecksum"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "header": {
+            "properties": {
+              "type": {
+                "const": "actor"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "ref:actor_record_schema"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "header": {
+            "properties": {
+              "type": {
+                "const": "agent"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "ref:agent_record_schema"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "header": {
+            "properties": {
+              "type": {
+                "const": "task"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "ref:task_record_schema"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "header": {
+            "properties": {
+              "type": {
+                "const": "execution"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "ref:execution_record_schema"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "header": {
+            "properties": {
+              "type": {
+                "const": "feedback"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "ref:feedback_record_schema"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "header": {
+            "properties": {
+              "type": {
+                "const": "cycle"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "ref:cycle_record_schema"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "header": {
+            "properties": {
+              "type": {
+                "const": "workflow"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "ref:workflow_record_schema"
           }
         }
       }
     }
-  },
-  "then": {
-    "properties": {
+  ],
+  "examples": [
+    {
       "header": {
-        "type": "object",
-        "required": [
-          "schemaUrl",
-          "schemaChecksum"
+        "version": "1.1",
+        "type": "actor",
+        "payloadChecksum": "063d4ba3505e4d2d3852f6063cbd0b98a8728b2afb4a26a323c5c5c512137398",
+        "signatures": [
+          {
+            "keyId": "human:lead-dev",
+            "role": "author",
+            "notes": "Self-registration of lead developer account",
+            "signature": "yEtlWOGAek8ukP8fycqYZOyogQBudO5XUf4v4BUGaOTogDH4wraanhLvutaJBM7rdilFUS2VvmxZmIy0KjTZAg==",
+            "timestamp": 1752274500
+          }
         ]
+      },
+      "payload": {
+        "id": "human:lead-dev",
+        "type": "human",
+        "displayName": "Lead Developer",
+        "publicKey": "0yyrCETtVql51Id+nRKGmpbfsxNxOz+eCYLpWDoutV0=",
+        "roles": [
+          "developer",
+          "reviewer"
+        ],
+        "status": "active"
+      }
+    },
+    {
+      "header": {
+        "version": "1.1",
+        "type": "execution",
+        "payloadChecksum": "bd667ddc8698a50594592ac15d0761e62a9f05cc3ba10a9a853ef0819e5fb2ad",
+        "signatures": [
+          {
+            "keyId": "agent:camilo:cursor",
+            "role": "author",
+            "notes": "OAuth 2.0 flow completed with GitHub provider integration",
+            "signature": "8d9LWTtMlK/Ct4+QWGFpH4iFdZb9T/hlFThAAGKqz8UOPe9qDwPFcv3b4qz9G+NQXh1/PgB1pl8YiQCe6fnjAQ==",
+            "timestamp": 1752274600
+          },
+          {
+            "keyId": "human:camilo",
+            "role": "reviewer",
+            "notes": "Reviewed and tested locally. LGTM.",
+            "signature": "17xsA75W0zzNZI3DXa8iHmxS5NwedfCwu9DoXwk/vArk9yaHcFsY6EgJHNPUtIX+XeKSVF/lOg6CvVIkcXjjAA==",
+            "timestamp": 1752274650
+          }
+        ]
+      },
+      "payload": {
+        "id": "1752274600-exec-implement-oauth",
+        "taskId": "1752274500-task-implement-oauth",
+        "type": "progress",
+        "title": "OAuth 2.0 flow implemented",
+        "result": "Completed the OAuth 2.0 authentication flow with GitHub provider. Token refresh and session management included."
+      }
+    },
+    {
+      "header": {
+        "version": "1.1",
+        "type": "custom",
+        "schemaUrl": "https://example.com/schemas/deployment-record-v1.json",
+        "schemaChecksum": "d4e5f6a1b2c3789012345678901234567890123456789012345678901234abcd",
+        "payloadChecksum": "1f9598081fcfcf34732de647de25c8445e68e9320e0c10d3a4bd911c7274a1b3",
+        "signatures": [
+          {
+            "keyId": "agent:deploy-bot",
+            "role": "author",
+            "notes": "Production deployment of v2.1.0",
+            "signature": "W3cSLJnEp+OmKVOwFqjuLTL1S55/OlQyFDzmmxg+vUfETIiQWNr7aDH06/rHUM11g2BLEGRfXZPQPFry6FJeAw==",
+            "timestamp": 1752274700
+          }
+        ]
+      },
+      "payload": {
+        "deploymentId": "deploy-2025-07-12-v2.1.0",
+        "environment": "production",
+        "status": "success"
       }
     }
-  }
+  ]
 }

@@ -83,8 +83,8 @@ function updateSchemaRefs(obj: any): void {
 
   for (const key in obj) {
     if (key === '$ref' && typeof obj[key] === 'string') {
-      // Convert "../02_actor/actor_record_schema.yaml" to "ref:actor_record_schema"
-      obj[key] = obj[key].replace(/.*\/([^/]+)_schema\.yaml$/, 'ref:$1_schema');
+      // Convert "actor_record_schema.yaml" or "../path/actor_record_schema.yaml" to "ref:actor_record_schema"
+      obj[key] = obj[key].replace(/^(?:.*\/)?([^/]+_schema)\.yaml$/, 'ref:$1');
     } else if (typeof obj[key] === 'object') {
       updateSchemaRefs(obj[key]);
     }
