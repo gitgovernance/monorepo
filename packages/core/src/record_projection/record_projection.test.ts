@@ -2263,7 +2263,6 @@ describe('RecordProjector', () => {
       }));
       mockStores.feedbacks.list.mockResolvedValue([]);
       mockStores.executions.list.mockResolvedValue([]);
-      mockStores.changelogs.list.mockResolvedValue([]);
 
       (verifySignatures as jest.Mock).mockResolvedValue(true);
 

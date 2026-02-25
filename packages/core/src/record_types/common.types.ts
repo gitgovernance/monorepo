@@ -7,14 +7,6 @@ import type { FeedbackRecord } from "./";
 import type { EmbeddedMetadataRecord } from "./embedded.types";
 
 /**
- * A custom record type for testing purposes.
- */
-export type CustomRecord = {
-  type: 'custom';
-  data: unknown;
-}
-
-/**
  * Defines the possible 'type' values for any record in the system.
  */
 export type GitGovRecordType =
@@ -23,8 +15,7 @@ export type GitGovRecordType =
   | "cycle"
   | "task"
   | "execution"
-  | "feedback"
-  | "custom";
+  | "feedback";
 
 /**
  * The canonical payload for any GitGovernance record.
@@ -35,8 +26,7 @@ export type GitGovRecordPayload =
   | CycleRecord
   | TaskRecord
   | ExecutionRecord
-  | FeedbackRecord
-  | CustomRecord;
+  | FeedbackRecord;
 
 /**
  * The canonical type for any record in GitGovernance, wrapping a payload with metadata.
