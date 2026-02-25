@@ -729,14 +729,15 @@ describe('MCP Core Integration', () => {
     });
 
     it('[MSRV-CE4] should create waiver feedback record on disk', async () => {
+      const fingerprint = '1700000000-exec-waiver-test';
       const { data, isError } = await callHandler(auditWaiveTool, {
-        fingerprint: 'fp-test-123',
+        fingerprint,
         justification: 'False positive in test file',
       }, di);
 
       expect(isError).toBe(false);
       expect(data.waiverId).toBeDefined();
-      expect(data.fingerprint).toBe('fp-test-123');
+      expect(data.fingerprint).toBe(fingerprint);
 
       // Verify feedback record on disk
       const waiverFile = path.join(project.gitgovPath, 'feedback', `${data.waiverId}.json`);
