@@ -552,6 +552,68 @@ describe('Sync CLI Commands - E2E Tests', () => {
   });
 
   // ============================================================================
+  // EARS-G7: Re-push when remote gitgov-state branch is deleted
+  // ============================================================================
+  describe('EARS-G7: Re-push when remote branch deleted', () => {
+    let testProjectRoot: string;
+    let remotePath: string;
+    let worktreeBasePath: string;
+    const worktreesToClean: string[] = [];
+
+    beforeEach(() => {
+      const caseName = `ears-g7-${Date.now()}`;
+      testProjectRoot = path.join(tempDir, caseName);
+      remotePath = path.join(tempDir, `${caseName}-remote`);
+      createGitRepo(testProjectRoot, true);
+      createBareRemote(remotePath);
+      addRemote(testProjectRoot, remotePath);
+      execSync('git push -u origin main', { cwd: testProjectRoot, stdio: 'pipe' });
+      worktreeBasePath = getWorktreeBasePath(testProjectRoot);
+      worktreesToClean.length = 0;
+      worktreesToClean.push(worktreeBasePath);
+    });
+
+    afterEach(() => {
+      process.chdir(originalCwd);
+      for (const wt of worktreesToClean) {
+        cleanupWorktree(testProjectRoot, wt);
+      }
+    });
+
+    it('[EARS-G7] WHEN remote gitgov-state is deleted THEN push SHALL detect local ahead and recreate remote branch', () => {
+      // 1. Initialize GitGovernance, create a task, and push
+      runCliCommand(['init', '--name', 'EARS-G7 Test', '--actor-name', 'Test User', '--quiet'], { cwd: testProjectRoot });
+      runCliCommand(['task', 'new', 'Task Before Delete', '-d', 'Task created before remote branch deletion'], { cwd: testProjectRoot });
+      runCliCommand(['sync', 'push'], { cwd: testProjectRoot });
+
+      // 2. Verify gitgov-state exists remotely
+      const branchesBefore = execSync('git ls-remote --heads origin gitgov-state', { cwd: testProjectRoot, encoding: 'utf8' });
+      expect(branchesBefore.trim()).toContain('gitgov-state');
+
+      // 3. Delete remote branch (simulating remote data loss)
+      execSync('git branch -D gitgov-state', { cwd: remotePath, stdio: 'pipe' });
+
+      // 4. Verify remote branch is gone
+      const branchesAfterDelete = execSync('git ls-remote --heads origin gitgov-state', { cwd: testProjectRoot, encoding: 'utf8' });
+      expect(branchesAfterDelete.trim()).toBe('');
+
+      // 5. Push again — no new local changes, but local is ahead of (non-existent) remote
+      const pushResult = runCliCommand(['sync', 'push'], { cwd: testProjectRoot });
+      expect(pushResult.success).toBe(true);
+
+      // 6. Verify gitgov-state was recreated remotely
+      const branchesAfterPush = execSync('git ls-remote --heads origin gitgov-state', { cwd: testProjectRoot, encoding: 'utf8' });
+      expect(branchesAfterPush.trim()).toContain('gitgov-state');
+
+      // 7. Verify the task data survived on the remote
+      execSync('git fetch origin gitgov-state', { cwd: testProjectRoot, stdio: 'pipe' });
+      const stateFiles = execSync('git ls-tree -r --name-only origin/gitgov-state', { cwd: testProjectRoot, encoding: 'utf8' });
+      expect(stateFiles).toContain('.gitgov/config.json');
+      expect(stateFiles).toMatch(/\.gitgov\/tasks\/.*\.json/);
+    });
+  });
+
+  // ============================================================================
   // Worktree Sync E2E (E2E-SYNC-W1 to W4)
   // ============================================================================
   describe('Worktree Sync (E2E-SYNC-W1 to W4)', () => {

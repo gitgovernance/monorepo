@@ -546,8 +546,12 @@ ${steps.join('\n')}
       }
 
       // [EARS-B2] Handle "no changes" case (can be success=true with 0 files or success=false without conflict)
-      if (result.filesSynced === 0) {
+      if (result.filesSynced === 0 && !result.commitHash) {
         console.log('ℹ️  No local changes to push');
+      } else if (result.filesSynced === 0 && result.commitHash) {
+        // [EARS-B10] Existing commits pushed without new delta
+        console.log(`✅ Pushed existing commits to gitgov-state`);
+        console.log(`📝 Commit: ${result.commitHash.substring(0, 8)}`);
       } else if (result.success) {
         console.log(`✅ ${result.filesSynced} files synced to gitgov-state`);
         if (result.commitHash) {
