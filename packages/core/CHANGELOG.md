@@ -1,3 +1,10 @@
+## [2.7.2](https://github.com/gitgovernance/monorepo/compare/core-v2.7.1...core-v2.7.2) (2026-02-25)
+
+
+### 🐛 Bug Fixes
+
+* **core,cli:** detect remote-deleted branch on push, remove legacy .gitignore, reconcile diverged histories ([#99](https://github.com/gitgovernance/monorepo/issues/99)) ([01c3c8a](https://github.com/gitgovernance/monorepo/commit/01c3c8a65368d50ea101c2242727608857c86bdf))
+
 ## [2.7.1](https://github.com/gitgovernance/monorepo/compare/core-v2.7.0...core-v2.7.1) (2026-02-24)
 
 
