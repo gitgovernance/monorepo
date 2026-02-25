@@ -437,6 +437,16 @@ export class FsLintModule implements IFsLintModule {
       });
       results.push(...lintResults);
 
+      // [EARS-D2] Reference validation via LintModule
+      if (options.validateReferences) {
+        const refResults = this.lintModule.lintRecordReferences(record, {
+          recordId,
+          entityType,
+          filePath
+        });
+        results.push(...refResults);
+      }
+
       // File naming validation (filesystem-specific)
       if (options.validateFileNaming) {
         const namingResults = this.validateFileNaming(record, recordId, filePath, entityType);
