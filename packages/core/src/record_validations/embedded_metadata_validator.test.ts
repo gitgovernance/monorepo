@@ -79,7 +79,7 @@ describe('EmbeddedMetadata Validator', () => {
     it('[EARS-2] should throw DetailedValidationError for invalid schema', async () => {
       const invalidValidator = jest.fn().mockReturnValue(false);
       Object.defineProperty(invalidValidator, 'errors', {
-        value: [{ instancePath: '/header/type', message: 'must be one of actor, task, execution, changelog, feedback, cycle, custom', data: 'invalid-type' }],
+        value: [{ instancePath: '/header/type', message: 'must be one of actor, task, execution, feedback, cycle, custom', data: 'invalid-type' }],
         writable: true,
         configurable: true
       });
@@ -266,7 +266,7 @@ describe('EmbeddedMetadata Validator', () => {
       it('should reject invalid header.type values', () => {
         const invalidValidator = jest.fn().mockReturnValue(false);
         Object.defineProperty(invalidValidator, 'errors', {
-          value: [{ instancePath: '/header/type', message: 'must be one of actor, task, execution, changelog, feedback, cycle, custom', data: 'invalid-type' }],
+          value: [{ instancePath: '/header/type', message: 'must be one of actor, task, execution, feedback, cycle, custom', data: 'invalid-type' }],
           writable: true,
           configurable: true
         });
@@ -287,7 +287,7 @@ describe('EmbeddedMetadata Validator', () => {
       });
 
       it('should accept valid header.type values', () => {
-        const validTypes = ['actor', 'task', 'execution', 'changelog', 'feedback', 'cycle', 'custom'];
+        const validTypes = ['actor', 'task', 'execution', 'feedback', 'cycle', 'custom'];
 
         validTypes.forEach(type => {
           const record = {

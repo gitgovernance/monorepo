@@ -60,7 +60,6 @@ function inferTypeFromPayload(payload: GitGovRecordPayload): string {
   // Check for distinctive properties of each record type
   if ('engine' in payload) return 'agent';
   if ('taskId' in payload && 'result' in payload) return 'execution';
-  if ('relatedTasks' in payload && 'completedAt' in payload) return 'changelog';
   if ('entityType' in payload && 'entityId' in payload) return 'feedback';
   if ('status' in payload && 'taskIds' in payload) return 'cycle';
   if ('priority' in payload && 'description' in payload) return 'task';
