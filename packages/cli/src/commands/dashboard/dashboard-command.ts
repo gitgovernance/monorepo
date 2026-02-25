@@ -361,8 +361,6 @@ export class DashboardCommand {
         return `Feedback ${timeAgo}`;
       case 'execution_created':
         return `Progress ${timeAgo}`;
-      case 'changelog_created':
-        return `Updated ${timeAgo}`;
       default:
         return `Activity ${timeAgo}`;
     }

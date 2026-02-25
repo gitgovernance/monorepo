@@ -135,7 +135,6 @@ jest.doMock('@gitgov/core', () => {
       loadCycleRecord: jest.fn((data) => data),
       loadFeedbackRecord: jest.fn((data) => data),
       loadExecutionRecord: jest.fn((data) => data),
-      loadChangelogRecord: jest.fn((data) => data),
       loadActorRecord: jest.fn((data) => data),
       loadAgentRecord: jest.fn((data) => data)
     },
@@ -246,15 +245,6 @@ jest.doMock('@gitgov/core', () => {
           status: 'completed'
         }),
         getAllExecutions: jest.fn().mockResolvedValue([])
-      })),
-      ChangelogAdapter: jest.fn().mockImplementation(() => ({
-        create: jest.fn().mockResolvedValue({
-          id: createValidId('changelog', 'test-change', Date.now()),
-          entityType: 'task',
-          entityId: 'task-123',
-          changeType: 'completion'
-        }),
-        getAllChangelogs: jest.fn().mockResolvedValue([])
       })),
       WorkflowAdapter: Object.assign(
         jest.fn().mockImplementation(() => ({

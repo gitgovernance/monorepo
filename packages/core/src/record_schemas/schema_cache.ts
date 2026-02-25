@@ -56,7 +56,6 @@ export class SchemaValidationCache {
       const schemaRefMap: Record<string, string> = {
         'ActorRecord': 'ref:actor_record_schema',
         'AgentRecord': 'ref:agent_record_schema',
-        'ChangelogRecord': 'ref:changelog_record_schema',
         'CycleRecord': 'ref:cycle_record_schema',
         'ExecutionRecord': 'ref:execution_record_schema',
         'FeedbackRecord': 'ref:feedback_record_schema',

@@ -10,7 +10,6 @@ jest.mock('@gitgov/core', () => ({
     createAgentRecord: jest.fn((data) => data),
     createFeedbackRecord: jest.fn((data) => data),
     createExecutionRecord: jest.fn((data) => data),
-    createChangelogRecord: jest.fn((data) => data),
     createTestSignature: jest.fn((keyId, role, notes) => ({
       keyId,
       role,
