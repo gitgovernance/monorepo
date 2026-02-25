@@ -153,6 +153,13 @@ export class FsLintModule implements IFsLintModule {
   }
 
   /**
+   * Delegates to LintModule.lintRecordReferences() for reference validation.
+   */
+  lintRecordReferences(record: GitGovRecord, context: LintRecordContext): LintResult[] {
+    return this.lintModule.lintRecordReferences(record, context);
+  }
+
+  /**
    * Delegates to LintModule.fixRecord() for pure fix.
    */
   fixRecord(record: GitGovRecord, results: LintResult[], options: FixRecordOptions): GitGovRecord {

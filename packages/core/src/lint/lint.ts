@@ -165,6 +165,43 @@ export class LintModule implements ILintModule {
   }
 
   /**
+   * Validates reference prefixes for a single record.
+   * Checks that references array entries use known prefixes (task:, commit:, etc.).
+   */
+  lintRecordReferences(record: GitGovRecord, context: LintRecordContext): LintResult[] {
+    const results: LintResult[] = [];
+    const { recordId, entityType, filePath = `unknown/${recordId}.json` } = context;
+    const refs = (record.payload as { references?: string[] }).references;
+    if (!refs || refs.length === 0) return results;
+
+    const knownPrefixes = ['task:', 'commit:', 'actor:', 'cycle:', 'execution:', 'feedback:', 'url:', 'file:'];
+    for (const ref of refs) {
+      const hasKnownPrefix = knownPrefixes.some(p => ref.startsWith(p));
+      if (!hasKnownPrefix) {
+        results.push({
+          level: 'warning',
+          filePath,
+          validator: 'TYPED_REFERENCE',
+          message: `Unknown reference prefix in "${ref}"`,
+          entity: { type: entityType, id: recordId },
+          fixable: false,
+        });
+      }
+      if (ref.includes(':') && ref.split(':')[1] === '') {
+        results.push({
+          level: 'error',
+          filePath,
+          validator: 'TYPED_REFERENCE',
+          message: `Empty reference value in "${ref}"`,
+          entity: { type: entityType, id: recordId },
+          fixable: false,
+        });
+      }
+    }
+    return results;
+  }
+
+  /**
    * Validates all records from stores.
    * Iterates this.stores to collect records, then validates each one.
    *

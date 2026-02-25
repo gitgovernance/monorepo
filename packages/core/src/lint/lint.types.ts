@@ -42,6 +42,15 @@ export interface ILintModule {
   ): LintResult[];
 
   /**
+   * Validates reference prefixes for a single record.
+   * Checks that references use known prefixes (task:, commit:, etc.).
+   */
+  lintRecordReferences(
+    record: GitGovRecord,
+    context: LintRecordContext
+  ): LintResult[];
+
+  /**
    * Validates all records from stores.
    * Each implementation resolves its own data source.
    *

@@ -1,0 +1,28 @@
+{
+  "name": "@gitgov/e2e",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Cross-package E2E tests for GitGovernance monorepo",
+  "scripts": {
+    "test": "vitest run",
+    "test:local": "vitest run tests/cli_records.test.ts tests/projection.test.ts tests/parity.test.ts",
+    "test:github": "GITHUB_TEST_REPO=git@github.com:gitgovernance/e2e-test-repo.git vitest run"
+  },
+  "devDependencies": {
+    "@gitgov/core": "workspace:*",
+    "@octokit/rest": "^22.0.1",
+    "@prisma/adapter-pg": "^6.0.0",
+    "@prisma/client": "^6.0.0",
+    "@types/node": "^20.0.0",
+    "@types/pg": "^8.16.0",
+    "dotenv": "^17.2.2",
+    "pg": "^8.13.0",
+    "prisma": "^6.0.0",
+    "typescript": "^5.8.0",
+    "vitest": "^4.0.0"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}
