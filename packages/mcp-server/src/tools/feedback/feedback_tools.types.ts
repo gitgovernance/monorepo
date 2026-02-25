@@ -4,7 +4,7 @@
  */
 
 export interface FeedbackCreateInput {
-  entityType: 'task' | 'execution' | 'changelog' | 'feedback' | 'cycle';
+  entityType: 'task' | 'execution' | 'feedback' | 'cycle';
   entityId: string;
   type: 'blocking' | 'suggestion' | 'question' | 'approval' | 'clarification' | 'assignment';
   content: string;

@@ -800,7 +800,6 @@ describe('MCP Core Integration', () => {
       expect(container.stores.cycles).toBeDefined();
       expect(container.stores.feedbacks).toBeDefined();
       expect(container.stores.executions).toBeDefined();
-      expect(container.stores.changelogs).toBeDefined();
       expect(container.stores.actors).toBeDefined();
       expect(container.stores.agents).toBeDefined();
 

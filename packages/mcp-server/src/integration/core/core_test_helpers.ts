@@ -14,7 +14,7 @@ import { McpDependencyInjectionService } from '../../di/mcp_di.js';
 import type { ToolResult } from '../../server/mcp_server.types.js';
 import type { TempGitgovProject, ParsedToolResult } from './mcp_core_integration.types.js';
 
-const STORE_DIRS = ['tasks', 'cycles', 'feedback', 'executions', 'changelogs', 'actors', 'agents'];
+const STORE_DIRS = ['tasks', 'cycles', 'feedback', 'executions', 'actors', 'agents'];
 
 // ─── Crypto Helpers ───
 
