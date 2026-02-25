@@ -131,7 +131,7 @@ export class FsWorktreeSyncStateModule implements ISyncStateModule {
   }
 
   // ═══════════════════════════════════════════════
-  // Section A: Worktree Management (WTSYNC-A1..A6)
+  // Section A: Worktree Management (WTSYNC-A1..A7)
   // ═══════════════════════════════════════════════
 
   /** [WTSYNC-A4] Returns the worktree path */
@@ -145,6 +145,8 @@ export class FsWorktreeSyncStateModule implements ISyncStateModule {
 
     if (health.healthy) {
       logger.debug('Worktree is healthy');
+      // [WTSYNC-A7] Clean up legacy .gitignore even on healthy worktrees
+      await this.removeLegacyGitignore();
       return; // [WTSYNC-A2]
     }
 
@@ -167,6 +169,32 @@ export class FsWorktreeSyncStateModule implements ISyncStateModule {
         this.worktreePath,
         error instanceof Error ? error : undefined,
       );
+    }
+
+    // [WTSYNC-A7] Clean up legacy .gitignore after worktree creation
+    await this.removeLegacyGitignore();
+  }
+
+  /**
+   * [WTSYNC-A7] Remove .gitignore from state branch if it exists.
+   * The worktree module filters files in code (shouldSyncFile()), not via .gitignore.
+   * Legacy state branches initialized by FsSyncState may have a .gitignore — remove it.
+   */
+  private async removeLegacyGitignore(): Promise<void> {
+    const gitignorePath = path.join(this.worktreePath, '.gitignore');
+    if (!existsSync(gitignorePath)) return;
+
+    logger.info('Removing legacy .gitignore from state branch');
+    try {
+      await this.execInWorktree(['rm', '.gitignore']);
+      await this.execInWorktree(['commit', '-m', 'gitgov: remove legacy .gitignore (filtering is in code)']);
+    } catch {
+      // If rm/commit fails (e.g., .gitignore is untracked), just delete the file
+      try {
+        await fsPromises.unlink(gitignorePath);
+      } catch {
+        // Ignore — file may have been removed by git rm
+      }
     }
   }
 
@@ -220,15 +248,15 @@ export class FsWorktreeSyncStateModule implements ISyncStateModule {
   }
 
   // ═══════════════════════════════════════════════
-  // Section B: Push Operations (WTSYNC-B1..B14)
+  // Section B: Push Operations (WTSYNC-B1..B16)
   // ═══════════════════════════════════════════════
 
-  /** [WTSYNC-B1..B14] Push local state to remote */
+  /** [WTSYNC-B1..B16] Push local state to remote */
   async pushState(options: SyncStatePushOptions): Promise<SyncStatePushResult> {
     const { actorId, dryRun = false, force = false } = options;
     const log = (msg: string) => logger.debug(`[pushState] ${msg}`);
 
-    // Guard: refuse push if rebase is in progress (mirrors git behavior)
+    // [WTSYNC-B15] Guard: refuse push if rebase is in progress (mirrors git behavior)
     if (await this.isRebaseInProgress()) {
       throw new RebaseAlreadyInProgressError();
     }
@@ -262,11 +290,61 @@ export class FsWorktreeSyncStateModule implements ISyncStateModule {
     log(`Delta: ${delta.length} syncable files (${rawDelta.length} total)`);
 
     if (delta.length === 0) {
+      // [WTSYNC-B16] No uncommitted changes — check if local is ahead of remote
+      const { ahead: aheadOfRemote, remoteExists } = await this.isLocalAheadOfRemote();
+      if (!aheadOfRemote) {
+        return {
+          success: true,
+          filesSynced: 0,
+          sourceBranch: options.sourceBranch ?? 'current',
+          commitHash: null,
+          commitMessage: null,
+          conflictDetected: false,
+        };
+      }
+
+      // Local has commits not on remote — reconcile (if needed) then push
+      log('No uncommitted changes but local is ahead of remote — pushing existing commits');
+
+      // [WTSYNC-B16] Reconcile with remote if branch exists and not force (step 9)
+      if (remoteExists && !force) {
+        try {
+          await this.execInWorktree(['pull', '--rebase', 'origin', this.stateBranchName]);
+        } catch (err) {
+          // Check if this is a rebase conflict
+          if (await this.isRebaseInProgress()) {
+            const affectedFiles = await this.getConflictedFiles();
+            return {
+              success: false,
+              filesSynced: 0,
+              sourceBranch: options.sourceBranch ?? 'current',
+              commitHash: null,
+              commitMessage: null,
+              conflictDetected: true,
+              conflictInfo: {
+                type: 'rebase_conflict',
+                affectedFiles,
+                message: 'Rebase conflict during push reconciliation (local ahead, no uncommitted changes)',
+                resolutionSteps: [
+                  `Edit conflicted files in ${this.worktreePath}/.gitgov/`,
+                  'Run `gitgov sync resolve --reason "..."` to finalize',
+                ],
+              },
+              error: 'Rebase conflict during push reconciliation',
+            };
+          }
+          throw err;
+        }
+      }
+
+      // Push (step 10)
+      await this.execInWorktree(['push', 'origin', this.stateBranchName]);
+      const currentHead = (await this.execInWorktree(['rev-parse', 'HEAD'])).trim();
       return {
         success: true,
         filesSynced: 0,
         sourceBranch: options.sourceBranch ?? 'current',
-        commitHash: null,
+        commitHash: currentHead,
         commitMessage: null,
         conflictDetected: false,
       };
@@ -378,15 +456,15 @@ export class FsWorktreeSyncStateModule implements ISyncStateModule {
   }
 
   // ═══════════════════════════════════════════════
-  // Section C: Pull Operations (WTSYNC-C1..C8)
+  // Section C: Pull Operations (WTSYNC-C1..C9)
   // ═══════════════════════════════════════════════
 
-  /** [WTSYNC-C1..C8] Pull remote state */
+  /** [WTSYNC-C1..C9] Pull remote state */
   async pullState(options?: SyncStatePullOptions): Promise<SyncStatePullResult> {
     const { forceReindex = false, force = false } = options ?? {};
     const log = (msg: string) => logger.debug(`[pullState] ${msg}`);
 
-    // Guard: refuse pull if rebase is in progress (mirrors git behavior)
+    // [WTSYNC-C9] Guard: refuse pull if rebase is in progress (mirrors git behavior)
     if (await this.isRebaseInProgress()) {
       throw new RebaseAlreadyInProgressError();
     }
@@ -766,6 +844,7 @@ export class FsWorktreeSyncStateModule implements ISyncStateModule {
 
   /** [WTSYNC-E1..E5] Audit state */
   async auditState(options?: AuditStateOptions): Promise<AuditStateReport> {
+    // [WTSYNC-E5] All scopes ("current", "state-branch", "all") resolve to worktree records
     const {
       scope = 'all',
       verifySignatures = true,
@@ -883,6 +962,40 @@ export class FsWorktreeSyncStateModule implements ISyncStateModule {
   /** Execute git command in worktree context (throws on non-zero exit) */
   private async execInWorktree(args: string[], options?: ExecOptions): Promise<string> {
     return this.execGit(['-C', this.worktreePath, ...args], options);
+  }
+
+  /**
+   * [WTSYNC-B16] Check if local gitgov-state has commits not present on remote.
+   * Returns { ahead: true } if local has unpushed commits or remote branch doesn't exist.
+   * Also returns { remoteExists } to let caller decide whether reconciliation is needed.
+   */
+  private async isLocalAheadOfRemote(): Promise<{ ahead: boolean; remoteExists: boolean }> {
+    // First check if remote branch exists
+    try {
+      await this.execGit(['ls-remote', '--exit-code', 'origin', this.stateBranchName]);
+    } catch {
+      // Remote branch doesn't exist — local is definitionally "ahead"
+      return { ahead: true, remoteExists: false };
+    }
+
+    // Fetch latest remote state
+    try {
+      await this.execInWorktree(['fetch', 'origin', this.stateBranchName]);
+    } catch {
+      // Fetch failed — can't determine, assume not ahead
+      return { ahead: false, remoteExists: true };
+    }
+
+    // Count commits local has that remote doesn't
+    try {
+      const count = (await this.execInWorktree([
+        'rev-list', `origin/${this.stateBranchName}..HEAD`, '--count',
+      ])).trim();
+      return { ahead: parseInt(count, 10) > 0, remoteExists: true };
+    } catch {
+      // rev-list failed — treat as ahead
+      return { ahead: true, remoteExists: true };
+    }
   }
 
   /** Calculate file delta (uncommitted changes in worktree) */
