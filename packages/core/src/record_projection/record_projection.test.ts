@@ -326,7 +326,7 @@ describe('RecordProjector', () => {
     });
   });
 
-  describe('Core Cache Operations (Block A)', () => {
+  describe('4.1. Core Cache Operations (EARS-A1 a A6)', () => {
     it('[EARS-A1] should generate complete index with all required fields', async () => {
       const report = await recordProjector.generateIndex();
       const indexData = await recordProjector.getIndexData();
@@ -645,7 +645,7 @@ describe('RecordProjector', () => {
     });
   });
 
-  describe('RecordMetrics Integration', () => {
+  describe('4.1. RecordMetrics Integration (EARS-C5)', () => {
     it('should delegate all calculations to RecordMetrics without duplicating logic', async () => {
       const report = await recordProjector.generateIndex();
 
@@ -665,8 +665,8 @@ describe('RecordProjector', () => {
     });
   });
 
-  describe('Error Handling & Graceful Degradation (Block C)', () => {
-    it('[EARS-C4] should handle sink write errors gracefully', async () => {
+  describe('4.1. Error Handling & Graceful Degradation (EARS-C2 a C4)', () => {
+    it('[EARS-C4] should report sink write errors in IndexGenerationReport', async () => {
       // Step 1: Generate initial valid cache
       const report1 = await recordProjector.generateIndex();
       expect(report1.success).toBe(true);
@@ -735,7 +735,7 @@ describe('RecordProjector', () => {
     });
   });
 
-  describe('Performance & Optimization (Block C)', () => {
+  describe('4.1. Performance & Optimization (EARS-C1)', () => {
     it('[EARS-C1] should generate index efficiently for phase 1 datasets (0-500 records)', async () => {
       // Validate we're testing Phase 1 dataset size
       const taskCount = (await mockStores.tasks.list()).length;
@@ -766,7 +766,7 @@ describe('RecordProjector', () => {
     });
   });
 
-  describe('Cache Lifecycle Management', () => {
+  describe('4.1. Cache Lifecycle Management (EARS-C6)', () => {
     it('should handle complete cache lifecycle', async () => {
       // 1. Generate cache
       const report = await recordProjector.generateIndex();
@@ -807,7 +807,7 @@ describe('RecordProjector', () => {
     });
   });
 
-  describe('Integration with Ecosystem', () => {
+  describe('4.1. Integration with Ecosystem (EARS-C2)', () => {
     it('should work correctly with BacklogAdapter data flow', async () => {
       // Setup realistic data that BacklogAdapter would create
       const realisticTask = await createMockTaskRecord({
@@ -862,7 +862,7 @@ describe('RecordProjector', () => {
     });
   });
 
-  describe('DerivedStates Calculation (Block B)', () => {
+  describe('4.1. DerivedStates Calculation (EARS-B1 a B4)', () => {
     it('[EARS-B1] should apply derived data protocol rules', async () => {
       await recordProjector.generateIndex();
       const indexData = await recordProjector.getIndexData();
@@ -879,43 +879,86 @@ describe('RecordProjector', () => {
     });
 
     it('[EARS-B2] should mark stalled tasks as isStalled', async () => {
+      // Create an 'active' task with an old ID (14+ days ago) and no executions
+      const fourteenDaysAgo = Math.floor(Date.now() / 1000) - (15 * 24 * 60 * 60);
+      const stalledTask = await createMockTaskRecord({
+        id: `${fourteenDaysAgo}-task-stalled`,
+        title: 'Stalled Task',
+        status: 'active'
+      });
+
+      mockStores.tasks.list.mockResolvedValue([`${fourteenDaysAgo}-task-stalled`]);
+      mockStores.tasks.get.mockResolvedValue(stalledTask);
+      mockStores.executions.list.mockResolvedValue([]);
+
       await recordProjector.generateIndex();
       const indexData = await recordProjector.getIndexData();
 
-      const enrichedTask = indexData?.enrichedTasks?.[0];
-      expect(enrichedTask?.derivedState.isStalled).toBeDefined();
-      expect(typeof enrichedTask?.derivedState.isStalled).toBe('boolean');
+      expect(indexData?.derivedStates.stalledTasks).toContain(`${fourteenDaysAgo}-task-stalled`);
+      expect(indexData?.enrichedTasks?.[0]?.derivedState.isStalled).toBe(true);
     });
 
     it('[EARS-B3] should mark tasks with questions as needsClarification', async () => {
+      const taskId = '1757687335-task-needs-clarification';
+      const task = await createMockTaskRecord({
+        id: taskId,
+        title: 'Task Needing Clarification',
+        status: 'active'
+      });
+
+      // Create feedback with type='question' and status='open' targeting this task
+      const feedbackPayload = {
+        id: '1757687336-feedback-question',
+        entityType: 'task' as const,
+        entityId: taskId,
+        type: 'question' as const,
+        status: 'open' as const,
+        content: 'What is the expected behavior for edge case X?'
+      };
+      const feedbackSignature = createTestSignature('human:reviewer', 'author', 'Question');
+      const feedbackRecord = await createEmbeddedMetadataRecord(feedbackPayload, { signatures: [feedbackSignature] });
+
+      mockStores.tasks.list.mockResolvedValue([taskId]);
+      mockStores.tasks.get.mockResolvedValue(task);
+      mockStores.feedbacks.list.mockResolvedValue(['1757687336-feedback-question']);
+      mockStores.feedbacks.get.mockResolvedValue(feedbackRecord);
+
       await recordProjector.generateIndex();
       const indexData = await recordProjector.getIndexData();
 
-      const enrichedTask = indexData?.enrichedTasks?.[0];
-      expect(enrichedTask?.derivedState.needsClarification).toBeDefined();
-      expect(typeof enrichedTask?.derivedState.needsClarification).toBe('boolean');
+      expect(indexData?.derivedStates.needsClarificationTasks).toContain(taskId);
+      expect(indexData?.enrichedTasks?.[0]?.derivedState.needsClarification).toBe(true);
     });
 
     it('[EARS-B4] should mark tasks with dependencies as isBlockedByDependency', async () => {
-      const taskWithDeps = await createMockTaskRecord({
-        id: '1757687335-task-blocked',
-        title: 'Blocked Task',
-        references: ['task:1757687335-blocker-task']
+      const blockerTask = await createMockTaskRecord({
+        id: '1757687335-task-blocker',
+        title: 'Blocker Task',
+        status: 'active'
       });
 
-      mockStores.tasks.list.mockResolvedValue(['1757687335-task-blocked']);
-      mockStores.tasks.get.mockResolvedValue(taskWithDeps);
+      const blockedTask = await createMockTaskRecord({
+        id: '1757687336-task-blocked',
+        title: 'Blocked Task',
+        status: 'active',
+        references: ['task:1757687335-task-blocker']
+      });
+
+      mockStores.tasks.list.mockResolvedValue(['1757687335-task-blocker', '1757687336-task-blocked']);
+      mockStores.tasks.get
+        .mockResolvedValueOnce(blockerTask)
+        .mockResolvedValueOnce(blockedTask);
 
       await recordProjector.generateIndex();
       const indexData = await recordProjector.getIndexData();
 
-      const enrichedTask = indexData?.enrichedTasks?.[0];
-      expect(enrichedTask?.derivedState.isBlockedByDependency).toBeDefined();
-      expect(typeof enrichedTask?.derivedState.isBlockedByDependency).toBe('boolean');
+      expect(indexData?.derivedStates.blockedByDependencyTasks).toContain('1757687336-task-blocked');
+      const blockedEnriched = indexData?.enrichedTasks?.find(t => t.id === '1757687336-task-blocked');
+      expect(blockedEnriched?.derivedState.isBlockedByDependency).toBe(true);
     });
   });
 
-  describe('Activity History (Blocks D-E)', () => {
+  describe('4.1. Activity History & LastUpdated (EARS-D1 a E6)', () => {
     it('[EARS-D1] should calculate activity history from record timestamps', async () => {
       await recordProjector.generateIndex();
       const indexData = await recordProjector.getIndexData();
@@ -1061,42 +1104,85 @@ describe('RecordProjector', () => {
     });
 
     it('[EARS-E3] should return most recent timestamp for dynamic sorting', async () => {
-      await recordProjector.generateIndex();
-      const indexData = await recordProjector.getIndexData();
+      const baseTimestamp = Math.floor(Date.now() / 1000);
+      const taskId = `${baseTimestamp}-task-with-exec`;
 
-      const enrichedTask = indexData?.enrichedTasks?.[0];
-      expect(enrichedTask?.lastUpdated).toBeDefined();
-      expect(typeof enrichedTask?.lastUpdated).toBe('number');
-      expect(enrichedTask?.lastUpdated).toBeGreaterThan(0);
-    });
-
-    it('[EARS-E4] should find task files in project root correctly', async () => {
-      // Create a task with known ID to test path resolution
-      const testTask = await createMockTaskRecord({
-        id: '1757687335-task-path-test',
-        title: 'Task for Path Resolution Test'
+      const task = await createMockTaskRecord({
+        id: taskId,
+        title: 'Task with Execution',
+        status: 'active'
       });
 
-      mockStores.tasks.list.mockResolvedValue(['1757687335-task-path-test']);
-      mockStores.tasks.get.mockResolvedValue(testTask);
+      // Create an execution with a newer timestamp (65s after task creation)
+      const execTimestamp = baseTimestamp + 65;
+      const execution = await createMockExecutionRecord({
+        id: `${execTimestamp}-exec-recent`,
+        taskId: taskId,
+        title: 'Recent work done'
+      });
 
-      // Generate index which calls calculateLastUpdated internally
+      mockStores.tasks.list.mockResolvedValue([taskId]);
+      mockStores.tasks.get.mockResolvedValue(task);
+      mockStores.executions.list.mockResolvedValue([`${execTimestamp}-exec-recent`]);
+      mockStores.executions.get.mockResolvedValue(execution);
+
       await recordProjector.generateIndex();
       const indexData = await recordProjector.getIndexData();
 
       const enrichedTask = indexData?.enrichedTasks?.[0];
+      expect(enrichedTask?.lastUpdated).toBe(execTimestamp * 1000);
+      expect(enrichedTask?.lastActivityType).toBe('execution_added');
+    });
 
-      // Validate that calculateLastUpdated was able to process the task
-      // If file resolution logic worked, lastUpdated should be > 0
-      expect(enrichedTask?.lastUpdated).toBeDefined();
-      expect(enrichedTask?.lastUpdated).toBeGreaterThan(0);
+    it('[EARS-E4] should obtain timestamp from extractLastModifier or ID fallback', async () => {
+      const baseTimestamp = Math.floor(Date.now() / 1000);
 
-      // Verify lastActivityType reflects activity tracking (not just crashes)
-      // This proves path resolution through .gitgov/tasks/ logic doesn't break
-      expect(['task_created', 'task_modified']).toContain(enrichedTask?.lastActivityType);
+      // Scenario 1: Task WITH signatures → lastUpdated from last modifier timestamp
+      const taskWithSigs = await createMockTaskRecord({
+        id: `${baseTimestamp}-task-with-sigs`,
+        title: 'Task with Signatures'
+      });
+      // Add a second signature 120s after creation (> 60s threshold)
+      taskWithSigs.header.signatures = [
+        taskWithSigs.header.signatures[0],
+        {
+          keyId: 'human:modifier',
+          role: 'reviewer',
+          notes: '',
+          signature: 'mock-sig-2',
+          timestamp: baseTimestamp + 120
+        }
+      ] as [Signature, ...Signature[]];
 
-      // NOTE: In real environment, this would verify actual filesystem path
-      // In test environment, we validate the logic gracefully handles missing files
+      mockStores.tasks.list.mockResolvedValue([`${baseTimestamp}-task-with-sigs`]);
+      mockStores.tasks.get.mockResolvedValue(taskWithSigs);
+
+      await recordProjector.generateIndex();
+      let indexData = await recordProjector.getIndexData();
+      let enrichedTask = indexData?.enrichedTasks?.[0];
+
+      // With signature modification >60s after creation, lastUpdated = modifier timestamp
+      expect(enrichedTask?.lastUpdated).toBe((baseTimestamp + 120) * 1000);
+      expect(enrichedTask?.lastActivityType).toBe('task_modified');
+
+      // Scenario 2: Task WITHOUT modifier signature → lastUpdated falls back to ID timestamp
+      const taskNoModifier = await createMockTaskRecord({
+        id: `${baseTimestamp}-task-no-modifier`,
+        title: 'Task without Modifier'
+      });
+      // Single signature = author only, no modification
+
+      mockStores.tasks.list.mockResolvedValue([`${baseTimestamp}-task-no-modifier`]);
+      mockStores.tasks.get.mockResolvedValue(taskNoModifier);
+      await mockSink.clear({});
+
+      await recordProjector.generateIndex();
+      indexData = await recordProjector.getIndexData();
+      enrichedTask = indexData?.enrichedTasks?.[0];
+
+      // Fallback to creation timestamp from ID
+      expect(enrichedTask?.lastUpdated).toBe(baseTimestamp * 1000);
+      expect(enrichedTask?.lastActivityType).toBe('task_created');
     });
 
     it('[EARS-E5] should use timestamps in milliseconds for consistency', async () => {
@@ -1108,17 +1194,39 @@ describe('RecordProjector', () => {
     });
 
     it('[EARS-E6] should detect significant modifications after 60s threshold', async () => {
+      const baseTimestamp = Math.floor(Date.now() / 1000);
+
+      const task = await createMockTaskRecord({
+        id: `${baseTimestamp}-task-modified-late`,
+        title: 'Task Modified After Threshold'
+      });
+
+      // Add a second signature 61s after creation (just over the 60s threshold)
+      task.header.signatures = [
+        task.header.signatures[0],
+        {
+          keyId: 'human:late-modifier',
+          role: 'reviewer',
+          notes: '',
+          signature: 'mock-sig-late',
+          timestamp: baseTimestamp + 61
+        }
+      ] as [Signature, ...Signature[]];
+
+      mockStores.tasks.list.mockResolvedValue([`${baseTimestamp}-task-modified-late`]);
+      mockStores.tasks.get.mockResolvedValue(task);
+
       await recordProjector.generateIndex();
       const indexData = await recordProjector.getIndexData();
 
       const enrichedTask = indexData?.enrichedTasks?.[0];
-      // lastActivityType should reflect if there was a modification vs creation
-      expect(enrichedTask?.lastActivityType).toBeDefined();
+      expect(enrichedTask?.lastActivityType).toBe('task_modified');
+      expect(enrichedTask?.lastUpdated).toBe((baseTimestamp + 61) * 1000);
     });
   });
 
-  describe('Task Enrichment (Blocks F-K)', () => {
-    describe('Activity Metadata (Block F)', () => {
+  describe('4.1. Task Enrichment (EARS-F1 a K2)', () => {
+    describe('Activity Metadata (EARS-F1 a F2)', () => {
       it('[EARS-F1] should enrich tasks with lastUpdated lastActivityType and recentActivity', async () => {
         // Generate index which calls enrichTaskRecord internally
         await recordProjector.generateIndex();
@@ -1144,7 +1252,7 @@ describe('RecordProjector', () => {
       });
     });
 
-    describe('Signature Extraction (Block H)', () => {
+    describe('Signature Extraction (EARS-H1 a H2)', () => {
       it('[EARS-H1] should extract author from first signature using helper', async () => {
         const taskWithSignatures = await createMockTaskRecord({
           id: '1757687335-task-with-author',
@@ -1201,7 +1309,7 @@ describe('RecordProjector', () => {
       });
     });
 
-    describe('Graceful Degradation (Block K)', () => {
+    describe('Graceful Degradation (EARS-K1 a K2)', () => {
       it('[EARS-K1] should handle records without signatures gracefully', async () => {
         // Type assertion justified: Simulating runtime corruption where signatures array is empty
         // despite being defined as non-empty tuple [Signature, ...Signature[]]
@@ -1269,7 +1377,7 @@ describe('RecordProjector', () => {
       });
     });
 
-    describe('Metrics Calculation (Block G)', () => {
+    describe('Metrics Calculation (EARS-G3 a G7)', () => {
       it('[EARS-G3] should count and store the number of task executions', async () => {
         await recordProjector.generateIndex();
         const indexData = await recordProjector.getIndexData();
@@ -1325,7 +1433,7 @@ describe('RecordProjector', () => {
       });
     });
 
-    describe('Relationships: Dependencies & Assignments (Blocks G, I)', () => {
+    describe('Relationships: Dependencies & Assignments (EARS-G1, G2, I1 a I3)', () => {
       it('[EARS-G1] should identify and store the last modifier of the task', async () => {
         const timestamp = Math.floor(Date.now() / 1000);
         const taskWithModifier = await createMockTaskRecord({
@@ -1518,7 +1626,7 @@ describe('RecordProjector', () => {
       });
     });
 
-    describe('Relationships: Cycles (Block I)', () => {
+    describe('Relationships: Cycles (EARS-I4 a I5)', () => {
       it('[EARS-I4] should link all cycles when task has cycleIds (array)', async () => {
         const cycle1 = await createMockCycleRecord({
           id: '1757687335-cycle-sprint1',
@@ -1575,7 +1683,7 @@ describe('RecordProjector', () => {
       });
     });
 
-    describe('Derived States (Block J)', () => {
+    describe('Derived States (EARS-J1 a J6)', () => {
       it('[EARS-J1] should calculate healthScore using multi-factor algorithm', async () => {
         await recordProjector.generateIndex();
         const indexData = await recordProjector.getIndexData();
@@ -1632,45 +1740,80 @@ describe('RecordProjector', () => {
       });
 
       it('[EARS-J4] should mark isStalled correctly based on staleness rules', async () => {
+        // Task 'active' with old ID (15+ days) and no executions → isStalled = true
+        const fifteenDaysAgo = Math.floor(Date.now() / 1000) - (15 * 24 * 60 * 60);
+        const stalledTask = await createMockTaskRecord({
+          id: `${fifteenDaysAgo}-task-stalled-j4`,
+          title: 'Stalled Task for J4',
+          status: 'active'
+        });
+
+        mockStores.tasks.list.mockResolvedValue([`${fifteenDaysAgo}-task-stalled-j4`]);
+        mockStores.tasks.get.mockResolvedValue(stalledTask);
+        mockStores.executions.list.mockResolvedValue([]);
+
         await recordProjector.generateIndex();
         const indexData = await recordProjector.getIndexData();
 
         const enrichedTask = indexData?.enrichedTasks?.[0];
-        expect(enrichedTask?.derivedState.isStalled).toBeDefined();
-        // Actual staleness logic is determined by RecordMetrics/DerivedStates
-        expect(typeof enrichedTask?.derivedState.isStalled).toBe('boolean');
+        expect(enrichedTask?.derivedState.isStalled).toBe(true);
       });
 
       it('[EARS-J5] should mark isAtRisk correctly based on priority and blockers', async () => {
-        const highPriorityTask = await createMockTaskRecord({
-          id: '1757687335-task-high-priority',
-          title: 'High Priority Task',
-          priority: 'high'
+        // Task with priority='critical' and status='paused' → isAtRisk = true
+        const criticalPausedTask = await createMockTaskRecord({
+          id: '1757687335-task-critical-paused',
+          title: 'Critical Paused Task',
+          priority: 'critical',
+          status: 'paused'
         });
 
-        mockStores.tasks.list.mockResolvedValue(['1757687335-task-high-priority']);
-        mockStores.tasks.get.mockResolvedValue(highPriorityTask);
+        mockStores.tasks.list.mockResolvedValue(['1757687335-task-critical-paused']);
+        mockStores.tasks.get.mockResolvedValue(criticalPausedTask);
 
         await recordProjector.generateIndex();
         const indexData = await recordProjector.getIndexData();
 
+        expect(indexData?.derivedStates.atRiskTasks).toContain('1757687335-task-critical-paused');
         const enrichedTask = indexData?.enrichedTasks?.[0];
-        expect(enrichedTask?.derivedState.isAtRisk).toBeDefined();
-        expect(typeof enrichedTask?.derivedState.isAtRisk).toBe('boolean');
+        expect(enrichedTask?.derivedState.isAtRisk).toBe(true);
       });
 
       it('[EARS-J6] should mark needsClarification when open questions exist', async () => {
+        const taskId = '1757687335-task-needs-clarification-j6';
+        const task = await createMockTaskRecord({
+          id: taskId,
+          title: 'Task with Open Question J6',
+          status: 'active'
+        });
+
+        // Create feedback with type='question' and status='open'
+        const feedbackPayload = {
+          id: '1757687336-feedback-question-j6',
+          entityType: 'task' as const,
+          entityId: taskId,
+          type: 'question' as const,
+          status: 'open' as const,
+          content: 'Clarification needed on acceptance criteria'
+        };
+        const feedbackSignature = createTestSignature('human:reviewer', 'author', 'Question');
+        const feedbackRecord = await createEmbeddedMetadataRecord(feedbackPayload, { signatures: [feedbackSignature] });
+
+        mockStores.tasks.list.mockResolvedValue([taskId]);
+        mockStores.tasks.get.mockResolvedValue(task);
+        mockStores.feedbacks.list.mockResolvedValue(['1757687336-feedback-question-j6']);
+        mockStores.feedbacks.get.mockResolvedValue(feedbackRecord);
+
         await recordProjector.generateIndex();
         const indexData = await recordProjector.getIndexData();
 
         const enrichedTask = indexData?.enrichedTasks?.[0];
-        expect(enrichedTask?.derivedState.needsClarification).toBeDefined();
-        expect(typeof enrichedTask?.derivedState.needsClarification).toBe('boolean');
+        expect(enrichedTask?.derivedState.needsClarification).toBe(true);
       });
     });
   });
 
-  describe('Cryptographic Validation (Blocks R-S)', () => {
+  describe('4.3. Cryptographic Validation (EARS-R1 a S3)', () => {
     beforeEach(() => {
       // Reset mocks before each test in this suite
       jest.clearAllMocks();
@@ -1811,7 +1954,7 @@ describe('RecordProjector', () => {
     });
   });
 
-  describe('Cryptographic Validation - Integration Tests (Block T)', () => {
+  describe('4.4. Integration Tests (EARS-T1 a T6)', () => {
     it('[EARS-T1] should REALLY detect payload tampering with real checksum calculation', async () => {
       // Create a task with REAL valid checksum
       const validTask = await createMockTaskRecord({
@@ -2014,6 +2157,132 @@ describe('RecordProjector', () => {
       const checksumErrors = report.errorsFound.filter(e => e.type === 'checksum_failure');
       expect(checksumErrors).toHaveLength(1);
       expect(checksumErrors[0]?.recordId).toBe('1757687335-cycle-tampered');
+    });
+  });
+
+  describe('4.5. Projection Pipeline (EARS-U1 a U7)', () => {
+    it('[EARS-U1] should return IndexData without writing to any sink', async () => {
+      const result = await recordProjector.computeProjection();
+
+      // Result should be a complete IndexData
+      expect(result).not.toBeNull();
+      expect(result.metadata).toBeDefined();
+      expect(result.tasks).toBeDefined();
+      expect(result.enrichedTasks).toBeDefined();
+      expect(result.cycles).toBeDefined();
+      expect(result.actors).toBeDefined();
+      expect(result.derivedStates).toBeDefined();
+      expect(result.activityHistory).toBeDefined();
+
+      // Sink persist should NOT have been called
+      expect(mockSink.persist).not.toHaveBeenCalled();
+    });
+
+    it('[EARS-U2] should use opts.lastCommitHash in IndexData metadata', async () => {
+      const result = await recordProjector.computeProjection({ lastCommitHash: 'abc123def' });
+
+      expect(result.metadata.lastCommitHash).toBe('abc123def');
+    });
+
+    it('[EARS-U3] should delegate to computeProjection from generateIndex', async () => {
+      const report = await recordProjector.generateIndex();
+
+      expect(report.success).toBe(true);
+
+      // Verify sink.persist was called with IndexData
+      expect(mockSink.persist).toHaveBeenCalledTimes(1);
+      const persistCall = mockSink.persist.mock.calls[0];
+      expect(persistCall).toBeDefined();
+      const persistedData = persistCall![0] as IndexData;
+      expect(persistedData.metadata).toBeDefined();
+      expect(persistedData.tasks.length).toBeGreaterThan(0);
+
+      // Verify the persisted data matches what computeProjection would produce
+      expect(persistedData.tasks.length).toBe(1);
+      expect(persistedData.cycles.length).toBe(1);
+      expect(persistedData.actors.length).toBe(1);
+    });
+
+    it('[EARS-U4] should complete generateIndex without sink with writeTime 0', async () => {
+      // Create projector WITHOUT sink (omit property entirely for exactOptionalPropertyTypes)
+      const projectorNoSink = new RecordProjector({
+        recordMetrics: mockRecordMetrics as unknown as RecordMetrics,
+        stores: mockStores,
+      });
+
+      const report = await projectorNoSink.generateIndex();
+
+      expect(report.success).toBe(true);
+      // writeTime should be negligible (< 1ms) since no sink write occurs
+      expect(report.performance.writeTime).toBeLessThan(1);
+      expect(report.recordsProcessed).toBe(3); // 1 task + 1 cycle + 1 actor
+    });
+
+    it('[EARS-U5] should accept undefined sink in constructor', async () => {
+      expect(() => {
+        new RecordProjector({
+          recordMetrics: mockRecordMetrics as unknown as RecordMetrics,
+          stores: mockStores,
+        });
+      }).not.toThrow();
+    });
+
+    it('[EARS-U6] should throw Error for cache methods without sink', async () => {
+      const projectorNoSink = new RecordProjector({
+        recordMetrics: mockRecordMetrics as unknown as RecordMetrics,
+        stores: mockStores,
+      });
+
+      await expect(projectorNoSink.getIndexData()).rejects.toThrow('no projection sink configured');
+      await expect(projectorNoSink.isIndexUpToDate()).rejects.toThrow('no projection sink configured');
+      await expect(projectorNoSink.invalidateCache()).rejects.toThrow('no projection sink configured');
+    });
+
+    it('[EARS-U7] should produce identical output from computeProjection and generateIndex', async () => {
+      // First call computeProjection directly
+      const projectionResult = await recordProjector.computeProjection({ lastCommitHash: 'test-sha-u7' });
+
+      // Reset mocks to ensure fresh state for generateIndex
+      jest.clearAllMocks();
+
+      // Re-setup default mocks (clearAllMocks resets them)
+      mockStores.tasks.list.mockResolvedValue(['1757687335-task-test']);
+      mockStores.tasks.get.mockResolvedValue(await createMockTaskRecord({
+        id: '1757687335-task-test',
+        title: 'Test Task'
+      }));
+      mockStores.cycles.list.mockResolvedValue(['1757687335-cycle-test']);
+      mockStores.cycles.get.mockResolvedValue(await createMockCycleRecord({
+        id: '1757687335-cycle-test',
+        title: 'Test Cycle'
+      }));
+      mockStores.actors.list.mockResolvedValue(['human:test']);
+      mockStores.actors.get.mockResolvedValue(await createMockActorRecord({
+        id: 'human:test',
+        displayName: 'Test User'
+      }));
+      mockStores.feedbacks.list.mockResolvedValue([]);
+      mockStores.executions.list.mockResolvedValue([]);
+      mockStores.changelogs.list.mockResolvedValue([]);
+
+      (verifySignatures as jest.Mock).mockResolvedValue(true);
+
+      // Then call generateIndex (which internally calls computeProjection)
+      const report = await recordProjector.generateIndex();
+      expect(report.success).toBe(true);
+
+      // Get persisted data from generateIndex
+      const persistCallU7 = mockSink.persist.mock.calls[0];
+      expect(persistCallU7).toBeDefined();
+      const persistedData = persistCallU7![0] as IndexData;
+
+      // Compare structural equality (ignore timestamps which differ between calls)
+      expect(persistedData.tasks.length).toBe(projectionResult.tasks.length);
+      expect(persistedData.cycles.length).toBe(projectionResult.cycles.length);
+      expect(persistedData.actors.length).toBe(projectionResult.actors.length);
+      expect(persistedData.enrichedTasks.length).toBe(projectionResult.enrichedTasks.length);
+      expect(persistedData.derivedStates).toEqual(projectionResult.derivedStates);
+      expect(persistedData.metadata.recordCounts).toEqual(projectionResult.metadata.recordCounts);
     });
   });
 });

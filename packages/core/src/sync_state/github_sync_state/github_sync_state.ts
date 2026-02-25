@@ -716,8 +716,8 @@ export class GithubSyncStateModule implements ISyncStateModule {
  * Files with undefined entityType are still counted in filesChecked
  * but skipped for lintRecord() validation.
  */
-function pathToEntityType(filePath: string): Exclude<GitGovRecordType, 'custom'> | undefined {
-  const dirMap: Record<string, Exclude<GitGovRecordType, 'custom'>> = {
+function pathToEntityType(filePath: string): GitGovRecordType | undefined {
+  const dirMap: Record<string, GitGovRecordType> = {
     tasks: 'task',
     cycles: 'cycle',
     actors: 'actor',

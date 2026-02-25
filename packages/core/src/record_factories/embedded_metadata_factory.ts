@@ -1,4 +1,4 @@
-import type { EmbeddedMetadataRecord, GitGovRecordPayload } from '../record_types';
+import type { EmbeddedMetadataRecord, GitGovRecordPayload, GitGovRecordType } from '../record_types';
 import type { Signature, EmbeddedMetadataHeader } from '../record_types/embedded.types';
 import { validateEmbeddedMetadataDetailed } from '../record_validations/embedded_metadata_validator';
 import { DetailedValidationError } from '../record_validations/common';
@@ -19,7 +19,7 @@ export type SignatureConfig = Partial<Pick<Signature, 'keyId' | 'role' | 'notes'
  */
 export type CreateEmbeddedMetadataOptions = {
   /** Header configuration (partial override, excludes auto-generated fields) */
-  header?: Partial<Pick<EmbeddedMetadataHeader, 'version' | 'type' | 'schemaUrl' | 'schemaChecksum'>>;
+  header?: Partial<Pick<EmbeddedMetadataHeader, 'version' | 'type'>>;
   /** Signature configuration (if not provided, uses default test signature) */
   signature?: SignatureConfig;
   /** Custom signatures array (if provided, overrides signature config) */
@@ -56,7 +56,7 @@ export function createTestSignature(
  * @param payload - The record payload
  * @returns The inferred type string
  */
-function inferTypeFromPayload(payload: GitGovRecordPayload): string {
+function inferTypeFromPayload(payload: GitGovRecordPayload): GitGovRecordType {
   // Check for distinctive properties of each record type
   if ('engine' in payload) return 'agent';
   if ('taskId' in payload && 'result' in payload) return 'execution';
@@ -65,7 +65,7 @@ function inferTypeFromPayload(payload: GitGovRecordPayload): string {
   if ('priority' in payload && 'description' in payload) return 'task';
   if ('displayName' in payload && 'publicKey' in payload) return 'actor';
 
-  return 'custom';
+  return 'task';
 }
 
 
@@ -124,10 +124,6 @@ export function createEmbeddedMetadataRecord<T extends GitGovRecordPayload>(
     type: type,
     payloadChecksum,
     signatures,
-    ...(type === 'custom' && {
-      schemaUrl: options.header?.schemaUrl,
-      schemaChecksum: options.header?.schemaChecksum
-    })
   };
 
   const embeddedRecord = {

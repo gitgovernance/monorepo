@@ -19,49 +19,28 @@ The SDK uses dependency injection. Each adapter receives its dependencies via co
 ### Filesystem Backend (CLI, local development)
 
 ```typescript
-import { Adapters, Store, EventBus } from "@gitgov/core";
-import { FsRecordStore } from "@gitgov/core/fs";
-import type {
-  TaskRecord,
-  CycleRecord,
-  ActorRecord,
-  AgentRecord,
-} from "@gitgov/core";
+import { Adapters, Store, EventBus } from '@gitgov/core';
+import { FsRecordStore } from '@gitgov/core/fs';
+import type { TaskRecord, CycleRecord, ActorRecord, AgentRecord } from '@gitgov/core';
 
 // Infrastructure
 const eventBus = new EventBus.EventBus();
-const taskStore = new FsRecordStore<TaskRecord>({
-  recordType: "tasks",
-  projectRoot: ".",
-});
-const cycleStore = new FsRecordStore<CycleRecord>({
-  recordType: "cycles",
-  projectRoot: ".",
-});
-const actorStore = new FsRecordStore<ActorRecord>({
-  recordType: "actors",
-  projectRoot: ".",
-});
-const agentStore = new FsRecordStore<AgentRecord>({
-  recordType: "agents",
-  projectRoot: ".",
-});
+const taskStore = new FsRecordStore<TaskRecord>({ recordType: 'tasks', projectRoot: '.' });
+const cycleStore = new FsRecordStore<CycleRecord>({ recordType: 'cycles', projectRoot: '.' });
+const actorStore = new FsRecordStore<ActorRecord>({ recordType: 'actors', projectRoot: '.' });
+const agentStore = new FsRecordStore<AgentRecord>({ recordType: 'agents', projectRoot: '.' });
 
 // Adapters compose modules
 const identity = new Adapters.IdentityAdapter({ actorStore, agentStore });
 const workflow = Adapters.WorkflowAdapter.createDefault();
 const backlog = new Adapters.BacklogAdapter({
-  taskStore,
-  cycleStore,
-  identity,
-  eventBus,
-  workflowAdapter: workflow,
+  taskStore, cycleStore, identity, eventBus, workflowAdapter: workflow,
 });
 
 // Create a task
 const task = await backlog.createTask(
-  { title: "Implement auth", priority: "high" },
-  "human:project-lead",
+  { title: 'Implement auth', priority: 'high' },
+  'human:project-lead',
 );
 ```
 
@@ -70,43 +49,32 @@ const task = await backlog.createTask(
 For SaaS, Forge apps, or GitHub Actions — no filesystem needed:
 
 ```typescript
-import { Octokit } from "@octokit/rest";
+import { Octokit } from '@octokit/rest';
 import {
   GitHubRecordStore,
   GitHubConfigStore,
   GitHubGitModule,
   GitHubFileLister,
-} from "@gitgov/core/github";
-import type { TaskRecord } from "@gitgov/core";
+} from '@gitgov/core/github';
+import type { TaskRecord } from '@gitgov/core';
 
 const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
-const repoOpts = {
-  owner: "my-org",
-  repo: "my-repo",
-  basePath: ".gitgov/tasks",
-};
+const repoOpts = { owner: 'my-org', repo: 'my-repo', basePath: '.gitgov/tasks' };
 
 const taskStore = new GitHubRecordStore<TaskRecord>(repoOpts, octokit);
 
 // Read — returns parsed JSON, caches SHA for subsequent writes
-const task = await taskStore.get("task-001");
+const task = await taskStore.get('task-001');
 
 // Write — returns { commitSha } from the created commit
-const result = await taskStore.put("task-002", newTask);
+const result = await taskStore.put('task-002', newTask);
 
 // Atomic batch — single commit for N records (requires GitHubGitModule)
-const gitModule = new GitHubGitModule(
-  { owner: "my-org", repo: "my-repo" },
-  octokit,
-);
-const batchStore = new GitHubRecordStore<TaskRecord>(
-  repoOpts,
-  octokit,
-  gitModule,
-);
+const gitModule = new GitHubGitModule({ owner: 'my-org', repo: 'my-repo' }, octokit);
+const batchStore = new GitHubRecordStore<TaskRecord>(repoOpts, octokit, gitModule);
 await batchStore.putMany([
-  { id: "task-003", value: task3 },
-  { id: "task-004", value: task4 },
+  { id: 'task-003', value: task3 },
+  { id: 'task-004', value: task4 },
 ]);
 ```
 
@@ -115,7 +83,7 @@ await batchStore.putMany([
 ```mermaid
 graph LR
     subgraph "@gitgov/core — Pure Logic"
-        Adapters["Adapters (9)"]
+        Adapters["Adapters (10)"]
         Modules["Modules (26)"]
         Records["Record System"]
         Projection["RecordProjector + IRecordProjection"]
@@ -139,6 +107,7 @@ graph LR
         GhGit["GitHubGitModule"]
         GhConfig["GitHubConfigStore"]
         GhFiles["GitHubFileLister"]
+        GhSync["GithubSyncStateModule"]
     end
 
     subgraph "@gitgov/core/memory — Testing"
@@ -172,13 +141,13 @@ graph LR
 
 ### 5 Export Paths
 
-| Import                | Contents                                                                                                | I/O    |
-| --------------------- | ------------------------------------------------------------------------------------------------------- | ------ |
-| `@gitgov/core`        | Interfaces, types, pure logic, factories, validators                                                    | No     |
-| `@gitgov/core/fs`     | Filesystem implementations (FsRecordStore, FsRecordProjection, LocalGitModule, FsLintModule, ...)       | Local  |
-| `@gitgov/core/github` | GitHub API implementations (GitHubRecordStore, GitHubGitModule, GitHubConfigStore, GitHubFileLister)    | Remote |
-| `@gitgov/core/memory` | In-memory implementations for testing (MemoryRecordStore, MemoryRecordProjection, MemoryGitModule, ...) | No     |
-| `@gitgov/core/prisma` | Database-backed implementations via Prisma-compatible client (PrismaRecordProjection)                   | Remote |
+| Import | Contents | I/O |
+|--------|----------|-----|
+| `@gitgov/core` | Interfaces, types, pure logic, factories, validators | No |
+| `@gitgov/core/fs` | Filesystem implementations (FsRecordStore, FsRecordProjection, LocalGitModule, FsLintModule, ...) | Local |
+| `@gitgov/core/github` | GitHub API implementations (GitHubRecordStore, GitHubGitModule, GitHubConfigStore, GitHubFileLister, GithubSyncStateModule) | Remote |
+| `@gitgov/core/memory` | In-memory implementations for testing (MemoryRecordStore, MemoryRecordProjection, MemoryGitModule, ...) | No |
+| `@gitgov/core/prisma` | Database-backed implementations via Prisma-compatible client (PrismaRecordProjection) | Remote |
 
 The root import (`@gitgov/core`) never imports `fs`, `path`, `child_process`, `@octokit/rest`, or `@prisma/client`.
 
@@ -186,61 +155,62 @@ The root import (`@gitgov/core`) never imports `fs`, `path`, `child_process`, `@
 
 Every record type has 4 parallel artifacts:
 
-| Artifact  | Directory                   | Responsibility                              |
-| --------- | --------------------------- | ------------------------------------------- |
-| Types     | `record_types/generated/`   | Shape of the record (generated from schema) |
-| Factory   | `record_factories/`         | Create record with defaults + validation    |
-| Validator | `record_validations/`       | Business rules on the record                |
-| Schema    | `record_schemas/generated/` | JSON Schema for AJV validation              |
+| Artifact | Directory | Responsibility |
+|----------|-----------|----------------|
+| Types | `record_types/generated/` | Shape of the record (generated from schema) |
+| Factory | `record_factories/` | Create record with defaults + validation |
+| Validator | `record_validations/` | Business rules on the record |
+| Schema | `record_schemas/generated/` | JSON Schema for AJV validation |
 
-The 7 records: **Actor, Agent, Task, Cycle, Execution, Feedback, Workflow**
+The 8 records: **Actor, Agent, Task, Cycle, Execution, Changelog, Feedback, Workflow**
 
 ## Adapters
 
 Adapters are orchestrators that compose modules. All receive dependencies via constructor injection.
 
-| Adapter            | Purpose                                            |
-| ------------------ | -------------------------------------------------- |
-| `ProjectAdapter`   | Project initialization, environment validation     |
-| `IdentityAdapter`  | Actor and agent identity management                |
-| `BacklogAdapter`   | Task and cycle lifecycle, workflow validation      |
-| `ExecutionAdapter` | Execution audit log tracking                       |
-| `FeedbackAdapter`  | Structured feedback and blocking resolution        |
-| `MetricsAdapter`   | System status and productivity metrics             |
-| `IndexerAdapter`   | Local cache generation and integrity checks        |
-| `WorkflowAdapter`  | State transitions with signatures and custom rules |
-| `AgentAdapter`     | Agent lifecycle management                         |
+| Adapter | Purpose |
+|---------|---------|
+| `ProjectAdapter` | Project initialization, environment validation |
+| `IdentityAdapter` | Actor and agent identity management |
+| `BacklogAdapter` | Task and cycle lifecycle, workflow validation |
+| `ExecutionAdapter` | Execution audit log tracking |
+| `FeedbackAdapter` | Structured feedback and blocking resolution |
+| `ChangelogAdapter` | Automatic changelog entries |
+| `MetricsAdapter` | System status and productivity metrics |
+| `IndexerAdapter` | Local cache generation and integrity checks |
+| `WorkflowAdapter` | State transitions with signatures and custom rules |
+| `AgentAdapter` | Agent lifecycle management |
 
 ## Modules
 
-| Module                 | Responsibility                                                                     |
-| ---------------------- | ---------------------------------------------------------------------------------- |
-| `record_types/`        | TypeScript types per record (generated from schemas)                               |
-| `record_factories/`    | Factories with defaults for creating records                                       |
-| `record_validations/`  | Business validators (above schema)                                                 |
-| `record_schemas/`      | JSON Schemas + schema cache + errors                                               |
-| `record_store/`        | `RecordStore<V, R, O>` interface (impl in fs/memory/github)                        |
-| `record_projection/`   | `IRecordProjection` interface + RecordProjector engine (drivers: fs/memory/prisma) |
-| `record_metrics/`      | RecordMetrics calculation engine (system status, productivity, collaboration)      |
-| `config_store/`        | Storage for project config.json (impl in fs/github)                                |
-| `config_manager/`      | Typed access to config.json (versioned in git)                                     |
-| `session_store/`       | Storage for .session.json                                                          |
-| `session_manager/`     | Typed access to .session.json (ephemeral, not versioned)                           |
-| `sync_state/`          | Push/pull/resolve synchronization state                                            |
-| `git/`                 | `IGitModule` interface + local/memory implementations                              |
-| `crypto/`              | Checksums, digital signatures, verification                                        |
-| `key_provider/`        | Key storage abstraction (fs/memory)                                                |
-| `file_lister/`         | File listing abstraction (fs/memory)                                               |
-| `lint/`                | Structural + referential validation                                                |
-| `event_bus/`           | Typed pub/sub with 9 event types                                                   |
-| `agent_runner/`        | Agent execution (interface + loader)                                               |
-| `watcher_state/`       | File change tracking in .gitgov/                                                   |
-| `project_initializer/` | GitGovernance project setup                                                        |
-| `finding_detector/`    | Finding detection (regex, heuristic, LLM)                                          |
-| `source_auditor/`      | Cross-system audit (code, Jira, gitgov)                                            |
-| `diagram_generator/`   | Mermaid diagram generation                                                         |
-| `logger/`              | Centralized logging                                                                |
-| `utils/`               | ID generation/parsing, array utils, signature utils                                |
+| Module | Responsibility |
+|--------|----------------|
+| `record_types/` | TypeScript types per record (generated from schemas) |
+| `record_factories/` | Factories with defaults for creating records |
+| `record_validations/` | Business validators (above schema) |
+| `record_schemas/` | JSON Schemas + schema cache + errors |
+| `record_store/` | `RecordStore<V, R, O>` interface (impl in fs/memory/github) |
+| `record_projection/` | `IRecordProjection` interface + RecordProjector engine (drivers: fs/memory/prisma) |
+| `record_metrics/` | RecordMetrics calculation engine (system status, productivity, collaboration) |
+| `config_store/` | Storage for project config.json (impl in fs/github) |
+| `config_manager/` | Typed access to config.json (versioned in git) |
+| `session_store/` | Storage for .session.json |
+| `session_manager/` | Typed access to .session.json (ephemeral, not versioned) |
+| `sync_state/` | Push/pull/resolve synchronization state |
+| `git/` | `IGitModule` interface + local/memory implementations |
+| `crypto/` | Checksums, digital signatures, verification |
+| `key_provider/` | Key storage abstraction (fs/memory) |
+| `file_lister/` | File listing abstraction (fs/memory) |
+| `lint/` | Structural + referential validation |
+| `event_bus/` | Typed pub/sub with 9 event types |
+| `agent_runner/` | Agent execution (interface + loader) |
+| `watcher_state/` | File change tracking in .gitgov/ |
+| `project_initializer/` | GitGovernance project setup |
+| `finding_detector/` | Finding detection (regex, heuristic, LLM) |
+| `source_auditor/` | Cross-system audit (code, Jira, gitgov) |
+| `diagram_generator/` | Mermaid diagram generation |
+| `logger/` | Centralized logging |
+| `utils/` | ID generation/parsing, array utils, signature utils |
 
 ## Development
 

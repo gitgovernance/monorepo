@@ -1,9 +1,10 @@
 /**
  * SyncCommand Unit Tests
- * 
+ * @blueprint sync_command.md
+ *
  * Tests the CLI layer for sync commands (push, pull, resolve, audit)
  * using mocks to isolate from SyncModule implementation.
- * 
+ *
  * Integration tests for actual Git operations are in packages/core/src/sync_state/fs/fs_sync_state.test.ts
  */
 
@@ -224,10 +225,10 @@ describe('SyncCommand - Unit Tests', () => {
   // CLI layer doesn't directly test branch management
 
   // =====================================================================
-  // EARS-B1 a B9: Operación Push
+  // EARS-B1 a B10: Operación Push
   // =====================================================================
 
-  describe('Push Operation (EARS-B1 a B9)', () => {
+  describe('Push Operation (EARS-B1 a B10)', () => {
     // Note: Audit is now handled internally by pushState, not by CLI
 
     it('[EARS-B1] should calculate delta of files before push', async () => {
@@ -270,6 +271,34 @@ describe('SyncCommand - Unit Tests', () => {
       // Verify output - [EARS-B5] message updated to clarify "local" changes
       expect(mockConsoleLog).toHaveBeenCalledWith(
         expect.stringContaining('No local changes to push')
+      );
+    });
+
+    it('[EARS-B10] should show pushed existing commits when filesSynced is 0 but commitHash exists', async () => {
+      // Setup - delta=0 path where local was ahead of remote and pushed existing commits
+      mockSyncModule.pushState.mockResolvedValue({
+        success: true,
+        filesSynced: 0,
+        sourceBranch: 'main',
+        commitHash: 'abc12345',
+        commitMessage: null,
+        conflictDetected: false
+      });
+
+      // Execute
+      await syncCommand.executePush({});
+
+      // Verify it does NOT show "No local changes"
+      expect(mockConsoleLog).not.toHaveBeenCalledWith(
+        expect.stringContaining('No local changes to push')
+      );
+
+      // Verify it shows the correct message
+      expect(mockConsoleLog).toHaveBeenCalledWith(
+        expect.stringContaining('Pushed existing commits to gitgov-state')
+      );
+      expect(mockConsoleLog).toHaveBeenCalledWith(
+        expect.stringContaining('abc12345'.substring(0, 8))
       );
     });
 
@@ -664,27 +693,6 @@ describe('SyncCommand - Unit Tests', () => {
       );
     });
 
-    it('[EARS-C9] should handle error from pullState and show clear message', async () => {
-      // Setup: Pull returns error (e.g., no remote configured)
-      mockSyncModule.pullState.mockResolvedValue({
-        success: false,
-        hasChanges: false,
-        filesUpdated: 0,
-        reindexed: false,
-        conflictDetected: false,
-        error: 'No remote \'origin\' configured. Pull requires a remote repository. Add a remote with: git remote add origin <url>'
-      });
-
-      // Execute
-      await syncCommand.executePull({});
-
-      // Verify error was shown to user
-      expect(mockProcessExit).toHaveBeenCalledWith(1);
-      expect(mockConsoleError).toHaveBeenCalledWith(
-        expect.stringContaining('No remote')
-      );
-    });
-
     it('[EARS-C8] should handle conflict without updating session when no actor', async () => {
       // Setup: Conflict detected but no actor in session
       mockSyncModule.pullState.mockResolvedValue({
@@ -721,6 +729,27 @@ describe('SyncCommand - Unit Tests', () => {
 
       // Verify session was NOT updated (graceful degradation)
       expect(mockSessionManager.updateActorState).not.toHaveBeenCalled();
+    });
+
+    it('[EARS-C9] should handle error from pullState and show clear message', async () => {
+      // Setup: Pull returns error (e.g., no remote configured)
+      mockSyncModule.pullState.mockResolvedValue({
+        success: false,
+        hasChanges: false,
+        filesUpdated: 0,
+        reindexed: false,
+        conflictDetected: false,
+        error: 'No remote \'origin\' configured. Pull requires a remote repository. Add a remote with: git remote add origin <url>'
+      });
+
+      // Execute
+      await syncCommand.executePull({});
+
+      // Verify error was shown to user
+      expect(mockProcessExit).toHaveBeenCalledWith(1);
+      expect(mockConsoleError).toHaveBeenCalledWith(
+        expect.stringContaining('No remote')
+      );
     });
 
     it('[EARS-C10] should detect local changes conflict and show affected files during pull', async () => {

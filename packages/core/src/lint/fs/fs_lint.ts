@@ -405,7 +405,7 @@ export class FsLintModule implements IFsLintModule {
   private async lintSingleRecord(
     recordId: string,
     options: FsLintOptions,
-    entityType: Exclude<GitGovRecordType, 'custom'>
+    entityType: GitGovRecordType
   ): Promise<LintResult[]> {
     const results: LintResult[] = [];
     let filePath: string;
@@ -517,11 +517,11 @@ export class FsLintModule implements IFsLintModule {
     _record: GitGovRecord,
     recordId: string,
     filePath: string,
-    entityType: Exclude<GitGovRecordType, 'custom'>
+    entityType: GitGovRecordType
   ): LintResult[] {
     const results: LintResult[] = [];
 
-    const dirNameMap: Record<Exclude<GitGovRecordType, 'custom'>, string> = {
+    const dirNameMap: Record<GitGovRecordType, string> = {
       'task': 'tasks', 'cycle': 'cycles', 'execution': 'executions',
       'feedback': 'feedbacks', 'actor': 'actors', 'agent': 'agents'
     };
@@ -562,14 +562,14 @@ export class FsLintModule implements IFsLintModule {
    * [EARS-A1] Discovers all records with their types by scanning filesystem.
    * @private
    */
-  private async discoverAllRecordsWithTypes(_path?: string): Promise<Array<{ id: string; type: Exclude<GitGovRecordType, 'custom'> }>> {
+  private async discoverAllRecordsWithTypes(_path?: string): Promise<Array<{ id: string; type: GitGovRecordType }>> {
     // Note: _path parameter is deprecated, projectRoot is now injected via constructor
-    const recordTypes: Array<Exclude<GitGovRecordType, 'custom'>> = [
+    const recordTypes: Array<GitGovRecordType> = [
       'actor', 'agent', 'cycle', 'task', 'execution', 'feedback'
     ];
-    const allRecords: Array<{ id: string; type: Exclude<GitGovRecordType, 'custom'> }> = [];
+    const allRecords: Array<{ id: string; type: GitGovRecordType }> = [];
 
-    const dirNameMap: Record<Exclude<GitGovRecordType, 'custom'>, string> = {
+    const dirNameMap: Record<GitGovRecordType, string> = {
       'task': 'tasks', 'cycle': 'cycles', 'execution': 'executions',
       'feedback': 'feedbacks',
       'actor': 'actors', 'agent': 'agents'
@@ -594,8 +594,8 @@ export class FsLintModule implements IFsLintModule {
    * Gets file path for a record.
    * @private
    */
-  private getFilePath(recordId: string, entityType: Exclude<GitGovRecordType, 'custom'>): string {
-    const dirNameMap: Record<Exclude<GitGovRecordType, 'custom'>, string> = {
+  private getFilePath(recordId: string, entityType: GitGovRecordType): string {
+    const dirNameMap: Record<GitGovRecordType, string> = {
       'task': 'tasks', 'cycle': 'cycles', 'execution': 'executions',
       'feedback': 'feedbacks', 'actor': 'actors', 'agent': 'agents'
     };

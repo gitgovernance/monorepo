@@ -87,9 +87,6 @@ importers:
       conventional-changelog-conventionalcommits:
         specifier: ^7.0.2
         version: 7.0.2
-      dotenv:
-        specifier: ^17.2.2
-        version: 17.2.2
       esbuild:
         specifier: ^0.19.0
         version: 0.19.12

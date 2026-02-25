@@ -95,7 +95,6 @@ export type {
   GitGovRecordType,
   Signature,
   EmbeddedMetadataRecord,
-  CustomRecord,
 } from "./record_types";
 export * as DiagramGenerator from "./diagram_generator";
 

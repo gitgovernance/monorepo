@@ -1,3 +1,38 @@
+## [2.7.2](https://github.com/gitgovernance/monorepo/compare/core-v2.7.1...core-v2.7.2) (2026-02-25)
+
+
+### 🐛 Bug Fixes
+
+* **core,cli:** detect remote-deleted branch on push, remove legacy .gitignore, reconcile diverged histories ([#99](https://github.com/gitgovernance/monorepo/issues/99)) ([01c3c8a](https://github.com/gitgovernance/monorepo/commit/01c3c8a65368d50ea101c2242727608857c86bdf))
+
+## [2.7.1](https://github.com/gitgovernance/monorepo/compare/core-v2.7.0...core-v2.7.1) (2026-02-24)
+
+
+### ♻️ Refactoring
+
+* **core:** remove custom record type from protocol ([#97](https://github.com/gitgovernance/monorepo/issues/97)) ([f5bde2a](https://github.com/gitgovernance/monorepo/commit/f5bde2a69978a567684a1f951e32be09f6742cc7)), closes [#98](https://github.com/gitgovernance/monorepo/issues/98)
+
+## [2.7.0](https://github.com/gitgovernance/monorepo/compare/core-v2.6.0...core-v2.7.0) (2026-02-24)
+
+
+### ✨ Features
+
+* **core:** saas-base cycle 3 — prisma projection, sync state, webhooks, E2E ([#93](https://github.com/gitgovernance/monorepo/issues/93)) ([fd1a2be](https://github.com/gitgovernance/monorepo/commit/fd1a2bea53f98ef79bb793fe53627e9b8780c2b6))
+
+## [2.6.0](https://github.com/gitgovernance/monorepo/compare/core-v2.5.0...core-v2.6.0) (2026-02-21)
+
+
+### ✨ Features
+
+* **cli:** add exec, feedback, actor commands and init --type extension ([16badb9](https://github.com/gitgovernance/monorepo/commit/16badb9af5ccb768b7c6f65dd7119f4dcdedde4a))
+* **core:** extend ProjectAdapter type support and export TransitionRule ([787a32a](https://github.com/gitgovernance/monorepo/commit/787a32a54fe945e82dc71ecfa94160a7e1b53240))
+* **mcp-server:** add execution, agent, identity, workflow tools ([414bf5d](https://github.com/gitgovernance/monorepo/commit/414bf5d51fc02745eea62cc772dac9e3890e12c4))
+
+
+### ♻️ Refactoring
+
+* **cli:** align init E2E test EARS naming with blueprint ([6138ad6](https://github.com/gitgovernance/monorepo/commit/6138ad6c607f19ce620fc93dad57449983fcfdbe))
+
 ## [2.5.0](https://github.com/gitgovernance/monorepo/compare/core-v2.4.0...core-v2.5.0) (2026-02-19)
 
 

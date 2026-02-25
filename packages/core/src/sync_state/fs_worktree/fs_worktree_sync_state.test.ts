@@ -331,7 +331,7 @@ describe('FsWorktreeSyncStateModule', () => {
   // 4.1. Worktree Management (WTSYNC-A1 to A6)
   // ═══════════════════════════════════════════════
 
-  describe('4.1. Worktree Management (WTSYNC-A1 to A6)', () => {
+  describe('4.1. Worktree Management (WTSYNC-A1 to A7)', () => {
     it('[WTSYNC-A1] should create worktree when none exists', async () => {
       const { repoPath, remotePath } = await setupRepoWithRemote();
       cleanupPaths.push(repoPath, remotePath);
@@ -433,13 +433,67 @@ describe('FsWorktreeSyncStateModule', () => {
       const { stdout: branches } = await execAsync('git branch', { cwd: repoPath });
       expect(branches).toContain('gitgov-state');
     });
+
+    it('[WTSYNC-A7] should NOT create .gitignore on fresh state branch initialization', async () => {
+      const { repoPath, remotePath } = await setupRepoWithRemote();
+      cleanupPaths.push(repoPath, remotePath);
+
+      const { module } = createModule(repoPath);
+      await module.ensureWorktree();
+
+      // Verify the worktree has NO .gitignore at root
+      const worktreePath = module.getWorktreePath();
+      expect(fs.existsSync(path.join(worktreePath, '.gitignore'))).toBe(false);
+
+      // Verify the state branch tree has NO .gitignore
+      const { stdout: tree } = await execAsync(
+        'git ls-tree -r --name-only gitgov-state',
+        { cwd: repoPath }
+      );
+      expect(tree.trim()).toBe(''); // orphan empty tree — no files at all
+    });
+
+    it('[WTSYNC-A7] should remove legacy .gitignore from existing state branch', async () => {
+      const { repoPath, remotePath } = await setupRepoWithRemote();
+      cleanupPaths.push(repoPath, remotePath);
+
+      // Simulate legacy FsSyncState init: create state branch WITH .gitignore
+      await execAsync('git checkout --orphan gitgov-state', { cwd: repoPath });
+      await execAsync('git rm -rf . 2>/dev/null || true', { cwd: repoPath });
+      fs.writeFileSync(path.join(repoPath, '.gitignore'), '# Legacy\nindex.json\n.session.json\n');
+      await execAsync('git add .gitignore', { cwd: repoPath });
+      await execAsync('git commit -m "Initialize state branch with .gitignore"', { cwd: repoPath });
+      await execAsync('git checkout main', { cwd: repoPath });
+
+      // Verify .gitignore exists on state branch before cleanup
+      const { stdout: treeBefore } = await execAsync(
+        'git ls-tree --name-only gitgov-state',
+        { cwd: repoPath }
+      );
+      expect(treeBefore.trim()).toContain('.gitignore');
+
+      // Now create worktree — should clean up legacy .gitignore
+      const { module } = createModule(repoPath);
+      await module.ensureWorktree();
+
+      // Verify .gitignore is GONE
+      const worktreePath = module.getWorktreePath();
+      expect(fs.existsSync(path.join(worktreePath, '.gitignore'))).toBe(false);
+
+      // Verify the state branch no longer has .gitignore
+      const { stdout: treeAfter } = await execAsync(
+        'git ls-tree --name-only gitgov-state',
+        { cwd: repoPath }
+      );
+      expect(treeAfter.trim()).not.toContain('.gitignore');
+    });
   });
 
   // ═══════════════════════════════════════════════
-  // 4.2. Push Operations (WTSYNC-B1 to B15)
+  // 4.2. Push Operations (WTSYNC-B1 to B16)
   // ═══════════════════════════════════════════════
 
-  describe('4.2. Push Operations (WTSYNC-B1 to B15)', () => {
+  describe('4.2. Push Operations (WTSYNC-B1 to B16)', () => {
     async function setupPushTest(): Promise<{
       repoPath: string;
       remotePath: string;
@@ -694,7 +748,7 @@ describe('FsWorktreeSyncStateModule', () => {
     });
 
     it('[WTSYNC-B11] should remove locally deleted files from worktree', async () => {
-      const { module } = await setupPushTest();
+      const { module, remotePath } = await setupPushTest();
       const worktreePath = module.getWorktreePath();
 
       // Create and commit a file first
@@ -708,6 +762,13 @@ describe('FsWorktreeSyncStateModule', () => {
 
       const result = await module.pushState({ actorId: 'test-actor' });
       expect(result.success).toBe(true);
+
+      // Verify the deletion was committed — file should not exist on remote
+      const { stdout: remoteTree } = await execAsync(
+        'git ls-tree -r --name-only gitgov-state',
+        { cwd: remotePath }
+      );
+      expect(remoteTree).not.toContain('tasks/to-delete.json');
     });
 
     it('[WTSYNC-B12] should not commit or push when dryRun is true', async () => {
@@ -763,6 +824,198 @@ describe('FsWorktreeSyncStateModule', () => {
       );
       expect(remoteLog).toContain('sync state');
     });
+
+    it('[WTSYNC-B16] should push existing commits when no uncommitted changes but local is ahead of remote', async () => {
+      const { repoPath, remotePath } = await setupRepoWithRemote();
+      cleanupPaths.push(repoPath, remotePath);
+      await setupStateBranch(repoPath);
+
+      const { module } = createModule(repoPath);
+      await module.ensureWorktree();
+      const worktreePath = module.getWorktreePath();
+
+      // Create a task, commit it locally in the worktree, and push
+      fs.writeFileSync(
+        path.join(worktreePath, '.gitgov', 'tasks', 'task-ahead.json'),
+        JSON.stringify({ id: 'task-ahead' })
+      );
+      await module.pushState({ actorId: 'test-actor' });
+
+      // Delete the remote branch to simulate remote data loss
+      await execAsync(`git branch -D gitgov-state`, { cwd: remotePath });
+
+      // Now push again — no uncommitted changes, but local is ahead (remote branch gone)
+      const result = await module.pushState({ actorId: 'test-actor' });
+      expect(result.success).toBe(true);
+      expect(result.commitHash).not.toBeNull();
+      expect(result.filesSynced).toBe(0); // No new files, just re-pushed existing commits
+
+      // Verify the remote branch was recreated
+      const { stdout: remoteBranches } = await execAsync('git branch', { cwd: remotePath });
+      expect(remoteBranches).toContain('gitgov-state');
+    });
+
+    it('[WTSYNC-B16] should push when no uncommitted changes and remote branch does not exist', async () => {
+      const { repoPath, remotePath } = await setupRepoWithRemote();
+      cleanupPaths.push(repoPath, remotePath);
+
+      const { module } = createModule(repoPath);
+      // Create state branch locally (ensureStateBranch) + worktree, but never push to remote
+      await module.ensureWorktree();
+      const worktreePath = module.getWorktreePath();
+
+      // Add a task and commit in the worktree (but don't push)
+      // Orphan branch starts empty — create .gitgov/tasks/ directory first
+      fs.mkdirSync(path.join(worktreePath, '.gitgov', 'tasks'), { recursive: true });
+      fs.writeFileSync(
+        path.join(worktreePath, '.gitgov', 'tasks', 'task-new.json'),
+        JSON.stringify({ id: 'task-new' })
+      );
+      await execAsync('git add .gitgov/tasks/task-new.json', { cwd: worktreePath });
+      await execAsync('git commit -m "gitgov: local commit"', { cwd: worktreePath });
+
+      // Now call pushState — delta is 0 (no uncommitted changes) but remote has no branch
+      const result = await module.pushState({ actorId: 'test-actor' });
+      expect(result.success).toBe(true);
+      expect(result.commitHash).not.toBeNull();
+
+      // Verify the remote now has the branch
+      const { stdout: remoteBranches } = await execAsync('git branch', { cwd: remotePath });
+      expect(remoteBranches).toContain('gitgov-state');
+    });
+
+    it('[WTSYNC-B16] should return no changes when no uncommitted changes and local equals remote', async () => {
+      const { repoPath, remotePath } = await setupRepoWithRemote();
+      cleanupPaths.push(repoPath, remotePath);
+      await setupStateBranch(repoPath);
+
+      const { module } = createModule(repoPath);
+      await module.ensureWorktree();
+      const worktreePath = module.getWorktreePath();
+
+      // Push a task to get local and remote in sync
+      fs.writeFileSync(
+        path.join(worktreePath, '.gitgov', 'tasks', 'task-synced.json'),
+        JSON.stringify({ id: 'task-synced' })
+      );
+      await module.pushState({ actorId: 'test-actor' });
+
+      // Push again with nothing new — should report no changes
+      const result = await module.pushState({ actorId: 'test-actor' });
+      expect(result.success).toBe(true);
+      expect(result.filesSynced).toBe(0);
+      expect(result.commitHash).toBeNull(); // Nothing to push
+      expect(result.commitMessage).toBeNull();
+    });
+
+    it('[WTSYNC-B16] should reconcile via rebase when local is ahead and remote also has new commits', async () => {
+      const { repoPath, remotePath } = await setupRepoWithRemote();
+      cleanupPaths.push(repoPath, remotePath);
+      await setupStateBranch(repoPath);
+
+      const { module } = createModule(repoPath);
+      await module.ensureWorktree();
+      const worktreePath = module.getWorktreePath();
+
+      // Step 1: Push a file via pushState to establish remote baseline
+      fs.writeFileSync(
+        path.join(worktreePath, '.gitgov', 'tasks', 'baseline-task.json'),
+        JSON.stringify({ id: 'baseline-task' })
+      );
+      await module.pushState({ actorId: 'test-actor' });
+
+      // Step 2: Push a DIFFERENT file from a clone (creates remote-only commit)
+      const tempClone = path.join(os.tmpdir(), `gitgov-wt-diverge-${Date.now()}`);
+      cleanupPaths.push(tempClone);
+      await execAsync(`git clone ${remotePath} ${tempClone}`);
+      await execAsync('git config user.name "Other"', { cwd: tempClone });
+      await execAsync('git config user.email "other@test.com"', { cwd: tempClone });
+      await execAsync('git checkout gitgov-state', { cwd: tempClone });
+      fs.writeFileSync(
+        path.join(tempClone, '.gitgov', 'tasks', 'remote-only-task.json'),
+        JSON.stringify({ id: 'remote-only-task' })
+      );
+      await execAsync('git add .gitgov/tasks/remote-only-task.json', { cwd: tempClone });
+      await execAsync('git commit -m "remote: add diverging task"', { cwd: tempClone });
+      await execAsync('git push origin gitgov-state', { cwd: tempClone });
+
+      // Step 3: Create a local-only commit directly in worktree (NOT pushed)
+      fs.writeFileSync(
+        path.join(worktreePath, '.gitgov', 'tasks', 'local-only-task.json'),
+        JSON.stringify({ id: 'local-only-task' })
+      );
+      await execAsync('git add .gitgov/tasks/local-only-task.json', { cwd: worktreePath });
+      await execAsync('git commit -m "gitgov: local-only commit"', { cwd: worktreePath });
+
+      // Now: local is ahead (has local-only-task commit), remote also has new commit (remote-only-task)
+      // delta=0 (no uncommitted changes) but histories have diverged
+
+      // Step 4: pushState should reconcile (pull --rebase) then push
+      const result = await module.pushState({ actorId: 'test-actor' });
+      expect(result.success).toBe(true);
+      expect(result.filesSynced).toBe(0);
+      expect(result.commitHash).not.toBeNull();
+
+      // Step 5: Verify both files exist on remote
+      const { stdout: remoteLog } = await execAsync(
+        'git log gitgov-state --name-only --oneline',
+        { cwd: remotePath }
+      );
+      expect(remoteLog).toContain('tasks/local-only-task.json');
+      expect(remoteLog).toContain('tasks/remote-only-task.json');
+    });
+
+    it('[WTSYNC-B16] should return conflictDetected when reconciliation hits a conflict', async () => {
+      const { repoPath, remotePath } = await setupRepoWithRemote();
+      cleanupPaths.push(repoPath, remotePath);
+      await setupStateBranch(repoPath);
+
+      const { module } = createModule(repoPath);
+      await module.ensureWorktree();
+      const worktreePath = module.getWorktreePath();
+
+      // Step 1: Push baseline via pushState
+      fs.writeFileSync(
+        path.join(worktreePath, '.gitgov', 'tasks', 'baseline.json'),
+        JSON.stringify({ id: 'baseline' })
+      );
+      await module.pushState({ actorId: 'test-actor' });
+
+      // Step 2: Push SAME file with different content from a clone (creates conflict)
+      const tempClone = path.join(os.tmpdir(), `gitgov-wt-conflict-recon-${Date.now()}`);
+      cleanupPaths.push(tempClone);
+      await execAsync(`git clone ${remotePath} ${tempClone}`);
+      await execAsync('git config user.name "Other"', { cwd: tempClone });
+      await execAsync('git config user.email "other@test.com"', { cwd: tempClone });
+      await execAsync('git checkout gitgov-state', { cwd: tempClone });
+      fs.writeFileSync(
+        path.join(tempClone, '.gitgov', 'tasks', 'conflict-file.json'),
+        JSON.stringify({ id: 'conflict-file', by: 'remote' }, null, 2)
+      );
+      await execAsync('git add .gitgov/tasks/conflict-file.json', { cwd: tempClone });
+      await execAsync('git commit -m "remote: add conflict file"', { cwd: tempClone });
+      await execAsync('git push origin gitgov-state', { cwd: tempClone });
+
+      // Step 3: Create SAME file locally with different content, commit directly (NOT pushed)
+      fs.writeFileSync(
+        path.join(worktreePath, '.gitgov', 'tasks', 'conflict-file.json'),
+        JSON.stringify({ id: 'conflict-file', by: 'local' }, null, 2)
+      );
+      await execAsync('git add .gitgov/tasks/conflict-file.json', { cwd: worktreePath });
+      await execAsync('git commit -m "gitgov: local conflict commit"', { cwd: worktreePath });
+
+      // Now: delta=0 (no uncommitted changes), local ahead, remote also ahead,
+      // AND both modified the same file → reconciliation will conflict
+
+      // Step 4: pushState should detect conflict during reconciliation
+      const result = await module.pushState({ actorId: 'test-actor' });
+      expect(result.success).toBe(false);
+      expect(result.conflictDetected).toBe(true);
+      expect(result.conflictInfo?.type).toBe('rebase_conflict');
+      expect(result.conflictInfo?.affectedFiles).toContain('.gitgov/tasks/conflict-file.json');
+      expect(result.filesSynced).toBe(0);
+      expect(result.commitHash).toBeNull();
+    });
   });
 
   // ═══════════════════════════════════════════════
@@ -801,10 +1054,31 @@ describe('FsWorktreeSyncStateModule', () => {
     });
 
     it('[WTSYNC-C2] should fetch from remote before pulling', async () => {
-      const { module } = await setupPullTest();
+      const { module, remotePath } = await setupPullTest();
 
+      // Push a change to remote that local doesn't know about
+      const tempClone = path.join(os.tmpdir(), `gitgov-wt-fetch-${Date.now()}`);
+      cleanupPaths.push(tempClone);
+      await execAsync(`git clone ${remotePath} ${tempClone}`);
+      await execAsync('git config user.name "Other"', { cwd: tempClone });
+      await execAsync('git config user.email "other@test.com"', { cwd: tempClone });
+      await execAsync('git checkout gitgov-state', { cwd: tempClone });
+      fs.writeFileSync(
+        path.join(tempClone, '.gitgov', 'tasks', 'fetch-test.json'),
+        JSON.stringify({ id: 'fetch-test' })
+      );
+      await execAsync('git add .gitgov/tasks/fetch-test.json', { cwd: tempClone });
+      await execAsync('git commit -m "remote: add task for fetch test"', { cwd: tempClone });
+      await execAsync('git push origin gitgov-state', { cwd: tempClone });
+
+      // Pull should fetch the remote change and bring it locally
       const result = await module.pullState();
       expect(result.success).toBe(true);
+      expect(result.hasChanges).toBe(true);
+
+      // Verify the fetched file exists in worktree
+      const fetchedFile = path.join(module.getWorktreePath(), '.gitgov', 'tasks', 'fetch-test.json');
+      expect(fs.existsSync(fetchedFile)).toBe(true);
     });
 
     it('[WTSYNC-C3] should rebase on fetched changes', async () => {
@@ -871,23 +1145,6 @@ describe('FsWorktreeSyncStateModule', () => {
       // add/add conflict on same file is guaranteed during rebase
       expect(result.conflictDetected).toBe(true);
       expect(result.conflictInfo?.type).toBe('rebase_conflict');
-    });
-
-    it('[WTSYNC-C9] should throw RebaseAlreadyInProgressError when rebase is already in progress', async () => {
-      const { repoPath, remotePath } = await setupRepoWithRemote();
-      cleanupPaths.push(repoPath, remotePath);
-      await setupStateBranch(repoPath);
-
-      const { module } = createModule(repoPath);
-      await module.ensureWorktree();
-
-      // Create a rebase conflict (leaves rebase in progress)
-      const { cloneDir } = await setupRebaseConflict(remotePath, module.getWorktreePath());
-      cleanupPaths.push(cloneDir);
-
-      // Pull should refuse while rebase is in progress
-      await expect(module.pullState())
-        .rejects.toThrow(RebaseAlreadyInProgressError);
     });
 
     it('[WTSYNC-C5] should re-index records after successful pull with changes', async () => {
@@ -1110,6 +1367,23 @@ describe('FsWorktreeSyncStateModule', () => {
       const result = await module.pullState();
       expect(result.success).toBe(true);
       expect(result.hasChanges).toBe(false);
+    });
+
+    it('[WTSYNC-C9] should throw RebaseAlreadyInProgressError when rebase is already in progress', async () => {
+      const { repoPath, remotePath } = await setupRepoWithRemote();
+      cleanupPaths.push(repoPath, remotePath);
+      await setupStateBranch(repoPath);
+
+      const { module } = createModule(repoPath);
+      await module.ensureWorktree();
+
+      // Create a rebase conflict (leaves rebase in progress)
+      const { cloneDir } = await setupRebaseConflict(remotePath, module.getWorktreePath());
+      cleanupPaths.push(cloneDir);
+
+      // Pull should refuse while rebase is in progress
+      await expect(module.pullState())
+        .rejects.toThrow(RebaseAlreadyInProgressError);
     });
   });
 

@@ -1,3 +1,8 @@
+/**
+ * Tests for id_parser module.
+ * All EARS prefixes map to id_parser_module.md
+ * @see packages/blueprints/03_products/core/specs/modules/utils_module/id_parser_module.md
+ */
 import {
   extractRecordIdFromPath,
   getEntityTypeFromPath,

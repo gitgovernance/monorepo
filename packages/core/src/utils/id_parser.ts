@@ -12,7 +12,7 @@ import type { GitGovRecordType } from '../record_types';
 /**
  * Mapping from directory names to entity types.
  */
-const DIR_TO_TYPE: Record<string, Exclude<GitGovRecordType, 'custom'>> = {
+const DIR_TO_TYPE: Record<string, GitGovRecordType> = {
   'tasks': 'task',
   'cycles': 'cycle',
   'executions': 'execution',
@@ -53,7 +53,7 @@ export function extractRecordIdFromPath(filePath: string): string {
  * getEntityTypeFromPath('.gitgov/actors/human_dev.json') // 'actor'
  * getEntityTypeFromPath('/some/other/path.json') // null
  */
-export function getEntityTypeFromPath(filePath: string): Exclude<GitGovRecordType, 'custom'> | null {
+export function getEntityTypeFromPath(filePath: string): GitGovRecordType | null {
   const pathParts = filePath.split('/');
   const typeDirIndex = pathParts.findIndex(part => VALID_DIRS.includes(part));
 
@@ -85,7 +85,7 @@ export function getEntityTypeFromPath(filePath: string): Exclude<GitGovRecordTyp
  * inferEntityTypeFromId('agent:code-reviewer') // 'agent'
  * inferEntityTypeFromId('1234567890-task-implement-auth') // 'task'
  */
-export function inferEntityTypeFromId(recordId: string): Exclude<GitGovRecordType, 'custom'> {
+export function inferEntityTypeFromId(recordId: string): GitGovRecordType {
   // Execution patterns
   if (recordId.match(/^\d+-exec-/) || recordId.includes('-execution-')) {
     return 'execution';
@@ -123,7 +123,7 @@ export function inferEntityTypeFromId(recordId: string): Exclude<GitGovRecordTyp
 /**
  * Valid prefixes for timestamp-based record IDs.
  */
-const VALID_PREFIXES = ['task', 'cycle', 'exec', 'feedback'] as const;
+export const VALID_PREFIXES = ['task', 'cycle', 'exec', 'feedback'] as const;
 
 /**
  * Parses a timestamp-based record ID (e.g., '12345-task-slug') into its components.
