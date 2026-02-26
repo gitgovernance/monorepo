@@ -49,6 +49,7 @@ export type GitgovTaskRow = PrismaRecordRowBase & {
   references: string[];
   cycleIds: string[];
   notes: string | null;
+  metadataJson: JsonValue | null;
   isStalled: boolean;
   isAtRisk: boolean;
   needsClarification: boolean;
@@ -74,6 +75,7 @@ export type GitgovCycleRow = PrismaRecordRowBase & {
   childCycleIds: string[];
   tags: string[];
   notes: string | null;
+  metadataJson: JsonValue | null;
 };
 
 export type GitgovActorRow = PrismaRecordRowBase & {

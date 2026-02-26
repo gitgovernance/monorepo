@@ -84,7 +84,6 @@ import {
   loadAgentRecord,
   loadCycleRecord,
   loadExecutionRecord,
-  loadChangelogRecord,
   loadFeedbackRecord
 } from "../../record_factories";
 import { DetailedValidationError } from "../../record_validations/common";
@@ -154,7 +153,7 @@ export class FsLintModule implements IFsLintModule {
   }
 
   /**
-   * Delegates to LintModule.lintRecordReferences() for prefix validation.
+   * Delegates to LintModule.lintRecordReferences() for reference validation.
    */
   lintRecordReferences(record: GitGovRecord, context: LintRecordContext): LintResult[] {
     return this.lintModule.lintRecordReferences(record, context);
@@ -195,7 +194,7 @@ export class FsLintModule implements IFsLintModule {
 
     // Suppress console.warn during lint
     const originalWarn = console.warn;
-    console.warn = () => {};
+    console.warn = () => { };
 
     try {
       // 1. Discovery: Find all records
@@ -272,7 +271,7 @@ export class FsLintModule implements IFsLintModule {
     };
 
     const originalWarn = console.warn;
-    console.warn = () => {};
+    console.warn = () => { };
 
     try {
       const results = await this.lintSingleRecord(recordId, opts, entityType);
@@ -433,7 +432,6 @@ export class FsLintModule implements IFsLintModule {
         case 'agent': record = loadAgentRecord(raw); break;
         case 'cycle': record = loadCycleRecord(raw); break;
         case 'execution': record = loadExecutionRecord(raw); break;
-        case 'changelog': record = loadChangelogRecord(raw); break;
         case 'feedback': record = loadFeedbackRecord(raw); break;
         default: record = raw as GitGovRecord;
       }
@@ -446,13 +444,7 @@ export class FsLintModule implements IFsLintModule {
       });
       results.push(...lintResults);
 
-      // File naming validation (filesystem-specific)
-      if (options.validateFileNaming) {
-        const namingResults = this.validateFileNaming(record, recordId, filePath, entityType);
-        results.push(...namingResults);
-      }
-
-      // [EARS-D2] Reference prefix validation (pure, no stores needed)
+      // [EARS-D2] Reference validation via LintModule
       if (options.validateReferences) {
         const refResults = this.lintModule.lintRecordReferences(record, {
           recordId,
@@ -460,6 +452,12 @@ export class FsLintModule implements IFsLintModule {
           filePath
         });
         results.push(...refResults);
+      }
+
+      // File naming validation (filesystem-specific)
+      if (options.validateFileNaming) {
+        const namingResults = this.validateFileNaming(record, recordId, filePath, entityType);
+        results.push(...namingResults);
       }
 
     } catch (error) {
@@ -525,8 +523,7 @@ export class FsLintModule implements IFsLintModule {
 
     const dirNameMap: Record<GitGovRecordType, string> = {
       'task': 'tasks', 'cycle': 'cycles', 'execution': 'executions',
-      'changelog': 'changelogs', 'feedback': 'feedbacks',
-      'actor': 'actors', 'agent': 'agents'
+      'feedback': 'feedbacks', 'actor': 'actors', 'agent': 'agents'
     };
 
     // [EARS-B1] Validate correct directory
@@ -568,13 +565,13 @@ export class FsLintModule implements IFsLintModule {
   private async discoverAllRecordsWithTypes(_path?: string): Promise<Array<{ id: string; type: GitGovRecordType }>> {
     // Note: _path parameter is deprecated, projectRoot is now injected via constructor
     const recordTypes: Array<GitGovRecordType> = [
-      'actor', 'agent', 'cycle', 'task', 'execution', 'changelog', 'feedback'
+      'actor', 'agent', 'cycle', 'task', 'execution', 'feedback'
     ];
     const allRecords: Array<{ id: string; type: GitGovRecordType }> = [];
 
     const dirNameMap: Record<GitGovRecordType, string> = {
       'task': 'tasks', 'cycle': 'cycles', 'execution': 'executions',
-      'changelog': 'changelogs', 'feedback': 'feedbacks',
+      'feedback': 'feedbacks',
       'actor': 'actors', 'agent': 'agents'
     };
 
@@ -600,8 +597,7 @@ export class FsLintModule implements IFsLintModule {
   private getFilePath(recordId: string, entityType: GitGovRecordType): string {
     const dirNameMap: Record<GitGovRecordType, string> = {
       'task': 'tasks', 'cycle': 'cycles', 'execution': 'executions',
-      'changelog': 'changelogs', 'feedback': 'feedbacks',
-      'actor': 'actors', 'agent': 'agents'
+      'feedback': 'feedbacks', 'actor': 'actors', 'agent': 'agents'
     };
     const dirName = dirNameMap[entityType];
     const safeId = recordId.replace(/:/g, '_');

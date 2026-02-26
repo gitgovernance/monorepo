@@ -10,10 +10,8 @@
       "properties": {
         "version": {
           "type": "string",
-          "enum": [
-            "1.0"
-          ],
-          "description": "Version of the embedded metadata format."
+          "pattern": "^\\d+\\.\\d+$",
+          "description": "Protocol version in MAJOR.MINOR format (e.g. \"1.1\", \"2.0\")."
         },
         "type": {
           "type": "string",
@@ -22,11 +20,22 @@
             "agent",
             "task",
             "execution",
-            "changelog",
             "feedback",
-            "cycle"
+            "cycle",
+            "workflow",
+            "custom"
           ],
           "description": "The type of the record contained in the payload."
+        },
+        "schemaUrl": {
+          "type": "string",
+          "format": "uri",
+          "description": "URL to a custom schema for the payload. Required when type is 'custom'."
+        },
+        "schemaChecksum": {
+          "type": "string",
+          "pattern": "^[a-fA-F0-9]{64}$",
+          "description": "SHA-256 checksum of the custom schema. Required when type is 'custom'."
         },
         "payloadChecksum": {
           "type": "string",
@@ -42,14 +51,14 @@
               "keyId": {
                 "type": "string",
                 "pattern": "^(human|agent)(:[a-z0-9-]+)+$",
-                "description": "The Actor ID of the signer (must match ActorRecord.id pattern)."
+                "description": "The Actor ID of the signer. Supports scoped identifiers (e.g. agent:camilo:cursor)."
               },
               "role": {
                 "type": "string",
                 "pattern": "^([a-z-]+|custom:[a-z0-9-]+)$",
                 "minLength": 1,
                 "maxLength": 50,
-                "description": "The context role of the signature (e.g., 'author', 'reviewer', 'auditor', or 'custom:*')."
+                "description": "The context role of the signature (e.g., 'author', 'reviewer', or 'custom:*')."
               },
               "notes": {
                 "type": "string",
@@ -64,6 +73,7 @@
               },
               "timestamp": {
                 "type": "integer",
+                "minimum": 1600000000,
                 "description": "Unix timestamp of the signature."
               }
             },
@@ -97,12 +107,35 @@
     "payload"
   ],
   "additionalProperties": false,
-  "oneOf": [
+  "allOf": [
     {
       "if": {
         "properties": {
           "header": {
+            "properties": {
+              "type": {
+                "const": "custom"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "header": {
             "type": "object",
+            "required": [
+              "schemaUrl",
+              "schemaChecksum"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "header": {
             "properties": {
               "type": {
                 "const": "actor"
@@ -117,14 +150,12 @@
             "$ref": "ref:actor_record_schema"
           }
         }
-      },
-      "else": false
+      }
     },
     {
       "if": {
         "properties": {
           "header": {
-            "type": "object",
             "properties": {
               "type": {
                 "const": "agent"
@@ -139,14 +170,12 @@
             "$ref": "ref:agent_record_schema"
           }
         }
-      },
-      "else": false
+      }
     },
     {
       "if": {
         "properties": {
           "header": {
-            "type": "object",
             "properties": {
               "type": {
                 "const": "task"
@@ -161,14 +190,12 @@
             "$ref": "ref:task_record_schema"
           }
         }
-      },
-      "else": false
+      }
     },
     {
       "if": {
         "properties": {
           "header": {
-            "type": "object",
             "properties": {
               "type": {
                 "const": "execution"
@@ -183,36 +210,12 @@
             "$ref": "ref:execution_record_schema"
           }
         }
-      },
-      "else": false
+      }
     },
     {
       "if": {
         "properties": {
           "header": {
-            "type": "object",
-            "properties": {
-              "type": {
-                "const": "changelog"
-              }
-            }
-          }
-        }
-      },
-      "then": {
-        "properties": {
-          "payload": {
-            "$ref": "ref:changelog_record_schema"
-          }
-        }
-      },
-      "else": false
-    },
-    {
-      "if": {
-        "properties": {
-          "header": {
-            "type": "object",
             "properties": {
               "type": {
                 "const": "feedback"
@@ -227,14 +230,12 @@
             "$ref": "ref:feedback_record_schema"
           }
         }
-      },
-      "else": false
+      }
     },
     {
       "if": {
         "properties": {
           "header": {
-            "type": "object",
             "properties": {
               "type": {
                 "const": "cycle"
@@ -249,55 +250,75 @@
             "$ref": "ref:cycle_record_schema"
           }
         }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "header": {
+            "properties": {
+              "type": {
+                "const": "workflow"
+              }
+            }
+          }
+        }
       },
-      "else": false
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "ref:workflow_record_schema"
+          }
+        }
+      }
     }
   ],
   "examples": [
     {
       "header": {
-        "version": "1.0",
-        "type": "task",
-        "payloadChecksum": "a1b2c3d4e5f6...",
+        "version": "1.1",
+        "type": "actor",
+        "payloadChecksum": "063d4ba3505e4d2d3852f6063cbd0b98a8728b2afb4a26a323c5c5c512137398",
         "signatures": [
           {
             "keyId": "human:lead-dev",
             "role": "author",
-            "notes": "Initial task creation for OAuth 2.0 implementation",
-            "signature": "...",
+            "notes": "Self-registration of lead developer account",
+            "signature": "yEtlWOGAek8ukP8fycqYZOyogQBudO5XUf4v4BUGaOTogDH4wraanhLvutaJBM7rdilFUS2VvmxZmIy0KjTZAg==",
             "timestamp": 1752274500
           }
         ]
       },
       "payload": {
-        "id": "1752274500-task-implementar-auth",
-        "status": "pending",
-        "priority": "high",
-        "description": "Implementar autenticación OAuth 2.0.",
-        "tags": [
-          "skill:go",
-          "area:backend"
-        ]
+        "id": "human:lead-dev",
+        "type": "human",
+        "displayName": "Lead Developer",
+        "publicKey": "0yyrCETtVql51Id+nRKGmpbfsxNxOz+eCYLpWDoutV0=",
+        "roles": [
+          "developer",
+          "reviewer"
+        ],
+        "status": "active"
       }
     },
     {
       "header": {
-        "version": "1.0",
+        "version": "1.1",
         "type": "execution",
-        "payloadChecksum": "b2c3d4e5f6a1...",
+        "payloadChecksum": "bd667ddc8698a50594592ac15d0761e62a9f05cc3ba10a9a853ef0819e5fb2ad",
         "signatures": [
           {
-            "keyId": "agent:cursor",
+            "keyId": "agent:camilo:cursor",
             "role": "author",
             "notes": "OAuth 2.0 flow completed with GitHub provider integration",
-            "signature": "...",
+            "signature": "8d9LWTtMlK/Ct4+QWGFpH4iFdZb9T/hlFThAAGKqz8UOPe9qDwPFcv3b4qz9G+NQXh1/PgB1pl8YiQCe6fnjAQ==",
             "timestamp": 1752274600
           },
           {
             "keyId": "human:camilo",
             "role": "reviewer",
             "notes": "Reviewed and tested locally. LGTM.",
-            "signature": "...",
+            "signature": "17xsA75W0zzNZI3DXa8iHmxS5NwedfCwu9DoXwk/vArk9yaHcFsY6EgJHNPUtIX+XeKSVF/lOg6CvVIkcXjjAA==",
             "timestamp": 1752274650
           }
         ]
@@ -307,39 +328,30 @@
         "taskId": "1752274500-task-implement-oauth",
         "type": "progress",
         "title": "OAuth 2.0 flow implemented",
-        "result": "Completed the OAuth 2.0 authentication flow..."
+        "result": "Completed the OAuth 2.0 authentication flow with GitHub provider. Token refresh and session management included."
       }
     },
     {
       "header": {
-        "version": "1.0",
-        "type": "actor",
-        "payloadChecksum": "c3d4e5f6a1b2...",
+        "version": "1.1",
+        "type": "custom",
+        "schemaUrl": "https://example.com/schemas/deployment-record-v1.json",
+        "schemaChecksum": "d4e5f6a1b2c3789012345678901234567890123456789012345678901234abcd",
+        "payloadChecksum": "1f9598081fcfcf34732de647de25c8445e68e9320e0c10d3a4bd911c7274a1b3",
         "signatures": [
           {
-            "keyId": "human:admin",
+            "keyId": "agent:deploy-bot",
             "role": "author",
-            "notes": "New developer onboarded to team",
-            "signature": "...",
+            "notes": "Production deployment of v2.1.0",
+            "signature": "W3cSLJnEp+OmKVOwFqjuLTL1S55/OlQyFDzmmxg+vUfETIiQWNr7aDH06/rHUM11g2BLEGRfXZPQPFry6FJeAw==",
             "timestamp": 1752274700
-          },
-          {
-            "keyId": "agent:aion",
-            "role": "auditor",
-            "notes": "Actor verification: 10/10. Credentials validated.",
-            "signature": "...",
-            "timestamp": 1752274705
           }
         ]
       },
       "payload": {
-        "id": "human:new-developer",
-        "type": "human",
-        "displayName": "New Developer",
-        "publicKey": "...",
-        "roles": [
-          "developer"
-        ]
+        "deploymentId": "deploy-2025-07-12-v2.1.0",
+        "environment": "production",
+        "status": "success"
       }
     }
   ]

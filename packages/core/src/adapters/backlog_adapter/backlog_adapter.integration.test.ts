@@ -46,14 +46,12 @@ import { WorkflowAdapter } from '../workflow_adapter';
 import { FeedbackAdapter } from '../feedback_adapter';
 import { ExecutionAdapter } from '../execution_adapter';
 import type { IFeedbackAdapter } from '../feedback_adapter';
-import { ChangelogAdapter } from '../changelog_adapter';
 import { RecordMetrics } from '../../record_metrics';
 import { ConfigManager } from '../../config_manager';
 import type { SessionManager } from '../../session_manager';
 import { eventBus } from '../../event_bus';
 import type {
   FeedbackCreatedEvent,
-  ChangelogCreatedEvent,
   SystemDailyTickEvent
 } from '../../event_bus';
 import type {
@@ -63,7 +61,6 @@ import type {
   GitGovTaskRecord,
   GitGovCycleRecord,
   GitGovFeedbackRecord,
-  GitGovChangelogRecord,
   GitGovActorRecord,
 } from '../../record_types';
 import type { Signature } from '../../record_types/embedded.types';
@@ -147,7 +144,7 @@ function createMockCycleRecord(payload: Partial<CycleRecord>): GitGovRecord & { 
 }
 
 // Store factory type for describe.each
-type BacklogStores = Required<Pick<RecordStores, 'tasks' | 'cycles' | 'feedbacks' | 'changelogs'>>;
+type BacklogStores = Required<Pick<RecordStores, 'tasks' | 'cycles' | 'feedbacks'>>;
 type StoreFactory = () => BacklogStores;
 
 // Backend configurations for testing
@@ -156,7 +153,6 @@ const backends: [string, StoreFactory][] = [
     tasks: new MemoryRecordStore<GitGovTaskRecord>(),
     cycles: new MemoryRecordStore<GitGovCycleRecord>(),
     feedbacks: new MemoryRecordStore<GitGovFeedbackRecord>(),
-    changelogs: new MemoryRecordStore<GitGovChangelogRecord>(),
   })],
   ['Fs', () => {
     const basePath = `/tmp/gitgov-test-${Date.now()}`;
@@ -164,7 +160,6 @@ const backends: [string, StoreFactory][] = [
       tasks: new FsRecordStore<GitGovTaskRecord>({ basePath: `${basePath}/tasks`, createIfMissing: true }),
       cycles: new FsRecordStore<GitGovCycleRecord>({ basePath: `${basePath}/cycles`, createIfMissing: true }),
       feedbacks: new FsRecordStore<GitGovFeedbackRecord>({ basePath: `${basePath}/feedbacks`, createIfMissing: true }),
-      changelogs: new FsRecordStore<GitGovChangelogRecord>({ basePath: `${basePath}/changelogs`, createIfMissing: true }),
     };
   }],
 ];
@@ -179,7 +174,6 @@ describe.each(backends)('BacklogAdapter Integration Tests with %s backend', (_na
   // Mock adapters accessible for spying in tests
   let mockFeedbackAdapter: IFeedbackAdapter;
   let mockMetricsAdapter: RecordMetrics;
-  let mockChangelogAdapter: ChangelogAdapter;
   let mockExecutionAdapter: ExecutionAdapter;
   let mockConfigManager: ConfigManager;
 
@@ -248,14 +242,6 @@ describe.each(backends)('BacklogAdapter Integration Tests with %s backend', (_na
       getAllExecutions: jest.fn()
     } as unknown as ExecutionAdapter;
 
-    mockChangelogAdapter = {
-      create: jest.fn(),
-      getChangelog: jest.fn(),
-      getChangelogsByEntity: jest.fn(),
-      getAllChangelogs: jest.fn(),
-      getRecentChangelogs: jest.fn()
-    } as unknown as ChangelogAdapter;
-
     mockMetricsAdapter = {
       getSystemStatus: jest.fn(),
       getTaskHealth: jest.fn(),
@@ -280,7 +266,6 @@ describe.each(backends)('BacklogAdapter Integration Tests with %s backend', (_na
       eventBus: eventBus,
       feedbackAdapter: mockFeedbackAdapter as unknown as FeedbackAdapter,
       executionAdapter: mockExecutionAdapter,
-      changelogAdapter: mockChangelogAdapter,
       metricsAdapter: mockMetricsAdapter,
       configManager: mockConfigManager,
       sessionManager: mockSessionManager,
@@ -550,62 +535,6 @@ describe.each(backends)('BacklogAdapter Integration Tests with %s backend', (_na
       await backlogAdapter.handleFeedbackCreated(resolutionEvent);
 
       console.log('✅ Blocking Crisis handled successfully');
-    });
-
-    it('[EARS-N3] "The Automated Archivist" - Complete archival flow with ChangelogAdapter', async () => {
-      const taskId = '1757687335-task-archival';
-      const changelogId = '1757687335-changelog-archival';
-
-      const mockTask = createMockTaskRecord({
-        id: taskId,
-        status: 'done'
-      });
-      const mockChangelog: GitGovChangelogRecord = {
-        header: {
-          version: '1.0',
-          type: 'changelog',
-          payloadChecksum: 'mock-checksum',
-          signatures: [{ keyId: 'human:test', role: 'author', notes: '', signature: 'mock', timestamp: Date.now() }]
-        },
-        payload: {
-          id: changelogId,
-          title: 'Task Archival Completed',
-          description: 'Successfully archived task with full changelog',
-          relatedTasks: [taskId],
-          completedAt: 1757687335,
-          version: 'v1.0.0'
-        }
-      };
-
-      // Setup mocks for archival
-      jest.spyOn(stores.changelogs, 'get').mockResolvedValue(mockChangelog);
-      jest.spyOn(stores.tasks, 'get').mockResolvedValue(mockTask);
-      jest.spyOn(stores.tasks, 'put').mockResolvedValue(undefined);
-
-      const archivalEvent = {
-        type: 'changelog.created',
-        timestamp: Date.now(),
-        source: 'changelog_adapter',
-        payload: {
-          changelogId,
-          relatedTasks: [taskId],
-          title: 'Task Archival Completed',
-          version: 'v1.0.0'
-        }
-      } as ChangelogCreatedEvent;
-
-      await backlogAdapter.handleChangelogCreated(archivalEvent);
-
-      expect(stores.tasks.put).toHaveBeenCalledWith(
-        taskId,
-        expect.objectContaining({
-          payload: expect.objectContaining({
-            status: 'archived'
-          })
-        })
-      );
-
-      console.log('✅ Automated Archivist completed successfully');
     });
 
     it('[EARS-N4] "The Proactive System" - Daily audit with RecordMetrics and automated warnings', async () => {

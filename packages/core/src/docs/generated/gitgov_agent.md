@@ -18,7 +18,7 @@
 {
   "header": {
     "version": "1.0",
-    "type": "task", // actor, agent, task, execution, changelog, feedback, cycle, custom
+    "type": "task", // actor, agent, task, execution, feedback, cycle, custom
     "payloadChecksum": "a1b2c3d4e5f6...", // SHA-256 hash of payload content
     "signatures": [
       {

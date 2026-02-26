@@ -6,15 +6,28 @@ import { generateCycleId } from "../utils/id_generator";
 
 /**
  * Creates a new, fully-formed CycleRecord with validation.
+ *
+ * The factory is generic to preserve the metadata type for compile-time safety.
+ *
+ * @param payload - Partial CycleRecord payload with optional typed metadata
+ * @returns CycleRecord<TMetadata> - The validated CycleRecord with preserved metadata type
+ *
+ * @example
+ * interface EpicCycleMeta { epic: boolean; phase: string; }
+ * const record = createCycleRecord<EpicCycleMeta>({
+ *   title: 'Sprint Q4 Performance',
+ *   metadata: { epic: true, phase: 'active' }
+ * });
+ * // record.metadata?.epic is typed as boolean
  */
-export function createCycleRecord(
-  payload: Partial<CycleRecord>
-): CycleRecord {
+export function createCycleRecord<TMetadata extends object = object>(
+  payload: Partial<CycleRecord<TMetadata>>
+): CycleRecord<TMetadata> {
   // Generate timestamp for ID if not provided
   const timestamp = Math.floor(Date.now() / 1000);
 
   // Build cycle with defaults for optional fields
-  const cycle: CycleRecord = {
+  const cycle = {
     id: payload.id || generateCycleId(payload.title || '', timestamp),
     title: payload.title || '',
     status: payload.status || 'planning',
@@ -22,8 +35,8 @@ export function createCycleRecord(
     childCycleIds: payload.childCycleIds,
     tags: payload.tags,
     notes: payload.notes,
-    ...payload,
-  } as CycleRecord;
+    metadata: payload.metadata,
+  } as CycleRecord<TMetadata>;
 
   // Use validator to check complete schema with detailed errors
   const validation = validateCycleRecordDetailed(cycle);

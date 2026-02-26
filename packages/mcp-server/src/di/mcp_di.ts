@@ -7,7 +7,6 @@ import type {
   GitGovCycleRecord,
   GitGovFeedbackRecord,
   GitGovExecutionRecord,
-  GitGovChangelogRecord,
   GitGovActorRecord,
   GitGovAgentRecord,
 } from '@gitgov/core';
@@ -102,9 +101,6 @@ export class McpDependencyInjectionService {
       executions: new FsRecordStore<GitGovExecutionRecord>({
         basePath: path.join(gitgovPath, 'executions'),
       }),
-      changelogs: new FsRecordStore<GitGovChangelogRecord>({
-        basePath: path.join(gitgovPath, 'changelogs'),
-      }),
       actors: new FsRecordStore<GitGovActorRecord>({
         basePath: path.join(gitgovPath, 'actors'),
         idEncoder: DEFAULT_ID_ENCODER,
@@ -144,16 +140,6 @@ export class McpDependencyInjectionService {
       eventBus,
     });
 
-    const changelogAdapter = new Adapters.ChangelogAdapter({
-      stores: {
-        changelogs: stores.changelogs,
-        tasks: stores.tasks,
-        cycles: stores.cycles,
-      },
-      identity: identityAdapter,
-      eventBus,
-    });
-
     const recordMetrics = new RecordMetrics.RecordMetrics({
       stores: {
         tasks: stores.tasks,
@@ -171,11 +157,9 @@ export class McpDependencyInjectionService {
         tasks: stores.tasks,
         cycles: stores.cycles,
         feedbacks: stores.feedbacks,
-        changelogs: stores.changelogs,
       },
       feedbackAdapter,
       executionAdapter,
-      changelogAdapter,
       metricsAdapter: recordMetrics,
       workflowAdapter,
       identity: identityAdapter,
@@ -196,7 +180,6 @@ export class McpDependencyInjectionService {
         cycles: stores.cycles,
         feedbacks: stores.feedbacks,
         executions: stores.executions,
-        changelogs: stores.changelogs,
         actors: stores.actors,
       },
       sink,
@@ -210,7 +193,6 @@ export class McpDependencyInjectionService {
       agents: stores.agents,
       executions: stores.executions,
       feedbacks: stores.feedbacks,
-      changelogs: stores.changelogs,
     } as unknown as Lint.RecordStores;
 
     const pureLintModule = new Lint.LintModule({

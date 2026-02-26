@@ -42,7 +42,6 @@ import type {
   GitGovCycleRecord,
   GitGovFeedbackRecord,
   GitGovExecutionRecord,
-  GitGovChangelogRecord,
 } from '../../core/src/record_types';
 
 describe('Block E: Projection Parity (CE1-CE2)', () => {
@@ -156,7 +155,6 @@ describe('Block E: Projection Parity (CE1-CE2)', () => {
         cycles: new FsRecordStore<GitGovCycleRecord>({ basePath: path.join(repoPath, '.gitgov', 'cycles') }),
         feedbacks: new FsRecordStore<GitGovFeedbackRecord>({ basePath: path.join(repoPath, '.gitgov', 'feedbacks') }),
         executions: new FsRecordStore<GitGovExecutionRecord>({ basePath: path.join(repoPath, '.gitgov', 'executions') }),
-        changelogs: new FsRecordStore<GitGovChangelogRecord>({ basePath: path.join(repoPath, '.gitgov', 'changelogs') }),
         actors: new FsRecordStore<GitGovActorRecord>({ basePath: path.join(repoPath, '.gitgov', 'actors'), idEncoder: DEFAULT_ID_ENCODER }),
       };
       const fsTypedStores = fsStores as unknown as RecordProjectorDependencies['stores'];
@@ -176,7 +174,6 @@ describe('Block E: Projection Parity (CE1-CE2)', () => {
         cycles: new GitHubRecordStore<GitGovCycleRecord>({ ...ghOpts, basePath: '.gitgov/cycles' }, octokit),
         feedbacks: new GitHubRecordStore<GitGovFeedbackRecord>({ ...ghOpts, basePath: '.gitgov/feedbacks' }, octokit),
         executions: new GitHubRecordStore<GitGovExecutionRecord>({ ...ghOpts, basePath: '.gitgov/executions' }, octokit),
-        changelogs: new GitHubRecordStore<GitGovChangelogRecord>({ ...ghOpts, basePath: '.gitgov/changelogs' }, octokit),
         actors: new GitHubRecordStore<GitGovActorRecord>({ ...ghOpts, basePath: '.gitgov/actors', idEncoder: DEFAULT_ID_ENCODER }, octokit),
       };
       const ghTypedStores = ghStores as unknown as RecordProjectorDependencies['stores'];

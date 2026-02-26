@@ -17,7 +17,7 @@ export function registerFeedbackCommands(program: Command): void {
     .command('feedback')
     .description('Create structured, immutable FeedbackRecords')
     .alias('fb')
-    .requiredOption('-e, --entity-type <entityType>', 'Type of entity (task, execution, changelog, feedback, cycle)')
+    .requiredOption('-e, --entity-type <entityType>', 'Type of entity (task, execution, feedback, cycle)')
     .requiredOption('-i, --entity-id <entityId>', 'ID of the entity')
     .requiredOption('-t, --type <type>', 'Feedback type (blocking, suggestion, question, approval, clarification, assignment)')
     .requiredOption('-c, --content <content>', 'Feedback content')

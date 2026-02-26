@@ -24,7 +24,7 @@ async function createTempProject(): Promise<string> {
   await fs.mkdir(gitgovDir, { recursive: true });
 
   // Create required store directories
-  const storeDirs = ['tasks', 'cycles', 'feedback', 'executions', 'changelogs', 'actors', 'agents'];
+  const storeDirs = ['tasks', 'cycles', 'feedback', 'executions', 'actors', 'agents'];
   for (const storeDir of storeDirs) {
     await fs.mkdir(path.join(gitgovDir, storeDir), { recursive: true });
   }
@@ -69,7 +69,6 @@ describe('McpDependencyInjectionService', () => {
       expect(container.stores.cycles).toBeDefined();
       expect(container.stores.feedbacks).toBeDefined();
       expect(container.stores.executions).toBeDefined();
-      expect(container.stores.changelogs).toBeDefined();
       expect(container.stores.actors).toBeDefined();
       expect(container.stores.agents).toBeDefined();
 

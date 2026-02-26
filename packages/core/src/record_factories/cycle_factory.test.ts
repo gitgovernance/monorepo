@@ -213,5 +213,176 @@ describe('createCycleRecord', () => {
       expect(cycle.taskIds).toEqual(validTaskIds);
     });
   });
+
+  describe('CycleRecord Metadata Factory Operations (EARS 75-78)', () => {
+    it('[EARS-75] should preserve metadata field when provided', () => {
+      const payload: Partial<CycleRecord> = {
+        title: 'Epic Cycle with Metadata',
+        metadata: {
+          epic: true,
+          phase: 'active',
+          files: {
+            overview: 'overview.md',
+            roadmap: 'roadmap.md',
+            plan: 'implementation_plan.md'
+          }
+        }
+      };
+
+      const cycle = createCycleRecord(payload);
+
+      expect(cycle.metadata).toEqual({
+        epic: true,
+        phase: 'active',
+        files: {
+          overview: 'overview.md',
+          roadmap: 'roadmap.md',
+          plan: 'implementation_plan.md'
+        }
+      });
+    });
+
+    it('[EARS-76] should preserve complex metadata with nested structures', () => {
+      const payload: Partial<CycleRecord> = {
+        title: 'Sprint Cycle with Complex Metadata',
+        metadata: {
+          sprint: 24,
+          velocity: 42,
+          team: 'backend',
+          okr: {
+            objective: 'Improve API performance',
+            keyResults: [
+              { id: 'KR-1', target: 200, current: 150 }
+            ]
+          }
+        }
+      };
+
+      const cycle = createCycleRecord(payload);
+
+      expect(cycle.metadata).toEqual({
+        sprint: 24,
+        velocity: 42,
+        team: 'backend',
+        okr: {
+          objective: 'Improve API performance',
+          keyResults: [
+            { id: 'KR-1', target: 200, current: 150 }
+          ]
+        }
+      });
+    });
+
+    it('[EARS-77] should accept CycleRecord without metadata', () => {
+      const payload: Partial<CycleRecord> = {
+        title: 'Cycle without Metadata'
+      };
+
+      const cycle = createCycleRecord(payload);
+
+      expect(cycle.metadata).toBeUndefined();
+    });
+
+    it('[EARS-78] should accept empty metadata object', () => {
+      const payload: Partial<CycleRecord> = {
+        title: 'Cycle with Empty Metadata',
+        metadata: {}
+      };
+
+      const cycle = createCycleRecord(payload);
+
+      expect(cycle.metadata).toEqual({});
+    });
+  });
+
+  describe('CycleRecord Typed Metadata Helpers (EARS 79-83)', () => {
+    it('[EARS-79] should allow CycleRecord with typed epic metadata', () => {
+      type EpicMeta = {
+        epic: boolean;
+        phase: string;
+        files: Record<string, string>;
+      };
+
+      const meta: EpicMeta = {
+        epic: true,
+        phase: 'active',
+        files: { overview: 'overview.md', roadmap: 'roadmap.md' }
+      };
+
+      const result = createCycleRecord<EpicMeta>({
+        title: 'Epic: Auth System',
+        metadata: meta
+      });
+
+      expect(result.metadata).toEqual(meta);
+      expect(result.metadata?.epic).toBe(true);
+      expect(result.metadata?.phase).toBe('active');
+    });
+
+    it('[EARS-80] should allow Partial<CycleRecord<T>> for factory input', () => {
+      type SprintMeta = {
+        sprint: number;
+        velocity?: number;
+      };
+
+      const payload: Partial<CycleRecord<SprintMeta>> = {
+        title: 'Sprint 24',
+        metadata: { sprint: 24, velocity: 42 }
+      };
+
+      const result = createCycleRecord(payload);
+
+      expect(result.metadata?.sprint).toBe(24);
+      expect(result.metadata?.velocity).toBe(42);
+    });
+
+    it('[EARS-81] should allow custom metadata types defined by consumers', () => {
+      type BudgetMeta = {
+        budget: number;
+        currency: string;
+        allocated: boolean;
+      };
+
+      const budgetMeta: BudgetMeta = {
+        budget: 50000,
+        currency: 'USD',
+        allocated: true
+      };
+
+      const result = createCycleRecord<BudgetMeta>({
+        title: 'Q4 Budget Cycle',
+        metadata: budgetMeta
+      });
+
+      expect(result.metadata).toEqual(budgetMeta);
+      expect(result.metadata?.budget).toBe(50000);
+      expect(result.metadata?.currency).toBe('USD');
+    });
+
+    it('[EARS-82] should allow CycleRecord<T> without metadata (optional)', () => {
+      type SomeMeta = { field: string; };
+
+      const result = createCycleRecord<SomeMeta>({
+        title: 'Cycle Without Typed Metadata'
+      });
+
+      expect(result.metadata).toBeUndefined();
+    });
+
+    it('[EARS-83] should preserve generic type in factory return', () => {
+      type EpicCycleMeta = { epic: boolean; phase: string; };
+
+      const result = createCycleRecord<EpicCycleMeta>({
+        title: 'Typed Factory Return',
+        metadata: { epic: true, phase: 'active' }
+      });
+
+      // Compile-time: result is CycleRecord<EpicCycleMeta>, not CycleRecord<object>
+      const epic: boolean = result.metadata!.epic;
+      const phase: string = result.metadata!.phase;
+      expect(epic).toBe(true);
+      expect(phase).toBe('active');
+    });
+  });
 });
 

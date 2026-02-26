@@ -729,14 +729,16 @@ describe('MCP Core Integration', () => {
     });
 
     it('[MSRV-CE4] should create waiver feedback record on disk', async () => {
+      // entityId must match execution ID pattern (schema v1.1 conditional validation)
+      const execId = '1700000000-exec-waiver-test';
       const { data, isError } = await callHandler(auditWaiveTool, {
-        fingerprint: 'fp-test-123',
+        fingerprint: execId,
         justification: 'False positive in test file',
       }, di);
 
       expect(isError).toBe(false);
       expect(data.waiverId).toBeDefined();
-      expect(data.fingerprint).toBe('fp-test-123');
+      expect(data.fingerprint).toBe(execId);
 
       // Verify feedback record on disk
       const waiverFile = path.join(project.gitgovPath, 'feedback', `${data.waiverId}.json`);
@@ -800,7 +802,6 @@ describe('MCP Core Integration', () => {
       expect(container.stores.cycles).toBeDefined();
       expect(container.stores.feedbacks).toBeDefined();
       expect(container.stores.executions).toBeDefined();
-      expect(container.stores.changelogs).toBeDefined();
       expect(container.stores.actors).toBeDefined();
       expect(container.stores.agents).toBeDefined();
 

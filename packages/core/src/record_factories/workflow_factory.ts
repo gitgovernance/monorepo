@@ -15,12 +15,13 @@ export function createWorkflowConfig(
 
   // Build config with defaults for optional fields
   const config: WorkflowRecord = {
-    version: payload.version || '1.0.0',
+    id: payload.id || `${Math.floor(Date.now() / 1000)}-workflow-custom`,
     name: payload.name || 'Custom Methodology',
     description: payload.description,
     state_transitions: payload.state_transitions || {
-      review: {
+      submit: {
         from: ['draft'],
+        to: 'review',
         requires: {
           command: 'gitgov task submit',
           signatures: {
@@ -57,12 +58,13 @@ export function createWorkflowConfig(
  */
 export async function createDefaultWorkflowConfig(): Promise<WorkflowRecord> {
   return createWorkflowConfig({
-    version: '1.0.0',
+    id: '1700000000-workflow-default-methodology',
     name: 'GitGovernance Default Methodology',
     description: 'Standard GitGovernance workflow with quality gates and agent collaboration',
     state_transitions: {
-      review: {
+      submit: {
         from: ['draft'],
+        to: 'review',
         requires: {
           command: 'gitgov task submit',
           signatures: {
@@ -74,8 +76,9 @@ export async function createDefaultWorkflowConfig(): Promise<WorkflowRecord> {
           }
         }
       },
-      ready: {
+      approve: {
         from: ['review'],
+        to: 'ready',
         requires: {
           command: 'gitgov task approve',
           signatures: {
@@ -97,15 +100,17 @@ export async function createDefaultWorkflowConfig(): Promise<WorkflowRecord> {
           }
         }
       },
-      active: {
-        from: ['ready'],
+      activate: {
+        from: ['ready', 'paused'],
+        to: 'active',
         requires: {
           event: 'first_execution_record_created',
           custom_rules: ['task_must_have_valid_assignment_for_executor']
         }
       },
-      done: {
+      complete: {
         from: ['active'],
+        to: 'done',
         requires: {
           command: 'gitgov task complete',
           signatures: {
@@ -117,16 +122,32 @@ export async function createDefaultWorkflowConfig(): Promise<WorkflowRecord> {
           }
         }
       },
-      archived: {
+      archive: {
         from: ['done'],
+        to: 'archived',
         requires: {
-          event: 'changelog_record_created'
+          command: 'gitgov task archive'
         }
       },
-      paused: {
+      pause: {
         from: ['active', 'review'],
+        to: 'paused',
         requires: {
           event: 'feedback_blocking_created'
+        }
+      },
+      cancel: {
+        from: ['ready', 'active'],
+        to: 'discarded',
+        requires: {
+          command: 'gitgov task cancel',
+          signatures: {
+            '__default__': {
+              role: 'canceller',
+              capability_roles: ['approver:product', 'approver:quality'],
+              min_approvals: 1
+            }
+          }
         }
       }
     },

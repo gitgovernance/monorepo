@@ -36,7 +36,6 @@ describe('Schema Consistency Tests', () => {
       'agent_record_schema.json',
       'task_record_schema.json',
       'execution_record_schema.json',
-      'changelog_record_schema.json',
       'feedback_record_schema.json',
       'cycle_record_schema.json',
       'workflow_record_schema.json',
@@ -60,7 +59,6 @@ describe('Schema Consistency Tests', () => {
       'agent_record_schema.json',
       'task_record_schema.json',
       'execution_record_schema.json',
-      'changelog_record_schema.json',
       'feedback_record_schema.json',
       'cycle_record_schema.json'
     ];

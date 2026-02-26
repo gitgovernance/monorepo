@@ -5,9 +5,9 @@
  */
 
 /**
- * Canonical schema for task records as defined in task_protocol.md
+ * Canonical schema for task records as defined in 04_task.md
  */
-export interface TaskRecord {
+export interface TaskRecord<TMetadata = object> {
   /**
    * Unique identifier for the task (10 timestamp + 1 dash + 4 'task' + 1 dash + max 50 slug = 66 max)
    */
@@ -44,4 +44,12 @@ export interface TaskRecord {
    * Additional comments, decisions made or added context
    */
   notes?: string;
+  /**
+   * Optional structured data for machine consumption.
+   * Use this field for domain-specific data that needs to be programmatically processed.
+   * Complements tags (classification) and notes (free text) with structured, queryable data.
+   * Common use cases: epic metadata, external tool references, agent metrics, compliance tags.
+   *
+   */
+  metadata?: TMetadata;
 }

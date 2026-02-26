@@ -7,12 +7,13 @@ import type { WorkflowRecord } from '../record_types';
 
 describe('WorkflowValidator Module', () => {
   const validWorkflowConfig: WorkflowRecord = {
-    version: '1.0.0',
+    id: '1234567890-workflow-default-methodology',
     name: 'GitGovernance Default Methodology',
     description: 'Standard GitGovernance workflow with quality gates',
     state_transitions: {
-      review: {
+      submit: {
         from: ['draft'],
+        to: 'review',
         requires: {
           command: 'gitgov task submit',
           signatures: {
@@ -24,8 +25,9 @@ describe('WorkflowValidator Module', () => {
           }
         }
       },
-      ready: {
+      approve: {
         from: ['review'],
+        to: 'ready',
         requires: {
           command: 'gitgov task approve',
           signatures: {
@@ -46,10 +48,10 @@ describe('WorkflowValidator Module', () => {
     }
   };
 
-  const invalidConfigWithoutVersion = {
+  const invalidConfigWithoutId = {
     name: 'Test Methodology',
     state_transitions: {}
-    // Missing required 'version' field
+    // Missing required 'id' field
   };
 
   describe('isWorkflowConfig', () => {
@@ -59,7 +61,7 @@ describe('WorkflowValidator Module', () => {
     });
 
     it('[EARS-2] should return false for invalid workflow methodology config', () => {
-      const result = isWorkflowConfig(invalidConfigWithoutVersion);
+      const result = isWorkflowConfig(invalidConfigWithoutId);
       expect(result).toBe(false);
     });
 
@@ -80,7 +82,7 @@ describe('WorkflowValidator Module', () => {
   });
 
   describe('Schema Cache Integration', () => {
-    it('should use schema cache for validation performance', () => {
+    it('[EARS-7] should use schema cache for validation performance', () => {
       const { SchemaValidationCache } = require('../record_schemas/schema_cache');
       const cacheSpy = jest.spyOn(SchemaValidationCache, 'getValidatorFromSchema');
 
@@ -90,7 +92,7 @@ describe('WorkflowValidator Module', () => {
       cacheSpy.mockRestore();
     });
 
-    it('should reuse compiled validators from cache', () => {
+    it('[EARS-8] should reuse compiled validators from cache', () => {
       const { SchemaValidationCache } = require('../record_schemas/schema_cache');
       const cacheSpy = jest.spyOn(SchemaValidationCache, 'getValidatorFromSchema');
 
@@ -108,18 +110,18 @@ describe('WorkflowValidator Module', () => {
       cacheSpy.mockRestore();
     });
 
-    it('should produce identical results with or without cache', () => {
+    it('[EARS-9] should produce identical results with or without cache', () => {
       const result1 = validateWorkflowConfigDetailed(validWorkflowConfig);
       const result2 = validateWorkflowConfigDetailed(validWorkflowConfig);
       expect(result1).toEqual(result2);
     });
 
-    it('should support cache clearing', () => {
+    it('[EARS-10] should support cache clearing', () => {
       const { SchemaValidationCache } = require('../record_schemas/schema_cache');
       expect(() => SchemaValidationCache.clearCache()).not.toThrow();
     });
 
-    it('should provide cache statistics', () => {
+    it('[EARS-11] should provide cache statistics', () => {
       const { SchemaValidationCache } = require('../record_schemas/schema_cache');
       const stats = SchemaValidationCache.getCacheStats();
       expect(stats).toBeDefined();
@@ -136,25 +138,27 @@ describe('WorkflowValidator Module', () => {
     });
 
     it('[EARS-7] should return detailed errors for missing required fields', () => {
-      const result = validateWorkflowConfigDetailed(invalidConfigWithoutVersion);
+      const result = validateWorkflowConfigDetailed(invalidConfigWithoutId);
 
       expect(result.isValid).toBe(false);
       expect(result.errors).toHaveLength(1);
       expect(result.errors[0]).toEqual(
         expect.objectContaining({
-          field: expect.stringMatching(/(version|required)/),
-          message: expect.stringContaining('version')
+          field: expect.stringMatching(/(id|required)/),
+          message: expect.stringContaining('id')
         })
       );
+      expect(result.errors[0]).toHaveProperty('value');
     });
 
     it('[EARS-8] should return detailed errors for invalid state transitions', () => {
       const configWithInvalidFrom = {
-        version: '1.0.0',
+        id: '1234567890-workflow-test',
         name: 'Test Methodology',
         state_transitions: {
           review: {
             from: ['INVALID_STATE'],
+            to: 'review',
             requires: {}
           }
         }
@@ -164,11 +168,14 @@ describe('WorkflowValidator Module', () => {
 
       expect(result.isValid).toBe(false);
       expect(result.errors.length).toBeGreaterThan(0);
+      expect(result.errors[0]).toHaveProperty('field');
+      expect(result.errors[0]).toHaveProperty('message');
+      expect(result.errors[0]).toHaveProperty('value');
     });
 
     it('[EARS-9] should return detailed errors for missing state_transitions', () => {
       const configWithoutTransitions = {
-        version: '1.0.0',
+        id: '1234567890-workflow-test',
         name: 'Test Methodology'
         // Missing required state_transitions
       };
@@ -205,6 +212,18 @@ describe('WorkflowValidator Module', () => {
       expect(result.isValid).toBe(true);
       expect(result.errors).toEqual([]);
     });
+
+    it('[EARS-16] should return all errors when multiple fields are invalid', () => {
+      const configWithMultipleErrors = {
+        // Missing id AND state_transitions — 2 required fields absent
+        name: 'Broken Methodology'
+      };
+
+      const result = validateWorkflowConfigDetailed(configWithMultipleErrors);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.length).toBeGreaterThanOrEqual(2);
+    });
   });
 
   describe('validateWorkflowConfigBusinessRules', () => {
@@ -221,6 +240,7 @@ describe('WorkflowValidator Module', () => {
         state_transitions: {
           invalid_state: {
             from: ['draft'] as ['draft'],
+            to: 'invalid_state',
             requires: {}
           }
         }
@@ -230,6 +250,7 @@ describe('WorkflowValidator Module', () => {
 
       expect(result.isValid).toBe(false);
       expect(result.errors).toHaveLength(1);
+      expect(result.errors?.[0]?.field).toContain('state_transitions.invalid_state.to');
       expect(result.errors?.[0]?.message).toContain('Invalid target state: invalid_state');
     });
 
@@ -239,6 +260,7 @@ describe('WorkflowValidator Module', () => {
         state_transitions: {
           review: {
             from: ['invalid_from_state'] as ['invalid_from_state'],
+            to: 'review',
             requires: {}
           }
         }
@@ -255,8 +277,9 @@ describe('WorkflowValidator Module', () => {
       const configWithUndefinedCustomRule = {
         ...validWorkflowConfig,
         state_transitions: {
-          active: {
+          activate: {
             from: ['ready'] as ['ready'],
+            to: 'active',
             requires: {
               custom_rules: ['undefined_rule']
             }
@@ -291,11 +314,12 @@ describe('WorkflowValidator Module', () => {
 
     it('[EARS-16] should validate config with no custom rules', () => {
       const configWithoutCustomRules = {
-        version: '1.0.0',
+        id: '1234567890-workflow-simple',
         name: 'Simple Methodology',
         state_transitions: {
-          review: {
+          submit: {
             from: ['draft'] as ['draft'],
+            to: 'review',
             requires: {
               command: 'gitgov task submit'
             }

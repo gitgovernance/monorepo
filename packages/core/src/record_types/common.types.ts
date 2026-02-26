@@ -3,7 +3,6 @@ import type { AgentRecord } from "./";
 import type { CycleRecord } from "./";
 import type { TaskRecord } from "./";
 import type { ExecutionRecord } from "./";
-import type { ChangelogRecord } from "./";
 import type { FeedbackRecord } from "./";
 import type { EmbeddedMetadataRecord } from "./embedded.types";
 
@@ -16,7 +15,6 @@ export type GitGovRecordType =
   | "cycle"
   | "task"
   | "execution"
-  | "changelog"
   | "feedback";
 
 /**
@@ -28,7 +26,6 @@ export type GitGovRecordPayload =
   | CycleRecord
   | TaskRecord
   | ExecutionRecord
-  | ChangelogRecord
   | FeedbackRecord;
 
 /**
@@ -48,7 +45,6 @@ export type GitGovTaskRecord = EmbeddedMetadataRecord<TaskRecord>;
 export type GitGovCycleRecord = EmbeddedMetadataRecord<CycleRecord>;
 export type GitGovFeedbackRecord = EmbeddedMetadataRecord<FeedbackRecord>;
 export type GitGovExecutionRecord = EmbeddedMetadataRecord<ExecutionRecord>;
-export type GitGovChangelogRecord = EmbeddedMetadataRecord<ChangelogRecord>;
 export type GitGovActorRecord = EmbeddedMetadataRecord<ActorRecord>;
 export type GitGovAgentRecord = EmbeddedMetadataRecord<AgentRecord>;
 
@@ -58,7 +54,6 @@ export type AgentPayload = Partial<AgentRecord>;
 export type CyclePayload = Partial<CycleRecord>;
 export type TaskPayload = Partial<TaskRecord>;
 export type ExecutionPayload = Partial<ExecutionRecord>;
-export type ChangelogPayload = Partial<ChangelogRecord>;
 export type FeedbackPayload = Partial<FeedbackRecord>;
 
 /**

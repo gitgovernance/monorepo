@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "cycle_record_schema.json",
   "title": "CycleRecord",
-  "description": "Canonical schema for cycle records - strategic grouping of work",
+  "description": "Canonical schema for cycle records — strategic grouping of work into sprints, milestones, or roadmaps.",
   "additionalProperties": false,
   "type": "object",
   "required": [
@@ -15,7 +15,7 @@
       "type": "string",
       "pattern": "^\\d{10}-cycle-[a-z0-9-]{1,50}$",
       "maxLength": 67,
-      "description": "Unique identifier for the cycle (10 timestamp + 1 dash + 5 'cycle' + 1 dash + max 50 slug = 67 max)",
+      "description": "Unique identifier for the cycle (10 timestamp + 1 dash + 5 'cycle' + 1 dash + max 50 slug = 67 max).",
       "examples": [
         "1754400000-cycle-sprint-24-api-performance",
         "1754500000-cycle-auth-system-v2",
@@ -26,7 +26,7 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 256,
-      "description": "Human-readable title for the cycle (e.g., 'Sprint 24', 'Auth v2.0', 'Q4 2025')",
+      "description": "Human-readable title for the cycle (e.g., 'Sprint 24', 'Auth v2.0', 'Q4 2025').",
       "examples": [
         "Sprint 24 - API Performance",
         "Authentication System v2.0",
@@ -41,7 +41,7 @@
         "completed",
         "archived"
       ],
-      "description": "The lifecycle status of the cycle"
+      "description": "The lifecycle status of the cycle."
     },
     "taskIds": {
       "type": "array",
@@ -51,7 +51,7 @@
         "maxLength": 66
       },
       "default": [],
-      "description": "Optional array of Task IDs that belong to this cycle. Can be empty for cycles that only contain child cycles. (10 timestamp + 1 dash + 4 'task' + 1 dash + max 50 slug = 66 max)",
+      "description": "Optional array of Task IDs that belong to this cycle. Bidirectional with TaskRecord.cycleIds. Can be empty for container cycles.",
       "examples": [
         [
           "1752274500-task-optimizar-endpoint-search",
@@ -67,7 +67,7 @@
         "maxLength": 67
       },
       "default": [],
-      "description": "Optional array of Cycle IDs that are children of this cycle, allowing for hierarchies (e.g., Q1 containing Sprint 1, Sprint 2, Sprint 3). (10 timestamp + 1 dash + 5 'cycle' + 1 dash + max 50 slug = 67 max)",
+      "description": "Optional array of child Cycle IDs for hierarchical composition (e.g., Q1 containing Sprint 1, Sprint 2, Sprint 3).",
       "examples": [
         [
           "1754400000-cycle-sprint-24",
@@ -101,9 +101,29 @@
     },
     "notes": {
       "type": "string",
-      "minLength": 0,
-      "maxLength": 10000,
-      "description": "Optional description of the cycle's goals, objectives, and context"
+      "minLength": 1,
+      "description": "Optional description of the cycle's goals, objectives, and context."
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Optional structured data for machine consumption.\nUse this field for domain-specific data that needs to be programmatically processed.\nExtends the strategic grouping with structured, queryable attributes.\nCommon use cases: epic lifecycle, sprint configuration, OKR tracking, budget allocation.\n",
+      "examples": [
+        {
+          "epic": true,
+          "phase": "active",
+          "files": {
+            "overview": "overview.md",
+            "roadmap": "roadmap.md",
+            "plan": "implementation_plan.md"
+          }
+        },
+        {
+          "sprint": 24,
+          "velocity": 42,
+          "team": "backend"
+        }
+      ]
     }
   },
   "examples": [
@@ -121,7 +141,7 @@
         "team:backend",
         "focus:performance"
       ],
-      "notes": "Objetivo: Reducir la latencia p95 de la API por debajo de 200ms y preparar infraestructura para Black Friday."
+      "notes": "Objective: Reduce API p95 latency below 200ms and prepare infrastructure for Black Friday."
     },
     {
       "id": "1754500000-cycle-auth-system-v2",
@@ -138,7 +158,7 @@
         "security",
         "feature:auth"
       ],
-      "notes": "Milestone mayor: Sistema completo de autenticación con OAuth2, 2FA, y gestión avanzada de sesiones. Crítico para lanzamiento Q4."
+      "notes": "Major milestone: Complete authentication system with OAuth2, 2FA, and advanced session management. Critical for Q4 launch."
     },
     {
       "id": "1754600000-cycle-q4-2025-growth",
@@ -154,7 +174,7 @@
         "strategy:growth",
         "okr:scale-to-1m-users"
       ],
-      "notes": "Objetivo trimestral: Escalar a 1M usuarios activos. Incluye mejoras de performance, nuevo sistema de auth, y lanzamiento de app móvil."
+      "notes": "Quarterly objective: Scale to 1M active users. Includes performance improvements, new auth system, and mobile app launch."
     }
   ]
 }

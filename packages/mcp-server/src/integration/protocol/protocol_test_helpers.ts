@@ -97,7 +97,6 @@ export function createComprehensiveMockContainer(overrides: MockContainerOverrid
       agents: createMockStore(agents),
       feedbacks: createMockStore(),
       executions: createMockStore(),
-      changelogs: createMockStore(),
     },
     backlogAdapter: {
       createTask: vi.fn().mockResolvedValue({

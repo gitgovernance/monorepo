@@ -45,7 +45,6 @@ import type {
   GitGovCycleRecord,
   GitGovFeedbackRecord,
   GitGovExecutionRecord,
-  GitGovChangelogRecord,
 } from '../../core/src/record_types';
 
 describe('Block D: Cross-Path Workflows (CD1-CD5)', () => {
@@ -115,7 +114,6 @@ describe('Block D: Cross-Path Workflows (CD1-CD5)', () => {
     const cyclesStore = new GitHubRecordStore<GitGovCycleRecord>({ ...storeOpts, basePath: '.gitgov/cycles' }, octokit);
     const feedbacksStore = new GitHubRecordStore<GitGovFeedbackRecord>({ ...storeOpts, basePath: '.gitgov/feedbacks' }, octokit);
     const executionsStore = new GitHubRecordStore<GitGovExecutionRecord>({ ...storeOpts, basePath: '.gitgov/executions' }, octokit);
-    const changelogsStore = new GitHubRecordStore<GitGovChangelogRecord>({ ...storeOpts, basePath: '.gitgov/changelogs' }, octokit);
 
     // Verify tasks are readable from GitHub
     const taskIds = await tasksStore.list();
@@ -131,7 +129,7 @@ describe('Block D: Cross-Path Workflows (CD1-CD5)', () => {
     cd1TaskId = taskRecord!.payload.id;
 
     // 3. Core: Project from GitHub stores to DB
-    const stores = { tasks: tasksStore, actors: actorsStore, cycles: cyclesStore, feedbacks: feedbacksStore, executions: executionsStore, changelogs: changelogsStore };
+    const stores = { tasks: tasksStore, actors: actorsStore, cycles: cyclesStore, feedbacks: feedbacksStore, executions: executionsStore };
     const typedStores = stores as unknown as RecordProjectorDependencies['stores'];
     const recordMetrics = new RecordMetrics({ stores: typedStores });
     const projector = new RecordProjector({ recordMetrics, stores: typedStores });
@@ -229,7 +227,6 @@ describe('Block D: Cross-Path Workflows (CD1-CD5)', () => {
         cycles: new GitHubRecordStore<GitGovCycleRecord>({ ...storeOpts, basePath: '.gitgov/cycles' }, octokit),
         feedbacks: new GitHubRecordStore<GitGovFeedbackRecord>({ ...storeOpts, basePath: '.gitgov/feedbacks' }, octokit),
         executions: new GitHubRecordStore<GitGovExecutionRecord>({ ...storeOpts, basePath: '.gitgov/executions' }, octokit),
-        changelogs: new GitHubRecordStore<GitGovChangelogRecord>({ ...storeOpts, basePath: '.gitgov/changelogs' }, octokit),
       };
 
       const typedStores = stores as unknown as RecordProjectorDependencies['stores'];
@@ -340,7 +337,6 @@ describe('Block D: Cross-Path Workflows (CD1-CD5)', () => {
         cycles: new GitHubRecordStore<GitGovCycleRecord>({ ...storeOpts, basePath: '.gitgov/cycles' }, cd4Octokit),
         feedbacks: new GitHubRecordStore<GitGovFeedbackRecord>({ ...storeOpts, basePath: '.gitgov/feedbacks' }, cd4Octokit),
         executions: new GitHubRecordStore<GitGovExecutionRecord>({ ...storeOpts, basePath: '.gitgov/executions' }, cd4Octokit),
-        changelogs: new GitHubRecordStore<GitGovChangelogRecord>({ ...storeOpts, basePath: '.gitgov/changelogs' }, cd4Octokit),
       };
 
       const typedStores = stores as unknown as RecordProjectorDependencies['stores'];

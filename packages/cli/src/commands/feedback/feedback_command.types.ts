@@ -18,14 +18,14 @@ export interface FeedbackCreateOptions extends BaseCommandOptions {
 }
 
 /** Entity type enum for validation */
-export type FeedbackEntityType = 'task' | 'execution' | 'changelog' | 'feedback' | 'cycle';
+export type FeedbackEntityType = 'task' | 'execution' | 'feedback' | 'cycle';
 
 /** Feedback type enum for validation */
 export type FeedbackType = 'blocking' | 'suggestion' | 'question' | 'approval' | 'clarification' | 'assignment';
 
 /** Valid entity types for validation */
 export const VALID_ENTITY_TYPES: FeedbackEntityType[] = [
-  'task', 'execution', 'changelog', 'feedback', 'cycle'
+  'task', 'execution', 'feedback', 'cycle'
 ];
 
 /** Valid feedback types for validation */

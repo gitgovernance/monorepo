@@ -131,7 +131,6 @@ function createMockDependencies(projectRoot: string = '/tmp/test-project'): {
     tasks: MockStore;
     cycles: MockStore;
     executions: MockStore;
-    changelogs: MockStore;
     feedbacks: MockStore;
     actors: MockStore;
     agents: MockStore;
@@ -145,7 +144,6 @@ function createMockDependencies(projectRoot: string = '/tmp/test-project'): {
     tasks: createMockStore(),
     cycles: createMockStore(),
     executions: createMockStore(),
-    changelogs: createMockStore(),
     feedbacks: createMockStore(),
     actors: createMockStore(),
     agents: createMockStore()
@@ -188,16 +186,16 @@ function createMockDependencies(projectRoot: string = '/tmp/test-project'): {
  */
 function mockFilesystemDiscovery(
   mockReaddir: jest.MockedFunction<typeof readdir>,
-  files: Array<{ id: string; type: 'task' | 'cycle' | 'execution' | 'changelog' | 'feedback' | 'actor' | 'agent' }>
+  files: Array<{ id: string; type: 'task' | 'cycle' | 'execution' | 'feedback' | 'actor' | 'agent' }>
 ): void {
   const filesByDir: Record<string, string[]> = {
-    tasks: [], cycles: [], executions: [], changelogs: [], feedbacks: [], actors: [], agents: []
+    tasks: [], cycles: [], executions: [], feedbacks: [], actors: [], agents: []
   };
 
   for (const file of files) {
     const dirMap: Record<string, string> = {
       task: 'tasks', cycle: 'cycles', execution: 'executions',
-      changelog: 'changelogs', feedback: 'feedbacks', actor: 'actors', agent: 'agents'
+      feedback: 'feedbacks', actor: 'actors', agent: 'agents'
     };
     const dir = dirMap[file.type];
     if (dir && filesByDir[dir]) {

@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "feedback_record_schema.json",
   "title": "FeedbackRecord",
-  "description": "Canonical schema for feedback records - structured conversation about work",
+  "description": "Canonical schema for feedback records — the structured conversation about work.",
   "additionalProperties": false,
   "type": "object",
   "required": [
@@ -18,32 +18,35 @@
       "type": "string",
       "pattern": "^\\d{10}-feedback-[a-z0-9-]{1,50}$",
       "maxLength": 70,
-      "description": "Unique identifier for the feedback entry",
+      "description": "Unique identifier for the feedback entry (10 timestamp + 1 dash + 8 'feedback' + 1 dash + max 50 slug = 70 max)",
       "examples": [
         "1752788100-feedback-blocking-rest-api",
-        "1752788200-feedback-question-test-coverage"
+        "1752788400-feedback-question-test-coverage"
       ]
     },
     "entityType": {
       "type": "string",
       "enum": [
+        "actor",
+        "agent",
         "task",
         "execution",
-        "changelog",
         "feedback",
-        "cycle"
+        "cycle",
+        "workflow"
       ],
-      "description": "The type of entity this feedback refers to"
+      "description": "The type of entity this feedback refers to."
     },
     "entityId": {
       "type": "string",
       "minLength": 1,
       "maxLength": 256,
-      "description": "The ID of the entity this feedback refers to.\nMust match the pattern for its entityType:\n- task: ^\\d{10}-task-[a-z0-9-]{1,50}$\n- execution: ^\\d{10}-exec-[a-z0-9-]{1,50}$\n- changelog: ^\\d{10}-changelog-[a-z0-9-]{1,50}$\n- feedback: ^\\d{10}-feedback-[a-z0-9-]{1,50}$\n- cycle: ^\\d{10}-cycle-[a-z0-9-]{1,50}$\n",
+      "description": "The ID of the entity this feedback refers to.\nMust match the ID pattern for its entityType:\n- actor: ^(human|agent)(:[a-z0-9-]+)+$\n- agent: ^agent(:[a-z0-9-]+)+$\n- task: ^\\d{10}-task-[a-z0-9-]{1,50}$\n- execution: ^\\d{10}-exec-[a-z0-9-]{1,50}$\n- feedback: ^\\d{10}-feedback-[a-z0-9-]{1,50}$\n- cycle: ^\\d{10}-cycle-[a-z0-9-]{1,50}$\n- workflow: ^\\d{10}-workflow-[a-z0-9-]{1,50}$\n",
       "examples": [
         "1752274500-task-implementar-oauth",
         "1752642000-exec-subtarea-9-4",
-        "1752788100-feedback-blocking-rest-api"
+        "1752788100-feedback-blocking-rest-api",
+        "human:camilo"
       ]
     },
     "type": {
@@ -56,12 +59,7 @@
         "clarification",
         "assignment"
       ],
-      "description": "The semantic intent of the feedback",
-      "examples": [
-        "blocking",
-        "question",
-        "approval"
-      ]
+      "description": "The semantic intent of the feedback."
     },
     "status": {
       "type": "string",
@@ -71,19 +69,18 @@
         "resolved",
         "wontfix"
       ],
-      "description": "The lifecycle status of the feedback. \nNote: FeedbackRecords are immutable. To change status, create a new feedback \nthat references this one using entityType: \"feedback\" and resolvesFeedbackId.\n"
+      "description": "The lifecycle status of the feedback.\nFeedbackRecords are immutable. To change status, create a new FeedbackRecord\nthat references this one using entityType: \"feedback\" and resolvesFeedbackId.\n"
     },
     "content": {
       "type": "string",
       "minLength": 1,
-      "maxLength": 5000,
-      "description": "The content of the feedback. Reduced from 10000 to 5000 chars for practical use."
+      "description": "The content of the feedback."
     },
     "assignee": {
       "type": "string",
       "pattern": "^(human|agent)(:[a-z0-9-]+)+$",
       "maxLength": 256,
-      "description": "Optional. The Actor ID responsible for addressing the feedback (e.g., 'human:maria', 'agent:camilo:cursor')",
+      "description": "Optional. The Actor ID responsible for addressing the feedback (e.g., 'human:maria', 'agent:camilo:cursor').",
       "examples": [
         "human:maria",
         "agent:code-reviewer",
@@ -94,7 +91,7 @@
       "type": "string",
       "pattern": "^\\d{10}-feedback-[a-z0-9-]{1,50}$",
       "maxLength": 70,
-      "description": "Optional. The ID of another feedback record that this one resolves or responds to",
+      "description": "Optional. The ID of another FeedbackRecord that this one resolves or responds to.",
       "examples": [
         "1752788100-feedback-blocking-rest-api"
       ]
@@ -102,18 +99,151 @@
     "metadata": {
       "type": "object",
       "additionalProperties": true,
-      "description": "Optional structured data for machine consumption.\nUse this field for domain-specific data that needs to be programmatically processed.\nCommon use cases: waiver details (fingerprint, ruleId, file, line), approval context, assignment metadata.\n",
-      "examples": [
-        {
-          "fingerprint": "abc123def456",
-          "ruleId": "PII-001",
-          "file": "src/user.ts",
-          "line": 42,
-          "expiresAt": "2025-12-31T23:59:59Z"
-        }
-      ]
+      "description": "Optional structured data for machine consumption.\nUse this field for domain-specific data that needs to be programmatically processed.\nCommon use cases: waiver details (fingerprint, ruleId, file, line), approval context, assignment metadata.\n"
     }
   },
+  "allOf": [
+    {
+      "if": {
+        "required": [
+          "entityType"
+        ],
+        "properties": {
+          "entityType": {
+            "const": "actor"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "entityId": {
+            "type": "string",
+            "pattern": "^(human|agent)(:[a-z0-9-]+)+$"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "entityType"
+        ],
+        "properties": {
+          "entityType": {
+            "const": "agent"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "entityId": {
+            "type": "string",
+            "pattern": "^agent(:[a-z0-9-]+)+$"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "entityType"
+        ],
+        "properties": {
+          "entityType": {
+            "const": "task"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "entityId": {
+            "type": "string",
+            "pattern": "^\\d{10}-task-[a-z0-9-]{1,50}$"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "entityType"
+        ],
+        "properties": {
+          "entityType": {
+            "const": "execution"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "entityId": {
+            "type": "string",
+            "pattern": "^\\d{10}-exec-[a-z0-9-]{1,50}$"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "entityType"
+        ],
+        "properties": {
+          "entityType": {
+            "const": "feedback"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "entityId": {
+            "type": "string",
+            "pattern": "^\\d{10}-feedback-[a-z0-9-]{1,50}$"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "entityType"
+        ],
+        "properties": {
+          "entityType": {
+            "const": "cycle"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "entityId": {
+            "type": "string",
+            "pattern": "^\\d{10}-cycle-[a-z0-9-]{1,50}$"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "entityType"
+        ],
+        "properties": {
+          "entityType": {
+            "const": "workflow"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "entityId": {
+            "type": "string",
+            "pattern": "^\\d{10}-workflow-[a-z0-9-]{1,50}$"
+          }
+        }
+      }
+    }
+  ],
   "examples": [
     {
       "id": "1752788100-feedback-blocking-rest-api",
@@ -121,7 +251,7 @@
       "entityId": "1752642000-exec-subtarea-9-4",
       "type": "blocking",
       "status": "open",
-      "content": "Esta implementación no cumple el estándar de rutas REST. Los endpoints deben seguir el patrón /api/v1/{resource}/{id}. Actualmente usa /get-user?id=X que no es RESTful."
+      "content": "This implementation does not comply with the REST endpoint standard. Endpoints must follow the /api/v1/{resource}/{id} pattern. Currently uses /get-user?id=X which is not RESTful."
     },
     {
       "id": "1752788200-feedback-rest-api-fixed",
@@ -129,7 +259,7 @@
       "entityId": "1752788100-feedback-blocking-rest-api",
       "type": "clarification",
       "status": "resolved",
-      "content": "Implementada la corrección. Ahora todos los endpoints siguen el estándar REST: GET /api/v1/users/:id, POST /api/v1/users, etc. Tests actualizados y passing.",
+      "content": "Fix implemented. All endpoints now follow REST standard: GET /api/v1/users/:id, POST /api/v1/users, etc. Tests updated and passing.",
       "resolvesFeedbackId": "1752788100-feedback-blocking-rest-api"
     },
     {
@@ -138,7 +268,7 @@
       "entityId": "1752274500-task-implementar-oauth",
       "type": "assignment",
       "status": "open",
-      "content": "Asignando esta tarea a María por su experiencia con OAuth2. Prioridad alta para el sprint actual.",
+      "content": "Assigning this task to Maria for her experience with OAuth2. High priority for the current sprint.",
       "assignee": "human:maria"
     },
     {
@@ -147,7 +277,7 @@
       "entityId": "1752274500-task-implementar-oauth",
       "type": "question",
       "status": "open",
-      "content": "¿Cuál es el nivel de test coverage esperado para esta feature? El spec no lo menciona explícitamente. ¿Debemos apuntar a 80% como el resto del proyecto?"
+      "content": "What level of test coverage is expected for this feature? The spec does not mention it explicitly. Should we aim for 80% like the rest of the project?"
     }
   ]
 }

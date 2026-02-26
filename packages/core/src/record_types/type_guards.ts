@@ -19,7 +19,6 @@ import type {
   ExecutionRecord,
   ActorRecord,
   AgentRecord,
-  ChangelogRecord,
   FeedbackRecord
 } from './index';
 
@@ -62,14 +61,6 @@ export function isActorPayload(payload: GitGovRecordPayload): payload is ActorRe
  */
 export function isAgentPayload(payload: GitGovRecordPayload): payload is AgentRecord {
   return 'engine' in payload;
-}
-
-/**
- * Type guard: checks if payload is a ChangelogRecord.
- * Verifies presence of changelog-specific fields: title, description, relatedTasks, completedAt.
- */
-export function isChangelogPayload(payload: GitGovRecordPayload): payload is ChangelogRecord {
-  return 'title' in payload && 'description' in payload && 'relatedTasks' in payload && 'completedAt' in payload;
 }
 
 /**

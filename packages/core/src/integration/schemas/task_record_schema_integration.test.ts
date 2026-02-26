@@ -116,7 +116,7 @@ describe('TaskRecord Schema Integration Tests', () => {
       expect(result.isValid).toBe(true);
     });
 
-    it('[EARS-194] should reject id exceeding maxLength 70', () => {
+    it('[EARS-194] should reject id exceeding maxLength 66', () => {
       const invalid = {
         ...createValidTaskRecord(),
         id: '1234567890-task-' + 'a'.repeat(60) // exceeds 70 total
@@ -130,7 +130,7 @@ describe('TaskRecord Schema Integration Tests', () => {
       )).toBe(true);
     });
 
-    it('[EARS-195] should accept id with maxLength 70', () => {
+    it('[EARS-195] should accept id with maxLength 66', () => {
       const valid = {
         ...createValidTaskRecord(),
         id: '1234567890-task-' + 'a'.repeat(50) // 16 + 50 = 66 chars (pattern limits slug to 50)
@@ -431,18 +431,15 @@ describe('TaskRecord Schema Integration Tests', () => {
       expect(result.isValid).toBe(true);
     });
 
-    it('[EARS-219] should reject description exceeding maxLength 22000', () => {
-      const invalid = {
+    it('[EARS-219] should accept description with no upper length limit', () => {
+      const valid = {
         ...createValidTaskRecord(),
-        description: 'a'.repeat(22001)
+        description: 'a'.repeat(50000)
       };
 
-      const result = validateTaskRecordDetailed(invalid);
+      const result = validateTaskRecordDetailed(valid);
 
-      expect(result.isValid).toBe(false);
-      expect(result.errors.some(e =>
-        e.field.includes('description') && (e.message.includes('more than') || e.message.includes('maxLength'))
-      )).toBe(true);
+      expect(result.isValid).toBe(true);
     });
 
     it('[EARS-220] should reject description with non-string type', () => {
@@ -723,29 +720,29 @@ describe('TaskRecord Schema Integration Tests', () => {
       expect(result.isValid).toBe(true);
     });
 
-    it('[EARS-242] should accept empty notes string (minLength 0)', () => {
-      const valid = {
-        ...createValidTaskRecord(),
-        notes: ''
-      };
-
-      const result = validateTaskRecordDetailed(valid);
-
-      expect(result.isValid).toBe(true);
-    });
-
-    it('[EARS-243] should reject notes exceeding maxLength 3000', () => {
+    it('[EARS-242] should reject empty notes string (minLength 1)', () => {
       const invalid = {
         ...createValidTaskRecord(),
-        notes: 'a'.repeat(3001)
+        notes: ''
       };
 
       const result = validateTaskRecordDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
-        e.field.includes('notes') && (e.message.includes('more than') || e.message.includes('maxLength'))
+        e.field.includes('notes') && (e.message.includes('fewer than') || e.message.includes('minLength'))
       )).toBe(true);
+    });
+
+    it('[EARS-243] should accept notes with no upper length limit', () => {
+      const valid = {
+        ...createValidTaskRecord(),
+        notes: 'a'.repeat(50000)
+      };
+
+      const result = validateTaskRecordDetailed(valid);
+
+      expect(result.isValid).toBe(true);
     });
 
     it('[EARS-244] should reject notes with non-string type', () => {
@@ -799,10 +796,10 @@ describe('TaskRecord Schema Integration Tests', () => {
       expect(result.isValid).toBe(true);
     });
 
-    it('[EARS-248] should accept description with exactly 22000 chars', () => {
+    it('[EARS-248] should accept description with large content (no upper limit)', () => {
       const valid = {
         ...createValidTaskRecord(),
-        description: 'a'.repeat(22000)
+        description: 'a'.repeat(100000)
       };
 
       const result = validateTaskRecordDetailed(valid);
@@ -860,10 +857,10 @@ describe('TaskRecord Schema Integration Tests', () => {
   });
 
   describe('Edge Cases: Boundary Testing for Notes (EARS 253)', () => {
-    it('[EARS-253] should accept notes with exactly 3000 characters', () => {
+    it('[EARS-253] should accept notes with large content (no upper limit)', () => {
       const valid = {
         ...createValidTaskRecord(),
-        notes: 'a'.repeat(3000)
+        notes: 'a'.repeat(50000)
       };
 
       const result = validateTaskRecordDetailed(valid);
@@ -900,8 +897,7 @@ describe('TaskRecord Schema Integration Tests', () => {
         ...createValidTaskRecord(),
         cycleIds: [],
         tags: [],
-        references: [],
-        notes: ''
+        references: []
       };
 
       const result = validateTaskRecordDetailed(valid);
@@ -1135,6 +1131,171 @@ describe('TaskRecord Schema Integration Tests', () => {
       const valid = {
         ...createValidTaskRecord(),
         tags: []
+      };
+
+      const result = validateTaskRecordDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+    });
+  });
+
+  describe('Metadata Field Validations (EARS 1025-1035)', () => {
+    it('[EARS-1025] should accept missing metadata', () => {
+      const valid = createValidTaskRecord();
+
+      const result = validateTaskRecordDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+    });
+
+    it('[EARS-1026] should accept empty metadata object', () => {
+      const valid = {
+        ...createValidTaskRecord(),
+        metadata: {}
+      };
+
+      const result = validateTaskRecordDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+    });
+
+    it('[EARS-1027] should accept metadata with simple key-value pairs', () => {
+      const valid = {
+        ...createValidTaskRecord(),
+        metadata: {
+          epic: true,
+          jira: 'AUTH-42',
+          storyPoints: 5
+        }
+      };
+
+      const result = validateTaskRecordDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+    });
+
+    it('[EARS-1028] should accept metadata with nested objects', () => {
+      const valid = {
+        ...createValidTaskRecord(),
+        metadata: {
+          epic: true,
+          files: {
+            overview: 'overview.md',
+            roadmap: 'roadmap.md'
+          },
+          metrics: {
+            estimatedHours: 4,
+            actualHours: 2.5
+          }
+        }
+      };
+
+      const result = validateTaskRecordDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+    });
+
+    it('[EARS-1029] should accept metadata with arrays', () => {
+      const valid = {
+        ...createValidTaskRecord(),
+        metadata: {
+          blockedBy: ['AUTH-40', 'AUTH-41'],
+          labels: [
+            { name: 'security', color: '#ff0000' },
+            { name: 'auth', color: '#00ff00' }
+          ]
+        }
+      };
+
+      const result = validateTaskRecordDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+    });
+
+    it('[EARS-1030] should reject non-object metadata (string)', () => {
+      const invalid = {
+        ...createValidTaskRecord(),
+        metadata: 'not-an-object' as unknown as object
+      };
+
+      const result = validateTaskRecordDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.field.includes('metadata') && e.message.includes('object')
+      )).toBe(true);
+    });
+
+    it('[EARS-1031] should reject non-object metadata (number)', () => {
+      const invalid = {
+        ...createValidTaskRecord(),
+        metadata: 123 as unknown as object
+      };
+
+      const result = validateTaskRecordDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.field.includes('metadata') && e.message.includes('object')
+      )).toBe(true);
+    });
+
+    it('[EARS-1032] should reject non-object metadata (array)', () => {
+      const invalid = {
+        ...createValidTaskRecord(),
+        metadata: ['not', 'an', 'object'] as unknown as object
+      };
+
+      const result = validateTaskRecordDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.field.includes('metadata') && e.message.includes('object')
+      )).toBe(true);
+    });
+
+    it('[EARS-1033] should reject null metadata', () => {
+      const invalid = {
+        ...createValidTaskRecord(),
+        metadata: null as unknown as object
+      };
+
+      const result = validateTaskRecordDetailed(invalid);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e =>
+        e.field.includes('metadata')
+      )).toBe(true);
+    });
+
+    it('[EARS-1034] should accept metadata with epic modeling structure', () => {
+      const valid = {
+        ...createValidTaskRecord(),
+        metadata: {
+          epic: true,
+          phase: 'implementation',
+          estimatedHours: 8,
+          jira: 'AUTH-42',
+          files: { overview: 'epics/auth/overview.md' }
+        }
+      };
+
+      const result = validateTaskRecordDetailed(valid);
+
+      expect(result.isValid).toBe(true);
+    });
+
+    it('[EARS-1035] should accept metadata with mixed value types', () => {
+      const valid = {
+        ...createValidTaskRecord(),
+        metadata: {
+          stringValue: 'hello',
+          numberValue: 42,
+          booleanValue: true,
+          nullValue: null,
+          arrayValue: [1, 2, 3],
+          objectValue: { nested: 'object' }
+        }
       };
 
       const result = validateTaskRecordDetailed(valid);

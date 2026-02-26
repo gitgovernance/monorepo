@@ -7,11 +7,12 @@ describe('WorkflowRecord Schema Integration Tests', () => {
    * This is a plain object creation (not using the factory) to test the validator directly.
    */
   const createValidWorkflowRecord = (): WorkflowRecord => ({
-    version: '1.0.0',
+    id: '1234567890-workflow-test-methodology',
     name: 'Test Methodology',
     state_transitions: {
-      review: {
+      submit: {
         from: ['draft'],
+        to: 'review',
         requires: {}
       }
     }
@@ -32,15 +33,15 @@ describe('WorkflowRecord Schema Integration Tests', () => {
       )).toBe(true);
     });
 
-    it('[EARS-709] should reject missing required field: version', () => {
+    it('[EARS-709] should reject missing required field: id', () => {
       const invalid = createValidWorkflowRecord();
-      delete (invalid as Partial<WorkflowRecord>).version;
+      delete (invalid as Partial<WorkflowRecord>).id;
 
       const result = validateWorkflowConfigDetailed(invalid as WorkflowRecord);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
-        e.message.includes('version') || e.field.includes('version')
+        e.message.includes('id') || e.field.includes('id')
       )).toBe(true);
     });
 
@@ -69,25 +70,25 @@ describe('WorkflowRecord Schema Integration Tests', () => {
     });
   });
 
-  describe('Version Field Validations (EARS 712-722)', () => {
-    it('[EARS-712] should reject version with invalid semver pattern', () => {
+  describe('ID Field Validations (EARS 712-722)', () => {
+    it('[EARS-712] should reject id with invalid pattern', () => {
       const invalid = {
         ...createValidWorkflowRecord(),
-        version: 'invalid-version'
+        id: 'invalid-id-format'
       };
 
       const result = validateWorkflowConfigDetailed(invalid);
 
       expect(result.isValid).toBe(false);
       expect(result.errors.some(e =>
-        e.message.includes('pattern') || e.field.includes('version')
+        e.message.includes('pattern') || e.field.includes('id')
       )).toBe(true);
     });
 
-    it('[EARS-713] should accept version "1.0.0"', () => {
+    it('[EARS-713] should accept valid id', () => {
       const valid = {
         ...createValidWorkflowRecord(),
-        version: '1.0.0'
+        id: '1234567890-workflow-test'
       };
 
       const result = validateWorkflowConfigDetailed(valid);
@@ -96,10 +97,10 @@ describe('WorkflowRecord Schema Integration Tests', () => {
       expect(result.errors).toHaveLength(0);
     });
 
-    it('[EARS-714] should accept version "10.25.100"', () => {
+    it('[EARS-714] should accept another valid id', () => {
       const valid = {
         ...createValidWorkflowRecord(),
-        version: '10.25.100'
+        id: '1757687335-workflow-my-methodology'
       };
 
       const result = validateWorkflowConfigDetailed(valid);
@@ -108,10 +109,10 @@ describe('WorkflowRecord Schema Integration Tests', () => {
       expect(result.errors).toHaveLength(0);
     });
 
-    it('[EARS-715] should reject non-string version', () => {
+    it('[EARS-715] should reject non-string id', () => {
       const invalid = {
         ...createValidWorkflowRecord(),
-        version: 123
+        id: 123
       };
 
       const result = validateWorkflowConfigDetailed(invalid);
@@ -122,10 +123,10 @@ describe('WorkflowRecord Schema Integration Tests', () => {
       )).toBe(true);
     });
 
-    it('[EARS-716] should reject version without patch "1.0"', () => {
+    it('[EARS-716] should reject id without proper format', () => {
       const invalid = {
         ...createValidWorkflowRecord(),
-        version: '1.0'
+        id: '1234567890-workflow'
       };
 
       const result = validateWorkflowConfigDetailed(invalid);
@@ -136,10 +137,10 @@ describe('WorkflowRecord Schema Integration Tests', () => {
       )).toBe(true);
     });
 
-    it('[EARS-717] should reject version with \'v\' prefix "v1.0.0"', () => {
+    it('[EARS-717] should reject id with invalid prefix', () => {
       const invalid = {
         ...createValidWorkflowRecord(),
-        version: 'v1.0.0'
+        id: 'v1234567890-workflow-test'
       };
 
       const result = validateWorkflowConfigDetailed(invalid);
@@ -150,10 +151,10 @@ describe('WorkflowRecord Schema Integration Tests', () => {
       )).toBe(true);
     });
 
-    it('[EARS-718] should reject empty version', () => {
+    it('[EARS-718] should reject empty id', () => {
       const invalid = {
         ...createValidWorkflowRecord(),
-        version: ''
+        id: ''
       };
 
       const result = validateWorkflowConfigDetailed(invalid);
@@ -164,10 +165,10 @@ describe('WorkflowRecord Schema Integration Tests', () => {
       )).toBe(true);
     });
 
-    it('[EARS-719] should reject version with non-numeric chars "1.0.0-alpha"', () => {
+    it('[EARS-719] should reject id with uppercase', () => {
       const invalid = {
         ...createValidWorkflowRecord(),
-        version: '1.0.0-alpha'
+        id: '1234567890-workflow-Test'
       };
 
       const result = validateWorkflowConfigDetailed(invalid);
@@ -178,10 +179,10 @@ describe('WorkflowRecord Schema Integration Tests', () => {
       )).toBe(true);
     });
 
-    it('[EARS-720] should reject null version', () => {
+    it('[EARS-720] should reject null id', () => {
       const invalid = {
         ...createValidWorkflowRecord(),
-        version: null
+        id: null
       };
 
       const result = validateWorkflowConfigDetailed(invalid);
@@ -192,10 +193,10 @@ describe('WorkflowRecord Schema Integration Tests', () => {
       )).toBe(true);
     });
 
-    it('[EARS-721] should accept version "0.0.0"', () => {
+    it('[EARS-721] should accept minimal valid id', () => {
       const valid = {
         ...createValidWorkflowRecord(),
-        version: '0.0.0'
+        id: '0000000000-workflow-a'
       };
 
       const result = validateWorkflowConfigDetailed(valid);
@@ -204,10 +205,10 @@ describe('WorkflowRecord Schema Integration Tests', () => {
       expect(result.errors).toHaveLength(0);
     });
 
-    it('[EARS-722] should accept version "1.2.3"', () => {
+    it('[EARS-722] should accept longer valid id', () => {
       const valid = {
         ...createValidWorkflowRecord(),
-        version: '1.2.3'
+        id: '1234567890-workflow-my-test-flow'
       };
 
       const result = validateWorkflowConfigDetailed(valid);
@@ -606,6 +607,7 @@ describe('WorkflowRecord Schema Integration Tests', () => {
         state_transitions: {
           review: {
             from: ['draft'],
+            to: 'review',
             requires: {}
           }
         }
@@ -642,6 +644,7 @@ describe('WorkflowRecord Schema Integration Tests', () => {
         state_transitions: {
           analyzing: {
             from: ['idle'],
+            to: 'analyzing',
             requires: {}
           }
         }
@@ -659,6 +662,7 @@ describe('WorkflowRecord Schema Integration Tests', () => {
         state_transitions: {
           active: {
             from: ['ready', 'paused'],
+            to: 'active',
             requires: {}
           }
         }
@@ -716,6 +720,7 @@ describe('WorkflowRecord Schema Integration Tests', () => {
         state_transitions: {
           review: {
             from: ['draft'],
+            to: 'review',
             requires: {}
           }
         }
@@ -739,6 +744,7 @@ describe('WorkflowRecord Schema Integration Tests', () => {
         state_transitions: {
           review: {
             from: ['draft'],
+            to: 'review',
             requires: {
               command: 'gitgov task submit'
             }
@@ -800,6 +806,7 @@ describe('WorkflowRecord Schema Integration Tests', () => {
         state_transitions: {
           active: {
             from: ['ready'],
+            to: 'active',
             requires: {
               event: 'first_execution_record_created'
             }
@@ -861,6 +868,7 @@ describe('WorkflowRecord Schema Integration Tests', () => {
         state_transitions: {
           review: {
             from: ['draft'],
+            to: 'review',
             requires: {
               command: 'gitgov task submit',
               event: 'task_submitted'
@@ -881,6 +889,7 @@ describe('WorkflowRecord Schema Integration Tests', () => {
         state_transitions: {
           review: {
             from: ['draft'],
+            to: 'review',
             requires: {}
           }
         }
@@ -900,6 +909,7 @@ describe('WorkflowRecord Schema Integration Tests', () => {
         state_transitions: {
           review: {
             from: ['draft'],
+            to: 'review',
             requires: {}
           }
         }
@@ -938,6 +948,7 @@ describe('WorkflowRecord Schema Integration Tests', () => {
         state_transitions: {
           review: {
             from: ['draft'],
+            to: 'review',
             requires: {
               custom_rules: []
             }
@@ -957,6 +968,7 @@ describe('WorkflowRecord Schema Integration Tests', () => {
         state_transitions: {
           review: {
             from: ['draft'],
+            to: 'review',
             requires: {
               custom_rules: ['rule_one']
             }
@@ -1018,6 +1030,7 @@ describe('WorkflowRecord Schema Integration Tests', () => {
         state_transitions: {
           review: {
             from: ['draft'],
+            to: 'review',
             requires: {
               custom_rules: ['rule_one', 'rule_two', 'rule_three']
             }
@@ -1037,6 +1050,7 @@ describe('WorkflowRecord Schema Integration Tests', () => {
         state_transitions: {
           review: {
             from: ['draft'],
+            to: 'review',
             requires: {
               custom_rules: ['']
             }
@@ -1056,6 +1070,7 @@ describe('WorkflowRecord Schema Integration Tests', () => {
         state_transitions: {
           review: {
             from: ['draft'],
+            to: 'review',
             requires: {
               custom_rules: ['single_rule']
             }
@@ -1075,6 +1090,7 @@ describe('WorkflowRecord Schema Integration Tests', () => {
         state_transitions: {
           review: {
             from: ['draft'],
+            to: 'review',
             requires: {
               custom_rules: ['rule1', 'rule2', 'rule3', 'rule4', 'rule5']
             }
@@ -1117,6 +1133,7 @@ describe('WorkflowRecord Schema Integration Tests', () => {
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
+            to: 'review',
             requires: {
               signatures: {}
             }
@@ -1263,6 +1280,7 @@ describe('WorkflowRecord Schema Integration Tests', () => {
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
+            to: 'review',
             requires: {
               signatures: {
                 default: {
@@ -1342,6 +1360,7 @@ describe('WorkflowRecord Schema Integration Tests', () => {
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
+            to: 'review',
             requires: {
               signatures: {
                 default: {
@@ -1421,6 +1440,7 @@ describe('WorkflowRecord Schema Integration Tests', () => {
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
+            to: 'review',
             requires: {
               signatures: {
                 default: {
@@ -1500,6 +1520,7 @@ describe('WorkflowRecord Schema Integration Tests', () => {
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
+            to: 'review',
             requires: {
               signatures: {
                 default: {
@@ -1525,6 +1546,7 @@ describe('WorkflowRecord Schema Integration Tests', () => {
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
+            to: 'review',
             requires: {
               signatures: {
                 default: {
@@ -1550,6 +1572,7 @@ describe('WorkflowRecord Schema Integration Tests', () => {
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
+            to: 'review',
             requires: {
               signatures: {
                 default: {
@@ -1683,6 +1706,7 @@ describe('WorkflowRecord Schema Integration Tests', () => {
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
+            to: 'review',
             requires: {
               signatures: {
                 default: {
@@ -1708,6 +1732,7 @@ describe('WorkflowRecord Schema Integration Tests', () => {
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
+            to: 'review',
             requires: {
               signatures: {
                 default: {
@@ -1733,6 +1758,7 @@ describe('WorkflowRecord Schema Integration Tests', () => {
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
+            to: 'review',
             requires: {
               signatures: {
                 default: {
@@ -1758,6 +1784,7 @@ describe('WorkflowRecord Schema Integration Tests', () => {
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
+            to: 'review',
             requires: {
               signatures: {
                 default: {
@@ -1784,6 +1811,7 @@ describe('WorkflowRecord Schema Integration Tests', () => {
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
+            to: 'review',
             requires: {
               signatures: {
                 default: {
@@ -1866,6 +1894,7 @@ describe('WorkflowRecord Schema Integration Tests', () => {
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
+            to: 'review',
             requires: {
               signatures: {
                 default: {
@@ -1919,6 +1948,7 @@ describe('WorkflowRecord Schema Integration Tests', () => {
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
+            to: 'review',
             requires: {
               signatures: {
                 default: {
@@ -1945,6 +1975,7 @@ describe('WorkflowRecord Schema Integration Tests', () => {
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
+            to: 'review',
             requires: {
               signatures: {
                 default: {
@@ -2027,6 +2058,7 @@ describe('WorkflowRecord Schema Integration Tests', () => {
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
+            to: 'review',
             requires: {
               signatures: {
                 default: {
@@ -3640,7 +3672,7 @@ describe('WorkflowRecord Schema Integration Tests', () => {
   describe('Happy Path - Complete Valid Records (EARS 993-1001)', () => {
     it('[EARS-993] should accept minimal record with only required fields', () => {
       const minimal = {
-        version: '1.0.0',
+        id: '1234567890-workflow-minimal',
         name: 'Minimal Methodology',
         state_transitions: {}
       };
@@ -3653,12 +3685,13 @@ describe('WorkflowRecord Schema Integration Tests', () => {
 
     it('[EARS-994] should accept full record with all optional fields', () => {
       const full = {
-        version: '1.0.0',
+        id: '1234567890-workflow-complete',
         name: 'Complete Methodology',
         description: 'A methodology with all fields populated',
         state_transitions: {
           review: {
             from: ['draft'] as ['draft'],
+            to: 'review',
             requires: {
               command: 'gitgov task submit',
               signatures: {
@@ -3696,10 +3729,10 @@ describe('WorkflowRecord Schema Integration Tests', () => {
       const valid = {
         ...createValidWorkflowRecord(),
         state_transitions: {
-          review: { from: ['draft'] as ['draft'], requires: {} },
-          ready: { from: ['review'] as ['review'], requires: {} },
-          active: { from: ['ready'] as ['ready'], requires: {} },
-          done: { from: ['active'] as ['active'], requires: {} }
+          submit: { from: ['draft'] as ['draft'], to: 'review', requires: {} },
+          approve: { from: ['review'] as ['review'], to: 'ready', requires: {} },
+          activate: { from: ['ready'] as ['ready'], to: 'active', requires: {} },
+          complete: { from: ['active'] as ['active'], to: 'done', requires: {} }
         }
       };
 
@@ -3719,8 +3752,9 @@ describe('WorkflowRecord Schema Integration Tests', () => {
           }
         },
         state_transitions: {
-          active: {
+          activate: {
             from: ['ready'] as ['ready'],
+            to: 'active',
             requires: {
               custom_rules: ['assignment-check']
             }
@@ -3736,12 +3770,13 @@ describe('WorkflowRecord Schema Integration Tests', () => {
 
     it('[EARS-1000] should accept complete GitGovernance Default Methodology example', () => {
       const gitgovExample = {
-        version: '1.0.0',
+        id: '1234567890-workflow-gitgov-default',
         name: 'GitGovernance Default Methodology',
         description: 'Default task workflow methodology for GitGovernance projects',
         state_transitions: {
-          review: {
+          submit: {
             from: ['draft'] as ['draft'],
+            to: 'review',
             requires: {
               command: 'gitgov task submit',
               signatures: {
@@ -3754,15 +3789,17 @@ describe('WorkflowRecord Schema Integration Tests', () => {
               }
             }
           },
-          active: {
+          activate: {
             from: ['ready'] as ['ready'],
+            to: 'active',
             requires: {
               event: 'first_execution_record_created',
               custom_rules: ['assignment-required']
             }
           },
-          done: {
+          complete: {
             from: ['active'] as ['active'],
+            to: 'done',
             requires: {
               signatures: {
                 quality: {

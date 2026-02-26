@@ -24,7 +24,6 @@ import type {
   GitGovCycleRecord,
   GitGovFeedbackRecord,
   GitGovExecutionRecord,
-  GitGovChangelogRecord,
   GitGovActorRecord,
 } from '../../core/src/record_types';
 
@@ -190,7 +189,6 @@ export async function runProjector(
     cycles: new FsRecordStore<GitGovCycleRecord>({ basePath: path.join(repoDir, '.gitgov', 'cycles') }),
     feedbacks: new FsRecordStore<GitGovFeedbackRecord>({ basePath: path.join(repoDir, '.gitgov', 'feedbacks') }),
     executions: new FsRecordStore<GitGovExecutionRecord>({ basePath: path.join(repoDir, '.gitgov', 'executions') }),
-    changelogs: new FsRecordStore<GitGovChangelogRecord>({ basePath: path.join(repoDir, '.gitgov', 'changelogs') }),
     actors: new FsRecordStore<GitGovActorRecord>({ basePath: path.join(repoDir, '.gitgov', 'actors'), idEncoder: DEFAULT_ID_ENCODER }),
   };
 
@@ -260,7 +258,6 @@ export async function projectAndCompare(
     cycles: new FsRecordStore<GitGovCycleRecord>({ basePath: path.join(repoDir, '.gitgov', 'cycles') }),
     feedbacks: new FsRecordStore<GitGovFeedbackRecord>({ basePath: path.join(repoDir, '.gitgov', 'feedbacks') }),
     executions: new FsRecordStore<GitGovExecutionRecord>({ basePath: path.join(repoDir, '.gitgov', 'executions') }),
-    changelogs: new FsRecordStore<GitGovChangelogRecord>({ basePath: path.join(repoDir, '.gitgov', 'changelogs') }),
     actors: new FsRecordStore<GitGovActorRecord>({ basePath: path.join(repoDir, '.gitgov', 'actors'), idEncoder: DEFAULT_ID_ENCODER }),
   };
 

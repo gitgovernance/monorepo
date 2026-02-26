@@ -42,7 +42,6 @@ function createMockContainer(overrides: Partial<McpDiContainer> = {}): McpDiCont
       cycles: createMockStore(),
       feedbacks: createMockStore(),
       executions: createMockStore(),
-      changelogs: createMockStore(),
       actors: createMockStore(),
       agents: createMockStore(),
     },

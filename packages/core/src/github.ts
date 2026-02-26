@@ -118,6 +118,10 @@ export function mapOctokitError(error: unknown, context: string): GitHubApiError
 
 // ==================== Module Exports ====================
 
+// SyncState
+export { GithubSyncStateModule } from './sync_state/github_sync_state';
+export type { GithubSyncStateDependencies } from './sync_state/github_sync_state';
+
 // FileLister
 export { GitHubFileLister } from './file_lister/github';
 export type {
@@ -142,7 +146,3 @@ export type {
   GitHubConfigStoreOptions,
   GitHubSaveResult,
 } from './config_store/github';
-
-// SyncState
-export { GithubSyncStateModule } from './sync_state/github_sync_state';
-export type { GithubSyncStateDependencies } from './sync_state/github_sync_state';

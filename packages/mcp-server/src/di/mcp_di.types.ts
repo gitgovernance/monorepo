@@ -4,7 +4,6 @@ import type {
   GitGovCycleRecord,
   GitGovFeedbackRecord,
   GitGovExecutionRecord,
-  GitGovChangelogRecord,
   GitGovActorRecord,
   GitGovAgentRecord,
   IRecordProjector,
@@ -40,7 +39,6 @@ export interface McpDiContainer {
     cycles: RecordStore<GitGovCycleRecord>;
     feedbacks: RecordStore<GitGovFeedbackRecord>;
     executions: RecordStore<GitGovExecutionRecord>;
-    changelogs: RecordStore<GitGovChangelogRecord>;
     actors: RecordStore<GitGovActorRecord>;
     agents: RecordStore<GitGovAgentRecord>;
   };

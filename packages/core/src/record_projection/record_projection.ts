@@ -7,7 +7,6 @@ import type {
   GitGovCycleRecord,
   GitGovFeedbackRecord,
   GitGovExecutionRecord,
-  GitGovChangelogRecord,
   GitGovActorRecord
 } from '../record_types';
 import type { ActivityEvent } from '../event_bus';
@@ -37,7 +36,7 @@ import type {
  */
 export class RecordProjector implements IRecordProjector {
   private recordMetrics: RecordMetrics;
-  private stores: Required<Pick<RecordStores, 'tasks' | 'cycles' | 'feedbacks' | 'executions' | 'changelogs' | 'actors'>>;
+  private stores: Required<Pick<RecordStores, 'tasks' | 'cycles' | 'feedbacks' | 'executions' | 'actors'>>;
   private sink: IRecordProjection | undefined;
 
   constructor(dependencies: RecordProjectorDependencies) {
@@ -72,7 +71,6 @@ export class RecordProjector implements IRecordProjector {
       cycles,
       feedback: await this.readAllFeedback(),
       executions: await this.readAllExecutions(),
-      changelogs: await this.readAllChangelogs(),
       actors
     };
 
@@ -112,7 +110,6 @@ export class RecordProjector implements IRecordProjector {
           actors: actors.length,
           feedback: allRecords.feedback.length,
           executions: allRecords.executions.length,
-          changelogs: allRecords.changelogs.length
         },
         generationTime: 0 // Will be set by caller if needed
       },
@@ -499,23 +496,6 @@ export class RecordProjector implements IRecordProjector {
   }
 
   /**
-   * Reads all changelogs from stores.changelogs with full metadata.
-   */
-  private async readAllChangelogs(): Promise<GitGovChangelogRecord[]> {
-    const changelogIds = await this.stores.changelogs.list();
-    const changelogs: GitGovChangelogRecord[] = [];
-
-    for (const id of changelogIds) {
-      const record = await this.stores.changelogs.get(id);
-      if (record) {
-        changelogs.push(record);
-      }
-    }
-
-    return changelogs;
-  }
-
-  /**
    * Persists IndexData to sink if available.
    * [EARS-U4] No-op when sink is undefined (writeTime=0).
    * [EARS-14] Sink implementation handles atomicity internally.
@@ -706,24 +686,6 @@ export class RecordProjector implements IRecordProjector {
         }
       });
 
-      // Changelogs creados (basado en ID timestamp) 
-      allRecords.changelogs.forEach(changelog => {
-        const timestampPart = changelog.payload.id.split('-')[0];
-        if (timestampPart) {
-          const event: ActivityEvent = {
-            timestamp: parseInt(timestampPart),
-            type: 'changelog_created',
-            entityId: changelog.payload.id,
-            entityTitle: changelog.payload.title || 'Release notes',
-            actorId: changelog.header.signatures[0]?.keyId || 'unknown'
-          };
-          if (changelog.payload.version) {
-            event.metadata = { version: changelog.payload.version };
-          }
-          events.push(event);
-        }
-      });
-
       // Executions creadas (basado en ID timestamp)
       allRecords.executions.forEach(execution => {
         const timestampPart = execution.payload.id.split('-')[0];
@@ -825,18 +787,17 @@ export class RecordProjector implements IRecordProjector {
         }
       }
 
-      // 4. Check related changelog records
-      const relatedChangelogs = relatedRecords.changelogs.filter(c =>
-        (c.payload.relatedTasks && c.payload.relatedTasks.includes(taskPayload.id)) ||
-        c.payload.description?.includes(taskPayload.id)
+      // 4. Check related release executions (custom:release)
+      const relatedReleases = relatedRecords.executions.filter(e =>
+        e.payload.taskId === taskPayload.id && e.payload.type === 'custom:release'
       );
 
-      for (const changelog of relatedChangelogs) {
-        const changelogTime = this.getTimestampFromId(changelog.payload.id) * 1000; // Convert to milliseconds
-        if (changelogTime > lastUpdated) {
-          lastUpdated = changelogTime;
-          lastActivityType = 'changelog_created';
-          recentActivity = `Changelog: ${changelog.payload.title}`;
+      for (const release of relatedReleases) {
+        const releaseTime = this.getTimestampFromId(release.payload.id) * 1000; // Convert to milliseconds
+        if (releaseTime > lastUpdated) {
+          lastUpdated = releaseTime;
+          lastActivityType = 'execution_added';
+          recentActivity = `Release: ${release.payload.title}`;
         }
       }
 
@@ -869,7 +830,7 @@ export class RecordProjector implements IRecordProjector {
    * 5. Cycles (all cycles as array with id+title)
    * 6. Metrics (executionCount, blockingFeedbackCount, openQuestionCount)
    * 7. Time to resolution (for done tasks)
-   * 8. Release info (isReleased, lastReleaseVersion from changelogs)
+   * 8. Release info
    * 9. Derived states (EARS-43: REUTILIZA pre-calculated derivedStates con O(1) lookup)
    * 10. Health score (0-100 using multi-factor algorithm)
    * 11. Time in current stage (days)
@@ -950,13 +911,14 @@ export class RecordProjector implements IRecordProjector {
       ? (lastUpdated - this.getTimestampFromId(task.payload.id) * 1000) / (1000 * 60 * 60) // horas
       : undefined;
 
-    // Step 8: Release info (from changelogs)
-    const releaseChangelogs = relatedRecords.changelogs.filter(cl =>
-      cl.payload.relatedTasks.includes(task.payload.id)
+    // Step 8: Release info (from custom:release executions)
+    const releaseExecutions = relatedRecords.executions.filter(e =>
+      e.payload.taskId === task.payload.id && e.payload.type === 'custom:release'
     );
-    const isReleased = releaseChangelogs.length > 0;
+    const isReleased = releaseExecutions.length > 0;
+    const lastReleaseExec = releaseExecutions[releaseExecutions.length - 1];
     const lastReleaseVersion: string | undefined = isReleased
-      ? (releaseChangelogs[releaseChangelogs.length - 1]?.payload.version || undefined)
+      ? ((lastReleaseExec?.payload.metadata as Record<string, unknown>)?.['version'] as string | undefined)
       : undefined;
 
     // Step 9: Derived states (EARS-43: Usar pre-calculated derivedStates con O(1) lookup)

@@ -16,10 +16,10 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Paths
-const BLUEPRINTS_SCHEMAS_DIR = path.join(__dirname, '../../private/packages/blueprints/02_protocol/schemas');
+const PROTOCOL_SCHEMAS_DIR = path.join(__dirname, '../../private/packages/blueprints/02_protocol/schemas');
 const CORE_SCHEMAS_DIR = path.join(__dirname, '../src/record_schemas/generated');
 
-// Schema names to sync from blueprints/02_protocol/schemas/
+// Schema names (flat directory in 02_protocol/schemas/)
 const SCHEMA_NAMES = [
   'embedded_metadata_schema',
   'actor_record_schema',
@@ -41,12 +41,12 @@ function syncSchemas() {
 
   // Process each schema
   for (const schemaName of SCHEMA_NAMES) {
-    const yamlPath = path.join(BLUEPRINTS_SCHEMAS_DIR, `${schemaName}.yaml`);
+    const yamlPath = path.join(PROTOCOL_SCHEMAS_DIR, `${schemaName}.yaml`);
     const jsonPath = path.join(CORE_SCHEMAS_DIR, `${schemaName}.json`);
 
     if (!fs.existsSync(yamlPath)) {
-      console.warn(`⚠️  Schema not found: ${yamlPath}`);
-      continue;
+      console.error(`❌ Schema not found: ${yamlPath}`);
+      process.exit(1);
     }
 
     try {
@@ -83,8 +83,8 @@ function updateSchemaRefs(obj: any): void {
 
   for (const key in obj) {
     if (key === '$ref' && typeof obj[key] === 'string') {
-      // Convert "../02_actor/actor_record_schema.yaml" to "ref:actor_record_schema"
-      obj[key] = obj[key].replace(/.*\/([^/]+)_schema\.yaml$/, 'ref:$1_schema');
+      // Convert "actor_record_schema.yaml" or "../path/actor_record_schema.yaml" to "ref:actor_record_schema"
+      obj[key] = obj[key].replace(/^(?:.*\/)?([^/]+_schema)\.yaml$/, 'ref:$1');
     } else if (typeof obj[key] === 'object') {
       updateSchemaRefs(obj[key]);
     }

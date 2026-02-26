@@ -113,25 +113,31 @@ export class WorkflowAdapter implements IWorkflow {
   }
 
   /**
+   * Finds a transition config by matching from and to states.
+   * Keys are transition names (e.g. submit, approve), target state is in transition.to.
+   */
+  private findTransitionByStates(from: string, to: string): NonNullable<WorkflowRecord['state_transitions']>[string] | null {
+    const config = this.getConfig();
+    for (const transitionConfig of Object.values(config.state_transitions ?? {})) {
+      if (transitionConfig && transitionConfig.to === to && transitionConfig.from.includes(from)) {
+        return transitionConfig;
+      }
+    }
+    return null;
+  }
+
+  /**
    * Determines if a state transition is legal according to the methodology
    */
   async getTransitionRule(from: TaskStatus, to: TaskStatus, _context: ValidationContext): Promise<TransitionRule | null> {
-    const config = this.getConfig();
-
-    // Look for transition rule in configuration
-    const transitionConfig = config.state_transitions?.[to];
+    const transitionConfig = this.findTransitionByStates(from, to);
 
     if (!transitionConfig) {
       return null;
     }
 
-    // Check if 'from' state is valid for this transition
-    if (!transitionConfig.from.includes(from)) {
-      return null;
-    }
-
     return {
-      to,
+      to: transitionConfig.to as TaskStatus,
       conditions: transitionConfig.requires
     };
   }
@@ -140,8 +146,6 @@ export class WorkflowAdapter implements IWorkflow {
    * Validates if an actor's signature meets the requirements for a transition
    */
   async validateSignature(signature: Signature, context: ValidationContext): Promise<boolean> {
-    const config = this.getConfig();
-
     if (!context.transitionTo) {
       throw new Error('ValidationContext must include "transitionTo" for signature validation.');
     }
@@ -152,13 +156,8 @@ export class WorkflowAdapter implements IWorkflow {
       return false;
     }
 
-    const transitionConfig = config.state_transitions?.[targetState];
+    const transitionConfig = this.findTransitionByStates(context.task.status, targetState);
     if (!transitionConfig) return false;
-
-    // A transition must be possible from the current task state
-    if (!transitionConfig.from.includes(context.task.status)) {
-      return false;
-    }
 
     const signatureRules = transitionConfig.requires.signatures;
     if (!signatureRules) return true; // No signature required for this transition
@@ -278,11 +277,10 @@ export class WorkflowAdapter implements IWorkflow {
     }
 
     const available: TransitionRule[] = [];
-    for (const toState in config.state_transitions) {
-      const transitionConfig = config.state_transitions[toState];
+    for (const transitionConfig of Object.values(config.state_transitions)) {
       if (transitionConfig && transitionConfig.from.includes(from)) {
         available.push({
-          to: toState as TaskStatus,
+          to: transitionConfig.to as TaskStatus,
           conditions: transitionConfig.requires,
         });
       }

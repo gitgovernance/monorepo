@@ -25,7 +25,6 @@ export type {
   AgentRecord,
   FeedbackRecord,
   ExecutionRecord,
-  ChangelogRecord,
   WorkflowRecord,
 } from "./record_types";
 
@@ -91,7 +90,6 @@ export type {
   GitGovAgentRecord,
   GitGovFeedbackRecord,
   GitGovExecutionRecord,
-  GitGovChangelogRecord,
   GitGovRecord,
   GitGovRecordPayload,
   GitGovRecordType,
@@ -113,7 +111,6 @@ export * as RecordMetrics from "./record_metrics";
 
 // adapters
 export * as BacklogAdapter from "./adapters/backlog_adapter";
-export * as ChangelogAdapter from "./adapters/changelog_adapter";
 export * as ExecutionAdapter from "./adapters/execution_adapter";
 export * as FeedbackAdapter from "./adapters/feedback_adapter";
 export * as IdentityAdapter from "./adapters/identity_adapter";

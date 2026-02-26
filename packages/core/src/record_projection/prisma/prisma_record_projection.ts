@@ -35,6 +35,7 @@ export class PrismaRecordProjection implements IRecordProjection {
       childCycleIds: c.payload.childCycleIds ?? [],
       tags: c.payload.tags ?? [],
       notes: c.payload.notes ?? null,
+      metadataJson: c.payload.metadata ? toJson(c.payload.metadata) : null,
       headerJson: toJson(c.header),
     }));
     const actorRows = data.actors.map((a) => ({
@@ -192,6 +193,7 @@ export class PrismaRecordProjection implements IRecordProjection {
       references: enriched.references ?? [],
       cycleIds: enriched.cycleIds ?? [],
       notes: enriched.notes ?? null,
+      metadataJson: enriched.metadata ? toJson(enriched.metadata) : null,
       isStalled: enriched.derivedState.isStalled,
       isAtRisk: enriched.derivedState.isAtRisk,
       needsClarification: enriched.derivedState.needsClarification,
@@ -250,6 +252,7 @@ export class PrismaRecordProjection implements IRecordProjection {
           references: r.references,
           cycleIds: r.cycleIds,
           ...opt('notes', r.notes),
+          ...opt('metadata', r.metadataJson as Record<string, unknown> | null),
         },
       })),
       enrichedTasks: taskRows.map((r) => ({
@@ -262,6 +265,7 @@ export class PrismaRecordProjection implements IRecordProjection {
         references: r.references,
         cycleIds: r.cycleIds,
         ...opt('notes', r.notes),
+        ...opt('metadata', r.metadataJson as Record<string, unknown> | null),
         derivedState: {
           isStalled: r.isStalled,
           isAtRisk: r.isAtRisk,
@@ -295,6 +299,7 @@ export class PrismaRecordProjection implements IRecordProjection {
           childCycleIds: c.childCycleIds,
           tags: c.tags,
           ...opt('notes', c.notes),
+          ...opt('metadata', c.metadataJson as Record<string, unknown> | null),
         },
       })),
       actors: actorRows.map((a) => ({

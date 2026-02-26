@@ -2,8 +2,9 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "agent_record_schema.json",
   "title": "AgentRecord",
-  "description": "Canonical schema for agent operational manifests.",
+  "description": "Canonical schema for agent operational manifests — the work contract that defines how an agent is invoked.",
   "type": "object",
+  "additionalProperties": false,
   "required": [
     "id",
     "engine"
@@ -11,8 +12,13 @@
   "properties": {
     "id": {
       "type": "string",
-      "pattern": "^agent:[a-z0-9:-]+$",
-      "description": "Unique identifier for the agent, linking to an ActorRecord."
+      "pattern": "^agent(:[a-z0-9-]+)+$",
+      "description": "Unique identifier for the agent, linking 1:1 to an ActorRecord of type agent.",
+      "examples": [
+        "agent:scribe",
+        "agent:aion",
+        "agent:camilo:cursor"
+      ]
     },
     "status": {
       "type": "string",
@@ -20,63 +26,12 @@
         "active",
         "archived"
       ],
-      "default": "active"
-    },
-    "triggers": {
-      "type": "array",
-      "default": [],
-      "description": "Optional list of triggers that activate the agent.\nAdditional fields are allowed and depend on trigger type:\n- webhook triggers: 'event' (event identifier), 'filter' (condition)\n- scheduled triggers: 'cron' (cron expression)\n- manual triggers: 'command' (example CLI command)\n",
-      "items": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "manual",
-              "webhook",
-              "scheduled"
-            ],
-            "description": "Type of trigger that activates the agent"
-          }
-        },
-        "required": [
-          "type"
-        ],
-        "additionalProperties": true
-      }
-    },
-    "knowledge_dependencies": {
-      "type": "array",
-      "default": [],
-      "items": {
-        "type": "string",
-        "description": "Glob patterns for blueprint files this agent needs access to"
-      }
-    },
-    "prompt_engine_requirements": {
-      "type": "object",
-      "properties": {
-        "roles": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "skills": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        }
-      }
-    },
-    "metadata": {
-      "type": "object",
-      "description": "Optional framework-specific or deployment-specific metadata for agent extensions.\nCommon use cases: framework identification (langchain, google-adk), deployment info (provider, image, region),\ncost tracking (cost_per_invocation, currency), tool capabilities, maintainer info.\nThis field does NOT affect agent execution - it is purely informational.\n",
-      "additionalProperties": true
+      "default": "active",
+      "description": "Operational status. An archived agent cannot be invoked."
     },
     "engine": {
       "type": "object",
+      "description": "Invocation specification — defines how the agent is executed. Uses oneOf with 4 variants: local, api, mcp, custom.",
       "oneOf": [
         {
           "required": [
@@ -123,7 +78,8 @@
                 "GET",
                 "PUT"
               ],
-              "default": "POST"
+              "default": "POST",
+              "description": "HTTP method"
             },
             "auth": {
               "type": "object",
@@ -169,7 +125,7 @@
             },
             "tool": {
               "type": "string",
-              "description": "Name of the MCP tool to invoke. If not specified, defaults to agentId without 'agent:' prefix."
+              "description": "Name of the MCP tool to invoke. If omitted, the agent has access to all tools on the server."
             },
             "auth": {
               "type": "object",
@@ -218,6 +174,60 @@
           }
         }
       ]
+    },
+    "triggers": {
+      "type": "array",
+      "default": [],
+      "description": "Optional list of triggers that activate the agent.\nAdditional fields are allowed and depend on trigger type:\n- manual: 'command' (example CLI command)\n- webhook: 'event' (event identifier), 'filter' (condition)\n- scheduled: 'cron' (cron expression)\n",
+      "items": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "manual",
+              "webhook",
+              "scheduled"
+            ],
+            "description": "Type of trigger that activates the agent"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "knowledge_dependencies": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "string",
+        "description": "Glob patterns for files this agent needs access to"
+      }
+    },
+    "prompt_engine_requirements": {
+      "type": "object",
+      "description": "Requirements for prompt composition — roles and skills the agent needs.",
+      "properties": {
+        "roles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "skills": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Optional framework-specific or deployment-specific metadata.\nCommon use cases: framework identification (langchain, google-adk), deployment info,\ncost tracking, tool capabilities, maintainer info.\nThis field does NOT affect agent execution — it is purely informational.\n",
+      "additionalProperties": true
     }
   },
   "examples": [

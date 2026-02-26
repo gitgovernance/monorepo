@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "task_record_schema.json",
   "title": "TaskRecord",
-  "description": "Canonical schema for task records as defined in task_protocol.md",
+  "description": "Canonical schema for task records as defined in 04_task.md",
   "additionalProperties": false,
   "type": "object",
   "required": [
@@ -52,7 +52,6 @@
         "paused",
         "discarded"
       ],
-      "maxLength": 40,
       "description": "Current state of the task in the institutional flow"
     },
     "priority": {
@@ -63,13 +62,11 @@
         "high",
         "critical"
       ],
-      "maxLength": 40,
       "description": "Strategic or tactical priority level"
     },
     "description": {
       "type": "string",
       "minLength": 10,
-      "maxLength": 22000,
       "description": "Functional, technical or strategic summary of the objective"
     },
     "tags": {
@@ -77,7 +74,7 @@
       "items": {
         "type": "string",
         "minLength": 1,
-        "pattern": "^[a-z0-9-]+(:[a-z0-9-:]+)*$"
+        "pattern": "^[a-z0-9-]+(:[a-z0-9-]+)*$"
       },
       "default": [],
       "description": "Optional. List of key:value tags for categorization and role suggestion (e.g., 'skill:react', 'role:agent:developer')."
@@ -94,9 +91,26 @@
     },
     "notes": {
       "type": "string",
-      "minLength": 0,
-      "maxLength": 3000,
+      "minLength": 1,
       "description": "Additional comments, decisions made or added context"
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Optional structured data for machine consumption.\nUse this field for domain-specific data that needs to be programmatically processed.\nComplements tags (classification) and notes (free text) with structured, queryable data.\nCommon use cases: epic metadata, external tool references, agent metrics, compliance tags.\n",
+      "examples": [
+        {
+          "epic": true,
+          "phase": "implementation",
+          "files": {
+            "overview": "overview.md"
+          }
+        },
+        {
+          "jira": "AUTH-42",
+          "storyPoints": 5
+        }
+      ]
     }
   },
   "examples": [

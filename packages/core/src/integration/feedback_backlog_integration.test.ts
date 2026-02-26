@@ -69,7 +69,7 @@ import { MemoryRecordStore } from '../record_store/memory';
 import { EventBus } from '../event_bus/event_bus';
 import type {
   GitGovTaskRecord, GitGovFeedbackRecord, GitGovCycleRecord,
-  GitGovExecutionRecord, GitGovChangelogRecord, GitGovActorRecord
+  GitGovExecutionRecord, GitGovActorRecord
 } from '../record_types';
 import type { IEventStream } from '../event_bus';
 import { createTestSignature } from '../record_factories';
@@ -86,7 +86,6 @@ describe('FeedbackAdapter <-> BacklogAdapter Integration (Real Event Communicati
   let feedbackStore: MemoryRecordStore<GitGovFeedbackRecord>;
   let cycleStore: MemoryRecordStore<GitGovCycleRecord>;
   let executionStore: MemoryRecordStore<GitGovExecutionRecord>;
-  let changelogStore: MemoryRecordStore<GitGovChangelogRecord>;
   let actorStore: MemoryRecordStore<GitGovActorRecord>;
 
   beforeEach(async () => {
@@ -98,7 +97,6 @@ describe('FeedbackAdapter <-> BacklogAdapter Integration (Real Event Communicati
     feedbackStore = new MemoryRecordStore<GitGovFeedbackRecord>();
     cycleStore = new MemoryRecordStore<GitGovCycleRecord>();
     executionStore = new MemoryRecordStore<GitGovExecutionRecord>();
-    changelogStore = new MemoryRecordStore<GitGovChangelogRecord>();
     actorStore = new MemoryRecordStore<GitGovActorRecord>();
 
     // Create mock KeyProvider for integration test
@@ -159,15 +157,11 @@ describe('FeedbackAdapter <-> BacklogAdapter Integration (Real Event Communicati
         tasks: taskStore,
         cycles: cycleStore,
         feedbacks: feedbackStore,
-        changelogs: changelogStore,
       },
       feedbackAdapter, // REAL FeedbackAdapter
       executionAdapter: {
         isFirstExecution: jest.fn()
       } as any, // Mock ExecutionAdapter for now
-      changelogAdapter: {
-        create: jest.fn()
-      } as any, // Mock ChangelogAdapter for now
       metricsAdapter, // REAL RecordMetrics
       workflowAdapter: workflowAdapter,
       identity: identityAdapter,

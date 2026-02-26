@@ -41,14 +41,13 @@ describe('SchemaValidationCache', () => {
       expect(schemaNames).toContain('AgentRecord');
       expect(schemaNames).toContain('TaskRecord');
       expect(schemaNames).toContain('ExecutionRecord');
-      expect(schemaNames).toContain('ChangelogRecord');
       expect(schemaNames).toContain('FeedbackRecord');
       expect(schemaNames).toContain('CycleRecord');
       expect(schemaNames).toContain('WorkflowRecord');
       expect(schemaNames).toContain('EmbeddedMetadata');
 
       // Verify minimum number of schemas
-      expect(schemaNames.length).toBeGreaterThanOrEqual(9);
+      expect(schemaNames.length).toBeGreaterThanOrEqual(8);
     });
 
     it('[EARS-4] should verify schema existence with type safety', () => {
@@ -162,18 +161,6 @@ describe('SchemaValidationCache', () => {
           invalid: { id: 'invalid' }
         },
         {
-          schema: Schemas.ChangelogRecord,
-          valid: {
-            id: '1234567890-changelog-test-entry',
-            title: 'Task Completion',
-            description: 'Successfully completed task implementation with all requirements',
-            relatedTasks: ['1234567890-task-test-implementation'],
-            completedAt: 1234567890,
-            version: 'v1.0.0'
-          },
-          invalid: { id: 'invalid' }
-        },
-        {
           schema: Schemas.FeedbackRecord,
           valid: {
             id: '1234567890-feedback-test-comment',
@@ -198,16 +185,17 @@ describe('SchemaValidationCache', () => {
         {
           schema: Schemas.WorkflowRecord,
           valid: {
-            version: '1.0.0',
+            id: '1234567890-workflow-test-workflow',
             name: 'Test Workflow',
             state_transitions: {
-              'draft': {
+              'submit': {
                 from: ['draft'],
+                to: 'ready',
                 requires: { command: 'gitgov task submit' }
               }
             }
           },
-          invalid: { version: 'invalid' }
+          invalid: { id: 'invalid' }
         }
       ];
 

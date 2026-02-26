@@ -190,7 +190,7 @@ describe('FeedbackRecord Factory', () => {
     describe('FeedbackRecord Specific Factory Operations (EARS 35-38)', () => {
       it('[EARS-35] should throw DetailedValidationError for invalid entityType', async () => {
         const validationErrors = [
-          { field: 'entityType', message: 'must be one of task, execution, changelog, feedback', value: 'invalid-entity' }
+          { field: 'entityType', message: 'must be one of task, execution, feedback', value: 'invalid-entity' }
         ];
 
         mockValidateFeedbackRecordDetailed.mockReturnValue({
@@ -266,7 +266,7 @@ describe('FeedbackRecord Factory', () => {
       });
 
       it('[EARS-35] should accept valid entityType values', async () => {
-        const validEntityTypes = ['task', 'execution', 'changelog', 'feedback'];
+        const validEntityTypes = ['task', 'execution', 'feedback'];
 
         for (const entityType of validEntityTypes) {
           const payload = {

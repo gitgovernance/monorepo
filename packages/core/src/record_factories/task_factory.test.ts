@@ -239,4 +239,170 @@ describe('createTaskRecord', () => {
       }
     });
   });
+
+  describe('TaskRecord Metadata Factory Operations (EARS 66-69)', () => {
+    it('[EARS-66] should preserve metadata field when provided', () => {
+      const payload: Partial<TaskRecord> = {
+        title: 'Task with Metadata',
+        description: 'Testing metadata preservation in task factory',
+        metadata: {
+          jira: 'AUTH-42',
+          storyPoints: 5
+        }
+      };
+
+      const task = createTaskRecord(payload);
+
+      expect(task.metadata).toEqual({
+        jira: 'AUTH-42',
+        storyPoints: 5
+      });
+    });
+
+    it('[EARS-67] should preserve complex metadata with nested structures', () => {
+      const payload: Partial<TaskRecord> = {
+        title: 'Task with Complex Metadata',
+        description: 'Testing nested metadata structures',
+        metadata: {
+          epic: true,
+          phase: 'implementation',
+          files: {
+            overview: 'overview.md',
+            roadmap: 'roadmap.md'
+          },
+          estimates: [{ skill: 'backend', hours: 8 }]
+        }
+      };
+
+      const task = createTaskRecord(payload);
+
+      expect(task.metadata).toEqual({
+        epic: true,
+        phase: 'implementation',
+        files: {
+          overview: 'overview.md',
+          roadmap: 'roadmap.md'
+        },
+        estimates: [{ skill: 'backend', hours: 8 }]
+      });
+    });
+
+    it('[EARS-68] should accept TaskRecord without metadata', () => {
+      const payload: Partial<TaskRecord> = {
+        title: 'Task without Metadata',
+        description: 'Testing task creation without metadata field'
+      };
+
+      const task = createTaskRecord(payload);
+
+      expect(task.metadata).toBeUndefined();
+    });
+
+    it('[EARS-69] should accept empty metadata object', () => {
+      const payload: Partial<TaskRecord> = {
+        title: 'Task with Empty Metadata',
+        description: 'Testing task with empty metadata object',
+        metadata: {}
+      };
+
+      const task = createTaskRecord(payload);
+
+      expect(task.metadata).toEqual({});
+    });
+  });
+
+  describe('TaskRecord Typed Metadata Helpers (EARS 70-74)', () => {
+    it('[EARS-70] should allow TaskRecord with typed project metadata', () => {
+      type ProjectMeta = {
+        jira: string;
+        storyPoints: number;
+        sprint: string;
+      };
+
+      const meta: ProjectMeta = {
+        jira: 'AUTH-42',
+        storyPoints: 5,
+        sprint: 'Sprint 24'
+      };
+
+      const result = createTaskRecord<ProjectMeta>({
+        title: 'Implement OAuth',
+        description: 'Full OAuth2 implementation for project tracking',
+        metadata: meta
+      });
+
+      expect(result.metadata).toEqual(meta);
+      expect(result.metadata?.jira).toBe('AUTH-42');
+      expect(result.metadata?.storyPoints).toBe(5);
+    });
+
+    it('[EARS-71] should allow Partial<TaskRecord<T>> for factory input', () => {
+      type ComplianceMeta = {
+        regulation: string;
+        deadline?: string;
+      };
+
+      const payload: Partial<TaskRecord<ComplianceMeta>> = {
+        title: 'GDPR Compliance Task',
+        description: 'Ensure GDPR compliance across all user data endpoints',
+        metadata: { regulation: 'GDPR', deadline: '2025-12-31' }
+      };
+
+      const result = createTaskRecord(payload);
+
+      expect(result.metadata?.regulation).toBe('GDPR');
+      expect(result.metadata?.deadline).toBe('2025-12-31');
+    });
+
+    it('[EARS-72] should allow custom metadata types defined by consumers', () => {
+      type AgentMeta = {
+        assignedAgent: string;
+        estimatedTokens: number;
+        toolsRequired: string[];
+      };
+
+      const agentMeta: AgentMeta = {
+        assignedAgent: 'agent:code-reviewer',
+        estimatedTokens: 50000,
+        toolsRequired: ['grep', 'read', 'edit']
+      };
+
+      const result = createTaskRecord<AgentMeta>({
+        title: 'Code Review Task',
+        description: 'Automated code review with agent metadata tracking',
+        metadata: agentMeta
+      });
+
+      expect(result.metadata).toEqual(agentMeta);
+      expect(result.metadata?.assignedAgent).toBe('agent:code-reviewer');
+      expect(result.metadata?.toolsRequired).toHaveLength(3);
+    });
+
+    it('[EARS-73] should allow TaskRecord<T> without metadata (optional)', () => {
+      type SomeMeta = { field: string; };
+
+      const result = createTaskRecord<SomeMeta>({
+        title: 'Task Without Typed Metadata',
+        description: 'TaskRecord with generic type but no metadata provided'
+      });
+
+      expect(result.metadata).toBeUndefined();
+    });
+
+    it('[EARS-74] should preserve generic type in factory return', () => {
+      type EpicMeta = { jira: string; storyPoints: number; };
+
+      const result = createTaskRecord<EpicMeta>({
+        title: 'Typed Factory Return',
+        description: 'Verifies createTaskRecord<T> returns TaskRecord<T>',
+        metadata: { jira: 'PROJ-99', storyPoints: 8 }
+      });
+
+      // Compile-time: result is TaskRecord<EpicMeta>, not TaskRecord<object>
+      const jira: string = result.metadata!.jira;
+      const points: number = result.metadata!.storyPoints;
+      expect(jira).toBe('PROJ-99');
+      expect(points).toBe(8);
+    });
+  });
 });

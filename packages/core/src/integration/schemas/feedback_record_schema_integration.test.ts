@@ -304,18 +304,6 @@ describe('FeedbackRecord Schema Integration Tests', () => {
       expect(result.isValid).toBe(true);
     });
 
-    it('[EARS-638] should accept entityType "changelog"', () => {
-      const valid = {
-        ...createValidFeedbackRecord(),
-        entityType: 'changelog' as const,
-        entityId: '1234567890-changelog-test'
-      };
-
-      const result = validateFeedbackRecordDetailed(valid);
-
-      expect(result.isValid).toBe(true);
-    });
-
     it('[EARS-639] should accept entityType "feedback"', () => {
       const valid = {
         ...createValidFeedbackRecord(),
@@ -398,10 +386,10 @@ describe('FeedbackRecord Schema Integration Tests', () => {
       )).toBe(true);
     });
 
-    it('[EARS-645] should accept entityId with 1 or more chars', () => {
+    it('[EARS-645] should accept entityId matching entityType pattern', () => {
       const valid = {
         ...createValidFeedbackRecord(),
-        entityId: 'a'
+        entityId: '1234567890-task-a'
       };
 
       const result = validateFeedbackRecordDetailed(valid);
@@ -437,10 +425,10 @@ describe('FeedbackRecord Schema Integration Tests', () => {
       )).toBe(true);
     });
 
-    it('[EARS-648] should accept entityId with exactly 1 char', () => {
+    it('[EARS-648] should accept entityId matching entityType pattern (short slug)', () => {
       const valid = {
         ...createValidFeedbackRecord(),
-        entityId: 'a'
+        entityId: '1234567890-task-a'
       };
 
       const result = validateFeedbackRecordDetailed(valid);
@@ -448,10 +436,10 @@ describe('FeedbackRecord Schema Integration Tests', () => {
       expect(result.isValid).toBe(true);
     });
 
-    it('[EARS-649] should accept entityId with exactly 256 chars', () => {
+    it('[EARS-649] should accept entityId matching entityType pattern (max slug)', () => {
       const valid = {
         ...createValidFeedbackRecord(),
-        entityId: 'a'.repeat(256)
+        entityId: '1234567890-task-' + 'a'.repeat(50)
       };
 
       const result = validateFeedbackRecordDetailed(valid);
@@ -459,10 +447,10 @@ describe('FeedbackRecord Schema Integration Tests', () => {
       expect(result.isValid).toBe(true);
     });
 
-    it('[EARS-650] should accept entityId with 128 chars', () => {
+    it('[EARS-650] should accept entityId matching entityType pattern (mid slug)', () => {
       const valid = {
         ...createValidFeedbackRecord(),
-        entityId: 'a'.repeat(128)
+        entityId: '1234567890-task-' + 'a'.repeat(25)
       };
 
       const result = validateFeedbackRecordDetailed(valid);
@@ -737,18 +725,15 @@ describe('FeedbackRecord Schema Integration Tests', () => {
       expect(result.isValid).toBe(true);
     });
 
-    it('[EARS-672] should reject content exceeding maxLength 5000', () => {
-      const invalid = {
+    it('[EARS-672] should accept content with 5001 chars (no maxLength)', () => {
+      const valid = {
         ...createValidFeedbackRecord(),
         content: 'a'.repeat(5001)
       };
 
-      const result = validateFeedbackRecordDetailed(invalid);
+      const result = validateFeedbackRecordDetailed(valid);
 
-      expect(result.isValid).toBe(false);
-      expect(result.errors.some(e =>
-        e.field.includes('content') && e.message.includes('more than')
-      )).toBe(true);
+      expect(result.isValid).toBe(true);
     });
 
     it('[EARS-673] should reject non-string content', () => {
@@ -812,18 +797,15 @@ describe('FeedbackRecord Schema Integration Tests', () => {
       )).toBe(true);
     });
 
-    it('[EARS-678] should reject content with 5001 chars', () => {
-      const invalid = {
+    it('[EARS-678] should accept content with 5001 chars (no maxLength)', () => {
+      const valid = {
         ...createValidFeedbackRecord(),
         content: 'a'.repeat(5001)
       };
 
-      const result = validateFeedbackRecordDetailed(invalid);
+      const result = validateFeedbackRecordDetailed(valid);
 
-      expect(result.isValid).toBe(false);
-      expect(result.errors.some(e =>
-        e.field.includes('content') && e.message.includes('more than')
-      )).toBe(true);
+      expect(result.isValid).toBe(true);
     });
 
     it('[EARS-679] should accept content with 2500 chars', () => {
@@ -1311,7 +1293,6 @@ describe('FeedbackRecord Schema Integration Tests', () => {
       const entities = [
         { type: 'task' as const, id: '1234567890-task-test' },
         { type: 'execution' as const, id: '1234567890-exec-test' },
-        { type: 'changelog' as const, id: '1234567890-changelog-test' },
         { type: 'feedback' as const, id: '1234567890-feedback-test' },
         { type: 'cycle' as const, id: '1234567890-cycle-test' }
       ];

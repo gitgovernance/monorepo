@@ -47,7 +47,6 @@ import type {
   GitGovCycleRecord,
   GitGovFeedbackRecord,
   GitGovExecutionRecord,
-  GitGovChangelogRecord,
 } from '../../core/src/record_types';
 import type { ILintModule } from '../../core/src/lint';
 
@@ -70,7 +69,6 @@ function createGitgovStateStores(octokit: Octokit) {
     cycles: new GitHubRecordStore<GitGovCycleRecord>({ ...opts, basePath: '.gitgov/cycles' }, octokit),
     feedbacks: new GitHubRecordStore<GitGovFeedbackRecord>({ ...opts, basePath: '.gitgov/feedbacks' }, octokit),
     executions: new GitHubRecordStore<GitGovExecutionRecord>({ ...opts, basePath: '.gitgov/executions' }, octokit),
-    changelogs: new GitHubRecordStore<GitGovChangelogRecord>({ ...opts, basePath: '.gitgov/changelogs' }, octokit),
   };
 }
 

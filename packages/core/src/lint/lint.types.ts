@@ -42,6 +42,15 @@ export interface ILintModule {
   ): LintResult[];
 
   /**
+   * Validates reference prefixes for a single record.
+   * Checks that references use known prefixes (task:, commit:, etc.).
+   */
+  lintRecordReferences(
+    record: GitGovRecord,
+    context: LintRecordContext
+  ): LintResult[];
+
+  /**
    * Validates all records from stores.
    * Each implementation resolves its own data source.
    *
@@ -119,7 +128,6 @@ export interface RecordStores {
   cycles?: RecordStore<GitGovRecord>;
   executions?: RecordStore<GitGovRecord>;
   feedbacks?: RecordStore<GitGovRecord>;
-  changelogs?: RecordStore<GitGovRecord>;
 }
 
 /**
@@ -265,7 +273,7 @@ export interface LintResult {
 
   /** Información de la entidad GitGovernance afectada */
   entity: {
-    type: "actor" | "agent" | "task" | "cycle" | "execution" | "changelog" | "feedback";
+    type: "actor" | "agent" | "task" | "cycle" | "execution" | "feedback";
     id: string;
   };
 

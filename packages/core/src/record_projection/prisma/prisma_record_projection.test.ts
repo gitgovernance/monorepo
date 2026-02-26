@@ -340,7 +340,7 @@ describe('PrismaRecordProjection', () => {
         id: 'row-1', repoId, projectionType, recordId: 'task-1',
         title: 'Task task-1', status: 'active', priority: 'high',
         description: 'Description for task-1', tags: ['tag1'], references: [], cycleIds: ['cycle-1'],
-        notes: null, isStalled: false, isAtRisk: true, needsClarification: false,
+        notes: null, metadataJson: null, isStalled: false, isAtRisk: true, needsClarification: false,
         isBlockedByDependency: false, healthScore: 75, timeInCurrentStage: 3600000,
         executionCount: 2, blockingFeedbackCount: 1, openQuestionCount: 0,
         timeToResolution: null, isReleased: false, lastReleaseVersion: null,
@@ -355,7 +355,7 @@ describe('PrismaRecordProjection', () => {
       (mockClient.gitgovCycle.findMany as jest.Mock).mockResolvedValue([{
         id: 'row-c1', repoId, projectionType, recordId: 'cycle-1',
         title: 'Sprint 1', status: 'active', taskIds: ['task-1'],
-        childCycleIds: [], tags: ['sprint'], notes: null,
+        childCycleIds: [], tags: ['sprint'], notes: null, metadataJson: null,
         headerJson: { ...mockHeader, type: 'cycle' },
         createdAt: new Date(), updatedAt: new Date(),
       }]);
@@ -426,7 +426,7 @@ describe('PrismaRecordProjection', () => {
         id: 'row-1', repoId, projectionType, recordId: 'task-99',
         title: 'Important Task', status: 'done', priority: 'critical',
         description: 'A task', tags: ['urgent'], references: ['ref-1'], cycleIds: [],
-        notes: 'Some notes', isStalled: false, isAtRisk: false, needsClarification: false,
+        notes: 'Some notes', metadataJson: null, isStalled: false, isAtRisk: false, needsClarification: false,
         isBlockedByDependency: false, healthScore: 100, timeInCurrentStage: 0,
         executionCount: 0, blockingFeedbackCount: 0, openQuestionCount: 0,
         timeToResolution: 7200000, isReleased: true, lastReleaseVersion: 'v1.0',
@@ -501,6 +501,133 @@ describe('PrismaRecordProjection', () => {
       });
       // Verify createMany is also in the same transaction
       expect(mockClient.gitgovTask.createMany).toHaveBeenCalled();
+    });
+  });
+
+  describe('4.5. Metadata Projection (EARS-E1 a E6)', () => {
+    it('[EARS-E1] should serialize task metadata to metadataJson when present', async () => {
+      const enrichedWithMeta = createMockEnrichedTask('task-meta');
+      enrichedWithMeta.metadata = { jira: 'AUTH-42', storyPoints: 5 };
+
+      const data = createMockIndexData({
+        enrichedTasks: [enrichedWithMeta],
+        tasks: [{
+          header: mockHeader as IndexData['tasks'][0]['header'],
+          payload: {
+            id: 'task-meta',
+            title: 'Task task-meta',
+            status: 'active',
+            priority: 'high',
+            description: 'Description for task-meta',
+            metadata: { jira: 'AUTH-42', storyPoints: 5 },
+          },
+        }],
+      });
+      await sink.persist(data, {});
+
+      const call = (mockClient.gitgovTask.createMany as jest.Mock).mock.calls[0]![0];
+      const row = call.data[0];
+      expect(row.metadataJson).toEqual({ jira: 'AUTH-42', storyPoints: 5 });
+    });
+
+    it('[EARS-E2] should set task metadataJson to null when metadata is absent', async () => {
+      const data = createMockIndexData();
+      await sink.persist(data, {});
+
+      const call = (mockClient.gitgovTask.createMany as jest.Mock).mock.calls[0]![0];
+      const row = call.data[0];
+      expect(row.metadataJson).toBeNull();
+    });
+
+    it('[EARS-E3] should serialize cycle metadata to metadataJson when present', async () => {
+      const data = createMockIndexData({
+        cycles: [{
+          header: { ...mockHeader, type: 'cycle' as const } as IndexData['cycles'][0]['header'],
+          payload: {
+            id: 'cycle-meta',
+            title: 'Epic Cycle',
+            status: 'active',
+            taskIds: [],
+            metadata: { epic: true, phase: 'active', files: { overview: 'overview.md' } },
+          },
+        }],
+      });
+      await sink.persist(data, {});
+
+      const call = (mockClient.gitgovCycle.createMany as jest.Mock).mock.calls[0]![0];
+      const row = call.data[0];
+      expect(row.metadataJson).toEqual({ epic: true, phase: 'active', files: { overview: 'overview.md' } });
+    });
+
+    it('[EARS-E4] should set cycle metadataJson to null when metadata is absent', async () => {
+      const data = createMockIndexData();
+      await sink.persist(data, {});
+
+      const call = (mockClient.gitgovCycle.createMany as jest.Mock).mock.calls[0]![0];
+      const row = call.data[0];
+      expect(row.metadataJson).toBeNull();
+    });
+
+    it('[EARS-E5] should reconstruct task metadata from metadataJson during read', async () => {
+      (mockClient.gitgovMeta.findUnique as jest.Mock).mockResolvedValue({
+        id: 'meta-1', repoId, projectionType,
+        generatedAt: '2026-01-01T00:00:00.000Z', integrityStatus: 'valid',
+        recordCountsJson: {}, generationTime: 50,
+        derivedStatesJson: { stalledTasks: [], atRiskTasks: [], needsClarificationTasks: [], blockedByDependencyTasks: [] },
+        metricsJson: {}, lastCommitHash: null, createdAt: new Date(), updatedAt: new Date(),
+      });
+
+      (mockClient.gitgovTask.findMany as jest.Mock).mockResolvedValue([{
+        id: 'row-1', repoId, projectionType, recordId: 'task-meta',
+        title: 'Task with Meta', status: 'active', priority: 'high',
+        description: 'Has metadata', tags: [], references: [], cycleIds: [],
+        notes: null, metadataJson: { jira: 'AUTH-42', storyPoints: 5 },
+        isStalled: false, isAtRisk: false, needsClarification: false,
+        isBlockedByDependency: false, healthScore: 80, timeInCurrentStage: 0,
+        executionCount: 0, blockingFeedbackCount: 0, openQuestionCount: 0,
+        timeToResolution: null, isReleased: false, lastReleaseVersion: null,
+        lastUpdated: 1000, lastActivityType: 'task_created', recentActivity: null,
+        relationshipsJson: { assignedTo: [], dependsOn: [], blockedBy: [], cycles: [] },
+        headerJson: mockHeader, createdAt: new Date(), updatedAt: new Date(),
+      }]);
+      (mockClient.gitgovCycle.findMany as jest.Mock).mockResolvedValue([]);
+      (mockClient.gitgovActor.findMany as jest.Mock).mockResolvedValue([]);
+      (mockClient.gitgovFeedback.findMany as jest.Mock).mockResolvedValue([]);
+      (mockClient.gitgovActivity.findMany as jest.Mock).mockResolvedValue([]);
+
+      const result = await sink.read({});
+
+      expect(result!.tasks[0]!.payload.metadata).toEqual({ jira: 'AUTH-42', storyPoints: 5 });
+      expect(result!.enrichedTasks[0]!.metadata).toEqual({ jira: 'AUTH-42', storyPoints: 5 });
+    });
+
+    it('[EARS-E6] should reconstruct cycle metadata from metadataJson during read', async () => {
+      (mockClient.gitgovMeta.findUnique as jest.Mock).mockResolvedValue({
+        id: 'meta-1', repoId, projectionType,
+        generatedAt: '2026-01-01T00:00:00.000Z', integrityStatus: 'valid',
+        recordCountsJson: {}, generationTime: 50,
+        derivedStatesJson: { stalledTasks: [], atRiskTasks: [], needsClarificationTasks: [], blockedByDependencyTasks: [] },
+        metricsJson: {}, lastCommitHash: null, createdAt: new Date(), updatedAt: new Date(),
+      });
+
+      (mockClient.gitgovTask.findMany as jest.Mock).mockResolvedValue([]);
+      (mockClient.gitgovCycle.findMany as jest.Mock).mockResolvedValue([{
+        id: 'row-c1', repoId, projectionType, recordId: 'cycle-meta',
+        title: 'Epic Cycle', status: 'active', taskIds: [], childCycleIds: [],
+        tags: [], notes: null,
+        metadataJson: { epic: true, phase: 'active', files: { overview: 'overview.md' } },
+        headerJson: { ...mockHeader, type: 'cycle' },
+        createdAt: new Date(), updatedAt: new Date(),
+      }]);
+      (mockClient.gitgovActor.findMany as jest.Mock).mockResolvedValue([]);
+      (mockClient.gitgovFeedback.findMany as jest.Mock).mockResolvedValue([]);
+      (mockClient.gitgovActivity.findMany as jest.Mock).mockResolvedValue([]);
+
+      const result = await sink.read({});
+
+      expect(result!.cycles[0]!.payload.metadata).toEqual({
+        epic: true, phase: 'active', files: { overview: 'overview.md' },
+      });
     });
   });
 });

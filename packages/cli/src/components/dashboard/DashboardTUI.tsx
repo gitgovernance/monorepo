@@ -862,9 +862,8 @@ const RowView: React.FC<{
             const icon = activity.type === 'task_created' ? '📝' :
               activity.type === 'cycle_created' ? '🔄' :
                 activity.type === 'feedback_created' ? '💬' :
-                  activity.type === 'changelog_created' ? '📄' :
-                    activity.type === 'execution_created' ? '🤖' :
-                      activity.type === 'actor_created' ? '👤' : '📋';
+                  activity.type === 'execution_created' ? '🤖' :
+                    activity.type === 'actor_created' ? '👤' : '📋';
 
             const actorDisplay = activity.actorId ? ` by ${activity.actorId.replace('human:', '').replace('agent:', '')}` : '';
             // Only task_created events have priority in metadata

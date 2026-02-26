@@ -16,7 +16,7 @@ export const feedbackCreateTool: McpToolDefinition<FeedbackCreateInput> = {
     properties: {
       entityType: {
         type: 'string',
-        enum: ['task', 'execution', 'changelog', 'feedback', 'cycle'],
+        enum: ['task', 'execution', 'feedback', 'cycle'],
         description: 'The type of entity this feedback is about.',
       },
       entityId: { type: 'string', description: 'The ID of the entity.' },

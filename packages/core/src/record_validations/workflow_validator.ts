@@ -65,12 +65,13 @@ export function validateWorkflowConfigBusinessRules(
   // Validate state_transitions have valid structure
   const validStates = ['draft', 'review', 'ready', 'active', 'done', 'archived', 'paused', 'discarded'];
 
-  for (const [targetState, transition] of Object.entries(config.state_transitions)) {
-    if (!validStates.includes(targetState)) {
+  for (const [transitionName, transition] of Object.entries(config.state_transitions)) {
+    // Validate 'to' target state is valid
+    if (transition?.to && !validStates.includes(transition.to)) {
       errors.push({
-        field: `state_transitions.${targetState}`,
-        message: `Invalid target state: ${targetState}`,
-        value: targetState
+        field: `state_transitions.${transitionName}.to`,
+        message: `Invalid target state: ${transition.to}`,
+        value: transition.to
       });
     }
 
@@ -79,7 +80,7 @@ export function validateWorkflowConfigBusinessRules(
       for (const fromState of transition.from) {
         if (!validStates.includes(fromState)) {
           errors.push({
-            field: `state_transitions.${targetState}.from`,
+            field: `state_transitions.${transitionName}.from`,
             message: `Invalid source state: ${fromState}`,
             value: fromState
           });
@@ -92,7 +93,7 @@ export function validateWorkflowConfigBusinessRules(
       for (const ruleId of transition.requires.custom_rules) {
         if (!config.custom_rules[ruleId]) {
           errors.push({
-            field: `state_transitions.${targetState}.requires.custom_rules`,
+            field: `state_transitions.${transitionName}.requires.custom_rules`,
             message: `Custom rule '${ruleId}' not defined in custom_rules section`,
             value: ruleId
           });

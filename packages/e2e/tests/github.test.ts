@@ -34,7 +34,6 @@ import type {
   GitGovCycleRecord,
   GitGovFeedbackRecord,
   GitGovExecutionRecord,
-  GitGovChangelogRecord,
 } from '../../core/src/record_types';
 
 // ===== Test Record Factories =====
@@ -128,7 +127,6 @@ describe('Block C: GitHub Integration (CC1-CC5)', () => {
   let cyclesStore: GitHubRecordStore<GitGovCycleRecord>;
   let feedbacksStore: GitHubRecordStore<GitGovFeedbackRecord>;
   let executionsStore: GitHubRecordStore<GitGovExecutionRecord>;
-  let changelogsStore: GitHubRecordStore<GitGovChangelogRecord>;
 
   beforeAll(async () => {
     if (!HAS_GITHUB) {
@@ -163,7 +161,6 @@ describe('Block C: GitHub Integration (CC1-CC5)', () => {
     cyclesStore = new GitHubRecordStore<GitGovCycleRecord>({ ...storeOpts, basePath: '.gitgov/cycles' }, octokit);
     feedbacksStore = new GitHubRecordStore<GitGovFeedbackRecord>({ ...storeOpts, basePath: '.gitgov/feedbacks' }, octokit);
     executionsStore = new GitHubRecordStore<GitGovExecutionRecord>({ ...storeOpts, basePath: '.gitgov/executions' }, octokit);
-    changelogsStore = new GitHubRecordStore<GitGovChangelogRecord>({ ...storeOpts, basePath: '.gitgov/changelogs' }, octokit);
   });
 
   afterAll(async () => {
@@ -219,7 +216,6 @@ describe('Block C: GitHub Integration (CC1-CC5)', () => {
       cycles: cyclesStore,
       feedbacks: feedbacksStore,
       executions: executionsStore,
-      changelogs: changelogsStore,
     };
 
     const typedStores = stores as unknown as RecordProjectorDependencies['stores'];
@@ -247,7 +243,6 @@ describe('Block C: GitHub Integration (CC1-CC5)', () => {
       cycles: cyclesStore,
       feedbacks: feedbacksStore,
       executions: executionsStore,
-      changelogs: changelogsStore,
     };
 
     const typedStores = stores as unknown as RecordProjectorDependencies['stores'];

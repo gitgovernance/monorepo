@@ -12,7 +12,6 @@ import type { BacklogAdapterDependencies } from './backlog_adapter.types';
 import type { RecordStore } from '../../record_store';
 import { FeedbackAdapter } from '../feedback_adapter';
 import { ExecutionAdapter } from '../execution_adapter';
-import { ChangelogAdapter } from '../changelog_adapter';
 import { RecordMetrics } from '../../record_metrics';
 import { ConfigManager } from '../../config_manager';
 import type { SessionManager } from '../../session_manager';
@@ -23,7 +22,6 @@ import type {
   GitGovTaskRecord,
   GitGovCycleRecord,
   GitGovFeedbackRecord,
-  GitGovChangelogRecord,
 } from '../../record_types';
 
 describe('BacklogAdapter - End-to-End Tests', () => {
@@ -55,13 +53,6 @@ describe('BacklogAdapter - End-to-End Tests', () => {
             delete: jest.fn(),
             exists: jest.fn()
           } as unknown as RecordStore<GitGovFeedbackRecord>,
-          changelogs: {
-            get: jest.fn(),
-            list: jest.fn().mockResolvedValue([]),
-            put: jest.fn(),
-            delete: jest.fn(),
-            exists: jest.fn()
-          } as unknown as RecordStore<GitGovChangelogRecord>,
         },
         feedbackAdapter: {
           create: jest.fn().mockResolvedValue({ id: 'feedback-auto' }),
@@ -76,13 +67,6 @@ describe('BacklogAdapter - End-to-End Tests', () => {
           getExecutionsByTask: jest.fn(),
           getAllExecutions: jest.fn()
         } as unknown as ExecutionAdapter,
-        changelogAdapter: {
-          create: jest.fn(),
-          getChangelog: jest.fn(),
-          getChangelogsByEntity: jest.fn(),
-          getAllChangelogs: jest.fn(),
-          getRecentChangelogs: jest.fn()
-        } as unknown as ChangelogAdapter,
         metricsAdapter: {
           getSystemStatus: jest.fn().mockResolvedValue({
             tasks: { total: 5, byStatus: { active: 3, done: 2 }, byPriority: {} },

@@ -6,7 +6,6 @@ import type {
   GitGovAgentRecord,
   GitGovExecutionRecord,
   GitGovFeedbackRecord,
-  GitGovChangelogRecord,
 } from '../record_types';
 
 /**
@@ -27,5 +26,4 @@ export type RecordStores = {
   cycles?: RecordStore<GitGovCycleRecord>;
   executions?: RecordStore<GitGovExecutionRecord>;
   feedbacks?: RecordStore<GitGovFeedbackRecord>;
-  changelogs?: RecordStore<GitGovChangelogRecord>;
 }

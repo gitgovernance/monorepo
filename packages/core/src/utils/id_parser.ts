@@ -33,7 +33,6 @@ export const DIR_TO_TYPE: Record<string, GitGovRecordType> = {
   'tasks': 'task',
   'cycles': 'cycle',
   'executions': 'execution',
-  'changelogs': 'changelog',
   'feedbacks': 'feedback',
   'actors': 'actor',
   'agents': 'agent'
@@ -96,7 +95,6 @@ export function getEntityTypeFromPath(filePath: string): GitGovRecordType | null
  *
  * Uses ID naming conventions:
  * - `{timestamp}-exec-*` or `*-execution-*` → execution
- * - `{timestamp}-changelog-*` → changelog
  * - `{timestamp}-feedback-*` → feedback
  * - `{timestamp}-cycle-*` or `cycle:*` → cycle
  * - `{timestamp}-task-*` or `task:*` → task
@@ -116,11 +114,6 @@ export function inferEntityTypeFromId(recordId: string): GitGovRecordType {
   // Execution patterns
   if (recordId.match(/^\d+-exec-/) || recordId.includes('-execution-')) {
     return 'execution';
-  }
-
-  // Changelog pattern
-  if (recordId.match(/^\d+-changelog-/)) {
-    return 'changelog';
   }
 
   // Feedback pattern
@@ -155,7 +148,7 @@ export function inferEntityTypeFromId(recordId: string): GitGovRecordType {
 /**
  * Valid prefixes for timestamp-based record IDs.
  */
-export const VALID_PREFIXES = ['task', 'cycle', 'exec', 'changelog', 'feedback'] as const;
+export const VALID_PREFIXES = ['task', 'cycle', 'exec', 'feedback'] as const;
 
 /**
  * Parses a timestamp-based record ID (e.g., '12345-task-slug') into its components.

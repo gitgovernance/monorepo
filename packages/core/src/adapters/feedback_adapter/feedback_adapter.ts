@@ -41,8 +41,8 @@ export class FeedbackAdapter implements IFeedbackAdapter {
       throw new Error('RecordNotFoundError: entityId is required');
     }
 
-    if (payloadWithEntityId.entityType && !['task', 'execution', 'changelog', 'feedback', 'cycle'].includes(payloadWithEntityId.entityType)) {
-      throw new Error('InvalidEntityTypeError: entityType must be task, execution, changelog, feedback, or cycle');
+    if (payloadWithEntityId.entityType && !['task', 'execution', 'feedback', 'cycle'].includes(payloadWithEntityId.entityType)) {
+      throw new Error('InvalidEntityTypeError: entityType must be task, execution, feedback, or cycle');
     }
 
     // Validate no duplicate assignments: a task can be assigned to multiple actors,

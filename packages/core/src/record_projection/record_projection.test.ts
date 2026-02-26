@@ -40,7 +40,6 @@ import type {
   GitGovTaskRecord,
   GitGovExecutionRecord,
   GitGovFeedbackRecord,
-  GitGovChangelogRecord,
   TaskRecord,
   ActorRecord,
   CycleRecord,
@@ -215,7 +214,6 @@ describe('RecordProjector', () => {
     actors: jest.Mocked<RecordStore<GitGovActorRecord>>;
     feedbacks: jest.Mocked<RecordStore<GitGovFeedbackRecord>>;
     executions: jest.Mocked<RecordStore<GitGovExecutionRecord>>;
-    changelogs: jest.Mocked<RecordStore<GitGovChangelogRecord>>;
   };
   let mockSink: jest.Mocked<IRecordProjection>;
   let mockRecordMetrics: jest.Mocked<Pick<RecordMetrics, 'getSystemStatus' | 'getProductivityMetrics' | 'getCollaborationMetrics' | 'getTaskHealth'>>;
@@ -265,14 +263,6 @@ describe('RecordProjector', () => {
         list: jest.fn().mockResolvedValue([]),
         exists: jest.fn().mockResolvedValue(false),
       } as jest.Mocked<RecordStore<GitGovExecutionRecord>>,
-      changelogs: {
-        get: jest.fn().mockResolvedValue(null),
-        put: jest.fn().mockResolvedValue(undefined),
-        putMany: jest.fn().mockResolvedValue(undefined),
-        delete: jest.fn().mockResolvedValue(undefined),
-        list: jest.fn().mockResolvedValue([]),
-        exists: jest.fn().mockResolvedValue(false),
-      } as jest.Mocked<RecordStore<GitGovChangelogRecord>>,
     };
 
     // Create mock RecordMetrics
@@ -385,7 +375,6 @@ describe('RecordProjector', () => {
       expect(metadata?.recordCounts['actors']).toBeDefined();
       expect(metadata?.recordCounts['feedback']).toBeDefined();
       expect(metadata?.recordCounts['executions']).toBeDefined();
-      expect(metadata?.recordCounts['changelogs']).toBeDefined();
 
       // generationTime should be number >= 0
       expect(metadata?.generationTime).toBeDefined();
@@ -1000,7 +989,6 @@ describe('RecordProjector', () => {
         cycles: [cycle1],
         feedback: [],
         executions: [],
-        changelogs: [],
         actors: [] // Actors don't have timestamp-based IDs, so we don't test them here
       };
 
@@ -1086,7 +1074,6 @@ describe('RecordProjector', () => {
         cycles: [],
         feedback: [],
         executions: [relatedExecution],
-        changelogs: [],
         actors: []
       };
 
@@ -1106,14 +1093,14 @@ describe('RecordProjector', () => {
       expect(result.recentActivity).toContain('Recent execution');
     });
 
-    it('[EARS-E2] should consider related executions feedback and changelogs', async () => {
+    it('[EARS-E2] should consider related executions and feedback', async () => {
       await recordProjector.generateIndex();
       const indexData = await recordProjector.getIndexData();
 
       const enrichedTask = indexData?.enrichedTasks?.[0];
       // lastActivityType should reflect the most recent activity type
       expect(enrichedTask?.lastActivityType).toBeDefined();
-      expect(['task_created', 'task_modified', 'feedback_received', 'execution_added', 'changelog_created']).toContain(enrichedTask?.lastActivityType);
+      expect(['task_created', 'task_modified', 'feedback_received', 'execution_added']).toContain(enrichedTask?.lastActivityType);
     });
 
     it('[EARS-E3] should return most recent timestamp for dynamic sorting', async () => {
@@ -1251,7 +1238,7 @@ describe('RecordProjector', () => {
         const enrichedTask = indexData?.enrichedTasks?.[0];
         expect(enrichedTask?.lastUpdated).toBeGreaterThan(0);
         expect(enrichedTask?.lastActivityType).toBeDefined();
-        expect(['task_created', 'task_modified', 'feedback_received', 'execution_added', 'changelog_created']).toContain(enrichedTask?.lastActivityType);
+        expect(['task_created', 'task_modified', 'feedback_received', 'execution_added']).toContain(enrichedTask?.lastActivityType);
       });
 
       it('[EARS-F2] should include enrichedTasks in IndexData for dashboard consumption', async () => {
@@ -2276,7 +2263,6 @@ describe('RecordProjector', () => {
       }));
       mockStores.feedbacks.list.mockResolvedValue([]);
       mockStores.executions.list.mockResolvedValue([]);
-      mockStores.changelogs.list.mockResolvedValue([]);
 
       (verifySignatures as jest.Mock).mockResolvedValue(true);
 

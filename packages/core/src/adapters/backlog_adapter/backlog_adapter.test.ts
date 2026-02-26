@@ -3,14 +3,12 @@ import type { BacklogAdapterDependencies } from './backlog_adapter.types';
 import type {
   FeedbackCreatedEvent,
   ExecutionCreatedEvent,
-  ChangelogCreatedEvent,
   SystemDailyTickEvent,
   CycleStatusChangedEvent
 } from '../../event_bus';
 import type { TaskRecord } from '../../record_types';
 import type { CycleRecord } from '../../record_types';
 import type { FeedbackRecord } from '../../record_types';
-import type { ChangelogRecord } from '../../record_types';
 import type { GitGovRecord } from '../../record_types';
 import type { ActorRecord } from '../../record_types';
 import type { Signature } from '../../record_types/embedded.types';
@@ -48,13 +46,6 @@ type MockBacklogAdapterDependencies = {
       delete: jest.MockedFunction<(id: string) => Promise<void>>;
       exists: jest.MockedFunction<(id: string) => Promise<boolean>>;
     };
-    changelogs: {
-      list: jest.MockedFunction<() => Promise<string[]>>;
-      get: jest.MockedFunction<(id: string) => Promise<(GitGovRecord & { payload: ChangelogRecord }) | null>>;
-      put: jest.MockedFunction<(id: string, record: GitGovRecord & { payload: ChangelogRecord }) => Promise<void>>;
-      delete: jest.MockedFunction<(id: string) => Promise<void>>;
-      exists: jest.MockedFunction<(id: string) => Promise<boolean>>;
-    };
   };
   feedbackAdapter: {
     create: jest.MockedFunction<(payload: Partial<FeedbackRecord>, actorId: string) => Promise<FeedbackRecord>>;
@@ -66,9 +57,6 @@ type MockBacklogAdapterDependencies = {
   };
   executionAdapter: {
     isFirstExecution: jest.MockedFunction<(taskId: string) => Promise<boolean>>;
-  };
-  changelogAdapter: {
-    create: jest.MockedFunction<(payload: Partial<ChangelogRecord>, actorId: string) => Promise<ChangelogRecord>>;
   };
   metricsAdapter: {
     getSystemStatus: jest.MockedFunction<() => Promise<SystemStatus>>;
@@ -174,27 +162,6 @@ function createMockFeedbackRecord(payload: Partial<FeedbackRecord>): GitGovRecor
   };
 }
 
-function createMockChangelogRecord(payload: Partial<ChangelogRecord>): GitGovRecord & { payload: ChangelogRecord } {
-  const baseId = payload.id || '1757687335-changelog-mock';
-  return {
-    header: {
-      version: '1.0',
-      type: 'changelog',
-      payloadChecksum: 'mock-checksum',
-      signatures: [{ keyId: 'mock-author', role: 'author', notes: 'Mock signature for backlog tests', signature: 'mock-sig', timestamp: 123 }] as [Signature, ...Signature[]]
-    },
-    payload: {
-      id: baseId,
-      title: 'Mock Changelog',
-      description: 'Mock changelog description',
-      relatedTasks: [],
-      completedAt: Date.now(),
-      version: 'v1.0.0',
-      ...payload
-    } as unknown as ChangelogRecord
-  };
-}
-
 // Complete unit tests for BacklogAdapter
 describe('BacklogAdapter - Complete Unit Tests', () => {
   let backlogAdapter: BacklogAdapter;
@@ -225,13 +192,6 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
           delete: jest.fn(),
           exists: jest.fn()
         },
-        changelogs: {
-          list: jest.fn().mockResolvedValue([]),
-          get: jest.fn(),
-          put: jest.fn(),
-          delete: jest.fn(),
-          exists: jest.fn()
-        },
       },
       feedbackAdapter: {
         create: jest.fn(),
@@ -243,9 +203,6 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       },
       executionAdapter: {
         isFirstExecution: jest.fn()
-      },
-      changelogAdapter: {
-        create: jest.fn()
       },
       metricsAdapter: {
         getSystemStatus: jest.fn().mockResolvedValue({
@@ -2189,49 +2146,6 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
 
       // Should not write to taskStore
       expect(mockDependencies.stores.tasks.put).not.toHaveBeenCalled();
-    });
-
-    it('[EARS-M7] should archive task when changelog created', async () => {
-      const taskId = '1757687335-task-done-task';
-      const mockTask = createMockTaskRecord({
-        id: taskId,
-        status: 'done'
-      });
-      const mockChangelog = createMockChangelogRecord({
-        id: '1757687335-changelog-task-done',
-        title: 'Task completed',
-        description: 'Successfully completed the task with all requirements met',
-        relatedTasks: [taskId],
-        completedAt: 1757687335,
-        version: 'v1.0.0'
-      });
-
-      mockDependencies.stores.changelogs.get.mockResolvedValue(mockChangelog);
-      mockDependencies.stores.tasks.get.mockResolvedValue(mockTask);
-      mockDependencies.stores.tasks.put.mockResolvedValue(undefined);
-
-      const event: ChangelogCreatedEvent = {
-        type: 'changelog.created',
-        timestamp: Date.now(),
-        source: 'changelog_adapter',
-        payload: {
-          changelogId: '1757687335-changelog-task-done',
-          relatedTasks: [taskId],
-          title: 'Task completed',
-          version: 'v1.0.0'
-        }
-      };
-
-      await backlogAdapter.handleChangelogCreated(event);
-
-      expect(mockDependencies.stores.tasks.put).toHaveBeenCalledWith(
-        taskId,
-        expect.objectContaining({
-          payload: expect.objectContaining({
-            status: 'archived'
-          })
-        })
-      );
     });
 
     it('[EARS-M9] should complete parent cycle when all child cycles are completed', async () => {

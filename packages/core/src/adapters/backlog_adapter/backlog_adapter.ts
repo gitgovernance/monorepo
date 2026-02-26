@@ -21,7 +21,6 @@ import type {
   CycleStatusChangedEvent,
   FeedbackCreatedEvent,
   ExecutionCreatedEvent,
-  ChangelogCreatedEvent,
   SystemDailyTickEvent,
   EventMetadata
 } from '../../event_bus';
@@ -43,7 +42,7 @@ const DEFAULT_CONFIG: BacklogAdapterConfig = {
  * Acts as Mediator between Task/Cycle protocols and Workflow/Planning methodologies.
  */
 export class BacklogAdapter implements IBacklogAdapter {
-  private stores: Required<Pick<RecordStores, 'tasks' | 'cycles' | 'feedbacks' | 'changelogs'>>;
+  private stores: Required<Pick<RecordStores, 'tasks' | 'cycles' | 'feedbacks'>>;
 
   private feedbackAdapter: FeedbackAdapter;
   private metricsAdapter: RecordMetrics;
@@ -88,9 +87,6 @@ export class BacklogAdapter implements IBacklogAdapter {
     );
     this.eventBus.subscribe<ExecutionCreatedEvent>("execution.created", (event) =>
       this.handleExecutionCreated(event)
-    );
-    this.eventBus.subscribe<ChangelogCreatedEvent>("changelog.created", (event) =>
-      this.handleChangelogCreated(event)
     );
     this.eventBus.subscribe<CycleStatusChangedEvent>("cycle.status.changed", (event) =>
       this.handleCycleStatusChanged(event)
@@ -902,55 +898,6 @@ export class BacklogAdapter implements IBacklogAdapter {
       }
     } catch (error) {
       console.error('Error in handleExecutionCreated:', error);
-    }
-  }
-
-  /**
-   * [EARS-37] Handles changelog created events - transitions done→archived
-   */
-  async handleChangelogCreated(event: ChangelogCreatedEvent): Promise<void> {
-    try {
-      // Get changelog record to access entityType and entityId
-      const changelogRecord = await this.stores.changelogs.get(event.payload.changelogId);
-      if (!changelogRecord) {
-        console.warn(`Changelog not found: ${event.payload.changelogId}`);
-        return;
-      }
-
-      // EARS-37: Handle changelogs with relatedTasks
-      if (!changelogRecord.payload.relatedTasks || changelogRecord.payload.relatedTasks.length === 0) {
-        return;
-      }
-
-      // Archive all related tasks that are in 'done' status
-      for (const taskId of changelogRecord.payload.relatedTasks) {
-        const task = await this.getTask(taskId);
-        if (!task || task.status !== 'done') {
-          continue;
-        }
-
-        // Transition to archived
-        const updatedTask = { ...task, status: 'archived' as const };
-        const taskRecord = await this.stores.tasks.get(task.id);
-        if (taskRecord) {
-          const updatedRecord = { ...taskRecord, payload: updatedTask };
-          await this.stores.tasks.put(updatedRecord.payload.id, updatedRecord);
-
-          this.eventBus.publish({
-            type: 'task.status.changed',
-            timestamp: Date.now(),
-            source: 'backlog_adapter',
-            payload: {
-              taskId: task.id,
-              oldStatus: 'done',
-              newStatus: 'archived',
-              actorId: 'system'
-            }
-          } as TaskStatusChangedEvent);
-        }
-      } // Close for loop
-    } catch (error) {
-      console.error('Error in handleChangelogCreated:', error);
     }
   }
 

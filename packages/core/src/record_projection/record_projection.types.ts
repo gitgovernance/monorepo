@@ -6,7 +6,6 @@ import type {
   GitGovCycleRecord,
   GitGovFeedbackRecord,
   GitGovExecutionRecord,
-  GitGovChangelogRecord,
   GitGovActorRecord
 } from '../record_types';
 import type { SystemStatus, ProductivityMetrics, CollaborationMetrics } from '../record_metrics';
@@ -23,7 +22,6 @@ export type AllRecords = {
   cycles: GitGovCycleRecord[];
   feedback: GitGovFeedbackRecord[];
   executions: GitGovExecutionRecord[];
-  changelogs: GitGovChangelogRecord[];
   actors: GitGovActorRecord[];
 };
 
@@ -88,7 +86,7 @@ export type EnrichedTaskRecord = TaskRecord & {
     lastReleaseVersion?: string;
   };
   lastUpdated: number;
-  lastActivityType: 'task_modified' | 'feedback_received' | 'execution_added' | 'changelog_created' | 'task_created';
+  lastActivityType: 'task_modified' | 'feedback_received' | 'execution_added' | 'task_created';
   recentActivity?: string;
 };
 
@@ -192,7 +190,7 @@ export interface IRecordProjection {
  */
 export type RecordProjectorDependencies = {
   recordMetrics: RecordMetrics;
-  stores: Required<Pick<RecordStores, 'tasks' | 'cycles' | 'feedbacks' | 'executions' | 'changelogs' | 'actors'>>;
+  stores: Required<Pick<RecordStores, 'tasks' | 'cycles' | 'feedbacks' | 'executions' | 'actors'>>;
   sink?: IRecordProjection;
 };
 

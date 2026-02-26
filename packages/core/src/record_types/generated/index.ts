@@ -7,7 +7,6 @@
 
 export * from "./actor_record";
 export * from "./agent_record";
-export * from "./changelog_record";
 export * from "./cycle_record";
 export * from "./execution_record";
 export * from "./feedback_record";

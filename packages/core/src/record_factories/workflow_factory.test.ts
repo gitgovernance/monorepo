@@ -29,8 +29,9 @@ describe('createWorkflowConfig', () => {
     const payload: Partial<WorkflowRecord> = {
       name: 'Custom Test Methodology',
       state_transitions: {
-        review: {
+        submit: {
           from: ['draft'],
+          to: 'review',
           requires: {
             command: 'gitgov task submit'
           }
@@ -40,7 +41,7 @@ describe('createWorkflowConfig', () => {
 
     const config = await createWorkflowConfig(payload);
 
-    expect(config.version).toBe('1.0.0'); // Default version
+    expect(config.id).toBeDefined(); // Auto-generated id
     expect(config.name).toBe('Custom Test Methodology');
     expect(config.state_transitions).toBeDefined();
   });
@@ -87,12 +88,13 @@ describe('createWorkflowConfig', () => {
 
   it('[EARS-4] should preserve all provided fields', async () => {
     const payload: Partial<WorkflowRecord> = {
-      version: '2.0.0',
+      id: '1234567890-workflow-advanced',
       name: 'Advanced Methodology',
       description: 'Advanced workflow with custom rules',
       state_transitions: {
-        review: {
+        submit: {
           from: ['draft'],
+          to: 'review',
           requires: {
             command: 'gitgov task submit',
             signatures: {
@@ -115,7 +117,7 @@ describe('createWorkflowConfig', () => {
 
     const config = await createWorkflowConfig(payload);
 
-    expect(config.version).toBe('2.0.0');
+    expect(config.id).toBe('1234567890-workflow-advanced');
     expect(config.name).toBe('Advanced Methodology');
     expect(config.description).toBe('Advanced workflow with custom rules');
     expect(config.custom_rules).toEqual(payload.custom_rules);
@@ -125,8 +127,9 @@ describe('createWorkflowConfig', () => {
     const payload: Partial<WorkflowRecord> = {
       name: 'Minimal Methodology',
       state_transitions: {
-        review: {
+        submit: {
           from: ['draft'],
+          to: 'review',
           requires: {
             command: 'gitgov task submit'
           }
@@ -137,26 +140,27 @@ describe('createWorkflowConfig', () => {
     const config = await createWorkflowConfig(payload);
 
     expect(config.name).toBe('Minimal Methodology');
-    expect(config.version).toBe('1.0.0'); // Default
+    expect(config.id).toBeDefined(); // Auto-generated
     expect(config.state_transitions).toEqual(payload.state_transitions);
   });
 
   it('[EARS-6] should handle empty payload with all defaults', async () => {
     const config = await createWorkflowConfig({});
 
-    expect(config.version).toBe('1.0.0');
+    expect(config.id).toBeDefined();
     expect(config.name).toBe('Custom Methodology');
     expect(config.state_transitions).toBeDefined();
   });
 
   it('[EARS-8] should validate and create complex methodology config', async () => {
     const complexPayload: Partial<WorkflowRecord> = {
-      version: '1.5.0',
+      id: '1234567890-workflow-enterprise',
       name: 'Enterprise Methodology',
       description: 'Complex enterprise workflow with multiple approval gates',
       state_transitions: {
-        review: {
+        submit: {
           from: ['draft'],
+          to: 'review',
           requires: {
             command: 'gitgov task submit',
             signatures: {
@@ -168,8 +172,9 @@ describe('createWorkflowConfig', () => {
             }
           }
         },
-        ready: {
+        approve: {
           from: ['review'],
+          to: 'ready',
           requires: {
             signatures: {
               'design': {
@@ -197,10 +202,10 @@ describe('createWorkflowConfig', () => {
 
     const config = await createWorkflowConfig(complexPayload);
 
-    expect(config.version).toBe('1.5.0');
+    expect(config.id).toBe('1234567890-workflow-enterprise');
     expect(config.name).toBe('Enterprise Methodology');
     expect(config.description).toBe('Complex enterprise workflow with multiple approval gates');
-    expect(config.state_transitions['ready']?.requires.signatures?.['quality']?.min_approvals).toBe(2);
+    expect(config.state_transitions['approve']?.requires.signatures?.['quality']?.min_approvals).toBe(2);
     expect(config.custom_rules?.['security_scan_required']?.validation).toBe('custom');
   });
 });
@@ -220,17 +225,18 @@ describe('createDefaultWorkflowConfig', () => {
   it('[EARS-9] should create default GitGovernance methodology config', async () => {
     const config = await createDefaultWorkflowConfig();
 
-    expect(config.version).toBe('1.0.0');
+    expect(config.id).toBe('1700000000-workflow-default-methodology');
     expect(config.name).toBe('GitGovernance Default Methodology');
     expect(config.description).toBe('Standard GitGovernance workflow with quality gates and agent collaboration');
 
-    // Verify key transitions exist
-    expect(config.state_transitions['review']).toBeDefined();
-    expect(config.state_transitions['ready']).toBeDefined();
-    expect(config.state_transitions['active']).toBeDefined();
-    expect(config.state_transitions['done']).toBeDefined();
-    expect(config.state_transitions['archived']).toBeDefined();
-    expect(config.state_transitions['paused']).toBeDefined();
+    // Verify key transitions exist (keys are transition names, not states)
+    expect(config.state_transitions['submit']).toBeDefined();
+    expect(config.state_transitions['approve']).toBeDefined();
+    expect(config.state_transitions['activate']).toBeDefined();
+    expect(config.state_transitions['complete']).toBeDefined();
+    expect(config.state_transitions['archive']).toBeDefined();
+    expect(config.state_transitions['pause']).toBeDefined();
+    expect(config.state_transitions['cancel']).toBeDefined();
 
     // Verify custom rules exist
     expect(config.custom_rules?.['task_must_have_valid_assignment_for_executor']).toBeDefined();
@@ -242,11 +248,12 @@ describe('createDefaultWorkflowConfig', () => {
   it('[EARS-10] should create config that matches kanban_workflow.json structure', async () => {
     const config = await createDefaultWorkflowConfig();
 
-    // Verify structure matches what's expected by BacklogAdapter
-    expect(config.state_transitions['review']?.from).toEqual(['draft']);
-    expect(config.state_transitions['review']?.requires.command).toBe('gitgov task submit');
+    // Verify structure matches kanban_workflow.json (transition names as keys, with to)
+    expect(config.state_transitions['submit']?.from).toEqual(['draft']);
+    expect(config.state_transitions['submit']?.to).toBe('review');
+    expect(config.state_transitions['submit']?.requires.command).toBe('gitgov task submit');
 
-    expect(config.state_transitions['ready']?.requires.signatures?.['design']?.capability_roles).toEqual(['approver:design']);
-    expect(config.state_transitions['active']?.requires.custom_rules).toContain('task_must_have_valid_assignment_for_executor');
+    expect(config.state_transitions['approve']?.requires.signatures?.['design']?.capability_roles).toEqual(['approver:design']);
+    expect(config.state_transitions['activate']?.requires.custom_rules).toContain('task_must_have_valid_assignment_for_executor');
   });
 });

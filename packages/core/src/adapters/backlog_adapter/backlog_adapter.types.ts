@@ -13,12 +13,10 @@ import type {
   IEventStream,
   FeedbackCreatedEvent,
   ExecutionCreatedEvent,
-  ChangelogCreatedEvent,
   CycleStatusChangedEvent,
   SystemDailyTickEvent,
 } from '../../event_bus';
 import type { ExecutionAdapter } from '../execution_adapter';
-import type { ChangelogAdapter } from '../changelog_adapter';
 import type { RecordMetrics, SystemStatus, TaskHealthReport } from '../../record_metrics';
 
 /**
@@ -26,12 +24,11 @@ import type { RecordMetrics, SystemStatus, TaskHealthReport } from '../../record
  */
 export type BacklogAdapterDependencies = {
   // Data Layer - Required stores for BacklogAdapter
-  stores: Required<Pick<RecordStores, 'tasks' | 'cycles' | 'feedbacks' | 'changelogs'>>;
+  stores: Required<Pick<RecordStores, 'tasks' | 'cycles' | 'feedbacks'>>;
 
   // Adapter Dependencies (Phase 3 Integration)
   feedbackAdapter: FeedbackAdapter;
   executionAdapter: ExecutionAdapter;
-  changelogAdapter: ChangelogAdapter;
   metricsAdapter: RecordMetrics;
 
   // Business Rules Layer (Methodologies)
@@ -79,7 +76,6 @@ export interface IBacklogAdapter {
   // Phase 3: Event Handlers (NEW)
   handleFeedbackCreated(event: FeedbackCreatedEvent): Promise<void>;
   handleExecutionCreated(event: ExecutionCreatedEvent): Promise<void>;
-  handleChangelogCreated(event: ChangelogCreatedEvent): Promise<void>;
   handleCycleStatusChanged(event: CycleStatusChangedEvent): Promise<void>;
   handleDailyTick(event: SystemDailyTickEvent): Promise<void>;
 

@@ -20,7 +20,6 @@ const GITGOV_DIRECTORIES = [
   'tasks',
   'executions',
   'feedbacks',
-  'changelogs',
 ] as const;
 
 /**

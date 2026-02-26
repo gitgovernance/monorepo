@@ -44,10 +44,6 @@ describe('ID Parsers', () => {
       expect(getEntityTypeFromPath('.gitgov/executions/123-exec-commit.json')).toBe('execution');
     });
 
-    it('[EARS-A2] should return changelog for changelogs directory', () => {
-      expect(getEntityTypeFromPath('.gitgov/changelogs/123-changelog-release.json')).toBe('changelog');
-    });
-
     it('[EARS-A2] should return feedback for feedbacks directory', () => {
       expect(getEntityTypeFromPath('.gitgov/feedbacks/123-feedback-review.json')).toBe('feedback');
     });
@@ -68,10 +64,6 @@ describe('ID Parsers', () => {
 
     it('[EARS-B1] should infer execution from -execution- pattern', () => {
       expect(inferEntityTypeFromId('something-execution-test')).toBe('execution');
-    });
-
-    it('[EARS-B1] should infer changelog from pattern', () => {
-      expect(inferEntityTypeFromId('1234567890-changelog-release')).toBe('changelog');
     });
 
     it('[EARS-B1] should infer feedback from pattern', () => {
@@ -192,10 +184,6 @@ describe('ID Parsers', () => {
 
     it('[EARS-E1] should return true for valid exec ID', () => {
       expect(isValidTimestampedId('67890-exec-execution-slug')).toBe(true);
-    });
-
-    it('[EARS-E1] should return true for valid changelog ID', () => {
-      expect(isValidTimestampedId('11111-changelog-changelog-slug')).toBe(true);
     });
 
     it('[EARS-E1] should return true for valid feedback ID', () => {

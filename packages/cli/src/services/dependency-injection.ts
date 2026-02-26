@@ -5,7 +5,7 @@ import { Adapters, Config, Session, EventBus, Lint, Git, SourceAuditor, FindingD
 import { FsRecordStore, DEFAULT_ID_ENCODER, FsFileLister, FsProjectInitializer, FsLintModule, FsWorktreeSyncStateModule, GitModule, createAgentRunner, createConfigManager, findProjectRoot, createSessionManager, FsRecordProjection } from '@gitgov/core/fs';
 import type { IFsLintModule } from '@gitgov/core/fs';
 import type {
-  GitGovTaskRecord, GitGovCycleRecord, GitGovFeedbackRecord, GitGovExecutionRecord, GitGovChangelogRecord, GitGovActorRecord, GitGovAgentRecord,
+  GitGovTaskRecord, GitGovCycleRecord, GitGovFeedbackRecord, GitGovExecutionRecord, GitGovActorRecord, GitGovAgentRecord,
   // Module types
   IRecordProjector, IRecordMetrics, IConfigManager, IIdentityAdapter, ISessionManager, IAgentRunner, IKeyProvider,
   ISyncStateModule,
@@ -40,7 +40,6 @@ export class DependencyInjectionService {
     cycles: RecordStore<GitGovCycleRecord>;
     feedbacks: RecordStore<GitGovFeedbackRecord>;
     executions: RecordStore<GitGovExecutionRecord>;
-    changelogs: RecordStore<GitGovChangelogRecord>;
     actors: RecordStore<GitGovActorRecord>;
     agents: RecordStore<GitGovAgentRecord>;
   } | null = null;
@@ -135,7 +134,6 @@ export class DependencyInjectionService {
       cycles: new FsRecordStore<GitGovCycleRecord>({ basePath: path.join(projectRoot, '.gitgov', 'cycles') }),
       feedbacks: new FsRecordStore<GitGovFeedbackRecord>({ basePath: path.join(projectRoot, '.gitgov', 'feedbacks') }),
       executions: new FsRecordStore<GitGovExecutionRecord>({ basePath: path.join(projectRoot, '.gitgov', 'executions') }),
-      changelogs: new FsRecordStore<GitGovChangelogRecord>({ basePath: path.join(projectRoot, '.gitgov', 'changelogs') }),
       actors: new FsRecordStore<GitGovActorRecord>({ basePath: path.join(projectRoot, '.gitgov', 'actors'), idEncoder: DEFAULT_ID_ENCODER }),
       agents: new FsRecordStore<GitGovAgentRecord>({ basePath: path.join(projectRoot, '.gitgov', 'agents'), idEncoder: DEFAULT_ID_ENCODER }),
     };
@@ -216,7 +214,6 @@ export class DependencyInjectionService {
           cycles: this.stores.cycles,
           feedbacks: this.stores.feedbacks,
           executions: this.stores.executions,
-          changelogs: this.stores.changelogs,
           actors: this.stores.actors,
         },
         sink,
@@ -293,12 +290,6 @@ export class DependencyInjectionService {
         eventBus
       });
 
-      const changelogAdapter = new Adapters.ChangelogAdapter({
-        stores: { changelogs: this.stores.changelogs, tasks: this.stores.tasks, cycles: this.stores.cycles },
-        identity: identityAdapter,
-        eventBus
-      });
-
       // Create RecordMetrics
       const recordMetrics = new RecordMetrics.RecordMetrics({
         stores: {
@@ -322,11 +313,9 @@ export class DependencyInjectionService {
           tasks: this.stores.tasks,
           cycles: this.stores.cycles,
           feedbacks: this.stores.feedbacks,
-          changelogs: this.stores.changelogs,
         },
         feedbackAdapter,
         executionAdapter,
-        changelogAdapter,
         metricsAdapter: recordMetrics,
         workflowAdapter,
         identity: identityAdapter,
@@ -516,7 +505,6 @@ export class DependencyInjectionService {
         agents: this.stores.agents,
         executions: this.stores.executions,
         feedbacks: this.stores.feedbacks,
-        changelogs: this.stores.changelogs,
       } as unknown as LintRecordStores;
 
       // Create pure LintModule (no I/O)
