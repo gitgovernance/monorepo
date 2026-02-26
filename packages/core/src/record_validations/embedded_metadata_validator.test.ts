@@ -79,7 +79,7 @@ describe('EmbeddedMetadata Validator', () => {
     it('[EARS-2] should throw DetailedValidationError for invalid schema', async () => {
       const invalidValidator = jest.fn().mockReturnValue(false);
       Object.defineProperty(invalidValidator, 'errors', {
-        value: [{ instancePath: '/header/type', message: 'must be one of actor, agent, task, execution, feedback, cycle, custom', data: 'invalid-type' }],
+        value: [{ instancePath: '/header/type', message: 'must be one of actor, agent, task, execution, feedback, cycle', data: 'invalid-type' }],
         writable: true,
         configurable: true
       });
@@ -266,7 +266,7 @@ describe('EmbeddedMetadata Validator', () => {
       it('should reject invalid header.type values', () => {
         const invalidValidator = jest.fn().mockReturnValue(false);
         Object.defineProperty(invalidValidator, 'errors', {
-          value: [{ instancePath: '/header/type', message: 'must be one of actor, agent, task, execution, feedback, cycle, custom', data: 'invalid-type' }],
+          value: [{ instancePath: '/header/type', message: 'must be one of actor, agent, task, execution, feedback, cycle', data: 'invalid-type' }],
           writable: true,
           configurable: true
         });
@@ -287,7 +287,7 @@ describe('EmbeddedMetadata Validator', () => {
       });
 
       it('should accept valid header.type values', () => {
-        const validTypes = ['actor', 'agent', 'task', 'execution', 'feedback', 'cycle', 'custom'];
+        const validTypes = ['actor', 'agent', 'task', 'execution', 'feedback', 'cycle'];
 
         validTypes.forEach(type => {
           const record = {
@@ -312,7 +312,6 @@ describe('EmbeddedMetadata Validator', () => {
     // - payloadChecksum format (pattern: ^[a-fA-F0-9]{64}$)
     // - schemaChecksum format (pattern: ^[a-fA-F0-9]{64}$)
     // - signatures minItems: 1
-    // - custom type requirements (oneOf logic)
     // See: packages/core/src/record_schemas/generated/embedded_metadata_schema.json
   });
 });
