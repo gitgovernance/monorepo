@@ -11,6 +11,7 @@ import * as os from 'os';
 import { execSync } from 'child_process';
 import { generateKeyPairSync } from 'crypto';
 import { McpDependencyInjectionService } from '../../di/mcp_di.js';
+import { getWorktreeBasePath } from '@gitgov/core/fs';
 import type { ToolResult } from '../../server/mcp_server.types.js';
 import type { TempGitgovProject, ParsedToolResult } from './mcp_core_integration.types.js';
 
@@ -43,14 +44,17 @@ function generateTestKeyPair(): { publicKey: string; privateKey: string } {
 export async function createTempGitgovProject(): Promise<TempGitgovProject> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'mcp-core-test-'));
   const projectRoot = await fs.realpath(dir); // macOS /tmp → /private/tmp
-  const gitgovPath = path.join(projectRoot, '.gitgov');
+
+  // .gitgov/ lives in worktree path, not in the repo
+  const worktreeBase = getWorktreeBasePath(projectRoot);
+  const gitgovPath = path.join(worktreeBase, '.gitgov');
 
   // git init (needed for source auditor and sync)
   execSync('git init', { cwd: projectRoot, stdio: 'ignore' });
   execSync('git config user.email "test@test.com"', { cwd: projectRoot, stdio: 'ignore' });
   execSync('git config user.name "Test"', { cwd: projectRoot, stdio: 'ignore' });
 
-  // Create .gitgov/ structure
+  // Create .gitgov/ structure in worktree path
   await fs.mkdir(gitgovPath, { recursive: true });
   for (const storeDir of STORE_DIRS) {
     await fs.mkdir(path.join(gitgovPath, storeDir), { recursive: true });
@@ -101,6 +105,7 @@ export async function createTempGitgovProject(): Promise<TempGitgovProject> {
 
   const cleanup = async () => {
     await fs.rm(projectRoot, { recursive: true, force: true });
+    await fs.rm(worktreeBase, { recursive: true, force: true });
   };
 
   return { projectRoot, gitgovPath, cleanup };

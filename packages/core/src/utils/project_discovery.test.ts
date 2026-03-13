@@ -6,21 +6,20 @@
  *
  * EARS Blocks:
  * - A: findProjectRoot (§4.1)
- * - B: findGitgovRoot (§4.2)
- * - C: Utility Methods (§4.3)
+ * - B: getWorktreeBasePath (§4.2)
+ * - C: resetDiscoveryCache (§4.3)
  */
 
 import {
   findProjectRoot,
-  findGitgovRoot,
-  getGitgovPath,
-  isGitgovProject,
+  getWorktreeBasePath,
   resetDiscoveryCache,
 } from './project_discovery';
 
 // Mock fs module
 jest.mock('fs', () => ({
   existsSync: jest.fn(),
+  realpathSync: jest.fn((p: string) => p),
 }));
 
 import { existsSync } from 'fs';
@@ -86,86 +85,34 @@ describe('Project Discovery', () => {
     });
   });
 
-  // ==================== §4.2 findGitgovRoot (EARS-B) ====================
+  // ==================== §4.2 getWorktreeBasePath (EARS-B) ====================
 
-  describe('4.2. findGitgovRoot (EARS-B1 to B3)', () => {
-    it('[EARS-B1] WHEN findGitgovRoot finds both .gitgov and .git, THE SYSTEM SHALL prioritize .gitgov', () => {
-      mockedExistsSync.mockImplementation((p) => {
-        return p === '/test/project/.gitgov' || p === '/test/project/.git';
-      });
+  describe('4.2. getWorktreeBasePath (EARS-B1 to B3)', () => {
+    it('[EARS-B1] WHEN getWorktreeBasePath is called, THE SYSTEM SHALL return path under ~/.gitgov/worktrees/', () => {
+      const result = getWorktreeBasePath('/test/project');
 
-      const result = findGitgovRoot('/test/project/src');
-
-      expect(result).toBe('/test/project');
+      expect(result).toMatch(/\.gitgov\/worktrees\/[a-f0-9]{12}$/);
     });
 
-    it('[EARS-B2] WHEN findGitgovRoot does not find .gitgov but finds .git, THE SYSTEM SHALL fallback to .git', () => {
-      mockedExistsSync.mockImplementation((p) => {
-        return p === '/test/project/.git';
-      });
+    it('[EARS-B2] WHEN getWorktreeBasePath is called with same path, THE SYSTEM SHALL return deterministic hash', () => {
+      const result1 = getWorktreeBasePath('/test/project');
+      const result2 = getWorktreeBasePath('/test/project');
 
-      const result = findGitgovRoot('/test/project/src');
-
-      expect(result).toBe('/test/project');
+      expect(result1).toBe(result2);
     });
 
-    it('[EARS-B3] WHEN findGitgovRoot finds neither .gitgov nor .git, THE SYSTEM SHALL return null', () => {
-      mockedExistsSync.mockReturnValue(false);
+    it('[EARS-B3] WHEN getWorktreeBasePath is called with different paths, THE SYSTEM SHALL return different hashes', () => {
+      const result1 = getWorktreeBasePath('/test/project-a');
+      const result2 = getWorktreeBasePath('/test/project-b');
 
-      const result = findGitgovRoot('/some/path');
-
-      expect(result).toBeNull();
+      expect(result1).not.toBe(result2);
     });
   });
 
-  // ==================== §4.3 Utility Methods (EARS-C) ====================
+  // ==================== §4.3 resetDiscoveryCache (EARS-C) ====================
 
-  describe('4.3. Utility Methods (EARS-C1 to C4)', () => {
-    it('[EARS-C1] WHEN getGitgovPath is invoked from GitGovernance project, THE SYSTEM SHALL return absolute path', () => {
-      mockedExistsSync.mockImplementation((p) => {
-        return p === '/test/project/.gitgov';
-      });
-
-      const originalCwd = process.cwd;
-      process.cwd = () => '/test/project/src';
-
-      const result = getGitgovPath();
-
-      expect(result).toBe('/test/project/.gitgov');
-      process.cwd = originalCwd;
-    });
-
-    it('[EARS-C2] WHEN getGitgovPath is invoked outside GitGovernance project, THE SYSTEM SHALL throw Error', () => {
-      mockedExistsSync.mockReturnValue(false);
-
-      expect(() => getGitgovPath()).toThrow(
-        'Could not find project root'
-      );
-    });
-
-    it('[EARS-C3] WHEN isGitgovProject is invoked from GitGovernance project, THE SYSTEM SHALL return true', () => {
-      mockedExistsSync.mockImplementation((p) => {
-        return String(p).includes('.gitgov');
-      });
-
-      const originalCwd = process.cwd;
-      process.cwd = () => '/test/project/src';
-
-      const result = isGitgovProject();
-
-      expect(result).toBe(true);
-      process.cwd = originalCwd;
-    });
-
-    it('[EARS-C4] WHEN isGitgovProject is invoked outside GitGovernance project, THE SYSTEM SHALL return false', () => {
-      mockedExistsSync.mockReturnValue(false);
-
-      const result = isGitgovProject();
-
-      expect(result).toBe(false);
-    });
-
-    it('[EARS-C5] WHEN resetDiscoveryCache is invoked, THE SYSTEM SHALL clear project root cache', () => {
+  describe('4.3. resetDiscoveryCache (EARS-C1)', () => {
+    it('[EARS-C1] WHEN resetDiscoveryCache is invoked, THE SYSTEM SHALL clear project root cache', () => {
       mockedExistsSync.mockImplementation((p) => p === '/test/project/.git');
 
       // First call - populates cache

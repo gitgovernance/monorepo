@@ -50,7 +50,7 @@ class DiagramCommand {
 
         if (options.watch) {
           // Show TUI with watch mode (with or without filters)
-          const { findProjectRoot, getGitgovPath } = await import('@gitgov/core/fs');
+          const { findProjectRoot, getWorktreeBasePath } = await import('@gitgov/core/fs');
 
           const projectRoot = findProjectRoot();
           if (!projectRoot) {
@@ -58,7 +58,7 @@ class DiagramCommand {
             process.exit(1);
           }
 
-          const gitgovPath = getGitgovPath();
+          const gitgovPath = path.join(getWorktreeBasePath(projectRoot), '.gitgov');
 
           const props = {
             gitgovPath,  // ✅ USING ConfigManager consistently
@@ -94,7 +94,7 @@ class DiagramCommand {
           // Generate diagram directly (with or without filters)
           console.log('🎯 Generating diagram...');
           const { DiagramGenerator } = await import('@gitgov/core');
-          const { findProjectRoot, getGitgovPath } = await import('@gitgov/core/fs');
+          const { findProjectRoot, getWorktreeBasePath } = await import('@gitgov/core/fs');
 
           try {
             const projectRoot = findProjectRoot();
@@ -104,7 +104,7 @@ class DiagramCommand {
             }
 
             const generator = new DiagramGenerator.DiagramGenerator();
-            const gitgovPath = getGitgovPath();
+            const gitgovPath = path.join(getWorktreeBasePath(projectRoot), '.gitgov');
 
             // Build filters (may be empty for full diagram)
             const filters: Record<string, string> = {};

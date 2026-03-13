@@ -50,10 +50,7 @@ export type { IGitModule, GitModuleDependencies } from './git';
 // Project Discovery (filesystem-based project root detection)
 export {
   findProjectRoot,
-  findGitgovRoot,
-  getGitgovPath,
   getWorktreeBasePath,
-  isGitgovProject,
   resetDiscoveryCache,
 } from './utils/project_discovery';
 

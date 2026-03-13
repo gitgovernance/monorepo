@@ -42,7 +42,7 @@ import type { McpDiConfig, McpDiContainer } from './mcp_di.types.js';
  * McpDependencyInjectionService — Singleton DI container para el MCP server.
  *
  * Inicializa stores, adapters y modules del core de forma lazy.
- * Si .gitgov/ no existe, intenta bootstrap desde gitgov-state branch.
+ * Resuelve .gitgov/ via worktree path (getWorktreeBasePath).
  */
 export class McpDependencyInjectionService {
   private config: McpDiConfig;
@@ -109,8 +109,8 @@ export class McpDependencyInjectionService {
 
     // --- Infrastructure ---
     const eventBus = new EventBus.EventBus();
-    const configManager = createConfigManager(projectRoot);
-    const sessionManager = createSessionManager(projectRoot);
+    const configManager = createConfigManager(worktreeBase);
+    const sessionManager = createSessionManager(worktreeBase);
     const keyProvider = new FsKeyProvider({
       keysDir: path.join(gitgovPath, 'keys'),
     });
