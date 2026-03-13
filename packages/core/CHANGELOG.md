@@ -1,3 +1,23 @@
+## [2.9.0](https://github.com/gitgovernance/monorepo/compare/core-v2.8.0...core-v2.9.0) (2026-03-13)
+
+
+### ✨ Features
+
+* **cli:** add governance E2E tests and e2e README ([ed9cf15](https://github.com/gitgovernance/monorepo/commit/ed9cf154df17f9505cb3a6f13ab25654e9097b75))
+* consolidate E2E public API migration, worktree refactor, and hook handler ([8c0a47b](https://github.com/gitgovernance/monorepo/commit/8c0a47bab2415c92aa3fbf3240cdda146c4d2a61))
+* **core:** add RECORD_TYPES constant for iteration and validation ([#103](https://github.com/gitgovernance/monorepo/issues/103)) ([aab5385](https://github.com/gitgovernance/monorepo/commit/aab5385347df00c57167d8302acf8afb6868beab))
+
+
+### 🐛 Bug Fixes
+
+* **mcp-server:** migrate from FsSyncStateModule to FsWorktreeSyncStateModule ([d447d7d](https://github.com/gitgovernance/monorepo/commit/d447d7dc5eb5873df506cca4fe110731d7f50418))
+
+
+### ♻️ Refactoring
+
+* **core:** move DIR_TO_TYPE and TYPE_TO_DIR to common.types.ts ([04f286c](https://github.com/gitgovernance/monorepo/commit/04f286c37603c16b0811589d08f169e77c6349d0))
+* remove deprecated project_discovery functions, migrate to worktree paths ([97b1a73](https://github.com/gitgovernance/monorepo/commit/97b1a734d6c0786c1797677a3d9fed096abc64a6))
+
 ## [2.8.0](https://github.com/gitgovernance/monorepo/compare/core-v2.7.2...core-v2.8.0) (2026-02-26)
 
 
