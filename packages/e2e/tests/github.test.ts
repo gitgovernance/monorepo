@@ -11,7 +11,6 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { Octokit } from '@octokit/rest';
-import { randomUUID } from 'crypto';
 
 import {
   createTestPrisma,
@@ -21,20 +20,20 @@ import {
   GITHUB_TEST_REPO_NAME,
   GITHUB_TOKEN,
   PrismaRecordProjection,
+  GitHubRecordStore,
+  RecordProjector,
+  RecordMetrics,
 } from './helpers';
-import type { PrismaClient, ProjectionClient } from './helpers';
-
-import { GitHubRecordStore } from '../../core/src/record_store/github';
-import { RecordProjector } from '../../core/src/record_projection';
-import type { RecordProjectorDependencies } from '../../core/src/record_projection';
-import { RecordMetrics } from '../../core/src/record_metrics';
 import type {
+  PrismaClient,
+  ProjectionClient,
+  RecordProjectorDependencies,
   GitGovTaskRecord,
   GitGovActorRecord,
   GitGovCycleRecord,
   GitGovFeedbackRecord,
   GitGovExecutionRecord,
-} from '../../core/src/record_types';
+} from './helpers';
 
 // ===== Test Record Factories =====
 

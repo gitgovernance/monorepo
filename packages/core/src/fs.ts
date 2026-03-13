@@ -52,12 +52,10 @@ export {
   findProjectRoot,
   findGitgovRoot,
   getGitgovPath,
+  getWorktreeBasePath,
   isGitgovProject,
   resetDiscoveryCache,
 } from './utils/project_discovery';
-
-// FsSyncStateModule (filesystem-based state synchronization)
-export { FsSyncStateModule } from './sync_state/fs';
 
 // FsWorktreeSyncStateModule (worktree-based state synchronization)
 export { FsWorktreeSyncStateModule } from './sync_state/fs_worktree';

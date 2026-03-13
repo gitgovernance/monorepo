@@ -20,8 +20,10 @@ import {
   createTestPrisma,
   cleanupDb,
   projectAndCompare,
-  listRecordFiles,
-  readRecordFile,
+  listRecordIds,
+  readRecord,
+  getGitgovDir,
+  cleanupWorktree,
   SKIP_CLEANUP,
   HAS_GITHUB,
   GITHUB_TEST_OWNER,
@@ -31,18 +33,18 @@ import {
   RecordProjector,
   RecordMetrics,
   DEFAULT_ID_ENCODER,
+  FsRecordStore,
+  GitHubRecordStore,
 } from './helpers';
-import type { PrismaClient, RecordProjectorDependencies } from './helpers';
-
-import { FsRecordStore } from '../../core/src/record_store/fs';
-import { GitHubRecordStore } from '../../core/src/record_store/github';
 import type {
+  PrismaClient,
+  RecordProjectorDependencies,
   GitGovTaskRecord,
   GitGovActorRecord,
   GitGovCycleRecord,
   GitGovFeedbackRecord,
   GitGovExecutionRecord,
-} from '../../core/src/record_types';
+} from './helpers';
 
 describe('Block E: Projection Parity (CE1-CE2)', () => {
 
@@ -59,10 +61,10 @@ describe('Block E: Projection Parity (CE1-CE2)', () => {
       runCliCommand(['init', '--name', 'CE1 Parity', '--actor-name', 'Parity Dev', '--quiet'], { cwd: repoPath });
       runCliCommand(['task', 'new', 'Parity task', '-d', 'Testing FS vs Prisma parity', '-p', 'high', '-q'], { cwd: repoPath });
 
-      const taskFiles = listRecordFiles(repoPath, 'tasks');
-      const task = readRecordFile(repoPath, 'tasks', taskFiles[0]!);
-      const actorFiles = listRecordFiles(repoPath, 'actors');
-      const actor = readRecordFile(repoPath, 'actors', actorFiles[0]!);
+      const taskIds = await listRecordIds(repoPath, 'tasks');
+      const task = await readRecord(repoPath, 'tasks', taskIds[0]!);
+      const actorIds = await listRecordIds(repoPath, 'actors');
+      const actor = await readRecord(repoPath, 'actors', actorIds[0]!);
 
       runCliCommand(['task', 'assign', task.payload.id, '--to', actor.payload.id, '-q'], { cwd: repoPath });
       runCliCommand(['cycle', 'new', 'Parity Sprint', '--task-ids', task.payload.id, '-q'], { cwd: repoPath });
@@ -97,6 +99,7 @@ describe('Block E: Projection Parity (CE1-CE2)', () => {
       // CE1f: Compare feedback
       expect(prismaIndexData.feedback.length).toBe(fsIndexData.feedback.length);
     } finally {
+      cleanupWorktree(repoPath);
       await cleanupDb(prisma, repoId);
       await prisma.$disconnect();
       if (!SKIP_CLEANUP) fs.rmSync(tempDir, { recursive: true, force: true });
@@ -138,10 +141,10 @@ describe('Block E: Projection Parity (CE1-CE2)', () => {
       runCliCommand(['init', '--name', 'CE2 Parity', '--actor-name', 'CE2 Dev', '--quiet'], { cwd: repoPath });
       runCliCommand(['task', 'new', 'CE2 parity task', '-d', 'FS vs GitHub parity', '-p', 'high', '-q'], { cwd: repoPath });
 
-      const taskFiles = listRecordFiles(repoPath, 'tasks');
-      const task = readRecordFile(repoPath, 'tasks', taskFiles[0]!);
-      const actorFiles = listRecordFiles(repoPath, 'actors');
-      const actor = readRecordFile(repoPath, 'actors', actorFiles[0]!);
+      const taskIds = await listRecordIds(repoPath, 'tasks');
+      const task = await readRecord(repoPath, 'tasks', taskIds[0]!);
+      const actorIds = await listRecordIds(repoPath, 'actors');
+      const actor = await readRecord(repoPath, 'actors', actorIds[0]!);
 
       runCliCommand(['task', 'assign', task.payload.id, '--to', actor.payload.id, '-q'], { cwd: repoPath });
       runCliCommand(['cycle', 'new', 'CE2 Sprint', '--task-ids', task.payload.id, '-q'], { cwd: repoPath });
@@ -149,13 +152,14 @@ describe('Block E: Projection Parity (CE1-CE2)', () => {
 
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      // 3. Projection A: FsRecordStore (local .gitgov/)
+      // 3. Projection A: FsRecordStore (worktree .gitgov/)
+      const gitgovDir = getGitgovDir(repoPath);
       const fsStores = {
-        tasks: new FsRecordStore<GitGovTaskRecord>({ basePath: path.join(repoPath, '.gitgov', 'tasks') }),
-        cycles: new FsRecordStore<GitGovCycleRecord>({ basePath: path.join(repoPath, '.gitgov', 'cycles') }),
-        feedbacks: new FsRecordStore<GitGovFeedbackRecord>({ basePath: path.join(repoPath, '.gitgov', 'feedbacks') }),
-        executions: new FsRecordStore<GitGovExecutionRecord>({ basePath: path.join(repoPath, '.gitgov', 'executions') }),
-        actors: new FsRecordStore<GitGovActorRecord>({ basePath: path.join(repoPath, '.gitgov', 'actors'), idEncoder: DEFAULT_ID_ENCODER }),
+        tasks: new FsRecordStore<GitGovTaskRecord>({ basePath: path.join(gitgovDir, 'tasks') }),
+        cycles: new FsRecordStore<GitGovCycleRecord>({ basePath: path.join(gitgovDir, 'cycles') }),
+        feedbacks: new FsRecordStore<GitGovFeedbackRecord>({ basePath: path.join(gitgovDir, 'feedbacks') }),
+        executions: new FsRecordStore<GitGovExecutionRecord>({ basePath: path.join(gitgovDir, 'executions') }),
+        actors: new FsRecordStore<GitGovActorRecord>({ basePath: path.join(gitgovDir, 'actors'), idEncoder: DEFAULT_ID_ENCODER }),
       };
       const fsTypedStores = fsStores as unknown as RecordProjectorDependencies['stores'];
       const fsMetrics = new RecordMetrics({ stores: fsTypedStores });
@@ -221,6 +225,7 @@ describe('Block E: Projection Parity (CE1-CE2)', () => {
           });
         } catch { /* may not exist */ }
       }
+      cleanupWorktree(repoPath);
       if (!SKIP_CLEANUP) fs.rmSync(tempDir, { recursive: true, force: true });
       else console.log(`[SKIP_CLEANUP] Keeping tempDir=${tempDir}`);
     }

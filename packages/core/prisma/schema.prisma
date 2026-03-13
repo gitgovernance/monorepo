@@ -51,6 +51,7 @@ model GitgovTask {
   references  String[]
   cycleIds    String[]
   notes       String?
+  metadataJson Json?
 
   // derivedState (queryable)
   isStalled             Boolean
@@ -100,6 +101,7 @@ model GitgovCycle {
   childCycleIds  String[]
   tags           String[]
   notes          String?
+  metadataJson   Json?
   headerJson     Json
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt

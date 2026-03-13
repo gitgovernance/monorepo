@@ -3,43 +3,63 @@
  *
  * Extracts CLI execution, git setup, DB management, projection,
  * and GitHub integration utilities into a single importable module.
+ *
+ * IMPORTANT: All imports use @gitgov/core public API — NEVER ../../core/src/.
+ * Record I/O uses FsRecordStore — NEVER raw fs.readFileSync/readdirSync.
+ * See Cycle 3.10 in roadmap for rationale.
  */
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import pg from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
+// PrismaClient comes from core's generated prisma output — not a src/ internal import.
+// This is the one acceptable ../../core/ path because the generated client has no public export path.
 import { PrismaClient } from '../../core/generated/prisma/index.js';
 
-// Core internal imports (avoid @gitgov/core/fs public API which pulls in esm_helper.ts)
-import { FsRecordStore, DEFAULT_ID_ENCODER } from '../../core/src/record_store/fs';
-import { FsRecordProjection } from '../../core/src/record_projection/fs';
-import { PrismaRecordProjection } from '../../core/src/record_projection/prisma';
-import type { ProjectionClient } from '../../core/src/record_projection/prisma';
-import { RecordProjector } from '../../core/src/record_projection';
-import type { RecordProjectorDependencies, IndexGenerationReport, IndexData } from '../../core/src/record_projection';
-import { RecordMetrics } from '../../core/src/record_metrics';
+// === @gitgov/core public API ===
+import { FsRecordStore, DEFAULT_ID_ENCODER, FsRecordProjection, getWorktreeBasePath } from '@gitgov/core/fs';
+import { PrismaRecordProjection } from '@gitgov/core/prisma';
+import type { ProjectionClient } from '@gitgov/core/prisma';
+import { GithubSyncStateModule, GitHubRecordStore } from '@gitgov/core/github';
+import type { GithubSyncStateDependencies } from '@gitgov/core/github';
+import { RecordProjection, RecordMetrics as RecordMetricsNs } from '@gitgov/core';
 import type {
+  RecordProjectorDependencies,
+  IndexGenerationReport,
+  IndexData,
+  IRecordProjector,
   GitGovTaskRecord,
   GitGovCycleRecord,
   GitGovFeedbackRecord,
   GitGovExecutionRecord,
   GitGovActorRecord,
-} from '../../core/src/record_types';
+} from '@gitgov/core';
 
-// Re-export types used by test files
+// Unwrap namespace exports for convenience
+const RecordProjector = RecordProjection.RecordProjector;
+const RecordMetrics = RecordMetricsNs.RecordMetrics;
+
+// Re-export for test files — all from public API
 export type { PrismaClient } from '../../core/generated/prisma/index.js';
-export type { IndexGenerationReport, IndexData, RecordProjectorDependencies, IRecordProjector } from '../../core/src/record_projection';
-export type { ProjectionClient } from '../../core/src/record_projection/prisma';
-export { PrismaRecordProjection } from '../../core/src/record_projection/prisma';
-export { RecordProjector } from '../../core/src/record_projection';
-export { RecordMetrics } from '../../core/src/record_metrics';
-export { DEFAULT_ID_ENCODER } from '../../core/src/record_store/fs';
-
-// Sync state (Block F)
-export { GithubSyncStateModule } from '../../core/src/sync_state/github_sync_state';
-export type { GithubSyncStateDependencies } from '../../core/src/sync_state/github_sync_state';
-export type { StateDeltaFile, SyncStatePushResult, AuditStateReport } from '../../core/src/sync_state';
+export type {
+  IndexGenerationReport,
+  IndexData,
+  RecordProjectorDependencies,
+  IRecordProjector,
+  GitGovTaskRecord,
+  GitGovCycleRecord,
+  GitGovActorRecord,
+  GitGovFeedbackRecord,
+  GitGovExecutionRecord,
+  ILintModule,
+} from '@gitgov/core';
+export type { ProjectionClient } from '@gitgov/core/prisma';
+export type { GithubSyncStateDependencies } from '@gitgov/core/github';
+export { PrismaRecordProjection } from '@gitgov/core/prisma';
+export { GithubSyncStateModule, GitHubRecordStore } from '@gitgov/core/github';
+export { FsRecordStore, DEFAULT_ID_ENCODER } from '@gitgov/core/fs';
+export { RecordProjector, RecordMetrics };
 
 // ===== Types =====
 
@@ -130,21 +150,62 @@ export const addRemote = (repoPath: string, remotePath: string): void => {
   execSync(`git remote add origin "${remotePath}"`, { cwd: repoPath, stdio: 'pipe' });
 };
 
-// ===== FS Helpers =====
+// ===== Worktree Helpers =====
+//
+// The CLI stores .gitgov/ in ~/.gitgov/worktrees/<SHA256(realpathSync(repoRoot))[0:12]>/
+// NOT in the repo directory itself. getWorktreeBasePath lives in @gitgov/core/fs.
 
-export const listRecordFiles = (repoDir: string, dir: string): string[] => {
-  const dirPath = path.join(repoDir, '.gitgov', dir);
-  try {
-    return fs.readdirSync(dirPath).filter(f => f.endsWith('.json'));
-  } catch {
-    return [];
+/**
+ * Returns the .gitgov/ directory path where the CLI stores records.
+ * This is inside the worktree, not the repo directory.
+ */
+export const getGitgovDir = (repoPath: string): string => {
+  return path.join(getWorktreeBasePath(repoPath), '.gitgov');
+};
+
+/**
+ * Clean up a worktree created by CLI init.
+ * Must be called in afterAll/finally to avoid leaking worktrees in ~/.gitgov/worktrees/.
+ */
+export const cleanupWorktree = (repoPath: string): void => {
+  const wtPath = getWorktreeBasePath(repoPath);
+  if (fs.existsSync(wtPath)) {
+    try {
+      execSync(`git worktree remove "${wtPath}" --force`, { cwd: repoPath, stdio: 'pipe' });
+    } catch { /* ignore */ }
+    if (fs.existsSync(wtPath)) {
+      fs.rmSync(wtPath, { recursive: true, force: true });
+    }
   }
 };
 
-export const readRecordFile = (repoDir: string, dir: string, filename: string): ParsedRecord => {
-  const filePath = path.join(repoDir, '.gitgov', dir, filename);
-  return JSON.parse(fs.readFileSync(filePath, 'utf-8')) as ParsedRecord;
+// ===== Record Helpers (via @gitgov/core/fs — NEVER raw fs) =====
+//
+// All record helpers resolve through getGitgovDir() to read from the
+// worktree location where the CLI actually stores .gitgov/ records.
+
+/**
+ * Lists record IDs in a .gitgov/ subdirectory via FsRecordStore.
+ * Resolves through worktree path (CLI stores records in ~/.gitgov/worktrees/<hash>/).
+ */
+export const listRecordIds = async (repoDir: string, dir: string): Promise<string[]> => {
+  const gitgovDir = getGitgovDir(repoDir);
+  const store = new FsRecordStore<ParsedRecord>({ basePath: path.join(gitgovDir, dir) });
+  return store.list();
 };
+
+/**
+ * Reads a single record from .gitgov/ via FsRecordStore.
+ * Resolves through worktree path.
+ */
+export const readRecord = async <T = ParsedRecord>(repoDir: string, dir: string, id: string): Promise<T> => {
+  const gitgovDir = getGitgovDir(repoDir);
+  const store = new FsRecordStore<T>({ basePath: path.join(gitgovDir, dir) });
+  const record = await store.get(id);
+  if (!record) throw new Error(`Record not found: ${gitgovDir}/${dir}/${id}`);
+  return record;
+};
+
 
 // ===== DB Helpers =====
 
@@ -176,6 +237,21 @@ export async function cleanupDb(prisma: PrismaClient, repoId: string): Promise<v
 // ===== Projection Helpers =====
 
 /**
+ * Creates typed FsRecordStores for all .gitgov/ record directories.
+ * Resolves through worktree path. Shared by runProjector and projectAndCompare.
+ */
+function createRecordStores(repoDir: string): RecordProjectorDependencies['stores'] {
+  const gitgovDir = getGitgovDir(repoDir);
+  return {
+    tasks: new FsRecordStore<GitGovTaskRecord>({ basePath: path.join(gitgovDir, 'tasks') }),
+    cycles: new FsRecordStore<GitGovCycleRecord>({ basePath: path.join(gitgovDir, 'cycles') }),
+    feedbacks: new FsRecordStore<GitGovFeedbackRecord>({ basePath: path.join(gitgovDir, 'feedbacks') }),
+    executions: new FsRecordStore<GitGovExecutionRecord>({ basePath: path.join(gitgovDir, 'executions') }),
+    actors: new FsRecordStore<GitGovActorRecord>({ basePath: path.join(gitgovDir, 'actors'), idEncoder: DEFAULT_ID_ENCODER }),
+  };
+}
+
+/**
  * Wires up FsRecordStore -> RecordProjector -> PrismaRecordProjection.
  * Reads CLI-created records from .gitgov/, computes projection, persists to Prisma.
  */
@@ -184,15 +260,7 @@ export async function runProjector(
   repoDir: string,
   repoId: string,
 ): Promise<IndexGenerationReport> {
-  const stores = {
-    tasks: new FsRecordStore<GitGovTaskRecord>({ basePath: path.join(repoDir, '.gitgov', 'tasks') }),
-    cycles: new FsRecordStore<GitGovCycleRecord>({ basePath: path.join(repoDir, '.gitgov', 'cycles') }),
-    feedbacks: new FsRecordStore<GitGovFeedbackRecord>({ basePath: path.join(repoDir, '.gitgov', 'feedbacks') }),
-    executions: new FsRecordStore<GitGovExecutionRecord>({ basePath: path.join(repoDir, '.gitgov', 'executions') }),
-    actors: new FsRecordStore<GitGovActorRecord>({ basePath: path.join(repoDir, '.gitgov', 'actors'), idEncoder: DEFAULT_ID_ENCODER }),
-  };
-
-  const typedStores: RecordProjectorDependencies['stores'] = stores;
+  const stores = createRecordStores(repoDir);
 
   const sink = new PrismaRecordProjection({
     client: prisma as unknown as ProjectionClient,
@@ -200,8 +268,8 @@ export async function runProjector(
     projectionType: 'index',
   });
 
-  const recordMetrics = new RecordMetrics({ stores: typedStores });
-  const projector = new RecordProjector({ recordMetrics, stores: typedStores });
+  const recordMetrics = new RecordMetrics({ stores });
+  const projector = new RecordProjector({ recordMetrics, stores });
 
   try {
     const startTime = performance.now();
@@ -253,17 +321,9 @@ export async function projectAndCompare(
   repoDir: string,
   repoId: string,
 ): Promise<{ fsIndexData: IndexData; prismaIndexData: IndexData }> {
-  const stores = {
-    tasks: new FsRecordStore<GitGovTaskRecord>({ basePath: path.join(repoDir, '.gitgov', 'tasks') }),
-    cycles: new FsRecordStore<GitGovCycleRecord>({ basePath: path.join(repoDir, '.gitgov', 'cycles') }),
-    feedbacks: new FsRecordStore<GitGovFeedbackRecord>({ basePath: path.join(repoDir, '.gitgov', 'feedbacks') }),
-    executions: new FsRecordStore<GitGovExecutionRecord>({ basePath: path.join(repoDir, '.gitgov', 'executions') }),
-    actors: new FsRecordStore<GitGovActorRecord>({ basePath: path.join(repoDir, '.gitgov', 'actors'), idEncoder: DEFAULT_ID_ENCODER }),
-  };
-
-  const typedStores: RecordProjectorDependencies['stores'] = stores;
-  const recordMetrics = new RecordMetrics({ stores: typedStores });
-  const projector = new RecordProjector({ recordMetrics, stores: typedStores });
+  const stores = createRecordStores(repoDir);
+  const recordMetrics = new RecordMetrics({ stores });
+  const projector = new RecordProjector({ recordMetrics, stores });
 
   // 1. Compute once
   const indexData = await projector.computeProjection();
@@ -272,8 +332,8 @@ export async function projectAndCompare(
   );
   indexData.metadata.generationTime = 1; // deterministic value for comparison
 
-  // 2. Persist to FS (CLI path)
-  const fsSink = new FsRecordProjection({ basePath: path.join(repoDir, '.gitgov') });
+  // 2. Persist to FS (CLI path) — uses worktree .gitgov/ path
+  const fsSink = new FsRecordProjection({ basePath: getGitgovDir(repoDir) });
   await fsSink.persist(indexData, {});
 
   // 3. Persist to Prisma (SaaS path)

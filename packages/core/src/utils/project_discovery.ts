@@ -8,8 +8,10 @@
  * Core modules receive projectRoot via constructor injection.
  */
 
+import { createHash } from 'crypto';
+import { existsSync, realpathSync } from 'fs';
+import * as os from 'os';
 import * as path from 'path';
-import { existsSync } from 'fs';
 
 // Project root cache for performance
 let projectRootCache: string | null = null;
@@ -131,4 +133,21 @@ export function isGitgovProject(): boolean {
 export function resetDiscoveryCache(): void {
   projectRootCache = null;
   lastSearchPath = null;
+}
+
+/**
+ * Compute the worktree base path for a given repo root.
+ *
+ * The CLI stores .gitgov/ state in ~/.gitgov/worktrees/<hash>/ — NOT inside
+ * the repo directory. The hash is SHA-256(realpathSync(repoRoot))[0:12].
+ *
+ * Uses realpathSync to resolve symlinks (macOS /tmp/ → /private/tmp/).
+ *
+ * @param repoRoot - Absolute path to the git repo root
+ * @returns Path under ~/.gitgov/worktrees/{hash}
+ */
+export function getWorktreeBasePath(repoRoot: string): string {
+  const resolvedPath = realpathSync(repoRoot);
+  const hash = createHash('sha256').update(resolvedPath).digest('hex').slice(0, 12);
+  return path.join(os.homedir(), '.gitgov', 'worktrees', hash);
 }

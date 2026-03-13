@@ -55,6 +55,12 @@ export class FsFileLister implements FileLister {
       }
     }
 
+    // [EARS-FFL06] Normalize directory patterns: trailing '/' → '/**'
+    // fast-glob requires explicit '/**' for recursive file matching;
+    // GitHubFileLister (picomatch) treats trailing '/' as directory listing.
+    // This normalization ensures parity between Fs and GitHub backends.
+    const normalized = patterns.map(p => p.endsWith('/') ? `${p}**` : p);
+
     const fgOptions: Parameters<typeof fg>[1] = {
       cwd: this.cwd,
       ignore: options?.ignore ?? [],
@@ -68,7 +74,7 @@ export class FsFileLister implements FileLister {
       fgOptions.deep = options.maxDepth;
     }
 
-    return fg(patterns, fgOptions);
+    return fg(normalized, fgOptions);
   }
 
   /**

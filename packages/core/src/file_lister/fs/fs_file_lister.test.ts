@@ -189,6 +189,27 @@ describe('FsFileLister', () => {
     });
   });
 
+  describe('4.3. Directory Pattern Normalization (EARS-FFL06)', () => {
+    it('[EARS-FFL06] should expand trailing slash to recursive glob', async () => {
+      await createFile('.gitgov/tasks/task-1.json', '{}');
+      await createFile('.gitgov/actors/actor-1.json', '{}');
+      await createFile('.gitgov/cycles/cycle-1.json', '{}');
+
+      const files = await lister.list(['.gitgov/']);
+      expect(files.length).toBe(3);
+      expect(files).toContain('.gitgov/tasks/task-1.json');
+      expect(files).toContain('.gitgov/actors/actor-1.json');
+      expect(files).toContain('.gitgov/cycles/cycle-1.json');
+    });
+
+    it('[EARS-FFL06] should not modify patterns without trailing slash', async () => {
+      await createFile('src/index.ts', 'export {};');
+
+      const files = await lister.list(['**/*.ts']);
+      expect(files).toContain('src/index.ts');
+    });
+  });
+
   describe('Options', () => {
     it('should respect maxDepth option', async () => {
       await createFile('level1.ts');

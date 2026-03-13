@@ -112,6 +112,7 @@
       "if": {
         "properties": {
           "header": {
+            "type": "object",
             "properties": {
               "type": {
                 "const": "custom"
@@ -136,6 +137,7 @@
       "if": {
         "properties": {
           "header": {
+            "type": "object",
             "properties": {
               "type": {
                 "const": "actor"
@@ -156,6 +158,7 @@
       "if": {
         "properties": {
           "header": {
+            "type": "object",
             "properties": {
               "type": {
                 "const": "agent"
@@ -176,6 +179,7 @@
       "if": {
         "properties": {
           "header": {
+            "type": "object",
             "properties": {
               "type": {
                 "const": "task"
@@ -196,6 +200,7 @@
       "if": {
         "properties": {
           "header": {
+            "type": "object",
             "properties": {
               "type": {
                 "const": "execution"
@@ -216,6 +221,7 @@
       "if": {
         "properties": {
           "header": {
+            "type": "object",
             "properties": {
               "type": {
                 "const": "feedback"
@@ -236,6 +242,7 @@
       "if": {
         "properties": {
           "header": {
+            "type": "object",
             "properties": {
               "type": {
                 "const": "cycle"
@@ -256,6 +263,7 @@
       "if": {
         "properties": {
           "header": {
+            "type": "object",
             "properties": {
               "type": {
                 "const": "workflow"

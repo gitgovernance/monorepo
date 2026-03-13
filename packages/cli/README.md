@@ -59,12 +59,15 @@ Commands:
   agent                  Manage and run GitGov agents
   actor                  Manage project actors (identity)
   sync                   State synchronization (push/pull/resolve/audit)
+  hook                   Process Claude Code hook events (passive governance)
   context [options]      Query working context for agents and automation
   push [options]         Alias for "gitgov sync push"
   pull [options]         Alias for "gitgov sync pull"
 ```
 
 Every command supports `--json`, `--verbose`, and `--quiet` flags. Run `gitgov <command> --help` for full details.
+
+> **Note:** The `hook` command is machine-only — invoked automatically by Claude Code hooks, not by users. It reads JSON from stdin and always exits 0.
 
 ### Task Workflow
 
@@ -166,12 +169,12 @@ graph TD
 
 The CLI is a thin UI layer. All business logic lives in `@gitgov/core`. Commands delegate to adapters via a dependency injection service.
 
-| Technology | Role |
-|------------|------|
-| Commander.js | Command framework (flags, subcommands, help) |
-| Ink + React | Interactive TUI (`gitgov dashboard`) |
-| @gitgov/core | Business logic (adapters, stores, validators) |
-| esbuild | Bundle to single `gitgov.mjs` for distribution |
+| Technology   | Role                                           |
+| ------------ | ---------------------------------------------- |
+| Commander.js | Command framework (flags, subcommands, help)   |
+| Ink + React  | Interactive TUI (`gitgov dashboard`)           |
+| @gitgov/core | Business logic (adapters, stores, validators)  |
+| esbuild      | Bundle to single `gitgov.mjs` for distribution |
 
 ## Development
 

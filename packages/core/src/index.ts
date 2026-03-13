@@ -12,6 +12,7 @@ export * as ProjectInitializer from "./project_initializer";
 export * as Schemas from "./record_schemas";
 export * as Store from "./record_store";
 export * as SyncState from "./sync_state";
+export * as HookHandler from "./hook_handler";
 // Type system exports
 export * as Validation from "./record_validations";
 export * as Records from "./record_types";
@@ -66,6 +67,9 @@ export type { IConfigManager, GitGovConfig, AuditState } from "./config_manager"
 
 // Session type exports
 export type { SyncStatus, ActorState, ISessionManager } from "./session_manager";
+
+// HookHandler type exports
+export type { HookEvent, HookResult, HookHandlerDependencies, HookEventType, CommandClassification } from "./hook_handler";
 
 // EventBus type exports
 export type { ActivityEvent } from "./event_bus";

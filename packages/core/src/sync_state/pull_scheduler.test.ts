@@ -7,18 +7,18 @@
  */
 
 import { PullScheduler } from "./pull_scheduler";
-import type { FsSyncStateModule } from "./fs/fs_sync_state";
+import type { FsWorktreeSyncStateModule } from "./fs_worktree/fs_worktree_sync_state";
 import type { ConfigManager } from "../config_manager";
 import type { SessionManager } from "../session_manager";
 import type { SyncStatePullResult } from "./sync_state.types";
 
 /**
- * Mock FsSyncStateModule for testing
+ * Mock FsWorktreeSyncStateModule for testing
  */
-function createMockFsSyncStateModule(): jest.Mocked<FsSyncStateModule> {
+function createMockFsSyncStateModule(): jest.Mocked<FsWorktreeSyncStateModule> {
   return {
     pullState: jest.fn(),
-  } as unknown as jest.Mocked<FsSyncStateModule>;
+  } as unknown as jest.Mocked<FsWorktreeSyncStateModule>;
 }
 
 /**
@@ -40,7 +40,7 @@ function createMockSessionManager(): jest.Mocked<SessionManager> {
 }
 
 describe("PullScheduler", () => {
-  let mockFsSyncStateModule: jest.Mocked<FsSyncStateModule>;
+  let mockFsSyncStateModule: jest.Mocked<FsWorktreeSyncStateModule>;
   let mockConfigManager: jest.Mocked<ConfigManager>;
   let mockSessionManager: jest.Mocked<SessionManager>;
   let scheduler: PullScheduler;
