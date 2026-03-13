@@ -50,14 +50,9 @@ export type { IGitModule, GitModuleDependencies } from './git';
 // Project Discovery (filesystem-based project root detection)
 export {
   findProjectRoot,
-  findGitgovRoot,
-  getGitgovPath,
-  isGitgovProject,
+  getWorktreeBasePath,
   resetDiscoveryCache,
 } from './utils/project_discovery';
-
-// FsSyncStateModule (filesystem-based state synchronization)
-export { FsSyncStateModule } from './sync_state/fs';
 
 // FsWorktreeSyncStateModule (worktree-based state synchronization)
 export { FsWorktreeSyncStateModule } from './sync_state/fs_worktree';

@@ -2,25 +2,29 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import { McpDependencyInjectionService } from './mcp_di.js';
+import { getWorktreeBasePath } from '@gitgov/core/fs';
 
 /**
  * McpDependencyInjectionService tests — Block B (MSRV-B1 to MSRV-B5)
  *
- * These tests use a real temp directory with .gitgov/ structure.
+ * These tests use a real temp directory with .gitgov/ structure
+ * placed at the worktree path (getWorktreeBasePath), matching production behavior.
  * Core constructors are imported transitively — no mocking of core internals.
  */
 
 let tmpDir: string;
+let worktreeDir: string;
 
-async function createTempProject(): Promise<string> {
+async function createTempProject(): Promise<{ projectRoot: string; worktreeBase: string }> {
   const { mkdtemp } = await import('fs/promises');
   const { tmpdir } = await import('os');
   const dir = await mkdtemp(path.join(tmpdir(), 'mcp-di-test-'));
   // realpath for macOS /tmp → /private/tmp symlink
   const realDir = await fs.realpath(dir);
 
-  // Create minimal .gitgov/ structure
-  const gitgovDir = path.join(realDir, '.gitgov');
+  // .gitgov/ lives in worktree path, not in the repo
+  const worktreeBase = getWorktreeBasePath(realDir);
+  const gitgovDir = path.join(worktreeBase, '.gitgov');
   await fs.mkdir(gitgovDir, { recursive: true });
 
   // Create required store directories
@@ -46,17 +50,20 @@ async function createTempProject(): Promise<string> {
     JSON.stringify({}),
   );
 
-  return realDir;
+  return { projectRoot: realDir, worktreeBase };
 }
 
 describe('McpDependencyInjectionService', () => {
   describe('4.1. DI Lifecycle (MSRV-B1 to MSRV-B5)', () => {
     beforeEach(async () => {
-      tmpDir = await createTempProject();
+      const project = await createTempProject();
+      tmpDir = project.projectRoot;
+      worktreeDir = project.worktreeBase;
     });
 
     afterEach(async () => {
       await fs.rm(tmpDir, { recursive: true, force: true });
+      await fs.rm(worktreeDir, { recursive: true, force: true });
     });
 
     it('[MSRV-B1] should provide all core adapters and stores via getContainer()', async () => {
@@ -77,6 +84,8 @@ describe('McpDependencyInjectionService', () => {
       expect(container.feedbackAdapter).toBeDefined();
       expect(container.executionAdapter).toBeDefined();
       expect(container.identityAdapter).toBeDefined();
+      expect(container.agentAdapter).toBeDefined();
+      expect(container.workflowAdapter).toBeDefined();
 
       // Modules
       expect(container.lintModule).toBeDefined();
@@ -99,7 +108,7 @@ describe('McpDependencyInjectionService', () => {
       expect(container.configManager).toBeDefined();
     });
 
-    it('[MSRV-B3] should throw when .gitgov/ not found and no gitgov-state branch', async () => {
+    it('[MSRV-B3] should throw when .gitgov/ not found at worktree path', async () => {
       // Create a dir without .gitgov/
       const emptyDir = path.join(tmpDir, 'empty-project');
       await fs.mkdir(emptyDir, { recursive: true });
@@ -117,7 +126,7 @@ describe('McpDependencyInjectionService', () => {
       expect(container1).toBe(container2);
     });
 
-    it('[MSRV-B5] should use the project root as base path for all stores', async () => {
+    it('[MSRV-B5] should use the worktree path as base path for all stores', async () => {
       const di = new McpDependencyInjectionService({ projectRoot: tmpDir });
       const container = await di.getContainer();
 

@@ -10,6 +10,46 @@ import {
   cleanupWorktree,
 } from './helpers';
 
+/** Loose record shape for E2E test manipulation (intentional corruption).
+ *  Known fields use dot access; corruption fields use bracket notation. */
+type TestRecordSignature = {
+  [key: string]: unknown;
+  keyId?: string;
+  role?: string;
+  notes?: string;
+  signature?: string;
+  timestamp?: number;
+};
+type TestRecord = {
+  header: {
+    [key: string]: unknown;
+    type?: string;
+    payloadChecksum?: string;
+    signatures?: TestRecordSignature[];
+  };
+  payload: {
+    [key: string]: unknown;
+    id?: string;
+    title?: string;
+    description?: string;
+    status?: string;
+    cycleIds?: string[];
+    taskIds?: string[];
+    references?: unknown[];
+  };
+};
+
+/** Shape of a single lint result from `gitgov lint --format json` output. */
+type LintResultEntry = {
+  level: string;
+  filePath: string;
+  validator: string;
+  message: string;
+  entity: { type: string; id: string };
+  fixable: boolean;
+  context?: Record<string, unknown>;
+};
+
 /**
  * E2E Tests for `gitgov lint` Command
  *
@@ -68,7 +108,7 @@ describe('Lint CLI Command - E2E Tests', () => {
     worktreeBasePath: string,
     type: string,
     filename: string,
-    modifier: (record: any) => any
+    modifier: (record: TestRecord) => TestRecord
   ) => {
     const filePath = path.join(worktreeBasePath, '.gitgov', type, filename);
     const content = JSON.parse(fs.readFileSync(filePath, 'utf8'));
@@ -215,7 +255,7 @@ describe('Lint CLI Command - E2E Tests', () => {
 
       const report = JSON.parse(result.output || result.error!);
       const schemaErrors = report.results.filter(
-        (r: any) => r.validator === 'SCHEMA_VALIDATION'
+        (r: LintResultEntry) => r.validator === 'SCHEMA_VALIDATION'
       );
       expect(schemaErrors.length).toBeGreaterThan(0);
       expect(report.summary.errors).toBeGreaterThan(0);
@@ -232,7 +272,7 @@ describe('Lint CLI Command - E2E Tests', () => {
       const record = readRecord(worktreeBasePath, 'tasks', taskFile!);
       // Add an undeclared additional property to payload
       modifyRecordInWorktree(worktreeBasePath, 'tasks', taskFile!, (rec) => {
-        rec.payload.undeclaredField = 'this should not be here';
+        rec.payload['undeclaredField'] = 'this should not be here';
         return rec;
       });
 
@@ -242,13 +282,17 @@ describe('Lint CLI Command - E2E Tests', () => {
       );
 
       const report = JSON.parse(result.output || result.error!);
+      // Additional properties on payload are caught by the embedded metadata conditional $ref,
+      // so the error path includes "/payload" → classified as EMBEDDED_METADATA_STRUCTURE.
+      // This is consistent with EARS-D1 which checks for both validators.
       const schemaErrors = report.results.filter(
-        (r: any) => r.validator === 'SCHEMA_VALIDATION'
+        (r: LintResultEntry) => r.validator === 'SCHEMA_VALIDATION' ||
+          (r.validator === 'EMBEDDED_METADATA_STRUCTURE' && r.message.includes('additional properties'))
       );
       expect(schemaErrors.length).toBeGreaterThan(0);
       // Verify oneOf/if-then-else noise is filtered (should not have redundant errors)
       const redundantErrors = report.results.filter(
-        (r: any) => r.message && (
+        (r: LintResultEntry) => r.message && (
           r.message.includes('boolean schema is false') ||
           r.message.includes('must match "else" schema') ||
           r.message.includes('must match "then" schema')
@@ -279,7 +323,7 @@ describe('Lint CLI Command - E2E Tests', () => {
 
       const report = JSON.parse(result.output || result.error!);
       const schemaErrors = report.results.filter(
-        (r: any) => r.validator === 'SCHEMA_VALIDATION'
+        (r: LintResultEntry) => r.validator === 'SCHEMA_VALIDATION'
       );
       expect(schemaErrors.length).toBeGreaterThan(0);
 
@@ -329,7 +373,7 @@ describe('Lint CLI Command - E2E Tests', () => {
 
       const report = JSON.parse(result.output || result.error!);
       const checksumErrors = report.results.filter(
-        (r: any) => r.validator === 'CHECKSUM_VERIFICATION'
+        (r: LintResultEntry) => r.validator === 'CHECKSUM_VERIFICATION'
       );
       expect(checksumErrors.length).toBeGreaterThan(0);
       expect(checksumErrors[0].message).toContain('payloadChecksum');
@@ -346,7 +390,7 @@ describe('Lint CLI Command - E2E Tests', () => {
       const record = readRecord(worktreeBasePath, 'tasks', taskFile!);
       // Set an invalid signature (not valid base64 88 chars)
       modifyRecordInWorktree(worktreeBasePath, 'tasks', taskFile!, (rec) => {
-        rec.header.signatures[0].signature = 'not-a-valid-base64-signature';
+        rec.header.signatures![0]!.signature = 'not-a-valid-base64-signature';
         return rec;
       });
 
@@ -358,7 +402,7 @@ describe('Lint CLI Command - E2E Tests', () => {
       const report = JSON.parse(result.output || result.error!);
       // Check for schema validation error on signature pattern
       const sigErrors = report.results.filter(
-        (r: any) => r.validator === 'SCHEMA_VALIDATION' || r.validator === 'SIGNATURE_STRUCTURE'
+        (r: LintResultEntry) => r.validator === 'SCHEMA_VALIDATION' || r.validator === 'SIGNATURE_STRUCTURE'
       );
       expect(sigErrors.length).toBeGreaterThan(0);
 
@@ -374,7 +418,7 @@ describe('Lint CLI Command - E2E Tests', () => {
       const record = readRecord(worktreeBasePath, 'tasks', taskFile!);
       // Remove notes from signature
       modifyRecordInWorktree(worktreeBasePath, 'tasks', taskFile!, (rec) => {
-        delete rec.header.signatures[0].notes;
+        delete rec.header.signatures![0]!.notes;
         return rec;
       });
 
@@ -386,7 +430,7 @@ describe('Lint CLI Command - E2E Tests', () => {
       const report = JSON.parse(result.output || result.error!);
       // Missing notes could trigger SCHEMA_VALIDATION or SIGNATURE_STRUCTURE
       const sigErrors = report.results.filter(
-        (r: any) => r.validator === 'SCHEMA_VALIDATION' || r.validator === 'SIGNATURE_STRUCTURE'
+        (r: LintResultEntry) => r.validator === 'SCHEMA_VALIDATION' || r.validator === 'SIGNATURE_STRUCTURE'
       );
       expect(sigErrors.length).toBeGreaterThan(0);
 
@@ -425,8 +469,8 @@ describe('Lint CLI Command - E2E Tests', () => {
       const record = readRecord(worktreeBasePath, 'tasks', taskFile!);
       // Add undeclared fields — schema has additionalProperties: false
       modifyRecordInWorktree(worktreeBasePath, 'tasks', taskFile!, (rec) => {
-        rec.payload.extraField = 'should not be here';
-        rec.payload.anotherExtra = 42;
+        rec.payload['extraField'] = 'should not be here';
+        rec.payload['anotherExtra'] = 42;
         return rec;
       });
 
@@ -437,12 +481,12 @@ describe('Lint CLI Command - E2E Tests', () => {
 
       const report = JSON.parse(result.output || result.error!);
       const structErrors = report.results.filter(
-        (r: any) => r.validator === 'EMBEDDED_METADATA_STRUCTURE' ||
+        (r: LintResultEntry) => r.validator === 'EMBEDDED_METADATA_STRUCTURE' ||
           (r.validator === 'SCHEMA_VALIDATION' && r.message.includes('additional properties'))
       );
       expect(structErrors.length).toBeGreaterThan(0);
       // Additional properties errors should be fixable
-      const fixable = report.results.filter((r: any) => r.fixable);
+      const fixable = report.results.filter((r: LintResultEntry) => r.fixable);
       expect(fixable.length).toBeGreaterThan(0);
 
       // Restore
@@ -457,7 +501,7 @@ describe('Lint CLI Command - E2E Tests', () => {
       const record = readRecord(worktreeBasePath, 'tasks', taskFile!);
       // Add undeclared field to header
       modifyRecordInWorktree(worktreeBasePath, 'tasks', taskFile!, (rec) => {
-        rec.header.extraHeaderField = 'should not be in header';
+        rec.header['extraHeaderField'] = 'should not be in header';
         return rec;
       });
 
@@ -470,7 +514,7 @@ describe('Lint CLI Command - E2E Tests', () => {
       expect(report.summary.errors).toBeGreaterThan(0);
       // Should detect schema error on the header
       const headerErrors = report.results.filter(
-        (r: any) => r.message && r.message.includes('additional properties')
+        (r: LintResultEntry) => r.message && r.message.includes('additional properties')
       );
       expect(headerErrors.length).toBeGreaterThan(0);
 
@@ -534,7 +578,7 @@ describe('Lint CLI Command - E2E Tests', () => {
 
       const report = JSON.parse(result.output || result.error!);
       const execErrors = report.results.filter(
-        (r: any) => r.entity.id === execId
+        (r: LintResultEntry) => r.entity.id === execId
       );
       expect(execErrors.length).toBeGreaterThan(0);
 
@@ -620,7 +664,7 @@ describe('Lint CLI Command - E2E Tests', () => {
       // Filter for reference errors on THIS task only
       const taskId = record.payload.id;
       const refErrors = report.results.filter(
-        (r: any) => r.validator === 'REFERENTIAL_INTEGRITY' &&
+        (r: LintResultEntry) => r.validator === 'REFERENTIAL_INTEGRITY' &&
           r.entity.id === taskId
       );
       // There should be no reference errors for valid typed references
@@ -671,7 +715,7 @@ describe('Lint CLI Command - E2E Tests', () => {
       const report = JSON.parse(result.output || result.error!);
       // Task record in cycles/ triggers SCHEMA_VALIDATION errors (wrong schema applied)
       const misplacedErrors = report.results.filter(
-        (r: any) => r.entity.type === 'cycle' && r.entity.id.includes('task')
+        (r: LintResultEntry) => r.entity.type === 'cycle' && r.entity.id.includes('task')
       );
       expect(misplacedErrors.length).toBeGreaterThan(0);
 
@@ -706,7 +750,7 @@ describe('Lint CLI Command - E2E Tests', () => {
 
       const report = JSON.parse(result.output || result.error!);
       const biErrors = report.results.filter(
-        (r: any) => r.validator === 'BIDIRECTIONAL_CONSISTENCY'
+        (r: LintResultEntry) => r.validator === 'BIDIRECTIONAL_CONSISTENCY'
       );
       expect(biErrors.length).toBe(0);
 
@@ -747,7 +791,7 @@ describe('Lint CLI Command - E2E Tests', () => {
       const record = readRecord(worktreeBasePath, 'tasks', taskFile!);
       // Set keyId to format that violates ^(human|agent)(:[a-z0-9-]+)+$ pattern
       modifyRecordInWorktree(worktreeBasePath, 'tasks', taskFile!, (rec) => {
-        rec.header.signatures[0].keyId = 'invalid_format_no_colon';
+        rec.header.signatures![0]!.keyId = 'invalid_format_no_colon';
         return rec;
       });
 
@@ -758,10 +802,10 @@ describe('Lint CLI Command - E2E Tests', () => {
 
       const report = JSON.parse(result.output || result.error!);
       const sigErrors = report.results.filter(
-        (r: any) => r.validator === 'SIGNATURE_STRUCTURE' || r.validator === 'SCHEMA_VALIDATION'
+        (r: LintResultEntry) => r.validator === 'SIGNATURE_STRUCTURE' || r.validator === 'SCHEMA_VALIDATION'
       );
       expect(sigErrors.length).toBeGreaterThan(0);
-      expect(sigErrors.some((e: any) => e.message.includes('keyId'))).toBe(true);
+      expect(sigErrors.some((e: LintResultEntry) => e.message.includes('keyId'))).toBe(true);
 
       // Restore
       const filePath = path.join(worktreeBasePath, '.gitgov', 'tasks', taskFile!);
@@ -809,7 +853,7 @@ describe('Lint CLI Command - E2E Tests', () => {
 
       // Add additional property — triggers fixable EMBEDDED_METADATA_STRUCTURE error
       modifyRecordInWorktree(worktreeBasePath, 'tasks', taskFile!, (rec) => {
-        rec.payload.extraFieldToFix = 'this will be removed by --fix';
+        rec.payload['extraFieldToFix'] = 'this will be removed by --fix';
         return rec;
       });
 
@@ -819,7 +863,7 @@ describe('Lint CLI Command - E2E Tests', () => {
         { cwd: testProjectRoot, expectError: true }
       );
       const lintReport = JSON.parse(lintResult.output || lintResult.error!);
-      const fixableErrors = lintReport.results.filter((r: any) => r.fixable);
+      const fixableErrors = lintReport.results.filter((r: LintResultEntry) => r.fixable);
       expect(fixableErrors.length).toBeGreaterThan(0);
 
       // Run fix — the CLI has access to the private key from init
@@ -937,7 +981,7 @@ describe('Lint CLI Command - E2E Tests', () => {
 
       // Add additional property to trigger EMBEDDED_METADATA_STRUCTURE error
       modifyRecordInWorktree(worktreeBasePath, 'tasks', taskFile!, (rec) => {
-        rec.payload.extraField = 'triggers error';
+        rec.payload['extraField'] = 'triggers error';
         return rec;
       });
 
@@ -1029,7 +1073,7 @@ describe('Lint CLI Command - E2E Tests', () => {
       const report = JSON.parse(result.output || result.error!);
       // The misplaced file should produce errors (schema mismatch)
       const misplacedErrors = report.results.filter(
-        (r: any) => r.entity.type === 'cycle' && r.entity.id.includes('task')
+        (r: LintResultEntry) => r.entity.type === 'cycle' && r.entity.id.includes('task')
       );
       expect(misplacedErrors.length).toBeGreaterThan(0);
 
@@ -1049,7 +1093,7 @@ describe('Lint CLI Command - E2E Tests', () => {
       expect(result.success).toBe(true);
       const report = JSON.parse(result.output);
       const namingErrors = report.results.filter(
-        (r: any) => r.validator === 'FILE_NAMING_CONVENTION'
+        (r: LintResultEntry) => r.validator === 'FILE_NAMING_CONVENTION'
       );
       expect(namingErrors.length).toBe(0);
     });

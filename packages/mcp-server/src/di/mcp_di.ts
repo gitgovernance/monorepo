@@ -30,9 +30,10 @@ import {
   FsFileLister,
   FsLintModule,
   LocalGitModule,
-  FsSyncStateModule,
+  FsWorktreeSyncStateModule,
   FsRecordProjection,
   FsAgentRunner,
+  getWorktreeBasePath,
 } from '@gitgov/core/fs';
 
 import type { McpDiConfig, McpDiContainer } from './mcp_di.types.js';
@@ -41,7 +42,7 @@ import type { McpDiConfig, McpDiContainer } from './mcp_di.types.js';
  * McpDependencyInjectionService — Singleton DI container para el MCP server.
  *
  * Inicializa stores, adapters y modules del core de forma lazy.
- * Si .gitgov/ no existe, intenta bootstrap desde gitgov-state branch.
+ * Resuelve .gitgov/ via worktree path (getWorktreeBasePath).
  */
 export class McpDependencyInjectionService {
   private config: McpDiConfig;
@@ -69,22 +70,17 @@ export class McpDependencyInjectionService {
 
   private async initialize(): Promise<McpDiContainer> {
     const projectRoot = this.config.projectRoot;
-    const gitgovPath = path.join(projectRoot, '.gitgov');
+    const worktreeBase = getWorktreeBasePath(projectRoot);
+    const gitgovPath = path.join(worktreeBase, '.gitgov');
 
-    // [MSRV-B2] Check if .gitgov/ exists
+    // [MSRV-B2] Check if .gitgov/ exists in worktree
     const gitgovExists = await this.directoryExists(gitgovPath);
 
     if (!gitgovExists) {
-      // [MSRV-B2] Try bootstrap from gitgov-state branch
-      const gitModule = this.createGitModule(projectRoot);
-      const bootstrapResult = await FsSyncStateModule.bootstrapFromStateBranch(gitModule);
-
-      if (!bootstrapResult.success) {
-        // [MSRV-B3] Neither .gitgov/ nor gitgov-state exist
-        throw new Error(
-          'GitGovernance not initialized. .gitgov/ directory not found and bootstrap from gitgov-state branch failed.',
-        );
-      }
+      // [MSRV-B3] Worktree not initialized — user must run `gitgov init` or `gitgov sync pull`
+      throw new Error(
+        'GitGovernance not initialized. Run `gitgov init` or `gitgov sync pull` first.',
+      );
     }
 
     // --- Stores ---
@@ -113,8 +109,8 @@ export class McpDependencyInjectionService {
 
     // --- Infrastructure ---
     const eventBus = new EventBus.EventBus();
-    const configManager = createConfigManager(projectRoot);
-    const sessionManager = createSessionManager(projectRoot);
+    const configManager = createConfigManager(worktreeBase);
+    const sessionManager = createSessionManager(worktreeBase);
     const keyProvider = new FsKeyProvider({
       keysDir: path.join(gitgovPath, 'keys'),
     });
@@ -210,13 +206,13 @@ export class McpDependencyInjectionService {
     // --- Git + Sync ---
     const gitModule = this.createGitModule(projectRoot);
 
-    const syncModule = new FsSyncStateModule({
+    const syncModule = new FsWorktreeSyncStateModule({
       git: gitModule,
       config: configManager,
       identity: identityAdapter,
       lint: pureLintModule,
       indexer: projector,
-    });
+    }, { repoRoot: projectRoot });
 
     // --- Source Auditor ---
     const findingDetector = new FindingDetector.FindingDetectorModule();

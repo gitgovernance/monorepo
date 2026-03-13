@@ -8,6 +8,10 @@
  */
 
 import type { GitGovRecordType } from '../record_types';
+import { DIR_TO_TYPE, TYPE_TO_DIR } from '../record_types';
+
+// Re-export for backwards compatibility with internal consumers
+export { DIR_TO_TYPE, TYPE_TO_DIR };
 
 /**
  * Parsed result of a timestamp-based record ID.
@@ -25,26 +29,6 @@ export interface ParsedActorId {
   type: 'human' | 'agent';
   slug: string;
 }
-
-/**
- * Mapping from directory names to entity types.
- */
-export const DIR_TO_TYPE: Record<string, GitGovRecordType> = {
-  'tasks': 'task',
-  'cycles': 'cycle',
-  'executions': 'execution',
-  'feedbacks': 'feedback',
-  'actors': 'actor',
-  'agents': 'agent'
-};
-
-/**
- * Mapping from entity types to directory names (inverse of DIR_TO_TYPE).
- */
-export const TYPE_TO_DIR: Record<GitGovRecordType, string> =
-  Object.fromEntries(
-    Object.entries(DIR_TO_TYPE).map(([dir, type]) => [type, dir]),
-  ) as Record<GitGovRecordType, string>;
 
 /**
  * Valid directory names for GitGov records.

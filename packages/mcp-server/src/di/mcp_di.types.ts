@@ -25,7 +25,7 @@ import type { IFsLintModule } from '@gitgov/core/fs';
  * Configuracion de inicializacion del DI container del MCP server.
  */
 export interface McpDiConfig {
-  /** Ruta raiz del proyecto (donde esta .gitgov/) */
+  /** Ruta raiz del proyecto (repo root — .gitgov/ se resuelve via worktree) */
   projectRoot: string;
 }
 

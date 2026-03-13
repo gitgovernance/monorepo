@@ -67,22 +67,4 @@ export interface ProjectRootFinder {
    * @returns Absolute path to project root or null
    */
   findProjectRoot(startPath?: string): string | null;
-
-  /**
-   * Find GitGovernance project root by searching upward for .gitgov or .git
-   * @param startPath - Starting path (default: process.cwd())
-   * @returns Absolute path to project root or null
-   */
-  findGitgovRoot(startPath?: string): string | null;
-
-  /**
-   * Get absolute path to .gitgov directory
-   * @throws Error if not in a GitGovernance project
-   */
-  getGitgovPath(): string;
-
-  /**
-   * Check if current directory is a GitGovernance project
-   */
-  isGitgovProject(): boolean;
 }

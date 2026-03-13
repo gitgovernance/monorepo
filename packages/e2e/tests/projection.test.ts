@@ -18,8 +18,9 @@ import {
   createTestPrisma,
   cleanupDb,
   runProjector,
-  listRecordFiles,
-  readRecordFile,
+  listRecordIds,
+  readRecord,
+  cleanupWorktree,
   SKIP_CLEANUP,
   PrismaRecordProjection,
 } from './helpers';
@@ -46,11 +47,11 @@ describe('Block B: Projection Pipeline (CB1-CB8)', () => {
     runCliCommand(['task', 'new', 'Write Tests', '-d', 'Write unit tests', '-p', 'medium', '-q'], { cwd: repoPath });
 
     // Get task IDs for cycle + assign
-    const taskFiles = listRecordFiles(repoPath, 'tasks');
-    const task1 = readRecordFile(repoPath, 'tasks', taskFiles[0]!);
-    const task2 = readRecordFile(repoPath, 'tasks', taskFiles[1]!);
-    const actorFiles = listRecordFiles(repoPath, 'actors');
-    const actor = readRecordFile(repoPath, 'actors', actorFiles[0]!);
+    const taskIds = await listRecordIds(repoPath, 'tasks');
+    const task1 = await readRecord(repoPath, 'tasks', taskIds[0]!);
+    const task2 = await readRecord(repoPath, 'tasks', taskIds[1]!);
+    const actorIds = await listRecordIds(repoPath, 'actors');
+    const actor = await readRecord(repoPath, 'actors', actorIds[0]!);
 
     runCliCommand(['cycle', 'new', 'Sprint Alpha', '--task-ids', `${task1.payload.id},${task2.payload.id}`, '-q'], { cwd: repoPath });
     runCliCommand(['task', 'assign', task1.payload.id, '--to', actor.payload.id, '-q'], { cwd: repoPath });
@@ -60,6 +61,7 @@ describe('Block B: Projection Pipeline (CB1-CB8)', () => {
   });
 
   afterAll(async () => {
+    cleanupWorktree(repoPath);
     await cleanupDb(prisma, repoId);
     await prisma.$disconnect();
     if (!SKIP_CLEANUP) fs.rmSync(tempDir, { recursive: true, force: true });

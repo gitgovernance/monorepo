@@ -23,8 +23,10 @@ import {
   createTestPrisma,
   cleanupDb,
   runProjector,
-  listRecordFiles,
-  readRecordFile,
+  listRecordIds,
+  readRecord,
+  getGitgovDir,
+  cleanupWorktree,
   HAS_GITHUB,
   GITHUB_REMOTE_URL,
   GITHUB_TEST_OWNER,
@@ -32,20 +34,20 @@ import {
   GITHUB_TOKEN,
   SKIP_CLEANUP,
   PrismaRecordProjection,
+  GitHubRecordStore,
+  RecordProjector,
+  RecordMetrics,
 } from './helpers';
-import type { PrismaClient, ProjectionClient } from './helpers';
-
-import { GitHubRecordStore } from '../../core/src/record_store/github';
-import { RecordProjector } from '../../core/src/record_projection';
-import type { RecordProjectorDependencies } from '../../core/src/record_projection';
-import { RecordMetrics } from '../../core/src/record_metrics';
 import type {
+  PrismaClient,
+  ProjectionClient,
+  RecordProjectorDependencies,
   GitGovTaskRecord,
   GitGovActorRecord,
   GitGovCycleRecord,
   GitGovFeedbackRecord,
   GitGovExecutionRecord,
-} from '../../core/src/record_types';
+} from './helpers';
 
 describe('Block D: Cross-Path Workflows (CD1-CD5)', () => {
   let prisma: PrismaClient;
@@ -95,6 +97,8 @@ describe('Block D: Cross-Path Workflows (CD1-CD5)', () => {
       execSync('git push origin --delete gitgov-state', { cwd: userARepo, stdio: 'pipe' });
     } catch { /* ignore */ }
 
+    // Cleanup worktrees for all repos used in tests
+    cleanupWorktree(userARepo);
     await cleanupDb(prisma, repoId);
     await prisma.$disconnect();
     if (!SKIP_CLEANUP) fs.rmSync(tempDir, { recursive: true, force: true });
@@ -195,13 +199,13 @@ describe('Block D: Cross-Path Workflows (CD1-CD5)', () => {
     runCliCommand(['sync', 'pull'], { cwd: userARepo });
 
     // 3. Verify: feedback file exists locally
-    const fbFiles = listRecordFiles(userARepo, 'feedbacks');
-    expect(fbFiles.length).toBeGreaterThanOrEqual(1);
+    const fbIds = await listRecordIds(userARepo, 'feedbacks');
+    expect(fbIds.length).toBeGreaterThanOrEqual(1);
 
     // Find the API-written feedback
     let found = false;
-    for (const fbFile of fbFiles) {
-      const fb = readRecordFile(userARepo, 'feedbacks', fbFile);
+    for (const fbId of fbIds) {
+      const fb = await readRecord(userARepo, 'feedbacks', fbId);
       if (fb.payload.id === feedbackId) {
         expect(fb.payload.content).toBe('Feedback written via GitHub API');
         expect(fb.header.signatures.length).toBeGreaterThanOrEqual(1);
@@ -276,18 +280,16 @@ describe('Block D: Cross-Path Workflows (CD1-CD5)', () => {
     const userBRepo = path.join(tempDir, 'user-b');
 
     try {
-      // User B: fresh repo with own identity, then sync with shared remote
+      // User B: fresh repo, join existing project via sync pull (NOT init — project exists on remote)
       createGitRepo(userBRepo);
       execSync(`git remote add origin "${GITHUB_REMOTE_URL}"`, { cwd: userBRepo, stdio: 'pipe' });
+      execSync('git fetch origin', { cwd: userBRepo, stdio: 'pipe' });
 
-      // Init as User B (creates own actor identity + keypair)
-      runCliCommand(['init', '--name', 'CD4 UserB Project', '--actor-name', 'User B Dev', '--quiet'], { cwd: userBRepo });
-
-      // Commit init-generated files (.gitignore, .gitgov/) to avoid conflicts with gitgov-state checkout
-      execSync('git add -A && git commit -m "gitgov init"', { cwd: userBRepo, stdio: 'pipe' });
-
-      // Pull existing gitgov state (merges User A's records)
+      // Pull existing gitgov state — CLI bootstraps worktree from origin/gitgov-state (WTSYNC-A5)
       runCliCommand(['sync', 'pull'], { cwd: userBRepo });
+
+      // Create User B's identity (joins existing project, doesn't re-init)
+      runCliCommand(['actor', 'new', '-t', 'human', '-n', 'User B Dev', '-r', 'developer'], { cwd: userBRepo });
 
       // User B creates a task
       runCliCommand(['task', 'new', 'User B task', '-d', 'Task from second user', '-p', 'medium', '-q'], { cwd: userBRepo });
@@ -376,11 +378,12 @@ describe('Block D: Cross-Path Workflows (CD1-CD5)', () => {
       expect(apiFb).toBeDefined();
       expect(apiFb!.feedbackType).toBe('suggestion');
     } finally {
+      cleanupWorktree(userBRepo);
       await cleanupDb(prisma, cd4RepoId);
     }
   });
 
-  it('[EARS-CD5] should sync records between two CLI users via shared GitHub remote', () => {
+  it('[EARS-CD5] should sync records between two CLI users via shared GitHub remote', async () => {
     // This test verifies the basic CLI push/pull round-trip via real GitHub
     // (migrated from old CF1-CF3)
 
@@ -394,28 +397,28 @@ describe('Block D: Cross-Path Workflows (CD1-CD5)', () => {
     const result = runCliCommand(['sync', 'pull'], { cwd: clonePath });
     expect(result.success).toBe(true);
 
-    // Verify .gitgov/ arrived from gitgov-state branch
-    expect(fs.existsSync(path.join(clonePath, '.gitgov'))).toBe(true);
-    expect(fs.existsSync(path.join(clonePath, '.gitgov', 'config.json'))).toBe(true);
+    // Verify .gitgov/ arrived in worktree path (CLI stores state in ~/.gitgov/worktrees/<hash>/)
+    expect(fs.existsSync(path.join(getGitgovDir(clonePath)))).toBe(true);
+    expect(fs.existsSync(path.join(getGitgovDir(clonePath), 'config.json'))).toBe(true);
 
     // Verify records synced — tasks, actors should be present
     const syncedDirs = ['tasks', 'actors', 'cycles'];
     for (const dir of syncedDirs) {
-      const files = listRecordFiles(clonePath, dir);
-      expect(files.length).toBeGreaterThanOrEqual(1);
+      const ids = await listRecordIds(clonePath, dir);
+      expect(ids.length).toBeGreaterThanOrEqual(1);
     }
 
     // Verify task content survived round-trip
-    const origTasks = listRecordFiles(userARepo, 'tasks');
-    const cloneTasks = listRecordFiles(clonePath, 'tasks');
-    expect(cloneTasks.length).toBeGreaterThanOrEqual(origTasks.length);
+    const origTaskIds = await listRecordIds(userARepo, 'tasks');
+    const cloneTaskIds = await listRecordIds(clonePath, 'tasks');
+    expect(cloneTaskIds.length).toBeGreaterThanOrEqual(origTaskIds.length);
 
-    if (origTasks.length > 0 && cloneTasks.length > 0) {
-      // Find matching task by filename
-      for (const taskFile of origTasks) {
-        if (cloneTasks.includes(taskFile)) {
-          const origTask = readRecordFile(userARepo, 'tasks', taskFile);
-          const cloneTask = readRecordFile(clonePath, 'tasks', taskFile);
+    if (origTaskIds.length > 0 && cloneTaskIds.length > 0) {
+      // Find matching task by ID
+      for (const taskId of origTaskIds) {
+        if (cloneTaskIds.includes(taskId)) {
+          const origTask = await readRecord(userARepo, 'tasks', taskId);
+          const cloneTask = await readRecord(clonePath, 'tasks', taskId);
           expect(cloneTask.payload.title).toBe(origTask.payload.title);
           expect(cloneTask.payload.id).toBe(origTask.payload.id);
           expect(cloneTask.header.payloadChecksum).toBe(origTask.header.payloadChecksum);
