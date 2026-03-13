@@ -18,6 +18,26 @@ export type GitGovRecordType =
   | "feedback";
 
 /**
+ * Canonical mapping from directory names to record types.
+ */
+export const DIR_TO_TYPE: Record<string, GitGovRecordType> = {
+  'tasks': 'task',
+  'cycles': 'cycle',
+  'executions': 'execution',
+  'feedbacks': 'feedback',
+  'actors': 'actor',
+  'agents': 'agent',
+};
+
+/**
+ * Canonical mapping from record types to directory names (inverse of DIR_TO_TYPE).
+ */
+export const TYPE_TO_DIR: Record<GitGovRecordType, string> =
+  Object.fromEntries(
+    Object.entries(DIR_TO_TYPE).map(([dir, type]) => [type, dir]),
+  ) as Record<GitGovRecordType, string>;
+
+/**
  * The canonical payload for any GitGovernance record.
  */
 export type GitGovRecordPayload =
