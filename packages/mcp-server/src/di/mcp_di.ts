@@ -30,9 +30,10 @@ import {
   FsFileLister,
   FsLintModule,
   LocalGitModule,
-  FsSyncStateModule,
+  FsWorktreeSyncStateModule,
   FsRecordProjection,
   FsAgentRunner,
+  getWorktreeBasePath,
 } from '@gitgov/core/fs';
 
 import type { McpDiConfig, McpDiContainer } from './mcp_di.types.js';
@@ -69,22 +70,17 @@ export class McpDependencyInjectionService {
 
   private async initialize(): Promise<McpDiContainer> {
     const projectRoot = this.config.projectRoot;
-    const gitgovPath = path.join(projectRoot, '.gitgov');
+    const worktreeBase = getWorktreeBasePath(projectRoot);
+    const gitgovPath = path.join(worktreeBase, '.gitgov');
 
-    // [MSRV-B2] Check if .gitgov/ exists
+    // [MSRV-B2] Check if .gitgov/ exists in worktree
     const gitgovExists = await this.directoryExists(gitgovPath);
 
     if (!gitgovExists) {
-      // [MSRV-B2] Try bootstrap from gitgov-state branch
-      const gitModule = this.createGitModule(projectRoot);
-      const bootstrapResult = await FsSyncStateModule.bootstrapFromStateBranch(gitModule);
-
-      if (!bootstrapResult.success) {
-        // [MSRV-B3] Neither .gitgov/ nor gitgov-state exist
-        throw new Error(
-          'GitGovernance not initialized. .gitgov/ directory not found and bootstrap from gitgov-state branch failed.',
-        );
-      }
+      // [MSRV-B3] Worktree not initialized — user must run `gitgov init` or `gitgov sync pull`
+      throw new Error(
+        'GitGovernance not initialized. Run `gitgov init` or `gitgov sync pull` first.',
+      );
     }
 
     // --- Stores ---
@@ -210,13 +206,13 @@ export class McpDependencyInjectionService {
     // --- Git + Sync ---
     const gitModule = this.createGitModule(projectRoot);
 
-    const syncModule = new FsSyncStateModule({
+    const syncModule = new FsWorktreeSyncStateModule({
       git: gitModule,
       config: configManager,
       identity: identityAdapter,
       lint: pureLintModule,
       indexer: projector,
-    });
+    }, { repoRoot: projectRoot });
 
     // --- Source Auditor ---
     const findingDetector = new FindingDetector.FindingDetectorModule();
