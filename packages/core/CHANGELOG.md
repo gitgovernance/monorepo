@@ -1,3 +1,10 @@
+## [2.10.0](https://github.com/gitgovernance/monorepo/compare/core-v2.9.0...core-v2.10.0) (2026-03-13)
+
+
+### ✨ Features
+
+* **core:** add RECORD_TYPES constant for iteration and validation ([#103](https://github.com/gitgovernance/monorepo/issues/103)) ([aab5385](https://github.com/gitgovernance/monorepo/commit/aab5385347df00c57167d8302acf8afb6868beab))
+
 ## [2.9.0](https://github.com/gitgovernance/monorepo/compare/core-v2.8.0...core-v2.9.0) (2026-03-13)
 
 
