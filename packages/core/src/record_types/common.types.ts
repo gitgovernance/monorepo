@@ -18,6 +18,13 @@ export type GitGovRecordType =
   | "feedback";
 
 /**
+ * All valid record types as a readonly array, useful for iteration and validation.
+ */
+export const RECORD_TYPES: readonly GitGovRecordType[] = [
+  'actor', 'agent', 'cycle', 'task', 'execution', 'feedback',
+] as const;
+
+/**
  * Canonical mapping from directory names to record types.
  */
 export const DIR_TO_TYPE: Record<string, GitGovRecordType> = {
