@@ -1,3 +1,17 @@
+## [2.10.0](https://github.com/gitgovernance/monorepo/compare/core-v2.9.0...core-v2.10.0) (2026-03-14)
+
+
+### ✨ Features
+
+* **core/cli:** SARIF 2.1.0 module + CLI refactor (sarif_compliance_spec Cycles 1-2) ([e459dc2](https://github.com/gitgovernance/monorepo/commit/e459dc204b794fb53ded3d641cedf22eb7a988a3))
+
+
+### 🐛 Bug Fixes
+
+* **cli:** pin @gitgov/core dependency to ^2.9.0 ([#105](https://github.com/gitgovernance/monorepo/issues/105)) ([cc9b3d5](https://github.com/gitgovernance/monorepo/commit/cc9b3d5cb6aebe52bdf0fcb993ddf0f3494e2de7))
+* **cli:** replace deprecated getGitgovPath with getWorktreeBasePath ([95ccdd3](https://github.com/gitgovernance/monorepo/commit/95ccdd3133fb3328efa82066876ce0546e7f6fca))
+* **cli:** skip diagram e2e tests incompatible with worktree mode ([853bac0](https://github.com/gitgovernance/monorepo/commit/853bac0feb4281542dfed6b98b657eae5b4afc5f))
+
 ## [2.9.0](https://github.com/gitgovernance/monorepo/compare/core-v2.8.0...core-v2.9.0) (2026-03-13)
 
 
