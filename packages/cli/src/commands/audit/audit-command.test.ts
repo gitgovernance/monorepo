@@ -483,18 +483,21 @@ describe('AuditCommand', () => {
 
       await auditCommand.execute(createDefaultOptions({ scope: 'full' }));
 
+      expect(mockSourceAuditorModule.audit).toHaveBeenCalled();
       expect(mockProcessExit).toHaveBeenCalledWith(0);
     });
 
     it('[EARS-D2] should exit 1 when findings match fail-on severity', async () => {
       await auditCommand.execute(createDefaultOptions({ scope: 'full' }));
 
+      expect(mockSourceAuditorModule.audit).toHaveBeenCalled();
       expect(mockProcessExit).toHaveBeenCalledWith(1);
     });
 
     it('[EARS-D2] should exit 1 when --fail-on high and high findings exist', async () => {
       await auditCommand.execute(createDefaultOptions({ scope: 'full', failOn: 'high' }));
 
+      expect(mockSourceAuditorModule.audit).toHaveBeenCalled();
       expect(mockProcessExit).toHaveBeenCalledWith(1);
     });
 
@@ -512,6 +515,7 @@ describe('AuditCommand', () => {
 
       await auditCommand.execute(createDefaultOptions({ scope: 'full' }));
 
+      expect(mockSourceAuditorModule.audit).toHaveBeenCalled();
       expect(mockProcessExit).toHaveBeenCalledWith(0);
     });
 
@@ -531,6 +535,7 @@ describe('AuditCommand', () => {
 
       await auditCommand.execute(createDefaultOptions({ scope: 'full', failOn: 'medium' }));
 
+      expect(mockSourceAuditorModule.audit).toHaveBeenCalled();
       expect(mockProcessExit).toHaveBeenCalledWith(0);
     });
 
@@ -550,6 +555,7 @@ describe('AuditCommand', () => {
 
       await auditCommand.execute(createDefaultOptions({ scope: 'full', failOn: 'low' }));
 
+      expect(mockSourceAuditorModule.audit).toHaveBeenCalled();
       expect(mockProcessExit).toHaveBeenCalledWith(1);
     });
   });
@@ -634,66 +640,50 @@ describe('AuditCommand', () => {
     // Commander before reaching the execute() method.
 
     it('[EARS-F1] should accept valid --scope values (diff, full, baseline)', async () => {
-      // Test that valid scope values are accepted
-      await auditCommand.execute(createDefaultOptions({ scope: 'diff' }));
-      expect(mockSourceAuditorModule.audit).toHaveBeenCalled();
-
-      mockSourceAuditorModule.audit.mockClear();
-      await auditCommand.execute(createDefaultOptions({ scope: 'full' }));
-      expect(mockSourceAuditorModule.audit).toHaveBeenCalled();
-
-      mockSourceAuditorModule.audit.mockClear();
-      await auditCommand.execute(createDefaultOptions({ scope: 'baseline' }));
-      expect(mockSourceAuditorModule.audit).toHaveBeenCalled();
+      for (const scope of ['diff', 'full', 'baseline'] as const) {
+        mockSourceAuditorModule.audit.mockClear();
+        mockConsoleError.mockClear();
+        await auditCommand.execute(createDefaultOptions({ scope }));
+        expect(mockSourceAuditorModule.audit).toHaveBeenCalled();
+        expect(mockConsoleError).not.toHaveBeenCalled();
+      }
     });
 
     it('[EARS-F2] should accept valid --output values (text, json, sarif)', async () => {
-      await auditCommand.execute(createDefaultOptions({ output: 'text' }));
-      expect(mockSourceAuditorModule.audit).toHaveBeenCalled();
-
-      mockSourceAuditorModule.audit.mockClear();
-      await auditCommand.execute(createDefaultOptions({ output: 'json' }));
-      expect(mockSourceAuditorModule.audit).toHaveBeenCalled();
-
-      mockSourceAuditorModule.audit.mockClear();
-      await auditCommand.execute(createDefaultOptions({ output: 'sarif' }));
-      expect(mockSourceAuditorModule.audit).toHaveBeenCalled();
+      for (const output of ['text', 'json', 'sarif'] as const) {
+        mockSourceAuditorModule.audit.mockClear();
+        mockConsoleError.mockClear();
+        await auditCommand.execute(createDefaultOptions({ output }));
+        expect(mockSourceAuditorModule.audit).toHaveBeenCalled();
+        expect(mockConsoleError).not.toHaveBeenCalled();
+      }
     });
 
     it('[EARS-F3] should accept valid --group-by values (file, severity, category)', async () => {
-      await auditCommand.execute(createDefaultOptions({ groupBy: 'file' }));
-      expect(mockSourceAuditorModule.audit).toHaveBeenCalled();
-
-      mockSourceAuditorModule.audit.mockClear();
-      await auditCommand.execute(createDefaultOptions({ groupBy: 'severity' }));
-      expect(mockSourceAuditorModule.audit).toHaveBeenCalled();
-
-      mockSourceAuditorModule.audit.mockClear();
-      await auditCommand.execute(createDefaultOptions({ groupBy: 'category' }));
-      expect(mockSourceAuditorModule.audit).toHaveBeenCalled();
+      for (const groupBy of ['file', 'severity', 'category'] as const) {
+        mockSourceAuditorModule.audit.mockClear();
+        mockConsoleError.mockClear();
+        await auditCommand.execute(createDefaultOptions({ groupBy }));
+        expect(mockSourceAuditorModule.audit).toHaveBeenCalled();
+        expect(mockConsoleError).not.toHaveBeenCalled();
+      }
     });
 
     it('[EARS-F4] should accept valid --fail-on values (critical, high, medium, low)', async () => {
-      await auditCommand.execute(createDefaultOptions({ failOn: 'critical' }));
-      expect(mockSourceAuditorModule.audit).toHaveBeenCalled();
-
-      mockSourceAuditorModule.audit.mockClear();
-      await auditCommand.execute(createDefaultOptions({ failOn: 'high' }));
-      expect(mockSourceAuditorModule.audit).toHaveBeenCalled();
-
-      mockSourceAuditorModule.audit.mockClear();
-      await auditCommand.execute(createDefaultOptions({ failOn: 'medium' }));
-      expect(mockSourceAuditorModule.audit).toHaveBeenCalled();
-
-      mockSourceAuditorModule.audit.mockClear();
-      await auditCommand.execute(createDefaultOptions({ failOn: 'low' }));
-      expect(mockSourceAuditorModule.audit).toHaveBeenCalled();
+      for (const failOn of ['critical', 'high', 'medium', 'low'] as const) {
+        mockSourceAuditorModule.audit.mockClear();
+        mockConsoleError.mockClear();
+        await auditCommand.execute(createDefaultOptions({ failOn }));
+        expect(mockSourceAuditorModule.audit).toHaveBeenCalled();
+        expect(mockConsoleError).not.toHaveBeenCalled();
+      }
     });
 
     it('[EARS-F5] should accept valid --target values (code)', async () => {
-      // MVP only supports 'code' target
+      mockConsoleError.mockClear();
       await auditCommand.execute(createDefaultOptions({ target: 'code' }));
       expect(mockSourceAuditorModule.audit).toHaveBeenCalled();
+      expect(mockConsoleError).not.toHaveBeenCalled();
     });
   });
 });
