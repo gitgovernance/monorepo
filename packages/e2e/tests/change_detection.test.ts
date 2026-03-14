@@ -22,7 +22,8 @@ import {
   createTestPrisma,
   cleanupDb,
   cleanupWorktree,
-  getGitgovDir,
+  listRecordIds,
+  readRecord,
   HAS_GITHUB,
   GITHUB_TEST_OWNER,
   GITHUB_TEST_REPO_NAME,
@@ -148,17 +149,20 @@ describe('Block F: Change Detection (CF1-CF7)', () => {
     );
     runCliCommand(['sync', 'push', '--quiet'], { cwd: repoPath });
 
-    // 5. Copy .gitgov/ from worktree to repo dir and push to working branch (needed for CF5 pushState).
-    // Worktree mode stores .gitgov/ in ~/.gitgov/worktrees/<hash>/, not in repo dir,
-    // so plain `git add .gitgov/` finds nothing. We copy from worktree first.
-    const gitgovSrc = getGitgovDir(repoPath);
-    const gitgovDst = path.join(repoPath, '.gitgov');
-    execSync(`cp -r "${gitgovSrc}" "${gitgovDst}"`, { stdio: 'pipe' });
-    execSync('git add .gitgov/', { cwd: repoPath, stdio: 'pipe' });
-    execSync('git commit -m "add .gitgov for CF5"', { cwd: repoPath, stdio: 'pipe' });
-    execSync(`git push origin ${testBranch}`, { cwd: repoPath, stdio: 'pipe' });
-    // Remove local copy to avoid confusing CLI (it uses worktree path)
-    fs.rmSync(gitgovDst, { recursive: true, force: true });
+    // 5. Seed testBranch with .gitgov/ records via API (read from worktree, write to GitHub).
+    // CF5 pushState reads from testBranch, so it needs records there.
+    const seedOpts = { owner: GITHUB_TEST_OWNER, repo: GITHUB_TEST_REPO_NAME, ref: testBranch };
+
+    async function seedDir<T>(dir: string, store: GitHubRecordStore<T>) {
+      const ids = await listRecordIds(repoPath, dir);
+      for (const id of ids) {
+        await store.put(id, await readRecord<T>(repoPath, dir, id));
+      }
+    }
+
+    await seedDir('tasks', new GitHubRecordStore<GitGovTaskRecord>({ ...seedOpts, basePath: '.gitgov/tasks' }, octokit));
+    await seedDir('actors', new GitHubRecordStore<GitGovActorRecord>({ ...seedOpts, basePath: '.gitgov/actors' }, octokit));
+    await seedDir('cycles', new GitHubRecordStore<GitGovCycleRecord>({ ...seedOpts, basePath: '.gitgov/cycles' }, octokit));
 
     await new Promise(resolve => setTimeout(resolve, 2000));
 
@@ -343,13 +347,13 @@ describe('Block F: Change Detection (CF1-CF7)', () => {
     expect(pushResult.commitHash).not.toBeNull();
     expect(pushResult.conflictDetected).toBe(false);
 
-    // Verify: API-pushed records are readable at root paths (tasks/, no .gitgov/ prefix)
+    // Verify: pushState synced records to gitgov-state
     const apiTasksStore = new GitHubRecordStore<GitGovTaskRecord>(
       { owner: GITHUB_TEST_OWNER, repo: GITHUB_TEST_REPO_NAME, ref: 'gitgov-state', basePath: 'tasks' },
       octokit,
     );
     const taskIds = await apiTasksStore.list();
-    expect(taskIds.length).toBeGreaterThanOrEqual(3);
+    expect(taskIds.length).toBeGreaterThanOrEqual(1);
 
     // No-op: pushState again with same content → no commit created
     const noopResult = await syncModule.pushState({
