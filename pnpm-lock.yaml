@@ -57,8 +57,8 @@ importers:
   packages/cli:
     dependencies:
       '@gitgov/core':
-        specifier: workspace:*
-        version: link:../core
+        specifier: ^2.9.0
+        version: 2.9.0
       clipboardy:
         specifier: ^5.0.0
         version: 5.0.0
@@ -240,8 +240,8 @@ importers:
   packages/mcp-server:
     dependencies:
       '@gitgov/core':
-        specifier: workspace:*
-        version: link:../core
+        specifier: ^2.9.0
+        version: 2.9.0
       '@modelcontextprotocol/sdk':
         specifier: ^1.26.0
         version: 1.26.0(zod@4.3.6)
@@ -888,6 +888,9 @@ packages:
     engines: {node: '>=18'}
     cpu: [x64]
     os: [win32]
+
+  '@gitgov/core@2.9.0':
+    resolution: {integrity: sha512-vIsqH3FLGh31Jr5MgUQc+a2v+gEqZqaKlS9yb4OPxSoyPSUZfWyvffnKonVpRmYD3E/PSxnmSY0PnIQD2g+uOQ==}
 
   '@hono/node-server@1.19.9':
     resolution: {integrity: sha512-vHL6w3ecZsky+8P5MD+eFfaGTyCeOHUIFYMGpQGbrBTSmNNoxv0if69rEZ5giu36weC5saFuznL411gRX7bJDw==}
@@ -4863,6 +4866,16 @@ snapshots:
 
   '@esbuild/win32-x64@0.27.3':
     optional: true
+
+  '@gitgov/core@2.9.0':
+    dependencies:
+      '@octokit/rest': 22.0.1
+      ajv: 8.17.1
+      ajv-formats: 3.0.1(ajv@8.17.1)
+      chokidar: 3.6.0
+      fast-glob: 3.3.3
+      js-yaml: 4.1.0
+      picomatch: 4.0.3
 
   '@hono/node-server@1.19.9(hono@4.11.9)':
     dependencies:
