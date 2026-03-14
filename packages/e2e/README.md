@@ -79,7 +79,7 @@ Each block is independent and self-contained. No block depends on another having
 | C     | `github.test.ts`           | CC1-CC5 | GitHub token              | GitHubRecordStore against real GitHub API                      |
 | D     | `cross_path.test.ts`       | CD1-CD5 | CLI + PostgreSQL + GitHub | Records created by CLI readable via GitHub and vice versa      |
 | E     | `parity.test.ts`           | CE1     | CLI + PostgreSQL          | FS projection vs Prisma projection produce identical IndexData |
-| F     | `change_detection.test.ts` | CF1-CF4 | CLI + PostgreSQL + GitHub | GithubSyncStateModule detects remote changes                   |
+| F     | `change_detection.test.ts` | CF1-CF7 | CLI + PostgreSQL + GitHub | GithubSyncStateModule: delta detection, pushState, concurrency, audit |
 
 ## Architecture
 

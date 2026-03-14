@@ -22,6 +22,7 @@ import {
   createTestPrisma,
   cleanupDb,
   cleanupWorktree,
+  getGitgovDir,
   HAS_GITHUB,
   GITHUB_TEST_OWNER,
   GITHUB_TEST_REPO_NAME,
@@ -93,9 +94,7 @@ function createSyncModule(octokit: Octokit, indexer: IRecordProjector): GithubSy
 
 // ===== Tests =====
 
-// TODO(3.10.7): Rewrite CF5/CF6 to use GitHub API branches instead of local `git add .gitgov/`
-// which doesn't work with worktree mode (.gitgov/ lives in worktree, not in repo dir).
-describe.skip('Block F: Change Detection (CF1-CF7)', () => {
+describe('Block F: Change Detection (CF1-CF7)', () => {
   let octokit: Octokit;
   let prisma: PrismaClient;
   let cf3RepoId: string;
@@ -149,11 +148,17 @@ describe.skip('Block F: Change Detection (CF1-CF7)', () => {
     );
     runCliCommand(['sync', 'push', '--quiet'], { cwd: repoPath });
 
-    // 5. Push .gitgov/ to working branch (needed for CF5 pushState)
-    // TODO(3.10.7): copyGitgovToRepo removed — rewrite to use GitHub API branches
+    // 5. Copy .gitgov/ from worktree to repo dir and push to working branch (needed for CF5 pushState).
+    // Worktree mode stores .gitgov/ in ~/.gitgov/worktrees/<hash>/, not in repo dir,
+    // so plain `git add .gitgov/` finds nothing. We copy from worktree first.
+    const gitgovSrc = getGitgovDir(repoPath);
+    const gitgovDst = path.join(repoPath, '.gitgov');
+    execSync(`cp -r "${gitgovSrc}" "${gitgovDst}"`, { stdio: 'pipe' });
     execSync('git add .gitgov/', { cwd: repoPath, stdio: 'pipe' });
     execSync('git commit -m "add .gitgov for CF5"', { cwd: repoPath, stdio: 'pipe' });
     execSync(`git push origin ${testBranch}`, { cwd: repoPath, stdio: 'pipe' });
+    // Remove local copy to avoid confusing CLI (it uses worktree path)
+    fs.rmSync(gitgovDst, { recursive: true, force: true });
 
     await new Promise(resolve => setTimeout(resolve, 2000));
 
@@ -296,14 +301,35 @@ describe.skip('Block F: Change Detection (CF1-CF7)', () => {
   }, 30_000);
 
   it('[EARS-CF5] should push state via API with dryRun and no-op detection', async () => {
-    // Add new task and push to working branch (simulates dev committing)
-    runCliCommand(
-      ['task', 'new', 'CF5 pushState task', '-d', 'API push test', '-p', 'medium', '-q'],
-      { cwd: repoPath },
+    // Write a task record to testBranch via GitHub API (simulates dev committing .gitgov/).
+    // Uses GitHubRecordStore instead of local `git add .gitgov/` which fails with worktree mode.
+    const cf5Store = new GitHubRecordStore<GitGovTaskRecord>(
+      { owner: GITHUB_TEST_OWNER, repo: GITHUB_TEST_REPO_NAME, ref: testBranch, basePath: '.gitgov/tasks' },
+      octokit,
     );
-    execSync('git add .gitgov/', { cwd: repoPath, stdio: 'pipe' });
-    execSync('git commit -m "CF5 pushState task"', { cwd: repoPath, stdio: 'pipe' });
-    execSync(`git push origin ${testBranch}`, { cwd: repoPath, stdio: 'pipe' });
+    const cf5TaskId = `${Date.now()}-task-cf5-push`;
+    await cf5Store.put(cf5TaskId, {
+      header: {
+        version: '1.0' as const,
+        type: 'task' as const,
+        payloadChecksum: 'a'.repeat(64),
+        signatures: [{
+          keyId: 'human:cf-dev',
+          role: 'author',
+          notes: 'CF5 push test',
+          signature: 'A'.repeat(86) + '==',
+          timestamp: Date.now(),
+        }],
+      },
+      payload: {
+        id: cf5TaskId,
+        title: 'CF5 pushState task',
+        status: 'draft' as const,
+        priority: 'medium' as const,
+        description: 'API push test',
+        tags: ['e2e'],
+      },
+    });
     await new Promise(resolve => setTimeout(resolve, 2000));
 
     // pushState: sync from working branch to gitgov-state (WriterService path)
@@ -334,14 +360,30 @@ describe.skip('Block F: Change Detection (CF1-CF7)', () => {
     expect(noopResult.filesSynced).toBe(0);
     expect(noopResult.commitHash).toBeNull();
 
-    // dryRun: add another task, push to branch, then dryRun pushState
-    runCliCommand(
-      ['task', 'new', 'CF5 dryRun task', '-d', 'Should not appear on gitgov-state', '-p', 'low', '-q'],
-      { cwd: repoPath },
-    );
-    execSync('git add .gitgov/', { cwd: repoPath, stdio: 'pipe' });
-    execSync('git commit -m "CF5 dryRun task"', { cwd: repoPath, stdio: 'pipe' });
-    execSync(`git push origin ${testBranch}`, { cwd: repoPath, stdio: 'pipe' });
+    // dryRun: add another task to testBranch via API, then dryRun pushState
+    const cf5DryRunId = `${Date.now()}-task-cf5-dryrun`;
+    await cf5Store.put(cf5DryRunId, {
+      header: {
+        version: '1.0' as const,
+        type: 'task' as const,
+        payloadChecksum: 'a'.repeat(64),
+        signatures: [{
+          keyId: 'human:cf-dev',
+          role: 'author',
+          notes: 'CF5 dryRun',
+          signature: 'A'.repeat(86) + '==',
+          timestamp: Date.now(),
+        }],
+      },
+      payload: {
+        id: cf5DryRunId,
+        title: 'CF5 dryRun task',
+        status: 'draft' as const,
+        priority: 'low' as const,
+        description: 'Should not appear on gitgov-state',
+        tags: ['e2e'],
+      },
+    });
     await new Promise(resolve => setTimeout(resolve, 2000));
 
     const dryRunResult = await syncModule.pushState({
@@ -359,29 +401,85 @@ describe.skip('Block F: Change Detection (CF1-CF7)', () => {
     const branchB = `${testBranch}-conflict-b`;
     conflictBranches.push(branchA, branchB);
 
-    // Branch A: from testBranch, add unique task
-    execSync(`git checkout -b ${branchA}`, { cwd: repoPath, stdio: 'pipe' });
-    runCliCommand(
-      ['task', 'new', 'Conflict A Task', '-d', 'Branch A only', '-p', 'high', '-q'],
-      { cwd: repoPath },
-    );
-    execSync('git add .gitgov/', { cwd: repoPath, stdio: 'pipe' });
-    execSync('git commit -m "conflict A task"', { cwd: repoPath, stdio: 'pipe' });
-    execSync(`git push -u origin ${branchA}`, { cwd: repoPath, stdio: 'pipe' });
+    // Get testBranch SHA to create both conflict branches from the same point
+    const { data: testRef } = await octokit.rest.git.getRef({
+      owner: GITHUB_TEST_OWNER,
+      repo: GITHUB_TEST_REPO_NAME,
+      ref: `heads/${testBranch}`,
+    });
 
-    // Branch B: from testBranch (without branch A's task), add different task
-    execSync(`git checkout ${testBranch}`, { cwd: repoPath, stdio: 'pipe' });
-    execSync(`git checkout -b ${branchB}`, { cwd: repoPath, stdio: 'pipe' });
-    runCliCommand(
-      ['task', 'new', 'Conflict B Task', '-d', 'Branch B only', '-p', 'low', '-q'],
-      { cwd: repoPath },
-    );
-    execSync('git add .gitgov/', { cwd: repoPath, stdio: 'pipe' });
-    execSync('git commit -m "conflict B task"', { cwd: repoPath, stdio: 'pipe' });
-    execSync(`git push -u origin ${branchB}`, { cwd: repoPath, stdio: 'pipe' });
+    // Create branches via API (not local git checkout — avoids worktree interference)
+    await octokit.rest.git.createRef({
+      owner: GITHUB_TEST_OWNER,
+      repo: GITHUB_TEST_REPO_NAME,
+      ref: `refs/heads/${branchA}`,
+      sha: testRef.object.sha,
+    });
+    await octokit.rest.git.createRef({
+      owner: GITHUB_TEST_OWNER,
+      repo: GITHUB_TEST_REPO_NAME,
+      ref: `refs/heads/${branchB}`,
+      sha: testRef.object.sha,
+    });
 
-    // Back to testBranch
-    execSync(`git checkout ${testBranch}`, { cwd: repoPath, stdio: 'pipe' });
+    // Write unique task to branchA via GitHubRecordStore
+    const conflictAId = `${Date.now()}-task-conflict-a`;
+    const storeA = new GitHubRecordStore<GitGovTaskRecord>(
+      { owner: GITHUB_TEST_OWNER, repo: GITHUB_TEST_REPO_NAME, ref: branchA, basePath: '.gitgov/tasks' },
+      octokit,
+    );
+    await storeA.put(conflictAId, {
+      header: {
+        version: '1.0' as const,
+        type: 'task' as const,
+        payloadChecksum: 'a'.repeat(64),
+        signatures: [{
+          keyId: 'human:dev-a',
+          role: 'author',
+          notes: 'Conflict A',
+          signature: 'A'.repeat(86) + '==',
+          timestamp: Date.now(),
+        }],
+      },
+      payload: {
+        id: conflictAId,
+        title: 'Conflict A Task',
+        status: 'draft' as const,
+        priority: 'high' as const,
+        description: 'Branch A only',
+        tags: ['e2e'],
+      },
+    });
+
+    // Write unique task to branchB via GitHubRecordStore
+    const conflictBId = `${Date.now()}-task-conflict-b`;
+    const storeB = new GitHubRecordStore<GitGovTaskRecord>(
+      { owner: GITHUB_TEST_OWNER, repo: GITHUB_TEST_REPO_NAME, ref: branchB, basePath: '.gitgov/tasks' },
+      octokit,
+    );
+    await storeB.put(conflictBId, {
+      header: {
+        version: '1.0' as const,
+        type: 'task' as const,
+        payloadChecksum: 'a'.repeat(64),
+        signatures: [{
+          keyId: 'human:dev-b',
+          role: 'author',
+          notes: 'Conflict B',
+          signature: 'A'.repeat(86) + '==',
+          timestamp: Date.now(),
+        }],
+      },
+      payload: {
+        id: conflictBId,
+        title: 'Conflict B Task',
+        status: 'draft' as const,
+        priority: 'low' as const,
+        description: 'Branch B only',
+        tags: ['e2e'],
+      },
+    });
+
     await new Promise(resolve => setTimeout(resolve, 2000));
 
     // Concurrent pushState from both branches
