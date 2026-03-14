@@ -11,22 +11,26 @@
  */
 
 // Mock @gitgov/core
-jest.doMock('@gitgov/core', () => ({
-  Config: {
-    ConfigManager: {
-      findProjectRoot: jest.fn().mockReturnValue('/mock/project/root'),
-      findGitgovRoot: jest.fn().mockReturnValue('/mock/project/root/.gitgov'),
-    }
-  },
-  SourceAuditor: {
-    SourceAuditorModule: jest.fn(),
-    WaiverReader: jest.fn(),
-    WaiverWriter: jest.fn(),
-  },
-  FindingDetector: {
-    FindingDetectorModule: jest.fn(),
-  }
-}));
+jest.doMock('@gitgov/core', () => {
+  const actual = jest.requireActual('@gitgov/core');
+  return {
+    Config: {
+      ConfigManager: {
+        findProjectRoot: jest.fn().mockReturnValue('/mock/project/root'),
+        findGitgovRoot: jest.fn().mockReturnValue('/mock/project/root/.gitgov'),
+      }
+    },
+    SourceAuditor: {
+      SourceAuditorModule: jest.fn(),
+      WaiverReader: jest.fn(),
+      WaiverWriter: jest.fn(),
+    },
+    FindingDetector: {
+      FindingDetectorModule: jest.fn(),
+    },
+    Sarif: actual.Sarif,
+  };
+});
 
 // Mock DependencyInjectionService
 jest.mock('../../services/dependency-injection', () => ({
@@ -392,7 +396,9 @@ describe('AuditCommand', () => {
 
       expect(sarifCall).toBeDefined();
       const sarif = JSON.parse(sarifCall![0]);
-      expect(sarif.$schema).toContain('sarif-schema-2.1.0');
+      expect(sarif.$schema).toBe(
+        'https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/schemas/sarif-schema-2.1.0.json'
+      );
       expect(sarif.runs).toHaveLength(1);
       expect(sarif.runs[0].tool.driver.name).toBe('gitgov-audit');
     });
