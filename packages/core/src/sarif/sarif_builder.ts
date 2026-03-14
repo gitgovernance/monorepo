@@ -126,11 +126,12 @@ function buildInvocations(options: SarifBuilderOptions): SarifInvocation[] | und
 }
 
 class SarifBuilderImpl implements SarifBuilder {
-  private readonly ajv: Ajv;
+  private readonly validateFn: ReturnType<Ajv['compile']>;
 
   constructor() {
-    this.ajv = new Ajv({ allErrors: true, strict: false });
-    addFormats(this.ajv);
+    const ajv = new Ajv({ allErrors: true, strict: false });
+    addFormats(ajv);
+    this.validateFn = ajv.compile(sarifSchema);
   }
 
   async build(options: SarifBuilderOptions): Promise<SarifLog> {
@@ -249,14 +250,13 @@ class SarifBuilderImpl implements SarifBuilder {
   }
 
   validate(sarif: SarifLog): ValidationResult {
-    const validate = this.ajv.compile(sarifSchema);
-    const valid = validate(sarif);
+    const valid = this.validateFn(sarif);
 
     if (valid) {
       return { valid: true };
     }
 
-    const errors = (validate.errors ?? []).map(
+    const errors = (this.validateFn.errors ?? []).map(
       (e) => `${e.instancePath || '/'} ${e.message ?? 'unknown error'}`
     );
 

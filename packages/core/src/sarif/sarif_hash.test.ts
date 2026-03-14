@@ -11,10 +11,14 @@ describe('SarifHash', () => {
 
     it('[SARIF-B1] normalizeLineContent: should trim leading and trailing whitespace', () => {
       expect(normalizeLineContent('  const x = 1;  ')).toBe('const x = 1;');
+      // Tabs are also whitespace
+      expect(normalizeLineContent('\tconst x = 1;\t')).toBe('const x = 1;');
     });
 
     it('[SARIF-B2] normalizeLineContent: should collapse multiple spaces to single space', () => {
       expect(normalizeLineContent('const  x =   1;')).toBe('const x = 1;');
+      // Mixed whitespace (tabs + spaces) collapsed
+      expect(normalizeLineContent('const\t\tx =\t  1;')).toBe('const x = 1;');
     });
 
     it('[SARIF-B3] computePrimaryLocationLineHash: should return string matching format hexHash:N', () => {
@@ -34,6 +38,10 @@ describe('SarifHash', () => {
       const context = createOccurrenceContext();
       const result = await buildPartialFingerprints('src/file.ts', 10, async () => null, context);
       expect(result).toEqual({});
+      // Empty string is NOT null — produces a real fingerprint (empty line is still a line)
+      const ctxEmpty = createOccurrenceContext();
+      const emptyResult = await buildPartialFingerprints('src/file.ts', 10, async () => '', ctxEmpty);
+      expect(emptyResult['primaryLocationLineHash/v1']).toMatch(/^[0-9a-f]{16}:1$/);
     });
 
     it('[SARIF-B5] buildPartialFingerprints: should return empty object when getLineContent is undefined', async () => {

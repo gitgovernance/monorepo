@@ -78,7 +78,7 @@ describe('SarifBuilder', () => {
     });
   });
 
-  describe('4.3. Build core (SARIF-C1 to C8)', () => {
+  describe('4.3. Build core (SARIF-C1 to C9)', () => {
 
     it('[SARIF-C1] build: should populate location with correct line and column', async () => {
       const sarif = await builder.build(baseOptions);
@@ -142,6 +142,15 @@ describe('SarifBuilder', () => {
       const loc = firstResult(sarif).locations[0];
       // Empty string snippet should be omitted (falsy)
       expect(loc!.physicalLocation.region.snippet).toBeUndefined();
+    });
+
+    it('[SARIF-C9] build: rule with suggestion should include fullDescription.text', async () => {
+      const sarif = await builder.build(baseOptions);
+      const rules = firstRun(sarif).tool.driver.rules ?? [];
+      const rule = rules.find(r => r.id === 'PII-001');
+      expect(rule).toBeDefined();
+      expect(rule!.fullDescription).toBeDefined();
+      expect(rule!.fullDescription!.text).toBe('Remove email from source');
     });
   });
 
