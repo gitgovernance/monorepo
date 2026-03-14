@@ -105,6 +105,7 @@ export * as DiagramGenerator from "./diagram_generator";
 // Audit modules
 export * as FindingDetector from "./finding_detector";
 export * as SourceAuditor from "./source_auditor";
+export * as Sarif from "./sarif";
 
 // Agent runner
 export * as Runner from "./agent_runner";

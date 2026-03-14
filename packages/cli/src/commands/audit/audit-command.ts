@@ -1,7 +1,9 @@
 import { Command, Option } from 'commander';
 import { BaseCommand } from '../../base/base-command';
 import type { BaseCommandOptions } from '../../interfaces/command';
-import type { SourceAuditor, FindingDetector, IConfigManager } from '@gitgov/core';
+import { readFile } from 'node:fs/promises';
+import type { SourceAuditor, FindingDetector, IConfigManager, Sarif } from '@gitgov/core';
+import { Sarif as SarifModule } from '@gitgov/core';
 
 // Types are imported from Core via the SourceAuditor namespace
 // Re-export for consumers of this command
@@ -175,7 +177,7 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
       }
 
       // Format and display output
-      this.formatOutput(result, options);
+      await this.formatOutput(result, options);
 
       // Calculate exit code
       const exitCode = this.calculateExitCode(result, options.failOn);
@@ -262,7 +264,7 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
    * Format and display output based on --output option
    * [EARS-C1, EARS-C2, EARS-C3, EARS-C4]
    */
-  private formatOutput(result: SourceAuditor.AuditResult, options: AuditCommandOptions): void {
+  private async formatOutput(result: SourceAuditor.AuditResult, options: AuditCommandOptions): Promise<void> {
     // [EARS-C4] Quiet mode - only show critical findings
     if (options.quiet) {
       const criticals = result.findings.filter(f => f.severity === 'critical');
@@ -281,8 +283,8 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
         this.formatJsonOutput(result);
         break;
       case 'sarif':
-        // [EARS-C3] SARIF output
-        this.formatSarifOutput(result);
+        // [EARS-C3] SARIF output — delegated to SarifBuilder from @gitgov/core
+        await this.formatSarifOutput(result);
         break;
       default:
         // [EARS-C1, C5, C6, C7] Text output with grouping and limits
@@ -453,37 +455,31 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
   }
 
   /**
-   * Format SARIF output for GitHub Code Scanning
-   * [EARS-C3]
+   * Format SARIF output using SarifBuilder from @gitgov/core
+   * [EARS-C3, SARIF-H1, SARIF-H2, SARIF-H3]
    */
-  private formatSarifOutput(result: SourceAuditor.AuditResult): void {
-    const sarif = {
-      $schema: 'https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json',
-      version: '2.1.0',
-      runs: [{
-        tool: {
-          driver: {
-            name: 'gitgov-audit',
-            version: '1.0.0',
-            informationUri: 'https://gitgovernance.com/audit',
-            rules: this.extractRules(result.findings),
-          },
-        },
-        results: result.findings.map(f => ({
-          ruleId: f.ruleId,
-          level: this.mapSeverityToSarifLevel(f.severity),
-          message: { text: f.message },
-          locations: [{
-            physicalLocation: {
-              artifactLocation: { uri: f.file },
-              region: { startLine: f.line, startColumn: f.column },
-            },
-          }],
-          fingerprints: { 'gitgov/v1': f.fingerprint },
-        })),
-      }],
+  private async formatSarifOutput(result: SourceAuditor.AuditResult): Promise<void> {
+    const builder = SarifModule.createSarifBuilder();
+
+    const getLineContent: Sarif.GetLineContentFn = async (file, line) => {
+      try {
+        const content = await readFile(file, 'utf-8');
+        const lines = content.split('\n');
+        return lines[line - 1] ?? null;
+      } catch {
+        return null;
+      }
     };
-    console.log(JSON.stringify(sarif, null, 2));
+
+    const sarifLog = await builder.build({
+      toolName: 'gitgov-audit',
+      toolVersion: '2.1.0',
+      informationUri: 'https://gitgovernance.com/audit',
+      findings: result.findings,
+      getLineContent,
+    });
+
+    console.log(JSON.stringify(sarifLog, null, 2));
   }
 
   /**
@@ -629,28 +625,4 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
     return colors[severity] ?? '\x1b[37m';
   }
 
-  private extractRules(findings: FindingDetector.Finding[]): Array<{ id: string; name: string; shortDescription: { text: string } }> {
-    const ruleMap = new Map<string, { id: string; name: string; shortDescription: { text: string } }>();
-    for (const f of findings) {
-      if (!ruleMap.has(f.ruleId)) {
-        ruleMap.set(f.ruleId, {
-          id: f.ruleId,
-          name: f.ruleId,
-          shortDescription: { text: f.message },
-        });
-      }
-    }
-    return Array.from(ruleMap.values());
-  }
-
-  private mapSeverityToSarifLevel(severity: string): string {
-    const map: Record<string, string> = {
-      critical: 'error',
-      high: 'error',
-      medium: 'warning',
-      low: 'note',
-      info: 'note',
-    };
-    return map[severity] ?? 'note';
-  }
 }
