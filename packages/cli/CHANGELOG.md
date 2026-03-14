@@ -1,3 +1,87 @@
+## [2.1.0](https://github.com/gitgovernance/monorepo/compare/cli-v2.0.0...cli-v2.1.0) (2026-03-14)
+
+
+### 🚀 Features
+
+* **cli:** add actor commands + move key storage to .gitgov/keys/ ([cd7f035](https://github.com/gitgovernance/monorepo/commit/cd7f035fa26aef7e0b051ce689599867a29cc874))
+* **cli:** add exec, feedback, actor commands and init --type extension ([16badb9](https://github.com/gitgovernance/monorepo/commit/16badb9af5ccb768b7c6f65dd7119f4dcdedde4a))
+* **cli:** add governance E2E tests and e2e README ([ed9cf15](https://github.com/gitgovernance/monorepo/commit/ed9cf154df17f9505cb3a6f13ab25654e9097b75))
+* **cli:** add sync status intelligence to dashboard + update pull messaging ([ee27a34](https://github.com/gitgovernance/monorepo/commit/ee27a346fb269936ae11ed181e52c227ed2716e8))
+* **cli:** integrate worktree-based sync into DI, init, and sync commands ([0dcf92d](https://github.com/gitgovernance/monorepo/commit/0dcf92d5e2bc751e2ce7c555a96b10c57345244f))
+* consolidate E2E public API migration, worktree refactor, and hook handler ([8c0a47b](https://github.com/gitgovernance/monorepo/commit/8c0a47bab2415c92aa3fbf3240cdda146c4d2a61))
+* consolidate private packages into single submodule ([b1f032b](https://github.com/gitgovernance/monorepo/commit/b1f032b59d0a4963e72f4115114b5fa2308b10a6))
+* **core:** adapt factories, validators, and projection to v1.1 ([6817bb6](https://github.com/gitgovernance/monorepo/commit/6817bb656d404530e7249aacf3af66111abf2189))
+* **core:** add FsWorktreeSyncStateModule — worktree-based ISyncStateModule ([b487902](https://github.com/gitgovernance/monorepo/commit/b48790232693f30d65c50d43245658a4a4c728e9))
+* **core:** add metadata projection to PrismaRecordProjection ([d48e349](https://github.com/gitgovernance/monorepo/commit/d48e34998b6206821d64adb70c55ea0957139dec))
+* **core:** add metadata support to task and cycle factories ([74e5167](https://github.com/gitgovernance/monorepo/commit/74e5167bf1be6a7a0b9fb2f9397e18243b7e011c))
+* **core:** add PrismaRecordProjection driver via @gitgov/core/prisma ([814dd3a](https://github.com/gitgovernance/monorepo/commit/814dd3a7fb10cacd01e02d38220b44bebbc7b2bc))
+* **core:** add RECORD_TYPES constant for iteration and validation ([#103](https://github.com/gitgovernance/monorepo/issues/103)) ([aab5385](https://github.com/gitgovernance/monorepo/commit/aab5385347df00c57167d8302acf8afb6868beab))
+* **core:** auto-commit before pull + preserve LOCAL_ONLY on force pull ([8e0cea6](https://github.com/gitgovernance/monorepo/commit/8e0cea6c9e997ac41bac547a3993011d8ea2dc20))
+* **core:** extend ProjectAdapter type support and export TransitionRule ([787a32a](https://github.com/gitgovernance/monorepo/commit/787a32a54fe945e82dc71ecfa94160a7e1b53240))
+* **core:** GitHub API backends with Octokit DI ([#91](https://github.com/gitgovernance/monorepo/issues/91)) ([b2cc265](https://github.com/gitgovernance/monorepo/commit/b2cc2651b3a5ff9ae13f321f1838b83c09e9effb))
+* **core:** regenerate schemas and types for protocol v1.1 ([3814aca](https://github.com/gitgovernance/monorepo/commit/3814aca3cca1db25ebdbf09cd7347112f9efc4bf))
+* **core:** rename indexer_adapter → record_projector + metrics_adapter → record_metrics ([e30e86b](https://github.com/gitgovernance/monorepo/commit/e30e86b5d3df9ce9cd74c33d7bfc0c546bc1cd9b))
+* **core:** rename record_projector → record_projection + ProjectionSink → RecordProjection ([ffc0ea3](https://github.com/gitgovernance/monorepo/commit/ffc0ea34b416f4e1970184fa149b23b6e1e30790))
+* **core:** saas-base cycle 3 — prisma projection, sync state, webhooks, E2E ([#93](https://github.com/gitgovernance/monorepo/issues/93)) ([fd1a2be](https://github.com/gitgovernance/monorepo/commit/fd1a2bea53f98ef79bb793fe53627e9b8780c2b6))
+* **core:** update factories, validators, and projection for v1.1 ([6a75e75](https://github.com/gitgovernance/monorepo/commit/6a75e758c6a1894fa674ba41486f3991c3224cd6))
+* **mcp-server:** add @gitgov/mcp-server package with 36 tools ([f350130](https://github.com/gitgovernance/monorepo/commit/f350130a1656aa067b0326113ef81f5042373960))
+* **mcp-server:** add 3-level test pyramid (175 tests) + coherence fixes ([2bd92f6](https://github.com/gitgovernance/monorepo/commit/2bd92f68c911a2de430de04a70e7fd4b8dfe7211))
+* **mcp-server:** add execution, agent, identity, workflow tools ([414bf5d](https://github.com/gitgovernance/monorepo/commit/414bf5d51fc02745eea62cc772dac9e3890e12c4))
+
+
+### 🐛 Bug Fixes
+
+* **ci:** add git user config and fix tsc exec syntax ([a4a5023](https://github.com/gitgovernance/monorepo/commit/a4a5023da447332b7b6add05e889e7e6b74e68d7))
+* **ci:** align Node.js version to 24 per .nvmrc ([d6e7eee](https://github.com/gitgovernance/monorepo/commit/d6e7eeef914ff17784485cdfb4d46dd572379fc2))
+* **ci:** build core before typecheck for type resolution ([388f8cf](https://github.com/gitgovernance/monorepo/commit/388f8cfe1e5b79fc8977afa3facc9cdc5fea1a7b))
+* **ci:** resolve 3 CI failures — typecheck, git defaults, build order ([54278f3](https://github.com/gitgovernance/monorepo/commit/54278f3f1093ee9c12a2e7348208e74c5fae6e87))
+* **cli,core:** remove changelog references, sync with protocol v1.1 ([873b635](https://github.com/gitgovernance/monorepo/commit/873b635ed6f456067e04d76b18db10de47a0e233))
+* **cli:** pin @gitgov/core dependency to ^2.9.0 ([#105](https://github.com/gitgovernance/monorepo/issues/105)) ([cc9b3d5](https://github.com/gitgovernance/monorepo/commit/cc9b3d5cb6aebe52bdf0fcb993ddf0f3494e2de7))
+* **cli:** replace deprecated getGitgovPath with getWorktreeBasePath ([95ccdd3](https://github.com/gitgovernance/monorepo/commit/95ccdd3133fb3328efa82066876ce0546e7f6fca))
+* **cli:** skip diagram e2e tests incompatible with worktree mode ([853bac0](https://github.com/gitgovernance/monorepo/commit/853bac0feb4281542dfed6b98b657eae5b4afc5f))
+* **core,cli:** detect remote-deleted branch on push, remove legacy .gitignore, reconcile diverged histories ([#99](https://github.com/gitgovernance/monorepo/issues/99)) ([01c3c8a](https://github.com/gitgovernance/monorepo/commit/01c3c8a65368d50ea101c2242727608857c86bdf))
+* **core:** adapt adapters to protocol v1.1 schema changes ([72c98da](https://github.com/gitgovernance/monorepo/commit/72c98dad25ff358db0b84f7e2c797ff948119ae2))
+* **core:** adapt schema_cache and workflow_validator to new WorkflowRecord schema ([b506951](https://github.com/gitgovernance/monorepo/commit/b506951eb1060b496a961659b54f0dbe34998c8a))
+* **core:** add missing lintRecordReferences delegation in FsLintModule ([99402ed](https://github.com/gitgovernance/monorepo/commit/99402ed0e51624036720f0809ffceb23b5932b56))
+* **core:** align record_projection docs and test name with implementation ([b63cc38](https://github.com/gitgovernance/monorepo/commit/b63cc38640e802d4995a73e8f7a1f2f6beab93a7))
+* **core:** fix sync-schemas path and remove changelog ([5df44c4](https://github.com/gitgovernance/monorepo/commit/5df44c46b787f38690f4526c3c289e6a779070e4))
+* **core:** make sync-schemas fail-fast on missing YAML ([56b09bf](https://github.com/gitgovernance/monorepo/commit/56b09bfea3ac5d6327a9f78a86a53241d1202eaf))
+* **core:** reconcile lint.test.ts with PR [#98](https://github.com/gitgovernance/monorepo/issues/98) audit fixes ([72bed99](https://github.com/gitgovernance/monorepo/commit/72bed99567ea004d2f598058bd65ee0c20479b06))
+* **core:** regenerate schemas and types from protocol YAML ([1197566](https://github.com/gitgovernance/monorepo/commit/1197566a581ed4732e63af063cc5eac21eaf3042))
+* **core:** remove changelog references from lint and project_initializer ([f4f6325](https://github.com/gitgovernance/monorepo/commit/f4f6325d37086f43d204209d2298218e490103d9))
+* **core:** remove custom type references from validator tests ([e7401df](https://github.com/gitgovernance/monorepo/commit/e7401dffe7661f18edea3f42018885029c871b99)), closes [PR#97](https://github.com/gitgovernance/PR/issues/97)
+* **core:** restore accidentally deleted files, add lintRecordReferences ([364d40b](https://github.com/gitgovernance/monorepo/commit/364d40b1679cc2f8ddf16c5e20d8ae1c8d66d163))
+* **core:** restore GithubSyncStateModule export from github entry point ([5e99508](https://github.com/gitgovernance/monorepo/commit/5e99508cd91934bb9b516f9b59fa44c24314f630))
+* **core:** restore id_parser exports and interfaces from main, remove changelog ([c5ba0c0](https://github.com/gitgovernance/monorepo/commit/c5ba0c00617ed16c5b1bf81a292a6395a5b87819))
+* **core:** restore production modules erroneously deleted ([7a522f1](https://github.com/gitgovernance/monorepo/commit/7a522f1e0c572d31c92a8fcc639e953b44aec4cd))
+* **core:** update README record and adapter counts after changelog removal ([8aed640](https://github.com/gitgovernance/monorepo/commit/8aed640dbef6f66361875a3a0e12b1a77b419ef1))
+* **core:** update sync-prompts.ts path to private/packages/blueprints ([f0ea727](https://github.com/gitgovernance/monorepo/commit/f0ea7271ff1ca6b9e0b6a9aa059ca35df77dc6e9))
+* **core:** update utils, crypto, sync_state, event_bus for v1.1 ([0f5f663](https://github.com/gitgovernance/monorepo/commit/0f5f663de09a88d378a3add5c91604c1ec22d395))
+* **mcp-server:** align FsKeyProvider with core v2.4.0 API ([d26bdba](https://github.com/gitgovernance/monorepo/commit/d26bdba3ecffcb6ebd55efd5563e4c774d914faa))
+* **mcp-server:** migrate from FsSyncStateModule to FsWorktreeSyncStateModule ([d447d7d](https://github.com/gitgovernance/monorepo/commit/d447d7dc5eb5873df506cca4fe110731d7f50418))
+* **mcp-server:** remove all `any` types, fix type mismatches, EARS coherence ([5472926](https://github.com/gitgovernance/monorepo/commit/5472926b4d193e49e8d651d373ca2c3e7ec73761))
+* **mcp-server:** remove changelog references from DI, tools, and tests ([f1fe488](https://github.com/gitgovernance/monorepo/commit/f1fe488816b2b0df7c206a7b6980ac7cde4ae122))
+* **mcp-server:** resolve MSRV-E naming collision, update test counts ([a73fe2d](https://github.com/gitgovernance/monorepo/commit/a73fe2de76593da614bda8ccf81100c0fa48bbec))
+* **mcp-server:** use valid execution ID in waiver integration test ([2f4093f](https://github.com/gitgovernance/monorepo/commit/2f4093f7e52625f2816d0c90137aade523aca2f2))
+
+
+### ♻️ Refactoring
+
+* **cli:** align init E2E test EARS naming with blueprint ([6138ad6](https://github.com/gitgovernance/monorepo/commit/6138ad6c607f19ce620fc93dad57449983fcfdbe))
+* **core:** move DIR_TO_TYPE and TYPE_TO_DIR to common.types.ts ([04f286c](https://github.com/gitgovernance/monorepo/commit/04f286c37603c16b0811589d08f169e77c6349d0))
+* **core:** remove changelog record type ([e0fb32b](https://github.com/gitgovernance/monorepo/commit/e0fb32baa41c056d1c34e04269c2925e1a6f2100))
+* **core:** remove custom record type from protocol ([#97](https://github.com/gitgovernance/monorepo/issues/97)) ([f5bde2a](https://github.com/gitgovernance/monorepo/commit/f5bde2a69978a567684a1f951e32be09f6742cc7)), closes [#98](https://github.com/gitgovernance/monorepo/issues/98)
+* **core:** remove custom record type, fix duplicate export, clean changelog refs ([de093ff](https://github.com/gitgovernance/monorepo/commit/de093ffb79416bbda640cd39efc1331a7322cff7))
+* **core:** remove unnecessary Exclude<GitGovRecordType, 'custom'> ([8473764](https://github.com/gitgovernance/monorepo/commit/847376459dd5797539b5da80538034fb02672d36))
+* **mcp-server:** rename fingerprint var to execId for clarity ([b721643](https://github.com/gitgovernance/monorepo/commit/b72164370d4c2851bc345ed0b8ee803b51f577c4))
+* remove deprecated project_discovery functions, migrate to worktree paths ([97b1a73](https://github.com/gitgovernance/monorepo/commit/97b1a734d6c0786c1797677a3d9fed096abc64a6))
+* **workflow:** remove view_configs, fix sync script paths, update private submodule ([63d15ee](https://github.com/gitgovernance/monorepo/commit/63d15ee7e0cbd4bc532c3b33f2f14421651acb86))
+
+
+### 📚 Documentation
+
+* **mcp-server:** improve README coherence with implementation ([f94fc4f](https://github.com/gitgovernance/monorepo/commit/f94fc4f48c89f8c3b85bf47b1d16557d9ca29d5f))
+
 ## [2.0.0](https://github.com/gitgovernance/monorepo/compare/cli-v1.14.0...cli-v2.0.0) (2026-02-02)
 
 
