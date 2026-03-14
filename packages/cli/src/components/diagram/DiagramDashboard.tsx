@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Text, useInput, useApp } from 'ink';
 import { DiagramGenerator } from '@gitgov/core';
-import { findProjectRoot, getGitgovPath } from '@gitgov/core/fs';
+import { findProjectRoot, getWorktreeBasePath } from '@gitgov/core/fs';
 import { StatusBadge } from '../shared/StatusBadge';
 
 interface DiagramDashboardProps {
@@ -68,7 +68,7 @@ export const DiagramDashboard: React.FC<DiagramDashboardProps> = ({
       const projectRoot = findProjectRoot();
       if (!projectRoot) throw new Error("Project root not found.");
 
-      const actualGitgovPath = getGitgovPath();
+      const actualGitgovPath = getWorktreeBasePath(projectRoot);
       const path = await import('path');
       const actualOutputPath = path.join(projectRoot, outputPath);
 
@@ -161,7 +161,7 @@ export const DiagramDashboard: React.FC<DiagramDashboardProps> = ({
             // Get paths
             const projectRoot = findProjectRoot();
             if (!projectRoot) throw new Error("Project root not found.");
-            const actualGitgovPath = getGitgovPath();
+            const actualGitgovPath = getWorktreeBasePath(projectRoot);
             const path = await import('path');
 
             console.log(`📖 About to regenerate after ${fileName} changed`);
