@@ -110,6 +110,9 @@ export * as Sarif from "./sarif";
 // Agent runner
 export * as Runner from "./agent_runner";
 
+// Policy evaluator (stub -- formal implementation in Epic 5)
+export * as PolicyEvaluator from "./policy_evaluator";
+
 // Renamed modules (promoted from adapters/)
 export * as RecordProjection from "./record_projection";
 export * as RecordMetrics from "./record_metrics";
