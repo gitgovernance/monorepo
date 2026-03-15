@@ -1,3 +1,16 @@
+## [2.10.1](https://github.com/gitgovernance/monorepo/compare/core-v2.10.0...core-v2.10.1) (2026-03-15)
+
+
+### 🐛 Bug Fixes
+
+* **core:** GitHubFileLister pattern + RecordProjector NaN filter + blockedBy ([#110](https://github.com/gitgovernance/monorepo/issues/110)) ([79e1272](https://github.com/gitgovernance/monorepo/commit/79e12724703da85a3943184f9ba81663759fa570))
+
+
+### ♻️ Refactoring
+
+* **e2e:** replace git add hack with typed API seeding in Block F ([744aeb6](https://github.com/gitgovernance/monorepo/commit/744aeb6ab45088f45c5b2ef7f88d62f38e2657c2))
+* **e2e:** rewrite Block F (CF5/CF6) for worktree mode compatibility ([6cdd9ca](https://github.com/gitgovernance/monorepo/commit/6cdd9ca0efb421c50e90effe7288238a14c882af))
+
 ## [2.10.0](https://github.com/gitgovernance/monorepo/compare/core-v2.9.0...core-v2.10.0) (2026-03-14)
 
 
