@@ -207,9 +207,9 @@ describe('GitHubFileLister', () => {
     });
   });
 
-  // ==================== 4.2. GitHub-Specific Behavior (EARS-B1 to B7) ====================
+  // ==================== 4.2. GitHub-Specific Behavior (EARS-B1 to B8) ====================
 
-  describe('4.2. GitHub-Specific Behavior (EARS-B1 to B7)', () => {
+  describe('4.2. GitHub-Specific Behavior (EARS-B1 to B8)', () => {
     it('[EARS-B1] should fetch tree via Octokit git.getTree with recursive', async () => {
       mockOctokit.rest.git.getTree.mockResolvedValue(createTreeResponse([
         { path: '.gitgov/config.json', type: 'blob' },
@@ -224,6 +224,29 @@ describe('GitHubFileLister', () => {
         tree_sha: 'gitgov-state',
         recursive: '1',
       });
+    });
+
+    it('[EARS-B1] should normalize directory patterns to recursive globs', async () => {
+      // Without basePath, list(['.gitgov/']) should match all files under .gitgov/
+      // picomatch doesn't treat 'dir/' as recursive — normalization adds '**'
+      const listerNoBase = new GitHubFileLister(
+        { owner: 'org', repo: 'repo', ref: 'gitgov-state' },
+        mockOctokit,
+      );
+      mockOctokit.rest.git.getTree.mockResolvedValue(createTreeResponse([
+        { path: '.gitgov/tasks/task-1.json', type: 'blob' },
+        { path: '.gitgov/actors/human_dev.json', type: 'blob' },
+        { path: '.gitgov/config.json', type: 'blob' },
+        { path: 'README.md', type: 'blob' },
+      ]));
+
+      const result = await listerNoBase.list(['.gitgov/']);
+
+      expect(result.length).toBe(3);
+      expect(result).toContain('.gitgov/tasks/task-1.json');
+      expect(result).toContain('.gitgov/actors/human_dev.json');
+      expect(result).toContain('.gitgov/config.json');
+      expect(result).not.toContain('README.md');
     });
 
     it('[EARS-B1] should filter tree entries with picomatch', async () => {
@@ -318,6 +341,24 @@ describe('GitHubFileLister', () => {
       });
     });
 
+    it('[EARS-B5] should throw PERMISSION_DENIED for HTTP 403 on stat', async () => {
+      mockOctokit.rest.repos.getContent.mockRejectedValue(createOctokitError(403));
+
+      await expect(lister.stat('secret.json')).rejects.toThrow(FileListerError);
+      await expect(lister.stat('secret.json')).rejects.toMatchObject({
+        code: 'PERMISSION_DENIED',
+      });
+    });
+
+    it('[EARS-B5] should throw PERMISSION_DENIED for HTTP 403 on exists', async () => {
+      mockOctokit.rest.repos.getContent.mockRejectedValue(createOctokitError(403));
+
+      await expect(lister.exists('secret.json')).rejects.toThrow(FileListerError);
+      await expect(lister.exists('secret.json')).rejects.toMatchObject({
+        code: 'PERMISSION_DENIED',
+      });
+    });
+
     it('[EARS-B6] should cache tree and not re-fetch on subsequent list calls', async () => {
       mockOctokit.rest.git.getTree.mockResolvedValue(createTreeResponse([
         { path: '.gitgov/config.json', type: 'blob' },
@@ -367,6 +408,9 @@ describe('GitHubFileLister', () => {
       await expect(lister.read('file.json')).rejects.toThrow(FileListerError);
       await expect(lister.read('file.json')).rejects.toMatchObject({
         code: 'READ_ERROR',
+      });
+      await expect(lister.read('file.json')).rejects.toMatchObject({
+        message: expect.stringContaining('500'),
       });
     });
 
@@ -425,9 +469,9 @@ describe('GitHubFileLister', () => {
     });
   });
 
-  // ==================== Constructor Defaults ====================
+  // ==================== 4.2+ Constructor Defaults (EARS-B8) ====================
 
-  describe('Constructor Defaults', () => {
+  describe('4.2+ Constructor Defaults (EARS-B8)', () => {
     it('[EARS-B8] should use gitgov-state as default ref when not specified', async () => {
       const listerNoRef = new GitHubFileLister(
         { owner: 'org', repo: 'repo' },

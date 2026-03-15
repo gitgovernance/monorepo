@@ -141,6 +141,9 @@ export class RecordProjector implements IRecordProjector {
 
     try {
       // [EARS-U3] Delegate to computeProjection() for all computation
+      // readTime measures computeProjection() which combines both read and calculation phases.
+      // calculationTime remains 0 because computation cannot be separated from reads inside
+      // computeProjection() — they are interleaved (e.g., RecordMetrics reads + calculates).
       const readAndCalcStart = performance.now();
       const indexData = await this.computeProjection();
       performance_metrics.readTime = performance.now() - readAndCalcStart;
@@ -605,7 +608,8 @@ export class RecordProjector implements IRecordProjector {
               const dependencyTask = allRecords.tasks.find(t => t.payload.id === dependencyId);
               return dependencyTask &&
                 dependencyTask.payload.status !== 'done' &&
-                dependencyTask.payload.status !== 'archived';
+                dependencyTask.payload.status !== 'archived' &&
+                dependencyTask.payload.status !== 'discarded';
             }
             return false;
           });
@@ -719,7 +723,9 @@ export class RecordProjector implements IRecordProjector {
       });
 
       // [EARS-20] Ordenar cronológicamente y limitar a últimos 15 eventos
+      // Filter invalid timestamps (NaN from non-numeric actor ID prefixes like 'human:dev')
       return events
+        .filter(ev => typeof ev.timestamp === 'number' && !isNaN(ev.timestamp) && ev.timestamp > 0)
         .sort((a, b) => b.timestamp - a.timestamp) // Más recientes primero
         .slice(0, 15); // Últimos 15 eventos para performance
 
