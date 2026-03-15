@@ -1,13 +1,3 @@
-![License: Apache-2.0](https://img.shields.io/badge/Protocol-Apache--2.0-blue.svg)
-![License: MPL-2.0](https://img.shields.io/badge/Core-MPL--2.0-blue.svg)
-![core npm version](https://img.shields.io/npm/v/@gitgov/core?color=orange&label=Core%20npm)
-![Tests](https://img.shields.io/badge/Core-2628%20tests-success)
-![License: Apache-2.0](https://img.shields.io/badge/CLI-Apache--2.0-blue.svg)
-![cli npm version](https://img.shields.io/npm/v/@gitgov/cli?color=orange&label=CLI%20npm)
-![Tests](https://img.shields.io/badge/CLI-450%20tests-success)
-![License: Apache-2.0](https://img.shields.io/badge/MCP--Server-Apache--2.0-blue.svg)
-![Tests](https://img.shields.io/badge/MCP--Server-199%20tests-success)
-
 # GitGovernance
 
 **An Operating System for Intelligent Work, built on Git.**
@@ -67,12 +57,13 @@ Agent:  "Sprint is 70% done, 3 tasks active, 1 blocked."
 
 ## Packages
 
-| Package | License | Purpose | Documentation |
-|:--------|:--------|:--------|:--------------|
-| **Protocol** | Apache 2.0 | The **Standard** -- RFCs, schemas, and normative specifications. | [`protocol/`](packages/private/packages/blueprints/02_protocol/) |
-| **`@gitgov/core`** | MPL-2.0 | The **Engine** -- Type-safe SDK for business logic, records, validation, storage, adapters. | [`README.md`](packages/core/README.md) |
-| **`@gitgov/cli`** | Apache 2.0 | The **Tool** -- Command-line interface for humans and AI agents. | [`README.md`](packages/cli/README.md) |
-| **`@gitgov/mcp-server`** | Apache 2.0 | The **Bridge** -- MCP server exposing 43 tools for AI agents (Claude Code, Cursor, Windsurf). | [`README.md`](packages/mcp-server/README.md) |
+| Package | Version | Tests | License | Purpose |
+|:--------|:--------|------:|:--------|:--------|
+| **Protocol** | — | — | ![Apache-2.0](https://img.shields.io/badge/Apache--2.0-brightgreen.svg) | The **Standard** — RFCs, schemas, specifications |
+| [`@gitgov/core`](packages/core/README.md) | 2.10.1 | 2,568 | ![MPL-2.0](https://img.shields.io/badge/MPL--2.0-brightgreen.svg) | The **Engine** — SDK for records, validation, storage, adapters |
+| [`@gitgov/cli`](packages/cli/README.md) | 2.1.0 | 475 | ![Apache-2.0](https://img.shields.io/badge/Apache--2.0-brightgreen.svg) | The **Tool** — CLI for humans and AI agents |
+| [`@gitgov/mcp-server`](packages/mcp-server/README.md) | — | 199 | ![Apache-2.0](https://img.shields.io/badge/Apache--2.0-brightgreen.svg) | The **Bridge** — 43 MCP tools for AI agents |
+| [`@gitgov/e2e`](packages/e2e/README.md) | — | 36 | ![Apache-2.0](https://img.shields.io/badge/Apache--2.0-brightgreen.svg) | The **Validation** — Cross-package E2E tests (CLI + core + GitHub) |
 
 ## Community
 
@@ -86,8 +77,9 @@ Agent:  "Sprint is 70% done, 3 tasks active, 1 blocked."
 - **`@gitgov/core`**: [Mozilla Public License 2.0 (MPL-2.0)](https://opensource.org/licenses/MPL-2.0)
 - **`@gitgov/cli`**: [Apache License 2.0](https://opensource.org/licenses/Apache-2.0)
 - **`@gitgov/mcp-server`**: [Apache License 2.0](https://opensource.org/licenses/Apache-2.0)
+- **`@gitgov/e2e`**: [Apache License 2.0](https://opensource.org/licenses/Apache-2.0)
 
-The protocol specification is licensed permissively to maximize adoption as an open standard. The core SDK uses weak copyleft to protect shared improvements while allowing commercial integration. The CLI and MCP server are permissively licensed to maximize distribution as adoption tools.
+The protocol specification is licensed permissively to maximize adoption as an open standard. The core SDK uses weak copyleft to protect shared improvements while allowing commercial integration. The CLI, MCP server, and E2E tests are permissively licensed to maximize distribution as adoption tools.
 
 ---
 

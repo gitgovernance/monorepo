@@ -145,7 +145,7 @@ graph LR
 |--------|----------|-----|
 | `@gitgov/core` | Interfaces, types, pure logic, factories, validators | No |
 | `@gitgov/core/fs` | Filesystem implementations (FsRecordStore, FsRecordProjection, LocalGitModule, FsLintModule, ...) | Local |
-| `@gitgov/core/github` | GitHub API implementations (GitHubRecordStore, GitHubGitModule, GitHubConfigStore, GitHubFileLister, GithubSyncStateModule) | Remote |
+| `@gitgov/core/github` | GitHub API implementations (GitHubRecordStore, GitHubGitModule, GitHubConfigStore, GitHubFileLister, GithubSyncStateModule, GithubWebhookHandler) | Remote |
 | `@gitgov/core/memory` | In-memory implementations for testing (MemoryRecordStore, MemoryRecordProjection, MemoryGitModule, ...) | No |
 | `@gitgov/core/prisma` | Database-backed implementations via Prisma-compatible client (PrismaRecordProjection) | Remote |
 
@@ -162,7 +162,7 @@ Every record type has 4 parallel artifacts:
 | Validator | `record_validations/` | Business rules on the record |
 | Schema | `record_schemas/generated/` | JSON Schema for AJV validation |
 
-The 8 records: **Actor, Agent, Task, Cycle, Execution, Changelog, Feedback, Workflow**
+The 6 records: **Actor, Agent, Task, Cycle, Execution, Feedback**
 
 ## Adapters
 
@@ -175,7 +175,6 @@ Adapters are orchestrators that compose modules. All receive dependencies via co
 | `BacklogAdapter` | Task and cycle lifecycle, workflow validation |
 | `ExecutionAdapter` | Execution audit log tracking |
 | `FeedbackAdapter` | Structured feedback and blocking resolution |
-| `ChangelogAdapter` | Automatic changelog entries |
 | `MetricsAdapter` | System status and productivity metrics |
 | `IndexerAdapter` | Local cache generation and integrity checks |
 | `WorkflowAdapter` | State transitions with signatures and custom rules |
@@ -196,7 +195,9 @@ Adapters are orchestrators that compose modules. All receive dependencies via co
 | `config_manager/` | Typed access to config.json (versioned in git) |
 | `session_store/` | Storage for .session.json |
 | `session_manager/` | Typed access to .session.json (ephemeral, not versioned) |
-| `sync_state/` | Push/pull/resolve synchronization state |
+| `sync_state/` | Push/pull/resolve synchronization (FsWorktreeSyncStateModule, GithubSyncStateModule, GithubWebhookHandler, PullScheduler) |
+| `record_projection/` | RecordProjector engine — generates IndexData, persists to sinks (FS, Prisma, Memory) |
+| `sarif/` | SarifBuilder — generates SARIF 2.1.0 with content-based fingerprints, suppressions, validation |
 | `git/` | `IGitModule` interface + local/memory implementations |
 | `crypto/` | Checksums, digital signatures, verification |
 | `key_provider/` | Key storage abstraction (fs/memory) |
