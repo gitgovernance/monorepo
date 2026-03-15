@@ -38,7 +38,7 @@ import { promises as fsPromises, existsSync } from 'fs';
 const logger = createLogger('[WorktreeSyncState] ');
 
 // ═══════════════════════════════════════════════════════════
-// Standalone helpers (same logic as FsSyncStateModule)
+// Standalone helpers for worktree sync operations
 // ═══════════════════════════════════════════════════════════
 
 /**
