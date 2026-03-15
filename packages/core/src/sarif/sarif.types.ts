@@ -2,7 +2,7 @@ import type { Finding, FindingCategory, DetectorName } from '../finding_detector
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SARIF 2.1.0 structural types
-// Basados en https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/
+// Based on https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -440,29 +440,29 @@ export interface SarifVersionStrategy {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Contrato: SARIF dentro de ExecutionRecord.metadata
+// Contract: SARIF inside ExecutionRecord.metadata
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Formato del metadata en ExecutionRecord cuando contiene SARIF.
- * El AgentRunner o el orquestador wrappea el SarifLog en esta estructura.
+ * Metadata format in ExecutionRecord when it contains SARIF.
+ * The AgentRunner or orchestrator wraps the SarifLog in this structure.
  *
- * Ejemplo:
+ * Example:
  *   ExecutionRecord.metadata = { kind: "sarif", version: "2.1.0", data: sarifLog }
  *
- * Consumidores:
- * - Projection (epic projection_schema_v2): lee kind === "sarif", descompone data.runs[0].results → GitgovFinding
- * - Orquestador (epic audit_orchestration): lee data de cada ExecutionRecord para consolidar findings
- * - Policy (epic policy_evaluation): extrae findings consolidados para evaluacion
+ * Consumers:
+ * - Projection (epic projection_schema_v2): reads kind === "sarif", decomposes data.runs[0].results → GitgovFinding
+ * - Orchestrator (epic audit_orchestration): reads data from each ExecutionRecord to consolidate findings
+ * - Policy (epic policy_evaluation): extracts consolidated findings for evaluation
  */
 export type SarifExecutionMetadata = {
-  /** Discriminador — siempre "sarif" para SARIF content */
+  /** Discriminator — always "sarif" for SARIF content */
   kind: 'sarif';
-  /** Version SARIF del contenido */
+  /** SARIF version of the content */
   version: '2.1.0';
-  /** SarifLog completo producido por SarifBuilder.build() */
+  /** Complete SarifLog produced by SarifBuilder.build() */
   data: SarifLog;
-  /** Summary para queries rapidas sin deserializar el SarifLog completo */
+  /** Summary for quick queries without deserializing the full SarifLog */
   summary?: {
     total: number;
     bySeverity: Record<string, number>;

@@ -96,8 +96,15 @@ export class GitHubFileLister implements FileLister {
       relativePaths.push(relativePath);
     }
 
+    // Normalize directory patterns: '.gitgov/' → '.gitgov/**'
+    // picomatch treats '.gitgov/' as literal, but callers expect it to match
+    // all files under that directory (consistent with fast-glob in FsFileLister).
+    const normalizedPatterns = patterns.map(p =>
+      p.endsWith('/') ? `${p}**` : p,
+    );
+
     // Match against patterns using picomatch
-    const isMatch = picomatch(patterns, {
+    const isMatch = picomatch(normalizedPatterns, {
       ignore: options?.ignore,
     });
 

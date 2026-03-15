@@ -454,6 +454,21 @@ describe('RecordProjector', () => {
       }
     });
 
+    it('[EARS-A1] should filter NaN/invalid timestamps from activityHistory before persisting', async () => {
+      const report = await recordProjector.generateIndex();
+      expect(report.success).toBe(true);
+
+      const indexData = await recordProjector.getIndexData();
+      const activityHistory = indexData?.activityHistory ?? [];
+
+      // All persisted events must have valid numeric timestamps (no NaN, no 0, no negative)
+      for (const event of activityHistory) {
+        expect(typeof event.timestamp).toBe('number');
+        expect(isNaN(event.timestamp)).toBe(false);
+        expect(event.timestamp).toBeGreaterThan(0);
+      }
+    });
+
     it('[EARS-A1] should include tasks array with full GitGovTaskRecord (headers + payloads)', async () => {
       await recordProjector.generateIndex();
       const indexData = await recordProjector.getIndexData();
@@ -1379,28 +1394,34 @@ describe('RecordProjector', () => {
 
     describe('Metrics Calculation (EARS-G3 a G7)', () => {
       it('[EARS-G3] should count and store the number of task executions', async () => {
+        // Default setup has no executions (mockStores.executions.list returns [])
+        // TODO: add execution to shared setup for exact count verification (e.g., toBe(1))
         await recordProjector.generateIndex();
         const indexData = await recordProjector.getIndexData();
 
         const enrichedTask = indexData?.enrichedTasks?.[0];
         expect(enrichedTask?.metrics).toBeDefined();
-        expect(enrichedTask?.metrics.executionCount).toBeGreaterThanOrEqual(0);
+        expect(enrichedTask?.metrics.executionCount).toBe(0);
       });
 
       it('[EARS-G4] should count and store open blocking feedbacks', async () => {
+        // Default setup has no feedback (mockStores.feedbacks.list returns [])
+        // TODO: add blocking feedback to shared setup for exact count verification (e.g., toBe(1))
         await recordProjector.generateIndex();
         const indexData = await recordProjector.getIndexData();
 
         const enrichedTask = indexData?.enrichedTasks?.[0];
-        expect(enrichedTask?.metrics.blockingFeedbackCount).toBeGreaterThanOrEqual(0);
+        expect(enrichedTask?.metrics.blockingFeedbackCount).toBe(0);
       });
 
       it('[EARS-G5] should count and store open questions', async () => {
+        // Default setup has no feedback (mockStores.feedbacks.list returns [])
+        // TODO: add question feedback to shared setup for exact count verification (e.g., toBe(1))
         await recordProjector.generateIndex();
         const indexData = await recordProjector.getIndexData();
 
         const enrichedTask = indexData?.enrichedTasks?.[0];
-        expect(enrichedTask?.metrics.openQuestionCount).toBeGreaterThanOrEqual(0);
+        expect(enrichedTask?.metrics.openQuestionCount).toBe(0);
       });
 
       it('[EARS-G6] should calculate and store time to resolution for done tasks', async () => {
@@ -1498,12 +1519,15 @@ describe('RecordProjector', () => {
       });
 
       it('[EARS-I1] should extract assignedTo from related feedback', async () => {
+        // Default setup has no assignment feedback (mockStores.feedbacks.list returns [])
+        // TODO: add assignment feedback to shared setup for exact assignee verification
         await recordProjector.generateIndex();
         const indexData = await recordProjector.getIndexData();
 
         const enrichedTask = indexData?.enrichedTasks?.[0];
         expect(enrichedTask?.relationships.assignedTo).toBeDefined();
         expect(Array.isArray(enrichedTask?.relationships.assignedTo)).toBe(true);
+        expect(enrichedTask?.relationships.assignedTo).toHaveLength(0);
       });
 
       it('[EARS-I2] should extract dependsOn including ALL typed references (task:, pr:, issue:, file:, url:)', async () => {
@@ -1617,12 +1641,15 @@ describe('RecordProjector', () => {
       });
 
       it('[EARS-I3] should extract blockedBy by scanning references from other tasks', async () => {
+        // Default setup has a single task with no references pointing to it
+        // TODO: add a task referencing the test task to shared setup for exact blockedBy verification
         await recordProjector.generateIndex();
         const indexData = await recordProjector.getIndexData();
 
         const enrichedTask = indexData?.enrichedTasks?.[0];
         expect(enrichedTask?.relationships.blockedBy).toBeDefined();
         expect(Array.isArray(enrichedTask?.relationships.blockedBy)).toBe(true);
+        expect(enrichedTask?.relationships.blockedBy).toHaveLength(0);
       });
     });
 

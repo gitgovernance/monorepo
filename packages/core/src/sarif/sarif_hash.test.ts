@@ -7,7 +7,7 @@ import {
 } from './sarif_hash';
 
 describe('SarifHash', () => {
-  describe('4.2. Hash centralizado (SARIF-B1 a B8)', () => {
+  describe('4.2. Centralized hash (SARIF-B1 to B8)', () => {
 
     it('[SARIF-B1] normalizeLineContent: should trim leading and trailing whitespace', () => {
       expect(normalizeLineContent('  const x = 1;  ')).toBe('const x = 1;');
