@@ -1,0 +1,27 @@
+{
+  "header": {
+    "version": "1.0",
+    "type": "agent",
+    "payloadChecksum": "",
+    "signatures": []
+  },
+  "payload": {
+    "id": "agent:gitgov:security-audit",
+    "status": "active",
+    "engine": {
+      "type": "local",
+      "entrypoint": "packages/agents/security-audit/dist/index.mjs",
+      "function": "runAgent"
+    },
+    "triggers": [{ "type": "manual" }],
+    "metadata": {
+      "purpose": "audit",
+      "description": "Security audit: PII, secrets, API keys",
+      "audit": {
+        "target": "code",
+        "outputFormat": "sarif",
+        "supportedScopes": ["diff", "full", "baseline"]
+      }
+    }
+  }
+}
