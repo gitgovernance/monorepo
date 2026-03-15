@@ -1,7 +1,7 @@
 import type { SyncStateModuleDependencies } from '../sync_state.types';
 
 /**
- * Reutiliza las mismas dependencias que FsSyncStateModule.
+ * Worktree-based sync state dependencies.
  * No requiere dependencias adicionales.
  */
 export type FsWorktreeSyncStateDependencies = SyncStateModuleDependencies;

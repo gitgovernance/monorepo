@@ -3,8 +3,8 @@
  *
  * Defines the contract for state synchronization between local working tree
  * and a shared state branch. Implementations handle the I/O specifics:
- * - FsSyncStateModule: Uses local filesystem + git CLI (packages/core/src/sync_state/fs/)
- * - GithubSyncStateModule: Uses GitHub API via Octokit (packages/core/src/sync_state/github_sync_state/)
+ * - FsWorktreeSyncStateModule: Uses worktree path (~/.gitgov/worktrees/) + git CLI
+ * - GithubSyncStateModule: Uses GitHub API via Octokit
  *
  * @module sync_state
  */
