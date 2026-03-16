@@ -15,6 +15,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 
 const AGENT_RECORD_PATH = path.resolve(__dirname, '../../../.gitgov/agents/agent-security-audit.json');
@@ -23,6 +24,31 @@ const ACTOR_RECORD_PATH = path.resolve(__dirname, '../../../.gitgov/actors/actor
 function loadJson(filePath: string): Record<string, unknown> {
   return JSON.parse(fs.readFileSync(filePath, 'utf-8')) as Record<string, unknown>;
 }
+
+// ─── Mocks (top-level, hoisted by Jest) ─────────────────────────────────────
+
+const mockAuditFn = jest.fn();
+const mockSarifBuild = jest.fn();
+
+jest.mock('@gitgov/core', () => ({
+  SourceAuditor: {
+    SourceAuditorModule: jest.fn().mockImplementation(() => ({ audit: mockAuditFn })),
+  },
+  FindingDetector: {
+    FindingDetectorModule: jest.fn().mockImplementation(() => ({})),
+  },
+  Sarif: {
+    createSarifBuilder: jest.fn(() => ({ build: mockSarifBuild })),
+  },
+}));
+
+jest.mock('@gitgov/core/fs', () => ({
+  FsFileLister: jest.fn().mockImplementation(() => ({})),
+}));
+
+// ─── Import after mocks ──────────────────────────────────────────────────────
+
+import { runAgent } from './src/index';
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
@@ -107,9 +133,6 @@ describe('security-audit integration', () => {
     // These tests use mocks for AgentRunner internals but verify the full flow
     // from AgentRecord loading through to ExecutionRecord creation.
 
-    const mockAuditFn = jest.fn();
-    const mockSarifBuild = jest.fn();
-
     beforeEach(() => {
       jest.clearAllMocks();
 
@@ -162,25 +185,6 @@ describe('security-audit integration', () => {
       expect(engine['type']).toBe('local');
       expect(engine['function']).toBe('runAgent');
 
-      // Simulate execution via runtime handler (how AgentRunner invokes local agents)
-      const { runAgent } = jest.requireActual('./src/index') as { runAgent: Function };
-
-      // Mock core dependencies
-      jest.mock('@gitgov/core', () => ({
-        SourceAuditor: {
-          SourceAuditorModule: jest.fn().mockImplementation(() => ({ audit: mockAuditFn })),
-        },
-        FindingDetector: {
-          FindingDetectorModule: jest.fn().mockImplementation(() => ({})),
-        },
-        Sarif: {
-          createSarifBuilder: jest.fn(() => ({ build: mockSarifBuild })),
-        },
-      }));
-      jest.mock('@gitgov/core/fs', () => ({
-        FsFileLister: jest.fn().mockImplementation(() => ({})),
-      }));
-
       const ctx = {
         agentId: payload['id'] as string,
         actorId: payload['id'] as string,
@@ -211,23 +215,6 @@ describe('security-audit integration', () => {
     });
 
     it('[AAV2-G2] should set metadata.kind sarif in ExecutionRecord', async () => {
-      jest.mock('@gitgov/core', () => ({
-        SourceAuditor: {
-          SourceAuditorModule: jest.fn().mockImplementation(() => ({ audit: mockAuditFn })),
-        },
-        FindingDetector: {
-          FindingDetectorModule: jest.fn().mockImplementation(() => ({})),
-        },
-        Sarif: {
-          createSarifBuilder: jest.fn(() => ({ build: mockSarifBuild })),
-        },
-      }));
-      jest.mock('@gitgov/core/fs', () => ({
-        FsFileLister: jest.fn().mockImplementation(() => ({})),
-      }));
-
-      const { runAgent } = jest.requireActual('./src/index') as { runAgent: Function };
-
       const ctx = {
         agentId: 'agent:gitgov:security-audit',
         actorId: 'agent:gitgov:security-audit',
@@ -251,23 +238,6 @@ describe('security-audit integration', () => {
     });
 
     it('[AAV2-G4] should produce finding when file with known PII is in scope', async () => {
-      jest.mock('@gitgov/core', () => ({
-        SourceAuditor: {
-          SourceAuditorModule: jest.fn().mockImplementation(() => ({ audit: mockAuditFn })),
-        },
-        FindingDetector: {
-          FindingDetectorModule: jest.fn().mockImplementation(() => ({})),
-        },
-        Sarif: {
-          createSarifBuilder: jest.fn(() => ({ build: mockSarifBuild })),
-        },
-      }));
-      jest.mock('@gitgov/core/fs', () => ({
-        FsFileLister: jest.fn().mockImplementation(() => ({})),
-      }));
-
-      const { runAgent } = jest.requireActual('./src/index') as { runAgent: Function };
-
       const ctx = {
         agentId: 'agent:gitgov:security-audit',
         actorId: 'agent:gitgov:security-audit',
