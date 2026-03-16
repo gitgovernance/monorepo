@@ -1,3 +1,15 @@
+## [2.11.0](https://github.com/gitgovernance/monorepo/compare/core-v2.10.1...core-v2.11.0) (2026-03-16)
+
+
+### ✨ Features
+
+* **core/agents:** audit orchestration — Cycles 1-2 ([#115](https://github.com/gitgovernance/monorepo/issues/115)) ([cc7cf44](https://github.com/gitgovernance/monorepo/commit/cc7cf447983862c94653d4d9c5325191119198eb))
+
+
+### 📝 Documentation
+
+* update public READMEs — test counts, protocol v1.1, new modules ([#113](https://github.com/gitgovernance/monorepo/issues/113)) ([6e43af4](https://github.com/gitgovernance/monorepo/commit/6e43af40c8b48706667de52933857bcb2b1a90a8))
+
 ## [2.10.1](https://github.com/gitgovernance/monorepo/compare/core-v2.10.0...core-v2.10.1) (2026-03-15)
 
 
