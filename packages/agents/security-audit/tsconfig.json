@@ -17,6 +17,6 @@
     "resolveJsonModule": true,
     "types": ["node", "jest"]
   },
-  "include": ["src", "agent.test.ts"],
+  "include": ["src", "*.test.ts"],
   "exclude": ["node_modules", "dist"]
 }
