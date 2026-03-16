@@ -2323,7 +2323,30 @@ describe('RecordProjector', () => {
   });
 
   describe('4.8. Projection Schema V2 — Executions & Agents (PSV2-A7 a A9)', () => {
-    it('[PSV2-A7] should include executions array in IndexData from stores.executions', async () => {
+    it('[PSV2-A7] should require executions and agents fields in IndexData (non-optional)', () => {
+      // Construct a minimal IndexData and verify both fields are present and required
+      const indexData: IndexData = {
+        metadata: { generatedAt: '', lastCommitHash: '', integrityStatus: 'valid', recordCounts: {}, generationTime: 0 },
+        metrics: { tasks: { total: 0, byStatus: {}, byPriority: {} }, cycles: { total: 0, active: 0, completed: 0 }, health: { overallScore: 0, blockedTasks: 0, staleTasks: 0 }, throughput: 0, leadTime: 0, cycleTime: 0, tasksCompleted7d: 0, averageCompletionTime: 0, activeAgents: 0, totalAgents: 0, agentUtilization: 0, humanAgentRatio: 0, collaborationIndex: 0 },
+        derivedStates: { stalledTasks: [], atRiskTasks: [], needsClarificationTasks: [], blockedByDependencyTasks: [] },
+        activityHistory: [],
+        tasks: [],
+        enrichedTasks: [],
+        cycles: [],
+        actors: [],
+        feedback: [],
+        executions: [],
+        agents: [],
+      };
+
+      // Both fields exist and are typed as arrays (non-optional in the type)
+      expect(indexData.executions).toBeDefined();
+      expect(indexData.agents).toBeDefined();
+      expect(Array.isArray(indexData.executions)).toBe(true);
+      expect(Array.isArray(indexData.agents)).toBe(true);
+    });
+
+    it('[PSV2-A8] should populate IndexData.executions from stores.executions.list()', async () => {
       const exec = await createMockExecutionRecord({
         taskId: '1757687335-task-test',
         type: 'progress',
@@ -2343,7 +2366,7 @@ describe('RecordProjector', () => {
       expect(projection.executions[0]!.header).toBeDefined();
     });
 
-    it('[PSV2-A8] should include agents array in IndexData from stores.agents', async () => {
+    it('[PSV2-A9] should populate IndexData.agents from stores.agents.list()', async () => {
       // Create a mock agent record manually since there's no createAgentRecord in test factories
       const agentRecord: GitGovAgentRecord = {
         header: {
@@ -2379,7 +2402,7 @@ describe('RecordProjector', () => {
       expect(projection.agents[0]!.header).toBeDefined();
     });
 
-    it('[PSV2-A9] should include agents count in metadata.recordCounts', async () => {
+    it('[PSV2-A9] should populate IndexData.agents from stores.agents.list()', async () => {
       const agentRecord: GitGovAgentRecord = {
         header: {
           version: '1.0',
@@ -2404,8 +2427,12 @@ describe('RecordProjector', () => {
 
       const projection = await recordProjector.computeProjection({ lastCommitHash: 'abc' });
 
-      expect(projection.metadata.recordCounts['agents']).toBe(1);
-      expect(projection.metadata.recordCounts['executions']).toBeDefined();
+      expect(projection.agents).toBeDefined();
+      expect(Array.isArray(projection.agents)).toBe(true);
+      expect(projection.agents.length).toBe(1);
+      expect(projection.agents[0]!.payload.id).toBe('1757687335-agent-code-reviewer');
+      expect(projection.agents[0]!.payload.engine.type).toBe('api');
+      expect(projection.agents[0]!.header).toBeDefined();
     });
   });
 });

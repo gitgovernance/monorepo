@@ -134,12 +134,24 @@ describe('FsRecordProjection', () => {
   });
 
   describe('4.1b. Projection Schema V2 — Backward Compatibility (PSV2-A10 a A12)', () => {
-    it('[PSV2-A10] should persist IndexData with executions and agents arrays', async () => {
+    it('[PSV2-A10] should persist and read back executions from index.json', async () => {
       const data = createMockIndexData({
         executions: [{
           header: { version: '1.0' as const, type: 'execution' as const, payloadChecksum: 'chk1', signatures: [] },
           payload: { id: 'exec-1', taskId: 'task-1', type: 'progress', title: 'Work', result: 'Done' },
         }] as unknown as IndexData['executions'],
+      });
+
+      await sink.persist(data, context);
+      const result = await sink.read(context);
+
+      expect(result).not.toBeNull();
+      expect(result!.executions).toHaveLength(1);
+      expect(result!.executions[0]!.payload.id).toBe('exec-1');
+    });
+
+    it('[PSV2-A11] should persist and read back agents from index.json', async () => {
+      const data = createMockIndexData({
         agents: [{
           header: { version: '1.0' as const, type: 'agent' as const, payloadChecksum: 'chk2', signatures: [] },
           payload: { id: 'agent-1', engine: { type: 'local' as const }, status: 'active' as const },
@@ -150,14 +162,12 @@ describe('FsRecordProjection', () => {
       const result = await sink.read(context);
 
       expect(result).not.toBeNull();
-      expect(result!.executions).toHaveLength(1);
-      expect(result!.executions[0]!.payload.id).toBe('exec-1');
       expect(result!.agents).toHaveLength(1);
       expect(result!.agents[0]!.payload.id).toBe('agent-1');
     });
 
-    it('[PSV2-A11] should default executions to [] when reading older JSON without the field', async () => {
-      // Write JSON without executions field (simulates older format)
+    it('[PSV2-A12] should return executions: [] and agents: [] when reading legacy index.json', async () => {
+      // Write JSON without executions or agents field (simulates legacy format)
       const indexPath = path.join(tmpDir, 'index.json');
       await fs.mkdir(tmpDir, { recursive: true });
       const oldData = {
@@ -170,7 +180,7 @@ describe('FsRecordProjection', () => {
         cycles: [],
         actors: [],
         feedback: [],
-        // NOTE: no executions or agents field
+        // NOTE: no executions or agents field — legacy format
       };
       await fs.writeFile(indexPath, JSON.stringify(oldData, null, 2), 'utf-8');
 
@@ -178,29 +188,6 @@ describe('FsRecordProjection', () => {
 
       expect(result).not.toBeNull();
       expect(result!.executions).toEqual([]);
-    });
-
-    it('[PSV2-A12] should default agents to [] when reading older JSON without the field', async () => {
-      // Write JSON without agents field (simulates older format)
-      const indexPath = path.join(tmpDir, 'index.json');
-      await fs.mkdir(tmpDir, { recursive: true });
-      const oldData = {
-        metadata: { generatedAt: new Date().toISOString(), lastCommitHash: 'old', integrityStatus: 'valid', recordCounts: {}, generationTime: 50 },
-        metrics: {},
-        derivedStates: { stalledTasks: [], atRiskTasks: [], needsClarificationTasks: [], blockedByDependencyTasks: [] },
-        activityHistory: [],
-        tasks: [],
-        enrichedTasks: [],
-        cycles: [],
-        actors: [],
-        feedback: [],
-        executions: [], // executions present but no agents
-      };
-      await fs.writeFile(indexPath, JSON.stringify(oldData, null, 2), 'utf-8');
-
-      const result = await sink.read(context);
-
-      expect(result).not.toBeNull();
       expect(result!.agents).toEqual([]);
     });
   });
