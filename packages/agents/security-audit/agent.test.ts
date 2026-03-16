@@ -1,186 +1,193 @@
-import { runAgent } from './src/agent';
+/**
+ * Tabla de Trazabilidad EARS - agent.test.ts
+ * All EARS prefixes map to security_audit_agent.md
+ *
+ * | EARS ID  | Requisito                                                      | Test Case                                                         | Estado    |
+ * |----------|----------------------------------------------------------------|-------------------------------------------------------------------|-----------|
+ * | AAV2-C1  | scope: 'full' invoca audit sin diff context                    | [AAV2-C1] should call sourceAuditor.audit with scope: full        | Implementado |
+ * | AAV2-C2  | scope: 'diff' invoca audit con diff scope                      | [AAV2-C2] should call sourceAuditor.audit with scope: diff        | Implementado |
+ * | AAV2-C3  | Pasa AuditResult a SarifBuilder con toolName correcto          | [AAV2-C3] should call sarifBuilder.build with toolName            | Implementado |
+ * | AAV2-C4  | Retorna AgentOutput con kind sarif y data = SarifLog           | [AAV2-C4] should return AgentOutput with metadata.kind: sarif     | Implementado |
+ * | AAV2-C5  | Incluye TODOS los findings sin filtrar waivers                 | [AAV2-C5] should include ALL findings without waiver filtering    | Implementado |
+ * | AAV2-C6  | Stage condicional se salta si anterior = 0 findings            | [AAV2-C6] should skip conditional stage when prev = 0 findings    | Implementado |
+ * | AAV2-A5  | Stage condicional se salta si anterior = 0 findings (package) | [AAV2-A5] should skip conditional stage when previous stage produced zero findings | Implementado |
+ */
+
+import { SecurityAuditAgent } from './src/agent';
+import type { SecurityAuditAgentDeps } from './src/agent';
+import type { SecurityAuditInput, AgentDetectorConfig } from './src/types';
 import { DEFAULT_CONFIG } from './src/config';
 
-type SarifLog = {
-  $schema: string;
-  version: '2.1.0';
-  runs: Array<{
-    tool: { driver: { name: string; version: string; informationUri: string; rules: unknown[] } };
-    results: unknown[];
-  }>;
-};
-
-// ─── Mocks ───────────────────────────────────────────────────────────────────
-
-const mockAuditResult = {
-  findings: [
-    {
-      id: 'f1',
-      ruleId: 'PII-001',
-      category: 'pii-email' as const,
-      severity: 'high' as const,
-      file: 'src/app.ts',
-      line: 10,
-      snippet: 'const email = "user@test.com"',
-      message: 'Hardcoded email address detected',
-      detector: 'regex' as const,
-      fingerprint: 'abc123',
-      confidence: 0.95,
-    },
-  ],
-  summary: {
-    total: 1,
-    bySeverity: { critical: 0, high: 1, medium: 0, low: 0, info: 0 },
-    byCategory: { 'pii-email': 1 },
-    byDetector: { regex: 1, heuristic: 0, llm: 0 },
-  },
-  scannedFiles: 5,
-  scannedLines: 200,
-  duration: 42,
-  detectors: ['regex' as const],
-  waivers: { acknowledged: 0, new: 1 },
-};
-
-const mockAuditFn = jest.fn().mockResolvedValue(mockAuditResult);
-
-// Mock @gitgov/core
-jest.mock('@gitgov/core', () => ({
-  SourceAuditor: {
-    SourceAuditorModule: jest.fn().mockImplementation(() => ({
-      audit: mockAuditFn,
-    })),
-  },
-  FindingDetector: {
-    FindingDetectorModule: jest.fn().mockImplementation(() => ({})),
-  },
-  Sarif: {
-    createSarifBuilder: jest.fn().mockReturnValue({
-      build: jest.fn().mockImplementation(async (opts: Record<string, unknown>) => ({
-        $schema: 'https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/schemas/sarif-schema-2.1.0.json',
-        version: '2.1.0' as const,
-        runs: [{
-          tool: {
-            driver: {
-              name: opts['toolName'] as string,
-              version: opts['toolVersion'] as string,
-              informationUri: opts['informationUri'] as string,
-              rules: [],
-            },
-          },
-          results: [],
-        }],
-      })),
-    }),
-  },
-}));
-
-// Mock @gitgov/core/fs
-jest.mock('@gitgov/core/fs', () => ({
-  findProjectRoot: jest.fn().mockReturnValue('/mock/project'),
-  FsFileLister: jest.fn().mockImplementation(() => ({})),
-}));
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function createCtx(input: Record<string, unknown>) {
+function makeAuditResult(overrides: Record<string, unknown> = {}) {
   return {
-    agentId: 'agent:gitgov:security-audit',
-    actorId: 'actor:agent:security-audit',
-    taskId: 'task-001',
-    runId: 'run-001',
-    input,
+    findings: [],
+    summary: { total: 0, bySeverity: {}, byCategory: {}, byDetector: {} },
+    scannedFiles: 10,
+    scannedLines: 500,
+    duration: 42,
+    detectors: ['regex' as const],
+    waivers: { acknowledged: 0, new: 0 },
+    ...overrides,
   };
 }
 
-// ─── Tests ────────────────────────────────────────────────────────────────────
+function makeSarifLog() {
+  return {
+    version: '2.1.0' as const,
+    $schema: 'https://json.schemastore.org/sarif-2.1.0.json',
+    runs: [{
+      tool: {
+        driver: {
+          name: 'gitgov-security-audit',
+          version: '2.0.0',
+          informationUri: 'https://github.com/gitgovernance/monorepo/tree/main/packages/agents/security-audit',
+          rules: [],
+        },
+      },
+      results: [],
+    }],
+  };
+}
+
+function makeDeps(overrides: Partial<SecurityAuditAgentDeps> = {}): SecurityAuditAgentDeps {
+  return {
+    sourceAuditor: {
+      audit: jest.fn().mockResolvedValue(makeAuditResult()),
+    },
+    sarifBuilder: {
+      build: jest.fn().mockResolvedValue(makeSarifLog()),
+      validate: jest.fn(), // required by SarifBuilder interface, not called by agent
+    },
+    ...overrides,
+  };
+}
+
+const baseInput: SecurityAuditInput = {
+  scope: 'full',
+  taskId: 'task-001',
+  baseDir: '/tmp/test-repo',
+};
 
 describe('SecurityAuditAgent', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
-
-  describe('4.1. Agent Execution (AORCH-B9)', () => {
-    it('[AORCH-B9] should run SourceAuditorModule.audit() with scope from ctx.input', async () => {
-      const ctx = createCtx({
-        scope: 'diff',
-        include: ['src/**/*.ts'],
-        exclude: ['**/*.test.ts'],
-        taskId: 'task-001',
+  describe('4.1. Package y Estructura (AAV2-A5)', () => {
+    it('[AAV2-A5] should skip conditional stage when previous stage produced zero findings', async () => {
+      const auditMock = jest.fn().mockResolvedValue(makeAuditResult({ findings: [] }));
+      const deps = makeDeps({
+        sourceAuditor: { audit: auditMock },
       });
+      const agent = new SecurityAuditAgent(deps);
 
-      await runAgent(ctx);
-
-      // Verify SourceAuditorModule was instantiated
-      const { SourceAuditor } = jest.requireMock('@gitgov/core') as {
-        SourceAuditor: { SourceAuditorModule: jest.Mock };
+      const config: AgentDetectorConfig = {
+        pipeline: [
+          { detector: 'regex', conditional: false },
+          { detector: 'heuristic', conditional: true },
+          { detector: 'llm', conditional: true },
+        ],
       };
-      expect(SourceAuditor.SourceAuditorModule).toHaveBeenCalledTimes(1);
 
-      // Verify audit() was called with the correct scope from input
-      expect(mockAuditFn).toHaveBeenCalledTimes(1);
-      const auditOptions = mockAuditFn.mock.calls[0]![0] as {
-        baseDir: string;
-        scope: { include: string[]; exclude: string[] };
-      };
-      expect(auditOptions.scope.include).toEqual(['src/**/*.ts']);
-      expect(auditOptions.scope.exclude).toEqual(['**/*.test.ts']);
+      await agent.run(baseInput, config);
+
+      // regex runs (0 findings) → heuristic skipped → llm skipped
+      expect(auditMock).toHaveBeenCalledTimes(1);
     });
   });
 
-  describe('4.2. SARIF Output (AORCH-B10)', () => {
-    it('[AORCH-B10] should return AgentOutput with metadata.kind sarif and valid SarifLog', async () => {
-      const ctx = createCtx({
-        scope: 'full',
-        taskId: 'task-002',
-      });
+  describe('4.3. Pipeline de Auditoria (AAV2-C1 a AAV2-C6)', () => {
+    it('[AAV2-C1] should call sourceAuditor.audit with scope: full', async () => {
+      const deps = makeDeps();
+      const agent = new SecurityAuditAgent(deps);
 
-      const output = await runAgent(ctx);
+      await agent.run(baseInput, DEFAULT_CONFIG);
 
-      // Verify metadata shape
-      expect(output.metadata).toBeDefined();
-      expect(output.metadata!['kind']).toBe('sarif');
-      expect(output.metadata!['version']).toBe('2.1.0');
-
-      // Verify data is a valid SarifLog structure
-      const sarifLog = output.metadata!['data'] as SarifLog;
-      expect(sarifLog.version).toBe('2.1.0');
-      expect(sarifLog.$schema).toContain('sarif-schema-2.1.0');
-      expect(Array.isArray(sarifLog.runs)).toBe(true);
-      expect(sarifLog.runs.length).toBeGreaterThan(0);
-
-      // Verify message is present
-      expect(output.message).toContain('Security audit completed');
-    });
-  });
-
-  describe('4.3. Internal Configuration (AORCH-B11)', () => {
-    it('[AORCH-B11] should use detectors from internal config.ts without external --detector param', async () => {
-      // Input has NO detector field — only scope and taskId
-      const ctx = createCtx({
-        scope: 'diff',
-        taskId: 'task-003',
-      });
-
-      await runAgent(ctx);
-
-      // Verify FindingDetectorModule was created with the internal config
-      const { FindingDetector } = jest.requireMock('@gitgov/core') as {
-        FindingDetector: { FindingDetectorModule: jest.Mock };
-      };
-      expect(FindingDetector.FindingDetectorModule).toHaveBeenCalledTimes(1);
-      expect(FindingDetector.FindingDetectorModule).toHaveBeenCalledWith(
-        DEFAULT_CONFIG.detectorConfig
+      expect(deps.sourceAuditor.audit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          baseDir: '/tmp/test-repo',
+          scope: expect.objectContaining({
+            include: ['**/*'],
+          }),
+        }),
       );
 
-      // Verify audit was still called (agent works without external detector config)
-      expect(mockAuditFn).toHaveBeenCalledTimes(1);
-
-      // Verify default include/exclude from config were used (no include/exclude in input)
-      const auditOptions = mockAuditFn.mock.calls[0]![0] as {
-        scope: { include: string[]; exclude: string[] };
-      };
-      expect(auditOptions.scope.include).toEqual(DEFAULT_CONFIG.defaultInclude);
-      expect(auditOptions.scope.exclude).toEqual(DEFAULT_CONFIG.defaultExclude);
+      // scope: 'full' should NOT include changedSince
+      const callArgs = (deps.sourceAuditor.audit as jest.Mock).mock.calls[0]![0] as Record<string, unknown>;
+      const scope = callArgs['scope'] as Record<string, unknown>;
+      expect(scope['changedSince']).toBeUndefined();
     });
+
+    it('[AAV2-C2] should call sourceAuditor.audit with scope: diff', async () => {
+      const deps = makeDeps();
+      const agent = new SecurityAuditAgent(deps);
+
+      await agent.run({ ...baseInput, scope: 'diff' }, DEFAULT_CONFIG);
+
+      const callArgs = (deps.sourceAuditor.audit as jest.Mock).mock.calls[0]![0] as Record<string, unknown>;
+      const scope = callArgs['scope'] as Record<string, unknown>;
+      expect(scope['changedSince']).toBe('HEAD');
+      expect(scope['include']).toEqual(['**/*']);
+      expect(callArgs['baseDir']).toBe('/tmp/test-repo');
+    });
+
+    it('[AAV2-C3] should call sarifBuilder.build with toolName: gitgov-security-audit', async () => {
+      const deps = makeDeps();
+      const agent = new SecurityAuditAgent(deps);
+
+      await agent.run(baseInput, DEFAULT_CONFIG);
+
+      expect(deps.sarifBuilder.build).toHaveBeenCalledWith(
+        expect.objectContaining({
+          toolName: 'gitgov-security-audit',
+          findings: expect.any(Array),
+        }),
+      );
+    });
+
+    it('[AAV2-C4] should return AgentOutput with metadata.kind: sarif', async () => {
+      const deps = makeDeps();
+      const agent = new SecurityAuditAgent(deps);
+
+      const output = await agent.run(baseInput, DEFAULT_CONFIG);
+
+      expect(output.metadata).toBeDefined();
+      const metadata = output.metadata as Record<string, unknown>;
+      expect(metadata['kind']).toBe('sarif');
+      expect(metadata['version']).toBe('2.1.0');
+      expect(metadata['data']).toBeDefined();
+    });
+
+    it('[AAV2-C5] should include ALL findings in SARIF without waiver filtering', async () => {
+      const findings = [
+        { id: 'f1', ruleId: 'PII-001', severity: 'high', category: 'pii-email', file: 'a.ts', line: 1, snippet: '', message: '', detector: 'regex', fingerprint: 'abc', confidence: 0.9 },
+        { id: 'f2', ruleId: 'SEC-001', severity: 'low', category: 'hardcoded-secret', file: 'b.ts', line: 2, snippet: '', message: '', detector: 'regex', fingerprint: 'def', confidence: 0.8 },
+      ];
+      const deps = makeDeps({
+        sourceAuditor: {
+          audit: jest.fn().mockResolvedValue(makeAuditResult({ findings, scannedFiles: 2 })),
+        },
+      });
+      const agent = new SecurityAuditAgent(deps);
+
+      await agent.run(baseInput, DEFAULT_CONFIG);
+
+      // SarifBuilder must receive ALL findings without filtering
+      expect(deps.sarifBuilder.build).toHaveBeenCalledWith(
+        expect.objectContaining({ findings }),
+      );
+    });
+
+    it('[AAV2-C6] should skip conditional stage when previous stage returned zero findings', async () => {
+      const auditMock = jest.fn().mockResolvedValue(makeAuditResult({ findings: [] }));
+      const deps = makeDeps({
+        sourceAuditor: { audit: auditMock },
+      });
+      const agent = new SecurityAuditAgent(deps);
+
+      // DEFAULT_CONFIG: [regex(non-conditional), heuristic(conditional)]
+      // regex returns 0 findings → heuristic should be skipped
+      await agent.run(baseInput, DEFAULT_CONFIG);
+
+      // Only 1 call (regex stage), heuristic skipped because conditional + 0 findings
+      expect(auditMock).toHaveBeenCalledTimes(1);
+    });
+
   });
 });

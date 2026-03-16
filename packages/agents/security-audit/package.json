@@ -1,11 +1,12 @@
 {
   "name": "@gitgov/agent-security-audit",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "type": "module",
   "main": "dist/index.mjs",
   "scripts": {
     "build": "esbuild src/index.ts --bundle --platform=node --format=esm --target=node20 --outfile=dist/index.mjs --external:@gitgov/core",
     "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit",
     "test": "jest"
   },
   "dependencies": {

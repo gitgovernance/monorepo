@@ -1,50 +1,34 @@
-import type { FindingDetector } from '@gitgov/core';
-
-type FindingDetectorConfig = FindingDetector.FindingDetectorConfig;
+import type { AgentDetectorConfig, SecurityAuditInput } from './types';
 
 /**
- * Internal detector configuration for the security-audit agent.
- * Defines which detectors are enabled and their settings.
+ * Configuracion por defecto del pipeline de deteccion.
+ * - Etapa 1: regex (siempre, rapido, gratis)
+ * - Etapa 2: heuristic (solo si regex encontro algo)
+ * El LLM NO esta en el default — requiere override explicito.
+ */
+export const DEFAULT_CONFIG: AgentDetectorConfig = Object.freeze({
+  pipeline: Object.freeze([
+    Object.freeze({ detector: 'regex' as const, conditional: false }),
+    Object.freeze({ detector: 'heuristic' as const, conditional: true }),
+  ]),
+}) as AgentDetectorConfig;
+
+/**
+ * Construye la configuracion final del agente.
+ * Sin overrides retorna DEFAULT_CONFIG. Con overrides, el pipeline
+ * del override reemplaza el default completo.
  *
- * This config is NOT received as an external parameter.
- * The agent always uses this internal config (AORCH-B11).
+ * @param _input - Reserved for future input-driven config adaptation
+ *   (e.g., scope='diff' could use lighter pipeline). Not consumed in MVP.
  */
+export function buildConfig(
+  _input: SecurityAuditInput,
+  overrides?: Partial<AgentDetectorConfig>,
+): AgentDetectorConfig {
+  if (!overrides) return DEFAULT_CONFIG;
 
-export type DetectorStage = {
-  detector: 'regex' | 'heuristic' | 'llm';
-  conditional: boolean;
-};
-
-export type SecurityAuditConfig = {
-  /** Ordered pipeline of detector stages */
-  pipeline: DetectorStage[];
-  /** FindingDetectorConfig for SourceAuditorModule */
-  detectorConfig: FindingDetectorConfig;
-  /** Default exclude patterns for file scanning */
-  defaultExclude: string[];
-  /** Default include patterns for file scanning */
-  defaultInclude: string[];
-};
-
-/**
- * Default configuration for MVP.
- * Only regex detector enabled — heuristic and llm stages come in Epic 3.
- */
-export const DEFAULT_CONFIG: SecurityAuditConfig = {
-  pipeline: [
-    { detector: 'regex', conditional: false },
-  ],
-  detectorConfig: {
-    regex: { enabled: true },
-  },
-  defaultExclude: [
-    '**/node_modules/**',
-    '**/.git/**',
-    '**/dist/**',
-    '**/build/**',
-    '**/*.min.js',
-    '**/package-lock.json',
-    '**/pnpm-lock.yaml',
-  ],
-  defaultInclude: ['**/*'],
-};
+  return {
+    pipeline: overrides.pipeline ?? DEFAULT_CONFIG.pipeline,
+    rules: overrides.rules,
+  };
+}
