@@ -209,6 +209,9 @@ Adapters are orchestrators that compose modules. All receive dependencies via co
 | `project_initializer/` | GitGovernance project setup |
 | `finding_detector/` | Finding detection (regex, heuristic, LLM) |
 | `source_auditor/` | Cross-system audit (code, Jira, gitgov) |
+| `sarif/` | SARIF 2.1.0 builder, hash, validation (42 EARS) |
+| `audit_orchestrator/` | Multi-agent audit orchestration, SARIF consolidation, waiver application (10 EARS) |
+| `policy_evaluator/` | Pass/block evaluation by severity threshold (stub — Epic 5 formalizes) |
 | `diagram_generator/` | Mermaid diagram generation |
 | `logger/` | Centralized logging |
 | `utils/` | ID generation/parsing, array utils, signature utils |

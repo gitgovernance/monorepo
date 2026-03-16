@@ -1,0 +1,677 @@
+import { createAuditOrchestrator } from "./audit_orchestrator";
+import type {
+  AuditOrchestratorDeps,
+  AuditOrchestrationOptions,
+  PolicyDecisionStub,
+} from "./audit_orchestrator.types";
+import type { SarifLog, SarifResult } from "../sarif/sarif.types";
+import type { RecordStore } from "../record_store/record_store";
+import type { GitGovAgentRecord } from "../record_types";
+import type { IAgentRunner } from "../agent_runner/agent_runner";
+import type { RunOptions, AgentResponse } from "../agent_runner/agent_runner.types";
+import type { IWaiverReader, ActiveWaiver } from "../source_auditor/types";
+
+// ============================================================================
+// Test helpers
+// ============================================================================
+
+/**
+ * Creates a valid SarifLog with given results.
+ * Uses `as SarifResult[]` to bypass strict SarifResultProperties typing
+ * since tests use arbitrary property values.
+ */
+function makeSarifLog(results: Record<string, unknown>[] = []): SarifLog {
+  return {
+    $schema:
+      "https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/schemas/sarif-schema-2.1.0.json",
+    version: "2.1.0",
+    runs: [
+      {
+        tool: {
+          driver: {
+            name: "test-tool",
+            version: "1.0.0",
+            informationUri: "https://example.com",
+          },
+        },
+        results: results as SarifResult[],
+      },
+    ],
+  };
+}
+
+function makeAgentRecord(
+  id: string,
+  purpose: string,
+): GitGovAgentRecord {
+  return {
+    header: {
+      version: "1.0",
+      type: "agent",
+      payloadChecksum: "abc123",
+      signatures: [
+        {
+          keyId: "agent:test",
+          role: "author",
+          notes: "test signature",
+          signature: "dGVzdA==".padEnd(88, "="),
+          timestamp: Date.now(),
+        },
+      ],
+    },
+    payload: {
+      id,
+      engine: { type: "local" },
+      metadata: { purpose },
+    },
+  };
+}
+
+function makeAgentResponse(
+  agentId: string,
+  sarif: SarifLog,
+  executionRecordId: string = "exec-001",
+): AgentResponse {
+  return {
+    runId: "run-" + agentId,
+    agentId,
+    status: "success",
+    output: {
+      message: "Scan completed",
+      metadata: {
+        kind: "sarif",
+        version: "2.1.0",
+        data: sarif,
+      },
+    },
+    executionRecordId,
+    startedAt: new Date().toISOString(),
+    completedAt: new Date().toISOString(),
+    durationMs: 100,
+  };
+}
+
+function makePolicyStub(
+  decision: "pass" | "block" = "pass",
+  reason: string = "No issues",
+): PolicyDecisionStub {
+  return {
+    decision,
+    reason,
+    executionRecordId: "exec-policy-001",
+  };
+}
+
+function createMockDeps(overrides?: Partial<AuditOrchestratorDeps>): AuditOrchestratorDeps {
+  const recordStore: RecordStore<GitGovAgentRecord> = {
+    list: jest.fn().mockResolvedValue([]),
+    get: jest.fn().mockResolvedValue(null),
+    put: jest.fn().mockResolvedValue(undefined),
+    putMany: jest.fn().mockResolvedValue(undefined),
+    delete: jest.fn().mockResolvedValue(undefined),
+    exists: jest.fn().mockResolvedValue(false),
+  };
+
+  const agentRunner: IAgentRunner = {
+    runOnce: jest.fn().mockResolvedValue(makeAgentResponse("test", makeSarifLog())),
+  };
+
+  const waiverReader: IWaiverReader = {
+    loadActiveWaivers: jest.fn().mockResolvedValue([]),
+    hasActiveWaiver: jest.fn().mockResolvedValue(false),
+  };
+
+  const policyEvaluator = {
+    evaluate: jest.fn().mockResolvedValue(makePolicyStub()),
+  };
+
+  return {
+    recordStore,
+    agentRunner,
+    waiverReader,
+    policyEvaluator,
+    ...overrides,
+  };
+}
+
+const defaultOptions: AuditOrchestrationOptions = {
+  scope: "full",
+  taskId: "1234567890-task-test",
+};
+
+function makeSarifResult(overrides: {
+  ruleId: string;
+  level: "error" | "warning" | "note" | "none";
+  message: string;
+  file: string;
+  startLine: number;
+  fingerprint?: string;
+  category?: string;
+}): Record<string, unknown> {
+  const result: Record<string, unknown> = {
+    ruleId: overrides.ruleId,
+    level: overrides.level,
+    message: { text: overrides.message },
+    locations: [
+      {
+        physicalLocation: {
+          artifactLocation: { uri: overrides.file },
+          region: { startLine: overrides.startLine },
+        },
+      },
+    ],
+    properties: {
+      "gitgov/category": overrides.category ?? "unknown-risk",
+      "gitgov/detector": "regex",
+      "gitgov/confidence": 0.9,
+    },
+  };
+
+  if (overrides.fingerprint) {
+    result["partialFingerprints"] = {
+      "primaryLocationLineHash/v1": overrides.fingerprint,
+    };
+  }
+
+  return result;
+}
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+describe("AuditOrchestrator", () => {
+  describe("4.1. Agent Discovery (AORCH-A1)", () => {
+    it("[AORCH-A1] should pass scope, include, exclude, and taskId in ctx.input to AgentRunner", async () => {
+      const agentRecord = makeAgentRecord("agent:security-audit", "audit");
+      const sarif = makeSarifLog();
+
+      const deps = createMockDeps();
+      (deps.recordStore.list as jest.Mock).mockResolvedValue(["agent:security-audit"]);
+      (deps.recordStore.get as jest.Mock).mockResolvedValue(agentRecord);
+      (deps.agentRunner.runOnce as jest.Mock).mockResolvedValue(
+        makeAgentResponse("agent:security-audit", sarif, "exec-scan-001"),
+      );
+
+      const orchestrator = createAuditOrchestrator(deps);
+      await orchestrator.run({
+        scope: "diff",
+        include: ["src/**/*.ts"],
+        exclude: ["node_modules/**"],
+        taskId: "1234567890-task-audit",
+      });
+
+      expect(deps.agentRunner.runOnce).toHaveBeenCalledWith(
+        expect.objectContaining({
+          agentId: "agent:security-audit",
+          taskId: "1234567890-task-audit",
+          input: {
+            scope: "diff",
+            include: ["src/**/*.ts"],
+            exclude: ["node_modules/**"],
+            taskId: "1234567890-task-audit",
+          },
+        }),
+      );
+    });
+  });
+
+  describe("4.2. Agent Execution (AORCH-B1 to B5, B8)", () => {
+    it("[AORCH-B1] should read AgentRecords from RecordStore and filter by metadata.purpose === audit", async () => {
+      const auditAgent = makeAgentRecord("agent:security-audit", "audit");
+      const nonAuditAgent = makeAgentRecord("agent:deployment", "deploy");
+
+      const deps = createMockDeps();
+      (deps.recordStore.list as jest.Mock).mockResolvedValue([
+        "agent:security-audit",
+        "agent:deployment",
+      ]);
+      (deps.recordStore.get as jest.Mock).mockImplementation(async (id: string) => {
+        if (id === "agent:security-audit") return auditAgent;
+        if (id === "agent:deployment") return nonAuditAgent;
+        return null;
+      });
+      (deps.agentRunner.runOnce as jest.Mock).mockResolvedValue(
+        makeAgentResponse("agent:security-audit", makeSarifLog(), "exec-001"),
+      );
+
+      const orchestrator = createAuditOrchestrator(deps);
+      const result = await orchestrator.run(defaultOptions);
+
+      // Only the audit agent should be executed
+      expect(deps.agentRunner.runOnce).toHaveBeenCalledTimes(1);
+      expect(deps.agentRunner.runOnce).toHaveBeenCalledWith(
+        expect.objectContaining({ agentId: "agent:security-audit" }),
+      );
+      expect(result.agentResults).toHaveLength(1);
+      const firstResult = result.agentResults[0]!;
+      expect(firstResult).toBeDefined();
+      expect(firstResult.agentId).toBe("agent:security-audit");
+    });
+
+    it("[AORCH-B2] should filter discovered agents to only the specified agentId when --agent is provided", async () => {
+      const agent1 = makeAgentRecord("agent:security-audit", "audit");
+      const agent2 = makeAgentRecord("agent:pii-scan", "audit");
+
+      const deps = createMockDeps();
+      (deps.recordStore.list as jest.Mock).mockResolvedValue([
+        "agent:security-audit",
+        "agent:pii-scan",
+      ]);
+      (deps.recordStore.get as jest.Mock).mockImplementation(async (id: string) => {
+        if (id === "agent:security-audit") return agent1;
+        if (id === "agent:pii-scan") return agent2;
+        return null;
+      });
+      (deps.agentRunner.runOnce as jest.Mock).mockResolvedValue(
+        makeAgentResponse("agent:pii-scan", makeSarifLog(), "exec-001"),
+      );
+
+      const orchestrator = createAuditOrchestrator(deps);
+      const result = await orchestrator.run({
+        ...defaultOptions,
+        agentId: "agent:pii-scan",
+      });
+
+      expect(deps.agentRunner.runOnce).toHaveBeenCalledTimes(1);
+      expect(deps.agentRunner.runOnce).toHaveBeenCalledWith(
+        expect.objectContaining({ agentId: "agent:pii-scan" }),
+      );
+      expect(result.agentResults).toHaveLength(1);
+      const firstResult = result.agentResults[0]!;
+      expect(firstResult).toBeDefined();
+      expect(firstResult.agentId).toBe("agent:pii-scan");
+    });
+
+    it("[AORCH-B3] should return empty findings and warning when no audit agents are found", async () => {
+      const nonAuditAgent = makeAgentRecord("agent:deployment", "deploy");
+
+      const deps = createMockDeps();
+      (deps.recordStore.list as jest.Mock).mockResolvedValue(["agent:deployment"]);
+      (deps.recordStore.get as jest.Mock).mockResolvedValue(nonAuditAgent);
+
+      const orchestrator = createAuditOrchestrator(deps);
+      const result = await orchestrator.run(defaultOptions);
+
+      expect(result.findings).toHaveLength(0);
+      expect(result.agentResults).toHaveLength(0);
+      expect(result.summary.total).toBe(0);
+      expect(result.summary.agentsRun).toBe(0);
+      expect(deps.agentRunner.runOnce).not.toHaveBeenCalled();
+      expect(result.warning).toBe('No audit agents found');
+    });
+
+    it("[AORCH-B4] should collect SarifLog and include in agentResults with status success when agent succeeds", async () => {
+      const agentRecord = makeAgentRecord("agent:security-audit", "audit");
+      const sarif = makeSarifLog([
+        makeSarifResult({
+          ruleId: "SEC-001",
+          level: "error",
+          message: "Hardcoded secret found",
+          file: "src/config.ts",
+          startLine: 10,
+          fingerprint: "hash-sec-001",
+          category: "hardcoded-secret",
+        }),
+      ]);
+
+      const deps = createMockDeps();
+      (deps.recordStore.list as jest.Mock).mockResolvedValue(["agent:security-audit"]);
+      (deps.recordStore.get as jest.Mock).mockResolvedValue(agentRecord);
+      (deps.agentRunner.runOnce as jest.Mock).mockResolvedValue(
+        makeAgentResponse("agent:security-audit", sarif, "exec-scan-001"),
+      );
+
+      const orchestrator = createAuditOrchestrator(deps);
+      const result = await orchestrator.run(defaultOptions);
+
+      expect(result.agentResults).toHaveLength(1);
+      const firstResult = result.agentResults[0]!;
+      expect(firstResult).toBeDefined();
+      expect(firstResult.status).toBe("success");
+      const firstRun = firstResult.sarif.runs[0]!;
+      expect(firstRun).toBeDefined();
+      expect(firstRun.results).toHaveLength(1);
+      expect(firstResult.executionId).toBe("exec-scan-001");
+    });
+
+    it("[AORCH-B5] should include result with status error and continue with remaining agents when agent fails", async () => {
+      const agent1 = makeAgentRecord("agent:failing-audit", "audit");
+      const agent2 = makeAgentRecord("agent:working-audit", "audit");
+
+      const workingSarif = makeSarifLog([
+        makeSarifResult({
+          ruleId: "PII-001",
+          level: "warning",
+          message: "PII detected",
+          file: "src/user.ts",
+          startLine: 5,
+          fingerprint: "hash-pii-001",
+          category: "pii-email",
+        }),
+      ]);
+
+      const deps = createMockDeps();
+      (deps.recordStore.list as jest.Mock).mockResolvedValue([
+        "agent:failing-audit",
+        "agent:working-audit",
+      ]);
+      (deps.recordStore.get as jest.Mock).mockImplementation(async (id: string) => {
+        if (id === "agent:failing-audit") return agent1;
+        if (id === "agent:working-audit") return agent2;
+        return null;
+      });
+      (deps.agentRunner.runOnce as jest.Mock).mockImplementation(
+        async (opts: RunOptions) => {
+          if (opts.agentId === "agent:failing-audit") {
+            throw new Error("Agent crashed");
+          }
+          return makeAgentResponse("agent:working-audit", workingSarif, "exec-002");
+        },
+      );
+
+      const orchestrator = createAuditOrchestrator(deps);
+      const result = await orchestrator.run(defaultOptions);
+
+      // Both agents should appear in results
+      expect(result.agentResults).toHaveLength(2);
+
+      const failedResult = result.agentResults.find(
+        (r) => r.agentId === "agent:failing-audit",
+      );
+      expect(failedResult).toBeDefined();
+      expect(failedResult?.status).toBe("error");
+      expect(failedResult?.errorMessage).toBe("Agent crashed");
+
+      const successResult = result.agentResults.find(
+        (r) => r.agentId === "agent:working-audit",
+      );
+      expect(successResult).toBeDefined();
+      expect(successResult?.status).toBe("success");
+
+      // Findings from the working agent should still be consolidated
+      expect(result.findings).toHaveLength(1);
+      const firstFinding = result.findings[0]!;
+      expect(firstFinding).toBeDefined();
+      expect(firstFinding.ruleId).toBe("PII-001");
+
+      // Summary should reflect both
+      expect(result.summary.agentsRun).toBe(1);
+      expect(result.summary.agentsFailed).toBe(1);
+    });
+
+    it("[AORCH-B8] should create one ExecutionRecord of type analysis per agent via AgentRunner", async () => {
+      const agent1 = makeAgentRecord("agent:security-audit", "audit");
+      const agent2 = makeAgentRecord("agent:pii-scan", "audit");
+
+      const deps = createMockDeps();
+      (deps.recordStore.list as jest.Mock).mockResolvedValue([
+        "agent:security-audit",
+        "agent:pii-scan",
+      ]);
+      (deps.recordStore.get as jest.Mock).mockImplementation(async (id: string) => {
+        if (id === "agent:security-audit") return agent1;
+        if (id === "agent:pii-scan") return agent2;
+        return null;
+      });
+      (deps.agentRunner.runOnce as jest.Mock)
+        .mockResolvedValueOnce(
+          makeAgentResponse("agent:security-audit", makeSarifLog(), "exec-scan-001"),
+        )
+        .mockResolvedValueOnce(
+          makeAgentResponse("agent:pii-scan", makeSarifLog(), "exec-scan-002"),
+        );
+
+      const orchestrator = createAuditOrchestrator(deps);
+      const result = await orchestrator.run(defaultOptions);
+
+      // AgentRunner was called once per agent
+      expect(deps.agentRunner.runOnce).toHaveBeenCalledTimes(2);
+
+      // ExecutionRecord IDs are captured from AgentRunner responses
+      expect(result.executionIds.scans).toEqual(["exec-scan-001", "exec-scan-002"]);
+      const result0 = result.agentResults[0]!;
+      const result1 = result.agentResults[1]!;
+      expect(result0).toBeDefined();
+      expect(result1).toBeDefined();
+      expect(result0.executionId).toBe("exec-scan-001");
+      expect(result1.executionId).toBe("exec-scan-002");
+    });
+  });
+
+  describe("4.3. Consolidation and Dedup (AORCH-B6, B12)", () => {
+    it("[AORCH-B6] should deduplicate findings that share the same fingerprint across agents", async () => {
+      const agent1 = makeAgentRecord("agent:security-audit", "audit");
+      const agent2 = makeAgentRecord("agent:pii-scan", "audit");
+
+      const sharedResult = makeSarifResult({
+        ruleId: "SEC-001",
+        level: "error",
+        message: "Hardcoded secret",
+        file: "src/config.ts",
+        startLine: 10,
+        fingerprint: "shared-hash-001",
+        category: "hardcoded-secret",
+      });
+
+      const sarif1 = makeSarifLog([sharedResult]);
+      const sarif2 = makeSarifLog([sharedResult]);
+
+      const deps = createMockDeps();
+      (deps.recordStore.list as jest.Mock).mockResolvedValue([
+        "agent:security-audit",
+        "agent:pii-scan",
+      ]);
+      (deps.recordStore.get as jest.Mock).mockImplementation(async (id: string) => {
+        if (id === "agent:security-audit") return agent1;
+        if (id === "agent:pii-scan") return agent2;
+        return null;
+      });
+      (deps.agentRunner.runOnce as jest.Mock)
+        .mockResolvedValueOnce(
+          makeAgentResponse("agent:security-audit", sarif1, "exec-001"),
+        )
+        .mockResolvedValueOnce(
+          makeAgentResponse("agent:pii-scan", sarif2, "exec-002"),
+        );
+
+      const orchestrator = createAuditOrchestrator(deps);
+      const result = await orchestrator.run(defaultOptions);
+
+      // Only one consolidated finding despite two agents reporting it
+      expect(result.findings).toHaveLength(1);
+      const finding = result.findings[0]!;
+      expect(finding).toBeDefined();
+      expect(finding.fingerprint).toBe("shared-hash-001");
+      expect(finding.reportedBy).toEqual([
+        "agent:security-audit",
+        "agent:pii-scan",
+      ]);
+    });
+
+    it("[AORCH-B12] should deduplicate using ruleId + file + startLine when primaryLocationLineHash is missing", async () => {
+      const agent1 = makeAgentRecord("agent:security-audit", "audit");
+      const agent2 = makeAgentRecord("agent:external-tool", "audit");
+
+      // No fingerprint -- fallback dedup
+      const resultWithoutFingerprint = makeSarifResult({
+        ruleId: "EXT-001",
+        level: "warning",
+        message: "External finding",
+        file: "src/app.ts",
+        startLine: 42,
+        category: "unknown-risk",
+      });
+
+      const sarif1 = makeSarifLog([resultWithoutFingerprint]);
+      const sarif2 = makeSarifLog([resultWithoutFingerprint]);
+
+      const deps = createMockDeps();
+      (deps.recordStore.list as jest.Mock).mockResolvedValue([
+        "agent:security-audit",
+        "agent:external-tool",
+      ]);
+      (deps.recordStore.get as jest.Mock).mockImplementation(async (id: string) => {
+        if (id === "agent:security-audit") return agent1;
+        if (id === "agent:external-tool") return agent2;
+        return null;
+      });
+      (deps.agentRunner.runOnce as jest.Mock)
+        .mockResolvedValueOnce(
+          makeAgentResponse("agent:security-audit", sarif1, "exec-001"),
+        )
+        .mockResolvedValueOnce(
+          makeAgentResponse("agent:external-tool", sarif2, "exec-002"),
+        );
+
+      const orchestrator = createAuditOrchestrator(deps);
+      const result = await orchestrator.run(defaultOptions);
+
+      // Deduplicated by fallback: ruleId + file + startLine
+      expect(result.findings).toHaveLength(1);
+      const finding = result.findings[0]!;
+      expect(finding).toBeDefined();
+      expect(finding.fingerprint).toBe("fallback:EXT-001:src/app.ts:42");
+      expect(finding.reportedBy).toEqual([
+        "agent:security-audit",
+        "agent:external-tool",
+      ]);
+    });
+  });
+
+  describe("4.4. Waiver Application (AORCH-B7)", () => {
+    it("[AORCH-B7] should continue with unsuppressed findings when WaiverReader fails", async () => {
+      const agentRecord = makeAgentRecord("agent:security-audit", "audit");
+      const sarif = makeSarifLog([
+        makeSarifResult({
+          ruleId: "SEC-001",
+          level: "error",
+          message: "Hardcoded secret",
+          file: "src/config.ts",
+          startLine: 10,
+          fingerprint: "hash-sec-001",
+          category: "hardcoded-secret",
+        }),
+      ]);
+
+      const deps = createMockDeps();
+      (deps.recordStore.list as jest.Mock).mockResolvedValue(["agent:security-audit"]);
+      (deps.recordStore.get as jest.Mock).mockResolvedValue(agentRecord);
+      (deps.agentRunner.runOnce as jest.Mock).mockResolvedValue(
+        makeAgentResponse("agent:security-audit", sarif, "exec-001"),
+      );
+      (deps.waiverReader.loadActiveWaivers as jest.Mock).mockRejectedValue(
+        new Error("WaiverReader connection failed"),
+      );
+
+      const orchestrator = createAuditOrchestrator(deps);
+      // Should not throw
+      const result = await orchestrator.run(defaultOptions);
+
+      // Findings should be returned unsuppressed
+      expect(result.findings).toHaveLength(1);
+      const finding = result.findings[0]!;
+      expect(finding).toBeDefined();
+      expect(finding.isWaived).toBe(false);
+      expect(finding.waiver).toBeUndefined();
+    });
+
+    it("[AORCH-B7] should mark finding as suppressed when active waiver exists for its fingerprint", async () => {
+      const agentRecord = makeAgentRecord("agent:security-audit", "audit");
+      const sarif = makeSarifLog([
+        makeSarifResult({
+          ruleId: "SEC-001",
+          level: "error",
+          message: "Hardcoded secret",
+          file: "src/config.ts",
+          startLine: 10,
+          fingerprint: "waived-hash-001",
+          category: "hardcoded-secret",
+        }),
+        makeSarifResult({
+          ruleId: "SEC-002",
+          level: "warning",
+          message: "Weak crypto",
+          file: "src/crypto.ts",
+          startLine: 20,
+          fingerprint: "not-waived-hash-002",
+          category: "unknown-risk",
+        }),
+      ]);
+
+      const activeWaiver: ActiveWaiver = {
+        fingerprint: "waived-hash-001",
+        ruleId: "SEC-001",
+        feedback: {
+          id: "1234567890-feedback-waiver-sec001",
+          entityType: "execution",
+          entityId: "exec-previous",
+          type: "approval",
+          status: "acknowledged",
+          content: "Risk accepted per security review",
+          metadata: {
+            fingerprint: "waived-hash-001",
+            ruleId: "SEC-001",
+            file: "src/config.ts",
+            line: 10,
+          },
+        },
+      };
+
+      const deps = createMockDeps();
+      (deps.recordStore.list as jest.Mock).mockResolvedValue(["agent:security-audit"]);
+      (deps.recordStore.get as jest.Mock).mockResolvedValue(agentRecord);
+      (deps.agentRunner.runOnce as jest.Mock).mockResolvedValue(
+        makeAgentResponse("agent:security-audit", sarif, "exec-001"),
+      );
+      (deps.waiverReader.loadActiveWaivers as jest.Mock).mockResolvedValue([
+        activeWaiver,
+      ]);
+
+      const orchestrator = createAuditOrchestrator(deps);
+      const result = await orchestrator.run(defaultOptions);
+
+      expect(result.findings).toHaveLength(2);
+
+      const waivedFinding = result.findings.find(
+        (f) => f.fingerprint === "waived-hash-001",
+      );
+      expect(waivedFinding).toBeDefined();
+      expect(waivedFinding?.isWaived).toBe(true);
+      expect(waivedFinding?.waiver).toBe(activeWaiver);
+
+      const notWaivedFinding = result.findings.find(
+        (f) => f.fingerprint === "not-waived-hash-002",
+      );
+      expect(notWaivedFinding).toBeDefined();
+      expect(notWaivedFinding?.isWaived).toBe(false);
+      expect(notWaivedFinding?.waiver).toBeUndefined();
+
+      // Summary should count suppressed
+      expect(result.summary.suppressed).toBe(1);
+    });
+  });
+
+  describe("4.5. Error Handling", () => {
+    it("[AORCH-B3] should propagate error when PolicyEvaluator throws", async () => {
+      const agentRecord = makeAgentRecord("agent:security-audit", "audit");
+      const sarif = makeSarifLog();
+
+      const deps = createMockDeps();
+      (deps.recordStore.list as jest.Mock).mockResolvedValue(["agent:security-audit"]);
+      (deps.recordStore.get as jest.Mock).mockResolvedValue(agentRecord);
+      (deps.agentRunner.runOnce as jest.Mock).mockResolvedValue(
+        makeAgentResponse("agent:security-audit", sarif, "exec-001"),
+      );
+      (deps.policyEvaluator.evaluate as jest.Mock).mockRejectedValue(
+        new Error("PolicyEvaluator internal error"),
+      );
+
+      const orchestrator = createAuditOrchestrator(deps);
+
+      await expect(orchestrator.run(defaultOptions)).rejects.toThrow(
+        "PolicyEvaluator internal error",
+      );
+    });
+  });
+});
