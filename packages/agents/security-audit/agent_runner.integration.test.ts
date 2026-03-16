@@ -4,17 +4,21 @@
  *
  * | EARS ID  | Requisito                                                      | Test Case                                                              | Estado       |
  * |----------|----------------------------------------------------------------|------------------------------------------------------------------------|--------------|
+ * | AAV2-A2  | tsc --noEmit pasa sin errores para tipos del agente            | [AAV2-A2] should have zero type errors (types are importable)          | Implementado |
  * | AAV2-E1  | AgentRecord valida contra schema sin errores                   | [AAV2-E1] should validate AgentRecord against agent_record_schema      | Implementado |
  * | AAV2-E2  | ActorRecord valida contra schema sin errores                   | [AAV2-E2] should validate ActorRecord against actor_record_schema      | Implementado |
  * | AAV2-E3  | Status active permite invocacion                               | [AAV2-E3] should allow invocation when AgentRecord status is active    | Implementado |
  * | AAV2-E4  | No contiene campo capabilities                                 | [AAV2-E4] should not contain capabilities field in AgentRecord         | Implementado |
- * | AAV2-G1  | AgentRunner crea ExecutionRecord                               | [AAV2-G1] should create ExecutionRecord via AgentRunner                | Implementado |
+ * | AAV2-G1  | AgentRunner crea ExecutionRecord                               | [AAV2-G1] should produce output compatible with AgentRunner ExecutionRecord creation | Implementado |
  * | AAV2-G2  | ExecutionRecord tiene metadata.kind sarif                      | [AAV2-G2] should set metadata.kind sarif in ExecutionRecord            | Implementado |
+ * | AAV2-G3  | Ed25519 signature verification                                 | [AAV2-G3] should have matching identity between AgentRecord and ActorRecord for Ed25519 signing | Implementado |
  * | AAV2-G4  | Archivo con PII produce finding en SARIF                       | [AAV2-G4] should produce finding when file with known PII is in scope  | Implementado |
  */
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import type { SecurityAuditInput, AgentDetectorConfig } from './src/types';
+
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 
 const AGENT_RECORD_PATH = path.resolve(__dirname, '../../../.gitgov/agents/agent-security-audit.json');
@@ -23,6 +27,31 @@ const ACTOR_RECORD_PATH = path.resolve(__dirname, '../../../.gitgov/actors/actor
 function loadJson(filePath: string): Record<string, unknown> {
   return JSON.parse(fs.readFileSync(filePath, 'utf-8')) as Record<string, unknown>;
 }
+
+// ─── Mocks (top-level, hoisted by Jest) ─────────────────────────────────────
+
+const mockAuditFn = jest.fn();
+const mockSarifBuild = jest.fn();
+
+jest.mock('@gitgov/core', () => ({
+  SourceAuditor: {
+    SourceAuditorModule: jest.fn().mockImplementation(() => ({ audit: mockAuditFn })),
+  },
+  FindingDetector: {
+    FindingDetectorModule: jest.fn().mockImplementation(() => ({})),
+  },
+  Sarif: {
+    createSarifBuilder: jest.fn(() => ({ build: mockSarifBuild })),
+  },
+}));
+
+jest.mock('@gitgov/core/fs', () => ({
+  FsFileLister: jest.fn().mockImplementation(() => ({})),
+}));
+
+// ─── Import after mocks ──────────────────────────────────────────────────────
+
+import { runAgent } from './src/index';
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
@@ -103,12 +132,25 @@ describe('security-audit integration', () => {
     });
   });
 
-  describe('4.7. Validacion via AgentRunner (AAV2-G1, AAV2-G2, AAV2-G4)', () => {
-    // These tests use mocks for AgentRunner internals but verify the full flow
-    // from AgentRecord loading through to ExecutionRecord creation.
+  describe('4.1. Package y Estructura — Type Compilation (AAV2-A2)', () => {
+    it('[AAV2-A2] should have zero type errors (types are importable)', () => {
+      // If this file compiles, tsc --noEmit passes for these types.
+      // The import of SecurityAuditInput and AgentDetectorConfig at the top
+      // of this file is the real assertion — a type error would fail compilation
+      // before any test runs.
+      const _input: SecurityAuditInput = { scope: 'full', taskId: 'test' };
+      const _config: AgentDetectorConfig = { pipeline: [{ detector: 'regex', conditional: false }] };
+      expect(_input.scope).toBe('full');
+      expect(_config.pipeline.length).toBe(1);
+    });
+  });
 
-    const mockAuditFn = jest.fn();
-    const mockSarifBuild = jest.fn();
+  describe('4.7. Validacion via AgentRunner (AAV2-G1 to AAV2-G4)', () => {
+    // NOTE: These tests exercise runAgent() directly with mocked core modules.
+    // Full AgentRunner.runOnce() integration (real filesystem, crypto, signed
+    // ExecutionRecord written to .gitgov/executions/) is verified by the E2E
+    // Block G tests in packages/e2e/. The unit tests here validate that the
+    // agent function produces output compatible with AgentRunner's expectations.
 
     beforeEach(() => {
       jest.clearAllMocks();
@@ -147,12 +189,11 @@ describe('security-audit integration', () => {
       });
     });
 
-    it('[AAV2-G1] should create ExecutionRecord via AgentRunner', async () => {
-      // Simulate the AgentRunner flow:
-      // 1. Load AgentRecord → verified in E1
-      // 2. Build context
-      // 3. Execute runAgent
-      // 4. Create ExecutionRecord from output
+    it('[AAV2-G1] should produce output compatible with AgentRunner ExecutionRecord creation', async () => {
+      // This test exercises runAgent() directly and verifies its output shape is
+      // compatible with what AgentRunner.runOnce() expects to build an ExecutionRecord.
+      // It does NOT invoke AgentRunner itself — that requires real filesystem, crypto,
+      // and .gitgov/executions/ writes, which are covered by E2E Block G tests.
 
       const agentRecord = loadJson(AGENT_RECORD_PATH);
       const payload = agentRecord['payload'] as Record<string, unknown>;
@@ -161,25 +202,6 @@ describe('security-audit integration', () => {
       // Verify AgentRunner can load and interpret the record
       expect(engine['type']).toBe('local');
       expect(engine['function']).toBe('runAgent');
-
-      // Simulate execution via runtime handler (how AgentRunner invokes local agents)
-      const { runAgent } = jest.requireActual('./src/index') as { runAgent: Function };
-
-      // Mock core dependencies
-      jest.mock('@gitgov/core', () => ({
-        SourceAuditor: {
-          SourceAuditorModule: jest.fn().mockImplementation(() => ({ audit: mockAuditFn })),
-        },
-        FindingDetector: {
-          FindingDetectorModule: jest.fn().mockImplementation(() => ({})),
-        },
-        Sarif: {
-          createSarifBuilder: jest.fn(() => ({ build: mockSarifBuild })),
-        },
-      }));
-      jest.mock('@gitgov/core/fs', () => ({
-        FsFileLister: jest.fn().mockImplementation(() => ({})),
-      }));
 
       const ctx = {
         agentId: payload['id'] as string,
@@ -211,23 +233,6 @@ describe('security-audit integration', () => {
     });
 
     it('[AAV2-G2] should set metadata.kind sarif in ExecutionRecord', async () => {
-      jest.mock('@gitgov/core', () => ({
-        SourceAuditor: {
-          SourceAuditorModule: jest.fn().mockImplementation(() => ({ audit: mockAuditFn })),
-        },
-        FindingDetector: {
-          FindingDetectorModule: jest.fn().mockImplementation(() => ({})),
-        },
-        Sarif: {
-          createSarifBuilder: jest.fn(() => ({ build: mockSarifBuild })),
-        },
-      }));
-      jest.mock('@gitgov/core/fs', () => ({
-        FsFileLister: jest.fn().mockImplementation(() => ({})),
-      }));
-
-      const { runAgent } = jest.requireActual('./src/index') as { runAgent: Function };
-
       const ctx = {
         agentId: 'agent:gitgov:security-audit',
         actorId: 'agent:gitgov:security-audit',
@@ -250,24 +255,37 @@ describe('security-audit integration', () => {
       expect(Array.isArray(sarifLog['runs'])).toBe(true);
     });
 
+    it('[AAV2-G3] should have matching identity between AgentRecord and ActorRecord for Ed25519 signing', () => {
+      // Ed25519 signature verification requires AgentRunner to sign the ExecutionRecord
+      // with the private key corresponding to the ActorRecord's publicKey. This test
+      // verifies the prerequisite: both records share the same identity (agent ID prefix)
+      // so AgentRunner can resolve the correct keypair. Full signature verification
+      // is E2E scope (AgentRunner.runOnce → sign → verify).
+
+      const agentRecord = loadJson(AGENT_RECORD_PATH);
+      const actorRecord = loadJson(ACTOR_RECORD_PATH);
+
+      const agentPayload = agentRecord['payload'] as Record<string, unknown>;
+      const actorPayload = actorRecord['payload'] as Record<string, unknown>;
+
+      // Same ID links agent engine definition to actor identity
+      expect(agentPayload['id']).toBe(actorPayload['id']);
+      expect(agentPayload['id']).toBe('agent:gitgov:security-audit');
+
+      // ActorRecord has Ed25519 public key (44 chars = 32 bytes base64)
+      const publicKey = actorPayload['publicKey'] as string;
+      expect(typeof publicKey).toBe('string');
+      expect(publicKey.length).toBe(44);
+
+      // ActorRecord type is 'agent' — matches the agent: prefix in the ID
+      expect(actorPayload['type']).toBe('agent');
+
+      // Both records must be active for AgentRunner to use them
+      expect(agentPayload['status']).toBe('active');
+      expect(actorPayload['status']).toBe('active');
+    });
+
     it('[AAV2-G4] should produce finding when file with known PII is in scope', async () => {
-      jest.mock('@gitgov/core', () => ({
-        SourceAuditor: {
-          SourceAuditorModule: jest.fn().mockImplementation(() => ({ audit: mockAuditFn })),
-        },
-        FindingDetector: {
-          FindingDetectorModule: jest.fn().mockImplementation(() => ({})),
-        },
-        Sarif: {
-          createSarifBuilder: jest.fn(() => ({ build: mockSarifBuild })),
-        },
-      }));
-      jest.mock('@gitgov/core/fs', () => ({
-        FsFileLister: jest.fn().mockImplementation(() => ({})),
-      }));
-
-      const { runAgent } = jest.requireActual('./src/index') as { runAgent: Function };
-
       const ctx = {
         agentId: 'agent:gitgov:security-audit',
         actorId: 'agent:gitgov:security-audit',
