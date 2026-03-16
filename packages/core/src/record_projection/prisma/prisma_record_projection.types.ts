@@ -107,6 +107,31 @@ export type GitgovActivityRow = PrismaRowBase & {
   metadataJson: JsonValue | null;
 };
 
+export type GitgovExecutionRow = PrismaRecordRowBase & {
+  taskId: string;
+  executionType: string;
+  title: string;
+  result: string;
+  notes: string | null;
+  metadataKind: string | null;
+  metadataVersion: string | null;
+  metadataJson: JsonValue | null;
+  references: string[];
+};
+
+export type GitgovAgentRow = PrismaRecordRowBase & {
+  engineType: string;
+  status: string | null;
+  triggersJson: JsonValue | null;
+  metadataJson: JsonValue | null;
+};
+
+export type GitgovWorkflowRow = PrismaRecordRowBase & {
+  title: string | null;
+  status: string | null;
+  metadataJson: JsonValue | null;
+};
+
 // --- Delegate types (duck typing for Prisma-generated delegates) ---
 
 export type SingletonDelegate<TRow> = {
@@ -139,6 +164,9 @@ export type ProjectionClient = {
   gitgovActor: RecordDelegate<GitgovActorRow>;
   gitgovFeedback: RecordDelegate<GitgovFeedbackRow>;
   gitgovActivity: RecordDelegate<GitgovActivityRow>;
+  gitgovExecution: RecordDelegate<GitgovExecutionRow>;
+  gitgovAgent: RecordDelegate<GitgovAgentRow>;
+  gitgovWorkflow: RecordDelegate<GitgovWorkflowRow>;
   $transaction(operations: PromiseLike<unknown>[]): PromiseLike<unknown>;
 };
 

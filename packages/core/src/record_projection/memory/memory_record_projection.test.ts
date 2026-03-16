@@ -40,6 +40,8 @@ function createMockIndexData(overrides: Partial<IndexData> = {}): IndexData {
     cycles: [],
     actors: [],
     feedback: [],
+    executions: [],
+    agents: [],
     ...overrides,
   } as IndexData;
 }
@@ -119,6 +121,44 @@ describe('MemoryRecordProjection', () => {
 
       expect(await sink.read({ repoIdentifier: 'repo-1' })).toBeNull();
       expect(await sink.read({ repoIdentifier: 'repo-2' })).not.toBeNull();
+    });
+  });
+
+  describe('4.1b. Projection Schema V2 — Memory Pass-Through (PSV2-A13 a A14)', () => {
+    it('[PSV2-A13] should store and retrieve IndexData with executions array', async () => {
+      const data = createMockIndexData({
+        executions: [{
+          header: { version: '1.0' as const, type: 'execution' as const, payloadChecksum: 'chk1', signatures: [] },
+          payload: { id: 'exec-1', taskId: 'task-1', type: 'progress', title: 'Work', result: 'Done' },
+        }] as unknown as IndexData['executions'],
+      });
+      const context: ProjectionContext = { repoIdentifier: 'repo-exec' };
+
+      await sink.persist(data, context);
+      const result = await sink.read(context);
+
+      expect(result).not.toBeNull();
+      expect(result!.executions).toHaveLength(1);
+      expect(result!.executions[0]!.payload.id).toBe('exec-1');
+      expect(result!.executions[0]!.payload.type).toBe('progress');
+    });
+
+    it('[PSV2-A14] should store and retrieve IndexData with agents array', async () => {
+      const data = createMockIndexData({
+        agents: [{
+          header: { version: '1.0' as const, type: 'agent' as const, payloadChecksum: 'chk2', signatures: [] },
+          payload: { id: 'agent-1', engine: { type: 'local' as const }, status: 'active' as const },
+        }] as unknown as IndexData['agents'],
+      });
+      const context: ProjectionContext = { repoIdentifier: 'repo-agent' };
+
+      await sink.persist(data, context);
+      const result = await sink.read(context);
+
+      expect(result).not.toBeNull();
+      expect(result!.agents).toHaveLength(1);
+      expect(result!.agents[0]!.payload.id).toBe('agent-1');
+      expect(result!.agents[0]!.payload.engine.type).toBe('local');
     });
   });
 
