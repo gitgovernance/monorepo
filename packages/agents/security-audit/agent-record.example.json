@@ -10,18 +10,24 @@
     "status": "active",
     "engine": {
       "type": "local",
+      "runtime": "typescript",
       "entrypoint": "packages/agents/security-audit/dist/index.mjs",
       "function": "runAgent"
     },
     "triggers": [{ "type": "manual" }],
+    "knowledge_dependencies": [],
+    "prompt_engine_requirements": {},
     "metadata": {
       "purpose": "audit",
-      "description": "Security audit: PII, secrets, API keys",
+      "description": "Security audit agent - scans repos for PII/secrets, outputs SARIF 2.1.0",
       "audit": {
         "target": "code",
         "outputFormat": "sarif",
         "supportedScopes": ["diff", "full", "baseline"]
-      }
+      },
+      "version": "2.0.0",
+      "replaces": "agent:source-audit (PoC)",
+      "evolves_epic2_ears": ["AORCH-B9", "AORCH-B10", "AORCH-B11"]
     }
   }
 }
