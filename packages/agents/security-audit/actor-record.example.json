@@ -1,0 +1,18 @@
+{
+  "header": {
+    "version": "1.0",
+    "type": "actor",
+    "payloadChecksum": "b56ec458debb1e17125a9d16140c3892cd92053be64d526856b95442dad5bb47",
+    "signatures": []
+  },
+  "payload": {
+    "id": "agent:gitgov:security-audit",
+    "type": "agent",
+    "displayName": "Security Audit Agent",
+    "publicKey": "f2KDakrcn5NyNveEad5QB0c3zBBvx5bAKyYwf/lK/Bw=",
+    "roles": [
+      "executor"
+    ],
+    "status": "active"
+  }
+}

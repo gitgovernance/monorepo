@@ -21,8 +21,8 @@ import type { SecurityAuditInput, AgentDetectorConfig } from './src/types';
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 
-const AGENT_RECORD_PATH = path.resolve(__dirname, '../../../.gitgov/agents/agent-security-audit.json');
-const ACTOR_RECORD_PATH = path.resolve(__dirname, '../../../.gitgov/actors/actor-security-audit.json');
+const AGENT_RECORD_PATH = path.resolve(__dirname, 'agent-record.example.json');
+const ACTOR_RECORD_PATH = path.resolve(__dirname, 'actor-record.example.json');
 
 function loadJson(filePath: string): Record<string, unknown> {
   return JSON.parse(fs.readFileSync(filePath, 'utf-8')) as Record<string, unknown>;

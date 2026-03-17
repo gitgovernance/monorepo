@@ -15,7 +15,12 @@
     "moduleDetection": "force",
     "esModuleInterop": true,
     "resolveJsonModule": true,
-    "types": ["node", "jest"]
+    "types": ["node", "jest"],
+    "paths": {
+      "@gitgov/core": ["../../core/src/index.ts"],
+      "@gitgov/core/*": ["../../core/src/*"]
+    },
+    "baseUrl": "."
   },
   "include": ["src", "*.test.ts"],
   "exclude": ["node_modules", "dist"]

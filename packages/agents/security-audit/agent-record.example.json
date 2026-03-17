@@ -2,7 +2,7 @@
   "header": {
     "version": "1.0",
     "type": "agent",
-    "payloadChecksum": "",
+    "payloadChecksum": "9a7988137c5d63eb0c6d32d01c6c010573dfdeee5f1fe718e0745c94ade1be3e",
     "signatures": []
   },
   "payload": {
@@ -14,7 +14,11 @@
       "entrypoint": "packages/agents/security-audit/dist/index.mjs",
       "function": "runAgent"
     },
-    "triggers": [{ "type": "manual" }],
+    "triggers": [
+      {
+        "type": "manual"
+      }
+    ],
     "knowledge_dependencies": [],
     "prompt_engine_requirements": {},
     "metadata": {
@@ -23,11 +27,19 @@
       "audit": {
         "target": "code",
         "outputFormat": "sarif",
-        "supportedScopes": ["diff", "full", "baseline"]
+        "supportedScopes": [
+          "diff",
+          "full",
+          "baseline"
+        ]
       },
       "version": "2.0.0",
       "replaces": "agent:source-audit (PoC)",
-      "evolves_epic2_ears": ["AORCH-B9", "AORCH-B10", "AORCH-B11"]
+      "evolves_epic2_ears": [
+        "AORCH-B9",
+        "AORCH-B10",
+        "AORCH-B11"
+      ]
     }
   }
 }
