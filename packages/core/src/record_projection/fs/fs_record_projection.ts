@@ -30,7 +30,17 @@ export class FsRecordProjection implements IRecordProjection {
   async read(_context: ProjectionContext): Promise<IndexData | null> {
     try {
       const content = await fs.readFile(this.indexPath, 'utf-8');
-      return JSON.parse(content) as IndexData;
+      const parsed = JSON.parse(content) as IndexData;
+
+      // Backward compatibility: default new fields if missing from older JSON
+      if (!parsed.executions) {
+        parsed.executions = [];
+      }
+      if (!parsed.agents) {
+        parsed.agents = [];
+      }
+
+      return parsed;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
         return null;

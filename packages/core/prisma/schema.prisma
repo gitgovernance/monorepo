@@ -169,3 +169,62 @@ model GitgovActivity {
   @@index([repoId, projectionType])
   @@index([repoId, timestamp(sort: Desc)])
 }
+
+model GitgovExecution {
+  id              String   @id @default(cuid())
+  repoId          String
+  projectionType  String   @default("index")
+  recordId        String
+  taskId          String
+  executionType   String
+  title           String
+  result          String
+  notes           String?
+  metadataKind    String?
+  metadataVersion String?
+  metadataJson    Json?
+  references      String[]
+  headerJson      Json
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([repoId, projectionType, recordId])
+  @@index([repoId, projectionType])
+  @@index([repoId, taskId])
+  @@index([repoId, executionType])
+  @@index([repoId, metadataKind])
+}
+
+model GitgovAgent {
+  id              String   @id @default(cuid())
+  repoId          String
+  projectionType  String   @default("index")
+  recordId        String
+  engineType      String
+  status          String?
+  triggersJson    Json?
+  metadataJson    Json?
+  headerJson      Json
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([repoId, projectionType, recordId])
+  @@index([repoId, projectionType])
+  @@index([repoId, engineType])
+}
+
+model GitgovWorkflow {
+  id              String   @id @default(cuid())
+  repoId          String
+  projectionType  String   @default("index")
+  recordId        String
+  title           String?
+  status          String?
+  metadataJson    Json?
+  headerJson      Json
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([repoId, projectionType, recordId])
+  @@index([repoId, projectionType])
+}

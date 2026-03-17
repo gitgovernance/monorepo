@@ -26,6 +26,9 @@ function createMockClient(): ProjectionClient {
     gitgovActor: createMockDelegate(),
     gitgovFeedback: createMockDelegate(),
     gitgovActivity: createMockDelegate(),
+    gitgovExecution: createMockDelegate(),
+    gitgovAgent: createMockDelegate(),
+    gitgovWorkflow: createMockDelegate(),
     $transaction: jest.fn().mockResolvedValue([]),
   };
 }
@@ -177,6 +180,32 @@ function createMockIndexData(overrides: Partial<IndexData> = {}): IndexData {
         },
       },
     ],
+    executions: [
+      {
+        header: { ...mockHeader, type: 'execution' as const },
+        payload: {
+          id: 'exec-1',
+          taskId: 'task-1',
+          type: 'progress',
+          title: 'Implemented feature',
+          result: 'Code committed',
+          notes: 'Refactored module',
+          references: ['commit:abc123'],
+        },
+      },
+    ],
+    agents: [
+      {
+        header: { ...mockHeader, type: 'agent' as const },
+        payload: {
+          id: 'agent-scanner',
+          engine: { type: 'local' as const, runtime: 'typescript', entrypoint: 'src/index.ts' },
+          status: 'active' as const,
+          triggers: [{ type: 'webhook' as const }],
+          metadata: { framework: 'langchain' },
+        },
+      },
+    ],
     ...overrides,
   } as IndexData;
 }
@@ -193,14 +222,14 @@ describe('PrismaRecordProjection', () => {
   });
 
   describe('4.1. Persist Decomposition (EARS-A1 a A5)', () => {
-    it('[EARS-A1] should decompose IndexData into 6 tables within a single $transaction', async () => {
+    it('[EARS-A1] should decompose IndexData into 9 tables within a single $transaction', async () => {
       const data = createMockIndexData();
       await sink.persist(data, { lastCommitHash: 'sha-1' });
 
       expect(mockClient.$transaction).toHaveBeenCalledTimes(1);
       const ops = (mockClient.$transaction as jest.Mock).mock.calls[0]![0] as unknown[];
-      // 5 deletes + 1 upsert + 5 createMany (all collections non-empty) = 11
-      expect(ops.length).toBe(11);
+      // 7 deletes + 1 upsert + 7 createMany (all collections non-empty) = 15
+      expect(ops.length).toBe(15);
     });
 
     it('[EARS-A2] should store each enrichedTask as individual row with queryable fields and headerJson', async () => {
@@ -301,6 +330,8 @@ describe('PrismaRecordProjection', () => {
         actors: [],
         feedback: [],
         activityHistory: [],
+        executions: [],
+        agents: [],
       });
       await sink.persist(data, {});
 
@@ -309,9 +340,11 @@ describe('PrismaRecordProjection', () => {
       expect(mockClient.gitgovActor.createMany).not.toHaveBeenCalled();
       expect(mockClient.gitgovFeedback.createMany).not.toHaveBeenCalled();
       expect(mockClient.gitgovActivity.createMany).not.toHaveBeenCalled();
-      // Only 5 deletes + 1 upsert = 6
+      expect(mockClient.gitgovExecution.createMany).not.toHaveBeenCalled();
+      expect(mockClient.gitgovAgent.createMany).not.toHaveBeenCalled();
+      // Only 7 deletes + 1 upsert = 8
       const ops = (mockClient.$transaction as jest.Mock).mock.calls[0]![0] as unknown[];
-      expect(ops.length).toBe(6);
+      expect(ops.length).toBe(8);
     });
   });
 
@@ -473,17 +506,19 @@ describe('PrismaRecordProjection', () => {
       expect(result).toBe(false);
     });
 
-    it('[EARS-D3] should delete rows from 6 tables in a $transaction', async () => {
+    it('[EARS-D3] should delete rows from 8 tables in a $transaction', async () => {
       await sink.clear({});
 
       expect(mockClient.$transaction).toHaveBeenCalledTimes(1);
       const ops = (mockClient.$transaction as jest.Mock).mock.calls[0]![0] as unknown[];
-      expect(ops.length).toBe(6);
+      expect(ops.length).toBe(8);
       expect(mockClient.gitgovTask.deleteMany).toHaveBeenCalled();
       expect(mockClient.gitgovCycle.deleteMany).toHaveBeenCalled();
       expect(mockClient.gitgovActor.deleteMany).toHaveBeenCalled();
       expect(mockClient.gitgovFeedback.deleteMany).toHaveBeenCalled();
       expect(mockClient.gitgovActivity.deleteMany).toHaveBeenCalled();
+      expect(mockClient.gitgovExecution.deleteMany).toHaveBeenCalled();
+      expect(mockClient.gitgovAgent.deleteMany).toHaveBeenCalled();
       expect(mockClient.gitgovMeta.deleteMany).toHaveBeenCalled();
     });
 
@@ -628,6 +663,116 @@ describe('PrismaRecordProjection', () => {
       expect(result!.cycles[0]!.payload.metadata).toEqual({
         epic: true, phase: 'active', files: { overview: 'overview.md' },
       });
+    });
+  });
+
+  describe('4.6. Projection Schema V2 — Executions & Agents (PSV2-A15 a A18)', () => {
+    it('[PSV2-A15] should persist executions with executionType mapped from payload.type', async () => {
+      const data = createMockIndexData();
+      await sink.persist(data, { lastCommitHash: 'sha-1' });
+
+      expect(mockClient.gitgovExecution.createMany).toHaveBeenCalledTimes(1);
+      const call = (mockClient.gitgovExecution.createMany as jest.Mock).mock.calls[0]![0];
+      expect(call.data).toHaveLength(1);
+      const row = call.data[0];
+      expect(row.recordId).toBe('exec-1');
+      expect(row.taskId).toBe('task-1');
+      expect(row.executionType).toBe('progress');
+      expect(row.title).toBe('Implemented feature');
+      expect(row.result).toBe('Code committed');
+      expect(row.notes).toBe('Refactored module');
+      expect(row.references).toEqual(['commit:abc123']);
+      expect(row.headerJson).toBeDefined();
+    });
+
+    it('[PSV2-A16] should persist agents with engineType mapped from payload.engine.type', async () => {
+      const data = createMockIndexData();
+      await sink.persist(data, { lastCommitHash: 'sha-1' });
+
+      expect(mockClient.gitgovAgent.createMany).toHaveBeenCalledTimes(1);
+      const call = (mockClient.gitgovAgent.createMany as jest.Mock).mock.calls[0]![0];
+      expect(call.data).toHaveLength(1);
+      const row = call.data[0];
+      expect(row.recordId).toBe('agent-scanner');
+      expect(row.engineType).toBe('local');
+      expect(row.status).toBe('active');
+      expect(row.triggersJson).toBeDefined();
+      expect(row.metadataJson).toBeDefined();
+      expect(row.headerJson).toBeDefined();
+    });
+
+    it('[PSV2-A17] should reconstruct executions from GitgovExecution rows during read', async () => {
+      (mockClient.gitgovMeta.findUnique as jest.Mock).mockResolvedValue({
+        id: 'meta-1', repoId, projectionType,
+        generatedAt: '2026-01-01T00:00:00.000Z', integrityStatus: 'valid',
+        recordCountsJson: {}, generationTime: 50,
+        derivedStatesJson: { stalledTasks: [], atRiskTasks: [], needsClarificationTasks: [], blockedByDependencyTasks: [] },
+        metricsJson: {}, lastCommitHash: null, createdAt: new Date(), updatedAt: new Date(),
+      });
+
+      (mockClient.gitgovTask.findMany as jest.Mock).mockResolvedValue([]);
+      (mockClient.gitgovCycle.findMany as jest.Mock).mockResolvedValue([]);
+      (mockClient.gitgovActor.findMany as jest.Mock).mockResolvedValue([]);
+      (mockClient.gitgovFeedback.findMany as jest.Mock).mockResolvedValue([]);
+      (mockClient.gitgovActivity.findMany as jest.Mock).mockResolvedValue([]);
+      (mockClient.gitgovExecution.findMany as jest.Mock).mockResolvedValue([{
+        id: 'row-e1', repoId, projectionType, recordId: 'exec-1',
+        taskId: 'task-1', executionType: 'progress', title: 'Implemented feature',
+        result: 'Code committed', notes: 'Refactored module',
+        metadataKind: null, metadataVersion: null, metadataJson: null,
+        references: ['commit:abc123'],
+        headerJson: { ...mockHeader, type: 'execution' },
+        createdAt: new Date(), updatedAt: new Date(),
+      }]);
+      (mockClient.gitgovAgent.findMany as jest.Mock).mockResolvedValue([]);
+
+      const result = await sink.read({});
+
+      expect(result).not.toBeNull();
+      expect(result!.executions).toHaveLength(1);
+      expect(result!.executions[0]!.payload.id).toBe('exec-1');
+      expect(result!.executions[0]!.payload.type).toBe('progress');
+      expect(result!.executions[0]!.payload.taskId).toBe('task-1');
+      expect(result!.executions[0]!.payload.title).toBe('Implemented feature');
+      expect(result!.executions[0]!.payload.notes).toBe('Refactored module');
+      expect(result!.executions[0]!.payload.references).toEqual(['commit:abc123']);
+      expect(result!.executions[0]!.header).toBeDefined();
+    });
+
+    it('[PSV2-A18] should reconstruct agents from GitgovAgent rows during read', async () => {
+      (mockClient.gitgovMeta.findUnique as jest.Mock).mockResolvedValue({
+        id: 'meta-1', repoId, projectionType,
+        generatedAt: '2026-01-01T00:00:00.000Z', integrityStatus: 'valid',
+        recordCountsJson: {}, generationTime: 50,
+        derivedStatesJson: { stalledTasks: [], atRiskTasks: [], needsClarificationTasks: [], blockedByDependencyTasks: [] },
+        metricsJson: {}, lastCommitHash: null, createdAt: new Date(), updatedAt: new Date(),
+      });
+
+      (mockClient.gitgovTask.findMany as jest.Mock).mockResolvedValue([]);
+      (mockClient.gitgovCycle.findMany as jest.Mock).mockResolvedValue([]);
+      (mockClient.gitgovActor.findMany as jest.Mock).mockResolvedValue([]);
+      (mockClient.gitgovFeedback.findMany as jest.Mock).mockResolvedValue([]);
+      (mockClient.gitgovActivity.findMany as jest.Mock).mockResolvedValue([]);
+      (mockClient.gitgovExecution.findMany as jest.Mock).mockResolvedValue([]);
+      (mockClient.gitgovAgent.findMany as jest.Mock).mockResolvedValue([{
+        id: 'row-ag1', repoId, projectionType, recordId: 'agent-scanner',
+        engineType: 'local', status: 'active',
+        triggersJson: [{ type: 'webhook' }],
+        metadataJson: { framework: 'langchain' },
+        headerJson: { ...mockHeader, type: 'agent' },
+        createdAt: new Date(), updatedAt: new Date(),
+      }]);
+
+      const result = await sink.read({});
+
+      expect(result).not.toBeNull();
+      expect(result!.agents).toHaveLength(1);
+      expect(result!.agents[0]!.payload.id).toBe('agent-scanner');
+      expect(result!.agents[0]!.payload.engine.type).toBe('local');
+      expect(result!.agents[0]!.payload.status).toBe('active');
+      expect(result!.agents[0]!.payload.triggers).toEqual([{ type: 'webhook' }]);
+      expect(result!.agents[0]!.payload.metadata).toEqual({ framework: 'langchain' });
+      expect(result!.agents[0]!.header).toBeDefined();
     });
   });
 });

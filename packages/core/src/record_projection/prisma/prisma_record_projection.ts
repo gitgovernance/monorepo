@@ -8,6 +8,8 @@ import type {
   GitgovActorRow,
   GitgovFeedbackRow,
   GitgovActivityRow,
+  GitgovExecutionRow,
+  GitgovAgentRow,
 } from './prisma_record_projection.types';
 
 export class PrismaRecordProjection implements IRecordProjection {
@@ -74,6 +76,31 @@ export class PrismaRecordProjection implements IRecordProjection {
       actorId: ev.actorId ?? null,
       metadataJson: ev.metadata ? toJson(ev.metadata) : null,
     }));
+    const executionRows = data.executions.map((e) => ({
+      repoId: this.repoId,
+      projectionType: this.projectionType,
+      recordId: e.payload.id,
+      taskId: e.payload.taskId,
+      executionType: e.payload.type,
+      title: e.payload.title,
+      result: e.payload.result,
+      notes: e.payload.notes ?? null,
+      metadataKind: null as string | null,
+      metadataVersion: null as string | null,
+      metadataJson: e.payload.metadata ? toJson(e.payload.metadata) : null,
+      references: e.payload.references ?? [],
+      headerJson: toJson(e.header),
+    }));
+    const agentRows = data.agents.map((a) => ({
+      repoId: this.repoId,
+      projectionType: this.projectionType,
+      recordId: a.payload.id,
+      engineType: a.payload.engine.type,
+      status: a.payload.status ?? null,
+      triggersJson: a.payload.triggers ? toJson(a.payload.triggers) : null,
+      metadataJson: a.payload.metadata ? toJson(a.payload.metadata) : null,
+      headerJson: toJson(a.header),
+    }));
 
     const ops: PromiseLike<unknown>[] = [
       this.client.gitgovTask.deleteMany({ where }),
@@ -81,6 +108,8 @@ export class PrismaRecordProjection implements IRecordProjection {
       this.client.gitgovActor.deleteMany({ where }),
       this.client.gitgovFeedback.deleteMany({ where }),
       this.client.gitgovActivity.deleteMany({ where }),
+      this.client.gitgovExecution.deleteMany({ where }),
+      this.client.gitgovAgent.deleteMany({ where }),
       this.client.gitgovMeta.upsert({
         where: { repoId_projectionType: where },
         create: {
@@ -121,6 +150,12 @@ export class PrismaRecordProjection implements IRecordProjection {
     if (activityRows.length > 0) {
       ops.push(this.client.gitgovActivity.createMany({ data: activityRows }));
     }
+    if (executionRows.length > 0) {
+      ops.push(this.client.gitgovExecution.createMany({ data: executionRows }));
+    }
+    if (agentRows.length > 0) {
+      ops.push(this.client.gitgovAgent.createMany({ data: agentRows }));
+    }
 
     await this.client.$transaction(ops);
   }
@@ -137,15 +172,17 @@ export class PrismaRecordProjection implements IRecordProjection {
     if (!meta || !('generatedAt' in meta)) return null;
 
     const whereMany = { repoId: this.repoId, projectionType: this.projectionType };
-    const [taskRows, cycleRows, actorRows, feedbackRows, activityRows] = await Promise.all([
+    const [taskRows, cycleRows, actorRows, feedbackRows, activityRows, executionRows, agentRows] = await Promise.all([
       this.client.gitgovTask.findMany({ where: whereMany }),
       this.client.gitgovCycle.findMany({ where: whereMany }),
       this.client.gitgovActor.findMany({ where: whereMany }),
       this.client.gitgovFeedback.findMany({ where: whereMany }),
       this.client.gitgovActivity.findMany({ where: whereMany }),
+      this.client.gitgovExecution.findMany({ where: whereMany }),
+      this.client.gitgovAgent.findMany({ where: whereMany }),
     ]);
 
-    return this.reconstructIndexData(meta, taskRows, cycleRows, actorRows, feedbackRows, activityRows);
+    return this.reconstructIndexData(meta, taskRows, cycleRows, actorRows, feedbackRows, activityRows, executionRows, agentRows);
   }
 
   async exists(_context: ProjectionContext): Promise<boolean> {
@@ -169,6 +206,8 @@ export class PrismaRecordProjection implements IRecordProjection {
       this.client.gitgovActor.deleteMany({ where }),
       this.client.gitgovFeedback.deleteMany({ where }),
       this.client.gitgovActivity.deleteMany({ where }),
+      this.client.gitgovExecution.deleteMany({ where }),
+      this.client.gitgovAgent.deleteMany({ where }),
       this.client.gitgovMeta.deleteMany({ where }),
     ]);
   }
@@ -221,6 +260,8 @@ export class PrismaRecordProjection implements IRecordProjection {
     actorRows: GitgovActorRow[],
     feedbackRows: GitgovFeedbackRow[],
     activityRows: GitgovActivityRow[],
+    executionRows: GitgovExecutionRow[],
+    agentRows: GitgovAgentRow[],
   ): IndexData {
     return {
       metadata: {
@@ -328,6 +369,32 @@ export class PrismaRecordProjection implements IRecordProjection {
           ...opt('metadata', f.metadataJson as Record<string, unknown> | null),
         },
       })),
+      executions: executionRows.map((e) => ({
+        header: e.headerJson as unknown as IndexData['executions'][0]['header'],
+        payload: {
+          id: e.recordId,
+          taskId: e.taskId,
+          type: e.executionType,
+          title: e.title,
+          result: e.result,
+          ...opt('notes', e.notes),
+          ...opt('references', e.references.length > 0 ? e.references : null),
+          ...opt('metadata', e.metadataJson as Record<string, unknown> | null),
+        },
+      })),
+      agents: agentRows.map((a) => {
+        const payload: Record<string, unknown> = {
+          id: a.recordId,
+          engine: { type: a.engineType },
+        };
+        if (a.status !== null) payload['status'] = a.status;
+        if (a.triggersJson !== null) payload['triggers'] = a.triggersJson;
+        if (a.metadataJson !== null) payload['metadata'] = a.metadataJson;
+        return {
+          header: a.headerJson as unknown as IndexData['agents'][0]['header'],
+          payload: payload as unknown as IndexData['agents'][0]['payload'],
+        };
+      }),
     };
   }
 }

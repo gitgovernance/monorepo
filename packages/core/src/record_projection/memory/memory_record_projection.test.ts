@@ -40,6 +40,8 @@ function createMockIndexData(overrides: Partial<IndexData> = {}): IndexData {
     cycles: [],
     actors: [],
     feedback: [],
+    executions: [],
+    agents: [],
     ...overrides,
   } as IndexData;
 }
@@ -119,6 +121,53 @@ describe('MemoryRecordProjection', () => {
 
       expect(await sink.read({ repoIdentifier: 'repo-1' })).toBeNull();
       expect(await sink.read({ repoIdentifier: 'repo-2' })).not.toBeNull();
+    });
+  });
+
+  describe('4.1b. Projection Schema V2 — Memory Pass-Through (PSV2-A13 a A14)', () => {
+    it('[PSV2-A13] should store executions and agents in memory', async () => {
+      const data = createMockIndexData({
+        executions: [{
+          header: { version: '1.0' as const, type: 'execution' as const, payloadChecksum: 'chk1', signatures: [] },
+          payload: { id: 'exec-1', taskId: 'task-1', type: 'progress', title: 'Work', result: 'Done' },
+        }] as unknown as IndexData['executions'],
+        agents: [{
+          header: { version: '1.0' as const, type: 'agent' as const, payloadChecksum: 'chk2', signatures: [] },
+          payload: { id: 'agent-1', engine: { type: 'local' as const }, status: 'active' as const },
+        }] as unknown as IndexData['agents'],
+      });
+      const context: ProjectionContext = { repoIdentifier: 'repo-both' };
+
+      await sink.persist(data, context);
+      const result = await sink.read(context);
+
+      expect(result).not.toBeNull();
+      expect(result!.executions).toHaveLength(1);
+      expect(result!.executions[0]!.payload.id).toBe('exec-1');
+      expect(result!.agents).toHaveLength(1);
+      expect(result!.agents[0]!.payload.id).toBe('agent-1');
+    });
+
+    it('[PSV2-A14] should return same executions and agents after persist (round-trip)', async () => {
+      const data = createMockIndexData({
+        executions: [{
+          header: { version: '1.0' as const, type: 'execution' as const, payloadChecksum: 'chk1', signatures: [] },
+          payload: { id: 'exec-rt', taskId: 'task-1', type: 'progress', title: 'Work', result: 'Done' },
+        }] as unknown as IndexData['executions'],
+        agents: [{
+          header: { version: '1.0' as const, type: 'agent' as const, payloadChecksum: 'chk2', signatures: [] },
+          payload: { id: 'agent-rt', engine: { type: 'local' as const }, status: 'active' as const },
+        }] as unknown as IndexData['agents'],
+      });
+      const context: ProjectionContext = { repoIdentifier: 'repo-roundtrip' };
+
+      await sink.persist(data, context);
+      const result = await sink.read(context);
+
+      expect(result).not.toBeNull();
+      // Round-trip: verify the exact same data comes back
+      expect(result!.executions).toEqual(data.executions);
+      expect(result!.agents).toEqual(data.agents);
     });
   });
 

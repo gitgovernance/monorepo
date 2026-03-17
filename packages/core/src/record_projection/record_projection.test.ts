@@ -36,6 +36,7 @@ import type { RecordStore } from '../record_store';
 import { verifySignatures, calculatePayloadChecksum } from '../crypto';
 import type {
   GitGovActorRecord,
+  GitGovAgentRecord,
   GitGovCycleRecord,
   GitGovTaskRecord,
   GitGovExecutionRecord,
@@ -214,6 +215,7 @@ describe('RecordProjector', () => {
     actors: jest.Mocked<RecordStore<GitGovActorRecord>>;
     feedbacks: jest.Mocked<RecordStore<GitGovFeedbackRecord>>;
     executions: jest.Mocked<RecordStore<GitGovExecutionRecord>>;
+    agents: jest.Mocked<RecordStore<GitGovAgentRecord>>;
   };
   let mockSink: jest.Mocked<IRecordProjection>;
   let mockRecordMetrics: jest.Mocked<Pick<RecordMetrics, 'getSystemStatus' | 'getProductivityMetrics' | 'getCollaborationMetrics' | 'getTaskHealth'>>;
@@ -263,6 +265,14 @@ describe('RecordProjector', () => {
         list: jest.fn().mockResolvedValue([]),
         exists: jest.fn().mockResolvedValue(false),
       } as jest.Mocked<RecordStore<GitGovExecutionRecord>>,
+      agents: {
+        get: jest.fn().mockResolvedValue(null),
+        put: jest.fn().mockResolvedValue(undefined),
+        putMany: jest.fn().mockResolvedValue(undefined),
+        delete: jest.fn().mockResolvedValue(undefined),
+        list: jest.fn().mockResolvedValue([]),
+        exists: jest.fn().mockResolvedValue(false),
+      } as jest.Mocked<RecordStore<GitGovAgentRecord>>,
     };
 
     // Create mock RecordMetrics
@@ -2309,6 +2319,120 @@ describe('RecordProjector', () => {
       expect(persistedData.enrichedTasks.length).toBe(projectionResult.enrichedTasks.length);
       expect(persistedData.derivedStates).toEqual(projectionResult.derivedStates);
       expect(persistedData.metadata.recordCounts).toEqual(projectionResult.metadata.recordCounts);
+    });
+  });
+
+  describe('4.8. Projection Schema V2 — Executions & Agents (PSV2-A7 a A9)', () => {
+    it('[PSV2-A7] should require executions and agents fields in IndexData (non-optional)', () => {
+      // Construct a minimal IndexData and verify both fields are present and required
+      const indexData: IndexData = {
+        metadata: { generatedAt: '', lastCommitHash: '', integrityStatus: 'valid', recordCounts: {}, generationTime: 0 },
+        metrics: { tasks: { total: 0, byStatus: {}, byPriority: {} }, cycles: { total: 0, active: 0, completed: 0 }, health: { overallScore: 0, blockedTasks: 0, staleTasks: 0 }, throughput: 0, leadTime: 0, cycleTime: 0, tasksCompleted7d: 0, averageCompletionTime: 0, activeAgents: 0, totalAgents: 0, agentUtilization: 0, humanAgentRatio: 0, collaborationIndex: 0 },
+        derivedStates: { stalledTasks: [], atRiskTasks: [], needsClarificationTasks: [], blockedByDependencyTasks: [] },
+        activityHistory: [],
+        tasks: [],
+        enrichedTasks: [],
+        cycles: [],
+        actors: [],
+        feedback: [],
+        executions: [],
+        agents: [],
+      };
+
+      // Both fields exist and are typed as arrays (non-optional in the type)
+      expect(indexData.executions).toBeDefined();
+      expect(indexData.agents).toBeDefined();
+      expect(Array.isArray(indexData.executions)).toBe(true);
+      expect(Array.isArray(indexData.agents)).toBe(true);
+    });
+
+    it('[PSV2-A8] should populate IndexData.executions from stores.executions.list()', async () => {
+      const exec = await createMockExecutionRecord({
+        taskId: '1757687335-task-test',
+        type: 'progress',
+        title: 'Implemented feature X',
+        result: 'Code committed',
+      });
+      mockStores.executions.list.mockResolvedValue([exec.payload.id]);
+      mockStores.executions.get.mockResolvedValue(exec);
+
+      const projection = await recordProjector.computeProjection({ lastCommitHash: 'abc' });
+
+      expect(projection.executions).toBeDefined();
+      expect(Array.isArray(projection.executions)).toBe(true);
+      expect(projection.executions.length).toBe(1);
+      expect(projection.executions[0]!.payload.id).toBe(exec.payload.id);
+      expect(projection.executions[0]!.payload.type).toBe('progress');
+      expect(projection.executions[0]!.header).toBeDefined();
+    });
+
+    it('[PSV2-A9] should populate IndexData.agents from stores.agents.list()', async () => {
+      // Create a mock agent record manually since there's no createAgentRecord in test factories
+      const agentRecord: GitGovAgentRecord = {
+        header: {
+          version: '1.0',
+          type: 'agent',
+          payloadChecksum: 'checksum-agent-1',
+          signatures: [{
+            keyId: 'human:system',
+            role: 'author',
+            notes: 'Agent registration',
+            signature: 'A'.repeat(88),
+            timestamp: 1757687335,
+          }],
+        },
+        payload: {
+          id: '1757687335-agent-security-scanner',
+          engine: { type: 'local', runtime: 'typescript', entrypoint: 'src/index.ts' },
+          status: 'active',
+          triggers: [{ type: 'webhook' as const }],
+          metadata: { framework: 'langchain' },
+        },
+      };
+      mockStores.agents.list.mockResolvedValue([agentRecord.payload.id]);
+      mockStores.agents.get.mockResolvedValue(agentRecord);
+
+      const projection = await recordProjector.computeProjection({ lastCommitHash: 'abc' });
+
+      expect(projection.agents).toBeDefined();
+      expect(Array.isArray(projection.agents)).toBe(true);
+      expect(projection.agents.length).toBe(1);
+      expect(projection.agents[0]!.payload.id).toBe('1757687335-agent-security-scanner');
+      expect(projection.agents[0]!.payload.engine.type).toBe('local');
+      expect(projection.agents[0]!.header).toBeDefined();
+    });
+
+    it('[PSV2-A9] should populate IndexData.agents from stores.agents.list()', async () => {
+      const agentRecord: GitGovAgentRecord = {
+        header: {
+          version: '1.0',
+          type: 'agent',
+          payloadChecksum: 'checksum-agent-2',
+          signatures: [{
+            keyId: 'human:system',
+            role: 'author',
+            notes: 'Agent registration',
+            signature: 'A'.repeat(88),
+            timestamp: 1757687335,
+          }],
+        },
+        payload: {
+          id: '1757687335-agent-code-reviewer',
+          engine: { type: 'api', url: 'https://api.example.com/review' },
+          status: 'active',
+        },
+      };
+      mockStores.agents.list.mockResolvedValue([agentRecord.payload.id]);
+      mockStores.agents.get.mockResolvedValue(agentRecord);
+
+      const projection = await recordProjector.computeProjection({ lastCommitHash: 'abc' });
+
+      expect(projection.agents).toBeDefined();
+      expect(Array.isArray(projection.agents)).toBe(true);
+      expect(projection.agents.length).toBe(1);
+      expect(projection.agents[0]!.payload.id).toBe('1757687335-agent-code-reviewer');
+      expect(projection.agents[0]!.payload.engine.type).toBe('api');
+      expect(projection.agents[0]!.header).toBeDefined();
     });
   });
 });

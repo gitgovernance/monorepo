@@ -7,7 +7,8 @@ import type {
   GitGovCycleRecord,
   GitGovFeedbackRecord,
   GitGovExecutionRecord,
-  GitGovActorRecord
+  GitGovActorRecord,
+  GitGovAgentRecord
 } from '../record_types';
 import type { ActivityEvent } from '../event_bus';
 import type {
@@ -36,7 +37,7 @@ import type {
  */
 export class RecordProjector implements IRecordProjector {
   private recordMetrics: RecordMetrics;
-  private stores: Required<Pick<RecordStores, 'tasks' | 'cycles' | 'feedbacks' | 'executions' | 'actors'>>;
+  private stores: Required<Pick<RecordStores, 'tasks' | 'cycles' | 'feedbacks' | 'executions' | 'actors' | 'agents'>>;
   private sink: IRecordProjection | undefined;
 
   constructor(dependencies: RecordProjectorDependencies) {
@@ -65,12 +66,19 @@ export class RecordProjector implements IRecordProjector {
       this.recordMetrics.getCollaborationMetrics()
     ]);
 
+    // 2.5. Read remaining stores
+    const [feedback, executions, agents] = await Promise.all([
+      this.readAllFeedback(),
+      this.readAllExecutions(),
+      this.readAllAgents()
+    ]);
+
     // 3. Calculate activity history
     const allRecords: AllRecords = {
       tasks,
       cycles,
-      feedback: await this.readAllFeedback(),
-      executions: await this.readAllExecutions(),
+      feedback,
+      executions,
       actors
     };
 
@@ -108,8 +116,9 @@ export class RecordProjector implements IRecordProjector {
           tasks: tasks.length,
           cycles: cycles.length,
           actors: actors.length,
-          feedback: allRecords.feedback.length,
-          executions: allRecords.executions.length,
+          feedback: feedback.length,
+          executions: executions.length,
+          agents: agents.length,
         },
         generationTime: 0 // Will be set by caller if needed
       },
@@ -120,7 +129,9 @@ export class RecordProjector implements IRecordProjector {
       enrichedTasks,
       cycles,
       actors,
-      feedback: allRecords.feedback
+      feedback,
+      executions,
+      agents,
     };
 
     return indexData;
@@ -496,6 +507,23 @@ export class RecordProjector implements IRecordProjector {
     }
 
     return executions;
+  }
+
+  /**
+   * Reads all agents from stores.agents with full metadata.
+   */
+  private async readAllAgents(): Promise<GitGovAgentRecord[]> {
+    const agentIds = await this.stores.agents.list();
+    const agents: GitGovAgentRecord[] = [];
+
+    for (const id of agentIds) {
+      const record = await this.stores.agents.get(id);
+      if (record) {
+        agents.push(record);
+      }
+    }
+
+    return agents;
   }
 
   /**

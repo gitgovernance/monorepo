@@ -6,7 +6,8 @@ import type {
   GitGovCycleRecord,
   GitGovFeedbackRecord,
   GitGovExecutionRecord,
-  GitGovActorRecord
+  GitGovActorRecord,
+  GitGovAgentRecord
 } from '../record_types';
 import type { SystemStatus, ProductivityMetrics, CollaborationMetrics } from '../record_metrics';
 import type { ActivityEvent } from '../event_bus';
@@ -110,6 +111,8 @@ export type IndexData = {
   cycles: GitGovCycleRecord[];
   actors: GitGovActorRecord[];
   feedback: GitGovFeedbackRecord[];
+  executions: GitGovExecutionRecord[];
+  agents: GitGovAgentRecord[];
 };
 
 /**
@@ -190,7 +193,7 @@ export interface IRecordProjection {
  */
 export type RecordProjectorDependencies = {
   recordMetrics: RecordMetrics;
-  stores: Required<Pick<RecordStores, 'tasks' | 'cycles' | 'feedbacks' | 'executions' | 'actors'>>;
+  stores: Required<Pick<RecordStores, 'tasks' | 'cycles' | 'feedbacks' | 'executions' | 'actors' | 'agents'>>;
   sink?: IRecordProjection;
 };
 
