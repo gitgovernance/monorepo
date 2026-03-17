@@ -1,3 +1,17 @@
+## [2.12.0](https://github.com/gitgovernance/monorepo/compare/core-v2.11.0...core-v2.12.0) (2026-03-17)
+
+
+### ✨ Features
+
+* **agents:** security-audit agent with configurable pipeline and SARIF output ([#117](https://github.com/gitgovernance/monorepo/issues/117)) ([0fb2e70](https://github.com/gitgovernance/monorepo/commit/0fb2e70b2aa5913698c8704ea8223d45f0648a81))
+* **agents:** security-audit identity and integration — Cycle 2 ([#118](https://github.com/gitgovernance/monorepo/issues/118)) ([b167370](https://github.com/gitgovernance/monorepo/commit/b167370975e4256841decf12c0e1cdbab598bfb1))
+* **core:** projection schema v2 — Cycle 1 ([#120](https://github.com/gitgovernance/monorepo/issues/120)) ([1a90958](https://github.com/gitgovernance/monorepo/commit/1a90958506f25372f6fdc4e317ba6c344b24a2cd))
+
+
+### 🐛 Bug Fixes
+
+* **agents:** security-audit test fixes + audit gap closure ([#119](https://github.com/gitgovernance/monorepo/issues/119)) ([1ebfca3](https://github.com/gitgovernance/monorepo/commit/1ebfca3c4f03d38ba3a3514e7f7648a800479643))
+
 ## [2.11.0](https://github.com/gitgovernance/monorepo/compare/core-v2.10.1...core-v2.11.0) (2026-03-16)
 
 
