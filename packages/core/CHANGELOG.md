@@ -1,3 +1,64 @@
+## [3.0.0](https://github.com/gitgovernance/monorepo/compare/core-v2.15.0...core-v3.0.0) (2026-03-18)
+
+
+### ⚠ BREAKING CHANGES
+
+* **cli:** audit-command.ts is now a thin wrapper around
+AuditOrchestrator.run() instead of calling SourceAuditorModule directly.
+
+Changes:
+- DI: added getAuditOrchestrator() to dependency-injection.ts
+- Removed legacy flags: --target, --detector, --max-findings, --group-by, --summary
+- Added --agent flag for filtering to specific agent
+- Exit code from policyDecision.decision (block=1, pass=0)
+- Output formatting adapted for AuditOrchestrationResult
+- Waive subcommand unchanged
+
+Code reduction: 628 → ~340 lines (-46%)
+Tests: 19 passing, AORCH-C1..C6 covered
+
+* fix(cli): audit fixes — mock type, --quiet desc, EARS-C11 getAuditOrchestrator test
+
+* test(e2e): Block G (CG9-CG16) + Block H (CH1-CH4) — 12 new E2E tests
+
+Block G — Audit Orchestration (CG9-CG16):
+- CG9: SarifBuilder.validate() passes on agent output
+- CG10: Content-based fingerprints stable across line numbers
+- CG11: Flat gitgov/ property keys in SARIF results
+- CG12: Multi-agent execution with dedup consolidation
+- CG13: Failed agent doesn't block remaining agents
+- CG14: Duplicate findings deduplicated with reportedBy[]
+- CG15: Zero findings skips conditional heuristic stage
+- CG16: Findings trigger subsequent detection stages
+
+Block H — Policy Evaluation (CH1-CH4):
+- CH1: ExecutionRecord type decision with BLOCK result
+- CH2: ExecutionRecord type decision with PASS result
+- CH3: Waived findings excluded from policy decision
+- CH4: ExecutionRecord has complete structure for Ed25519 signing
+
+All 20 E2E tests passing (8 existing + 12 new).
+
+* fix(tests): fold E4b/P1b into parents, remove PSV2-A9 duplicate
+
+* docs(core): clarify PolicyEvaluationResult re-export boundary in orchestrator types
+
+* feat(core): create policy.yml during project initialization (EARS-FPI14)
+
+FsProjectInitializer.createProjectStructure() now creates .gitgov/policy.yml
+with default configuration (version: "1.0", failOn: critical).
+Does not overwrite existing policy.yml on re-initialization.
+
+2 new tests: [EARS-FPI14] create + no-overwrite. 26/26 passing.
+
+* fix(core): FPI14 use async fs.access instead of sync existsSync, fix test mocks
+
+* test(e2e): verify policy.yml creation during gitgov init (EARS-FPI14)
+
+### ♻️ Refactoring
+
+* **cli:** audit-command uses AuditOrchestrator (C1-C6) ([#130](https://github.com/gitgovernance/monorepo/issues/130)) ([9c8c92a](https://github.com/gitgovernance/monorepo/commit/9c8c92a5664333ee32ec3cf4fae4786ecda0014e))
+
 ## [2.15.0](https://github.com/gitgovernance/monorepo/compare/core-v2.14.0...core-v2.15.0) (2026-03-18)
 
 
