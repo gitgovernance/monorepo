@@ -1,3 +1,10 @@
+## [2.14.0](https://github.com/gitgovernance/monorepo/compare/core-v2.13.0...core-v2.14.0) (2026-03-18)
+
+
+### ✨ Features
+
+* **core:** policy evaluation Cycle 2 — re-evaluation + orchestrator integration ([#125](https://github.com/gitgovernance/monorepo/issues/125)) ([fb81e5e](https://github.com/gitgovernance/monorepo/commit/fb81e5e6b084224724c1fd2d0c79d7891a4b5509))
+
 ## [2.13.0](https://github.com/gitgovernance/monorepo/compare/core-v2.12.0...core-v2.13.0) (2026-03-18)
 
 
