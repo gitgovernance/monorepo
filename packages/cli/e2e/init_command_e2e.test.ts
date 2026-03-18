@@ -134,6 +134,13 @@ describe('Init CLI Command - Edge Cases E2E Tests', () => {
       expect(result.success).toBe(true);
       expect(fs.existsSync(path.join(worktreeBasePath, '.gitgov'))).toBe(true);
       expect(fs.existsSync(path.join(worktreeBasePath, '.gitgov', 'config.json'))).toBe(true);
+
+      // EARS-FPI14: policy.yml created with defaults during init
+      const policyPath = path.join(worktreeBasePath, '.gitgov', 'policy.yml');
+      expect(fs.existsSync(policyPath)).toBe(true);
+      const policyContent = fs.readFileSync(policyPath, 'utf-8');
+      expect(policyContent).toContain('version: "1.0"');
+      expect(policyContent).toContain('failOn: critical');
     });
 
     it('[EARS-E2] WHEN repo has no remote THE SYSTEM SHALL create gitgov-state locally but NOT push', () => {
