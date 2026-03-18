@@ -26,6 +26,7 @@ export class GitLabConfigStore implements ConfigStore<GitLabSaveResult> {
   /** Cached blob_id from the last loadConfig call, used for optimistic concurrency */
   private cachedBlobId: string | null = null;
 
+  // [EARS-B6] Defaults: ref='gitgov-state', basePath='.gitgov'
   constructor(options: GitLabConfigStoreOptions) {
     this.projectId = options.projectId;
     this.api = options.api;
@@ -72,7 +73,9 @@ export class GitLabConfigStore implements ConfigStore<GitLabSaveResult> {
         // [EARS-A2] 404 → null (fail-safe)
         if (status === 404) return null;
       }
-      // [EARS-C4/C5] Auth and server errors are NOT fail-safe — throw
+      // [EARS-C4] 401/403 → PERMISSION_DENIED (not fail-safe)
+      // [EARS-C5] 5xx → SERVER_ERROR (not fail-safe)
+      // [EARS-C6] Network error → NETWORK_ERROR
       throw mapGitbeakerError(error, `loadConfig ${this.projectId}/${path}`);
     }
   }
@@ -147,6 +150,9 @@ export class GitLabConfigStore implements ConfigStore<GitLabSaveResult> {
       };
     } catch (error: unknown) {
       if (error instanceof GitLabApiError) throw error;
+      // [EARS-C1] 401/403 → PERMISSION_DENIED
+      // [EARS-C2] 409 → CONFLICT
+      // [EARS-C3] 5xx → SERVER_ERROR
       throw mapGitbeakerError(error, `saveConfig ${this.projectId}/${path}`);
     }
   }
