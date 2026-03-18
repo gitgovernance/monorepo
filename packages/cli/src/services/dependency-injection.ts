@@ -1,7 +1,7 @@
 import * as path from 'path';
 import * as os from 'os';
 import { createHash } from 'crypto';
-import { Adapters, Config, Session, EventBus, Lint, Git, SourceAuditor, FindingDetector, Runner, KeyProvider, RecordProjection, RecordMetrics } from '@gitgov/core';
+import { Adapters, Config, Session, EventBus, Lint, Git, SourceAuditor, FindingDetector, Runner, KeyProvider, RecordProjection, RecordMetrics, AuditOrchestrator, PolicyEvaluator } from '@gitgov/core';
 import { FsRecordStore, DEFAULT_ID_ENCODER, FsFileLister, FsProjectInitializer, FsLintModule, FsWorktreeSyncStateModule, GitModule, createAgentRunner, createConfigManager, findProjectRoot, createSessionManager, FsRecordProjection } from '@gitgov/core/fs';
 import type { IFsLintModule } from '@gitgov/core/fs';
 import type {
@@ -29,6 +29,7 @@ export class DependencyInjectionService {
   private syncModule: ISyncStateModule | null = null;
   private sourceAuditorModule: SourceAuditor.SourceAuditorModule | null = null;
   private agentRunnerModule: IAgentRunner | null = null;
+  private auditOrchestrator: ReturnType<typeof AuditOrchestrator.createAuditOrchestrator> | null = null;
   private configManager: InstanceType<typeof Config.ConfigManager> | null = null;
   private sessionManager: InstanceType<typeof Session.SessionManager> | null = null;
   private gitModule: Git.IGitModule | null = null;
@@ -714,6 +715,45 @@ export class DependencyInjectionService {
         throw new Error(`❌ Failed to initialize agent runner: ${error.message}`);
       }
       throw new Error("❌ Unknown error initializing agent runner.");
+    }
+  }
+
+  /**
+   * Creates and returns AuditOrchestrator with all required dependencies
+   */
+  async getAuditOrchestrator(): Promise<ReturnType<typeof AuditOrchestrator.createAuditOrchestrator>> {
+    if (this.auditOrchestrator) {
+      return this.auditOrchestrator;
+    }
+
+    try {
+      await this.initializeStores();
+      if (!this.stores) {
+        throw new Error("Failed to initialize stores");
+      }
+
+      const agentRunner = await this.getAgentRunnerModule();
+      const waiverReader = await this.getWaiverReader();
+      const recordStore = this.stores.agents;
+      const policyEvaluator = PolicyEvaluator.createPolicyEvaluator({});
+
+      this.auditOrchestrator = AuditOrchestrator.createAuditOrchestrator({
+        recordStore,
+        agentRunner,
+        waiverReader,
+        policyEvaluator,
+      });
+
+      return this.auditOrchestrator;
+
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message.includes('Could not find project root')) {
+          throw new Error("❌ GitGovernance not initialized. Run 'gitgov init' first.");
+        }
+        throw new Error(`❌ Failed to initialize audit orchestrator: ${error.message}`);
+      }
+      throw new Error("❌ Unknown error initializing audit orchestrator.");
     }
   }
 
