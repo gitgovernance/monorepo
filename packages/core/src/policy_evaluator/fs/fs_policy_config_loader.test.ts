@@ -1,5 +1,5 @@
 /**
- * PolicyConfigLoader tests.
+ * FsPolicyConfigLoader tests.
  *
  * EARS: PEVAL-P1, PEVAL-P2, PEVAL-P3, PEVAL-P4
  */
@@ -7,7 +7,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
-import { loadPolicyConfig } from "./policy_config_loader";
+import { FsPolicyConfigLoader, loadPolicyConfig } from "./fs_policy_config_loader";
 
 // ============================================================================
 // Test helpers
@@ -25,8 +25,8 @@ function writePolicyYml(dir: string, content: string): void {
 // Tests
 // ============================================================================
 
-describe("PolicyConfigLoader", () => {
-  describe("4.0. policy.yml Schema + Loader (PEVAL-P1 to P4)", () => {
+describe("FsPolicyConfigLoader", () => {
+  describe("4.1. policy.yml Schema + Loader (PEVAL-P1 to P4)", () => {
     it("[PEVAL-P1] should load and parse policy.yml into PolicyConfig", async () => {
       const dir = createTmpDir();
       writePolicyYml(
@@ -44,6 +44,24 @@ blockCategories:
 
       expect(config.failOn).toBe("high");
       expect(config.blockCategories).toEqual(["hardcoded-secret", "pii-ssn"]);
+
+      fs.rmSync(dir, { recursive: true });
+    });
+
+    it("[PEVAL-P1b] FsPolicyConfigLoader class should load and parse policy.yml", async () => {
+      const dir = createTmpDir();
+      writePolicyYml(
+        dir,
+        `
+version: "1.0"
+failOn: medium
+`,
+      );
+
+      const loader = new FsPolicyConfigLoader();
+      const config = await loader.loadPolicyConfig(dir);
+
+      expect(config.failOn).toBe("medium");
 
       fs.rmSync(dir, { recursive: true });
     });

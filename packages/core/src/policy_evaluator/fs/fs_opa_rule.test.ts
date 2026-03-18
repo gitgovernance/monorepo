@@ -1,5 +1,5 @@
 /**
- * OPA rule tests.
+ * FsOpaRule tests.
  *
  * EARS: PEVAL-O1 through PEVAL-O6
  *
@@ -11,11 +11,11 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
 import { execSync } from "node:child_process";
-import { createOpaRule } from "./opa_rule";
+import { createOpaRule } from "./fs_opa_rule";
 import type {
   ConsolidatedFinding,
   PolicyConfig,
-} from "./policy_evaluator.types";
+} from "../policy_evaluator.types";
 
 // ============================================================================
 // Test helpers
@@ -89,8 +89,8 @@ block contains msg if {
 
 const describeIfOpa = isOpaAvailable() ? describe : describe.skip;
 
-describeIfOpa("OPA Rule", () => {
-  describe("4.9. OPA Integration (PEVAL-O1 to O6)", () => {
+describeIfOpa("FsOpaRule", () => {
+  describe("4.2. OPA Integration (PEVAL-O1 to O6)", () => {
     it("[PEVAL-O1] should load and evaluate .rego policies via OPA WASM runtime", async () => {
       const dir = createTmpDir();
       const regoPath = path.join(dir, "test_block.rego");

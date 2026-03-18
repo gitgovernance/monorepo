@@ -10,7 +10,7 @@ import type {
   ConsolidatedFinding,
   FindingSeverity,
 } from "../audit_orchestrator/audit_orchestrator.types";
-import type { ActiveWaiver, IWaiverReader } from "../source_auditor/types";
+import type { ActiveWaiver } from "../source_auditor/types";
 
 // Re-export for convenience
 export type { ConsolidatedFinding, FindingSeverity } from "../audit_orchestrator/audit_orchestrator.types";
@@ -116,6 +116,23 @@ export interface PolicyRule {
 }
 
 /**
+ * Interface for loading PolicyConfig from storage.
+ * Implementations: FsPolicyConfigLoader (filesystem), future: GithubPolicyConfigLoader.
+ */
+export interface PolicyConfigLoader {
+  loadPolicyConfig(gitgovDir: string): Promise<PolicyConfig>;
+}
+
+/**
+ * Interface for creating OPA rules from .rego files.
+ * Implementations: FsOpaRuleFactory (local OPA CLI + WASM), future: RemoteOpaRule.
+ * The factory receives repoRoot at construction time (DI), not per call.
+ */
+export interface OpaRuleFactory {
+  createOpaRule(regoPath: string): Promise<PolicyRule>;
+}
+
+/**
  * PolicyEvaluator interface.
  * ASYNC -- evaluate() returns Promise<PolicyEvaluationResult>.
  */
@@ -129,9 +146,10 @@ export interface PolicyEvaluator {
 
 /**
  * Dependencies injected into createPolicyEvaluator().
+ * opaRuleFactory is optional -- when absent, OPA policies are skipped with a warning.
  */
 export type PolicyEvaluatorDeps = {
-  waiverReader: IWaiverReader;
+  opaRuleFactory?: OpaRuleFactory;
 };
 
 /**

@@ -1,15 +1,12 @@
 // Factory
-export { createPolicyEvaluator } from "./policy_evaluator";
+export { createPolicyEvaluator, reevaluatePolicy } from "./policy_evaluator";
 
-// Config loader
-export { loadPolicyConfig } from "./policy_config_loader";
+// Fs implementations (Strategy pattern)
+export { loadPolicyConfig, createOpaRule, FsOpaRuleFactory } from "./fs";
 
 // Built-in rules
 export { severityThreshold } from "./severity_threshold";
 export { categoryBlock } from "./category_block";
-
-// OPA rule
-export { createOpaRule } from "./opa_rule";
 
 // Types and constants
 export {
@@ -25,6 +22,8 @@ export type {
   PolicyDecision,
   PolicyRuleResult,
   PolicyRule,
+  PolicyConfigLoader,
+  OpaRuleFactory,
   PolicyEvaluator,
   PolicyEvaluatorDeps,
   PolicyEvaluationResult,
