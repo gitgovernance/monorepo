@@ -1,3 +1,15 @@
+## [2.13.0](https://github.com/gitgovernance/monorepo/compare/core-v2.12.0...core-v2.13.0) (2026-03-18)
+
+
+### ✨ Features
+
+* **core:** policy evaluation engine with OPA integration — Cycle 1 ([#124](https://github.com/gitgovernance/monorepo/issues/124)) ([0f15efa](https://github.com/gitgovernance/monorepo/commit/0f15efa7ce5cdee773b69a6319e3280972b7b6fd))
+
+
+### 🐛 Bug Fixes
+
+* **agents:** security-audit Cycle 2 fixtures and test paths ([#122](https://github.com/gitgovernance/monorepo/issues/122)) ([7cd9b8a](https://github.com/gitgovernance/monorepo/commit/7cd9b8a8ddccd716f8d4f9f2049ccf37565ae53b))
+
 ## [2.12.0](https://github.com/gitgovernance/monorepo/compare/core-v2.11.0...core-v2.12.0) (2026-03-17)
 
 
