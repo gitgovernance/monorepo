@@ -42,3 +42,15 @@ export type {
 // GitModule
 export { GitLabGitModule } from './git';
 export type { GitLabGitModuleOptions } from './git';
+
+// SyncState
+export { GitLabSyncStateModule } from './sync_state';
+export type { GitLabSyncStateDependencies } from './sync_state';
+
+// Webhook
+export { GitLabWebhookHandler } from './webhook';
+export type {
+  GitLabWebhookOptions,
+  GitLabWebhookPayload,
+  GitLabWebhookResult,
+} from './webhook';
