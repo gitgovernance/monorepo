@@ -4,3 +4,6 @@
 [submodule "packages/core-gitlab"]
 	path = packages/core-gitlab
 	url = git@gitlab.com:gitgovernance/core-gitlab.git
+[submodule "packages/claude-plugins"]
+	path = packages/claude-plugins
+	url = git@github.com:gitgovernance/claude-plugins.git
