@@ -737,4 +737,147 @@ describe("AuditOrchestrator", () => {
       );
     });
   });
+
+  describe("4.8. Orchestrator Integration (PEVAL-G1 to G4)", () => {
+    it("[PEVAL-G1] should invoke PolicyEvaluator.evaluate after all agent scans complete", async () => {
+      const agentRecord = makeAgentRecord("agent:security-audit", "audit");
+      const sarif = makeSarifLog([
+        makeSarifResult({
+          ruleId: "SEC-001",
+          level: "error",
+          message: "Hardcoded secret",
+          file: "src/config.ts",
+          startLine: 10,
+          fingerprint: "hash-sec-001",
+          category: "hardcoded-secret",
+        }),
+      ]);
+
+      const deps = createMockDeps();
+      (deps.recordStore.list as jest.Mock).mockResolvedValue(["agent:security-audit"]);
+      (deps.recordStore.get as jest.Mock).mockResolvedValue(agentRecord);
+      (deps.agentRunner.runOnce as jest.Mock).mockResolvedValue(
+        makeAgentResponse("agent:security-audit", sarif, "exec-scan-g1"),
+      );
+
+      const orchestrator = createAuditOrchestrator(deps);
+      await orchestrator.run(defaultOptions);
+
+      // PolicyEvaluator.evaluate should have been called after scans
+      expect(deps.policyEvaluator.evaluate).toHaveBeenCalledTimes(1);
+
+      // The input should contain the consolidated findings from the scan
+      const evaluateCall = (deps.policyEvaluator.evaluate as jest.Mock).mock.calls[0][0];
+      expect(evaluateCall.findings).toHaveLength(1);
+      expect(evaluateCall.findings[0].fingerprint).toBe("hash-sec-001");
+      expect(evaluateCall.scanExecutionIds).toContain("exec-scan-g1");
+      expect(evaluateCall.taskId).toBe(defaultOptions.taskId);
+    });
+
+    it("[PEVAL-G2] should include policyDecision in AuditOrchestrationResult", async () => {
+      const agentRecord = makeAgentRecord("agent:security-audit", "audit");
+      const sarif = makeSarifLog([
+        makeSarifResult({
+          ruleId: "SEC-001",
+          level: "error",
+          message: "Critical finding",
+          file: "src/app.ts",
+          startLine: 5,
+          fingerprint: "hash-critical-g2",
+          category: "secret",
+        }),
+      ]);
+
+      const blockDecision = makePolicyDecision("block", "1 critical finding exceeds threshold");
+      const blockResult = makePolicyResult("block", "1 critical finding exceeds threshold");
+      blockResult.decision = blockDecision;
+
+      const deps = createMockDeps();
+      (deps.recordStore.list as jest.Mock).mockResolvedValue(["agent:security-audit"]);
+      (deps.recordStore.get as jest.Mock).mockResolvedValue(agentRecord);
+      (deps.agentRunner.runOnce as jest.Mock).mockResolvedValue(
+        makeAgentResponse("agent:security-audit", sarif, "exec-scan-g2"),
+      );
+      (deps.policyEvaluator.evaluate as jest.Mock).mockResolvedValue(blockResult);
+
+      const orchestrator = createAuditOrchestrator(deps);
+      const result = await orchestrator.run(defaultOptions);
+
+      // policyDecision should be present in the result
+      expect(result.policyDecision).toBeDefined();
+      expect(result.policyDecision.decision).toBe("block");
+      expect(result.policyDecision.reason).toBe("1 critical finding exceeds threshold");
+    });
+
+    it("[PEVAL-G3] should include policy ExecutionRecord ID in executionIds.policy", async () => {
+      const agentRecord = makeAgentRecord("agent:security-audit", "audit");
+      const sarif = makeSarifLog();
+
+      const policyResult = makePolicyResult("pass", "No issues");
+      // Use a known ID to verify it's included
+      policyResult.executionRecord.id = "exec-policy-g3-test";
+
+      const deps = createMockDeps();
+      (deps.recordStore.list as jest.Mock).mockResolvedValue(["agent:security-audit"]);
+      (deps.recordStore.get as jest.Mock).mockResolvedValue(agentRecord);
+      (deps.agentRunner.runOnce as jest.Mock).mockResolvedValue(
+        makeAgentResponse("agent:security-audit", sarif, "exec-scan-g3"),
+      );
+      (deps.policyEvaluator.evaluate as jest.Mock).mockResolvedValue(policyResult);
+
+      const orchestrator = createAuditOrchestrator(deps);
+      const result = await orchestrator.run(defaultOptions);
+
+      // executionIds.policy should contain the policy ExecutionRecord ID
+      expect(result.executionIds.policy).toBe("exec-policy-g3-test");
+      // scan IDs should also be present
+      expect(result.executionIds.scans).toContain("exec-scan-g3");
+    });
+
+    it("[PEVAL-G4] should include finding fingerprint in TaskRecord.references for lifecycle linkage", async () => {
+      const agentRecord = makeAgentRecord("agent:security-audit", "audit");
+      const sarif = makeSarifLog([
+        makeSarifResult({
+          ruleId: "SEC-001",
+          level: "error",
+          message: "Hardcoded secret",
+          file: "src/config.ts",
+          startLine: 10,
+          fingerprint: "fp-lifecycle-001",
+          category: "hardcoded-secret",
+        }),
+        makeSarifResult({
+          ruleId: "PII-001",
+          level: "warning",
+          message: "Email detected",
+          file: "src/user.ts",
+          startLine: 20,
+          fingerprint: "fp-lifecycle-002",
+          category: "pii-email",
+        }),
+      ]);
+
+      const deps = createMockDeps();
+      (deps.recordStore.list as jest.Mock).mockResolvedValue(["agent:security-audit"]);
+      (deps.recordStore.get as jest.Mock).mockResolvedValue(agentRecord);
+      (deps.agentRunner.runOnce as jest.Mock).mockResolvedValue(
+        makeAgentResponse("agent:security-audit", sarif, "exec-scan-g4"),
+      );
+
+      const orchestrator = createAuditOrchestrator(deps);
+      const result = await orchestrator.run(defaultOptions);
+
+      // Finding fingerprints should be available in the result for task linkage
+      const fingerprints = result.findings.map((f) => f.fingerprint);
+      expect(fingerprints).toContain("fp-lifecycle-001");
+      expect(fingerprints).toContain("fp-lifecycle-002");
+
+      // Each finding should have a non-empty fingerprint string
+      for (const finding of result.findings) {
+        expect(finding.fingerprint).toBeDefined();
+        expect(typeof finding.fingerprint).toBe("string");
+        expect(finding.fingerprint.length).toBeGreaterThan(0);
+      }
+    });
+  });
 });

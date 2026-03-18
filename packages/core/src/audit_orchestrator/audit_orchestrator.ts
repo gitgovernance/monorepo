@@ -321,8 +321,8 @@ export function createAuditOrchestrator(deps: AuditOrchestratorDeps) {
       const policyResult = await deps.policyEvaluator.evaluate(policyInput);
 
       // Derive findings with waiver state from the policy decision to avoid
-      // duplicating waiver application logic (PolicyEvaluator is the single source
-      // of truth for waiver matching — see MEDIA-5).
+      // duplicating waiver application logic. PolicyEvaluator is the single source
+      // of truth for waiver matching.
       const waivedFingerprints = new Set(
         policyResult.decision.waivedFindings.map((f) => f.fingerprint),
       );

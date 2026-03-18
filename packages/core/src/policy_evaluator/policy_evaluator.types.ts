@@ -30,6 +30,7 @@ export type PolicyEvaluationInput = {
   policy: PolicyConfig;
   scanExecutionIds: string[];
   taskId: string;
+  repoRoot?: string;
 };
 
 /**

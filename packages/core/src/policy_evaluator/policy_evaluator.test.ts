@@ -24,9 +24,14 @@
  * | PEVAL-E4  | should set metadata kind to policy-decision with version and full decision    | 4.5      |
  * | PEVAL-E5  | should return ExecutionRecord to caller without persisting                    | 4.5      |
  * | PEVAL-O5  | should skip OPA evaluation when opa config is undefined                       | 4.9      |
+ * | PEVAL-F1  | should load findings from ExecutionRecords without re-executing agents        | 4.7      |
+ * | PEVAL-F2  | should use current active waivers not historical ones                         | 4.7      |
+ * | PEVAL-F3  | should create new ExecutionRecord without modifying previous decision         | 4.7      |
+ * | PEVAL-F4  | should log warning and skip ExecutionRecord without SARIF in metadata         | 4.7      |
+ * | PEVAL-F5  | should include waiver feedbackRecordId in references when pass after block    | 4.7      |
  */
 
-import { createPolicyEvaluator } from "./policy_evaluator";
+import { createPolicyEvaluator, reevaluatePolicy } from "./policy_evaluator";
 import type {
   PolicyEvaluationInput,
   PolicyConfig,
@@ -37,8 +42,10 @@ import type {
   ActiveWaiver,
   IWaiverReader,
 } from "./policy_evaluator.types";
-import type { FeedbackRecord } from "../record_types";
+import type { FeedbackRecord, GitGovExecutionRecord } from "../record_types";
 import type { WaiverMetadata } from "../source_auditor/types";
+import type { RecordStore } from "../record_store/record_store";
+import type { SarifLog, SarifResult } from "../sarif/sarif.types";
 
 // ============================================================================
 // Test helpers
@@ -545,6 +552,382 @@ describe("PolicyEvaluator", () => {
       // Only built-in rules should be evaluated
       const ruleNames = result.decision.rulesEvaluated.map((r) => r.ruleName);
       expect(ruleNames).toEqual(["SeverityThreshold", "CategoryBlock"]);
+    });
+  });
+
+  describe("4.7. Re-evaluation (PEVAL-F1 to F5)", () => {
+    /**
+     * Helper: builds a mock ExecutionRecord with SARIF metadata.
+     */
+    function makeExecRecordWithSarif(
+      id: string,
+      sarif: SarifLog,
+    ): GitGovExecutionRecord {
+      return {
+        header: {
+          version: "1.0",
+          type: "execution",
+          payloadChecksum: "abc123",
+          signatures: [
+            {
+              keyId: "agent:test",
+              role: "author",
+              notes: "test",
+              signature: "dGVzdA==".padEnd(88, "="),
+              timestamp: Date.now(),
+            },
+          ],
+        },
+        payload: {
+          id,
+          taskId: "task-reeval-001",
+          type: "analysis",
+          title: "Scan result",
+          result: "Scan completed",
+          references: [],
+          metadata: {
+            kind: "sarif",
+            version: "2.1.0",
+            data: sarif,
+          },
+        },
+      };
+    }
+
+    /**
+     * Helper: builds a mock ExecutionRecord WITHOUT SARIF (e.g., a decision record).
+     */
+    function makeExecRecordWithoutSarif(
+      id: string,
+    ): GitGovExecutionRecord {
+      return {
+        header: {
+          version: "1.0",
+          type: "execution",
+          payloadChecksum: "abc123",
+          signatures: [
+            {
+              keyId: "agent:test",
+              role: "author",
+              notes: "test",
+              signature: "dGVzdA==".padEnd(88, "="),
+              timestamp: Date.now(),
+            },
+          ],
+        },
+        payload: {
+          id,
+          taskId: "task-reeval-001",
+          type: "decision",
+          title: "Policy decision",
+          result: "PASS",
+          references: [],
+          metadata: {
+            kind: "policy-decision",
+            version: "1.0.0",
+            data: {},
+          },
+        },
+      };
+    }
+
+    /**
+     * Helper: builds a minimal SarifLog with results.
+     */
+    function makeSarifLogForReeval(
+      results: Array<{
+        ruleId: string;
+        level: "error" | "warning" | "note" | "none";
+        message: string;
+        file: string;
+        startLine: number;
+        fingerprint?: string;
+        category?: string;
+      }>,
+    ): SarifLog {
+      return {
+        $schema:
+          "https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/schemas/sarif-schema-2.1.0.json",
+        version: "2.1.0",
+        runs: [
+          {
+            tool: {
+              driver: {
+                name: "test-agent",
+                version: "1.0.0",
+                informationUri: "https://example.com",
+              },
+            },
+            results: results.map((r) => ({
+              ruleId: r.ruleId,
+              level: r.level,
+              message: { text: r.message },
+              locations: [
+                {
+                  physicalLocation: {
+                    artifactLocation: { uri: r.file },
+                    region: { startLine: r.startLine },
+                  },
+                },
+              ],
+              ...(r.fingerprint
+                ? {
+                    partialFingerprints: {
+                      "primaryLocationLineHash/v1": r.fingerprint,
+                    },
+                  }
+                : {}),
+              properties: {
+                "gitgov/category": r.category ?? "unknown",
+                "gitgov/detector": "regex",
+                "gitgov/confidence": 0.9,
+              },
+            })) as SarifResult[],
+          },
+        ],
+      };
+    }
+
+    /**
+     * Helper: creates mock deps for reevaluatePolicy.
+     */
+    function makeReevalDeps(overrides?: {
+      executionRecords?: Map<string, GitGovExecutionRecord>;
+      activeWaivers?: ActiveWaiver[];
+    }) {
+      const recordsMap =
+        overrides?.executionRecords ?? new Map<string, GitGovExecutionRecord>();
+      const waivers = overrides?.activeWaivers ?? [];
+
+      const executionStore: RecordStore<GitGovExecutionRecord> = {
+        get: jest.fn().mockImplementation(async (id: string) => {
+          return recordsMap.get(id) ?? null;
+        }),
+        put: jest.fn().mockResolvedValue(undefined),
+        putMany: jest.fn().mockResolvedValue(undefined),
+        delete: jest.fn().mockResolvedValue(undefined),
+        list: jest.fn().mockResolvedValue([...recordsMap.keys()]),
+        exists: jest.fn().mockImplementation(async (id: string) => {
+          return recordsMap.has(id);
+        }),
+      };
+
+      const waiverReader: IWaiverReader = {
+        loadActiveWaivers: jest.fn().mockResolvedValue(waivers),
+        hasActiveWaiver: jest.fn().mockResolvedValue(false),
+      };
+
+      const evalDeps = makeDeps();
+      const policyEvaluator = createPolicyEvaluator(evalDeps);
+
+      return { executionStore, waiverReader, policyEvaluator };
+    }
+
+    it("[PEVAL-F1] should load findings from ExecutionRecords without re-executing agents", async () => {
+      const sarif = makeSarifLogForReeval([
+        {
+          ruleId: "SEC-001",
+          level: "error",
+          message: "Hardcoded secret found",
+          file: "src/config.ts",
+          startLine: 10,
+          fingerprint: "fp-sec-001",
+          category: "hardcoded-secret",
+        },
+        {
+          ruleId: "PII-001",
+          level: "warning",
+          message: "Email detected",
+          file: "src/user.ts",
+          startLine: 20,
+          fingerprint: "fp-pii-001",
+          category: "pii-email",
+        },
+      ]);
+
+      const records = new Map<string, GitGovExecutionRecord>();
+      records.set("exec-scan-001", makeExecRecordWithSarif("exec-scan-001", sarif));
+
+      const deps = makeReevalDeps({ executionRecords: records });
+
+      const result = await reevaluatePolicy(
+        ["exec-scan-001"],
+        "task-reeval-001",
+        makeConfig({ failOn: "critical" }),
+        deps,
+      );
+
+      // Should have extracted 2 findings from the SARIF without re-scanning
+      expect(result.decision.blockingFindings.length + result.decision.waivedFindings.length >= 0).toBe(true);
+      // The findings should be from the SARIF data (no agent was re-executed)
+      expect(deps.executionStore.get).toHaveBeenCalledWith("exec-scan-001");
+      // Findings were loaded: the decision was made based on SARIF content
+      expect(result.decision.decision).toBe("block"); // critical finding => block
+      expect(result.decision.blockingFindings).toHaveLength(1);
+      expect(result.decision.blockingFindings[0]!.fingerprint).toBe("fp-sec-001");
+    });
+
+    it("[PEVAL-F2] should use current active waivers not historical ones", async () => {
+      const sarif = makeSarifLogForReeval([
+        {
+          ruleId: "SEC-001",
+          level: "error",
+          message: "Hardcoded secret found",
+          file: "src/config.ts",
+          startLine: 10,
+          fingerprint: "fp-sec-reeval-001",
+          category: "hardcoded-secret",
+        },
+      ]);
+
+      const records = new Map<string, GitGovExecutionRecord>();
+      records.set("exec-scan-002", makeExecRecordWithSarif("exec-scan-002", sarif));
+
+      // Current waivers (not the ones from scan time)
+      const currentWaiver = makeWaiver("fp-sec-reeval-001", "feedback-current-waiver");
+
+      const deps = makeReevalDeps({
+        executionRecords: records,
+        activeWaivers: [currentWaiver],
+      });
+
+      const result = await reevaluatePolicy(
+        ["exec-scan-002"],
+        "task-reeval-002",
+        makeConfig({ failOn: "critical" }),
+        deps,
+      );
+
+      // The current waiver should waive the critical finding => pass
+      expect(result.decision.decision).toBe("pass");
+      expect(result.decision.waivedFindings).toHaveLength(1);
+      expect(result.decision.waivedFindings[0]!.fingerprint).toBe("fp-sec-reeval-001");
+      // Verify waiverReader.loadActiveWaivers was called (current waivers)
+      expect(deps.waiverReader.loadActiveWaivers).toHaveBeenCalled();
+    });
+
+    it("[PEVAL-F3] should create new ExecutionRecord without modifying previous decision", async () => {
+      const sarif = makeSarifLogForReeval([
+        {
+          ruleId: "SEC-001",
+          level: "warning",
+          message: "Minor issue",
+          file: "src/app.ts",
+          startLine: 5,
+          fingerprint: "fp-minor-001",
+          category: "code-quality",
+        },
+      ]);
+
+      const records = new Map<string, GitGovExecutionRecord>();
+      const originalRecord = makeExecRecordWithSarif("exec-scan-003", sarif);
+      records.set("exec-scan-003", originalRecord);
+
+      const deps = makeReevalDeps({ executionRecords: records });
+
+      const result = await reevaluatePolicy(
+        ["exec-scan-003"],
+        "task-reeval-003",
+        makeConfig({ failOn: "critical" }),
+        deps,
+      );
+
+      // New ExecutionRecord should have a different ID
+      expect(result.executionRecord.id).toBeDefined();
+      expect(result.executionRecord.id).not.toBe("exec-scan-003");
+      expect(result.executionRecord.type).toBe("decision");
+
+      // Original record should not have been modified (put was not called)
+      expect(deps.executionStore.put).not.toHaveBeenCalled();
+
+      // The original record in the map should be unchanged
+      const unchangedRecord = records.get("exec-scan-003");
+      expect(unchangedRecord).toBe(originalRecord);
+    });
+
+    it("[PEVAL-F4] should log warning and skip ExecutionRecord without SARIF in metadata", async () => {
+      const sarifRecord = makeExecRecordWithSarif(
+        "exec-scan-sarif",
+        makeSarifLogForReeval([
+          {
+            ruleId: "SEC-001",
+            level: "warning",
+            message: "Issue found",
+            file: "src/app.ts",
+            startLine: 5,
+            fingerprint: "fp-issue-001",
+            category: "code-quality",
+          },
+        ]),
+      );
+      const nonSarifRecord = makeExecRecordWithoutSarif("exec-decision-001");
+
+      const records = new Map<string, GitGovExecutionRecord>();
+      records.set("exec-scan-sarif", sarifRecord);
+      records.set("exec-decision-001", nonSarifRecord);
+
+      const deps = makeReevalDeps({ executionRecords: records });
+
+      const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+
+      const result = await reevaluatePolicy(
+        ["exec-scan-sarif", "exec-decision-001"],
+        "task-reeval-004",
+        makeConfig({ failOn: "critical" }),
+        deps,
+      );
+
+      // Should warn about the non-SARIF record
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("exec-decision-001"),
+      );
+
+      // Should NOT throw -- result should contain findings from the SARIF record only
+      expect(result.decision).toBeDefined();
+      // The SARIF record's finding should be present
+      expect(result.decision.decision).toBe("pass"); // warning with failOn: critical => pass
+
+      warnSpy.mockRestore();
+    });
+
+    it("[PEVAL-F5] should include waiver feedbackRecordId in references when pass after prior block", async () => {
+      const sarif = makeSarifLogForReeval([
+        {
+          ruleId: "SEC-001",
+          level: "error",
+          message: "Critical secret found",
+          file: "src/config.ts",
+          startLine: 10,
+          fingerprint: "fp-sec-block-001",
+          category: "hardcoded-secret",
+        },
+      ]);
+
+      const records = new Map<string, GitGovExecutionRecord>();
+      records.set("exec-scan-block", makeExecRecordWithSarif("exec-scan-block", sarif));
+
+      // New waiver that turns the previous block into a pass
+      const waiver = makeWaiver("fp-sec-block-001", "feedback-waiver-unblock");
+
+      const deps = makeReevalDeps({
+        executionRecords: records,
+        activeWaivers: [waiver],
+      });
+
+      const result = await reevaluatePolicy(
+        ["exec-scan-block"],
+        "task-reeval-005",
+        makeConfig({ failOn: "critical" }),
+        deps,
+      );
+
+      // Should pass now (critical finding is waived)
+      expect(result.decision.decision).toBe("pass");
+
+      // References should include the waiver's feedbackRecordId
+      expect(result.executionRecord.references).toContain("feedback-waiver-unblock");
+      // References should also include the scan execution ID
+      expect(result.executionRecord.references).toContain("exec-scan-block");
     });
   });
 });

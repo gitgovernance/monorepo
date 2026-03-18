@@ -19,11 +19,15 @@ import type {
   ConsolidatedFinding,
   FindingSeverity,
   ActiveWaiver,
+  IWaiverReader,
 } from "./policy_evaluator.types";
 import { SEVERITY_ORDER } from "./policy_evaluator.types";
 import { severityThreshold } from "./severity_threshold";
 import { categoryBlock } from "./category_block";
 import { createOpaRule } from "./opa_rule";
+import type { RecordStore } from "../record_store/record_store";
+import type { GitGovExecutionRecord } from "../record_types";
+import type { SarifLog, SarifLevel, SarifPhysicalLocation } from "../sarif/sarif.types";
 
 // ============================================================================
 // Helper functions
@@ -38,9 +42,7 @@ function applyWaivers(
   activeWaivers: ActiveWaiver[],
 ): ConsolidatedFinding[] {
   const waiverMap = new Map(
-    activeWaivers
-      .filter((w) => w.fingerprint)
-      .map((w) => [w.fingerprint, w]),
+    activeWaivers.map((w) => [w.fingerprint, w]),
   );
 
   // TODO: waiverRequirements enforcement (PEVAL-P2 Cycle 2)
@@ -192,7 +194,7 @@ export function createPolicyEvaluator(
       const builtInRules = [severityThreshold, categoryBlock];
 
       // Load OPA rules if configured (PEVAL-O5: skip when opa is undefined)
-      const repoRoot = process.cwd();
+      const repoRoot = input.repoRoot ?? process.cwd();
       const opaRules =
         policy.opa?.policies && policy.opa.policies.length > 0
           ? await Promise.all(
@@ -237,4 +239,192 @@ export function createPolicyEvaluator(
       return { decision, executionRecord };
     },
   };
+}
+
+// ============================================================================
+// Re-evaluation (Cycle 2: PEVAL-F1 through F5)
+// ============================================================================
+
+/**
+ * Maps SARIF level to FindingSeverity.
+ * Same logic as levelToSeverity in audit_orchestrator.
+ */
+function levelToSeverity(level: SarifLevel | string | undefined): FindingSeverity {
+  switch (level) {
+    case "error":
+      return "critical";
+    case "warning":
+      return "high";
+    case "note":
+      return "medium";
+    default:
+      return "low";
+  }
+}
+
+/**
+ * Builds a fallback fingerprint for SARIF results missing primaryLocationLineHash/v1.
+ */
+function buildFallbackFingerprint(
+  ruleId: string | undefined,
+  location: SarifPhysicalLocation | undefined,
+): string | undefined {
+  const file = location?.artifactLocation?.uri;
+  const line = location?.region?.startLine;
+  if (!ruleId || !file) return undefined;
+  return `fallback:${ruleId}:${file}:${String(line ?? 0)}`;
+}
+
+/**
+ * Extracts ConsolidatedFinding[] from a SarifLog.
+ * Re-consolidates findings from SARIF results with dedup by fingerprint.
+ */
+function extractFindingsFromSarif(sarif: SarifLog): ConsolidatedFinding[] {
+  const byFingerprint = new Map<string, ConsolidatedFinding>();
+
+  for (const run of sarif.runs) {
+    const agentId = run.tool?.driver?.name ?? "unknown";
+
+    for (const sarifResult of run.results) {
+      const location = sarifResult.locations?.[0]?.physicalLocation;
+      const fingerprint =
+        sarifResult.partialFingerprints?.["primaryLocationLineHash/v1"] ??
+        buildFallbackFingerprint(sarifResult.ruleId, location);
+      if (!fingerprint) continue;
+
+      const existing = byFingerprint.get(fingerprint);
+
+      if (existing) {
+        if (!existing.reportedBy.includes(agentId)) {
+          existing.reportedBy.push(agentId);
+        }
+      } else {
+        const props = sarifResult.properties as
+          | Record<string, unknown>
+          | undefined;
+        const category =
+          (props?.["gitgov/category"] as string | undefined) ?? "unknown";
+
+        const finding: ConsolidatedFinding = {
+          fingerprint,
+          ruleId: sarifResult.ruleId,
+          message: sarifResult.message.text,
+          severity: levelToSeverity(sarifResult.level),
+          file: location?.artifactLocation?.uri ?? "",
+          line: location?.region?.startLine ?? 0,
+          category,
+          reportedBy: [agentId],
+          isWaived: false,
+        };
+        const col = location?.region?.startColumn;
+        if (col !== undefined) {
+          finding.column = col;
+        }
+        byFingerprint.set(fingerprint, finding);
+      }
+    }
+  }
+
+  return Array.from(byFingerprint.values());
+}
+
+/**
+ * Type guard for SARIF metadata on an ExecutionRecord.
+ */
+type SarifMetadata = {
+  kind: "sarif";
+  version: string;
+  data: SarifLog;
+};
+
+function isSarifMetadata(
+  metadata: unknown,
+): metadata is SarifMetadata {
+  if (metadata === null || metadata === undefined || typeof metadata !== "object") {
+    return false;
+  }
+  const m = metadata as Record<string, unknown>;
+  return m["kind"] === "sarif" && m["data"] !== null && m["data"] !== undefined;
+}
+
+/**
+ * Re-evaluates policy using existing scan ExecutionRecords without re-executing agents.
+ *
+ * PEVAL-F1: Loads findings from ExecutionRecords (no re-scan).
+ * PEVAL-F2: Uses current active waivers (not historical).
+ * PEVAL-F3: Creates a NEW ExecutionRecord (previous untouched).
+ * PEVAL-F4: Skips ExecutionRecords without SARIF metadata (logs warning).
+ * PEVAL-F5: Includes waiver feedbackRecordId in references when pass after prior block.
+ */
+export async function reevaluatePolicy(
+  scanExecutionIds: string[],
+  taskId: string,
+  policy: PolicyConfig,
+  deps: {
+    executionStore: RecordStore<GitGovExecutionRecord>;
+    waiverReader: IWaiverReader;
+    policyEvaluator: PolicyEvaluator;
+  },
+): Promise<PolicyEvaluationResult> {
+  // PEVAL-F1: Load findings from each scan ExecutionRecord
+  const allFindings: ConsolidatedFinding[] = [];
+
+  for (const execId of scanExecutionIds) {
+    const record = await deps.executionStore.get(execId);
+    if (!record) {
+      // PEVAL-F4: Log warning for missing records
+      console.warn(
+        `reevaluatePolicy: ExecutionRecord "${execId}" not found, skipping`,
+      );
+      continue;
+    }
+
+    const metadata = record.payload.metadata;
+
+    // PEVAL-F4: Skip records without SARIF in metadata
+    if (!isSarifMetadata(metadata)) {
+      console.warn(
+        `reevaluatePolicy: ExecutionRecord "${execId}" does not contain SARIF metadata (kind !== "sarif"), skipping`,
+      );
+      continue;
+    }
+
+    const findings = extractFindingsFromSarif(metadata.data);
+    allFindings.push(...findings);
+  }
+
+  // Dedup across multiple SarifLogs (same fingerprint from different scans)
+  const dedupMap = new Map<string, ConsolidatedFinding>();
+  for (const f of allFindings) {
+    const existing = dedupMap.get(f.fingerprint);
+    if (existing) {
+      for (const agent of f.reportedBy) {
+        if (!existing.reportedBy.includes(agent)) {
+          existing.reportedBy.push(agent);
+        }
+      }
+    } else {
+      dedupMap.set(f.fingerprint, { ...f });
+    }
+  }
+  const consolidatedFindings = Array.from(dedupMap.values());
+
+  // PEVAL-F2: Load CURRENT active waivers (not historical)
+  const activeWaivers = await deps.waiverReader.loadActiveWaivers();
+
+  // PEVAL-F3: Create NEW evaluation (delegates to PolicyEvaluator.evaluate)
+  const input: PolicyEvaluationInput = {
+    findings: consolidatedFindings,
+    activeWaivers,
+    policy,
+    scanExecutionIds,
+    taskId,
+  };
+
+  // The PolicyEvaluator.evaluate() call creates a new PolicyDecision + ExecutionRecord
+  // (PEVAL-F3: new record, previous decision record is untouched)
+  // (PEVAL-F5: references are built by buildReferences() which includes waiver feedback IDs)
+  const result = await deps.policyEvaluator.evaluate(input);
+
+  return result;
 }

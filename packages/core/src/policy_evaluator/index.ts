@@ -1,5 +1,5 @@
 // Factory
-export { createPolicyEvaluator } from "./policy_evaluator";
+export { createPolicyEvaluator, reevaluatePolicy } from "./policy_evaluator";
 
 // Config loader
 export { loadPolicyConfig } from "./policy_config_loader";

@@ -41,6 +41,11 @@ export async function loadPolicyConfig(
     return { ...DEFAULT_CONFIG };
   }
 
+  // Validate version field
+  if (typeof parsed.version !== 'string') {
+    throw new Error('policy.yml: missing or invalid "version" field');
+  }
+
   // Validate failOn (PEVAL-P1)
   if (!VALID_SEVERITIES.has(parsed.failOn)) {
     throw new Error(
