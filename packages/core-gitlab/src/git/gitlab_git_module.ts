@@ -45,7 +45,7 @@ export class GitLabGitModule implements IGitModule {
   /** Active branch for operations (switchable via checkoutBranch) */
   private activeRef: string;
 
-  // [EARS-I2] Default branch is gitgov-state
+  // [EARS-B8] Default branch is gitgov-state (via constructor default)
   constructor(options: GitLabGitModuleOptions) {
     this.projectId = options.projectId;
     this.api = options.api;

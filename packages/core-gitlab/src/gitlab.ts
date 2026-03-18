@@ -35,6 +35,9 @@ export type GitLabApiErrorCode =
  * Used by ConfigStore, RecordStore, and SyncStateModule.
  * FileLister and GitModule have their own error hierarchies.
  */
+// [EARS-C1] Constructor preserves code, message, statusCode, name
+// [EARS-C2] instanceof check works correctly
+// [EARS-C3] Preserves original error as cause via ErrorOptions
 export class GitLabApiError extends Error {
   constructor(
     message: string,
