@@ -108,6 +108,7 @@ function extractStatusCode(error: Error & { cause?: { response?: { status: numbe
  * [EARS-A1] 401/403 → PERMISSION_DENIED
  * [EARS-A2] 404 → NOT_FOUND
  * [EARS-A3] 409 → CONFLICT
+ * [EARS-A4] 400 → SERVER_ERROR (validation error)
  * [EARS-A5] 5xx → SERVER_ERROR
  * [EARS-A6] Other status → SERVER_ERROR
  * [EARS-A7] Non-HTTP → NETWORK_ERROR
