@@ -128,6 +128,8 @@ export type ConsolidatedFinding = {
   column?: number;
   /** Agent IDs that reported this finding */
   reportedBy: string[];
+  /** Source code snippet from SARIF region.snippet.text */
+  snippet?: string;
   /** Whether this finding is suppressed by a waiver */
   isWaived: boolean;
   /** Active waiver details if suppressed */

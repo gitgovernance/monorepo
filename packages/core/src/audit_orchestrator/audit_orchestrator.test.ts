@@ -569,6 +569,82 @@ describe("AuditOrchestrator", () => {
     });
   });
 
+  describe("4.3b. Snippet Extraction (AORCH-B13)", () => {
+    it("[AORCH-B13] should extract snippet from SARIF region.snippet.text into ConsolidatedFinding", async () => {
+      const agentRecord = makeAgentRecord("agent:security-audit", "audit");
+      const sarifResultWithSnippet = {
+        ruleId: "SEC-001",
+        level: "error",
+        message: { text: "Hardcoded secret found" },
+        locations: [
+          {
+            physicalLocation: {
+              artifactLocation: { uri: "src/config.ts" },
+              region: {
+                startLine: 10,
+                snippet: { text: 'const API_KEY = "sk-secret-12345";' },
+              },
+            },
+          },
+        ],
+        partialFingerprints: {
+          "primaryLocationLineHash/v1": "hash-snippet-001",
+        },
+        properties: {
+          "gitgov/category": "hardcoded-secret",
+          "gitgov/detector": "regex",
+          "gitgov/confidence": 0.95,
+        },
+      };
+      const sarif = makeSarifLog([sarifResultWithSnippet]);
+
+      const deps = createMockDeps();
+      (deps.recordStore.list as jest.Mock).mockResolvedValue(["agent:security-audit"]);
+      (deps.recordStore.get as jest.Mock).mockResolvedValue(agentRecord);
+      (deps.agentRunner.runOnce as jest.Mock).mockResolvedValue(
+        makeAgentResponse("agent:security-audit", sarif, "exec-snippet-001"),
+      );
+
+      const orchestrator = createAuditOrchestrator(deps);
+      const result = await orchestrator.run(defaultOptions);
+
+      expect(result.findings).toHaveLength(1);
+      const finding = result.findings[0]!;
+      expect(finding).toBeDefined();
+      expect(finding.snippet).toBe('const API_KEY = "sk-secret-12345";');
+    });
+
+    it("[AORCH-B13] should omit snippet when SARIF region has no snippet.text", async () => {
+      const agentRecord = makeAgentRecord("agent:security-audit", "audit");
+      const sarif = makeSarifLog([
+        makeSarifResult({
+          ruleId: "SEC-002",
+          level: "warning",
+          message: "Weak crypto",
+          file: "src/crypto.ts",
+          startLine: 20,
+          fingerprint: "hash-no-snippet-001",
+          category: "unknown-risk",
+        }),
+      ]);
+
+      const deps = createMockDeps();
+      (deps.recordStore.list as jest.Mock).mockResolvedValue(["agent:security-audit"]);
+      (deps.recordStore.get as jest.Mock).mockResolvedValue(agentRecord);
+      (deps.agentRunner.runOnce as jest.Mock).mockResolvedValue(
+        makeAgentResponse("agent:security-audit", sarif, "exec-no-snippet-001"),
+      );
+
+      const orchestrator = createAuditOrchestrator(deps);
+      const result = await orchestrator.run(defaultOptions);
+
+      expect(result.findings).toHaveLength(1);
+      const finding = result.findings[0]!;
+      expect(finding).toBeDefined();
+      expect(finding.snippet).toBeUndefined();
+    });
+  });
+
   describe("4.4. Waiver Application (AORCH-B7)", () => {
     it("[AORCH-B7] should continue with unsuppressed findings when WaiverReader fails", async () => {
       const agentRecord = makeAgentRecord("agent:security-audit", "audit");

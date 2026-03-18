@@ -245,6 +245,8 @@ export type SarifResultProperties = {
    * Source: header.version (e.g., "1.1")
    */
   'gitgov/protocolVersion'?: string;
+  /** SHA-256 hash of the original snippet (before redaction) */
+  'gitgov/snippetHash'?: string;
   /** Semantic category of the finding */
   'gitgov/category': FindingCategory;
   /** Detector that generated the finding */

@@ -168,6 +168,8 @@ function consolidateFindings(
           const category =
             (props?.["gitgov/category"] as string | undefined) ?? "unknown";
 
+          const snippet = location?.region?.snippet?.text;
+
           const finding: ConsolidatedFinding = {
             fingerprint,
             ruleId: sarifResult.ruleId,
@@ -177,6 +179,7 @@ function consolidateFindings(
             line: location?.region?.startLine ?? 0,
             category,
             reportedBy: [result.agentId],
+            ...(snippet ? { snippet } : {}),
             isWaived: false,
           };
           const col = location?.region?.startColumn;
