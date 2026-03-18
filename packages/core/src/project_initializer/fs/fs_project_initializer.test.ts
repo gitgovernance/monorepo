@@ -512,7 +512,8 @@ describe('FsProjectInitializer', () => {
     });
 
     it('[EARS-FPI14] should create policy.yml with default configuration', async () => {
-      mockExistsSync.mockReturnValue(false);
+      // policy.yml does not exist — fs.access rejects
+      mockFs.access.mockRejectedValueOnce(new Error('ENOENT'));
 
       await initializer.createProjectStructure();
 
@@ -526,10 +527,8 @@ describe('FsProjectInitializer', () => {
     });
 
     it('[EARS-FPI14] should not overwrite existing policy.yml on re-initialization', async () => {
-      mockExistsSync.mockImplementation((p: unknown) => {
-        if (String(p).includes('policy.yml')) return true;
-        return false;
-      });
+      // policy.yml exists — fs.access resolves
+      mockFs.access.mockResolvedValueOnce(undefined);
 
       await initializer.createProjectStructure();
 
