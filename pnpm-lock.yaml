@@ -262,9 +262,15 @@ importers:
 
   packages/e2e:
     devDependencies:
+      '@gitbeaker/rest':
+        specifier: ^40.0.0
+        version: 40.6.0
       '@gitgov/core':
         specifier: workspace:*
         version: link:../core
+      '@gitgov/core-gitlab':
+        specifier: workspace:*
+        version: link:../core-gitlab
       '@octokit/rest':
         specifier: ^22.0.1
         version: 22.0.1
