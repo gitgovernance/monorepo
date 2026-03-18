@@ -46,12 +46,11 @@ blockCategories:
       expect(config.blockCategories).toEqual(["hardcoded-secret", "pii-ssn"]);
 
       fs.rmSync(dir, { recursive: true });
-    });
 
-    it("[PEVAL-P1b] FsPolicyConfigLoader class should load and parse policy.yml", async () => {
-      const dir = createTmpDir();
+      // Also verify FsPolicyConfigLoader class interface
+      const dir2 = createTmpDir();
       writePolicyYml(
-        dir,
+        dir2,
         `
 version: "1.0"
 failOn: medium
@@ -59,11 +58,11 @@ failOn: medium
       );
 
       const loader = new FsPolicyConfigLoader();
-      const config = await loader.loadPolicyConfig(dir);
+      const classConfig = await loader.loadPolicyConfig(dir2);
 
-      expect(config.failOn).toBe("medium");
+      expect(classConfig.failOn).toBe("medium");
 
-      fs.rmSync(dir, { recursive: true });
+      fs.rmSync(dir2, { recursive: true });
     });
 
     it("[PEVAL-P2] should validate waiver FeedbackRecords against roles and minApprovals", async () => {

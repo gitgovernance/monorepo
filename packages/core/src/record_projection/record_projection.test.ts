@@ -2402,37 +2402,5 @@ describe('RecordProjector', () => {
       expect(projection.agents[0]!.header).toBeDefined();
     });
 
-    it('[PSV2-A9] should populate IndexData.agents from stores.agents.list()', async () => {
-      const agentRecord: GitGovAgentRecord = {
-        header: {
-          version: '1.0',
-          type: 'agent',
-          payloadChecksum: 'checksum-agent-2',
-          signatures: [{
-            keyId: 'human:system',
-            role: 'author',
-            notes: 'Agent registration',
-            signature: 'A'.repeat(88),
-            timestamp: 1757687335,
-          }],
-        },
-        payload: {
-          id: '1757687335-agent-code-reviewer',
-          engine: { type: 'api', url: 'https://api.example.com/review' },
-          status: 'active',
-        },
-      };
-      mockStores.agents.list.mockResolvedValue([agentRecord.payload.id]);
-      mockStores.agents.get.mockResolvedValue(agentRecord);
-
-      const projection = await recordProjector.computeProjection({ lastCommitHash: 'abc' });
-
-      expect(projection.agents).toBeDefined();
-      expect(Array.isArray(projection.agents)).toBe(true);
-      expect(projection.agents.length).toBe(1);
-      expect(projection.agents[0]!.payload.id).toBe('1757687335-agent-code-reviewer');
-      expect(projection.agents[0]!.payload.engine.type).toBe('api');
-      expect(projection.agents[0]!.header).toBeDefined();
-    });
   });
 });

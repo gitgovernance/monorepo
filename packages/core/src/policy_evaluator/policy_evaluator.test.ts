@@ -21,7 +21,7 @@
  * | PEVAL-E1  | should create ExecutionRecord with type decision                             | 4.5      |
  * | PEVAL-E2  | should set result to human-readable string describing decision               | 4.5      |
  * | PEVAL-E3  | should populate references with scanExecutionIds and waiver feedbackRecordIds | 4.5      |
- * | PEVAL-E4  | should set metadata kind to policy-decision with version and full PolicyDecision | 4.5   |
+ * | PEVAL-E4  | should set metadata kind to policy-decision with version and full PolicyDecision | 4.5  |
  * | PEVAL-E5  | should return ExecutionRecord to caller without persisting                    | 4.5      |
  * | PEVAL-O5  | should skip OPA evaluation when opa config is undefined                       | 4.9      |
  * | PEVAL-F1  | should load findings from ExecutionRecords without re-executing agents        | 4.7      |
@@ -486,25 +486,14 @@ describe("PolicyEvaluator", () => {
       const result = await evaluator.evaluate(
         makeInput({
           findings: [makeFinding({ fingerprint: "fp-1", severity: "low" })],
+          taskId: "task-id-test",
         }),
       );
 
       expect(result.executionRecord.metadata.kind).toBe("policy-decision");
       expect(result.executionRecord.metadata.version).toBe("1.0.0");
       expect(result.executionRecord.metadata.data).toBe(result.decision);
-    });
-
-    it("[PEVAL-E4b] should include id field in ExecutionRecord", async () => {
-      const deps = makeDeps();
-      const evaluator = createPolicyEvaluator(deps);
-
-      const result = await evaluator.evaluate(
-        makeInput({
-          findings: [makeFinding({ fingerprint: "fp-1", severity: "low" })],
-          taskId: "task-id-test",
-        }),
-      );
-
+      // ExecutionRecord.id is populated with taskId-based identifier
       expect(result.executionRecord.id).toBeDefined();
       expect(result.executionRecord.id).toContain("exec-policy-task-id-test-");
     });

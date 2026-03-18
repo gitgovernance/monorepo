@@ -501,4 +501,41 @@ describe('FsProjectInitializer', () => {
       expect(mockExecSync).not.toHaveBeenCalled();
     });
   });
+
+  describe('4.5. Policy Configuration (EARS-FPI14)', () => {
+    let initializer: FsProjectInitializer;
+
+    beforeEach(() => {
+      initializer = new FsProjectInitializer(testRoot);
+      mockFs.mkdir.mockResolvedValue(undefined);
+      mockFs.writeFile.mockResolvedValue(undefined);
+    });
+
+    it('[EARS-FPI14] should create policy.yml with default configuration', async () => {
+      // policy.yml does not exist — fs.access rejects
+      mockFs.access.mockRejectedValueOnce(new Error('ENOENT'));
+
+      await initializer.createProjectStructure();
+
+      const policyWrite = mockFs.writeFile.mock.calls.find(
+        (call) => String(call[0]).includes('policy.yml'),
+      );
+      expect(policyWrite).toBeDefined();
+      const written = String(policyWrite![1]);
+      expect(written).toContain('version: "1.0"');
+      expect(written).toContain('failOn: critical');
+    });
+
+    it('[EARS-FPI14] should not overwrite existing policy.yml on re-initialization', async () => {
+      // policy.yml exists — fs.access resolves
+      mockFs.access.mockResolvedValueOnce(undefined);
+
+      await initializer.createProjectStructure();
+
+      const policyWrite = mockFs.writeFile.mock.calls.find(
+        (call) => String(call[0]).includes('policy.yml'),
+      );
+      expect(policyWrite).toBeUndefined();
+    });
+  });
 });

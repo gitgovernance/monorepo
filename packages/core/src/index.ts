@@ -110,6 +110,9 @@ export * as Sarif from "./sarif";
 // Agent runner
 export * as Runner from "./agent_runner";
 
+// Audit orchestrator
+export * as AuditOrchestrator from "./audit_orchestrator";
+
 // Policy evaluator (stub -- formal implementation in Epic 5)
 export * as PolicyEvaluator from "./policy_evaluator";
 

@@ -8,7 +8,10 @@ import type {
   PolicyDecision,
 } from "../policy_evaluator/policy_evaluator.types";
 
-// Re-export PolicyEvaluator types for consumers that import from audit_orchestrator
+// Re-export PolicyEvaluator types for consumers that import from audit_orchestrator.
+// Note: AuditOrchestrationResult.policyDecision exposes PolicyDecision (the inner decision),
+// NOT PolicyEvaluationResult (which wraps decision + executionRecord). The orchestrator
+// handles executionRecord persistence internally — callers only see the decision.
 export type { PolicyDecision, PolicyEvaluationResult } from "../policy_evaluator/policy_evaluator.types";
 
 // ============================================================================
