@@ -21,14 +21,14 @@
  * | PEVAL-E1  | should create ExecutionRecord with type decision                             | 4.5      |
  * | PEVAL-E2  | should set result to human-readable string describing decision               | 4.5      |
  * | PEVAL-E3  | should populate references with scanExecutionIds and waiver feedbackRecordIds | 4.5      |
- * | PEVAL-E4  | should set metadata kind to policy-decision with version and full decision    | 4.5      |
+ * | PEVAL-E4  | should set metadata kind to policy-decision with version and full PolicyDecision | 4.5   |
  * | PEVAL-E5  | should return ExecutionRecord to caller without persisting                    | 4.5      |
  * | PEVAL-O5  | should skip OPA evaluation when opa config is undefined                       | 4.9      |
  * | PEVAL-F1  | should load findings from ExecutionRecords without re-executing agents        | 4.7      |
  * | PEVAL-F2  | should use current active waivers not historical ones                         | 4.7      |
  * | PEVAL-F3  | should create new ExecutionRecord without modifying previous decision         | 4.7      |
  * | PEVAL-F4  | should log warning and skip ExecutionRecord without SARIF in metadata         | 4.7      |
- * | PEVAL-F5  | should include waiver feedbackRecordId in references when pass after block    | 4.7      |
+ * | PEVAL-F5  | should include waiver feedbackRecordId in references when pass after prior block | 4.7   |
  */
 
 import { createPolicyEvaluator, reevaluatePolicy } from "./policy_evaluator";
@@ -108,11 +108,7 @@ function makeWaiver(
 }
 
 function makeDeps(): PolicyEvaluatorDeps {
-  const waiverReader: IWaiverReader = {
-    loadActiveWaivers: jest.fn().mockResolvedValue([]),
-    hasActiveWaiver: jest.fn().mockResolvedValue(false),
-  };
-  return { waiverReader };
+  return {};
 }
 
 function makeInput(

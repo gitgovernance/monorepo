@@ -1,5 +1,5 @@
 /**
- * OPA rule -- PolicyRule implemented via OPA WASM runtime.
+ * FsOpaRule -- filesystem implementation of OpaRuleFactory.
  *
  * Compiles .rego files to WASM using `opa build`, then evaluates
  * using @open-policy-agent/opa-wasm.
@@ -17,7 +17,8 @@ import type {
   ConsolidatedFinding,
   PolicyConfig,
   ActiveWaiver,
-} from "./policy_evaluator.types";
+  OpaRuleFactory,
+} from "../policy_evaluator.types";
 
 /**
  * Input format for OPA evaluation.
@@ -253,4 +254,16 @@ export async function createOpaRule(
       };
     },
   };
+}
+
+/**
+ * Filesystem implementation of OpaRuleFactory.
+ * Receives repoRoot at construction time (DI) so callers don't need to know it.
+ */
+export class FsOpaRuleFactory implements OpaRuleFactory {
+  constructor(private readonly repoRoot: string) {}
+
+  async createOpaRule(regoPath: string): Promise<PolicyRule> {
+    return createOpaRule(regoPath, this.repoRoot);
+  }
 }

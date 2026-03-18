@@ -15,6 +15,7 @@ import type {
   PolicyDecision,
   PolicyExecutionRecordData,
   PolicyConfig,
+  PolicyRule,
   PolicyRuleResult,
   ConsolidatedFinding,
   FindingSeverity,
@@ -24,7 +25,6 @@ import type {
 import { SEVERITY_ORDER } from "./policy_evaluator.types";
 import { severityThreshold } from "./severity_threshold";
 import { categoryBlock } from "./category_block";
-import { createOpaRule } from "./opa_rule";
 import type { RecordStore } from "../record_store/record_store";
 import type { GitGovExecutionRecord } from "../record_types";
 import type { SarifLog, SarifLevel, SarifPhysicalLocation } from "../sarif/sarif.types";
@@ -162,7 +162,7 @@ function buildExecutionRecord(
  * Factory: creates PolicyEvaluator with injected dependencies.
  */
 export function createPolicyEvaluator(
-  _deps: PolicyEvaluatorDeps,
+  deps: PolicyEvaluatorDeps,
 ): PolicyEvaluator {
   return {
     async evaluate(
@@ -194,13 +194,20 @@ export function createPolicyEvaluator(
       const builtInRules = [severityThreshold, categoryBlock];
 
       // Load OPA rules if configured (PEVAL-O5: skip when opa is undefined)
-      const repoRoot = input.repoRoot ?? process.cwd();
-      const opaRules =
-        policy.opa?.policies && policy.opa.policies.length > 0
-          ? await Promise.all(
-              policy.opa.policies.map((p) => createOpaRule(p, repoRoot)),
-            )
-          : [];
+      let opaRules: PolicyRule[] = [];
+      if (policy.opa?.policies && policy.opa.policies.length > 0) {
+        if (deps.opaRuleFactory) {
+          opaRules = await Promise.all(
+            policy.opa.policies.map((p) =>
+              deps.opaRuleFactory!.createOpaRule(p),
+            ),
+          );
+        } else {
+          console.warn(
+            "[PolicyEvaluator] OPA policies configured but no opaRuleFactory provided, skipping OPA evaluation",
+          );
+        }
+      }
 
       const allRules = [
         ...builtInRules,
