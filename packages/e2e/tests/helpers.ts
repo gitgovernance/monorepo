@@ -379,3 +379,21 @@ export function requireGitHub(): void {
     console.log('[SKIP] GitHub tests require GITHUB_TEST_REPO env var');
   }
 }
+
+// ============================================================
+// GitLab Guards (Block J)
+// ============================================================
+
+export const GITLAB_TOKEN = process.env['GITLAB_TOKEN'] ?? '';
+export const GITLAB_TEST_PROJECT_ID = process.env['GITLAB_TEST_PROJECT_ID'] ?? '';
+export const HAS_GITLAB = GITLAB_TOKEN.length > 0 && GITLAB_TEST_PROJECT_ID.length > 0;
+
+/**
+ * Guard: call at the beginning of GitLab-dependent test suites.
+ * When GITLAB_TOKEN is not set, logs a skip message.
+ */
+export function requireGitLab(): void {
+  if (!HAS_GITLAB) {
+    console.log('[SKIP] GitLab tests require GITLAB_TOKEN + GITLAB_TEST_PROJECT_ID env vars');
+  }
+}

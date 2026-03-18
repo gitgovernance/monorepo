@@ -7,10 +7,13 @@
   "scripts": {
     "test": "vitest run",
     "test:local": "vitest run tests/cli_records.test.ts tests/projection.test.ts tests/parity.test.ts",
-    "test:github": "GITHUB_TEST_REPO=git@github.com:gitgovernance/e2e-test-repo.git vitest run"
+    "test:github": "GITHUB_TEST_REPO=git@github.com:gitgovernance/e2e-test-repo.git vitest run",
+    "test:gitlab": "vitest run tests/gitlab.test.ts"
   },
   "devDependencies": {
     "@gitgov/core": "workspace:*",
+    "@gitgov/core-gitlab": "workspace:*",
+    "@gitbeaker/rest": "^40.0.0",
     "@octokit/rest": "^22.0.1",
     "@prisma/adapter-pg": "^6.0.0",
     "@prisma/client": "^6.0.0",
