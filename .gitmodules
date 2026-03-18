@@ -1,3 +1,9 @@
 [submodule "packages/private"]
 	path = packages/private
 	url = git@github.com:gitgovernance/private.git
+[submodule "packages/core-gitlab"]
+	path = packages/core-gitlab
+	url = git@gitlab.com:gitgovernance/core-gitlab.git
+[submodule "packages/claude-plugins"]
+	path = packages/claude-plugins
+	url = git@github.com:gitgovernance/claude-plugins.git

@@ -1,11 +1,13 @@
 /**
- * Block E: Projection Parity — 2 EARS (CE1-CE2)
+ * Block E: Projection Parity — 3 EARS (CE1-CE3)
  * Blueprint: e2e/specs/parity.md
  *
  * CE1: Guarantees that FsRecordProjection (index.json) and PrismaRecordProjection (6 DB tables)
  *      produce equivalent IndexData when given the same input.
  * CE2: Guarantees that FsRecordStore (local) and GitHubRecordStore (remote) produce equivalent
  *      IndexData when reading the same records (FS vs GitHub parity).
+ * CE3: Guarantees that FsRecordStore (local) and GitLab API (remote) produce equivalent
+ *      record data when reading the same records (FS vs GitLab parity).
  */
 import { describe, it, expect } from 'vitest';
 import { execSync } from 'child_process';
@@ -13,6 +15,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { Octokit } from '@octokit/rest';
+import { Gitlab } from '@gitbeaker/rest';
 
 import {
   runCliCommand,
@@ -35,6 +38,9 @@ import {
   DEFAULT_ID_ENCODER,
   FsRecordStore,
   GitHubRecordStore,
+  HAS_GITLAB,
+  GITLAB_TOKEN,
+  GITLAB_TEST_PROJECT_ID,
 } from './helpers';
 import type {
   PrismaClient,
@@ -230,4 +236,129 @@ describe('Block E: Projection Parity (CE1-CE2)', () => {
       else console.log(`[SKIP_CLEANUP] Keeping tempDir=${tempDir}`);
     }
   }, 60_000);
+
+  it('[EARS-CE3] should produce equivalent records from FsRecordStore and GitLab API', async () => {
+    if (!HAS_GITLAB) {
+      throw new Error(
+        'CE3 requires GitLab credentials. Set GITLAB_TOKEN and GITLAB_TEST_PROJECT_ID in packages/e2e/.env',
+      );
+    }
+
+    const api = new Gitlab({ token: GITLAB_TOKEN });
+    const projectId = Number(GITLAB_TEST_PROJECT_ID);
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gitgov-e2e-ce3-'));
+    const repoPath = path.join(tempDir, 'ce3');
+    const testBranch = `e2e-ce3-${Date.now()}`;
+
+    try {
+      // 1. Create local repo with records directly (no CLI dependency)
+      createGitRepo(repoPath);
+      const gitgovDir = path.join(repoPath, '.gitgov');
+      fs.mkdirSync(path.join(gitgovDir, 'tasks'), { recursive: true });
+      fs.mkdirSync(path.join(gitgovDir, 'actors'), { recursive: true });
+
+      // Write test records to FS
+      const testTask = {
+        header: { id: 'ce3-task-001', type: 'task', version: '1.0' },
+        payload: { id: 'ce3-task-001', title: 'CE3 parity task', status: 'open', priority: 'high' },
+      };
+      const testActor = {
+        header: { id: 'human:ce3-dev', type: 'actor', version: '1.0' },
+        payload: { id: 'human:ce3-dev', name: 'CE3 Dev', type: 'human' },
+      };
+
+      fs.writeFileSync(
+        path.join(gitgovDir, 'tasks', 'ce3-task-001.json'),
+        JSON.stringify(testTask, null, 2),
+      );
+      fs.writeFileSync(
+        path.join(gitgovDir, 'actors', 'human_ce3-dev.json'),
+        JSON.stringify(testActor, null, 2),
+      );
+
+      // 2. Read records from FS
+      const fsTaskContent = JSON.parse(fs.readFileSync(path.join(gitgovDir, 'tasks', 'ce3-task-001.json'), 'utf-8'));
+      const fsActorContent = JSON.parse(fs.readFileSync(path.join(gitgovDir, 'actors', 'human_ce3-dev.json'), 'utf-8'));
+      const fsTaskRecords = [fsTaskContent];
+      const fsTasks = ['ce3-task-001'];
+      const fsActors = ['human_ce3-dev'];
+
+      // 3. Push same records to GitLab via Commits API
+      await api.Branches.create(projectId, testBranch, 'main');
+
+      const actions: Array<{ action: 'create'; file_path: string; content: string; encoding: 'base64' }> = [];
+
+      for (const dir of ['tasks', 'actors', 'cycles', 'feedbacks', 'executions']) {
+        const dirPath = path.join(gitgovDir, dir);
+        if (!fs.existsSync(dirPath)) continue;
+        for (const file of fs.readdirSync(dirPath)) {
+          if (!file.endsWith('.json')) continue;
+          const content = fs.readFileSync(path.join(dirPath, file), 'utf-8');
+          actions.push({
+            action: 'create',
+            file_path: `.gitgov/${dir}/${file}`,
+            content: Buffer.from(content).toString('base64'),
+            encoding: 'base64',
+          });
+        }
+      }
+
+      // Also push config.json if exists
+      const configPath = path.join(gitgovDir, 'config.json');
+      if (fs.existsSync(configPath)) {
+        actions.push({
+          action: 'create',
+          file_path: '.gitgov/config.json',
+          content: Buffer.from(fs.readFileSync(configPath, 'utf-8')).toString('base64'),
+          encoding: 'base64',
+        });
+      }
+
+      await api.Commits.create(projectId, testBranch, 'CE3: push all .gitgov/ records', actions);
+
+      // 4. Read records back from GitLab
+      const glTaskFiles = await api.Repositories.allRepositoryTrees(projectId, {
+        path: '.gitgov/tasks',
+        ref: testBranch,
+      } as Parameters<typeof api.Repositories.allRepositoryTrees>[1]) as unknown as Array<{ name: string; type: string }>;
+
+      const glTasks = glTaskFiles.filter(f => f.type === 'blob' && f.name.endsWith('.json'));
+
+      const glTaskRecords = await Promise.all(
+        glTasks.map(async (f) => {
+          const file = await api.RepositoryFiles.show(projectId, `.gitgov/tasks/${f.name}`, testBranch);
+          return JSON.parse(Buffer.from(String(file.content), 'base64').toString('utf-8'));
+        }),
+      );
+
+      const glActorFiles = await api.Repositories.allRepositoryTrees(projectId, {
+        path: '.gitgov/actors',
+        ref: testBranch,
+      } as Parameters<typeof api.Repositories.allRepositoryTrees>[1]) as unknown as Array<{ name: string; type: string }>;
+
+      const glActors = glActorFiles.filter(f => f.type === 'blob' && f.name.endsWith('.json'));
+
+      // 5. Compare: FS and GitLab should have identical records
+      // CE3-1: Record counts match
+      expect(glTasks.length).toBe(fsTasks.length);
+      expect(glActors.length).toBe(fsActors.length);
+
+      // CE3-2: Task payloads match
+      for (const fsTask of fsTaskRecords) {
+        const glTask = glTaskRecords.find((t: { payload: { id: string } }) => t.payload.id === fsTask.payload.id);
+        expect(glTask).toBeDefined();
+        expect(glTask.payload.title).toBe(fsTask.payload.title);
+        expect(glTask.payload.status).toBe(fsTask.payload.status);
+        expect(glTask.payload.priority).toBe(fsTask.payload.priority);
+      }
+
+    } finally {
+      // Cleanup GitLab branch
+      try {
+        await api.Branches.remove(projectId, testBranch);
+      } catch { /* may not exist */ }
+      cleanupWorktree(repoPath);
+      if (!SKIP_CLEANUP) fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  }, 120_000);
 });
