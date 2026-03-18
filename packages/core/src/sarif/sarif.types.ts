@@ -1,4 +1,5 @@
 import type { Finding, FindingCategory, DetectorName } from '../finding_detector/types';
+import type { RedactionLevel, RedactionConfig } from '../redaction/redactor.types';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SARIF 2.1.0 structural types
@@ -273,7 +274,7 @@ export type SarifRunProperties = {
   'gitgov/scannedFiles'?: number;
   /** Number of lines scanned */
   'gitgov/scannedLines'?: number;
-  /** Redaction level applied to findings before SARIF generation. Tag only — builder does not redact */
+  /** Redaction level applied to findings in SARIF output */
   'gitgov/redactionLevel'?: RedactionLevel;
 };
 
@@ -295,12 +296,9 @@ export type GetLineContentFn = (file: string, line: number) => Promise<string | 
  */
 export type OccurrenceContext = Map<string, number>;
 
-/**
- * Controls what snippet content is included in SARIF output.
- * "l1": Git level — snippets redacted for sensitive categories (safe for ExecutionRecord in Git)
- * "l2": Projection level — full snippet content included (for SaaS/PostgreSQL)
- */
-export type RedactionLevel = 'l1' | 'l2';
+// RedactionLevel is imported from '../redaction/redactor.types' — single source of truth.
+// Re-exported here for backward compatibility with consumers that import from sarif.types.
+export type { RedactionLevel } from '../redaction/redactor.types';
 
 /**
  * An active waiver to be mapped to a SARIF suppression.
@@ -392,6 +390,8 @@ export type SarifBuilderOptions = {
   // ── Output control ─────────────────────────────────────────
   /** Controls snippet redaction in SARIF output */
   redactionLevel?: RedactionLevel;
+  /** Custom redaction config override (uses DEFAULT_REDACTION_CONFIG when omitted) */
+  redactionConfig?: RedactionConfig;
 
   // ── Version control provenance §3.14.16 ───────────────────
   /** Git commit hash for versionControlProvenance */

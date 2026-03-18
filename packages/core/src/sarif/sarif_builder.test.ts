@@ -381,4 +381,59 @@ describe('SarifBuilder', () => {
       expect(sarif.runs[0]!.versionControlProvenance).toBeUndefined();
     });
   });
+
+  describe('4.13. Redaction Integration (RLDX-D1 to D4)', () => {
+
+    it('[RLDX-D1] should apply redaction when redactionLevel is l1', async () => {
+      // pii-email is a sensitive category — snippet should be [REDACTED]
+      const sarif = await builder.build({ ...baseOptions, redactionLevel: 'l1' });
+      const snippet = firstResult(sarif).locations[0]!.physicalLocation.region.snippet;
+      expect(snippet).toBeDefined();
+      expect(snippet!.text).toBe('[REDACTED]');
+      // snippetHash should be stored in properties
+      expect(firstResult(sarif).properties?.['gitgov/snippetHash']).toBeDefined();
+      expect(typeof firstResult(sarif).properties?.['gitgov/snippetHash']).toBe('string');
+    });
+
+    it('[RLDX-D2] should output complete data for l2', async () => {
+      const sarif = await builder.build({ ...baseOptions, redactionLevel: 'l2' });
+      const snippet = firstResult(sarif).locations[0]!.physicalLocation.region.snippet;
+      expect(snippet).toBeDefined();
+      expect(snippet!.text).toBe('const email = user.email;');
+    });
+
+    it('[RLDX-D3] should be backward-compatible without redactionLevel', async () => {
+      const sarif = await builder.build(baseOptions);
+      const snippet = firstResult(sarif).locations[0]!.physicalLocation.region.snippet;
+      expect(snippet).toBeDefined();
+      expect(snippet!.text).toBe('const email = user.email;');
+    });
+
+    it('[RLDX-D4] should use custom redactionConfig', async () => {
+      // Create a custom config that treats 'logging-pii' (normally safe) as sensitive
+      const customConfig = {
+        sensitiveCategories: ['logging-pii'],
+        safeCategories: [],
+        defaultBehavior: 'keep' as const,
+      };
+
+      const loggingFinding: Finding = {
+        ...baseFindings[0]!,
+        id: 'finding-custom-cfg',
+        category: 'logging-pii',
+        snippet: 'console.log(user.email);',
+      };
+
+      const sarif = await builder.build({
+        ...baseOptions,
+        findings: [loggingFinding],
+        redactionLevel: 'l1',
+        redactionConfig: customConfig,
+      });
+
+      const snippet = firstResult(sarif).locations[0]!.physicalLocation.region.snippet;
+      expect(snippet).toBeDefined();
+      expect(snippet!.text).toBe('[REDACTED]');
+    });
+  });
 });

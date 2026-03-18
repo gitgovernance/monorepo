@@ -14,6 +14,7 @@ import type {
   PolicyEvaluationResult,
   PolicyDecision,
 } from "../policy_evaluator/policy_evaluator.types";
+import { FindingRedactor, DEFAULT_REDACTION_CONFIG } from "../redaction";
 
 // ============================================================================
 // Test helpers
@@ -954,6 +955,175 @@ describe("AuditOrchestrator", () => {
         expect(typeof finding.fingerprint).toBe("string");
         expect(finding.fingerprint.length).toBeGreaterThan(0);
       }
+    });
+  });
+
+  describe("4.9. Redaction Integration (RLDX-E1 to E3)", () => {
+    it("[RLDX-E1] should apply redactSarif to agent results for L1 when redactor is provided", async () => {
+      const agentRecord = makeAgentRecord("agent:security-audit", "audit");
+      const sarifWithSnippet: SarifLog = {
+        $schema:
+          "https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/schemas/sarif-schema-2.1.0.json",
+        version: "2.1.0",
+        runs: [
+          {
+            tool: {
+              driver: {
+                name: "test-tool",
+                version: "1.0.0",
+                informationUri: "https://example.com",
+              },
+            },
+            results: [
+              {
+                ruleId: "PII-001",
+                level: "error",
+                message: { text: "Email detected in source" },
+                locations: [
+                  {
+                    physicalLocation: {
+                      artifactLocation: { uri: "src/user.ts" },
+                      region: {
+                        startLine: 10,
+                        snippet: { text: "const email = user@example.com;" },
+                      },
+                    },
+                  },
+                ],
+                partialFingerprints: {
+                  "primaryLocationLineHash/v1": "hash-pii-e1",
+                },
+                properties: {
+                  "gitgov/category": "pii-email",
+                  "gitgov/detector": "regex",
+                  "gitgov/confidence": 0.95,
+                },
+              },
+            ] as SarifResult[],
+          },
+        ],
+      };
+
+      const redactor = new FindingRedactor(DEFAULT_REDACTION_CONFIG);
+      const deps = createMockDeps({ redactor });
+      (deps.recordStore.list as jest.Mock).mockResolvedValue(["agent:security-audit"]);
+      (deps.recordStore.get as jest.Mock).mockResolvedValue(agentRecord);
+      (deps.agentRunner.runOnce as jest.Mock).mockResolvedValue(
+        makeAgentResponse("agent:security-audit", sarifWithSnippet, "exec-e1"),
+      );
+
+      const orchestrator = createAuditOrchestrator(deps);
+      const result = await orchestrator.run(defaultOptions);
+
+      // l1AgentResults should be present
+      expect(result.l1AgentResults).toBeDefined();
+      expect(result.l1AgentResults).toHaveLength(1);
+
+      // L1 SARIF should have redacted snippet for pii-email (sensitive)
+      const l1Sarif = result.l1AgentResults![0]!.sarif;
+      const l1Snippet =
+        l1Sarif.runs[0]!.results[0]!.locations[0]!.physicalLocation.region.snippet;
+      expect(l1Snippet).toBeDefined();
+      expect(l1Snippet!.text).toBe("[REDACTED]");
+
+      // snippetHash should be present
+      const l1Props = l1Sarif.runs[0]!.results[0]!.properties;
+      expect(l1Props?.["gitgov/snippetHash"]).toBeDefined();
+    });
+
+    it("[RLDX-E2] should preserve original unredacted agent results for L2", async () => {
+      const agentRecord = makeAgentRecord("agent:security-audit", "audit");
+      const originalSnippet = "const secret = 'sk-12345';";
+      const sarifWithSnippet: SarifLog = {
+        $schema:
+          "https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/schemas/sarif-schema-2.1.0.json",
+        version: "2.1.0",
+        runs: [
+          {
+            tool: {
+              driver: {
+                name: "test-tool",
+                version: "1.0.0",
+                informationUri: "https://example.com",
+              },
+            },
+            results: [
+              {
+                ruleId: "SEC-001",
+                level: "error",
+                message: { text: "Hardcoded secret found" },
+                locations: [
+                  {
+                    physicalLocation: {
+                      artifactLocation: { uri: "src/config.ts" },
+                      region: {
+                        startLine: 5,
+                        snippet: { text: originalSnippet },
+                      },
+                    },
+                  },
+                ],
+                partialFingerprints: {
+                  "primaryLocationLineHash/v1": "hash-sec-e2",
+                },
+                properties: {
+                  "gitgov/category": "hardcoded-secret",
+                  "gitgov/detector": "regex",
+                  "gitgov/confidence": 0.99,
+                },
+              },
+            ] as SarifResult[],
+          },
+        ],
+      };
+
+      const redactor = new FindingRedactor(DEFAULT_REDACTION_CONFIG);
+      const deps = createMockDeps({ redactor });
+      (deps.recordStore.list as jest.Mock).mockResolvedValue(["agent:security-audit"]);
+      (deps.recordStore.get as jest.Mock).mockResolvedValue(agentRecord);
+      (deps.agentRunner.runOnce as jest.Mock).mockResolvedValue(
+        makeAgentResponse("agent:security-audit", sarifWithSnippet, "exec-e2"),
+      );
+
+      const orchestrator = createAuditOrchestrator(deps);
+      const result = await orchestrator.run(defaultOptions);
+
+      // Original agentResults (for L2) should be unredacted
+      const l2Snippet =
+        result.agentResults[0]!.sarif.runs[0]!.results[0]!.locations[0]!
+          .physicalLocation.region.snippet;
+      expect(l2Snippet).toBeDefined();
+      expect(l2Snippet!.text).toBe(originalSnippet);
+
+      // L1 should be redacted
+      const l1Snippet =
+        result.l1AgentResults![0]!.sarif.runs[0]!.results[0]!.locations[0]!
+          .physicalLocation.region.snippet;
+      expect(l1Snippet!.text).toBe("[REDACTED]");
+    });
+
+    it("[RLDX-E3] should not require agent knowledge of RedactionLevel", async () => {
+      // Verify that AgentAuditInput does not include RedactionLevel
+      // (structural test — agents receive scope, include, exclude, taskId only)
+      const agentRecord = makeAgentRecord("agent:security-audit", "audit");
+      const sarif = makeSarifLog();
+
+      const redactor = new FindingRedactor(DEFAULT_REDACTION_CONFIG);
+      const deps = createMockDeps({ redactor });
+      (deps.recordStore.list as jest.Mock).mockResolvedValue(["agent:security-audit"]);
+      (deps.recordStore.get as jest.Mock).mockResolvedValue(agentRecord);
+      (deps.agentRunner.runOnce as jest.Mock).mockResolvedValue(
+        makeAgentResponse("agent:security-audit", sarif, "exec-e3"),
+      );
+
+      const orchestrator = createAuditOrchestrator(deps);
+      await orchestrator.run(defaultOptions);
+
+      // Verify the input passed to AgentRunner does NOT contain redactionLevel
+      const runOnceCall = (deps.agentRunner.runOnce as jest.Mock).mock.calls[0]![0] as RunOptions;
+      const agentInput = runOnceCall.input as Record<string, unknown>;
+      expect(agentInput).not.toHaveProperty("redactionLevel");
+      expect(agentInput).not.toHaveProperty("redactionConfig");
     });
   });
 });

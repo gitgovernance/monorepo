@@ -309,7 +309,19 @@ export function createAuditOrchestrator(deps: AuditOrchestratorDeps) {
             },
       );
 
-      // 4. Consolidate findings with dedup by fingerprint
+      // 4. Produce L1-redacted SARIF copies when redactor is provided (RLDX-E1)
+      // The redactor applies redactSarif(sarif, 'l1') to each agent's SarifLog.
+      // Original agentResults remain unredacted for L2 (RLDX-E2).
+      // Agents do not need knowledge of RedactionLevel (RLDX-E3).
+      let l1AgentResults: AgentAuditResult[] | undefined;
+      if (deps.redactor) {
+        l1AgentResults = agentResults.map((r) => ({
+          ...r,
+          sarif: deps.redactor!.redactSarif(r.sarif, "l1"),
+        }));
+      }
+
+      // 5. Consolidate findings with dedup by fingerprint
       const rawFindings = consolidateFindings(agentResults);
 
       // 5-6. Pass raw findings + waivers to PolicyEvaluator (it handles waiver application internally)
@@ -343,7 +355,7 @@ export function createAuditOrchestrator(deps: AuditOrchestratorDeps) {
         return f;
       });
 
-      return {
+      const result: AuditOrchestrationResult = {
         findings: findingsWithWaivers,
         agentResults,
         policyDecision: policyResult.decision,
@@ -353,6 +365,12 @@ export function createAuditOrchestrator(deps: AuditOrchestratorDeps) {
           policy: policyResult.executionRecord.id,
         },
       };
+
+      if (l1AgentResults) {
+        result.l1AgentResults = l1AgentResults;
+      }
+
+      return result;
     },
   };
 }

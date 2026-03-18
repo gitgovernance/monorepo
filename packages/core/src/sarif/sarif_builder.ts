@@ -20,6 +20,7 @@ import {
   createOccurrenceContext,
 } from './sarif_hash';
 import sarifSchema from './fixtures/sarif-schema-2.1.0.json';
+import { FindingRedactor, DEFAULT_REDACTION_CONFIG } from '../redaction';
 
 /** Official SARIF 2.1.0 Errata 01 schema URL */
 const SARIF_SCHEMA_URL =
@@ -252,11 +253,20 @@ class SarifBuilderImpl implements SarifBuilder {
       }];
     }
 
-    return {
+    const sarifLog: SarifLog = {
       $schema: SARIF_SCHEMA_URL,
       version: '2.1.0',
       runs: [run],
     };
+
+    // Apply redaction when redactionLevel is set (RLDX-D1..D4)
+    if (options.redactionLevel) {
+      const config = options.redactionConfig ?? DEFAULT_REDACTION_CONFIG;
+      const redactor = new FindingRedactor(config);
+      return redactor.redactSarif(sarifLog, options.redactionLevel);
+    }
+
+    return sarifLog;
   }
 
   validate(sarif: SarifLog): ValidationResult {
