@@ -14,6 +14,7 @@ import type {
   AuditSummary,
   FindingSeverity,
 } from "./audit_orchestrator.types";
+import type { PolicyEvaluationInput } from "../policy_evaluator/policy_evaluator.types";
 
 /**
  * Creates an empty SarifLog (used for error cases).
@@ -192,33 +193,12 @@ function consolidateFindings(
 }
 
 /**
- * Applies active waivers as suppressions on consolidated findings.
- * A waiver is a FeedbackRecord with type: "approval" and metadata.fingerprint.
- * Matching is by fingerprint (primaryLocationLineHash/v1).
- */
-function applyWaivers(
-  findings: ConsolidatedFinding[],
-  waivers: ActiveWaiver[],
-): ConsolidatedFinding[] {
-  const waiverByFingerprint = new Map(
-    waivers.filter((w) => w.fingerprint).map((w) => [w.fingerprint, w]),
-  );
-
-  return findings.map((finding) => {
-    const waiver = waiverByFingerprint.get(finding.fingerprint);
-    if (waiver) {
-      return {
-        ...finding,
-        isWaived: true,
-        waiver,
-      };
-    }
-    return finding;
-  });
-}
-
-/**
  * Builds the summary counts for CLI display.
+ *
+ * NOTE: `total` counts ALL findings (including waived), while severity counts
+ * (critical, high, medium, low) only count non-waived (active) findings.
+ * This asymmetry is intentional: `total` reflects the full scan scope,
+ * severity counts reflect actionable findings for the policy decision.
  */
 function buildSummary(
   findings: ConsolidatedFinding[],
@@ -249,8 +229,8 @@ export function createAuditOrchestrator(deps: AuditOrchestratorDeps) {
      * 2. Filter by agentId if specified
      * 3. Execute via AgentRunner (Promise.allSettled)
      * 4. Consolidate SARIF findings, dedup by fingerprint
-     * 5. Apply waivers
-     * 6. Evaluate policy
+     * 5. Load active waivers
+     * 6. Pass raw findings + waivers to PolicyEvaluator
      * 7. Return AuditOrchestrationResult
      */
     async run(
@@ -262,23 +242,29 @@ export function createAuditOrchestrator(deps: AuditOrchestratorDeps) {
         options.agentId,
       );
 
+      // Load waivers upfront (needed for policy evaluation)
+      let waivers: ActiveWaiver[] = [];
+      try {
+        waivers = await deps.waiverReader.loadActiveWaivers();
+      } catch {
+        // WaiverReader failure is non-fatal: findings remain unsuppressed (AORCH-B7)
+      }
+
       // 2. If no agents found, return empty result with warning (AORCH-B3)
       if (auditAgents.length === 0) {
-        const policyOpts: { failOn?: FindingSeverity; taskId: string } = {
+        const policyInput: PolicyEvaluationInput = {
+          findings: [],
+          activeWaivers: waivers,
+          policy: { failOn: options.failOn ?? "critical" },
+          scanExecutionIds: [],
           taskId: options.taskId,
         };
-        if (options.failOn !== undefined) {
-          policyOpts.failOn = options.failOn;
-        }
-        const policyDecision = await deps.policyEvaluator.evaluate(
-          [],
-          policyOpts,
-        );
+        const policyResult = await deps.policyEvaluator.evaluate(policyInput);
 
         return {
           findings: [],
           agentResults: [],
-          policyDecision,
+          policyDecision: policyResult.decision,
           summary: {
             total: 0,
             critical: 0,
@@ -291,9 +277,9 @@ export function createAuditOrchestrator(deps: AuditOrchestratorDeps) {
           },
           executionIds: {
             scans: [],
-            policy: policyDecision.executionRecordId,
+            policy: "",
           },
-          warning: 'No audit agents found',
+          warning: "No audit agents found",
         };
       }
 
@@ -323,38 +309,48 @@ export function createAuditOrchestrator(deps: AuditOrchestratorDeps) {
       // 4. Consolidate findings with dedup by fingerprint
       const rawFindings = consolidateFindings(agentResults);
 
-      // 5. Load active waivers and apply as suppressions
-      // Graceful degradation: if WaiverReader fails, continue with findings unsuppressed (AORCH-B7)
-      let waivers: ActiveWaiver[] = [];
-      try {
-        waivers = await deps.waiverReader.loadActiveWaivers();
-      } catch {
-        // WaiverReader failure is non-fatal: findings remain unsuppressed
-      }
-      const findings = applyWaivers(rawFindings, waivers);
-
-      // 6. Evaluate policy
-      const policyOpts2: { failOn?: FindingSeverity; taskId: string } = {
+      // 5-6. Pass raw findings + waivers to PolicyEvaluator (it handles waiver application internally)
+      const scanExecutionIds = agentResults.map((r) => r.executionId);
+      const policyInput: PolicyEvaluationInput = {
+        findings: rawFindings,
+        activeWaivers: waivers,
+        policy: { failOn: options.failOn ?? "critical" },
+        scanExecutionIds,
         taskId: options.taskId,
       };
-      if (options.failOn !== undefined) {
-        policyOpts2.failOn = options.failOn;
-      }
-      const policyDecision = await deps.policyEvaluator.evaluate(
-        findings,
-        policyOpts2,
+      const policyResult = await deps.policyEvaluator.evaluate(policyInput);
+
+      // Derive findings with waiver state from the policy decision to avoid
+      // duplicating waiver application logic (PolicyEvaluator is the single source
+      // of truth for waiver matching — see MEDIA-5).
+      const waivedFingerprints = new Set(
+        policyResult.decision.waivedFindings.map((f) => f.fingerprint),
       );
+      const waiverByFingerprint = new Map<string, ActiveWaiver>();
+      for (const f of policyResult.decision.waivedFindings) {
+        if (f.waiver) {
+          waiverByFingerprint.set(f.fingerprint, f.waiver);
+        }
+      }
+      const findingsWithWaivers = rawFindings.map((f) => {
+        const waiver = waiverByFingerprint.get(f.fingerprint);
+        if (waivedFingerprints.has(f.fingerprint) && waiver) {
+          return { ...f, isWaived: true, waiver };
+        }
+        return f;
+      });
 
       return {
-        findings,
+        findings: findingsWithWaivers,
         agentResults,
-        policyDecision,
-        summary: buildSummary(findings, agentResults),
+        policyDecision: policyResult.decision,
+        summary: buildSummary(findingsWithWaivers, agentResults),
         executionIds: {
-          scans: agentResults.map((r) => r.executionId),
-          policy: policyDecision.executionRecordId,
+          scans: scanExecutionIds,
+          policy: policyResult.executionRecord.id,
         },
       };
     },
   };
 }
+

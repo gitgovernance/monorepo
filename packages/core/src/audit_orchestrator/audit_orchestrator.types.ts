@@ -3,6 +3,13 @@ import type { RecordStore } from "../record_store/record_store";
 import type { GitGovAgentRecord } from "../record_types";
 import type { IAgentRunner } from "../agent_runner/agent_runner";
 import type { IWaiverReader, ActiveWaiver } from "../source_auditor/types";
+import type {
+  PolicyEvaluator,
+  PolicyDecision,
+} from "../policy_evaluator/policy_evaluator.types";
+
+// Re-export PolicyEvaluator types for consumers that import from audit_orchestrator
+export type { PolicyDecision, PolicyEvaluationResult } from "../policy_evaluator/policy_evaluator.types";
 
 // ============================================================================
 // ORCHESTRATION INPUT/OUTPUT
@@ -40,7 +47,7 @@ export type AuditOrchestrationResult = {
   /** Per-agent execution results */
   agentResults: AgentAuditResult[];
   /** Policy evaluation decision */
-  policyDecision: PolicyDecisionStub;
+  policyDecision: PolicyDecision;
   /** Aggregated summary */
   summary: AuditSummary;
   /** ExecutionRecord IDs created during this run */
@@ -150,18 +157,6 @@ export type AuditSummary = {
   agentsFailed: number;
 };
 
-/**
- * Policy evaluation result (stub in Cycle 1, formal in Cycle 2).
- */
-export type PolicyDecisionStub = {
-  /** Pass or block */
-  decision: "pass" | "block";
-  /** Human-readable reason for decision */
-  reason: string;
-  /** ExecutionRecord ID for the policy evaluation */
-  executionRecordId: string;
-};
-
 // ============================================================================
 // DEPENDENCY INJECTION
 // ============================================================================
@@ -179,14 +174,3 @@ export type AuditOrchestratorDeps = {
   /** PolicyEvaluator for pass/block decision */
   policyEvaluator: PolicyEvaluator;
 };
-
-/**
- * PolicyEvaluator interface.
- * Stub in Cycle 1 -- formal implementation in Cycle 2.
- */
-export interface PolicyEvaluator {
-  evaluate(
-    findings: ConsolidatedFinding[],
-    options: { failOn?: FindingSeverity; taskId: string },
-  ): Promise<PolicyDecisionStub>;
-}

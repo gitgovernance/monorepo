@@ -2,7 +2,6 @@ import { createAuditOrchestrator } from "./audit_orchestrator";
 import type {
   AuditOrchestratorDeps,
   AuditOrchestrationOptions,
-  PolicyDecisionStub,
 } from "./audit_orchestrator.types";
 import type { SarifLog, SarifResult } from "../sarif/sarif.types";
 import type { RecordStore } from "../record_store/record_store";
@@ -10,6 +9,11 @@ import type { GitGovAgentRecord } from "../record_types";
 import type { IAgentRunner } from "../agent_runner/agent_runner";
 import type { RunOptions, AgentResponse } from "../agent_runner/agent_runner.types";
 import type { IWaiverReader, ActiveWaiver } from "../source_auditor/types";
+import type {
+  PolicyEvaluator,
+  PolicyEvaluationResult,
+  PolicyDecision,
+} from "../policy_evaluator/policy_evaluator.types";
 
 // ============================================================================
 // Test helpers
@@ -91,14 +95,40 @@ function makeAgentResponse(
   };
 }
 
-function makePolicyStub(
+function makePolicyDecision(
   decision: "pass" | "block" = "pass",
   reason: string = "No issues",
-): PolicyDecisionStub {
+): PolicyDecision {
   return {
     decision,
     reason,
-    executionRecordId: "exec-policy-001",
+    blockingFindings: [],
+    waivedFindings: [],
+    summary: { critical: 0, high: 0, medium: 0, low: 0 },
+    rulesEvaluated: [],
+    evaluatedAt: new Date().toISOString(),
+  };
+}
+
+function makePolicyResult(
+  decision: "pass" | "block" = "pass",
+  reason: string = "No issues",
+): PolicyEvaluationResult {
+  const policyDecision = makePolicyDecision(decision, reason);
+  return {
+    decision: policyDecision,
+    executionRecord: {
+      id: `exec-policy-test-${Date.now()}`,
+      type: "decision",
+      title: "Policy evaluation",
+      result: decision === "pass" ? "PASS" : "BLOCK",
+      references: [],
+      metadata: {
+        kind: "policy-decision",
+        version: "1.0.0",
+        data: policyDecision,
+      },
+    },
   };
 }
 
@@ -121,8 +151,8 @@ function createMockDeps(overrides?: Partial<AuditOrchestratorDeps>): AuditOrches
     hasActiveWaiver: jest.fn().mockResolvedValue(false),
   };
 
-  const policyEvaluator = {
-    evaluate: jest.fn().mockResolvedValue(makePolicyStub()),
+  const policyEvaluator: PolicyEvaluator = {
+    evaluate: jest.fn().mockResolvedValue(makePolicyResult()),
   };
 
   return {
@@ -298,7 +328,7 @@ describe("AuditOrchestrator", () => {
       expect(result.summary.total).toBe(0);
       expect(result.summary.agentsRun).toBe(0);
       expect(deps.agentRunner.runOnce).not.toHaveBeenCalled();
-      expect(result.warning).toBe('No audit agents found');
+      expect(result.warning).toBe("No audit agents found");
     });
 
     it("[AORCH-B4] should collect SarifLog and include in agentResults with status success when agent succeeds", async () => {
@@ -618,6 +648,38 @@ describe("AuditOrchestrator", () => {
         },
       };
 
+      // Set up policy evaluator mock to return waived finding in decision
+      // (orchestrator now derives waiver state from policy decision, not independently)
+      const waivedConsolidatedFinding = {
+        fingerprint: "waived-hash-001",
+        ruleId: "SEC-001",
+        message: "Hardcoded secret",
+        severity: "critical" as const,
+        category: "hardcoded-secret",
+        file: "src/config.ts",
+        line: 10,
+        reportedBy: ["agent:security-audit"],
+        isWaived: true,
+        waiver: activeWaiver,
+      };
+      const policyDecision = makePolicyDecision("pass", "All waived");
+      policyDecision.waivedFindings = [waivedConsolidatedFinding];
+      const policyResult: PolicyEvaluationResult = {
+        decision: policyDecision,
+        executionRecord: {
+          id: `exec-policy-test-${Date.now()}`,
+          type: "decision",
+          title: "Policy evaluation",
+          result: "PASS",
+          references: [],
+          metadata: {
+            kind: "policy-decision",
+            version: "1.0.0",
+            data: policyDecision,
+          },
+        },
+      };
+
       const deps = createMockDeps();
       (deps.recordStore.list as jest.Mock).mockResolvedValue(["agent:security-audit"]);
       (deps.recordStore.get as jest.Mock).mockResolvedValue(agentRecord);
@@ -627,6 +689,7 @@ describe("AuditOrchestrator", () => {
       (deps.waiverReader.loadActiveWaivers as jest.Mock).mockResolvedValue([
         activeWaiver,
       ]);
+      (deps.policyEvaluator.evaluate as jest.Mock).mockResolvedValue(policyResult);
 
       const orchestrator = createAuditOrchestrator(deps);
       const result = await orchestrator.run(defaultOptions);

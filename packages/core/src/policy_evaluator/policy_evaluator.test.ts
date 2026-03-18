@@ -1,5 +1,44 @@
+/**
+ * PolicyEvaluator tests -- Epic 5: policy_evaluation.
+ *
+ * Trazabilidad:
+ * | EARS ID   | Test                                                                         | Section  |
+ * |:----------|:-----------------------------------------------------------------------------|:---------|
+ * | PEVAL-A1  | should require all fields in PolicyEvaluationInput                            | 4.1      |
+ * | PEVAL-A2  | should include required fields and optional ruleId in ConsolidatedFinding     | 4.1      |
+ * | PEVAL-A3  | should require failOn in PolicyConfig and allow optional fields               | 4.1      |
+ * | PEVAL-A4  | should include all fields in PolicyDecision                                   | 4.1      |
+ * | PEVAL-A5  | should include ruleName, passed, and reason in PolicyRuleResult               | 4.1      |
+ * | PEVAL-D1  | should apply active waivers to findings before evaluating rules               | 4.4      |
+ * | PEVAL-D2  | should set isWaived:true and attach waiver when fingerprint matches           | 4.4      |
+ * | PEVAL-D3  | should set decision to block when any rule returns passed:false               | 4.4      |
+ * | PEVAL-D4  | should set decision to pass when all rules return passed:true                 | 4.4      |
+ * | PEVAL-D5  | should populate blockingFindings with findings causing rule failure            | 4.4      |
+ * | PEVAL-D6  | should populate waivedFindings with all findings where isWaived is true       | 4.4      |
+ * | PEVAL-D7  | should set evaluatedAt to a valid ISO 8601 timestamp                         | 4.4      |
+ * | PEVAL-D8  | should evaluate custom rules after built-in rules                            | 4.4      |
+ * | PEVAL-D9  | should return decision pass with empty blockingFindings when findings is empty| 4.4      |
+ * | PEVAL-E1  | should create ExecutionRecord with type decision                             | 4.5      |
+ * | PEVAL-E2  | should set result to human-readable string describing decision               | 4.5      |
+ * | PEVAL-E3  | should populate references with scanExecutionIds and waiver feedbackRecordIds | 4.5      |
+ * | PEVAL-E4  | should set metadata kind to policy-decision with version and full decision    | 4.5      |
+ * | PEVAL-E5  | should return ExecutionRecord to caller without persisting                    | 4.5      |
+ * | PEVAL-O5  | should skip OPA evaluation when opa config is undefined                       | 4.9      |
+ */
+
 import { createPolicyEvaluator } from "./policy_evaluator";
-import type { ConsolidatedFinding } from "./policy_evaluator.types";
+import type {
+  PolicyEvaluationInput,
+  PolicyConfig,
+  PolicyRule,
+  PolicyRuleResult,
+  ConsolidatedFinding,
+  PolicyEvaluatorDeps,
+  ActiveWaiver,
+  IWaiverReader,
+} from "./policy_evaluator.types";
+import type { FeedbackRecord } from "../record_types";
+import type { WaiverMetadata } from "../source_auditor/types";
 
 // ============================================================================
 // Test helpers
@@ -9,7 +48,7 @@ function makeFinding(
   overrides: Partial<ConsolidatedFinding> = {},
 ): ConsolidatedFinding {
   return {
-    fingerprint: `fp-${Math.random().toString(36).slice(2, 8)}`,
+    fingerprint: "fp-test-001",
     message: "test finding",
     severity: "high",
     category: "test",
@@ -21,106 +60,491 @@ function makeFinding(
   };
 }
 
+function makeConfig(
+  overrides: Partial<PolicyConfig> = {},
+): PolicyConfig {
+  return {
+    failOn: "critical",
+    ...overrides,
+  };
+}
+
+function makeFeedbackRecord(
+  id: string,
+  fingerprint: string,
+): FeedbackRecord<WaiverMetadata> {
+  return {
+    id,
+    entityType: "execution",
+    entityId: "exec-previous",
+    type: "approval",
+    status: "acknowledged",
+    content: "Risk accepted per security review",
+    metadata: {
+      fingerprint,
+      ruleId: "SEC-001",
+      file: "src/config.ts",
+      line: 10,
+    },
+  };
+}
+
+function makeWaiver(
+  fingerprint: string,
+  feedbackId: string,
+): ActiveWaiver {
+  return {
+    fingerprint,
+    ruleId: "SEC-001",
+    feedback: makeFeedbackRecord(feedbackId, fingerprint),
+  };
+}
+
+function makeDeps(): PolicyEvaluatorDeps {
+  const waiverReader: IWaiverReader = {
+    loadActiveWaivers: jest.fn().mockResolvedValue([]),
+    hasActiveWaiver: jest.fn().mockResolvedValue(false),
+  };
+  return { waiverReader };
+}
+
+function makeInput(
+  overrides: Partial<PolicyEvaluationInput> = {},
+): PolicyEvaluationInput {
+  return {
+    findings: [makeFinding()],
+    activeWaivers: [],
+    policy: makeConfig(),
+    scanExecutionIds: ["exec-scan-001"],
+    taskId: "task-001",
+    ...overrides,
+  };
+}
+
 // ============================================================================
-// PolicyEvaluator stub tests (AORCH-C7 to C10)
+// Tests
 // ============================================================================
 
 describe("PolicyEvaluator", () => {
-  describe("Cycle 2: Stub evaluation (AORCH-C7 to C10)", () => {
-    const evaluator = createPolicyEvaluator();
+  describe("4.1. Types and structure (PEVAL-A1 to A5)", () => {
+    it("[PEVAL-A1] should require all fields in PolicyEvaluationInput", () => {
+      const input: PolicyEvaluationInput = {
+        findings: [],
+        activeWaivers: [],
+        policy: { failOn: "critical" },
+        scanExecutionIds: ["exec-001"],
+        taskId: "task-001",
+      };
 
-    it("[AORCH-C7] should return pass when failOn is critical and no critical findings exist", async () => {
-      const findings = [
-        makeFinding({ severity: "high" }),
-        makeFinding({ severity: "medium" }),
-        makeFinding({ severity: "low" }),
-      ];
-
-      const result = await evaluator.evaluate(findings, {
-        failOn: "critical",
-        taskId: "task-1",
-      });
-
-      expect(result.decision).toBe("pass");
-      expect(result.reason).toContain("No findings at or above critical");
+      expect(input.findings).toBeDefined();
+      expect(input.activeWaivers).toBeDefined();
+      expect(input.policy).toBeDefined();
+      expect(input.scanExecutionIds).toBeDefined();
+      expect(input.taskId).toBeDefined();
     });
 
-    it("[AORCH-C8] should return block when findings at or above failOn severity exist", async () => {
-      const findings = [
-        makeFinding({ severity: "high" }),
-        makeFinding({ severity: "medium" }),
-      ];
+    it("[PEVAL-A2] should include required fields and optional ruleId in ConsolidatedFinding", () => {
+      // With ruleId
+      const withRuleId = makeFinding({ ruleId: "SEC-001" });
+      expect(withRuleId.fingerprint).toBeDefined();
+      expect(withRuleId.severity).toBeDefined();
+      expect(withRuleId.category).toBeDefined();
+      expect(withRuleId.file).toBeDefined();
+      expect(withRuleId.line).toBeDefined();
+      expect(withRuleId.reportedBy).toBeDefined();
+      expect(withRuleId.isWaived).toBeDefined();
+      expect(withRuleId.message).toBeDefined();
+      expect(withRuleId.ruleId).toBe("SEC-001");
 
-      const result = await evaluator.evaluate(findings, {
+      // Without ruleId
+      const withoutRuleId = makeFinding();
+      expect(withoutRuleId.ruleId).toBeUndefined();
+    });
+
+    it("[PEVAL-A3] should require failOn in PolicyConfig and allow optional fields", () => {
+      const minimal: PolicyConfig = { failOn: "critical" };
+      expect(minimal.failOn).toBe("critical");
+      expect(minimal.blockCategories).toBeUndefined();
+      expect(minimal.rules).toBeUndefined();
+
+      const full: PolicyConfig = {
         failOn: "high",
-        taskId: "task-2",
-      });
-
-      expect(result.decision).toBe("block");
-      expect(result.reason).toContain("Found findings at or above high");
+        blockCategories: ["secret"],
+        rules: [],
+      };
+      expect(full.failOn).toBe("high");
+      expect(full.blockCategories).toEqual(["secret"]);
     });
 
-    it("[AORCH-C9] should return executionRecordId as empty string (stub -- Epic 5 creates real ExecutionRecord)", async () => {
-      const findings = [makeFinding({ severity: "critical" })];
+    it("[PEVAL-A4] should include all fields in PolicyDecision", async () => {
+      const deps = makeDeps();
+      const evaluator = createPolicyEvaluator(deps);
 
-      const result = await evaluator.evaluate(findings, {
-        failOn: "critical",
-        taskId: "task-3",
-      });
+      const result = await evaluator.evaluate(
+        makeInput({
+          findings: [makeFinding({ fingerprint: "fp-1", severity: "low" })],
+          policy: makeConfig({ failOn: "critical" }),
+        }),
+      );
 
-      expect(result.executionRecordId).toBe("");
+      const decision = result.decision;
+      expect(decision.decision).toBeDefined();
+      expect(decision.reason).toBeDefined();
+      expect(decision.blockingFindings).toBeDefined();
+      expect(decision.waivedFindings).toBeDefined();
+      expect(decision.summary).toBeDefined();
+      expect(decision.rulesEvaluated).toBeDefined();
+      expect(decision.evaluatedAt).toBeDefined();
     });
 
-    it("[AORCH-C10] should not count waived findings toward threshold", async () => {
-      const findings = [
-        makeFinding({ severity: "critical", isWaived: true }),
-        makeFinding({ severity: "high", isWaived: true }),
-        makeFinding({ severity: "low", isWaived: false }),
-      ];
+    it("[PEVAL-A5] should include ruleName, passed, and reason in PolicyRuleResult", async () => {
+      const deps = makeDeps();
+      const evaluator = createPolicyEvaluator(deps);
 
-      const result = await evaluator.evaluate(findings, {
-        failOn: "critical",
-        taskId: "task-4",
-      });
+      const result = await evaluator.evaluate(
+        makeInput({
+          findings: [makeFinding({ fingerprint: "fp-1", severity: "low" })],
+          policy: makeConfig({ failOn: "critical" }),
+        }),
+      );
 
-      expect(result.decision).toBe("pass");
-      expect(result.reason).toContain("No findings at or above critical");
+      expect(result.decision.rulesEvaluated.length).toBeGreaterThan(0);
+      const firstRule = result.decision.rulesEvaluated[0];
+      expect(firstRule).toBeDefined();
+      expect(firstRule!.ruleName).toBeDefined();
+      expect(typeof firstRule!.passed).toBe("boolean");
+      expect(firstRule!.reason).toBeDefined();
     });
   });
 
-  describe("Edge cases", () => {
-    const evaluator = createPolicyEvaluator();
+  describe("4.4. Evaluator principal (PEVAL-D1 to D9)", () => {
+    it("[PEVAL-D1] should apply active waivers to findings before evaluating rules", async () => {
+      const deps = makeDeps();
+      const evaluator = createPolicyEvaluator(deps);
 
-    it("should default to critical when failOn is not specified", async () => {
-      const findings = [makeFinding({ severity: "high" })];
+      const waiver = makeWaiver("fp-critical-001", "feedback-waiver-001");
 
-      const result = await evaluator.evaluate(findings, {
-        taskId: "task-5",
-      });
+      const result = await evaluator.evaluate(
+        makeInput({
+          findings: [
+            makeFinding({
+              fingerprint: "fp-critical-001",
+              severity: "critical",
+              isWaived: false,
+            }),
+          ],
+          activeWaivers: [waiver],
+          policy: makeConfig({ failOn: "critical" }),
+        }),
+      );
 
-      expect(result.decision).toBe("pass");
-      expect(result.reason).toContain("No findings at or above critical");
+      // The critical finding should be waived, so decision should be pass
+      expect(result.decision.decision).toBe("pass");
+      expect(result.decision.waivedFindings).toHaveLength(1);
     });
 
-    it("should return pass with empty findings", async () => {
-      const result = await evaluator.evaluate([], {
-        failOn: "low",
-        taskId: "task-6",
-      });
+    it("[PEVAL-D2] should set isWaived:true and attach waiver when fingerprint matches", async () => {
+      const deps = makeDeps();
+      const evaluator = createPolicyEvaluator(deps);
 
-      expect(result.decision).toBe("pass");
+      const waiver = makeWaiver("fp-match-001", "feedback-waiver-002");
+
+      const result = await evaluator.evaluate(
+        makeInput({
+          findings: [
+            makeFinding({ fingerprint: "fp-match-001", severity: "critical" }),
+          ],
+          activeWaivers: [waiver],
+          policy: makeConfig({ failOn: "critical" }),
+        }),
+      );
+
+      const waivedFinding = result.decision.waivedFindings[0];
+      expect(waivedFinding).toBeDefined();
+      expect(waivedFinding!.isWaived).toBe(true);
+      expect(waivedFinding!.waiver).toBe(waiver);
     });
 
-    it("should block when failOn is low and any active finding exists", async () => {
-      const findings = [makeFinding({ severity: "low" })];
+    it("[PEVAL-D3] should set decision to block when any rule returns passed:false", async () => {
+      const deps = makeDeps();
+      const evaluator = createPolicyEvaluator(deps);
 
-      const result = await evaluator.evaluate(findings, {
-        failOn: "low",
-        taskId: "task-7",
-      });
+      const result = await evaluator.evaluate(
+        makeInput({
+          findings: [
+            makeFinding({ fingerprint: "fp-1", severity: "critical" }),
+          ],
+          policy: makeConfig({ failOn: "critical" }),
+        }),
+      );
 
-      expect(result.decision).toBe("block");
-      expect(result.reason).toContain("Found findings at or above low");
+      expect(result.decision.decision).toBe("block");
+    });
+
+    it("[PEVAL-D4] should set decision to pass when all rules return passed:true", async () => {
+      const deps = makeDeps();
+      const evaluator = createPolicyEvaluator(deps);
+
+      const result = await evaluator.evaluate(
+        makeInput({
+          findings: [makeFinding({ fingerprint: "fp-1", severity: "low" })],
+          policy: makeConfig({ failOn: "critical" }),
+        }),
+      );
+
+      expect(result.decision.decision).toBe("pass");
+      expect(result.decision.rulesEvaluated.every((r) => r.passed)).toBe(true);
+    });
+
+    it("[PEVAL-D5] should populate blockingFindings with findings causing rule failure", async () => {
+      const deps = makeDeps();
+      const evaluator = createPolicyEvaluator(deps);
+
+      const result = await evaluator.evaluate(
+        makeInput({
+          findings: [
+            makeFinding({ fingerprint: "fp-crit", severity: "critical" }),
+            makeFinding({ fingerprint: "fp-low", severity: "low" }),
+          ],
+          policy: makeConfig({ failOn: "critical" }),
+        }),
+      );
+
+      expect(result.decision.decision).toBe("block");
+      expect(result.decision.blockingFindings).toHaveLength(1);
+      expect(result.decision.blockingFindings[0]!.fingerprint).toBe("fp-crit");
+    });
+
+    it("[PEVAL-D6] should populate waivedFindings with all findings where isWaived is true", async () => {
+      const deps = makeDeps();
+      const evaluator = createPolicyEvaluator(deps);
+
+      const waiver1 = makeWaiver("fp-waived-1", "feedback-1");
+      const waiver2 = makeWaiver("fp-waived-2", "feedback-2");
+
+      const result = await evaluator.evaluate(
+        makeInput({
+          findings: [
+            makeFinding({ fingerprint: "fp-waived-1", severity: "critical" }),
+            makeFinding({ fingerprint: "fp-waived-2", severity: "high" }),
+            makeFinding({ fingerprint: "fp-not-waived", severity: "low" }),
+          ],
+          activeWaivers: [waiver1, waiver2],
+          policy: makeConfig({ failOn: "critical" }),
+        }),
+      );
+
+      expect(result.decision.waivedFindings).toHaveLength(2);
+      const waivedFingerprints = result.decision.waivedFindings.map(
+        (f) => f.fingerprint,
+      );
+      expect(waivedFingerprints).toContain("fp-waived-1");
+      expect(waivedFingerprints).toContain("fp-waived-2");
+    });
+
+    it("[PEVAL-D7] should set evaluatedAt to a valid ISO 8601 timestamp", async () => {
+      const deps = makeDeps();
+      const evaluator = createPolicyEvaluator(deps);
+
+      const result = await evaluator.evaluate(
+        makeInput({
+          findings: [makeFinding({ fingerprint: "fp-1", severity: "low" })],
+        }),
+      );
+
+      const date = new Date(result.decision.evaluatedAt);
+      expect(date.toISOString()).toBe(result.decision.evaluatedAt);
+      expect(isNaN(date.getTime())).toBe(false);
+    });
+
+    it("[PEVAL-D8] should evaluate custom rules after built-in rules", async () => {
+      const deps = makeDeps();
+      const evaluator = createPolicyEvaluator(deps);
+
+      const evaluationOrder: string[] = [];
+
+      const customRule: PolicyRule = {
+        name: "CustomRule",
+        evaluate(_findings, _config): PolicyRuleResult {
+          evaluationOrder.push("CustomRule");
+          return {
+            ruleName: "CustomRule",
+            passed: false,
+            reason: "Custom rule failed",
+          };
+        },
+      };
+
+      const result = await evaluator.evaluate(
+        makeInput({
+          findings: [makeFinding({ fingerprint: "fp-1", severity: "low" })],
+          policy: makeConfig({ failOn: "critical", rules: [customRule] }),
+        }),
+      );
+
+      // Custom rule should appear after built-in rules
+      const ruleNames = result.decision.rulesEvaluated.map((r) => r.ruleName);
+      expect(ruleNames).toEqual([
+        "SeverityThreshold",
+        "CategoryBlock",
+        "CustomRule",
+      ]);
+
+      // Custom rule failure should block
+      expect(result.decision.decision).toBe("block");
+    });
+
+    it("[PEVAL-D9] should return decision pass with empty blockingFindings when findings is empty", async () => {
+      const deps = makeDeps();
+      const evaluator = createPolicyEvaluator(deps);
+
+      const result = await evaluator.evaluate(
+        makeInput({
+          findings: [],
+          policy: makeConfig({ failOn: "low" }),
+        }),
+      );
+
+      expect(result.decision.decision).toBe("pass");
+      expect(result.decision.reason).toBe("No findings to evaluate");
+      expect(result.decision.blockingFindings).toHaveLength(0);
+      expect(result.decision.rulesEvaluated).toHaveLength(0);
+    });
+  });
+
+  describe("4.5. ExecutionRecord (PEVAL-E1 to E5)", () => {
+    it("[PEVAL-E1] should create ExecutionRecord with type decision", async () => {
+      const deps = makeDeps();
+      const evaluator = createPolicyEvaluator(deps);
+
+      const result = await evaluator.evaluate(
+        makeInput({
+          findings: [makeFinding({ fingerprint: "fp-1", severity: "low" })],
+        }),
+      );
+
+      expect(result.executionRecord.type).toBe("decision");
+    });
+
+    it("[PEVAL-E2] should set result to human-readable string describing decision", async () => {
+      const deps = makeDeps();
+      const evaluator = createPolicyEvaluator(deps);
+
+      // Pass case
+      const passResult = await evaluator.evaluate(
+        makeInput({
+          findings: [makeFinding({ fingerprint: "fp-1", severity: "low" })],
+          policy: makeConfig({ failOn: "critical" }),
+        }),
+      );
+      expect(passResult.executionRecord.result).toContain("PASS");
+
+      // Block case
+      const blockResult = await evaluator.evaluate(
+        makeInput({
+          findings: [
+            makeFinding({ fingerprint: "fp-1", severity: "critical" }),
+          ],
+          policy: makeConfig({ failOn: "critical" }),
+        }),
+      );
+      expect(blockResult.executionRecord.result).toContain("BLOCK");
+      expect(blockResult.executionRecord.result).toContain("blocking");
+    });
+
+    it("[PEVAL-E3] should populate references with scanExecutionIds and waiver feedbackRecordIds", async () => {
+      const deps = makeDeps();
+      const evaluator = createPolicyEvaluator(deps);
+
+      const waiver = makeWaiver("fp-waived", "feedback-waiver-003");
+
+      const result = await evaluator.evaluate(
+        makeInput({
+          findings: [
+            makeFinding({ fingerprint: "fp-waived", severity: "critical" }),
+          ],
+          activeWaivers: [waiver],
+          scanExecutionIds: ["exec-scan-001", "exec-scan-002"],
+          policy: makeConfig({ failOn: "critical" }),
+        }),
+      );
+
+      expect(result.executionRecord.references).toContain("exec-scan-001");
+      expect(result.executionRecord.references).toContain("exec-scan-002");
+      expect(result.executionRecord.references).toContain(
+        "feedback-waiver-003",
+      );
+    });
+
+    it("[PEVAL-E4] should set metadata kind to policy-decision with version and full PolicyDecision", async () => {
+      const deps = makeDeps();
+      const evaluator = createPolicyEvaluator(deps);
+
+      const result = await evaluator.evaluate(
+        makeInput({
+          findings: [makeFinding({ fingerprint: "fp-1", severity: "low" })],
+        }),
+      );
+
+      expect(result.executionRecord.metadata.kind).toBe("policy-decision");
+      expect(result.executionRecord.metadata.version).toBe("1.0.0");
+      expect(result.executionRecord.metadata.data).toBe(result.decision);
+    });
+
+    it("[PEVAL-E4b] should include id field in ExecutionRecord", async () => {
+      const deps = makeDeps();
+      const evaluator = createPolicyEvaluator(deps);
+
+      const result = await evaluator.evaluate(
+        makeInput({
+          findings: [makeFinding({ fingerprint: "fp-1", severity: "low" })],
+          taskId: "task-id-test",
+        }),
+      );
+
+      expect(result.executionRecord.id).toBeDefined();
+      expect(result.executionRecord.id).toContain("exec-policy-task-id-test-");
+    });
+
+    it("[PEVAL-E5] should return ExecutionRecord to caller without persisting", async () => {
+      const deps = makeDeps();
+      const evaluator = createPolicyEvaluator(deps);
+
+      const result = await evaluator.evaluate(
+        makeInput({
+          findings: [makeFinding({ fingerprint: "fp-1", severity: "low" })],
+          taskId: "task-test-e5",
+        }),
+      );
+
+      // executionRecord is returned directly, not persisted
+      expect(result.executionRecord).toBeDefined();
+      expect(result.executionRecord.type).toBe("decision");
+      expect(result.executionRecord.title).toContain("task-test-e5");
+    });
+  });
+
+  describe("4.9. OPA Integration (PEVAL-O5)", () => {
+    it("[PEVAL-O5] should skip OPA evaluation when opa config is undefined", async () => {
+      const deps = makeDeps();
+      const evaluator = createPolicyEvaluator(deps);
+
+      const result = await evaluator.evaluate(
+        makeInput({
+          findings: [makeFinding({ fingerprint: "fp-1", severity: "low" })],
+          policy: makeConfig({ failOn: "critical" }),
+        }),
+      );
+
+      // No OPA rules should appear in rulesEvaluated
+      const opaRules = result.decision.rulesEvaluated.filter((r) =>
+        r.ruleName.startsWith("opa:"),
+      );
+      expect(opaRules).toHaveLength(0);
+
+      // Only built-in rules should be evaluated
+      const ruleNames = result.decision.rulesEvaluated.map((r) => r.ruleName);
+      expect(ruleNames).toEqual(["SeverityThreshold", "CategoryBlock"]);
     });
   });
 });
