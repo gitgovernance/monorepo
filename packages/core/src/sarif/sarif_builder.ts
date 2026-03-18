@@ -242,6 +242,16 @@ class SarifBuilderImpl implements SarifBuilder {
       run.properties = runProps;
     }
 
+    // SARIF-L1/L2/L3: versionControlProvenance §3.14.16
+    // repositoryUri is required per SARIF spec — only create provenance when it's provided
+    if (options.repositoryUri) {
+      run.versionControlProvenance = [{
+        repositoryUri: options.repositoryUri,
+        ...(options.commitHash ? { revisionId: options.commitHash } : {}),
+        ...(options.branch ? { branch: options.branch } : {}),
+      }];
+    }
+
     return {
       $schema: SARIF_SCHEMA_URL,
       version: '2.1.0',

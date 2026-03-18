@@ -349,4 +349,36 @@ describe('SarifBuilder', () => {
       expect(result.approvedBy).toBe('human:ciso');
     });
   });
+
+  describe('4.12. versionControlProvenance (SARIF-L1 to L3)', () => {
+    it('[SARIF-L1] build: should populate versionControlProvenance with revisionId and branch', async () => {
+      const sarif = await builder.build({
+        ...baseOptions,
+        commitHash: 'abc123def456',
+        branch: 'main',
+        repositoryUri: 'https://github.com/org/repo',
+      });
+      const provenance = sarif.runs[0]!.versionControlProvenance;
+      expect(provenance).toBeDefined();
+      expect(provenance!.length).toBe(1);
+      expect(provenance![0]!.revisionId).toBe('abc123def456');
+      expect(provenance![0]!.branch).toBe('main');
+      expect(provenance![0]!.repositoryUri).toBe('https://github.com/org/repo');
+    });
+
+    it('[SARIF-L2] build: should include repositoryUri in versionControlProvenance', async () => {
+      const sarif = await builder.build({
+        ...baseOptions,
+        repositoryUri: 'https://github.com/org/repo',
+      });
+      const provenance = sarif.runs[0]!.versionControlProvenance;
+      expect(provenance).toBeDefined();
+      expect(provenance![0]!.repositoryUri).toBe('https://github.com/org/repo');
+    });
+
+    it('[SARIF-L3] build: should not include versionControlProvenance when no git context fields given', async () => {
+      const sarif = await builder.build(baseOptions);
+      expect(sarif.runs[0]!.versionControlProvenance).toBeUndefined();
+    });
+  });
 });

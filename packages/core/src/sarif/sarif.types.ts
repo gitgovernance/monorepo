@@ -31,6 +31,21 @@ export type SarifRun = {
   invocations?: SarifInvocation[];
   /** Custom GitGov properties for the run */
   properties?: SarifRunProperties;
+  /** Version control provenance — §3.14.16 */
+  versionControlProvenance?: SarifVersionControlDetails[];
+};
+
+/**
+ * Version control information for the scanned repository.
+ * §3.55 versionControlDetails object
+ */
+export type SarifVersionControlDetails = {
+  /** Repository URI (e.g., "https://github.com/org/repo") */
+  repositoryUri: string;
+  /** Commit hash at time of scan */
+  revisionId?: string;
+  /** Branch name (e.g., "main", "feature/xyz") */
+  branch?: string;
 };
 
 /**
@@ -375,6 +390,14 @@ export type SarifBuilderOptions = {
   // ── Output control ─────────────────────────────────────────
   /** Controls snippet redaction in SARIF output */
   redactionLevel?: RedactionLevel;
+
+  // ── Version control provenance §3.14.16 ───────────────────
+  /** Git commit hash for versionControlProvenance */
+  commitHash?: string;
+  /** Git branch name for versionControlProvenance */
+  branch?: string;
+  /** Repository URI for versionControlProvenance */
+  repositoryUri?: string;
 };
 
 /**
