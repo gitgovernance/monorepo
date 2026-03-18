@@ -1,5 +1,5 @@
 import { sha256 } from '../crypto';
-import type { SarifLog } from '../sarif/sarif.types';
+import type { SarifLog, SarifResultProperties } from '../sarif/sarif.types';
 import type { RedactionLevel, RedactionConfig, RedactableInput, RedactedFinding } from './redactor.types';
 
 /**
@@ -17,7 +17,13 @@ import type { RedactionLevel, RedactionConfig, RedactableInput, RedactedFinding 
  *   const l1Sarif = redactor.redactSarif(agentResult.sarif, 'l1');
  */
 class FindingRedactor {
-  constructor(private readonly config: RedactionConfig) {}
+  private readonly sensitiveSet: Set<string>;
+  private readonly safeSet: Set<string>;
+
+  constructor(private readonly config: RedactionConfig) {
+    this.sensitiveSet = new Set(config.sensitiveCategories);
+    this.safeSet = new Set(config.safeCategories);
+  }
 
   /**
    * Redacta un finding para el nivel indicado.
@@ -98,9 +104,10 @@ class FindingRedactor {
             const originalText = snippet.text;
             snippet.text = '[REDACTED]';
             // Store hash for L1 <-> L2 integrity verification
-            if (result.properties) {
-              result.properties['gitgov/snippetHash'] = sha256(originalText);
+            if (!result.properties) {
+              result.properties = {} as SarifResultProperties;
             }
+            result.properties['gitgov/snippetHash'] = sha256(originalText);
           }
         }
       }
@@ -118,8 +125,8 @@ class FindingRedactor {
    * 3. No registrada -> segun defaultBehavior ('redact' = true, 'keep' = false)
    */
   private isSensitiveCategory(category: string): boolean {
-    if (this.config.sensitiveCategories.includes(category)) return true;
-    if (this.config.safeCategories.includes(category)) return false;
+    if (this.sensitiveSet.has(category)) return true;
+    if (this.safeSet.has(category)) return false;
     return this.config.defaultBehavior === 'redact';
   }
 }

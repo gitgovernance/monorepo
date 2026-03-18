@@ -25,7 +25,7 @@
 import { FindingRedactor } from './redactor';
 import { DEFAULT_REDACTION_CONFIG } from './category_config';
 import { sha256 } from '../crypto';
-import type { Finding } from '../finding_detector/types';
+import type { Finding, FindingCategory } from '../finding_detector/types';
 import type { ConsolidatedFinding } from '../audit_orchestrator/audit_orchestrator.types';
 import type { RedactionConfig } from './redactor.types';
 import type { SarifLog } from '../sarif/sarif.types';
@@ -77,7 +77,7 @@ const consolidatedFinding: ConsolidatedFinding = {
   isWaived: false,
 };
 
-function buildSarifLog(category: string, snippetText: string): SarifLog {
+function buildSarifLog(category: FindingCategory, snippetText: string): SarifLog {
   return {
     $schema: 'https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json',
     version: '2.1.0',
@@ -107,7 +107,7 @@ function buildSarifLog(category: string, snippetText: string): SarifLog {
               },
             ],
             properties: {
-              'gitgov/category': category as 'hardcoded-secret',
+              'gitgov/category': category,
               'gitgov/detector': 'regex',
               'gitgov/confidence': 0.95,
             },
