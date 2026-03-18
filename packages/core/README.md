@@ -121,8 +121,17 @@ graph LR
         PrismaProjection["PrismaRecordProjection"]
     end
 
+    subgraph "@gitgov/core-gitlab — GitLab API"
+        GlStore["GitLabRecordStore"]
+        GlGit["GitLabGitModule"]
+        GlConfig["GitLabConfigStore"]
+        GlFiles["GitLabFileLister"]
+        GlSync["GitLabSyncStateModule"]
+    end
+
     Adapters -.->|DI| FsStore
     Adapters -.->|DI| GhStore
+    Adapters -.->|DI| GlStore
     Adapters -.->|DI| MemStore
     Projection -.->|sink| FsProjection
     Projection -.->|sink| MemProjection
@@ -135,21 +144,23 @@ graph LR
     style Adapters fill:#e8f5e8,stroke:#4caf50,stroke-width:2px
     style FsStore fill:#e3f2fd,stroke:#1976d2
     style GhStore fill:#f3e5f5,stroke:#7b1fa2
+    style GlStore fill:#fce4ec,stroke:#e65100
     style MemStore fill:#fff3e0,stroke:#f57c00
     style PrismaProjection fill:#fce4ec,stroke:#c62828
 ```
 
-### 5 Export Paths
+### 6 Import Paths
 
 | Import | Contents | I/O |
 |--------|----------|-----|
 | `@gitgov/core` | Interfaces, types, pure logic, factories, validators | No |
 | `@gitgov/core/fs` | Filesystem implementations (FsRecordStore, FsRecordProjection, LocalGitModule, FsLintModule, ...) | Local |
 | `@gitgov/core/github` | GitHub API implementations (GitHubRecordStore, GitHubGitModule, GitHubConfigStore, GitHubFileLister, GithubSyncStateModule, GithubWebhookHandler) | Remote |
+| `@gitgov/core-gitlab` | GitLab API implementations (GitLabRecordStore, GitLabGitModule, GitLabConfigStore, GitLabFileLister, GitLabSyncStateModule, GitLabWebhookHandler) — [separate package](https://gitlab.com/gitgovernance/core-gitlab) | Remote |
 | `@gitgov/core/memory` | In-memory implementations for testing (MemoryRecordStore, MemoryRecordProjection, MemoryGitModule, ...) | No |
 | `@gitgov/core/prisma` | Database-backed implementations via Prisma-compatible client (PrismaRecordProjection) | Remote |
 
-The root import (`@gitgov/core`) never imports `fs`, `path`, `child_process`, `@octokit/rest`, or `@prisma/client`.
+The root import (`@gitgov/core`) never imports `fs`, `path`, `child_process`, `@octokit/rest`, `@gitbeaker/rest`, or `@prisma/client`.
 
 ### Record Symmetry
 
