@@ -7,7 +7,7 @@ export type {
   AgentAuditInput,
   ConsolidatedFinding,
   AuditSummary,
-  PolicyDecisionStub,
   FindingSeverity,
-  PolicyEvaluator,
+  PolicyDecision,
+  PolicyEvaluationResult,
 } from "./audit_orchestrator.types";
