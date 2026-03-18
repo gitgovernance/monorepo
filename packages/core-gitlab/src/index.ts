@@ -30,3 +30,15 @@ export type {
   GitLabConfigStoreOptions,
   GitLabSaveResult,
 } from './config_store';
+
+// RecordStore
+export { GitLabRecordStore } from './record_store';
+export type {
+  GitLabRecordStoreOptions,
+  GitLabWriteResult,
+  GitLabWriteOpts,
+} from './record_store';
+
+// GitModule
+export { GitLabGitModule } from './git';
+export type { GitLabGitModuleOptions } from './git';
