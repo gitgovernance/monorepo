@@ -1,3 +1,16 @@
+## [3.1.0](https://github.com/gitgovernance/monorepo/compare/core-v3.0.0...core-v3.1.0) (2026-03-18)
+
+
+### ✨ Features
+
+* **core-gitlab:** GitLab REST API provider — 7 modules, 175 tests ([#127](https://github.com/gitgovernance/monorepo/issues/127)) ([60b663e](https://github.com/gitgovernance/monorepo/commit/60b663ef0f84f60e70a0516ce7a617db0b1889c1))
+* **core:** add direct exports for Git and FileLister types ([#133](https://github.com/gitgovernance/monorepo/issues/133)) ([5dc00b9](https://github.com/gitgovernance/monorepo/commit/5dc00b9358e6744e6839d93e5fbc024153545a74))
+
+
+### 🐛 Bug Fixes
+
+* **e2e:** remove core-gitlab workspace dep that breaks CI install ([#134](https://github.com/gitgovernance/monorepo/issues/134)) ([9216b5c](https://github.com/gitgovernance/monorepo/commit/9216b5ca79ee9683f872cd04aa53016bf95246f4))
+
 ## [3.0.0](https://github.com/gitgovernance/monorepo/compare/core-v2.15.0...core-v3.0.0) (2026-03-18)
 
 
