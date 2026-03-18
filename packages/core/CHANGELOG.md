@@ -1,3 +1,10 @@
+## [2.15.0](https://github.com/gitgovernance/monorepo/compare/core-v2.14.0...core-v2.15.0) (2026-03-18)
+
+
+### ✨ Features
+
+* **core:** add versionControlProvenance to SARIF output ([#128](https://github.com/gitgovernance/monorepo/issues/128)) ([7738d41](https://github.com/gitgovernance/monorepo/commit/7738d41cfdc1c2a37ff0376c59f0210b08c84e35))
+
 ## [2.14.0](https://github.com/gitgovernance/monorepo/compare/core-v2.13.0...core-v2.14.0) (2026-03-18)
 
 
