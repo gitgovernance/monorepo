@@ -131,6 +131,67 @@ async function runScan(fixtureDir: string): Promise<SarifLog> {
   });
 }
 
+/**
+ * Runs scan with redactionLevel option set — SarifBuilder will include
+ * gitgov/redactionLevel in run.properties.
+ */
+async function runScanWithRedactionLevel(
+  fixtureDir: string,
+  redactionLevel: 'l1' | 'l2',
+): Promise<SarifLog> {
+  const findingDetector = new FindingDetector.FindingDetectorModule({
+    regex: { enabled: true },
+  });
+
+  const noOpWaiverReader: SourceAuditor.IWaiverReader = {
+    loadActiveWaivers: async () => [],
+    hasActiveWaiver: async () => false,
+  };
+
+  const fileLister = new FsFileLister({ cwd: fixtureDir });
+
+  const sourceAuditor = new SourceAuditor.SourceAuditorModule({
+    findingDetector,
+    waiverReader: noOpWaiverReader,
+    fileLister,
+  });
+
+  const auditResult = await sourceAuditor.audit({
+    baseDir: fixtureDir,
+    scope: {
+      include: ['**/*'],
+      exclude: ['**/node_modules/**', '**/.git/**'],
+    },
+  });
+
+  const getLineContent = async (file: string, line: number): Promise<string | null> => {
+    const fullPath = path.isAbsolute(file) ? file : path.join(fixtureDir, file);
+    try {
+      const content = fs.readFileSync(fullPath, 'utf8');
+      const lines = content.split('\n');
+      if (line < 1 || line > lines.length) return null;
+      return lines[line - 1] ?? null;
+    } catch {
+      return null;
+    }
+  };
+
+  const sarifBuilder = Sarif.createSarifBuilder();
+  return sarifBuilder.build({
+    toolName: 'gitgov-security-audit',
+    toolVersion: '1.0.0',
+    informationUri: 'https://gitgovernance.com/agents/security-audit',
+    findings: auditResult.findings,
+    taskId: 'task-redaction-e2e',
+    agentId: 'agent:gitgov:security-audit',
+    scanScope: 'full',
+    scannedFiles: auditResult.scannedFiles,
+    scannedLines: auditResult.scannedLines,
+    getLineContent,
+    redactionLevel,
+  });
+}
+
 // ============================================================================
 // Tests
 // ============================================================================
@@ -274,22 +335,28 @@ describe('Block I: Redaction Pipeline (CI1 to CI4)', () => {
   });
 
   // ==========================================
-  // CI4: redactSarif does not mutate original
+  // CI4: redactionLevel preserved in run.properties
   // ==========================================
 
-  it('[CI4] should not mutate the original SarifLog when producing L1 or L2', () => {
-    // Take a snapshot of the original before we compare
-    const originalSnapshot = JSON.stringify(originalSarif);
+  it('[CI4] should preserve redactionLevel in SARIF run.properties when built with redactionLevel option', async () => {
+    // Build SARIF with redactionLevel: 'l1' — SarifBuilder sets run.properties['gitgov/redactionLevel']
+    const sarifWithLevel = await runScanWithRedactionLevel(fixtureDir, 'l1');
 
-    // Re-run redaction
-    const l1Again = redactor.redactSarif(originalSarif, 'l1');
-    const l2Again = redactor.redactSarif(originalSarif, 'l2');
+    // Verify run.properties contains the redaction level
+    const runProps = sarifWithLevel.runs[0]?.properties as Record<string, unknown> | undefined;
+    expect(runProps).toBeDefined();
+    expect(runProps!['gitgov/redactionLevel']).toBe('l1');
 
-    // Original must be unchanged
-    expect(JSON.stringify(originalSarif)).toBe(originalSnapshot);
+    // Apply redactSarif — must preserve run.properties
+    const redactedSarif = redactor.redactSarif(sarifWithLevel, 'l1');
+    const redactedRunProps = redactedSarif.runs[0]?.properties as Record<string, unknown> | undefined;
+    expect(redactedRunProps).toBeDefined();
+    expect(redactedRunProps!['gitgov/redactionLevel']).toBe('l1');
 
-    // L1 outputs must be consistent between runs
-    expect(JSON.stringify(l1Again)).toBe(JSON.stringify(l1Sarif));
-    expect(JSON.stringify(l2Again)).toBe(JSON.stringify(l2Sarif));
+    // Also verify for L2
+    const sarifWithL2 = await runScanWithRedactionLevel(fixtureDir, 'l2');
+    const l2RunProps = sarifWithL2.runs[0]?.properties as Record<string, unknown> | undefined;
+    expect(l2RunProps).toBeDefined();
+    expect(l2RunProps!['gitgov/redactionLevel']).toBe('l2');
   });
 });

@@ -34,6 +34,7 @@ import type {
   GitGovFeedbackRecord,
   GitGovExecutionRecord,
   GitGovActorRecord,
+  GitGovAgentRecord,
 } from '@gitgov/core';
 
 // Unwrap namespace exports for convenience
@@ -52,6 +53,7 @@ export type {
   GitGovActorRecord,
   GitGovFeedbackRecord,
   GitGovExecutionRecord,
+  GitGovAgentRecord,
   ILintModule,
 } from '@gitgov/core';
 export type { ProjectionClient } from '@gitgov/core/prisma';
@@ -248,6 +250,7 @@ function createRecordStores(repoDir: string): RecordProjectorDependencies['store
     feedbacks: new FsRecordStore<GitGovFeedbackRecord>({ basePath: path.join(gitgovDir, 'feedbacks') }),
     executions: new FsRecordStore<GitGovExecutionRecord>({ basePath: path.join(gitgovDir, 'executions') }),
     actors: new FsRecordStore<GitGovActorRecord>({ basePath: path.join(gitgovDir, 'actors'), idEncoder: DEFAULT_ID_ENCODER }),
+    agents: new FsRecordStore<GitGovAgentRecord>({ basePath: path.join(gitgovDir, 'agents'), idEncoder: DEFAULT_ID_ENCODER }),
   };
 }
 
