@@ -35,8 +35,9 @@ function gitbeakerError(status: number): Error {
 function createModule() {
   const api = createMockApi();
   const indexer = { computeProjection: jest.fn().mockResolvedValue({}) };
-  const mod = new GitLabSyncStateModule({ projectId: 123, api, indexer });
-  return { mod, api, indexer };
+  const lint = { lintRecord: jest.fn().mockResolvedValue({ errors: [] }) };
+  const mod = new GitLabSyncStateModule({ projectId: 123, api, indexer, lint });
+  return { mod, api, indexer, lint };
 }
 
 describe('GitLabSyncStateModule', () => {
@@ -80,7 +81,7 @@ describe('GitLabSyncStateModule', () => {
       mock(api).RepositoryFiles.show.mockResolvedValue({ content: 'e30=', blob_id: 'b1' });
       mock(api).Commits.create.mockResolvedValue({ id: 'new-commit' });
 
-      const result = await mod.pushState({ sourceBranch: 'main' });
+      const result = await mod.pushState({ sourceBranch: 'main', actorId: 'human:test' });
       expect(result.success).toBe(true);
       expect(result.commitHash).toBe('new-commit');
       expect(mock(api).Commits.create).toHaveBeenCalledTimes(1);
@@ -95,7 +96,7 @@ describe('GitLabSyncStateModule', () => {
       mock(api).RepositoryFiles.show.mockResolvedValue({ content: 'e30=', blob_id: 'b' });
       mock(api).Commits.create.mockRejectedValue(gitbeakerError(409));
 
-      const result = await mod.pushState({});
+      const result = await mod.pushState({ actorId: 'human:test' });
       expect(result.success).toBe(false);
       expect(result.conflictDetected).toBe(true);
     });
@@ -108,7 +109,7 @@ describe('GitLabSyncStateModule', () => {
         .mockResolvedValueOnce([]);
       mock(api).RepositoryFiles.show.mockResolvedValue({ content: 'e30=', blob_id: 'b' });
 
-      const result = await mod.pushState({ dryRun: true });
+      const result = await mod.pushState({ dryRun: true, actorId: 'human:test' });
       expect(result.success).toBe(true);
       expect(result.filesSynced).toBe(1);
       expect(result.commitHash).toBeNull();
@@ -124,7 +125,7 @@ describe('GitLabSyncStateModule', () => {
       mock(api).RepositoryFiles.show.mockResolvedValue({ content: 'e30=', blob_id: 'x' });
       mock(api).Commits.create.mockResolvedValue({ id: 'commit-sha' });
 
-      const result = await mod.pushState({});
+      const result = await mod.pushState({ actorId: 'human:test' });
       expect(result.filesSynced).toBe(2);
       expect(result.commitHash).toBe('commit-sha');
     });
@@ -137,7 +138,7 @@ describe('GitLabSyncStateModule', () => {
         .mockResolvedValueOnce([{ path: '.gitgov/t.json', type: 'blob', id: 'same-id' }])
         .mockResolvedValueOnce([{ path: 't.json', type: 'blob', id: 'same-id' }]);
 
-      const result = await mod.pushState({});
+      const result = await mod.pushState({ actorId: 'human:test' });
       expect(result.success).toBe(true);
       expect(result.filesSynced).toBe(0);
       expect(result.commitHash).toBeNull();
@@ -243,6 +244,77 @@ describe('GitLabSyncStateModule', () => {
       const delta = await mod.calculateStateDelta('main');
       expect(delta).toHaveLength(2); // Only blobs
       expect(delta.every(d => d.status === 'A')).toBe(true);
+    });
+  });
+
+  describe('4.5. Conflict Handling (EARS-GS-E1 to E2)', () => {
+    it('[EARS-GS-E1] should resolve conflict by pulling latest and retrying push', async () => {
+      const { mod, api } = createModule();
+      // pullState mock
+      mock(api).Branches.show.mockResolvedValue({ commit: { id: 'sha' } });
+      mock(api).Repositories.allRepositoryTrees
+        .mockResolvedValueOnce([{ type: 'blob' }]) // pullState tree
+        .mockResolvedValueOnce([]) // pushState source
+        .mockResolvedValueOnce([]); // pushState target
+
+      const result = await mod.resolveConflict({ actorId: 'human:test' });
+      expect(result.success).toBe(true);
+    });
+
+    it('[EARS-GS-E2] should detect content conflict on same file modified by both sides', async () => {
+      const { mod, api } = createModule();
+      // pullState succeeds
+      mock(api).Branches.show.mockResolvedValue({ commit: { id: 'sha' } });
+      mock(api).Repositories.allRepositoryTrees
+        .mockResolvedValueOnce([{ type: 'blob' }]) // pullState
+        .mockResolvedValueOnce([{ path: '.gitgov/t.json', type: 'blob', id: 'new' }]) // push source
+        .mockResolvedValueOnce([]); // push target
+      mock(api).RepositoryFiles.show.mockResolvedValue({ content: 'e30=', blob_id: 'b' });
+      // Push fails with 409 again (content conflict)
+      mock(api).Commits.create.mockRejectedValue(gitbeakerError(409));
+
+      const result = await mod.resolveConflict({ actorId: 'human:test' });
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Content conflict');
+    });
+  });
+
+  describe('4.6. Audit State (EARS-GS-F1 to F2)', () => {
+    it('[EARS-GS-F1] should audit remote state branch via API and return report', async () => {
+      const { mod, api, lint } = createModule();
+      mock(api).Branches.show.mockResolvedValue({ commit: { id: 'sha' } });
+      mock(api).Repositories.allRepositoryTrees.mockResolvedValue([
+        { path: 'tasks/t1.json', type: 'blob' },
+        { path: 'actors/a1.json', type: 'blob' },
+      ]);
+      mock(api).RepositoryFiles.show.mockResolvedValue({
+        content: Buffer.from('{"valid":true}').toString('base64'),
+      });
+      lint.lintRecord.mockResolvedValue({ errors: [] });
+
+      const report = await mod.auditState();
+      expect(report.passed).toBe(true);
+      expect(report.totalCommits).toBe(2);
+      expect(lint.lintRecord).toHaveBeenCalledTimes(2);
+    });
+
+    it('[EARS-GS-F2] should detect and report integrity violations', async () => {
+      const { mod, api, lint } = createModule();
+      mock(api).Branches.show.mockResolvedValue({ commit: { id: 'sha' } });
+      mock(api).Repositories.allRepositoryTrees.mockResolvedValue([
+        { path: 'tasks/t1.json', type: 'blob' },
+      ]);
+      mock(api).RepositoryFiles.show.mockResolvedValue({
+        content: Buffer.from('{"broken":true}').toString('base64'),
+      });
+      lint.lintRecord.mockResolvedValue({
+        errors: [{ message: 'Missing required field: header.id' }],
+      });
+
+      const report = await mod.auditState();
+      expect(report.passed).toBe(false);
+      expect(report.lintReport.errors).toHaveLength(1);
+      expect(report.lintReport.errors[0]!.message).toContain('Missing required field');
     });
   });
 });

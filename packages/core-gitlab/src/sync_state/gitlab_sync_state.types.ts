@@ -16,4 +16,6 @@ export type GitLabSyncStateDependencies = {
   api: GitbeakerClient;
   /** Record projector for re-indexing after pull */
   indexer: { computeProjection(): Promise<unknown> };
+  /** Lint module for record validation in auditState() */
+  lint?: { lintRecord(recordType: string, record: unknown): Promise<{ errors: Array<{ message: string }> }> };
 };

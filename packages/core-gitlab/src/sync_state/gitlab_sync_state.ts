@@ -35,6 +35,19 @@ type SyncStatePullResult = {
   filesUpdated: number;
   reindexed: boolean;
   conflictDetected: boolean;
+  conflictInfo?: { type: string; affectedFiles: string[]; message: string };
+  error?: string;
+};
+
+type SyncStateResolveResult = {
+  success: boolean;
+  error?: string;
+};
+
+type AuditStateReport = {
+  passed: boolean;
+  totalCommits: number;
+  lintReport: { errors: Array<{ file: string; message: string }> };
 };
 
 /**
@@ -94,7 +107,7 @@ export class GitLabSyncStateModule {
   /**
    * [EARS-GS-B1..B5] Push state to gitgov-state branch via Commits API (1 API call).
    */
-  async pushState(options: { sourceBranch?: string; dryRun?: boolean; actorId?: string }): Promise<SyncStatePushResult> {
+  async pushState(options: { sourceBranch?: string; dryRun?: boolean; actorId: string; force?: boolean }): Promise<SyncStatePushResult> {
     const branchName = await this.getStateBranchName();
     const sourceBranch = options.sourceBranch ?? 'main';
 
@@ -261,7 +274,100 @@ export class GitLabSyncStateModule {
     }
   }
 
+  // ==================== Block E: Conflict Handling ====================
+
+  /**
+   * [EARS-GS-E1] Resolve conflict by pulling latest state and retrying push.
+   * [EARS-GS-E2] Detects content conflicts (same file modified by both sides).
+   */
+  async resolveConflict(options: { actorId: string; sourceBranch?: string }): Promise<SyncStateResolveResult> {
+    try {
+      // Pull latest state
+      await this.pullState({ forceReindex: true });
+
+      // Retry push
+      const result = await this.pushState({
+        actorId: options.actorId,
+        ...(options.sourceBranch !== undefined && { sourceBranch: options.sourceBranch }),
+      });
+
+      if (result.conflictDetected) {
+        // [EARS-GS-E2] Content conflict — cannot auto-resolve
+        return { success: false, error: 'Content conflict: file modified by both local and remote. Manual resolution required.' };
+      }
+
+      return result.error ? { success: result.success, error: result.error } : { success: result.success };
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      return { success: false, error: msg };
+    }
+  }
+
+  // ==================== Block F: Audit State ====================
+
+  /**
+   * [EARS-GS-F1] Audit remote state branch records via API.
+   * [EARS-GS-F2] Reports integrity violations in lintReport.
+   */
+  async auditState(): Promise<AuditStateReport> {
+    const branchName = await this.getStateBranchName();
+    const errors: Array<{ file: string; message: string }> = [];
+
+    const items = await this.deps.api.Repositories.allRepositoryTrees(this.deps.projectId, {
+      ref: branchName,
+      recursive: true,
+    } as Parameters<typeof this.deps.api.Repositories.allRepositoryTrees>[1]) as unknown as Array<{ path: string; type: string }>;
+
+    const records = items.filter(i => i.type === 'blob' && i.path.endsWith('.json'));
+
+    if (this.deps.lint) {
+      for (const record of records) {
+        try {
+          const file = await this.deps.api.RepositoryFiles.show(this.deps.projectId, record.path, branchName);
+          const content = JSON.parse(Buffer.from(String(file.content), 'base64').toString('utf-8')) as unknown;
+          const recordType = this.inferRecordType(record.path);
+          const result = await this.deps.lint.lintRecord(recordType, content);
+          for (const err of result.errors) {
+            errors.push({ file: record.path, message: err.message });
+          }
+        } catch (error: unknown) {
+          const msg = error instanceof Error ? error.message : String(error);
+          errors.push({ file: record.path, message: `Failed to lint: ${msg}` });
+        }
+      }
+    }
+
+    return {
+      passed: errors.length === 0,
+      totalCommits: records.length,
+      lintReport: { errors },
+    };
+  }
+
+  // ==================== ISyncStateModule stubs ====================
+
+  /** ISyncStateModule — returns files with conflict markers. Not applicable to API-based sync. */
+  async checkConflictMarkers(_filePaths: string[]): Promise<string[]> {
+    return [];
+  }
+
+  /** ISyncStateModule — returns structured diff for conflicted files. Not applicable to API-based sync. */
+  async getConflictDiff(_filePaths?: string[]): Promise<{ files: Array<{ path: string }> }> {
+    return { files: [] };
+  }
+
+  /** ISyncStateModule — verifies resolution integrity. Not applicable to API-based sync. */
+  async verifyResolutionIntegrity(): Promise<Array<{ message: string }>> {
+    return [];
+  }
+
   // ==================== Helpers ====================
+
+  /** Infers record type from file path (e.g., 'tasks/t1.json' → 'tasks') */
+  private inferRecordType(path: string): string {
+    const parts = path.split('/');
+    return parts.length > 1 ? parts[parts.length - 2]! : 'unknown';
+  }
 
   private async getRemoteSha(branchName: string): Promise<string | null> {
     try {
