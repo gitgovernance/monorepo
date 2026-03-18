@@ -46,7 +46,7 @@ describe('GitLabWebhookHandler', () => {
     it('[EARS-GW-A1] should accept payload with valid X-Gitlab-Token', () => {
       const handler = createHandler();
       const result = handler.handle(pushPayload());
-      expect(result.action).not.toBe('error');
+      expect(result.action).toBe('sync');
     });
 
     it('[EARS-GW-A2] should return error for invalid or missing token', () => {
@@ -116,16 +116,36 @@ describe('GitLabWebhookHandler', () => {
 
     it('[EARS-GW-C3] should deduplicate files across multiple commits', () => {
       const handler = createHandler();
-      const result = handler.handle(pushPayload({
+
+      // Case 1: add → delete = omit
+      const r1 = handler.handle(pushPayload({
         commits: [
           { id: 'c1', added: ['.gitgov/tasks/t1.json'], modified: [], removed: [] },
           { id: 'c2', added: [], modified: [], removed: ['.gitgov/tasks/t1.json'] },
         ],
       }));
+      expect(r1.action).toBe('ignore');
+      expect(r1.reason).toBe('No syncable files');
 
-      // add → delete = omit
-      expect(result.action).toBe('ignore');
-      expect(result.reason).toBe('No syncable files');
+      // Case 2: add → modify = stays as A (first add wins)
+      const r2 = handler.handle(pushPayload({
+        commits: [
+          { id: 'c1', added: ['.gitgov/tasks/t2.json'], modified: [], removed: [] },
+          { id: 'c2', added: [], modified: ['.gitgov/tasks/t2.json'], removed: [] },
+        ],
+      }));
+      expect(r2.action).toBe('sync');
+      expect(r2.delta![0]!.status).toBe('A');
+
+      // Case 3: modify → delete = delete
+      const r3 = handler.handle(pushPayload({
+        commits: [
+          { id: 'c1', added: [], modified: ['.gitgov/tasks/t3.json'], removed: [] },
+          { id: 'c2', added: [], modified: [], removed: ['.gitgov/tasks/t3.json'] },
+        ],
+      }));
+      expect(r3.action).toBe('sync');
+      expect(r3.delta![0]!.status).toBe('D');
     });
   });
 

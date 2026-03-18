@@ -21,15 +21,22 @@ import type {
   GitLabPushEventData,
 } from './gitlab_webhook.types';
 
-/** Check if a file path should be synced (.gitgov/ files only, excluding certain patterns) */
+/**
+ * Check if a file path should be synced.
+ * On gitgov-state branch, .gitgov/ files live at root (no .gitgov/ prefix).
+ * We sync all .json files since the entire branch is .gitgov/ content.
+ *
+ * NOTE: Ideally this would import shouldSyncFile from @gitgov/core,
+ * but the webhook module is zero-dependency (no Gitbeaker, no core).
+ * This local version covers the gitgov-state branch convention where
+ * all files are syncable .json records.
+ */
 function shouldSyncFile(filePath: string): boolean {
-  if (!filePath.startsWith('.gitgov/') && !filePath.includes('/')) {
-    // Root-level .gitgov files like config.json
-    return filePath === 'config.json' || filePath.endsWith('.json');
-  }
+  // Files under .gitgov/ prefix (source branch convention)
   if (filePath.startsWith('.gitgov/')) return true;
-  // For gitgov-state branch where files are at root
-  return filePath.endsWith('.json');
+  // Files on gitgov-state branch (root = .gitgov/ content) — all .json are records
+  if (filePath.endsWith('.json')) return true;
+  return false;
 }
 
 export class GitLabWebhookHandler {
@@ -73,6 +80,7 @@ export class GitLabWebhookHandler {
       return { action: 'ignore', reason: `Not push event: ${pushData.object_kind}`, deliveryId };
     }
 
+    // [EARS-GW-B1] Process push events to state branch
     // [EARS-GW-B3] Only process pushes to state branch
     const branch = pushData.ref.replace('refs/heads/', '');
     if (branch !== this.stateBranch) {
