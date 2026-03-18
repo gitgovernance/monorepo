@@ -251,14 +251,16 @@ describe('GitLabGitModule', () => {
 
     it('[EARS-C3] should handle mixed create/update/delete actions', async () => {
       const { git, api } = createModule();
+      // new.json via contentMap → create
       await git.add(['new.json'], { contentMap: { 'new.json': 'new' } });
-      await git.add(['existing.json'], { contentMap: { 'existing.json': 'updated' } });
+      // existing.json via getFileContent → update
+      mock(api).RepositoryFiles.show.mockResolvedValueOnce({
+        content: Buffer.from('old content').toString('base64'), blob_id: 'b',
+      });
+      await git.add(['existing.json']);
+      // old.json → delete
       await git.rm(['old.json']);
 
-      // new.json → 404 (create), existing.json → 200 (update)
-      mock(api).RepositoryFiles.show
-        .mockRejectedValueOnce(gitbeakerError(404))
-        .mockResolvedValueOnce({ blob_id: 'x' });
       mock(api).Commits.create.mockResolvedValue({ id: 'sha' });
 
       await git.commit('mixed');

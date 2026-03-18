@@ -39,6 +39,9 @@ export class GitLabGitModule implements IGitModule {
   /** Staging buffer: path → content (null = delete) */
   private stagingBuffer: Map<string, string | null> = new Map();
 
+  /** Tracks which staged files are new (from contentMap) vs existing (from getFileContent) */
+  private stagedFileIsNew: Set<string> = new Set();
+
   /** Active branch for operations (switchable via checkoutBranch) */
   private activeRef: string;
 
@@ -201,6 +204,16 @@ export class GitLabGitModule implements IGitModule {
         date: String(c['authored_date'] ?? ''),
       }));
 
+      // [EARS-B3] Filter by pathFilter if specified — use diffs to identify affected paths
+      if (options?.pathFilter) {
+        const diffs = (data.diffs ?? []) as unknown as Array<Record<string, unknown>>;
+        const affectedPaths = new Set(diffs.map(d => String(d['new_path'] ?? '')));
+        const hasMatchingPath = Array.from(affectedPaths).some(f => f.startsWith(options.pathFilter!));
+        if (!hasMatchingPath) {
+          commits = [];
+        }
+      }
+
       if (options?.maxCount) {
         commits = commits.slice(0, options.maxCount);
       }
@@ -262,9 +275,16 @@ export class GitLabGitModule implements IGitModule {
   /** [EARS-C1] Read file content and store in staging buffer */
   async add(filePaths: string[], options?: { force?: boolean; contentMap?: Record<string, string> }): Promise<void> {
     for (const filePath of filePaths) {
-      const content = options?.contentMap?.[filePath]
-        ?? await this.getFileContent(this.activeRef, filePath);
-      this.stagingBuffer.set(filePath, content);
+      if (options?.contentMap?.[filePath] !== undefined) {
+        // Content provided directly — file is new (create action)
+        this.stagingBuffer.set(filePath, options.contentMap[filePath]!);
+        this.stagedFileIsNew.add(filePath);
+      } else {
+        // Read from remote — file exists (update action)
+        const content = await this.getFileContent(this.activeRef, filePath);
+        this.stagingBuffer.set(filePath, content);
+        this.stagedFileIsNew.delete(filePath);
+      }
     }
   }
 
@@ -316,15 +336,16 @@ export class GitLabGitModule implements IGitModule {
     }
 
     // Build actions from staging buffer
+    // [EARS-C3] Build actions from staging buffer — NO extra API calls.
+    // Action type determined by add() at staging time (contentMap → create, getFileContent → update).
     const actions: Array<Record<string, unknown>> = [];
 
     for (const [path, content] of this.stagingBuffer) {
       if (content === null) {
         actions.push({ action: 'delete', file_path: path });
       } else {
-        const exists = await this.fileExistsOnRemote(path);
         actions.push({
-          action: exists ? 'update' : 'create',
+          action: this.stagedFileIsNew.has(path) ? 'create' : 'update',
           file_path: path,
           content,
         });
@@ -346,6 +367,7 @@ export class GitLabGitModule implements IGitModule {
 
       // [EARS-C4] Clear staging buffer
       this.stagingBuffer.clear();
+      this.stagedFileIsNew.clear();
 
       return String(result.id);
     } catch (error: unknown) {
@@ -356,15 +378,6 @@ export class GitLabGitModule implements IGitModule {
         }
       }
       this.translateError(error, 'commit');
-    }
-  }
-
-  private async fileExistsOnRemote(filePath: string): Promise<boolean> {
-    try {
-      await this.api.RepositoryFiles.show(this.projectId, filePath, this.activeRef);
-      return true;
-    } catch {
-      return false;
     }
   }
 
@@ -419,7 +432,11 @@ export class GitLabGitModule implements IGitModule {
   async setUpstream(_branchName: string, _remote: string, _remoteBranch: string): Promise<void> { /* no-op */ }
   async rebaseAbort(): Promise<void> { /* no-op */ }
 
-  /** [EARS-D1] Delegates to commitInternal, allowing empty staging buffer */
+  // ═══════════════════════════════════════════════════════════════
+  // CATEGORY A: commitAllowEmpty (EARS-D1 — Cat. A, tested with no-ops)
+  // ═══════════════════════════════════════════════════════════════
+
+  /** [EARS-D1] Delegates to commitInternal, allowing empty staging buffer. Cat. A — makes real API calls. */
   async commitAllowEmpty(message: string, author?: CommitAuthor): Promise<string> {
     return this.commitInternal(message, author, true);
   }
