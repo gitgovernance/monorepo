@@ -69,6 +69,13 @@ export class FsProjectInitializer implements IProjectInitializer {
     for (const dir of GITGOV_DIRECTORIES) {
       await fs.mkdir(path.join(gitgovPath, dir), { recursive: true });
     }
+
+    // EARS-FPI14: Create default policy.yml if it doesn't exist
+    const policyPath = path.join(gitgovPath, 'policy.yml');
+    if (!existsSync(policyPath)) {
+      const defaultPolicy = 'version: "1.0"\nfailOn: critical\n';
+      await fs.writeFile(policyPath, defaultPolicy, 'utf-8');
+    }
   }
 
   /**
