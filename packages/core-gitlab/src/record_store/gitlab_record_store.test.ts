@@ -23,6 +23,9 @@ function createMockApi() {
     Commits: {
       create: jest.fn(),
     },
+    Branches: {
+      show: jest.fn(),
+    },
   } as unknown as GitLabRecordStoreOptions['api'];
 }
 
@@ -31,6 +34,7 @@ function mockApi(api: GitLabRecordStoreOptions['api']) {
     RepositoryFiles: { show: jest.Mock; create: jest.Mock; edit: jest.Mock; remove: jest.Mock };
     Repositories: { allRepositoryTrees: jest.Mock };
     Commits: { create: jest.Mock };
+    Branches: { show: jest.Mock };
   };
 }
 
@@ -112,9 +116,10 @@ describe('GitLabRecordStore', () => {
     it('[EARS-A5] should delete existing record and return commitSha', async () => {
       const { store, api } = createStore();
       mockApi(api).RepositoryFiles.remove.mockResolvedValue({});
+      mockApi(api).Branches.show.mockResolvedValue({ commit: { id: 'delete-commit-sha' } });
 
       const result = await store.delete('task-001');
-      expect(result.commitSha).toBeDefined();
+      expect(result.commitSha).toBe('delete-commit-sha');
     });
 
     it('[EARS-A6] should complete without error and return commitSha undefined for non-existing ID', async () => {
@@ -274,6 +279,7 @@ describe('GitLabRecordStore', () => {
     it('[EARS-B4] should delete file via Gitbeaker RepositoryFiles.remove', async () => {
       const { store, api } = createStore();
       mockApi(api).RepositoryFiles.remove.mockResolvedValue({});
+      mockApi(api).Branches.show.mockResolvedValue({ commit: { id: 'sha' } });
 
       await store.delete('task-001');
       expect(mockApi(api).RepositoryFiles.remove).toHaveBeenCalledWith(
@@ -284,6 +290,7 @@ describe('GitLabRecordStore', () => {
     it('[EARS-B4] should use opts.commitMessage for delete when provided', async () => {
       const { store, api } = createStore();
       mockApi(api).RepositoryFiles.remove.mockResolvedValue({});
+      mockApi(api).Branches.show.mockResolvedValue({ commit: { id: 'sha' } });
 
       await store.delete('task-001', { commitMessage: 'remove task' });
       expect(mockApi(api).RepositoryFiles.remove).toHaveBeenCalledWith(
@@ -300,6 +307,19 @@ describe('GitLabRecordStore', () => {
 
       const ids = await store.list();
       expect(ids).toEqual(['t1']);
+    });
+
+    it('[EARS-B5] should paginate Tree API results for list', async () => {
+      const { store, api } = createStore();
+      // allRepositoryTrees handles pagination internally — returns all items
+      const items = Array.from({ length: 150 }, (_, i) => ({
+        path: `.gitgov/tasks/task-${i}.json`, type: 'blob', name: `task-${i}.json`,
+      }));
+      mockApi(api).Repositories.allRepositoryTrees.mockResolvedValue(items);
+
+      const ids = await store.list();
+      expect(ids).toHaveLength(150);
+      expect(mockApi(api).Repositories.allRepositoryTrees).toHaveBeenCalledTimes(1);
     });
 
     it('[EARS-B6] should encode/decode IDs when idEncoder configured', async () => {
@@ -351,6 +371,28 @@ describe('GitLabRecordStore', () => {
       expect(mockApi(api).Commits.create).toHaveBeenCalledTimes(1);
       const actions = mockApi(api).Commits.create.mock.calls[0]![3] as Array<{ action: string }>;
       expect(actions).toHaveLength(2);
+    });
+
+    it('[EARS-B8] should use opts.commitMessage for putMany when provided', async () => {
+      const { store, api } = createStore();
+      mockApi(api).RepositoryFiles.show.mockRejectedValue(gitbeakerError(404));
+      mockApi(api).Commits.create.mockResolvedValue({ id: 'sha' });
+
+      await store.putMany([{ id: 't1', value: testRecord }], { commitMessage: 'custom batch' });
+      expect(mockApi(api).Commits.create).toHaveBeenCalledWith(
+        123, 'gitgov-state', 'custom batch', expect.any(Array),
+      );
+    });
+
+    it('[EARS-B8] should generate default commit message for putMany', async () => {
+      const { store, api } = createStore();
+      mockApi(api).RepositoryFiles.show.mockRejectedValue(gitbeakerError(404));
+      mockApi(api).Commits.create.mockResolvedValue({ id: 'sha' });
+
+      await store.putMany([{ id: 't1', value: testRecord }, { id: 't2', value: testRecord }]);
+      expect(mockApi(api).Commits.create).toHaveBeenCalledWith(
+        123, 'gitgov-state', 'putMany 2 records', expect.any(Array),
+      );
     });
 
     it('[EARS-B8] should use create action for new records and update for existing', async () => {

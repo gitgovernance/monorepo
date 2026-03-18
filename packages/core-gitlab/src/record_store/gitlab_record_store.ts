@@ -205,7 +205,10 @@ export class GitLabRecordStore<V> {
       );
       this.blobIdCache.delete(filePath);
 
-      return { commitSha: message }; // GitLab remove doesn't return commit SHA directly
+      // GitLab RepositoryFiles.remove doesn't return commit SHA directly.
+      // Re-read the branch HEAD to get the latest commit SHA.
+      const branch = await this.api.Branches.show(this.projectId, this.ref);
+      return { commitSha: String(branch.commit.id) };
     } catch (error: unknown) {
       if (isGitbeakerRequestError(error)) {
         const status = this.extractStatus(error);
