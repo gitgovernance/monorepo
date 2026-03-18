@@ -63,7 +63,7 @@ let mockWaiverReader: {
 };
 
 let mockFeedbackAdapter: {
-  create: jest.MockedFunction<(data: Record<string, unknown>, actorId: string) => Promise<FeedbackRecord>>;
+  create: jest.MockedFunction<(data: Partial<FeedbackRecord>, actorId: string) => Promise<FeedbackRecord>>;
 };
 
 let mockIdentityAdapter: {

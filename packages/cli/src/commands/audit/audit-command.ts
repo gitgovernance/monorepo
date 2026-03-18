@@ -23,7 +23,7 @@ export interface AuditCommandOptions extends BaseCommandOptions {
   include?: string;
   /** Additional globs to exclude (CSV) */
   exclude?: string;
-  /** Quiet mode - only fatal errors */
+  /** Quiet mode - only critical findings */
   quiet?: boolean;
 }
 
@@ -69,7 +69,7 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
       .option('-a, --agent <agentId>', 'Run only a specific audit agent')
       .option('-i, --include <globs>', 'Additional globs to include (CSV)')
       .option('-e, --exclude <globs>', 'Additional globs to exclude (CSV)')
-      .option('-q, --quiet', 'Quiet mode - only fatal errors', false)
+      .option('-q, --quiet', 'Quiet mode - only critical findings', false)
       .option('--json', 'Alias for --output json', false)
       .action(async (options: AuditCommandOptions & { json?: boolean }) => {
         // Handle --json alias

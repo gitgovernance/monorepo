@@ -5,7 +5,7 @@
  * EARS Coverage:
  * - §4.1 Singleton Pattern (EARS-A1 to A2)
  * - §4.2 Store Initialization & Bootstrap (EARS-B1 to B4)
- * - §4.3 Adapter Factories (EARS-C1 to C10)
+ * - §4.3 Adapter Factories (EARS-C1 to C11)
  * - §4.4 Bootstrap Reindex (EARS-D1 to D2)
  * - §4.5 Error Handling (EARS-E1 to E4)
  * - §4.6 Validation (EARS-F1 to F2)
@@ -505,7 +505,45 @@ jest.doMock('@gitgov/core', () => {
     Validation: {
       isTaskRecord: jest.fn().mockReturnValue(true),
       validateTaskRecordDetailed: jest.fn().mockReturnValue({ isValid: true, errors: [] })
-    }
+    },
+
+    // 🎭 MOCK AUDIT ORCHESTRATOR: Mock audit orchestration
+    AuditOrchestrator: {
+      createAuditOrchestrator: jest.fn().mockImplementation(() => ({
+        run: jest.fn().mockResolvedValue({
+          findings: [],
+          agentResults: [],
+          policyDecision: { decision: 'pass', reason: 'No findings', blockingFindings: [], waivedFindings: [], summary: { critical: 0, high: 0, medium: 0, low: 0 }, rulesEvaluated: [], evaluatedAt: new Date().toISOString() },
+          summary: { total: 0, critical: 0, high: 0, medium: 0, low: 0, suppressed: 0, agentsRun: 0, agentsFailed: 0 },
+          executionIds: { scans: [], policy: 'exec-policy-1' },
+        }),
+      })),
+    },
+
+    // 🎭 MOCK POLICY EVALUATOR: Mock policy evaluation
+    PolicyEvaluator: {
+      createPolicyEvaluator: jest.fn().mockImplementation(() => ({
+        evaluate: jest.fn().mockReturnValue({ decision: 'pass', reason: 'No findings' }),
+      })),
+    },
+
+    // 🎭 MOCK SOURCE AUDITOR: Mock source auditor (for WaiverReader/WaiverWriter)
+    SourceAuditor: {
+      SourceAuditorModule: jest.fn(),
+      WaiverReader: jest.fn().mockImplementation(() => ({
+        loadActiveWaivers: jest.fn().mockResolvedValue([]),
+      })),
+      WaiverWriter: jest.fn().mockImplementation(() => ({
+        createWaiver: jest.fn().mockResolvedValue(undefined),
+      })),
+    },
+
+    // 🎭 MOCK FINDING DETECTOR: Mock finding detection
+    FindingDetector: {
+      FindingDetectorModule: jest.fn().mockImplementation(() => ({
+        detect: jest.fn().mockResolvedValue([]),
+      })),
+    },
   };
 });
 
@@ -630,7 +668,7 @@ import { DependencyInjectionService } from './dependency-injection';
 // Mocked module references (require once after doMock, use everywhere)
 const mockFs = require('fs');
 const corefs = require('@gitgov/core/fs');
-const { Git, Adapters, KeyProvider, EventBus, RecordProjection, RecordMetrics } = require('@gitgov/core');
+const { Git, Adapters, KeyProvider, EventBus, RecordProjection, RecordMetrics, AuditOrchestrator: AuditOrchestratorMock, PolicyEvaluator: PolicyEvaluatorMock } = require('@gitgov/core');
 
 describe('DependencyInjectionService', () => {
   let diService: DependencyInjectionService;
@@ -720,9 +758,9 @@ describe('DependencyInjectionService', () => {
   });
 
   // ============================================================================
-  // §4.3. Adapter Factories (EARS-C1 to C10)
+  // §4.3. Adapter Factories (EARS-C1 to C11)
   // ============================================================================
-  describe('4.3. Adapter Factories (EARS-C1 to C10)', () => {
+  describe('4.3. Adapter Factories (EARS-C1 to C11)', () => {
     it('[EARS-C1] should create RecordProjector with all dependencies', async () => {
       const projector = await diService.getRecordProjector();
       expect(projector).toBeDefined();
@@ -821,6 +859,19 @@ describe('DependencyInjectionService', () => {
 
       // Verify createSessionManager was called with worktree base path
       expect(corefs.createSessionManager).toHaveBeenCalledWith(mockWorktreeBasePath);
+    });
+
+    it('[EARS-C11] should create AuditOrchestrator with all dependencies', async () => {
+      const orchestrator = await diService.getAuditOrchestrator();
+
+      expect(orchestrator).toBeDefined();
+      expect(orchestrator.run).toBeDefined();
+
+      // Verify AuditOrchestrator factory was called
+      expect(AuditOrchestratorMock.createAuditOrchestrator).toHaveBeenCalled();
+
+      // Verify PolicyEvaluator was created as dependency
+      expect(PolicyEvaluatorMock.createPolicyEvaluator).toHaveBeenCalled();
     });
   });
 
