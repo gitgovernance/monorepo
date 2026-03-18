@@ -243,9 +243,10 @@ class SarifBuilderImpl implements SarifBuilder {
     }
 
     // SARIF-L1/L2/L3: versionControlProvenance §3.14.16
-    if (options.commitHash || options.branch || options.repositoryUri) {
+    // repositoryUri is required per SARIF spec — only create provenance when it's provided
+    if (options.repositoryUri) {
       run.versionControlProvenance = [{
-        repositoryUri: options.repositoryUri ?? '',
+        repositoryUri: options.repositoryUri,
         ...(options.commitHash ? { revisionId: options.commitHash } : {}),
         ...(options.branch ? { branch: options.branch } : {}),
       }];
