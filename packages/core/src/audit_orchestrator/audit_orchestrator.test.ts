@@ -792,8 +792,8 @@ describe("AuditOrchestrator", () => {
     });
   });
 
-  describe("4.5. Error Handling", () => {
-    it("[AORCH-B3] should propagate error when PolicyEvaluator throws", async () => {
+  describe("4.5. Error Handling (AORCH-C1)", () => {
+    it("[AORCH-C1] should propagate error when PolicyEvaluator throws", async () => {
       const agentRecord = makeAgentRecord("agent:security-audit", "audit");
       const sarif = makeSarifLog();
 
@@ -815,8 +815,8 @@ describe("AuditOrchestrator", () => {
     });
   });
 
-  describe("4.8. Orchestrator Integration (PEVAL-G1 to G4)", () => {
-    it("[PEVAL-G1] should invoke PolicyEvaluator.evaluate after all agent scans complete", async () => {
+  describe("4.6. PolicyEvaluator Integration (AORCH-D1 to D4)", () => {
+    it("[AORCH-D1] should invoke PolicyEvaluator.evaluate after all agent scans complete", async () => {
       const agentRecord = makeAgentRecord("agent:security-audit", "audit");
       const sarif = makeSarifLog([
         makeSarifResult({
@@ -851,7 +851,7 @@ describe("AuditOrchestrator", () => {
       expect(evaluateCall.taskId).toBe(defaultOptions.taskId);
     });
 
-    it("[PEVAL-G2] should include policyDecision in AuditOrchestrationResult", async () => {
+    it("[AORCH-D2] should include policyDecision in AuditOrchestrationResult", async () => {
       const agentRecord = makeAgentRecord("agent:security-audit", "audit");
       const sarif = makeSarifLog([
         makeSarifResult({
@@ -886,7 +886,7 @@ describe("AuditOrchestrator", () => {
       expect(result.policyDecision.reason).toBe("1 critical finding exceeds threshold");
     });
 
-    it("[PEVAL-G3] should include policy ExecutionRecord ID in executionIds.policy", async () => {
+    it("[AORCH-D3] should include policy ExecutionRecord ID in executionIds.policy", async () => {
       const agentRecord = makeAgentRecord("agent:security-audit", "audit");
       const sarif = makeSarifLog();
 
@@ -911,7 +911,7 @@ describe("AuditOrchestrator", () => {
       expect(result.executionIds.scans).toContain("exec-scan-g3");
     });
 
-    it("[PEVAL-G4] should include finding fingerprint in TaskRecord.references for lifecycle linkage", async () => {
+    it("[AORCH-D4] should include finding fingerprint in TaskRecord.references for lifecycle linkage", async () => {
       const agentRecord = makeAgentRecord("agent:security-audit", "audit");
       const sarif = makeSarifLog([
         makeSarifResult({
@@ -958,8 +958,8 @@ describe("AuditOrchestrator", () => {
     });
   });
 
-  describe("4.9. Redaction Integration (RLDX-E1 to E3)", () => {
-    it("[RLDX-E1] should apply redactSarif to agent results for L1 when redactor is provided", async () => {
+  describe("4.7. Redaction Integration (AORCH-E1 to E3)", () => {
+    it("[AORCH-E1] should apply redactSarif to agent results for L1 when redactor is provided", async () => {
       const agentRecord = makeAgentRecord("agent:security-audit", "audit");
       const sarifWithSnippet: SarifLog = {
         $schema:
@@ -1031,7 +1031,7 @@ describe("AuditOrchestrator", () => {
       expect(l1Props?.["gitgov/snippetHash"]).toBeDefined();
     });
 
-    it("[RLDX-E2] should preserve original unredacted agent results for L2", async () => {
+    it("[AORCH-E2] should preserve original unredacted agent results for L2", async () => {
       const agentRecord = makeAgentRecord("agent:security-audit", "audit");
       const originalSnippet = "const secret = 'sk-12345';";
       const sarifWithSnippet: SarifLog = {
@@ -1102,7 +1102,7 @@ describe("AuditOrchestrator", () => {
       expect(l1Snippet!.text).toBe("[REDACTED]");
     });
 
-    it("[RLDX-E3] should not require agent knowledge of RedactionLevel", async () => {
+    it("[AORCH-E3] should not require agent knowledge of RedactionLevel", async () => {
       // Verify that AgentAuditInput does not include RedactionLevel
       // (structural test — agents receive scope, include, exclude, taskId only)
       const agentRecord = makeAgentRecord("agent:security-audit", "audit");

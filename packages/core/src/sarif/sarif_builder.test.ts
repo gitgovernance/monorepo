@@ -382,9 +382,9 @@ describe('SarifBuilder', () => {
     });
   });
 
-  describe('4.13. Redaction Integration (RLDX-D1 to D4)', () => {
+  describe('4.13. Redaction Integration in Builder (SARIF-M1 to M4)', () => {
 
-    it('[RLDX-D1] should apply redaction when redactionLevel is l1', async () => {
+    it('[SARIF-M1] should apply redaction when redactionLevel is l1', async () => {
       // pii-email is a sensitive category — snippet should be [REDACTED]
       const sarif = await builder.build({ ...baseOptions, redactionLevel: 'l1' });
       const snippet = firstResult(sarif).locations[0]!.physicalLocation.region.snippet;
@@ -395,21 +395,21 @@ describe('SarifBuilder', () => {
       expect(typeof firstResult(sarif).properties?.['gitgov/snippetHash']).toBe('string');
     });
 
-    it('[RLDX-D2] should output complete data for l2', async () => {
+    it('[SARIF-M2] should output complete data for l2', async () => {
       const sarif = await builder.build({ ...baseOptions, redactionLevel: 'l2' });
       const snippet = firstResult(sarif).locations[0]!.physicalLocation.region.snippet;
       expect(snippet).toBeDefined();
       expect(snippet!.text).toBe('const email = user.email;');
     });
 
-    it('[RLDX-D3] should be backward-compatible without redactionLevel', async () => {
+    it('[SARIF-M3] should be backward-compatible without redactionLevel', async () => {
       const sarif = await builder.build(baseOptions);
       const snippet = firstResult(sarif).locations[0]!.physicalLocation.region.snippet;
       expect(snippet).toBeDefined();
       expect(snippet!.text).toBe('const email = user.email;');
     });
 
-    it('[RLDX-D4] should use custom redactionConfig', async () => {
+    it('[SARIF-M4] should use custom redactionConfig', async () => {
       // Create a custom config that treats 'logging-pii' (normally safe) as sensitive
       const customConfig = {
         sensitiveCategories: ['logging-pii'],

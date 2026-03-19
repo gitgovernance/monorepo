@@ -203,10 +203,8 @@ describeIfOpa("FsOpaRule", () => {
       fs.rmSync(dir, { recursive: true });
     });
 
-    it("[PEVAL-O5] should skip OPA evaluation when opa config is undefined", async () => {
-      // This is tested at the evaluator level (policy_evaluator.test.ts).
-      // At the rule level, createOpaRule is only called when policies are configured.
-      // Verify that the rule works correctly when called.
+    it("[PEVAL-O7] should pass when evaluated with empty findings", async () => {
+      // Verifies that a compiled OPA rule passes when no findings match the block policy.
       const dir = createTmpDir();
       const regoPath = path.join(dir, "test_pass.rego");
       fs.writeFileSync(regoPath, PASSING_REGO, "utf-8");

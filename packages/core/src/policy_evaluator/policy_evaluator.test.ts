@@ -139,24 +139,24 @@ describe("PolicyEvaluator", () => {
         taskId: "task-001",
       };
 
-      expect(input.findings).toBeDefined();
-      expect(input.activeWaivers).toBeDefined();
-      expect(input.policy).toBeDefined();
-      expect(input.scanExecutionIds).toBeDefined();
-      expect(input.taskId).toBeDefined();
+      expect(input.findings).toEqual([]);
+      expect(input.activeWaivers).toEqual([]);
+      expect(input.policy.failOn).toBe("critical");
+      expect(input.scanExecutionIds).toEqual(["exec-001"]);
+      expect(input.taskId).toBe("task-001");
     });
 
     it("[PEVAL-A2] should include required fields and optional ruleId in ConsolidatedFinding", () => {
       // With ruleId
       const withRuleId = makeFinding({ ruleId: "SEC-001" });
-      expect(withRuleId.fingerprint).toBeDefined();
-      expect(withRuleId.severity).toBeDefined();
-      expect(withRuleId.category).toBeDefined();
-      expect(withRuleId.file).toBeDefined();
-      expect(withRuleId.line).toBeDefined();
-      expect(withRuleId.reportedBy).toBeDefined();
-      expect(withRuleId.isWaived).toBeDefined();
-      expect(withRuleId.message).toBeDefined();
+      expect(withRuleId.fingerprint).toBe("fp-test-001");
+      expect(withRuleId.severity).toBe("high");
+      expect(withRuleId.category).toBe("test");
+      expect(withRuleId.file).toBe("src/foo.ts");
+      expect(withRuleId.line).toBe(10);
+      expect(withRuleId.reportedBy).toEqual(["agent-1"]);
+      expect(withRuleId.isWaived).toBe(false);
+      expect(withRuleId.message).toBe("test finding");
       expect(withRuleId.ruleId).toBe("SEC-001");
 
       // Without ruleId
@@ -177,6 +177,7 @@ describe("PolicyEvaluator", () => {
       };
       expect(full.failOn).toBe("high");
       expect(full.blockCategories).toEqual(["secret"]);
+      expect(full.rules).toEqual([]);
     });
 
     it("[PEVAL-A4] should include all fields in PolicyDecision", async () => {
@@ -516,7 +517,7 @@ describe("PolicyEvaluator", () => {
     });
   });
 
-  describe("4.9. OPA Integration (PEVAL-O5)", () => {
+  describe("4.2. OPA Integration in Evaluator (PEVAL-O5)", () => {
     it("[PEVAL-O5] should skip OPA evaluation when opa config is undefined", async () => {
       const deps = makeDeps();
       const evaluator = createPolicyEvaluator(deps);
@@ -742,8 +743,8 @@ describe("PolicyEvaluator", () => {
         deps,
       );
 
-      // Should have extracted 2 findings from the SARIF without re-scanning
-      expect(result.decision.blockingFindings.length + result.decision.waivedFindings.length >= 0).toBe(true);
+      // Should have extracted findings from the SARIF without re-scanning
+      expect(result.decision.blockingFindings.length + result.decision.waivedFindings.length).toBeGreaterThan(0);
       // The findings should be from the SARIF data (no agent was re-executed)
       expect(deps.executionStore.get).toHaveBeenCalledWith("exec-scan-001");
       // Findings were loaded: the decision was made based on SARIF content
