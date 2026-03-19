@@ -44,6 +44,13 @@ jobs:
         with:
           version: 9
 
+      - name: Exclude GitLab submodule from workspace
+        run: |
+          if [ ! -f packages/core-gitlab/package.json ]; then
+            sed -i '/core-gitlab/d' pnpm-workspace.yaml
+            sed -i '/@gitgov\/core-gitlab/d' packages/e2e/package.json
+          fi
+
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
 
