@@ -120,6 +120,9 @@ export * as AuditOrchestrator from "./audit_orchestrator";
 // Policy evaluator (stub -- formal implementation in Epic 5)
 export * as PolicyEvaluator from "./policy_evaluator";
 
+// Redaction module (Epic 6 — L1/L2 finding redaction)
+export * as Redaction from "./redaction";
+
 // Renamed modules (promoted from adapters/)
 export * as RecordProjection from "./record_projection";
 export * as RecordMetrics from "./record_metrics";

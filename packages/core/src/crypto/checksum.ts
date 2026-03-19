@@ -38,4 +38,13 @@ function canonicalize(payload: object): string {
 export function calculatePayloadChecksum(payload: GitGovRecordPayload): string {
   const jsonString = canonicalize(payload);
   return createHash("sha256").update(jsonString, "utf8").digest("hex");
+}
+
+/**
+ * Computes SHA-256 hex digest of a string input.
+ * EARS-8: returns 64-character lowercase hex string.
+ * EARS-9: deterministic (same input → same output).
+ */
+export function sha256(input: string): string {
+  return createHash("sha256").update(input, "utf8").digest("hex");
 } 

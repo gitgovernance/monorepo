@@ -22,7 +22,18 @@ jobs:
           node-version: 24
           cache: pnpm
 
-      - run: pnpm install --frozen-lockfile
+      # core-gitlab is a GitLab submodule — can't be cloned by GitHub Actions.
+      # Remove from workspace + deps so pnpm install succeeds.
+      # E2E tests (which need it) only run locally, never in CI.
+      - name: Exclude GitLab submodule from workspace
+        run: |
+          if [ ! -f packages/core-gitlab/package.json ]; then
+            sed -i '/core-gitlab/d' pnpm-workspace.yaml
+            sed -i '/@gitgov\/core-gitlab/d' packages/e2e/package.json
+            pnpm install --no-frozen-lockfile
+          else
+            pnpm install --frozen-lockfile
+          fi
 
       - name: Build core (required for mcp-server type resolution)
         run: pnpm --filter @gitgov/core run build
@@ -48,7 +59,15 @@ jobs:
           node-version: 24
           cache: pnpm
 
-      - run: pnpm install --frozen-lockfile
+      - name: Exclude GitLab submodule from workspace
+        run: |
+          if [ ! -f packages/core-gitlab/package.json ]; then
+            sed -i '/core-gitlab/d' pnpm-workspace.yaml
+            sed -i '/@gitgov\/core-gitlab/d' packages/e2e/package.json
+            pnpm install --no-frozen-lockfile
+          else
+            pnpm install --frozen-lockfile
+          fi
 
       - name: Configure git for tests
         run: |
@@ -81,7 +100,15 @@ jobs:
           node-version: 24
           cache: pnpm
 
-      - run: pnpm install --frozen-lockfile
+      - name: Exclude GitLab submodule from workspace
+        run: |
+          if [ ! -f packages/core-gitlab/package.json ]; then
+            sed -i '/core-gitlab/d' pnpm-workspace.yaml
+            sed -i '/@gitgov\/core-gitlab/d' packages/e2e/package.json
+            pnpm install --no-frozen-lockfile
+          else
+            pnpm install --frozen-lockfile
+          fi
 
       - name: Build core
         run: pnpm --filter @gitgov/core run build

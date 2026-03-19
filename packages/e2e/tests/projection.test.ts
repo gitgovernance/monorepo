@@ -1,5 +1,5 @@
 /**
- * Block B: Projection Pipeline — 8 EARS (CB1-CB8)
+ * Block B: Projection Pipeline — 11 EARS (CB1-CB11)
  * Blueprint: e2e/specs/projection.md
  *
  * Validates that CLI-created records project correctly to PostgreSQL (6 tables)
@@ -23,10 +23,33 @@ import {
   cleanupWorktree,
   SKIP_CLEANUP,
   PrismaRecordProjection,
+  FsRecordStore,
+  DEFAULT_ID_ENCODER,
+  RecordProjector,
+  RecordMetrics,
 } from './helpers';
-import type { PrismaClient, IndexGenerationReport, ProjectionClient } from './helpers';
+import { FsRecordProjection, getWorktreeBasePath } from '@gitgov/core/fs';
+import type {
+  PrismaClient,
+  IndexGenerationReport,
+  ProjectionClient,
+  GitGovTaskRecord,
+  GitGovCycleRecord,
+  GitGovFeedbackRecord,
+  GitGovExecutionRecord,
+  GitGovActorRecord,
+  GitGovAgentRecord,
+} from './helpers';
 
-describe('Block B: Projection Pipeline (CB1-CB8)', () => {
+/**
+ * Returns the .gitgov/ directory where the CLI stores records.
+ * CLI uses worktree-based paths: ~/.gitgov/worktrees/<hash>/.gitgov/
+ */
+function getGitgovDir(repoPath: string): string {
+  return path.join(getWorktreeBasePath(repoPath), '.gitgov');
+}
+
+describe('Block B: Projection Pipeline (CB1-CB11)', () => {
   let prisma: PrismaClient;
   let tempDir: string;
   let repoPath: string;
@@ -212,6 +235,135 @@ describe('Block B: Projection Pipeline (CB1-CB8)', () => {
     } finally {
       await cleanupDb(prisma, emptyRepoId);
       if (!SKIP_CLEANUP) fs.rmSync(emptyTempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('[EARS-CB9] should populate IndexData.executions when executions exist in stores', async () => {
+    // Create a temp repo with an execution record written directly to the store
+    const cb9Dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gitgov-e2e-cb9-'));
+    const cb9Repo = path.join(cb9Dir, 'repo');
+
+    try {
+      createGitRepo(cb9Repo);
+      runCliCommand(['init', '--name', 'CB9 Test', '--actor-name', 'Dev CB9', '--quiet'], { cwd: cb9Repo });
+
+      // CLI stores .gitgov/ in worktree path, not in repo dir
+      const gitgovDir = getGitgovDir(cb9Repo);
+      const execDir = path.join(gitgovDir, 'executions');
+      fs.mkdirSync(execDir, { recursive: true });
+      const execRecord = {
+        header: { version: '1.0', type: 'execution', payloadChecksum: 'cb9-chk', signatures: [] },
+        payload: { id: 'exec-cb9-test', taskId: 'task-cb9', type: 'analysis', title: 'CB9 Scan', result: 'Done' },
+      };
+      fs.writeFileSync(path.join(execDir, 'exec-cb9-test.json'), JSON.stringify(execRecord, null, 2));
+
+      // Build stores with all record types including executions
+      const stores = {
+        tasks: new FsRecordStore<GitGovTaskRecord>({ basePath: path.join(gitgovDir, 'tasks') }),
+        cycles: new FsRecordStore<GitGovCycleRecord>({ basePath: path.join(gitgovDir, 'cycles') }),
+        feedbacks: new FsRecordStore<GitGovFeedbackRecord>({ basePath: path.join(gitgovDir, 'feedbacks') }),
+        executions: new FsRecordStore<GitGovExecutionRecord>({ basePath: execDir }),
+        actors: new FsRecordStore<GitGovActorRecord>({ basePath: path.join(gitgovDir, 'actors'), idEncoder: DEFAULT_ID_ENCODER }),
+        agents: new FsRecordStore<GitGovAgentRecord>({ basePath: path.join(gitgovDir, 'agents'), idEncoder: DEFAULT_ID_ENCODER }),
+      };
+
+      const recordMetrics = new RecordMetrics({ stores });
+      const projector = new RecordProjector({ recordMetrics, stores });
+      const indexData = await projector.computeProjection();
+
+      expect(indexData.executions).toBeDefined();
+      expect(indexData.executions.length).toBeGreaterThanOrEqual(1);
+
+      const found = indexData.executions.find(e => e.payload.id === 'exec-cb9-test');
+      expect(found).toBeDefined();
+      expect(found!.payload.title).toBe('CB9 Scan');
+    } finally {
+      cleanupWorktree(cb9Repo);
+      if (!SKIP_CLEANUP) fs.rmSync(cb9Dir, { recursive: true, force: true });
+    }
+  });
+
+  it('[EARS-CB10] should populate IndexData.agents when agents exist in stores', async () => {
+    const cb10Dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gitgov-e2e-cb10-'));
+    const cb10Repo = path.join(cb10Dir, 'repo');
+
+    try {
+      createGitRepo(cb10Repo);
+      runCliCommand(['init', '--name', 'CB10 Test', '--actor-name', 'Dev CB10', '--quiet'], { cwd: cb10Repo });
+
+      // CLI stores .gitgov/ in worktree path, not in repo dir
+      const gitgovDir = getGitgovDir(cb10Repo);
+      const agentsDir = path.join(gitgovDir, 'agents');
+      fs.mkdirSync(agentsDir, { recursive: true });
+      const agentRecord = {
+        header: { version: '1.0', type: 'agent', payloadChecksum: 'cb10-chk', signatures: [] },
+        payload: {
+          id: 'agent:gitgov:security-audit',
+          status: 'active',
+          engine: { type: 'local', entrypoint: 'dist/index.mjs', function: 'runAgent' },
+          metadata: { purpose: 'audit', audit: { target: 'code', outputFormat: 'sarif', supportedScopes: ['full'] } },
+        },
+      };
+      fs.writeFileSync(path.join(agentsDir, 'agent_gitgov_security-audit.json'), JSON.stringify(agentRecord, null, 2));
+
+      const stores = {
+        tasks: new FsRecordStore<GitGovTaskRecord>({ basePath: path.join(gitgovDir, 'tasks') }),
+        cycles: new FsRecordStore<GitGovCycleRecord>({ basePath: path.join(gitgovDir, 'cycles') }),
+        feedbacks: new FsRecordStore<GitGovFeedbackRecord>({ basePath: path.join(gitgovDir, 'feedbacks') }),
+        executions: new FsRecordStore<GitGovExecutionRecord>({ basePath: path.join(gitgovDir, 'executions') }),
+        actors: new FsRecordStore<GitGovActorRecord>({ basePath: path.join(gitgovDir, 'actors'), idEncoder: DEFAULT_ID_ENCODER }),
+        agents: new FsRecordStore<GitGovAgentRecord>({ basePath: agentsDir, idEncoder: DEFAULT_ID_ENCODER }),
+      };
+
+      const recordMetrics = new RecordMetrics({ stores });
+      const projector = new RecordProjector({ recordMetrics, stores });
+      const indexData = await projector.computeProjection();
+
+      expect(indexData.agents).toBeDefined();
+      expect(indexData.agents.length).toBeGreaterThanOrEqual(1);
+
+      const found = indexData.agents.find(a => a.payload.id === 'agent:gitgov:security-audit');
+      expect(found).toBeDefined();
+      expect(found!.payload.status).toBe('active');
+    } finally {
+      cleanupWorktree(cb10Repo);
+      if (!SKIP_CLEANUP) fs.rmSync(cb10Dir, { recursive: true, force: true });
+    }
+  });
+
+  it('[EARS-CB11] should return empty arrays for executions and agents from legacy index.json', async () => {
+    const cb11Dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gitgov-e2e-cb11-'));
+
+    try {
+      // Write a legacy index.json WITHOUT executions or agents fields
+      const legacyData = {
+        metadata: {
+          generatedAt: new Date().toISOString(),
+          lastCommitHash: 'abc123',
+          integrityStatus: 'valid',
+          recordCounts: { tasks: 0, cycles: 0, actors: 0 },
+          generationTime: 10,
+        },
+        metrics: {},
+        derivedStates: { atRisk: [], stalled: [], needsClarification: [], blockedByDependency: [] },
+        activityHistory: [],
+        tasks: [],
+        enrichedTasks: [],
+        cycles: [],
+        actors: [],
+        feedback: [],
+        // NOTE: no executions or agents field — legacy format
+      };
+      fs.writeFileSync(path.join(cb11Dir, 'index.json'), JSON.stringify(legacyData, null, 2));
+
+      const fsProjection = new FsRecordProjection({ basePath: cb11Dir });
+      const result = await fsProjection.read({});
+
+      expect(result).not.toBeNull();
+      expect(result!.executions).toEqual([]);
+      expect(result!.agents).toEqual([]);
+    } finally {
+      if (!SKIP_CLEANUP) fs.rmSync(cb11Dir, { recursive: true, force: true });
     }
   });
 });

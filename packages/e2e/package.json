@@ -12,6 +12,7 @@
   },
   "devDependencies": {
     "@gitgov/core": "workspace:*",
+    "@gitgov/core-gitlab": "workspace:*",
     "@gitbeaker/rest": "^40.0.0",
     "@octokit/rest": "^22.0.1",
     "@prisma/adapter-pg": "^6.0.0",

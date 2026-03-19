@@ -7,6 +7,7 @@ import type {
   PolicyEvaluator,
   PolicyDecision,
 } from "../policy_evaluator/policy_evaluator.types";
+import type { FindingRedactor } from "../redaction";
 
 // Re-export PolicyEvaluator types for consumers that import from audit_orchestrator.
 // Note: AuditOrchestrationResult.policyDecision exposes PolicyDecision (the inner decision),
@@ -47,8 +48,14 @@ export type AuditOrchestrationOptions = {
 export type AuditOrchestrationResult = {
   /** Consolidated, deduplicated findings from all agents */
   findings: ConsolidatedFinding[];
-  /** Per-agent execution results */
+  /** Per-agent execution results (original, unredacted — for L2 persistence) */
   agentResults: AgentAuditResult[];
+  /**
+   * Per-agent results with redacted SARIF for L1 (Git) persistence (RLDX-E1).
+   * Only present when a FindingRedactor is provided in deps.
+   * Each entry mirrors agentResults but with sarif redacted via redactSarif(sarif, 'l1').
+   */
+  l1AgentResults?: AgentAuditResult[];
   /** Policy evaluation decision */
   policyDecision: PolicyDecision;
   /** Aggregated summary */
@@ -128,6 +135,8 @@ export type ConsolidatedFinding = {
   column?: number;
   /** Agent IDs that reported this finding */
   reportedBy: string[];
+  /** Source code snippet from SARIF region.snippet.text */
+  snippet?: string;
   /** Whether this finding is suppressed by a waiver */
   isWaived: boolean;
   /** Active waiver details if suppressed */
@@ -176,4 +185,10 @@ export type AuditOrchestratorDeps = {
   waiverReader: IWaiverReader;
   /** PolicyEvaluator for pass/block decision */
   policyEvaluator: PolicyEvaluator;
+  /**
+   * Optional FindingRedactor for L1/L2 separation (RLDX-E1..E3).
+   * When provided, the orchestrator produces redacted SARIF copies for L1 persistence.
+   * Agents do not need to know about RedactionLevel — the orchestrator applies the policy.
+   */
+  redactor?: FindingRedactor;
 };
