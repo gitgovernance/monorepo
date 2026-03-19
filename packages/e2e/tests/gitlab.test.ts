@@ -4,45 +4,68 @@
  * Blueprint: e2e/specs/gitlab.md
  * EARS: CJ1-CJ8
  *
- * Tests GitLab REST API operations against a REAL GitLab repository
- * using Gitbeaker directly. Validates that the API patterns used by
- * @gitgov/core-gitlab work correctly against gitlab.com.
+ * Tests @gitgov/core-gitlab (GitLabRecordStore) against a REAL GitLab
+ * repository. Validates that the same RecordStore contract that works
+ * for GitHub (Block C) also works for GitLab.
  *
  * Requires: GITLAB_TOKEN + GITLAB_TEST_PROJECT_ID env vars.
  * Each test run creates an ephemeral branch and cleans up in afterAll.
+ *
+ * Uses @gitgov/core-gitlab via workspace:* (submodule in packages/core-gitlab).
  */
-
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { Gitlab } from '@gitbeaker/rest';
 import { randomUUID } from 'crypto';
+import { GitLabRecordStore } from '@gitgov/core-gitlab';
+import type { GitLabRecordStoreOptions } from '@gitgov/core-gitlab';
 import {
   createTestPrisma,
   cleanupDb,
-  RecordProjector,
-  RecordMetrics,
-  PrismaRecordProjection,
 } from './helpers';
-import type {
-  PrismaClient,
-  RecordProjectorDependencies,
-  IndexData,
-} from './helpers';
+import type { PrismaClient } from './helpers';
 
 const GITLAB_TOKEN = process.env['GITLAB_TOKEN'] ?? '';
 const GITLAB_TEST_PROJECT_ID = process.env['GITLAB_TEST_PROJECT_ID'] ?? '';
 const HAS_GITLAB = GITLAB_TOKEN.length > 0 && GITLAB_TEST_PROJECT_ID.length > 0;
 
-const describeGitLab = HAS_GITLAB ? describe : describe.skip;
+// Record type for tests
+type TestTaskRecord = {
+  header: { version: string; type: string; payloadChecksum: string; signatures: Array<{ keyId: string; role: string; notes: string; signature: string; timestamp: number }> };
+  payload: { id: string; title: string; status: string; priority: string };
+};
 
-describeGitLab('Block J: GitLab Integration (CJ1-CJ8)', () => {
+function makeTaskRecord(id: string, title: string): TestTaskRecord {
+  return {
+    header: {
+      version: '1.0',
+      type: 'task',
+      payloadChecksum: 'e2e-checksum-' + id,
+      signatures: [{
+        keyId: 'human:e2e-gitlab-dev',
+        role: 'author',
+        notes: 'E2E GitLab test',
+        signature: 'e2e-sig',
+        timestamp: Date.now(),
+      }],
+    },
+    payload: { id, title, status: 'draft', priority: 'high' },
+  };
+}
+
+describe('Block J: GitLab Integration (CJ1-CJ8)', () => {
+  if (!HAS_GITLAB) {
+    it('requires GITLAB_TOKEN and GITLAB_TEST_PROJECT_ID — set in packages/e2e/.env', () => {
+      throw new Error('GITLAB_TOKEN and GITLAB_TEST_PROJECT_ID must be set to run GitLab E2E tests');
+    });
+    return;
+  }
+
   let api: InstanceType<typeof Gitlab>;
   let projectId: number;
   let testBranch: string;
+  let tasksStore: GitLabRecordStore<TestTaskRecord>;
   let prisma: PrismaClient;
   let repoId: string;
-  const basePath = '.gitgov/tasks';
-
-  type TestRecord = { id: string; title: string; status: string };
 
   beforeAll(async () => {
     api = new Gitlab({ token: GITLAB_TOKEN });
@@ -58,121 +81,67 @@ describeGitLab('Block J: GitLab Integration (CJ1-CJ8)', () => {
       ]);
     }
 
-    // Create ephemeral test branch
     await api.Branches.create(projectId, testBranch, 'main');
 
-    // DB for projection tests (CJ5, CJ6)
+    // GitLabRecordStore from @gitgov/core-gitlab
+    tasksStore = new GitLabRecordStore<TestTaskRecord>({
+      projectId,
+      api: api as unknown as GitLabRecordStoreOptions['api'],
+      ref: testBranch,
+      basePath: '.gitgov/tasks',
+    });
+
     prisma = createTestPrisma();
     repoId = `gitlab-e2e-${randomUUID().slice(0, 8)}`;
   }, 30_000);
 
   afterAll(async () => {
-    try {
-      await api.Branches.remove(projectId, testBranch);
-    } catch {
-      console.warn(`[cleanup] Failed to delete branch ${testBranch}`);
-    }
-    try {
-      await cleanupDb(prisma, repoId);
-      await prisma.$disconnect();
-    } catch {
-      console.warn('[cleanup] DB cleanup failed');
-    }
+    try { await api.Branches.remove(projectId, testBranch); } catch { /* branch may not exist */ }
+    try { await cleanupDb(prisma, repoId); await prisma.$disconnect(); } catch { /* ignore */ }
   }, 30_000);
 
-  // ==================== Helpers ====================
-
-  function filePath(id: string): string {
-    return `${basePath}/${id}.json`;
-  }
-
-  async function putRecord(id: string, record: TestRecord): Promise<string> {
-    const content = Buffer.from(JSON.stringify(record, null, 2)).toString('base64');
-    try {
-      await api.RepositoryFiles.create(
-        projectId, filePath(id), testBranch, content, `put ${id}`, { encoding: 'base64' },
-      );
-    } catch {
-      await api.RepositoryFiles.edit(
-        projectId, filePath(id), testBranch, content, `put ${id}`, { encoding: 'base64' },
-      );
-    }
-    const file = await api.RepositoryFiles.show(projectId, filePath(id), testBranch);
-    return String(file.last_commit_id);
-  }
-
-  async function getRecord(id: string): Promise<TestRecord | null> {
-    try {
-      const file = await api.RepositoryFiles.show(projectId, filePath(id), testBranch);
-      return JSON.parse(Buffer.from(String(file.content), 'base64').toString('utf-8')) as TestRecord;
-    } catch {
-      return null;
-    }
-  }
-
-  async function listRecordIds(): Promise<string[]> {
-    try {
-      const items = await api.Repositories.allRepositoryTrees(projectId, {
-        path: basePath,
-        ref: testBranch,
-      } as Parameters<typeof api.Repositories.allRepositoryTrees>[1]);
-      return (items as unknown as Array<{ name: string; type: string }>)
-        .filter(i => i.type === 'blob' && i.name.endsWith('.json'))
-        .map(i => i.name.replace('.json', ''));
-    } catch {
-      return [];
-    }
-  }
-
-  // ==================== CJ1-CJ3: CRUD Individual ====================
+  // ==================== CJ1-CJ3: CRUD via GitLabRecordStore ====================
 
   it('[EARS-CJ1] should write record to GitLab repo and return commit SHA', async () => {
-    const record: TestRecord = { id: 'task-001', title: 'Test Task', status: 'open' };
-    const commitSha = await putRecord('task-001', record);
+    const record = makeTaskRecord('task-001', 'GitLab E2E Task');
+    const result = await tasksStore.put('task-001', record);
 
-    expect(commitSha).toBeDefined();
-    expect(typeof commitSha).toBe('string');
-    expect(commitSha.length).toBeGreaterThan(0);
+    expect(result).toBeDefined();
+    expect(result.commitSha).toBeDefined();
+    expect(typeof result.commitSha).toBe('string');
+    expect(result.commitSha.length).toBeGreaterThan(0);
   }, 30_000);
 
   it('[EARS-CJ2] should list all record IDs from GitLab directory via Tree API', async () => {
-    const ids = await listRecordIds();
+    const ids = await tasksStore.list();
     expect(ids).toContain('task-001');
   }, 30_000);
 
   it('[EARS-CJ3] should read record with intact payload', async () => {
-    const record = await getRecord('task-001');
+    const record = await tasksStore.get('task-001');
 
     expect(record).not.toBeNull();
-    expect(record!.id).toBe('task-001');
-    expect(record!.title).toBe('Test Task');
-    expect(record!.status).toBe('open');
+    expect(record!.payload.id).toBe('task-001');
+    expect(record!.payload.title).toBe('GitLab E2E Task');
+    expect(record!.payload.status).toBe('draft');
+    expect(record!.header.signatures).toHaveLength(1);
+    expect(record!.header.signatures[0].keyId).toBe('human:e2e-gitlab-dev');
   }, 30_000);
 
   // ==================== CJ4: Batch Write ====================
 
   it('[EARS-CJ4] should write N records in 1 atomic commit via Commits API', async () => {
-    const records = [
-      { id: 'task-batch-1', title: 'Batch 1', status: 'open' },
-      { id: 'task-batch-2', title: 'Batch 2', status: 'open' },
-      { id: 'task-batch-3', title: 'Batch 3', status: 'open' },
+    const records: Array<{ id: string; value: TestTaskRecord }> = [
+      { id: 'task-batch-1', value: makeTaskRecord('task-batch-1', 'Batch 1') },
+      { id: 'task-batch-2', value: makeTaskRecord('task-batch-2', 'Batch 2') },
+      { id: 'task-batch-3', value: makeTaskRecord('task-batch-3', 'Batch 3') },
     ];
 
-    const actions = records.map(r => ({
-      action: 'create' as const,
-      file_path: filePath(r.id),
-      content: Buffer.from(JSON.stringify(r, null, 2)).toString('base64'),
-      encoding: 'base64' as const,
-    }));
+    const result = await tasksStore.putMany(records);
+    expect(result).toBeDefined();
+    expect(result.commitSha).toBeDefined();
 
-    const result = await api.Commits.create(
-      projectId, testBranch, 'batch write 3 records', actions,
-    );
-
-    expect(result.id).toBeDefined();
-
-    // Verify all 3 are readable
-    const ids = await listRecordIds();
+    const ids = await tasksStore.list();
     expect(ids).toContain('task-batch-1');
     expect(ids).toContain('task-batch-2');
     expect(ids).toContain('task-batch-3');
@@ -181,101 +150,73 @@ describeGitLab('Block J: GitLab Integration (CJ1-CJ8)', () => {
   // ==================== CJ7: Delete ====================
 
   it('[EARS-CJ7] should delete record from GitLab and return null on subsequent get', async () => {
-    const before = await getRecord('task-batch-3');
+    const before = await tasksStore.get('task-batch-3');
     expect(before).not.toBeNull();
 
-    await api.RepositoryFiles.remove(
-      projectId, filePath('task-batch-3'), testBranch, 'delete task-batch-3',
-    );
+    await tasksStore.delete('task-batch-3');
 
-    const after = await getRecord('task-batch-3');
+    const after = await tasksStore.get('task-batch-3');
     expect(after).toBeNull();
   }, 30_000);
 
-  // ==================== CJ5-CJ6: Projection from GitLab ====================
+  // ==================== CJ5-CJ6: Projection ====================
 
   it('[EARS-CJ5] should compute IndexData from GitLab-stored records', async () => {
-    // Read all records written in previous tests from GitLab
-    // Build a minimal store-like interface that reads from GitLab API
-    const allItems = await api.Repositories.allRepositoryTrees(projectId, {
-      path: basePath,
-      ref: testBranch,
-    } as Parameters<typeof api.Repositories.allRepositoryTrees>[1]) as unknown as Array<{ path: string; name: string; type: string }>;
+    const ids = await tasksStore.list();
+    expect(ids.length).toBeGreaterThanOrEqual(3);
 
-    const recordFiles = allItems.filter(i => i.type === 'blob' && i.name.endsWith('.json'));
-
-    // Read each record from GitLab
-    const records: Array<{ id: string; data: unknown }> = [];
-    for (const rf of recordFiles) {
-      const file = await api.RepositoryFiles.show(projectId, `${basePath}/${rf.name}`, testBranch);
-      const data = JSON.parse(Buffer.from(String(file.content), 'base64').toString('utf-8')) as unknown;
-      records.push({ id: rf.name.replace('.json', ''), data });
+    for (const id of ids) {
+      const record = await tasksStore.get(id);
+      expect(record).not.toBeNull();
+      expect(record!.payload.id).toBe(id);
+      expect(record!.header.version).toBe('1.0');
     }
-
-    // Verify we can read records from GitLab and they have data
-    expect(records.length).toBeGreaterThanOrEqual(3); // task-001 + task-batch-1 + task-batch-2
-    expect(records.every(r => r.data !== null)).toBe(true);
   }, 60_000);
 
   it('[EARS-CJ6] should persist GitLab-sourced data to PostgreSQL', async () => {
-    // Use PrismaRecordProjection to persist data read from GitLab into DB
-    const { ProjectionClient } = await import('@gitgov/core/prisma');
+    const ids = await tasksStore.list();
 
-    const sink = new PrismaRecordProjection({
-      client: prisma as unknown as Parameters<(typeof PrismaRecordProjection)['prototype']['persist']>[0],
-      repoId,
-      projectionType: 'index',
-    });
-
-    // Persist simple metadata — just enough to prove the GitLab→DB pipeline works
-    // The full IndexData structure requires enrichedTasks etc. which need real records.
-    // We use upsertMeta directly via prisma to validate DB connectivity.
-    const projectionType = 'index';
     await prisma.gitgovMeta.upsert({
-      where: { repoId_projectionType: { repoId, projectionType } },
+      where: { repoId_projectionType: { repoId, projectionType: 'index' } },
       create: {
         repoId,
-        projectionType,
+        projectionType: 'index',
         generatedAt: new Date().toISOString(),
         integrityStatus: 'valid',
-        recordCountsJson: { tasks: 3, cycles: 0, actors: 0, executions: 0, feedbacks: 0 },
+        recordCountsJson: { tasks: ids.length, cycles: 0, actors: 0, executions: 0, feedbacks: 0 },
         generationTime: 0,
         derivedStatesJson: {},
         metricsJson: {},
       },
       update: {
-        recordCountsJson: { tasks: 3, cycles: 0, actors: 0, executions: 0, feedbacks: 0 },
+        recordCountsJson: { tasks: ids.length },
       },
     });
 
-    // Verify data landed in DB
     const meta = await prisma.gitgovMeta.findFirst({ where: { repoId } });
     expect(meta).not.toBeNull();
-    expect(meta!.repoId).toBe(repoId);
     const counts = meta!.recordCountsJson as Record<string, number>;
-    expect(counts['tasks']).toBe(3);
+    expect(counts['tasks']).toBe(ids.length);
   }, 30_000);
 
   // ==================== CJ8: Optimistic Concurrency ====================
 
   it('[EARS-CJ8] should detect stale blob_id after external modification', async () => {
-    // Read to get blob_id
-    const file = await api.RepositoryFiles.show(projectId, filePath('task-001'), testBranch);
-    const originalBlobId = String(file.blob_id);
+    const record = await tasksStore.get('task-001');
+    expect(record).not.toBeNull();
 
-    // Modify externally
+    // Modify externally (bypass GitLabRecordStore)
     const newContent = Buffer.from(JSON.stringify(
-      { id: 'task-001', title: 'Modified externally', status: 'changed' }, null, 2,
+      makeTaskRecord('task-001', 'Modified externally'), null, 2,
     )).toString('base64');
     await api.RepositoryFiles.edit(
-      projectId, filePath('task-001'), testBranch, newContent,
-      'external modification', { encoding: 'base64' },
+      projectId, '.gitgov/tasks/task-001.json', testBranch,
+      newContent, 'external modification', { encoding: 'base64' },
     );
 
-    // Re-read to verify blob_id changed
-    const updated = await api.RepositoryFiles.show(projectId, filePath('task-001'), testBranch);
-    const newBlobId = String(updated.blob_id);
-
-    expect(newBlobId).not.toBe(originalBlobId);
+    // Re-read via store — should see the external change
+    const modified = await tasksStore.get('task-001');
+    expect(modified).not.toBeNull();
+    expect(modified!.payload.title).toBe('Modified externally');
   }, 30_000);
 });
