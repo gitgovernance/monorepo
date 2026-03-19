@@ -1,3 +1,15 @@
+## [3.2.0](https://github.com/gitgovernance/monorepo/compare/core-v3.1.0...core-v3.2.0) (2026-03-19)
+
+
+### ✨ Features
+
+* **core:** redaction L1/L2 + E2E alignment + CI GitLab submodule support ([#132](https://github.com/gitgovernance/monorepo/issues/132)) ([4bf4d8d](https://github.com/gitgovernance/monorepo/commit/4bf4d8d85448e22b90023db0dd6a78f5cdf370a5))
+
+
+### 🐛 Bug Fixes
+
+* **ci:** exclude GitLab submodule from release workflows ([2c2ebe5](https://github.com/gitgovernance/monorepo/commit/2c2ebe50395e7deb4e13923f1793fdbd71165b12))
+
 ## [3.1.0](https://github.com/gitgovernance/monorepo/compare/core-v3.0.0...core-v3.1.0) (2026-03-18)
 
 
