@@ -1,3 +1,96 @@
+## [3.0.0](https://github.com/gitgovernance/monorepo/compare/cli-v2.1.0...cli-v3.0.0) (2026-03-19)
+
+
+### ⚠ BREAKING CHANGES
+
+* **cli:** audit-command.ts is now a thin wrapper around
+AuditOrchestrator.run() instead of calling SourceAuditorModule directly.
+
+Changes:
+- DI: added getAuditOrchestrator() to dependency-injection.ts
+- Removed legacy flags: --target, --detector, --max-findings, --group-by, --summary
+- Added --agent flag for filtering to specific agent
+- Exit code from policyDecision.decision (block=1, pass=0)
+- Output formatting adapted for AuditOrchestrationResult
+- Waive subcommand unchanged
+
+Code reduction: 628 → ~340 lines (-46%)
+Tests: 19 passing, AORCH-C1..C6 covered
+
+* fix(cli): audit fixes — mock type, --quiet desc, EARS-C11 getAuditOrchestrator test
+
+* test(e2e): Block G (CG9-CG16) + Block H (CH1-CH4) — 12 new E2E tests
+
+Block G — Audit Orchestration (CG9-CG16):
+- CG9: SarifBuilder.validate() passes on agent output
+- CG10: Content-based fingerprints stable across line numbers
+- CG11: Flat gitgov/ property keys in SARIF results
+- CG12: Multi-agent execution with dedup consolidation
+- CG13: Failed agent doesn't block remaining agents
+- CG14: Duplicate findings deduplicated with reportedBy[]
+- CG15: Zero findings skips conditional heuristic stage
+- CG16: Findings trigger subsequent detection stages
+
+Block H — Policy Evaluation (CH1-CH4):
+- CH1: ExecutionRecord type decision with BLOCK result
+- CH2: ExecutionRecord type decision with PASS result
+- CH3: Waived findings excluded from policy decision
+- CH4: ExecutionRecord has complete structure for Ed25519 signing
+
+All 20 E2E tests passing (8 existing + 12 new).
+
+* fix(tests): fold E4b/P1b into parents, remove PSV2-A9 duplicate
+
+* docs(core): clarify PolicyEvaluationResult re-export boundary in orchestrator types
+
+* feat(core): create policy.yml during project initialization (EARS-FPI14)
+
+FsProjectInitializer.createProjectStructure() now creates .gitgov/policy.yml
+with default configuration (version: "1.0", failOn: critical).
+Does not overwrite existing policy.yml on re-initialization.
+
+2 new tests: [EARS-FPI14] create + no-overwrite. 26/26 passing.
+
+* fix(core): FPI14 use async fs.access instead of sync existsSync, fix test mocks
+
+* test(e2e): verify policy.yml creation during gitgov init (EARS-FPI14)
+
+### 🚀 Features
+
+* **agents:** security-audit agent with configurable pipeline and SARIF output ([#117](https://github.com/gitgovernance/monorepo/issues/117)) ([0fb2e70](https://github.com/gitgovernance/monorepo/commit/0fb2e70b2aa5913698c8704ea8223d45f0648a81))
+* **agents:** security-audit identity and integration — Cycle 2 ([#118](https://github.com/gitgovernance/monorepo/issues/118)) ([b167370](https://github.com/gitgovernance/monorepo/commit/b167370975e4256841decf12c0e1cdbab598bfb1))
+* **core-gitlab:** GitLab REST API provider — 7 modules, 175 tests ([#127](https://github.com/gitgovernance/monorepo/issues/127)) ([60b663e](https://github.com/gitgovernance/monorepo/commit/60b663ef0f84f60e70a0516ce7a617db0b1889c1))
+* **core/agents:** audit orchestration — Cycles 1-2 ([#115](https://github.com/gitgovernance/monorepo/issues/115)) ([cc7cf44](https://github.com/gitgovernance/monorepo/commit/cc7cf447983862c94653d4d9c5325191119198eb))
+* **core/cli:** SARIF 2.1.0 module + CLI refactor (sarif_compliance_spec Cycles 1-2) ([e459dc2](https://github.com/gitgovernance/monorepo/commit/e459dc204b794fb53ded3d641cedf22eb7a988a3))
+* **core:** add direct exports for Git and FileLister types ([#133](https://github.com/gitgovernance/monorepo/issues/133)) ([5dc00b9](https://github.com/gitgovernance/monorepo/commit/5dc00b9358e6744e6839d93e5fbc024153545a74))
+* **core:** add versionControlProvenance to SARIF output ([#128](https://github.com/gitgovernance/monorepo/issues/128)) ([7738d41](https://github.com/gitgovernance/monorepo/commit/7738d41cfdc1c2a37ff0376c59f0210b08c84e35))
+* **core:** policy evaluation Cycle 2 — re-evaluation + orchestrator integration ([#125](https://github.com/gitgovernance/monorepo/issues/125)) ([fb81e5e](https://github.com/gitgovernance/monorepo/commit/fb81e5e6b084224724c1fd2d0c79d7891a4b5509))
+* **core:** policy evaluation engine with OPA integration — Cycle 1 ([#124](https://github.com/gitgovernance/monorepo/issues/124)) ([0f15efa](https://github.com/gitgovernance/monorepo/commit/0f15efa7ce5cdee773b69a6319e3280972b7b6fd))
+* **core:** projection schema v2 — Cycle 1 ([#120](https://github.com/gitgovernance/monorepo/issues/120)) ([1a90958](https://github.com/gitgovernance/monorepo/commit/1a90958506f25372f6fdc4e317ba6c344b24a2cd))
+* **core:** redaction L1/L2 + E2E alignment + CI GitLab submodule support ([#132](https://github.com/gitgovernance/monorepo/issues/132)) ([4bf4d8d](https://github.com/gitgovernance/monorepo/commit/4bf4d8d85448e22b90023db0dd6a78f5cdf370a5))
+
+
+### 🐛 Bug Fixes
+
+* **agents:** security-audit Cycle 2 fixtures and test paths ([#122](https://github.com/gitgovernance/monorepo/issues/122)) ([7cd9b8a](https://github.com/gitgovernance/monorepo/commit/7cd9b8a8ddccd716f8d4f9f2049ccf37565ae53b))
+* **agents:** security-audit test fixes + audit gap closure ([#119](https://github.com/gitgovernance/monorepo/issues/119)) ([1ebfca3](https://github.com/gitgovernance/monorepo/commit/1ebfca3c4f03d38ba3a3514e7f7648a800479643))
+* **ci:** exclude GitLab submodule from release workflows ([2c2ebe5](https://github.com/gitgovernance/monorepo/commit/2c2ebe50395e7deb4e13923f1793fdbd71165b12))
+* **cli:** stabilize flaky E2E tests EARS-G1 and EARS-G4 ([b792b94](https://github.com/gitgovernance/monorepo/commit/b792b9462c25b411f4b1161188f03e413196827d))
+* **core:** GitHubFileLister pattern + RecordProjector NaN filter + blockedBy ([#110](https://github.com/gitgovernance/monorepo/issues/110)) ([79e1272](https://github.com/gitgovernance/monorepo/commit/79e12724703da85a3943184f9ba81663759fa570))
+* **e2e:** remove core-gitlab workspace dep that breaks CI install ([#134](https://github.com/gitgovernance/monorepo/issues/134)) ([9216b5c](https://github.com/gitgovernance/monorepo/commit/9216b5ca79ee9683f872cd04aa53016bf95246f4))
+
+
+### ♻️ Refactoring
+
+* **cli:** audit-command uses AuditOrchestrator (C1-C6) ([#130](https://github.com/gitgovernance/monorepo/issues/130)) ([9c8c92a](https://github.com/gitgovernance/monorepo/commit/9c8c92a5664333ee32ec3cf4fae4786ecda0014e))
+* **e2e:** replace git add hack with typed API seeding in Block F ([744aeb6](https://github.com/gitgovernance/monorepo/commit/744aeb6ab45088f45c5b2ef7f88d62f38e2657c2))
+* **e2e:** rewrite Block F (CF5/CF6) for worktree mode compatibility ([6cdd9ca](https://github.com/gitgovernance/monorepo/commit/6cdd9ca0efb421c50e90effe7288238a14c882af))
+
+
+### 📚 Documentation
+
+* update public READMEs — test counts, protocol v1.1, new modules ([#113](https://github.com/gitgovernance/monorepo/issues/113)) ([6e43af4](https://github.com/gitgovernance/monorepo/commit/6e43af40c8b48706667de52933857bcb2b1a90a8))
+
 ## [2.1.0](https://github.com/gitgovernance/monorepo/compare/cli-v2.0.0...cli-v2.1.0) (2026-03-14)
 
 
