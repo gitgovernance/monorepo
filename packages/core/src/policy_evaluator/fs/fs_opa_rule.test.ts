@@ -1,7 +1,7 @@
 /**
  * FsOpaRule tests.
  *
- * EARS: PEVAL-O1 through PEVAL-O6
+ * EARS: PEVAL-O1 through PEVAL-O7
  *
  * These tests require the `opa` CLI to be installed.
  * If not available, the suite is skipped.

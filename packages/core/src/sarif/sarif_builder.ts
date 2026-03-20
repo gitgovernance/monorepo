@@ -259,7 +259,7 @@ class SarifBuilderImpl implements SarifBuilder {
       runs: [run],
     };
 
-    // Apply redaction when redactionLevel is set (RLDX-D1..D4)
+    // Apply redaction when redactionLevel is set (SARIF-M1..M4)
     if (options.redactionLevel) {
       const config = options.redactionConfig ?? DEFAULT_REDACTION_CONFIG;
       const redactor = new FindingRedactor(config);

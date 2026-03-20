@@ -309,10 +309,10 @@ export function createAuditOrchestrator(deps: AuditOrchestratorDeps) {
             },
       );
 
-      // 4. Produce L1-redacted SARIF copies when redactor is provided (RLDX-E1)
+      // 4. Produce L1-redacted SARIF copies when redactor is provided (AORCH-E1)
       // The redactor applies redactSarif(sarif, 'l1') to each agent's SarifLog.
-      // Original agentResults remain unredacted for L2 (RLDX-E2).
-      // Agents do not need knowledge of RedactionLevel (RLDX-E3).
+      // Original agentResults remain unredacted for L2 (AORCH-E2).
+      // Agents do not need knowledge of RedactionLevel (AORCH-E3).
       let l1AgentResults: AgentAuditResult[] | undefined;
       if (deps.redactor) {
         l1AgentResults = agentResults.map((r) => ({
