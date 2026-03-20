@@ -192,13 +192,14 @@ describe("PolicyEvaluator", () => {
       );
 
       const decision = result.decision;
-      expect(decision.decision).toBeDefined();
-      expect(decision.reason).toBeDefined();
-      expect(decision.blockingFindings).toBeDefined();
-      expect(decision.waivedFindings).toBeDefined();
-      expect(decision.summary).toBeDefined();
-      expect(decision.rulesEvaluated).toBeDefined();
-      expect(decision.evaluatedAt).toBeDefined();
+      // Low finding with failOn: critical → pass
+      expect(decision.decision).toBe("pass");
+      expect(typeof decision.reason).toBe("string");
+      expect(decision.blockingFindings).toEqual([]);
+      expect(decision.waivedFindings).toEqual([]);
+      expect(decision.summary).toEqual(expect.objectContaining({ low: 1 }));
+      expect(decision.rulesEvaluated.length).toBeGreaterThan(0);
+      expect(new Date(decision.evaluatedAt).toISOString()).toBe(decision.evaluatedAt);
     });
 
     it("[PEVAL-A5] should include ruleName, passed, and reason in PolicyRuleResult", async () => {
@@ -213,11 +214,10 @@ describe("PolicyEvaluator", () => {
       );
 
       expect(result.decision.rulesEvaluated.length).toBeGreaterThan(0);
-      const firstRule = result.decision.rulesEvaluated[0];
-      expect(firstRule).toBeDefined();
-      expect(firstRule!.ruleName).toBeDefined();
-      expect(typeof firstRule!.passed).toBe("boolean");
-      expect(firstRule!.reason).toBeDefined();
+      const firstRule = result.decision.rulesEvaluated[0]!;
+      expect(firstRule.ruleName).toBe("SeverityThreshold");
+      expect(firstRule.passed).toBe(true);
+      expect(typeof firstRule.reason).toBe("string");
     });
   });
 
@@ -517,7 +517,7 @@ describe("PolicyEvaluator", () => {
     });
   });
 
-  describe("4.2. OPA Integration in Evaluator (PEVAL-O5)", () => {
+  describe("OPA Skip (PEVAL-O5 — from fs_policy_evaluator_module, tested at evaluator level)", () => {
     it("[PEVAL-O5] should skip OPA evaluation when opa config is undefined", async () => {
       const deps = makeDeps();
       const evaluator = createPolicyEvaluator(deps);

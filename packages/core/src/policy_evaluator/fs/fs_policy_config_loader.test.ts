@@ -57,8 +57,8 @@ failOn: medium
 `,
       );
 
-      const loader = new FsPolicyConfigLoader();
-      const classConfig = await loader.loadPolicyConfig(dir2);
+      const loader = new FsPolicyConfigLoader(dir2);
+      const classConfig = await loader.loadPolicyConfig();
 
       expect(classConfig.failOn).toBe("medium");
 

@@ -1,12 +1,13 @@
 // Factory
 export { createPolicyEvaluator, reevaluatePolicy } from "./policy_evaluator";
 
-// Fs implementations (Strategy pattern)
-export { loadPolicyConfig, createOpaRule, FsOpaRuleFactory } from "./fs";
-
-// Built-in rules
+// Built-in rules (part of core interface, not fs/github specific)
 export { severityThreshold } from "./severity_threshold";
 export { categoryBlock } from "./category_block";
+
+// NOTE: Implementations are exported from their respective entrypoints:
+// @gitgov/core/fs     → FsPolicyConfigLoader, loadPolicyConfig, FsOpaRuleFactory, createOpaRule
+// @gitgov/core/github → GitHubPolicyConfigLoader
 
 // Types and constants
 export {

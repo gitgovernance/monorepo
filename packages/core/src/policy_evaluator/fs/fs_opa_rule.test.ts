@@ -90,7 +90,7 @@ block contains msg if {
 const describeIfOpa = isOpaAvailable() ? describe : describe.skip;
 
 describeIfOpa("FsOpaRule", () => {
-  describe("4.2. OPA Integration (PEVAL-O1 to O6)", () => {
+  describe("4.2. OPA Integration (PEVAL-O1 to O7)", () => {
     it("[PEVAL-O1] should load and evaluate .rego policies via OPA WASM runtime", async () => {
       const dir = createTmpDir();
       const regoPath = path.join(dir, "test_block.rego");
@@ -112,8 +112,8 @@ describeIfOpa("FsOpaRule", () => {
 
       const result = rule.evaluate(findings, makeConfig());
       expect(result.ruleName).toBe("opa:test_block");
-      // The rule should have evaluated (blocking or passing)
-      expect(typeof result.passed).toBe("boolean");
+      // BLOCKING_REGO blocks hardcoded-secret category → passed: false
+      expect(result.passed).toBe(false);
 
       fs.rmSync(dir, { recursive: true });
     });
@@ -203,20 +203,6 @@ describeIfOpa("FsOpaRule", () => {
       fs.rmSync(dir, { recursive: true });
     });
 
-    it("[PEVAL-O7] should pass when evaluated with empty findings", async () => {
-      // Verifies that a compiled OPA rule passes when no findings match the block policy.
-      const dir = createTmpDir();
-      const regoPath = path.join(dir, "test_pass.rego");
-      fs.writeFileSync(regoPath, PASSING_REGO, "utf-8");
-
-      const rule = await createOpaRule(regoPath, dir);
-      const result = rule.evaluate([], makeConfig());
-
-      expect(result.passed).toBe(true);
-
-      fs.rmSync(dir, { recursive: true });
-    });
-
     it("[PEVAL-O6] should log warning and skip when rego file does not exist", async () => {
       const dir = createTmpDir();
       const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
@@ -239,6 +225,20 @@ describeIfOpa("FsOpaRule", () => {
       );
 
       warnSpy.mockRestore();
+      fs.rmSync(dir, { recursive: true });
+    });
+
+    it("[PEVAL-O7] should pass when evaluated with empty findings", async () => {
+      // Verifies that a compiled OPA rule passes when no findings match the block policy.
+      const dir = createTmpDir();
+      const regoPath = path.join(dir, "test_pass.rego");
+      fs.writeFileSync(regoPath, PASSING_REGO, "utf-8");
+
+      const rule = await createOpaRule(regoPath, dir);
+      const result = rule.evaluate([], makeConfig());
+
+      expect(result.passed).toBe(true);
+
       fs.rmSync(dir, { recursive: true });
     });
   });
