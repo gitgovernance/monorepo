@@ -11,6 +11,8 @@ export type GitGovConfig = {
   projectId: string;
   projectName: string;
   rootCycle: string;
+  /** SaaS URL for cloud features (gitgov login, sync, dashboard). Default: "https://cloud.gitgov.dev" */
+  saasUrl?: string;
   state?: {
     branch?: string;
     sync?: {
