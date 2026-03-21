@@ -1,3 +1,19 @@
+## [3.3.0](https://github.com/gitgovernance/monorepo/compare/core-v3.2.0...core-v3.3.0) (2026-03-21)
+
+
+### ✨ Features
+
+* **core:** add saasUrl to GitGovConfig for gitgov login support ([a844fe1](https://github.com/gitgovernance/monorepo/commit/a844fe10efaa5c190b2127bd8cad6982a98bc4a5))
+* **core:** GitHubPolicyConfigLoader + PolicyConfigLoader DI refactor ([b8f2321](https://github.com/gitgovernance/monorepo/commit/b8f232189329327168367a71a16bf2d943a61efd))
+* **core:** PrismaKeyProvider — database-backed KeyProvider for SaaS multi-tenant ([d32176c](https://github.com/gitgovernance/monorepo/commit/d32176c6a7d02438da47d9bbe38273f49223f81a))
+
+
+### 🐛 Bug Fixes
+
+* **cli:** stabilize flaky E2E tests EARS-G1 and EARS-G4 ([b792b94](https://github.com/gitgovernance/monorepo/commit/b792b9462c25b411f4b1161188f03e413196827d))
+* **core:** align EARS IDs to owning blueprints — audit_orchestrator, sarif_builder, policy_evaluator ([018760a](https://github.com/gitgovernance/monorepo/commit/018760ae9b599e97a9bd3183fbf81d0d637d5837))
+* **core:** align EARS traceability comments to owning blueprints ([93251f5](https://github.com/gitgovernance/monorepo/commit/93251f5696bea98da12879d33e10393646fdafdf))
+
 ## [3.2.0](https://github.com/gitgovernance/monorepo/compare/core-v3.1.0...core-v3.2.0) (2026-03-19)
 
 
