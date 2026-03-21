@@ -27,8 +27,14 @@ const DEFAULT_CONFIG: PolicyConfig = {
  * Loads .gitgov/policy.yml from disk and parses it into PolicyConfig.
  */
 export class FsPolicyConfigLoader implements PolicyConfigLoader {
-  async loadPolicyConfig(gitgovDir: string): Promise<PolicyConfig> {
-    const policyPath = path.join(gitgovDir, "policy.yml");
+  private readonly gitgovDir: string;
+
+  constructor(gitgovDir: string) {
+    this.gitgovDir = gitgovDir;
+  }
+
+  async loadPolicyConfig(): Promise<PolicyConfig> {
+    const policyPath = path.join(this.gitgovDir, "policy.yml");
 
     let content: string;
     try {
@@ -38,7 +44,13 @@ export class FsPolicyConfigLoader implements PolicyConfigLoader {
       return { ...DEFAULT_CONFIG };
     }
 
-    const parsed = yaml.load(content) as PolicyConfigFile | undefined;
+    let parsed: PolicyConfigFile | undefined;
+    try {
+      parsed = yaml.load(content) as PolicyConfigFile | undefined;
+    } catch {
+      // Malformed YAML syntax — return default config (fail-safe)
+      return { ...DEFAULT_CONFIG };
+    }
 
     if (!parsed || typeof parsed !== "object") {
       return { ...DEFAULT_CONFIG };
@@ -95,11 +107,11 @@ export class FsPolicyConfigLoader implements PolicyConfigLoader {
 
 /**
  * Standalone function wrapper around FsPolicyConfigLoader.
- * Delegates to FsPolicyConfigLoader.
+ * Convenience for callers that don't need DI.
  */
 export async function loadPolicyConfig(
   gitgovDir: string,
 ): Promise<PolicyConfig> {
-  const loader = new FsPolicyConfigLoader();
-  return loader.loadPolicyConfig(gitgovDir);
+  const loader = new FsPolicyConfigLoader(gitgovDir);
+  return loader.loadPolicyConfig();
 }

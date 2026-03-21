@@ -47,6 +47,10 @@ export { FsProjectInitializer } from './project_initializer/fs';
 export { LocalGitModule, LocalGitModule as GitModule } from './git/local';
 export type { IGitModule, GitModuleDependencies } from './git';
 
+// PolicyEvaluator FS implementations
+export { FsPolicyConfigLoader, loadPolicyConfig } from './policy_evaluator/fs';
+export { FsOpaRuleFactory, createOpaRule } from './policy_evaluator/fs';
+
 // Project Discovery (filesystem-based project root detection)
 export {
   findProjectRoot,

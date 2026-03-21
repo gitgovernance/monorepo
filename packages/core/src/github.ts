@@ -146,3 +146,7 @@ export type {
   GitHubConfigStoreOptions,
   GitHubSaveResult,
 } from './config_store/github';
+
+// PolicyConfigLoader
+export { GitHubPolicyConfigLoader } from './policy_evaluator/github/github_policy_config_loader';
+export type { GitHubPolicyConfigLoaderOptions } from './policy_evaluator/github/github_policy_config_loader';

@@ -117,10 +117,10 @@ export interface PolicyRule {
 
 /**
  * Interface for loading PolicyConfig from storage.
- * Implementations: FsPolicyConfigLoader (filesystem), future: GithubPolicyConfigLoader.
+ * Implementations: FsPolicyConfigLoader (filesystem), GitHubPolicyConfigLoader (GitHub API).
  */
 export interface PolicyConfigLoader {
-  loadPolicyConfig(gitgovDir: string): Promise<PolicyConfig>;
+  loadPolicyConfig(): Promise<PolicyConfig>;
 }
 
 /**

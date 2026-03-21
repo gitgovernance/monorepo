@@ -4,7 +4,7 @@
  * Compiles .rego files to WASM using `opa build`, then evaluates
  * using @open-policy-agent/opa-wasm.
  *
- * EARS: PEVAL-O1, PEVAL-O2, PEVAL-O3, PEVAL-O4, PEVAL-O5, PEVAL-O6
+ * EARS: PEVAL-O1, PEVAL-O2, PEVAL-O3, PEVAL-O4, PEVAL-O5, PEVAL-O6, PEVAL-O7
  */
 
 import * as fs from "node:fs";

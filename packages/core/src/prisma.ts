@@ -13,3 +13,11 @@ export type {
   ProjectionClient,
   JsonValue,
 } from './record_projection/prisma';
+
+// KeyProvider (database-backed via Prisma-compatible client)
+export { PrismaKeyProvider } from './key_provider/prisma';
+export type {
+  PrismaKeyProviderOptions,
+  ActorKeyDelegate,
+  ActorKeyRow,
+} from './key_provider/prisma';
