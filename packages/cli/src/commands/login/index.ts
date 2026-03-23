@@ -9,5 +9,4 @@ export type {
   GetKeyResponse,
   KeyStatusRequest,
   KeyStatusResponse,
-  LoginSessionData,
 } from './login-command.types';

@@ -2,7 +2,8 @@
  * Login Command — connects CLI with SaaS, exchanges private keys
  *
  * Spec: cli/specs/login_command.md
- * EARS: LOGIN-A1..A3, LOGIN-B1..B3, LOGIN-C1..C2, LOGIN-D1..D2
+ * EARS: LOGIN-A1..A3, LOGIN-B1..B3, LOGIN-C1..C2, LOGIN-D1..D2 (unit tests)
+ *       LOGIN-E1..E4 (E2E tests in cli/e2e/login_command_e2e.test.ts)
  */
 
 import { Command } from 'commander';
@@ -274,14 +275,18 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
         return;
       }
 
-      // [LOGIN-D2] Keys differ → error
+      // [LOGIN-D2] Keys differ → error (logged in but key conflict is an error state)
       if (localKey && saasKeyResponse.privateKey && localKey !== saasKeyResponse.privateKey) {
-        console.error('Keys differ between CLI and SaaS. Resolve manually: use `gitgov actor rotate-key` to generate a new key, or choose which to keep.');
-        this.handleSuccess(
-          { loggedIn: true, user: actorId, keySynced: false, keyConflict: true },
-          options,
-          `Logged in as ${actorId}\nKeys differ — resolve manually`
-        );
+        // Login succeeded but key sync failed — report as error
+        if (options.json) {
+          console.log(JSON.stringify({
+            success: false,
+            error: 'Key conflict',
+            data: { loggedIn: true, user: actorId, keySynced: false, keyConflict: true },
+          }, null, 2));
+        } else {
+          console.error('Keys differ between CLI and SaaS. Resolve manually: use `gitgov actor rotate-key` to generate a new key, or choose which to keep.');
+        }
         return;
       }
     }

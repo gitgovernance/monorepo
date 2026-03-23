@@ -60,19 +60,6 @@ export type KeyStatusResponse = {
 };
 
 // ============================================================================
-// SESSION DATA (§3.4)
-// ============================================================================
-
-export type LoginSessionData = {
-  token: string;
-  user: { login: string; id: number };
-  actorId: string;
-  saasUrl: string;
-  keySynced: boolean;
-  lastLogin: string;
-};
-
-// ============================================================================
 // DEPENDENCY INJECTION
 // ============================================================================
 
