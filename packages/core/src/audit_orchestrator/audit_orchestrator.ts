@@ -13,6 +13,7 @@ import type {
   ConsolidatedFinding,
   AuditSummary,
   FindingSeverity,
+  ReviewAgentResult,
 } from "./audit_orchestrator.types";
 import type { PolicyEvaluationInput } from "../policy_evaluator/policy_evaluator.types";
 
@@ -74,6 +75,73 @@ async function discoverAuditAgents(
   }
 
   return auditAgentIds;
+}
+
+/**
+ * [AORCH-F1] Discovers AgentRecords with metadata.purpose === "review".
+ */
+async function discoverReviewAgents(
+  agentStore: RecordStore<GitGovAgentRecord>,
+): Promise<string[]> {
+  const agentIds = await agentStore.list();
+  const reviewAgentIds: string[] = [];
+
+  for (const id of agentIds) {
+    const record = await agentStore.get(id);
+    if (!record) continue;
+    const meta = record.payload.metadata as
+      | Record<string, unknown>
+      | undefined;
+    if (meta && meta["purpose"] === "review") {
+      reviewAgentIds.push(record.payload.id);
+    }
+  }
+
+  return reviewAgentIds;
+}
+
+/**
+ * [AORCH-F1, F2, F4] Executes a single review agent and returns its result.
+ * AgentRunner creates the FeedbackRecord automatically (EARS-L1).
+ */
+async function executeReviewAgent(
+  agentRunner: IAgentRunner,
+  agentId: string,
+  findings: ConsolidatedFinding[],
+  policyDecision: AuditOrchestrationResult["policyDecision"],
+  taskId: string,
+): Promise<ReviewAgentResult> {
+  const startMs = Date.now();
+
+  try {
+    // [AORCH-F2] Pass findings, policyDecision, and taskId in ctx.input
+    const runOpts: RunOptions = {
+      agentId,
+      taskId,
+      input: {
+        findings,
+        policyDecision,
+        taskId,
+      },
+    };
+
+    const response = await agentRunner.runOnce(runOpts);
+
+    return {
+      agentId,
+      status: "success",
+      durationMs: Date.now() - startMs,
+      feedbackRecordId: response.executionRecordId,
+    };
+  } catch (err) {
+    // [AORCH-F4] Review agent failure never blocks the pipeline
+    return {
+      agentId,
+      status: "error",
+      durationMs: Date.now() - startMs,
+      errorMessage: err instanceof Error ? err.message : String(err),
+    };
+  }
 }
 
 /**
@@ -368,6 +436,39 @@ export function createAuditOrchestrator(deps: AuditOrchestratorDeps) {
 
       if (l1AgentResults) {
         result.l1AgentResults = l1AgentResults;
+      }
+
+      // [AORCH-F1] Discover and execute review agents post-policy
+      // [AORCH-F3] If no review agents found, skip silently (no warning, no error)
+      const reviewAgents = await discoverReviewAgents(deps.recordStore);
+      if (reviewAgents.length > 0) {
+        // [AORCH-F1, F2] Execute review agents with findings + policyDecision
+        const reviewSettled = await Promise.allSettled(
+          reviewAgents.map((agentId) =>
+            executeReviewAgent(
+              deps.agentRunner,
+              agentId,
+              findingsWithWaivers,
+              policyResult.decision,
+              options.taskId,
+            ),
+          ),
+        );
+
+        // [AORCH-F4] Collect results — failures don't block pipeline
+        result.reviewResults = reviewSettled.map((s, i) =>
+          s.status === "fulfilled"
+            ? s.value
+            : {
+                agentId: reviewAgents[i] ?? "unknown",
+                status: "error" as const,
+                durationMs: 0,
+                errorMessage:
+                  s.reason instanceof Error
+                    ? s.reason.message
+                    : String(s.reason),
+              },
+        );
       }
 
       return result;
