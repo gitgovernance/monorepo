@@ -123,7 +123,7 @@ export class HttpLlmDetector implements LlmDetector {
         confidence: raw.confidence ?? 0.9,
       };
 
-      if (raw.suggestion) finding.suggestion = raw.suggestion;
+      if (raw.fixes?.length) finding.fixes = raw.fixes;
       if (raw.legalReference) finding.legalReference = raw.legalReference;
 
       return finding;

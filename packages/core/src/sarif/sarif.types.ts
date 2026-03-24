@@ -121,10 +121,40 @@ export type SarifResult = {
    */
   suppressions?: SarifSuppression[];
   /**
+   * Proposed fixes for this result.
+   * §3.55.4 fix object — detector suggestion for remediation.
+   * description.text is the human-readable suggestion.
+   * artifactChanges are optional concrete diffs.
+   */
+  fixes?: SarifFix[];
+  /**
    * GitGov governance metadata.
    * §3.8 PropertyBag
    */
   properties?: SarifResultProperties;
+};
+
+/**
+ * A proposed fix for a result.
+ * §3.55 fix object
+ */
+export type SarifFix = {
+  /** Human-readable description of the fix */
+  description: { text: string };
+  /** Concrete file changes (optional) */
+  artifactChanges?: SarifArtifactChange[];
+};
+
+/**
+ * A change to a single artifact.
+ * §3.56 artifactChange object
+ */
+export type SarifArtifactChange = {
+  artifactLocation: { uri: string };
+  replacements: Array<{
+    deletedRegion: { startLine: number; startColumn?: number; endLine?: number; endColumn?: number };
+    insertedContent?: { text: string };
+  }>;
 };
 
 /**

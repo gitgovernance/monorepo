@@ -8,7 +8,7 @@ export const REGEX_RULES: RegexRule[] = [
     category: "pii-email",
     severity: "high",
     message: "Email address detected in source code",
-    suggestion: "Move to configuration or environment variable",
+    fixes: [{ description: "Move to configuration or environment variable" }],
     legalReference: "GDPR Art. 4(1)",
   },
   {
@@ -17,7 +17,7 @@ export const REGEX_RULES: RegexRule[] = [
     category: "pii-phone",
     severity: "medium",
     message: "Phone number pattern detected",
-    suggestion: "Avoid hardcoding personal phone numbers",
+    fixes: [{ description: "Avoid hardcoding personal phone numbers" }],
   },
   {
     id: "PII-003",
@@ -25,7 +25,7 @@ export const REGEX_RULES: RegexRule[] = [
     category: "pii-financial",
     severity: "critical",
     message: "Potential credit card number detected",
-    suggestion: "Never store credit card numbers in source code",
+    fixes: [{ description: "Never store credit card numbers in source code" }],
     legalReference: "PCI-DSS, GDPR Art. 32",
   },
   {
@@ -34,7 +34,7 @@ export const REGEX_RULES: RegexRule[] = [
     category: "pii-generic",
     severity: "critical",
     message: "US Social Security Number pattern detected",
-    suggestion: "SSNs must never be stored in source code",
+    fixes: [{ description: "SSNs must never be stored in source code" }],
   },
   {
     id: "PII-005",
@@ -42,7 +42,7 @@ export const REGEX_RULES: RegexRule[] = [
     category: "pii-generic",
     severity: "medium",
     message: "Sensitive field name detected",
-    suggestion: "Review if real data or structure requiring encryption",
+    fixes: [{ description: "Review if real data or structure requiring encryption" }],
   },
 
   // === SECRETS ===
@@ -53,7 +53,7 @@ export const REGEX_RULES: RegexRule[] = [
     category: "hardcoded-secret",
     severity: "critical",
     message: "Hardcoded API key detected",
-    suggestion: "Use environment variables or secret management",
+    fixes: [{ description: "Use environment variables or secret management" }],
   },
   {
     id: "SEC-002",
@@ -61,7 +61,7 @@ export const REGEX_RULES: RegexRule[] = [
     category: "hardcoded-secret",
     severity: "critical",
     message: "AWS Access Key ID detected",
-    suggestion: "Rotate this key immediately and use IAM roles",
+    fixes: [{ description: "Rotate this key immediately and use IAM roles" }],
   },
   {
     id: "SEC-003",
@@ -69,7 +69,7 @@ export const REGEX_RULES: RegexRule[] = [
     category: "hardcoded-secret",
     severity: "critical",
     message: "Private key detected in source code",
-    suggestion: "Never commit private keys. Use secret management.",
+    fixes: [{ description: "Never commit private keys. Use secret management." }],
   },
 
   // === LOGGING PII ===
@@ -80,7 +80,7 @@ export const REGEX_RULES: RegexRule[] = [
     category: "logging-pii",
     severity: "high",
     message: "Potential PII being logged",
-    suggestion: "Sanitize logs to remove personal data",
+    fixes: [{ description: "Sanitize logs to remove personal data" }],
     legalReference: "GDPR Art. 5(1)(f)",
   },
 ];

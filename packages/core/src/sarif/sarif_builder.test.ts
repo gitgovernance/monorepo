@@ -16,7 +16,7 @@ const baseFindings: Finding[] = [
     column: 5,
     snippet: 'const email = user.email;',
     message: 'PII email detected in source code',
-    suggestion: 'Remove email from source',
+    fixes: [{ description: 'Remove email from source' }],
     legalReference: 'GDPR Art. 5(1)(f)',
     detector: 'regex',
     fingerprint: 'abc123def456',
@@ -144,7 +144,7 @@ describe('SarifBuilder', () => {
       expect(loc!.physicalLocation.region.snippet).toBeUndefined();
     });
 
-    it('[SARIF-C9] build: rule with suggestion should include fullDescription.text', async () => {
+    it('[SARIF-C9] build: rule with fixes should include fullDescription.text', async () => {
       const sarif = await builder.build(baseOptions);
       const rules = firstRun(sarif).tool.driver.rules ?? [];
       const rule = rules.find(r => r.id === 'PII-001');

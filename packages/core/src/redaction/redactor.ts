@@ -31,9 +31,9 @@ class FindingRedactor {
    *
    * L2: retorna copia completa sin modificaciones (solo agrega metadatos).
    * L1 + categoria no sensible: retorna copia sin modificaciones.
-   * L1 + categoria sensible: redacta snippet, genericiza message, elimina suggestion.
+   * L1 + categoria sensible: redacta snippet, genericiza message, elimina fixes.
    *
-   * Note: ConsolidatedFinding does not have suggestion field.
+   * Note: ConsolidatedFinding does not have fixes field.
    * Only fields that exist on the input are redacted.
    */
   redact<T extends RedactableInput>(finding: T, level: RedactionLevel): RedactedFinding<T> {
@@ -55,7 +55,7 @@ class FindingRedactor {
     }
 
     // L1 + categoria sensible: redactar
-    // Only redact snippet/suggestion if they exist on the input type
+    // Only redact snippet/fixes if they exist on the input type
     const snippet = 'snippet' in finding ? finding.snippet : undefined;
     const overrides: Record<string, unknown> = {
       message: `Sensitive finding (${finding.category})`,
@@ -65,8 +65,8 @@ class FindingRedactor {
     if ('snippet' in finding) {
       overrides['snippet'] = '[REDACTED]';
     }
-    if ('suggestion' in finding) {
-      overrides['suggestion'] = undefined;
+    if ('fixes' in finding) {
+      overrides['fixes'] = undefined;
     }
     if (snippet) {
       overrides['snippetHash'] = sha256(snippet as string);

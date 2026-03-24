@@ -49,8 +49,8 @@ export interface Finding {
   snippet: string;
   /** Problem description */
   message: string;
-  /** Remediation suggestion */
-  suggestion?: string;
+  /** Proposed fixes — SARIF §3.55.4 standard */
+  fixes?: Array<{ description: string }>;
   /** Legal reference (e.g., "GDPR Art. 5(1)(f)") */
   legalReference?: string;
   /** Detector that generated the finding */
@@ -169,8 +169,8 @@ export interface RegexRule {
   severity: FindingSeverity;
   /** Descriptive problem message */
   message: string;
-  /** Remediation suggestion */
-  suggestion?: string;
+  /** Proposed fixes — SARIF §3.55.4 standard */
+  fixes?: Array<{ description: string }>;
   /** Applicable legal reference */
   legalReference?: string;
 }
@@ -186,7 +186,7 @@ export interface LlmRawFinding {
   category: string;
   severity: "critical" | "high" | "medium" | "low" | "info";
   message: string;
-  suggestion?: string;
+  fixes?: Array<{ description: string }>;
   legalReference?: string;
   snippet?: string;
   confidence?: number;

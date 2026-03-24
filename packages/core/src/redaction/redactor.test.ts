@@ -12,7 +12,7 @@
  * | RLDX-B1  | should return all original fields with redactionLevel l2 when level is l2                      |
  * | RLDX-B2  | should replace snippet with [REDACTED] and set hasFullSnippet false for sensitive category at l1|
  * | RLDX-B3  | should set snippetHash to sha256 of original snippet for sensitive finding with non-empty snippet|
- * | RLDX-B4  | should genericize message and set suggestion to undefined for sensitive category                |
+ * | RLDX-B4  | should genericize message and set fixes to undefined for sensitive category                |
  * | RLDX-B5  | should return all original fields with hasFullSnippet true for safe category at l1              |
  * | RLDX-B6  | should apply full redaction for unregistered category when defaultBehavior is redact            |
  * | RLDX-B7  | should return original fields intact for unregistered category when defaultBehavior is keep     |
@@ -43,7 +43,7 @@ const sensitiveFinding: Finding = {
   severity: 'critical',
   snippet: "const apiKey = 'sk-1234567890abcdef'",
   message: 'Hardcoded API key detected at line 12',
-  suggestion: 'Move to environment variable API_KEY',
+  fixes: [{ description: 'Move to environment variable API_KEY' }],
   fingerprint: 'abc123fingerprint',
   detector: 'regex',
   confidence: 0.95,
@@ -58,7 +58,7 @@ const safeFinding: Finding = {
   severity: 'low',
   snippet: "document.cookie = '_ga=' + gaId",
   message: 'Analytics tracking cookie set',
-  suggestion: 'Ensure cookie consent is obtained',
+  fixes: [{ description: 'Ensure cookie consent is obtained' }],
   fingerprint: 'def456fingerprint',
   detector: 'regex',
   confidence: 0.8,
@@ -155,7 +155,7 @@ describe('FindingRedactor', () => {
     });
 
     it('[RLDX-A5] should carry all finding fields plus redactionLevel hasFullSnippet and snippetHash', () => {
-      // Test with Finding (has snippet, suggestion)
+      // Test with Finding (has snippet, fixes)
       const redactedFinding = redactor.redact(sensitiveFinding, 'l1');
       expect(redactedFinding.file).toBe(sensitiveFinding.file);
       expect(redactedFinding.line).toBe(sensitiveFinding.line);
@@ -167,7 +167,7 @@ describe('FindingRedactor', () => {
       expect(redactedFinding.hasFullSnippet).toBeDefined();
       expect(redactedFinding.snippetHash).toBeDefined();
 
-      // Test with ConsolidatedFinding (has snippet, no suggestion)
+      // Test with ConsolidatedFinding (has snippet, no fixes)
       const redactedConsolidated = redactor.redact(consolidatedFinding, 'l1');
       expect(redactedConsolidated.fingerprint).toBe(consolidatedFinding.fingerprint);
       expect(redactedConsolidated.reportedBy).toEqual(consolidatedFinding.reportedBy);
@@ -186,7 +186,7 @@ describe('FindingRedactor', () => {
 
       expect(result.snippet).toBe(sensitiveFinding.snippet);
       expect(result.message).toBe(sensitiveFinding.message);
-      expect(result.suggestion).toBe(sensitiveFinding.suggestion);
+      expect(result.fixes).toBe(sensitiveFinding.fixes);
       expect(result.redactionLevel).toBe('l2');
       expect(result.hasFullSnippet).toBe(true);
     });
@@ -208,12 +208,12 @@ describe('FindingRedactor', () => {
       expect(result.snippetHash).toBe(sha256(sensitiveFinding.snippet));
     });
 
-    it('[RLDX-B4] should genericize message and set suggestion to undefined for sensitive category', () => {
+    it('[RLDX-B4] should genericize message and set fixes to undefined for sensitive category', () => {
       const result = redactor.redact(sensitiveFinding, 'l1');
 
       expect(result.message).toContain('hardcoded-secret');
       expect(result.message).not.toBe(sensitiveFinding.message);
-      expect(result.suggestion).toBeUndefined();
+      expect(result.fixes).toBeUndefined();
     });
 
     it('[RLDX-B5] should return all original fields with hasFullSnippet true for safe category at l1', () => {
@@ -221,7 +221,7 @@ describe('FindingRedactor', () => {
 
       expect(result.snippet).toBe(safeFinding.snippet);
       expect(result.message).toBe(safeFinding.message);
-      expect(result.suggestion).toBe(safeFinding.suggestion);
+      expect(result.fixes).toBe(safeFinding.fixes);
       expect(result.hasFullSnippet).toBe(true);
       expect(result.redactionLevel).toBe('l1');
     });
