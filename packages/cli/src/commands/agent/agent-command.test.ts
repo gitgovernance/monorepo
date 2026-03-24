@@ -458,4 +458,127 @@ describe('AgentCommand', () => {
       expect(output.data.engine).toEqual({ type: 'local' });
     });
   });
+
+  describe('4.5. Agent New con Config (EARS-E1 to EARS-E4)', () => {
+    it('[EARS-E1] should create AgentRecord with merged config JSON', async () => {
+      const config = JSON.stringify({
+        engine: {
+          entrypoint: 'packages/agents/security-audit/dist/index.mjs',
+          function: 'runAgent',
+        },
+        metadata: { purpose: 'audit', audit: { target: 'code', outputFormat: 'sarif' } },
+      });
+
+      await agentCommand.executeNew('agent:test-config', {
+        engineType: 'local',
+        config,
+        json: true,
+      } as AgentNewOptions);
+
+      // Verify createAgentRecord was called with merged payload
+      expect(mockAgentAdapter.createAgentRecord).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'agent:test-config',
+          engine: expect.objectContaining({
+            type: 'local',
+            entrypoint: 'packages/agents/security-audit/dist/index.mjs',
+            function: 'runAgent',
+          }),
+          metadata: expect.objectContaining({
+            purpose: 'audit',
+          }),
+        }),
+      );
+    });
+
+    it('[EARS-E2] should read and merge config from --config-file', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const nodeFs = require('node:fs') as typeof import('fs');
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const nodePath = require('node:path') as typeof import('path');
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const nodeOs = require('node:os') as typeof import('os');
+
+      const tmpFile = nodePath.join(nodeOs.tmpdir(), `agent-config-e2-${Date.now()}.json`);
+
+      nodeFs.writeFileSync(tmpFile, JSON.stringify({
+        engine: { entrypoint: 'dist/index.mjs', function: 'runAgent' },
+        metadata: { purpose: 'review' },
+      }));
+
+      try {
+        await agentCommand.executeNew('agent:test-file', {
+          engineType: 'local',
+          configFile: tmpFile,
+          json: true,
+        } as AgentNewOptions);
+
+        expect(mockAgentAdapter.createAgentRecord).toHaveBeenCalledWith(
+          expect.objectContaining({
+            id: 'agent:test-file',
+            engine: expect.objectContaining({
+              type: 'local',
+              entrypoint: 'dist/index.mjs',
+            }),
+            metadata: expect.objectContaining({
+              purpose: 'review',
+            }),
+          }),
+        );
+      } finally {
+        nodeFs.unlinkSync(tmpFile);
+      }
+    });
+
+    it('[EARS-E3] should merge --engine-type shortcut with --config fields', async () => {
+      // Config says engine type "api" but -e says "local" — -e wins
+      const config = JSON.stringify({
+        engine: {
+          type: 'api',
+          url: 'https://example.com',
+          entrypoint: 'dist/index.mjs',
+        },
+        metadata: { purpose: 'audit' },
+      });
+
+      await agentCommand.executeNew('agent:test-merge', {
+        engineType: 'local',
+        config,
+        json: true,
+      } as AgentNewOptions);
+
+      expect(mockAgentAdapter.createAgentRecord).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'agent:test-merge',
+          engine: expect.objectContaining({
+            type: 'local', // -e wins over config.engine.type
+            entrypoint: 'dist/index.mjs', // from config
+          }),
+        }),
+      );
+    });
+
+    it('[EARS-E4] should show error and exit 1 when config JSON is invalid', async () => {
+      const mockExit = jest.spyOn(process, 'exit').mockImplementation((() => {}) as never);
+
+      await agentCommand.executeNew('agent:test-invalid', {
+        engineType: 'local',
+        config: '{invalid json!!!',
+        json: true,
+      } as AgentNewOptions);
+
+      // Should have called process.exit(1)
+      expect(mockExit).toHaveBeenCalledWith(1);
+
+      // Should have logged error
+      const errorCall = mockConsoleLog.mock.calls.find(call =>
+        typeof call[0] === 'string' && call[0].includes('Invalid JSON'),
+      ) ?? mockConsoleError.mock.calls.find(call =>
+        typeof call[0] === 'string' && (call[0] as string).includes('Invalid JSON'),
+      );
+      expect(errorCall).toBeDefined();
+
+      mockExit.mockRestore();
+    });
+  });
 });

@@ -50,11 +50,15 @@ export interface ShowCommandOptions extends BaseCommandOptions {
 
 /**
  * CLI-specific options for agent new command
- * EARS: ICOMP-C7..C9
+ * EARS: ICOMP-C7..C9, EARS-E1..E4
  */
 export interface AgentNewOptions extends BaseCommandOptions {
   /** Engine type */
   engineType: 'local' | 'api' | 'mcp' | 'custom';
+  /** [EARS-E1] Inline JSON config to merge with defaults */
+  config?: string;
+  /** [EARS-E2] Path to JSON config file */
+  configFile?: string;
 }
 
 /**
@@ -88,7 +92,9 @@ export class AgentCommand extends BaseCommand<RunCommandOptions> {
       .command('new <actorId>')
       .alias('n')
       .description('Create a new AgentRecord for an actor of type agent')
-      .addOption(new Option('-e, --engine-type <type>', 'Execution engine type').choices(['local', 'api', 'mcp', 'custom']).makeOptionMandatory())
+      .addOption(new Option('-e, --engine-type <type>', 'Execution engine type').choices(['local', 'api', 'mcp', 'custom']))
+      .option('-c, --config <json>', 'Inline JSON config to merge with defaults (engine, metadata, triggers)')
+      .option('--config-file <path>', 'Path to JSON config file')
       .option('--json', 'Output as JSON', false)
       .option('-v, --verbose', 'Verbose output', false)
       .option('-q, --quiet', 'Quiet output', false)
@@ -149,12 +155,62 @@ export class AgentCommand extends BaseCommand<RunCommandOptions> {
     try {
       const agentAdapter = await this.container.getAgentAdapter();
 
-      // [ICOMP-C7] Create AgentRecord via adapter
-      // Engine is a discriminated union — adapter validates required fields per type
-      const agent = await agentAdapter.createAgentRecord({
+      // [EARS-E1, E2, E3, E4] Build payload from config sources
+      let configPayload: Record<string, unknown> = {};
+
+      // [EARS-E2] Read from config file first (lowest priority)
+      if (options.configFile) {
+        const { readFileSync } = await import('node:fs');
+        try {
+          const fileContent = readFileSync(options.configFile, 'utf-8');
+          configPayload = JSON.parse(fileContent) as Record<string, unknown>;
+        } catch (err) {
+          // [EARS-E4] Invalid JSON or file not found
+          const message = err instanceof Error ? err.message : String(err);
+          throw new Error(`Failed to read --config-file: ${message}`);
+        }
+      }
+
+      // [EARS-E1] Merge inline config (higher priority than file)
+      if (options.config) {
+        try {
+          const inlineConfig = JSON.parse(options.config) as Record<string, unknown>;
+          configPayload = { ...configPayload, ...inlineConfig };
+        } catch {
+          // [EARS-E4] Invalid JSON
+          throw new Error('Invalid JSON in --config. Provide valid JSON string.');
+        }
+      }
+
+      // [EARS-E3] Engine type shortcut has highest priority
+      // Build engine: start from config, override type if -e provided
+      const configEngine = (configPayload['engine'] ?? {}) as Record<string, unknown>;
+      const engineType = options.engineType ?? (configEngine['type'] as string) ?? 'local';
+      const engine = { ...configEngine, type: engineType } as AgentRecord['engine'];
+
+      // Build full payload: merge config fields + engine
+      const payload: Partial<AgentRecord> & { id: string } = {
         id: actorId,
-        engine: { type: options.engineType } as AgentRecord['engine'],
-      });
+        engine,
+      };
+
+      // Merge metadata if provided in config
+      if (configPayload['metadata']) {
+        (payload as Record<string, unknown>)['metadata'] = configPayload['metadata'];
+      }
+
+      // Merge triggers if provided in config
+      if (configPayload['triggers']) {
+        (payload as Record<string, unknown>)['triggers'] = configPayload['triggers'];
+      }
+
+      // Merge knowledge_dependencies if provided
+      if (configPayload['knowledge_dependencies']) {
+        (payload as Record<string, unknown>)['knowledge_dependencies'] = configPayload['knowledge_dependencies'];
+      }
+
+      // [ICOMP-C7] Create AgentRecord via adapter
+      const agent = await agentAdapter.createAgentRecord(payload);
 
       // [ICOMP-C9] Output
       if (options.json) {
