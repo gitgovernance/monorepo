@@ -2,6 +2,7 @@ import type { AgentRecord } from "../record_types";
 import type { IEventStream } from "../event_bus";
 import type { IExecutionAdapter } from "../adapters/execution_adapter";
 import type { IIdentityAdapter } from "../adapters/identity_adapter";
+import type { IFeedbackAdapter } from "../adapters/feedback_adapter";
 import type { ProtocolHandlerRegistry, RuntimeHandlerRegistry } from "./agent_runner";
 
 // ============================================================================
@@ -146,6 +147,8 @@ export type AgentRunnerDependencies = {
   identityAdapter?: IIdentityAdapter;
   /** ExecutionAdapter for persisting executions (REQUIRED) */
   executionAdapter: IExecutionAdapter;
+  /** FeedbackAdapter for persisting review agent output (optional — backward compatible) [EARS-L1, L2] */
+  feedbackAdapter?: IFeedbackAdapter;
   /** EventBus for emitting events (optional, no events if not provided) */
   eventBus?: IEventStream;
   /** Protocol handler registry (for engine.type: "custom") */

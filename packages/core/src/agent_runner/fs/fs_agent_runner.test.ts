@@ -3,7 +3,7 @@
  *
  * Tests for filesystem-based agent runner implementation.
  *
- * Reference: agent_runner_module.md §4.1-4.3, §4.7-4.11
+ * Reference: agent_runner_module.md §4.1-4.3, §4.7-4.12
  */
 
 import * as fs from "fs";
@@ -412,7 +412,7 @@ describe("FsAgentRunner", () => {
     });
   });
 
-  describe("4.4. Engine Type Validation (EARS-G1 to EARS-G3)", () => {
+  describe("4.7. Engine Type Validation (EARS-G1 to EARS-G3)", () => {
     it("[EARS-G1] should throw UnsupportedEngineType for unknown type", async () => {
       writeAgentFile("unknown-engine", {
         engine: { type: "invalid" as "local" },
@@ -468,7 +468,7 @@ describe("FsAgentRunner", () => {
     });
   });
 
-  describe("4.5. ExecutionRecord Writing (EARS-H1 to EARS-H4)", () => {
+  describe("4.8. ExecutionRecord Writing (EARS-H1 to EARS-H4)", () => {
     it("[EARS-H1] should create ExecutionRecord on success", async () => {
       const entrypoint = writeAgentEntrypoint(
         "success.js",
@@ -580,7 +580,7 @@ describe("FsAgentRunner", () => {
     });
   });
 
-  describe("4.6. EventBus Integration (EARS-I1 to EARS-I4)", () => {
+  describe("4.9. EventBus Integration (EARS-I1 to EARS-I4)", () => {
     it("[EARS-I1] should emit agent:started event", async () => {
       const entrypoint = writeAgentEntrypoint(
         "event-started.js",
@@ -696,7 +696,7 @@ describe("FsAgentRunner", () => {
     });
   });
 
-  describe("4.7. Response Return (EARS-J1 to EARS-J3)", () => {
+  describe("4.10. Response Return (EARS-J1 to EARS-J3)", () => {
     it("[EARS-J1] should always return AgentResponse", async () => {
       const entrypoint = writeAgentEntrypoint(
         "response.js",
@@ -779,7 +779,7 @@ describe("FsAgentRunner", () => {
     });
   });
 
-  describe("4.8. Factory Function (EARS-K1)", () => {
+  describe("4.11. Factory Function (EARS-K1)", () => {
     it("[EARS-K1] should create FsAgentRunner with injected dependencies", () => {
       const runner = createFsAgentRunner({
         executionAdapter: mockExecutionAdapter,
@@ -788,6 +788,149 @@ describe("FsAgentRunner", () => {
       });
 
       expect(runner).toBeInstanceOf(FsAgentRunner);
+    });
+  });
+
+  describe("4.12. FeedbackRecord Support for Review Agents (EARS-L1 to EARS-L4)", () => {
+    const mockFeedbackAdapter = {
+      create: jest.fn().mockResolvedValue({ id: "feedback:review-001" }),
+      resolve: jest.fn(),
+      getFeedback: jest.fn(),
+      getFeedbackByEntity: jest.fn(),
+      getAllFeedback: jest.fn(),
+      getFeedbackThread: jest.fn(),
+    };
+
+    beforeEach(() => {
+      mockFeedbackAdapter.create.mockClear().mockResolvedValue({ id: "feedback:review-001" } as never);
+      mockExecutionAdapter.create.mockClear().mockResolvedValue({ id: "exec:test-123" } as never);
+    });
+
+    it("[EARS-L1] should create FeedbackRecord when agent purpose is review", async () => {
+      const entrypoint = writeAgentEntrypoint(
+        "review-agent.js",
+        "module.exports.runReviewAdvisor = async () => ({ data: 'review-ok' })"
+      );
+      writeAgentFile("review-agent", {
+        engine: { type: "local", entrypoint, function: "runReviewAdvisor" },
+        metadata: { purpose: "review" },
+      });
+
+      const runner = new FsAgentRunner({
+        executionAdapter: mockExecutionAdapter,
+        feedbackAdapter: mockFeedbackAdapter,
+        gitgovPath,
+        projectRoot: tempDir,
+      });
+
+      const response = await runner.runOnce({
+        agentId: "agent:review-agent",
+        taskId: "task:1",
+      });
+
+      expect(response.status).toBe("success");
+      expect(mockFeedbackAdapter.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          entityType: "execution",
+          entityId: "task:1",
+          type: "suggestion",
+          status: "open",
+          metadata: expect.objectContaining({
+            agentId: "agent:review-agent",
+            purpose: "review",
+            executionStatus: "success",
+          }),
+        }),
+        expect.any(String)
+      );
+      expect(response.executionRecordId).toBe("feedback:review-001");
+    });
+
+    it("[EARS-L2] should fallback to ExecutionRecord when feedbackAdapter missing", async () => {
+      const entrypoint = writeAgentEntrypoint(
+        "review-no-feedback.js",
+        "module.exports.runReviewAdvisor = async () => ({ data: 'review-fallback' })"
+      );
+      writeAgentFile("review-no-feedback", {
+        engine: { type: "local", entrypoint, function: "runReviewAdvisor" },
+        metadata: { purpose: "review" },
+      });
+
+      // No feedbackAdapter provided
+      const runner = new FsAgentRunner({
+        executionAdapter: mockExecutionAdapter,
+        gitgovPath,
+        projectRoot: tempDir,
+      });
+
+      const response = await runner.runOnce({
+        agentId: "agent:review-no-feedback",
+        taskId: "task:1",
+      });
+
+      expect(response.status).toBe("success");
+      // Should fallback to executionAdapter
+      expect(mockExecutionAdapter.create).toHaveBeenCalled();
+      expect(mockFeedbackAdapter.create).not.toHaveBeenCalled();
+      expect(response.executionRecordId).toBe("exec:test-123");
+    });
+
+    it("[EARS-L3] should create ExecutionRecord when agent purpose is audit (no regression)", async () => {
+      const entrypoint = writeAgentEntrypoint(
+        "audit-agent.js",
+        "module.exports.runAgent = async () => ({ data: 'audit-ok' })"
+      );
+      writeAgentFile("audit-agent", {
+        engine: { type: "local", entrypoint },
+        metadata: { purpose: "audit" },
+      });
+
+      mockFeedbackAdapter.create.mockClear();
+
+      const runner = new FsAgentRunner({
+        executionAdapter: mockExecutionAdapter,
+        feedbackAdapter: mockFeedbackAdapter,
+        gitgovPath,
+        projectRoot: tempDir,
+      });
+
+      const response = await runner.runOnce({
+        agentId: "agent:audit-agent",
+        taskId: "task:1",
+      });
+
+      expect(response.status).toBe("success");
+      // Should use executionAdapter, NOT feedbackAdapter
+      expect(mockExecutionAdapter.create).toHaveBeenCalled();
+      expect(mockFeedbackAdapter.create).not.toHaveBeenCalled();
+      expect(response.executionRecordId).toBe("exec:test-123");
+    });
+
+    it("[EARS-L4] should include feedbackRecordId in AgentResponse for review agents", async () => {
+      const entrypoint = writeAgentEntrypoint(
+        "review-id.js",
+        "module.exports.runReviewAdvisor = async () => ({ data: 'review-id-test' })"
+      );
+      writeAgentFile("review-id", {
+        engine: { type: "local", entrypoint, function: "runReviewAdvisor" },
+        metadata: { purpose: "review" },
+      });
+
+      mockFeedbackAdapter.create.mockResolvedValue({ id: "feedback:L4-test" });
+
+      const runner = new FsAgentRunner({
+        executionAdapter: mockExecutionAdapter,
+        feedbackAdapter: mockFeedbackAdapter,
+        gitgovPath,
+        projectRoot: tempDir,
+      });
+
+      const response = await runner.runOnce({
+        agentId: "agent:review-id",
+        taskId: "task:1",
+      });
+
+      expect(response.executionRecordId).toBe("feedback:L4-test");
     });
   });
 });
