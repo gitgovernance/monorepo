@@ -1,0 +1,24 @@
+{
+  "name": "@gitgov/agent-review-advisor",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "dist/index.mjs",
+  "scripts": {
+    "build": "esbuild src/index.ts --bundle --platform=node --format=esm --target=node20 --outfile=dist/index.mjs --external:@gitgov/core --external:@anthropic-ai/claude-agent-sdk",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit",
+    "test": "jest"
+  },
+  "dependencies": {
+    "@gitgov/core": "workspace:*",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.81"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.0.0",
+    "@types/node": "^20.0.0",
+    "esbuild": "^0.19.0",
+    "jest": "^29.0.0",
+    "ts-jest": "^29.0.0",
+    "typescript": "^5.0.0"
+  }
+}
