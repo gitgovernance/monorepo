@@ -1,3 +1,10 @@
+## [3.4.0](https://github.com/gitgovernance/monorepo/compare/core-v3.3.0...core-v3.4.0) (2026-03-25)
+
+
+### ✨ Features
+
+* **core:** AgentRunner FeedbackRecord support for review agents (EARS-L1 to L4) ([#137](https://github.com/gitgovernance/monorepo/issues/137)) ([29dedd6](https://github.com/gitgovernance/monorepo/commit/29dedd6da9f26a7ac2e3743226b5fa74c21c3887))
+
 ## [3.3.0](https://github.com/gitgovernance/monorepo/compare/core-v3.2.0...core-v3.3.0) (2026-03-21)
 
 
