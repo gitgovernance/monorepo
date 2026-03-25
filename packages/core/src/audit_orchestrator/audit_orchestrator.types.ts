@@ -69,6 +69,24 @@ export type AuditOrchestrationResult = {
   };
   /** Warning message (e.g. when no audit agents are found) */
   warning?: string;
+  /** Review agent results (optional — empty if no review agents registered) [AORCH-F1] */
+  reviewResults?: ReviewAgentResult[];
+};
+
+/**
+ * Result from a single review agent execution. [AORCH-F1, F4]
+ */
+export type ReviewAgentResult = {
+  /** Agent identifier */
+  agentId: string;
+  /** Whether the agent succeeded or failed */
+  status: "success" | "error";
+  /** Execution duration in milliseconds */
+  durationMs: number;
+  /** Error message if status is "error" [AORCH-F4] */
+  errorMessage?: string;
+  /** FeedbackRecord ID created by AgentRunner */
+  feedbackRecordId?: string;
 };
 
 // ============================================================================

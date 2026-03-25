@@ -13,9 +13,10 @@ import {
   EngineConfigError,
   MissingDependencyError,
 } from "../agent_runner.errors";
-import type { AgentRecord } from "../../record_types";
+import type { AgentRecord, FeedbackRecord } from "../../record_types";
 import type { IEventStream } from "../../event_bus";
 import type { IExecutionAdapter } from "../../adapters/execution_adapter";
+import type { IFeedbackAdapter } from "../../adapters/feedback_adapter";
 import type { IIdentityAdapter } from "../../adapters/identity_adapter";
 import type {
   IAgentRunner,
@@ -51,6 +52,7 @@ export class FsAgentRunner implements IAgentRunner {
   private projectRoot: string;
   private identityAdapter: IIdentityAdapter | undefined;
   private executionAdapter: IExecutionAdapter;
+  private feedbackAdapter: IFeedbackAdapter | undefined; // [EARS-L1, L2]
   private eventBus: IEventStream | undefined;
   /** Protocol handlers for CustomBackend */
   public readonly protocolHandlers: ProtocolHandlerRegistry | undefined;
@@ -72,6 +74,7 @@ export class FsAgentRunner implements IAgentRunner {
     this.gitgovPath = deps.gitgovPath ?? path.join(this.projectRoot, ".gitgov");
     this.identityAdapter = deps.identityAdapter ?? undefined;
     this.executionAdapter = deps.executionAdapter;
+    this.feedbackAdapter = deps.feedbackAdapter ?? undefined; // [EARS-L1, L2]
     this.eventBus = deps.eventBus ?? undefined;
     this.protocolHandlers = deps.protocolHandlers ?? undefined;
     this.runtimeHandlers = deps.runtimeHandlers ?? undefined;
@@ -169,34 +172,74 @@ export class FsAgentRunner implements IAgentRunner {
     const durationMs =
       new Date(completedAt).getTime() - new Date(startedAt).getTime();
 
-    // [EARS-H1, H2] Write ExecutionRecord
+    // Determine agent purpose from metadata [EARS-L1, L3]
+    const agentMeta = agent.metadata as Record<string, unknown> | undefined;
+    const agentPurpose = agentMeta?.["purpose"] as string | undefined;
+    const isReviewAgent = agentPurpose === "review";
+
     // Build result message (min 10 chars required by schema)
     const resultMessage = status === "success"
       ? output?.message || `Agent ${opts.agentId} completed successfully`
       : `Agent ${opts.agentId} failed: ${error || 'Unknown error'}`;
 
-    const executionRecord = await this.executionAdapter.create(
-      {
-        taskId: opts.taskId,
-        type: status === "success" ? "completion" : "blocker",
-        title: `Agent execution: ${opts.agentId}`,
-        result: resultMessage.length >= 10 ? resultMessage : resultMessage.padEnd(10, '.'),
-        metadata: {
-          agentId: opts.agentId,
-          runId,
-          status,
-          output: status === "success" ? output : undefined,
-          error: status === "error" ? error : undefined,
-          startedAt,
-          completedAt,
-          durationMs,
-        },
-      },
-      ctx.actorId
-    );
+    let recordId: string;
 
-    // [EARS-H3] executionRecordId in response
-    const executionRecordId = executionRecord.id;
+    // [EARS-L1] Review agents create FeedbackRecord when feedbackAdapter available
+    // [EARS-L2] Fallback to ExecutionRecord if feedbackAdapter missing
+    // [EARS-L3] Non-review agents always create ExecutionRecord (no regression)
+    if (isReviewAgent && this.feedbackAdapter) {
+      // [EARS-L1] Create FeedbackRecord(type: 'suggestion') for review agents
+      // Following waiver pattern: entityType=execution, entityId=scanExecutionId,
+      // metadata.fingerprint for per-finding correlation
+      const feedbackRecord = await this.feedbackAdapter.create(
+        {
+          entityType: "execution",
+          entityId: opts.taskId, // scan execution context
+          type: "suggestion",
+          status: "open",
+          content: resultMessage.length >= 10 ? resultMessage : resultMessage.padEnd(10, '.'),
+          metadata: {
+            agentId: opts.agentId,
+            purpose: "review",
+            runId,
+            executionStatus: status,
+            output: status === "success" ? output : undefined,
+            error: status === "error" ? error : undefined,
+            startedAt,
+            completedAt,
+            durationMs,
+          },
+        } as Partial<FeedbackRecord>,
+        ctx.actorId
+      );
+      // [EARS-L4] feedbackRecordId in response (reuses executionRecordId field)
+      recordId = feedbackRecord.id;
+    } else {
+      // [EARS-H1, H2, L2, L3] Write ExecutionRecord
+      const executionRecord = await this.executionAdapter.create(
+        {
+          taskId: opts.taskId,
+          type: status === "success" ? "completion" : "blocker",
+          title: `Agent execution: ${opts.agentId}`,
+          result: resultMessage.length >= 10 ? resultMessage : resultMessage.padEnd(10, '.'),
+          metadata: {
+            agentId: opts.agentId,
+            runId,
+            status,
+            output: status === "success" ? output : undefined,
+            error: status === "error" ? error : undefined,
+            startedAt,
+            completedAt,
+            durationMs,
+          },
+        },
+        ctx.actorId
+      );
+      recordId = executionRecord.id;
+    }
+
+    // [EARS-H3, L4] recordId in response
+    const executionRecordId = recordId;
 
     // [EARS-I2, I3] Emit completion event
     if (status === "success") {

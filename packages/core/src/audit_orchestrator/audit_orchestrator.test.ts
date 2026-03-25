@@ -1126,4 +1126,210 @@ describe("AuditOrchestrator", () => {
       expect(agentInput).not.toHaveProperty("redactionConfig");
     });
   });
+
+  describe("4.5. Review Agent Execution (AORCH-F1 to AORCH-F4)", () => {
+    it("[AORCH-F1] should discover and execute review agents after policy evaluation", async () => {
+      // Setup: 1 audit agent + 1 review agent
+      const auditRecord = makeAgentRecord("agent:scanner", "audit");
+      const reviewRecord = makeAgentRecord("agent:reviewer", "review");
+      const deps = createMockDeps();
+      const orchestrator = createAuditOrchestrator(deps);
+
+      (deps.recordStore.list as jest.Mock).mockResolvedValue([
+        "agent:scanner",
+        "agent:reviewer",
+      ]);
+      (deps.recordStore.get as jest.Mock).mockImplementation(
+        async (id: string) => {
+          if (id === "agent:scanner") return auditRecord;
+          if (id === "agent:reviewer") return reviewRecord;
+          return null;
+        },
+      );
+
+      // Audit agent returns SARIF with findings
+      const sarif = makeSarifLog([
+        {
+          ruleId: "SEC-001",
+          level: "error",
+          message: { text: "Secret found" },
+          locations: [
+            {
+              physicalLocation: {
+                artifactLocation: { uri: "config.ts" },
+                region: { startLine: 3 },
+              },
+            },
+          ],
+          partialFingerprints: { "primaryLocationLineHash/v1": "fp-001" },
+        },
+      ]);
+
+      let callCount = 0;
+      (deps.agentRunner.runOnce as jest.Mock).mockImplementation(
+        async (opts: RunOptions) => {
+          callCount++;
+          if (callCount === 1) {
+            // Audit agent
+            return makeAgentResponse("agent:scanner", sarif);
+          }
+          // Review agent
+          return {
+            runId: "run-review",
+            agentId: opts.agentId,
+            status: "success",
+            output: { message: "Review complete" },
+            executionRecordId: "feedback:review-001",
+            startedAt: new Date().toISOString(),
+            completedAt: new Date().toISOString(),
+            durationMs: 50,
+          };
+        },
+      );
+
+      const result = await orchestrator.run(defaultOptions);
+
+      // Review agents should have been executed
+      expect(result.reviewResults).toBeDefined();
+      expect(result.reviewResults).toHaveLength(1);
+      expect(result.reviewResults![0]!.agentId).toBe("agent:reviewer");
+      expect(result.reviewResults![0]!.status).toBe("success");
+      expect(result.reviewResults![0]!.feedbackRecordId).toBe("feedback:review-001");
+    });
+
+    it("[AORCH-F2] should pass findings, policyDecision, and taskId in ctx.input to review agents", async () => {
+      const auditRecord = makeAgentRecord("agent:scanner", "audit");
+      const reviewRecord = makeAgentRecord("agent:reviewer", "review");
+      const deps = createMockDeps();
+      const orchestrator = createAuditOrchestrator(deps);
+
+      (deps.recordStore.list as jest.Mock).mockResolvedValue([
+        "agent:scanner",
+        "agent:reviewer",
+      ]);
+      (deps.recordStore.get as jest.Mock).mockImplementation(
+        async (id: string) => {
+          if (id === "agent:scanner") return auditRecord;
+          if (id === "agent:reviewer") return reviewRecord;
+          return null;
+        },
+      );
+
+      const sarif = makeSarifLog([
+        {
+          ruleId: "PII-001",
+          level: "warning",
+          message: { text: "PII detected" },
+          locations: [
+            {
+              physicalLocation: {
+                artifactLocation: { uri: "checkout.ts" },
+                region: { startLine: 47 },
+              },
+            },
+          ],
+          partialFingerprints: { "primaryLocationLineHash/v1": "fp-pii" },
+        },
+      ]);
+
+      let reviewInput: Record<string, unknown> | undefined;
+      let callCount = 0;
+      (deps.agentRunner.runOnce as jest.Mock).mockImplementation(
+        async (opts: RunOptions) => {
+          callCount++;
+          if (callCount === 1) {
+            return makeAgentResponse("agent:scanner", sarif);
+          }
+          // Capture review agent input
+          reviewInput = opts.input as Record<string, unknown>;
+          return {
+            runId: "run-review",
+            agentId: opts.agentId,
+            status: "success",
+            output: { message: "Review complete" },
+            executionRecordId: "feedback:review-002",
+            startedAt: new Date().toISOString(),
+            completedAt: new Date().toISOString(),
+            durationMs: 50,
+          };
+        },
+      );
+
+      await orchestrator.run(defaultOptions);
+
+      // Verify review agent received findings + policyDecision + taskId
+      expect(reviewInput).toBeDefined();
+      expect(reviewInput!["findings"]).toBeDefined();
+      expect(Array.isArray(reviewInput!["findings"])).toBe(true);
+      expect(reviewInput!["policyDecision"]).toBeDefined();
+      expect(reviewInput!["taskId"]).toBe(defaultOptions.taskId);
+    });
+
+    it("[AORCH-F3] should skip review step without warning when no review agents are found", async () => {
+      // Only audit agent, no review agents
+      const auditRecord = makeAgentRecord("agent:scanner", "audit");
+      const deps = createMockDeps();
+      const orchestrator = createAuditOrchestrator(deps);
+
+      (deps.recordStore.list as jest.Mock).mockResolvedValue(["agent:scanner"]);
+      (deps.recordStore.get as jest.Mock).mockResolvedValue(auditRecord);
+
+      const sarif = makeSarifLog();
+      (deps.agentRunner.runOnce as jest.Mock).mockResolvedValue(
+        makeAgentResponse("agent:scanner", sarif),
+      );
+
+      const result = await orchestrator.run(defaultOptions);
+
+      // No review results — silently skipped
+      expect(result.reviewResults).toBeUndefined();
+      // No warning about missing review agents
+      expect(result.warning).toBeUndefined();
+    });
+
+    it("[AORCH-F4] should continue audit pipeline when review agent fails and include error in result", async () => {
+      const auditRecord = makeAgentRecord("agent:scanner", "audit");
+      const reviewRecord = makeAgentRecord("agent:bad-reviewer", "review");
+      const deps = createMockDeps();
+      const orchestrator = createAuditOrchestrator(deps);
+
+      (deps.recordStore.list as jest.Mock).mockResolvedValue([
+        "agent:scanner",
+        "agent:bad-reviewer",
+      ]);
+      (deps.recordStore.get as jest.Mock).mockImplementation(
+        async (id: string) => {
+          if (id === "agent:scanner") return auditRecord;
+          if (id === "agent:bad-reviewer") return reviewRecord;
+          return null;
+        },
+      );
+
+      const sarif = makeSarifLog();
+      let f4CallCount = 0;
+      (deps.agentRunner.runOnce as jest.Mock).mockImplementation(
+        async () => {
+          f4CallCount++;
+          if (f4CallCount === 1) {
+            return makeAgentResponse("agent:scanner", sarif);
+          }
+          // Review agent throws
+          throw new Error("Claude API unavailable");
+        },
+      );
+
+      // Should NOT throw — review failure is non-fatal
+      const result = await orchestrator.run(defaultOptions);
+
+      // Pipeline completed successfully
+      expect(result.findings).toBeDefined();
+      expect(result.policyDecision).toBeDefined();
+
+      // Review error captured in results
+      expect(result.reviewResults).toBeDefined();
+      expect(result.reviewResults).toHaveLength(1);
+      expect(result.reviewResults![0]!.status).toBe("error");
+      expect(result.reviewResults![0]!.errorMessage).toBe("Claude API unavailable");
+    });
+  });
 });
