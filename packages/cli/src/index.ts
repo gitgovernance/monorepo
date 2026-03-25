@@ -17,6 +17,7 @@ import { registerActorCommands } from './commands/actor';
 import { registerExecCommands } from './commands/exec';
 import { registerFeedbackCommands } from './commands/feedback';
 import { registerHookCommands } from './commands/hook';
+import { registerLoginCommands } from './commands/login';
 import { DependencyInjectionService } from './services/dependency-injection';
 import packageJson from '../package.json' assert { type: 'json' };
 
@@ -46,6 +47,9 @@ async function setupCommands() {
 
     // Register actor commands EARLY so "gitgov actor new" works on clone (after pull)
     registerActorCommands(program);
+
+    // Register login commands EARLY — OAuth flow needs minimal DI
+    registerLoginCommands(program);
 
     // Register hook commands EARLY — passive governance must work even without full DI
     // Hook handles its own DI internally and always exits 0

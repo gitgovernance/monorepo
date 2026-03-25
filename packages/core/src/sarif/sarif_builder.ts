@@ -55,7 +55,7 @@ function extractRules(findings: Finding[]): SarifReportingDescriptor[] {
       rules.push({
         id: f.ruleId,
         shortDescription: { text: f.message },
-        ...(f.suggestion && { fullDescription: { text: f.suggestion } }),
+        ...(f.fixes && f.fixes.length > 0 && { fullDescription: { text: f.fixes[0]!.description } }),
         ...(f.legalReference && { helpUri: `https://gitgovernance.com/rules/${f.ruleId}` }),
       });
     }
@@ -205,6 +205,9 @@ class SarifBuilderImpl implements SarifBuilder {
         if (Object.keys(partial).length > 0) {
           result.partialFingerprints = partial;
         }
+        // SARIF §3.55.4 — text-only fixes go in rules[].fullDescription (SARIF-C9)
+        // result.fixes[] requires artifactChanges (schema mandates it)
+        // Only emit result.fixes when concrete diffs are provided (future)
         if (waiver) {
           result.suppressions = [buildSuppression(waiver)];
         }

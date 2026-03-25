@@ -85,7 +85,7 @@ export class RegexDetector implements Detector {
           fingerprint: generateFingerprint(rule.id, filePath, line),
           confidence: 1.0,
         };
-        if (rule.suggestion) finding.suggestion = rule.suggestion;
+        if (rule.fixes?.length) finding.fixes = rule.fixes;
         if (rule.legalReference) finding.legalReference = rule.legalReference;
         findings.push(finding);
       }

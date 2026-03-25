@@ -22,7 +22,7 @@ interface HeuristicRule {
   severity: FindingSeverity;
   confidence: number;
   message: string;
-  suggestion?: string;
+  fixes?: Array<{ description: string }>;
 }
 
 const HEURISTIC_RULES: HeuristicRule[] = [
@@ -33,7 +33,7 @@ const HEURISTIC_RULES: HeuristicRule[] = [
     severity: "medium",
     confidence: 0.7,
     message: "Sensitive variable name detected",
-    suggestion: "Consider if this variable contains actual PII",
+    fixes: [{ description: "Consider if this variable contains actual PII" }],
   },
   {
     id: "HEUR-002",
@@ -42,7 +42,7 @@ const HEURISTIC_RULES: HeuristicRule[] = [
     severity: "medium",
     confidence: 0.6,
     message: "Logging of potentially sensitive object detected",
-    suggestion: "Sanitize logged objects to remove PII",
+    fixes: [{ description: "Sanitize logged objects to remove PII" }],
   },
   {
     id: "HEUR-003",
@@ -51,7 +51,7 @@ const HEURISTIC_RULES: HeuristicRule[] = [
     severity: "low",
     confidence: 0.5,
     message: "JSON serialization of potentially sensitive object",
-    suggestion: "Ensure sensitive fields are excluded before serialization",
+    fixes: [{ description: "Ensure sensitive fields are excluded before serialization" }],
   },
 ];
 
@@ -126,7 +126,7 @@ export class HeuristicDetector implements Detector {
           fingerprint: generateFingerprint(rule.id, filePath, line),
           confidence: rule.confidence,
         };
-        if (rule.suggestion) finding.suggestion = rule.suggestion;
+        if (rule.fixes?.length) finding.fixes = rule.fixes;
         findings.push(finding);
       }
     }
