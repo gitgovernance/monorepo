@@ -1,3 +1,20 @@
+## [3.5.0](https://github.com/gitgovernance/monorepo/compare/core-v3.4.0...core-v3.5.0) (2026-03-25)
+
+
+### ✨ Features
+
+* **cli:** login command — OAuth flow + key sync CLI↔SaaS ([0f5f8a9](https://github.com/gitgovernance/monorepo/commit/0f5f8a9abf5bceb4e53efc37b82d1459e3823a58))
+
+
+### 🐛 Bug Fixes
+
+* **cli:** login command audit fixes + dead code cleanup ([0ae9b26](https://github.com/gitgovernance/monorepo/commit/0ae9b26028bbd971958171e44dd4df3ab8016102))
+
+
+### ♻️ Refactoring
+
+* **core:** suggestion → fixes (SARIF §3.55.4 standard) ([35fdf76](https://github.com/gitgovernance/monorepo/commit/35fdf7622b135409967bfe79dd5fe3bb384496a5))
+
 ## [3.4.0](https://github.com/gitgovernance/monorepo/compare/core-v3.3.0...core-v3.4.0) (2026-03-25)
 
 
