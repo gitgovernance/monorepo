@@ -200,12 +200,25 @@ describe('AuditCommand', () => {
       getCurrentActor: jest.fn().mockResolvedValue({ id: 'human:developer' } as ActorRecord),
     };
 
+    // Mock backlog adapter for TaskRecord creation (AORCH-C1)
+    const mockBacklogAdapter = {
+      createTask: jest.fn().mockResolvedValue({
+        id: '1774524476-task-audit-full-scan',
+        title: 'Audit: diff scan',
+        status: 'active',
+      }),
+    };
+
     // Configure DI mock
     mockDI.getInstance.mockReturnValue({
       getAuditOrchestrator: jest.fn().mockResolvedValue(mockOrchestrator),
+      getBacklogAdapter: jest.fn().mockResolvedValue(mockBacklogAdapter),
       getWaiverReader: jest.fn().mockResolvedValue(mockWaiverReader),
       getFeedbackAdapter: jest.fn().mockResolvedValue(mockFeedbackAdapter),
       getIdentityAdapter: jest.fn().mockResolvedValue(mockIdentityAdapter),
+      getSessionManager: jest.fn().mockResolvedValue({
+        getState: jest.fn().mockReturnValue({ actorId: 'human:developer' }),
+      }),
     } as unknown as DependencyInjectionService);
 
     auditCommand = new AuditCommand();
@@ -355,12 +368,24 @@ describe('AuditCommand', () => {
       expect(optionNames).not.toContain('--summary');
     });
 
-    it('[AORCH-C1] should generate a taskId for each run', async () => {
+    it('[AORCH-C1] should create TaskRecord via backlogAdapter and pass its ID', async () => {
       await auditCommand.execute(createDefaultOptions({ scope: 'full' }));
 
+      // Verify backlogAdapter.createTask was called with correct params
+      const diInstance = mockDI.getInstance();
+      const backlogAdapter = await diInstance.getBacklogAdapter();
+      expect(backlogAdapter.createTask).toHaveBeenCalledTimes(1);
+      const createTaskArgs = backlogAdapter.createTask.mock.calls[0];
+      expect(createTaskArgs[0]).toMatchObject({
+        title: expect.stringContaining('Audit:'),
+        status: 'active',
+        priority: 'high',
+        tags: expect.arrayContaining(['audit', 'automated']),
+      });
+
+      // Verify taskId from createTask is passed to orchestrator
       const callArg = mockOrchestrator.run.mock.calls[0]![0];
-      expect(callArg.taskId).toBeDefined();
-      expect(callArg.taskId).toMatch(/^task-audit-/);
+      expect(callArg.taskId).toBe('1774524476-task-audit-full-scan');
     });
 
     it('should handle initialization errors gracefully', async () => {

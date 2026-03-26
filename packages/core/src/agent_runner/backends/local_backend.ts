@@ -54,8 +54,15 @@ export class LocalBackend {
     engine: LocalEngine,
     ctx: AgentExecutionContext
   ): Promise<AgentOutput> {
-    // [EARS-B1] Resolve absolute path
-    const absolutePath = path.join(this.projectRoot, engine.entrypoint!);
+    // [EARS-B1] Resolve entrypoint: NPM package name or filesystem path
+    // NPM packages: start with @ (scoped) or have no file extension and no path separators
+    // File paths: start with . or / or have file extension (.mjs, .js, .ts)
+    const entrypoint = engine.entrypoint!;
+    const hasFileExtension = /\.\w+$/.test(entrypoint);
+    const isPackageName = entrypoint.startsWith("@") || (!hasFileExtension && !entrypoint.startsWith(".") && !entrypoint.startsWith("/") && !entrypoint.includes(path.sep));
+    const absolutePath = isPackageName ? entrypoint : (
+      path.isAbsolute(entrypoint) ? entrypoint : path.join(this.projectRoot, entrypoint)
+    );
 
     // [EARS-B4] Dynamic import
     const mod = await import(absolutePath);

@@ -19,6 +19,8 @@ type AgentExecutionContext = {
   taskId: string;
   runId: string;
   input?: unknown;
+  /** Root directory of the project. Use instead of process.cwd(). */
+  projectRoot: string;
 };
 
 /**
@@ -36,7 +38,8 @@ export async function runAgent(ctx: AgentExecutionContext) {
   const config = buildConfig(input);
 
   // FsFileLister required by SourceAuditorModule.audit() — without it, audit() throws
-  const fileLister = new FsFileLister({ cwd: input.baseDir ?? process.cwd() });
+  // Use ctx.projectRoot (injected by AgentRunner) instead of process.cwd()
+  const fileLister = new FsFileLister({ cwd: input.baseDir ?? ctx.projectRoot ?? process.cwd() });
 
   // No WaiverReader — agent emits ALL findings (Decision A12/A13)
   const sourceAuditor = new SourceAuditor.SourceAuditorModule({

@@ -10,6 +10,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 import { FsAgentRunner, createFsAgentRunner } from "./fs_agent_runner";
+import { DEFAULT_ID_ENCODER } from "../../record_store/fs/fs_record_store";
 import type { IExecutionAdapter } from "../../adapters/execution_adapter";
 import type { IEventStream, BaseEvent } from "../../event_bus";
 import type { AgentRecord, ExecutionRecord } from "../../record_types";
@@ -58,9 +59,10 @@ describe("FsAgentRunner", () => {
   });
 
   const writeAgentFile = (id: string, agent: Partial<AgentRecord>) => {
-    const filename = `agent-${id}.json`;
+    const agentId = `agent:${id}`;
+    const filename = `${DEFAULT_ID_ENCODER.encode(agentId)}.json`;
     const fullAgent: AgentRecord = {
-      id: `agent:${id}`,
+      id: agentId,
       engine: { type: "local" },
       ...agent,
     };
@@ -160,6 +162,36 @@ describe("FsAgentRunner", () => {
       });
 
       expect(response.output?.message).toBe("from src");
+    });
+
+    it("[EARS-B1b] should resolve absolute path for entrypoint", async () => {
+      const absoluteEntrypoint = writeAgentEntrypoint(
+        "abs-agent.js",
+        "module.exports.runAgent = async () => ({ message: 'from absolute' })"
+      );
+      // Use absolute path directly (starts with /)
+      writeAgentFile("abs-test", {
+        engine: { type: "local", entrypoint: absoluteEntrypoint },
+      });
+
+      const runner = new FsAgentRunner({
+        executionAdapter: mockExecutionAdapter,
+        gitgovPath,
+        projectRoot: tempDir,
+      });
+
+      const response = await runner.runOnce({
+        agentId: "agent:abs-test",
+        taskId: "task:1",
+      });
+
+      expect(response.output?.message).toBe("from absolute");
+    });
+
+    it.skip("[EARS-B1c] should resolve NPM package name for entrypoint", () => {
+      // TODO: Requires a real NPM package installed in node_modules
+      // to test import("@gitgov/agent-test-echo") resolution.
+      // Validated in E2E tests (gate_agent_flow.e2e.test.ts).
     });
 
     it("[EARS-B2] should lookup runtime handler", async () => {

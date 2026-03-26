@@ -2,7 +2,6 @@ import { Command, Option } from 'commander';
 import { BaseCommand } from '../../base/base-command';
 import type { BaseCommandOptions } from '../../interfaces/command';
 import { readFile } from 'node:fs/promises';
-import { randomUUID } from 'node:crypto';
 import type { AuditOrchestrator, FindingDetector, Sarif } from '@gitgov/core';
 import { Sarif as SarifModule } from '@gitgov/core';
 
@@ -97,15 +96,27 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
   async execute(options: AuditCommandOptions): Promise<void> {
     try {
       const orchestrator = await this.container.getAuditOrchestrator();
+      const backlogAdapter = await this.container.getBacklogAdapter();
+      const { actorId } = await this.requireActor(options);
 
       if (!options.quiet) {
         this.logger.log(`Scanning repository (scope: ${options.scope})...`);
       }
 
+      // Create a real TaskRecord for the audit run — serves as correlation
+      // node linking ExecutionRecords (scan, policy) and FeedbackRecords (review)
+      const auditTask = await backlogAdapter.createTask({
+        title: `Audit: ${options.scope} scan`,
+        status: 'active',
+        priority: 'high',
+        description: `Automated audit scan (scope: ${options.scope})`,
+        tags: ['audit', 'automated'],
+      }, actorId);
+
       // Invoke orchestrator - ALL logic lives here
       const orchestrationOptions: AuditOrchestrator.AuditOrchestrationOptions = {
         scope: options.scope,
-        taskId: `task-audit-${randomUUID().slice(0, 8)}`,
+        taskId: auditTask.id,
         failOn: options.failOn,
       };
       if (options.agent) {

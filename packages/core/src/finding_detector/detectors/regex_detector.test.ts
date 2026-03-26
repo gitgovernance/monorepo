@@ -59,13 +59,15 @@ describe("RegexDetector", () => {
     it("[EARS-6] should detect hardcoded API keys", async () => {
       const detector = new RegexDetector();
       const content =
-        'const api_key = "sk_live_abcdefghijklmnopqrstuvwxyz123456";';
+        'const api_key = "sk_test_abcdefghijklmnopqrstuvwxyz123456";';
       const findings = await detector.detect(content, "test.ts");
 
-      expect(findings).toHaveLength(1);
-      expect(findings[0]?.category).toBe("hardcoded-secret");
-      expect(findings[0]?.severity).toBe("critical");
-      expect(findings[0]?.ruleId).toBe("SEC-001");
+      // Matches both SEC-001 (generic api_key pattern) and SEC-004 (Stripe sk_test_ pattern)
+      expect(findings).toHaveLength(2);
+      const ruleIds = findings.map(f => f.ruleId).sort();
+      expect(ruleIds).toEqual(["SEC-001", "SEC-004"]);
+      expect(findings.every(f => f.category === "hardcoded-secret")).toBe(true);
+      expect(findings.every(f => f.severity === "critical")).toBe(true);
     });
 
     it("[EARS-7] should detect AWS Access Key IDs", async () => {
@@ -99,6 +101,68 @@ describe("RegexDetector", () => {
       expect(findings[0]?.category).toBe("logging-pii");
       expect(findings[0]?.severity).toBe("high");
       expect(findings[0]?.ruleId).toBe("LOG-001");
+    });
+  });
+
+  describe("4.6. Provider Tokens and Data Transfer (EARS-26 to EARS-30)", () => {
+    it("[EARS-26] should detect GitHub tokens (SEC-005)", async () => {
+      const detector = new RegexDetector();
+      const content = 'const token = "ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcd";';
+      const findings = await detector.detect(content, "test.ts");
+
+      expect(findings.length).toBeGreaterThanOrEqual(1);
+      const ghFinding = findings.find(f => f.ruleId === "SEC-005");
+      expect(ghFinding).toBeDefined();
+      expect(ghFinding!.category).toBe("hardcoded-secret");
+      expect(ghFinding!.severity).toBe("critical");
+    });
+
+    it("[EARS-27] should detect hardcoded passwords (SEC-006)", async () => {
+      const detector = new RegexDetector();
+      const content = 'const password = "super_secret_password_123";';
+      const findings = await detector.detect(content, "test.ts");
+
+      expect(findings.length).toBeGreaterThanOrEqual(1);
+      const pwFinding = findings.find(f => f.ruleId === "SEC-006");
+      expect(pwFinding).toBeDefined();
+      expect(pwFinding!.category).toBe("hardcoded-secret");
+      expect(pwFinding!.severity).toBe("critical");
+    });
+
+    it("[EARS-28] should detect JWT tokens (SEC-007)", async () => {
+      const detector = new RegexDetector();
+      const content = 'const jwt = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U";';
+      const findings = await detector.detect(content, "test.ts");
+
+      expect(findings.length).toBeGreaterThanOrEqual(1);
+      const jwtFinding = findings.find(f => f.ruleId === "SEC-007");
+      expect(jwtFinding).toBeDefined();
+      expect(jwtFinding!.category).toBe("hardcoded-secret");
+      expect(jwtFinding!.severity).toBe("high");
+    });
+
+    it("[EARS-29] should detect PII sent to third-party analytics (XFER-001)", async () => {
+      const detector = new RegexDetector();
+      const content = 'analytics.track("purchase", { email: user.email, phone: user.phone });';
+      const findings = await detector.detect(content, "test.ts");
+
+      expect(findings.length).toBeGreaterThanOrEqual(1);
+      const xferFinding = findings.find(f => f.ruleId === "XFER-001");
+      expect(xferFinding).toBeDefined();
+      expect(xferFinding!.category).toBe("third-party-transfer");
+      expect(xferFinding!.severity).toBe("high");
+    });
+
+    it("[EARS-30] should detect Stripe keys standalone without api_key variable name (SEC-004)", async () => {
+      const detector = new RegexDetector();
+      const content = 'const STRIPE_KEY = "sk_test_4eC39HqLyjWDarjtT1zdp7dc";';
+      const findings = await detector.detect(content, "test.ts");
+
+      expect(findings.length).toBeGreaterThanOrEqual(1);
+      const stripeFinding = findings.find(f => f.ruleId === "SEC-004");
+      expect(stripeFinding).toBeDefined();
+      expect(stripeFinding!.category).toBe("hardcoded-secret");
+      expect(stripeFinding!.severity).toBe("critical");
     });
   });
 
