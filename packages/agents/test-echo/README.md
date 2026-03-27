@@ -1,59 +1,59 @@
 # @gitgov/agent-test-echo
 
-Agente de referencia minimo para el ecosistema [GitGovernance](https://github.com/gitgovernance/monorepo). Recibe input, devuelve un echo con contexto de ejecucion.
+Minimal reference agent for the [GitGovernance](https://github.com/gitgovernance/monorepo) ecosystem. Receives input, returns an echo with execution context.
 
-**Para que sirve:**
+**What it's for:**
 
-- Validar que el AgentRunner funciona correctamente
-- Ejemplo concreto de como crear un agente desde cero
-- Demostrar los 2 modos de instalacion: NPM package y path local
-- Template para crear nuevos agentes
-
----
-
-## Requisitos Previos
-
-- [GitGovernance CLI](https://github.com/gitgovernance/monorepo) instalado (`npm install -g @gitgov/cli`)
-- Un proyecto inicializado con `gitgov init`
+- Validate that the AgentRunner works correctly
+- Concrete example of how to create an agent from scratch
+- Demonstrate both installation modes: NPM package and local path
+- Template for creating new agents
 
 ---
 
-## Instalacion
+## Prerequisites
 
-### Opcion A: Desde NPM (produccion, CI, GitLab Duo)
+- [GitGovernance CLI](https://github.com/gitgovernance/monorepo) installed (`npm install -g @gitgov/cli`)
+- A project initialized with `gitgov init`
+
+---
+
+## Installation
+
+### Option A: From NPM (production, CI, GitLab Duo)
 
 ```bash
 npm install @gitgov/agent-test-echo
 ```
 
-### Opcion B: Desde el monorepo (desarrollo local)
+### Option B: From the monorepo (local development)
 
 ```bash
 cd packages/agents/test-echo
 pnpm build
 ```
 
-No necesitas instalar nada — el CLI puede cargar el agente directamente desde su path local.
+No need to install anything — the CLI can load the agent directly from its local path.
 
 ---
 
-## Registro del Agente
+## Agent Registration
 
-Antes de ejecutar un agente, necesitas registrarlo en tu proyecto GitGovernance. Son 2 pasos:
+Before running an agent, you need to register it in your GitGovernance project. Two steps:
 
-### Paso 1: Crear el actor (identidad criptografica)
+### Step 1: Create the actor (cryptographic identity)
 
 ```bash
 gitgov actor new --type agent --name test-echo --role tester
 ```
 
-Esto genera:
-- Un `ActorRecord` con keypair Ed25519 en `.gitgov/actors/`
-- Una clave privada en `.gitgov/keys/` (para firmar records)
+This generates:
+- An `ActorRecord` with Ed25519 keypair in `.gitgov/actors/`
+- A private key in `.gitgov/keys/` (for signing records)
 
-### Paso 2: Registrar el agente
+### Step 2: Register the agent
 
-**Si instalaste desde NPM:**
+**If installed from NPM:**
 
 ```bash
 gitgov agent new agent:test-echo --config '{
@@ -66,7 +66,7 @@ gitgov agent new agent:test-echo --config '{
 }'
 ```
 
-**Si usas path local (desarrollo):**
+**If using local path (development):**
 
 ```bash
 gitgov agent new agent:test-echo --config '{
@@ -79,7 +79,7 @@ gitgov agent new agent:test-echo --config '{
 }'
 ```
 
-### Verificar
+### Verify
 
 ```bash
 gitgov agent list
@@ -88,17 +88,17 @@ gitgov agent list
 
 ---
 
-## Ejecucion
+## Execution
 
 ```bash
-# Sin input
+# Without input
 gitgov agent run agent:test-echo
 
-# Con input
+# With input
 gitgov agent run agent:test-echo --input '{"hello": "world"}'
 ```
 
-### Output esperado
+### Expected output
 
 ```json
 {
@@ -119,45 +119,45 @@ gitgov agent run agent:test-echo --input '{"hello": "world"}'
 }
 ```
 
-El `AgentRunner` automaticamente:
-- Carga el `AgentRecord` desde `.gitgov/agents/`
-- Resuelve el entrypoint (NPM o path local)
-- Ejecuta `runAgent(ctx)` inyectando `projectRoot` (directorio del repo)
-- Crea y firma un `ExecutionRecord` con Ed25519
-- Emite eventos via `EventBus`
+The `AgentRunner` automatically:
+- Loads the `AgentRecord` from `.gitgov/agents/`
+- Resolves the entrypoint (NPM or local path)
+- Executes `runAgent(ctx)` injecting `projectRoot` (the repo directory)
+- Creates and signs an `ExecutionRecord` with Ed25519
+- Emits events via `EventBus`
 
-Tu agente solo retorna `AgentOutput`. No necesita conocer el protocolo de firma ni los records.
+Your agent only returns `AgentOutput`. It doesn't need to know about signing or records.
 
 ---
 
-## Modos de Entrypoint
+## Entrypoint Modes
 
-El `engine.entrypoint` del AgentRecord soporta 3 formatos:
+The `engine.entrypoint` in the AgentRecord supports 3 formats:
 
-| Modo | Valor de entrypoint | Cuando usar |
+| Mode | Entrypoint value | When to use |
 |---|---|---|
-| **NPM package** | `"@gitgov/agent-test-echo"` | Produccion, CI, GitLab Duo container. El agente se instala con `npm install` |
-| **Path relativo** | `"packages/agents/test-echo/dist/index.mjs"` | Desarrollo local en el monorepo. Se resuelve desde el root del proyecto |
-| **Path absoluto** | `"/Users/.../dist/index.mjs"` | Debugging. Se usa directamente sin resolver |
+| **NPM package** | `"@gitgov/agent-test-echo"` | Production, CI, GitLab Duo container. Agent installed via `npm install` |
+| **Relative path** | `"packages/agents/test-echo/dist/index.mjs"` | Local development in the monorepo. Resolved from the project root |
+| **Absolute path** | `"/Users/.../dist/index.mjs"` | Debugging. Used directly without resolution |
 
-El `LocalBackend` detecta automaticamente el modo:
-- Si empieza con `@` o no tiene extension de archivo → NPM package
-- Si empieza con `/` → path absoluto
-- Si empieza con `.` o tiene extension → path relativo
+The `LocalBackend` detects the mode automatically:
+- Starts with `@` or has no file extension → NPM package
+- Starts with `/` → absolute path
+- Starts with `.` or has a file extension → relative path
 
 ---
 
-## Crear Tu Propio Agente
+## Create Your Own Agent
 
-Usa este package como template:
+Use this package as a template:
 
-### 1. Copiar
+### 1. Copy
 
 ```bash
 cp -r packages/agents/test-echo packages/agents/my-agent
 ```
 
-### 2. Editar `package.json`
+### 2. Edit `package.json`
 
 ```json
 {
@@ -167,7 +167,7 @@ cp -r packages/agents/test-echo packages/agents/my-agent
 }
 ```
 
-### 3. Editar `index.ts`
+### 3. Edit `index.ts`
 
 ```typescript
 type AgentExecutionContext = {
@@ -176,7 +176,7 @@ type AgentExecutionContext = {
   taskId: string;
   runId: string;
   input?: unknown;
-  /** Directorio del repo del usuario. Usar en vez de process.cwd(). */
+  /** User's repo directory. Use instead of process.cwd(). */
   projectRoot: string;
 };
 
@@ -188,24 +188,24 @@ type AgentOutput = {
 };
 
 export async function runAgent(ctx: AgentExecutionContext): Promise<AgentOutput> {
-  // ctx.projectRoot — directorio del repo (donde estan los archivos fuente)
-  // ctx.input       — input del usuario (lo que paso con --input)
-  // ctx.agentId     — ID de este agente
-  // ctx.taskId      — TaskRecord que disparo la ejecucion
+  // ctx.projectRoot — repo directory (where source files live)
+  // ctx.input       — user input (passed with --input)
+  // ctx.agentId     — this agent's ID
+  // ctx.taskId      — TaskRecord that triggered execution
 
-  // Tu logica aqui...
+  // Your logic here...
 
   return {
-    message: "Mi agente ejecuto exitosamente",
-    data: { /* tu resultado */ },
-    metadata: { /* tu metadata */ },
+    message: "My agent executed successfully",
+    data: { /* your result */ },
+    metadata: { /* your metadata */ },
   };
 }
 ```
 
-**Importante:** Usa `ctx.projectRoot` para acceder al filesystem del repo. Nunca uses `process.cwd()` — puede apuntar a un directorio incorrecto cuando el agente corre via AgentRunner.
+**Important:** Use `ctx.projectRoot` for filesystem access. Never use `process.cwd()` — it may point to the wrong directory when the agent runs via AgentRunner.
 
-### 4. Build y registrar
+### 4. Build and register
 
 ```bash
 pnpm build
@@ -218,13 +218,13 @@ gitgov agent new agent:my-agent --config '{
 gitgov agent run agent:my-agent
 ```
 
-### 5. Publicar a NPM (opcional)
+### 5. Publish to NPM (optional)
 
 ```bash
 npm publish
 ```
 
-Cualquier usuario puede entonces:
+Any user can then:
 ```bash
 npm install @gitgov/agent-my-agent
 gitgov actor new --type agent --name my-agent --role developer
@@ -234,43 +234,43 @@ gitgov agent run agent:my-agent
 
 ---
 
-## Que Hace el AgentRunner (para entender el flujo)
+## How the AgentRunner Works
 
 ```
-Usuario ejecuta: gitgov agent run agent:test-echo --input '{"hello":"world"}'
+User runs: gitgov agent run agent:test-echo --input '{"hello":"world"}'
          │
          ▼
     AgentRunner
          │
          ├── 1. loadAgent("agent:test-echo")
-         │       └── FsRecordStore lee .gitgov/agents/agent_test-echo.json
+         │       └── FsRecordStore reads .gitgov/agents/agent_test-echo.json
          │
          ├── 2. Resolve entrypoint
-         │       ├── "@gitgov/agent-test-echo" → import desde node_modules
-         │       └── "packages/.../dist/index.mjs" → import desde path local
+         │       ├── "@gitgov/agent-test-echo" → import from node_modules
+         │       └── "packages/.../dist/index.mjs" → import from local path
          │
          ├── 3. Build AgentExecutionContext
          │       └── { agentId, actorId, taskId, runId, input, projectRoot }
          │
          ├── 4. Execute runAgent(ctx)
-         │       └── Tu funcion corre y retorna AgentOutput
+         │       └── Your function runs and returns AgentOutput
          │
-         ├── 5. Create ExecutionRecord (automatico)
-         │       └── Firmado con Ed25519 del ActorRecord del agente
+         ├── 5. Create ExecutionRecord (automatic)
+         │       └── Signed with the agent's ActorRecord Ed25519 key
          │
-         └── 6. Return AgentResponse al CLI
+         └── 6. Return AgentResponse to CLI
                  └── { status, output, executionRecordId, durationMs }
 ```
 
 ---
 
-## Agentes Existentes en el Ecosistema
+## Existing Agents in the Ecosystem
 
-| Agente | Proposito | Package |
+| Agent | Purpose | Package |
 |---|---|---|
-| **test-echo** | Testing y referencia | `@gitgov/agent-test-echo` |
-| **security-audit** | Deteccion de PII, secrets, GDPR | `@gitgov/agent-security-audit` |
-| **review-advisor** | Analisis semantico con Claude | `@gitgov/agent-review-advisor` |
+| **test-echo** | Testing and reference | `@gitgov/agent-test-echo` |
+| **security-audit** | PII, secrets, GDPR detection | `@gitgov/agent-security-audit` |
+| **review-advisor** | Semantic analysis with Claude | `@gitgov/agent-review-advisor` |
 
 ---
 
