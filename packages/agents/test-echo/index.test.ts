@@ -1,7 +1,7 @@
 /**
  * Test Echo Agent — Unit Tests
  * Blueprint: agents/test-echo/test_echo_agent.md
- * EARS: ECHO-A1 to ECHO-A4
+ * EARS: ECHO-A1 to ECHO-A4 (unit), ECHO-B1 to ECHO-B3 (integration/E2E — see e2e-private)
  */
 
 import { runAgent } from './index';
@@ -47,3 +47,17 @@ describe('test-echo agent', () => {
     });
   });
 });
+
+  describe('4.2. NPM Package Resolution (ECHO-B1 to ECHO-B3) — integration/E2E', () => {
+    it.skip('[ECHO-B1] should be importable from @gitgov/agent-test-echo', () => {
+      // Integration test: requires npm publish + install. See e2e-private.
+    });
+
+    it.skip('[ECHO-B2] should resolve NPM package entrypoint via AgentRunner', () => {
+      // Integration test: requires AgentRunner + npm installed package. See e2e-private.
+    });
+
+    it.skip('[ECHO-B3] should resolve relative path entrypoint via AgentRunner', () => {
+      // Integration test: requires AgentRunner + built dist. See e2e-private.
+    });
+  });
