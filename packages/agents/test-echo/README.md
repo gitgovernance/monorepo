@@ -39,38 +39,28 @@ No need to install anything — the CLI can load the agent directly from its loc
 
 ## Agent Registration
 
-Before running an agent, you need to register it in your GitGovernance project. Two steps:
-
-### Step 1: Create the actor (cryptographic identity)
-
-```bash
-gitgov actor new --type agent --name test-echo --role tester
-```
-
-This generates:
-- An `ActorRecord` with Ed25519 keypair in `.gitgov/actors/`
-- A private key in `.gitgov/keys/` (for signing records)
-
-### Step 2: Register the agent
+Register the agent in your GitGovernance project. One command — the CLI auto-creates the cryptographic identity (ActorRecord + Ed25519 keypair) if it doesn't exist.
 
 **If installed from NPM:**
 
 ```bash
 gitgov agent new agent:test-echo --config '{
-  "metadata": { "purpose": "testing" },
+  "metadata": { "purpose": "testing", "role": "tester" },
   "engine": {
     "type": "local",
     "entrypoint": "@gitgov/agent-test-echo",
     "function": "runAgent"
   }
 }'
+# → ActorRecord auto-created: agent:test-echo
+# → AgentRecord created: agent:test-echo
 ```
 
 **If using local path (development):**
 
 ```bash
 gitgov agent new agent:test-echo --config '{
-  "metadata": { "purpose": "testing" },
+  "metadata": { "purpose": "testing", "role": "tester" },
   "engine": {
     "type": "local",
     "entrypoint": "packages/agents/test-echo/dist/index.mjs",
@@ -85,6 +75,8 @@ gitgov agent new agent:test-echo --config '{
 gitgov agent list
 # → agent:test-echo  engine:local  status:active
 ```
+
+> **Note:** You can still create the actor separately with `gitgov actor new --type agent --name test-echo --role tester` if you prefer. The `agent new` command will detect it already exists and skip the auto-creation.
 
 ---
 
