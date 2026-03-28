@@ -59,6 +59,8 @@ let mockBacklogAdapter: {
 
 let mockIdentityAdapter: {
   getCurrentActor: jest.MockedFunction<() => Promise<ActorRecord>>;
+  getActor: jest.MockedFunction<(id: string) => Promise<ActorRecord>>;
+  createActor: jest.MockedFunction<(data: Record<string, unknown>, signAs: string) => Promise<ActorRecord>>;
 };
 
 let mockAgentStore: {
@@ -157,6 +159,8 @@ describe('AgentCommand', () => {
 
     mockIdentityAdapter = {
       getCurrentActor: jest.fn().mockResolvedValue(mockActor),
+      getActor: jest.fn().mockResolvedValue(mockActor),
+      createActor: jest.fn().mockResolvedValue(mockActor),
     };
 
     mockAgentAdapter = {
@@ -432,12 +436,38 @@ describe('AgentCommand', () => {
       );
     });
 
-    it('[ICOMP-C8] should error when actor does not exist or is not agent type', async () => {
+    it('[EARS-E5] should auto-create ActorRecord when it does not exist', async () => {
+      // First call to createAgentRecord fails because actor doesn't exist
+      mockAgentAdapter.createAgentRecord
+        .mockRejectedValueOnce(new Error('ActorRecord with id agent:new-agent not found'))
+        .mockResolvedValueOnce({ id: 'agent:new-agent', status: 'active', engine: { type: 'local' } });
+
+      await agentCommand.executeNew('agent:new-agent', { engineType: 'local' } as AgentNewOptions);
+
+      // Should have auto-created the actor
+      expect(mockIdentityAdapter.createActor).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'agent', displayName: 'new-agent' }),
+        'self',
+      );
+      // Should have retried createAgentRecord after actor creation
+      expect(mockAgentAdapter.createAgentRecord).toHaveBeenCalledTimes(2);
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('auto-created'));
+    });
+
+    it('[EARS-E6] should reuse existing ActorRecord without creating new one', async () => {
+      // createAgentRecord succeeds on first try (actor already exists)
+      await agentCommand.executeNew('agent:test-echo', { engineType: 'local' } as AgentNewOptions);
+
+      expect(mockIdentityAdapter.createActor).not.toHaveBeenCalled();
+      expect(mockAgentAdapter.createAgentRecord).toHaveBeenCalledTimes(1);
+    });
+
+    it('[ICOMP-C8] should error on non-actor related failures', async () => {
       mockAgentAdapter.createAgentRecord.mockRejectedValue(
-        new Error('No ActorRecord found with id agent:nonexistent or type is not agent'),
+        new Error('Database connection failed'),
       );
 
-      await agentCommand.executeNew('agent:nonexistent', { engineType: 'mcp' } as AgentNewOptions);
+      await agentCommand.executeNew('agent:test-echo', { engineType: 'mcp' } as AgentNewOptions);
 
       expect(mockConsoleError).toHaveBeenCalledWith(
         expect.stringContaining('Failed to create agent'),
