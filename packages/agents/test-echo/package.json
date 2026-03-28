@@ -39,5 +39,11 @@
     "@types/jest": "^29.5.14",
     "@types/node": "^22.0.0"
   },
-  "license": "MPL-2.0"
+  "license": "MPL-2.0",
+  "gitgov": {
+    "agentId": "agent:test-echo",
+    "role": "tester",
+    "purpose": "testing",
+    "function": "runAgent"
+  }
 }
