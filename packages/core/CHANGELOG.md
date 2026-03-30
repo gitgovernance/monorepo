@@ -1,3 +1,10 @@
+## [3.6.0](https://github.com/gitgovernance/monorepo/compare/core-v3.5.0...core-v3.6.0) (2026-03-30)
+
+
+### ✨ Features
+
+* **core/cli/agents:** agent runtime v2 — projectRoot, FsRecordStore, detection rules ([#138](https://github.com/gitgovernance/monorepo/issues/138)) ([e29337a](https://github.com/gitgovernance/monorepo/commit/e29337aa095f6c22b48c8b27f9cac7093521a11c))
+
 ## [3.5.0](https://github.com/gitgovernance/monorepo/compare/core-v3.4.0...core-v3.5.0) (2026-03-25)
 
 
