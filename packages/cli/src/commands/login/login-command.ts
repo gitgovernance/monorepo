@@ -141,7 +141,7 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
       let keyStatus: KeyStatusResponse = { hasKey: false, actorExists: false };
       try {
         const configManager = await this.dependencyService.getConfigManager();
-        const config = await configManager.getConfig();
+        const config = await configManager.loadConfig();
         const repoId = config?.projectId ?? '';
         keyStatus = await this.getKeyStatus(saasUrl, token, actorId, repoId);
       } catch {
@@ -220,7 +220,7 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
     options: LoginCommandOptions,
   ): Promise<void> {
     const configManager = await this.dependencyService.getConfigManager();
-    const config = await configManager.getConfig();
+    const config = await configManager.loadConfig();
     const repoId = config?.projectId ?? '';
 
     const hasLocal = await this.hasLocalKey(actorId);
@@ -309,7 +309,7 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
     if (options.url) return options.url;
     try {
       const configManager = await this.dependencyService.getConfigManager();
-      const config = await configManager.getConfig();
+      const config = await configManager.loadConfig();
       if (config?.saasUrl) return config.saasUrl;
     } catch {
       // No config available — use default

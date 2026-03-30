@@ -3,7 +3,7 @@
  *
  * EARS Coverage:
  * - §4.1 CLI -> Orchestrator Integration (AORCH-C1 to C6)
- * - §4.2 Waiver Management (EARS-E1 to E5)
+ * - §4.5 Waiver Management (EARS-E1 to E5)
  */
 
 // Mock @gitgov/core
@@ -31,6 +31,7 @@ jest.doMock('@gitgov/core', () => {
       FindingDetectorModule: jest.fn(),
     },
     Sarif: actual.Sarif,
+    generateExecutionId: actual.generateExecutionId ?? ((title: string, ts: number) => `${ts}-exec-${title}`),
   };
 });
 
@@ -43,7 +44,15 @@ jest.mock('../../services/dependency-injection', () => ({
 
 import { AuditCommand, type AuditCommandOptions } from './audit-command';
 import { DependencyInjectionService } from '../../services/dependency-injection';
-import type { AuditOrchestrator, SourceAuditor, FeedbackRecord, ActorRecord } from '@gitgov/core';
+import type {
+  AuditOrchestrationOptions,
+  AuditOrchestrationResult,
+  PolicyDecision,
+  ConsolidatedFinding,
+  FeedbackRecord,
+  ActorRecord,
+  ActiveWaiver,
+} from '@gitgov/core';
 
 // Mock console methods
 const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation();
@@ -55,11 +64,11 @@ const mockDI = jest.mocked(DependencyInjectionService);
 
 // Mock orchestrator
 let mockOrchestrator: {
-  run: jest.MockedFunction<(options: AuditOrchestrator.AuditOrchestrationOptions) => Promise<AuditOrchestrator.AuditOrchestrationResult>>;
+  run: jest.MockedFunction<(options: AuditOrchestrationOptions) => Promise<AuditOrchestrationResult>>;
 };
 
 let mockWaiverReader: {
-  loadActiveWaivers: jest.MockedFunction<() => Promise<SourceAuditor.ActiveWaiver[]>>;
+  loadActiveWaivers: jest.MockedFunction<() => Promise<ActiveWaiver[]>>;
 };
 
 let mockFeedbackAdapter: {
@@ -73,7 +82,7 @@ let mockIdentityAdapter: {
 describe('AuditCommand', () => {
   let auditCommand: AuditCommand;
 
-  const mockPolicyDecisionPass: AuditOrchestrator.PolicyDecision = {
+  const mockPolicyDecisionPass: PolicyDecision = {
     decision: 'pass',
     reason: 'No findings exceed configured thresholds.',
     blockingFindings: [],
@@ -83,7 +92,7 @@ describe('AuditCommand', () => {
     evaluatedAt: '2026-03-18T00:00:00.000Z',
   };
 
-  const mockPolicyDecisionBlock: AuditOrchestrator.PolicyDecision = {
+  const mockPolicyDecisionBlock: PolicyDecision = {
     decision: 'block',
     reason: '1 finding(s) at or above critical threshold.',
     blockingFindings: [
@@ -106,7 +115,7 @@ describe('AuditCommand', () => {
     evaluatedAt: '2026-03-18T00:00:00.000Z',
   };
 
-  const mockResultWithFindings: AuditOrchestrator.AuditOrchestrationResult = {
+  const mockResultWithFindings: AuditOrchestrationResult = {
     findings: [
       {
         fingerprint: 'sha256:abc123def456',
@@ -159,7 +168,7 @@ describe('AuditCommand', () => {
     },
   };
 
-  const mockEmptyResult: AuditOrchestrator.AuditOrchestrationResult = {
+  const mockEmptyResult: AuditOrchestrationResult = {
     findings: [],
     agentResults: [],
     policyDecision: mockPolicyDecisionPass,
@@ -375,7 +384,7 @@ describe('AuditCommand', () => {
       const diInstance = mockDI.getInstance();
       const backlogAdapter = await diInstance.getBacklogAdapter();
       expect(backlogAdapter.createTask).toHaveBeenCalledTimes(1);
-      const createTaskArgs = backlogAdapter.createTask.mock.calls[0];
+      const createTaskArgs = (backlogAdapter.createTask as jest.Mock).mock.calls[0];
       expect(createTaskArgs[0]).toMatchObject({
         title: expect.stringContaining('Audit:'),
         status: 'active',
@@ -418,7 +427,7 @@ describe('AuditCommand', () => {
     });
   });
 
-  describe('4.2. Waiver Management (EARS-E1 to E5)', () => {
+  describe('4.5. Waiver Management (EARS-E1 to E5)', () => {
     it('[EARS-E1] should create FeedbackRecord with waiver metadata', async () => {
       await auditCommand.executeWaive('sha256:abc123', {
         justification: 'Test data for unit tests',
@@ -463,7 +472,7 @@ describe('AuditCommand', () => {
               file: 'test.ts',
               line: 10,
             },
-          } as SourceAuditor.ActiveWaiver['feedback'],
+          } as ActiveWaiver['feedback'],
         },
       ]);
 

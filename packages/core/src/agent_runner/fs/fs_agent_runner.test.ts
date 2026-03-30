@@ -864,12 +864,13 @@ describe("FsAgentRunner", () => {
       expect(mockFeedbackAdapter.create).toHaveBeenCalledWith(
         expect.objectContaining({
           entityType: "execution",
-          entityId: "task:1",
+          entityId: expect.stringMatching(/^\d{10}-exec-review-/),
           type: "suggestion",
           status: "open",
           metadata: expect.objectContaining({
             agentId: "agent:review-agent",
             purpose: "review",
+            taskId: "task:1",
             executionStatus: "success",
           }),
         }),

@@ -193,6 +193,8 @@ describe('DashboardCommand - EARS Compliance Tests', () => {
     tasks: [],
     cycles: [],
     actors: [],
+    executions: [],
+    agents: [],
     enrichedTasks: [],
     feedback: [],
     activityHistory: []
