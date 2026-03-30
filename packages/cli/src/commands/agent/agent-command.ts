@@ -210,7 +210,32 @@ export class AgentCommand extends BaseCommand<RunCommandOptions> {
       }
 
       // [ICOMP-C7] Create AgentRecord via adapter
-      const agent = await agentAdapter.createAgentRecord(payload);
+      // If actor doesn't exist, auto-create it first, then retry
+      let agent: AgentRecord;
+      try {
+        agent = await agentAdapter.createAgentRecord(payload);
+      } catch (createErr) {
+        const msg = createErr instanceof Error ? createErr.message : '';
+        if (msg.includes('ActorRecord') && msg.includes('not found')) {
+          // Auto-create ActorRecord — eliminates need for separate `gitgov actor new`
+          const identityAdapter = await this.container.getIdentityAdapter();
+          const role = (configPayload['metadata'] as Record<string, unknown> | undefined)?.['role'] as string
+            ?? (configPayload['gitgov'] as Record<string, unknown> | undefined)?.['role'] as string
+            ?? 'agent';
+          const actorName = actorId.replace(/^agent:/, '');
+          await identityAdapter.createActor(
+            { type: 'agent', displayName: actorName, roles: [role] as [string, ...string[]] },
+            'self',
+          );
+          if (!options.quiet) {
+            console.log(`  ActorRecord auto-created: ${actorId}`);
+          }
+          // Retry after actor creation
+          agent = await agentAdapter.createAgentRecord(payload);
+        } else {
+          throw createErr;
+        }
+      }
 
       // [ICOMP-C9] Output
       if (options.json) {

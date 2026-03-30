@@ -29,6 +29,7 @@ describe("CustomBackend", () => {
       actorId: "agent:test-custom",
       taskId: "task:123",
       runId: "run-uuid-123",
+      projectRoot: "/tmp/test-project",
       ...overrides,
     };
   }

@@ -1,6 +1,6 @@
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { promises as fs } from "node:fs";
+import { FsRecordStore, DEFAULT_ID_ENCODER } from "../../record_store/fs/fs_record_store";
 import {
   LocalBackend,
   ApiBackend,
@@ -135,6 +135,7 @@ export class FsAgentRunner implements IAgentRunner {
       taskId: opts.taskId,
       runId,
       input: opts.input,
+      projectRoot: this.projectRoot,
     };
 
     // [EARS-I1] Emit agent:started event
@@ -294,21 +295,20 @@ export class FsAgentRunner implements IAgentRunner {
   }
 
   /**
-   * [EARS-A1, A2] Loads AgentRecord from .gitgov/agents/agent-{id}.json
+   * [EARS-A1, A2] Loads AgentRecord from .gitgov/agents/ via FsRecordStore.
+   * Uses DEFAULT_ID_ENCODER for consistent naming (colon → underscore).
    */
   private async loadAgent(agentId: string): Promise<AgentRecord> {
-    // Remove "agent:" prefix if present
-    const id = agentId.startsWith("agent:") ? agentId.slice(6) : agentId;
-    const agentPath = path.join(this.gitgovPath, "agents", `agent-${id}.json`);
+    const store = new FsRecordStore<{ payload: AgentRecord }>({
+      basePath: path.join(this.gitgovPath, "agents"),
+      idEncoder: DEFAULT_ID_ENCODER,
+    });
 
-    try {
-      const content = await fs.readFile(agentPath, "utf-8");
-      const record = JSON.parse(content);
-      // Return payload if wrapped in GitGovRecord structure
-      return record.payload ?? record;
-    } catch {
+    const record = await store.get(agentId);
+    if (!record) {
       throw new AgentNotFoundError(agentId);
     }
+    return record.payload ?? (record as unknown as AgentRecord);
   }
 
   /**

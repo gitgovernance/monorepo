@@ -873,6 +873,18 @@ describe('DependencyInjectionService', () => {
       // Verify PolicyEvaluator was created as dependency
       expect(PolicyEvaluatorMock.createPolicyEvaluator).toHaveBeenCalled();
     });
+
+    it('[EARS-C12] should pass repoRoot as projectRoot to AgentRunner', async () => {
+      // getAuditOrchestrator internally calls getAgentRunnerModule which calls createAgentRunner
+      await diService.getAuditOrchestrator();
+
+      // Verify createAgentRunner was called with repoRoot (not worktree path)
+      const { createAgentRunner } = jest.requireMock('@gitgov/core/fs');
+      expect(createAgentRunner).toHaveBeenCalled();
+      const callArgs = createAgentRunner.mock.calls[0][0];
+      expect(callArgs.projectRoot).toBe(mockRepoRoot);
+      expect(callArgs.gitgovPath).toContain('.gitgov');
+    });
   });
 
   // ============================================================================

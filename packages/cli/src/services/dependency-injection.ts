@@ -698,9 +698,11 @@ export class DependencyInjectionService {
       const eventBus = new EventBus.EventBus();
 
       // Create AgentRunnerModule with dependencies
+      // projectRoot = repoRoot (user's repo) so agents scan source files there.
+      // gitgovPath = worktree .gitgov/ (where records live).
       this.agentRunnerModule = createAgentRunner({
         gitgovPath: path.join(this.projectRoot, '.gitgov'),
-        projectRoot: this.projectRoot,
+        projectRoot: this.repoRoot ?? this.projectRoot,
         executionAdapter,
         eventBus
       });

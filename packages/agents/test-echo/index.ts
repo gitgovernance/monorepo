@@ -13,6 +13,8 @@ type AgentExecutionContext = {
   taskId: string;
   runId: string;
   input?: unknown;
+  /** Root directory of the project. Use instead of process.cwd(). */
+  projectRoot: string;
 };
 
 type AgentOutput = {
@@ -37,6 +39,7 @@ export async function runAgent(ctx: AgentExecutionContext): Promise<AgentOutput>
         agentId: ctx.agentId,
         taskId: ctx.taskId,
         runId: ctx.runId,
+        projectRoot: ctx.projectRoot,
       },
     },
     artifacts: [],

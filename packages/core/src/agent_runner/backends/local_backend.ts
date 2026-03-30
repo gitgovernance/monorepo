@@ -54,8 +54,24 @@ export class LocalBackend {
     engine: LocalEngine,
     ctx: AgentExecutionContext
   ): Promise<AgentOutput> {
-    // [EARS-B1] Resolve absolute path
-    const absolutePath = path.join(this.projectRoot, engine.entrypoint!);
+    // [EARS-B1] Resolve entrypoint: NPM package name or filesystem path
+    // NPM packages: start with @ (scoped) or have no file extension and no path separators
+    // File paths: start with . or / or have file extension (.mjs, .js, .ts)
+    const entrypoint = engine.entrypoint!;
+    const hasFileExtension = /\.\w+$/.test(entrypoint);
+    const isPackageName = entrypoint.startsWith("@") || (!hasFileExtension && !entrypoint.startsWith(".") && !entrypoint.startsWith("/") && !entrypoint.includes(path.sep));
+    let absolutePath: string;
+    if (isPackageName) {
+      // NPM package: resolve from projectRoot/node_modules/
+      // Read the package's exports/main to find the entry file
+      const pkgDir = path.join(ctx.projectRoot, "node_modules", ...entrypoint.split("/"));
+      const pkgJsonPath = path.join(pkgDir, "package.json");
+      const pkgJson = JSON.parse(await (await import("node:fs/promises")).readFile(pkgJsonPath, "utf-8"));
+      const entry = pkgJson.exports?.["."]?.import || pkgJson.exports?.["."] || pkgJson.main || "index.js";
+      absolutePath = path.join(pkgDir, entry);
+    } else {
+      absolutePath = path.isAbsolute(entrypoint) ? entrypoint : path.join(this.projectRoot, entrypoint);
+    }
 
     // [EARS-B4] Dynamic import
     const mod = await import(absolutePath);

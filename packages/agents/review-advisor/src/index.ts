@@ -14,6 +14,8 @@ type AgentExecutionContext = {
   taskId: string;
   runId: string;
   input?: unknown;
+  /** Root directory of the project. Use instead of process.cwd(). */
+  projectRoot: string;
 };
 
 /**

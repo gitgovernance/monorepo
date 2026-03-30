@@ -72,6 +72,51 @@ export const REGEX_RULES: RegexRule[] = [
     fixes: [{ description: "Never commit private keys. Use secret management." }],
   },
 
+  // === PROVIDER TOKENS ===
+  {
+    id: "SEC-004",
+    pattern: /(?:sk|pk|rk)_(?:live|test)_[a-zA-Z0-9]{20,}/g,
+    category: "hardcoded-secret",
+    severity: "critical",
+    message: "Stripe API key detected",
+    fixes: [{ description: "Use environment variables. Never commit Stripe keys." }],
+  },
+  {
+    id: "SEC-005",
+    pattern: /(?:ghp|gho|ghs|ghu|github_pat)_[a-zA-Z0-9]{20,}/g,
+    category: "hardcoded-secret",
+    severity: "critical",
+    message: "GitHub token detected",
+    fixes: [{ description: "Use environment variables or GitHub App tokens." }],
+  },
+  {
+    id: "SEC-006",
+    pattern: /(?:password|passwd|pwd)\s*[:=]\s*['"][^'"]{8,}['"]/gi,
+    category: "hardcoded-secret",
+    severity: "critical",
+    message: "Hardcoded password detected",
+    fixes: [{ description: "Use environment variables or secret management." }],
+  },
+  {
+    id: "SEC-007",
+    pattern: /eyJ[a-zA-Z0-9_-]{20,}\.eyJ[a-zA-Z0-9_-]{20,}\.[a-zA-Z0-9_-]{20,}/g,
+    category: "hardcoded-secret",
+    severity: "high",
+    message: "JWT token detected in source code",
+    fixes: [{ description: "Never commit JWT tokens. Generate at runtime." }],
+  },
+
+  // === DATA TRANSFER ===
+  {
+    id: "XFER-001",
+    pattern: /analytics\.(?:track|identify|page)\s*\([^)]*(?:email|phone|name|address|ssn)/gi,
+    category: "third-party-transfer",
+    severity: "high",
+    message: "PII sent to third-party analytics",
+    fixes: [{ description: "Strip PII before sending to analytics. Use pseudonymized identifiers." }],
+    legalReference: "GDPR Art. 5(1)(c) — data minimization",
+  },
+
   // === LOGGING PII ===
   {
     id: "LOG-001",

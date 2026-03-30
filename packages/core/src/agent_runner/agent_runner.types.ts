@@ -77,6 +77,10 @@ export type AgentExecutionContext = {
   runId: string;
   /** Optional input passed to the agent (from RunOptions.input) */
   input?: unknown;
+  /** Root directory of the project being operated on.
+   * Agents use this instead of process.cwd() for file operations.
+   * Injected by FsAgentRunner from its projectRoot dependency. */
+  projectRoot: string;
 };
 
 /**
