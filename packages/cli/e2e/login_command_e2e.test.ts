@@ -53,8 +53,8 @@ describe('Login Command E2E (LOGIN-E1 to E4)', () => {
   it('[LOGIN-E1] should show not logged in when no session token exists', () => {
     // Ensure no cloud token in session
     const session = readSession();
-    if (session?.cloud) {
-      delete session.cloud;
+    if (session?.['cloud']) {
+      delete session['cloud'];
       writeSession(session);
     }
 
@@ -74,8 +74,8 @@ describe('Login Command E2E (LOGIN-E1 to E4)', () => {
   it('[LOGIN-E2] should succeed gracefully when logging out without active session', () => {
     // Ensure no cloud token
     const session = readSession();
-    if (session?.cloud) {
-      delete session.cloud;
+    if (session?.['cloud']) {
+      delete session['cloud'];
       writeSession(session);
     }
 
@@ -135,7 +135,7 @@ describe('Login Command E2E (LOGIN-E1 to E4)', () => {
     // Verify session file: cloud should be gone, actorState should remain
     const updatedSession = readSession();
     expect(updatedSession).not.toBeNull();
-    expect(updatedSession!.cloud).toBeUndefined();
-    expect(updatedSession!.actorState).toEqual({ 'human:e2e-user': { activeTaskId: 'task-123' } });
+    expect(updatedSession!['cloud']).toBeUndefined();
+    expect(updatedSession!['actorState']).toEqual({ 'human:e2e-user': { activeTaskId: 'task-123' } });
   });
 });

@@ -32,7 +32,7 @@ jest.mock('../../services/dependency-injection', () => ({
         hasPrivateKey: mockHasPrivateKey,
       } as unknown as IKeyProvider),
       getConfigManager: jest.fn().mockResolvedValue({
-        getConfig: mockGetConfig,
+        loadConfig: mockGetConfig,
       }),
     }),
   },

@@ -88,6 +88,33 @@ export type { ConfigStore } from "./config_store";
 export type { FileLister as IFileLister, FileListOptions, FileStats } from "./file_lister";
 export { FileListerError } from "./file_lister";
 
+// AuditOrchestrator direct type exports
+export type {
+  AuditOrchestrationOptions,
+  AuditOrchestrationResult,
+  ConsolidatedFinding,
+  PolicyDecision,
+  AuditSummary,
+  AuditOrchestratorDeps,
+} from "./audit_orchestrator";
+
+// FindingDetector direct type exports
+export type {
+  Finding,
+  FindingCategory,
+  DetectorName,
+  RegexRule,
+} from "./finding_detector";
+
+// Sarif direct type exports
+export type { GetLineContentFn } from "./sarif";
+
+// SourceAuditor direct type exports
+export type { ActiveWaiver } from "./source_auditor";
+
+// ID generator utilities (protocol-valid ID creation)
+export { generateTaskId, generateExecutionId, generateFeedbackId, generateCycleId, generateActorId, generateAgentId } from "./utils/id_generator";
+
 // Git direct exports (interface + types + errors)
 export type { IGitModule, ExecOptions, ExecResult, GetCommitHistoryOptions, CommitInfo, ChangedFile, CommitAuthor } from "./git";
 export { GitError, GitCommandError, FileNotFoundError, BranchNotFoundError, BranchAlreadyExistsError, MergeConflictError } from "./git";

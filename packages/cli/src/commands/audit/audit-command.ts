@@ -2,8 +2,16 @@ import { Command, Option } from 'commander';
 import { BaseCommand } from '../../base/base-command';
 import type { BaseCommandOptions } from '../../interfaces/command';
 import { readFile } from 'node:fs/promises';
-import type { AuditOrchestrator, FindingDetector, Sarif } from '@gitgov/core';
-import { Sarif as SarifModule } from '@gitgov/core';
+import { Sarif as SarifModule, generateExecutionId } from '@gitgov/core';
+import type {
+  AuditOrchestrationOptions,
+  AuditOrchestrationResult,
+  ConsolidatedFinding,
+  Finding,
+  FindingCategory,
+  DetectorName,
+  GetLineContentFn,
+} from '@gitgov/core';
 
 /**
  * CLI-specific options for audit command
@@ -30,7 +38,7 @@ export interface AuditCommandOptions extends BaseCommandOptions {
  * Options for waive subcommand
  */
 export interface WaiveCommandOptions extends BaseCommandOptions {
-  /** Justification for the waiver */
+  /** Justification for the waiver (required by EARS-E2 at runtime) */
   justification?: string;
   /** List active waivers */
   list?: boolean;
@@ -114,7 +122,7 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
       }, actorId);
 
       // Invoke orchestrator - ALL logic lives here
-      const orchestrationOptions: AuditOrchestrator.AuditOrchestrationOptions = {
+      const orchestrationOptions: AuditOrchestrationOptions = {
         scope: options.scope,
         taskId: auditTask.id,
         failOn: options.failOn,
@@ -156,7 +164,7 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
    * Format and display output based on --output option
    * [AORCH-C4]
    */
-  private async formatOutput(result: AuditOrchestrator.AuditOrchestrationResult, options: AuditCommandOptions): Promise<void> {
+  private async formatOutput(result: AuditOrchestrationResult, options: AuditCommandOptions): Promise<void> {
     // Quiet mode - only show critical findings
     if (options.quiet) {
       const criticals = result.findings.filter(f => f.severity === 'critical' && !f.isWaived);
@@ -184,7 +192,7 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
   /**
    * Format text output: FINDINGS -> SUMMARY -> POLICY DECISION
    */
-  private formatTextOutput(result: AuditOrchestrator.AuditOrchestrationResult, options: AuditCommandOptions): void {
+  private formatTextOutput(result: AuditOrchestrationResult, options: AuditCommandOptions): void {
     const { findings, summary, policyDecision } = result;
     const activeFindings = findings.filter(f => !f.isWaived);
 
@@ -240,8 +248,8 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
   /**
    * Display findings grouped by file
    */
-  private displayByFile(findings: AuditOrchestrator.ConsolidatedFinding[]): void {
-    const byFile: Record<string, AuditOrchestrator.ConsolidatedFinding[]> = {};
+  private displayByFile(findings: ConsolidatedFinding[]): void {
+    const byFile: Record<string, ConsolidatedFinding[]> = {};
     for (const f of findings) {
       const existing = byFile[f.file];
       if (existing) {
@@ -268,7 +276,7 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
   /**
    * Format JSON output
    */
-  private formatJsonOutput(result: AuditOrchestrator.AuditOrchestrationResult): void {
+  private formatJsonOutput(result: AuditOrchestrationResult): void {
     console.log(JSON.stringify(result, null, 2));
   }
 
@@ -276,10 +284,10 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
    * Format SARIF output using SarifBuilder from @gitgov/core
    * [AORCH-C4]
    */
-  private async formatSarifOutput(result: AuditOrchestrator.AuditOrchestrationResult): Promise<void> {
+  private async formatSarifOutput(result: AuditOrchestrationResult): Promise<void> {
     const builder = SarifModule.createSarifBuilder();
 
-    const getLineContent: Sarif.GetLineContentFn = async (file, line) => {
+    const getLineContent: GetLineContentFn = async (file: string, line: number) => {
       try {
         const content = await readFile(file, 'utf-8');
         const lines = content.split('\n');
@@ -289,20 +297,20 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
       }
     };
 
-    // Convert ConsolidatedFindings to FindingDetector.Finding shape for SarifBuilder
-    const findings: FindingDetector.Finding[] = result.findings.map(f => {
-      const finding: FindingDetector.Finding = {
+    // Convert ConsolidatedFindings to Finding shape for SarifBuilder
+    const findings: Finding[] = result.findings.map(f => {
+      const finding: Finding = {
         id: f.fingerprint,
         fingerprint: f.fingerprint,
         file: f.file,
         line: f.line,
         ruleId: f.ruleId ?? 'UNKNOWN',
-        category: f.category as FindingDetector.FindingCategory,
+        category: f.category as FindingCategory,
         severity: f.severity,
         message: f.message,
         snippet: '',
         confidence: 1.0,
-        detector: (f.reportedBy[0] ?? 'regex') as FindingDetector.DetectorName,
+        detector: (f.reportedBy[0] ?? 'regex') as DetectorName,
       };
       if (f.column !== undefined) {
         finding.column = f.column;
@@ -375,7 +383,7 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
       await feedbackAdapter.create(
         {
           entityType: 'execution',
-          entityId: 'cli-waiver',
+          entityId: generateExecutionId('cli-waiver', Math.floor(Date.now() / 1000)),
           type: 'approval',
           status: 'resolved',
           content: options.justification,

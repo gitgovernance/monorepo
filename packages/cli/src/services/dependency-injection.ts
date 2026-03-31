@@ -216,6 +216,7 @@ export class DependencyInjectionService {
           feedbacks: this.stores.feedbacks,
           executions: this.stores.executions,
           actors: this.stores.actors,
+          agents: this.stores.agents,
         },
         sink,
       });
@@ -700,10 +701,12 @@ export class DependencyInjectionService {
       // Create AgentRunnerModule with dependencies
       // projectRoot = repoRoot (user's repo) so agents scan source files there.
       // gitgovPath = worktree .gitgov/ (where records live).
+      const feedbackAdapter = await this.getFeedbackAdapter();
       this.agentRunnerModule = createAgentRunner({
         gitgovPath: path.join(this.projectRoot, '.gitgov'),
         projectRoot: this.repoRoot ?? this.projectRoot,
         executionAdapter,
+        feedbackAdapter,
         eventBus
       });
 

@@ -133,6 +133,8 @@ function createMockIndexData(
     enrichedTasks,
     cycles: [],
     actors: [],
+    executions: [],
+    agents: [],
     feedback: [],
     derivedStates: {
       stalledTasks: [],

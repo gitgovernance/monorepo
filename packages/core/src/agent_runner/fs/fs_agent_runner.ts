@@ -1,6 +1,7 @@
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { FsRecordStore, DEFAULT_ID_ENCODER } from "../../record_store/fs/fs_record_store";
+import { generateExecutionId } from "../../utils/id_generator";
 import {
   LocalBackend,
   ApiBackend,
@@ -190,18 +191,26 @@ export class FsAgentRunner implements IAgentRunner {
     // [EARS-L3] Non-review agents always create ExecutionRecord (no regression)
     if (isReviewAgent && this.feedbackAdapter) {
       // [EARS-L1] Create FeedbackRecord(type: 'suggestion') for review agents
-      // Following waiver pattern: entityType=execution, entityId=scanExecutionId,
-      // metadata.fingerprint for per-finding correlation
+      // entityType=execution, entityId=scan execution ID (from input if available)
+      // Schema requires entityId to match ^\d{10}-exec-[a-z0-9-]{1,50}$
+      // entityId references the execution being reviewed. Use scanExecutionId from input
+      // if available (orchestrator passes it), otherwise generate a valid execution-style ID.
+      const inputData = opts.input as Record<string, unknown> | undefined;
+      const scanExecutionId = inputData?.["scanExecutionId"] as string | undefined;
+      const timestamp = Math.floor(Date.now() / 1000);
+      const entityId = scanExecutionId || generateExecutionId(`review-${opts.agentId}`, timestamp);
+
       const feedbackRecord = await this.feedbackAdapter.create(
         {
           entityType: "execution",
-          entityId: opts.taskId, // scan execution context
+          entityId,
           type: "suggestion",
           status: "open",
           content: resultMessage.length >= 10 ? resultMessage : resultMessage.padEnd(10, '.'),
           metadata: {
             agentId: opts.agentId,
             purpose: "review",
+            taskId: opts.taskId,
             runId,
             executionStatus: status,
             output: status === "success" ? output : undefined,
