@@ -1,3 +1,10 @@
+## [3.7.0](https://github.com/gitgovernance/monorepo/compare/core-v3.6.1...core-v3.7.0) (2026-03-31)
+
+
+### ✨ Features
+
+* **core:** add direct type exports + GitgovActor metadataJson ([#141](https://github.com/gitgovernance/monorepo/issues/141)) ([e758773](https://github.com/gitgovernance/monorepo/commit/e758773e018a58520f9acf9bc20f17ac311247d9))
+
 ## [3.6.1](https://github.com/gitgovernance/monorepo/compare/core-v3.6.0...core-v3.6.1) (2026-03-31)
 
 
