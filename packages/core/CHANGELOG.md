@@ -1,3 +1,10 @@
+## [3.6.1](https://github.com/gitgovernance/monorepo/compare/core-v3.6.0...core-v3.6.1) (2026-03-31)
+
+
+### 🐛 Bug Fixes
+
+* **core/cli:** tsc zero errors + audit command fixes + FeedbackRecord entityId ([#139](https://github.com/gitgovernance/monorepo/issues/139)) ([06dca2c](https://github.com/gitgovernance/monorepo/commit/06dca2c019bd7e6c2ab29349bbefc4240384c43a))
+
 ## [3.6.0](https://github.com/gitgovernance/monorepo/compare/core-v3.5.0...core-v3.6.0) (2026-03-30)
 
 
