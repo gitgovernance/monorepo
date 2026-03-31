@@ -123,6 +123,7 @@ model GitgovActor {
   status         String?
   supersededBy   String?
   headerJson     Json
+  metadataJson   Json?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 

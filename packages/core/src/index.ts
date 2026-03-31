@@ -102,12 +102,25 @@ export type {
 export type {
   Finding,
   FindingCategory,
+  FindingSeverity,
   DetectorName,
   RegexRule,
 } from "./finding_detector";
 
 // Sarif direct type exports
-export type { GetLineContentFn } from "./sarif";
+export type {
+  GetLineContentFn,
+  SarifLog,
+  SarifResult,
+  SarifResultProperties,
+  SarifRunProperties,
+} from "./sarif";
+
+// SourceAuditor direct type exports (ActiveWaiver already exported above)
+export type { IWaiverReader, WaiverMetadata } from "./source_auditor";
+
+// AuditOrchestrator agent result type
+export type { AgentAuditResult } from "./audit_orchestrator";
 
 // SourceAuditor direct type exports
 export type { ActiveWaiver } from "./source_auditor";
