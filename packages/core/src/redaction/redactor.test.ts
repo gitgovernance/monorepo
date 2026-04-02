@@ -35,7 +35,7 @@ import type { SarifLog } from '../sarif/sarif.types';
 // ─────────────────────────────────────────────────────────────────────────────
 
 const sensitiveFinding: Finding = {
-  id: 'f-001',
+  fingerprint: 'abc123fingerprint',
   file: 'src/auth/config.ts',
   line: 12,
   ruleId: 'SEC-001',
@@ -50,7 +50,7 @@ const sensitiveFinding: Finding = {
 };
 
 const safeFinding: Finding = {
-  id: 'f-002',
+  fingerprint: 'def456fingerprint',
   file: 'src/analytics/tracker.ts',
   line: 5,
   ruleId: 'TRK-001',

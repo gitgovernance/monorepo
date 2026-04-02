@@ -21,7 +21,7 @@ function makeFinding(
     fingerprint: "fp-test-001",
     message: "test finding",
     severity: "high",
-    category: "test",
+    category: "unknown-risk",
     file: "src/foo.ts",
     line: 10,
     reportedBy: ["agent-1"],
@@ -48,11 +48,11 @@ describe("CategoryBlock", () => {
     it("[PEVAL-C4] should return passed:false when non-waived findings in blocked categories", () => {
       const findings = [
         makeFinding({ fingerprint: "fp-1", category: "hardcoded-secret", isWaived: false }),
-        makeFinding({ fingerprint: "fp-2", category: "pii-ssn", isWaived: false }),
-        makeFinding({ fingerprint: "fp-3", category: "low-risk", isWaived: false }),
+        makeFinding({ fingerprint: "fp-2", category: "pii-generic", isWaived: false }),
+        makeFinding({ fingerprint: "fp-3", category: "unknown-risk", isWaived: false }),
       ];
       const config = makeConfig({
-        blockCategories: ["hardcoded-secret", "pii-ssn"],
+        blockCategories: ["hardcoded-secret", "pii-generic"],
       });
 
       const result = categoryBlock.evaluate(findings, config);
@@ -61,7 +61,7 @@ describe("CategoryBlock", () => {
       expect(result.ruleName).toBe("CategoryBlock");
       expect(result.reason).toContain("2 finding(s) in blocked category");
       expect(result.reason).toContain("hardcoded-secret");
-      expect(result.reason).toContain("pii-ssn");
+      expect(result.reason).toContain("pii-generic");
     });
 
     it("[PEVAL-C5] should return passed:true when blockCategories is empty or undefined", () => {
@@ -86,11 +86,11 @@ describe("CategoryBlock", () => {
     it("[PEVAL-C6] should return passed:true when all blocked-category findings are waived", () => {
       const findings = [
         makeFinding({ fingerprint: "fp-1", category: "hardcoded-secret", isWaived: true }),
-        makeFinding({ fingerprint: "fp-2", category: "pii-ssn", isWaived: true }),
-        makeFinding({ fingerprint: "fp-3", category: "low-risk", isWaived: false }),
+        makeFinding({ fingerprint: "fp-2", category: "pii-generic", isWaived: true }),
+        makeFinding({ fingerprint: "fp-3", category: "unknown-risk", isWaived: false }),
       ];
       const config = makeConfig({
-        blockCategories: ["hardcoded-secret", "pii-ssn"],
+        blockCategories: ["hardcoded-secret", "pii-generic"],
       });
 
       const result = categoryBlock.evaluate(findings, config);

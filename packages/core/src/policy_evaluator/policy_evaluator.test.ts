@@ -58,7 +58,7 @@ function makeFinding(
     fingerprint: "fp-test-001",
     message: "test finding",
     severity: "high",
-    category: "test",
+    category: "unknown-risk",
     file: "src/foo.ts",
     line: 10,
     reportedBy: ["agent-1"],
@@ -154,7 +154,7 @@ describe("PolicyEvaluator", () => {
       const withRuleId = makeFinding({ ruleId: "SEC-001" });
       expect(withRuleId.fingerprint).toBe("fp-test-001");
       expect(withRuleId.severity).toBe("high");
-      expect(withRuleId.category).toBe("test");
+      expect(withRuleId.category).toBe("unknown-risk");
       expect(withRuleId.file).toBe("src/foo.ts");
       expect(withRuleId.line).toBe(10);
       expect(withRuleId.reportedBy).toEqual(["agent-1"]);

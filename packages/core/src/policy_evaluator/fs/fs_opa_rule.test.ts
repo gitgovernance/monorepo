@@ -28,7 +28,7 @@ function makeFinding(
     fingerprint: "fp-test-001",
     message: "test finding",
     severity: "high",
-    category: "test",
+    category: "unknown-risk",
     file: "src/foo.ts",
     line: 10,
     reportedBy: ["agent-1"],
@@ -192,7 +192,7 @@ describeIfOpa("FsOpaRule", () => {
       const nonMatchingFindings = [
         makeFinding({
           fingerprint: "fp-2",
-          category: "low-risk",
+          category: "unknown-risk",
           isWaived: false,
         }),
       ];
