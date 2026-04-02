@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import type {
   CodeSnippet,
   FindingCategory,
@@ -106,21 +106,19 @@ export class HttpLlmDetector implements LlmDetector {
         : "unknown-risk";
 
       const finding: Finding = {
-        id: randomUUID(),
-        ruleId: raw.ruleId ?? "LLM-001",
-        category,
-        severity: raw.severity,
+        fingerprint: generateFingerprint(raw.ruleId, raw.file, raw.line),
+        ruleId: raw.ruleId,
         file: raw.file,
         line: raw.line,
-        snippet: truncateSnippet(raw.snippet ?? ""),
         message: raw.message,
+        snippet: truncateSnippet(raw.snippet ?? ""),
+        category,
+        severity: raw.severity,
         detector: "llm",
-        fingerprint: generateFingerprint(
-          raw.ruleId ?? "LLM-001",
-          raw.file,
-          raw.line
-        ),
-        confidence: raw.confidence ?? 0.9,
+        confidence: raw.confidence,
+        executionId: "",      // filled post-orchestration
+        reportedBy: [],       // filled post-orchestration
+        isWaived: false,      // filled post-orchestration
       };
 
       if (raw.fixes?.length) finding.fixes = raw.fixes;

@@ -21,7 +21,6 @@ describe("WaiverWriter", () => {
   });
 
   const mockFinding: Finding = {
-    id: "finding-1",
     ruleId: "PII-001",
     category: "pii-email",
     severity: "high",
@@ -32,6 +31,9 @@ describe("WaiverWriter", () => {
     detector: "regex",
     fingerprint: "abc123def456",
     confidence: 1.0,
+    executionId: "",
+    reportedBy: [],
+    isWaived: false,
   };
 
   describe("4.7. WaiverWriter (EARS-G1 to EARS-G5)", () => {
@@ -110,7 +112,7 @@ describe("WaiverWriter", () => {
     it("[EARS-G4] should create waivers for all findings in batch", async () => {
       const findings: Finding[] = [
         mockFinding,
-        { ...mockFinding, id: "finding-2", fingerprint: "xyz789" },
+        { ...mockFinding, fingerprint: "xyz789" },
       ];
 
       await writer.createWaiversBatch(

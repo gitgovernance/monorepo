@@ -79,7 +79,8 @@ export class RecordProjector implements IRecordProjector {
       cycles,
       feedback,
       executions,
-      actors
+      actors,
+      agents
     };
 
     const activityHistory = await this.calculateActivityHistory(allRecords);

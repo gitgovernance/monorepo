@@ -8,11 +8,12 @@ import type { RecordStore } from "../record_store/record_store";
 import type { GitGovAgentRecord } from "../record_types";
 import type { IAgentRunner } from "../agent_runner/agent_runner";
 import type { RunOptions, AgentResponse } from "../agent_runner/agent_runner.types";
-import type { IWaiverReader, ActiveWaiver } from "../source_auditor/types";
+import type { IWaiverReader, Waiver } from "../source_auditor/types";
 import type {
   PolicyEvaluator,
   PolicyEvaluationResult,
   PolicyDecision,
+  Finding,
 } from "../policy_evaluator/policy_evaluator.types";
 import { FindingRedactor, DEFAULT_REDACTION_CONFIG } from "../redaction";
 
@@ -103,6 +104,7 @@ function makePolicyDecision(
   return {
     decision,
     reason,
+    executionId: "",
     blockingFindings: [],
     waivedFindings: [],
     summary: { critical: 0, high: 0, medium: 0, low: 0 },
@@ -148,8 +150,8 @@ function createMockDeps(overrides?: Partial<AuditOrchestratorDeps>): AuditOrches
   };
 
   const waiverReader: IWaiverReader = {
-    loadActiveWaivers: jest.fn().mockResolvedValue([]),
-    hasActiveWaiver: jest.fn().mockResolvedValue(false),
+    loadWaivers: jest.fn().mockResolvedValue([]),
+    hasWaiver: jest.fn().mockResolvedValue(false),
   };
 
   const policyEvaluator: PolicyEvaluator = {
@@ -571,7 +573,7 @@ describe("AuditOrchestrator", () => {
   });
 
   describe("4.3b. Snippet Extraction (AORCH-B13)", () => {
-    it("[AORCH-B13] should extract snippet from SARIF region.snippet.text into ConsolidatedFinding", async () => {
+    it("[AORCH-B13] should extract snippet from SARIF region.snippet.text into Finding", async () => {
       const agentRecord = makeAgentRecord("agent:security-audit", "audit");
       const sarifResultWithSnippet = {
         ruleId: "SEC-001",
@@ -667,7 +669,7 @@ describe("AuditOrchestrator", () => {
       (deps.agentRunner.runOnce as jest.Mock).mockResolvedValue(
         makeAgentResponse("agent:security-audit", sarif, "exec-001"),
       );
-      (deps.waiverReader.loadActiveWaivers as jest.Mock).mockRejectedValue(
+      (deps.waiverReader.loadWaivers as jest.Mock).mockRejectedValue(
         new Error("WaiverReader connection failed"),
       );
 
@@ -706,41 +708,47 @@ describe("AuditOrchestrator", () => {
         }),
       ]);
 
-      const activeWaiver: ActiveWaiver = {
+      const activeWaiver: Waiver = {
         fingerprint: "waived-hash-001",
         ruleId: "SEC-001",
         feedback: {
-          id: "1234567890-feedback-waiver-sec001",
-          entityType: "execution",
-          entityId: "exec-previous",
-          type: "approval",
-          status: "acknowledged",
-          content: "Risk accepted per security review",
-          metadata: {
-            fingerprint: "waived-hash-001",
-            ruleId: "SEC-001",
-            file: "src/config.ts",
-            line: 10,
+          header: { version: "1.0", type: "feedback", payloadChecksum: "test", signatures: [] },
+          payload: {
+            id: "1234567890-feedback-waiver-sec001",
+            entityType: "execution",
+            entityId: "exec-previous",
+            type: "approval",
+            status: "acknowledged",
+            content: "Risk accepted per security review",
+            metadata: {
+              fingerprint: "waived-hash-001",
+              ruleId: "SEC-001",
+              file: "src/config.ts",
+              line: 10,
+            },
           },
-        },
+        } as any,
       };
 
       // Set up policy evaluator mock to return waived finding in decision
       // (orchestrator now derives waiver state from policy decision, not independently)
-      const waivedConsolidatedFinding = {
+      const waivedFinding: Finding = {
         fingerprint: "waived-hash-001",
         ruleId: "SEC-001",
         message: "Hardcoded secret",
-        severity: "critical" as const,
+        severity: "critical",
         category: "hardcoded-secret",
         file: "src/config.ts",
         line: 10,
+        detector: "regex",
+        confidence: 1.0,
+        executionId: "",
         reportedBy: ["agent:security-audit"],
         isWaived: true,
         waiver: activeWaiver,
       };
       const policyDecision = makePolicyDecision("pass", "All waived");
-      policyDecision.waivedFindings = [waivedConsolidatedFinding];
+      policyDecision.waivedFindings = [waivedFinding];
       const policyResult: PolicyEvaluationResult = {
         decision: policyDecision,
         executionRecord: {
@@ -763,7 +771,7 @@ describe("AuditOrchestrator", () => {
       (deps.agentRunner.runOnce as jest.Mock).mockResolvedValue(
         makeAgentResponse("agent:security-audit", sarif, "exec-001"),
       );
-      (deps.waiverReader.loadActiveWaivers as jest.Mock).mockResolvedValue([
+      (deps.waiverReader.loadWaivers as jest.Mock).mockResolvedValue([
         activeWaiver,
       ]);
       (deps.policyEvaluator.evaluate as jest.Mock).mockResolvedValue(policyResult);
@@ -773,12 +781,12 @@ describe("AuditOrchestrator", () => {
 
       expect(result.findings).toHaveLength(2);
 
-      const waivedFinding = result.findings.find(
+      const foundWaived = result.findings.find(
         (f) => f.fingerprint === "waived-hash-001",
       );
-      expect(waivedFinding).toBeDefined();
-      expect(waivedFinding?.isWaived).toBe(true);
-      expect(waivedFinding?.waiver).toBe(activeWaiver);
+      expect(foundWaived).toBeDefined();
+      expect(foundWaived?.isWaived).toBe(true);
+      expect(foundWaived?.waiver).toBe(activeWaiver);
 
       const notWaivedFinding = result.findings.find(
         (f) => f.fingerprint === "not-waived-hash-002",

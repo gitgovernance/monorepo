@@ -1,65 +1,26 @@
 /**
- * Finding categories detectable by the module.
- * Includes PII, secrets, logging, and data transfer.
+ * Finding Detector types.
+ *
+ * Core types (Finding, FindingCategory, FindingSeverity, DetectorName) are
+ * imported from @gitgov/core/audit — the central definition.
+ * This file re-exports them and defines detector-specific types.
  */
-export type FindingCategory =
-  | "pii-email"
-  | "pii-phone"
-  | "pii-financial"
-  | "pii-health"
-  | "pii-generic"
-  | "hardcoded-secret"
-  | "logging-pii"
-  | "tracking-cookie"
-  | "tracking-analytics-id"
-  | "unencrypted-storage"
-  | "third-party-transfer"
-  | "unknown-risk";
 
-/**
- * Severity levels for remediation prioritization.
- */
-export type FindingSeverity = "critical" | "high" | "medium" | "low" | "info";
+// ─── Re-export canonical types from audit ────────────────────────────────────
 
-/**
- * Identifier of the detector that generated the finding.
- */
-export type DetectorName = "regex" | "heuristic" | "llm";
+export type {
+  Finding,
+  FindingCategory,
+  FindingSeverity,
+  DetectorName,
+} from "../audit/types";
 
-/**
- * PII/secrets detection result in source code.
- * Includes metadata for deduplication and traceability.
- */
-export interface Finding {
-  /** Unique UUID of the finding */
-  id: string;
-  /** Rule ID that detected it (e.g., "PII-001", "SEC-002") */
-  ruleId: string;
-  /** Semantic category of the finding */
-  category: FindingCategory;
-  /** Severity for prioritization */
-  severity: FindingSeverity;
-  /** Relative path to repo */
-  file: string;
-  /** Line number (1-based) */
-  line: number;
-  /** Optional column */
-  column?: number;
-  /** Sanitized affected code (max 300 chars) */
-  snippet: string;
-  /** Problem description */
-  message: string;
-  /** Proposed fixes — SARIF §3.55.4 standard */
-  fixes?: Array<{ description: string }>;
-  /** Legal reference (e.g., "GDPR Art. 5(1)(f)") */
-  legalReference?: string;
-  /** Detector that generated the finding */
-  detector: DetectorName;
-  /** SHA256 for deduplication: hash(ruleId:file:line) */
-  fingerprint: string;
-  /** Confidence level 0-1 */
-  confidence: number;
-}
+// ─── Detector-specific types ─────────────────────────────────────────────────
+
+import type { Finding, FindingCategory, FindingSeverity, DetectorName } from "../audit/types";
+
+/** Quota type for LLM usage control */
+export type QuotaType = "unlimited" | "trial" | "usage-based";
 
 /**
  * Configuration to enable/disable detectors.
@@ -105,9 +66,6 @@ export interface CodeSnippet {
   /** Tags from heuristic detector that flagged it */
   heuristicTags: string[];
 }
-
-/** Quota type for LLM usage control */
-export type QuotaType = "unlimited" | "trial" | "usage-based";
 
 /**
  * Remote LLM detector configuration.
@@ -182,12 +140,12 @@ export interface RegexRule {
 export interface LlmRawFinding {
   file: string;
   line: number;
-  ruleId?: string;
+  ruleId: string;
   category: string;
-  severity: "critical" | "high" | "medium" | "low" | "info";
+  severity: "critical" | "high" | "medium" | "low";
   message: string;
+  confidence: number;
   fixes?: Array<{ description: string }>;
   legalReference?: string;
   snippet?: string;
-  confidence?: number;
 }

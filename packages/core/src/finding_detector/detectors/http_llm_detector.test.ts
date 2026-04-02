@@ -11,9 +11,11 @@ describe("HttpLlmDetector", () => {
             {
               file: "test.ts",
               line: 1,
+              ruleId: "PII-001",
               category: "pii-email",
               severity: "high",
               message: "Email detected by LLM",
+              confidence: 0.95,
             },
           ],
         }),
@@ -37,9 +39,9 @@ describe("HttpLlmDetector", () => {
 
       expect(findings).toHaveLength(1);
       expect(findings[0]?.detector).toBe("llm");
-      expect(findings[0]?.confidence).toBe(0.9);
-      expect(findings[0]).toHaveProperty("id");
+      expect(findings[0]?.confidence).toBe(0.95);
       expect(findings[0]).toHaveProperty("fingerprint");
+      expect(findings[0]).toHaveProperty("executionId");
     });
   });
 

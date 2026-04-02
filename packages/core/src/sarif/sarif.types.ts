@@ -331,27 +331,6 @@ export type OccurrenceContext = Map<string, number>;
 export type { RedactionLevel } from '../redaction/redactor.types';
 
 /**
- * An active waiver to be mapped to a SARIF suppression.
- * Derived from FeedbackRecord type: "approval".
- * Note: There is no WaiverRecord type — waivers ARE FeedbackRecords.
- */
-export type SarifActiveWaiver = {
-  /**
-   * Fingerprint to match against result.partialFingerprints["primaryLocationLineHash/v1"].
-   * This is the primaryLocationLineHash/v1 value (content-based hash).
-   */
-  fingerprint: string;
-  /** FeedbackRecord ID for traceability */
-  feedbackId: string;
-  /** Waiver justification (from FeedbackRecord.content) */
-  content: string;
-  /** Expiration date in ISO 8601 (if set) */
-  expiresAt?: string;
-  /** Actor who approved the waiver */
-  approvedBy?: string;
-};
-
-/**
  * All inputs to SarifBuilder.build().
  * Uses type (not interface) — data only, no methods.
  */
@@ -407,8 +386,8 @@ export type SarifBuilderOptions = {
   exitCode?: number;
 
   // ── Suppressions ───────────────────────────────────────────
-  /** Active waivers to map to suppressions */
-  activeWaivers?: SarifActiveWaiver[];
+  /** Waivers to map to SARIF suppressions (§3.35) */
+  waivers?: import("../audit/types").Waiver[];
 
   // ── Content access ─────────────────────────────────────────
   /**

@@ -13,7 +13,7 @@ import * as os from "node:os";
 import { execSync } from "node:child_process";
 import { createOpaRule } from "./fs_opa_rule";
 import type {
-  ConsolidatedFinding,
+  Finding,
   PolicyConfig,
 } from "../policy_evaluator.types";
 
@@ -22,15 +22,19 @@ import type {
 // ============================================================================
 
 function makeFinding(
-  overrides: Partial<ConsolidatedFinding> = {},
-): ConsolidatedFinding {
+  overrides: Partial<Finding> = {},
+): Finding {
   return {
     fingerprint: "fp-test-001",
+    ruleId: "TEST-001",
     message: "test finding",
     severity: "high",
-    category: "test",
+    category: "unknown-risk",
     file: "src/foo.ts",
     line: 10,
+    detector: "regex",
+    confidence: 1.0,
+    executionId: "",
     reportedBy: ["agent-1"],
     isWaived: false,
     ...overrides,
@@ -166,7 +170,7 @@ describeIfOpa("FsOpaRule", () => {
       fs.rmSync(dir, { recursive: true });
     });
 
-    it("[PEVAL-O4] should pass ConsolidatedFinding as input.findings to OPA", async () => {
+    it("[PEVAL-O4] should pass Finding as input.findings to OPA", async () => {
       const dir = createTmpDir();
       const regoPath = path.join(dir, "test_block.rego");
       fs.writeFileSync(regoPath, BLOCKING_REGO, "utf-8");
@@ -192,7 +196,7 @@ describeIfOpa("FsOpaRule", () => {
       const nonMatchingFindings = [
         makeFinding({
           fingerprint: "fp-2",
-          category: "low-risk",
+          category: "unknown-risk",
           isWaived: false,
         }),
       ];

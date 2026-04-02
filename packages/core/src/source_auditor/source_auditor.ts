@@ -7,7 +7,7 @@ import type {
   AuditSummary,
   AuditContentsInput,
   FileContent,
-  ActiveWaiver,
+  Waiver,
 } from "./types";
 import { ScopeSelector } from "./scope_selector";
 import { ScoringEngine } from "./scoring_engine";
@@ -125,10 +125,10 @@ export class SourceAuditorModule {
     }
 
     // Step 3: Load Waivers
-    let waivers: ActiveWaiver[] = [];
+    let waivers: Waiver[] = [];
     if (this.deps.waiverReader) {
       try {
-        waivers = await this.deps.waiverReader.loadActiveWaivers();
+        waivers = await this.deps.waiverReader.loadWaivers();
       } catch {
         // Graceful degradation: continue without waivers
       }
@@ -200,7 +200,7 @@ export class SourceAuditorModule {
    */
   private filterByWaivers(
     findings: Finding[],
-    waivers: ActiveWaiver[]
+    waivers: Waiver[]
   ): { newFindings: Finding[]; acknowledgedCount: number } {
     const waiverFingerprints = new Set(waivers.map((w) => w.fingerprint));
     const newFindings = findings.filter(
@@ -216,7 +216,7 @@ export class SourceAuditorModule {
   private calculateSummary(findings: Finding[]): AuditSummary {
     const summary: AuditSummary = {
       total: findings.length,
-      bySeverity: { critical: 0, high: 0, medium: 0, low: 0, info: 0 },
+      bySeverity: { critical: 0, high: 0, medium: 0, low: 0 },
       byCategory: {},
       byDetector: { regex: 0, heuristic: 0, llm: 0 },
     };
@@ -239,7 +239,7 @@ export class SourceAuditorModule {
       findings: [],
       summary: {
         total: 0,
-        bySeverity: { critical: 0, high: 0, medium: 0, low: 0, info: 0 },
+        bySeverity: { critical: 0, high: 0, medium: 0, low: 0 },
         byCategory: {},
         byDetector: { regex: 0, heuristic: 0, llm: 0 },
       },

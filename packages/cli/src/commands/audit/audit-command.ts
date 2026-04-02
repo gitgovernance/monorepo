@@ -6,7 +6,7 @@ import { Sarif as SarifModule, generateExecutionId } from '@gitgov/core';
 import type {
   AuditOrchestrationOptions,
   AuditOrchestrationResult,
-  ConsolidatedFinding,
+  Finding,
   Finding,
   FindingCategory,
   DetectorName,
@@ -248,8 +248,8 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
   /**
    * Display findings grouped by file
    */
-  private displayByFile(findings: ConsolidatedFinding[]): void {
-    const byFile: Record<string, ConsolidatedFinding[]> = {};
+  private displayByFile(findings: Finding[]): void {
+    const byFile: Record<string, Finding[]> = {};
     for (const f of findings) {
       const existing = byFile[f.file];
       if (existing) {
@@ -297,7 +297,7 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
       }
     };
 
-    // Convert ConsolidatedFindings to Finding shape for SarifBuilder
+    // Convert Findings to Finding shape for SarifBuilder
     const findings: Finding[] = result.findings.map(f => {
       const finding: Finding = {
         id: f.fingerprint,
@@ -341,7 +341,7 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
       // [EARS-E3] List waivers
       if (options.list) {
         const waiverReader = await this.container.getWaiverReader();
-        const waivers = await waiverReader.loadActiveWaivers();
+        const waivers = await waiverReader.loadWaivers();
 
         if (waivers.length === 0) {
           console.log('\nNo active waivers found.\n');

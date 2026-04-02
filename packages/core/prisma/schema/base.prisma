@@ -1,0 +1,11 @@
+// GitGovernance Core — Prisma Base Configuration
+// datasource + generator shared by all .prisma files in this folder
+
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../../generated/prisma"
+}

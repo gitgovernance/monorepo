@@ -1,5 +1,4 @@
-import type { Finding } from '../finding_detector/types';
-import type { ConsolidatedFinding } from '../audit_orchestrator/audit_orchestrator.types';
+import type { Finding } from '../audit/types';
 
 /**
  * Nivel de detalle para persistencia de findings.
@@ -33,13 +32,13 @@ type RedactionConfig = {
 
 /**
  * Union of types that FindingRedactor can accept.
- * Finding comes from detectors; ConsolidatedFinding from AuditOrchestrator.
+ * Finding comes from detectors; Finding from AuditOrchestrator.
  */
-type RedactableInput = Finding | ConsolidatedFinding;
+type RedactableInput = Finding | Finding;
 
 /**
  * Finding con metadatos de redaccion aplicados.
- * Generic over input type so it works with both Finding and ConsolidatedFinding.
+ * Generic over input type so it works with both Finding and Finding.
  * Extiende T — no lo modifica. El original siempre se conserva.
  * Un RedactedFinding es una "vista" del Finding para un destino especifico.
  */

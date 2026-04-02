@@ -5,7 +5,7 @@
  * | EARS ID   | Test                                                                         | Section  |
  * |:----------|:-----------------------------------------------------------------------------|:---------|
  * | PEVAL-A1  | should require all fields in PolicyEvaluationInput                            | 4.1      |
- * | PEVAL-A2  | should include required fields and optional ruleId in ConsolidatedFinding     | 4.1      |
+ * | PEVAL-A2  | should include required fields and optional ruleId in Finding     | 4.1      |
  * | PEVAL-A3  | should require failOn in PolicyConfig and allow optional fields               | 4.1      |
  * | PEVAL-A4  | should include all fields in PolicyDecision                                   | 4.1      |
  * | PEVAL-A5  | should include ruleName, passed, and reason in PolicyRuleResult               | 4.1      |
@@ -37,9 +37,9 @@ import type {
   PolicyConfig,
   PolicyRule,
   PolicyRuleResult,
-  ConsolidatedFinding,
+  Finding,
   PolicyEvaluatorDeps,
-  ActiveWaiver,
+  Waiver,
   IWaiverReader,
 } from "./policy_evaluator.types";
 import type { FeedbackRecord, GitGovExecutionRecord } from "../record_types";
@@ -52,15 +52,19 @@ import type { SarifLog, SarifResult } from "../sarif/sarif.types";
 // ============================================================================
 
 function makeFinding(
-  overrides: Partial<ConsolidatedFinding> = {},
-): ConsolidatedFinding {
+  overrides: Partial<Finding> = {},
+): Finding {
   return {
     fingerprint: "fp-test-001",
+    ruleId: "TEST-001",
     message: "test finding",
     severity: "high",
-    category: "test",
+    category: "unknown-risk",
     file: "src/foo.ts",
     line: 10,
+    detector: "regex",
+    confidence: 1.0,
+    executionId: "",
     reportedBy: ["agent-1"],
     isWaived: false,
     ...overrides,
@@ -99,11 +103,14 @@ function makeFeedbackRecord(
 function makeWaiver(
   fingerprint: string,
   feedbackId: string,
-): ActiveWaiver {
+): Waiver {
   return {
     fingerprint,
     ruleId: "SEC-001",
-    feedback: makeFeedbackRecord(feedbackId, fingerprint),
+    feedback: {
+      header: { version: "1.0", type: "feedback", payloadChecksum: "sha256:test", signatures: [{ keyId: "human:test", role: "author", signature: "sig", timestamp: Date.now() }] },
+      payload: makeFeedbackRecord(feedbackId, fingerprint),
+    } as any,
   };
 }
 
@@ -146,12 +153,12 @@ describe("PolicyEvaluator", () => {
       expect(input.taskId).toBe("task-001");
     });
 
-    it("[PEVAL-A2] should include required fields and optional ruleId in ConsolidatedFinding", () => {
+    it("[PEVAL-A2] should include required fields and optional ruleId in Finding", () => {
       // With ruleId
       const withRuleId = makeFinding({ ruleId: "SEC-001" });
       expect(withRuleId.fingerprint).toBe("fp-test-001");
       expect(withRuleId.severity).toBe("high");
-      expect(withRuleId.category).toBe("test");
+      expect(withRuleId.category).toBe("unknown-risk");
       expect(withRuleId.file).toBe("src/foo.ts");
       expect(withRuleId.line).toBe(10);
       expect(withRuleId.reportedBy).toEqual(["agent-1"]);
@@ -159,9 +166,9 @@ describe("PolicyEvaluator", () => {
       expect(withRuleId.message).toBe("test finding");
       expect(withRuleId.ruleId).toBe("SEC-001");
 
-      // Without ruleId
+      // Without ruleId override — uses default
       const withoutRuleId = makeFinding();
-      expect(withoutRuleId.ruleId).toBeUndefined();
+      expect(withoutRuleId.ruleId).toBe("TEST-001");
     });
 
     it("[PEVAL-A3] should require failOn in PolicyConfig and allow optional fields", () => {
@@ -494,9 +501,9 @@ describe("PolicyEvaluator", () => {
       expect(result.executionRecord.metadata.kind).toBe("policy-decision");
       expect(result.executionRecord.metadata.version).toBe("1.0.0");
       expect(result.executionRecord.metadata.data).toBe(result.decision);
-      // ExecutionRecord.id is populated with taskId-based identifier
+      // ExecutionRecord.id follows protocol pattern: {timestamp}-exec-{slug}
       expect(result.executionRecord.id).toBeDefined();
-      expect(result.executionRecord.id).toContain("exec-policy-task-id-test-");
+      expect(result.executionRecord.id).toMatch(/^\d{10}-exec-policy-decision$/);
     });
 
     it("[PEVAL-E5] should return ExecutionRecord to caller without persisting", async () => {
@@ -679,7 +686,7 @@ describe("PolicyEvaluator", () => {
      */
     function makeReevalDeps(overrides?: {
       executionRecords?: Map<string, GitGovExecutionRecord>;
-      activeWaivers?: ActiveWaiver[];
+      activeWaivers?: Waiver[];
     }) {
       const recordsMap =
         overrides?.executionRecords ?? new Map<string, GitGovExecutionRecord>();
@@ -699,8 +706,8 @@ describe("PolicyEvaluator", () => {
       };
 
       const waiverReader: IWaiverReader = {
-        loadActiveWaivers: jest.fn().mockResolvedValue(waivers),
-        hasActiveWaiver: jest.fn().mockResolvedValue(false),
+        loadWaivers: jest.fn().mockResolvedValue(waivers),
+        hasWaiver: jest.fn().mockResolvedValue(false),
       };
 
       const evalDeps = makeDeps();
@@ -788,8 +795,8 @@ describe("PolicyEvaluator", () => {
       expect(result.decision.decision).toBe("pass");
       expect(result.decision.waivedFindings).toHaveLength(1);
       expect(result.decision.waivedFindings[0]!.fingerprint).toBe("fp-sec-reeval-001");
-      // Verify waiverReader.loadActiveWaivers was called (current waivers)
-      expect(deps.waiverReader.loadActiveWaivers).toHaveBeenCalled();
+      // Verify waiverReader.loadWaivers was called (current waivers)
+      expect(deps.waiverReader.loadWaivers).toHaveBeenCalled();
     });
 
     it("[PEVAL-F3] should create new ExecutionRecord without modifying previous decision", async () => {

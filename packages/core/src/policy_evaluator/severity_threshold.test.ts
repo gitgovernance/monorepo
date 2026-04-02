@@ -6,7 +6,7 @@
 
 import { severityThreshold } from "./severity_threshold";
 import type {
-  ConsolidatedFinding,
+  Finding,
   PolicyConfig,
 } from "./policy_evaluator.types";
 
@@ -15,15 +15,19 @@ import type {
 // ============================================================================
 
 function makeFinding(
-  overrides: Partial<ConsolidatedFinding> = {},
-): ConsolidatedFinding {
+  overrides: Partial<Finding> = {},
+): Finding {
   return {
     fingerprint: "fp-test-001",
+    ruleId: "TEST-001",
     message: "test finding",
     severity: "high",
-    category: "test",
+    category: "unknown-risk",
     file: "src/foo.ts",
     line: 10,
+    detector: "regex",
+    confidence: 1.0,
+    executionId: "",
     reportedBy: ["agent-1"],
     isWaived: false,
     ...overrides,

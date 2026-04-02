@@ -1,6 +1,6 @@
 // Public API of @gitgov/core/sarif
 export { createSarifBuilder } from './sarif_builder';
-export { toSarifWaiver } from './sarif_builder';
+export { toSarifSuppression } from './sarif_builder';
 export {
   normalizeLineContent,
   computePrimaryLocationLineHash,
@@ -25,7 +25,6 @@ export type {
   SarifRunProperties,
   SarifBuilderOptions,
   SarifBuilder,
-  SarifActiveWaiver,
   ValidationResult,
   RedactionLevel,
   GetLineContentFn,

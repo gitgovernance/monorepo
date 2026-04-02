@@ -173,7 +173,7 @@ describe("RegexDetector", () => {
       const findings = await detector.detect(longLine, "test.ts");
 
       expect(findings).toHaveLength(1);
-      expect(findings[0]?.snippet.length).toBeLessThanOrEqual(300);
+      expect(findings[0]?.snippet?.length).toBeLessThanOrEqual(300);
     });
   });
 });

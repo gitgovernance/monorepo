@@ -8,7 +8,7 @@
 import type {
   PolicyRule,
   PolicyRuleResult,
-  ConsolidatedFinding,
+  Finding,
   PolicyConfig,
 } from "./policy_evaluator.types";
 
@@ -16,7 +16,7 @@ export const categoryBlock: PolicyRule = {
   name: "CategoryBlock",
 
   evaluate(
-    findings: ConsolidatedFinding[],
+    findings: Finding[],
     config: PolicyConfig,
   ): PolicyRuleResult {
     if (!config.blockCategories?.length) {

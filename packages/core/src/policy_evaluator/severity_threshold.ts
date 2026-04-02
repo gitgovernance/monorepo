@@ -8,7 +8,7 @@
 import type {
   PolicyRule,
   PolicyRuleResult,
-  ConsolidatedFinding,
+  Finding,
   PolicyConfig,
 } from "./policy_evaluator.types";
 import { SEVERITY_ORDER } from "./policy_evaluator.types";
@@ -17,7 +17,7 @@ export const severityThreshold: PolicyRule = {
   name: "SeverityThreshold",
 
   evaluate(
-    findings: ConsolidatedFinding[],
+    findings: Finding[],
     config: PolicyConfig,
   ): PolicyRuleResult {
     const threshold = SEVERITY_ORDER[config.failOn];

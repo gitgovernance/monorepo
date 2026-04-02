@@ -44,6 +44,7 @@
     "compile:types": "tsx scripts/compile-json-to-types.ts",
     "generate:indexes": "tsx scripts/generate-indexes.ts",
     "validate:schemas": "tsx scripts/validate-schemas.ts",
+    "prisma:generate": "prisma generate",
     "sync": "pnpm sync:schemas && pnpm sync:workflow-configs && pnpm sync:prompts",
     "prebuild": "pnpm compile:types && pnpm generate:indexes",
     "build": "pnpm clean && tsup",
@@ -87,8 +88,8 @@
     "picomatch": "^4.0.3"
   },
   "devDependencies": {
-    "@prisma/adapter-pg": "^6.0.0",
-    "@prisma/client": "^6.0.0",
+    "@prisma/adapter-pg": "^7.3.0",
+    "@prisma/client": "^7.3.0",
     "@semantic-release/changelog": "^6.0.3",
     "@semantic-release/git": "^10.0.1",
     "@semantic-release/github": "^9.2.6",
@@ -101,7 +102,7 @@
     "jest": "^29.7.0",
     "json-schema-to-typescript": "^15.0.4",
     "pg": "^8.13.0",
-    "prisma": "^6.0.0",
+    "prisma": "^7.3.0",
     "semantic-release": "^22.0.12",
     "ts-jest": "^29.1.1",
     "tsup": "^8.0.0",

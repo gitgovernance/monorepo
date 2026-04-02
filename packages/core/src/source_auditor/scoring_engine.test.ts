@@ -13,7 +13,6 @@ describe("ScoringEngine", () => {
     it("[Step-5] should return findings unchanged (pass-through for now)", () => {
       const findings: Finding[] = [
         {
-          id: "test-1",
           ruleId: "PII-001",
           category: "pii-email",
           severity: "high",
@@ -24,6 +23,9 @@ describe("ScoringEngine", () => {
           detector: "regex",
           fingerprint: "abc123",
           confidence: 1.0,
+          executionId: "",
+          reportedBy: [],
+          isWaived: false,
         },
       ];
 

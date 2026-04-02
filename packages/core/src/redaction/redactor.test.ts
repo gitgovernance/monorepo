@@ -25,8 +25,7 @@
 import { FindingRedactor } from './redactor';
 import { DEFAULT_REDACTION_CONFIG } from './category_config';
 import { sha256 } from '../crypto';
-import type { Finding, FindingCategory } from '../finding_detector/types';
-import type { ConsolidatedFinding } from '../audit_orchestrator/audit_orchestrator.types';
+import type { Finding, FindingCategory } from '../audit/types';
 import type { RedactionConfig } from './redactor.types';
 import type { SarifLog } from '../sarif/sarif.types';
 
@@ -35,7 +34,7 @@ import type { SarifLog } from '../sarif/sarif.types';
 // ─────────────────────────────────────────────────────────────────────────────
 
 const sensitiveFinding: Finding = {
-  id: 'f-001',
+  fingerprint: 'abc123fingerprint',
   file: 'src/auth/config.ts',
   line: 12,
   ruleId: 'SEC-001',
@@ -44,13 +43,15 @@ const sensitiveFinding: Finding = {
   snippet: "const apiKey = 'sk-1234567890abcdef'",
   message: 'Hardcoded API key detected at line 12',
   fixes: [{ description: 'Move to environment variable API_KEY' }],
-  fingerprint: 'abc123fingerprint',
   detector: 'regex',
   confidence: 0.95,
+  executionId: '',
+  reportedBy: [],
+  isWaived: false,
 };
 
 const safeFinding: Finding = {
-  id: 'f-002',
+  fingerprint: 'def456fingerprint',
   file: 'src/analytics/tracker.ts',
   line: 5,
   ruleId: 'TRK-001',
@@ -59,12 +60,14 @@ const safeFinding: Finding = {
   snippet: "document.cookie = '_ga=' + gaId",
   message: 'Analytics tracking cookie set',
   fixes: [{ description: 'Ensure cookie consent is obtained' }],
-  fingerprint: 'def456fingerprint',
   detector: 'regex',
   confidence: 0.8,
+  executionId: '',
+  reportedBy: [],
+  isWaived: false,
 };
 
-const consolidatedFinding: ConsolidatedFinding = {
+const consolidatedFinding: Finding = {
   fingerprint: 'cons-001',
   ruleId: 'PII-001',
   message: 'PII email detected in user service',
@@ -72,6 +75,9 @@ const consolidatedFinding: ConsolidatedFinding = {
   category: 'pii-email',
   file: 'src/user/service.ts',
   line: 42,
+  detector: 'regex',
+  confidence: 1.0,
+  executionId: '',
   reportedBy: ['agent-a', 'agent-b'],
   snippet: "const email = user.email; // john@example.com",
   isWaived: false,
@@ -167,7 +173,7 @@ describe('FindingRedactor', () => {
       expect(redactedFinding.hasFullSnippet).toBeDefined();
       expect(redactedFinding.snippetHash).toBeDefined();
 
-      // Test with ConsolidatedFinding (has snippet, no fixes)
+      // Test with Finding (has snippet, no fixes)
       const redactedConsolidated = redactor.redact(consolidatedFinding, 'l1');
       expect(redactedConsolidated.fingerprint).toBe(consolidatedFinding.fingerprint);
       expect(redactedConsolidated.reportedBy).toEqual(consolidatedFinding.reportedBy);
@@ -205,7 +211,7 @@ describe('FindingRedactor', () => {
       expect(result.snippetHash).toBeDefined();
       expect(typeof result.snippetHash).toBe('string');
       expect(result.snippetHash).toHaveLength(64); // SHA256 hex = 64 chars
-      expect(result.snippetHash).toBe(sha256(sensitiveFinding.snippet));
+      expect(result.snippetHash).toBe(sha256(sensitiveFinding.snippet!));
     });
 
     it('[RLDX-B4] should genericize message and set fixes to undefined for sensitive category', () => {

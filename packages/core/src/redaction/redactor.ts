@@ -3,7 +3,7 @@ import type { SarifLog, SarifResultProperties } from '../sarif/sarif.types';
 import type { RedactionLevel, RedactionConfig, RedactableInput, RedactedFinding } from './redactor.types';
 
 /**
- * Aplica politica de redaccion a un Finding o ConsolidatedFinding segun el nivel de destino.
+ * Aplica politica de redaccion a un Finding o Finding segun el nivel de destino.
  *
  * Dos metodos publicos:
  * - `redact(finding, level)` — redaccion a nivel de Finding individual
@@ -27,13 +27,13 @@ class FindingRedactor {
 
   /**
    * Redacta un finding para el nivel indicado.
-   * Generic over T so it accepts both Finding and ConsolidatedFinding.
+   * Generic over T so it accepts both Finding and Finding.
    *
    * L2: retorna copia completa sin modificaciones (solo agrega metadatos).
    * L1 + categoria no sensible: retorna copia sin modificaciones.
    * L1 + categoria sensible: redacta snippet, genericiza message, elimina fixes.
    *
-   * Note: ConsolidatedFinding does not have fixes field.
+   * Note: Finding does not have fixes field.
    * Only fields that exist on the input are redacted.
    */
   redact<T extends RedactableInput>(finding: T, level: RedactionLevel): RedactedFinding<T> {

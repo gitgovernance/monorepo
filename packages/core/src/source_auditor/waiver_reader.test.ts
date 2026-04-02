@@ -1,8 +1,21 @@
 // Sections: §4.6 (EARS-F1 to EARS-F7)
 import { WaiverReader } from "./waiver_reader";
 import type { IFeedbackAdapter } from "../adapters/feedback_adapter";
-import type { FeedbackRecord } from "../record_types";
+import type { FeedbackRecord, GitGovFeedbackRecord } from "../record_types";
 import type { WaiverMetadata } from "./types";
+
+/** Wraps a FeedbackRecord payload into a GitGovFeedbackRecord (EmbeddedMetadataRecord) */
+function wrapFeedback(payload: FeedbackRecord): GitGovFeedbackRecord {
+  return {
+    header: {
+      version: "1.0",
+      type: "feedback",
+      payloadChecksum: "sha256:test",
+      signatures: [{ keyId: "human:test", role: "author", notes: "", signature: "test-sig", timestamp: Date.now() }],
+    },
+    payload,
+  } as GitGovFeedbackRecord;
+}
 
 describe("WaiverReader", () => {
   let mockFeedbackAdapter: jest.Mocked<IFeedbackAdapter>;
@@ -37,9 +50,9 @@ describe("WaiverReader", () => {
         },
       };
 
-      mockFeedbackAdapter.getAllFeedback.mockResolvedValue([waiverFeedback]);
+      mockFeedbackAdapter.getAllFeedback.mockResolvedValue([wrapFeedback(waiverFeedback)]);
 
-      const waivers = await reader.loadActiveWaivers();
+      const waivers = await reader.loadWaivers();
 
       expect(waivers).toHaveLength(1);
       expect(waivers[0]?.fingerprint).toBe("abc123");
@@ -72,9 +85,9 @@ describe("WaiverReader", () => {
         },
       ];
 
-      mockFeedbackAdapter.getAllFeedback.mockResolvedValue(feedbacks);
+      mockFeedbackAdapter.getAllFeedback.mockResolvedValue(feedbacks.map(wrapFeedback));
 
-      const waivers = await reader.loadActiveWaivers();
+      const waivers = await reader.loadWaivers();
 
       expect(waivers).toHaveLength(1);
       expect(waivers[0]?.fingerprint).toBe("abc123");
@@ -117,9 +130,9 @@ describe("WaiverReader", () => {
         },
       ];
 
-      mockFeedbackAdapter.getAllFeedback.mockResolvedValue(feedbacks);
+      mockFeedbackAdapter.getAllFeedback.mockResolvedValue(feedbacks.map(wrapFeedback));
 
-      const waivers = await reader.loadActiveWaivers();
+      const waivers = await reader.loadWaivers();
 
       expect(waivers).toHaveLength(1);
       expect(waivers[0]?.fingerprint).toBe("valid123");
@@ -142,15 +155,15 @@ describe("WaiverReader", () => {
         },
       };
 
-      mockFeedbackAdapter.getAllFeedback.mockResolvedValue([waiverFeedback]);
+      mockFeedbackAdapter.getAllFeedback.mockResolvedValue([wrapFeedback(waiverFeedback)]);
 
-      const waivers = await reader.loadActiveWaivers();
+      const waivers = await reader.loadWaivers();
 
       expect(waivers).toHaveLength(1);
       expect(waivers[0]?.expiresAt).toBeUndefined();
     });
 
-    it("[EARS-F5] hasActiveWaiver should return true if fingerprint has active waiver", async () => {
+    it("[EARS-F5] hasWaiver should return true if fingerprint has active waiver", async () => {
       const waiverFeedback: FeedbackRecord<WaiverMetadata> = {
         id: "feedback-1",
         entityType: "execution",
@@ -166,17 +179,17 @@ describe("WaiverReader", () => {
         },
       };
 
-      mockFeedbackAdapter.getAllFeedback.mockResolvedValue([waiverFeedback]);
+      mockFeedbackAdapter.getAllFeedback.mockResolvedValue([wrapFeedback(waiverFeedback)]);
 
-      const hasWaiver = await reader.hasActiveWaiver("abc123");
+      const hasWaiver = await reader.hasWaiver("abc123");
 
       expect(hasWaiver).toBe(true);
     });
 
-    it("[EARS-F6] hasActiveWaiver should return false if fingerprint has no waiver", async () => {
+    it("[EARS-F6] hasWaiver should return false if fingerprint has no waiver", async () => {
       mockFeedbackAdapter.getAllFeedback.mockResolvedValue([]);
 
-      const hasWaiver = await reader.hasActiveWaiver("nonexistent");
+      const hasWaiver = await reader.hasWaiver("nonexistent");
 
       expect(hasWaiver).toBe(false);
     });
@@ -197,7 +210,7 @@ describe("WaiverReader", () => {
         },
       };
 
-      mockFeedbackAdapter.getFeedbackByEntity.mockResolvedValue([waiverFeedback]);
+      mockFeedbackAdapter.getFeedbackByEntity.mockResolvedValue([wrapFeedback(waiverFeedback)]);
 
       const waivers = await reader.getWaiversForExecution("exec-1");
 

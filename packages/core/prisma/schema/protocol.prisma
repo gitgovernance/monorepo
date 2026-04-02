@@ -1,0 +1,254 @@
+// GitGovernance Core — Protocol Record Projection Tables
+// Fields match record types from core/src/record_types/generated/
+// Enrichment fields from EnrichedTaskRecord (record_projection.types.ts)
+// headerJson stores EmbeddedMetadataRecord.header for signature reconstruction
+//
+// NOTE: No repoId, no projectionType — those are consumer concerns (saas-api).
+// Core projects records for a single repo context.
+
+// ──────────────────────────────────────────
+// Meta (singleton per projection)
+// ──────────────────────────────────────────
+
+model GitgovMeta {
+  id                String   @id @default(cuid())
+  lastCommitHash    String?
+  generatedAt       String
+  integrityStatus   String
+  recordCountsJson  Json
+  generationTime    Float
+  derivedStatesJson Json
+  metricsJson       Json
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+// ──────────────────────────────────────────
+// Task — TaskRecord + EnrichedTaskRecord
+// Schema: task_record_schema.yaml
+// ──────────────────────────────────────────
+
+model GitgovTask {
+  id             String   @id @default(cuid())
+  recordId       String   @unique  // TaskRecord.id
+
+  // ── TaskRecord payload (from schema) ──
+  title       String
+  status      String     // draft|review|ready|active|done|archived|paused|discarded
+  priority    String     // low|medium|high|critical
+  description String
+  tags        String[]   @default([])
+  references  String[]   @default([])
+  cycleIds    String[]   @default([])
+  notes       String?
+  metadata    Json?      // TaskRecord.metadata (generic TMetadata)
+
+  // ── EnrichedTaskRecord.derivedState ──
+  isStalled             Boolean
+  isAtRisk              Boolean
+  needsClarification    Boolean
+  isBlockedByDependency Boolean
+  healthScore           Float
+  timeInCurrentStage    Float
+
+  // ── EnrichedTaskRecord.metrics ──
+  executionCount        Int
+  blockingFeedbackCount Int
+  openQuestionCount     Int
+  timeToResolution      Float?
+
+  // ── EnrichedTaskRecord.release ──
+  isReleased         Boolean
+  lastReleaseVersion String?
+
+  // ── EnrichedTaskRecord activity ──
+  lastUpdated      Float
+  lastActivityType String
+  recentActivity   String?
+
+  // ── EnrichedTaskRecord.relationships (complex → JSON) ──
+  relationships Json
+
+  // ── EmbeddedMetadataRecord.header (signatures, checksums) ──
+  header      Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([isStalled])
+  @@index([healthScore])
+}
+
+// ──────────────────────────────────────────
+// Cycle — CycleRecord
+// Schema: cycle_record_schema.yaml
+// ──────────────────────────────────────────
+
+model GitgovCycle {
+  id            String   @id @default(cuid())
+  recordId      String   @unique  // CycleRecord.id
+
+  // ── CycleRecord payload ──
+  title         String
+  status        String   // planning|active|completed|archived
+  taskIds       String[] @default([])
+  childCycleIds String[] @default([])
+  tags          String[] @default([])
+  notes         String?
+  metadata      Json?
+
+  // ── EmbeddedMetadataRecord.header ──
+  header        Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+}
+
+// ──────────────────────────────────────────
+// Actor — ActorRecord
+// Schema: actor_record_schema.yaml
+// ──────────────────────────────────────────
+
+model GitgovActor {
+  id           String   @id @default(cuid())
+  recordId     String   @unique  // ActorRecord.id (e.g., "human:maria", "agent:security-audit")
+
+  // ── ActorRecord payload ──
+  type         String   // human|agent
+  publicKey    String
+  roles        String[]
+  status       String?  // active|revoked
+  supersededBy String?
+  metadata     Json?
+
+  // ── EmbeddedMetadataRecord.header ──
+  header       Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ──────────────────────────────────────────
+// Feedback — FeedbackRecord
+// Schema: feedback_record_schema.yaml
+// ──────────────────────────────────────────
+
+model GitgovFeedback {
+  id                 String   @id @default(cuid())
+  recordId           String   @unique  // FeedbackRecord.id
+
+  // ── FeedbackRecord payload ──
+  entityType         String   // actor|agent|task|execution|feedback|cycle|workflow
+  entityId           String
+  type               String   // blocking|suggestion|question|approval|clarification|assignment
+  status             String   // open|acknowledged|resolved|wontfix
+  content            String
+  assignee           String?
+  resolvesFeedbackId String?
+  metadata           Json?
+
+  // ── EmbeddedMetadataRecord.header ──
+  header             Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([entityId])
+  @@index([type, status])
+}
+
+// ──────────────────────────────────────────
+// Activity — ActivityEvent (from EventBus)
+// Not a protocol record — computed by RecordProjector
+// ──────────────────────────────────────────
+
+model GitgovActivity {
+  id          String   @id @default(cuid())
+  timestamp   Float
+  eventType   String
+  entityId    String
+  entityTitle String
+  actorId     String?
+  metadata    Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([timestamp(sort: Desc)])
+}
+
+// ──────────────────────────────────────────
+// Execution — ExecutionRecord
+// Schema: execution_record_schema.yaml
+// ──────────────────────────────────────────
+
+model GitgovExecution {
+  id         String   @id @default(cuid())
+  recordId   String   @unique  // ExecutionRecord.id
+
+  // ── ExecutionRecord payload ──
+  taskId     String
+  type       String   // analysis|decision|progress|blocker|completion|correction|info|custom:*
+  title      String
+  result     String
+  notes      String?
+  references String[] @default([])
+  metadata   Json?    // ExecutionRecord.metadata (contains SARIF, policy decisions, etc.)
+
+  // ── EmbeddedMetadataRecord.header ──
+  header     Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([taskId])
+  @@index([type])
+}
+
+// ──────────────────────────────────────────
+// Agent — AgentRecord
+// Schema: agent_record_schema.yaml
+// ──────────────────────────────────────────
+
+model GitgovAgent {
+  id       String   @id @default(cuid())
+  recordId String   @unique  // AgentRecord.id
+
+  // ── AgentRecord payload ──
+  status   String?  // active|archived
+  engine   Json     // AgentRecord.engine (complex: type + entrypoint + auth)
+  triggers Json?    // AgentRecord.triggers[] array
+  metadata Json?
+
+  // ── EmbeddedMetadataRecord.header ──
+  header   Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ──────────────────────────────────────────
+// Workflow — WorkflowRecord
+// Schema: workflow_record_schema.yaml
+// ──────────────────────────────────────────
+
+model GitgovWorkflow {
+  id               String @id @default(cuid())
+  recordId         String @unique  // WorkflowRecord.id
+
+  // ── WorkflowRecord payload ──
+  name             String    // WorkflowRecord.name (NOT "title")
+  description      String?
+  stateTransitions Json      // WorkflowRecord.state_transitions (complex nested)
+  customRules      Json?     // WorkflowRecord.custom_rules
+  agentIntegration Json?     // WorkflowRecord.agent_integration
+
+  // ── EmbeddedMetadataRecord.header ──
+  header           Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

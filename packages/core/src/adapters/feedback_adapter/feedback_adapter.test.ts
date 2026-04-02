@@ -439,8 +439,8 @@ describe('FeedbackAdapter', () => {
       const result = await feedbackAdapter.getFeedbackByEntity('task-123');
 
       expect(result).toHaveLength(2);
-      expect(result[0]).toEqual(feedback1.payload);
-      expect(result[1]).toEqual(feedback3.payload);
+      expect(result[0]).toEqual(feedback1);
+      expect(result[1]).toEqual(feedback3);
     });
 
     it('should return empty array when no feedbacks found for entity', async () => {
@@ -465,8 +465,8 @@ describe('FeedbackAdapter', () => {
       const result = await feedbackAdapter.getAllFeedback();
 
       expect(result).toHaveLength(2);
-      expect(result[0]).toEqual(feedback1.payload);
-      expect(result[1]).toEqual(feedback2.payload);
+      expect(result[0]).toEqual(feedback1);
+      expect(result[1]).toEqual(feedback2);
     });
 
     it('should return empty array when no feedbacks exist', async () => {

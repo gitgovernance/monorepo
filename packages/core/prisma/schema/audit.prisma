@@ -1,0 +1,165 @@
+// GitGovernance Core — Audit Product Projection Tables
+// Finding, Waiver, Scan — derived from protocol records
+// Fields match audit/types.ts (Finding, Waiver, Scan)
+// Spec: core/specs/modules/audit/audit_prisma_record_projection_module.md
+//
+// NOTE: No repoId — consumer concern (saas-api adds it).
+// Core projects audit data for a single repo context.
+
+// ──────────────────────────────────────────
+// Enums (matching @gitgov/core/audit types)
+// ──────────────────────────────────────────
+
+enum FindingSeverity {
+  critical
+  high
+  medium
+  low
+}
+
+enum FindingCategory {
+  pii_email
+  pii_phone
+  pii_financial
+  pii_health
+  pii_generic
+  hardcoded_secret
+  logging_pii
+  tracking_cookie
+  tracking_analytics_id
+  unencrypted_storage
+  third_party_transfer
+  unknown_risk
+}
+
+enum DetectorName {
+  regex
+  heuristic
+  llm
+}
+
+// ──────────────────────────────────────────
+// Finding
+// Base type: Finding from @gitgov/core/audit
+// ──────────────────────────────────────────
+
+model Finding {
+  id              String           @id @default(cuid())
+
+  // ── Finding base type fields ──
+  fingerprint     String           @unique
+  ruleId          String
+  file            String
+  line            Int
+  column          Int?
+  message         String
+  snippet         String?
+  category        FindingCategory
+  severity        FindingSeverity
+  detector        DetectorName
+  confidence      Float
+  fixes           Json[]           @default([])
+  legalReference  String?
+  executionId     String           // Logical reference to GitgovExecution.recordId (no FK — audit depends on protocol, not vice versa)
+  reportedBy      String[]         @default([])
+  isWaived        Boolean          @default(false)
+
+  // ── Projection-specific fields (tracking across scans) ──
+  findingId          String
+  snippetHash        String?
+  hasFullSnippet     Boolean          @default(true)
+  detectionCount     Int              @default(1)
+  detectionScanIds   String[]         @default([])
+  firstDetectedAt    DateTime         @default(now())
+  lastDetectedAt     DateTime         @default(now())
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  @@index([severity])
+  @@index([ruleId])
+  @@index([category])
+  @@index([file])
+  @@index([isWaived])
+  @@index([detectionCount])
+  @@index([executionId])
+}
+
+// ──────────────────────────────────────────
+// Waiver
+// Base type: Waiver from @gitgov/core/audit
+// ──────────────────────────────────────────
+
+model Waiver {
+  id              String    @id @default(cuid())
+
+  // ── Waiver base type fields ──
+  fingerprint     String    @unique
+  ruleId          String
+  expiresAt       DateTime?
+
+  // ── Materialized from FeedbackRecord ──
+  justification   String?
+  approvedBy      String?
+  file            String?
+  line            Int?
+  relatedTaskId   String?
+
+  // ── Projection-specific fields ──
+  gitRecordId     String?
+  status          String           @default("active")
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@index([gitRecordId])
+  @@index([status])
+  @@index([ruleId])
+}
+
+// ──────────────────────────────────────────
+// Scan
+// Base type: Scan from @gitgov/core/audit
+// ──────────────────────────────────────────
+
+model Scan {
+  id                   String    @id @default(cuid())
+
+  // ── Scan base type fields ──
+  scope                String
+  triggeredBy          String
+  executionRecordIds   String[]         @default([])
+  policyExecutionId    String?
+
+  // ── PolicyDecision (stored complete) ──
+  policyDecisionJson   Json?
+  displayStatus        String?
+
+  // ── Summary (flattened for queries) ──
+  findingsCount        Int?
+  criticalCount        Int              @default(0)
+  highCount            Int              @default(0)
+  mediumCount          Int              @default(0)
+  lowCount             Int              @default(0)
+  waivedCount          Int              @default(0)
+
+  // ── Projection-specific fields ──
+  scanNumber           Int
+  status               String           @default("pending")
+  prNumber             Int?
+  prUrl                String?
+  checkRunId           Int?
+  branch               String?
+  commitSha            String?
+  commitAuthor         String?
+  commitMessage        String?
+  scannedFiles         Int?
+  scannedLines         Int?
+  errorMessage         String?
+  startedAt            DateTime?
+  completedAt          DateTime?
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+
+  @@index([status])
+  @@index([scanNumber])
+  @@index([createdAt(sort: Desc)])
+}
