@@ -1,3 +1,10 @@
+## [3.8.0](https://github.com/gitgovernance/monorepo/compare/core-v3.7.0...core-v3.8.0) (2026-04-02)
+
+
+### ✨ Features
+
+* **core:** unified audit types — Finding, Waiver, Scan, PolicyDecision ([#142](https://github.com/gitgovernance/monorepo/issues/142)) ([3432cd2](https://github.com/gitgovernance/monorepo/commit/3432cd2bea4a9812feea3f2bbe8744cb4d323121))
+
 ## [3.7.0](https://github.com/gitgovernance/monorepo/compare/core-v3.6.1...core-v3.7.0) (2026-03-31)
 
 
