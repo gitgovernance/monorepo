@@ -19,11 +19,15 @@ function makeFinding(
 ): Finding {
   return {
     fingerprint: "fp-test-001",
+    ruleId: "TEST-001",
     message: "test finding",
     severity: "high",
     category: "unknown-risk",
     file: "src/foo.ts",
     line: 10,
+    detector: "regex",
+    confidence: 1.0,
+    executionId: "",
     reportedBy: ["agent-1"],
     isWaived: false,
     ...overrides,

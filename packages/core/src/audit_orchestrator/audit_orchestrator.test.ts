@@ -13,6 +13,7 @@ import type {
   PolicyEvaluator,
   PolicyEvaluationResult,
   PolicyDecision,
+  Finding,
 } from "../policy_evaluator/policy_evaluator.types";
 import { FindingRedactor, DEFAULT_REDACTION_CONFIG } from "../redaction";
 
@@ -103,6 +104,7 @@ function makePolicyDecision(
   return {
     decision,
     reason,
+    executionId: "",
     blockingFindings: [],
     waivedFindings: [],
     summary: { critical: 0, high: 0, medium: 0, low: 0 },
@@ -710,31 +712,37 @@ describe("AuditOrchestrator", () => {
         fingerprint: "waived-hash-001",
         ruleId: "SEC-001",
         feedback: {
-          id: "1234567890-feedback-waiver-sec001",
-          entityType: "execution",
-          entityId: "exec-previous",
-          type: "approval",
-          status: "acknowledged",
-          content: "Risk accepted per security review",
-          metadata: {
-            fingerprint: "waived-hash-001",
-            ruleId: "SEC-001",
-            file: "src/config.ts",
-            line: 10,
+          header: { version: "1.0", type: "feedback", payloadChecksum: "test", signatures: [] },
+          payload: {
+            id: "1234567890-feedback-waiver-sec001",
+            entityType: "execution",
+            entityId: "exec-previous",
+            type: "approval",
+            status: "acknowledged",
+            content: "Risk accepted per security review",
+            metadata: {
+              fingerprint: "waived-hash-001",
+              ruleId: "SEC-001",
+              file: "src/config.ts",
+              line: 10,
+            },
           },
-        },
+        } as any,
       };
 
       // Set up policy evaluator mock to return waived finding in decision
       // (orchestrator now derives waiver state from policy decision, not independently)
-      const waivedFinding = {
+      const waivedFinding: Finding = {
         fingerprint: "waived-hash-001",
         ruleId: "SEC-001",
         message: "Hardcoded secret",
-        severity: "critical" as const,
+        severity: "critical",
         category: "hardcoded-secret",
         file: "src/config.ts",
         line: 10,
+        detector: "regex",
+        confidence: 1.0,
+        executionId: "",
         reportedBy: ["agent:security-audit"],
         isWaived: true,
         waiver: activeWaiver,

@@ -11,7 +11,7 @@ function wrapFeedback(payload: FeedbackRecord): GitGovFeedbackRecord {
       version: "1.0",
       type: "feedback",
       payloadChecksum: "sha256:test",
-      signatures: [{ keyId: "human:test", role: "author", signature: "test-sig", timestamp: Date.now() }],
+      signatures: [{ keyId: "human:test", role: "author", notes: "", signature: "test-sig", timestamp: Date.now() }],
     },
     payload,
   } as GitGovFeedbackRecord;

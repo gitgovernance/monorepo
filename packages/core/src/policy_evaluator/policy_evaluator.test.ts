@@ -56,11 +56,15 @@ function makeFinding(
 ): Finding {
   return {
     fingerprint: "fp-test-001",
+    ruleId: "TEST-001",
     message: "test finding",
     severity: "high",
     category: "unknown-risk",
     file: "src/foo.ts",
     line: 10,
+    detector: "regex",
+    confidence: 1.0,
+    executionId: "",
     reportedBy: ["agent-1"],
     isWaived: false,
     ...overrides,
@@ -162,9 +166,9 @@ describe("PolicyEvaluator", () => {
       expect(withRuleId.message).toBe("test finding");
       expect(withRuleId.ruleId).toBe("SEC-001");
 
-      // Without ruleId
+      // Without ruleId override — uses default
       const withoutRuleId = makeFinding();
-      expect(withoutRuleId.ruleId).toBeUndefined();
+      expect(withoutRuleId.ruleId).toBe("TEST-001");
     });
 
     it("[PEVAL-A3] should require failOn in PolicyConfig and allow optional fields", () => {

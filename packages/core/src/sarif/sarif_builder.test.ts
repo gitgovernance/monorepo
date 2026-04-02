@@ -92,7 +92,7 @@ describe('SarifBuilder', () => {
     });
 
     it('[SARIF-C2] build: findings with same ruleId should produce one rule entry', async () => {
-      const dup: Finding = { ...baseFindings[0]!, id: 'finding-002', line: 50 };
+      const dup: Finding = { ...baseFindings[0]!, fingerprint: 'finding-002', line: 50 };
       const sarif = await builder.build({ ...baseOptions, findings: [baseFindings[0]!, dup] });
       const rules = firstRun(sarif).tool.driver.rules ?? [];
       const pii001Count = rules.filter(r => r.id === 'PII-001').length;
@@ -139,7 +139,7 @@ describe('SarifBuilder', () => {
     });
 
     it('[SARIF-C8] build: finding without snippet should not include snippet in region', async () => {
-      const findingNoSnippet: Finding = { ...baseFindings[0]!, id: 'f-no-snippet', snippet: '' };
+      const findingNoSnippet: Finding = { ...baseFindings[0]!, fingerprint: 'f-no-snippet', snippet: '' };
       const sarif = await builder.build({ ...baseOptions, findings: [findingNoSnippet] });
       const loc = firstResult(sarif).locations[0];
       // Empty string snippet should be omitted (falsy)
@@ -278,7 +278,7 @@ describe('SarifBuilder', () => {
       const opts: SarifBuilderOptions = {
         ...baseOptions,
         getLineContent: async () => 'const email = user.email;',
-        waivers: [{ fingerprint: 'no-match', feedbackId: 'fb', content: 'ok' }],
+        waivers: [{ fingerprint: 'no-match', ruleId: 'PII-001', feedback: { header: { version: '1.0', type: 'feedback', payloadChecksum: 'test', signatures: [] }, payload: { id: 'fb', entityType: 'execution', entityId: 'exec-001', type: 'approval', status: 'resolved', content: 'ok' } } as any }],
       };
       const sarif = await builder.build(opts);
       expect(firstResult(sarif).suppressions).toBeUndefined();
@@ -430,7 +430,7 @@ describe('SarifBuilder', () => {
 
       const loggingFinding: Finding = {
         ...baseFindings[0]!,
-        id: 'finding-custom-cfg',
+        fingerprint: 'finding-custom-cfg',
         category: 'logging-pii',
         snippet: 'console.log(user.email);',
       };

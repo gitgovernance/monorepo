@@ -51,7 +51,6 @@ describe("SourceAuditorModule", () => {
   });
 
   const createFinding = (overrides: Partial<Finding> = {}): Finding => ({
-    id: "finding-1",
     ruleId: "PII-001",
     category: "pii-email",
     severity: "high",
@@ -62,6 +61,9 @@ describe("SourceAuditorModule", () => {
     detector: "regex",
     fingerprint: "abc123",
     confidence: 1.0,
+    executionId: "",
+    reportedBy: [],
+    isWaived: false,
     ...overrides,
   });
 
@@ -167,7 +169,7 @@ describe("SourceAuditorModule", () => {
     it("[EARS-B4] should track detectors used in result.detectors", async () => {
       mockFindingDetector.detect.mockResolvedValue([
         createFinding({ detector: "regex" }),
-        createFinding({ id: "2", detector: "heuristic", fingerprint: "def456" }),
+        createFinding({ detector: "heuristic", fingerprint: "def456" }),
       ]);
 
       const auditor = new SourceAuditorModule(createDeps());
@@ -259,8 +261,8 @@ describe("SourceAuditorModule", () => {
     it("[EARS-C5] should report waivers.new count correctly", async () => {
       mockFindingDetector.detect.mockResolvedValue([
         createFinding({ fingerprint: "new-1" }),
-        createFinding({ id: "2", fingerprint: "new-2" }),
-        createFinding({ id: "3", fingerprint: "waived-1" }),
+        createFinding({ fingerprint: "new-2" }),
+        createFinding({ fingerprint: "waived-1" }),
       ]);
 
       const waiver: Waiver = {
@@ -286,7 +288,7 @@ describe("SourceAuditorModule", () => {
     it("[EARS-D1] should calculate summary.total correctly", async () => {
       mockFindingDetector.detect.mockResolvedValue([
         createFinding({ fingerprint: "1" }),
-        createFinding({ id: "2", fingerprint: "2" }),
+        createFinding({ fingerprint: "2" }),
       ]);
 
       const auditor = new SourceAuditorModule(createDeps());
@@ -302,9 +304,9 @@ describe("SourceAuditorModule", () => {
     it("[EARS-D2] should calculate summary.bySeverity correctly", async () => {
       mockFindingDetector.detect.mockResolvedValue([
         createFinding({ severity: "critical", fingerprint: "1" }),
-        createFinding({ id: "2", severity: "high", fingerprint: "2" }),
-        createFinding({ id: "3", severity: "high", fingerprint: "3" }),
-        createFinding({ id: "4", severity: "medium", fingerprint: "4" }),
+        createFinding({ severity: "high", fingerprint: "2" }),
+        createFinding({ severity: "high", fingerprint: "3" }),
+        createFinding({ severity: "medium", fingerprint: "4" }),
       ]);
 
       const auditor = new SourceAuditorModule(createDeps());
@@ -323,8 +325,8 @@ describe("SourceAuditorModule", () => {
     it("[EARS-D3] should calculate summary.byCategory correctly", async () => {
       mockFindingDetector.detect.mockResolvedValue([
         createFinding({ category: "pii-email", fingerprint: "1" }),
-        createFinding({ id: "2", category: "pii-email", fingerprint: "2" }),
-        createFinding({ id: "3", category: "hardcoded-secret", fingerprint: "3" }),
+        createFinding({ category: "pii-email", fingerprint: "2" }),
+        createFinding({ category: "hardcoded-secret", fingerprint: "3" }),
       ]);
 
       const auditor = new SourceAuditorModule(createDeps());
@@ -341,8 +343,8 @@ describe("SourceAuditorModule", () => {
     it("[EARS-D4] should calculate summary.byDetector correctly", async () => {
       mockFindingDetector.detect.mockResolvedValue([
         createFinding({ detector: "regex", fingerprint: "1" }),
-        createFinding({ id: "2", detector: "regex", fingerprint: "2" }),
-        createFinding({ id: "3", detector: "heuristic", fingerprint: "3" }),
+        createFinding({ detector: "regex", fingerprint: "2" }),
+        createFinding({ detector: "heuristic", fingerprint: "3" }),
       ]);
 
       const auditor = new SourceAuditorModule(createDeps());
