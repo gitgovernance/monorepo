@@ -1,6 +1,5 @@
 import type { IFeedbackAdapter } from "../adapters/feedback_adapter";
-import type { FeedbackRecord } from "../record_types";
-import type { WaiverMetadata, ActiveWaiver, IWaiverReader } from "./types";
+import type { WaiverMetadata, Waiver, IWaiverReader } from "./types";
 
 /**
  * Reads active waivers from FeedbackRecords.
@@ -13,21 +12,22 @@ export class WaiverReader implements IWaiverReader {
    * Loads all active waivers (non-expired).
    * Filters by type: "approval" and metadata.fingerprint present.
    */
-  async loadActiveWaivers(): Promise<ActiveWaiver[]> {
+  async loadWaivers(): Promise<Waiver[]> {
     const allFeedback = await this.feedbackAdapter.getAllFeedback();
     const now = new Date();
-    const result: ActiveWaiver[] = [];
+    const result: Waiver[] = [];
 
     for (const f of allFeedback) {
-      if (f.type !== "approval" || !f.metadata) continue;
-      const meta = f.metadata as WaiverMetadata;
+      const payload = f.payload;
+      if (payload.type !== "approval" || !payload.metadata) continue;
+      const meta = payload.metadata as WaiverMetadata;
       if (typeof meta.fingerprint !== "string") continue;
       if (meta.expiresAt && new Date(meta.expiresAt) <= now) continue;
 
-      const waiver: ActiveWaiver = {
+      const waiver: Waiver = {
         fingerprint: meta.fingerprint,
         ruleId: meta.ruleId,
-        feedback: f as FeedbackRecord<WaiverMetadata>,
+        feedback: f,
       };
       if (meta.expiresAt) {
         waiver.expiresAt = new Date(meta.expiresAt);
@@ -41,29 +41,30 @@ export class WaiverReader implements IWaiverReader {
   /**
    * Checks if a specific finding has an active waiver.
    */
-  async hasActiveWaiver(fingerprint: string): Promise<boolean> {
-    const waivers = await this.loadActiveWaivers();
+  async hasWaiver(fingerprint: string): Promise<boolean> {
+    const waivers = await this.loadWaivers();
     return waivers.some((w) => w.fingerprint === fingerprint);
   }
 
   /**
    * Gets waivers for a specific ExecutionRecord.
    */
-  async getWaiversForExecution(executionId: string): Promise<ActiveWaiver[]> {
+  async getWaiversForExecution(executionId: string): Promise<Waiver[]> {
     const feedback = await this.feedbackAdapter.getFeedbackByEntity(executionId);
     const now = new Date();
-    const result: ActiveWaiver[] = [];
+    const result: Waiver[] = [];
 
     for (const f of feedback) {
-      if (f.type !== "approval" || !f.metadata) continue;
-      const meta = f.metadata as WaiverMetadata;
+      const payload = f.payload;
+      if (payload.type !== "approval" || !payload.metadata) continue;
+      const meta = payload.metadata as WaiverMetadata;
       if (typeof meta.fingerprint !== "string") continue;
       if (meta.expiresAt && new Date(meta.expiresAt) <= now) continue;
 
-      const waiver: ActiveWaiver = {
+      const waiver: Waiver = {
         fingerprint: meta.fingerprint,
         ruleId: meta.ruleId,
-        feedback: f as FeedbackRecord<WaiverMetadata>,
+        feedback: f,
       };
       if (meta.expiresAt) {
         waiver.expiresAt = new Date(meta.expiresAt);

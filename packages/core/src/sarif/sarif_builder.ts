@@ -12,9 +12,8 @@ import type {
   SarifResultProperties,
   SarifRunProperties,
   ValidationResult,
-  SarifActiveWaiver,
 } from './sarif.types';
-import type { Finding } from '../finding_detector/types';
+import type { Finding, Waiver } from '../audit/types';
 import {
   buildPartialFingerprints,
   createOccurrenceContext,
@@ -36,7 +35,6 @@ function mapSeverityToLevel(severity: Finding['severity']): SarifResult['level']
     case 'high':     return 'error';
     case 'medium':   return 'warning';
     case 'low':      return 'note';
-    case 'info':     return 'none';
   }
 }
 
@@ -66,12 +64,11 @@ function extractRules(findings: Finding[]): SarifReportingDescriptor[] {
 
 /**
  * Finds a waiver matching the given fingerprint.
- * Matching is by partialFingerprint (primaryLocationLineHash/v1).
  */
 function findMatchingWaiver(
   fingerprint: string | undefined,
-  waivers: SarifActiveWaiver[] | undefined
-): SarifActiveWaiver | undefined {
+  waivers: Waiver[] | undefined
+): Waiver | undefined {
   if (!fingerprint || !waivers || waivers.length === 0) {
     return undefined;
   }
@@ -79,18 +76,23 @@ function findMatchingWaiver(
 }
 
 /**
- * Builds a SARIF suppression from a SarifActiveWaiver.
+ * Converts a Waiver to a SARIF suppression (§3.35).
  * FeedbackRecord type: "approval" → kind: "inSource", status: "accepted"
  */
-function buildSuppression(waiver: SarifActiveWaiver): SarifSuppression {
+function buildSuppression(waiver: Waiver): SarifSuppression {
+  const payload = waiver.feedback?.payload;
+  const content = payload?.content;
+  const feedbackId = payload?.id;
+  const expiresAt = waiver.expiresAt?.toISOString();
+  const approvedBy = waiver.feedback?.header?.signatures?.[0]?.keyId;
   return {
     kind: 'inSource',
     status: 'accepted',
-    ...(waiver.content && { justification: waiver.content }),
+    ...(content && { justification: content }),
     properties: {
-      'gitgov/feedbackId': waiver.feedbackId,
-      ...(waiver.expiresAt && { 'gitgov/expiresAt': waiver.expiresAt }),
-      ...(waiver.approvedBy && { 'gitgov/approvedBy': waiver.approvedBy }),
+      'gitgov/feedbackId': feedbackId ?? '',
+      ...(expiresAt && { 'gitgov/expiresAt': expiresAt }),
+      ...(approvedBy && { 'gitgov/approvedBy': approvedBy }),
     },
   };
 }
@@ -162,7 +164,7 @@ class SarifBuilderImpl implements SarifBuilder {
         // so waivers cannot match. Callers MUST provide getLineContent for waiver matching to work.
         const waiver = findMatchingWaiver(
           partial['primaryLocationLineHash/v1'],
-          options.activeWaivers
+          options.waivers
         );
 
         // result.properties — only defined keys (no undefined values)
@@ -301,29 +303,9 @@ export function createSarifBuilder(): SarifBuilder {
 }
 
 /**
- * Maps ActiveWaiver (from WaiverReader in source_auditor) to SarifActiveWaiver.
- *
- * ActiveWaiver has: fingerprint, ruleId, expiresAt (Date), feedback (FeedbackRecord complete).
- * SarifActiveWaiver has: fingerprint, feedbackId (string), content (string), expiresAt (ISO string), approvedBy.
- *
- * The caller (orchestrator) uses it when building the final consolidated SARIF with --output sarif.
+ * Converts a Waiver to a SARIF suppression (§3.35).
+ * Exported for consumers that build SARIF manually (e.g., audit_orchestrator).
  */
-export function toSarifWaiver(waiver: {
-  fingerprint: string;
-  feedback: { id: string; content?: string; };
-  expiresAt?: Date;
-  approvedBy?: string;
-}): SarifActiveWaiver {
-  const result: SarifActiveWaiver = {
-    fingerprint: waiver.fingerprint,
-    feedbackId: waiver.feedback.id,
-    content: waiver.feedback.content ?? '',
-  };
-  if (waiver.expiresAt !== undefined) {
-    result.expiresAt = waiver.expiresAt.toISOString();
-  }
-  if (waiver.approvedBy !== undefined) {
-    result.approvedBy = waiver.approvedBy;
-  }
-  return result;
+export function toSarifSuppression(waiver: Waiver): SarifSuppression {
+  return buildSuppression(waiver);
 }

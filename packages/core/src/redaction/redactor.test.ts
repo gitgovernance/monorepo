@@ -26,7 +26,7 @@ import { FindingRedactor } from './redactor';
 import { DEFAULT_REDACTION_CONFIG } from './category_config';
 import { sha256 } from '../crypto';
 import type { Finding, FindingCategory } from '../finding_detector/types';
-import type { ConsolidatedFinding } from '../audit_orchestrator/audit_orchestrator.types';
+import type { Finding } from '../audit_orchestrator/audit_orchestrator.types';
 import type { RedactionConfig } from './redactor.types';
 import type { SarifLog } from '../sarif/sarif.types';
 
@@ -64,7 +64,7 @@ const safeFinding: Finding = {
   confidence: 0.8,
 };
 
-const consolidatedFinding: ConsolidatedFinding = {
+const consolidatedFinding: Finding = {
   fingerprint: 'cons-001',
   ruleId: 'PII-001',
   message: 'PII email detected in user service',
@@ -167,7 +167,7 @@ describe('FindingRedactor', () => {
       expect(redactedFinding.hasFullSnippet).toBeDefined();
       expect(redactedFinding.snippetHash).toBeDefined();
 
-      // Test with ConsolidatedFinding (has snippet, no fixes)
+      // Test with Finding (has snippet, no fixes)
       const redactedConsolidated = redactor.redact(consolidatedFinding, 'l1');
       expect(redactedConsolidated.fingerprint).toBe(consolidatedFinding.fingerprint);
       expect(redactedConsolidated.reportedBy).toEqual(consolidatedFinding.reportedBy);

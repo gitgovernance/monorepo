@@ -17,12 +17,13 @@ import type {
   PolicyConfig,
   PolicyRule,
   PolicyRuleResult,
-  ConsolidatedFinding,
+  Finding,
   FindingSeverity,
-  ActiveWaiver,
+  Waiver,
   IWaiverReader,
 } from "./policy_evaluator.types";
 import { SEVERITY_ORDER } from "./policy_evaluator.types";
+import { generateExecutionId } from "../utils/id_generator";
 import { severityThreshold } from "./severity_threshold";
 import { categoryBlock } from "./category_block";
 import type { RecordStore } from "../record_store/record_store";
@@ -38,9 +39,9 @@ import type { SarifLog, SarifLevel, SarifPhysicalLocation } from "../sarif/sarif
  * Creates copies with isWaived/waiver set -- does not mutate originals.
  */
 function applyWaivers(
-  findings: ConsolidatedFinding[],
-  activeWaivers: ActiveWaiver[],
-): ConsolidatedFinding[] {
+  findings: Finding[],
+  activeWaivers: Waiver[],
+): Finding[] {
   const waiverMap = new Map(
     activeWaivers.map((w) => [w.fingerprint, w]),
   );
@@ -63,9 +64,9 @@ function applyWaivers(
  * Used to populate blockingFindings in PolicyDecision.
  */
 function computeBlockingFindings(
-  findings: ConsolidatedFinding[],
+  findings: Finding[],
   policy: PolicyConfig,
-): ConsolidatedFinding[] {
+): Finding[] {
   const threshold = SEVERITY_ORDER[policy.failOn];
   const blockedSet = new Set(policy.blockCategories ?? []);
 
@@ -80,7 +81,7 @@ function computeBlockingFindings(
  * Counts findings by severity.
  */
 function buildSummary(
-  findings: ConsolidatedFinding[],
+  findings: Finding[],
 ): Record<FindingSeverity, number> {
   const s: Record<FindingSeverity, number> = {
     critical: 0,
@@ -120,13 +121,13 @@ function buildResultString(decision: PolicyDecision): string {
  */
 function buildReferences(
   scanExecutionIds: string[],
-  waivedFindings: ConsolidatedFinding[],
+  waivedFindings: Finding[],
 ): string[] {
   const refs = [...scanExecutionIds];
 
   for (const f of waivedFindings) {
-    if (f.waiver?.feedback?.id) {
-      refs.push(f.waiver.feedback.id);
+    if (f.waiver?.feedback?.payload?.id) {
+      refs.push(f.waiver.feedback.payload.id);
     }
   }
 
@@ -141,7 +142,7 @@ function buildExecutionRecord(
   decision: PolicyDecision,
 ): PolicyExecutionRecordData {
   return {
-    id: `exec-policy-${input.taskId}-${Date.now()}`,
+    id: decision.executionId,
     type: "decision",
     title: `Policy evaluation for task ${input.taskId}`,
     result: buildResultString(decision),
@@ -172,9 +173,11 @@ export function createPolicyEvaluator(
 
       // PEVAL-D9: Empty findings -> pass immediately
       if (findings.length === 0) {
+        const execId = generateExecutionId("policy-decision", Math.floor(Date.now() / 1000));
         const decision: PolicyDecision = {
           decision: "pass",
           reason: "No findings to evaluate",
+          executionId: execId,
           blockingFindings: [],
           waivedFindings: [],
           summary: { critical: 0, high: 0, medium: 0, low: 0 },
@@ -223,6 +226,7 @@ export function createPolicyEvaluator(
       const anyFailed = rulesEvaluated.some((r) => !r.passed);
 
       // PEVAL-D5/D6/D7: Build PolicyDecision
+      const execId = generateExecutionId("policy-decision", Math.floor(Date.now() / 1000));
       const decision: PolicyDecision = {
         decision: anyFailed ? "block" : "pass",
         reason: anyFailed
@@ -231,6 +235,7 @@ export function createPolicyEvaluator(
               .map((r) => r.reason)
               .join("; ")
           : "All findings waived or below configured thresholds.",
+        executionId: execId,
         blockingFindings: anyFailed
           ? computeBlockingFindings(withWaivers, policy)
           : [],
@@ -283,11 +288,11 @@ function buildFallbackFingerprint(
 }
 
 /**
- * Extracts ConsolidatedFinding[] from a SarifLog.
+ * Extracts Finding[] from a SarifLog.
  * Re-consolidates findings from SARIF results with dedup by fingerprint.
  */
-function extractFindingsFromSarif(sarif: SarifLog): ConsolidatedFinding[] {
-  const byFingerprint = new Map<string, ConsolidatedFinding>();
+function extractFindingsFromSarif(sarif: SarifLog): Finding[] {
+  const byFingerprint = new Map<string, Finding>();
 
   for (const run of sarif.runs) {
     const agentId = run.tool?.driver?.name ?? "unknown";
@@ -309,19 +314,26 @@ function extractFindingsFromSarif(sarif: SarifLog): ConsolidatedFinding[] {
         const props = sarifResult.properties as
           | Record<string, unknown>
           | undefined;
-        const category =
-          (props?.["gitgov/category"] as string | undefined) ?? "unknown";
+        const rawCategory =
+          (props?.["gitgov/category"] as string | undefined) ?? "unknown-risk";
+        const detector = (props?.["gitgov/detector"] as string | undefined) ?? "regex";
+        const confidence = (props?.["gitgov/confidence"] as number | undefined) ?? 1.0;
+        const snippet = location?.region?.snippet?.text;
 
-        const finding: ConsolidatedFinding = {
+        const finding: Finding = {
           fingerprint,
           ruleId: sarifResult.ruleId,
-          message: sarifResult.message.text,
-          severity: levelToSeverity(sarifResult.level),
           file: location?.artifactLocation?.uri ?? "",
           line: location?.region?.startLine ?? 0,
-          category,
+          message: sarifResult.message.text,
+          category: rawCategory as import("../audit/types").FindingCategory,
+          severity: levelToSeverity(sarifResult.level),
+          detector: detector as import("../audit/types").DetectorName,
+          confidence,
+          executionId: "",  // policy evaluator doesn't have exec context here
           reportedBy: [agentId],
           isWaived: false,
+          ...(snippet ? { snippet } : {}),
         };
         const col = location?.region?.startColumn;
         if (col !== undefined) {
@@ -374,7 +386,7 @@ export async function reevaluatePolicy(
   },
 ): Promise<PolicyEvaluationResult> {
   // PEVAL-F1: Load findings from each scan ExecutionRecord
-  const allFindings: ConsolidatedFinding[] = [];
+  const allFindings: Finding[] = [];
 
   for (const execId of scanExecutionIds) {
     const record = await deps.executionStore.get(execId);
@@ -401,7 +413,7 @@ export async function reevaluatePolicy(
   }
 
   // Dedup across multiple SarifLogs (same fingerprint from different scans)
-  const dedupMap = new Map<string, ConsolidatedFinding>();
+  const dedupMap = new Map<string, Finding>();
   for (const f of allFindings) {
     const existing = dedupMap.get(f.fingerprint);
     if (existing) {
@@ -417,7 +429,7 @@ export async function reevaluatePolicy(
   const consolidatedFindings = Array.from(dedupMap.values());
 
   // PEVAL-F2: Load CURRENT active waivers (not historical)
-  const activeWaivers = await deps.waiverReader.loadActiveWaivers();
+  const activeWaivers = await deps.waiverReader.loadWaivers();
 
   // PEVAL-F3: Create NEW evaluation (delegates to PolicyEvaluator.evaluate)
   const input: PolicyEvaluationInput = {

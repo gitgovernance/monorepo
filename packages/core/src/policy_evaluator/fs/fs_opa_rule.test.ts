@@ -13,7 +13,7 @@ import * as os from "node:os";
 import { execSync } from "node:child_process";
 import { createOpaRule } from "./fs_opa_rule";
 import type {
-  ConsolidatedFinding,
+  Finding,
   PolicyConfig,
 } from "../policy_evaluator.types";
 
@@ -22,8 +22,8 @@ import type {
 // ============================================================================
 
 function makeFinding(
-  overrides: Partial<ConsolidatedFinding> = {},
-): ConsolidatedFinding {
+  overrides: Partial<Finding> = {},
+): Finding {
   return {
     fingerprint: "fp-test-001",
     message: "test finding",
@@ -166,7 +166,7 @@ describeIfOpa("FsOpaRule", () => {
       fs.rmSync(dir, { recursive: true });
     });
 
-    it("[PEVAL-O4] should pass ConsolidatedFinding as input.findings to OPA", async () => {
+    it("[PEVAL-O4] should pass Finding as input.findings to OPA", async () => {
       const dir = createTmpDir();
       const regoPath = path.join(dir, "test_block.rego");
       fs.writeFileSync(regoPath, BLOCKING_REGO, "utf-8");

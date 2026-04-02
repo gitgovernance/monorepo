@@ -1014,7 +1014,8 @@ describe('RecordProjector', () => {
         cycles: [cycle1],
         feedback: [],
         executions: [],
-        actors: [] // Actors don't have timestamp-based IDs, so we don't test them here
+        actors: [], // Actors don't have timestamp-based IDs, so we don't test them here
+        agents: []
       };
 
       // Call calculateActivityHistory directly (not via generateIndex)
@@ -1099,7 +1100,8 @@ describe('RecordProjector', () => {
         cycles: [],
         feedback: [],
         executions: [relatedExecution],
-        actors: []
+        actors: [],
+        agents: []
       };
 
       // Call calculateLastUpdated directly (not via generateIndex)

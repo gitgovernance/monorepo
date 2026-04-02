@@ -5,3 +5,7 @@ packages:
   - packages/mcp-server
   - packages/e2e
   - packages/agents/*
+
+onlyBuiltDependencies:
+  - '@prisma/engines'
+  - prisma

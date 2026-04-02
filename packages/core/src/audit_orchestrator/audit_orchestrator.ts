@@ -2,7 +2,7 @@ import type { SarifLog, SarifPhysicalLocation } from "../sarif/sarif.types";
 import type { IAgentRunner } from "../agent_runner/agent_runner";
 import type { RecordStore } from "../record_store/record_store";
 import type { GitGovAgentRecord } from "../record_types";
-import type { ActiveWaiver } from "../source_auditor/types";
+import type { Waiver } from "../source_auditor/types";
 import type { RunOptions } from "../agent_runner/agent_runner.types";
 import type {
   AuditOrchestratorDeps,
@@ -10,7 +10,7 @@ import type {
   AuditOrchestrationResult,
   AgentAuditResult,
   AgentAuditInput,
-  ConsolidatedFinding,
+  Finding,
   AuditSummary,
   FindingSeverity,
   ReviewAgentResult,
@@ -107,7 +107,7 @@ async function discoverReviewAgents(
 async function executeReviewAgent(
   agentRunner: IAgentRunner,
   agentId: string,
-  findings: ConsolidatedFinding[],
+  findings: Finding[],
   policyDecision: AuditOrchestrationResult["policyDecision"],
   taskId: string,
 ): Promise<ReviewAgentResult> {
@@ -205,8 +205,8 @@ function buildFallbackFingerprint(
  */
 function consolidateFindings(
   agentResults: AgentAuditResult[],
-): ConsolidatedFinding[] {
-  const byFingerprint = new Map<string, ConsolidatedFinding>();
+): Finding[] {
+  const byFingerprint = new Map<string, Finding>();
 
   for (const result of agentResults) {
     if (result.status !== "success") continue;
@@ -233,22 +233,28 @@ function consolidateFindings(
           const props = sarifResult.properties as
             | Record<string, unknown>
             | undefined;
-          const category =
-            (props?.["gitgov/category"] as string | undefined) ?? "unknown";
+          const rawCategory =
+            (props?.["gitgov/category"] as string | undefined) ?? "unknown-risk";
+          const category = rawCategory as import("../audit/types").FindingCategory;
 
           const snippet = location?.region?.snippet?.text;
+          const detector = (props?.["gitgov/detector"] as string | undefined) ?? "regex";
+          const confidence = (props?.["gitgov/confidence"] as number | undefined) ?? 1.0;
 
-          const finding: ConsolidatedFinding = {
+          const finding: Finding = {
             fingerprint,
             ruleId: sarifResult.ruleId,
-            message: sarifResult.message.text,
-            severity: levelToSeverity(sarifResult.level),
             file: location?.artifactLocation?.uri ?? "",
             line: location?.region?.startLine ?? 0,
+            message: sarifResult.message.text,
             category,
+            severity: levelToSeverity(sarifResult.level),
+            detector: detector as import("../audit/types").DetectorName,
+            confidence,
+            executionId: result.executionId,
             reportedBy: [result.agentId],
-            ...(snippet ? { snippet } : {}),
             isWaived: false,
+            ...(snippet ? { snippet } : {}),
           };
           const col = location?.region?.startColumn;
           if (col !== undefined) {
@@ -272,7 +278,7 @@ function consolidateFindings(
  * severity counts reflect actionable findings for the policy decision.
  */
 function buildSummary(
-  findings: ConsolidatedFinding[],
+  findings: Finding[],
   agentResults: AgentAuditResult[],
 ): AuditSummary {
   const active = findings.filter((f) => !f.isWaived);
@@ -314,9 +320,9 @@ export function createAuditOrchestrator(deps: AuditOrchestratorDeps) {
       );
 
       // Load waivers upfront (needed for policy evaluation)
-      let waivers: ActiveWaiver[] = [];
+      let waivers: Waiver[] = [];
       try {
-        waivers = await deps.waiverReader.loadActiveWaivers();
+        waivers = await deps.waiverReader.loadWaivers();
       } catch {
         // WaiverReader failure is non-fatal: findings remain unsuppressed (AORCH-B7)
       }
@@ -409,7 +415,7 @@ export function createAuditOrchestrator(deps: AuditOrchestratorDeps) {
       const waivedFingerprints = new Set(
         policyResult.decision.waivedFindings.map((f) => f.fingerprint),
       );
-      const waiverByFingerprint = new Map<string, ActiveWaiver>();
+      const waiverByFingerprint = new Map<string, Waiver>();
       for (const f of policyResult.decision.waivedFindings) {
         if (f.waiver) {
           waiverByFingerprint.set(f.fingerprint, f.waiver);

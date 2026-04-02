@@ -1,6 +1,6 @@
 import type { RecordStores } from '../../record_store/record_store.types';
 import type { IdentityAdapter } from '../identity_adapter';
-import type { FeedbackRecord } from '../../record_types';
+import type { FeedbackRecord, GitGovFeedbackRecord } from '../../record_types';
 import type { IEventStream } from '../../event_bus';
 
 /**
@@ -45,12 +45,12 @@ export interface IFeedbackAdapter {
   /**
    * Gets all FeedbackRecords for a specific entity.
    */
-  getFeedbackByEntity(entityId: string): Promise<FeedbackRecord[]>;
+  getFeedbackByEntity(entityId: string): Promise<GitGovFeedbackRecord[]>;
 
   /**
    * Gets all FeedbackRecords in the system.
    */
-  getAllFeedback(): Promise<FeedbackRecord[]>;
+  getAllFeedback(): Promise<GitGovFeedbackRecord[]>;
 
   /**
    * Builds the complete conversation tree for a feedback.

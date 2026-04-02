@@ -14,19 +14,19 @@ import * as zlib from "node:zlib";
 import type {
   PolicyRule,
   PolicyRuleResult,
-  ConsolidatedFinding,
+  Finding,
   PolicyConfig,
-  ActiveWaiver,
+  Waiver,
   OpaRuleFactory,
 } from "../policy_evaluator.types";
 
 /**
  * Input format for OPA evaluation.
- * OPA receives ConsolidatedFinding[] as input.findings (flat, SARIF-derived).
+ * OPA receives Finding[] as input.findings (flat, SARIF-derived).
  */
 type OpaInput = {
-  findings: ConsolidatedFinding[];
-  waivers: ActiveWaiver[];
+  findings: Finding[];
+  waivers: Waiver[];
   config: {
     failOn: string;
     blockCategories: string[];
@@ -118,7 +118,7 @@ export async function createOpaRule(
   const noOpRule: PolicyRule = {
     name: ruleName,
     evaluate(
-      _findings: ConsolidatedFinding[],
+      _findings: Finding[],
       _config: PolicyConfig,
     ): PolicyRuleResult {
       return {
@@ -199,14 +199,14 @@ export async function createOpaRule(
     name: ruleName,
 
     evaluate(
-      findings: ConsolidatedFinding[],
+      findings: Finding[],
       config: PolicyConfig,
     ): PolicyRuleResult {
       // Build OPA input (PEVAL-O4)
       // Waivers are already applied to findings (isWaived flag set), but
       // we pass the full activeWaivers for OPA policies that need waiver metadata.
       const activeWaivers = findings
-        .filter((f): f is ConsolidatedFinding & { waiver: ActiveWaiver } => f.isWaived && f.waiver !== undefined)
+        .filter((f): f is Finding & { waiver: Waiver } => f.isWaived && f.waiver !== undefined)
         .map((f) => f.waiver);
       const input: OpaInput = {
         findings,

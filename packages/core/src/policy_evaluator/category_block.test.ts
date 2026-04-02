@@ -6,7 +6,7 @@
 
 import { categoryBlock } from "./category_block";
 import type {
-  ConsolidatedFinding,
+  Finding,
   PolicyConfig,
 } from "./policy_evaluator.types";
 
@@ -15,8 +15,8 @@ import type {
 // ============================================================================
 
 function makeFinding(
-  overrides: Partial<ConsolidatedFinding> = {},
-): ConsolidatedFinding {
+  overrides: Partial<Finding> = {},
+): Finding {
   return {
     fingerprint: "fp-test-001",
     message: "test finding",

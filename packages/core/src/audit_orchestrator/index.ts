@@ -5,7 +5,7 @@ export type {
   AuditOrchestrationResult,
   AgentAuditResult,
   AgentAuditInput,
-  ConsolidatedFinding,
+  Finding,
   AuditSummary,
   FindingSeverity,
   PolicyDecision,

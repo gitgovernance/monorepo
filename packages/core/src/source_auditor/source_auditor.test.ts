@@ -6,7 +6,7 @@ import { SourceAuditorModule } from "./source_auditor";
 import { FsFileLister } from "../file_lister";
 import type { FindingDetectorModule } from "../finding_detector";
 import type { Finding } from "../finding_detector/types";
-import type { IWaiverReader, ActiveWaiver, SourceAuditorDependencies } from "./types";
+import type { IWaiverReader, Waiver, SourceAuditorDependencies } from "./types";
 
 describe("SourceAuditorModule", () => {
   let tempDir: string;
@@ -32,8 +32,8 @@ describe("SourceAuditorModule", () => {
     } as unknown as jest.Mocked<FindingDetectorModule>;
 
     mockWaiverReader = {
-      loadActiveWaivers: jest.fn().mockResolvedValue([]),
-      hasActiveWaiver: jest.fn().mockResolvedValue(false),
+      loadWaivers: jest.fn().mockResolvedValue([]),
+      hasWaiver: jest.fn().mockResolvedValue(false),
     };
   });
 
@@ -191,19 +191,19 @@ describe("SourceAuditorModule", () => {
         baseDir: tempDir,
       });
 
-      expect(mockWaiverReader.loadActiveWaivers).toHaveBeenCalled();
+      expect(mockWaiverReader.loadWaivers).toHaveBeenCalled();
     });
 
     it("[EARS-C2] should exclude findings matching active waiver fingerprint", async () => {
       const finding = createFinding({ fingerprint: "waived-fingerprint" });
       mockFindingDetector.detect.mockResolvedValue([finding]);
 
-      const waiver: ActiveWaiver = {
+      const waiver: Waiver = {
         fingerprint: "waived-fingerprint",
         ruleId: "PII-001",
-        feedback: {} as ActiveWaiver["feedback"],
+        feedback: {} as Waiver["feedback"],
       };
-      mockWaiverReader.loadActiveWaivers.mockResolvedValue([waiver]);
+      mockWaiverReader.loadWaivers.mockResolvedValue([waiver]);
 
       const auditor = new SourceAuditorModule(createDeps());
 
@@ -221,7 +221,7 @@ describe("SourceAuditorModule", () => {
       // This test verifies integration behavior
       const finding = createFinding();
       mockFindingDetector.detect.mockResolvedValue([finding]);
-      mockWaiverReader.loadActiveWaivers.mockResolvedValue([]);
+      mockWaiverReader.loadWaivers.mockResolvedValue([]);
 
       const auditor = new SourceAuditorModule(createDeps());
 
@@ -237,13 +237,13 @@ describe("SourceAuditorModule", () => {
       const finding = createFinding({ fingerprint: "permanent-waiver" });
       mockFindingDetector.detect.mockResolvedValue([finding]);
 
-      const permanentWaiver: ActiveWaiver = {
+      const permanentWaiver: Waiver = {
         fingerprint: "permanent-waiver",
         ruleId: "PII-001",
         // No expiresAt
-        feedback: {} as ActiveWaiver["feedback"],
+        feedback: {} as Waiver["feedback"],
       };
-      mockWaiverReader.loadActiveWaivers.mockResolvedValue([permanentWaiver]);
+      mockWaiverReader.loadWaivers.mockResolvedValue([permanentWaiver]);
 
       const auditor = new SourceAuditorModule(createDeps());
 
@@ -263,12 +263,12 @@ describe("SourceAuditorModule", () => {
         createFinding({ id: "3", fingerprint: "waived-1" }),
       ]);
 
-      const waiver: ActiveWaiver = {
+      const waiver: Waiver = {
         fingerprint: "waived-1",
         ruleId: "PII-001",
-        feedback: {} as ActiveWaiver["feedback"],
+        feedback: {} as Waiver["feedback"],
       };
-      mockWaiverReader.loadActiveWaivers.mockResolvedValue([waiver]);
+      mockWaiverReader.loadWaivers.mockResolvedValue([waiver]);
 
       const auditor = new SourceAuditorModule(createDeps());
 
@@ -442,7 +442,7 @@ describe("SourceAuditorModule", () => {
           {
             fingerprint: "waived-fp",
             ruleId: "PII-001",
-            feedback: {} as ActiveWaiver["feedback"],
+            feedback: {} as Waiver["feedback"],
           },
         ],
       });

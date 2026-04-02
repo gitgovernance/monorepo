@@ -30,8 +30,8 @@ export type {
   PolicyEvaluationResult,
   PolicyExecutionRecordData,
   // Re-exports from canonical sources
-  ConsolidatedFinding,
+  Finding,
   FindingSeverity,
-  ActiveWaiver,
+  Waiver,
   IWaiverReader,
 } from "./policy_evaluator.types";

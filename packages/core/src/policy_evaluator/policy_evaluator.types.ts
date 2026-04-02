@@ -1,32 +1,41 @@
 /**
- * PolicyEvaluator types — Epic 5: policy_evaluation.
+ * PolicyEvaluator types.
  *
- * Canonical types for policy evaluation. ConsolidatedFinding and FindingSeverity
- * are re-exported from audit_orchestrator (not redefined).
- * ActiveWaiver and IWaiverReader are imported from source_auditor.
+ * Canonical audit types (Finding, FindingSeverity, Waiver, PolicyDecision, PolicyRuleResult)
+ * are imported from @gitgov/core/audit — the central definition.
+ * This file re-exports them and defines policy-evaluator-specific types.
  */
 
 import type {
-  ConsolidatedFinding,
+  Finding,
   FindingSeverity,
-} from "../audit_orchestrator/audit_orchestrator.types";
-import type { ActiveWaiver } from "../source_auditor/types";
+  Waiver,
+  PolicyDecision,
+  PolicyRuleResult,
+} from "../audit/types";
 
-// Re-export for convenience
-export type { ConsolidatedFinding, FindingSeverity } from "../audit_orchestrator/audit_orchestrator.types";
-export type { ActiveWaiver, IWaiverReader } from "../source_auditor/types";
+// ─── Re-export canonical types from audit ────────────────────────────────────
+
+export type {
+  Finding,
+  FindingSeverity,
+  Waiver,
+  PolicyDecision,
+  PolicyRuleResult,
+} from "../audit/types";
+
+export type { IWaiverReader } from "../source_auditor/types";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Core Domain Types
+// Policy-evaluator-specific types
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * Input to PolicyEvaluator.evaluate().
- * Constructed by the caller (AuditOrchestrator or CLI).
  */
 export type PolicyEvaluationInput = {
-  findings: ConsolidatedFinding[];
-  activeWaivers: ActiveWaiver[];
+  findings: Finding[];
+  activeWaivers: Waiver[];
   policy: PolicyConfig;
   scanExecutionIds: string[];
   taskId: string;
@@ -34,7 +43,7 @@ export type PolicyEvaluationInput = {
 
 /**
  * Runtime policy configuration.
- * Loaded from .gitgov/policy.yml via loadPolicyConfig(), or constructed programmatically.
+ * Loaded from .gitgov/policy.yml via loadPolicyConfig().
  */
 export type PolicyConfig = {
   failOn: FindingSeverity;
@@ -46,16 +55,13 @@ export type PolicyConfig = {
 
 /**
  * OPA engine configuration.
- * When present, .rego policies are loaded and evaluated via WASM.
  */
 export type OpaConfig = {
-  /** Paths to .rego files relative to repo root */
   policies: string[];
 };
 
 /**
  * Schema for .gitgov/policy.yml file on disk.
- * Parsed by loadPolicyConfig().
  */
 export type PolicyConfigFile = {
   version: string;
@@ -69,55 +75,29 @@ export type PolicyConfigFile = {
 
 /**
  * Requirements for waiver approval per category.
- * Example: { role: "ciso", minApprovals: 1 }
  */
 export type WaiverRequirement = {
   role: string;
   minApprovals: number;
 };
 
-/**
- * Result of policy evaluation.
- * Returned by PolicyEvaluator.evaluate().
- */
-export type PolicyDecision = {
-  decision: "pass" | "block";
-  reason: string;
-  blockingFindings: ConsolidatedFinding[];
-  waivedFindings: ConsolidatedFinding[];
-  summary: Record<FindingSeverity, number>;
-  rulesEvaluated: PolicyRuleResult[];
-  evaluatedAt: string; // ISO 8601
-};
-
-/**
- * Result of a single rule evaluation.
- */
-export type PolicyRuleResult = {
-  ruleName: string;
-  passed: boolean;
-  reason: string;
-};
-
 // ─────────────────────────────────────────────────────────────────────────────
-// Interfaces (contracts with methods)
+// Interfaces
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * A policy rule that evaluates findings against a specific criterion.
- * Strategy pattern: built-in and custom rules share this interface.
  */
 export interface PolicyRule {
   readonly name: string;
   evaluate(
-    findings: ConsolidatedFinding[],
+    findings: Finding[],
     config: PolicyConfig,
   ): PolicyRuleResult;
 }
 
 /**
  * Interface for loading PolicyConfig from storage.
- * Implementations: FsPolicyConfigLoader (filesystem), GitHubPolicyConfigLoader (GitHub API).
  */
 export interface PolicyConfigLoader {
   loadPolicyConfig(): Promise<PolicyConfig>;
@@ -125,8 +105,6 @@ export interface PolicyConfigLoader {
 
 /**
  * Interface for creating OPA rules from .rego files.
- * Implementations: FsOpaRuleFactory (local OPA CLI + WASM), future: RemoteOpaRule.
- * The factory receives repoRoot at construction time (DI), not per call.
  */
 export interface OpaRuleFactory {
   createOpaRule(regoPath: string): Promise<PolicyRule>;
@@ -134,7 +112,6 @@ export interface OpaRuleFactory {
 
 /**
  * PolicyEvaluator interface.
- * ASYNC -- evaluate() returns Promise<PolicyEvaluationResult>.
  */
 export interface PolicyEvaluator {
   evaluate(input: PolicyEvaluationInput): Promise<PolicyEvaluationResult>;
@@ -144,10 +121,6 @@ export interface PolicyEvaluator {
 // Dependency injection and result types
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Dependencies injected into createPolicyEvaluator().
- * opaRuleFactory is optional -- when absent, OPA policies are skipped with a warning.
- */
 export type PolicyEvaluatorDeps = {
   opaRuleFactory?: OpaRuleFactory;
 };
@@ -163,7 +136,6 @@ export type PolicyEvaluationResult = {
 
 /**
  * Data for the ExecutionRecord created by PolicyEvaluator.
- * The caller (orchestrator) handles persistence via RecordStore.
  */
 export type PolicyExecutionRecordData = {
   id: string;
@@ -182,10 +154,6 @@ export type PolicyExecutionRecordData = {
 // Constants and helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Severity ordering for threshold comparison.
- * critical(4) > high(3) > medium(2) > low(1).
- */
 export const SEVERITY_ORDER: Record<FindingSeverity, number> = {
   critical: 4,
   high: 3,
@@ -193,9 +161,6 @@ export const SEVERITY_ORDER: Record<FindingSeverity, number> = {
   low: 1,
 };
 
-/**
- * Returns the higher of two severities.
- */
 export function higherSeverity(
   a: FindingSeverity,
   b: FindingSeverity,

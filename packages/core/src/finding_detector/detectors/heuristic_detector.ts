@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import type { Detector, FindingCategory, FindingSeverity, Finding } from "../types";
 
 const MAX_SNIPPET_LENGTH = 300;
@@ -114,17 +114,19 @@ export class HeuristicDetector implements Detector {
         const snippet = extractSnippet(content, match.index);
 
         const finding: Finding = {
-          id: randomUUID(),
+          fingerprint: generateFingerprint(rule.id, filePath, line),
           ruleId: rule.id,
-          category: rule.category,
-          severity: rule.severity,
           file: filePath,
           line,
-          snippet,
           message: rule.message,
+          snippet,
+          category: rule.category,
+          severity: rule.severity,
           detector: this.name,
-          fingerprint: generateFingerprint(rule.id, filePath, line),
           confidence: rule.confidence,
+          executionId: "",      // filled post-orchestration
+          reportedBy: [],       // filled post-orchestration
+          isWaived: false,      // filled post-orchestration
         };
         if (rule.fixes?.length) finding.fixes = rule.fixes;
         findings.push(finding);

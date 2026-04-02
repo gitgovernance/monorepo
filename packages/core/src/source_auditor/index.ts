@@ -30,7 +30,7 @@ export type {
   AuditSummary,
   WaiverStatus,
   WaiverMetadata,
-  ActiveWaiver,
+  Waiver,
   CreateWaiverOptions,
   IWaiverReader,
 } from "./types";

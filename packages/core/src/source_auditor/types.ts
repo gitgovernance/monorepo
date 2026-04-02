@@ -3,8 +3,8 @@ import type {
   FindingCategory,
   FindingSeverity,
   DetectorName,
-} from "../finding_detector/types";
-import type { FeedbackRecord } from "../record_types";
+  Waiver,
+} from "../audit/types";
 import type { FindingDetectorModule } from "../finding_detector";
 import type { FileLister } from "../file_lister";
 import type { IGitModule } from '../git';
@@ -93,54 +93,23 @@ export type AuditContentsInput = {
   /** Pre-loaded file contents to audit */
   files: FileContent[];
   /** Pre-loaded waivers (optional - if omitted, no waiver filtering) */
-  waivers?: ActiveWaiver[];
+  waivers?: Waiver[];
 };
 
 // ============================================================================
-// WAIVER TYPES
+// WAIVER TYPES — imported from @gitgov/core/audit (central definition)
 // ============================================================================
 
-/**
- * Metadata stored in FeedbackRecord for waivers.
- * Uses the generic metadata<T> field of FeedbackRecord.
- */
-export type WaiverMetadata = {
-  /** SHA256 fingerprint for matching */
-  fingerprint: string;
-  /** Rule ID (e.g., "PII-001", "SEC-002") */
-  ruleId: string;
-  /** File path of the original finding */
-  file: string;
-  /** Line number of the original finding */
-  line: number;
-  /** Optional expiration date (ISO string) */
-  expiresAt?: string;
-  /** Optional related TaskRecord ID */
-  relatedTaskId?: string;
-}
-
-/**
- * Active waiver loaded from FeedbackRecord.
- */
-export type ActiveWaiver = {
-  /** Fingerprint for matching with findings */
-  fingerprint: string;
-  /** Original rule ID */
-  ruleId: string;
-  /** Expiration date (undefined = permanent) */
-  expiresAt?: Date;
-  /** Original FeedbackRecord with metadata */
-  feedback: FeedbackRecord<WaiverMetadata>;
-}
+export type { Waiver, WaiverMetadata } from "../audit/types";
 
 /**
  * Type for loading active waivers.
  */
 export type IWaiverReader = {
   /** Loads all active (non-expired) waivers */
-  loadActiveWaivers(): Promise<ActiveWaiver[]>;
+  loadWaivers(): Promise<Waiver[]>;
   /** Checks if a specific fingerprint has an active waiver */
-  hasActiveWaiver(fingerprint: string): Promise<boolean>;
+  hasWaiver(fingerprint: string): Promise<boolean>;
 }
 
 /**

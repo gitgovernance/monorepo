@@ -53,9 +53,9 @@ export class FeedbackAdapter implements IFeedbackAdapter {
 
       // Find all open assignments for this actor
       const openAssignments = existingFeedbacks.filter(feedback =>
-        feedback.type === 'assignment' &&
-        feedback.assignee === payload.assignee &&
-        feedback.status === 'open'
+        feedback.payload.type === 'assignment' &&
+        feedback.payload.assignee === payload.assignee &&
+        feedback.payload.status === 'open'
       );
 
       if (openAssignments.length > 0) {
@@ -66,14 +66,14 @@ export class FeedbackAdapter implements IFeedbackAdapter {
 
         for (const assignment of openAssignments) {
           const hasResolution = allFeedbacks.some(feedback =>
-            feedback.entityType === 'feedback' &&
-            feedback.resolvesFeedbackId === assignment.id &&
-            feedback.status === 'resolved'
+            feedback.payload.entityType === 'feedback' &&
+            feedback.payload.resolvesFeedbackId === assignment.payload.id &&
+            feedback.payload.status === 'resolved'
           );
 
           if (!hasResolution) {
             // Open assignment WITHOUT resolution = duplicate
-            throw new Error(`DuplicateAssignmentError: Task ${payloadWithEntityId.entityId} is already assigned to ${payload.assignee} (feedback: ${assignment.id})`);
+            throw new Error(`DuplicateAssignmentError: Task ${payloadWithEntityId.entityId} is already assigned to ${payload.assignee} (feedback: ${assignment.payload.id})`);
           }
         }
       }
@@ -190,14 +190,14 @@ export class FeedbackAdapter implements IFeedbackAdapter {
    * Usage: Invoked by `gitgov feedback list` to display feedback for a task/cycle/execution.
    * Returns: Array of FeedbackRecords filtered for the entity.
    */
-  async getFeedbackByEntity(entityId: string): Promise<FeedbackRecord[]> {
+  async getFeedbackByEntity(entityId: string): Promise<GitGovFeedbackRecord[]> {
     const ids = await this.stores.feedbacks.list();
-    const feedbacks: FeedbackRecord[] = [];
+    const feedbacks: GitGovFeedbackRecord[] = [];
 
     for (const id of ids) {
       const record = await this.stores.feedbacks.get(id);
       if (record && record.payload.entityId === entityId) {
-        feedbacks.push(record.payload);
+        feedbacks.push(record);
       }
     }
 
@@ -212,14 +212,14 @@ export class FeedbackAdapter implements IFeedbackAdapter {
    * Usage: Invoked by `gitgov feedback list` and by RecordMetrics for calculations.
    * Returns: Complete array of all FeedbackRecords.
    */
-  async getAllFeedback(): Promise<FeedbackRecord[]> {
+  async getAllFeedback(): Promise<GitGovFeedbackRecord[]> {
     const ids = await this.stores.feedbacks.list();
-    const feedbacks: FeedbackRecord[] = [];
+    const feedbacks: GitGovFeedbackRecord[] = [];
 
     for (const id of ids) {
       const record = await this.stores.feedbacks.get(id);
       if (record) {
-        feedbacks.push(record.payload);
+        feedbacks.push(record);
       }
     }
 
@@ -260,14 +260,14 @@ export class FeedbackAdapter implements IFeedbackAdapter {
     // 3. Find all responses (feedbacks pointing to this one)
     const allFeedbacks = await this.getAllFeedback();
     const responses = allFeedbacks.filter(
-      f => f.entityType === 'feedback' && f.entityId === feedbackId
+      f => f.payload.entityType === 'feedback' && f.payload.entityId === feedbackId
     );
 
     // 4. Build tree recursively
     const responseThreads: FeedbackThread[] = [];
     for (const response of responses) {
       try {
-        const thread = await this.buildThread(response.id, maxDepth, currentDepth + 1);
+        const thread = await this.buildThread(response.payload.id, maxDepth, currentDepth + 1);
         responseThreads.push(thread);
       } catch (error) {
         // If depth limit reached, just skip this branch

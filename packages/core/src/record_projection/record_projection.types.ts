@@ -24,6 +24,7 @@ export type AllRecords = {
   feedback: GitGovFeedbackRecord[];
   executions: GitGovExecutionRecord[];
   actors: GitGovActorRecord[];
+  agents: GitGovAgentRecord[];
 };
 
 /**
@@ -177,7 +178,9 @@ export type ProjectionContext = {
  *
  * Abstracts where IndexData is persisted. Implementations:
  * - FsRecordProjection: writes to .gitgov/index.json (CLI)
- * - PrismaRecordProjection: decomposes into 6 queryable Prisma tables (SaaS)
+ * - PrismaRecordProjection: decomposes into 9 queryable Prisma tables (SaaS)
+ *   (GitgovMeta, GitgovTask, GitgovCycle, GitgovActor, GitgovFeedback,
+ *    GitgovActivity, GitgovExecution, GitgovAgent, GitgovWorkflow)
  */
 export interface IRecordProjection {
   persist(data: IndexData, context: ProjectionContext): Promise<void>;

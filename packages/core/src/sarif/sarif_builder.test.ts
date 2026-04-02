@@ -1,26 +1,28 @@
 // All EARS prefixes map to sarif_module.md
-import { createSarifBuilder, toSarifWaiver } from './sarif_builder';
-import type { Finding } from '../finding_detector/types';
-import type { SarifBuilderOptions, SarifActiveWaiver, SarifLog } from './sarif.types';
+import { createSarifBuilder, toSarifSuppression } from './sarif_builder';
+import type { Finding, Waiver } from '../audit/types';
+import type { SarifBuilderOptions, SarifLog } from './sarif.types';
 
 // ─── Fixtures ───────────────────────────────────────────────────────────────
 
 const baseFindings: Finding[] = [
   {
-    id: 'finding-001',
+    fingerprint: 'abc123def456',
     ruleId: 'PII-001',
-    category: 'pii-email',
-    severity: 'high',
     file: 'src/auth/login.ts',
     line: 42,
     column: 5,
-    snippet: 'const email = user.email;',
     message: 'PII email detected in source code',
+    snippet: 'const email = user.email;',
+    category: 'pii-email',
+    severity: 'high',
+    detector: 'regex',
+    confidence: 0.95,
     fixes: [{ description: 'Remove email from source' }],
     legalReference: 'GDPR Art. 5(1)(f)',
-    detector: 'regex',
-    fingerprint: 'abc123def456',
-    confidence: 0.95,
+    executionId: '',
+    reportedBy: [],
+    isWaived: false,
   },
 ];
 
@@ -64,14 +66,14 @@ describe('SarifBuilder', () => {
       expect(firstRun(sarif).results).toEqual([]);
     });
 
-    it('[SARIF-A3] build: should map critical/high → error, medium → warning, low → note, info → none', async () => {
-      const severities: Finding['severity'][] = ['critical', 'high', 'medium', 'low', 'info'];
-      const expected = ['error', 'error', 'warning', 'note', 'none'];
+    it('[SARIF-A3] build: should map critical/high → error, medium → warning, low → note', async () => {
+      const severities: Finding['severity'][] = ['critical', 'high', 'medium', 'low'];
+      const expected = ['error', 'error', 'warning', 'note'];
 
       for (let i = 0; i < severities.length; i++) {
         const sev = severities[i]!;
         const exp = expected[i]!;
-        const finding: Finding = { ...baseFindings[0]!, id: `f-${i}`, severity: sev };
+        const finding: Finding = { ...baseFindings[0]!, severity: sev };
         const sarif = await builder.build({ ...baseOptions, findings: [finding] });
         expect(firstResult(sarif).level).toBe(exp);
       }
@@ -215,21 +217,30 @@ describe('SarifBuilder', () => {
       const opts: SarifBuilderOptions = {
         ...baseOptions,
         getLineContent: async () => 'const email = user.email;',
-        activeWaivers: [],
+        waivers: [],
       };
       // Compute fingerprint first to build the waiver
-      const sarifNoWaiver = await builder.build({ ...opts, activeWaivers: [] });
+      const sarifNoWaiver = await builder.build({ ...opts, waivers: [] });
       const fp = firstResult(sarifNoWaiver).partialFingerprints?.['primaryLocationLineHash/v1'] ?? '';
 
-      const waiver: SarifActiveWaiver = {
+      const waiver: Waiver = {
         fingerprint: fp,
-        feedbackId: 'feedback-2026-001',
-        content: 'Approved for test environment only',
-        expiresAt: '2026-12-31T00:00:00Z',
-        approvedBy: 'human:ciso',
+        ruleId: 'PII-001',
+        expiresAt: new Date('2026-12-31T00:00:00Z'),
+        feedback: {
+          header: { version: '1.0', type: 'feedback', payloadChecksum: 'test', signatures: [] },
+          payload: {
+            id: 'feedback-2026-001',
+            entityType: 'execution',
+            entityId: 'exec-001',
+            type: 'approval',
+            status: 'resolved',
+            content: 'Approved for test environment only',
+          },
+        } as any,
       };
 
-      const sarif = await builder.build({ ...opts, activeWaivers: [waiver] });
+      const sarif = await builder.build({ ...opts, waivers: [waiver] });
       const sup = firstResult(sarif).suppressions;
       expect(sup).toBeDefined();
       expect(sup![0]!.kind).toBe('inSource');
@@ -239,12 +250,12 @@ describe('SarifBuilder', () => {
       const opts: SarifBuilderOptions = {
         ...baseOptions,
         getLineContent: async () => 'const email = user.email;',
-        activeWaivers: [],
+        waivers: [],
       };
       const sarifNoWaiver = await builder.build(opts);
       const fp = firstResult(sarifNoWaiver).partialFingerprints?.['primaryLocationLineHash/v1'] ?? '';
-      const waiver: SarifActiveWaiver = { fingerprint: fp, feedbackId: 'fb-1', content: 'ok' };
-      const sarif = await builder.build({ ...opts, activeWaivers: [waiver] });
+      const waiver: Waiver = { fingerprint: fp, ruleId: 'PII-001', feedback: { header: { version: '1.0', type: 'feedback', payloadChecksum: 'test', signatures: [] }, payload: { id: 'fb-1', entityType: 'execution', entityId: 'exec-001', type: 'approval', status: 'resolved', content: 'ok' } } as any };
+      const sarif = await builder.build({ ...opts, waivers: [waiver] });
       const sup = firstResult(sarif).suppressions;
       expect(sup![0]!.status).toBe('accepted');
     });
@@ -253,12 +264,12 @@ describe('SarifBuilder', () => {
       const opts: SarifBuilderOptions = {
         ...baseOptions,
         getLineContent: async () => 'const email = user.email;',
-        activeWaivers: [],
+        waivers: [],
       };
       const sarifNoWaiver = await builder.build(opts);
       const fp = firstResult(sarifNoWaiver).partialFingerprints?.['primaryLocationLineHash/v1'] ?? '';
-      const waiver: SarifActiveWaiver = { fingerprint: fp, feedbackId: 'feedback-xyz', content: 'ok' };
-      const sarif = await builder.build({ ...opts, activeWaivers: [waiver] });
+      const waiver: Waiver = { fingerprint: fp, ruleId: 'PII-001', feedback: { header: { version: '1.0', type: 'feedback', payloadChecksum: 'test', signatures: [] }, payload: { id: 'feedback-xyz', entityType: 'execution', entityId: 'exec-001', type: 'approval', status: 'resolved', content: 'ok' } } as any };
+      const sarif = await builder.build({ ...opts, waivers: [waiver] });
       const sup = firstResult(sarif).suppressions;
       expect(sup![0]!.properties?.['gitgov/feedbackId']).toBe('feedback-xyz');
     });
@@ -267,14 +278,14 @@ describe('SarifBuilder', () => {
       const opts: SarifBuilderOptions = {
         ...baseOptions,
         getLineContent: async () => 'const email = user.email;',
-        activeWaivers: [{ fingerprint: 'no-match', feedbackId: 'fb', content: 'ok' }],
+        waivers: [{ fingerprint: 'no-match', feedbackId: 'fb', content: 'ok' }],
       };
       const sarif = await builder.build(opts);
       expect(firstResult(sarif).suppressions).toBeUndefined();
     });
 
-    it('[SARIF-F5] build: empty activeWaivers should produce no suppressions', async () => {
-      const sarif = await builder.build({ ...baseOptions, activeWaivers: [] });
+    it('[SARIF-F5] build: empty waivers should produce no suppressions', async () => {
+      const sarif = await builder.build({ ...baseOptions, waivers: [] });
       expect(firstResult(sarif).suppressions).toBeUndefined();
     });
   });
@@ -311,42 +322,42 @@ describe('SarifBuilder', () => {
     });
   });
 
-  describe('4.11. toSarifWaiver mapping (SARIF-K1 to K4)', () => {
+  describe('4.11. toSarifSuppression mapping (SARIF-K1 to K3)', () => {
 
-    it('[SARIF-K1] toSarifWaiver: should map feedback.id to feedbackId', () => {
-      const result = toSarifWaiver({
+    it('[SARIF-K1] toSarifSuppression: should map Waiver to SarifSuppression with kind inSource', () => {
+      const waiver: Waiver = {
         fingerprint: 'abc123',
-        feedback: { id: 'fb-001', content: 'Approved' },
-      });
-      expect(result.feedbackId).toBe('fb-001');
-      expect(result.fingerprint).toBe('abc123');
+        ruleId: 'PII-001',
+        feedback: { header: { version: '1.0', type: 'feedback', payloadChecksum: 'test', signatures: [] }, payload: { id: 'fb-001', entityType: 'execution', entityId: 'exec-001', type: 'approval', status: 'resolved', content: 'Approved' } } as any,
+      };
+      const result = toSarifSuppression(waiver);
+      expect(result.kind).toBe('inSource');
+      expect(result.status).toBe('accepted');
+      expect(result.justification).toBe('Approved');
+      expect(result.properties?.['gitgov/feedbackId']).toBe('fb-001');
     });
 
-    it('[SARIF-K2] toSarifWaiver: should default content to empty string when feedback.content is undefined', () => {
-      const result = toSarifWaiver({
+    it('[SARIF-K2] toSarifSuppression: should handle Waiver without content', () => {
+      const waiver: Waiver = {
         fingerprint: 'abc123',
-        feedback: { id: 'fb-002' },
-      });
-      expect(result.content).toBe('');
+        ruleId: 'PII-001',
+        feedback: { header: { version: '1.0', type: 'feedback', payloadChecksum: 'test', signatures: [] }, payload: { id: 'fb-002', entityType: 'execution', entityId: 'exec-001', type: 'approval', status: 'resolved', content: '' } } as any,
+      };
+      const result = toSarifSuppression(waiver);
+      expect(result.justification).toBeUndefined();
+      expect(result.properties?.['gitgov/feedbackId']).toBe('fb-002');
     });
 
-    it('[SARIF-K3] toSarifWaiver: should convert expiresAt Date to ISO string', () => {
+    it('[SARIF-K3] toSarifSuppression: should convert expiresAt Date to ISO string in properties', () => {
       const date = new Date('2026-12-31T00:00:00Z');
-      const result = toSarifWaiver({
+      const waiver: Waiver = {
         fingerprint: 'abc123',
-        feedback: { id: 'fb-003', content: 'ok' },
+        ruleId: 'PII-001',
         expiresAt: date,
-      });
-      expect(result.expiresAt).toBe('2026-12-31T00:00:00.000Z');
-    });
-
-    it('[SARIF-K4] toSarifWaiver: should propagate approvedBy when provided', () => {
-      const result = toSarifWaiver({
-        fingerprint: 'abc123',
-        feedback: { id: 'fb-004', content: 'ok' },
-        approvedBy: 'human:ciso',
-      });
-      expect(result.approvedBy).toBe('human:ciso');
+        feedback: { header: { version: '1.0', type: 'feedback', payloadChecksum: 'test', signatures: [] }, payload: { id: 'fb-003', entityType: 'execution', entityId: 'exec-001', type: 'approval', status: 'resolved', content: 'ok' } } as any,
+      };
+      const result = toSarifSuppression(waiver);
+      expect(result.properties?.['gitgov/expiresAt']).toBe('2026-12-31T00:00:00.000Z');
     });
   });
 
