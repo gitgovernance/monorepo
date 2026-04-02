@@ -531,7 +531,7 @@ jest.doMock('@gitgov/core', () => {
     SourceAuditor: {
       SourceAuditorModule: jest.fn(),
       WaiverReader: jest.fn().mockImplementation(() => ({
-        loadActiveWaivers: jest.fn().mockResolvedValue([]),
+        loadWaivers: jest.fn().mockResolvedValue([]),
       })),
       WaiverWriter: jest.fn().mockImplementation(() => ({
         createWaiver: jest.fn().mockResolvedValue(undefined),

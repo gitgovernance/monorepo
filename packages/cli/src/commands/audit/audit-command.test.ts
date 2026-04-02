@@ -48,10 +48,10 @@ import type {
   AuditOrchestrationOptions,
   AuditOrchestrationResult,
   PolicyDecision,
-  ConsolidatedFinding,
+  Finding,
   FeedbackRecord,
   ActorRecord,
-  ActiveWaiver,
+  Waiver,
 } from '@gitgov/core';
 
 // Mock console methods
@@ -68,7 +68,7 @@ let mockOrchestrator: {
 };
 
 let mockWaiverReader: {
-  loadActiveWaivers: jest.MockedFunction<() => Promise<ActiveWaiver[]>>;
+  loadWaivers: jest.MockedFunction<() => Promise<Waiver[]>>;
 };
 
 let mockFeedbackAdapter: {
@@ -198,7 +198,7 @@ describe('AuditCommand', () => {
     };
 
     mockWaiverReader = {
-      loadActiveWaivers: jest.fn().mockResolvedValue([]),
+      loadWaivers: jest.fn().mockResolvedValue([]),
     };
 
     mockFeedbackAdapter = {
@@ -454,7 +454,7 @@ describe('AuditCommand', () => {
     });
 
     it('[EARS-E3] should list active waivers with --list', async () => {
-      mockWaiverReader.loadActiveWaivers.mockResolvedValue([
+      mockWaiverReader.loadWaivers.mockResolvedValue([
         {
           fingerprint: 'sha256:waiver1',
           ruleId: 'SEC-001',
@@ -472,7 +472,7 @@ describe('AuditCommand', () => {
               file: 'test.ts',
               line: 10,
             },
-          } as ActiveWaiver['feedback'],
+          } as Waiver['feedback'],
         },
       ]);
 
@@ -492,7 +492,7 @@ describe('AuditCommand', () => {
     });
 
     it('[EARS-E5] should show empty message when no active waivers', async () => {
-      mockWaiverReader.loadActiveWaivers.mockResolvedValue([]);
+      mockWaiverReader.loadWaivers.mockResolvedValue([]);
 
       await auditCommand.executeWaive(undefined, { list: true });
 
