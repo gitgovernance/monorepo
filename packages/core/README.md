@@ -149,18 +149,84 @@ graph LR
     style PrismaProjection fill:#fce4ec,stroke:#c62828
 ```
 
-### 6 Import Paths
+### 7 Import Paths
 
 | Import | Contents | I/O |
 |--------|----------|-----|
-| `@gitgov/core` | Interfaces, types, pure logic, factories, validators | No |
+| `@gitgov/core` | Interfaces, types, pure logic, factories, validators + all audit types | No |
+| `@gitgov/core/audit` | Audit product types: Finding, Waiver, Scan, PolicyDecision, enums, metadata types | No |
 | `@gitgov/core/fs` | Filesystem implementations (FsRecordStore, FsRecordProjection, LocalGitModule, FsLintModule, ...) | Local |
 | `@gitgov/core/github` | GitHub API implementations (GitHubRecordStore, GitHubGitModule, GitHubConfigStore, GitHubFileLister, GithubSyncStateModule, GithubWebhookHandler) | Remote |
-| `@gitgov/core-gitlab` | GitLab API implementations (GitLabRecordStore, GitLabGitModule, GitLabConfigStore, GitLabFileLister, GitLabSyncStateModule, GitLabWebhookHandler) — [separate package](https://gitlab.com/gitgovernance/core-gitlab) | Remote |
+| `@gitgov/core-gitlab` | GitLab API implementations — [separate package](https://gitlab.com/gitgovernance/core-gitlab) | Remote |
 | `@gitgov/core/memory` | In-memory implementations for testing (MemoryRecordStore, MemoryRecordProjection, MemoryGitModule, ...) | No |
 | `@gitgov/core/prisma` | Database-backed implementations via Prisma-compatible client (PrismaRecordProjection) | Remote |
 
-The root import (`@gitgov/core`) never imports `fs`, `path`, `child_process`, `@octokit/rest`, `@gitbeaker/rest`, or `@prisma/client`.
+The root import (`@gitgov/core`) re-exports everything from `@gitgov/core/audit`. Both paths provide the same types.
+
+### Audit Product Types (`@gitgov/core/audit`)
+
+The Audit product defines canonical types derived from protocol records. **All consumers MUST import these from core — never redefine locally.**
+
+```typescript
+import type {
+  // Core finding type — one type everywhere, no "ConsolidatedFinding"
+  Finding,
+  // Waiver — materialized from FeedbackRecord(type: "approval")
+  Waiver, WaiverMetadata,
+  // Scan — groups ExecutionRecords from one audit run
+  Scan,
+  // Policy decision — stored in ExecutionRecord(type: "decision")
+  PolicyDecision,
+  // Enums — use these, never bare `string`
+  FindingSeverity,     // "critical" | "high" | "medium" | "low"
+  FindingCategory,     // "pii-email" | "hardcoded-secret" | ...
+  DetectorName,        // "regex" | "heuristic" | "llm"
+  WaiverStatus,        // "active" | "expired" | "revoked"
+  FindingStatus,       // "new" | "in_progress" | "waived" | "resolved"
+  ScanDisplayStatus,   // "success" | "partial" | "blocked"
+  PolicyStatus,        // "pass" | "block"
+  ScanScope,           // "full" | "diff"
+  // Metadata types — use with record generics
+  SarifExecutionMetadata,    // for ExecutionRecord<SarifExecutionMetadata>
+  PolicyExecutionMetadata,   // for ExecutionRecord<PolicyExecutionMetadata>
+  GitHubActorMetadata,       // for ActorRecord<GitHubActorMetadata>
+  // Lifecycle events
+  FindingHistoryEvent,
+  WaiverLifecycleEvent,
+} from '@gitgov/core/audit';  // or from '@gitgov/core'
+```
+
+### Record Generics
+
+All records accept a metadata type parameter via `<TMetadata>`:
+
+```typescript
+import type { GitGovExecutionRecord, GitGovActorRecord } from '@gitgov/core';
+import type { SarifExecutionMetadata, GitHubActorMetadata } from '@gitgov/core';
+
+// Typed metadata — no more `as { kind?: string; data?: SarifLog }`
+type SarifExecution = GitGovExecutionRecord<SarifExecutionMetadata>;
+type GitHubActor = GitGovActorRecord<GitHubActorMetadata>;
+```
+
+The generics flow from protocol schemas:
+```
+YAML schema (additionalProperties: true on metadata)
+  → compile:types generates Record<TMetadata = object>
+    → GitGovRecordPayload<TMetadata> accepts the generic
+      → EmbeddedMetadataRecord wraps with header + payload
+        → GitGov*Record<TMetadata> passes through
+```
+
+### Rules for Consumers
+
+Packages that depend on `@gitgov/core` (CLI, saas-api, saas-web, agents, MCP server) MUST follow these rules:
+
+1. **Import from core, never redefine.** If `Finding` exists in core, import it. Don't create `type Finding = { ... }` locally.
+2. **Use enums, never `string`.** Write `severity: FindingSeverity`, not `severity: string`.
+3. **No `as any`, no `as unknown as`.** If you need a cast, the type is wrong — fix it or add the type to core.
+4. **No `as { ... }` inline types.** If you cast `metadata as { kind?: string }`, use `SarifExecutionMetadata` from core instead.
+5. **If a type doesn't exist in core, add it to core.** Don't invent it locally — it will drift.
 
 ### Record Symmetry
 

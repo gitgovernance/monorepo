@@ -215,3 +215,17 @@ src/
 ## License
 
 This package is licensed under the [Apache License 2.0](https://opensource.org/licenses/Apache-2.0).
+
+
+## @gitgov/core — Type System
+
+This package depends on `@gitgov/core`. All record types, audit types, factories, and adapters come from core.
+
+**Rules:**
+- Import types from `@gitgov/core` or `@gitgov/core/audit` — never redefine locally
+- Record metadata is generic: `ExecutionRecord<SarifExecutionMetadata>`, `ActorRecord<GitHubActorMetadata>`
+- Status enums (`FindingSeverity`, `WaiverStatus`, `ScanDisplayStatus`) come from core — never use bare `string`
+- If a type you need does not exist in core, add it to core — do not invent it locally
+
+See [@gitgov/core README](../../core/README.md) for the full type chain (YAML → JSON → TS → generics) and import paths.
+

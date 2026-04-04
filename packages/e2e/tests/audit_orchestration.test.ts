@@ -32,7 +32,7 @@ import { createPolicyEvaluator } from '../../core/src/policy_evaluator';
 import type {
   AuditOrchestrationResult,
 } from '../../core/src/audit_orchestrator';
-import type { IWaiverReader, ActiveWaiver } from '../../core/src/source_auditor/types';
+import type { IWaiverReader, Waiver } from '../../core/src/source_auditor/types';
 
 // ============================================================================
 // Fixture setup
@@ -188,8 +188,8 @@ function createIntegrationAgentRunner(fixtureDir: string): IAgentRunner {
       const fileLister = new FsFileLister({ cwd: fixtureDir });
 
       const noOpWaiverReader: SourceAuditor.IWaiverReader = {
-        loadActiveWaivers: async () => [],
-        hasActiveWaiver: async () => false,
+        loadWaivers: async () => [],
+        hasWaiver: async () => false,
       };
 
       const sourceAuditor = new SourceAuditor.SourceAuditorModule({
@@ -316,8 +316,8 @@ function createLabeledAgentRunner(fixtureDir: string): IAgentRunner {
       const fileLister = new FsFileLister({ cwd: fixtureDir });
 
       const noOpWaiverReader: SourceAuditor.IWaiverReader = {
-        loadActiveWaivers: async () => [],
-        hasActiveWaiver: async () => false,
+        loadWaivers: async () => [],
+        hasWaiver: async () => false,
       };
 
       const sourceAuditor = new SourceAuditor.SourceAuditorModule({
@@ -413,8 +413,8 @@ function createFailingAgentRunner(
  */
 function createNoOpWaiverReader(): IWaiverReader {
   return {
-    loadActiveWaivers: async () => [],
-    hasActiveWaiver: async () => false,
+    loadWaivers: async () => [],
+    hasWaiver: async () => false,
   };
 }
 
@@ -544,7 +544,7 @@ describe('Block G: Audit Orchestration Pipeline (CG1 to CG16)', () => {
       expect(baselineResult.findings.length).toBeGreaterThanOrEqual(1);
       const targetFinding = baselineResult.findings[0]!;
 
-      const waiver: ActiveWaiver = {
+      const waiver: Waiver = {
         fingerprint: targetFinding.fingerprint,
         ruleId: targetFinding.ruleId ?? 'UNKNOWN',
         feedback: {
@@ -564,8 +564,8 @@ describe('Block G: Audit Orchestration Pipeline (CG1 to CG16)', () => {
       };
 
       const mockWaiverReader: IWaiverReader = {
-        loadActiveWaivers: async () => [waiver],
-        hasActiveWaiver: async (fp: string) => fp === targetFinding.fingerprint,
+        loadWaivers: async () => [waiver],
+        hasWaiver: async (fp: string) => fp === targetFinding.fingerprint,
       };
 
       const orchestrator = createOrchestrator({ waiverReader: mockWaiverReader });
@@ -600,7 +600,7 @@ describe('Block G: Audit Orchestration Pipeline (CG1 to CG16)', () => {
       expect(highFinding).toBeDefined();
 
       // Waive ALL findings so nothing is active
-      const waivers: ActiveWaiver[] = baselineResult.findings.map((f) => ({
+      const waivers: Waiver[] = baselineResult.findings.map((f) => ({
         fingerprint: f.fingerprint,
         ruleId: f.ruleId ?? 'UNKNOWN',
         feedback: {
@@ -620,8 +620,8 @@ describe('Block G: Audit Orchestration Pipeline (CG1 to CG16)', () => {
       }));
 
       const mockWaiverReader: IWaiverReader = {
-        loadActiveWaivers: async () => waivers,
-        hasActiveWaiver: async (fp: string) =>
+        loadWaivers: async () => waivers,
+        hasWaiver: async (fp: string) =>
           waivers.some((w) => w.fingerprint === fp),
       };
 
@@ -668,7 +668,7 @@ describe('Block G: Audit Orchestration Pipeline (CG1 to CG16)', () => {
         taskId: '1234567890-task-e2e-baseline-for-pass',
       });
 
-      const waivers: ActiveWaiver[] = baseResult.findings.map((f) => ({
+      const waivers: Waiver[] = baseResult.findings.map((f) => ({
         fingerprint: f.fingerprint,
         ruleId: f.ruleId ?? 'UNKNOWN',
         feedback: {
@@ -688,8 +688,8 @@ describe('Block G: Audit Orchestration Pipeline (CG1 to CG16)', () => {
       }));
 
       const mockWaiverReader: IWaiverReader = {
-        loadActiveWaivers: async () => waivers,
-        hasActiveWaiver: async (fp: string) =>
+        loadWaivers: async () => waivers,
+        hasWaiver: async (fp: string) =>
           waivers.some((w) => w.fingerprint === fp),
       };
 

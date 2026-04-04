@@ -78,11 +78,14 @@
     },
     "metadata": {
       "type": "object",
-      "description": "An optional field for additional, non-canonical metadata.",
+      "additionalProperties": true,
+      "description": "Optional structured data for machine consumption.\nCommon use cases: GitHub account linkage (github.login, github.id),\nteam assignment, deployment context, external identity references.\n",
       "examples": [
         {
-          "version": "1.2.0",
-          "source": "https://github.com/..."
+          "github": {
+            "login": "octocat",
+            "id": 1
+          }
         },
         {
           "team": "frontend"

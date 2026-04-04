@@ -28,7 +28,7 @@ export type {
   AuditOptions,
   AuditResult,
   AuditSummary,
-  WaiverStatus,
+  WaiverApplicationCounts,
   WaiverMetadata,
   Waiver,
   CreateWaiverOptions,

@@ -84,8 +84,8 @@ async function runScan(fixtureDir: string): Promise<SarifLog> {
   });
 
   const noOpWaiverReader: SourceAuditor.IWaiverReader = {
-    loadActiveWaivers: async () => [],
-    hasActiveWaiver: async () => false,
+    loadWaivers: async () => [],
+    hasWaiver: async () => false,
   };
 
   const fileLister = new FsFileLister({ cwd: fixtureDir });
@@ -144,8 +144,8 @@ async function runScanWithRedactionLevel(
   });
 
   const noOpWaiverReader: SourceAuditor.IWaiverReader = {
-    loadActiveWaivers: async () => [],
-    hasActiveWaiver: async () => false,
+    loadWaivers: async () => [],
+    hasWaiver: async () => false,
   };
 
   const fileLister = new FsFileLister({ cwd: fixtureDir });
