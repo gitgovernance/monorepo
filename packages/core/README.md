@@ -241,6 +241,23 @@ Every record type has 4 parallel artifacts:
 
 The 6 records: **Actor, Agent, Task, Cycle, Execution, Feedback**
 
+### Factories and ID Generators
+
+Always use factories to create records and generators for IDs — never construct them manually:
+
+```typescript
+import { createExecutionRecord, createTaskRecord, createFeedbackRecord } from '@gitgov/core';
+import { generateExecutionId, generateTaskId, generateFeedbackId } from '@gitgov/core';
+
+// Factory: creates record with validated ID, defaults, and schema validation
+const exec = createExecutionRecord({ taskId, type: 'analysis', title: 'scan', result: '...' });
+
+// Generator: when you only need the ID (e.g., for references)
+const execId = generateExecutionId('scan', Math.floor(Date.now() / 1000));
+```
+
+IDs follow schema patterns (e.g., `^\d{10}-exec-[a-z0-9-]{1,50}$`). Hand-crafted IDs fail validators and stores at runtime.
+
 ## Adapters
 
 Adapters are orchestrators that compose modules. All receive dependencies via constructor injection.
@@ -252,29 +269,35 @@ Adapters are orchestrators that compose modules. All receive dependencies via co
 | `BacklogAdapter` | Task and cycle lifecycle, workflow validation |
 | `ExecutionAdapter` | Execution audit log tracking |
 | `FeedbackAdapter` | Structured feedback and blocking resolution |
-| `MetricsAdapter` | System status and productivity metrics |
-| `IndexerAdapter` | Local cache generation and integrity checks |
 | `WorkflowAdapter` | State transitions with signatures and custom rules |
 | `AgentAdapter` | Agent lifecycle management |
+
+> RecordMetrics (metrics) and RecordProjector (indexing) are modules, not adapters.
 
 ## Modules
 
 | Module | Responsibility |
 |--------|----------------|
 | `record_types/` | TypeScript types per record (generated from schemas) |
-| `record_factories/` | Factories with defaults for creating records |
+| `record_factories/` | Factories with defaults for creating records (8 factories) |
 | `record_validations/` | Business validators (above schema) |
 | `record_schemas/` | JSON Schemas + schema cache + errors |
 | `record_store/` | `RecordStore<V, R, O>` interface (impl in fs/memory/github) |
-| `record_projection/` | `IRecordProjection` interface + RecordProjector engine (drivers: fs/memory/prisma) |
+| `record_projection/` | RecordProjector engine — generates IndexData, persists to sinks (FS, Prisma, Memory) |
 | `record_metrics/` | RecordMetrics calculation engine (system status, productivity, collaboration) |
 | `config_store/` | Storage for project config.json (impl in fs/github) |
 | `config_manager/` | Typed access to config.json (versioned in git) |
 | `session_store/` | Storage for .session.json |
 | `session_manager/` | Typed access to .session.json (ephemeral, not versioned) |
-| `sync_state/` | Push/pull/resolve synchronization (FsWorktreeSyncStateModule, GithubSyncStateModule, GithubWebhookHandler, PullScheduler) |
-| `record_projection/` | RecordProjector engine — generates IndexData, persists to sinks (FS, Prisma, Memory) |
-| `sarif/` | SarifBuilder — generates SARIF 2.1.0 with content-based fingerprints, suppressions, validation |
+| `sync_state/` | Push/pull/resolve synchronization (FsWorktree, GitHub, Webhook, PullScheduler) |
+| `audit/` | Canonical Audit product types: Finding, Waiver, Scan, PolicyDecision, metadata types, status enums |
+| `audit_orchestrator/` | Multi-agent audit orchestration, SARIF consolidation, waiver application |
+| `policy_evaluator/` | PolicyEvaluator — pass/block by severity threshold, category block, OPA rules |
+| `sarif/` | SarifBuilder — SARIF 2.1.0 with content-based fingerprints, suppressions, validation |
+| `finding_detector/` | Finding detection (regex, heuristic, LLM) |
+| `source_auditor/` | Cross-system audit (code, Jira, gitgov), waiver reader/writer |
+| `redaction/` | FindingRedactor — L1/L2 PII redaction in SARIF |
+| `hook_handler/` | Hook event handling for agent triggers |
 | `git/` | `IGitModule` interface + local/memory implementations |
 | `crypto/` | Checksums, digital signatures, verification |
 | `key_provider/` | Key storage abstraction (fs/memory) |
@@ -284,10 +307,8 @@ Adapters are orchestrators that compose modules. All receive dependencies via co
 | `agent_runner/` | Agent execution (interface + loader) |
 | `watcher_state/` | File change tracking in .gitgov/ |
 | `project_initializer/` | GitGovernance project setup |
-| `finding_detector/` | Finding detection (regex, heuristic, LLM) |
-| `source_auditor/` | Cross-system audit (code, Jira, gitgov) |
-| `sarif/` | SARIF 2.1.0 builder, hash, validation (42 EARS) |
-| `audit_orchestrator/` | Multi-agent audit orchestration, SARIF consolidation, waiver application (10 EARS) |
+| `logger/` | Logging centralizado |
+| `utils/` | ID generation/parsing, array utils, signature utils |
 | `policy_evaluator/` | Pass/block evaluation by severity threshold (stub — Epic 5 formalizes) |
 | `diagram_generator/` | Mermaid diagram generation |
 | `logger/` | Centralized logging |

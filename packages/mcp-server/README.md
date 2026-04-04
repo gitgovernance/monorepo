@@ -128,14 +128,12 @@ gitgov-mcp --port 3100
 | `gitgov_execution_list` | List executions, optionally filtered by task and type |
 | `gitgov_execution_show` | Show full details of an execution record |
 
-### Identity (4)
+### Identity (2)
 
 | Tool | Description |
 |---|---|
-| `gitgov_actor_new` | Register a new actor (human or agent) |
 | `gitgov_actor_list` | List all actors, optionally filtered by type |
 | `gitgov_actor_show` | Show detailed actor information by ID |
-| `gitgov_agent_new` | Create an AgentRecord for an actor of type agent |
 
 ### Workflow (1)
 
@@ -143,7 +141,13 @@ gitgov-mcp --port 3100
 |---|---|
 | `gitgov_workflow_transitions` | Get available task status transitions from a given status |
 
-### Audit (4)
+### Agent (1)
+
+| Tool | Description |
+|---|---|
+| `gitgov_agent_new` | Create an AgentRecord for an actor of type agent |
+
+### Audit (5)
 
 | Tool | Description |
 |---|---|
@@ -151,6 +155,7 @@ gitgov-mcp --port 3100
 | `gitgov_audit_waive` | Waive an audit finding |
 | `gitgov_audit_waive_list` | List active waivers |
 | `gitgov_agent_run` | Execute a registered agent |
+| `gitgov_actor_new` | Register a new actor (human or agent) |
 
 ## Prompts (3)
 
@@ -170,19 +175,32 @@ The server exposes `gitgov://` URIs for all records:
 
 MCP clients can browse and read these via the standard resources protocol.
 
+## Scripts
+
+| Script | Descripcion |
+|---|---|
+| `pnpm dev` | Run locally con tsx (stdio transport) |
+| `pnpm build` | Build con tsup (ESM bundle) |
+| `pnpm test` | Vitest run (199 tests, 3 levels) |
+| `pnpm test:watch` | Vitest watch mode |
+| `pnpm typecheck` | tsc --noEmit |
+
+## Environment
+
+El MCP server no requiere env vars para uso basico (lee `.gitgov/` del filesystem).
+
+`process.env` se usa internamente en dos contextos:
+- DI container: pasado a child processes (git commands) cuando ejecuta operaciones Git
+- E2E tests: pasado a spawnMcpServer para heredar el entorno de test
+
+No hay env vars que el usuario necesite configurar.
+
 ## Development
 
 ```bash
-# Run locally with tsx
 pnpm --filter @gitgov/mcp-server dev
-
-# Run tests (199 tests across 3 levels)
 pnpm --filter @gitgov/mcp-server test
-
-# Type check
 pnpm --filter @gitgov/mcp-server typecheck
-
-# Build
 pnpm --filter @gitgov/mcp-server build
 ```
 
@@ -215,6 +233,10 @@ src/
 ## License
 
 This package is licensed under the [Apache License 2.0](https://opensource.org/licenses/Apache-2.0).
+
+> For development rules, conventions, and architecture see the [AGENTS.md](../../packages/blueprints/03_products/mcp_server/AGENTS.md).
+
+**Last updated:** 2026-04-05 — Tool categorization fixed (Identity 4→2, Agent 1 added, Audit 4→5). Scripts table added. Env section added.
 
 
 ## @gitgov/core — Type System
