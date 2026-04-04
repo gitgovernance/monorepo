@@ -1,5 +1,5 @@
 import { DependencyInjectionService } from '../../services/dependency-injection';
-import type { TaskRecord, FeedbackRecord, CycleRecord, ActorRecord, ProductivityMetrics, CollaborationMetrics } from "@gitgov/core";
+import type { TaskRecord, CycleRecord, ActorRecord, ProductivityMetrics, CollaborationMetrics, GitGovFeedbackRecord } from "@gitgov/core";
 
 /**
  * Status Command Options interface
@@ -21,7 +21,7 @@ export interface StatusCommandOptions {
  */
 interface PersonalWorkSummary {
   assignedTasks: TaskRecord[];
-  pendingFeedback: FeedbackRecord[];
+  pendingFeedback: GitGovFeedbackRecord[];
   activeCycles: CycleRecord[];
   suggestedActions: string[];
 }
@@ -236,12 +236,12 @@ export class StatusCommand {
     }
 
     // Get pending feedback for actor (graceful degradation)
-    let pendingFeedback: FeedbackRecord[] = [];
+    let pendingFeedback: GitGovFeedbackRecord[] = [];
     try {
       const allFeedback = await feedbackAdapter.getAllFeedback();
       pendingFeedback = allFeedback.filter(feedback =>
-        feedback.status === 'open' &&
-        feedback.assignee === actorId
+        feedback.payload.status === 'open' &&
+        feedback.payload.assignee === actorId
       );
     } catch (error) {
       console.warn('⚠️ Could not load feedback:', error instanceof Error ? error.message : 'Unknown error');
@@ -351,11 +351,11 @@ export class StatusCommand {
   /**
    * Generates suggested actions based on work state
    */
-  private generateSuggestedActions(assignedTasks: TaskRecord[], pendingFeedback: FeedbackRecord[]): string[] {
+  private generateSuggestedActions(assignedTasks: TaskRecord[], pendingFeedback: GitGovFeedbackRecord[]): string[] {
     const suggestions: string[] = [];
 
     // Blocking feedback suggestions
-    const blockingFeedback = pendingFeedback.filter(f => f.type === 'blocking');
+    const blockingFeedback = pendingFeedback.filter(f => f.payload.type === 'blocking');
     if (blockingFeedback.length > 0) {
       suggestions.push(`Review ${blockingFeedback.length} blocking feedback(s) requiring your attention`);
     }
@@ -451,8 +451,8 @@ export class StatusCommand {
     if (personalWork.pendingFeedback.length > 0) {
       console.log(`❗️ Pending Feedback (${personalWork.pendingFeedback.length})`);
       personalWork.pendingFeedback.forEach(feedback => {
-        const typeIcon = feedback.type === 'blocking' ? '🔴' : feedback.type === 'question' ? '🟡' : '🔵';
-        console.log(`  ${typeIcon} [${feedback.type}] ${feedback.id} - ${feedback.content}`);
+        const typeIcon = feedback.payload.type === 'blocking' ? '🔴' : feedback.payload.type === 'question' ? '🟡' : '🔵';
+        console.log(`  ${typeIcon} [${feedback.payload.type}] ${feedback.payload.id} - ${feedback.payload.content}`);
       });
       console.log('');
     }

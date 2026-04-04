@@ -60,6 +60,7 @@ Commands:
   actor                  Manage project actors (identity)
   sync                   State synchronization (push/pull/resolve/audit)
   hook                   Process Claude Code hook events (passive governance)
+  login [options]        Authenticate to GitGovernance (OAuth)
   context [options]      Query working context for agents and automation
   push [options]         Alias for "gitgov sync push"
   pull [options]         Alias for "gitgov sync pull"
@@ -145,7 +146,7 @@ gitgov sync resolve --reason "..."      # Resolve conflicts
 ```mermaid
 graph TD
     subgraph "@gitgov/cli"
-        Commands["Commands (16)"]
+        Commands["Commands (17)"]
         Base["BaseCommand / SimpleCommand"]
         DI["DependencyInjectionService"]
         TUI["Ink/React TUI"]
@@ -156,7 +157,7 @@ graph TD
     end
 
     subgraph "@gitgov/core"
-        Adapters["Adapters (10)"]
+        Adapters["Adapters (7)"]
         Stores["Stores"]
     end
 
@@ -225,3 +226,21 @@ This package is licensed under the [Apache License 2.0](https://opensource.org/l
 ---
 
 **Built with ❤️ by the GitGovernance team.**
+
+> For development rules, conventions, and architecture see the [AGENTS.md](../../packages/blueprints/03_products/cli/AGENTS.md).
+
+**Last updated:** 2026-04-05 — 17 commands (login added). Adapters count fixed (10→7).
+
+
+## @gitgov/core — Type System
+
+This package depends on `@gitgov/core`. All record types, audit types, factories, and adapters come from core.
+
+**Rules:**
+- Import types from `@gitgov/core` or `@gitgov/core/audit` — never redefine locally
+- Record metadata is generic: `ExecutionRecord<SarifExecutionMetadata>`, `ActorRecord<GitHubActorMetadata>`
+- Status enums (`FindingSeverity`, `WaiverStatus`, `ScanDisplayStatus`) come from core — never use bare `string`
+- If a type you need does not exist in core, add it to core — do not invent it locally
+
+See [@gitgov/core README](../../core/README.md) for the full type chain (YAML → JSON → TS → generics) and import paths.
+

@@ -11,6 +11,19 @@ export type {
   FindingCategory,
   FindingSeverity,
   DetectorName,
+  // Status enums
+  WaiverStatus,
+  FindingStatus,
+  ScanDisplayStatus,
+  PolicyStatus,
+  ScanScope,
+  // Lifecycle events
+  FindingHistoryEvent,
+  WaiverLifecycleEvent,
+  // Metadata types (for record generics)
+  SarifExecutionMetadata,
+  PolicyExecutionMetadata,
+  GitHubActorMetadata,
   // Finding
   Finding,
   // Waiver

@@ -54,6 +54,94 @@ export type FindingSeverity = "critical" | "high" | "medium" | "low";
  */
 export type DetectorName = "regex" | "heuristic" | "llm";
 
+// ─── Status enums (product-level) ────────────────────────────────────────────
+
+/**
+ * Waiver lifecycle status.
+ */
+export type WaiverStatus = "active" | "expired" | "revoked";
+
+/**
+ * Derived finding status (not stored in DB — computed from tracking fields).
+ */
+export type FindingStatus = "new" | "in_progress" | "waived" | "resolved";
+
+/**
+ * Scan display status (derived from PolicyDecision).
+ */
+export type ScanDisplayStatus = "success" | "partial" | "blocked";
+
+/**
+ * Scan scope — what files to audit.
+ */
+export type ScanScope = "full" | "diff";
+
+// ─── Lifecycle events ─────────────────────────────────────────────────────────
+
+/**
+ * A single event in a finding's detection timeline.
+ * Used to reconstruct the history of a finding across scans and waivers.
+ *
+ * Convention: `timestamp` is epoch number (consistent with BaseEvent in event_bus).
+ * Type names follow `{domain}.{action}` pattern.
+ */
+export type FindingHistoryEvent =
+  | { type: "finding.detected"; timestamp: number; scanNumber: number; branch: string; commitSha: string; commitAuthor?: string }
+  | { type: "finding.waived"; timestamp: number; approvedBy: string; justification: string }
+  | { type: "finding.waiver_revoked"; timestamp: number }
+  | { type: "finding.task_created"; timestamp: number; taskTitle: string; taskRef: string }
+  | { type: "finding.first_introduced"; timestamp: number; commitSha: string; branch: string; commitAuthor?: string; commitMessage?: string };
+
+/**
+ * A single event in a waiver's lifecycle timeline.
+ *
+ * Convention: `timestamp` is epoch number. Type names follow `{domain}.{action}` pattern.
+ */
+export type WaiverLifecycleEvent =
+  | { type: "waiver.created"; timestamp: number }
+  | { type: "waiver.approved"; timestamp: number; approvedBy: string }
+  | { type: "waiver.revoked"; timestamp: number; revokedBy?: string }
+  | { type: "waiver.expired"; timestamp: number };
+
+/**
+ * Policy decision outcome.
+ */
+export type PolicyStatus = "pass" | "block";
+
+// ─── Metadata types (for ExecutionRecord<T>, ActorRecord<T>) ──────────────────
+
+/**
+ * Metadata shape for SARIF execution records.
+ * Used as: ExecutionRecord<SarifExecutionMetadata>
+ */
+export type SarifExecutionMetadata = {
+  kind: "sarif";
+  version: "2.1.0";
+  data: import("../sarif/sarif.types").SarifLog;
+};
+
+/**
+ * Metadata shape for policy decision execution records.
+ * Used as: ExecutionRecord<PolicyExecutionMetadata>
+ */
+export type PolicyExecutionMetadata = {
+  kind: "policy-decision";
+  version: "1.0.0";
+  data: PolicyDecision;
+};
+
+/**
+ * Metadata shape for actors linked to a GitHub account.
+ * Used as: ActorRecord<GitHubActorMetadata>
+ * Enables: actorId → actor.metadata.github.login → User lookup
+ */
+export type GitHubActorMetadata = {
+  github: {
+    login: string;
+    id: number;
+  };
+};
+
 // ─── Finding ──────────────────────────────────────────────────────────────────
 
 /**

@@ -7,6 +7,7 @@ export default defineConfig({
     'src/memory.ts',  // @gitgov/core/memory - all memory implementations
     'src/github.ts',  // @gitgov/core/github - GitHub API implementations
     'src/prisma.ts',  // @gitgov/core/prisma - Prisma-compatible DB implementations
+    'src/audit/index.ts', // @gitgov/core/audit - canonical Audit product types
   ],
   format: ['esm'],
   dts: true,

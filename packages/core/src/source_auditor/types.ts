@@ -149,9 +149,9 @@ export type AuditSummary = {
 }
 
 /**
- * Waiver application status.
+ * Waiver application counts — how many findings were acknowledged vs new after applying waivers.
  */
-export type WaiverStatus = {
+export type WaiverApplicationCounts = {
   /** Findings with active waiver (excluded from result) */
   acknowledged: number;
   /** New findings without waiver */
@@ -174,8 +174,8 @@ export type AuditResult = {
   duration: number;
   /** Detectors used in this scan */
   detectors: DetectorName[];
-  /** Waiver status */
-  waivers: WaiverStatus;
+  /** Waiver application counts */
+  waivers: WaiverApplicationCounts;
 }
 
 /**

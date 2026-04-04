@@ -10,13 +10,13 @@
 import { ReviewAdvisorAgent } from './src/agent';
 import type { ClaudeAnalyzer } from './src/agent';
 import type { ReviewAdvisorInput, ReviewOpinion } from './src/types';
-import type { AuditOrchestrator } from '@gitgov/core';
+import type { Finding, PolicyDecision } from '@gitgov/core';
 
 // ============================================================================
 // Test helpers
 // ============================================================================
 
-function makeFinding(overrides: Partial<AuditOrchestrator.ConsolidatedFinding> = {}): AuditOrchestrator.ConsolidatedFinding {
+function makeFinding(overrides: Partial<Finding> = {}): Finding {
   return {
     fingerprint: 'fp-test-001',
     ruleId: 'SEC-001',
@@ -31,7 +31,7 @@ function makeFinding(overrides: Partial<AuditOrchestrator.ConsolidatedFinding> =
   };
 }
 
-function makePolicyDecision(decision: 'pass' | 'block' = 'block'): AuditOrchestrator.PolicyDecision {
+function makePolicyDecision(decision: 'pass' | 'block' = 'block'): PolicyDecision {
   return {
     decision,
     reason: decision === 'block' ? 'Critical findings present' : 'No blocking findings',

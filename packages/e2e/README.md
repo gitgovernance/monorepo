@@ -2,6 +2,19 @@
 
 Cross-package E2E tests for the GitGovernance monorepo. Tests run against real infrastructure: CLI binary (`node gitgov.mjs`), PostgreSQL database, GitHub API, and filesystem.
 
+## Core Dependency
+
+This package depends on `@gitgov/core` for all record types, audit types, and adapters. Never redefine types that exist in core — import them. See [core README](../core/README.md#rules-for-consumers) for the 5 rules.
+
+```typescript
+// Correct
+import type { Finding, Waiver, PolicyDecision } from '@gitgov/core';
+import type { GitGovExecutionRecord, GitGovFeedbackRecord } from '@gitgov/core';
+
+// Wrong — never redefine
+type Finding = { severity: string; ... };
+```
+
 ## Prerequisites
 
 ```bash

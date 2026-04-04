@@ -204,7 +204,10 @@ describe('StatusCommand - Complete Unit Tests', () => {
     mockBacklogAdapter.getTasksAssignedToActor.mockResolvedValue([sampleTask]);
     mockBacklogAdapter.getAllTasks.mockResolvedValue([sampleTask]);
     mockBacklogAdapter.getAllCycles.mockResolvedValue([sampleCycle]);
-    mockFeedbackAdapter.getAllFeedback.mockResolvedValue([sampleFeedback]);
+    mockFeedbackAdapter.getAllFeedback.mockResolvedValue([{
+      header: { version: '1.0', type: 'feedback', payloadChecksum: 'sha256:mock', signatures: [] },
+      payload: sampleFeedback,
+    }]);
     mockRecordMetrics.getSystemStatus.mockResolvedValue(sampleSystemStatus);
     mockRecordMetrics.getProductivityMetrics.mockResolvedValue(sampleProductivityMetrics);
     mockRecordMetrics.getCollaborationMetrics.mockResolvedValue(sampleCollaborationMetrics);

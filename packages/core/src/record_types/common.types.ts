@@ -47,13 +47,13 @@ export const TYPE_TO_DIR: Record<GitGovRecordType, string> =
 /**
  * The canonical payload for any GitGovernance record.
  */
-export type GitGovRecordPayload =
-  | ActorRecord
-  | AgentRecord
-  | CycleRecord
-  | TaskRecord
-  | ExecutionRecord
-  | FeedbackRecord;
+export type GitGovRecordPayload<TMetadata = object> =
+  | ActorRecord<TMetadata>
+  | AgentRecord<TMetadata>
+  | CycleRecord<TMetadata>
+  | TaskRecord<TMetadata>
+  | ExecutionRecord<TMetadata>
+  | FeedbackRecord<TMetadata>;
 
 /**
  * The canonical type for any record in GitGovernance, wrapping a payload with metadata.
@@ -68,12 +68,12 @@ export type GitGovRecord = EmbeddedMetadataRecord<GitGovRecordPayload>;
  * const taskRecord: GitGovTaskRecord = await taskStore.read(taskId);
  * const authorId = taskRecord.header.signatures[0].keyId;
  */
-export type GitGovTaskRecord = EmbeddedMetadataRecord<TaskRecord>;
-export type GitGovCycleRecord = EmbeddedMetadataRecord<CycleRecord>;
-export type GitGovFeedbackRecord = EmbeddedMetadataRecord<FeedbackRecord>;
-export type GitGovExecutionRecord = EmbeddedMetadataRecord<ExecutionRecord>;
-export type GitGovActorRecord = EmbeddedMetadataRecord<ActorRecord>;
-export type GitGovAgentRecord = EmbeddedMetadataRecord<AgentRecord>;
+export type GitGovTaskRecord<TMetadata = object> = EmbeddedMetadataRecord<TaskRecord<TMetadata>>;
+export type GitGovCycleRecord<TMetadata = object> = EmbeddedMetadataRecord<CycleRecord<TMetadata>>;
+export type GitGovFeedbackRecord<TMetadata = object> = EmbeddedMetadataRecord<FeedbackRecord<TMetadata>>;
+export type GitGovExecutionRecord<TMetadata = object> = EmbeddedMetadataRecord<ExecutionRecord<TMetadata>>;
+export type GitGovActorRecord<TMetadata = object> = EmbeddedMetadataRecord<ActorRecord<TMetadata>>;
+export type GitGovAgentRecord<TMetadata = object> = EmbeddedMetadataRecord<AgentRecord<TMetadata>>;
 
 // Payloads for creating new records
 export type ActorPayload = Partial<ActorRecord>;
