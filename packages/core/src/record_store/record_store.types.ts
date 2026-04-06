@@ -20,10 +20,10 @@ import type {
  * The module iterates over Object.entries(stores) and skips undefined.
  */
 export type RecordStores = {
-  actors?: RecordStore<GitGovActorRecord>;
-  agents?: RecordStore<GitGovAgentRecord>;
-  tasks?: RecordStore<GitGovTaskRecord>;
-  cycles?: RecordStore<GitGovCycleRecord>;
-  executions?: RecordStore<GitGovExecutionRecord>;
-  feedbacks?: RecordStore<GitGovFeedbackRecord>;
+  actors?: RecordStore<GitGovActorRecord, any, any>;
+  agents?: RecordStore<GitGovAgentRecord, any, any>;
+  tasks?: RecordStore<GitGovTaskRecord, any, any>;
+  cycles?: RecordStore<GitGovCycleRecord, any, any>;
+  executions?: RecordStore<GitGovExecutionRecord, any, any>;
+  feedbacks?: RecordStore<GitGovFeedbackRecord, any, any>;
 }

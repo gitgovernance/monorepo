@@ -14,22 +14,32 @@ import type {
 
 export class PrismaRecordProjection implements IRecordProjection {
   private readonly client: ProjectionClient;
-  private readonly repoId: string;
-  private readonly projectionType: string;
+  private readonly tenantFields: Record<string, string>;
 
   constructor(options: PrismaRecordProjectionOptions) {
     this.client = options.client;
-    this.repoId = options.repoId;
-    this.projectionType = options.projectionType ?? 'index';
+    this.tenantFields = options.tenantFields ?? {};
+  }
+
+  private buildWhere(): Record<string, string> {
+    return { ...this.tenantFields };
+  }
+
+  private buildMetaWhere(): Record<string, unknown> {
+    const keys = Object.keys(this.tenantFields);
+    if (keys.length > 0) {
+      return { [keys.join('_')]: { ...this.tenantFields } };
+    }
+    return {};
   }
 
   async persist(data: IndexData, context: ProjectionContext): Promise<void> {
-    const where = { repoId: this.repoId, projectionType: this.projectionType };
+    const where = this.buildWhere();
+    const tenantFields = this.tenantFields;
 
     const taskRows = data.enrichedTasks.map((t) => this.buildTaskRow(t, data));
     const cycleRows = data.cycles.map((c) => ({
-      repoId: this.repoId,
-      projectionType: this.projectionType,
+      ...tenantFields,
       recordId: c.payload.id,
       title: c.payload.title,
       status: c.payload.status,
@@ -37,69 +47,65 @@ export class PrismaRecordProjection implements IRecordProjection {
       childCycleIds: c.payload.childCycleIds ?? [],
       tags: c.payload.tags ?? [],
       notes: c.payload.notes ?? null,
-      metadataJson: c.payload.metadata ? toJson(c.payload.metadata) : null,
-      headerJson: toJson(c.header),
+      metadata: c.payload.metadata ? toJson(c.payload.metadata) : null,
+      header: toJson(c.header),
     }));
     const actorRows = data.actors.map((a) => ({
-      repoId: this.repoId,
-      projectionType: this.projectionType,
+      ...tenantFields,
       recordId: a.payload.id,
-      actorType: a.payload.type,
+      type: a.payload.type,
       displayName: a.payload.displayName,
       publicKey: a.payload.publicKey,
       roles: [...a.payload.roles],
       status: a.payload.status ?? null,
       supersededBy: a.payload.supersededBy ?? null,
-      headerJson: toJson(a.header),
+      metadata: a.payload.metadata ? toJson(a.payload.metadata) : null,
+      header: toJson(a.header),
     }));
     const feedbackRows = data.feedback.map((f) => ({
-      repoId: this.repoId,
-      projectionType: this.projectionType,
+      ...tenantFields,
       recordId: f.payload.id,
       entityType: f.payload.entityType,
       entityId: f.payload.entityId,
-      feedbackType: f.payload.type,
+      type: f.payload.type,
       status: f.payload.status,
       content: f.payload.content,
       assignee: f.payload.assignee ?? null,
       resolvesFeedbackId: f.payload.resolvesFeedbackId ?? null,
-      metadataJson: f.payload.metadata ? toJson(f.payload.metadata) : null,
-      headerJson: toJson(f.header),
+      metadata: f.payload.metadata ? toJson(f.payload.metadata) : null,
+      header: toJson(f.header),
     }));
     const activityRows = data.activityHistory.map((ev) => ({
-      repoId: this.repoId,
-      projectionType: this.projectionType,
+      ...tenantFields,
       timestamp: ev.timestamp,
       eventType: ev.type,
       entityId: ev.entityId,
       entityTitle: ev.entityTitle,
       actorId: ev.actorId ?? null,
-      metadataJson: ev.metadata ? toJson(ev.metadata) : null,
+      metadata: ev.metadata ? toJson(ev.metadata) : null,
     }));
     const executionRows = data.executions.map((e) => ({
-      repoId: this.repoId,
-      projectionType: this.projectionType,
+      ...tenantFields,
       recordId: e.payload.id,
       taskId: e.payload.taskId,
-      executionType: e.payload.type,
+      type: e.payload.type,
       title: e.payload.title,
       result: e.payload.result,
       notes: e.payload.notes ?? null,
-      metadataKind: null as string | null,
-      metadataVersion: null as string | null,
-      metadataJson: e.payload.metadata ? toJson(e.payload.metadata) : null,
+      metadata: e.payload.metadata ? toJson(e.payload.metadata) : null,
       references: e.payload.references ?? [],
-      headerJson: toJson(e.header),
+      header: toJson(e.header),
     }));
     const agentRows = data.agents.map((a) => ({
-      repoId: this.repoId,
-      projectionType: this.projectionType,
+      ...tenantFields,
       recordId: a.payload.id,
-      engineType: a.payload.engine.type,
+      engine: toJson(a.payload.engine),
       status: a.payload.status ?? null,
-      triggersJson: a.payload.triggers ? toJson(a.payload.triggers) : null,
-      metadataJson: a.payload.metadata ? toJson(a.payload.metadata) : null,
-      headerJson: toJson(a.header),
+      triggers: a.payload.triggers ? toJson(a.payload.triggers) : null,
+      metadata: a.payload.metadata ? toJson(a.payload.metadata) : null,
+      knowledgeDependencies: a.payload.knowledge_dependencies ? toJson(a.payload.knowledge_dependencies) : null,
+      promptEngineRequirements: a.payload.prompt_engine_requirements ? toJson(a.payload.prompt_engine_requirements) : null,
+      header: toJson(a.header),
     }));
 
     const ops: PromiseLike<unknown>[] = [
@@ -110,30 +116,25 @@ export class PrismaRecordProjection implements IRecordProjection {
       this.client.gitgovActivity.deleteMany({ where }),
       this.client.gitgovExecution.deleteMany({ where }),
       this.client.gitgovAgent.deleteMany({ where }),
-      this.client.gitgovMeta.upsert({
-        where: { repoId_projectionType: where },
-        create: {
-          repoId: this.repoId,
-          projectionType: this.projectionType,
-          lastCommitHash: context.lastCommitHash ?? null,
-          generatedAt: data.metadata.generatedAt,
-          integrityStatus: data.metadata.integrityStatus,
-          recordCountsJson: toJson(data.metadata.recordCounts),
-          generationTime: data.metadata.generationTime,
-          derivedStatesJson: toJson(data.derivedStates),
-          metricsJson: toJson(data.metrics),
-        },
-        update: {
-          lastCommitHash: context.lastCommitHash ?? null,
-          generatedAt: data.metadata.generatedAt,
-          integrityStatus: data.metadata.integrityStatus,
-          recordCountsJson: toJson(data.metadata.recordCounts),
-          generationTime: data.metadata.generationTime,
-          derivedStatesJson: toJson(data.derivedStates),
-          metricsJson: toJson(data.metrics),
-        },
-      }),
+      this.client.gitgovWorkflow.deleteMany({ where }),
     ];
+
+    const metaData = {
+      ...tenantFields,
+      lastCommitHash: context.lastCommitHash ?? null,
+      generatedAt: data.metadata.generatedAt,
+      integrityStatus: data.metadata.integrityStatus,
+      recordCountsJson: toJson(data.metadata.recordCounts),
+      generationTime: data.metadata.generationTime,
+      derivedStatesJson: toJson(data.derivedStates),
+      metricsJson: toJson(data.metrics),
+    };
+
+    const metaWhere = this.buildMetaWhere();
+    // In single-tenant (no tenantFields), meta was already deleted above.
+    // Use upsert with empty where — findUnique returns null after delete, so it creates.
+    // In multi-tenant, upsert with composite key as before.
+    ops.push(this.client.gitgovMeta.upsert({ where: metaWhere, create: metaData, update: metaData }));
 
     if (taskRows.length > 0) {
       ops.push(this.client.gitgovTask.createMany({ data: taskRows }));
@@ -161,18 +162,14 @@ export class PrismaRecordProjection implements IRecordProjection {
   }
 
   async read(_context: ProjectionContext): Promise<IndexData | null> {
-    const where = {
-      repoId_projectionType: {
-        repoId: this.repoId,
-        projectionType: this.projectionType,
-      },
-    };
-
-    const meta = await this.client.gitgovMeta.findUnique({ where });
+    const metaWhere = this.buildMetaWhere();
+    const meta = Object.keys(metaWhere).length > 0
+      ? await this.client.gitgovMeta.findUnique({ where: metaWhere })
+      : (this.client.gitgovMeta.findFirst ? await this.client.gitgovMeta.findFirst({}) : null);
     if (!meta || !('generatedAt' in meta)) return null;
 
-    const whereMany = { repoId: this.repoId, projectionType: this.projectionType };
-    const [taskRows, cycleRows, actorRows, feedbackRows, activityRows, executionRows, agentRows] = await Promise.all([
+    const whereMany = this.buildWhere();
+    const [taskRows, cycleRows, actorRows, feedbackRows, activityRows, executionRows, agentRows, /* workflowRows */] = await Promise.all([
       this.client.gitgovTask.findMany({ where: whereMany }),
       this.client.gitgovCycle.findMany({ where: whereMany }),
       this.client.gitgovActor.findMany({ where: whereMany }),
@@ -180,26 +177,22 @@ export class PrismaRecordProjection implements IRecordProjection {
       this.client.gitgovActivity.findMany({ where: whereMany }),
       this.client.gitgovExecution.findMany({ where: whereMany }),
       this.client.gitgovAgent.findMany({ where: whereMany }),
+      this.client.gitgovWorkflow.findMany({ where: whereMany }),
     ]);
 
     return this.reconstructIndexData(meta, taskRows, cycleRows, actorRows, feedbackRows, activityRows, executionRows, agentRows);
   }
 
   async exists(_context: ProjectionContext): Promise<boolean> {
-    const row = await this.client.gitgovMeta.findUnique({
-      where: {
-        repoId_projectionType: {
-          repoId: this.repoId,
-          projectionType: this.projectionType,
-        },
-      },
-      select: { id: true },
-    });
+    const metaWhere = this.buildMetaWhere();
+    const row = Object.keys(metaWhere).length > 0
+      ? await this.client.gitgovMeta.findUnique({ where: metaWhere, select: { id: true } })
+      : (this.client.gitgovMeta.findFirst ? await this.client.gitgovMeta.findFirst({ select: { id: true } }) : null);
     return row !== null;
   }
 
   async clear(_context: ProjectionContext): Promise<void> {
-    const where = { repoId: this.repoId, projectionType: this.projectionType };
+    const where = this.buildWhere();
     await this.client.$transaction([
       this.client.gitgovTask.deleteMany({ where }),
       this.client.gitgovCycle.deleteMany({ where }),
@@ -208,6 +201,7 @@ export class PrismaRecordProjection implements IRecordProjection {
       this.client.gitgovActivity.deleteMany({ where }),
       this.client.gitgovExecution.deleteMany({ where }),
       this.client.gitgovAgent.deleteMany({ where }),
+      this.client.gitgovWorkflow.deleteMany({ where }),
       this.client.gitgovMeta.deleteMany({ where }),
     ]);
   }
@@ -221,8 +215,7 @@ export class PrismaRecordProjection implements IRecordProjection {
     const header = gitgovTask.header;
 
     return {
-      repoId: this.repoId,
-      projectionType: this.projectionType,
+      ...this.tenantFields,
       recordId: enriched.id,
       title: enriched.title,
       status: enriched.status,
@@ -232,7 +225,7 @@ export class PrismaRecordProjection implements IRecordProjection {
       references: enriched.references ?? [],
       cycleIds: enriched.cycleIds ?? [],
       notes: enriched.notes ?? null,
-      metadataJson: enriched.metadata ? toJson(enriched.metadata) : null,
+      metadata: enriched.metadata ? toJson(enriched.metadata) : null,
       isStalled: enriched.derivedState.isStalled,
       isAtRisk: enriched.derivedState.isAtRisk,
       needsClarification: enriched.derivedState.needsClarification,
@@ -248,8 +241,8 @@ export class PrismaRecordProjection implements IRecordProjection {
       lastUpdated: enriched.lastUpdated,
       lastActivityType: enriched.lastActivityType,
       recentActivity: enriched.recentActivity ?? null,
-      relationshipsJson: toJson(enriched.relationships),
-      headerJson: toJson(header),
+      relationships: toJson(enriched.relationships),
+      header: toJson(header),
     };
   }
 
@@ -279,10 +272,10 @@ export class PrismaRecordProjection implements IRecordProjection {
         entityId: a.entityId,
         entityTitle: a.entityTitle,
         ...opt('actorId', a.actorId),
-        ...opt('metadata', a.metadataJson as Record<string, string> | null),
+        ...opt('metadata', a.metadata as Record<string, string> | null),
       })),
       tasks: taskRows.map((r) => ({
-        header: r.headerJson as unknown as IndexData['tasks'][0]['header'],
+        header: r.header as unknown as IndexData['tasks'][0]['header'],
         payload: {
           id: r.recordId,
           title: r.title,
@@ -293,7 +286,7 @@ export class PrismaRecordProjection implements IRecordProjection {
           references: r.references,
           cycleIds: r.cycleIds,
           ...opt('notes', r.notes),
-          ...opt('metadata', r.metadataJson as Record<string, unknown> | null),
+          ...opt('metadata', r.metadata as Record<string, unknown> | null),
         },
       })),
       enrichedTasks: taskRows.map((r) => ({
@@ -306,7 +299,7 @@ export class PrismaRecordProjection implements IRecordProjection {
         references: r.references,
         cycleIds: r.cycleIds,
         ...opt('notes', r.notes),
-        ...opt('metadata', r.metadataJson as Record<string, unknown> | null),
+        ...opt('metadata', r.metadata as Record<string, unknown> | null),
         derivedState: {
           isStalled: r.isStalled,
           isAtRisk: r.isAtRisk,
@@ -315,7 +308,7 @@ export class PrismaRecordProjection implements IRecordProjection {
           healthScore: r.healthScore,
           timeInCurrentStage: r.timeInCurrentStage,
         },
-        relationships: r.relationshipsJson as unknown as EnrichedTaskRecord['relationships'],
+        relationships: r.relationships as unknown as EnrichedTaskRecord['relationships'],
         metrics: {
           executionCount: r.executionCount,
           blockingFeedbackCount: r.blockingFeedbackCount,
@@ -331,7 +324,7 @@ export class PrismaRecordProjection implements IRecordProjection {
         ...opt('recentActivity', r.recentActivity),
       })),
       cycles: cycleRows.map((c) => ({
-        header: c.headerJson as unknown as IndexData['cycles'][0]['header'],
+        header: c.header as unknown as IndexData['cycles'][0]['header'],
         payload: {
           id: c.recordId,
           title: c.title,
@@ -340,58 +333,61 @@ export class PrismaRecordProjection implements IRecordProjection {
           childCycleIds: c.childCycleIds,
           tags: c.tags,
           ...opt('notes', c.notes),
-          ...opt('metadata', c.metadataJson as Record<string, unknown> | null),
+          ...opt('metadata', c.metadata as Record<string, unknown> | null),
         },
       })),
       actors: actorRows.map((a) => ({
-        header: a.headerJson as unknown as IndexData['actors'][0]['header'],
+        header: a.header as unknown as IndexData['actors'][0]['header'],
         payload: {
           id: a.recordId,
-          type: a.actorType as 'human',
+          type: a.type as 'human',
           displayName: a.displayName,
           publicKey: a.publicKey,
           roles: a.roles as [string, ...string[]],
           ...opt('status', a.status as 'active' | 'revoked' | null),
           ...opt('supersededBy', a.supersededBy),
+          ...opt('metadata', a.metadata as Record<string, unknown> | null),
         },
       })),
       feedback: feedbackRows.map((f) => ({
-        header: f.headerJson as unknown as IndexData['feedback'][0]['header'],
+        header: f.header as unknown as IndexData['feedback'][0]['header'],
         payload: {
           id: f.recordId,
           entityType: f.entityType as 'task',
           entityId: f.entityId,
-          type: f.feedbackType as 'blocking',
+          type: f.type as 'blocking',
           status: f.status as 'open',
           content: f.content,
           ...opt('assignee', f.assignee),
           ...opt('resolvesFeedbackId', f.resolvesFeedbackId),
-          ...opt('metadata', f.metadataJson as Record<string, unknown> | null),
+          ...opt('metadata', f.metadata as Record<string, unknown> | null),
         },
       })),
       executions: executionRows.map((e) => ({
-        header: e.headerJson as unknown as IndexData['executions'][0]['header'],
+        header: e.header as unknown as IndexData['executions'][0]['header'],
         payload: {
           id: e.recordId,
           taskId: e.taskId,
-          type: e.executionType,
+          type: e.type,
           title: e.title,
           result: e.result,
           ...opt('notes', e.notes),
           ...opt('references', e.references.length > 0 ? e.references : null),
-          ...opt('metadata', e.metadataJson as Record<string, unknown> | null),
+          ...opt('metadata', e.metadata as Record<string, unknown> | null),
         },
       })),
       agents: agentRows.map((a) => {
         const payload: Record<string, unknown> = {
           id: a.recordId,
-          engine: { type: a.engineType },
+          engine: a.engine,
         };
         if (a.status !== null) payload['status'] = a.status;
-        if (a.triggersJson !== null) payload['triggers'] = a.triggersJson;
-        if (a.metadataJson !== null) payload['metadata'] = a.metadataJson;
+        if (a.triggers !== null) payload['triggers'] = a.triggers;
+        if (a.metadata !== null) payload['metadata'] = a.metadata;
+        if (a.knowledgeDependencies !== null) payload['knowledge_dependencies'] = a.knowledgeDependencies;
+        if (a.promptEngineRequirements !== null) payload['prompt_engine_requirements'] = a.promptEngineRequirements;
         return {
-          header: a.headerJson as unknown as IndexData['agents'][0]['header'],
+          header: a.header as unknown as IndexData['agents'][0]['header'],
           payload: payload as unknown as IndexData['agents'][0]['payload'],
         };
       }),

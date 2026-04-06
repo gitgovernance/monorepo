@@ -671,6 +671,7 @@ describe('RecordProjector', () => {
   });
 
   describe('4.1. RecordMetrics Integration (EARS-C5)', () => {
+    // TODO: This test lacks an EARS prefix — consider mapping to an existing EARS or adding one to the spec
     it('should delegate all calculations to RecordMetrics without duplicating logic', async () => {
       const report = await recordProjector.generateIndex();
 
@@ -1408,6 +1409,7 @@ describe('RecordProjector', () => {
       it('[EARS-G3] should count and store the number of task executions', async () => {
         // Default setup has no executions (mockStores.executions.list returns [])
         // TODO: add execution to shared setup for exact count verification (e.g., toBe(1))
+        // TODO: This test only verifies zero-state (0 count). Add positive-path test with real data.
         await recordProjector.generateIndex();
         const indexData = await recordProjector.getIndexData();
 
@@ -1419,6 +1421,7 @@ describe('RecordProjector', () => {
       it('[EARS-G4] should count and store open blocking feedbacks', async () => {
         // Default setup has no feedback (mockStores.feedbacks.list returns [])
         // TODO: add blocking feedback to shared setup for exact count verification (e.g., toBe(1))
+        // TODO: This test only verifies zero-state (0 count). Add positive-path test with real data.
         await recordProjector.generateIndex();
         const indexData = await recordProjector.getIndexData();
 
@@ -1429,6 +1432,7 @@ describe('RecordProjector', () => {
       it('[EARS-G5] should count and store open questions', async () => {
         // Default setup has no feedback (mockStores.feedbacks.list returns [])
         // TODO: add question feedback to shared setup for exact count verification (e.g., toBe(1))
+        // TODO: This test only verifies zero-state (0 count). Add positive-path test with real data.
         await recordProjector.generateIndex();
         const indexData = await recordProjector.getIndexData();
 
@@ -1533,6 +1537,7 @@ describe('RecordProjector', () => {
       it('[EARS-I1] should extract assignedTo from related feedback', async () => {
         // Default setup has no assignment feedback (mockStores.feedbacks.list returns [])
         // TODO: add assignment feedback to shared setup for exact assignee verification
+        // TODO: This test only verifies zero-state (0 count). Add positive-path test with real data.
         await recordProjector.generateIndex();
         const indexData = await recordProjector.getIndexData();
 
@@ -1655,6 +1660,7 @@ describe('RecordProjector', () => {
       it('[EARS-I3] should extract blockedBy by scanning references from other tasks', async () => {
         // Default setup has a single task with no references pointing to it
         // TODO: add a task referencing the test task to shared setup for exact blockedBy verification
+        // TODO: This test only verifies zero-state (0 count). Add positive-path test with real data.
         await recordProjector.generateIndex();
         const indexData = await recordProjector.getIndexData();
 
@@ -2324,7 +2330,7 @@ describe('RecordProjector', () => {
     });
   });
 
-  describe('4.8. Projection Schema V2 — Executions & Agents (PSV2-A7 a A9)', () => {
+  describe('4.6. Projection Schema V2 — Executions & Agents (PSV2-A7 a A9)', () => {
     it('[PSV2-A7] should require executions and agents fields in IndexData (non-optional)', () => {
       // Construct a minimal IndexData and verify both fields are present and required
       const indexData: IndexData = {

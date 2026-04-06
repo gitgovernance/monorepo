@@ -53,8 +53,11 @@ export class FsRecordProjection implements IRecordProjection {
     try {
       await fs.access(this.indexPath);
       return true;
-    } catch {
-      return false;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return false;
+      }
+      throw error;
     }
   }
 

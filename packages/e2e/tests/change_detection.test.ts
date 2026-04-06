@@ -12,13 +12,11 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
 import { Octokit } from '@octokit/rest';
 
 import {
-  runCliCommand,
-  createGitRepo,
+  runGitgovCli,
+  createTempGitRepo,
   createTestPrisma,
   cleanupDb,
   cleanupWorktree,
@@ -33,20 +31,18 @@ import {
   RecordProjector,
   RecordMetrics,
   PrismaRecordProjection,
-  DEFAULT_ID_ENCODER,
   GitHubRecordStore,
+  createGitHubProjectorStores,
 } from './helpers';
 import type {
   PrismaClient,
   ProjectionClient,
   GithubSyncStateDependencies,
-  RecordProjectorDependencies,
   IRecordProjector,
   GitGovTaskRecord,
   GitGovActorRecord,
   GitGovCycleRecord,
   GitGovFeedbackRecord,
-  GitGovExecutionRecord,
   ILintModule,
 } from './helpers';
 
@@ -57,27 +53,11 @@ function createLintStub(): ILintModule {
   return { lintRecord: () => [] } as unknown as ILintModule;
 }
 
-/**
- * GitHubRecordStore instances pointing to gitgov-state.
- * CLI sync push stores files WITH .gitgov/ prefix on gitgov-state.
- */
-function createGitgovStateStores(octokit: Octokit) {
-  const opts = { owner: GITHUB_TEST_OWNER, repo: GITHUB_TEST_REPO_NAME, ref: 'gitgov-state' };
-  return {
-    tasks: new GitHubRecordStore<GitGovTaskRecord>({ ...opts, basePath: '.gitgov/tasks' }, octokit),
-    actors: new GitHubRecordStore<GitGovActorRecord>({ ...opts, basePath: '.gitgov/actors', idEncoder: DEFAULT_ID_ENCODER }, octokit),
-    cycles: new GitHubRecordStore<GitGovCycleRecord>({ ...opts, basePath: '.gitgov/cycles' }, octokit),
-    feedbacks: new GitHubRecordStore<GitGovFeedbackRecord>({ ...opts, basePath: '.gitgov/feedbacks' }, octokit),
-    executions: new GitHubRecordStore<GitGovExecutionRecord>({ ...opts, basePath: '.gitgov/executions' }, octokit),
-  };
-}
-
 /** RecordProjector wired to gitgov-state stores. */
 function createGitgovStateProjector(octokit: Octokit): IRecordProjector {
-  const stores = createGitgovStateStores(octokit);
-  const typedStores = stores as unknown as RecordProjectorDependencies['stores'];
-  const recordMetrics = new RecordMetrics({ stores: typedStores });
-  return new RecordProjector({ recordMetrics, stores: typedStores });
+  const stores = createGitHubProjectorStores(octokit, { owner: GITHUB_TEST_OWNER, repo: GITHUB_TEST_REPO_NAME, ref: 'gitgov-state' });
+  const recordMetrics = new RecordMetrics({ stores });
+  return new RecordProjector({ recordMetrics, stores });
 }
 
 /** GithubSyncStateModule with real Octokit and stub config/identity/lint. */
@@ -98,9 +78,8 @@ function createSyncModule(octokit: Octokit, indexer: IRecordProjector): GithubSy
 describe('Block F: Change Detection (CF1-CF7)', () => {
   let octokit: Octokit;
   let prisma: PrismaClient;
-  let cf3RepoId: string;
-  let tempDir: string;
-  let repoPath: string;
+  let tmpDir: string;
+  let repoDir: string;
   let testBranch: string;
   let syncModule: GithubSyncStateModule;
   const conflictBranches: string[] = [];
@@ -115,19 +94,16 @@ describe('Block F: Change Detection (CF1-CF7)', () => {
 
     octokit = new Octokit({ auth: GITHUB_TOKEN });
     prisma = createTestPrisma();
-    cf3RepoId = `e2e-cf3-${Date.now()}`;
     testBranch = `e2e-cf-${Date.now()}`;
 
     // 1. Create local git repo
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gitgov-e2e-block-f-'));
-    repoPath = path.join(tempDir, 'block-f');
-    createGitRepo(repoPath);
+    ({ tmpDir, repoDir } = createTempGitRepo());
 
     // 2. Add remote + create test branch
-    execSync(`git remote add origin "${GITHUB_REMOTE_URL}"`, { cwd: repoPath, stdio: 'pipe' });
-    execSync('git fetch origin', { cwd: repoPath, stdio: 'pipe' });
-    execSync(`git checkout -b ${testBranch}`, { cwd: repoPath, stdio: 'pipe' });
-    execSync(`git push -u origin ${testBranch}`, { cwd: repoPath, stdio: 'pipe' });
+    execSync(`git remote add origin "${GITHUB_REMOTE_URL}"`, { cwd: repoDir, stdio: 'pipe' });
+    execSync('git fetch origin', { cwd: repoDir, stdio: 'pipe' });
+    execSync(`git checkout -b ${testBranch}`, { cwd: repoDir, stdio: 'pipe' });
+    execSync(`git push -u origin ${testBranch}`, { cwd: repoDir, stdio: 'pipe' });
 
     // 3. Clean up residual gitgov-state from previous runs
     try {
@@ -139,24 +115,24 @@ describe('Block F: Change Detection (CF1-CF7)', () => {
     } catch { /* may not exist */ }
 
     // 4. CLI: init + task + sync push → creates gitgov-state branch
-    runCliCommand(
-      ['init', '--name', 'CF Test Project', '--actor-name', 'CF Dev', '--quiet'],
-      { cwd: repoPath },
+    runGitgovCli(
+      'init --name "CF Test Project" --actor-name "CF Dev" --quiet',
+      { cwd: repoDir },
     );
-    runCliCommand(
-      ['task', 'new', 'CF initial task', '-d', 'Seed task for Block F', '-p', 'medium', '-q'],
-      { cwd: repoPath },
+    runGitgovCli(
+      'task new "CF initial task" -d "Seed task for Block F" -p medium -q',
+      { cwd: repoDir },
     );
-    runCliCommand(['sync', 'push', '--quiet'], { cwd: repoPath });
+    runGitgovCli('sync push --quiet', { cwd: repoDir });
 
     // 5. Seed testBranch with .gitgov/ records via API (read from worktree, write to GitHub).
     // CF5 pushState reads from testBranch, so it needs records there.
     const seedOpts = { owner: GITHUB_TEST_OWNER, repo: GITHUB_TEST_REPO_NAME, ref: testBranch };
 
     async function seedDir<T>(dir: string, store: GitHubRecordStore<T>) {
-      const ids = await listRecordIds(repoPath, dir);
+      const ids = await listRecordIds(repoDir, dir);
       for (const id of ids) {
-        await store.put(id, await readRecord<T>(repoPath, dir, id));
+        await store.put(id, await readRecord<T>(repoDir, dir, id));
       }
     }
 
@@ -183,11 +159,11 @@ describe('Block F: Change Detection (CF1-CF7)', () => {
       } catch { /* may not exist */ }
     }
 
-    await cleanupDb(prisma, cf3RepoId);
+    await cleanupDb(prisma);
     await prisma.$disconnect();
 
-    cleanupWorktree(repoPath);
-    if (tempDir) fs.rmSync(tempDir, { recursive: true, force: true });
+    cleanupWorktree(repoDir);
+    if (tmpDir) fs.rmSync(tmpDir, { recursive: true, force: true });
   }, 30_000);
 
   // ===== Tests are SEQUENTIAL — they share syncModule state (lastKnownSha) =====
@@ -218,11 +194,11 @@ describe('Block F: Change Detection (CF1-CF7)', () => {
 
   it('[EARS-CF3] should detect CLI-pushed changes and project to DB', async () => {
     // CLI pushes a new task → gitgov-state advances
-    runCliCommand(
-      ['task', 'new', 'CF3 delta task', '-d', 'Delta detection test', '-p', 'high', '-q'],
-      { cwd: repoPath },
+    runGitgovCli(
+      'task new "CF3 delta task" -d "Delta detection test" -p high -q',
+      { cwd: repoDir },
     );
-    runCliCommand(['sync', 'push', '--quiet'], { cwd: repoPath });
+    runGitgovCli('sync push --quiet', { cwd: repoDir });
     await new Promise(resolve => setTimeout(resolve, 2000));
 
     // calculateStateDelta should detect the new files (lastKnownSha is stale)
@@ -234,10 +210,9 @@ describe('Block F: Change Detection (CF1-CF7)', () => {
     await syncModule.pullState();
 
     // Project from GitHub → Prisma (simulates saas-api path)
-    const stores = createGitgovStateStores(octokit);
-    const typedStores = stores as unknown as RecordProjectorDependencies['stores'];
-    const recordMetrics = new RecordMetrics({ stores: typedStores });
-    const projector = new RecordProjector({ recordMetrics, stores: typedStores });
+    const stores = createGitHubProjectorStores(octokit, { owner: GITHUB_TEST_OWNER, repo: GITHUB_TEST_REPO_NAME, ref: 'gitgov-state' });
+    const recordMetrics = new RecordMetrics({ stores });
+    const projector = new RecordProjector({ recordMetrics, stores });
 
     const indexData = await projector.computeProjection();
     indexData.activityHistory = indexData.activityHistory.filter(
@@ -247,19 +222,15 @@ describe('Block F: Change Detection (CF1-CF7)', () => {
 
     const sink = new PrismaRecordProjection({
       client: prisma as unknown as ProjectionClient,
-      repoId: cf3RepoId,
-      projectionType: 'index',
     });
     await sink.persist(indexData, {});
 
     // Verify DB has the new task with enriched data
-    const tasks = await prisma.gitgovTask.findMany({ where: { repoId: cf3RepoId } });
+    const tasks = await prisma.gitgovTask.findMany({});
     expect(tasks.length).toBeGreaterThanOrEqual(2); // initial + CF3
     expect(tasks.some(t => t.title === 'CF3 delta task')).toBe(true);
 
-    const meta = await prisma.gitgovMeta.findFirst({
-      where: { repoId: cf3RepoId, projectionType: 'index' },
-    });
+    const meta = await prisma.gitgovMeta.findFirst({});
     expect(meta).not.toBeNull();
     const counts = meta!.recordCountsJson as Record<string, number>;
     expect(counts['tasks']).toBeGreaterThanOrEqual(2);

@@ -46,7 +46,10 @@ function makeFinding(overrides: {
     severity: overrides.severity,
     file: 'src/test.ts',
     line: 10,
-    category: 'pii',
+    category: 'pii-generic',
+    detector: 'regex',
+    confidence: 1.0,
+    executionId: '1700000000-exec-e2e-policy',
     reportedBy: ['agent:gitgov:security-audit'],
     isWaived: overrides.isWaived ?? false,
     waiver: overrides.waiver,
@@ -54,7 +57,7 @@ function makeFinding(overrides: {
 }
 
 /**
- * Creates an Waiver for a given fingerprint.
+ * Creates a Waiver for a given fingerprint.
  */
 function makeWaiver(fingerprint: string, ruleId: string): Waiver {
   return {

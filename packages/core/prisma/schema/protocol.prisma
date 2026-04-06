@@ -118,6 +118,7 @@ model GitgovActor {
 
   // ── ActorRecord payload ──
   type         String   // human|agent
+  displayName  String   // Human-readable name (1-100 chars)
   publicKey    String
   roles        String[]
   status       String?  // active|revoked
@@ -214,17 +215,19 @@ model GitgovExecution {
 // ──────────────────────────────────────────
 
 model GitgovAgent {
-  id       String   @id @default(cuid())
-  recordId String   @unique  // AgentRecord.id
+  id                         String   @id @default(cuid())
+  recordId                   String   @unique  // AgentRecord.id
 
   // ── AgentRecord payload ──
-  status   String?  // active|archived
-  engine   Json     // AgentRecord.engine (complex: type + entrypoint + auth)
-  triggers Json?    // AgentRecord.triggers[] array
-  metadata Json?
+  status                     String?  // active|archived
+  engine                     Json     // AgentRecord.engine (complex: type + entrypoint + auth)
+  triggers                   Json?    // AgentRecord.triggers[] array
+  knowledgeDependencies      Json?    // AgentRecord.knowledge_dependencies[]
+  promptEngineRequirements   Json?    // AgentRecord.prompt_engine_requirements
+  metadata                   Json?
 
   // ── EmbeddedMetadataRecord.header ──
-  header   Json
+  header                     Json
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

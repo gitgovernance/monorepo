@@ -2,24 +2,20 @@
  * Block E: Projection Parity — 3 EARS (CE1-CE3)
  * Blueprint: e2e/specs/parity.md
  *
- * CE1: Guarantees that FsRecordProjection (index.json) and PrismaRecordProjection (6 DB tables)
- *      produce equivalent IndexData when given the same input.
- * CE2: Guarantees that FsRecordStore (local) and GitHubRecordStore (remote) produce equivalent
- *      IndexData when reading the same records (FS vs GitHub parity).
- * CE3: Guarantees that FsRecordStore (local) and GitLab API (remote) produce equivalent
- *      record data when reading the same records (FS vs GitLab parity).
+ * CE1: FS (index.json) vs Prisma (9 DB tables) produce equivalent IndexData.
+ * CE2: FS (local) vs GitHub (gitgov-state) produce equivalent IndexData.
+ * CE3: FS (local) vs GitLab (branch) produce equivalent records.
  */
 import { describe, it, expect } from 'vitest';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
 import { Octokit } from '@octokit/rest';
 import { Gitlab } from '@gitbeaker/rest';
 
 import {
-  runCliCommand,
-  createGitRepo,
+  runGitgovCli,
+  createTempGitRepo,
   createTestPrisma,
   cleanupDb,
   projectAndCompare,
@@ -28,7 +24,6 @@ import {
   getGitgovDir,
   cleanupWorktree,
   SKIP_CLEANUP,
-  HAS_GITHUB,
   GITHUB_TEST_OWNER,
   GITHUB_TEST_REPO_NAME,
   GITHUB_TOKEN,
@@ -37,53 +32,54 @@ import {
   RecordMetrics,
   DEFAULT_ID_ENCODER,
   FsRecordStore,
-  GitHubRecordStore,
-  HAS_GITLAB,
   GITLAB_TOKEN,
   GITLAB_TEST_PROJECT_ID,
+  createGitHubProjectorStores,
 } from './helpers';
 import type {
   PrismaClient,
   RecordProjectorDependencies,
-  GitGovTaskRecord,
-  GitGovActorRecord,
-  GitGovCycleRecord,
-  GitGovFeedbackRecord,
-  GitGovExecutionRecord,
 } from './helpers';
 
-describe('Block E: Projection Parity (CE1-CE2)', () => {
+export type {
+  GitGovTaskRecord,
+  GitGovCycleRecord,
+  GitGovActorRecord,
+  GitGovFeedbackRecord,
+  GitGovExecutionRecord,
+  GitGovAgentRecord,
+  IRecordProjector,
+  ILintModule,
+} from '@gitgov/core';
 
-  it('[EARS-CE1] should produce equivalent IndexData from FS and Prisma projections', async () => {
+describe('Block E: Projection Parity (CE1-CE3)', () => {
+
+  it('[CE1] should produce equivalent IndexData from FS and Prisma projections', async () => {
     const prisma: PrismaClient = createTestPrisma();
-    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gitgov-e2e-block-e-'));
-    const repoPath = path.join(tempDir, 'ce1');
-    const repoId = `cli-e2e-ce1-${Date.now()}`;
+    const { tmpDir, repoDir } = createTempGitRepo();
 
     try {
-      createGitRepo(repoPath);
-
       // Create records via CLI
-      runCliCommand(['init', '--name', 'CE1 Parity', '--actor-name', 'Parity Dev', '--quiet'], { cwd: repoPath });
-      runCliCommand(['task', 'new', 'Parity task', '-d', 'Testing FS vs Prisma parity', '-p', 'high', '-q'], { cwd: repoPath });
+      runGitgovCli('init --name "CE1 Parity" --actor-name "Parity Dev" --quiet', { cwd: repoDir });
+      runGitgovCli('task new "Parity task" -d "Testing FS vs Prisma parity" -p high -q', { cwd: repoDir });
 
-      const taskIds = await listRecordIds(repoPath, 'tasks');
-      const task = await readRecord(repoPath, 'tasks', taskIds[0]!);
-      const actorIds = await listRecordIds(repoPath, 'actors');
-      const actor = await readRecord(repoPath, 'actors', actorIds[0]!);
+      const taskIds = await listRecordIds(repoDir, 'tasks');
+      const task = await readRecord(repoDir, 'tasks', taskIds[0]!);
+      const actorIds = await listRecordIds(repoDir, 'actors');
+      const actor = await readRecord(repoDir, 'actors', actorIds[0]!);
 
-      runCliCommand(['task', 'assign', task.payload.id, '--to', actor.payload.id, '-q'], { cwd: repoPath });
-      runCliCommand(['cycle', 'new', 'Parity Sprint', '--task-ids', task.payload.id, '-q'], { cwd: repoPath });
+      runGitgovCli(`task assign ${task.payload.id} --to ${actor.payload.id} -q`, { cwd: repoDir });
+      runGitgovCli(`cycle new "Parity Sprint" --task-ids ${task.payload.id} -q`, { cwd: repoDir });
 
       // Project to both sinks and compare
-      const { fsIndexData, prismaIndexData } = await projectAndCompare(prisma, repoPath, repoId);
+      const { fsIndexData, prismaIndexData } = await projectAndCompare(prisma, repoDir);
 
       // CE1a: Compare metadata record counts
       expect(prismaIndexData.metadata.recordCounts['tasks']).toBe(fsIndexData.metadata.recordCounts['tasks']);
       expect(prismaIndexData.metadata.recordCounts['actors']).toBe(fsIndexData.metadata.recordCounts['actors']);
       expect(prismaIndexData.metadata.recordCounts['cycles']).toBe(fsIndexData.metadata.recordCounts['cycles']);
 
-      // CE1b: Compare enrichedTasks
+      // CE1b: Compare tasks
       expect(prismaIndexData.tasks.length).toBe(fsIndexData.tasks.length);
       for (const fsTask of fsIndexData.tasks) {
         const prismaTask = prismaIndexData.tasks.find(t => t.payload.id === fsTask.payload.id);
@@ -93,46 +89,33 @@ describe('Block E: Projection Parity (CE1-CE2)', () => {
         expect(prismaTask!.payload.priority).toBe(fsTask.payload.priority);
       }
 
-      // CE1c: Compare activityHistory length
-      // Note: may be 0 due to NaN filtering, but must match between FS and Prisma
-
-      // CE1d: Compare actors
+      // CE1c: Compare actors
       expect(prismaIndexData.actors.length).toBe(fsIndexData.actors.length);
 
-      // CE1e: Compare cycles
+      // CE1d: Compare cycles
       expect(prismaIndexData.cycles.length).toBe(fsIndexData.cycles.length);
 
-      // CE1f: Compare feedback
+      // CE1e: Compare feedback
       expect(prismaIndexData.feedback.length).toBe(fsIndexData.feedback.length);
     } finally {
-      cleanupWorktree(repoPath);
-      await cleanupDb(prisma, repoId);
+      cleanupWorktree(repoDir);
+      await cleanupDb(prisma);
       await prisma.$disconnect();
-      if (!SKIP_CLEANUP) fs.rmSync(tempDir, { recursive: true, force: true });
-      else console.log(`[SKIP_CLEANUP] Keeping tempDir=${tempDir}`);
+      if (!SKIP_CLEANUP) fs.rmSync(tmpDir, { recursive: true, force: true });
     }
   });
 
-  it('[EARS-CE2] should produce equivalent projection from FsRecordStore and GitHubRecordStore', async () => {
-    if (!HAS_GITHUB) {
-      throw new Error(
-        'CE2 requires GitHub credentials. Set GITHUB_TOKEN, GITHUB_TEST_OWNER, '
-        + 'GITHUB_TEST_REPO_NAME, and GITHUB_TEST_REPO in packages/e2e/.env',
-      );
-    }
-
+  it('[CE2] should produce equivalent projection from FsRecordStore and GitHubRecordStore', async () => {
     const octokit = new Octokit({ auth: GITHUB_TOKEN });
-    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gitgov-e2e-ce2-'));
-    const repoPath = path.join(tempDir, 'ce2');
+    const { tmpDir, repoDir } = createTempGitRepo();
     const testBranch = `e2e-ce2-${Date.now()}`;
 
     try {
-      // 1. Create local repo, add remote, create branch
-      createGitRepo(repoPath);
-      execSync(`git remote add origin "${GITHUB_REMOTE_URL}"`, { cwd: repoPath, stdio: 'pipe' });
-      execSync('git fetch origin', { cwd: repoPath, stdio: 'pipe' });
-      execSync(`git checkout -b ${testBranch}`, { cwd: repoPath, stdio: 'pipe' });
-      execSync(`git push -u origin ${testBranch}`, { cwd: repoPath, stdio: 'pipe' });
+      // 1. Add remote, create branch
+      execSync(`git remote add origin "${GITHUB_REMOTE_URL}"`, { cwd: repoDir, stdio: 'pipe' });
+      execSync('git fetch origin', { cwd: repoDir, stdio: 'pipe' });
+      execSync(`git checkout -b ${testBranch}`, { cwd: repoDir, stdio: 'pipe' });
+      execSync(`git push -u origin ${testBranch}`, { cwd: repoDir, stdio: 'pipe' });
 
       // Clean up residual gitgov-state
       try {
@@ -144,28 +127,29 @@ describe('Block E: Projection Parity (CE1-CE2)', () => {
       } catch { /* may not exist */ }
 
       // 2. Create records via CLI and sync push to GitHub
-      runCliCommand(['init', '--name', 'CE2 Parity', '--actor-name', 'CE2 Dev', '--quiet'], { cwd: repoPath });
-      runCliCommand(['task', 'new', 'CE2 parity task', '-d', 'FS vs GitHub parity', '-p', 'high', '-q'], { cwd: repoPath });
+      runGitgovCli('init --name "CE2 Parity" --actor-name "CE2 Dev" --quiet', { cwd: repoDir });
+      runGitgovCli('task new "CE2 parity task" -d "FS vs GitHub parity" -p high -q', { cwd: repoDir });
 
-      const taskIds = await listRecordIds(repoPath, 'tasks');
-      const task = await readRecord(repoPath, 'tasks', taskIds[0]!);
-      const actorIds = await listRecordIds(repoPath, 'actors');
-      const actor = await readRecord(repoPath, 'actors', actorIds[0]!);
+      const taskIds = await listRecordIds(repoDir, 'tasks');
+      const task = await readRecord(repoDir, 'tasks', taskIds[0]!);
+      const actorIds = await listRecordIds(repoDir, 'actors');
+      const actor = await readRecord(repoDir, 'actors', actorIds[0]!);
 
-      runCliCommand(['task', 'assign', task.payload.id, '--to', actor.payload.id, '-q'], { cwd: repoPath });
-      runCliCommand(['cycle', 'new', 'CE2 Sprint', '--task-ids', task.payload.id, '-q'], { cwd: repoPath });
-      runCliCommand(['sync', 'push', '--quiet'], { cwd: repoPath });
+      runGitgovCli(`task assign ${task.payload.id} --to ${actor.payload.id} -q`, { cwd: repoDir });
+      runGitgovCli(`cycle new "CE2 Sprint" --task-ids ${task.payload.id} -q`, { cwd: repoDir });
+      runGitgovCli('sync push --quiet', { cwd: repoDir });
 
       await new Promise(resolve => setTimeout(resolve, 2000));
 
       // 3. Projection A: FsRecordStore (worktree .gitgov/)
-      const gitgovDir = getGitgovDir(repoPath);
+      const gitgovDir = getGitgovDir(repoDir);
       const fsStores = {
         tasks: new FsRecordStore<GitGovTaskRecord>({ basePath: path.join(gitgovDir, 'tasks') }),
         cycles: new FsRecordStore<GitGovCycleRecord>({ basePath: path.join(gitgovDir, 'cycles') }),
         feedbacks: new FsRecordStore<GitGovFeedbackRecord>({ basePath: path.join(gitgovDir, 'feedbacks') }),
         executions: new FsRecordStore<GitGovExecutionRecord>({ basePath: path.join(gitgovDir, 'executions') }),
         actors: new FsRecordStore<GitGovActorRecord>({ basePath: path.join(gitgovDir, 'actors'), idEncoder: DEFAULT_ID_ENCODER }),
+        agents: new FsRecordStore<GitGovAgentRecord>({ basePath: path.join(gitgovDir, 'agents'), idEncoder: DEFAULT_ID_ENCODER }),
       };
       const fsTypedStores = fsStores as unknown as RecordProjectorDependencies['stores'];
       const fsMetrics = new RecordMetrics({ stores: fsTypedStores });
@@ -177,18 +161,10 @@ describe('Block E: Projection Parity (CE1-CE2)', () => {
       );
       fsIndexData.metadata.generationTime = 1;
 
-      // 4. Projection B: GitHubRecordStore (gitgov-state — files have .gitgov/ prefix)
-      const ghOpts = { owner: GITHUB_TEST_OWNER, repo: GITHUB_TEST_REPO_NAME, ref: 'gitgov-state' };
-      const ghStores = {
-        tasks: new GitHubRecordStore<GitGovTaskRecord>({ ...ghOpts, basePath: '.gitgov/tasks' }, octokit),
-        cycles: new GitHubRecordStore<GitGovCycleRecord>({ ...ghOpts, basePath: '.gitgov/cycles' }, octokit),
-        feedbacks: new GitHubRecordStore<GitGovFeedbackRecord>({ ...ghOpts, basePath: '.gitgov/feedbacks' }, octokit),
-        executions: new GitHubRecordStore<GitGovExecutionRecord>({ ...ghOpts, basePath: '.gitgov/executions' }, octokit),
-        actors: new GitHubRecordStore<GitGovActorRecord>({ ...ghOpts, basePath: '.gitgov/actors', idEncoder: DEFAULT_ID_ENCODER }, octokit),
-      };
-      const ghTypedStores = ghStores as unknown as RecordProjectorDependencies['stores'];
-      const ghMetrics = new RecordMetrics({ stores: ghTypedStores });
-      const ghProjector = new RecordProjector({ recordMetrics: ghMetrics, stores: ghTypedStores });
+      // 4. Projection B: GitHubRecordStore (gitgov-state)
+      const ghStores = createGitHubProjectorStores(octokit, { owner: GITHUB_TEST_OWNER, repo: GITHUB_TEST_REPO_NAME, ref: 'gitgov-state' });
+      const ghMetrics = new RecordMetrics({ stores: ghStores });
+      const ghProjector = new RecordProjector({ recordMetrics: ghMetrics, stores: ghStores });
       const ghIndexData = await ghProjector.computeProjection();
 
       ghIndexData.activityHistory = ghIndexData.activityHistory.filter(
@@ -197,12 +173,10 @@ describe('Block E: Projection Parity (CE1-CE2)', () => {
       ghIndexData.metadata.generationTime = 1;
 
       // 5. Compare: FS and GitHub projections should be equivalent
-      // Record counts
       expect(ghIndexData.metadata.recordCounts['tasks']).toBe(fsIndexData.metadata.recordCounts['tasks']);
       expect(ghIndexData.metadata.recordCounts['cycles']).toBe(fsIndexData.metadata.recordCounts['cycles']);
       expect(ghIndexData.metadata.recordCounts['actors']).toBe(fsIndexData.metadata.recordCounts['actors']);
 
-      // Tasks
       expect(ghIndexData.tasks.length).toBe(fsIndexData.tasks.length);
       for (const fsTask of fsIndexData.tasks) {
         const ghTask = ghIndexData.tasks.find(t => t.payload.id === fsTask.payload.id);
@@ -212,16 +186,10 @@ describe('Block E: Projection Parity (CE1-CE2)', () => {
         expect(ghTask!.payload.priority).toBe(fsTask.payload.priority);
       }
 
-      // Cycles
       expect(ghIndexData.cycles.length).toBe(fsIndexData.cycles.length);
-
-      // Actors
       expect(ghIndexData.actors.length).toBe(fsIndexData.actors.length);
-
-      // Feedback
       expect(ghIndexData.feedback.length).toBe(fsIndexData.feedback.length);
     } finally {
-      // Cleanup GitHub branches
       for (const branch of [testBranch, 'gitgov-state']) {
         try {
           await octokit.rest.git.deleteRef({
@@ -231,59 +199,31 @@ describe('Block E: Projection Parity (CE1-CE2)', () => {
           });
         } catch { /* may not exist */ }
       }
-      cleanupWorktree(repoPath);
-      if (!SKIP_CLEANUP) fs.rmSync(tempDir, { recursive: true, force: true });
-      else console.log(`[SKIP_CLEANUP] Keeping tempDir=${tempDir}`);
+      cleanupWorktree(repoDir);
+      if (!SKIP_CLEANUP) fs.rmSync(tmpDir, { recursive: true, force: true });
     }
   }, 60_000);
 
-  it('[EARS-CE3] should produce equivalent records from FsRecordStore and GitLab API', async () => {
-    if (!HAS_GITLAB) {
-      throw new Error(
-        'CE3 requires GitLab credentials. Set GITLAB_TOKEN and GITLAB_TEST_PROJECT_ID in packages/e2e/.env',
-      );
-    }
-
+  it.skipIf(!GITLAB_TOKEN || !GITLAB_TEST_PROJECT_ID)('[CE3] should produce equivalent records from FsRecordStore and GitLab API', async () => {
     const api = new Gitlab({ token: GITLAB_TOKEN });
     const projectId = Number(GITLAB_TEST_PROJECT_ID);
-    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gitgov-e2e-ce3-'));
-    const repoPath = path.join(tempDir, 'ce3');
+    const { tmpDir, repoDir } = createTempGitRepo();
     const testBranch = `e2e-ce3-${Date.now()}`;
 
     try {
-      // 1. Create local repo with records directly (no CLI dependency)
-      createGitRepo(repoPath);
-      const gitgovDir = path.join(repoPath, '.gitgov');
-      fs.mkdirSync(path.join(gitgovDir, 'tasks'), { recursive: true });
-      fs.mkdirSync(path.join(gitgovDir, 'actors'), { recursive: true });
-
-      // Write test records to FS
-      const testTask = {
-        header: { id: 'ce3-task-001', type: 'task', version: '1.0' },
-        payload: { id: 'ce3-task-001', title: 'CE3 parity task', status: 'open', priority: 'high' },
-      };
-      const testActor = {
-        header: { id: 'human:ce3-dev', type: 'actor', version: '1.0' },
-        payload: { id: 'human:ce3-dev', name: 'CE3 Dev', type: 'human' },
-      };
-
-      fs.writeFileSync(
-        path.join(gitgovDir, 'tasks', 'ce3-task-001.json'),
-        JSON.stringify(testTask, null, 2),
-      );
-      fs.writeFileSync(
-        path.join(gitgovDir, 'actors', 'human_ce3-dev.json'),
-        JSON.stringify(testActor, null, 2),
-      );
+      // 1. Create records via CLI
+      runGitgovCli('init --name "CE3 Parity" --actor-name "CE3 Dev" --quiet', { cwd: repoDir });
+      runGitgovCli('task new "CE3 parity task" -d "FS vs GitLab parity" -p high -q', { cwd: repoDir });
 
       // 2. Read records from FS
-      const fsTaskContent = JSON.parse(fs.readFileSync(path.join(gitgovDir, 'tasks', 'ce3-task-001.json'), 'utf-8'));
-      const fsActorContent = JSON.parse(fs.readFileSync(path.join(gitgovDir, 'actors', 'human_ce3-dev.json'), 'utf-8'));
-      const fsTaskRecords = [fsTaskContent];
-      const fsTasks = ['ce3-task-001'];
-      const fsActors = ['human_ce3-dev'];
+      const gitgovDir = getGitgovDir(repoDir);
+      const taskIds = await listRecordIds(repoDir, 'tasks');
+      const actorIds = await listRecordIds(repoDir, 'actors');
+      const fsTaskRecords = await Promise.all(taskIds.map(id => readRecord(repoDir, 'tasks', id)));
+      const fsTasks = taskIds;
+      const fsActors = actorIds;
 
-      // 3. Push same records to GitLab via Commits API
+      // 3. Push records to GitLab via Commits API
       await api.Branches.create(projectId, testBranch, 'main');
 
       const actions: Array<{ action: 'create'; file_path: string; content: string; encoding: 'base64' }> = [];
@@ -303,7 +243,6 @@ describe('Block E: Projection Parity (CE1-CE2)', () => {
         }
       }
 
-      // Also push config.json if exists
       const configPath = path.join(gitgovDir, 'config.json');
       if (fs.existsSync(configPath)) {
         actions.push({
@@ -339,11 +278,9 @@ describe('Block E: Projection Parity (CE1-CE2)', () => {
       const glActors = glActorFiles.filter(f => f.type === 'blob' && f.name.endsWith('.json'));
 
       // 5. Compare: FS and GitLab should have identical records
-      // CE3-1: Record counts match
       expect(glTasks.length).toBe(fsTasks.length);
       expect(glActors.length).toBe(fsActors.length);
 
-      // CE3-2: Task payloads match
       for (const fsTask of fsTaskRecords) {
         const glTask = glTaskRecords.find((t: { payload: { id: string } }) => t.payload.id === fsTask.payload.id);
         expect(glTask).toBeDefined();
@@ -351,14 +288,12 @@ describe('Block E: Projection Parity (CE1-CE2)', () => {
         expect(glTask.payload.status).toBe(fsTask.payload.status);
         expect(glTask.payload.priority).toBe(fsTask.payload.priority);
       }
-
     } finally {
-      // Cleanup GitLab branch
       try {
         await api.Branches.remove(projectId, testBranch);
       } catch { /* may not exist */ }
-      cleanupWorktree(repoPath);
-      if (!SKIP_CLEANUP) fs.rmSync(tempDir, { recursive: true, force: true });
+      cleanupWorktree(repoDir);
+      if (!SKIP_CLEANUP) fs.rmSync(tmpDir, { recursive: true, force: true });
     }
   }, 120_000);
 });

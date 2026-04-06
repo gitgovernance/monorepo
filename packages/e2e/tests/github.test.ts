@@ -23,16 +23,15 @@ import {
   GitHubRecordStore,
   RecordProjector,
   RecordMetrics,
+  createGitHubProjectorStores,
+  DEFAULT_ID_ENCODER,
 } from './helpers';
 import type {
   PrismaClient,
   ProjectionClient,
-  RecordProjectorDependencies,
   GitGovTaskRecord,
   GitGovActorRecord,
   GitGovCycleRecord,
-  GitGovFeedbackRecord,
-  GitGovExecutionRecord,
 } from './helpers';
 
 // ===== Test Record Factories =====
@@ -119,13 +118,10 @@ function makeCycleRecord(): GitGovCycleRecord {
 describe('Block C: GitHub Integration (CC1-CC5)', () => {
   let octokit: Octokit;
   let prisma: PrismaClient;
-  let repoId: string;
   let testBranch: string;
   let tasksStore: GitHubRecordStore<GitGovTaskRecord>;
   let actorsStore: GitHubRecordStore<GitGovActorRecord>;
   let cyclesStore: GitHubRecordStore<GitGovCycleRecord>;
-  let feedbacksStore: GitHubRecordStore<GitGovFeedbackRecord>;
-  let executionsStore: GitHubRecordStore<GitGovExecutionRecord>;
 
   beforeAll(async () => {
     if (!HAS_GITHUB) {
@@ -136,7 +132,6 @@ describe('Block C: GitHub Integration (CC1-CC5)', () => {
     }
     octokit = new Octokit({ auth: GITHUB_TOKEN });
     prisma = createTestPrisma();
-    repoId = `e2e-github-cc-${Date.now()}`;
     testBranch = `e2e-github-${Date.now()}`;
 
     // Create test branch based on default branch
@@ -156,10 +151,8 @@ describe('Block C: GitHub Integration (CC1-CC5)', () => {
     // Create stores pointing to test branch
     const storeOpts = { owner: GITHUB_TEST_OWNER, repo: GITHUB_TEST_REPO_NAME, ref: testBranch };
     tasksStore = new GitHubRecordStore<GitGovTaskRecord>({ ...storeOpts, basePath: '.gitgov/tasks' }, octokit);
-    actorsStore = new GitHubRecordStore<GitGovActorRecord>({ ...storeOpts, basePath: '.gitgov/actors' }, octokit);
+    actorsStore = new GitHubRecordStore<GitGovActorRecord>({ ...storeOpts, basePath: '.gitgov/actors', idEncoder: DEFAULT_ID_ENCODER }, octokit);
     cyclesStore = new GitHubRecordStore<GitGovCycleRecord>({ ...storeOpts, basePath: '.gitgov/cycles' }, octokit);
-    feedbacksStore = new GitHubRecordStore<GitGovFeedbackRecord>({ ...storeOpts, basePath: '.gitgov/feedbacks' }, octokit);
-    executionsStore = new GitHubRecordStore<GitGovExecutionRecord>({ ...storeOpts, basePath: '.gitgov/executions' }, octokit);
   });
 
   afterAll(async () => {
@@ -172,7 +165,7 @@ describe('Block C: GitHub Integration (CC1-CC5)', () => {
       });
     } catch { /* branch may not exist if beforeAll failed */ }
 
-    await cleanupDb(prisma, repoId);
+    await cleanupDb(prisma);
     await prisma.$disconnect();
   });
 
@@ -209,17 +202,9 @@ describe('Block C: GitHub Integration (CC1-CC5)', () => {
     await cyclesStore.put(cycleId, makeCycleRecord());
 
     // Create projector with GitHub stores
-    const stores = {
-      tasks: tasksStore,
-      actors: actorsStore,
-      cycles: cyclesStore,
-      feedbacks: feedbacksStore,
-      executions: executionsStore,
-    };
-
-    const typedStores = stores as unknown as RecordProjectorDependencies['stores'];
-    const recordMetrics = new RecordMetrics({ stores: typedStores });
-    const projector = new RecordProjector({ recordMetrics, stores: typedStores });
+    const stores = createGitHubProjectorStores(octokit, { owner: GITHUB_TEST_OWNER, repo: GITHUB_TEST_REPO_NAME, ref: testBranch });
+    const recordMetrics = new RecordMetrics({ stores });
+    const projector = new RecordProjector({ recordMetrics, stores });
 
     const indexData = await projector.computeProjection();
 
@@ -236,17 +221,9 @@ describe('Block C: GitHub Integration (CC1-CC5)', () => {
 
   it('[EARS-CC5] should persist GitHub-sourced projection with correct enriched data', async () => {
     // Re-compute projection and persist to DB
-    const stores = {
-      tasks: tasksStore,
-      actors: actorsStore,
-      cycles: cyclesStore,
-      feedbacks: feedbacksStore,
-      executions: executionsStore,
-    };
-
-    const typedStores = stores as unknown as RecordProjectorDependencies['stores'];
-    const recordMetrics = new RecordMetrics({ stores: typedStores });
-    const projector = new RecordProjector({ recordMetrics, stores: typedStores });
+    const stores = createGitHubProjectorStores(octokit, { owner: GITHUB_TEST_OWNER, repo: GITHUB_TEST_REPO_NAME, ref: testBranch });
+    const recordMetrics = new RecordMetrics({ stores });
+    const projector = new RecordProjector({ recordMetrics, stores });
 
     const indexData = await projector.computeProjection();
     indexData.activityHistory = indexData.activityHistory.filter(
@@ -256,21 +233,17 @@ describe('Block C: GitHub Integration (CC1-CC5)', () => {
 
     const sink = new PrismaRecordProjection({
       client: prisma as unknown as ProjectionClient,
-      repoId,
-      projectionType: 'index',
     });
     await sink.persist(indexData, {});
 
     // Verify DB
-    const where = { repoId, projectionType: 'index' };
-
-    const meta = await prisma.gitgovMeta.findFirst({ where });
+    const meta = await prisma.gitgovMeta.findFirst({});
     expect(meta).not.toBeNull();
     const counts = meta!.recordCountsJson as Record<string, number>;
     expect(counts['tasks']).toBeGreaterThanOrEqual(1);
     expect(counts['actors']).toBeGreaterThanOrEqual(1);
 
-    const tasks = await prisma.gitgovTask.findMany({ where });
+    const tasks = await prisma.gitgovTask.findMany({});
     expect(tasks.length).toBeGreaterThanOrEqual(1);
     const dbTask = tasks.find(t => t.recordId === taskId);
     expect(dbTask).toBeDefined();
@@ -278,10 +251,10 @@ describe('Block C: GitHub Integration (CC1-CC5)', () => {
     expect(typeof dbTask!.isStalled).toBe('boolean');
     expect(typeof dbTask!.executionCount).toBe('number');
 
-    const actors = await prisma.gitgovActor.findMany({ where });
+    const actors = await prisma.gitgovActor.findMany({});
     expect(actors.length).toBeGreaterThanOrEqual(1);
 
-    const cycles = await prisma.gitgovCycle.findMany({ where });
+    const cycles = await prisma.gitgovCycle.findMany({});
     expect(cycles.length).toBeGreaterThanOrEqual(1);
   });
 });
