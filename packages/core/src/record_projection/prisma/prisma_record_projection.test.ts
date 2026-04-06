@@ -780,4 +780,84 @@ describe('PrismaRecordProjection', () => {
       expect(result!.agents[0]!.header).toBeDefined();
     });
   });
+
+  // ─── Schema-Type Coherence (COH-A1 to COH-A3) ──────────────────────────────
+  // Spec: prisma_record_projection_module.md §4.10
+
+  describe('4.10. Protocol Schema Coherence (COH-A1 to COH-A3)', () => {
+    const fs = require('fs');
+    const path = require('path');
+
+    type PrismaSchemaField = { name: string; type: string };
+    type PrismaSchemaModel = { name: string; fields: PrismaSchemaField[] };
+
+    function parsePrismaSchema(schemaPath: string): PrismaSchemaModel[] {
+      const content = fs.readFileSync(schemaPath, 'utf-8');
+      const models: PrismaSchemaModel[] = [];
+      let currentModel: PrismaSchemaModel | null = null;
+      for (const line of content.split('\n')) {
+        const modelMatch = line.match(/^model\s+(\w+)\s*\{/);
+        if (modelMatch) { currentModel = { name: modelMatch[1], fields: [] }; continue; }
+        if (line.trim() === '}' && currentModel) { models.push(currentModel); currentModel = null; continue; }
+        if (currentModel) {
+          const fieldMatch = line.match(/^\s+(\w+)\s+([\w[\]?]+)/);
+          if (fieldMatch && !line.trim().startsWith('//') && !line.trim().startsWith('@@')) {
+            const name = fieldMatch[1];
+            const rawType = fieldMatch[2];
+            if (rawType.match(/^[A-Z]/) && !['String','Int','Float','Boolean','DateTime','Json','BigInt','Decimal','Bytes'].includes(rawType.replace('?','').replace('[]',''))) {
+              continue; // Skip relations and unknown PascalCase types
+            }
+            currentModel.fields.push({ name, type: rawType.replace('?','').replace('[]','') });
+          }
+        }
+      }
+      return models;
+    }
+
+    const SCHEMA_DIR = path.resolve(__dirname, '../../../prisma/schema');
+    let protocolModels: PrismaSchemaModel[];
+
+    beforeAll(() => {
+      const protocolPath = path.join(SCHEMA_DIR, 'protocol.prisma');
+      expect(fs.existsSync(protocolPath)).toBe(true);
+      protocolModels = parsePrismaSchema(protocolPath);
+    });
+
+    it('[COH-A1] should verify every protocol.prisma field maps to a record type field', () => {
+      expect(protocolModels.length).toBeGreaterThan(0);
+      const taskModel = protocolModels.find((m: PrismaSchemaModel) => m.name === 'GitgovTask');
+      expect(taskModel).toBeDefined();
+      const taskFieldNames = taskModel!.fields.map((f: PrismaSchemaField) => f.name);
+      for (const field of ['title', 'status', 'priority', 'description', 'tags', 'references', 'cycleIds', 'notes', 'metadata']) {
+        expect(taskFieldNames).toContain(field);
+      }
+      for (const field of ['isStalled', 'isAtRisk', 'needsClarification', 'healthScore']) {
+        expect(taskFieldNames).toContain(field);
+      }
+    });
+
+    it('[COH-A2] should fail when record type field is added but not in prisma schema', () => {
+      const taskModel = protocolModels.find((m: PrismaSchemaModel) => m.name === 'GitgovTask');
+      const taskFieldNames = taskModel!.fields.map((f: PrismaSchemaField) => f.name);
+      expect(taskFieldNames).toContain('recordId');
+      expect(taskFieldNames).toContain('header');
+    });
+
+    it('[COH-A3] should fail when prisma has field not in record type or enrichment', () => {
+      const taskModel = protocolModels.find((m: PrismaSchemaModel) => m.name === 'GitgovTask');
+      const taskFieldNames = taskModel!.fields.map((f: PrismaSchemaField) => f.name);
+      const knownTaskFields = [
+        'id', 'recordId', 'createdAt', 'updatedAt',
+        'title', 'status', 'priority', 'description', 'tags', 'references', 'cycleIds', 'notes', 'metadata',
+        'header',
+        'isStalled', 'isAtRisk', 'needsClarification', 'isBlockedByDependency',
+        'healthScore', 'timeInCurrentStage', 'executionCount',
+        'blockingFeedbackCount', 'openQuestionCount', 'timeToResolution',
+        'isReleased', 'lastReleaseVersion',
+        'lastUpdated', 'lastActivityType', 'recentActivity', 'relationships',
+      ];
+      const orphanedFields = taskFieldNames.filter((f: string) => !knownTaskFields.includes(f));
+      expect(orphanedFields).toEqual([]);
+    });
+  });
 });

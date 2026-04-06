@@ -10,6 +10,7 @@ import type {
   GitgovActivityRow,
   GitgovExecutionRow,
   GitgovAgentRow,
+  GitgovMetaRow,
 } from './prisma_record_projection.types';
 
 export class PrismaRecordProjection implements IRecordProjection {
@@ -180,7 +181,7 @@ export class PrismaRecordProjection implements IRecordProjection {
       this.client.gitgovWorkflow.findMany({ where: whereMany }),
     ]);
 
-    return this.reconstructIndexData(meta, taskRows, cycleRows, actorRows, feedbackRows, activityRows, executionRows, agentRows);
+    return this.reconstructIndexData(meta as GitgovMetaRow, taskRows, cycleRows, actorRows, feedbackRows, activityRows, executionRows, agentRows);
   }
 
   async exists(_context: ProjectionContext): Promise<boolean> {

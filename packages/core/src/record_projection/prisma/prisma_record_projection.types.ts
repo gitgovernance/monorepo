@@ -144,7 +144,8 @@ export type SingletonDelegate<TRow> = {
   }): PromiseLike<TRow | { id: string } | null>;
   findFirst?(args: {
     where?: WhereClause;
-  }): PromiseLike<TRow | null>;
+    select?: { id: true };
+  }): PromiseLike<TRow | { id: string } | null>;
   deleteMany(args: { where: WhereClause }): PromiseLike<unknown>;
 };
 
