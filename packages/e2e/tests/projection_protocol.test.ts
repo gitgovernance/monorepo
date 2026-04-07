@@ -13,8 +13,8 @@ import * as path from 'path';
 import {
   runGitgovCli,
   createTempGitRepo,
-  createTestPrisma,
-  cleanupDb,
+  createProtocolPrisma,
+  cleanupProtocol,
   runProjector,
   listRecordIds,
   readRecord,
@@ -27,7 +27,7 @@ import {
   RecordMetrics,
 } from './helpers';
 import type {
-  PrismaClient,
+  ProtocolClient,
   IndexGenerationReport,
   GitGovTaskRecord,
   GitGovCycleRecord,
@@ -38,13 +38,13 @@ import type {
 } from './helpers';
 
 describe('Block B: Protocol Record Projection (CB1-CB10)', () => {
-  let prisma: PrismaClient;
+  let prisma: ProtocolClient;
   let tmpDir: string;
   let repoDir: string;
   let report: IndexGenerationReport;
 
   beforeAll(async () => {
-    prisma = createTestPrisma();
+    prisma = createProtocolPrisma();
     ({ tmpDir, repoDir } = createTempGitRepo());
 
     // CLI creates records (black-box)
@@ -68,7 +68,7 @@ describe('Block B: Protocol Record Projection (CB1-CB10)', () => {
 
   afterAll(async () => {
     cleanupWorktree(repoDir);
-    await cleanupDb(prisma);
+    await cleanupProtocol(prisma);
     await prisma.$disconnect();
     if (!SKIP_CLEANUP) fs.rmSync(tmpDir, { recursive: true, force: true });
   });
@@ -178,7 +178,7 @@ describe('Block B: Protocol Record Projection (CB1-CB10)', () => {
 
     try {
       // Do NOT run gitgov init — repo has no .gitgov/
-      await cleanupDb(prisma);
+      await cleanupProtocol(prisma);
 
       const emptyReport = await runProjector(prisma, emptyRepoDir);
 
@@ -195,7 +195,7 @@ describe('Block B: Protocol Record Projection (CB1-CB10)', () => {
         expect(counts['actors'] ?? 0).toBe(0);
       }
     } finally {
-      await cleanupDb(prisma);
+      await cleanupProtocol(prisma);
       if (!SKIP_CLEANUP) fs.rmSync(emptyTmpDir, { recursive: true, force: true });
     }
   });
@@ -213,7 +213,7 @@ describe('Block B: Protocol Record Projection (CB1-CB10)', () => {
       runGitgovCli('audit --scope full -q', { cwd: cb9RepoDir });
 
       // Projection
-      await cleanupDb(prisma);
+      await cleanupProtocol(prisma);
       const cb9Report = await runProjector(prisma, cb9RepoDir);
 
       const executions = await prisma.gitgovExecution.findMany({});
@@ -223,7 +223,7 @@ describe('Block B: Protocol Record Projection (CB1-CB10)', () => {
       expect(auditExec).toBeDefined();
     } finally {
       cleanupWorktree(cb9RepoDir);
-      await cleanupDb(prisma);
+      await cleanupProtocol(prisma);
       if (!SKIP_CLEANUP) fs.rmSync(cb9TmpDir, { recursive: true, force: true });
     }
   });
@@ -236,7 +236,7 @@ describe('Block B: Protocol Record Projection (CB1-CB10)', () => {
       runGitgovCli('agent new agent:test-echo --config \'{"metadata":{"purpose":"testing"},"engine":{"type":"local","entrypoint":"@gitgov/agent-test-echo","function":"runAgent"}}\'', { cwd: cb10RepoDir });
 
       // Projection
-      await cleanupDb(prisma);
+      await cleanupProtocol(prisma);
       const cb10Report = await runProjector(prisma, cb10RepoDir);
 
       const agents = await prisma.gitgovAgent.findMany({});
@@ -247,7 +247,7 @@ describe('Block B: Protocol Record Projection (CB1-CB10)', () => {
       expect(testAgent!.engine).toBeDefined();
     } finally {
       cleanupWorktree(cb10RepoDir);
-      await cleanupDb(prisma);
+      await cleanupProtocol(prisma);
       if (!SKIP_CLEANUP) fs.rmSync(cb10TmpDir, { recursive: true, force: true });
     }
   });

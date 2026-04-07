@@ -16,8 +16,8 @@ import { Gitlab } from '@gitbeaker/rest';
 import {
   runGitgovCli,
   createTempGitRepo,
-  createTestPrisma,
-  cleanupDb,
+  createProtocolPrisma,
+  cleanupProtocol,
   projectAndCompare,
   listRecordIds,
   readRecord,
@@ -37,7 +37,7 @@ import {
   createGitHubProjectorStores,
 } from './helpers';
 import type {
-  PrismaClient,
+  ProtocolClient,
   RecordProjectorDependencies,
 } from './helpers';
 
@@ -55,7 +55,7 @@ export type {
 describe('Block E: Projection Parity (CE1-CE3)', () => {
 
   it('[CE1] should produce equivalent IndexData from FS and Prisma projections', async () => {
-    const prisma: PrismaClient = createTestPrisma();
+    const prisma: ProtocolClient = createProtocolPrisma();
     const { tmpDir, repoDir } = createTempGitRepo();
 
     try {
@@ -99,7 +99,7 @@ describe('Block E: Projection Parity (CE1-CE3)', () => {
       expect(prismaIndexData.feedback.length).toBe(fsIndexData.feedback.length);
     } finally {
       cleanupWorktree(repoDir);
-      await cleanupDb(prisma);
+      await cleanupProtocol(prisma);
       await prisma.$disconnect();
       if (!SKIP_CLEANUP) fs.rmSync(tmpDir, { recursive: true, force: true });
     }

@@ -17,8 +17,8 @@ import { Octokit } from '@octokit/rest';
 import {
   runGitgovCli,
   createTempGitRepo,
-  createTestPrisma,
-  cleanupDb,
+  createProtocolPrisma,
+  cleanupProtocol,
   cleanupWorktree,
   listRecordIds,
   readRecord,
@@ -35,7 +35,7 @@ import {
   createGitHubProjectorStores,
 } from './helpers';
 import type {
-  PrismaClient,
+  ProtocolClient,
   ProjectionClient,
   GithubSyncStateDependencies,
   IRecordProjector,
@@ -77,7 +77,7 @@ function createSyncModule(octokit: Octokit, indexer: IRecordProjector): GithubSy
 
 describe('Block F: Change Detection (CF1-CF7)', () => {
   let octokit: Octokit;
-  let prisma: PrismaClient;
+  let prisma: ProtocolClient;
   let tmpDir: string;
   let repoDir: string;
   let testBranch: string;
@@ -93,7 +93,7 @@ describe('Block F: Change Detection (CF1-CF7)', () => {
     }
 
     octokit = new Octokit({ auth: GITHUB_TOKEN });
-    prisma = createTestPrisma();
+    prisma = createProtocolPrisma();
     testBranch = `e2e-cf-${Date.now()}`;
 
     // 1. Create local git repo
@@ -159,7 +159,7 @@ describe('Block F: Change Detection (CF1-CF7)', () => {
       } catch { /* may not exist */ }
     }
 
-    await cleanupDb(prisma);
+    await cleanupProtocol(prisma);
     await prisma.$disconnect();
 
     cleanupWorktree(repoDir);

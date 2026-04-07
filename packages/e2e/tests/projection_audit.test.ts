@@ -15,18 +15,27 @@ import * as path from 'path';
 import {
   runGitgovCli,
   createTempGitRepo,
-  createTestPrisma,
-  cleanupDb,
+  createAuditPrisma,
+  cleanupAudit,
   cleanupWorktree,
   listRecordIds,
   readRecord,
   SKIP_CLEANUP,
   getGitgovDir,
 } from './helpers';
-import type { PrismaClient } from './helpers';
+import type { AuditClient } from './helpers';
 
-// Resolve absolute path to agent entrypoint (agents live in monorepo, not in temp repo)
-const MONOREPO_ROOT = path.resolve(__dirname, '../../..');
+// Resolve absolute path to agent entrypoint.
+// In worktrees, __dirname resolves to the worktree path which may not have agent builds.
+// Use the real monorepo root (resolving through symlinks and worktree paths).
+const MONOREPO_ROOT = (() => {
+  const candidate = path.resolve(__dirname, '../../..');
+  const agentDist = path.join(candidate, 'packages/agents/security-audit/dist/index.mjs');
+  if (fs.existsSync(agentDist)) return candidate;
+  // Fallback: try the main monorepo (not worktree)
+  const mainRoot = path.resolve(__dirname, '../../../../../..');
+  return mainRoot;
+})();
 const SECURITY_AUDIT_ENTRYPOINT = path.join(MONOREPO_ROOT, 'packages/agents/security-audit/dist/index.mjs');
 
 // ─── Fixtures ───────────────────────────────────────────────────────────────
@@ -55,14 +64,14 @@ blocking:
 // ─── Tests ──────────────────────────────────────────────────────────────────
 
 describe('Block BA: Audit Record Projection (CBA1-CBA6)', () => {
-  let prisma: PrismaClient;
+  let prisma: AuditClient;
   let tmpDir: string;
   let repoDir: string;
   let auditOutput: string;
   let auditResult: Record<string, unknown>;
 
   beforeAll(async () => {
-    prisma = createTestPrisma();
+    prisma = createAuditPrisma();
     ({ tmpDir, repoDir } = createTempGitRepo());
 
     // 1. Init project + register agent
@@ -78,12 +87,17 @@ describe('Block BA: Audit Record Projection (CBA1-CBA6)', () => {
     fs.writeFileSync(path.join(repoDir, 'src', 'config.ts'), FIXTURE_CONFIG_TS);
     fs.writeFileSync(path.join(repoDir, 'src', 'checkout.ts'), FIXTURE_CHECKOUT_TS);
 
+    // 2b. Commit fixtures so FileLister can find them
+    const { execSync: exec } = require('child_process');
+    exec('git add -A && git commit -m "add fixtures"', { cwd: repoDir, stdio: 'pipe' });
+
     // 3. Write policy
     const gitgovDir = getGitgovDir(repoDir);
     fs.writeFileSync(path.join(gitgovDir, 'policy.yml'), POLICY_YML);
 
     // 4. Run audit
-    const cliResult = runGitgovCli('audit --scope full --output json', { cwd: repoDir, timeout: 60000 });
+    // expectError: true because policy may BLOCK (exit 1) when critical findings exist — that's expected
+    const cliResult = runGitgovCli('audit --scope full --output json', { cwd: repoDir, timeout: 60000, expectError: true });
     auditOutput = cliResult.output;
     // CLI may print text before JSON (e.g., "Scanning repository...") — find first {
     const jsonStart = auditOutput.indexOf('{');
@@ -95,9 +109,23 @@ describe('Block BA: Audit Record Projection (CBA1-CBA6)', () => {
     if (findingsArray.length === 0) {
       console.log('WARNING: audit produced 0 findings.');
       console.log('CLI success:', cliResult.success);
-      console.log('CLI error:', cliResult.error);
+      // Run again with spawnSync to capture stderr (agent debug log)
+      const { spawnSync } = require('child_process');
+      const debugRun = spawnSync('gitgov', ['audit', '--scope', 'full', '--output', 'json'], { cwd: repoDir, encoding: 'utf8', timeout: 60000 });
+      console.log('debug stderr:', debugRun.stderr?.substring(0, 500));
       console.log('Output length:', auditOutput.length);
-      console.log('FULL OUTPUT:', auditOutput);
+      console.log('repoDir:', repoDir);
+      console.log('config.ts exists:', fs.existsSync(path.join(repoDir, 'src', 'config.ts')));
+      const { execSync: ex } = require('child_process');
+      console.log('git log:', ex('git log --oneline', { cwd: repoDir, encoding: 'utf8' }).trim());
+      console.log('ls src:', ex('ls -la src/', { cwd: repoDir, encoding: 'utf8' }).trim());
+      // Check what scope the agent saw
+      const agentResult = (auditResult as any).agentResults?.[0];
+      console.log('agent status:', agentResult?.status, 'durationMs:', agentResult?.durationMs);
+      console.log('sarif runs:', agentResult?.sarif?.runs?.length);
+      if (agentResult?.sarif?.runs?.length > 0) {
+        console.log('sarif results:', agentResult.sarif.runs[0].results?.length);
+      }
       console.log('auditResult keys:', Object.keys(auditResult));
     } else {
       console.log(`Audit produced ${findingsArray.length} findings`);
@@ -111,7 +139,7 @@ describe('Block BA: Audit Record Projection (CBA1-CBA6)', () => {
     const summary = (auditResult as any).summary ?? {};
 
     // Clean DB before projecting
-    await cleanupDb(prisma);
+    await cleanupAudit(prisma);
 
     // Project findings to Finding table
     for (const finding of findings) {
@@ -172,7 +200,7 @@ describe('Block BA: Audit Record Projection (CBA1-CBA6)', () => {
 
   afterAll(async () => {
     cleanupWorktree(repoDir);
-    await cleanupDb(prisma);
+    await cleanupAudit(prisma);
     await prisma.$disconnect();
     if (!SKIP_CLEANUP) fs.rmSync(tmpDir, { recursive: true, force: true });
   });

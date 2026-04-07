@@ -13,8 +13,9 @@ import {
   runGitgovCli,
   createTempGitRepo,
   cleanupWorktree,
-  createTestPrisma,
-  cleanupDb,
+  createProtocolPrisma,
+  cleanupProtocol,
+  runProjector,
   getGitgovDir,
   listRecordIds,
   readRecord,
@@ -78,7 +79,7 @@ describe('E2E Helpers', () => {
   describe('4.2. Prisma Helpers (HLP-B1 to HLP-B3)', () => {
 
     it('[HLP-B1] should connect to PostgreSQL and return a working PrismaClient', async () => {
-      const prisma = createTestPrisma();
+      const prisma = createProtocolPrisma();
       try {
         // Verify connection works by executing a real query
         const count = await prisma.gitgovTask.count();
@@ -89,9 +90,9 @@ describe('E2E Helpers', () => {
     });
 
     it('[HLP-B2] should delete all rows from all 9 protocol tables', async () => {
-      const prisma = createTestPrisma();
+      const prisma = createProtocolPrisma();
       try {
-        await cleanupDb(prisma);
+        await cleanupProtocol(prisma);
 
         const tasks = await prisma.gitgovTask.findMany({});
         const actors = await prisma.gitgovActor.findMany({});
@@ -112,11 +113,10 @@ describe('E2E Helpers', () => {
       runGitgovCli('init --name PrismaTest --actor-name Dev -q', { cwd: repoDir });
       runGitgovCli('task new "Test task" -p high -q', { cwd: repoDir });
 
-      const prisma = createTestPrisma();
+      const prisma = createProtocolPrisma();
       try {
-        await cleanupDb(prisma);
+        await cleanupProtocol(prisma);
 
-        const { runProjector } = await import('./prisma');
         const report = await runProjector(prisma, repoDir);
 
         expect(report.success).toBe(true);
@@ -126,7 +126,7 @@ describe('E2E Helpers', () => {
         expect(tasks.length).toBeGreaterThanOrEqual(1);
       } finally {
         cleanupWorktree(repoDir);
-        await cleanupDb(prisma);
+        await cleanupProtocol(prisma);
         await prisma.$disconnect();
       }
     });

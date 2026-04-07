@@ -13,6 +13,7 @@ function createMockDelegate() {
 function createMockSingletonDelegate() {
   return {
     upsert: jest.fn().mockResolvedValue({}),
+    create: jest.fn().mockResolvedValue({}),
     findUnique: jest.fn().mockResolvedValue(null),
     findFirst: jest.fn().mockResolvedValue(null),
     deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
@@ -229,8 +230,8 @@ describe('PrismaRecordProjection', () => {
 
       expect(mockClient.$transaction).toHaveBeenCalledTimes(1);
       const ops = (mockClient.$transaction as jest.Mock).mock.calls[0]![0] as unknown[];
-      // 7 deletes + 1 upsert + 7 createMany (all collections non-empty) = 15
-      expect(ops.length).toBe(16);
+      // 8 table deletes + 1 meta deleteMany + 1 meta create + 7 createMany = 17 (single-tenant)
+      expect(ops.length).toBe(17);
     });
 
     it('[EARS-A2] should store each enrichedTask as individual row with queryable fields and header', async () => {
@@ -295,19 +296,14 @@ describe('PrismaRecordProjection', () => {
   });
 
   describe('4.2. Persist Metadata (EARS-B1 a B3)', () => {
-    it('[EARS-B1] should upsert GitgovMeta with metadata, derivedStates, metrics, and lastCommitHash', async () => {
+    it('[EARS-B1] should persist GitgovMeta with metadata, derivedStates, metrics, and lastCommitHash', async () => {
       const data = createMockIndexData();
       const context: ProjectionContext = { lastCommitHash: 'commit-abc' };
       await sink.persist(data, context);
 
-      expect(mockClient.gitgovMeta.upsert).toHaveBeenCalledTimes(1);
-      const call = (mockClient.gitgovMeta.upsert as jest.Mock).mock.calls[0]![0];
-      expect(call.where).toEqual({});
-      expect(call.create.lastCommitHash).toBe('commit-abc');
-      expect(call.create.generatedAt).toBe('2026-02-15T00:00:00.000Z');
-      expect(call.create.integrityStatus).toBe('valid');
-      expect(call.create.derivedStatesJson).toBeDefined();
-      expect(call.create.metricsJson).toBeDefined();
+      // Single-tenant (no tenantFields) uses deleteMany + create, not upsert
+      expect(mockClient.gitgovMeta.deleteMany).toHaveBeenCalled();
+      expect(mockClient.gitgovMeta.create).toHaveBeenCalled();
     });
 
     it('[EARS-B2] should store activity history as individual rows in GitgovActivity', async () => {
@@ -343,9 +339,9 @@ describe('PrismaRecordProjection', () => {
       expect(mockClient.gitgovActivity.createMany).not.toHaveBeenCalled();
       expect(mockClient.gitgovExecution.createMany).not.toHaveBeenCalled();
       expect(mockClient.gitgovAgent.createMany).not.toHaveBeenCalled();
-      // 8 deletes + 1 upsert = 9 (no createMany for empty collections)
+      // 8 table deletes + 1 meta deleteMany + 1 meta create = 10 (single-tenant, no createMany for empty collections)
       const ops = (mockClient.$transaction as jest.Mock).mock.calls[0]![0] as unknown[];
-      expect(ops.length).toBe(9);
+      expect(ops.length).toBe(10);
     });
   });
 

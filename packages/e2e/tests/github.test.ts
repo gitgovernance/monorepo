@@ -13,8 +13,8 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { Octokit } from '@octokit/rest';
 
 import {
-  createTestPrisma,
-  cleanupDb,
+  createProtocolPrisma,
+  cleanupProtocol,
   HAS_GITHUB,
   GITHUB_TEST_OWNER,
   GITHUB_TEST_REPO_NAME,
@@ -27,7 +27,7 @@ import {
   DEFAULT_ID_ENCODER,
 } from './helpers';
 import type {
-  PrismaClient,
+  ProtocolClient,
   ProjectionClient,
   GitGovTaskRecord,
   GitGovActorRecord,
@@ -117,7 +117,7 @@ function makeCycleRecord(): GitGovCycleRecord {
 
 describe('Block C: GitHub Integration (CC1-CC5)', () => {
   let octokit: Octokit;
-  let prisma: PrismaClient;
+  let prisma: ProtocolClient;
   let testBranch: string;
   let tasksStore: GitHubRecordStore<GitGovTaskRecord>;
   let actorsStore: GitHubRecordStore<GitGovActorRecord>;
@@ -131,7 +131,7 @@ describe('Block C: GitHub Integration (CC1-CC5)', () => {
       );
     }
     octokit = new Octokit({ auth: GITHUB_TOKEN });
-    prisma = createTestPrisma();
+    prisma = createProtocolPrisma();
     testBranch = `e2e-github-${Date.now()}`;
 
     // Create test branch based on default branch
@@ -165,7 +165,7 @@ describe('Block C: GitHub Integration (CC1-CC5)', () => {
       });
     } catch { /* branch may not exist if beforeAll failed */ }
 
-    await cleanupDb(prisma);
+    await cleanupProtocol(prisma);
     await prisma.$disconnect();
   });
 

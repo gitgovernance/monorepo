@@ -363,6 +363,16 @@ describe('AuditCommand', () => {
       expect(parsed).toHaveProperty('summary');
     });
 
+    it('[AORCH-C7] should emit only JSON to stdout when --output json (no progress text)', async () => {
+      await auditCommand.execute(createDefaultOptions({ scope: 'full', output: 'json' }));
+
+      // ALL console.log calls should be valid JSON — no progress text
+      for (const call of mockConsoleLog.mock.calls) {
+        const output = call[0] as string;
+        expect(() => JSON.parse(output)).not.toThrow();
+      }
+    });
+
     it('[AORCH-C5] should not set agentId when --agent is not provided', async () => {
       await auditCommand.execute(createDefaultOptions({ scope: 'full' }));
 

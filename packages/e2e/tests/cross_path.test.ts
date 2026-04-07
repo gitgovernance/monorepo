@@ -20,8 +20,8 @@ import * as os from 'os';
 import {
   runGitgovCli,
   createTempGitRepo,
-  createTestPrisma,
-  cleanupDb,
+  createProtocolPrisma,
+  cleanupProtocol,
   runProjector,
   listRecordIds,
   readRecord,
@@ -40,14 +40,14 @@ import {
   createGitHubProjectorStores,
 } from './helpers';
 import type {
-  PrismaClient,
+  ProtocolClient,
   ProjectionClient,
   GitGovTaskRecord,
   GitGovFeedbackRecord,
 } from './helpers';
 
 describe('Block D: Cross-Path Workflows (CD1-CD5)', () => {
-  let prisma: PrismaClient;
+  let prisma: ProtocolClient;
   let octokit: Octokit;
   let tmpDir: string;
   let userARepo: string;
@@ -62,7 +62,7 @@ describe('Block D: Cross-Path Workflows (CD1-CD5)', () => {
       );
     }
     octokit = new Octokit({ auth: GITHUB_TOKEN });
-    prisma = createTestPrisma();
+    prisma = createProtocolPrisma();
 
     ({ tmpDir, repoDir: userARepo } = createTempGitRepo());
     branchName = `e2e-crosspath-${Date.now()}`;
@@ -92,7 +92,7 @@ describe('Block D: Cross-Path Workflows (CD1-CD5)', () => {
 
     // Cleanup worktrees for all repos used in tests
     cleanupWorktree(userARepo);
-    await cleanupDb(prisma);
+    await cleanupProtocol(prisma);
     await prisma.$disconnect();
     if (!SKIP_CLEANUP) fs.rmSync(tmpDir, { recursive: true, force: true });
     else console.log(`[SKIP_CLEANUP] Keeping tmpDir=${tmpDir}`);
@@ -238,7 +238,7 @@ describe('Block D: Cross-Path Workflows (CD1-CD5)', () => {
       expect(counts['tasks']).toBeGreaterThanOrEqual(1);
       expect(counts['feedback']).toBeGreaterThanOrEqual(1);
     } finally {
-      await cleanupDb(prisma);
+      await cleanupProtocol(prisma);
     }
   });
 
@@ -340,7 +340,7 @@ describe('Block D: Cross-Path Workflows (CD1-CD5)', () => {
     } finally {
       cleanupWorktree(userBRepo);
       if (userBTmpDir! && !SKIP_CLEANUP) fs.rmSync(userBTmpDir!, { recursive: true, force: true });
-      await cleanupDb(prisma);
+      await cleanupProtocol(prisma);
     }
   });
 

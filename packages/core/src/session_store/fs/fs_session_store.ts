@@ -61,6 +61,8 @@ export class FsSessionStore implements SessionStore {
    * [EARS-B2] Preserves all fields (cloud, actorState, syncPreferences)
    */
   async saveSession(session: GitGovSession): Promise<void> {
+    // [EARS-B3] Ensure directory exists (session.json is volatile — may be deleted)
+    await fs.mkdir(path.dirname(this.sessionPath), { recursive: true });
     await fs.writeFile(this.sessionPath, JSON.stringify(session, null, 2), 'utf-8');
   }
 

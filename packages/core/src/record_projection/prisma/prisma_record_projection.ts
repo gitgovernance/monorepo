@@ -132,10 +132,14 @@ export class PrismaRecordProjection implements IRecordProjection {
     };
 
     const metaWhere = this.buildMetaWhere();
-    // In single-tenant (no tenantFields), meta was already deleted above.
-    // Use upsert with empty where — findUnique returns null after delete, so it creates.
-    // In multi-tenant, upsert with composite key as before.
-    ops.push(this.client.gitgovMeta.upsert({ where: metaWhere, create: metaData, update: metaData }));
+    if (Object.keys(this.tenantFields).length === 0) {
+      // Single-tenant: delete + create (upsert with empty where is invalid in Prisma 7.x)
+      ops.push(this.client.gitgovMeta.deleteMany({ where: {} }));
+      ops.push(this.client.gitgovMeta.create({ data: metaData }));
+    } else {
+      // Multi-tenant: upsert with composite key
+      ops.push(this.client.gitgovMeta.upsert({ where: metaWhere, create: metaData, update: metaData }));
+    }
 
     if (taskRows.length > 0) {
       ops.push(this.client.gitgovTask.createMany({ data: taskRows }));

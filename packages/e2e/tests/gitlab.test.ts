@@ -19,10 +19,10 @@ import { randomUUID } from 'crypto';
 import { GitLabRecordStore } from '@gitgov/core-gitlab';
 import type { GitLabRecordStoreOptions } from '@gitgov/core-gitlab';
 import {
-  createTestPrisma,
-  cleanupDb,
+  createProtocolPrisma,
+  cleanupProtocol,
 } from './helpers';
-import type { PrismaClient } from './helpers';
+import type { ProtocolClient } from './helpers';
 
 const GITLAB_TOKEN = process.env['GITLAB_TOKEN'] ?? '';
 const GITLAB_TEST_PROJECT_ID = process.env['GITLAB_TEST_PROJECT_ID'] ?? '';
@@ -62,7 +62,7 @@ describe('Block J: GitLab Integration (CJ1-CJ8)', () => {
   let projectId: number;
   let testBranch: string;
   let tasksStore: GitLabRecordStore<TestTaskRecord>;
-  let prisma: PrismaClient;
+  let prisma: ProtocolClient;
 
   beforeAll(async () => {
     api = new Gitlab({ token: GITLAB_TOKEN });
@@ -88,12 +88,12 @@ describe('Block J: GitLab Integration (CJ1-CJ8)', () => {
       basePath: '.gitgov/tasks',
     });
 
-    prisma = createTestPrisma();
+    prisma = createProtocolPrisma();
   }, 30_000);
 
   afterAll(async () => {
     try { await api.Branches.remove(projectId, testBranch); } catch { /* branch may not exist */ }
-    try { await cleanupDb(prisma); await prisma.$disconnect(); } catch { /* ignore */ }
+    try { await cleanupProtocol(prisma); await prisma.$disconnect(); } catch { /* ignore */ }
   }, 30_000);
 
   // ==================== CJ1-CJ3: CRUD via GitLabRecordStore ====================

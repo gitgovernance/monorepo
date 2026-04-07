@@ -138,6 +138,9 @@ export type SingletonDelegate<TRow> = {
     create: Omit<TRow, 'id' | 'createdAt' | 'updatedAt'> & Record<string, unknown>;
     update: Partial<Omit<TRow, 'id' | 'createdAt' | 'updatedAt'>>;
   }): PromiseLike<unknown>;
+  create(args: {
+    data: Omit<TRow, 'id' | 'createdAt' | 'updatedAt'> & Record<string, unknown>;
+  }): PromiseLike<unknown>;
   findUnique(args: {
     where: WhereClause;
     select?: { id: true };

@@ -558,9 +558,10 @@ export class DependencyInjectionService {
       const feedbackAdapter = await this.getFeedbackAdapter();
       const waiverReader = new SourceAuditor.WaiverReader(feedbackAdapter);
 
-      // Create FileLister for filesystem access
-      const projectRoot = await this.getProjectRoot();
-      const fileLister = new FsFileLister({ cwd: projectRoot });
+      // Create FileLister for filesystem access — use repoRoot (the actual git repo)
+      // not projectRoot (worktree), because the source code to scan lives in the repo
+      const repoRoot = await this.getRepoRoot();
+      const fileLister = new FsFileLister({ cwd: repoRoot });
 
       // Create SourceAuditorModule with dependencies (including FileLister)
       this.sourceAuditorModule = new SourceAuditor.SourceAuditorModule({
@@ -853,6 +854,8 @@ export class DependencyInjectionService {
       });
 
       // [CLIINT-A2] Create FsWorktreeSyncStateModule with repoRoot + worktreePath
+      // Read state branch from config.json (configurable, default: 'gitgov-state')
+      const stateBranchName = await configManager.getStateBranch();
       this.syncModule = new FsWorktreeSyncStateModule(
         {
           git: gitModule,
@@ -861,7 +864,7 @@ export class DependencyInjectionService {
           lint: lintModule,
           indexer: projector,
         },
-        { repoRoot: repoRoot!, worktreePath: this.projectRoot! },
+        { repoRoot: repoRoot!, worktreePath: this.projectRoot!, stateBranchName },
       );
 
       return this.syncModule;
