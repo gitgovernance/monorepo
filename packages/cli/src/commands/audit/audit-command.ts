@@ -107,7 +107,7 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
       const backlogAdapter = await this.container.getBacklogAdapter();
       const { actorId } = await this.requireActor(options);
 
-      if (!options.quiet) {
+      if (!options.quiet && options.output !== 'json') {
         this.logger.log(`Scanning repository (scope: ${options.scope})...`);
       }
 
@@ -165,8 +165,8 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
    * [AORCH-C4]
    */
   private async formatOutput(result: AuditOrchestrationResult, options: AuditCommandOptions): Promise<void> {
-    // Quiet mode - only show critical findings
-    if (options.quiet) {
+    // Quiet mode - only show critical findings (but respect --output json/sarif)
+    if (options.quiet && options.output !== 'json' && options.output !== 'sarif') {
       const criticals = result.findings.filter(f => f.severity === 'critical' && !f.isWaived);
       if (criticals.length > 0) {
         console.log(`❌ ${criticals.length} critical finding(s) detected`);
