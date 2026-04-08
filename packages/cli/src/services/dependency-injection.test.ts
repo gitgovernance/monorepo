@@ -96,7 +96,8 @@ jest.doMock('@gitgov/core', () => {
         }),
         saveConfig: jest.fn().mockResolvedValue(undefined),
         saveSession: jest.fn().mockResolvedValue(undefined),
-        updateActorState: jest.fn().mockResolvedValue(undefined)
+        updateActorState: jest.fn().mockResolvedValue(undefined),
+        getStateBranch: jest.fn().mockResolvedValue('gitgov-state'),
       }))
     },
 
@@ -652,7 +653,8 @@ jest.doMock('@gitgov/core/fs', () => ({
     }),
     saveConfig: jest.fn().mockResolvedValue(undefined),
     saveSession: jest.fn().mockResolvedValue(undefined),
-    updateActorState: jest.fn().mockResolvedValue(undefined)
+    updateActorState: jest.fn().mockResolvedValue(undefined),
+    getStateBranch: jest.fn().mockResolvedValue('gitgov-state'),
   })),
   DEFAULT_ID_ENCODER: { encode: (id: string) => id, decode: (encoded: string) => encoded },
   findProjectRoot: jest.fn().mockReturnValue('/tmp/test-gitgov'),

@@ -151,9 +151,25 @@ export class FsWorktreeSyncStateModule implements ISyncStateModule {
     }
 
     if (health.exists && !health.healthy) {
-      // [WTSYNC-A3] Corrupted — remove and recreate
-      logger.warn(`Worktree corrupted: ${health.error}. Recreating...`);
-      await this.removeWorktree();
+      // Check if it's just a branch mismatch (config changed) vs real corruption
+      if (health.error?.startsWith('Wrong branch:')) {
+        // [WTSYNC-A3b] Branch mismatch — switch branch in-place, don't destroy worktree
+        logger.info(`Branch mismatch in worktree. Switching to ${this.stateBranchName}...`);
+        await this.ensureStateBranch();
+        try {
+          await this.execGit(['-C', this.worktreePath, 'checkout', '-B', this.stateBranchName]);
+          await this.removeLegacyGitignore();
+          return;
+        } catch {
+          // If checkout fails, fall through to recreate
+          logger.warn('Branch switch failed, recreating worktree...');
+          await this.removeWorktree();
+        }
+      } else {
+        // [WTSYNC-A3] Truly corrupted — remove and recreate
+        logger.warn(`Worktree corrupted: ${health.error}. Recreating...`);
+        await this.removeWorktree();
+      }
     }
 
     // [WTSYNC-A5/A6] Ensure branch exists before creating worktree

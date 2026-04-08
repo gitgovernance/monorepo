@@ -18,7 +18,7 @@ export type EmbeddedMetadataHeader = BaseEmbeddedMetadataRecord['header'];
  * This extends the auto-generated base type but makes the payload generic.
  * We need to explicitly preserve the header structure due to the index signature in the base type.
  */
-export type EmbeddedMetadataRecord<T extends GitGovRecordPayload> = {
+export type EmbeddedMetadataRecord<T extends GitGovRecordPayload<unknown>> = {
   header: EmbeddedMetadataHeader;
   payload: T;
 }

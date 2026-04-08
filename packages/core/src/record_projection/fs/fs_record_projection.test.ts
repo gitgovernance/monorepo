@@ -133,7 +133,7 @@ describe('FsRecordProjection', () => {
     });
   });
 
-  describe('4.1b. Projection Schema V2 — Backward Compatibility (PSV2-A10 a A12)', () => {
+  describe('4.3. Projection Schema V2 — Backward Compatibility (PSV2-A10 a A12)', () => {
     it('[PSV2-A10] should persist and read back executions from index.json', async () => {
       const data = createMockIndexData({
         executions: [{

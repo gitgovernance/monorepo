@@ -1,22 +1,22 @@
 // All EARS prefixes map to review_advisor_agent.md
 
-import type { AuditOrchestrator } from '@gitgov/core';
+import type { Finding, PolicyDecision, FindingSeverity } from '@gitgov/core';
 
 /**
  * Input recibido por el agente via AgentExecutionContext.input.
  * Pasado por AuditOrchestrator post-policy (AORCH-F2).
  */
 export type ReviewAdvisorInput = {
-  /** Findings consolidados del AuditOrchestrator */
-  findings: AuditOrchestrator.ConsolidatedFinding[];
+  /** Findings del AuditOrchestrator */
+  findings: Finding[];
   /** Policy decision del evaluator */
-  policyDecision: AuditOrchestrator.PolicyDecision;
+  policyDecision: PolicyDecision;
   /** TaskRecord.id para trazabilidad */
   taskId: string;
   /** Directorio raiz del repo para contexto de archivos */
   baseDir?: string;
   /** Filtro: solo reviewar findings de estas severidades */
-  minSeverity?: 'critical' | 'high' | 'medium' | 'low';
+  minSeverity?: FindingSeverity;
 };
 
 /**

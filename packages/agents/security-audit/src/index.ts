@@ -39,7 +39,8 @@ export async function runAgent(ctx: AgentExecutionContext) {
 
   // FsFileLister required by SourceAuditorModule.audit() — without it, audit() throws
   // Use ctx.projectRoot (injected by AgentRunner) instead of process.cwd()
-  const fileLister = new FsFileLister({ cwd: input.baseDir ?? ctx.projectRoot ?? process.cwd() });
+  const resolvedCwd = input.baseDir ?? ctx.projectRoot ?? process.cwd();
+  const fileLister = new FsFileLister({ cwd: resolvedCwd });
 
   // No WaiverReader — agent emits ALL findings (Decision A12/A13)
   const sourceAuditor = new SourceAuditor.SourceAuditorModule({

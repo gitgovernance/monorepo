@@ -18,10 +18,10 @@ import * as path from 'path';
 import * as os from 'os';
 
 import {
-  runCliCommand,
-  createGitRepo,
-  createTestPrisma,
-  cleanupDb,
+  runGitgovCli,
+  createTempGitRepo,
+  createProtocolPrisma,
+  cleanupProtocol,
   runProjector,
   listRecordIds,
   readRecord,
@@ -37,25 +37,21 @@ import {
   GitHubRecordStore,
   RecordProjector,
   RecordMetrics,
+  createGitHubProjectorStores,
 } from './helpers';
 import type {
-  PrismaClient,
+  ProtocolClient,
   ProjectionClient,
-  RecordProjectorDependencies,
   GitGovTaskRecord,
-  GitGovActorRecord,
-  GitGovCycleRecord,
   GitGovFeedbackRecord,
-  GitGovExecutionRecord,
 } from './helpers';
 
 describe('Block D: Cross-Path Workflows (CD1-CD5)', () => {
-  let prisma: PrismaClient;
+  let prisma: ProtocolClient;
   let octokit: Octokit;
-  let tempDir: string;
+  let tmpDir: string;
   let userARepo: string;
   let branchName: string;
-  let repoId: string;
   let cd1TaskId: string; // hoisted from CD1 for use in CD2+
 
   beforeAll(() => {
@@ -66,15 +62,12 @@ describe('Block D: Cross-Path Workflows (CD1-CD5)', () => {
       );
     }
     octokit = new Octokit({ auth: GITHUB_TOKEN });
-    prisma = createTestPrisma();
-    repoId = `e2e-crosspath-${Date.now()}`;
+    prisma = createProtocolPrisma();
 
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gitgov-e2e-block-d-'));
-    userARepo = path.join(tempDir, 'user-a');
+    ({ tmpDir, repoDir: userARepo } = createTempGitRepo());
     branchName = `e2e-crosspath-${Date.now()}`;
 
-    // Create local git repo for CLI user A
-    createGitRepo(userARepo);
+    // Add remote for CLI user A
     execSync(`git remote add origin "${GITHUB_REMOTE_URL}"`, { cwd: userARepo, stdio: 'pipe' });
 
     // Fetch, create unique working branch, push to GitHub
@@ -99,25 +92,21 @@ describe('Block D: Cross-Path Workflows (CD1-CD5)', () => {
 
     // Cleanup worktrees for all repos used in tests
     cleanupWorktree(userARepo);
-    await cleanupDb(prisma, repoId);
+    await cleanupProtocol(prisma);
     await prisma.$disconnect();
-    if (!SKIP_CLEANUP) fs.rmSync(tempDir, { recursive: true, force: true });
-    else console.log(`[SKIP_CLEANUP] Keeping tempDir=${tempDir}`);
+    if (!SKIP_CLEANUP) fs.rmSync(tmpDir, { recursive: true, force: true });
+    else console.log(`[SKIP_CLEANUP] Keeping tmpDir=${tmpDir}`);
   });
 
   it('[EARS-CD1] should project CLI-pushed records read from GitHub into DB', async () => {
     // 1. CLI: init + create task + sync push
-    runCliCommand(['init', '--name', 'CD1 Project', '--actor-name', 'CLI Dev', '--quiet'], { cwd: userARepo });
-    runCliCommand(['task', 'new', 'Cross-path task', '-d', 'Testing CLI to GitHub path', '-p', 'high', '-q'], { cwd: userARepo });
-    runCliCommand(['sync', 'push'], { cwd: userARepo });
+    runGitgovCli('init --name "CD1 Project" --actor-name "CLI Dev" --quiet', { cwd: userARepo });
+    runGitgovCli('task new "Cross-path task" -d "Testing CLI to GitHub path" -p high -q', { cwd: userARepo });
+    runGitgovCli('sync push', { cwd: userARepo });
 
     // 2. API: Read records from GitHub via GitHubRecordStore
     const storeOpts = { owner: GITHUB_TEST_OWNER, repo: GITHUB_TEST_REPO_NAME, ref: 'gitgov-state' };
     const tasksStore = new GitHubRecordStore<GitGovTaskRecord>({ ...storeOpts, basePath: '.gitgov/tasks' }, octokit);
-    const actorsStore = new GitHubRecordStore<GitGovActorRecord>({ ...storeOpts, basePath: '.gitgov/actors' }, octokit);
-    const cyclesStore = new GitHubRecordStore<GitGovCycleRecord>({ ...storeOpts, basePath: '.gitgov/cycles' }, octokit);
-    const feedbacksStore = new GitHubRecordStore<GitGovFeedbackRecord>({ ...storeOpts, basePath: '.gitgov/feedbacks' }, octokit);
-    const executionsStore = new GitHubRecordStore<GitGovExecutionRecord>({ ...storeOpts, basePath: '.gitgov/executions' }, octokit);
 
     // Verify tasks are readable from GitHub
     const taskIds = await tasksStore.list();
@@ -133,10 +122,9 @@ describe('Block D: Cross-Path Workflows (CD1-CD5)', () => {
     cd1TaskId = taskRecord!.payload.id;
 
     // 3. Core: Project from GitHub stores to DB
-    const stores = { tasks: tasksStore, actors: actorsStore, cycles: cyclesStore, feedbacks: feedbacksStore, executions: executionsStore };
-    const typedStores = stores as unknown as RecordProjectorDependencies['stores'];
-    const recordMetrics = new RecordMetrics({ stores: typedStores });
-    const projector = new RecordProjector({ recordMetrics, stores: typedStores });
+    const stores = createGitHubProjectorStores(octokit, { owner: GITHUB_TEST_OWNER, repo: GITHUB_TEST_REPO_NAME, ref: 'gitgov-state' });
+    const recordMetrics = new RecordMetrics({ stores });
+    const projector = new RecordProjector({ recordMetrics, stores });
 
     const indexData = await projector.computeProjection();
     indexData.activityHistory = indexData.activityHistory.filter(
@@ -146,20 +134,17 @@ describe('Block D: Cross-Path Workflows (CD1-CD5)', () => {
 
     const sink = new PrismaRecordProjection({
       client: prisma as unknown as ProjectionClient,
-      repoId,
-      projectionType: 'index',
     });
     await sink.persist(indexData, {});
 
     // 4. Verify DB
-    const where = { repoId, projectionType: 'index' };
-    const dbTasks = await prisma.gitgovTask.findMany({ where });
+    const dbTasks = await prisma.gitgovTask.findMany({});
     expect(dbTasks.length).toBeGreaterThanOrEqual(1);
     const dbTask = dbTasks.find(t => t.title === 'Cross-path task');
     expect(dbTask).toBeDefined();
     expect(typeof dbTask!.healthScore).toBe('number');
 
-    const dbActors = await prisma.gitgovActor.findMany({ where });
+    const dbActors = await prisma.gitgovActor.findMany({});
     expect(dbActors.length).toBeGreaterThanOrEqual(1);
   });
 
@@ -196,7 +181,7 @@ describe('Block D: Cross-Path Workflows (CD1-CD5)', () => {
     await feedbacksStore.put(feedbackId, feedbackRecord);
 
     // 2. CLI: sync pull to get the API-written record
-    runCliCommand(['sync', 'pull'], { cwd: userARepo });
+    runGitgovCli('sync pull', { cwd: userARepo });
 
     // 3. Verify: feedback file exists locally
     const fbIds = await listRecordIds(userARepo, 'feedbacks');
@@ -222,20 +207,10 @@ describe('Block D: Cross-Path Workflows (CD1-CD5)', () => {
     // - Feedback written by API in CD2
     // Both should appear in a single unified projection
 
-    const cd3RepoId = `e2e-crosspath-cd3-${Date.now()}`;
     try {
-      const storeOpts = { owner: GITHUB_TEST_OWNER, repo: GITHUB_TEST_REPO_NAME, ref: 'gitgov-state' };
-      const stores = {
-        tasks: new GitHubRecordStore<GitGovTaskRecord>({ ...storeOpts, basePath: '.gitgov/tasks' }, octokit),
-        actors: new GitHubRecordStore<GitGovActorRecord>({ ...storeOpts, basePath: '.gitgov/actors' }, octokit),
-        cycles: new GitHubRecordStore<GitGovCycleRecord>({ ...storeOpts, basePath: '.gitgov/cycles' }, octokit),
-        feedbacks: new GitHubRecordStore<GitGovFeedbackRecord>({ ...storeOpts, basePath: '.gitgov/feedbacks' }, octokit),
-        executions: new GitHubRecordStore<GitGovExecutionRecord>({ ...storeOpts, basePath: '.gitgov/executions' }, octokit),
-      };
-
-      const typedStores = stores as unknown as RecordProjectorDependencies['stores'];
-      const recordMetrics = new RecordMetrics({ stores: typedStores });
-      const projector = new RecordProjector({ recordMetrics, stores: typedStores });
+      const stores = createGitHubProjectorStores(octokit, { owner: GITHUB_TEST_OWNER, repo: GITHUB_TEST_REPO_NAME, ref: 'gitgov-state' });
+      const recordMetrics = new RecordMetrics({ stores });
+      const projector = new RecordProjector({ recordMetrics, stores });
 
       const indexData = await projector.computeProjection();
       indexData.activityHistory = indexData.activityHistory.filter(
@@ -246,27 +221,24 @@ describe('Block D: Cross-Path Workflows (CD1-CD5)', () => {
       // Persist to DB
       const sink = new PrismaRecordProjection({
         client: prisma as unknown as ProjectionClient,
-        repoId: cd3RepoId,
-        projectionType: 'index',
       });
       await sink.persist(indexData, {});
 
       // Verify: both CLI-created task AND API-created feedback are in projection
-      const where = { repoId: cd3RepoId, projectionType: 'index' };
-      const dbTasks = await prisma.gitgovTask.findMany({ where });
+      const dbTasks = await prisma.gitgovTask.findMany({});
       expect(dbTasks.length).toBeGreaterThanOrEqual(1);
 
-      const dbFeedbacks = await prisma.gitgovFeedback.findMany({ where });
+      const dbFeedbacks = await prisma.gitgovFeedback.findMany({});
       expect(dbFeedbacks.length).toBeGreaterThanOrEqual(1);
 
       // Verify meta has counts for both
-      const meta = await prisma.gitgovMeta.findFirst({ where });
+      const meta = await prisma.gitgovMeta.findFirst({});
       expect(meta).not.toBeNull();
       const counts = meta!.recordCountsJson as Record<string, number>;
       expect(counts['tasks']).toBeGreaterThanOrEqual(1);
       expect(counts['feedback']).toBeGreaterThanOrEqual(1);
     } finally {
-      await cleanupDb(prisma, cd3RepoId);
+      await cleanupProtocol(prisma);
     }
   });
 
@@ -276,24 +248,24 @@ describe('Block D: Cross-Path Workflows (CD1-CD5)', () => {
     // 2. CLI User B: task via CLI sync push (different identity)
     // 3. API Actor: feedback via GitHubRecordStore.put() (simulates saas-api)
 
-    const cd4RepoId = `e2e-crosspath-cd4-${Date.now()}`;
-    const userBRepo = path.join(tempDir, 'user-b');
+    let userBTmpDir: string;
+    let userBRepo: string;
 
     try {
       // User B: fresh repo, join existing project via sync pull (NOT init — project exists on remote)
-      createGitRepo(userBRepo);
+      ({ tmpDir: userBTmpDir, repoDir: userBRepo } = createTempGitRepo());
       execSync(`git remote add origin "${GITHUB_REMOTE_URL}"`, { cwd: userBRepo, stdio: 'pipe' });
       execSync('git fetch origin', { cwd: userBRepo, stdio: 'pipe' });
 
       // Pull existing gitgov state — CLI bootstraps worktree from origin/gitgov-state (WTSYNC-A5)
-      runCliCommand(['sync', 'pull'], { cwd: userBRepo });
+      runGitgovCli('sync pull', { cwd: userBRepo });
 
       // Create User B's identity (joins existing project, doesn't re-init)
-      runCliCommand(['actor', 'new', '-t', 'human', '-n', 'User B Dev', '-r', 'developer'], { cwd: userBRepo });
+      runGitgovCli('actor new -t human -n "User B Dev" -r developer', { cwd: userBRepo });
 
       // User B creates a task
-      runCliCommand(['task', 'new', 'User B task', '-d', 'Task from second user', '-p', 'medium', '-q'], { cwd: userBRepo });
-      runCliCommand(['sync', 'push'], { cwd: userBRepo });
+      runGitgovCli('task new "User B task" -d "Task from second user" -p medium -q', { cwd: userBRepo });
+      runGitgovCli('sync push', { cwd: userBRepo });
 
       // Wait for GitHub to propagate after push (eventual consistency)
       await new Promise(r => setTimeout(r, 3000));
@@ -333,17 +305,9 @@ describe('Block D: Cross-Path Workflows (CD1-CD5)', () => {
       await cd4FeedbackStore.put(apiFeedbackId, apiFeedback);
       await new Promise(r => setTimeout(r, 2000));
 
-      const stores = {
-        tasks: new GitHubRecordStore<GitGovTaskRecord>({ ...storeOpts, basePath: '.gitgov/tasks' }, cd4Octokit),
-        actors: new GitHubRecordStore<GitGovActorRecord>({ ...storeOpts, basePath: '.gitgov/actors' }, cd4Octokit),
-        cycles: new GitHubRecordStore<GitGovCycleRecord>({ ...storeOpts, basePath: '.gitgov/cycles' }, cd4Octokit),
-        feedbacks: new GitHubRecordStore<GitGovFeedbackRecord>({ ...storeOpts, basePath: '.gitgov/feedbacks' }, cd4Octokit),
-        executions: new GitHubRecordStore<GitGovExecutionRecord>({ ...storeOpts, basePath: '.gitgov/executions' }, cd4Octokit),
-      };
-
-      const typedStores = stores as unknown as RecordProjectorDependencies['stores'];
-      const recordMetrics = new RecordMetrics({ stores: typedStores });
-      const projector = new RecordProjector({ recordMetrics, stores: typedStores });
+      const stores = createGitHubProjectorStores(cd4Octokit, storeOpts);
+      const recordMetrics = new RecordMetrics({ stores });
+      const projector = new RecordProjector({ recordMetrics, stores });
 
       const indexData = await projector.computeProjection();
       indexData.activityHistory = indexData.activityHistory.filter(
@@ -353,33 +317,30 @@ describe('Block D: Cross-Path Workflows (CD1-CD5)', () => {
 
       const sink = new PrismaRecordProjection({
         client: prisma as unknown as ProjectionClient,
-        repoId: cd4RepoId,
-        projectionType: 'index',
       });
       await sink.persist(indexData, {});
 
-      const where = { repoId: cd4RepoId, projectionType: 'index' };
-
       // Verify multiple tasks from different users
-      const dbTasks = await prisma.gitgovTask.findMany({ where });
+      const dbTasks = await prisma.gitgovTask.findMany({});
       expect(dbTasks.length).toBeGreaterThanOrEqual(2);
       const titles = dbTasks.map(t => t.title);
       expect(titles).toContain('Cross-path task');
       expect(titles).toContain('User B task');
 
       // Verify actors — should have actors from both CLI sessions
-      const dbActors = await prisma.gitgovActor.findMany({ where });
+      const dbActors = await prisma.gitgovActor.findMany({});
       expect(dbActors.length).toBeGreaterThanOrEqual(1);
 
       // Verify API actor's feedback made it into the unified projection
-      const dbFeedbacks = await prisma.gitgovFeedback.findMany({ where });
+      const dbFeedbacks = await prisma.gitgovFeedback.findMany({});
       expect(dbFeedbacks.length).toBeGreaterThanOrEqual(1);
       const apiFb = dbFeedbacks.find(fb => fb.recordId === apiFeedbackId);
       expect(apiFb).toBeDefined();
-      expect(apiFb!.feedbackType).toBe('suggestion');
+      expect(apiFb!.type).toBe('suggestion');
     } finally {
       cleanupWorktree(userBRepo);
-      await cleanupDb(prisma, cd4RepoId);
+      if (userBTmpDir! && !SKIP_CLEANUP) fs.rmSync(userBTmpDir!, { recursive: true, force: true });
+      await cleanupProtocol(prisma);
     }
   });
 
@@ -388,13 +349,14 @@ describe('Block D: Cross-Path Workflows (CD1-CD5)', () => {
     // (migrated from old CF1-CF3)
 
     // At this point, user A already pushed in CD1. Let's verify a fresh clone can pull.
-    const clonePath = path.join(tempDir, 'cd5-clone');
+    const cloneTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gitgov-e2e-cd5-'));
+    const clonePath = path.join(cloneTmpDir, 'cd5-clone');
 
     execSync(`git clone "${GITHUB_REMOTE_URL}" "${clonePath}" --branch ${branchName}`, { stdio: 'pipe' });
     execSync('git config user.name "CD5 Clone User"', { cwd: clonePath, stdio: 'pipe' });
     execSync('git config user.email "cd5@test.local"', { cwd: clonePath, stdio: 'pipe' });
 
-    const result = runCliCommand(['sync', 'pull'], { cwd: clonePath });
+    const result = runGitgovCli('sync pull', { cwd: clonePath });
     expect(result.success).toBe(true);
 
     // Verify .gitgov/ arrived in worktree path (CLI stores state in ~/.gitgov/worktrees/<hash>/)

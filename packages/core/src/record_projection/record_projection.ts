@@ -238,6 +238,7 @@ export class RecordProjector implements IRecordProjector {
    * - Detect broken references between records
    * - Validate timestamp consistency
    */
+  // TODO: Currently validates only tasks and cycles. EARS-A4 requires validating all 6 record types (actors, agents, executions, feedback).
   async validateIntegrity(): Promise<IntegrityReport> {
     const startTime = performance.now();
     const errors: IntegrityError[] = [];
@@ -542,6 +543,7 @@ export class RecordProjector implements IRecordProjector {
   /**
    * Gets current git commit hash (simplified)
    */
+  // TODO: Returns hardcoded 'mock-commit-hash'. Should obtain from git context (IGitModule).
   private async getGitCommitHash(): Promise<string> {
     try {
       // Simplified implementation - would use git commands in real implementation

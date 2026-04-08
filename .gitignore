@@ -12,4 +12,9 @@ bin
 # Ignore entire .gitgov/ directory (state lives in gitgov-state branch)
 .gitgov
 
+# Agent tooling (confidential build methodology)
+.claude/
+.cursor/
+.kiro/
+
 .env

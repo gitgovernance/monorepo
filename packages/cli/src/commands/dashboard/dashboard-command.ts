@@ -6,7 +6,7 @@ import * as path from 'path';
 import { DependencyInjectionService } from '../../services/dependency-injection';
 // import DashboardTUI from '../../components/dashboard/DashboardTUI';
 import type {
-  CycleRecord, FeedbackRecord, ActorRecord, TaskRecord,
+  CycleRecord, GitGovFeedbackRecord, ActorRecord, TaskRecord,
   SystemStatus, ProductivityMetrics, CollaborationMetrics, EnrichedTaskRecord,
 } from '@gitgov/core';
 import type { ActivityEvent } from '@gitgov/core';
@@ -40,7 +40,7 @@ interface DashboardIntelligence {
   collaborationMetrics: CollaborationMetrics;
   tasks: EnrichedTaskRecord[]; // ENHANCED - Tasks with last modification info
   cycles: CycleRecord[];
-  feedback: FeedbackRecord[];
+  feedback: GitGovFeedbackRecord[];
   currentActor: ActorRecord;
   activityHistory: ActivityEvent[]; // NUEVO - Activity history real
 }
@@ -451,18 +451,18 @@ export class DashboardCommand {
   /**
    * Gets task actor from assignments
    */
-  private getTaskActor(task: TaskRecord, feedback: FeedbackRecord[]): string {
+  private getTaskActor(task: TaskRecord, feedback: GitGovFeedbackRecord[]): string {
     const assignment = feedback.find(f =>
-      f.entityId === task.id &&
-      f.type === 'assignment' &&
-      f.status === 'open'
+      f.payload.entityId === task.id &&
+      f.payload.type === 'assignment' &&
+      f.payload.status === 'open'
     );
 
-    if (assignment?.assignee) {
-      if (assignment.assignee.startsWith('agent:')) {
-        return `agent:${assignment.assignee.split(':')[1]?.slice(0, 8)}`;
+    if (assignment?.payload.assignee) {
+      if (assignment.payload.assignee.startsWith('agent:')) {
+        return `agent:${assignment.payload.assignee.split(':')[1]?.slice(0, 8)}`;
       }
-      return assignment.assignee.replace('human:', '');
+      return assignment.payload.assignee.replace('human:', '');
     }
 
     return '—';

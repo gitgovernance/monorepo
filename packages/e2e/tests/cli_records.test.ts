@@ -11,11 +11,10 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
 
 import {
-  runCliCommand,
-  createGitRepo,
+  runGitgovCli,
+  createTempGitRepo,
   listRecordIds,
   readRecord,
   getGitgovDir,
@@ -25,47 +24,47 @@ import {
 import type { ParsedRecord } from './helpers';
 
 describe('Block A: CLI Record Creation (CA1-CA7, CA9)', () => {
-  let tempDir: string;
-  let repoPath: string;
+  let tmpDir: string;
+  let repoDir: string;
   let actorId: string;
   let taskId: string;
   let cycleId: string;
-  let agentRepoForCA3: string;
+  let agentTmpDir: string;
+  let agentRepoDir: string;
 
   beforeAll(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gitgov-e2e-block-a-'));
-    repoPath = path.join(tempDir, 'block-a');
-    createGitRepo(repoPath);
+    ({ tmpDir, repoDir } = createTempGitRepo());
   });
 
   afterAll(() => {
-    cleanupWorktree(repoPath);
-    if (agentRepoForCA3) cleanupWorktree(agentRepoForCA3);
-    if (!SKIP_CLEANUP) fs.rmSync(tempDir, { recursive: true, force: true });
-    else console.log(`[SKIP_CLEANUP] Keeping tempDir=${tempDir}`);
+    cleanupWorktree(repoDir);
+    if (agentRepoDir) cleanupWorktree(agentRepoDir);
+    if (!SKIP_CLEANUP) fs.rmSync(tmpDir, { recursive: true, force: true });
+    else console.log(`[SKIP_CLEANUP] Keeping tmpDir=${tmpDir}`);
+    if (agentTmpDir && !SKIP_CLEANUP) fs.rmSync(agentTmpDir, { recursive: true, force: true });
   });
 
   it('[EARS-CA1] should create human actor with keypair on gitgov init', async () => {
-    const result = runCliCommand(
-      ['init', '--name', 'Pipeline E2E Test', '--actor-name', 'E2E Dev', '--quiet'],
-      { cwd: repoPath },
+    const result = runGitgovCli(
+      'init --name "Pipeline E2E Test" --actor-name "E2E Dev" --quiet',
+      { cwd: repoDir },
     );
     expect(result.success).toBe(true);
 
     // Verify actor record exists
-    const actorIds = await listRecordIds(repoPath, 'actors');
+    const actorIds = await listRecordIds(repoDir, 'actors');
     expect(actorIds.length).toBeGreaterThanOrEqual(1);
 
     // Verify .key file exists in keys/ directory (CLI stores keys separately from actor JSON)
-    const keysDir = path.join(getGitgovDir(repoPath), 'keys');
+    const keysDir = path.join(getGitgovDir(repoDir), 'keys');
     const keyFiles = fs.readdirSync(keysDir).filter(f => f.endsWith('.key'));
     expect(keyFiles.length).toBeGreaterThanOrEqual(1);
 
     // Verify config.json exists
-    expect(fs.existsSync(path.join(getGitgovDir(repoPath), 'config.json'))).toBe(true);
+    expect(fs.existsSync(path.join(getGitgovDir(repoDir), 'config.json'))).toBe(true);
 
     // Read actor record and verify shape
-    const actor = await readRecord(repoPath, 'actors', actorIds[0]!);
+    const actor = await readRecord(repoDir, 'actors', actorIds[0]!);
     expect(actor.payload.type).toBe('human');
     expect(actor.payload.displayName).toBe('E2E Dev');
     expect(actor.payload.publicKey).toBeDefined();
@@ -74,57 +73,53 @@ describe('Block A: CLI Record Creation (CA1-CA7, CA9)', () => {
 
   it('[EARS-CA2] should create agent actor with separate keypair', async () => {
     // Agent init needs its own repo — init --type agent re-initializes the whole project
-    const agentRepoPath = path.join(tempDir, 'block-a-agent');
-    createGitRepo(agentRepoPath);
+    ({ tmpDir: agentTmpDir, repoDir: agentRepoDir } = createTempGitRepo());
 
-    const result = runCliCommand(
-      ['init', '--actor-name', 'Agente Auditor', '--type', 'agent', '--quiet'],
-      { cwd: agentRepoPath },
+    const result = runGitgovCli(
+      'init --actor-name "Agente Auditor" --type agent --quiet',
+      { cwd: agentRepoDir },
     );
     expect(result.success).toBe(true);
 
-    const actorIds = await listRecordIds(agentRepoPath, 'actors');
+    const actorIds = await listRecordIds(agentRepoDir, 'actors');
     const agentActorId = actorIds.find(id => id.includes('agent'));
     expect(agentActorId).toBeDefined();
 
-    const agent = await readRecord(agentRepoPath, 'actors', agentActorId!);
+    const agent = await readRecord(agentRepoDir, 'actors', agentActorId!);
     expect(agent.payload.type).toBe('agent');
     expect(agent.payload.displayName).toBe('Agente Auditor');
-
-    // Store for CA3
-    agentRepoForCA3 = agentRepoPath;
   });
 
   it('[EARS-CA3] should create agent record with engine config', async () => {
     // agent new requires <actorId> positional — use the agent actor from CA2's repo
-    expect(agentRepoForCA3).toBeDefined();
-    const actorIds = await listRecordIds(agentRepoForCA3, 'actors');
+    expect(agentRepoDir).toBeDefined();
+    const actorIds = await listRecordIds(agentRepoDir, 'actors');
     const agentActorId = actorIds.find(id => id.includes('agent'));
     expect(agentActorId).toBeDefined();
 
-    const agent = await readRecord(agentRepoForCA3, 'actors', agentActorId!);
-    const result = runCliCommand(
-      ['agent', 'new', agent.payload.id, '--engine-type', 'local'],
-      { cwd: agentRepoForCA3 },
+    const agent = await readRecord(agentRepoDir, 'actors', agentActorId!);
+    const result = runGitgovCli(
+      `agent new ${agent.payload.id} --engine-type local`,
+      { cwd: agentRepoDir },
     );
     expect(result.success).toBe(true);
 
-    const agentDir = path.join(getGitgovDir(agentRepoForCA3), 'agents');
+    const agentDir = path.join(getGitgovDir(agentRepoDir), 'agents');
     const agentFiles = fs.readdirSync(agentDir).filter(f => f.endsWith('.json'));
     expect(agentFiles.length).toBeGreaterThanOrEqual(1);
   });
 
   it('[EARS-CA4] should create signed task record with correct payload', async () => {
-    const result = runCliCommand(
-      ['task', 'new', 'Fix auth bug', '-d', 'Auth bypass in login flow', '-p', 'high', '--tags', 'bug,auth', '-q'],
-      { cwd: repoPath },
+    const result = runGitgovCli(
+      'task new "Fix auth bug" -d "Auth bypass in login flow" -p high --tags bug,auth -q',
+      { cwd: repoDir },
     );
     expect(result.success).toBe(true);
 
-    const taskIds = await listRecordIds(repoPath, 'tasks');
+    const taskIds = await listRecordIds(repoDir, 'tasks');
     expect(taskIds.length).toBeGreaterThanOrEqual(1);
 
-    const task = await readRecord(repoPath, 'tasks', taskIds[0]!);
+    const task = await readRecord(repoDir, 'tasks', taskIds[0]!);
     expect(task.payload.title).toBe('Fix auth bug');
     expect(task.payload.priority).toBe('high');
     expect(task.payload.status).toBe('draft');
@@ -135,16 +130,16 @@ describe('Block A: CLI Record Creation (CA1-CA7, CA9)', () => {
   });
 
   it('[EARS-CA4+] should create feedback record via task assign', async () => {
-    const result = runCliCommand(
-      ['task', 'assign', taskId, '--to', actorId, '-q'],
-      { cwd: repoPath },
+    const result = runGitgovCli(
+      `task assign ${taskId} --to ${actorId} -q`,
+      { cwd: repoDir },
     );
     expect(result.success).toBe(true);
 
-    const fbIds = await listRecordIds(repoPath, 'feedbacks');
+    const fbIds = await listRecordIds(repoDir, 'feedbacks');
     expect(fbIds.length).toBeGreaterThanOrEqual(1);
 
-    const fb = await readRecord(repoPath, 'feedbacks', fbIds[0]!);
+    const fb = await readRecord(repoDir, 'feedbacks', fbIds[0]!);
     expect(fb.payload.type).toBe('assignment');
     expect(fb.payload.entityType).toBe('task');
     expect(fb.payload.entityId).toBe(taskId);
@@ -152,30 +147,30 @@ describe('Block A: CLI Record Creation (CA1-CA7, CA9)', () => {
 
   it('[EARS-CA5] should create execution record linked to task', async () => {
     // exec new takes <taskId> as positional arg, not --task flag
-    const result = runCliCommand(
-      ['exec', 'new', taskId, '-t', 'analysis', '-r', 'Security scan completed with 0 findings', '--title', 'Security scan'],
-      { cwd: repoPath },
+    const result = runGitgovCli(
+      `exec new ${taskId} -t analysis -r "Security scan completed with 0 findings" --title "Security scan"`,
+      { cwd: repoDir },
     );
     expect(result.success).toBe(true);
 
-    const execIds = await listRecordIds(repoPath, 'executions');
+    const execIds = await listRecordIds(repoDir, 'executions');
     expect(execIds.length).toBeGreaterThanOrEqual(1);
 
-    const exec = await readRecord(repoPath, 'executions', execIds[0]!);
+    const exec = await readRecord(repoDir, 'executions', execIds[0]!);
     expect(exec.payload.taskId).toBe(taskId);
     expect(exec.header.signatures.length).toBeGreaterThanOrEqual(1);
   });
 
   it('[EARS-CA6] should create feedback record with approval type', async () => {
     // Requires: gitgov feedback --entity-type task --type approval ...
-    const result = runCliCommand(
-      ['feedback', '--entity-type', 'task', '--entity-id', taskId, '--type', 'approval', '--content', 'LGTM'],
-      { cwd: repoPath },
+    const result = runGitgovCli(
+      `feedback --entity-type task --entity-id ${taskId} --type approval --content LGTM`,
+      { cwd: repoDir },
     );
     expect(result.success).toBe(true);
 
-    const fbIds = await listRecordIds(repoPath, 'feedbacks');
-    const fbRecords = await Promise.all(fbIds.map(id => readRecord(repoPath, 'feedbacks', id)));
+    const fbIds = await listRecordIds(repoDir, 'feedbacks');
+    const fbRecords = await Promise.all(fbIds.map(id => readRecord(repoDir, 'feedbacks', id)));
     const approvalFb = fbRecords.find(fb => fb.payload.type === 'approval');
     expect(approvalFb).toBeDefined();
     expect(approvalFb!.payload.entityType).toBe('task');
@@ -183,20 +178,20 @@ describe('Block A: CLI Record Creation (CA1-CA7, CA9)', () => {
   });
 
   it('[EARS-CA7] should create cycle record referencing tasks', async () => {
-    const result = runCliCommand(
-      ['cycle', 'new', 'Sprint 1', '--task-ids', taskId, '-q'],
-      { cwd: repoPath },
+    const result = runGitgovCli(
+      `cycle new "Sprint 1" --task-ids ${taskId} -q`,
+      { cwd: repoDir },
     );
     expect(result.success).toBe(true);
 
-    const cycleIds = await listRecordIds(repoPath, 'cycles');
+    const cycleIds = await listRecordIds(repoDir, 'cycles');
     // gitgov init creates a root cycle, so we expect at least 2 (root + Sprint 1)
     expect(cycleIds.length).toBeGreaterThanOrEqual(2);
 
     // Find our Sprint 1 cycle (not the root cycle created by init)
     let sprint1: ParsedRecord | undefined;
     for (const id of cycleIds) {
-      const c = await readRecord(repoPath, 'cycles', id);
+      const c = await readRecord(repoDir, 'cycles', id);
       if (c.payload.title === 'Sprint 1') {
         sprint1 = c;
         break;
@@ -215,9 +210,9 @@ describe('Block A: CLI Record Creation (CA1-CA7, CA9)', () => {
     let totalChecked = 0;
 
     for (const dir of dirs) {
-      const ids = await listRecordIds(repoPath, dir);
+      const ids = await listRecordIds(repoDir, dir);
       for (const id of ids) {
-        const record = await readRecord(repoPath, dir, id);
+        const record = await readRecord(repoDir, dir, id);
         expect(record.header).toBeDefined();
         expect(record.header.payloadChecksum).toBeDefined();
         expect(record.header.signatures.length).toBeGreaterThanOrEqual(1);

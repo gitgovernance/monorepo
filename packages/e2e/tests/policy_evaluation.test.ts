@@ -19,8 +19,8 @@ import { createPolicyEvaluator } from '../../core/src/policy_evaluator';
 import type {
   PolicyEvaluationInput,
   PolicyConfig,
-  ConsolidatedFinding,
-  ActiveWaiver,
+  Finding,
+  Waiver,
   PolicyEvaluator,
   PolicyExecutionRecordData,
 } from '../../core/src/policy_evaluator';
@@ -30,15 +30,15 @@ import type {
 // ============================================================================
 
 /**
- * Creates a ConsolidatedFinding with given severity and optional waiver state.
+ * Creates a Finding with given severity and optional waiver state.
  */
 function makeFinding(overrides: {
   fingerprint: string;
   severity: 'critical' | 'high' | 'medium' | 'low';
   ruleId?: string;
   isWaived?: boolean;
-  waiver?: ActiveWaiver;
-}): ConsolidatedFinding {
+  waiver?: Waiver;
+}): Finding {
   return {
     fingerprint: overrides.fingerprint,
     ruleId: overrides.ruleId ?? 'TEST-001',
@@ -46,7 +46,10 @@ function makeFinding(overrides: {
     severity: overrides.severity,
     file: 'src/test.ts',
     line: 10,
-    category: 'pii',
+    category: 'pii-generic',
+    detector: 'regex',
+    confidence: 1.0,
+    executionId: '1700000000-exec-e2e-policy',
     reportedBy: ['agent:gitgov:security-audit'],
     isWaived: overrides.isWaived ?? false,
     waiver: overrides.waiver,
@@ -54,9 +57,9 @@ function makeFinding(overrides: {
 }
 
 /**
- * Creates an ActiveWaiver for a given fingerprint.
+ * Creates a Waiver for a given fingerprint.
  */
-function makeWaiver(fingerprint: string, ruleId: string): ActiveWaiver {
+function makeWaiver(fingerprint: string, ruleId: string): Waiver {
   return {
     fingerprint,
     ruleId,
@@ -94,7 +97,7 @@ describe('Block H: Policy Evaluation (CH1 to CH4)', () => {
 
   describe('3.1. Decision Records (CH1 to CH2)', () => {
     it('[CH1] should create ExecutionRecord type decision with result BLOCK when findings above failOn', async () => {
-      const findings: ConsolidatedFinding[] = [
+      const findings: Finding[] = [
         makeFinding({ fingerprint: 'fp-critical-001', severity: 'critical' }),
         makeFinding({ fingerprint: 'fp-high-002', severity: 'high' }),
       ];
@@ -124,7 +127,7 @@ describe('Block H: Policy Evaluation (CH1 to CH4)', () => {
     });
 
     it('[CH2] should create ExecutionRecord type decision with result PASS when no findings above failOn', async () => {
-      const findings: ConsolidatedFinding[] = [
+      const findings: Finding[] = [
         makeFinding({ fingerprint: 'fp-low-001', severity: 'low' }),
         makeFinding({ fingerprint: 'fp-low-002', severity: 'low' }),
       ];
@@ -161,7 +164,7 @@ describe('Block H: Policy Evaluation (CH1 to CH4)', () => {
       // Create a critical finding that is waived
       const waiver = makeWaiver('fp-critical-waived', 'PII-001');
 
-      const findings: ConsolidatedFinding[] = [
+      const findings: Finding[] = [
         makeFinding({ fingerprint: 'fp-critical-waived', severity: 'critical' }),
       ];
 
@@ -190,7 +193,7 @@ describe('Block H: Policy Evaluation (CH1 to CH4)', () => {
 
     it('[CH4] should sign decision ExecutionRecord with agent Ed25519 keypair and be verifiable', async () => {
       // Create findings so we get a meaningful decision
-      const findings: ConsolidatedFinding[] = [
+      const findings: Finding[] = [
         makeFinding({ fingerprint: 'fp-sign-001', severity: 'high' }),
       ];
 

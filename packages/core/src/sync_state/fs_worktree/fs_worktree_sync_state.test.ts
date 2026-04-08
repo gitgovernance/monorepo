@@ -391,6 +391,55 @@ describe('FsWorktreeSyncStateModule', () => {
       expect(fs.existsSync(path.join(worktreePath, '.git'))).toBe(true);
     });
 
+    it('[WTSYNC-A3b] should switch branch in-place preserving files when config changed', async () => {
+      const { repoPath, remotePath } = await setupRepoWithRemote();
+      cleanupPaths.push(repoPath, remotePath);
+
+      await setupStateBranch(repoPath);
+
+      // Create worktree on default gitgov-state branch
+      const { module } = createModule(repoPath);
+      const worktreePath = module.getWorktreePath();
+      await module.ensureWorktree();
+      expect(fs.existsSync(path.join(worktreePath, '.git'))).toBe(true);
+
+      // Write a test file to verify it survives the branch switch
+      const testFilePath = path.join(worktreePath, '.gitgov', 'test-marker.txt');
+      fs.mkdirSync(path.dirname(testFilePath), { recursive: true });
+      fs.writeFileSync(testFilePath, 'preserve-me');
+
+      // Create a new module with DIFFERENT stateBranchName (simulates config change)
+      const gitModule = new LocalGitModule({
+        repoRoot: repoPath,
+        execCommand: createExecCommand(repoPath),
+      });
+      const module2 = new FsWorktreeSyncStateModule(
+        {
+          git: gitModule,
+          config: { get: jest.fn(), set: jest.fn(), getAll: jest.fn().mockReturnValue({}) } as any,
+          identity: createMockIdentityAdapter(),
+          lint: createMockLintModule(),
+          indexer: createMockRecordProjector(),
+        },
+        { repoRoot: repoPath, stateBranchName: 'custom-state-branch' },
+      );
+
+      // ensureWorktree should switch branch in-place, not destroy
+      await module2.ensureWorktree();
+
+      // Worktree still exists with .git
+      expect(fs.existsSync(path.join(worktreePath, '.git'))).toBe(true);
+
+      // Test file should be preserved (branch switch doesn't delete untracked files)
+      expect(fs.existsSync(testFilePath)).toBe(true);
+      expect(fs.readFileSync(testFilePath, 'utf-8')).toBe('preserve-me');
+
+      // Branch should now be the custom one
+      const { execSync } = require('child_process');
+      const branch = execSync('git rev-parse --abbrev-ref HEAD', { cwd: worktreePath, encoding: 'utf-8' }).trim();
+      expect(branch).toBe('custom-state-branch');
+    });
+
     it('[WTSYNC-A4] should return correct worktree path', async () => {
       const tempDir = await createTempRepo();
       cleanupPaths.push(tempDir);

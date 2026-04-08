@@ -7,7 +7,7 @@
 /**
  * Canonical schema for actor records as defined in 02_actor.md
  */
-export interface ActorRecord {
+export interface ActorRecord<TMetadata = object> {
   /**
    * Unique, human-readable identifier for the actor.
    */
@@ -39,7 +39,10 @@ export interface ActorRecord {
    */
   supersededBy?: string;
   /**
-   * An optional field for additional, non-canonical metadata.
+   * Optional structured data for machine consumption.
+   * Common use cases: GitHub account linkage (github.login, github.id),
+   * team assignment, deployment context, external identity references.
+   *
    */
-  metadata?: {};
+  metadata?: TMetadata;
 }

@@ -124,7 +124,7 @@ describe('MemoryRecordProjection', () => {
     });
   });
 
-  describe('4.1b. Projection Schema V2 — Memory Pass-Through (PSV2-A13 a A14)', () => {
+  describe('4.3. Projection Schema V2 — Memory Pass-Through (PSV2-A13 a A14)', () => {
     it('[PSV2-A13] should store executions and agents in memory', async () => {
       const data = createMockIndexData({
         executions: [{

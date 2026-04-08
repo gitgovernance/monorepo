@@ -149,18 +149,84 @@ graph LR
     style PrismaProjection fill:#fce4ec,stroke:#c62828
 ```
 
-### 6 Import Paths
+### 7 Import Paths
 
 | Import | Contents | I/O |
 |--------|----------|-----|
-| `@gitgov/core` | Interfaces, types, pure logic, factories, validators | No |
+| `@gitgov/core` | Interfaces, types, pure logic, factories, validators + all audit types | No |
+| `@gitgov/core/audit` | Audit product types: Finding, Waiver, Scan, PolicyDecision, enums, metadata types | No |
 | `@gitgov/core/fs` | Filesystem implementations (FsRecordStore, FsRecordProjection, LocalGitModule, FsLintModule, ...) | Local |
 | `@gitgov/core/github` | GitHub API implementations (GitHubRecordStore, GitHubGitModule, GitHubConfigStore, GitHubFileLister, GithubSyncStateModule, GithubWebhookHandler) | Remote |
-| `@gitgov/core-gitlab` | GitLab API implementations (GitLabRecordStore, GitLabGitModule, GitLabConfigStore, GitLabFileLister, GitLabSyncStateModule, GitLabWebhookHandler) — [separate package](https://gitlab.com/gitgovernance/core-gitlab) | Remote |
+| `@gitgov/core-gitlab` | GitLab API implementations — [separate package](https://gitlab.com/gitgovernance/core-gitlab) | Remote |
 | `@gitgov/core/memory` | In-memory implementations for testing (MemoryRecordStore, MemoryRecordProjection, MemoryGitModule, ...) | No |
 | `@gitgov/core/prisma` | Database-backed implementations via Prisma-compatible client (PrismaRecordProjection) | Remote |
 
-The root import (`@gitgov/core`) never imports `fs`, `path`, `child_process`, `@octokit/rest`, `@gitbeaker/rest`, or `@prisma/client`.
+The root import (`@gitgov/core`) re-exports everything from `@gitgov/core/audit`. Both paths provide the same types.
+
+### Audit Product Types (`@gitgov/core/audit`)
+
+The Audit product defines canonical types derived from protocol records. **All consumers MUST import these from core — never redefine locally.**
+
+```typescript
+import type {
+  // Core finding type — one type everywhere, no "ConsolidatedFinding"
+  Finding,
+  // Waiver — materialized from FeedbackRecord(type: "approval")
+  Waiver, WaiverMetadata,
+  // Scan — groups ExecutionRecords from one audit run
+  Scan,
+  // Policy decision — stored in ExecutionRecord(type: "decision")
+  PolicyDecision,
+  // Enums — use these, never bare `string`
+  FindingSeverity,     // "critical" | "high" | "medium" | "low"
+  FindingCategory,     // "pii-email" | "hardcoded-secret" | ...
+  DetectorName,        // "regex" | "heuristic" | "llm"
+  WaiverStatus,        // "active" | "expired" | "revoked"
+  FindingStatus,       // "new" | "in_progress" | "waived" | "resolved"
+  ScanDisplayStatus,   // "success" | "partial" | "blocked"
+  PolicyStatus,        // "pass" | "block"
+  ScanScope,           // "full" | "diff"
+  // Metadata types — use with record generics
+  SarifExecutionMetadata,    // for ExecutionRecord<SarifExecutionMetadata>
+  PolicyExecutionMetadata,   // for ExecutionRecord<PolicyExecutionMetadata>
+  GitHubActorMetadata,       // for ActorRecord<GitHubActorMetadata>
+  // Lifecycle events
+  FindingHistoryEvent,
+  WaiverLifecycleEvent,
+} from '@gitgov/core/audit';  // or from '@gitgov/core'
+```
+
+### Record Generics
+
+All records accept a metadata type parameter via `<TMetadata>`:
+
+```typescript
+import type { GitGovExecutionRecord, GitGovActorRecord } from '@gitgov/core';
+import type { SarifExecutionMetadata, GitHubActorMetadata } from '@gitgov/core';
+
+// Typed metadata — no more `as { kind?: string; data?: SarifLog }`
+type SarifExecution = GitGovExecutionRecord<SarifExecutionMetadata>;
+type GitHubActor = GitGovActorRecord<GitHubActorMetadata>;
+```
+
+The generics flow from protocol schemas:
+```
+YAML schema (additionalProperties: true on metadata)
+  → compile:types generates Record<TMetadata = object>
+    → GitGovRecordPayload<TMetadata> accepts the generic
+      → EmbeddedMetadataRecord wraps with header + payload
+        → GitGov*Record<TMetadata> passes through
+```
+
+### Rules for Consumers
+
+Packages that depend on `@gitgov/core` (CLI, saas-api, saas-web, agents, MCP server) MUST follow these rules:
+
+1. **Import from core, never redefine.** If `Finding` exists in core, import it. Don't create `type Finding = { ... }` locally.
+2. **Use enums, never `string`.** Write `severity: FindingSeverity`, not `severity: string`.
+3. **No `as any`, no `as unknown as`.** If you need a cast, the type is wrong — fix it or add the type to core.
+4. **No `as { ... }` inline types.** If you cast `metadata as { kind?: string }`, use `SarifExecutionMetadata` from core instead.
+5. **If a type doesn't exist in core, add it to core.** Don't invent it locally — it will drift.
 
 ### Record Symmetry
 
@@ -175,6 +241,23 @@ Every record type has 4 parallel artifacts:
 
 The 6 records: **Actor, Agent, Task, Cycle, Execution, Feedback**
 
+### Factories and ID Generators
+
+Always use factories to create records and generators for IDs — never construct them manually:
+
+```typescript
+import { createExecutionRecord, createTaskRecord, createFeedbackRecord } from '@gitgov/core';
+import { generateExecutionId, generateTaskId, generateFeedbackId } from '@gitgov/core';
+
+// Factory: creates record with validated ID, defaults, and schema validation
+const exec = createExecutionRecord({ taskId, type: 'analysis', title: 'scan', result: '...' });
+
+// Generator: when you only need the ID (e.g., for references)
+const execId = generateExecutionId('scan', Math.floor(Date.now() / 1000));
+```
+
+IDs follow schema patterns (e.g., `^\d{10}-exec-[a-z0-9-]{1,50}$`). Hand-crafted IDs fail validators and stores at runtime.
+
 ## Adapters
 
 Adapters are orchestrators that compose modules. All receive dependencies via constructor injection.
@@ -186,29 +269,35 @@ Adapters are orchestrators that compose modules. All receive dependencies via co
 | `BacklogAdapter` | Task and cycle lifecycle, workflow validation |
 | `ExecutionAdapter` | Execution audit log tracking |
 | `FeedbackAdapter` | Structured feedback and blocking resolution |
-| `MetricsAdapter` | System status and productivity metrics |
-| `IndexerAdapter` | Local cache generation and integrity checks |
 | `WorkflowAdapter` | State transitions with signatures and custom rules |
 | `AgentAdapter` | Agent lifecycle management |
+
+> RecordMetrics (metrics) and RecordProjector (indexing) are modules, not adapters.
 
 ## Modules
 
 | Module | Responsibility |
 |--------|----------------|
 | `record_types/` | TypeScript types per record (generated from schemas) |
-| `record_factories/` | Factories with defaults for creating records |
+| `record_factories/` | Factories with defaults for creating records (8 factories) |
 | `record_validations/` | Business validators (above schema) |
 | `record_schemas/` | JSON Schemas + schema cache + errors |
 | `record_store/` | `RecordStore<V, R, O>` interface (impl in fs/memory/github) |
-| `record_projection/` | `IRecordProjection` interface + RecordProjector engine (drivers: fs/memory/prisma) |
+| `record_projection/` | RecordProjector engine — generates IndexData, persists to sinks (FS, Prisma, Memory) |
 | `record_metrics/` | RecordMetrics calculation engine (system status, productivity, collaboration) |
 | `config_store/` | Storage for project config.json (impl in fs/github) |
 | `config_manager/` | Typed access to config.json (versioned in git) |
 | `session_store/` | Storage for .session.json |
 | `session_manager/` | Typed access to .session.json (ephemeral, not versioned) |
-| `sync_state/` | Push/pull/resolve synchronization (FsWorktreeSyncStateModule, GithubSyncStateModule, GithubWebhookHandler, PullScheduler) |
-| `record_projection/` | RecordProjector engine — generates IndexData, persists to sinks (FS, Prisma, Memory) |
-| `sarif/` | SarifBuilder — generates SARIF 2.1.0 with content-based fingerprints, suppressions, validation |
+| `sync_state/` | Push/pull/resolve synchronization (FsWorktree, GitHub, Webhook, PullScheduler) |
+| `audit/` | Canonical Audit product types: Finding, Waiver, Scan, PolicyDecision, metadata types, status enums |
+| `audit_orchestrator/` | Multi-agent audit orchestration, SARIF consolidation, waiver application |
+| `policy_evaluator/` | PolicyEvaluator — pass/block by severity threshold, category block, OPA rules |
+| `sarif/` | SarifBuilder — SARIF 2.1.0 with content-based fingerprints, suppressions, validation |
+| `finding_detector/` | Finding detection (regex, heuristic, LLM) |
+| `source_auditor/` | Cross-system audit (code, Jira, gitgov), waiver reader/writer |
+| `redaction/` | FindingRedactor — L1/L2 PII redaction in SARIF |
+| `hook_handler/` | Hook event handling for agent triggers |
 | `git/` | `IGitModule` interface + local/memory implementations |
 | `crypto/` | Checksums, digital signatures, verification |
 | `key_provider/` | Key storage abstraction (fs/memory) |
@@ -218,10 +307,8 @@ Adapters are orchestrators that compose modules. All receive dependencies via co
 | `agent_runner/` | Agent execution (interface + loader) |
 | `watcher_state/` | File change tracking in .gitgov/ |
 | `project_initializer/` | GitGovernance project setup |
-| `finding_detector/` | Finding detection (regex, heuristic, LLM) |
-| `source_auditor/` | Cross-system audit (code, Jira, gitgov) |
-| `sarif/` | SARIF 2.1.0 builder, hash, validation (42 EARS) |
-| `audit_orchestrator/` | Multi-agent audit orchestration, SARIF consolidation, waiver application (10 EARS) |
+| `logger/` | Logging centralizado |
+| `utils/` | ID generation/parsing, array utils, signature utils |
 | `policy_evaluator/` | Pass/block evaluation by severity threshold (stub — Epic 5 formalizes) |
 | `diagram_generator/` | Mermaid diagram generation |
 | `logger/` | Centralized logging |

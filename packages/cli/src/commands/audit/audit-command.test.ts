@@ -90,6 +90,7 @@ describe('AuditCommand', () => {
     summary: { critical: 0, high: 0, medium: 0, low: 0 },
     rulesEvaluated: [],
     evaluatedAt: '2026-03-18T00:00:00.000Z',
+    executionId: 'exec-mock-policy-001',
   };
 
   const mockPolicyDecisionBlock: PolicyDecision = {
@@ -105,6 +106,9 @@ describe('AuditCommand', () => {
         file: 'src/config/database.ts',
         line: 12,
         column: 34,
+        detector: 'regex',
+        confidence: 1.0,
+        executionId: 'exec-mock-scan-001',
         reportedBy: ['agent:security-auditor'],
         isWaived: false,
       },
@@ -113,6 +117,7 @@ describe('AuditCommand', () => {
     summary: { critical: 1, high: 1, medium: 0, low: 0 },
     rulesEvaluated: [{ ruleName: 'severityThreshold', passed: false, reason: '1 finding(s) at or above critical threshold.' }],
     evaluatedAt: '2026-03-18T00:00:00.000Z',
+    executionId: 'exec-mock-policy-002',
   };
 
   const mockResultWithFindings: AuditOrchestrationResult = {
@@ -126,6 +131,9 @@ describe('AuditCommand', () => {
         file: 'src/config/database.ts',
         line: 12,
         column: 34,
+        detector: 'regex',
+        confidence: 1.0,
+        executionId: 'exec-mock-scan-001',
         reportedBy: ['agent:security-auditor'],
         isWaived: false,
       },
@@ -138,6 +146,9 @@ describe('AuditCommand', () => {
         file: 'src/utils/email.ts',
         line: 23,
         column: 10,
+        detector: 'regex',
+        confidence: 0.95,
+        executionId: 'exec-mock-scan-001',
         reportedBy: ['agent:security-auditor'],
         isWaived: false,
       },
@@ -350,6 +361,16 @@ describe('AuditCommand', () => {
       expect(parsed).toHaveProperty('findings');
       expect(parsed).toHaveProperty('policyDecision');
       expect(parsed).toHaveProperty('summary');
+    });
+
+    it('[AORCH-C7] should emit only JSON to stdout when --output json (no progress text)', async () => {
+      await auditCommand.execute(createDefaultOptions({ scope: 'full', output: 'json' }));
+
+      // ALL console.log calls should be valid JSON — no progress text
+      for (const call of mockConsoleLog.mock.calls) {
+        const output = call[0] as string;
+        expect(() => JSON.parse(output)).not.toThrow();
+      }
     });
 
     it('[AORCH-C5] should not set agentId when --agent is not provided', async () => {

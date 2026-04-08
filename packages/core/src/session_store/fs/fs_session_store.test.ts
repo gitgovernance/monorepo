@@ -20,6 +20,7 @@ jest.mock('fs', () => ({
     readFile: jest.fn(),
     writeFile: jest.fn(),
     readdir: jest.fn(),
+    mkdir: jest.fn(),
   },
 }));
 
@@ -119,9 +120,9 @@ describe('FsSessionStore', () => {
     });
   });
 
-  // ==================== §4.2 saveSession (EARS-B1 to B2) ====================
+  // ==================== §4.2 saveSession (EARS-B1 to B3) ====================
 
-  describe('4.2. saveSession (EARS-B1 to B2)', () => {
+  describe('4.2. saveSession (EARS-B1 to B3)', () => {
     it('[EARS-B1] WHEN saveSession is invoked, THE SYSTEM SHALL write to .gitgov/.session.json', async () => {
       const store = new FsSessionStore(projectRoot);
       const mockSession: GitGovSession = {
@@ -130,15 +131,34 @@ describe('FsSessionStore', () => {
           timestamp: '2024-01-01T00:00:00Z',
         },
       };
+      mockedFs.mkdir.mockResolvedValue(undefined as never);
       mockedFs.writeFile.mockResolvedValue();
 
       await store.saveSession(mockSession);
 
+      expect(mockedFs.mkdir).toHaveBeenCalledWith('/test/project/.gitgov', { recursive: true });
       expect(mockedFs.writeFile).toHaveBeenCalledWith(
         '/test/project/.gitgov/.session.json',
         JSON.stringify(mockSession, null, 2),
         'utf-8'
       );
+    });
+
+    it('[EARS-B3] WHEN saveSession is invoked and .gitgov/ dir is missing, THE SYSTEM SHALL create it recursively', async () => {
+      const store = new FsSessionStore(projectRoot);
+      const mockSession: GitGovSession = {
+        lastSession: {
+          actorId: 'human:test-user',
+          timestamp: '2024-01-01T00:00:00Z',
+        },
+      };
+      mockedFs.mkdir.mockResolvedValue(undefined as never);
+      mockedFs.writeFile.mockResolvedValue();
+
+      await store.saveSession(mockSession);
+
+      expect(mockedFs.mkdir).toHaveBeenCalledWith('/test/project/.gitgov', { recursive: true });
+      expect(mockedFs.writeFile).toHaveBeenCalled();
     });
 
     it('[EARS-B2] WHEN saveSession is invoked with complete session, THE SYSTEM SHALL preserve all fields', async () => {
@@ -158,6 +178,7 @@ describe('FsSessionStore', () => {
           pullScheduler: { enabled: true },
         },
       };
+      mockedFs.mkdir.mockResolvedValue(undefined as never);
       mockedFs.writeFile.mockResolvedValue();
 
       await store.saveSession(mockSession);

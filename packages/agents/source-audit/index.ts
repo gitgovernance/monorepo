@@ -73,8 +73,8 @@ export async function runAgent(ctx: AgentExecutionContext): Promise<AgentOutput>
 
     // Create a no-op waiver reader (waivers handled externally)
     const waiverReader: SourceAuditor.IWaiverReader = {
-      loadActiveWaivers: async () => [],
-      hasActiveWaiver: async () => false,
+      loadWaivers: async () => [],
+      hasWaiver: async () => false,
     };
 
     // Create source auditor with all dependencies
