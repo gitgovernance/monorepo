@@ -1,3 +1,20 @@
+## [3.9.0](https://github.com/gitgovernance/monorepo/compare/core-v3.8.0...core-v3.9.0) (2026-04-08)
+
+
+### ✨ Features
+
+* **core,cli,e2e:** configurable stateBranch, DB isolation, Prisma 7.x fixes ([5f531e1](https://github.com/gitgovernance/monorepo/commit/5f531e131d7e8e578949d139a1fbfd0831ae9e6f))
+* **core:** audit type coherence — generics, metadata types, status enums ([8b0d1b0](https://github.com/gitgovernance/monorepo/commit/8b0d1b03035c270c82ee16123a8e269a4d12182c))
+* **core:** prisma driver build fixes + audit types test completion ([089da53](https://github.com/gitgovernance/monorepo/commit/089da53b04a6ecbb8cdf9c5a875f35a6ece0beb8))
+* **core:** PrismaRecordProjection refactor + E2E single-tenant migration ([6175184](https://github.com/gitgovernance/monorepo/commit/61751840f78ef585fc4809ac659723f776c64d50))
+* doc coherence + README/AGENTS.md architecture + code fixes ([4993cba](https://github.com/gitgovernance/monorepo/commit/4993cba5f0ac2fdc2161590925289161bec12a6d))
+* **e2e:** projection_audit.test.ts (CBA1-CBA6) + fix CLI --output json ([50d56f7](https://github.com/gitgovernance/monorepo/commit/50d56f765f0995856d65c81a996694fdabe5b290))
+
+
+### ♻️ Refactoring
+
+* **agents:** extract resolvedCwd variable in security-audit entry ([e66bdc3](https://github.com/gitgovernance/monorepo/commit/e66bdc3ff39a2d5ecce8a51cee6681afa337859c))
+
 ## [3.8.0](https://github.com/gitgovernance/monorepo/compare/core-v3.7.0...core-v3.8.0) (2026-04-02)
 
 
