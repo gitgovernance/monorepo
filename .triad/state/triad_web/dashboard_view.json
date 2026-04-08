@@ -1,0 +1,13 @@
+{
+  "module": "dashboard_view",
+  "epic": "triad_web",
+  "state": "implemented",
+  "codePath": "packages/claude-plugins/plugins/triad/web/src/views/dashboard/",
+  "specPath": "specs/views/dashboard/",
+  "cycle": 1,
+  "history": [
+    { "from": "no_spec", "to": "spec_draft", "trigger": "hook:detect", "ts": "2026-04-07T16:00:00Z" },
+    { "from": "spec_draft", "to": "spec_ready", "trigger": "skill:audit", "ts": "2026-04-07T16:30:00Z", "score": 0.80 },
+    { "from": "spec_ready", "to": "implemented", "trigger": "hook:detect", "ts": "2026-04-07T17:00:00Z" }
+  ]
+}

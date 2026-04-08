@@ -1,0 +1,21 @@
+{
+  "module": "epic_manager",
+  "epic": "triad_state_machine",
+  "state": "coherent",
+  "codePath": "packages/claude-plugins/plugins/triad/hooks/src/epic_manager/",
+  "specPath": "packages/claude-plugins/plugins/triad/specs/modules/epic_manager/",
+  "cycle": 6,
+  "history": [
+    { "from": "no_spec", "to": "spec_draft", "trigger": "skill:new-spec", "ts": "2026-04-04T12:00:00Z" },
+    { "from": "spec_draft", "to": "spec_ready", "trigger": "skill:audit", "ts": "2026-04-04T14:00:00Z", "score": 0.85 },
+    { "from": "spec_ready", "to": "implemented", "trigger": "hook:detect", "ts": "2026-04-05T10:00:00Z" },
+    { "from": "implemented", "to": "tested", "trigger": "hook:detect", "ts": "2026-04-05T16:00:00Z" },
+    { "from": "tested", "to": "coherent", "trigger": "skill:audit", "ts": "2026-04-08T12:00:00Z", "score": 0.95 }
+  ],
+  "lastAudit": {
+    "verdict": "COHERENT",
+    "score": 0.95,
+    "findings": 0,
+    "ts": "2026-04-08T12:00:00Z"
+  }
+}

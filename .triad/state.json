@@ -1,0 +1,48 @@
+{
+  "epics": {
+    "triad_web": {
+      "stateDir": ".triad/state/triad_web/",
+      "packages": [
+        "packages/claude-plugins/plugins/triad/web/"
+      ],
+      "status": "active",
+      "phase": "impl",
+      "activeCycle": 1
+    },
+    "triad_state_machine": {
+      "stateDir": ".triad/state/triad_state_machine/",
+      "packages": [
+        "packages/claude-plugins/plugins/triad/hooks/src/"
+      ],
+      "status": "completed",
+      "phase": "complete",
+      "activeCycle": 6,
+      "history": [
+        {
+          "from": "proposal",
+          "to": "active",
+          "trigger": "auto:first-module-registered",
+          "ts": "2026-04-04T12:00:00Z"
+        },
+        {
+          "from": "active",
+          "to": "completed",
+          "trigger": "auto:all-modules-coherent",
+          "ts": "2026-04-08T12:00:00Z"
+        },
+        {
+          "from": "completed",
+          "to": "active",
+          "trigger": "auto:module-drift-detected",
+          "ts": "2026-04-08T00:20:33.291Z"
+        },
+        {
+          "from": "active",
+          "to": "completed",
+          "trigger": "auto:all-modules-coherent",
+          "ts": "2026-04-08T00:20:33.385Z"
+        }
+      ]
+    }
+  }
+}

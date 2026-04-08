@@ -1,0 +1,16 @@
+{
+  "module": "generate_data",
+  "epic": "triad_web",
+  "state": "coherent",
+  "codePath": "packages/claude-plugins/plugins/triad/web/scripts/",
+  "specPath": "specs/modules/generate_data/",
+  "cycle": 1,
+  "history": [
+    { "from": "no_spec", "to": "spec_draft", "trigger": "hook:detect", "ts": "2026-04-07T17:00:00Z" },
+    { "from": "spec_draft", "to": "spec_ready", "trigger": "skill:audit", "ts": "2026-04-07T17:30:00Z", "score": 0.85 },
+    { "from": "spec_ready", "to": "implemented", "trigger": "hook:detect", "ts": "2026-04-07T18:00:00Z" },
+    { "from": "implemented", "to": "tested", "trigger": "hook:detect", "ts": "2026-04-07T18:05:00Z" },
+    { "from": "tested", "to": "coherent", "trigger": "skill:audit", "ts": "2026-04-07T18:20:00Z", "score": 0.95 }
+  ],
+  "lastAudit": { "verdict": "COHERENT", "score": 0.95, "findings": 0, "ts": "2026-04-07T18:20:00Z" }
+}
