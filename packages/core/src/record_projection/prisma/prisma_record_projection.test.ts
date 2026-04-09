@@ -1,6 +1,6 @@
 import { PrismaRecordProjection } from './prisma_record_projection';
 import type { IndexData, ProjectionContext, EnrichedTaskRecord } from '../record_projection.types';
-import type { ProjectionClient } from './prisma_record_projection.types';
+import type { ProjectionClient, GitgovExecutionRow, GitgovAgentRow } from './prisma_record_projection.types';
 
 function createMockDelegate() {
   return {

@@ -3,7 +3,8 @@ import type { ActorRecord, GitGovRecord, GitGovActorRecord } from '../../record_
 import type { RecordStore } from '../../record_store/record_store';
 import { createActorRecord } from '../../record_factories/actor_factory';
 import { validateFullActorRecord } from '../../record_validations/actor_validator';
-import { generateKeys, signPayload, generateMockSignature } from '../../crypto/signatures';
+import { generateKeys, signPayload } from '../../crypto/signatures';
+import { KeyProviderError } from '../../key_provider/key_provider';
 import { calculatePayloadChecksum } from '../../crypto/checksum';
 import { generateActorId } from '../../utils/id_generator';
 import type { ISessionManager } from '../../session_manager';
@@ -19,6 +20,7 @@ import type { KeyProvider } from '../../key_provider/key_provider';
 
 // Mock KeyProvider
 interface MockKeyProvider extends KeyProvider {
+  sign: jest.MockedFunction<(actorId: string, data: Uint8Array) => Promise<Uint8Array>>;
   getPrivateKey: jest.MockedFunction<(actorId: string) => Promise<string | null>>;
   setPrivateKey: jest.MockedFunction<(actorId: string, key: string) => Promise<void>>;
   hasPrivateKey: jest.MockedFunction<(actorId: string) => Promise<boolean>>;
@@ -28,7 +30,6 @@ const mockedCreateActorRecord = createActorRecord as jest.MockedFunction<typeof 
 const mockedValidateFullActorRecord = validateFullActorRecord as jest.MockedFunction<typeof validateFullActorRecord>;
 const mockedGenerateKeys = generateKeys as jest.MockedFunction<typeof generateKeys>;
 const mockedSignPayload = signPayload as jest.MockedFunction<typeof signPayload>;
-const mockedGenerateMockSignature = generateMockSignature as jest.MockedFunction<typeof generateMockSignature>;
 const mockedCalculatePayloadChecksum = calculatePayloadChecksum as jest.MockedFunction<typeof calculatePayloadChecksum>;
 const mockedGenerateActorId = generateActorId as jest.MockedFunction<typeof generateActorId>;
 
@@ -77,6 +78,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
 
     // Create mock KeyProvider
     mockKeyProvider = {
+      sign: jest.fn().mockResolvedValue(new Uint8Array(64)),
       getPrivateKey: jest.fn().mockResolvedValue('mock-private-key'),
       setPrivateKey: jest.fn().mockResolvedValue(undefined),
       hasPrivateKey: jest.fn().mockResolvedValue(true),
@@ -120,8 +122,6 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       eventBus: mockEventBus,
     });
 
-    // Mock generateMockSignature to return valid Ed25519-like signature (64 bytes = 86 chars + ==)
-    mockedGenerateMockSignature.mockReturnValue('oro1j+DqU3XtJrkW4eNqP4gXqHtygAgSaRfuBuW19YAxAAR083ktaWpSBJk4AIof13gO3butj5L4n30XTn+Spg==');
   });
 
   const sampleActorPayload: ActorRecord = {
@@ -322,7 +322,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
   });
 
   describe('signRecord', () => {
-    it('[EARS-E1] should sign record with real cryptographic signature when private key is available', async () => {
+    it('[EARS-E1] should delegate signing to keyProvider.sign() producing Ed25519 signature', async () => {
       const mockRecord: GitGovRecord = {
         header: {
           version: '1.0',
@@ -336,53 +336,40 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
             timestamp: 1234567890
           }]
         },
-        payload: sampleActorPayload // Use valid ActorRecord payload
+        payload: sampleActorPayload
       };
-
-      const testPrivateKey = 'test-private-key-base64';
 
       // Mock actor exists
       mockActorStore.get.mockResolvedValue(sampleRecord);
-
-      // Mock KeyProvider to return private key
-      mockKeyProvider.getPrivateKey.mockResolvedValue(testPrivateKey);
-
-      // Mock signPayload to return real signature
-      mockedSignPayload.mockReturnValue({
-        keyId: 'human:test-user',
-        role: 'author',
-        notes: 'Record signed',
-        signature: 'real-cryptographic-signature',
-        timestamp: Math.floor(Date.now() / 1000)
-      });
       mockedCalculatePayloadChecksum.mockReturnValue('calculated-checksum');
+
+      // [EARS-E1] Mock keyProvider.sign() to return signature bytes
+      const fakeSignatureBytes = new Uint8Array(64).fill(42);
+      mockKeyProvider.sign.mockResolvedValue(fakeSignatureBytes);
 
       const signedRecord = await identityAdapter.signRecord(mockRecord, 'human:test-user', 'author', 'Record signed');
 
       // Should have 2 signatures: original + new real signature
       expect(signedRecord.header.signatures).toHaveLength(2);
 
-      // Check the new signature (second one) - should be real, not mock
+      // [IKS-B7] Verify keyProvider.sign() was called (not getPrivateKey + signPayload)
+      expect(mockKeyProvider.sign).toHaveBeenCalledWith(
+        'human:test-user',
+        expect.any(Uint8Array) // SHA-256 digest hash
+      );
+      expect(mockKeyProvider.getPrivateKey).not.toHaveBeenCalled();
+
+      // Check the new signature
       const newSignature = signedRecord.header.signatures[1];
       expect(newSignature).toBeDefined();
       expect(newSignature!.keyId).toBe('human:test-user');
       expect(newSignature!.role).toBe('author');
-      expect(newSignature!.signature).toBe('real-cryptographic-signature');
-      expect(newSignature!.signature).not.toContain('mock-signature-');
+      expect(newSignature!.notes).toBe('Record signed');
+      expect(newSignature!.signature).toBe(Buffer.from(fakeSignatureBytes).toString('base64'));
       expect(newSignature!.timestamp).toBeGreaterThan(0);
-
-      // Verify private key was loaded via KeyProvider
-      expect(mockKeyProvider.getPrivateKey).toHaveBeenCalledWith('human:test-user');
-      expect(mockedSignPayload).toHaveBeenCalledWith(
-        sampleActorPayload,
-        testPrivateKey,
-        'human:test-user',
-        'author',
-        'Record signed'
-      );
     });
 
-    it('[EARS-E2] should sign record with mock signature as fallback when private key is not available', async () => {
+    it('[EARS-E2] should throw KeyProviderError when no private key exists', async () => {
       const mockRecord: GitGovRecord = {
         header: {
           version: '1.0',
@@ -396,35 +383,27 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
             timestamp: 1234567890
           }]
         },
-        payload: sampleActorPayload // Use valid ActorRecord payload
+        payload: sampleActorPayload
       };
 
       // Mock actor exists
       mockActorStore.get.mockResolvedValue(sampleRecord);
+      mockedCalculatePayloadChecksum.mockReturnValue('calculated-checksum');
 
-      // Mock KeyProvider to return null (no private key)
-      mockKeyProvider.getPrivateKey.mockResolvedValue(null);
+      // [EARS-E2] [IKS-B6] keyProvider.sign() throws KEY_NOT_FOUND
+      mockKeyProvider.sign.mockRejectedValue(
+        new KeyProviderError(
+          'Private key not found for human:test-user',
+          'KEY_NOT_FOUND',
+          { actorId: 'human:test-user', hint: 'Run gitgov init or gitgov login to configure keys' }
+        )
+      );
 
-      // Suppress console.warn for tests
-      const originalWarn = console.warn;
-      console.warn = jest.fn();
-
-      const signedRecord = await identityAdapter.signRecord(mockRecord, 'human:test-user', 'author', 'Record signed');
-
-      // Should have 2 signatures: original + new mock signature
-      expect(signedRecord.header.signatures).toHaveLength(2);
-
-      // Check the new signature (second one) - should be mock
-      const newSignature = signedRecord.header.signatures[1];
-      expect(newSignature).toBeDefined();
-      expect(newSignature!.keyId).toBe('human:test-user');
-      expect(newSignature!.role).toBe('author');
-      // Mock signature should be valid base64 Ed25519 format (86 chars + ==)
-      expect(newSignature!.signature).toMatch(/^[A-Za-z0-9+/]{86}==$/);
-      expect(newSignature!.timestamp).toBeGreaterThan(0);
-
-      // Restore console.warn
-      console.warn = originalWarn;
+      // [IKS-B2] signRecord NEVER generates mock signature — throws
+      await expect(identityAdapter.signRecord(mockRecord, 'human:test-user', 'author', 'Record signed'))
+        .rejects.toThrow(KeyProviderError);
+      await expect(identityAdapter.signRecord(mockRecord, 'human:test-user', 'author', 'Record signed'))
+        .rejects.toMatchObject({ code: 'KEY_NOT_FOUND', context: { actorId: 'human:test-user' } });
     });
 
     it('[EARS-E3] should throw error when actor not found', async () => {
@@ -469,13 +448,11 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
 
       // Mock actor exists
       mockActorStore.get.mockResolvedValue(sampleRecord);
+      mockedCalculatePayloadChecksum.mockReturnValue('calculated-checksum');
 
-      // Mock KeyProvider to return null (no private key) - will use mock signature
-      mockKeyProvider.getPrivateKey.mockResolvedValue(null);
-
-      // Suppress console.warn for tests
-      const originalWarn = console.warn;
-      console.warn = jest.fn();
+      // [EARS-E4] keyProvider.sign() returns real signature bytes
+      const fakeSignatureBytes = new Uint8Array(64).fill(7);
+      mockKeyProvider.sign.mockResolvedValue(fakeSignatureBytes);
 
       const signedRecord = await identityAdapter.signRecord(mockRecord, 'human:test-user', 'author', 'Placeholder replacement');
 
@@ -488,12 +465,8 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       expect(finalSignature!.keyId).toBe('human:test-user');
       expect(finalSignature!.role).toBe('author');
       expect(finalSignature!.signature).not.toBe('placeholder');
-      // Mock signature should be valid base64 Ed25519 format (86 chars + ==)
-      expect(finalSignature!.signature).toMatch(/^[A-Za-z0-9+/]{86}==$/);
+      expect(finalSignature!.signature).toBe(Buffer.from(fakeSignatureBytes).toString('base64'));
       expect(finalSignature!.timestamp).toBeGreaterThan(0);
-
-      // Restore console.warn
-      console.warn = originalWarn;
     });
   });
 

@@ -2,14 +2,16 @@
  * FsKeyProvider Tests
  *
  * Tests for filesystem-based KeyProvider implementation.
- * EARS: KP01-KP04 (interface), FKP01-FKP10 (fs-specific)
+ * EARS: KP01-KP04 (interface), FKP01-FKP11 (fs-specific)
  */
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
+import { verify, createHash } from 'crypto';
 import { FsKeyProvider } from './fs_key_provider';
 import { KeyProviderError } from '../key_provider';
+import { generateKeys } from '../../crypto/signatures';
 
 describe('FsKeyProvider', () => {
   let tempDir: string;
@@ -205,6 +207,34 @@ describe('FsKeyProvider', () => {
       const content = await fs.readFile(keyPath, 'utf-8');
 
       expect(content).toBe('customKey');
+    });
+  });
+
+  describe('Signing (EARS-FKP11)', () => {
+    it('[EARS-FKP11] should sign data with Ed25519 key read internally and throw KEY_NOT_FOUND when missing', async () => {
+      // Generate real Ed25519 keypair
+      const { publicKey, privateKey } = await generateKeys();
+
+      // Store key via provider
+      await provider.setPrivateKey('human:signer', privateKey);
+
+      // Sign arbitrary data
+      const data = new Uint8Array(createHash('sha256').update('test-payload').digest());
+      const signature = await provider.sign('human:signer', data);
+
+      // Verify signature is valid Ed25519
+      expect(signature).toBeInstanceOf(Uint8Array);
+      expect(signature.length).toBe(64);
+
+      // Reconstruct SPKI DER to verify
+      const algorithmId = Buffer.from([0x30,0x2a,0x30,0x05,0x06,0x03,0x2b,0x65,0x70,0x03,0x21,0x00]);
+      const spki = Buffer.concat([algorithmId, Buffer.from(publicKey, 'base64')]);
+      const isValid = verify(null, data, { key: spki, type: 'spki', format: 'der' }, Buffer.from(signature));
+      expect(isValid).toBe(true);
+
+      // Throws KEY_NOT_FOUND for missing actor
+      await expect(provider.sign('human:nonexistent', data))
+        .rejects.toMatchObject({ code: 'KEY_NOT_FOUND', context: { actorId: 'human:nonexistent' } });
     });
   });
 });

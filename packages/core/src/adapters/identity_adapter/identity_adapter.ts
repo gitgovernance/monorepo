@@ -16,7 +16,8 @@ import type { IIdentityAdapter, IdentityAdapterDependencies } from './identity_a
 
 import { createActorRecord } from '../../record_factories/actor_factory';
 import { validateFullActorRecord } from '../../record_validations/actor_validator';
-import { generateKeys, signPayload, generateMockSignature } from '../../crypto/signatures';
+import { generateKeys, signPayload } from '../../crypto/signatures';
+import { createHash } from 'crypto';
 import { calculatePayloadChecksum } from '../../crypto/checksum';
 import { generateActorId } from '../../utils/id_generator';
 import type { ISessionManager } from '../../session_manager';
@@ -162,61 +163,46 @@ export class IdentityAdapter implements IIdentityAdapter {
     role: string,
     notes: string
   ): Promise<T> {
-    // Verify actor exists
+    // [EARS-E3] Verify actor exists
     const actor = await this.getActor(actorId);
     if (!actor) {
       throw new Error(`Actor not found: ${actorId}`);
     }
 
-    // Calculate payload checksum (real)
+    // [EARS-E1] Calculate payload checksum and build digest
     const payloadChecksum = calculatePayloadChecksum(record.payload);
+    const timestamp = Math.floor(Date.now() / 1000);
+    const digest = `${payloadChecksum}:${actorId}:${role}:${notes}:${timestamp}`;
+    const digestHash = createHash('sha256').update(digest).digest();
 
-    // Try to load private key via KeyProvider for real signing
-    let privateKey: string | null = null;
-    try {
-      privateKey = await this.keyProvider.getPrivateKey(actorId);
-    } catch (error) {
-      // Private key not found - fallback to mock signature for backward compatibility
-      console.warn(`⚠️  Private key not found for ${actorId}, using mock signature`);
-    }
+    // [EARS-E1] [IKS-B7] Delegate signing to keyProvider.sign() — NOT getPrivateKey() + signPayload()
+    // [EARS-E2] [IKS-B6] sign() throws KeyProviderError('KEY_NOT_FOUND') if no key exists
+    const signatureBytes = await this.keyProvider.sign(actorId, new Uint8Array(digestHash));
 
-    // Create signature (real if private key available, mock otherwise)
-    let signature: Signature;
-    if (privateKey) {
-      // Real cryptographic signing
-      signature = signPayload(record.payload, privateKey, actorId, role, notes);
-    } else {
-      // Fallback to mock signature for backward compatibility
-      signature = {
-        keyId: actorId,
-        role: role,
-        notes: notes,
-        signature: generateMockSignature(),
-        timestamp: Math.floor(Date.now() / 1000)
-      };
-    }
+    const signature: Signature = {
+      keyId: actorId,
+      role,
+      notes,
+      signature: Buffer.from(signatureBytes).toString('base64'),
+      timestamp,
+    };
 
-    // Replace placeholder signatures or add new signature if no placeholders exist
+    // [EARS-E4] Replace placeholder signatures or add new signature
     const existingSignatures = record.header.signatures || [];
     const hasPlaceholder = existingSignatures.some(sig => sig.signature === 'placeholder');
 
     let finalSignatures: [Signature, ...Signature[]];
     if (hasPlaceholder) {
-      // Replace placeholder signatures with the real signature
       const replaced = existingSignatures.map(sig =>
         sig.signature === 'placeholder' ? signature : sig
       );
-      // Ensure at least one signature (should always be true after replacement)
       finalSignatures = replaced.length > 0
         ? replaced as [Signature, ...Signature[]]
         : [signature];
     } else {
-      // No placeholders: append new signature (multi-signature scenario)
       finalSignatures = [...existingSignatures, signature] as [Signature, ...Signature[]];
     }
 
-    // Create signed record with real checksum + signature
-    // Type assertion safe: we only modify header, payload type T is preserved
     const signedRecord = {
       ...record,
       header: {

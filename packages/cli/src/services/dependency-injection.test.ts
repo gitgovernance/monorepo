@@ -296,25 +296,28 @@ jest.doMock('@gitgov/core', () => {
     // 🎭 MOCK KEY PROVIDER: Mock key storage operations
     KeyProvider: {
       FsKeyProvider: jest.fn().mockImplementation(() => ({
+        sign: jest.fn().mockResolvedValue(new Uint8Array(64)),
         getPrivateKey: jest.fn().mockResolvedValue('mock-private-key-base64'),
         setPrivateKey: jest.fn().mockResolvedValue(undefined),
         hasPrivateKey: jest.fn().mockResolvedValue(true),
         deletePrivateKey: jest.fn().mockResolvedValue(true)
       })),
       EnvKeyProvider: jest.fn().mockImplementation(() => ({
+        sign: jest.fn().mockResolvedValue(new Uint8Array(64)),
         getPrivateKey: jest.fn().mockResolvedValue('mock-private-key-base64'),
         setPrivateKey: jest.fn().mockResolvedValue(undefined),
         hasPrivateKey: jest.fn().mockResolvedValue(true),
         deletePrivateKey: jest.fn().mockResolvedValue(true)
       })),
       MockKeyProvider: jest.fn().mockImplementation(() => ({
+        sign: jest.fn().mockResolvedValue(new Uint8Array(64)),
         getPrivateKey: jest.fn().mockResolvedValue('mock-private-key-base64'),
         setPrivateKey: jest.fn().mockResolvedValue(undefined),
         hasPrivateKey: jest.fn().mockResolvedValue(true),
         deletePrivateKey: jest.fn().mockResolvedValue(true)
       })),
       KeyProviderError: class KeyProviderError extends Error {
-        constructor(message: string, public code: string, public actorId?: string) {
+        constructor(message: string, public code: string, public context: Record<string, unknown> = {}) {
           super(message);
           this.name = 'KeyProviderError';
         }

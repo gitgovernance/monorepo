@@ -1,4 +1,4 @@
-import { generateKeys, signPayload, verifySignatures, generateMockSignature } from './signatures';
+import { generateKeys, signPayload, verifySignatures } from './signatures';
 import type { GitGovRecord, GitGovRecordPayload, GitGovRecordType } from '../record_types';
 import type { ActorRecord } from '../record_types';
 import type { AgentRecord } from '../record_types';
@@ -355,23 +355,4 @@ describe('Crypto Module (Signatures)', () => {
     });
   });
 
-  describe('Mock Signature Generation', () => {
-    it('[EARS-7] should generate a valid base64 string of 64 bytes', () => {
-      const mockSig = generateMockSignature();
-
-      // Should be valid base64
-      expect(() => Buffer.from(mockSig, 'base64')).not.toThrow();
-
-      // Should decode to exactly 64 bytes (Ed25519 signature length)
-      const decoded = Buffer.from(mockSig, 'base64');
-      expect(decoded.length).toBe(64);
-    });
-
-    it('[EARS-7] should generate unique signatures on each call', () => {
-      const sig1 = generateMockSignature();
-      const sig2 = generateMockSignature();
-
-      expect(sig1).not.toBe(sig2);
-    });
-  });
 });

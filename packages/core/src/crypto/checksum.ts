@@ -42,8 +42,8 @@ export function calculatePayloadChecksum(payload: GitGovRecordPayload): string {
 
 /**
  * Computes SHA-256 hex digest of a string input.
- * EARS-8: returns 64-character lowercase hex string.
- * EARS-9: deterministic (same input → same output).
+ * EARS-7: returns 64-character lowercase hex string.
+ * EARS-8: deterministic (same input → same output).
  */
 export function sha256(input: string): string {
   return createHash("sha256").update(input, "utf8").digest("hex");

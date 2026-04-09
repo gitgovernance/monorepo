@@ -9,6 +9,7 @@
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { sign } from 'crypto';
 import type { KeyProvider } from '../key_provider';
 import { KeyProviderError } from '../key_provider';
 
@@ -47,6 +48,29 @@ export class FsKeyProvider implements KeyProvider {
   }
 
   /**
+   * [EARS-FKP11] Signs data with the actor's Ed25519 private key.
+   * Reads key internally — private key never leaves this provider.
+   * Throws KeyProviderError('KEY_NOT_FOUND') if no key exists.
+   */
+  async sign(actorId: string, data: Uint8Array): Promise<Uint8Array> {
+    const privateKey = await this.getPrivateKey(actorId);
+    if (!privateKey) {
+      throw new KeyProviderError(
+        `Private key not found for ${this.sanitizeForLog(actorId)}`,
+        'KEY_NOT_FOUND',
+        { actorId, hint: 'Run gitgov init or gitgov login to configure keys' }
+      );
+    }
+
+    const signature = sign(null, data, {
+      key: Buffer.from(privateKey, 'base64'),
+      type: 'pkcs8',
+      format: 'pem',
+    });
+    return new Uint8Array(signature);
+  }
+
+  /**
    * [EARS-KP01] Retrieves the private key for an actor.
    * [EARS-FKP07] Trims whitespace from content.
    * [EARS-FKP08] Returns null for empty key file.
@@ -72,7 +96,7 @@ export class FsKeyProvider implements KeyProvider {
       throw new KeyProviderError(
         `Failed to read private key for ${this.sanitizeForLog(actorId)}: ${(error as Error).message}`,
         'KEY_READ_ERROR',
-        actorId
+        { actorId }
       );
     }
   }
@@ -99,7 +123,7 @@ export class FsKeyProvider implements KeyProvider {
       throw new KeyProviderError(
         `Failed to write private key for ${this.sanitizeForLog(actorId)}: ${(error as Error).message}`,
         'KEY_WRITE_ERROR',
-        actorId
+        { actorId }
       );
     }
   }
@@ -136,7 +160,7 @@ export class FsKeyProvider implements KeyProvider {
       throw new KeyProviderError(
         `Failed to delete private key for ${this.sanitizeForLog(actorId)}: ${(error as Error).message}`,
         'KEY_DELETE_ERROR',
-        actorId
+        { actorId }
       );
     }
   }
@@ -167,7 +191,7 @@ export class FsKeyProvider implements KeyProvider {
       throw new KeyProviderError(
         'Invalid actorId: empty after sanitization',
         'INVALID_ACTOR_ID',
-        actorId
+        { actorId }
       );
     }
 

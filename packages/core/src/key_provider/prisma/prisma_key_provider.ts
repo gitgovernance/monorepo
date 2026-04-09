@@ -19,7 +19,7 @@
  * | PKP-D1  | hasPrivateKey   | 4.4     |
  */
 
-import { createCipheriv, createDecipheriv, randomBytes, createHash } from 'node:crypto';
+import { createCipheriv, createDecipheriv, randomBytes, createHash, sign } from 'node:crypto';
 import type { KeyProvider } from '../key_provider';
 import { KeyProviderError } from '../key_provider';
 import type { PrismaKeyProviderOptions } from './prisma_key_provider.types';
@@ -37,6 +37,29 @@ export class PrismaKeyProvider implements KeyProvider {
     this.prisma = options.prisma;
     this.repoId = options.repoId;
     this.encryptionSecret = options.encryptionSecret;
+  }
+
+  /**
+   * [PKP-E1] Signs data with actor's Ed25519 private key (decrypted from DB).
+   * Throws KeyProviderError('KEY_NOT_FOUND') if no key stored.
+   * Full implementation in Cycle 2 with org key hierarchy.
+   */
+  async sign(actorId: string, data: Uint8Array): Promise<Uint8Array> {
+    const privateKey = await this.getPrivateKey(actorId);
+    if (!privateKey) {
+      throw new KeyProviderError(
+        `Private key not found for ${actorId}`,
+        'KEY_NOT_FOUND',
+        { actorId, hint: 'Run gitgov login to sync your signing key' }
+      );
+    }
+
+    const signature = sign(null, data, {
+      key: Buffer.from(privateKey, 'base64'),
+      type: 'pkcs8',
+      format: 'pem',
+    });
+    return new Uint8Array(signature);
   }
 
   /**
@@ -61,7 +84,7 @@ export class PrismaKeyProvider implements KeyProvider {
       throw new KeyProviderError(
         `Failed to decrypt private key for ${actorId}: ${(error as Error).message}`,
         'KEY_READ_ERROR',
-        actorId,
+        { actorId },
       );
     }
   }
@@ -82,7 +105,7 @@ export class PrismaKeyProvider implements KeyProvider {
       throw new KeyProviderError(
         `Failed to store private key for ${actorId}: ${(error as Error).message}`,
         'KEY_WRITE_ERROR',
-        actorId,
+        { actorId },
       );
     }
   }

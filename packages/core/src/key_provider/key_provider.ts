@@ -17,7 +17,19 @@ export type KeyProviderErrorCode =
   | 'KEY_WRITE_ERROR'
   | 'KEY_DELETE_ERROR'
   | 'INVALID_KEY_FORMAT'
-  | 'INVALID_ACTOR_ID';
+  | 'INVALID_ACTOR_ID'
+  | 'DECRYPTION_FAILED'
+  | 'STORE_FAILED';
+
+/**
+ * Context for KeyProvider errors.
+ */
+export type KeyProviderErrorContext = {
+  actorId?: string;
+  orgId?: string;
+  hint?: string;
+  cause?: Error;
+};
 
 /**
  * Error thrown when key operations fail.
@@ -26,7 +38,7 @@ export class KeyProviderError extends Error {
   constructor(
     message: string,
     public readonly code: KeyProviderErrorCode,
-    public readonly actorId?: string
+    public readonly context: KeyProviderErrorContext = {}
   ) {
     super(message);
     this.name = 'KeyProviderError';
@@ -54,7 +66,18 @@ export class KeyProviderError extends Error {
  */
 export interface KeyProvider {
   /**
+   * [IKS-B5] Signs data with the actor's private key without exposing it.
+   * Primary signing method — HSM-ready (key never leaves the provider).
+   * [IKS-B6] Throws KeyProviderError('KEY_NOT_FOUND') if no key exists.
+   * @param actorId - The actor's ID
+   * @param data - Raw bytes to sign (typically a SHA-256 digest)
+   * @returns Ed25519 signature bytes
+   */
+  sign(actorId: string, data: Uint8Array): Promise<Uint8Array>;
+
+  /**
    * Retrieves the private key for an actor.
+   * Used for sync/export, NOT for signing (use sign() instead).
    * @param actorId - The actor's ID (e.g., 'actor:human:alice')
    * @returns The base64-encoded private key, or null if not found
    */
