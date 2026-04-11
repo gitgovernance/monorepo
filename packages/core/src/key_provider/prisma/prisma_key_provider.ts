@@ -17,6 +17,7 @@
  * | PKP-C2  | plaintext mode  | 4.3     |
  * | PKP-C3  | decrypt error   | 4.3     |
  * | PKP-D1  | hasPrivateKey   | 4.4     |
+ * | PKP-E1  | sign            | 4.5     |
  */
 
 import { createCipheriv, createDecipheriv, randomBytes, createHash, sign } from 'node:crypto';

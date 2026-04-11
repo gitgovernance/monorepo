@@ -46,6 +46,15 @@ export class KeyProviderError extends Error {
 }
 
 /**
+ * Ed25519 key pair — used by PrismaKeyProvider.storeKey() and IdentityAdapter.createActor().
+ * Both publicKey and privateKey are base64-encoded raw Ed25519 bytes (32 bytes each).
+ */
+export type KeyPair = {
+  publicKey: string;
+  privateKey: string;
+};
+
+/**
  * Interface for managing private key storage.
  * Implementations handle the actual persistence mechanism.
  *
@@ -66,9 +75,9 @@ export class KeyProviderError extends Error {
  */
 export interface KeyProvider {
   /**
-   * [IKS-B5] Signs data with the actor's private key without exposing it.
+   * [EARS-KP05] Signs data with the actor's private key without exposing it.
    * Primary signing method — HSM-ready (key never leaves the provider).
-   * [IKS-B6] Throws KeyProviderError('KEY_NOT_FOUND') if no key exists.
+   * [EARS-KP06] Throws KeyProviderError('KEY_NOT_FOUND') if no key exists.
    * @param actorId - The actor's ID
    * @param data - Raw bytes to sign (typically a SHA-256 digest)
    * @returns Ed25519 signature bytes

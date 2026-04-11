@@ -1,5 +1,5 @@
 /**
- * PrismaKeyProvider — 10 EARS (PKP-A1 to D1)
+ * PrismaKeyProvider — 11 EARS (PKP-A1 to E1)
  * Blueprint: prisma_key_provider_module.md
  *
  * | EARS ID | Test Case                                                        | Section |
@@ -14,7 +14,8 @@
  * | PKP-C2  | should store key in plaintext when no encryptionSecret           | 4.3     |
  * | PKP-C3  | should throw KEY_READ_ERROR when decryption fails               | 4.3     |
  * | PKP-D1  | should return true or false without reading key content          | 4.4     |
- * | PKP-E1  | should sign data with decrypted key and throw KEY_NOT_FOUND     | 4.5     |
+ * | PKP-E1  | should decrypt stored key, sign with Ed25519, and return signature | 4.5 |
+ * | PKP-E1  | should throw KEY_NOT_FOUND when signing with no active key      | 4.5     |
  */
 
 import { verify, createHash } from 'crypto';
@@ -245,7 +246,7 @@ describe('PrismaKeyProvider', () => {
   // ==========================================
 
   describe('4.5. Signing (PKP-E1)', () => {
-    it('[PKP-E1] should sign data with decrypted key and throw KEY_NOT_FOUND when missing', async () => {
+    it('[PKP-E1] should decrypt stored key, sign with Ed25519, and return signature', async () => {
       const { prisma } = createMockPrisma();
       const { publicKey, privateKey } = await generateKeys();
 
@@ -265,8 +266,14 @@ describe('PrismaKeyProvider', () => {
       const spki = Buffer.concat([algorithmId, Buffer.from(publicKey, 'base64')]);
       const isValid = verify(null, data, { key: spki, type: 'spki', format: 'der' }, Buffer.from(signature));
       expect(isValid).toBe(true);
+    });
 
-      // Throws KEY_NOT_FOUND for missing actor
+    it('[PKP-E1] should throw KEY_NOT_FOUND when signing with no active key', async () => {
+      const { prisma } = createMockPrisma();
+      const provider = new PrismaKeyProvider({ prisma, repoId: 'repo-1' });
+
+      const data = new Uint8Array(createHash('sha256').update('test-payload').digest());
+
       await expect(provider.sign('human:nonexistent', data))
         .rejects.toMatchObject({ code: 'KEY_NOT_FOUND' });
     });
