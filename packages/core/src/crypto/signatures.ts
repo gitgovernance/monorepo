@@ -1,4 +1,4 @@
-import { generateKeyPair, sign, verify, createHash, createPrivateKey, createPublicKey } from "crypto";
+import { generateKeyPair, sign, verify, createHash, createPrivateKey, createPublicKey, hkdf } from "crypto";
 import { promisify } from "util";
 import { calculatePayloadChecksum } from "./checksum";
 import type { GitGovRecordPayload, Signature } from "../record_types";
@@ -55,6 +55,50 @@ export function derivePublicKey(privateKeyBase64: string): string {
   }) as Buffer;
   // SPKI DER: [algorithm identifier (12 bytes)] + [raw public key (32 bytes)]
   return publicKeyDer.subarray(-32).toString('base64');
+}
+
+/**
+ * Derives a fixed-length symmetric key from a master key using HKDF-SHA256.
+ *
+ * Used by the 3-level key hierarchy in PrismaKeyProvider (Cycle 2 of
+ * identity_key_sync epic): the MASTER_KEY env var is expanded via HKDF with
+ * a purpose-specific `info` string to produce the key-wrapping key that
+ * encrypts per-org `OrgEncryptionKey` rows.
+ *
+ * HKDF (RFC 5869) provides proper key derivation: secure expansion from
+ * high-entropy keying material, binding by `info`, and no reliance on
+ * UTF-8 truncation (which would be fragile with multi-byte characters).
+ *
+ * @param masterKeyBase64 - Base64-encoded input keying material (32+ bytes).
+ *                         Generate with `openssl rand -base64 32`.
+ * @param info - Context/purpose binding string (e.g. 'gitgov-org-key').
+ *               Different `info` values produce different derived keys from
+ *               the same master key, enabling safe reuse across purposes.
+ * @param length - Derived key length in bytes. Default 32 (AES-256).
+ * @returns Promise resolving to the derived key as a Buffer.
+ */
+export function deriveHkdfKey(
+  masterKeyBase64: string,
+  info: string,
+  length: number = 32,
+): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    let keyMaterial: Buffer;
+    try {
+      keyMaterial = Buffer.from(masterKeyBase64, 'base64');
+    } catch (err) {
+      reject(err instanceof Error ? err : new Error('Invalid base64 master key'));
+      return;
+    }
+    // Empty salt is intentional: the `info` parameter provides domain separation.
+    hkdf('sha256', keyMaterial, Buffer.alloc(0), info, length, (err, derivedKey) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+      resolve(Buffer.from(derivedKey));
+    });
+  });
 }
 
 /**
