@@ -12,17 +12,9 @@ import * as path from 'path';
 import type {
   Finding,
   FindingSeverity,
-  FindingCategory,
-  DetectorName,
   Waiver,
-  WaiverMetadata,
   PolicyDecision,
-  PolicyRuleResult,
   Scan,
-  AuditOrchestrationResult,
-  AuditSummary,
-  AgentAuditResult,
-  ReviewAgentResult,
 } from './types';
 
 // ─── Schema Parser ──────────────────────────────────────────────────────────
@@ -47,7 +39,7 @@ function parsePrismaSchema(schemaPath: string): PrismaModel[] {
   for (const line of content.split('\n')) {
     const modelMatch = line.match(/^model\s+(\w+)\s*\{/);
     if (modelMatch) {
-      currentModel = { name: modelMatch[1], fields: [] };
+      currentModel = { name: modelMatch[1]!, fields: [] };
       continue;
     }
 
@@ -60,8 +52,8 @@ function parsePrismaSchema(schemaPath: string): PrismaModel[] {
     if (currentModel) {
       const fieldMatch = line.match(/^\s+(\w+)\s+([\w[\]?]+)/);
       if (fieldMatch && !line.trim().startsWith('//') && !line.trim().startsWith('@@')) {
-        const name = fieldMatch[1];
-        const rawType = fieldMatch[2];
+        const name = fieldMatch[1]!;
+        const rawType = fieldMatch[2]!;
         if (rawType.match(/^[A-Z]/) && !['String', 'Int', 'Float', 'Boolean', 'DateTime', 'Json', 'BigInt', 'Decimal', 'Bytes'].includes(rawType.replace('?', '').replace('[]', ''))) {
           const knownEnums = ['FindingSeverity', 'FindingCategory', 'DetectorName'];
           if (!knownEnums.includes(rawType.replace('?', '').replace('[]', ''))) {
@@ -160,7 +152,7 @@ describe('Audit Record Types (audit_record_types_module.md)', () => {
       expect(finding.reportedBy).toBeDefined();
       expect(typeof finding.isWaived).toBe('boolean');
       // Optional fields compile without error
-      const withOptionals: Finding = { ...finding, column: 5, snippet: 'code', fixes: [{ description: 'fix' }], legalReference: 'GDPR', waiver: undefined };
+      const withOptionals: Finding = { ...finding, column: 5, snippet: 'code', fixes: [{ description: 'fix' }], legalReference: 'GDPR' };
       expect(withOptionals.column).toBe(5);
     });
 
@@ -177,7 +169,7 @@ describe('Audit Record Types (audit_record_types_module.md)', () => {
         fingerprint: 'sha256:test',
         ruleId: 'SEC-001',
         feedback: {
-          header: { version: '1.0', type: 'feedback', payloadChecksum: 'sha256:mock', signatures: [] },
+          header: { version: '1.0', type: 'feedback', payloadChecksum: 'sha256:mock', signatures: [{ keyId: 'human:test', role: 'approver', notes: '', signature: 'mock', timestamp: 1700000000 }] },
           payload: {
             id: '1700000000-feedback-test',
             entityType: 'execution',

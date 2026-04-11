@@ -6,7 +6,10 @@
  * @module key_provider/memory/mock_key_provider
  */
 
+import { sign } from 'crypto';
 import type { KeyProvider } from '../key_provider';
+import { KeyProviderError } from '../key_provider';
+import { derivePublicKey } from '../../crypto/signatures';
 
 /**
  * Options for MockKeyProvider.
@@ -49,10 +52,52 @@ export class MockKeyProvider implements KeyProvider {
   }
 
   /**
+   * [EARS-MKP08] Signs data with a stored Ed25519 private key.
+   * Throws KeyProviderError('KEY_NOT_FOUND') if no key stored for actorId.
+   */
+  async sign(actorId: string, data: Uint8Array): Promise<Uint8Array> {
+    const privateKey = this.keys.get(actorId);
+    if (!privateKey) {
+      throw new KeyProviderError(
+        `Private key not found for ${actorId}`,
+        'KEY_NOT_FOUND',
+        { actorId, hint: 'Use setPrivateKey() to seed a key in MockKeyProvider' }
+      );
+    }
+
+    const signature = sign(null, data, {
+      key: Buffer.from(privateKey, 'base64'),
+      type: 'pkcs8',
+      format: 'pem',
+    });
+    return new Uint8Array(signature);
+  }
+
+  /**
    * [EARS-KP01] Retrieves the private key for an actor.
    */
   async getPrivateKey(actorId: string): Promise<string | null> {
     return this.keys.get(actorId) ?? null;
+  }
+
+  /**
+   * [EARS-KP07] Derives the raw Ed25519 public key from the stored private key.
+   * [EARS-KP08] Returns null if no private key exists for the actor.
+   */
+  async getPublicKey(actorId: string): Promise<string | null> {
+    const privateKey = this.keys.get(actorId);
+    if (!privateKey) {
+      return null;
+    }
+    try {
+      return derivePublicKey(privateKey);
+    } catch (error) {
+      throw new KeyProviderError(
+        `Failed to derive public key for ${actorId}: ${(error as Error).message}`,
+        'KEY_READ_ERROR',
+        { actorId }
+      );
+    }
   }
 
   /**

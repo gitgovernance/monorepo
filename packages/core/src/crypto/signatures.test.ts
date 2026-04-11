@@ -1,4 +1,4 @@
-import { generateKeys, signPayload, verifySignatures, generateMockSignature } from './signatures';
+import { generateKeys, signPayload, verifySignatures, derivePublicKey } from './signatures';
 import type { GitGovRecord, GitGovRecordPayload, GitGovRecordType } from '../record_types';
 import type { ActorRecord } from '../record_types';
 import type { AgentRecord } from '../record_types';
@@ -355,23 +355,40 @@ describe('Crypto Module (Signatures)', () => {
     });
   });
 
-  describe('Mock Signature Generation', () => {
-    it('[EARS-7] should generate a valid base64 string of 64 bytes', () => {
-      const mockSig = generateMockSignature();
-
-      // Should be valid base64
-      expect(() => Buffer.from(mockSig, 'base64')).not.toThrow();
-
-      // Should decode to exactly 64 bytes (Ed25519 signature length)
-      const decoded = Buffer.from(mockSig, 'base64');
-      expect(decoded.length).toBe(64);
+  describe('4.3. derivePublicKey (EARS-9)', () => {
+    it('[EARS-9] should derive public key matching generateKeys() output', async () => {
+      // Generate a keypair and derive its public key from the private key.
+      // The derived public key must match the one generateKeys() returned directly.
+      const { publicKey, privateKey } = await generateKeys();
+      const derived = derivePublicKey(privateKey);
+      expect(derived).toBe(publicKey);
+      expect(derived).toHaveLength(44); // base64 of 32 raw bytes
     });
 
-    it('[EARS-7] should generate unique signatures on each call', () => {
-      const sig1 = generateMockSignature();
-      const sig2 = generateMockSignature();
+    it('[EARS-9] should produce a public key that verifies signatures made with its matching private key', async () => {
+      // Sanity check: derived public key must successfully verify a signature
+      // created with the original private key. This is the contract that KeyProvider.getPublicKey() relies on.
+      const { privateKey } = await generateKeys();
+      const derivedPublicKey = derivePublicKey(privateKey);
 
-      expect(sig1).not.toBe(sig2);
+      const samplePayload: GitGovRecordPayload = { id: 'task:sample', title: 'sample' } as unknown as GitGovRecordPayload;
+      const sig = signPayload(samplePayload, privateKey, 'actor:test', 'author', 'unit-test');
+
+      const record = {
+        header: {
+          version: '1.0',
+          type: 'task',
+          payloadChecksum: calculatePayloadChecksum(samplePayload),
+          signatures: [sig],
+        },
+        payload: samplePayload,
+      } as GitGovRecord;
+
+      const getDerivedKey = async (keyId: string): Promise<string | null> =>
+        keyId === 'actor:test' ? derivedPublicKey : null;
+
+      await expect(verifySignatures(record, getDerivedKey)).resolves.toBe(true);
     });
   });
+
 });

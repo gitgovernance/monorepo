@@ -7,8 +7,10 @@
  * @module key_provider/memory/env_key_provider
  */
 
+import { sign } from 'crypto';
 import type { KeyProvider } from '../key_provider';
 import { KeyProviderError } from '../key_provider';
+import { derivePublicKey } from '../../crypto/signatures';
 
 /**
  * Options for EnvKeyProvider.
@@ -53,6 +55,28 @@ export class EnvKeyProvider implements KeyProvider {
   }
 
   /**
+   * [EARS-EKP13] Signs data with an Ed25519 private key from environment variable.
+   * Throws KeyProviderError('KEY_NOT_FOUND') if env var not set.
+   */
+  async sign(actorId: string, data: Uint8Array): Promise<Uint8Array> {
+    const privateKey = await this.getPrivateKey(actorId);
+    if (!privateKey) {
+      throw new KeyProviderError(
+        `Private key not found in env for ${actorId}`,
+        'KEY_NOT_FOUND',
+        { actorId, hint: 'Set environment variable with the private key' }
+      );
+    }
+
+    const signature = sign(null, data, {
+      key: Buffer.from(privateKey, 'base64'),
+      type: 'pkcs8',
+      format: 'pem',
+    });
+    return new Uint8Array(signature);
+  }
+
+  /**
    * [EARS-KP01] Retrieves the private key from environment variable.
    * [EARS-EKP01] Reads from {prefix}{SANITIZED_ACTOR_ID}.
    * [EARS-EKP07] Returns null for empty or whitespace-only value.
@@ -70,6 +94,26 @@ export class EnvKeyProvider implements KeyProvider {
   }
 
   /**
+   * [EARS-KP07] Derives the raw Ed25519 public key from the stored private key.
+   * [EARS-KP08] Returns null if no private key env var is set for the actor.
+   */
+  async getPublicKey(actorId: string): Promise<string | null> {
+    const privateKey = await this.getPrivateKey(actorId);
+    if (!privateKey) {
+      return null;
+    }
+    try {
+      return derivePublicKey(privateKey);
+    } catch (error) {
+      throw new KeyProviderError(
+        `Failed to derive public key for ${actorId}: ${(error as Error).message}`,
+        'KEY_READ_ERROR',
+        { actorId }
+      );
+    }
+  }
+
+  /**
    * [EARS-KP03] Stores a private key in the environment object.
    * [EARS-EKP02] Sets env var in custom env object.
    * [EARS-EKP03] Throws KEY_WRITE_ERROR when writing to process.env.
@@ -80,7 +124,7 @@ export class EnvKeyProvider implements KeyProvider {
         'Cannot write to environment variables in read-only mode. ' +
         'Use a custom env object with allowWrites: true for writable storage.',
         'KEY_WRITE_ERROR',
-        actorId
+        { actorId }
       );
     }
 
@@ -106,7 +150,7 @@ export class EnvKeyProvider implements KeyProvider {
       throw new KeyProviderError(
         'Cannot delete environment variables in read-only mode.',
         'KEY_DELETE_ERROR',
-        actorId
+        { actorId }
       );
     }
 
@@ -135,7 +179,7 @@ export class EnvKeyProvider implements KeyProvider {
       throw new KeyProviderError(
         'Invalid actorId: empty after sanitization',
         'INVALID_ACTOR_ID',
-        actorId
+        { actorId }
       );
     }
 

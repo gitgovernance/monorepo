@@ -58,6 +58,10 @@ export type { IAgentRunner, RunOptions, AgentResponse } from "./agent_runner/ind
 
 // KeyProvider type exports
 export type { KeyProvider as IKeyProvider } from "./key_provider/index";
+export type { KeyProviderErrorCode, KeyProviderErrorContext } from "./key_provider/index";
+export { KeyProviderError } from "./key_provider/index";
+// KeyPair type — used by storeKey() in PrismaKeyProvider + createActor() in IdentityAdapter
+export type { KeyPair } from "./key_provider/index";
 
 // Lint type exports (pure types only - Fs types are in @gitgov/core/fs)
 export type { RecordStores, LintOptions, FixReport, LintResult, ValidatorType, LintReport, ILintModule } from "./lint/index";

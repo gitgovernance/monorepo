@@ -1,4 +1,4 @@
-import { generateKeyPair, sign, verify, createHash, randomBytes } from "crypto";
+import { generateKeyPair, sign, verify, createHash, createPrivateKey, createPublicKey, hkdf } from "crypto";
 import { promisify } from "util";
 import { calculatePayloadChecksum } from "./checksum";
 import type { GitGovRecordPayload, Signature } from "../record_types";
@@ -30,6 +30,75 @@ export async function generateKeys(): Promise<{ publicKey: string; privateKey: s
     publicKey: rawPublicKey.toString('base64'), // 32 bytes -> 44 chars
     privateKey: Buffer.from(privateKey).toString('base64'),
   };
+}
+
+/**
+ * Derives the raw Ed25519 public key (base64) from a private key stored in
+ * PKCS8 PEM format (base64-encoded, the format used by generateKeys()).
+ *
+ * Used by KeyProvider.getPublicKey() implementations that do NOT cache the
+ * public key separately (FsKeyProvider, MockKeyProvider, EnvKeyProvider).
+ * PrismaKeyProvider caches publicKey as a column and does NOT need this.
+ *
+ * @param privateKeyBase64 Base64-encoded PKCS8 PEM private key
+ * @returns Base64-encoded raw Ed25519 public key (44 chars, 32 bytes)
+ */
+export function derivePublicKey(privateKeyBase64: string): string {
+  const privateKeyObject = createPrivateKey({
+    key: Buffer.from(privateKeyBase64, 'base64'),
+    type: 'pkcs8',
+    format: 'pem',
+  });
+  const publicKeyDer = createPublicKey(privateKeyObject).export({
+    type: 'spki',
+    format: 'der',
+  }) as Buffer;
+  // SPKI DER: [algorithm identifier (12 bytes)] + [raw public key (32 bytes)]
+  return publicKeyDer.subarray(-32).toString('base64');
+}
+
+/**
+ * Derives a fixed-length symmetric key from a master key using HKDF-SHA256.
+ *
+ * Used by the 3-level key hierarchy in PrismaKeyProvider (Cycle 2 of
+ * identity_key_sync epic): the MASTER_KEY env var is expanded via HKDF with
+ * a purpose-specific `info` string to produce the key-wrapping key that
+ * encrypts per-org `OrgEncryptionKey` rows.
+ *
+ * HKDF (RFC 5869) provides proper key derivation: secure expansion from
+ * high-entropy keying material, binding by `info`, and no reliance on
+ * UTF-8 truncation (which would be fragile with multi-byte characters).
+ *
+ * @param masterKeyBase64 - Base64-encoded input keying material (32+ bytes).
+ *                         Generate with `openssl rand -base64 32`.
+ * @param info - Context/purpose binding string (e.g. 'gitgov-org-key').
+ *               Different `info` values produce different derived keys from
+ *               the same master key, enabling safe reuse across purposes.
+ * @param length - Derived key length in bytes. Default 32 (AES-256).
+ * @returns Promise resolving to the derived key as a Buffer.
+ */
+export function deriveHkdfKey(
+  masterKeyBase64: string,
+  info: string,
+  length: number = 32,
+): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    let keyMaterial: Buffer;
+    try {
+      keyMaterial = Buffer.from(masterKeyBase64, 'base64');
+    } catch (err) {
+      reject(err instanceof Error ? err : new Error('Invalid base64 master key'));
+      return;
+    }
+    // Empty salt is intentional: the `info` parameter provides domain separation.
+    hkdf('sha256', keyMaterial, Buffer.alloc(0), info, length, (err, derivedKey) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+      resolve(Buffer.from(derivedKey));
+    });
+  });
 }
 
 /**
@@ -112,12 +181,3 @@ export async function verifySignatures(
   return true;
 }
 
-/**
- * Generates a mock signature with valid Ed25519 format.
- * Used as fallback when private key is not available.
- *
- * [EARS-7] Returns a base64-encoded string of 64 random bytes (86 chars + ==)
- */
-export function generateMockSignature(): string {
-  return randomBytes(64).toString('base64');
-}

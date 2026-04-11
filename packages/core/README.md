@@ -300,7 +300,7 @@ Adapters are orchestrators that compose modules. All receive dependencies via co
 | `hook_handler/` | Hook event handling for agent triggers |
 | `git/` | `IGitModule` interface + local/memory implementations |
 | `crypto/` | Checksums, digital signatures, verification |
-| `key_provider/` | Key storage abstraction (fs/memory) |
+| `key_provider/` | Key signing and storage abstraction (fs/env/memory/prisma) |
 | `file_lister/` | File listing abstraction (fs/memory) |
 | `lint/` | Structural + referential validation |
 | `event_bus/` | Typed pub/sub with 9 event types |

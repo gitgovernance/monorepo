@@ -2,11 +2,13 @@
  * EnvKeyProvider Tests
  *
  * Tests for environment variable-based KeyProvider implementation.
- * EARS: KP01-KP04 (interface), EKP01-EKP12 (env-specific)
+ * EARS: KP01-KP04 (interface), EKP01-EKP13 (env-specific)
  */
 
+import { verify, createHash } from 'crypto';
 import { EnvKeyProvider } from './env_key_provider';
 import { KeyProviderError } from '../key_provider';
+import { generateKeys } from '../../crypto/signatures';
 
 describe('EnvKeyProvider', () => {
   describe('KeyProvider Interface (EARS-KP01 to KP04)', () => {
@@ -187,6 +189,48 @@ describe('EnvKeyProvider', () => {
       await expect(provider.setPrivateKey('::::', 'key'))
         .rejects
         .toMatchObject({ code: 'INVALID_ACTOR_ID' });
+    });
+  });
+
+  describe('Signing (EARS-EKP13)', () => {
+    it('[EARS-EKP13] should sign data with Ed25519 key from env and throw KEY_NOT_FOUND when missing', async () => {
+      const { publicKey, privateKey } = await generateKeys();
+      const env: Record<string, string | undefined> = { GITGOV_KEY_HUMAN_SIGNER: privateKey };
+      const provider = new EnvKeyProvider({ env, allowWrites: true });
+
+      const data = new Uint8Array(createHash('sha256').update('test-payload').digest());
+      const signature = await provider.sign('human:signer', data);
+
+      expect(signature).toBeInstanceOf(Uint8Array);
+      expect(signature.length).toBe(64);
+
+      // Verify Ed25519 signature
+      const algorithmId = Buffer.from([0x30,0x2a,0x30,0x05,0x06,0x03,0x2b,0x65,0x70,0x03,0x21,0x00]);
+      const spki = Buffer.concat([algorithmId, Buffer.from(publicKey, 'base64')]);
+      const isValid = verify(null, data, { key: spki, type: 'spki', format: 'der' }, Buffer.from(signature));
+      expect(isValid).toBe(true);
+
+      // Throws KEY_NOT_FOUND for missing actor
+      await expect(provider.sign('human:nonexistent', data))
+        .rejects.toMatchObject({ code: 'KEY_NOT_FOUND' });
+    });
+  });
+
+  describe('Public Key Derivation (EARS-EKP14 to EKP15)', () => {
+    it('[EARS-EKP14] should derive public key from stored private key', async () => {
+      const { publicKey, privateKey } = await generateKeys();
+      const env: Record<string, string | undefined> = { GITGOV_KEY_HUMAN_ALICE: privateKey };
+      const provider = new EnvKeyProvider({ env });
+
+      const derived = await provider.getPublicKey('human:alice');
+      expect(derived).toBe(publicKey);
+      expect(derived).toHaveLength(44);
+    });
+
+    it('[EARS-EKP15] should return null when no private key env var exists', async () => {
+      const provider = new EnvKeyProvider({ env: {} });
+      const result = await provider.getPublicKey('human:nonexistent');
+      expect(result).toBeNull();
     });
   });
 });

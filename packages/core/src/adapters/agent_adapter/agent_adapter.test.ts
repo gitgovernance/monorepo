@@ -101,6 +101,7 @@ describe('AgentAdapter', () => {
 
     // Mock key provider
     mockKeyProvider = {
+      sign: jest.fn().mockResolvedValue(new Uint8Array(64)),
       getPrivateKey: jest.fn().mockResolvedValue('mock-private-key'),
       setPrivateKey: jest.fn().mockResolvedValue(undefined),
       deletePrivateKey: jest.fn().mockResolvedValue(undefined),
