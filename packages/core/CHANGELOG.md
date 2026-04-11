@@ -1,3 +1,22 @@
+## [3.10.0](https://github.com/gitgovernance/monorepo/compare/core-v3.9.0...core-v3.10.0) (2026-04-11)
+
+
+### ✨ Features
+
+* **core:** add getPublicKey to IKeyProvider + derivePublicKey helper ([1963f99](https://github.com/gitgovernance/monorepo/commit/1963f990ac1377cbace9e804a1529d6c93a6132e))
+* **core:** add KeyProvider.sign() and eliminate mock signature fallback ([5b032e2](https://github.com/gitgovernance/monorepo/commit/5b032e23053f14da9b2018175f1babf1a4e63d96))
+* **core:** PrismaKeyProvider v2 — org-scoped + 3-level key hierarchy ([aba885a](https://github.com/gitgovernance/monorepo/commit/aba885aac1a95930cfccc1b731ff200f28257241))
+
+
+### 🐛 Bug Fixes
+
+* **core:** key_provider hygiene + Cycle 2 prep ([727a163](https://github.com/gitgovernance/monorepo/commit/727a1633edeea9fc1b1969016684df1a940e24a4))
+
+
+### 📝 Documentation
+
+* **core:** update key_provider description — signing + 4 backends ([0d5b832](https://github.com/gitgovernance/monorepo/commit/0d5b83233cc83eaef750cd4fc96d5ddeb49db1b0))
+
 ## [3.9.0](https://github.com/gitgovernance/monorepo/compare/core-v3.8.0...core-v3.9.0) (2026-04-08)
 
 
