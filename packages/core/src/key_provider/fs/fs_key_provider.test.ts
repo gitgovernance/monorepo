@@ -2,7 +2,7 @@
  * FsKeyProvider Tests
  *
  * Tests for filesystem-based KeyProvider implementation.
- * EARS: KP01-KP04 (interface), FKP01-FKP11 (fs-specific)
+ * EARS: KP01-KP04 (interface), FKP01-FKP13 (fs-specific, includes getPublicKey)
  */
 
 import * as fs from 'fs/promises';
@@ -235,6 +235,24 @@ describe('FsKeyProvider', () => {
       // Throws KEY_NOT_FOUND for missing actor
       await expect(provider.sign('human:nonexistent', data))
         .rejects.toMatchObject({ code: 'KEY_NOT_FOUND', context: { actorId: 'human:nonexistent' } });
+    });
+  });
+
+  describe('Public Key Derivation (EARS-FKP12 to FKP13)', () => {
+    it('[EARS-FKP12] should derive public key from stored private key', async () => {
+      // Generate a real Ed25519 keypair and store the private key.
+      // getPublicKey() should derive the same public key that generateKeys() produced.
+      const { publicKey, privateKey } = await generateKeys();
+      await provider.setPrivateKey('human:alice', privateKey);
+
+      const derived = await provider.getPublicKey('human:alice');
+      expect(derived).toBe(publicKey);
+      expect(derived).toHaveLength(44); // base64 of 32 raw bytes
+    });
+
+    it('[EARS-FKP13] should return null when no private key exists', async () => {
+      const result = await provider.getPublicKey('human:nonexistent');
+      expect(result).toBeNull();
     });
   });
 });

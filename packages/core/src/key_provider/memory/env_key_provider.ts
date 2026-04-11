@@ -10,6 +10,7 @@
 import { sign } from 'crypto';
 import type { KeyProvider } from '../key_provider';
 import { KeyProviderError } from '../key_provider';
+import { derivePublicKey } from '../../crypto/signatures';
 
 /**
  * Options for EnvKeyProvider.
@@ -90,6 +91,26 @@ export class EnvKeyProvider implements KeyProvider {
     }
 
     return value.trim();
+  }
+
+  /**
+   * [EARS-KP07] Derives the raw Ed25519 public key from the stored private key.
+   * [EARS-KP08] Returns null if no private key env var is set for the actor.
+   */
+  async getPublicKey(actorId: string): Promise<string | null> {
+    const privateKey = await this.getPrivateKey(actorId);
+    if (!privateKey) {
+      return null;
+    }
+    try {
+      return derivePublicKey(privateKey);
+    } catch (error) {
+      throw new KeyProviderError(
+        `Failed to derive public key for ${actorId}: ${(error as Error).message}`,
+        'KEY_READ_ERROR',
+        { actorId }
+      );
+    }
   }
 
   /**

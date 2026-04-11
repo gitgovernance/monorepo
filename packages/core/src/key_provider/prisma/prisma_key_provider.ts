@@ -23,6 +23,7 @@
 import { createCipheriv, createDecipheriv, randomBytes, createHash, sign } from 'node:crypto';
 import type { KeyProvider } from '../key_provider';
 import { KeyProviderError } from '../key_provider';
+import { derivePublicKey } from '../../crypto/signatures';
 import type { PrismaKeyProviderOptions } from './prisma_key_provider.types';
 
 const ALGORITHM = 'aes-256-gcm';
@@ -38,6 +39,29 @@ export class PrismaKeyProvider implements KeyProvider {
     this.prisma = options.prisma;
     this.repoId = options.repoId;
     this.encryptionSecret = options.encryptionSecret;
+  }
+
+  /**
+   * [EARS-KP07] Derives the raw Ed25519 public key from the stored private key.
+   * [EARS-KP08] Returns null if no key exists for the actor.
+   *
+   * Note: v1 derives on-demand. In Cycle 2 v2 this will be replaced with a direct
+   * read of the `publicKey` column on ActorKey (no decryption, no org_key access).
+   */
+  async getPublicKey(actorId: string): Promise<string | null> {
+    const privateKey = await this.getPrivateKey(actorId);
+    if (!privateKey) {
+      return null;
+    }
+    try {
+      return derivePublicKey(privateKey);
+    } catch (error) {
+      throw new KeyProviderError(
+        `Failed to derive public key for ${actorId}: ${(error as Error).message}`,
+        'KEY_READ_ERROR',
+        { actorId }
+      );
+    }
   }
 
   /**

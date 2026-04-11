@@ -9,6 +9,7 @@
 import { sign } from 'crypto';
 import type { KeyProvider } from '../key_provider';
 import { KeyProviderError } from '../key_provider';
+import { derivePublicKey } from '../../crypto/signatures';
 
 /**
  * Options for MockKeyProvider.
@@ -77,6 +78,26 @@ export class MockKeyProvider implements KeyProvider {
    */
   async getPrivateKey(actorId: string): Promise<string | null> {
     return this.keys.get(actorId) ?? null;
+  }
+
+  /**
+   * [EARS-KP07] Derives the raw Ed25519 public key from the stored private key.
+   * [EARS-KP08] Returns null if no private key exists for the actor.
+   */
+  async getPublicKey(actorId: string): Promise<string | null> {
+    const privateKey = this.keys.get(actorId);
+    if (!privateKey) {
+      return null;
+    }
+    try {
+      return derivePublicKey(privateKey);
+    } catch (error) {
+      throw new KeyProviderError(
+        `Failed to derive public key for ${actorId}: ${(error as Error).message}`,
+        'KEY_READ_ERROR',
+        { actorId }
+      );
+    }
   }
 
   /**

@@ -86,11 +86,22 @@ export interface KeyProvider {
 
   /**
    * Retrieves the private key for an actor.
-   * Used for sync/export, NOT for signing (use sign() instead).
+   * Used for sync/export, NOT for signing (use sign() instead — HSM-ready).
    * @param actorId - The actor's ID (e.g., 'actor:human:alice')
    * @returns The base64-encoded private key, or null if not found
    */
   getPrivateKey(actorId: string): Promise<string | null>;
+
+  /**
+   * [EARS-KP07] Retrieves the public key for an actor.
+   * Required for key verification flows (KEY_MISMATCH detection in IdentityService).
+   * Implementations MAY cache this field directly (PrismaKeyProvider) or derive from the
+   * private key via derivePublicKey() (FsKeyProvider, MockKeyProvider, EnvKeyProvider).
+   * [EARS-KP08] Returns null if the actor has no key (fail-safe, same as getPrivateKey).
+   * @param actorId - The actor's ID
+   * @returns The base64-encoded public key (44 chars, raw Ed25519), or null if not found
+   */
+  getPublicKey(actorId: string): Promise<string | null>;
 
   /**
    * Stores a private key for an actor.

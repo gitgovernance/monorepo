@@ -1,4 +1,4 @@
-import { generateKeyPair, sign, verify, createHash } from "crypto";
+import { generateKeyPair, sign, verify, createHash, createPrivateKey, createPublicKey } from "crypto";
 import { promisify } from "util";
 import { calculatePayloadChecksum } from "./checksum";
 import type { GitGovRecordPayload, Signature } from "../record_types";
@@ -30,6 +30,31 @@ export async function generateKeys(): Promise<{ publicKey: string; privateKey: s
     publicKey: rawPublicKey.toString('base64'), // 32 bytes -> 44 chars
     privateKey: Buffer.from(privateKey).toString('base64'),
   };
+}
+
+/**
+ * Derives the raw Ed25519 public key (base64) from a private key stored in
+ * PKCS8 PEM format (base64-encoded, the format used by generateKeys()).
+ *
+ * Used by KeyProvider.getPublicKey() implementations that do NOT cache the
+ * public key separately (FsKeyProvider, MockKeyProvider, EnvKeyProvider).
+ * PrismaKeyProvider caches publicKey as a column and does NOT need this.
+ *
+ * @param privateKeyBase64 Base64-encoded PKCS8 PEM private key
+ * @returns Base64-encoded raw Ed25519 public key (44 chars, 32 bytes)
+ */
+export function derivePublicKey(privateKeyBase64: string): string {
+  const privateKeyObject = createPrivateKey({
+    key: Buffer.from(privateKeyBase64, 'base64'),
+    type: 'pkcs8',
+    format: 'pem',
+  });
+  const publicKeyDer = createPublicKey(privateKeyObject).export({
+    type: 'spki',
+    format: 'der',
+  }) as Buffer;
+  // SPKI DER: [algorithm identifier (12 bytes)] + [raw public key (32 bytes)]
+  return publicKeyDer.subarray(-32).toString('base64');
 }
 
 /**

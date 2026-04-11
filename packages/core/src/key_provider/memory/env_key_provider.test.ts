@@ -215,4 +215,22 @@ describe('EnvKeyProvider', () => {
         .rejects.toMatchObject({ code: 'KEY_NOT_FOUND' });
     });
   });
+
+  describe('Public Key Derivation (EARS-EKP14 to EKP15)', () => {
+    it('[EARS-EKP14] should derive public key from stored private key', async () => {
+      const { publicKey, privateKey } = await generateKeys();
+      const env: Record<string, string | undefined> = { GITGOV_KEY_HUMAN_ALICE: privateKey };
+      const provider = new EnvKeyProvider({ env });
+
+      const derived = await provider.getPublicKey('human:alice');
+      expect(derived).toBe(publicKey);
+      expect(derived).toHaveLength(44);
+    });
+
+    it('[EARS-EKP15] should return null when no private key env var exists', async () => {
+      const provider = new EnvKeyProvider({ env: {} });
+      const result = await provider.getPublicKey('human:nonexistent');
+      expect(result).toBeNull();
+    });
+  });
 });

@@ -12,6 +12,7 @@ import * as path from 'path';
 import { sign } from 'crypto';
 import type { KeyProvider } from '../key_provider';
 import { KeyProviderError } from '../key_provider';
+import { derivePublicKey } from '../../crypto/signatures';
 
 /**
  * Options for FsKeyProvider.
@@ -68,6 +69,27 @@ export class FsKeyProvider implements KeyProvider {
       format: 'pem',
     });
     return new Uint8Array(signature);
+  }
+
+  /**
+   * [EARS-KP07] Derives and returns the raw Ed25519 public key from the stored private key.
+   * [EARS-KP08] Returns null if no private key exists for the actor.
+   * FsKeyProvider does not cache the public key — it's derived on-demand via ed25519 SPKI extraction.
+   */
+  async getPublicKey(actorId: string): Promise<string | null> {
+    const privateKey = await this.getPrivateKey(actorId);
+    if (!privateKey) {
+      return null;
+    }
+    try {
+      return derivePublicKey(privateKey);
+    } catch (error) {
+      throw new KeyProviderError(
+        `Failed to derive public key for ${this.sanitizeForLog(actorId)}: ${(error as Error).message}`,
+        'KEY_READ_ERROR',
+        { actorId }
+      );
+    }
   }
 
   /**

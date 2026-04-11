@@ -188,6 +188,7 @@ describe.each(backends)('BacklogAdapter Integration Tests with %s backend', (_na
     const mockKeyProvider = {
       sign: jest.fn().mockResolvedValue(new Uint8Array(64)),
       getPrivateKey: jest.fn().mockResolvedValue('mock-private-key'),
+      getPublicKey: jest.fn().mockResolvedValue('mock-public-key'),
       setPrivateKey: jest.fn().mockResolvedValue(undefined),
       hasPrivateKey: jest.fn().mockResolvedValue(true),
       deletePrivateKey: jest.fn().mockResolvedValue(true),

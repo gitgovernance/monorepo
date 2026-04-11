@@ -2,7 +2,7 @@
  * MockKeyProvider Tests
  *
  * Tests for in-memory KeyProvider implementation (for testing).
- * EARS: KP01-KP04 (interface), MKP01-MKP08 (mock-specific)
+ * EARS: KP01-KP08 (interface incl. getPublicKey), MKP01-MKP10 (mock-specific)
  */
 
 import { verify, createHash } from 'crypto';
@@ -178,6 +178,23 @@ describe('MockKeyProvider', () => {
         .rejects.toThrow(KeyProviderError);
       await expect(provider.sign('human:nonexistent', data))
         .rejects.toMatchObject({ code: 'KEY_NOT_FOUND' });
+    });
+  });
+
+  describe('Public Key Derivation (EARS-MKP09 to MKP10)', () => {
+    it('[EARS-MKP09] should derive public key from stored private key', async () => {
+      const { publicKey, privateKey } = await generateKeys();
+      const provider = new MockKeyProvider({ keys: { 'human:alice': privateKey } });
+
+      const derived = await provider.getPublicKey('human:alice');
+      expect(derived).toBe(publicKey);
+      expect(derived).toHaveLength(44);
+    });
+
+    it('[EARS-MKP10] should return null when no private key exists', async () => {
+      const provider = new MockKeyProvider();
+      const result = await provider.getPublicKey('human:nonexistent');
+      expect(result).toBeNull();
     });
   });
 });
