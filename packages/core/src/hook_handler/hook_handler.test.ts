@@ -50,6 +50,9 @@ function createMockDependencies(overrides?: Partial<{
       getLastSession: jest.fn().mockResolvedValue(
         'lastSessionReturns' in opts ? opts.lastSessionReturns : { actorId: 'actor-123', timestamp: new Date().toISOString() }
       ),
+      setCloudToken: jest.fn(),
+      setLastSession: jest.fn(),
+      clearCloudToken: jest.fn(),
     } as unknown as HookHandlerDependencies['sessionManager'],
 
     executionAdapter: {

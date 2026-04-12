@@ -43,7 +43,9 @@ jest.mock('@gitgov/core', () => ({
 }));
 
 // Mock DependencyInjectionService
-const mockSaveSession = jest.fn();
+const mockSetCloudToken = jest.fn();
+const mockSetLastSession = jest.fn();
+const mockClearCloudToken = jest.fn();
 const mockLoadSession = jest.fn();
 const mockGetPrivateKey = jest.fn();
 const mockSetPrivateKey = jest.fn();
@@ -56,7 +58,9 @@ jest.mock('../../services/dependency-injection', () => ({
     getInstance: jest.fn().mockReturnValue({
       getSessionManager: jest.fn().mockResolvedValue({
         loadSession: mockLoadSession,
-        sessionStore: { saveSession: mockSaveSession },
+        setCloudToken: mockSetCloudToken,
+        setLastSession: mockSetLastSession,
+        clearCloudToken: mockClearCloudToken,
       }),
       getKeyProvider: jest.fn().mockReturnValue({
         getPrivateKey: mockGetPrivateKey,
@@ -66,6 +70,10 @@ jest.mock('../../services/dependency-injection', () => ({
       } as unknown as IKeyProvider),
       getConfigManager: jest.fn().mockResolvedValue({
         loadConfig: mockGetConfig,
+        getSaasUrl: jest.fn().mockImplementation(async () => {
+          const config = await mockGetConfig();
+          return config?.saasUrl ?? null;
+        }),
       }),
     }),
   },
@@ -150,10 +158,8 @@ describe('LoginCommand v2', () => {
 
       expect(deps.startCallbackServer).toHaveBeenCalledTimes(1);
 
-      expect(mockSaveSession).toHaveBeenCalled();
-      const savedSession = mockSaveSession.mock.calls[0][0];
-      expect(savedSession.cloud.sessionToken).toBe('test-session-token');
-      expect(savedSession.lastSession.actorId).toBe('human:camilo');
+      expect(mockSetCloudToken).toHaveBeenCalledWith('test-session-token');
+      expect(mockSetLastSession).toHaveBeenCalledWith('human:camilo', expect.any(String));
     });
 
     it('[LOGIN-A2] should display login status with user info', async () => {
@@ -184,22 +190,11 @@ describe('LoginCommand v2', () => {
       const cmd = new LoginCommand(createMockDeps());
       await cmd.executeLogout(defaultOptions);
 
-      expect(mockSaveSession).toHaveBeenCalled();
-      const savedSession = mockSaveSession.mock.calls[0][0];
-      expect(savedSession.cloud).toBeUndefined();
-      expect(savedSession.actorState).toEqual({ 'human:camilo': { activeTaskId: 'task-1' } });
+      expect(mockClearCloudToken).toHaveBeenCalled();
       expect(mockSetPrivateKey).not.toHaveBeenCalled();
     });
 
-    it('[LOGIN-A4] should fail when saasUrl is not configured', async () => {
-      mockGetConfig.mockResolvedValue({ projectId: 'test-repo' }); // no saasUrl
-
-      const cmd = new LoginCommand(createMockDeps());
-      await cmd.executeLogin(defaultOptions);
-
-      const errorOutput = mockConsoleError.mock.calls.map(c => c[0]).join('\n');
-      expect(errorOutput).toContain('No saasUrl configured');
-    });
+    // LOGIN-A4 (no saasUrl) was deduplicated → covered by LOGIN-H1 in §4.8
   });
 
   // ==================== §4.2 Key Sync CLI → SaaS (LOGIN-B1 to B3) ====================
@@ -232,12 +227,37 @@ describe('LoginCommand v2', () => {
       expect(output).toContain('Key synced to SaaS');
     });
 
+    it('[LOGIN-B2] should display confirmation after successful sync (keySynced derived, not persisted)', async () => {
+      mockHasPrivateKey.mockResolvedValue(true);
+      mockGetPrivateKey.mockResolvedValue('base64-private-key');
+      mockGetPublicKey.mockResolvedValue('base64-public-key');
+
+      const syncResponse: SyncKeyResponse = { success: true, actorId: 'human:camilo', mode: 'full' };
+      const deps = createMockDeps({
+        fetchSaas: jest.fn().mockImplementation(async (url: string) => {
+          if (url.includes('identity.keyStatus')) return { ok: true, json: async () => trpcWrap(noKeyStatus) };
+          if (url.includes('identity.syncKey')) return { ok: true, json: async () => trpcWrap(syncResponse) };
+          return { ok: false, json: async () => ({}) };
+        }),
+      });
+
+      const cmd = new LoginCommand(deps);
+      await cmd.executeLogin(defaultOptions);
+
+      // Confirmation displayed
+      const output = mockConsoleLog.mock.calls.map(c => c[0]).join('\n');
+      expect(output).toContain('Key synced to SaaS');
+      // keySynced is NOT persisted in session — derived at runtime (§3.4)
+      // setCloudToken was called (for login), but no keySynced field
+      expect(mockSetCloudToken).toHaveBeenCalled();
+    });
+
     it('[LOGIN-B3] should skip key sync when no-key-sync flag is passed', async () => {
       const deps = createMockDeps();
       const cmd = new LoginCommand(deps);
       await cmd.executeLogin({ ...defaultOptions, noKeySync: true });
 
-      expect(mockSaveSession).toHaveBeenCalled();
+      expect(mockSetCloudToken).toHaveBeenCalled();
       expect(deps.fetchSaas).not.toHaveBeenCalled();
     });
   });
@@ -279,6 +299,32 @@ describe('LoginCommand v2', () => {
           headers: expect.objectContaining({ Authorization: 'Bearer test-session-token' }),
         })
       );
+    });
+
+    it('[LOGIN-C2] should store downloaded key via FsKeyProvider (handles 0600 permissions)', async () => {
+      mockHasPrivateKey.mockResolvedValue(false);
+
+      const deps = createMockDeps({
+        fetchSaas: jest.fn().mockImplementation(async (url: string) => {
+          if (url.includes('identity.keyStatus')) {
+            return { ok: true, json: async () => trpcWrap(keyStatusWith('saas-pub')) };
+          }
+          if (url.includes('identity.getKey')) {
+            return { ok: true, json: async () => trpcWrap({
+              publicKey: 'saas-pub',
+              privateKeyEnvelope: { ephemeralPublicKey: 'e', ciphertext: 'c', iv: 'i', authTag: 'a' },
+            }) };
+          }
+          return { ok: false, json: async () => ({}) };
+        }),
+      });
+
+      const cmd = new LoginCommand(deps);
+      await cmd.executeLogin(defaultOptions);
+
+      // mockEcdhDecrypt returns Buffer.from('decrypted-private-key')
+      // setPrivateKey should be called — FsKeyProvider handles 0600 internally
+      expect(mockSetPrivateKey).toHaveBeenCalledWith('human:camilo', expect.any(String));
     });
   });
 
@@ -350,7 +396,34 @@ describe('LoginCommand v2', () => {
       );
     });
 
-    it('[LOGIN-F3] should show fingerprints and exit 1 when no --force flag', async () => {
+    it('[LOGIN-F2] should download SaaS key with --force-cloud when keys differ', async () => {
+      mockHasPrivateKey.mockResolvedValue(true);
+      mockGetPublicKey.mockResolvedValue('local-pub-key');
+
+      const mockEnvelope = { ephemeralPublicKey: 'ep', ciphertext: 'ct', iv: 'iv', authTag: 'at' };
+      const deps = createMockDeps({
+        fetchSaas: jest.fn().mockImplementation(async (url: string) => {
+          if (url.includes('identity.keyStatus')) {
+            return { ok: true, json: async () => trpcWrap(keyStatusWith('different-saas-pub')) };
+          }
+          if (url.includes('identity.getKey')) {
+            return { ok: true, json: async () => trpcWrap({ publicKey: 'different-saas-pub', privateKeyEnvelope: mockEnvelope }) };
+          }
+          return { ok: false, json: async () => ({}) };
+        }),
+      });
+
+      const cmd = new LoginCommand(deps);
+      await cmd.executeLogin({ ...defaultOptions, forceCloud: true });
+
+      expect(mockSetPrivateKey).toHaveBeenCalled();
+      expect(deps.fetchSaas).toHaveBeenCalledWith(
+        expect.stringContaining('/trpc/identity.getKey'),
+        expect.any(Object)
+      );
+    });
+
+    it('[LOGIN-F3] should show SHA-256 fingerprints and exit 1 when no --force flag', async () => {
       mockHasPrivateKey.mockResolvedValue(true);
       mockGetPublicKey.mockResolvedValue('cli-pub-key-abcdef');
 
@@ -362,10 +435,111 @@ describe('LoginCommand v2', () => {
       await cmd.executeLogin(defaultOptions);
 
       const errorOutput = mockConsoleError.mock.calls.map(c => c[0]).join('\n');
-      // .slice(0, 16) → first 16 chars of each public key
-      expect(errorOutput).toContain('cli-pub-key-abcd');
-      expect(errorOutput).toContain('saas-pub-key-xyz');
+      // SHA-256 hex fingerprints (first 16 chars of hash)
+      expect(errorOutput).toContain('Keys differ');
+      expect(errorOutput).toMatch(/Local:\s+[0-9a-f]{16}/);
+      expect(errorOutput).toMatch(/Cloud:\s+[0-9a-f]{16}/);
       expect(mockProcessExit).toHaveBeenCalledWith(1);
+    });
+
+    it('[LOGIN-F4] should verify keyStatus matches after --force-local resolve', async () => {
+      mockHasPrivateKey.mockResolvedValue(true);
+      mockGetPrivateKey.mockResolvedValue('local-priv');
+      mockGetPublicKey.mockResolvedValue('local-pub-key');
+
+      let callCount = 0;
+      const syncResponse: SyncKeyResponse = { success: true, actorId: 'human:camilo', mode: 'full' };
+      const deps = createMockDeps({
+        fetchSaas: jest.fn().mockImplementation(async (url: string) => {
+          if (url.includes('identity.keyStatus')) {
+            callCount++;
+            // First call: different key. Second call (post-verify): local key uploaded
+            const pub = callCount === 1 ? 'different-saas-key' : 'local-pub-key';
+            return { ok: true, json: async () => trpcWrap(keyStatusWith(pub)) };
+          }
+          if (url.includes('identity.syncKey')) return { ok: true, json: async () => trpcWrap(syncResponse) };
+          return { ok: false, json: async () => ({}) };
+        }),
+      });
+
+      const cmd = new LoginCommand(deps);
+      await cmd.executeLogin({ ...defaultOptions, forceLocal: true });
+
+      // keyStatus called twice: initial check + post-sync verification
+      const keyStatusCalls = (deps.fetchSaas as jest.Mock).mock.calls.filter(
+        (c: [string]) => c[0].includes('identity.keyStatus')
+      );
+      expect(keyStatusCalls.length).toBeGreaterThanOrEqual(2);
+    });
+  });
+
+  // ==================== §4.7 ECDH Transport (LOGIN-G1 to G3) ====================
+
+  describe('4.7. ECDH Transport (LOGIN-G1 to G3)', () => {
+    it('[LOGIN-G1] should encrypt key with ECDH before uploading to SaaS', async () => {
+      mockHasPrivateKey.mockResolvedValue(true);
+      mockGetPrivateKey.mockResolvedValue('base64-priv-key');
+      mockGetPublicKey.mockResolvedValue('base64-pub-key');
+
+      const syncResponse = { success: true, actorId: 'human:camilo', mode: 'full' as const };
+      const deps = createMockDeps({
+        fetchSaas: jest.fn().mockImplementation(async (url: string) => {
+          if (url.includes('identity.keyStatus')) return { ok: true, json: async () => trpcWrap(noKeyStatus) };
+          if (url.includes('identity.syncKey')) return { ok: true, json: async () => trpcWrap(syncResponse) };
+          return { ok: false, json: async () => ({}) };
+        }),
+      });
+
+      const cmd = new LoginCommand(deps);
+      await cmd.executeLogin(defaultOptions);
+
+      // Verify Crypto.ecdhEncrypt was called
+      expect(mockEcdhEncrypt).toHaveBeenCalled();
+      expect(mockGenerateEphemeralKeypair).toHaveBeenCalled();
+    });
+
+    it('[LOGIN-G2] should decrypt ECDH envelope when downloading key from SaaS', async () => {
+      mockHasPrivateKey.mockResolvedValue(false);
+
+      const mockEnvelope = { ephemeralPublicKey: 'ep', ciphertext: 'ct', iv: 'iv', authTag: 'at' };
+      const deps = createMockDeps({
+        fetchSaas: jest.fn().mockImplementation(async (url: string) => {
+          if (url.includes('identity.keyStatus')) return { ok: true, json: async () => trpcWrap(keyStatusWith('saas-pub')) };
+          if (url.includes('identity.getKey')) return { ok: true, json: async () => trpcWrap({ publicKey: 'saas-pub', privateKeyEnvelope: mockEnvelope }) };
+          return { ok: false, json: async () => ({}) };
+        }),
+      });
+
+      const cmd = new LoginCommand(deps);
+      await cmd.executeLogin(defaultOptions);
+
+      expect(mockEcdhDecrypt).toHaveBeenCalled();
+      // ecdhDecrypt returns Buffer, code does .toString('base64') before storing
+      const expectedKey = Buffer.from('decrypted-private-key').toString('base64');
+      expect(mockSetPrivateKey).toHaveBeenCalledWith('human:camilo', expectedKey);
+    });
+
+    it('[LOGIN-G3] should exit with error and not store key when ECDH decryption fails', async () => {
+      mockHasPrivateKey.mockResolvedValue(false);
+      mockEcdhDecrypt.mockRejectedValueOnce(new Error('Unsupported state or unable to authenticate data'));
+
+      const mockEnvelope = { ephemeralPublicKey: 'ep', ciphertext: 'tampered', iv: 'iv', authTag: 'at' };
+      const deps = createMockDeps({
+        fetchSaas: jest.fn().mockImplementation(async (url: string) => {
+          if (url.includes('identity.keyStatus')) return { ok: true, json: async () => trpcWrap(keyStatusWith('saas-pub')) };
+          if (url.includes('identity.getKey')) return { ok: true, json: async () => trpcWrap({ publicKey: 'saas-pub', privateKeyEnvelope: mockEnvelope }) };
+          return { ok: false, json: async () => ({}) };
+        }),
+      });
+
+      const cmd = new LoginCommand(deps);
+      await cmd.executeLogin(defaultOptions);
+
+      // Key should NOT have been stored
+      expect(mockSetPrivateKey).not.toHaveBeenCalled();
+      // Error should mention ECDH
+      const errorOutput = mockConsoleError.mock.calls.map(c => c[0]).join('\n');
+      expect(errorOutput).toContain('ECDH decryption error');
     });
   });
 
@@ -382,15 +556,15 @@ describe('LoginCommand v2', () => {
       expect(errorOutput).toContain('No saasUrl configured');
     });
 
-    it('[LOGIN-H3] should resolve orgId from git remote origin', async () => {
+    it('[LOGIN-H3] should resolve repoFullName from git remote origin', async () => {
       // The mock for child_process.execSync returns 'https://github.com/testorg/testrepo.git'
-      // resolveOrgId should parse this to 'testorg/testrepo'
+      // resolveRepoFullName should parse this to 'testorg/testrepo'
       mockHasPrivateKey.mockResolvedValue(false);
 
       const deps = createMockDeps({
         fetchSaas: jest.fn().mockImplementation(async (url: string) => {
           if (url.includes('identity.keyStatus')) {
-            // Verify the orgId is passed correctly in the tRPC input
+            // Verify the repoFullName is passed correctly in the tRPC input
             expect(url).toContain('testorg');
             return { ok: true, json: async () => trpcWrap(noKeyStatus) };
           }
@@ -401,11 +575,13 @@ describe('LoginCommand v2', () => {
       const cmd = new LoginCommand(deps);
       await cmd.executeLogin(defaultOptions);
 
-      // keyStatus should have been called with orgId from git remote
+      // keyStatus should have been called with repoFullName from git remote
       expect(deps.fetchSaas).toHaveBeenCalledWith(
         expect.stringContaining('testorg'),
         expect.any(Object)
       );
     });
+
+    it.todo('[LOGIN-H2] should timeout after 5 minutes with error message (requires timer mock — deferred to E2E)');
   });
 });

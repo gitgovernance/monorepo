@@ -6,6 +6,7 @@
  */
 
 import type { BaseCommandOptions } from '../../interfaces/command';
+import type { EcdhEnvelope } from '@gitgov/core';
 
 // ============================================================================
 // COMMAND OPTIONS
@@ -49,13 +50,8 @@ export type SyncKeyResponse = {
 /** Response from identity.getKey tRPC query */
 export type GetKeyResponse = {
   publicKey: string | null;
-  /** ECDH-encrypted private key envelope */
-  privateKeyEnvelope: {
-    ephemeralPublicKey: string;
-    ciphertext: string;
-    iv: string;
-    authTag: string;
-  };
+  /** ECDH-encrypted private key envelope (type from @gitgov/core) */
+  privateKeyEnvelope: EcdhEnvelope;
 };
 
 /** Wrapper for tRPC response envelope */

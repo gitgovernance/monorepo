@@ -13,6 +13,7 @@
  * - F: getSyncPreferences (§4.6)
  * - G: getLastSession (§4.7)
  * - H: updateSyncPreferences (§4.8)
+ * - I: Cloud Session Management (§4.9) — setCloudToken, setLastSession, clearCloudToken
  */
 
 import { SessionManager } from './session_manager';
@@ -406,6 +407,65 @@ describe('SessionManager', () => {
         enabled: true,
         pullIntervalSeconds: 45
       });
+    });
+  });
+
+  // ==================== §4.9 Cloud Session Management (EARS-I1 to I3) ====================
+
+  describe('4.9. Cloud Session Management (EARS-I1 to I3)', () => {
+    it('[EARS-I1] WHEN setCloudToken is called, THE SYSTEM SHALL persist the cloud token', async () => {
+      await sessionManager.setCloudToken('test-session-token');
+
+      const session = store.getSession();
+      expect(session?.cloud?.sessionToken).toBe('test-session-token');
+    });
+
+    it('[EARS-I1] should preserve existing session data when setting cloud token', async () => {
+      store.setSession({
+        lastSession: { actorId: 'human:camilo', timestamp: '2026-04-12T00:00:00Z' },
+        actorState: { 'human:camilo': { activeTaskId: 'task-1' } },
+      });
+
+      await sessionManager.setCloudToken('new-token');
+
+      const session = store.getSession();
+      expect(session?.cloud?.sessionToken).toBe('new-token');
+      expect(session?.lastSession?.actorId).toBe('human:camilo');
+      expect(session?.actorState?.['human:camilo']?.activeTaskId).toBe('task-1');
+    });
+
+    it('[EARS-I2] WHEN setLastSession is called, THE SYSTEM SHALL persist lastSession', async () => {
+      await sessionManager.setLastSession('human:testuser', '2026-04-12T10:00:00Z');
+
+      const session = store.getSession();
+      expect(session?.lastSession).toEqual({
+        actorId: 'human:testuser',
+        timestamp: '2026-04-12T10:00:00Z',
+      });
+    });
+
+    it('[EARS-I3] WHEN clearCloudToken is called, THE SYSTEM SHALL remove cloud token preserving rest', async () => {
+      store.setSession({
+        cloud: { sessionToken: 'existing-token' },
+        lastSession: { actorId: 'human:camilo', timestamp: '2026-04-12T00:00:00Z' },
+        actorState: { 'human:camilo': { activeTaskId: 'task-1' } },
+      });
+
+      await sessionManager.clearCloudToken();
+
+      const session = store.getSession();
+      expect(session?.cloud).toBeUndefined();
+      // Everything else preserved
+      expect(session?.lastSession?.actorId).toBe('human:camilo');
+      expect(session?.actorState?.['human:camilo']?.activeTaskId).toBe('task-1');
+    });
+
+    it('[EARS-I3] should succeed gracefully when no cloud token exists', async () => {
+      // No session set — clearCloudToken should not throw
+      await sessionManager.clearCloudToken();
+
+      const session = store.getSession();
+      expect(session?.cloud).toBeUndefined();
     });
   });
 });

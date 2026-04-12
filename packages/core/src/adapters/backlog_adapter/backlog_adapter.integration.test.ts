@@ -203,6 +203,9 @@ describe.each(backends)('BacklogAdapter Integration Tests with %s backend', (_na
       getSyncPreferences: jest.fn().mockResolvedValue(null),
       updateSyncPreferences: jest.fn().mockResolvedValue(undefined),
       getLastSession: jest.fn().mockResolvedValue(null),
+      setCloudToken: jest.fn(),
+      setLastSession: jest.fn(),
+      clearCloudToken: jest.fn(),
     };
 
     // Create identity adapter - will be mocked by jest.doMock
@@ -256,9 +259,17 @@ describe.each(backends)('BacklogAdapter Integration Tests with %s backend', (_na
     } as unknown as ConfigManager;
 
     const mockSessionManager = {
-      updateActorState: jest.fn().mockResolvedValue(undefined),
       loadSession: jest.fn().mockResolvedValue(null),
+      detectActorFromKeyFiles: jest.fn().mockResolvedValue(null),
       getActorState: jest.fn().mockResolvedValue(null),
+      updateActorState: jest.fn().mockResolvedValue(undefined),
+      getCloudSessionToken: jest.fn().mockResolvedValue(null),
+      getSyncPreferences: jest.fn().mockResolvedValue(null),
+      updateSyncPreferences: jest.fn().mockResolvedValue(undefined),
+      getLastSession: jest.fn().mockResolvedValue(null),
+      setCloudToken: jest.fn(),
+      setLastSession: jest.fn(),
+      clearCloudToken: jest.fn(),
     } as unknown as SessionManager;
 
     backlogAdapter = new BacklogAdapter({
