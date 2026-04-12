@@ -8,7 +8,7 @@
  * v2 changes (Cycle 4, identity_key_sync):
  *   - REST → tRPC wire format (IKS-A27)
  *   - plaintext → ECDH encrypted key exchange (IKS-A24/A25)
- *   - repoId → repoFullName via owner/repo from git remote (IKS-A29, IKS-A32)
+ *   - repoId → { providerHost, repoPath } from git remote (IKS-A29, IKS-A33)
  *   - +--force-local / --force-cloud conflict resolution (LOGIN-F1..F4)
  *   - saasUrl required, no default (IKS-A28, LOGIN-H1)
  *   - 5 minute callback timeout (LOGIN-H2)
@@ -16,7 +16,8 @@
 
 import { Command } from 'commander';
 import { BaseCommand } from '../../base/base-command';
-import { Crypto } from '@gitgov/core';
+import { Crypto, parseRemoteUrl } from '@gitgov/core';
+import type { GitRemoteRef } from '@gitgov/core';
 import type {
   LoginCommandOptions,
   LoginDeps,
@@ -154,10 +155,10 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
       // Check key sync status via tRPC
       let keyStatus: KeyStatusResponse | null = null;
       try {
-        const repoFullName = await this.resolveRepoFullName();
-        keyStatus = await this.getKeyStatus(saasUrl, token, repoFullName);
+        const repo = await this.resolveRepoIdentity();
+        keyStatus = await this.getKeyStatus(saasUrl, token, repo);
       } catch {
-        // Non-fatal — can't reach SaaS or resolve repoFullName
+        // Non-fatal — can't reach SaaS or resolve repo identity
       }
 
       const hasLocalKey = await this.hasLocalKey(actorId);
@@ -225,15 +226,15 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
     token: string,
     options: LoginCommandOptions,
   ): Promise<void> {
-    // [LOGIN-H3] Resolve repoFullName from git remote (IKS-A29, IKS-A32)
-    const repoFullName = await this.resolveRepoFullName();
+    // [LOGIN-H3, IKS-A33] Resolve repo identity from git remote
+    const repo = await this.resolveRepoIdentity();
 
     const hasLocal = await this.hasLocalKey(actorId);
-    const keyStatus = await this.getKeyStatus(saasUrl, token, repoFullName);
+    const keyStatus = await this.getKeyStatus(saasUrl, token, repo);
 
     // [LOGIN-B1] CLI has key, SaaS does not → upload with ECDH
     if (hasLocal && !keyStatus.exists) {
-      await this.uploadKeyToSaas(actorId, saasUrl, token, repoFullName, keyStatus.ecdhPublicKey);
+      await this.uploadKeyToSaas(actorId, saasUrl, token, repo, keyStatus.ecdhPublicKey);
       this.handleSuccess(
         { loggedIn: true, user: actorId, keySynced: true },
         options,
@@ -244,7 +245,7 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
 
     // [LOGIN-C1] SaaS has key, CLI does not → download with ECDH
     if (!hasLocal && keyStatus.exists && keyStatus.hasPrivateKey) {
-      await this.downloadKeyFromSaas(actorId, saasUrl, token, repoFullName);
+      await this.downloadKeyFromSaas(actorId, saasUrl, token, repo);
       this.handleSuccess(
         { loggedIn: true, user: actorId, keySynced: true },
         options,
@@ -272,10 +273,10 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
       if (localPublicKey && saasPublicKey && localPublicKey !== saasPublicKey) {
         // [LOGIN-F1] --force-local: upload local key, archive SaaS key
         if (options.forceLocal) {
-          await this.uploadKeyToSaas(actorId, saasUrl, token, repoFullName, keyStatus.ecdhPublicKey);
+          await this.uploadKeyToSaas(actorId, saasUrl, token, repo, keyStatus.ecdhPublicKey);
           console.log('Previous cloud key archived. Local key is now canonical.');
           // [LOGIN-F4] Post-sync verification
-          const postStatus = await this.getKeyStatus(saasUrl, token, repoFullName);
+          const postStatus = await this.getKeyStatus(saasUrl, token, repo);
           const newLocalPub = await keyProvider.getPublicKey(actorId);
           if (postStatus.publicKey === newLocalPub) {
             this.handleSuccess(
@@ -289,10 +290,10 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
 
         // [LOGIN-F2] --force-cloud: download SaaS key, replace local
         if (options.forceCloud) {
-          await this.downloadKeyFromSaas(actorId, saasUrl, token, repoFullName);
+          await this.downloadKeyFromSaas(actorId, saasUrl, token, repo);
           console.log('Previous local key archived. Cloud key is now canonical.');
           // [LOGIN-F4] Post-sync verification
-          const postStatus = await this.getKeyStatus(saasUrl, token, repoFullName);
+          const postStatus = await this.getKeyStatus(saasUrl, token, repo);
           const newLocalPub = await keyProvider.getPublicKey(actorId);
           if (postStatus.publicKey === newLocalPub) {
             this.handleSuccess(
@@ -335,7 +336,7 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
   }
 
   // ============================================================================
-  // tRPC HELPERS (v2 — ECDH encrypted, repoFullName-scoped)
+  // tRPC HELPERS (v2 — ECDH encrypted, providerHost+repoPath scoped)
   // ============================================================================
 
   // [LOGIN-H1] saasUrl must be explicitly configured — no default (IKS-A28)
@@ -351,14 +352,14 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
     throw new Error('No saasUrl configured. Run gitgov init or set saasUrl in .gitgov/config.json');
   }
 
-  // [LOGIN-H3] Resolve repoFullName from git remote origin (IKS-A29, IKS-A32)
-  private async resolveRepoFullName(): Promise<string> {
+  // [LOGIN-H3, IKS-A33] Resolve providerHost + repoPath from git remote origin
+  // Uses parseRemoteUrl from @gitgov/core — shared with SaaS
+  private async resolveRepoIdentity(): Promise<GitRemoteRef> {
     try {
       const { execSync } = await import('child_process');
       const remoteUrl = execSync('git remote get-url origin', { encoding: 'utf-8' }).trim();
-      // Parse owner/repo from https://github.com/owner/repo.git or git@github.com:owner/repo.git
-      const match = remoteUrl.match(/[/:]([\w.-]+)\/([\w.-]+?)(?:\.git)?$/);
-      if (match) return `${match[1]}/${match[2]}`;
+      const ref = parseRemoteUrl(remoteUrl);
+      if (ref) return ref;
     } catch {
       // Git not available or no remote
     }
@@ -375,8 +376,8 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
   }
 
   /** Call identity.keyStatus via tRPC (IKS-A27 wire format) */
-  private async getKeyStatus(saasUrl: string, token: string, repoFullName: string): Promise<KeyStatusResponse> {
-    const input = encodeURIComponent(JSON.stringify({ json: { repoFullName } }));
+  private async getKeyStatus(saasUrl: string, token: string, repo: GitRemoteRef): Promise<KeyStatusResponse> {
+    const input = encodeURIComponent(JSON.stringify({ json: { providerHost: repo.host, repoPath: repo.path } }));
     const url = `${saasUrl}/trpc/identity.keyStatus?input=${input}`;
     const res = await this.deps.fetchSaas(url, {
       headers: { Authorization: `Bearer ${token}` },
@@ -394,7 +395,7 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
     actorId: string,
     saasUrl: string,
     token: string,
-    repoFullName: string,
+    repo: GitRemoteRef,
     serverEcdhPublicKey: string,
   ): Promise<SyncKeyResponse> {
     const keyProvider = this.dependencyService.getKeyProvider();
@@ -417,7 +418,7 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ json: { repoFullName, publicKey, privateKeyEnvelope: envelope } }),
+      body: JSON.stringify({ json: { providerHost: repo.host, repoPath: repo.path, publicKey, privateKeyEnvelope: envelope } }),
     });
     if (!res.ok) throw new Error(`Failed to sync key to SaaS: ${res.status}`);
     const body = await res.json() as TrpcResponse<SyncKeyResponse>;
@@ -432,13 +433,13 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
     actorId: string,
     saasUrl: string,
     token: string,
-    repoFullName: string,
+    repo: GitRemoteRef,
   ): Promise<void> {
     // [LOGIN-G2] Generate ephemeral keypair for ECDH
     const clientKp = Crypto.generateEphemeralKeypair();
 
     const input = encodeURIComponent(JSON.stringify({
-      json: { repoFullName, clientEcdhPublicKey: clientKp.publicKey },
+      json: { providerHost: repo.host, repoPath: repo.path, clientEcdhPublicKey: clientKp.publicKey },
     }));
     const url = `${saasUrl}/trpc/identity.getKey?input=${input}`;
     const res = await this.deps.fetchSaas(url, {

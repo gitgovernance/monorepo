@@ -140,8 +140,8 @@ export type {
 export { generateTaskId, generateExecutionId, generateFeedbackId, generateCycleId, generateActorId, generateAgentId } from "./utils/id_generator";
 
 // Git direct exports (interface + types + errors)
-export type { IGitModule, ExecOptions, ExecResult, GetCommitHistoryOptions, CommitInfo, ChangedFile, CommitAuthor } from "./git/index";
-export { GitError, GitCommandError, FileNotFoundError, BranchNotFoundError, BranchAlreadyExistsError, MergeConflictError } from "./git/index";
+export type { IGitModule, ExecOptions, ExecResult, GetCommitHistoryOptions, CommitInfo, ChangedFile, CommitAuthor, GitRemoteRef } from "./git/index";
+export { GitError, GitCommandError, FileNotFoundError, BranchNotFoundError, BranchAlreadyExistsError, MergeConflictError, parseRemoteUrl } from "./git/index";
 export type {
   GitGovTaskRecord,
   GitGovCycleRecord,

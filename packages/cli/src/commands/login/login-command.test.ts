@@ -40,6 +40,14 @@ jest.mock('@gitgov/core', () => ({
     ecdhDecrypt: (...args: unknown[]) => mockEcdhDecrypt(...args),
     generateEphemeralKeypair: () => mockGenerateEphemeralKeypair(),
   },
+  parseRemoteUrl: (url: string) => {
+    // Parse the mock URL: https://github.com/testorg/testrepo.git
+    const httpsMatch = url.match(/^https?:\/\/([^/]+)\/(.+?)(?:\.git)?$/);
+    if (httpsMatch?.[1] && httpsMatch[2]) return { host: httpsMatch[1], path: httpsMatch[2] };
+    const sshMatch = url.match(/^[^@]+@([^:]+):(.+?)(?:\.git)?$/);
+    if (sshMatch?.[1] && sshMatch[2]) return { host: sshMatch[1], path: sshMatch[2] };
+    return null;
+  },
 }));
 
 // Mock DependencyInjectionService
