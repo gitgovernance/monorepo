@@ -10,8 +10,8 @@ import { Command } from 'commander';
 import { BaseCommand } from '../../base/base-command';
 import type { LoginCommandOptions, LoginDeps, KeyStatusResponse, SyncKeyResponse, GetKeyResponse } from './login-command.types';
 
-const DEFAULT_SAAS_URL = 'https://cloud.gitgov.dev';
 const CALLBACK_PORT = 9876;
+const CALLBACK_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes (IKS-A28, LOGIN-H2)
 
 /**
  * Default deps use real implementations (overridable for tests).
@@ -45,11 +45,11 @@ function createDefaultDeps(): LoginDeps {
           });
           server.listen(port, () => {});
           server.on('error', reject);
-          // Timeout after 60s
+          // [LOGIN-H2] Timeout after 5 minutes
           setTimeout(() => {
             server.close();
-            reject(new Error('Login timeout — no callback received within 60 seconds'));
-          }, 60_000);
+            reject(new Error('Login timeout — no callback received within 5 minutes'));
+          }, CALLBACK_TIMEOUT_MS);
         });
       });
     },
@@ -260,13 +260,14 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
       }
     }
 
-    // [LOGIN-D1] Both have key and they match → already synced
+    // [LOGIN-D1] Both have key — compare PUBLIC keys (not private — cheaper + more secure)
     if (hasLocal && keyStatus.hasKey) {
       const keyProvider = this.dependencyService.getKeyProvider();
-      const localKey = await keyProvider.getPrivateKey(actorId);
-      const saasKeyResponse = await this.getKeyFromSaas(saasUrl, token, actorId, repoId);
+      const localPublicKey = await keyProvider.getPublicKey(actorId);
+      // keyStatus.publicKey comes from the SaaS without downloading private key material
+      const saasPublicKey = keyStatus.publicKey ?? null;
 
-      if (localKey && saasKeyResponse.privateKey && localKey === saasKeyResponse.privateKey) {
+      if (localPublicKey && saasPublicKey && localPublicKey === saasPublicKey) {
         this.handleSuccess(
           { loggedIn: true, user: actorId, keySynced: true },
           options,
@@ -275,9 +276,8 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
         return;
       }
 
-      // [LOGIN-D2] Keys differ → error (logged in but key conflict is an error state)
-      if (localKey && saasKeyResponse.privateKey && localKey !== saasKeyResponse.privateKey) {
-        // Login succeeded but key sync failed — report as error
+      // [LOGIN-D2] Keys differ → error with instructions, exit 1
+      if (localPublicKey && saasPublicKey && localPublicKey !== saasPublicKey) {
         if (options.json) {
           console.log(JSON.stringify({
             success: false,
@@ -285,8 +285,11 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
             data: { loggedIn: true, user: actorId, keySynced: false, keyConflict: true },
           }, null, 2));
         } else {
-          console.error('Keys differ between CLI and SaaS. Resolve manually: use `gitgov actor rotate-key` to generate a new key, or choose which to keep.');
+          console.error('Keys differ between CLI and SaaS.');
+          console.error('Use --force-local to keep local key (uploads to cloud)');
+          console.error('Use --force-cloud to keep cloud key (downloads to local)');
         }
+        process.exit(1);
         return;
       }
     }
@@ -305,6 +308,7 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
   // HELPERS
   // ============================================================================
 
+  // [LOGIN-H1] saasUrl must be explicitly configured — no default (IKS-A28)
   private async resolveSaasUrl(options: LoginCommandOptions): Promise<string> {
     if (options.url) return options.url;
     try {
@@ -312,9 +316,9 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
       const config = await configManager.loadConfig();
       if (config?.saasUrl) return config.saasUrl;
     } catch {
-      // No config available — use default
+      // No config available
     }
-    return DEFAULT_SAAS_URL;
+    throw new Error('No saasUrl configured. Run gitgov init or set saasUrl in .gitgov/config.json');
   }
 
   private async hasLocalKey(actorId: string): Promise<boolean> {

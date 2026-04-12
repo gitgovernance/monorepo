@@ -57,6 +57,8 @@ export type KeyStatusRequest = {
 export type KeyStatusResponse = {
   hasKey: boolean;
   actorExists: boolean;
+  /** Public key of the actor (for case d comparison — avoids downloading private key) */
+  publicKey?: string | null;
 };
 
 // ============================================================================

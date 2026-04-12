@@ -17,6 +17,7 @@ const mockLoadSession = jest.fn();
 const mockGetPrivateKey = jest.fn();
 const mockSetPrivateKey = jest.fn();
 const mockHasPrivateKey = jest.fn();
+const mockGetPublicKey = jest.fn();
 const mockGetConfig = jest.fn();
 
 jest.mock('../../services/dependency-injection', () => ({
@@ -30,6 +31,7 @@ jest.mock('../../services/dependency-injection', () => ({
         getPrivateKey: mockGetPrivateKey,
         setPrivateKey: mockSetPrivateKey,
         hasPrivateKey: mockHasPrivateKey,
+        getPublicKey: mockGetPublicKey,
       } as unknown as IKeyProvider),
       getConfigManager: jest.fn().mockResolvedValue({
         loadConfig: mockGetConfig,
@@ -295,18 +297,15 @@ describe('LoginCommand', () => {
   // ==================== §4.4 Key Conflict Resolution (LOGIN-D1 to D2) ====================
 
   describe('4.4. Key Conflict Resolution (LOGIN-D1 to D2)', () => {
-    it('[LOGIN-D1] should display already synced when keys are identical', async () => {
-      const sharedKey = 'same-key-on-both-sides';
+    it('[LOGIN-D1] should display already synced when public keys are identical', async () => {
+      const sharedPublicKey = 'same-public-key-base64';
       mockHasPrivateKey.mockResolvedValue(true);
-      mockGetPrivateKey.mockResolvedValue(sharedKey);
+      mockGetPublicKey.mockResolvedValue(sharedPublicKey);
 
       const deps = createMockDeps({
         fetchSaas: jest.fn().mockImplementation(async (url: string) => {
           if (url.includes('/api/identity/status')) {
-            return { ok: true, json: async () => ({ hasKey: true, actorExists: true }) };
-          }
-          if (url.includes('/api/identity/key')) {
-            return { ok: true, json: async () => ({ privateKey: sharedKey }) };
+            return { ok: true, json: async () => ({ hasKey: true, actorExists: true, publicKey: sharedPublicKey }) };
           }
           return { ok: false, json: async () => ({}) };
         }),
@@ -319,17 +318,14 @@ describe('LoginCommand', () => {
       expect(output).toContain('Already synced');
     });
 
-    it('[LOGIN-D2] should display error with resolution instructions when keys differ', async () => {
+    it('[LOGIN-D2] should display error with resolution instructions when public keys differ', async () => {
       mockHasPrivateKey.mockResolvedValue(true);
-      mockGetPrivateKey.mockResolvedValue('cli-private-key');
+      mockGetPublicKey.mockResolvedValue('cli-public-key');
 
       const deps = createMockDeps({
         fetchSaas: jest.fn().mockImplementation(async (url: string) => {
           if (url.includes('/api/identity/status')) {
-            return { ok: true, json: async () => ({ hasKey: true, actorExists: true }) };
-          }
-          if (url.includes('/api/identity/key')) {
-            return { ok: true, json: async () => ({ privateKey: 'different-saas-key' }) };
+            return { ok: true, json: async () => ({ hasKey: true, actorExists: true, publicKey: 'different-saas-public-key' }) };
           }
           return { ok: false, json: async () => ({}) };
         }),
@@ -340,7 +336,8 @@ describe('LoginCommand', () => {
 
       const errorOutput = mockConsoleError.mock.calls.map(c => c[0]).join('\n');
       expect(errorOutput).toContain('Keys differ');
-      expect(errorOutput).toContain('gitgov actor rotate-key');
+      expect(errorOutput).toContain('--force-local');
+      expect(errorOutput).toContain('--force-cloud');
     });
   });
 });
