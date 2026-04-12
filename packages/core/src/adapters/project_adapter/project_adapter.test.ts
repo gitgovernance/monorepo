@@ -131,6 +131,7 @@ describe('ProjectAdapter', () => {
       getAuditState: jest.fn(),
       updateAuditState: jest.fn(),
       getStateBranch: jest.fn(),
+      getSaasUrl: jest.fn(),
     } as jest.Mocked<IConfigManager>;
 
     // Create mock IProjectInitializer (filesystem abstraction)

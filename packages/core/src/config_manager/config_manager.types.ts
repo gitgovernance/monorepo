@@ -135,4 +135,10 @@ export interface IConfigManager {
    * Get state branch name from configuration
    */
   getStateBranch(): Promise<string>;
+
+  /**
+   * [EARS-I1, EARS-I2] Get SaaS URL from configuration.
+   * Returns null if not configured — caller decides whether to fail (IKS-A28).
+   */
+  getSaasUrl(): Promise<string | null>;
 }
