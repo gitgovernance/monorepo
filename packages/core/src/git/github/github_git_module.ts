@@ -24,7 +24,7 @@ import type {
   ChangedFile,
   CommitAuthor,
 } from '../types';
-import { isOctokitRequestError } from '../../github';
+import { isOctokitRequestError, mapOctokitError } from '../../github';
 import type { GitHubGitModuleOptions } from './github_git_module.types';
 import { GitError, FileNotFoundError, BranchNotFoundError, BranchAlreadyExistsError } from '../errors';
 
@@ -414,6 +414,37 @@ export class GitHubGitModule implements IGitModule {
       }
       const msg = error instanceof Error ? error.message : String(error);
       throw new GitError(`network error: ${msg}`);
+    }
+  }
+
+  /**
+   * Deletes a branch via GitHub Refs API — idempotent semantics.
+   *
+   * Verifies IGitModule EARS-GM12/GM13. Implements Cycle 5 Task 5.0a (IKS-A41)
+   * `EARS-F1`/`EARS-F2` from `github_git_module.md §4.6`.
+   *
+   * - On success: DELETE /repos/{owner}/{repo}/git/refs/heads/{branchName}
+   * - On HTTP 404 (branch missing): returns as no-op (idempotent).
+   * - On other HTTP errors (401/403/5xx): throws a translated `GitHubApiError`
+   *   via `mapOctokitError(err, 'deleteBranch(...)')` (aligns with github_shared_module).
+   *
+   * @param branchName - Branch to delete (without `refs/heads/` prefix)
+   */
+  async deleteBranch(branchName: string): Promise<void> {
+    try {
+      // [EARS-F1] [EARS-GM12] Call octokit.rest.git.deleteRef on the head ref.
+      await this.octokit.rest.git.deleteRef({
+        owner: this.owner,
+        repo: this.repo,
+        ref: `heads/${branchName}`,
+      });
+    } catch (error: unknown) {
+      // [EARS-F2] [EARS-GM13] 404 → idempotent no-op.
+      if (isOctokitRequestError(error) && error.status === 404) {
+        return;
+      }
+      // [EARS-F2] Other HTTP errors → translated GitHubApiError via mapOctokitError.
+      throw mapOctokitError(error, `deleteBranch(${branchName})`);
     }
   }
 

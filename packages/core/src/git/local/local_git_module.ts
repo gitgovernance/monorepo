@@ -1286,8 +1286,37 @@ export class LocalGitModule implements IGitModule {
   }
 
   /**
+   * Deletes a branch — idempotent semantics (verifies IGitModule EARS-GM12/GM13).
+   *
+   * Implements: `git branch -D {branchName}`. If the branch does not exist,
+   * git exits non-zero with stderr containing "not found", which is caught
+   * and mapped to a no-op for idempotent behavior.
+   *
+   * @param branchName - Name of the branch to delete
+   * @throws GitCommandError for errors other than "branch not found"
+   */
+  async deleteBranch(branchName: string): Promise<void> {
+    // [EARS-H1] [EARS-GM12] Delete branch via `git branch -D`
+    const result = await this.execGit(['branch', '-D', branchName]);
+
+    if (result.exitCode !== 0) {
+      // [EARS-H2] [EARS-GM13] Branch not found → idempotent no-op
+      if (result.stderr.toLowerCase().includes('not found')) {
+        logger.debug(`deleteBranch no-op: branch '${branchName}' does not exist`);
+        return;
+      }
+      throw new GitCommandError(
+        `Failed to delete branch ${branchName}`,
+        result.stderr
+      );
+    }
+
+    logger.debug(`Deleted branch: ${branchName}`);
+  }
+
+  /**
    * Rebases current branch onto target branch (git rebase)
-   * 
+   *
    * @param targetBranch - Branch to rebase onto
    * @throws GitCommandError if rebase fails
    * @throws RebaseConflictError if conflicts are detected during rebase

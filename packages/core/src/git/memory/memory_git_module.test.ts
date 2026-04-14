@@ -510,10 +510,17 @@ describe('MemoryGitModule', () => {
 
     it('[EARS-H3] should save to config Map', async () => {
       await git.setConfig('user.name', 'Test User');
+      await git.setConfig('user.email', 'test@example.com');
 
-      // Verify by reading back (we'd need to expose config for proper test,
-      // but setConfig doesn't throw and that's the contract)
-      await expect(git.setConfig('user.email', 'test@example.com')).resolves.not.toThrow();
+      // Verify by reading back the internal state directly.
+      // Justified `as unknown as` cast: MemoryGitModule is a test-only mock
+      // whose whole purpose is to expose state for verification; this EARS
+      // contract (save to config Map) can only be verified by inspecting it.
+      const internalState = (git as unknown as {
+        state: { config: Map<string, string> };
+      }).state;
+      expect(internalState.config.get('user.name')).toBe('Test User');
+      expect(internalState.config.get('user.email')).toBe('test@example.com');
     });
 
     it('[EARS-H4] should be no-op for fetch', async () => {
@@ -534,6 +541,38 @@ describe('MemoryGitModule', () => {
       await git.resetHard('HEAD');
 
       expect(await git.getStagedFiles()).toEqual([]);
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 4.9. Branch Deletion (EARS-I1 to EARS-I2) — Cycle 5 identity_key_sync (IKS-A41)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  describe('4.9. Branch Deletion (EARS-I1 to EARS-I2)', () => {
+    it('[EARS-I1] should remove branch from internal state', async () => {
+      // Arrange: seed a branch in state
+      git.setBranches(['main', 'feature-to-delete']);
+      expect(await git.branchExists('feature-to-delete')).toBe(true);
+
+      // Act
+      await git.deleteBranch('feature-to-delete');
+
+      // Assert: branch removed from state.branches
+      expect(await git.branchExists('feature-to-delete')).toBe(false);
+      // main is untouched
+      expect(await git.branchExists('main')).toBe(true);
+    });
+
+    it('[EARS-I2] should complete as no-op when branch is not in state', async () => {
+      // Arrange: confirm branch absent
+      expect(await git.branchExists('never-existed')).toBe(false);
+
+      // Act + Assert: resolves without throwing
+      await expect(git.deleteBranch('never-existed')).resolves.toBeUndefined();
+
+      // State unchanged
+      expect(await git.branchExists('never-existed')).toBe(false);
+      expect(await git.branchExists('main')).toBe(true);
     });
   });
 });
