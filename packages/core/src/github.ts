@@ -158,3 +158,7 @@ export type {
 // PolicyConfigLoader
 export { GitHubPolicyConfigLoader } from './policy_evaluator/github/github_policy_config_loader';
 export type { GitHubPolicyConfigLoaderOptions } from './policy_evaluator/github/github_policy_config_loader';
+
+// ProjectInitializer
+export { GitHubProjectInitializer } from './project_initializer/github';
+export type { GitHubProjectInitializerOptions } from './project_initializer/github';
