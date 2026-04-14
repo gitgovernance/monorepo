@@ -538,4 +538,40 @@ describe('FsProjectInitializer', () => {
       expect(policyWrite).toBeUndefined();
     });
   });
+
+  // ==========================================================================
+  // 4.6. Transaction Boundary — finalize no-op (EARS-FPI15) — Cycle 5 IKS-A40
+  // ==========================================================================
+
+  describe('4.6. Transaction Boundary (EARS-FPI15)', () => {
+    let initializer: FsProjectInitializer;
+
+    beforeEach(() => {
+      initializer = new FsProjectInitializer(testRoot);
+      jest.clearAllMocks();
+    });
+
+    it('[EARS-FPI15] should complete as no-op without filesystem I/O', async () => {
+      // Call finalize() and assert zero fs operations were invoked.
+      // The FS backend has no transaction buffer — prior write methods
+      // persist immediately, so finalize() must not touch the filesystem.
+      await initializer.finalize();
+
+      expect(mockFs.mkdir).not.toHaveBeenCalled();
+      expect(mockFs.writeFile).not.toHaveBeenCalled();
+      expect(mockFs.readFile).not.toHaveBeenCalled();
+      expect(mockFs.access).not.toHaveBeenCalled();
+      expect(mockFs.rm).not.toHaveBeenCalled();
+      expect(mockFs.unlink).not.toHaveBeenCalled();
+      expect(mockFs.copyFile).not.toHaveBeenCalled();
+      expect(mockFs.appendFile).not.toHaveBeenCalled();
+    });
+
+    it('[EARS-FPI15] should not throw when called without prior write operations', async () => {
+      // Idempotent: calling finalize() as the very first action on a fresh
+      // initializer must also succeed (no-op), since there are no staged
+      // writes to materialize and no state to depend on.
+      await expect(initializer.finalize()).resolves.toBeUndefined();
+    });
+  });
 });
