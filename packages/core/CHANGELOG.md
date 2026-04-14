@@ -1,3 +1,25 @@
+## [3.11.0](https://github.com/gitgovernance/monorepo/compare/core-v3.10.0...core-v3.11.0) (2026-04-14)
+
+
+### ✨ Features
+
+* **cli:** login command v2 — tRPC + ECDH + orgId + --force flags ([3941faf](https://github.com/gitgovernance/monorepo/commit/3941faf211b294d18e4c07b299c22d8217b03200))
+* **core,cli:** GitRemoteRef + parseRemoteUrl + providerHost in login ([f2369d7](https://github.com/gitgovernance/monorepo/commit/f2369d728a78c50b823b30fd34a1888c41fd5289))
+* **core,cli:** ISessionManager cloud methods + repoFullName resolution ([90fda44](https://github.com/gitgovernance/monorepo/commit/90fda44ff14c23de0eb5ea28e320bb1398e362fd))
+* **core:** add ConfigManager.getSaasUrl() — EARS-I1/I2 ([541a8a4](https://github.com/gitgovernance/monorepo/commit/541a8a47b67d00d4767cfc3e851dcdbaf9886231))
+* **core:** add ECDH X25519 ephemeral transport for key sync ([babc424](https://github.com/gitgovernance/monorepo/commit/babc4240e996f3e2215019406c7ec010792eaafd))
+* **core:** export ed25519PublicKeyToSpki helper for SPKI reconstruction ([5eb647a](https://github.com/gitgovernance/monorepo/commit/5eb647a7a96bf01cf0c299b2591e5fcd5636864b))
+
+
+### 🐛 Bug Fixes
+
+* **cli,core:** audit fixes — public key compare, no default URL, 5min timeout ([f8a94e9](https://github.com/gitgovernance/monorepo/commit/f8a94e9e29facca78494ff03d51080340575e6d9))
+
+
+### ♻️ Refactoring
+
+* **core,cli:** GitRemoteRef rename — host→providerHost, path→repoPath (Task 4.7, IKS-A34) ([4fd9e76](https://github.com/gitgovernance/monorepo/commit/4fd9e76d56b37c0c19697d18940179ef04135e2e))
+
 ## [3.10.0](https://github.com/gitgovernance/monorepo/compare/core-v3.9.0...core-v3.10.0) (2026-04-11)
 
 
