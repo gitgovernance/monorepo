@@ -377,7 +377,7 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
 
   /** Call identity.keyStatus via tRPC (IKS-A27 wire format) */
   private async getKeyStatus(saasUrl: string, token: string, repo: GitRemoteRef): Promise<KeyStatusResponse> {
-    const input = encodeURIComponent(JSON.stringify({ json: { providerHost: repo.host, repoPath: repo.path } }));
+    const input = encodeURIComponent(JSON.stringify({ json: repo }));
     const url = `${saasUrl}/trpc/identity.keyStatus?input=${input}`;
     const res = await this.deps.fetchSaas(url, {
       headers: { Authorization: `Bearer ${token}` },
@@ -418,7 +418,7 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ json: { providerHost: repo.host, repoPath: repo.path, publicKey, privateKeyEnvelope: envelope } }),
+      body: JSON.stringify({ json: { ...repo, publicKey, privateKeyEnvelope: envelope } }),
     });
     if (!res.ok) throw new Error(`Failed to sync key to SaaS: ${res.status}`);
     const body = await res.json() as TrpcResponse<SyncKeyResponse>;
@@ -439,7 +439,7 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
     const clientKp = Crypto.generateEphemeralKeypair();
 
     const input = encodeURIComponent(JSON.stringify({
-      json: { providerHost: repo.host, repoPath: repo.path, clientEcdhPublicKey: clientKp.publicKey },
+      json: { ...repo, clientEcdhPublicKey: clientKp.publicKey },
     }));
     const url = `${saasUrl}/trpc/identity.getKey?input=${input}`;
     const res = await this.deps.fetchSaas(url, {

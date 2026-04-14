@@ -43,9 +43,9 @@ jest.mock('@gitgov/core', () => ({
   parseRemoteUrl: (url: string) => {
     // Parse the mock URL: https://github.com/testorg/testrepo.git
     const httpsMatch = url.match(/^https?:\/\/([^/]+)\/(.+?)(?:\.git)?$/);
-    if (httpsMatch?.[1] && httpsMatch[2]) return { host: httpsMatch[1], path: httpsMatch[2] };
+    if (httpsMatch?.[1] && httpsMatch[2]) return { providerHost: httpsMatch[1], repoPath: httpsMatch[2] };
     const sshMatch = url.match(/^[^@]+@([^:]+):(.+?)(?:\.git)?$/);
-    if (sshMatch?.[1] && sshMatch[2]) return { host: sshMatch[1], path: sshMatch[2] };
+    if (sshMatch?.[1] && sshMatch[2]) return { providerHost: sshMatch[1], repoPath: sshMatch[2] };
     return null;
   },
 }));
