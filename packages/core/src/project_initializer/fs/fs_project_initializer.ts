@@ -155,9 +155,12 @@ export class FsProjectInitializer implements IProjectInitializer {
    * (LSP: both FS and GitHub backends honor the same interface, with trivial
    * or non-trivial implementations according to their durability semantics).
    */
-  async finalize(): Promise<void> {
+  async finalize(): Promise<string | undefined> {
     // [EARS-FPI15] [EARS-PI11] No-op: filesystem writes are persisted immediately
     // by the individual write methods. No transaction buffer to commit.
+    // Returns undefined — there is no commit SHA for the FS backend (no commit
+    // concept). Transactional backends (GitHub) return the atomic commit SHA.
+    return undefined;
   }
 
   /**

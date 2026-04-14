@@ -185,3 +185,10 @@ export * as FeedbackAdapter from "./adapters/feedback_adapter/index";
 export * as IdentityAdapter from "./adapters/identity_adapter/index";
 export * as ProjectAdapter from "./adapters/project_adapter/index";
 export * as WorkflowAdapter from "./adapters/workflow_adapter/index";
+
+// Direct class re-exports for saas consumers. The namespace exports above wrap
+// the class under a namespace so `import { IdentityAdapter } from '@gitgov/core'`
+// yields the namespace (not the class). For consumers that construct adapters
+// per-request (e.g., GitHubRemoteInitService, Cycle 5 Task 5.1b), expose the
+// concrete class under a distinct name to avoid the namespace conflict.
+export { IdentityAdapter as IdentityAdapterClass } from "./adapters/identity_adapter/identity_adapter";

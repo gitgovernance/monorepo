@@ -120,8 +120,14 @@ export interface IProjectInitializer {
    *
    * Calling `finalize()` more than once in a single initialization sequence
    * is an error.
+   *
+   * **Return value (added in Cycle 5 Task 5.1b for identity_key_sync):**
+   * Transactional backends return the commit SHA of the atomic commit
+   * (useful for observability and state machine events — e.g.,
+   * `RepoStateMachineService.transition({type: 'INIT_COMPLETE', commitSha})`).
+   * Non-transactional backends (filesystem) return `undefined`.
    */
-  finalize(): Promise<void>;
+  finalize(): Promise<string | undefined>;
 }
 
 // EnvironmentValidation is defined in ./project_initializer.types.ts

@@ -157,7 +157,9 @@ export class GitHubProjectInitializer implements IProjectInitializer {
   }
 
   // GPI13 — IKS-T6: transaction boundary. Materializes all staged writes in 1 commit.
-  async finalize(): Promise<void> {
-    await this.gitModule.commit(this.commitMessage, this.commitAuthor);
+  // Returns the commit SHA for observability (used by RemoteInitService to emit
+  // `INIT_COMPLETE` event via `RepoStateMachineService.transition` with commitSha).
+  async finalize(): Promise<string | undefined> {
+    return await this.gitModule.commit(this.commitMessage, this.commitAuthor);
   }
 }
