@@ -95,20 +95,10 @@ export class GitHubGitModule implements IGitModule {
       return Buffer.from(blobData.content, 'base64').toString('utf-8');
     } catch (error: unknown) {
       if (error instanceof GitError) throw error;
-      if (isOctokitRequestError(error)) {
-        if (error.status === 404) {
-          throw new FileNotFoundError(filePath, commitHash);
-        }
-        if (error.status === 401 || error.status === 403) {
-          throw new GitError(`authentication/permission error (${error.status}): getFileContent ${filePath}`);
-        }
-        if (error.status >= 500) {
-          throw new GitError(`GitHub server error (${error.status}): getFileContent ${filePath}`);
-        }
-        throw new GitError(`GitHub API error (${error.status}): getFileContent ${filePath}`);
+      if (isOctokitRequestError(error) && error.status === 404) {
+        throw new FileNotFoundError(filePath, commitHash);
       }
-      const msg = error instanceof Error ? error.message : String(error);
-      throw new GitError(`network error: ${msg}`);
+      throw mapOctokitError(error, `getFileContent(${filePath})`);
     }
   }
 
@@ -130,19 +120,10 @@ export class GitHubGitModule implements IGitModule {
       });
       return data.object.sha;
     } catch (error: unknown) {
-      if (isOctokitRequestError(error)) {
-        if (error.status === 404) {
-          throw new BranchNotFoundError(ref);
-        }
-        if (error.status === 401 || error.status === 403) {
-          throw new GitError(`authentication/permission error (${error.status}): getCommitHash ${ref}`);
-        }
-        if (error.status >= 500) {
-          throw new GitError(`GitHub server error (${error.status}): getCommitHash ${ref}`);
-        }
+      if (isOctokitRequestError(error) && error.status === 404) {
+        throw new BranchNotFoundError(ref);
       }
-      const msg = error instanceof Error ? error.message : String(error);
-      throw new GitError(`network error: ${msg}`);
+      throw mapOctokitError(error, `getCommitHash(${ref})`);
     }
   }
 
@@ -178,17 +159,7 @@ export class GitHubGitModule implements IGitModule {
 
       return files;
     } catch (error: unknown) {
-      if (isOctokitRequestError(error)) {
-        if (error.status === 401 || error.status === 403) {
-          throw new GitError(`authentication/permission error (${error.status}): getChangedFiles ${fromCommit}...${toCommit}`);
-        }
-        if (error.status >= 500) {
-          throw new GitError(`GitHub server error (${error.status}): getChangedFiles`);
-        }
-        throw new GitError(`Failed to compare ${fromCommit}...${toCommit}: HTTP ${error.status}`);
-      }
-      const msg = error instanceof Error ? error.message : String(error);
-      throw new GitError(`network error: ${msg}`);
+      throw mapOctokitError(error, `getChangedFiles(${fromCommit}...${toCommit})`);
     }
   }
 
@@ -215,17 +186,7 @@ export class GitHubGitModule implements IGitModule {
         date: c.commit.author?.date ?? '',
       }));
     } catch (error: unknown) {
-      if (isOctokitRequestError(error)) {
-        if (error.status === 401 || error.status === 403) {
-          throw new GitError(`authentication/permission error (${error.status}): getCommitHistory ${branch}`);
-        }
-        if (error.status >= 500) {
-          throw new GitError(`GitHub server error (${error.status}): getCommitHistory`);
-        }
-        throw new GitError(`Failed to get commit history: HTTP ${error.status}`);
-      }
-      const msg = error instanceof Error ? error.message : String(error);
-      throw new GitError(`network error: ${msg}`);
+      throw mapOctokitError(error, `getCommitHistory(${branch})`);
     }
   }
 
@@ -265,17 +226,7 @@ export class GitHubGitModule implements IGitModule {
 
       return commits;
     } catch (error: unknown) {
-      if (isOctokitRequestError(error)) {
-        if (error.status === 401 || error.status === 403) {
-          throw new GitError(`authentication/permission error (${error.status}): getCommitHistoryRange ${fromHash}...${toHash}`);
-        }
-        if (error.status >= 500) {
-          throw new GitError(`GitHub server error (${error.status}): getCommitHistoryRange`);
-        }
-        throw new GitError(`Failed to get commit range: HTTP ${error.status}`);
-      }
-      const msg = error instanceof Error ? error.message : String(error);
-      throw new GitError(`network error: ${msg}`);
+      throw mapOctokitError(error, `getCommitHistoryRange(${fromHash}...${toHash})`);
     }
   }
 
@@ -291,19 +242,7 @@ export class GitHubGitModule implements IGitModule {
       });
       return data.commit.message;
     } catch (error: unknown) {
-      if (isOctokitRequestError(error)) {
-        if (error.status === 404) {
-          throw new GitError(`Commit not found: ${commitHash}`);
-        }
-        if (error.status === 401 || error.status === 403) {
-          throw new GitError(`authentication/permission error (${error.status}): getCommitMessage ${commitHash}`);
-        }
-        if (error.status >= 500) {
-          throw new GitError(`GitHub server error (${error.status}): getCommitMessage`);
-        }
-      }
-      const msg = error instanceof Error ? error.message : String(error);
-      throw new GitError(`network error: ${msg}`);
+      throw mapOctokitError(error, `getCommitMessage(${commitHash})`);
     }
   }
 
@@ -323,15 +262,8 @@ export class GitHubGitModule implements IGitModule {
       });
       return true;
     } catch (error: unknown) {
-      if (isOctokitRequestError(error)) {
-        if (error.status === 404) return false;
-        if (error.status === 401 || error.status === 403) {
-          throw new GitError(`authentication/permission error (${error.status}): branchExists ${branchName}`);
-        }
-        throw new GitError(`Failed to check branch: HTTP ${error.status}`);
-      }
-      const msg = error instanceof Error ? error.message : String(error);
-      throw new GitError(`network error: ${msg}`);
+      if (isOctokitRequestError(error) && error.status === 404) return false;
+      throw mapOctokitError(error, `branchExists(${branchName})`);
     }
   }
 
@@ -347,17 +279,7 @@ export class GitHubGitModule implements IGitModule {
       });
       return data.map(b => b.name);
     } catch (error: unknown) {
-      if (isOctokitRequestError(error)) {
-        if (error.status === 401 || error.status === 403) {
-          throw new GitError(`authentication/permission error (${error.status}): listRemoteBranches`);
-        }
-        if (error.status >= 500) {
-          throw new GitError(`GitHub server error (${error.status}): listRemoteBranches`);
-        }
-        throw new GitError(`Failed to list branches: HTTP ${error.status}`);
-      }
-      const msg = error instanceof Error ? error.message : String(error);
-      throw new GitError(`network error: ${msg}`);
+      throw mapOctokitError(error, 'listRemoteBranches()');
     }
   }
 
@@ -403,17 +325,10 @@ export class GitHubGitModule implements IGitModule {
         sha,
       });
     } catch (error: unknown) {
-      if (isOctokitRequestError(error)) {
-        if (error.status === 422) {
-          throw new BranchAlreadyExistsError(branchName);
-        }
-        if (error.status === 401 || error.status === 403) {
-          throw new GitError(`authentication/permission error (${error.status}): createBranch ${branchName}`);
-        }
-        throw new GitError(`Failed to create branch ${branchName}: HTTP ${error.status}`);
+      if (isOctokitRequestError(error) && error.status === 422) {
+        throw new BranchAlreadyExistsError(branchName);
       }
-      const msg = error instanceof Error ? error.message : String(error);
-      throw new GitError(`network error: ${msg}`);
+      throw mapOctokitError(error, `createBranch(${branchName})`);
     }
   }
 
@@ -570,17 +485,7 @@ export class GitHubGitModule implements IGitModule {
     return newCommitSha;
     } catch (error: unknown) {
       if (error instanceof GitError) throw error;
-      if (isOctokitRequestError(error)) {
-        if (error.status === 401 || error.status === 403) {
-          throw new GitError(`authentication/permission error (${error.status}): commit`);
-        }
-        if (error.status >= 500) {
-          throw new GitError(`GitHub server error (${error.status}): commit`);
-        }
-        throw new GitError(`GitHub API error (${error.status}): commit`);
-      }
-      const msg = error instanceof Error ? error.message : String(error);
-      throw new GitError(`network error: ${msg}`);
+      throw mapOctokitError(error, 'commit');
     }
   }
 

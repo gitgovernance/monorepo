@@ -15,6 +15,8 @@
 
 export type { Octokit, RestEndpointMethodTypes } from '@octokit/rest';
 
+import { GitError } from './git/errors';
+
 // ==================== Shared Types ====================
 
 /**
@@ -32,10 +34,16 @@ export type GitHubApiErrorCode =
 
 /**
  * Typed error for GitHub API operations.
- * Used by RecordStore, ConfigStore, and other modules that
+ * Used by RecordStore, ConfigStore, GitHubGitModule, and other modules that
  * interact with GitHub Contents API directly.
+ *
+ * Extends `GitError` so consumers that catch the base git error class
+ * still receive GitHub-backend errors polymorphically. This enables
+ * `catch (err instanceof GitError)` to handle both CLI and API failures
+ * uniformly while still allowing narrow `instanceof GitHubApiError` checks
+ * for backend-specific logic (e.g. inspecting the semantic `code` field).
  */
-export class GitHubApiError extends Error {
+export class GitHubApiError extends GitError {
   constructor(
     message: string,
     /** Semantic error code */

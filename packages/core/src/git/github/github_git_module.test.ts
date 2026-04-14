@@ -650,11 +650,17 @@ describe('GitHubGitModule', () => {
         .rejects.toThrow(BranchNotFoundError);
     });
 
-    it('[EARS-E3] should throw GitError for HTTP 401 or 403', async () => {
+    it('[EARS-E3] should throw GitHubApiError with PERMISSION_DENIED code for HTTP 401 or 403', async () => {
       mockOctokit.rest.repos.getContent.mockRejectedValue(createOctokitError(403));
 
+      // Backward-compat: GitHubApiError extends GitError, so `toThrow(GitError)` still matches.
       await expect(git.getFileContent('sha', 'file.json')).rejects.toThrow(GitError);
-      await expect(git.getFileContent('sha', 'file.json')).rejects.toThrow(/authentication\/permission error/);
+      await expect(git.getFileContent('sha', 'file.json')).rejects.toThrow(GitHubApiError);
+      await expect(git.getFileContent('sha', 'file.json')).rejects.toMatchObject({
+        name: 'GitHubApiError',
+        code: 'PERMISSION_DENIED',
+        statusCode: 403,
+      });
     });
 
     it('[EARS-E4] should throw appropriate error for HTTP 422', async () => {
@@ -685,28 +691,45 @@ describe('GitHubGitModule', () => {
       }).rejects.toThrow(/non-fast-forward/);
     });
 
-    it('[EARS-E5] should throw GitError for network failures', async () => {
+    it('[EARS-E5] should throw GitHubApiError with NETWORK_ERROR code for network failures', async () => {
       mockOctokit.rest.repos.getContent.mockRejectedValue(new TypeError('fetch failed'));
 
       await expect(git.getFileContent('sha', 'file.json')).rejects.toThrow(GitError);
-      await expect(git.getFileContent('sha', 'file.json')).rejects.toThrow(/network error/);
+      await expect(git.getFileContent('sha', 'file.json')).rejects.toThrow(GitHubApiError);
+      await expect(git.getFileContent('sha', 'file.json')).rejects.toMatchObject({
+        name: 'GitHubApiError',
+        code: 'NETWORK_ERROR',
+      });
     });
 
-    it('[EARS-E3] should translate HTTP 403 to GitError during commit transaction', async () => {
+    it('[EARS-E3] should translate HTTP 403 to GitHubApiError PERMISSION_DENIED during commit transaction', async () => {
       await git.add(['file.json'], { contentMap: { 'file.json': 'content' } });
       // Step 1 (getRef) fails with 403
       mockOctokit.rest.git.getRef.mockRejectedValue(createOctokitError(403));
 
       await expect(git.commit('test')).rejects.toThrow(GitError);
-      await expect(git.commit('test')).rejects.toThrow(/authentication\/permission error/);
+      // Re-stage because the previous commit attempt threw
+      await git.add(['file.json'], { contentMap: { 'file.json': 'content' } });
+      mockOctokit.rest.git.getRef.mockRejectedValue(createOctokitError(403));
+      await expect(git.commit('test')).rejects.toMatchObject({
+        name: 'GitHubApiError',
+        code: 'PERMISSION_DENIED',
+        statusCode: 403,
+      });
     });
 
-    it('[EARS-E5] should translate network error to GitError during commit transaction', async () => {
+    it('[EARS-E5] should translate network error to GitHubApiError NETWORK_ERROR during commit transaction', async () => {
       await git.add(['file.json'], { contentMap: { 'file.json': 'content' } });
       mockOctokit.rest.git.getRef.mockRejectedValue(new TypeError('fetch failed'));
 
       await expect(git.commit('test')).rejects.toThrow(GitError);
-      await expect(git.commit('test')).rejects.toThrow(/network error/);
+      // Re-stage because the previous commit attempt threw
+      await git.add(['file.json'], { contentMap: { 'file.json': 'content' } });
+      mockOctokit.rest.git.getRef.mockRejectedValue(new TypeError('fetch failed'));
+      await expect(git.commit('test')).rejects.toMatchObject({
+        name: 'GitHubApiError',
+        code: 'NETWORK_ERROR',
+      });
     });
   });
 
