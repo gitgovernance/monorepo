@@ -154,4 +154,13 @@ export class ConfigManager implements IConfigManager {
     const config = await this.loadConfig();
     return config?.state?.branch || 'gitgov-state';
   }
+
+  /**
+   * [EARS-I1, EARS-I2] Get SaaS URL from configuration.
+   * Returns null if not configured — no default (IKS-A28).
+   */
+  async getSaasUrl(): Promise<string | null> {
+    const config = await this.loadConfig();
+    return config?.saasUrl ?? null;
+  }
 }

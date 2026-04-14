@@ -50,6 +50,9 @@ interface MockSessionManager {
   getActorState: jest.MockedFunction<(actorId: string) => Promise<any>>;
   updateActorState: jest.MockedFunction<(actorId: string, state: any) => Promise<void>>;
   getLastSession: jest.MockedFunction<() => Promise<any>>;
+  setCloudToken: jest.MockedFunction<(token: string) => Promise<void>>;
+  setLastSession: jest.MockedFunction<(actorId: string, timestamp: string) => Promise<void>>;
+  clearCloudToken: jest.MockedFunction<() => Promise<void>>;
   getSyncPreferences: jest.MockedFunction<() => Promise<any>>;
   updateSyncPreferences: jest.MockedFunction<(prefs: any) => Promise<void>>;
   getCloudSessionToken: jest.MockedFunction<() => Promise<string | null>>;
@@ -102,6 +105,9 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       getActorState: jest.fn().mockResolvedValue(null),
       updateActorState: jest.fn().mockResolvedValue(undefined),
       getLastSession: jest.fn().mockResolvedValue(null),
+      setCloudToken: jest.fn(),
+      setLastSession: jest.fn(),
+      clearCloudToken: jest.fn(),
       getSyncPreferences: jest.fn().mockResolvedValue(null),
       updateSyncPreferences: jest.fn().mockResolvedValue(undefined),
       getCloudSessionToken: jest.fn().mockResolvedValue(null),

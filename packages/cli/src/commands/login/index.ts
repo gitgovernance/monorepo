@@ -3,10 +3,8 @@ export { registerLoginCommands } from './login';
 export type {
   LoginCommandOptions,
   LoginDeps,
-  SyncKeyRequest,
   SyncKeyResponse,
-  GetKeyRequest,
   GetKeyResponse,
-  KeyStatusRequest,
   KeyStatusResponse,
+  TrpcResponse,
 } from './login-command.types';

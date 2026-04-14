@@ -1,17 +1,19 @@
 /**
- * Login Command Types
+ * Login Command Types — v2 (Cycle 4, identity_key_sync)
  *
  * Spec: cli/specs/login_command.md §3.3
+ * Updated: REST → tRPC wire format, repoId → orgId, +ECDH, +--force flags
  */
 
 import type { BaseCommandOptions } from '../../interfaces/command';
+import type { EcdhEnvelope } from '@gitgov/core';
 
 // ============================================================================
 // COMMAND OPTIONS
 // ============================================================================
 
 export interface LoginCommandOptions extends BaseCommandOptions {
-  /** SaaS base URL (default: config.json saasUrl or https://cloud.gitgov.dev) */
+  /** SaaS base URL override (default: .gitgov/config.json saasUrl — no hardcoded default) */
   url?: string;
   /** Show current login status */
   status?: boolean;
@@ -19,44 +21,46 @@ export interface LoginCommandOptions extends BaseCommandOptions {
   logout?: boolean;
   /** Login without syncing keys */
   noKeySync?: boolean;
+  /** On key conflict: upload local key, archive SaaS key */
+  forceLocal?: boolean;
+  /** On key conflict: download SaaS key, archive local key */
+  forceCloud?: boolean;
 }
 
 // ============================================================================
-// SAAS API TYPES (§3.3)
+// tRPC RESPONSE TYPES (§3.3 — match identity_service.router.ts)
 // ============================================================================
 
-/** POST /api/identity/sync-key — CLI sends key to SaaS */
-export type SyncKeyRequest = {
-  actorId: string;
-  repoId: string;
-  /** base64 encoded, encrypted in transit (HTTPS) */
-  privateKey: string;
-};
-
-export type SyncKeyResponse = {
-  synced: boolean;
-};
-
-/** GET /api/identity/key — CLI requests key from SaaS */
-export type GetKeyRequest = {
-  actorId: string;
-  repoId: string;
-};
-
-export type GetKeyResponse = {
-  /** null if SaaS doesn't have it */
-  privateKey: string | null;
-};
-
-/** GET /api/identity/status — Check sync status */
-export type KeyStatusRequest = {
-  actorId: string;
-  repoId: string;
-};
-
+/** Response from identity.keyStatus tRPC query */
 export type KeyStatusResponse = {
-  hasKey: boolean;
-  actorExists: boolean;
+  exists: boolean;
+  hasPrivateKey: boolean;
+  publicKey: string | null;
+  /** Server's X25519 ECDH public key for upload encryption (ECIES pattern) */
+  ecdhPublicKey: string;
+};
+
+/** Response from identity.syncKey tRPC mutation */
+export type SyncKeyResponse = {
+  success: boolean;
+  actorId: string;
+  mode: 'full' | 'verify-only';
+};
+
+/** Response from identity.getKey tRPC query */
+export type GetKeyResponse = {
+  publicKey: string | null;
+  /** ECDH-encrypted private key envelope (type from @gitgov/core) */
+  privateKeyEnvelope: EcdhEnvelope;
+};
+
+/** Wrapper for tRPC response envelope */
+export type TrpcResponse<T> = {
+  result: {
+    data: {
+      json: T;
+    };
+  };
 };
 
 // ============================================================================

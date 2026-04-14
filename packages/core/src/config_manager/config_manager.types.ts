@@ -11,7 +11,7 @@ export type GitGovConfig = {
   projectId: string;
   projectName: string;
   rootCycle: string;
-  /** SaaS URL for cloud features (gitgov login, sync, dashboard). Default: "https://cloud.gitgov.dev" */
+  /** SaaS URL for cloud features (gitgov login, sync, dashboard). No default — must be set explicitly by gitgov init or manually (IKS-A28). */
   saasUrl?: string;
   state?: {
     branch?: string;
@@ -135,4 +135,10 @@ export interface IConfigManager {
    * Get state branch name from configuration
    */
   getStateBranch(): Promise<string>;
+
+  /**
+   * [EARS-I1, EARS-I2] Get SaaS URL from configuration.
+   * Returns null if not configured — caller decides whether to fail (IKS-A28).
+   */
+  getSaasUrl(): Promise<string | null>;
 }

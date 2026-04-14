@@ -116,4 +116,19 @@ export interface ISessionManager {
    * Get last session info (last human who interacted)
    */
   getLastSession(): Promise<{ actorId: string; timestamp: string } | null>;
+
+  /**
+   * [EARS-I1] Set cloud session token (used by gitgov login)
+   */
+  setCloudToken(token: string): Promise<void>;
+
+  /**
+   * [EARS-I2] Set last session info (actorId + timestamp)
+   */
+  setLastSession(actorId: string, timestamp: string): Promise<void>;
+
+  /**
+   * [EARS-I3] Remove cloud token without deleting keys (used by gitgov login --logout)
+   */
+  clearCloudToken(): Promise<void>;
 }

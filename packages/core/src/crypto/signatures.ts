@@ -58,6 +58,37 @@ export function derivePublicKey(privateKeyBase64: string): string {
 }
 
 /**
+ * SPKI DER prefix for raw Ed25519 public key (RFC 8410): 12-byte algorithm
+ * identifier followed by the 32-byte raw public key.
+ *
+ * Exposed so consumers can construct an SPKI-formatted key for `node:crypto.verify()`
+ * without redefining the prefix bytes (which is a documented standard, not a magic
+ * number — see RFC 8410 §3).
+ */
+export const SPKI_ED25519_HEADER: Buffer = Buffer.from([
+  0x30, 0x2a, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65,
+  0x70, 0x03, 0x21, 0x00,
+]);
+
+/**
+ * Reconstructs an SPKI DER-encoded public key from a raw 32-byte Ed25519 key.
+ *
+ * Inverse of `derivePublicKey`: takes the base64-encoded raw key (as stored
+ * in `ActorRecord.publicKey` and `ActorKey.publicKey`) and returns the SPKI
+ * DER buffer that `node:crypto.verify()` accepts as `{ key, type: 'spki', format: 'der' }`.
+ *
+ * Used by:
+ *   - `verifySignatures()` internally (Ed25519 signature verification path)
+ *   - e2e tests verifying signatures produced by `PrismaKeyProvider.sign()`
+ *
+ * @param publicKeyBase64 Base64-encoded raw Ed25519 public key (32 bytes -> 44 chars)
+ * @returns 44-byte SPKI DER buffer (12-byte prefix + 32-byte raw key)
+ */
+export function ed25519PublicKeyToSpki(publicKeyBase64: string): Buffer {
+  return Buffer.concat([SPKI_ED25519_HEADER, Buffer.from(publicKeyBase64, 'base64')]);
+}
+
+/**
  * Derives a fixed-length symmetric key from a master key using HKDF-SHA256.
  *
  * Used by the 3-level key hierarchy in PrismaKeyProvider (Cycle 2 of

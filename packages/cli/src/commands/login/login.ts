@@ -11,6 +11,8 @@ export function registerLoginCommands(program: Command): void {
     .option('-s, --status', 'Show current login status')
     .option('--logout', 'Remove session token (keys are preserved)')
     .option('--no-key-sync', 'Login without syncing keys')
+    .option('--force-local', 'On key conflict: keep local key, upload to cloud')
+    .option('--force-cloud', 'On key conflict: keep cloud key, download to local')
     .option('--json', 'Output as JSON')
     .option('-v, --verbose', 'Verbose output')
     .option('-q, --quiet', 'Quiet output')

@@ -118,6 +118,9 @@ describe('FeedbackAdapter <-> BacklogAdapter Integration (Real Event Communicati
       getSyncPreferences: jest.fn().mockResolvedValue(null),
       updateSyncPreferences: jest.fn().mockResolvedValue(undefined),
       getLastSession: jest.fn().mockResolvedValue(null),
+      setCloudToken: jest.fn(),
+      setLastSession: jest.fn(),
+      clearCloudToken: jest.fn(),
     };
 
     // Create REAL IdentityAdapter

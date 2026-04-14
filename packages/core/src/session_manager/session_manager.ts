@@ -177,4 +177,31 @@ export class SessionManager implements ISessionManager {
     const session = await this.loadSession();
     return session?.lastSession || null;
   }
+
+  /**
+   * [EARS-I1] Set cloud session token
+   */
+  async setCloudToken(token: string): Promise<void> {
+    const session = await this.loadSession() ?? {};
+    session.cloud = { sessionToken: token };
+    await this.sessionStore.saveSession(session);
+  }
+
+  /**
+   * [EARS-I2] Set last session info
+   */
+  async setLastSession(actorId: string, timestamp: string): Promise<void> {
+    const session = await this.loadSession() ?? {};
+    session.lastSession = { actorId, timestamp };
+    await this.sessionStore.saveSession(session);
+  }
+
+  /**
+   * [EARS-I3] Remove cloud token, preserve everything else
+   */
+  async clearCloudToken(): Promise<void> {
+    const session = await this.loadSession() ?? {};
+    delete session.cloud;
+    await this.sessionStore.saveSession(session);
+  }
 }

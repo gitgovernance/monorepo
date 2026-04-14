@@ -93,3 +93,50 @@ export type CommitAuthor = {
   /** Author email */
   email: string;
 };
+
+/**
+ * Parsed reference to a git remote URL.
+ *
+ * Represents the decomposed identity of a git remote:
+ *   providerHost: the server (github.com, gitlab.mycompany.com, gitea.internal.net)
+ *   repoPath: the repo path on that server (owner/repo, group/subgroup/project)
+ *
+ * Single source of truth shape — CLI parses from git remote, SaaS resolves to Repository.
+ * Both consumers import this type from @gitgov/core/git and use it directly without
+ * inline reconstruction. SaaS defines its zod schema co-located with the type guard
+ * `z.ZodType<GitRemoteRef>` so the type checker enforces shape coherence.
+ *
+ * IKS-A33, Cycle 4 identity_key_sync
+ */
+export type GitRemoteRef = {
+  /** Host of the git server (e.g. "github.com", "gitlab.mycompany.com") */
+  providerHost: string;
+  /** Path of the repository on the server (e.g. "owner/repo", "group/subgroup/project") */
+  repoPath: string;
+};
+
+/**
+ * [GM9, GM10, GM11] Parse a git remote URL into a GitRemoteRef.
+ *
+ * Supports:
+ *   HTTPS: https://github.com/owner/repo.git → { providerHost: "github.com", repoPath: "owner/repo" }
+ *   SSH:   git@github.com:owner/repo.git     → { providerHost: "github.com", repoPath: "owner/repo" }
+ *   Nested: https://gitlab.co/group/sub/proj.git → { providerHost: "gitlab.co", repoPath: "group/sub/proj" }
+ *
+ * Returns null if the URL cannot be parsed. Pure function — no I/O.
+ */
+export function parseRemoteUrl(url: string): GitRemoteRef | null {
+  // HTTPS: https://github.com/owner/repo.git
+  const httpsMatch = url.match(/^https?:\/\/([^/]+)\/(.+?)(?:\.git)?$/);
+  if (httpsMatch?.[1] && httpsMatch[2]) {
+    return { providerHost: httpsMatch[1], repoPath: httpsMatch[2] };
+  }
+
+  // SSH: git@github.com:owner/repo.git
+  const sshMatch = url.match(/^[^@]+@([^:]+):(.+?)(?:\.git)?$/);
+  if (sshMatch?.[1] && sshMatch[2]) {
+    return { providerHost: sshMatch[1], repoPath: sshMatch[2] };
+  }
+
+  return null;
+}

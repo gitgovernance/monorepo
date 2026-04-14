@@ -13,6 +13,7 @@
  * - F: getAuditState (§4.6)
  * - G: updateAuditState (§4.7)
  * - H: getStateBranch (§4.8)
+ * - I: getSaasUrl (§4.9)
  */
 
 import { ConfigManager } from './index';
@@ -461,6 +462,45 @@ describe('ConfigManager', () => {
       const result = await configManager.getStateBranch();
 
       expect(result).toBe('gitgov-state');
+    });
+  });
+
+  // ==================== §4.9 getSaasUrl (EARS-I) ====================
+
+  describe('4.9. getSaasUrl (EARS-I1 to I2)', () => {
+    it('[EARS-I1] WHEN getSaasUrl is invoked with saasUrl defined, THE SYSTEM SHALL return the SaaS URL', async () => {
+      store.setConfig({
+        protocolVersion: '1.0',
+        projectId: 'test',
+        projectName: 'Test',
+        rootCycle: '001-cycle-init',
+        saasUrl: 'https://cloud.gitgov.dev',
+      });
+
+      const result = await configManager.getSaasUrl();
+
+      expect(result).toBe('https://cloud.gitgov.dev');
+    });
+
+    it('[EARS-I2] WHEN getSaasUrl is invoked without saasUrl in config, THE SYSTEM SHALL return null', async () => {
+      store.setConfig({
+        protocolVersion: '1.0',
+        projectId: 'test',
+        projectName: 'Test',
+        rootCycle: '001-cycle-init',
+      });
+
+      const result = await configManager.getSaasUrl();
+
+      expect(result).toBeNull();
+    });
+
+    it('[EARS-I2] WHEN getSaasUrl is invoked with no config, THE SYSTEM SHALL return null', async () => {
+      // No config set
+
+      const result = await configManager.getSaasUrl();
+
+      expect(result).toBeNull();
     });
   });
 });

@@ -1,17 +1,34 @@
 /**
- * Login Command — connects CLI with SaaS, exchanges private keys
+ * Login Command v2 — connects CLI with SaaS, exchanges private keys via ECDH
  *
- * Spec: cli/specs/login_command.md
- * EARS: LOGIN-A1..A3, LOGIN-B1..B3, LOGIN-C1..C2, LOGIN-D1..D2 (unit tests)
- *       LOGIN-E1..E4 (E2E tests in cli/e2e/login_command_e2e.test.ts)
+ * Spec: cli/specs/login_command.md (v2)
+ * EARS: LOGIN-A1..A4, LOGIN-B1..B3, LOGIN-C1..C2, LOGIN-D1..D2,
+ *       LOGIN-E1..E4 (E2E), LOGIN-F1..F4, LOGIN-G1..G3, LOGIN-H1..H3
+ *
+ * v2 changes (Cycle 4, identity_key_sync):
+ *   - REST → tRPC wire format (IKS-A27)
+ *   - plaintext → ECDH encrypted key exchange (IKS-A24/A25)
+ *   - repoId → { providerHost, repoPath } from git remote (IKS-A29, IKS-A33)
+ *   - +--force-local / --force-cloud conflict resolution (LOGIN-F1..F4)
+ *   - saasUrl required, no default (IKS-A28, LOGIN-H1)
+ *   - 5 minute callback timeout (LOGIN-H2)
  */
 
 import { Command } from 'commander';
 import { BaseCommand } from '../../base/base-command';
-import type { LoginCommandOptions, LoginDeps, KeyStatusResponse, SyncKeyResponse, GetKeyResponse } from './login-command.types';
+import { Crypto, parseRemoteUrl } from '@gitgov/core';
+import type { GitRemoteRef } from '@gitgov/core';
+import type {
+  LoginCommandOptions,
+  LoginDeps,
+  KeyStatusResponse,
+  SyncKeyResponse,
+  GetKeyResponse,
+  TrpcResponse,
+} from './login-command.types';
 
-const DEFAULT_SAAS_URL = 'https://cloud.gitgov.dev';
 const CALLBACK_PORT = 9876;
+const CALLBACK_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes (IKS-A28, LOGIN-H2)
 
 /**
  * Default deps use real implementations (overridable for tests).
@@ -45,11 +62,11 @@ function createDefaultDeps(): LoginDeps {
           });
           server.listen(port, () => {});
           server.on('error', reject);
-          // Timeout after 60s
+          // [LOGIN-H2] Timeout after 5 minutes
           setTimeout(() => {
             server.close();
-            reject(new Error('Login timeout — no callback received within 60 seconds'));
-          }, 60_000);
+            reject(new Error('Login timeout — no callback received within 5 minutes'));
+          }, CALLBACK_TIMEOUT_MS);
         });
       });
     },
@@ -86,12 +103,10 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
       // Wait for callback with token
       const { token, user } = await callbackPromise;
 
-      // Store session token via SessionManager
+      // Store session token via SessionManager public API
       const sessionManager = await this.dependencyService.getSessionManager();
-      const session = await sessionManager.loadSession() ?? {};
-      session.cloud = { sessionToken: token };
-      session.lastSession = { actorId: `human:${user.login}`, timestamp: new Date().toISOString() };
-      await (sessionManager as any).sessionStore.saveSession(session);
+      await sessionManager.setCloudToken(token);
+      await sessionManager.setLastSession(`human:${user.login}`, new Date().toISOString());
 
       console.log(`Logged in as ${user.login} (human:${user.login})`);
 
@@ -137,15 +152,13 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
       const saasUrl = await this.resolveSaasUrl(options);
       const actorId = lastSession.actorId;
 
-      // Check key sync status
-      let keyStatus: KeyStatusResponse = { hasKey: false, actorExists: false };
+      // Check key sync status via tRPC
+      let keyStatus: KeyStatusResponse | null = null;
       try {
-        const configManager = await this.dependencyService.getConfigManager();
-        const config = await configManager.loadConfig();
-        const repoId = config?.projectId ?? '';
-        keyStatus = await this.getKeyStatus(saasUrl, token, actorId, repoId);
+        const repo = await this.resolveRepoIdentity();
+        keyStatus = await this.getKeyStatus(saasUrl, token, repo);
       } catch {
-        // Non-fatal — can't reach SaaS
+        // Non-fatal — can't reach SaaS or resolve repo identity
       }
 
       const hasLocalKey = await this.hasLocalKey(actorId);
@@ -155,9 +168,9 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
           loggedIn: true,
           user: actorId,
           saasUrl,
-          keySynced: hasLocalKey && keyStatus.hasKey,
+          keySynced: hasLocalKey && (keyStatus?.hasPrivateKey ?? false),
           localKey: hasLocalKey,
-          saasKey: keyStatus.hasKey,
+          saasKey: keyStatus?.hasPrivateKey ?? false,
           lastLogin: lastSession.timestamp,
         },
         options,
@@ -165,8 +178,8 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
           `Logged in as ${actorId}`,
           `  SaaS: ${saasUrl}`,
           `  Local key: ${hasLocalKey ? 'yes' : 'no'}`,
-          `  SaaS key: ${keyStatus.hasKey ? 'yes' : 'no'}`,
-          `  Synced: ${hasLocalKey && keyStatus.hasKey ? 'yes' : 'no'}`,
+          `  SaaS key: ${keyStatus?.hasPrivateKey ? 'yes' : 'no'}`,
+          `  Synced: ${hasLocalKey && keyStatus?.hasPrivateKey ? 'yes' : 'no'}`,
           `  Last login: ${lastSession.timestamp}`,
         ].join('\n')
       );
@@ -183,12 +196,7 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
   async executeLogout(options: LoginCommandOptions): Promise<void> {
     try {
       const sessionManager = await this.dependencyService.getSessionManager();
-      const session = await sessionManager.loadSession() ?? {};
-
-      // Remove cloud token but preserve everything else
-      delete session.cloud;
-
-      await (sessionManager as any).sessionStore.saveSession(session);
+      await sessionManager.clearCloudToken();
 
       this.handleSuccess(
         { loggedOut: true },
@@ -205,13 +213,12 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
   }
 
   /**
-   * Key sync detection and execution
-   * [LOGIN-B1] CLI → SaaS when SaaS has no key
-   * [LOGIN-B2] Update session after sync
-   * [LOGIN-C1] SaaS → CLI when CLI has no key
-   * [LOGIN-C2] Store downloaded key with secure permissions
-   * [LOGIN-D1] Keys match → already synced
-   * [LOGIN-D2] Keys differ → error
+   * Key sync detection and execution (5 cases + --force conflict resolution)
+   * [LOGIN-B1] CLI → SaaS when SaaS has no key (ECDH upload)
+   * [LOGIN-C1] SaaS → CLI when CLI has no key (ECDH download)
+   * [LOGIN-D1] Public keys match → already synced
+   * [LOGIN-D2] Public keys differ → conflict
+   * [LOGIN-F1..F4] --force-local / --force-cloud
    */
   private async syncKeys(
     actorId: string,
@@ -219,54 +226,41 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
     token: string,
     options: LoginCommandOptions,
   ): Promise<void> {
-    const configManager = await this.dependencyService.getConfigManager();
-    const config = await configManager.loadConfig();
-    const repoId = config?.projectId ?? '';
+    // [LOGIN-H3, IKS-A33] Resolve repo identity from git remote
+    const repo = await this.resolveRepoIdentity();
 
     const hasLocal = await this.hasLocalKey(actorId);
-    const keyStatus = await this.getKeyStatus(saasUrl, token, actorId, repoId);
+    const keyStatus = await this.getKeyStatus(saasUrl, token, repo);
 
-    // [LOGIN-B1] CLI has key, SaaS does not → sync to SaaS
-    if (hasLocal && !keyStatus.hasKey) {
-      const keyProvider = this.dependencyService.getKeyProvider();
-      const privateKey = await keyProvider.getPrivateKey(actorId);
-      if (privateKey) {
-        await this.syncKeyToSaas(saasUrl, token, actorId, repoId, privateKey);
-        // [LOGIN-B2] Update session
-        console.log(`Key synced to SaaS for repo ${repoId}`);
-        this.handleSuccess(
-          { loggedIn: true, user: actorId, keySynced: true },
-          options,
-          `Logged in as ${actorId}\nKey synced to SaaS`
-        );
-        return;
-      }
+    // [LOGIN-B1] CLI has key, SaaS does not → upload with ECDH
+    if (hasLocal && !keyStatus.exists) {
+      await this.uploadKeyToSaas(actorId, saasUrl, token, repo, keyStatus.ecdhPublicKey);
+      this.handleSuccess(
+        { loggedIn: true, user: actorId, keySynced: true },
+        options,
+        `Logged in as ${actorId}\nKey synced to SaaS`
+      );
+      return;
     }
 
-    // [LOGIN-C1] SaaS has key, CLI does not → download to CLI
-    if (!hasLocal && keyStatus.hasKey) {
-      const keyResponse = await this.getKeyFromSaas(saasUrl, token, actorId, repoId);
-      if (keyResponse.privateKey) {
-        // [LOGIN-C2] Store with FsKeyProvider (handles 0600 permissions)
-        const keyProvider = this.dependencyService.getKeyProvider();
-        await keyProvider.setPrivateKey(actorId, keyResponse.privateKey);
-        console.log(`Key downloaded from SaaS`);
-        this.handleSuccess(
-          { loggedIn: true, user: actorId, keySynced: true },
-          options,
-          `Logged in as ${actorId}\nKey downloaded from SaaS`
-        );
-        return;
-      }
+    // [LOGIN-C1] SaaS has key, CLI does not → download with ECDH
+    if (!hasLocal && keyStatus.exists && keyStatus.hasPrivateKey) {
+      await this.downloadKeyFromSaas(actorId, saasUrl, token, repo);
+      this.handleSuccess(
+        { loggedIn: true, user: actorId, keySynced: true },
+        options,
+        `Logged in as ${actorId}\nKey downloaded from SaaS`
+      );
+      return;
     }
 
-    // [LOGIN-D1] Both have key and they match → already synced
-    if (hasLocal && keyStatus.hasKey) {
+    // [LOGIN-D1] Both have key — compare PUBLIC keys
+    if (hasLocal && keyStatus.exists) {
       const keyProvider = this.dependencyService.getKeyProvider();
-      const localKey = await keyProvider.getPrivateKey(actorId);
-      const saasKeyResponse = await this.getKeyFromSaas(saasUrl, token, actorId, repoId);
+      const localPublicKey = await keyProvider.getPublicKey(actorId);
+      const saasPublicKey = keyStatus.publicKey;
 
-      if (localKey && saasKeyResponse.privateKey && localKey === saasKeyResponse.privateKey) {
+      if (localPublicKey && saasPublicKey && localPublicKey === saasPublicKey) {
         this.handleSuccess(
           { loggedIn: true, user: actorId, keySynced: true },
           options,
@@ -275,46 +269,101 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
         return;
       }
 
-      // [LOGIN-D2] Keys differ → error (logged in but key conflict is an error state)
-      if (localKey && saasKeyResponse.privateKey && localKey !== saasKeyResponse.privateKey) {
-        // Login succeeded but key sync failed — report as error
+      // [LOGIN-D2 / LOGIN-F1..F4] Keys differ → conflict resolution
+      if (localPublicKey && saasPublicKey && localPublicKey !== saasPublicKey) {
+        // [LOGIN-F1] --force-local: upload local key, archive SaaS key
+        if (options.forceLocal) {
+          await this.uploadKeyToSaas(actorId, saasUrl, token, repo, keyStatus.ecdhPublicKey);
+          console.log('Previous cloud key archived. Local key is now canonical.');
+          // [LOGIN-F4] Post-sync verification
+          const postStatus = await this.getKeyStatus(saasUrl, token, repo);
+          const newLocalPub = await keyProvider.getPublicKey(actorId);
+          if (postStatus.publicKey === newLocalPub) {
+            this.handleSuccess(
+              { loggedIn: true, user: actorId, keySynced: true },
+              options,
+              `Logged in as ${actorId}\nKey conflict resolved (local key uploaded)`
+            );
+          }
+          return;
+        }
+
+        // [LOGIN-F2] --force-cloud: download SaaS key, replace local
+        if (options.forceCloud) {
+          await this.downloadKeyFromSaas(actorId, saasUrl, token, repo);
+          console.log('Previous local key archived. Cloud key is now canonical.');
+          // [LOGIN-F4] Post-sync verification
+          const postStatus = await this.getKeyStatus(saasUrl, token, repo);
+          const newLocalPub = await keyProvider.getPublicKey(actorId);
+          if (postStatus.publicKey === newLocalPub) {
+            this.handleSuccess(
+              { loggedIn: true, user: actorId, keySynced: true },
+              options,
+              `Logged in as ${actorId}\nKey conflict resolved (cloud key downloaded)`
+            );
+          }
+          return;
+        }
+
+        // [LOGIN-F3] No flags → show fingerprints (SHA-256 hex, first 16 chars) and exit
+        const { createHash } = await import('crypto');
+        const localFp = createHash('sha256').update(Buffer.from(localPublicKey, 'base64')).digest('hex').slice(0, 16);
+        const saasFp = createHash('sha256').update(Buffer.from(saasPublicKey, 'base64')).digest('hex').slice(0, 16);
         if (options.json) {
           console.log(JSON.stringify({
             success: false,
             error: 'Key conflict',
-            data: { loggedIn: true, user: actorId, keySynced: false, keyConflict: true },
+            data: { loggedIn: true, user: actorId, keySynced: false, keyConflict: true,
+              localFingerprint: localFp, saasFingerprint: saasFp },
           }, null, 2));
         } else {
-          console.error('Keys differ between CLI and SaaS. Resolve manually: use `gitgov actor rotate-key` to generate a new key, or choose which to keep.');
+          console.error('Keys differ between CLI and SaaS.');
+          console.error(`  Local:  ${localFp}...`);
+          console.error(`  Cloud:  ${saasFp}...`);
+          console.error('Use --force-local to keep local key (uploads to cloud)');
+          console.error('Use --force-cloud to keep cloud key (downloads to local)');
         }
+        process.exit(1);
         return;
       }
     }
 
-    // Neither has key
-    if (!hasLocal && !keyStatus.hasKey) {
-      this.handleSuccess(
-        { loggedIn: true, user: actorId, keySynced: false },
-        options,
-        `Logged in as ${actorId}\nNo actor key found. Run gitgov init first.`
-      );
+    // Neither has key (case e) — exit 1 per spec
+    if (!hasLocal && !keyStatus.exists) {
+      console.error('No actor key found. Run gitgov init first to generate your identity key.');
+      process.exit(1);
     }
   }
 
   // ============================================================================
-  // HELPERS
+  // tRPC HELPERS (v2 — ECDH encrypted, providerHost+repoPath scoped)
   // ============================================================================
 
+  // [LOGIN-H1] saasUrl must be explicitly configured — no default (IKS-A28)
   private async resolveSaasUrl(options: LoginCommandOptions): Promise<string> {
     if (options.url) return options.url;
     try {
       const configManager = await this.dependencyService.getConfigManager();
-      const config = await configManager.loadConfig();
-      if (config?.saasUrl) return config.saasUrl;
+      const saasUrl = await configManager.getSaasUrl();
+      if (saasUrl) return saasUrl;
     } catch {
-      // No config available — use default
+      // No config available
     }
-    return DEFAULT_SAAS_URL;
+    throw new Error('No saasUrl configured. Run gitgov init or set saasUrl in .gitgov/config.json');
+  }
+
+  // [LOGIN-H3, IKS-A33] Resolve providerHost + repoPath from git remote origin
+  // Uses parseRemoteUrl from @gitgov/core — shared with SaaS
+  private async resolveRepoIdentity(): Promise<GitRemoteRef> {
+    try {
+      const { execSync } = await import('child_process');
+      const remoteUrl = execSync('git remote get-url origin', { encoding: 'utf-8' }).trim();
+      const ref = parseRemoteUrl(remoteUrl);
+      if (ref) return ref;
+    } catch {
+      // Git not available or no remote
+    }
+    throw new Error('Could not determine repository. Ensure you are in a git repository with a remote origin.');
   }
 
   private async hasLocalKey(actorId: string): Promise<boolean> {
@@ -326,35 +375,93 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
     }
   }
 
-  private async getKeyStatus(saasUrl: string, token: string, actorId: string, repoId: string): Promise<KeyStatusResponse> {
-    const url = `${saasUrl}/api/identity/status?actorId=${encodeURIComponent(actorId)}&repoId=${encodeURIComponent(repoId)}`;
+  /** Call identity.keyStatus via tRPC (IKS-A27 wire format) */
+  private async getKeyStatus(saasUrl: string, token: string, repo: GitRemoteRef): Promise<KeyStatusResponse> {
+    const input = encodeURIComponent(JSON.stringify({ json: repo }));
+    const url = `${saasUrl}/trpc/identity.keyStatus?input=${input}`;
     const res = await this.deps.fetchSaas(url, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    if (!res.ok) return { hasKey: false, actorExists: false };
-    return await res.json() as KeyStatusResponse;
+    if (!res.ok) return { exists: false, hasPrivateKey: false, publicKey: null, ecdhPublicKey: '' };
+    const body = await res.json() as TrpcResponse<KeyStatusResponse>;
+    return body.result.data.json;
   }
 
-  private async syncKeyToSaas(saasUrl: string, token: string, actorId: string, repoId: string, privateKey: string): Promise<SyncKeyResponse> {
-    const url = `${saasUrl}/api/identity/sync-key`;
+  /**
+   * [LOGIN-G1] Upload key to SaaS with ECDH (ECIES pattern).
+   * Fetches server's ecdhPublicKey from keyStatus, encrypts with ecdhEncrypt.
+   */
+  private async uploadKeyToSaas(
+    actorId: string,
+    saasUrl: string,
+    token: string,
+    repo: GitRemoteRef,
+    serverEcdhPublicKey: string,
+  ): Promise<SyncKeyResponse> {
+    const keyProvider = this.dependencyService.getKeyProvider();
+    const privateKey = await keyProvider.getPrivateKey(actorId);
+    const publicKey = await keyProvider.getPublicKey(actorId);
+    if (!privateKey || !publicKey) throw new Error('Local key not found');
+
+    // [LOGIN-G1] ECDH encrypt: client generates ephemeral keypair, encrypts for server
+    const clientKp = Crypto.generateEphemeralKeypair();
+    const envelope = await Crypto.ecdhEncrypt(
+      Buffer.from(privateKey, 'base64'),
+      clientKp,
+      serverEcdhPublicKey,
+    );
+
+    const url = `${saasUrl}/trpc/identity.syncKey`;
     const res = await this.deps.fetchSaas(url, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ actorId, repoId, privateKey }),
+      body: JSON.stringify({ json: { ...repo, publicKey, privateKeyEnvelope: envelope } }),
     });
     if (!res.ok) throw new Error(`Failed to sync key to SaaS: ${res.status}`);
-    return await res.json() as SyncKeyResponse;
+    const body = await res.json() as TrpcResponse<SyncKeyResponse>;
+    return body.result.data.json;
   }
 
-  private async getKeyFromSaas(saasUrl: string, token: string, actorId: string, repoId: string): Promise<GetKeyResponse> {
-    const url = `${saasUrl}/api/identity/key?actorId=${encodeURIComponent(actorId)}&repoId=${encodeURIComponent(repoId)}`;
+  /**
+   * [LOGIN-G2] Download key from SaaS with ECDH (ephemeral pattern).
+   * Generates client ephemeral keypair, sends pubkey, decrypts response.
+   */
+  private async downloadKeyFromSaas(
+    actorId: string,
+    saasUrl: string,
+    token: string,
+    repo: GitRemoteRef,
+  ): Promise<void> {
+    // [LOGIN-G2] Generate ephemeral keypair for ECDH
+    const clientKp = Crypto.generateEphemeralKeypair();
+
+    const input = encodeURIComponent(JSON.stringify({
+      json: { ...repo, clientEcdhPublicKey: clientKp.publicKey },
+    }));
+    const url = `${saasUrl}/trpc/identity.getKey?input=${input}`;
     const res = await this.deps.fetchSaas(url, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    if (!res.ok) return { privateKey: null };
-    return await res.json() as GetKeyResponse;
+    if (!res.ok) throw new Error(`Failed to download key from SaaS: ${res.status}`);
+
+    const body = await res.json() as TrpcResponse<GetKeyResponse>;
+    const { privateKeyEnvelope } = body.result.data.json;
+
+    // [LOGIN-G2] Decrypt ECDH envelope
+    let decryptedKey: Buffer;
+    try {
+      decryptedKey = await Crypto.ecdhDecrypt(privateKeyEnvelope, clientKp.privateKey);
+    } catch {
+      // [LOGIN-G3] ECDH decryption failure
+      throw new Error('Key transfer failed: ECDH decryption error. Try again or contact support.');
+    }
+
+    // [LOGIN-C2] Store with FsKeyProvider (handles 0600 permissions)
+    const keyProvider = this.dependencyService.getKeyProvider();
+    await keyProvider.setPrivateKey(actorId, decryptedKey.toString('base64'));
+    console.log('Key downloaded from SaaS');
   }
 }

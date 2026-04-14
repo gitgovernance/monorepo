@@ -112,7 +112,10 @@ export type {
   CommitInfo,
   ChangedFile,
   CommitAuthor,
+  GitRemoteRef,
 } from './types';
+
+export { parseRemoteUrl } from './types';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ERRORS
