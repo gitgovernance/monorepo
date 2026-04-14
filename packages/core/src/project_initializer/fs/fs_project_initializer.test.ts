@@ -572,6 +572,18 @@ describe('FsProjectInitializer', () => {
       // initializer must also succeed (no-op), since there are no staged
       // writes to materialize and no state to depend on.
       await expect(initializer.finalize()).resolves.toBeUndefined();
+
+      // Also verify zero side effects on the filesystem (symmetric with test 1)
+      // to catch any future drift where finalize() might acquire "quiet" I/O
+      // like logging to a file, cache writes, or state mutations.
+      expect(mockFs.mkdir).not.toHaveBeenCalled();
+      expect(mockFs.writeFile).not.toHaveBeenCalled();
+      expect(mockFs.readFile).not.toHaveBeenCalled();
+      expect(mockFs.access).not.toHaveBeenCalled();
+      expect(mockFs.rm).not.toHaveBeenCalled();
+      expect(mockFs.unlink).not.toHaveBeenCalled();
+      expect(mockFs.copyFile).not.toHaveBeenCalled();
+      expect(mockFs.appendFile).not.toHaveBeenCalled();
     });
   });
 });
