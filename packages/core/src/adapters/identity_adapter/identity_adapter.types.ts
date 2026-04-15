@@ -43,8 +43,12 @@ export interface IdentityAdapterDependencies {
   // Key Management
   keyProvider: KeyProvider;
 
-  // Session Management - Required for getCurrentActor and rotateActorKey
-  sessionManager: ISessionManager;
+  // Session Management — optional (only required by getCurrentActor and
+  // rotateActorKey; createActor/signRecord/getActor/etc. do not need it).
+  // Consumers that only use the sessionManager-independent methods can
+  // omit this field. Added as part of IKS-A46 pre-P9 cleanup to let
+  // `GitHubRemoteInitService` drop its sessionManagerStub workaround.
+  sessionManager?: ISessionManager;
 
   // Optional: Event Bus for event-driven integration (optional dependency)
   eventBus?: IEventStream;

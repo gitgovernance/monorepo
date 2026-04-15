@@ -25,7 +25,10 @@ import type { ISessionManager } from '../../session_manager';
 export class IdentityAdapter implements IIdentityAdapter {
   private stores: Required<Pick<RecordStores, 'actors'>>;
   private keyProvider: KeyProvider;
-  private sessionManager: ISessionManager;
+  // Optional as of IKS-A46 pre-P9 cleanup. Only `getCurrentActor()` and
+  // `rotateActorKey()` consume it; callers that never use those methods
+  // (e.g., GitHubRemoteInitService) can omit it at construction time.
+  private sessionManager: ISessionManager | undefined;
   private eventBus: IEventStream | undefined;
 
   constructor(dependencies: IdentityAdapterDependencies) {
@@ -242,6 +245,16 @@ export class IdentityAdapter implements IIdentityAdapter {
    * @returns Promise<ActorRecord> - The current active ActorRecord
    */
   async getCurrentActor(): Promise<ActorRecord> {
+    // sessionManager is required for this method — throw if omitted.
+    // IdentityAdapter accepts an optional sessionManager (IKS-A46 pre-P9
+    // cleanup) because createActor/signRecord/etc. don't need it. But
+    // getCurrentActor resolves "who is logged in" — that requires a session.
+    if (!this.sessionManager) {
+      throw new Error(
+        'IdentityAdapter.getCurrentActor requires a sessionManager. ' +
+        'Construct the adapter with { sessionManager } to use this method.',
+      );
+    }
     // 1. Try to get from session
     const session = await this.sessionManager.loadSession();
 
@@ -359,19 +372,26 @@ export class IdentityAdapter implements IIdentityAdapter {
       newActorId // Mark succession
     );
 
-    // Update session to point to the new actor using SessionManager
-    try {
-      // Migrate actorState from old actor to new actor
-      const oldState = await this.sessionManager.getActorState(actorId);
-      if (oldState) {
-        await this.sessionManager.updateActorState(newActorId, oldState);
-      } else {
-        // Create initial state for new actor
-        await this.sessionManager.updateActorState(newActorId, {});
+    // Update session to point to the new actor using SessionManager.
+    // IKS-A46 pre-P9 cleanup: sessionManager is optional on the adapter. If
+    // omitted (e.g., saas-api Remote Init context), skip the state migration
+    // entirely — there is no local session store to update. The new keypair
+    // still persists via keyProvider.setPrivateKey below, so rotation itself
+    // succeeds; only the cached actor state is not migrated.
+    if (this.sessionManager) {
+      try {
+        // Migrate actorState from old actor to new actor
+        const oldState = await this.sessionManager.getActorState(actorId);
+        if (oldState) {
+          await this.sessionManager.updateActorState(newActorId, oldState);
+        } else {
+          // Create initial state for new actor
+          await this.sessionManager.updateActorState(newActorId, {});
+        }
+      } catch (error) {
+        // Non-critical: session update failure logged as warning
+        console.warn(`⚠️  Could not update session for ${newActorId}: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
-    } catch (error) {
-      // Non-critical: session update failure logged as warning
-      console.warn(`⚠️  Could not update session for ${newActorId}: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
 
     // Persist new private key via KeyProvider
