@@ -251,6 +251,63 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       console.warn = originalWarn;
     });
 
+    it('[EARS-C1+IKS-A46] should succeed when constructed WITHOUT sessionManager (pre-P9 cleanup positive path)', async () => {
+      // Construct an adapter without sessionManager — the saas-api Remote Init pattern.
+      // Post-IKS-A46 pre-P9 cleanup, sessionManager is optional in IdentityAdapterDependencies.
+      // createActor does NOT touch sessionManager, so construction + createActor must succeed.
+      const adapterWithoutSession = new IdentityAdapter({
+        stores: { actors: mockActorStore },
+        keyProvider: mockKeyProvider,
+        // sessionManager omitted intentionally
+      });
+
+      const inputPayload = {
+        type: 'human' as const,
+        displayName: 'Remote Init User',
+        roles: ['author'] as [string, ...string[]]
+      };
+
+      mockedGenerateKeys.mockResolvedValue({
+        publicKey: 'remote-init-public-key',
+        privateKey: 'remote-init-private-key'
+      });
+      mockedGenerateActorId.mockReturnValue('human:remote-init-user');
+      mockedCreateActorRecord.mockReturnValue({
+        ...sampleActorPayload,
+        id: 'human:remote-init-user',
+        displayName: 'Remote Init User',
+        publicKey: 'remote-init-public-key',
+      });
+      mockedCalculatePayloadChecksum.mockReturnValue('checksum');
+      mockedSignPayload.mockReturnValue({
+        keyId: 'human:remote-init-user',
+        role: 'author',
+        notes: 'Actor registration',
+        signature: 'remote-init-signature',
+        timestamp: 1234567890
+      });
+      mockedValidateFullActorRecord.mockResolvedValue(undefined);
+      mockActorStore.put.mockResolvedValue(undefined);
+
+      const originalWarn = console.warn;
+      console.warn = jest.fn();
+
+      // Must NOT throw — createActor is sessionManager-independent
+      const result = await adapterWithoutSession.createActor(inputPayload, 'human:remote-init-user');
+
+      expect(result.id).toBe('human:remote-init-user');
+      expect(mockActorStore.put).toHaveBeenCalled();
+      expect(mockKeyProvider.setPrivateKey).toHaveBeenCalledWith(
+        'human:remote-init-user',
+        'remote-init-private-key'
+      );
+      // sessionManager was never touched (no stub to call)
+      expect(mockSessionManager.loadSession).not.toHaveBeenCalled();
+      expect(mockSessionManager.getActorState).not.toHaveBeenCalled();
+
+      console.warn = originalWarn;
+    });
+
     it('[EARS-C3] should persist private key via KeyProvider', async () => {
       const inputPayload = {
         type: 'human' as const,
@@ -555,6 +612,57 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
 
       await expect(identityAdapter.rotateActorKey('human:test-user'))
         .rejects.toThrow('Cannot rotate key for revoked actor: human:test-user');
+    });
+
+    it('[EARS-F8] should succeed without sessionManager, skipping actorState migration (IKS-A46 pre-P9 cleanup)', async () => {
+      // Construct adapter WITHOUT sessionManager — the saas-api Remote Init pattern
+      const adapterWithoutSession = new IdentityAdapter({
+        stores: { actors: mockActorStore },
+        keyProvider: mockKeyProvider,
+        // sessionManager omitted intentionally
+      });
+
+      const existingActor = sampleActorPayload;
+      const baseActorId = 'human:new-test-user';
+      const newActorId = 'human:new-test-user-v2';
+      const newPublicKey = 'NEW_PUBLIC_KEY_BASE64_44_CHARS_LONG_AAAAAAAAAAA=';
+      const newPrivateKey = 'new-private-key-base64';
+
+      jest.spyOn(adapterWithoutSession, 'getActor').mockResolvedValue(existingActor);
+      mockedGenerateKeys.mockResolvedValueOnce({
+        publicKey: newPublicKey,
+        privateKey: newPrivateKey
+      });
+      mockedGenerateActorId.mockReturnValueOnce(baseActorId);
+      mockedCreateActorRecord.mockReturnValueOnce({
+        ...existingActor,
+        id: newActorId,
+        publicKey: newPublicKey
+      });
+      mockedCalculatePayloadChecksum.mockReturnValueOnce('new-checksum');
+      mockedSignPayload.mockReturnValueOnce({
+        keyId: newActorId,
+        role: 'author',
+        notes: 'Key rotation',
+        signature: 'new-signature',
+        timestamp: Date.now()
+      });
+      mockedValidateFullActorRecord.mockResolvedValueOnce(undefined);
+      mockActorStore.put.mockResolvedValue(undefined);
+      mockActorStore.list.mockResolvedValue(['human:test-user']);
+      mockActorStore.get
+        .mockResolvedValueOnce(sampleRecord)
+        .mockResolvedValueOnce(sampleRecord);
+
+      const result = await adapterWithoutSession.rotateActorKey('human:test-user');
+
+      // Rotation succeeds: new actor created, old revoked, key persisted
+      expect(result.oldActor.status).toBe('revoked');
+      expect(result.newActor.id).toBe(newActorId);
+      expect(mockKeyProvider.setPrivateKey).toHaveBeenCalledWith(newActorId, newPrivateKey);
+      // sessionManager methods were NEVER invoked — the `if (this.sessionManager)` block skipped
+      expect(mockSessionManager.getActorState).not.toHaveBeenCalled();
+      expect(mockSessionManager.updateActorState).not.toHaveBeenCalled();
     });
 
     it('[EARS-F4] should throw error if validateFullActorRecord fails', async () => {
@@ -880,6 +988,20 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
 
       await expect(identityAdapter.getCurrentActor())
         .rejects.toThrow("❌ No active actors found. Run 'gitgov init' first.");
+    });
+
+    it('[EARS-M4] should throw clear error when sessionManager is undefined (IKS-A46 pre-P9 cleanup)', async () => {
+      // Construct an adapter WITHOUT sessionManager (post-IKS-A46 pre-P9 cleanup: optional field)
+      const adapterWithoutSession = new IdentityAdapter({
+        stores: { actors: mockActorStore },
+        keyProvider: mockKeyProvider,
+        // sessionManager omitted intentionally — this is the saas-api Remote Init pattern
+      });
+
+      await expect(adapterWithoutSession.getCurrentActor())
+        .rejects.toThrow(
+          'IdentityAdapter.getCurrentActor requires a sessionManager. Construct the adapter with { sessionManager } to use this method.'
+        );
     });
   });
 
