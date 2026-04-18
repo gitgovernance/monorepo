@@ -109,7 +109,7 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
 
       // Start local callback server and open browser in parallel
       const callbackPromise = this.deps.startCallbackServer(CALLBACK_PORT);
-      const oauthUrl = `${saasUrl}/api/auth/cli?callback=http://localhost:${CALLBACK_PORT}/auth/callback`;
+      const oauthUrl = `${saasUrl}/auth/cli?callback=http://localhost:${CALLBACK_PORT}/auth/callback`;
       await this.deps.openBrowser(oauthUrl);
 
       // Wait for callback with token

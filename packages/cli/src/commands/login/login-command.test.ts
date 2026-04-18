@@ -162,7 +162,7 @@ describe('LoginCommand v2', () => {
 
       expect(deps.openBrowser).toHaveBeenCalledTimes(1);
       const openUrl = (deps.openBrowser as jest.Mock).mock.calls[0][0] as string;
-      expect(openUrl).toContain('/api/auth/cli?callback=');
+      expect(openUrl).toContain('/auth/cli?callback=');
 
       expect(deps.startCallbackServer).toHaveBeenCalledTimes(1);
 
