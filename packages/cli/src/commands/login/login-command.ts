@@ -91,6 +91,18 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
   // [LOGIN-A1] OAuth flow → open browser, start callback server, store session token
   async executeLogin(options: LoginCommandOptions): Promise<void> {
     try {
+      // [LOGIN-J1] Cloud-first bootstrap: fetch remote gitgov-state so DI can discover it
+      try {
+        const { execSync } = await import('child_process');
+        execSync('git fetch origin gitgov-state', {
+          cwd: process.cwd(),
+          stdio: 'pipe',
+          timeout: 15000,
+        });
+      } catch {
+        // [LOGIN-J2] Fetch failed — continue, DI will use cached refs or fail with clear message
+      }
+
       const saasUrl = await this.resolveSaasUrl(options);
 
       console.log(`Opening browser for authentication at ${saasUrl}...`);

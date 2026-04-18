@@ -592,4 +592,57 @@ describe('LoginCommand v2', () => {
 
     it.todo('[LOGIN-H2] should timeout after 5 minutes with error message (requires timer mock — deferred to E2E)');
   });
+
+  // ============================================================================
+  // §4.9. Cloud-First Bootstrap (LOGIN-J1 to J2, Task 5.5)
+  // ============================================================================
+  describe('4.9. Cloud-First Bootstrap (LOGIN-J1 to J2)', () => {
+    it('[LOGIN-J1] should fetch origin gitgov-state before resolving saasUrl', async () => {
+      const { execSync } = await import('child_process');
+      (execSync as jest.MockedFunction<typeof execSync>).mockReturnValue('https://github.com/testorg/testrepo.git\n');
+
+      mockGetConfig.mockResolvedValue({ saasUrl: 'https://app.gitgov.dev' });
+      mockHasPrivateKey.mockResolvedValue(false);
+
+      const deps = createMockDeps({
+        fetchSaas: createTrpcFetch({
+          'keyStatus': noKeyStatus,
+        }),
+      });
+
+      const cmd = new LoginCommand(deps);
+      await cmd.executeLogin(defaultOptions);
+
+      expect(execSync).toHaveBeenCalledWith(
+        'git fetch origin gitgov-state',
+        expect.objectContaining({ stdio: 'pipe' }),
+      );
+    });
+
+    it('[LOGIN-J2] should continue login flow when fetch fails (no remote/offline)', async () => {
+      const { execSync } = await import('child_process');
+      (execSync as jest.MockedFunction<typeof execSync>).mockImplementation((cmd: unknown) => {
+        if (typeof cmd === 'string' && cmd.includes('fetch')) {
+          throw new Error('fatal: could not read from remote repository');
+        }
+        return 'https://github.com/testorg/testrepo.git\n';
+      });
+
+      mockGetConfig.mockResolvedValue({ saasUrl: 'https://app.gitgov.dev' });
+      mockHasPrivateKey.mockResolvedValue(false);
+
+      const deps = createMockDeps({
+        fetchSaas: createTrpcFetch({
+          'keyStatus': noKeyStatus,
+        }),
+      });
+
+      const cmd = new LoginCommand(deps);
+      await cmd.executeLogin(defaultOptions);
+
+      // Login should proceed despite fetch failure
+      expect(deps.startCallbackServer).toHaveBeenCalled();
+      expect(mockSetCloudToken).toHaveBeenCalledWith('test-session-token');
+    });
+  });
 });
