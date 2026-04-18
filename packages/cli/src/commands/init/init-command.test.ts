@@ -115,15 +115,13 @@ describe('InitCommand', () => {
       });
 
       expect(mockProjectAdapter.validateEnvironment).toHaveBeenCalled();
-      expect(mockProjectAdapter.initializeProject).toHaveBeenCalledWith({
-        name: 'Test Project',
-        template: undefined,
-        actorName: 'Test User',
-        actorEmail: undefined,
-        methodology: undefined,
-        skipValidation: undefined,
-        verbose: undefined
-      });
+      expect(mockProjectAdapter.initializeProject).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'Test Project',
+          actorName: 'Test User',
+          saasUrl: 'https://app.gitgov.dev',
+        })
+      );
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('🚀 Initializing GitGovernance Project...'));
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('✅ GitGovernance initialized successfully!'));
     });
@@ -216,6 +214,22 @@ describe('InitCommand', () => {
       );
     });
 
+    it('[EARS-A9] should create actor with human:${login} when --login provided', async () => {
+      await initCommand.execute({
+        name: 'Login Project',
+        login: 'cagodoy',
+        actorName: 'Camilo Acuña Godoy',
+      });
+
+      expect(mockProjectAdapter.initializeProject).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'Login Project',
+          login: 'cagodoy',
+          actorName: 'Camilo Acuña Godoy',
+        })
+      );
+    });
+
     it('[EARS-A7] should create actor with type=\'human\' by default', async () => {
       await initCommand.execute({
         name: 'Human Project',
@@ -241,15 +255,15 @@ describe('InitCommand', () => {
         template: 'basic'
       });
 
-      expect(mockProjectAdapter.initializeProject).toHaveBeenCalledWith({
-        name: 'Integration Test',
-        template: 'basic',
-        actorName: 'Integration User',
-        actorEmail: undefined,
-        methodology: 'scrum',
-        skipValidation: undefined,
-        verbose: undefined
-      });
+      expect(mockProjectAdapter.initializeProject).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'Integration Test',
+          template: 'basic',
+          actorName: 'Integration User',
+          methodology: 'scrum',
+          saasUrl: 'https://app.gitgov.dev',
+        })
+      );
     });
 
     it('[EARS-B2] should handle ProjectAdapter validation errors', async () => {
@@ -402,15 +416,17 @@ describe('InitCommand', () => {
         cache: false
       });
 
-      expect(mockProjectAdapter.initializeProject).toHaveBeenCalledWith({
-        name: 'Full Test',
-        template: 'enterprise',
-        actorName: 'Full User',
-        actorEmail: 'user@example.com',
-        methodology: 'scrum',
-        skipValidation: undefined,
-        verbose: true
-      });
+      expect(mockProjectAdapter.initializeProject).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'Full Test',
+          template: 'enterprise',
+          actorName: 'Full User',
+          actorEmail: 'user@example.com',
+          methodology: 'scrum',
+          verbose: true,
+          saasUrl: 'https://app.gitgov.dev',
+        })
+      );
     });
 
     it('[EARS-D2] should show user-friendly error messages with troubleshooting suggestions', async () => {
@@ -486,15 +502,15 @@ describe('InitCommand', () => {
         template: 'enterprise'
       });
 
-      expect(mockProjectAdapter.initializeProject).toHaveBeenCalledWith({
-        name: 'Custom Project',
-        template: 'enterprise',
-        actorName: 'Custom User',
-        actorEmail: undefined,
-        methodology: 'kanban',
-        skipValidation: undefined,
-        verbose: undefined
-      });
+      expect(mockProjectAdapter.initializeProject).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'Custom Project',
+          template: 'enterprise',
+          actorName: 'Custom User',
+          methodology: 'kanban',
+          saasUrl: 'https://app.gitgov.dev',
+        })
+      );
     });
   });
 

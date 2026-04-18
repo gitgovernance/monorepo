@@ -18,6 +18,7 @@ export interface InitCommandOptions {
   actorEmail?: string;
   force?: boolean;
   forceLocal?: boolean;
+  login?: string;
   saasUrl?: string;
   cache?: boolean; // Note: --no-cache sets this to false
   skipValidation?: boolean;
@@ -95,6 +96,7 @@ export class InitCommand {
       if (completeOptions.methodology) projectInitOptions.methodology = completeOptions.methodology;
       if (completeOptions.skipValidation) projectInitOptions.skipValidation = completeOptions.skipValidation;
       if (completeOptions.verbose) projectInitOptions.verbose = completeOptions.verbose;
+      if (completeOptions.login) projectInitOptions.login = completeOptions.login;
       const saasUrl = completeOptions.saasUrl || process.env['GITGOV_SAAS_URL'] || 'https://app.gitgov.dev';
       projectInitOptions.saasUrl = saasUrl;
 

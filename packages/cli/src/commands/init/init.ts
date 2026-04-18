@@ -19,6 +19,7 @@ export function registerInitCommands(program: Command): void {
     .option('-e, --actor-email <email>', 'Actor email (default: git user.email)')
     .option('-f, --force', 'Re-initialize forcefully (requires confirmation)')
     .option('--force-local', 'Proceed with local init even if gitgov-state exists on remote')
+    .option('-l, --login <login>', 'GitHub login for actorId (creates human:${login})')
     .option('--saas-url <url>', 'SaaS URL for cloud sync (written to config.json)')
     .option('--no-cache', 'Skip RecordProjector initialization (faster init)')
     .option('--skip-validation', 'Skip environment validation (advanced users)')

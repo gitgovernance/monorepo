@@ -76,11 +76,13 @@ export class ProjectAdapter implements IProjectAdapter {
       // 2.5. [EARS-G1] Copy Agent Prompt to project root for IDE access
       await this.projectInitializer.copyAgentPrompt();
 
-      // 3. Trust Root Creation via IdentityAdapter [EARS-B1]
+      // 3. Trust Root Creation via IdentityAdapter [EARS-B1, EARS-A9]
+      const actorType = (options.type ?? 'human') as 'human' | 'agent';
       const actor = await this.identityAdapter.createActor(
         {
-          type: (options.type ?? 'human') as 'human' | 'agent',
-          displayName: options.actorName || 'Project Owner',
+          ...(options.login && { id: `${actorType}:${options.login}` }),
+          type: actorType,
+          displayName: options.actorName || options.login || 'Project Owner',
           roles: [
             'admin',
             'author',

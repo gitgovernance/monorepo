@@ -612,6 +612,28 @@ describe('Init CLI Command - Edge Cases E2E Tests', () => {
       expect(fs.existsSync(path.join(worktreeBasePath, '.gitgov', 'config.json'))).toBe(true);
     });
 
+    it('[EARS-A9] WHEN --login provided THEN actorId SHALL be human:${login}', () => {
+      setupWithRemoteGitgovState('case-a9-login');
+
+      // Force local to bypass Smart Init, use --login for actorId
+      const result = runCliCommand(
+        ['init', '--name', 'Login Test', '--login', 'cagodoy', '--actor-name', 'Camilo', '--force-local', '--quiet'],
+        { cwd: testProjectRoot },
+      );
+
+      expect(result.success).toBe(true);
+
+      // Verify actor file has human:cagodoy, NOT human:camilo
+      const actorsDir = path.join(worktreeBasePath, '.gitgov', 'actors');
+      const actorFiles = fs.readdirSync(actorsDir).filter(f => f.startsWith('human'));
+      expect(actorFiles.length).toBeGreaterThanOrEqual(1);
+
+      // Read the actor record — payload.id should be human:cagodoy
+      const actorContent = JSON.parse(fs.readFileSync(path.join(actorsDir, actorFiles[0]), 'utf-8'));
+      expect(actorContent.payload.id).toBe('human:cagodoy');
+      expect(actorContent.payload.displayName).toBe('Camilo');
+    });
+
     it('[EARS-E14] WHEN remote exists but no gitgov-state THEN init SHALL proceed normally', () => {
       // Setup WITHOUT pushing gitgov-state to remote
       testProjectRoot = path.join(tempDir, `case5-no-state-${Date.now()}`);
