@@ -533,4 +533,102 @@ describe('Init CLI Command - Edge Cases E2E Tests', () => {
       expect(fs.existsSync(path.join(worktreeBasePath, '.gitgov', 'config.json'))).toBe(true);
     });
   });
+
+  // ============================================================================
+  // CASE 5: Smart Init — Remote has gitgov-state (cloud-first detection, Task 5.4)
+  // ============================================================================
+  describe('CASE 5: Smart Init — Remote has gitgov-state (Task 5.4)', () => {
+    let testProjectRoot: string;
+    let remotePath: string;
+    let worktreeBasePath: string;
+
+    /**
+     * Setup: create repo + bare remote + push main + create gitgov-state on remote.
+     * This simulates the state after the SaaS did Remote Init (Task 5.2).
+     */
+    const setupWithRemoteGitgovState = (caseName: string) => {
+      testProjectRoot = path.join(tempDir, `${caseName}-${Date.now()}`);
+      remotePath = path.join(tempDir, `${caseName}-remote-${Date.now()}`);
+
+      createGitRepo(testProjectRoot, true);
+      createBareRemote(remotePath);
+      addRemote(testProjectRoot, remotePath);
+      execSync('git push -u origin main', { cwd: testProjectRoot, stdio: 'pipe' });
+
+      // Simulate Remote Init: create gitgov-state branch on the remote with a .gitgov/config.json
+      const clonePath = path.join(tempDir, `${caseName}-clone-${Date.now()}`);
+      execSync(`git clone "${remotePath}" "${clonePath}"`, { stdio: 'pipe' });
+      execSync('git config user.name "SaaS Bot"', { cwd: clonePath, stdio: 'pipe' });
+      execSync('git config user.email "bot@gitgov.dev"', { cwd: clonePath, stdio: 'pipe' });
+      execSync('git checkout --orphan gitgov-state', { cwd: clonePath, stdio: 'pipe' });
+      execSync('git rm -rf .', { cwd: clonePath, stdio: 'pipe' });
+      fs.mkdirSync(path.join(clonePath, '.gitgov'), { recursive: true });
+      fs.writeFileSync(path.join(clonePath, '.gitgov', 'config.json'), JSON.stringify({ projectId: 'remote-init-test' }));
+      execSync('git add .gitgov/', { cwd: clonePath, stdio: 'pipe' });
+      execSync('git commit -m "gitgov: remote init"', { cwd: clonePath, stdio: 'pipe' });
+      execSync('git push origin gitgov-state', { cwd: clonePath, stdio: 'pipe' });
+      fs.rmSync(clonePath, { recursive: true, force: true });
+
+      worktreeBasePath = getWorktreeBasePath(testProjectRoot);
+    };
+
+    afterEach(() => {
+      process.chdir(originalCwd);
+      if (worktreeBasePath) cleanupWorktree(testProjectRoot, worktreeBasePath);
+    });
+
+    it('[EARS-E12] WHEN remote has gitgov-state THEN init SHALL abort suggesting gitgov login', () => {
+      setupWithRemoteGitgovState('case5-abort');
+
+      // Verify remote actually has the branch
+      const lsRemote = execSync('git ls-remote --heads origin gitgov-state', { cwd: testProjectRoot, encoding: 'utf8' });
+      expect(lsRemote.trim()).not.toBe('');
+
+      const result = runCliCommand(
+        ['init', '--name', 'Cloud Project', '--actor-name', 'Test User'],
+        { cwd: testProjectRoot, expectError: true },
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.output + (result.error ?? '')).toMatch(/gitgov login/i);
+      expect(fs.existsSync(path.join(worktreeBasePath, '.gitgov'))).toBe(false);
+    });
+
+    it('[EARS-E13] WHEN remote has gitgov-state AND --force-local THEN init SHALL proceed', () => {
+      setupWithRemoteGitgovState('case5-force');
+
+      const result = runCliCommand(
+        ['init', '--name', 'Force Local Project', '--actor-name', 'Test User', '--force-local', '--quiet'],
+        { cwd: testProjectRoot },
+      );
+
+      expect(result.success).toBe(true);
+      expect(fs.existsSync(path.join(worktreeBasePath, '.gitgov'))).toBe(true);
+      expect(fs.existsSync(path.join(worktreeBasePath, '.gitgov', 'config.json'))).toBe(true);
+    });
+
+    it('[EARS-E14] WHEN remote exists but no gitgov-state THEN init SHALL proceed normally', () => {
+      // Setup WITHOUT pushing gitgov-state to remote
+      testProjectRoot = path.join(tempDir, `case5-no-state-${Date.now()}`);
+      remotePath = path.join(tempDir, `case5-no-state-remote-${Date.now()}`);
+
+      createGitRepo(testProjectRoot, true);
+      createBareRemote(remotePath);
+      addRemote(testProjectRoot, remotePath);
+      execSync('git push -u origin main', { cwd: testProjectRoot, stdio: 'pipe' });
+      worktreeBasePath = getWorktreeBasePath(testProjectRoot);
+
+      // Verify remote does NOT have gitgov-state
+      const lsRemote = execSync('git ls-remote --heads origin gitgov-state', { cwd: testProjectRoot, encoding: 'utf8' });
+      expect(lsRemote.trim()).toBe('');
+
+      const result = runCliCommand(
+        ['init', '--name', 'Fresh Project', '--actor-name', 'Test User', '--quiet'],
+        { cwd: testProjectRoot },
+      );
+
+      expect(result.success).toBe(true);
+      expect(fs.existsSync(path.join(worktreeBasePath, '.gitgov'))).toBe(true);
+    });
+  });
 });

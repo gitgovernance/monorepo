@@ -17,6 +17,7 @@ export interface InitCommandOptions {
   actorName?: string;
   actorEmail?: string;
   force?: boolean;
+  forceLocal?: boolean;
   cache?: boolean; // Note: --no-cache sets this to false
   skipValidation?: boolean;
   json?: boolean;
@@ -43,16 +44,38 @@ export class InitCommand {
         await this.validateEnvironment(options);
       }
 
-      // 2. Interactive prompts for missing information
+      // 2. Smart Init: check if gitgov-state exists on remote (Task 5.4, IKS-T7/T8)
+      if (!options.forceLocal && !options.skipValidation) {
+        const remoteHasBranch = await this.checkRemoteForGitgovState();
+        if (remoteHasBranch) {
+          if (options.json) {
+            console.log(JSON.stringify({
+              success: false,
+              error: 'Project already initialized from cloud',
+              suggestion: 'gitgov login',
+              exitCode: 1,
+            }, null, 2));
+          } else {
+            console.log("⚠️  The branch 'gitgov-state' already exists on the remote.");
+            console.log("    This project was initialized from the cloud (Remote Init).\n");
+            console.log("💡 Run 'gitgov login' to download your identity and sync.\n");
+            console.log("    If you want to force a local init anyway, use --force-local.");
+          }
+          process.exit(1);
+          return;
+        }
+      }
+
+      // 3. Interactive prompts for missing information
       const completeOptions = await this.gatherMissingInfo(options);
 
-      // 3. Setup visual progress tracking
+      // 4. Setup visual progress tracking
       const progressTracker = this.createProgressTracker(options);
 
-      // 4. Get ProjectAdapter from dependency injection
+      // 5. Get ProjectAdapter from dependency injection
       const projectAdapter = await this.getProjectAdapter();
 
-      // 5. Delegate ALL business logic to ProjectAdapter
+      // 6. Delegate ALL business logic to ProjectAdapter
       progressTracker.start("🚀 Initializing GitGovernance Project...\n");
 
       // [EARS-D1] Build ProjectInitOptions handling all flag combinations correctly
@@ -294,6 +317,25 @@ export class InitCommand {
       console.log("   • Use 'gitgov task new' to create work items");
       console.log("   • Use 'gitgov status' for project dashboard");
       console.log("   • All changes are local until you commit to Git");
+    }
+  }
+
+  /**
+   * [EARS-F1/F2] Check if gitgov-state branch exists on the remote (Task 5.4).
+   * Uses `git ls-remote` — no API needed, works with any git remote.
+   * Returns false on any error (no remote, offline, etc.) — conservative fallback.
+   */
+  private async checkRemoteForGitgovState(): Promise<boolean> {
+    try {
+      const { execSync } = await import('child_process');
+      const output = execSync('git ls-remote --heads origin gitgov-state', {
+        cwd: process.cwd(),
+        encoding: 'utf8',
+        timeout: 10000,
+      }).trim();
+      return output.length > 0;
+    } catch {
+      return false;
     }
   }
 

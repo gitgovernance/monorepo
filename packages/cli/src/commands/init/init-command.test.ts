@@ -75,8 +75,13 @@ describe('InitCommand', () => {
       validateEnvironment: jest.fn()
     };
 
-    // Mock execSync for git config
-    (execSync as jest.MockedFunction<typeof execSync>).mockReturnValue('Test User\n');
+    // Mock execSync: git config returns user name, ls-remote returns empty (no remote branch)
+    (execSync as jest.MockedFunction<typeof execSync>).mockImplementation((cmd: unknown) => {
+      if (typeof cmd === 'string' && cmd.includes('ls-remote')) {
+        return '';
+      }
+      return 'Test User\n';
+    });
 
     // Create InitCommand (DI is mocked at module level)
     initCommand = new InitCommand();
@@ -440,7 +445,10 @@ describe('InitCommand', () => {
     });
 
     it('[EARS-D3] should use interactive prompts and intelligent defaults for UX excellence', async () => {
-      (execSync as jest.MockedFunction<typeof execSync>).mockReturnValue('John Doe\n');
+      (execSync as jest.MockedFunction<typeof execSync>).mockImplementation((cmd: unknown) => {
+        if (typeof cmd === 'string' && cmd.includes('ls-remote')) return '';
+        return 'John Doe\n';
+      });
 
       await initCommand.execute({
         name: 'Test Project'
@@ -618,6 +626,54 @@ describe('InitCommand', () => {
       const structureIndex = mockConsoleLog.mock.calls.indexOf(structureCall!);
       const pathLine = mockConsoleLog.mock.calls[structureIndex + 1];
       expect(pathLine?.[0]).toContain('~/.gitgov/');
+    });
+  });
+
+  // ============================================================================
+  // §4.6. Smart Init — Remote Detection (Task 5.4, IKS-T7/T8 CLI side)
+  // ============================================================================
+  describe('4.6. Smart Init — Remote Detection (Task 5.4)', () => {
+    it('should abort init when gitgov-state exists on remote', async () => {
+      (execSync as jest.MockedFunction<typeof execSync>).mockImplementation((cmd: unknown) => {
+        if (typeof cmd === 'string' && cmd.includes('ls-remote')) {
+          return 'abc123def456\trefs/heads/gitgov-state\n';
+        }
+        return 'Test User\n';
+      });
+
+      await initCommand.execute({ name: 'Cloud Project' });
+
+      expect(mockConsoleLog).toHaveBeenCalledWith(
+        expect.stringContaining('gitgov login'),
+      );
+      expect(mockProcessExit).toHaveBeenCalledWith(1);
+      expect(mockProjectAdapter.initializeProject).not.toHaveBeenCalled();
+    });
+
+    it('should proceed when gitgov-state does not exist on remote', async () => {
+      (execSync as jest.MockedFunction<typeof execSync>).mockImplementation((cmd: unknown) => {
+        if (typeof cmd === 'string' && cmd.includes('ls-remote')) {
+          return '';
+        }
+        return 'Test User\n';
+      });
+
+      await initCommand.execute({ name: 'Fresh Project' });
+
+      expect(mockProjectAdapter.initializeProject).toHaveBeenCalled();
+    });
+
+    it('should proceed with --force-local even when remote branch exists', async () => {
+      (execSync as jest.MockedFunction<typeof execSync>).mockImplementation((cmd: unknown) => {
+        if (typeof cmd === 'string' && cmd.includes('ls-remote')) {
+          return 'abc123def456\trefs/heads/gitgov-state\n';
+        }
+        return 'Test User\n';
+      });
+
+      await initCommand.execute({ name: 'Force Local Project', forceLocal: true });
+
+      expect(mockProjectAdapter.initializeProject).toHaveBeenCalled();
     });
   });
 });
