@@ -1,8 +1,10 @@
 /**
  * CLI Helpers — Execute the globally installed gitgov CLI for E2E tests.
- * [HLP-A1] Real binary execution, [HLP-A2] Git repo creation, [HLP-A3] Worktree cleanup.
+ * [HLP-A1] Real binary execution (sync), [HLP-A4] Async spawn for interactive commands.
+ * [HLP-A2] Git repo creation, [HLP-A3] Worktree cleanup.
  */
-import { execSync } from 'child_process';
+import { execSync, spawn } from 'child_process';
+import type { ChildProcess } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -12,6 +14,15 @@ export type CliResult = {
   success: boolean;
   output: string;
   error: string | null;
+};
+
+export type SpawnedCli = {
+  process: ChildProcess;
+  stdout: () => string;
+  stderr: () => string;
+  waitForOutput: (match: string | RegExp, timeoutMs?: number) => Promise<string>;
+  waitForExit: (timeoutMs?: number) => Promise<{ stdout: string; stderr: string; exitCode: number | null }>;
+  kill: () => void;
 };
 
 // [HLP-A1] Execute the globally installed gitgov CLI
@@ -66,6 +77,52 @@ export function createBareRemote(): { remotePath: string } {
 
 export function addRemote(repoPath: string, remotePath: string): void {
   execSync(`git remote add origin "${remotePath}"`, { cwd: repoPath, stdio: 'pipe' });
+}
+
+// [HLP-A4] Spawn gitgov CLI as async child process (for interactive/long-running commands)
+export function spawnGitgovCli(args: string, options: { cwd: string; timeout?: number }): SpawnedCli {
+  const child = spawn('gitgov', args.split(/\s+/), {
+    cwd: options.cwd,
+    stdio: ['pipe', 'pipe', 'pipe'],
+    env: { ...process.env },
+  });
+
+  let out = '';
+  let err = '';
+  child.stdout?.on('data', (d: Buffer) => { out += d.toString(); });
+  child.stderr?.on('data', (d: Buffer) => { err += d.toString(); });
+
+  return {
+    process: child,
+    stdout: () => out,
+    stderr: () => err,
+    waitForOutput(match, timeoutMs = 10000) {
+      return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error(`Timed out waiting for output matching ${match}`)), timeoutMs);
+        const check = () => {
+          const combined = out + err;
+          const found = typeof match === 'string' ? combined.includes(match) : match.test(combined);
+          if (found) { clearTimeout(timer); resolve(combined); }
+        };
+        child.stdout?.on('data', check);
+        child.stderr?.on('data', check);
+        check();
+      });
+    },
+    waitForExit(timeoutMs = 30000) {
+      return new Promise((resolve) => {
+        const timer = setTimeout(() => {
+          child.kill();
+          resolve({ stdout: out, stderr: err, exitCode: null });
+        }, timeoutMs);
+        child.on('close', (code) => {
+          clearTimeout(timer);
+          resolve({ stdout: out, stderr: err, exitCode: code });
+        });
+      });
+    },
+    kill() { child.kill(); },
+  };
 }
 
 // [HLP-A3] Clean up worktree created by CLI init
