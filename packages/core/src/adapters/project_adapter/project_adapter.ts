@@ -120,6 +120,7 @@ export class ProjectAdapter implements IProjectAdapter {
         projectId,
         projectName: options.name,
         rootCycle: rootCycle.id,
+        ...(options.saasUrl && { saasUrl: options.saasUrl }),
         state: {
           branch: 'gitgov-state',
           sync: {

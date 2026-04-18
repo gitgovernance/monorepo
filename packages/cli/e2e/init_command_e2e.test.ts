@@ -135,6 +135,11 @@ describe('Init CLI Command - Edge Cases E2E Tests', () => {
       expect(fs.existsSync(path.join(worktreeBasePath, '.gitgov'))).toBe(true);
       expect(fs.existsSync(path.join(worktreeBasePath, '.gitgov', 'config.json'))).toBe(true);
 
+      // saasUrl written to config.json with default value
+      const configContent = JSON.parse(fs.readFileSync(path.join(worktreeBasePath, '.gitgov', 'config.json'), 'utf-8'));
+      expect(configContent.saasUrl).toBeDefined();
+      expect(configContent.saasUrl).toBe('https://app.gitgov.dev');
+
       // EARS-FPI14: policy.yml created with defaults during init
       const policyPath = path.join(worktreeBasePath, '.gitgov', 'policy.yml');
       expect(fs.existsSync(policyPath)).toBe(true);
