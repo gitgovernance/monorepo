@@ -118,22 +118,27 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
       // Store session token via SessionManager public API
       const sessionManager = await this.dependencyService.getSessionManager();
       await sessionManager.setCloudToken(token);
-      await sessionManager.setLastSession(`human:${user.login}`, new Date().toISOString());
 
-      console.log(`Logged in as ${user.login} (human:${user.login})`);
+      // Discover local actor — use its actorId for key sync, not github login
+      const localActor = await this.findLocalHumanActor();
+      const actorId = localActor?.actorId ?? `human:${user.login}`;
+
+      await sessionManager.setLastSession(actorId, new Date().toISOString());
+
+      console.log(`Logged in as ${user.login} (${actorId})`);
 
       // [LOGIN-B3] Skip key sync if --no-key-sync
       if (options.noKeySync) {
         this.handleSuccess(
-          { loggedIn: true, user: user.login, actorId: `human:${user.login}`, keySynced: false },
+          { loggedIn: true, user: user.login, actorId, keySynced: false },
           options,
           `Logged in (key sync skipped)`
         );
         return;
       }
 
-      // Key sync detection and execution
-      await this.syncKeys(`human:${user.login}`, saasUrl, token, options);
+      // Key sync: use local actorId for FsKeyProvider, GitHub identity for SaaS context
+      await this.syncKeys(actorId, saasUrl, token, options);
 
     } catch (error) {
       this.handleError(
@@ -376,6 +381,19 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
       // Git not available or no remote
     }
     throw new Error('Could not determine repository. Ensure you are in a git repository with a remote origin.');
+  }
+
+  private async findLocalHumanActor(): Promise<{ actorId: string; displayName: string } | null> {
+    try {
+      const identityAdapter = await this.dependencyService.getIdentityAdapter();
+      const currentActor = await identityAdapter.getCurrentActor();
+      if (currentActor && currentActor.type === 'human') {
+        return { actorId: currentActor.id, displayName: currentActor.displayName };
+      }
+    } catch {
+      // No actor found or adapter not available
+    }
+    return null;
   }
 
   private async hasLocalKey(actorId: string): Promise<boolean> {

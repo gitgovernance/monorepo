@@ -60,6 +60,7 @@ const mockSetPrivateKey = jest.fn();
 const mockHasPrivateKey = jest.fn();
 const mockGetPublicKey = jest.fn();
 const mockGetConfig = jest.fn();
+const mockGetCurrentActor = jest.fn();
 
 jest.mock('../../services/dependency-injection', () => ({
   DependencyInjectionService: {
@@ -76,6 +77,9 @@ jest.mock('../../services/dependency-injection', () => ({
         hasPrivateKey: mockHasPrivateKey,
         getPublicKey: mockGetPublicKey,
       } as unknown as IKeyProvider),
+      getIdentityAdapter: jest.fn().mockResolvedValue({
+        getCurrentActor: mockGetCurrentActor,
+      }),
       getConfigManager: jest.fn().mockResolvedValue({
         loadConfig: mockGetConfig,
         getSaasUrl: jest.fn().mockImplementation(async () => {
@@ -616,6 +620,35 @@ describe('LoginCommand v2', () => {
       expect(execSync).toHaveBeenCalledWith(
         'git fetch origin gitgov-state',
         expect.objectContaining({ stdio: 'pipe' }),
+      );
+    });
+
+    it('[LOGIN-J3] should use local actor actorId for key sync instead of github login', async () => {
+      const { execSync } = await import('child_process');
+      (execSync as jest.MockedFunction<typeof execSync>).mockImplementation((cmd: unknown) => {
+        if (typeof cmd === 'string' && cmd.includes('fetch')) return '';
+        return 'https://github.com/testorg/testrepo.git\n';
+      });
+
+      mockGetConfig.mockResolvedValue({ saasUrl: 'https://app.gitgov.dev' });
+      mockGetCurrentActor.mockResolvedValue({
+        id: 'human:camilo-acua-godoy',
+        type: 'human',
+        displayName: 'Camilo Acuña Godoy',
+      });
+      mockHasPrivateKey.mockResolvedValue(false);
+
+      const deps = createMockDeps({
+        fetchSaas: createTrpcFetch({ 'keyStatus': noKeyStatus }),
+      });
+
+      const cmd = new LoginCommand(deps);
+      await cmd.executeLogin(defaultOptions);
+
+      // Should use local actorId, not human:camilo (github login)
+      expect(mockSetLastSession).toHaveBeenCalledWith(
+        'human:camilo-acua-godoy',
+        expect.any(String),
       );
     });
 
