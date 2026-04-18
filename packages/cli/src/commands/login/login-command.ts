@@ -105,11 +105,12 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
 
       const saasUrl = await this.resolveSaasUrl(options);
 
-      console.log(`Opening browser for authentication at ${saasUrl}...`);
-
       // Start local callback server and open browser in parallel
       const callbackPromise = this.deps.startCallbackServer(CALLBACK_PORT);
-      const oauthUrl = `${saasUrl}/auth/cli?callback=http://localhost:${CALLBACK_PORT}/auth/callback`;
+      const webUrl = process.env['GITGOV_WEB_URL'] ?? saasUrl.replace(':3001', ':3000');
+      const oauthUrl = `${webUrl}/auth/cli?callback=http://localhost:${CALLBACK_PORT}/auth/callback`;
+
+      console.log(`Opening browser for authentication at ${oauthUrl}`);
       await this.deps.openBrowser(oauthUrl);
 
       // Wait for callback with token
