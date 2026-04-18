@@ -11,6 +11,7 @@ import * as path from 'path';
 
 import {
   runGitgovCli,
+  spawnGitgovCli,
   createTempGitRepo,
   cleanupWorktree,
   createProtocolPrisma,
@@ -39,7 +40,7 @@ afterAll(() => {
 
 describe('E2E Helpers', () => {
 
-  describe('4.1. CLI Helpers (HLP-A1 to HLP-A3)', () => {
+  describe('4.1. CLI Helpers (HLP-A1 to HLP-A4)', () => {
 
     it('[HLP-A1] should execute gitgov --version and return success', () => {
       const { tmpDir, repoDir } = createTempGitRepo();
@@ -73,6 +74,18 @@ describe('E2E Helpers', () => {
       cleanupWorktree(repoDir);
 
       expect(fs.existsSync(gitgovDir)).toBe(false);
+    });
+
+    it('[HLP-A4] should spawn gitgov CLI and resolve waitForOutput when output matches', async () => {
+      const { tmpDir, repoDir } = createTempGitRepo();
+      tempDirs.push(tmpDir);
+
+      const cli = spawnGitgovCli('--version', { cwd: repoDir });
+      const output = await cli.waitForOutput(/\d+\.\d+\.\d+/, 5000);
+      expect(output).toMatch(/\d+\.\d+\.\d+/);
+
+      const result = await cli.waitForExit(5000);
+      expect(result.exitCode).toBe(0);
     });
   });
 
