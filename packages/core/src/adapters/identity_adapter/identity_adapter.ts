@@ -16,8 +16,7 @@ import type { IIdentityAdapter, IdentityAdapterDependencies } from './identity_a
 
 import { createActorRecord } from '../../record_factories/actor_factory';
 import { validateFullActorRecord } from '../../record_validations/actor_validator';
-import { generateKeys, signPayload } from '../../crypto/signatures';
-import { createHash } from 'crypto';
+import { generateKeys, signPayload, buildSignatureDigest } from '../../crypto/signatures';
 import { calculatePayloadChecksum } from '../../crypto/checksum';
 import { generateActorId } from '../../utils/id_generator';
 import type { ISessionManager } from '../../session_manager';
@@ -172,11 +171,10 @@ export class IdentityAdapter implements IIdentityAdapter {
       throw new Error(`Actor not found: ${actorId}`);
     }
 
-    // [EARS-E1] Calculate payload checksum and build digest
+    // [EARS-E1] Calculate payload checksum and build digest via crypto primitive
     const payloadChecksum = calculatePayloadChecksum(record.payload);
     const timestamp = Math.floor(Date.now() / 1000);
-    const digest = `${payloadChecksum}:${actorId}:${role}:${notes}:${timestamp}`;
-    const digestHash = createHash('sha256').update(digest).digest();
+    const digestHash = buildSignatureDigest(payloadChecksum, actorId, role, notes, timestamp);
 
     // [EARS-E1] [IKS-B7] Delegate signing to keyProvider.sign() — NOT getPrivateKey() + signPayload()
     // [EARS-E2] [IKS-B6] sign() throws KeyProviderError('KEY_NOT_FOUND') if no key exists
@@ -445,13 +443,16 @@ export class IdentityAdapter implements IIdentityAdapter {
       payloadChecksum, revokedBy, 'author', notes
     );
 
-    // Create updated record with revocation signature appended
+    // Create updated record with revocation signature. The original creation
+    // signatures are preserved in git history (previous commit). The current
+    // file state has only the revocation signature, which verifies against
+    // the revoked payload's checksum.
     const updatedRecord: GitGovActorRecord = {
       ...existingRecord,
       header: {
         ...existingRecord.header,
         payloadChecksum,
-        signatures: [...existingRecord.header.signatures, revocationSignature],
+        signatures: [revocationSignature],
       },
       payload: revokedPayload
     };
@@ -490,8 +491,7 @@ export class IdentityAdapter implements IIdentityAdapter {
     notes: string,
   ): Promise<Signature> {
     const timestamp = Math.floor(Date.now() / 1000);
-    const digest = `${payloadChecksum}:${signerActorId}:${role}:${notes}:${timestamp}`;
-    const digestHash = createHash('sha256').update(digest).digest();
+    const digestHash = buildSignatureDigest(payloadChecksum, signerActorId, role, notes, timestamp);
     const signatureBytes = await this.keyProvider.sign(signerActorId, new Uint8Array(digestHash));
 
     return {

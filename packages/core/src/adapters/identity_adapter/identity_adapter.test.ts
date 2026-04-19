@@ -364,7 +364,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
   });
 
   describe('revokeActor', () => {
-    it('[EARS-D1] should revoke an existing actor', async () => {
+    it('[EARS-D1] should revoke an existing actor and sign the revocation', async () => {
       const existingRecord = { ...sampleRecord };
       mockActorStore.get.mockResolvedValue(existingRecord);
       mockActorStore.put.mockResolvedValue(undefined);
@@ -373,8 +373,37 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       const result = await identityAdapter.revokeActor('human:test-user', 'human:test-user');
 
       expect(mockActorStore.get).toHaveBeenCalledWith('human:test-user');
-      expect(mockActorStore.put).toHaveBeenCalled();
       expect(result.status).toBe('revoked');
+
+      // [IKS-SUC1] Verify revocation signature REPLACES original (§6.5)
+      const putCall = mockActorStore.put.mock.calls[0]!;
+      const storedRecord = putCall[1];
+      expect(storedRecord.header.signatures).toHaveLength(1);
+      const revocationSig = storedRecord.header.signatures[0]!;
+      expect(revocationSig.keyId).toBe('human:test-user');
+      expect(revocationSig.role).toBe('author');
+      expect(revocationSig.notes).toContain('Revoking');
+      expect(storedRecord.header.payloadChecksum).toBe('new-checksum');
+    });
+
+    it('[EARS-D1b] should sign revocation with the revokedBy actor keyId', async () => {
+      const existingRecord = { ...sampleRecord };
+      mockActorStore.get.mockResolvedValue(existingRecord);
+      mockActorStore.put.mockResolvedValue(undefined);
+      mockedCalculatePayloadChecksum.mockReturnValue('admin-revoke-checksum');
+
+      await identityAdapter.revokeActor('human:test-user', 'human:admin', 'compromised');
+
+      expect(mockKeyProvider.sign).toHaveBeenCalledWith(
+        'human:admin',
+        expect.any(Uint8Array)
+      );
+      const putCall = mockActorStore.put.mock.calls[0]!;
+      const storedRecord = putCall[1];
+      expect(storedRecord.header.signatures).toHaveLength(1);
+      const revocationSig = storedRecord.header.signatures[0]!;
+      expect(revocationSig.keyId).toBe('human:admin');
+      expect(revocationSig.notes).toContain('compromised');
     });
 
     it('[EARS-D2] should throw error when actor does not exist', async () => {
@@ -596,6 +625,71 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       expect(mockKeyProvider.setPrivateKey).toHaveBeenCalledWith(
         newActorId,
         newPrivateKey
+      );
+    });
+
+    it('[EARS-F1b] should sign new actor with OLD actorId as keyId (IKS-SUC2)', async () => {
+      const pubKey = 'NEW_PUBLIC_KEY_BASE64_44_CHARS_LONG_AAAAAAAAAAA=';
+      const privKey = 'new-private-key-base64';
+      const successorId = 'human:new-test-user-v2';
+
+      jest.spyOn(identityAdapter, 'getActor').mockResolvedValue(sampleActorPayload);
+      mockedGenerateKeys.mockResolvedValueOnce({ publicKey: pubKey, privateKey: privKey });
+      mockedGenerateActorId.mockReturnValueOnce(successorId);
+      mockedCreateActorRecord.mockReturnValueOnce({ ...sampleActorPayload, id: successorId, publicKey: pubKey });
+      mockedCalculatePayloadChecksum.mockReturnValueOnce('new-checksum');
+      mockedValidateFullActorRecord.mockResolvedValueOnce(undefined);
+      mockActorStore.put.mockResolvedValue(undefined);
+      mockActorStore.get
+        .mockResolvedValueOnce(sampleRecord)
+        .mockResolvedValueOnce(sampleRecord);
+
+      await identityAdapter.rotateActorKey('human:test-user');
+
+      // [IKS-SUC2] Verify keyProvider.sign was called with OLD actorId for the new actor signature
+      expect(mockKeyProvider.sign).toHaveBeenCalledWith(
+        'human:test-user',
+        expect.any(Uint8Array)
+      );
+
+      // Verify new actor record was stored with signature using old actorId as keyId
+      const firstPutCall = mockActorStore.put.mock.calls[0]!;
+      const newActorRecord = firstPutCall[1];
+      expect(newActorRecord.header.signatures[0].keyId).toBe('human:test-user');
+      expect(newActorRecord.header.signatures[0].notes).toContain('successor of human:test-user');
+    });
+
+    it('[EARS-F1b] should accept external keys instead of generating (IKS-SUC3)', async () => {
+      const externalPublicKey = 'external-pub-key-base64-xxxxxxxxxxxxxxx=';
+      const externalPrivateKey = 'external-priv-key-base64-xxxxxxxxxxxxxx=';
+      const baseId = 'human:new-test-user';
+      const successorId = 'human:new-test-user-v2';
+
+      jest.spyOn(identityAdapter, 'getActor').mockResolvedValue(sampleActorPayload);
+      mockedGenerateActorId.mockReturnValueOnce(baseId);
+      mockedCreateActorRecord.mockReturnValueOnce({ ...sampleActorPayload, id: successorId, publicKey: externalPublicKey });
+      mockedCalculatePayloadChecksum.mockReturnValueOnce('ext-checksum');
+      mockedValidateFullActorRecord.mockResolvedValueOnce(undefined);
+      mockActorStore.put.mockResolvedValue(undefined);
+      mockActorStore.get
+        .mockResolvedValueOnce(sampleRecord)
+        .mockResolvedValueOnce(sampleRecord);
+
+      const result = await identityAdapter.rotateActorKey('human:test-user', {
+        newPublicKey: externalPublicKey,
+        newPrivateKey: externalPrivateKey,
+      });
+
+      // [IKS-SUC3] Verify generateKeys was NOT called (external keys used)
+      expect(mockedGenerateKeys).not.toHaveBeenCalled();
+
+      // Verify new actor uses the provided external key
+      expect(result.newActor.publicKey).toBe(externalPublicKey);
+
+      // Verify the external private key was persisted
+      expect(mockKeyProvider.setPrivateKey).toHaveBeenCalledWith(
+        successorId,
+        externalPrivateKey,
       );
     });
 

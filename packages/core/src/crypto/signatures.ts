@@ -133,7 +133,28 @@ export function deriveHkdfKey(
 }
 
 /**
- * Creates a signature for a given payload.
+ * Builds the SHA-256 digest hash that Ed25519 signatures are computed over.
+ *
+ * The digest string follows the protocol format:
+ *   "{payloadChecksum}:{keyId}:{role}:{notes}:{timestamp}"
+ *
+ * This is a stateless protocol primitive — callers sign the returned hash
+ * using their own signing mechanism (raw key via signPayload, or KeyProvider
+ * via adapter methods).
+ */
+export function buildSignatureDigest(
+  payloadChecksum: string,
+  keyId: string,
+  role: string,
+  notes: string,
+  timestamp: number,
+): Buffer {
+  const digest = `${payloadChecksum}:${keyId}:${role}:${notes}:${timestamp}`;
+  return createHash('sha256').update(digest).digest();
+}
+
+/**
+ * Creates a signature for a given payload using a raw private key.
  */
 export function signPayload(
   payload: GitGovRecordPayload,
@@ -144,10 +165,7 @@ export function signPayload(
 ): Signature {
   const payloadChecksum = calculatePayloadChecksum(payload);
   const timestamp = Math.floor(Date.now() / 1000);
-  const digest = `${payloadChecksum}:${keyId}:${role}:${notes}:${timestamp}`;
-
-  // Per the blueprint, sign the SHA-256 hash of the digest
-  const digestHash = createHash('sha256').update(digest).digest();
+  const digestHash = buildSignatureDigest(payloadChecksum, keyId, role, notes, timestamp);
 
   const signature = sign(null, digestHash, {
     key: Buffer.from(privateKey, 'base64'),
