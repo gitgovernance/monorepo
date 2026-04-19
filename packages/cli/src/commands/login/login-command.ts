@@ -53,12 +53,12 @@ function createDefaultDeps(): LoginDeps {
 
             if (token && login && id) {
               clearTimeout(timeoutHandle);
-              res.writeHead(200, { 'Content-Type': 'text/html' });
+              res.writeHead(200, { 'Content-Type': 'text/html', 'Connection': 'close' });
               res.end('<html><body><h1>Login successful!</h1><p>You can close this window.</p></body></html>');
               server.close();
               resolve({ token, user: { login, id: Number(id) } });
             } else {
-              res.writeHead(400, { 'Content-Type': 'text/plain' });
+              res.writeHead(400, { 'Content-Type': 'text/plain', 'Connection': 'close' });
               res.end('Missing token, login, or id');
             }
           });
