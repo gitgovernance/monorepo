@@ -941,7 +941,13 @@ export class DependencyInjectionService {
     }
 
     try {
-      // If projectRoot is not set yet, compute worktree path from repo root
+      // [IKS-WTP2] Initialize stores first to ensure worktree is bootstrapped.
+      try {
+        await this.initializeStores();
+      } catch {
+        // Fall through to projectRoot computation below.
+      }
+
       if (!this.projectRoot) {
         const root = findProjectRoot();
         if (!root) {
@@ -978,6 +984,18 @@ export class DependencyInjectionService {
     }
 
     try {
+      // [IKS-WTP2] Initialize stores first to ensure worktree is bootstrapped.
+      // This is critical for cloud-first flow where login runs before init —
+      // the worktree must exist with git content (actors, config) before
+      // session/keys are written, otherwise subsequent CLI commands can't
+      // find the actor records.
+      try {
+        await this.initializeStores();
+      } catch {
+        // Stores may fail (e.g., no gitgov-state branch yet).
+        // Fall through to projectRoot computation below.
+      }
+
       if (!this.projectRoot) {
         const root = findProjectRoot();
         if (!root) {
