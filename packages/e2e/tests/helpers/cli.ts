@@ -111,6 +111,10 @@ export function spawnGitgovCli(args: string, options: { cwd: string; timeout?: n
     },
     waitForExit(timeoutMs = 30000) {
       return new Promise((resolve) => {
+        if (child.exitCode !== null) {
+          resolve({ stdout: out, stderr: err, exitCode: child.exitCode });
+          return;
+        }
         const timer = setTimeout(() => {
           child.kill();
           resolve({ stdout: out, stderr: err, exitCode: null });

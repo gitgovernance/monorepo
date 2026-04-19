@@ -22,9 +22,10 @@ jest.mock('fs', () => ({
   realpathSync: jest.fn((p: string) => p),
 }));
 
-import { existsSync } from 'fs';
+import { existsSync, realpathSync } from 'fs';
 
 const mockedExistsSync = existsSync as jest.MockedFunction<typeof existsSync>;
+const mockedRealpathSync = realpathSync as jest.MockedFunction<typeof realpathSync>;
 
 describe('Project Discovery', () => {
   beforeEach(() => {
@@ -106,6 +107,21 @@ describe('Project Discovery', () => {
       const result2 = getWorktreeBasePath('/test/project-b');
 
       expect(result1).not.toBe(result2);
+    });
+
+    it('[EARS-B4] WHEN getWorktreeBasePath is called with a symlinked path and its resolved path, THE SYSTEM SHALL return the same hash', () => {
+      mockedRealpathSync.mockImplementation((p) => {
+        const s = typeof p === 'string' ? p : p.toString();
+        if (s.startsWith('/tmp/')) return s.replace('/tmp/', '/private/tmp/') as never;
+        return s as never;
+      });
+
+      const viaSymlink = getWorktreeBasePath('/tmp/my-project');
+      const viaReal = getWorktreeBasePath('/private/tmp/my-project');
+
+      expect(viaSymlink).toBe(viaReal);
+
+      mockedRealpathSync.mockImplementation((p) => (typeof p === 'string' ? p : p.toString()) as never);
     });
   });
 

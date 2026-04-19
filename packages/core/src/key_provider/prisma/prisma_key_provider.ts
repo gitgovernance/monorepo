@@ -281,6 +281,12 @@ export class PrismaKeyProvider implements KeyProvider {
     // [PKP-G2] Transactional: archive old active + create new active
     try {
       await this.prisma.$transaction(async (tx) => {
+        // [PKP-G2] Remove old archived rows to avoid unique constraint violation
+        // on (actorId, orgId, status) when archiving the current active row
+        await tx.actorKey.deleteMany({
+          where: { actorId, orgId: this.orgId, status: STATUS_ARCHIVED },
+        });
+
         // [PKP-G2] Archive any existing active row for this actor+org
         await tx.actorKey.updateMany({
           where: { actorId, orgId: this.orgId, status: STATUS_ACTIVE },
@@ -335,29 +341,31 @@ export class PrismaKeyProvider implements KeyProvider {
    * [PKP-F2] Lazy-loads the org key on first call and caches it in-instance.
    * Subsequent calls return the cached buffer without touching the DB.
    *
-   * Flow: fetch OrgEncryptionKey row by orgId → HKDF-derive wrapping key
-   * from MASTER_KEY → AES-GCM decrypt encryptedOrgKey → cache result.
-   *
-   * Throws `STORE_FAILED` if no OrgEncryptionKey row exists for this org
-   * (hint: call `createOrgEncryptionKey(prisma, orgId)` first).
+   * Flow: fetch OrgEncryptionKey row by orgId → if missing, auto-create
+   * via createOrgEncryptionKey → HKDF-derive wrapping key from MASTER_KEY
+   * → AES-GCM decrypt encryptedOrgKey → cache result.
    */
   private async getOrgKey(): Promise<Buffer> {
     if (this.orgKeyCache !== null) {
       return this.orgKeyCache;
     }
 
-    const row = await this.prisma.orgEncryptionKey.findUnique({
+    let row = await this.prisma.orgEncryptionKey.findUnique({
       where: { orgId: this.orgId },
     });
     if (!row) {
-      throw new KeyProviderError(
-        `No OrgEncryptionKey for org ${this.orgId}`,
-        'STORE_FAILED',
-        {
-          orgId: this.orgId,
-          hint: 'Call createOrgEncryptionKey(prisma, orgId) when the Organization is created',
-        },
-      );
+      // [PKP-F1] Auto-create on first use — lazy initialization
+      await createOrgEncryptionKey(this.prisma as OrgEncryptionKeyClient, this.orgId);
+      row = await this.prisma.orgEncryptionKey.findUnique({
+        where: { orgId: this.orgId },
+      });
+      if (!row) {
+        throw new KeyProviderError(
+          `Failed to auto-create OrgEncryptionKey for org ${this.orgId}`,
+          'STORE_FAILED',
+          { orgId: this.orgId },
+        );
+      }
     }
 
     const masterKeyBase64 = process.env['MASTER_KEY'];

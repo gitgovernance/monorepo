@@ -101,9 +101,9 @@ const mockProcessExit = jest.spyOn(process, 'exit').mockImplementation(() => und
 
 // ─── tRPC mock helpers ────────────────────────────────────────────────────
 
-/** Wrap a response in tRPC envelope */
+/** Wrap a response in tRPC v11 envelope (no superjson) */
 function trpcWrap<T>(data: T): TrpcResponse<T> {
-  return { result: { data: { json: data } } };
+  return { result: { data } };
 }
 
 /** Default keyStatus response (no key) */
@@ -595,6 +595,97 @@ describe('LoginCommand v2', () => {
     });
 
     it.todo('[LOGIN-H2] should timeout after 5 minutes with error message (requires timer mock — deferred to E2E)');
+  });
+
+  // ============================================================================
+  // §4.10. Repo Not Connected (LOGIN-K1, Task 5.11)
+  // ============================================================================
+  describe('4.10. Repo Not Connected (LOGIN-K1)', () => {
+    it('[LOGIN-K1] should show actionable error when repo is not connected to SaaS', async () => {
+      mockHasPrivateKey.mockResolvedValue(true);
+
+      const deps = createMockDeps({
+        fetchSaas: jest.fn().mockImplementation(async (url: string) => {
+          if (url.includes('identity.keyStatus')) {
+            return { ok: false, status: 404, text: async () => 'Not found' };
+          }
+          return { ok: false, json: async () => ({}) };
+        }),
+      });
+
+      const cmd = new LoginCommand(deps);
+      await cmd.executeLogin(defaultOptions);
+
+      expect(mockConsoleError).toHaveBeenCalledWith(
+        'This repository is not connected to GitGovernance.'
+      );
+      expect(mockConsoleError).toHaveBeenCalledWith(
+        expect.stringContaining('Connect it at:')
+      );
+      expect(mockProcessExit).toHaveBeenCalledWith(1);
+    });
+  });
+
+  // ============================================================================
+  // §4.11. Post-Sync State Push (LOGIN-L1 to L2)
+  // ============================================================================
+  describe('4.11. Post-Sync State Push (LOGIN-L1 to L2)', () => {
+    it('[LOGIN-L1] should push gitgov-state to remote after key sync succeeds', async () => {
+      const { execSync } = await import('child_process');
+      const mockExecSync = execSync as jest.MockedFunction<typeof execSync>;
+      mockExecSync.mockReturnValue('https://github.com/testorg/testrepo.git\n');
+
+      mockHasPrivateKey.mockResolvedValue(true);
+      mockGetPrivateKey.mockResolvedValue('base64-priv-key');
+      mockGetPublicKey.mockResolvedValue('base64-pub-key');
+
+      const syncResponse = { success: true, actorId: 'human:camilo', mode: 'full' as const };
+      const deps = createMockDeps({
+        fetchSaas: jest.fn().mockImplementation(async (url: string) => {
+          if (url.includes('identity.keyStatus')) return { ok: true, json: async () => trpcWrap(noKeyStatus) };
+          if (url.includes('identity.syncKey')) return { ok: true, json: async () => trpcWrap(syncResponse) };
+          return { ok: false, json: async () => ({}) };
+        }),
+      });
+
+      const cmd = new LoginCommand(deps);
+      await cmd.executeLogin(defaultOptions);
+
+      const pushCalls = mockExecSync.mock.calls.filter(
+        (call) => typeof call[0] === 'string' && call[0].includes('git push origin gitgov-state')
+      );
+      expect(pushCalls.length).toBe(1);
+    });
+
+    it('[LOGIN-L2] should skip push silently when gitgov-state branch does not exist locally', async () => {
+      const { execSync } = await import('child_process');
+      const mockExecSync = execSync as jest.MockedFunction<typeof execSync>;
+      mockExecSync.mockImplementation((cmd: string) => {
+        if (typeof cmd === 'string' && cmd.includes('git push origin gitgov-state')) {
+          throw new Error('error: src refspec gitgov-state does not match any');
+        }
+        return 'https://github.com/testorg/testrepo.git\n';
+      });
+
+      mockHasPrivateKey.mockResolvedValue(true);
+      mockGetPrivateKey.mockResolvedValue('base64-priv-key');
+      mockGetPublicKey.mockResolvedValue('base64-pub-key');
+
+      const syncResponse = { success: true, actorId: 'human:camilo', mode: 'full' as const };
+      const deps = createMockDeps({
+        fetchSaas: jest.fn().mockImplementation(async (url: string) => {
+          if (url.includes('identity.keyStatus')) return { ok: true, json: async () => trpcWrap(noKeyStatus) };
+          if (url.includes('identity.syncKey')) return { ok: true, json: async () => trpcWrap(syncResponse) };
+          return { ok: false, json: async () => ({}) };
+        }),
+      });
+
+      const cmd = new LoginCommand(deps);
+      await cmd.executeLogin(defaultOptions);
+
+      // Login should still succeed despite push failure
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('Logged in as'));
+    });
   });
 
   // ============================================================================

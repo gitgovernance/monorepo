@@ -662,6 +662,11 @@ jest.doMock('@gitgov/core/fs', () => ({
   DEFAULT_ID_ENCODER: { encode: (id: string) => id, decode: (encoded: string) => encoded },
   findProjectRoot: jest.fn().mockReturnValue('/tmp/test-gitgov'),
   findGitgovRoot: jest.fn().mockReturnValue('/tmp/test-gitgov'),
+  getWorktreeBasePath: jest.fn((repoRoot: string) => {
+    const { createHash } = require('crypto');
+    const hash = createHash('sha256').update(repoRoot).digest('hex').slice(0, 12);
+    return require('path').join(require('os').homedir(), '.gitgov', 'worktrees', hash);
+  }),
   createSessionManager: jest.fn().mockReturnValue({
     loadSession: jest.fn().mockResolvedValue(null),
     saveSession: jest.fn().mockResolvedValue(undefined),
@@ -678,8 +683,8 @@ const { Git, Adapters, KeyProvider, EventBus, RecordProjection, RecordMetrics, A
 describe('DependencyInjectionService', () => {
   let diService: DependencyInjectionService;
   const mockRepoRoot = '/tmp/test-gitgov';
-  // Worktree base path is computed from repoRoot via sha256 hash
-  const mockWorktreeBasePath = DependencyInjectionService.getWorktreeBasePath(mockRepoRoot);
+  // Worktree base path is computed from repoRoot via core's getWorktreeBasePath
+  const mockWorktreeBasePath = corefs.getWorktreeBasePath(mockRepoRoot);
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -763,9 +768,9 @@ describe('DependencyInjectionService', () => {
   });
 
   // ============================================================================
-  // §4.3. Adapter Factories (EARS-C1 to C11)
+  // §4.3. Adapter Factories (EARS-C1 to C12)
   // ============================================================================
-  describe('4.3. Adapter Factories (EARS-C1 to C11)', () => {
+  describe('4.3. Adapter Factories (EARS-C1 to C12)', () => {
     it('[EARS-C1] should create RecordProjector with all dependencies', async () => {
       const projector = await diService.getRecordProjector();
       expect(projector).toBeDefined();
@@ -889,6 +894,15 @@ describe('DependencyInjectionService', () => {
       const callArgs = createAgentRunner.mock.calls[0][0];
       expect(callArgs.projectRoot).toBe(mockRepoRoot);
       expect(callArgs.gitgovPath).toContain('.gitgov');
+    });
+
+    it('[EARS-C13] should make keyProvider accessible via getKeyProvider after getIdentityAdapter', async () => {
+      await diService.getIdentityAdapter();
+
+      const keyProvider = diService.getKeyProvider();
+      expect(keyProvider).toBeDefined();
+      expect(keyProvider.hasPrivateKey).toBeDefined();
+      expect(keyProvider.sign).toBeDefined();
     });
   });
 

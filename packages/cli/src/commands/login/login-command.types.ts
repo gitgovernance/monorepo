@@ -54,12 +54,10 @@ export type GetKeyResponse = {
   privateKeyEnvelope: EcdhEnvelope;
 };
 
-/** Wrapper for tRPC response envelope */
+/** Wrapper for tRPC v11 response envelope (no superjson) */
 export type TrpcResponse<T> = {
   result: {
-    data: {
-      json: T;
-    };
+    data: T;
   };
 };
 

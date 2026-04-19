@@ -692,4 +692,23 @@ describe('InitCommand', () => {
       expect(mockProjectAdapter.initializeProject).toHaveBeenCalled();
     });
   });
+
+  // ============================================================================
+  // §4.7. Post-Init State Commit (EARS-G1)
+  // ============================================================================
+  describe('4.7. Post-Init State Commit (EARS-G1)', () => {
+    it('[EARS-G1] should commit initialized files to gitgov-state worktree', async () => {
+      await initCommand.execute({ name: 'G1 Test', actorName: 'Test User' });
+
+      const mockExecSync = execSync as jest.MockedFunction<typeof execSync>;
+      const addCalls = mockExecSync.mock.calls.filter(
+        (call) => typeof call[0] === 'string' && call[0].includes('git add') && call[0].includes('config.json')
+      );
+      const commitCalls = mockExecSync.mock.calls.filter(
+        (call) => typeof call[0] === 'string' && call[0].includes('git commit') && call[0].includes('initial project structure')
+      );
+      expect(addCalls.length).toBeGreaterThanOrEqual(1);
+      expect(commitCalls.length).toBeGreaterThanOrEqual(1);
+    });
+  });
 });

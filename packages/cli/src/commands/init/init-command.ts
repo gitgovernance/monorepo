@@ -4,7 +4,7 @@ import { DependencyInjectionService } from '../../services/dependency-injection'
 import * as pathUtils from 'path';
 import * as os from 'os';
 import { createHash } from 'crypto';
-import { existsSync, promises as fsPromises } from 'fs';
+import { existsSync, realpathSync, promises as fsPromises } from 'fs';
 
 /**
  * Init Command Options interface
@@ -107,6 +107,9 @@ export class InitCommand {
       // 6. Format success output with visual impact
       this.showSuccessOutput(result, options);
 
+      // [EARS-G1] Commit initialized files to gitgov-state branch
+      await this.commitStateToWorktree();
+
     } catch (error) {
       // 7. Format errors for user-friendly display
       this.handleError(error, options);
@@ -159,6 +162,45 @@ export class InitCommand {
 
     this.container.setInitMode(projectRoot);
     return this.container.getProjectAdapter();
+  }
+
+  /**
+   * [EARS-G1] Commit initialized files to gitgov-state branch in the worktree.
+   * Then best-effort push to remote if available.
+   */
+  private async commitStateToWorktree(): Promise<void> {
+    try {
+      const { execSync } = await import('child_process');
+      const repoRoot = process.cwd();
+      const resolvedRoot = realpathSync(repoRoot);
+      const hash = createHash('sha256').update(resolvedRoot).digest('hex').slice(0, 12);
+      const worktreePath = pathUtils.join(os.homedir(), '.gitgov', 'worktrees', hash);
+
+      // Commit protocol files (exclude .session.json, keys/)
+      execSync('git add .gitgov/config.json .gitgov/policy.yml .gitgov/actors .gitgov/cycles', {
+        cwd: worktreePath,
+        stdio: 'pipe',
+      });
+      execSync('git commit -m "gitgov: initial project structure"', {
+        cwd: worktreePath,
+        stdio: 'pipe',
+      });
+
+      // Best-effort push to remote
+      try {
+        execSync('git push origin gitgov-state', {
+          cwd: repoRoot,
+          stdio: 'pipe',
+          timeout: 10000,
+          env: { ...process.env, GIT_SSH_COMMAND: 'ssh -o ConnectTimeout=5 -o BatchMode=yes' },
+        });
+      } catch {
+        console.log('\n⚠️  Could not push to remote.');
+        console.log('   Run \'gitgov sync push\' when your remote is ready.\n');
+      }
+    } catch {
+      // Non-fatal — files stay in worktree, user can sync push later
+    }
   }
 
   /**

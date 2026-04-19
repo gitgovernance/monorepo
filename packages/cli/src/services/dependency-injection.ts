@@ -1,8 +1,7 @@
 import * as path from 'path';
 import * as os from 'os';
-import { createHash } from 'crypto';
 import { Adapters, Config, Session, EventBus, Lint, Git, SourceAuditor, FindingDetector, Runner, KeyProvider, RecordProjection, RecordMetrics, AuditOrchestrator, PolicyEvaluator } from '@gitgov/core';
-import { FsRecordStore, DEFAULT_ID_ENCODER, FsFileLister, FsProjectInitializer, FsLintModule, FsWorktreeSyncStateModule, GitModule, createAgentRunner, createConfigManager, findProjectRoot, createSessionManager, FsRecordProjection } from '@gitgov/core/fs';
+import { FsRecordStore, DEFAULT_ID_ENCODER, FsFileLister, FsProjectInitializer, FsLintModule, FsWorktreeSyncStateModule, GitModule, createAgentRunner, createConfigManager, findProjectRoot, createSessionManager, FsRecordProjection, getWorktreeBasePath } from '@gitgov/core/fs';
 import type { IFsLintModule } from '@gitgov/core/fs';
 import type {
   GitGovTaskRecord, GitGovCycleRecord, GitGovFeedbackRecord, GitGovExecutionRecord, GitGovActorRecord, GitGovAgentRecord,
@@ -66,12 +65,6 @@ export class DependencyInjectionService {
     return DependencyInjectionService.instance;
   }
 
-  /** Compute worktree base path from repo root */
-  static getWorktreeBasePath(repoRoot: string): string {
-    const hash = createHash('sha256').update(repoRoot).digest('hex').slice(0, 12);
-    return path.join(os.homedir(), '.gitgov', 'worktrees', hash);
-  }
-
   /**
    * Configure DI for init mode — sets projectRoot to worktree path,
    * bypassing .gitgov discovery and bootstrap.
@@ -79,7 +72,7 @@ export class DependencyInjectionService {
    */
   setInitMode(projectRoot: string): void {
     this.repoRoot = projectRoot;
-    this.projectRoot = DependencyInjectionService.getWorktreeBasePath(projectRoot);
+    this.projectRoot = getWorktreeBasePath(projectRoot);
     this.initModeEnabled = true;
   }
 
@@ -109,7 +102,7 @@ export class DependencyInjectionService {
 
       const gitModule = await this.getGitModule();
       const repoRoot = await gitModule.getRepoRoot();
-      const worktreeBasePath = DependencyInjectionService.getWorktreeBasePath(repoRoot);
+      const worktreeBasePath = getWorktreeBasePath(repoRoot);
       const gitgovPath = path.join(worktreeBasePath, '.gitgov');
 
       // [CLIINT-A1] Check if worktree .gitgov/ exists
@@ -356,14 +349,14 @@ export class DependencyInjectionService {
       const eventBus = new EventBus.EventBus();
 
       // Create KeyProvider for filesystem-based key storage
-      const keyProvider = new KeyProvider.FsKeyProvider({
+      this.keyProvider = new KeyProvider.FsKeyProvider({
         keysDir: path.join(this.projectRoot!, '.gitgov', 'keys')
       });
 
       // Create IdentityAdapter with dependencies
       return new Adapters.IdentityAdapter({
         stores: { actors: this.stores.actors },
-        keyProvider,
+        keyProvider: this.keyProvider,
         sessionManager: await this.getSessionManager(),
         eventBus,
       });
@@ -955,7 +948,7 @@ export class DependencyInjectionService {
           throw new Error("Could not find project root");
         }
         this.repoRoot = root;
-        this.projectRoot = DependencyInjectionService.getWorktreeBasePath(root);
+        this.projectRoot = getWorktreeBasePath(root);
       }
 
       // Create ConfigManager instance using factory function
@@ -991,7 +984,7 @@ export class DependencyInjectionService {
           throw new Error("Could not find project root");
         }
         this.repoRoot = root;
-        this.projectRoot = DependencyInjectionService.getWorktreeBasePath(root);
+        this.projectRoot = getWorktreeBasePath(root);
       }
 
       this.sessionManager = createSessionManager(this.projectRoot);
@@ -1046,7 +1039,7 @@ export class DependencyInjectionService {
           return false;
         }
         this.repoRoot = root;
-        this.projectRoot = DependencyInjectionService.getWorktreeBasePath(root);
+        this.projectRoot = getWorktreeBasePath(root);
       }
 
       // [CLIINT-A3] Check if worktree .gitgov directory exists

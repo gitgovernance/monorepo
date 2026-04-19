@@ -76,6 +76,9 @@ export type ActorKeyDelegate = {
     where: { actorId: string; orgId: string; status: string };
     data: { status?: string; lastUsedAt?: Date };
   }): Promise<{ count: number }>;
+  deleteMany(args: {
+    where: { actorId: string; orgId: string; status: string };
+  }): Promise<{ count: number }>;
   update(args: {
     where: { id: string };
     data: {
