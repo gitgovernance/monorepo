@@ -61,6 +61,7 @@ Commands:
   sync                   State synchronization (push/pull/resolve/audit)
   hook                   Process Claude Code hook events (passive governance)
   login [options]        Authenticate to GitGovernance (OAuth)
+                         Flags: --force-local (skip cloud sync), --force-cloud (force cloud sync)
   context [options]      Query working context for agents and automation
   push [options]         Alias for "gitgov sync push"
   pull [options]         Alias for "gitgov sync pull"
