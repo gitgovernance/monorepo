@@ -303,20 +303,30 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
 
       // [LOGIN-D2 / LOGIN-F1..F4] Keys differ → conflict resolution
       if (localPublicKey && saasPublicKey && localPublicKey !== saasPublicKey) {
-        // [LOGIN-F1] --force-local: upload local key, archive SaaS key
+        // [LOGIN-F1] --force-local: upload local key → triggers succession on SaaS
         if (options.forceLocal) {
-          await this.uploadKeyToSaas(actorId, saasUrl, token, repo, keyStatus.ecdhPublicKey);
-          console.log('Previous cloud key archived. Local key is now canonical.');
-          // [LOGIN-F4] Post-sync verification
-          const postStatus = await this.getKeyStatus(saasUrl, token, repo);
-          const newLocalPub = await keyProvider.getPublicKey(actorId);
-          if (postStatus.publicKey === newLocalPub) {
+          const syncResult = await this.uploadKeyToSaas(actorId, saasUrl, token, repo, keyStatus.ecdhPublicKey);
+
+          // [IKS-SUC8] Handle succession response — SaaS created a new versioned actor
+          if (syncResult.rotated && syncResult.newActorId) {
+            const sessionManager = await this.dependencyService.getSessionManager();
+            await sessionManager.setLastSession(syncResult.newActorId, new Date().toISOString());
+            console.log(`Identity updated: ${actorId} → ${syncResult.newActorId}`);
             this.handleSuccess(
-              { loggedIn: true, user: actorId, keySynced: true },
+              { loggedIn: true, user: syncResult.newActorId, keySynced: true, rotated: true, oldActorId: actorId },
               options,
-              `Logged in as ${actorId}\nKey conflict resolved (local key uploaded)`
+              `Logged in as ${syncResult.newActorId}\nKey conflict resolved via succession (local key uploaded)`
             );
+            return;
           }
+
+          // Non-succession upload (legacy path or no ActorRecord in projection)
+          console.log('Previous cloud key archived. Local key is now canonical.');
+          this.handleSuccess(
+            { loggedIn: true, user: actorId, keySynced: true },
+            options,
+            `Logged in as ${actorId}\nKey conflict resolved (local key uploaded)`
+          );
           return;
         }
 

@@ -45,6 +45,9 @@ export type SyncKeyResponse = {
   success: boolean;
   actorId: string;
   mode: 'full' | 'verify-only';
+  rotated?: boolean;
+  newActorId?: string;
+  oldActorId?: string;
 };
 
 /** Response from identity.getKey tRPC query */

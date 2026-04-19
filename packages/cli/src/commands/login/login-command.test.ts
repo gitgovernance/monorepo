@@ -454,20 +454,16 @@ describe('LoginCommand v2', () => {
       expect(mockProcessExit).toHaveBeenCalledWith(1);
     });
 
-    it('[LOGIN-F4] should verify keyStatus matches after --force-local resolve', async () => {
+    it('[LOGIN-F4] should succeed on --force-local without post-sync re-verification', async () => {
       mockHasPrivateKey.mockResolvedValue(true);
       mockGetPrivateKey.mockResolvedValue('local-priv');
       mockGetPublicKey.mockResolvedValue('local-pub-key');
 
-      let callCount = 0;
       const syncResponse: SyncKeyResponse = { success: true, actorId: 'human:camilo', mode: 'full' };
       const deps = createMockDeps({
         fetchSaas: jest.fn().mockImplementation(async (url: string) => {
           if (url.includes('identity.keyStatus')) {
-            callCount++;
-            // First call: different key. Second call (post-verify): local key uploaded
-            const pub = callCount === 1 ? 'different-saas-key' : 'local-pub-key';
-            return { ok: true, json: async () => trpcWrap(keyStatusWith(pub)) };
+            return { ok: true, json: async () => trpcWrap(keyStatusWith('different-saas-key')) };
           }
           if (url.includes('identity.syncKey')) return { ok: true, json: async () => trpcWrap(syncResponse) };
           return { ok: false, json: async () => ({}) };
@@ -477,11 +473,56 @@ describe('LoginCommand v2', () => {
       const cmd = new LoginCommand(deps);
       await cmd.executeLogin({ ...defaultOptions, forceLocal: true });
 
-      // keyStatus called twice: initial check + post-sync verification
+      // syncKey response is trusted — no second keyStatus call needed
       const keyStatusCalls = (deps.fetchSaas as jest.Mock).mock.calls.filter(
         (c: [string]) => c[0].includes('identity.keyStatus')
       );
-      expect(keyStatusCalls.length).toBeGreaterThanOrEqual(2);
+      expect(keyStatusCalls).toHaveLength(1);
+    });
+  });
+
+  // ==================== §4.13 Key Succession Response (LOGIN-N1) ====================
+
+  describe('4.13. Key Succession Response (LOGIN-N1)', () => {
+    it('[LOGIN-N1] should update session to newActorId on succession response', async () => {
+      mockHasPrivateKey.mockResolvedValue(true);
+      mockGetPrivateKey.mockResolvedValue('local-private-key');
+      mockGetPublicKey.mockResolvedValue('local-public-key');
+
+      const successionResponse: SyncKeyResponse = {
+        success: true,
+        actorId: 'human:camilo-v2',
+        mode: 'full',
+        rotated: true,
+        newActorId: 'human:camilo-v2',
+        oldActorId: 'human:camilo',
+      };
+
+      const deps = createMockDeps({
+        fetchSaas: jest.fn().mockImplementation(async (url: string) => {
+          if (url.includes('identity.keyStatus')) {
+            return { ok: true, json: async () => trpcWrap(keyStatusWith('different-saas-key')) };
+          }
+          if (url.includes('identity.syncKey')) {
+            return { ok: true, json: async () => trpcWrap(successionResponse) };
+          }
+          return { ok: false, json: async () => ({}) };
+        }),
+      });
+
+      const cmd = new LoginCommand(deps);
+      await cmd.executeLogin({ ...defaultOptions, forceLocal: true });
+
+      // Session should be updated to the NEW actorId
+      expect(mockSetLastSession).toHaveBeenCalledWith(
+        'human:camilo-v2',
+        expect.any(String),
+      );
+
+      // Output should mention the identity change
+      const output = mockConsoleLog.mock.calls.map(c => c[0]).join('\n');
+      expect(output).toContain('human:camilo-v2');
+      expect(output).toContain('succession');
     });
   });
 
