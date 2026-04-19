@@ -19,7 +19,7 @@ export interface IIdentityAdapter {
   createActor(payload: ActorPayload, signerId: string): Promise<ActorRecord>;
   getActor(actorId: string): Promise<ActorRecord | null>;
   listActors(): Promise<ActorRecord[]>;
-  revokeActor(actorId: string, revokedBy?: string, reason?: "compromised" | "rotation" | "manual", supersededBy?: string): Promise<ActorRecord>;
+  revokeActor(actorId: string, revokedBy: string, reason?: "compromised" | "rotation" | "manual", supersededBy?: string): Promise<ActorRecord>;
 
   // Succession Chain Resolution
   resolveCurrentActorId(originalActorId: string): Promise<string>;
@@ -28,7 +28,7 @@ export interface IIdentityAdapter {
 
   // Advanced Operations
   signRecord<T extends GitGovRecord>(record: T, actorId: string, role: string, notes: string): Promise<T>;
-  rotateActorKey(actorId: string): Promise<{ oldActor: ActorRecord; newActor: ActorRecord }>;
+  rotateActorKey(actorId: string, options?: { newPublicKey?: string; newPrivateKey?: string }): Promise<{ oldActor: ActorRecord; newActor: ActorRecord }>;
   authenticate(sessionToken: string): Promise<void>;
   getActorPublicKey(keyId: string): Promise<string | null>;
 }

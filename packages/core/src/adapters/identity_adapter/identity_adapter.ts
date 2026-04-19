@@ -290,7 +290,8 @@ export class IdentityAdapter implements IIdentityAdapter {
   }
 
   async rotateActorKey(
-    actorId: string
+    actorId: string,
+    options?: { newPublicKey?: string; newPrivateKey?: string }
   ): Promise<{ oldActor: ActorRecord; newActor: ActorRecord }> {
     // Read existing actor
     const oldActor = await this.getActor(actorId);
@@ -302,8 +303,17 @@ export class IdentityAdapter implements IIdentityAdapter {
       throw new Error(`Cannot rotate key for revoked actor: ${actorId}`);
     }
 
-    // Generate new keys for the new actor
-    const { publicKey: newPublicKey, privateKey: newPrivateKey } = await generateKeys();
+    // [IKS-SUC3] Use provided keys or generate new ones
+    let newPublicKey: string;
+    let newPrivateKey: string;
+    if (options?.newPublicKey && options?.newPrivateKey) {
+      newPublicKey = options.newPublicKey;
+      newPrivateKey = options.newPrivateKey;
+    } else {
+      const generated = await generateKeys();
+      newPublicKey = generated.publicKey;
+      newPrivateKey = generated.privateKey;
+    }
 
     // Generate new actor ID following the pattern from actor_protocol_faq.md
     // Pattern: {baseId}-v{N} where N is the version number (using hyphens to match schema pattern)
@@ -338,8 +348,12 @@ export class IdentityAdapter implements IIdentityAdapter {
     // Calculate checksum for the new payload
     const payloadChecksum = calculatePayloadChecksum(validatedNewPayload);
 
-    // Create signature for the new record (self-signed for bootstrap)
-    const signature = signPayload(validatedNewPayload, newPrivateKey, newActorId, 'author', 'Key rotation');
+    // [IKS-SUC2] Sign new actor with OLD key (proof of ownership per RFC-02 §6.3).
+    // The old key proves "I, human:camilo, authorize human:camilo-v2 as my successor."
+    const notes = `Key rotation — successor of ${actorId}`;
+    const successorSignature = await this.createSignature(
+      payloadChecksum, actorId, 'author', notes
+    );
 
     // Create the complete GitGovRecord structure for new actor
     const newRecord: GitGovActorRecord = {
@@ -347,15 +361,15 @@ export class IdentityAdapter implements IIdentityAdapter {
         version: '1.0',
         type: 'actor',
         payloadChecksum,
-        signatures: [signature]
+        signatures: [successorSignature]
       },
       payload: validatedNewPayload
     };
 
-    // Validate the complete new record
+    // Validate the complete new record using old actor's public key
     await validateFullActorRecord(newRecord, async (keyId) => {
-      if (keyId === newActorId) {
-        return newPublicKey; // Self-referential for bootstrap
+      if (keyId === actorId) {
+        return oldActor.publicKey;
       }
       const signerActor = await this.getActor(keyId);
       return signerActor?.publicKey || null;
@@ -364,12 +378,12 @@ export class IdentityAdapter implements IIdentityAdapter {
     // Store the new actor record
     await this.stores.actors.put(newRecord.payload.id, newRecord);
 
-    // Revoke old actor and mark succession
+    // Revoke old actor and mark succession — signed with OLD key (still available)
     const revokedOldActor = await this.revokeActor(
       actorId,
-      'system',
+      actorId,
       'rotation',
-      newActorId // Mark succession
+      newActorId
     );
 
     // Update session to point to the new actor using SessionManager.
@@ -407,7 +421,7 @@ export class IdentityAdapter implements IIdentityAdapter {
     };
   }
 
-  async revokeActor(actorId: string, revokedBy: string = "system", reason: "compromised" | "rotation" | "manual" = "manual", supersededBy?: string): Promise<ActorRecord> {
+  async revokeActor(actorId: string, revokedBy: string, reason: "compromised" | "rotation" | "manual" = "manual", supersededBy?: string): Promise<ActorRecord> {
     // Read the existing actor
     const existingRecord = await this.stores.actors.get(actorId);
     if (!existingRecord) {
@@ -421,15 +435,23 @@ export class IdentityAdapter implements IIdentityAdapter {
       ...(supersededBy && { supersededBy })
     };
 
-    // Calculate new checksum for the updated payload
+    // [IKS-SUC1] Calculate new checksum and sign the revocation with the revoker's key.
+    // The original creation signatures remain for historical verification (RFC-02 §10.4).
     const payloadChecksum = calculatePayloadChecksum(revokedPayload);
+    const notes = supersededBy
+      ? `Revoking after key ${reason} — successor is ${supersededBy}`
+      : `Revoking: ${reason}`;
+    const revocationSignature = await this.createSignature(
+      payloadChecksum, revokedBy, 'author', notes
+    );
 
-    // Create updated record
+    // Create updated record with revocation signature appended
     const updatedRecord: GitGovActorRecord = {
       ...existingRecord,
       header: {
         ...existingRecord.header,
-        payloadChecksum
+        payloadChecksum,
+        signatures: [...existingRecord.header.signatures, revocationSignature],
       },
       payload: revokedPayload
     };
@@ -459,6 +481,26 @@ export class IdentityAdapter implements IIdentityAdapter {
     }
 
     return revokedPayload;
+  }
+
+  private async createSignature(
+    payloadChecksum: string,
+    signerActorId: string,
+    role: string,
+    notes: string,
+  ): Promise<Signature> {
+    const timestamp = Math.floor(Date.now() / 1000);
+    const digest = `${payloadChecksum}:${signerActorId}:${role}:${notes}:${timestamp}`;
+    const digestHash = createHash('sha256').update(digest).digest();
+    const signatureBytes = await this.keyProvider.sign(signerActorId, new Uint8Array(digestHash));
+
+    return {
+      keyId: signerActorId,
+      role,
+      notes,
+      signature: Buffer.from(signatureBytes).toString('base64'),
+      timestamp,
+    };
   }
 
   async authenticate(_sessionToken: string): Promise<void> {

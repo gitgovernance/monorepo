@@ -370,7 +370,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       mockActorStore.put.mockResolvedValue(undefined);
       mockedCalculatePayloadChecksum.mockReturnValue('new-checksum');
 
-      const result = await identityAdapter.revokeActor('human:test-user');
+      const result = await identityAdapter.revokeActor('human:test-user', 'human:test-user');
 
       expect(mockActorStore.get).toHaveBeenCalledWith('human:test-user');
       expect(mockActorStore.put).toHaveBeenCalled();
@@ -380,7 +380,7 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
     it('[EARS-D2] should throw error when actor does not exist', async () => {
       mockActorStore.get.mockResolvedValue(null);
 
-      await expect(identityAdapter.revokeActor('non-existent'))
+      await expect(identityAdapter.revokeActor('non-existent', 'human:admin'))
         .rejects.toThrow('ActorRecord with id non-existent not found');
     });
   });
