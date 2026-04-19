@@ -137,7 +137,11 @@ export type {
 } from "./sarif/index";
 
 // ID generator utilities (protocol-valid ID creation)
-export { generateTaskId, generateExecutionId, generateFeedbackId, generateCycleId, generateActorId, generateAgentId } from "./utils/id_generator";
+export { generateTaskId, generateExecutionId, generateFeedbackId, generateCycleId, generateActorId, generateAgentId, computeSuccessorActorId } from "./utils/id_generator";
+
+// Crypto primitives (protocol-level signing + checksum)
+export { buildSignatureDigest } from "./crypto/signatures";
+export { calculatePayloadChecksum } from "./crypto/checksum";
 
 // Git direct exports (interface + types + errors)
 export type { IGitModule, ExecOptions, ExecResult, GetCommitHistoryOptions, CommitInfo, ChangedFile, CommitAuthor, GitRemoteRef } from "./git/index";

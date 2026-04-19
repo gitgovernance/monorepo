@@ -3,7 +3,8 @@ import {
   generateTaskId,
   generateCycleId,
   generateExecutionId,
-  generateFeedbackId
+  generateFeedbackId,
+  computeSuccessorActorId
 } from './id_generator';
 
 describe('ID Generators', () => {
@@ -38,6 +39,27 @@ describe('ID Generators', () => {
   describe('generateFeedbackId', () => {
     it('[EARS-6] should create a valid feedback ID', () => {
       expect(generateFeedbackId('Code Review Comments', 77777)).toBe('77777-feedback-code-review-comments');
+    });
+  });
+
+  describe('computeSuccessorActorId (RFC-02 §6.3)', () => {
+    it('[EARS-7] should append -v2 for first rotation', () => {
+      expect(computeSuccessorActorId('human:camilo')).toBe('human:camilo-v2');
+    });
+
+    it('[EARS-7] should increment version for subsequent rotations', () => {
+      expect(computeSuccessorActorId('human:camilo-v2')).toBe('human:camilo-v3');
+      expect(computeSuccessorActorId('human:camilo-v99')).toBe('human:camilo-v100');
+    });
+
+    it('[EARS-7] should handle agent IDs', () => {
+      expect(computeSuccessorActorId('agent:aion')).toBe('agent:aion-v2');
+      expect(computeSuccessorActorId('agent:camilo:cursor-v3')).toBe('agent:camilo:cursor-v4');
+    });
+
+    it('[EARS-7] should produce valid actor ID pattern', () => {
+      const result = computeSuccessorActorId('human:dev');
+      expect(result).toMatch(/^(human|agent)(:[a-z0-9-]+)+$/);
     });
   });
 });

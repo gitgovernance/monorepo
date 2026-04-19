@@ -18,7 +18,7 @@ import { createActorRecord } from '../../record_factories/actor_factory';
 import { validateFullActorRecord } from '../../record_validations/actor_validator';
 import { generateKeys, signPayload, buildSignatureDigest } from '../../crypto/signatures';
 import { calculatePayloadChecksum } from '../../crypto/checksum';
-import { generateActorId } from '../../utils/id_generator';
+import { generateActorId, computeSuccessorActorId } from '../../utils/id_generator';
 import type { ISessionManager } from '../../session_manager';
 
 export class IdentityAdapter implements IIdentityAdapter {
@@ -315,20 +315,8 @@ export class IdentityAdapter implements IIdentityAdapter {
 
     // Generate new actor ID following the pattern from actor_protocol_faq.md
     // Pattern: {baseId}-v{N} where N is the version number (using hyphens to match schema pattern)
-    // Schema pattern: ^(human|agent)(:[a-z0-9-]+)+$ (only allows hyphens, not underscores)
     const baseId = generateActorId(oldActor.type, oldActor.displayName);
-    let newActorId: string;
-
-    // Check if baseId already has a version suffix (e.g., human:camilo-v2)
-    const versionMatch = baseId.match(/^(.+)-v(\d+)$/);
-    if (versionMatch && versionMatch[1] && versionMatch[2]) {
-      const baseWithoutVersion = versionMatch[1];
-      const currentVersion = parseInt(versionMatch[2], 10);
-      newActorId = `${baseWithoutVersion}-v${currentVersion + 1}`;
-    } else {
-      // First rotation: add -v2
-      newActorId = `${baseId}-v2`;
-    }
+    const newActorId = computeSuccessorActorId(baseId);
 
     // Create new actor with same metadata but new keys
     const newActorPayload: ActorRecord = {

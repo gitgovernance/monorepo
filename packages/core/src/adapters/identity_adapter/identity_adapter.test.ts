@@ -14,7 +14,13 @@ jest.mock('../../record_factories/actor_factory');
 jest.mock('../../record_validations/actor_validator');
 jest.mock('../../crypto/signatures');
 jest.mock('../../crypto/checksum');
-jest.mock('../../utils/id_generator');
+jest.mock('../../utils/id_generator', () => {
+  const actual = jest.requireActual('../../utils/id_generator');
+  return {
+    ...actual,
+    generateActorId: jest.fn(),
+  };
+});
 
 import type { KeyProvider } from '../../key_provider/key_provider';
 
