@@ -21,9 +21,11 @@ import { GitHubApiError } from '../../github';
 
 // ==================== Test Helpers ====================
 
-type MockOctokit = Octokit & {
+type MockOctokit = {
+  request: ReturnType<typeof jest.fn>;
   rest: {
     repos: {
+      get: jest.MockedFunction<any>;
       getContent: jest.MockedFunction<any>;
       compareCommits: jest.MockedFunction<any>;
       listCommits: jest.MockedFunction<any>;
@@ -49,6 +51,7 @@ function createMockOctokit(): MockOctokit {
   return {
     rest: {
       repos: {
+        get: jest.fn(),
         getContent: jest.fn(),
         compareCommits: jest.fn(),
         listCommits: jest.fn(),
@@ -68,7 +71,8 @@ function createMockOctokit(): MockOctokit {
         updateRef: jest.fn(),
       },
     },
-  } as unknown as MockOctokit;
+    request: jest.fn(),
+  } as MockOctokit;
 }
 
 function createOctokitError(status: number, message = 'Error'): Error & { status: number } {
@@ -552,6 +556,36 @@ describe('GitHubGitModule', () => {
         .rejects.toThrow(BranchAlreadyExistsError);
     });
 
+    it('[EARS-C6b] should fall back to repo default branch when activeRef does not exist', async () => {
+      // activeRef is 'gitgov-state' (from defaultBranch) — doesn't exist yet
+      mockOctokit.rest.git.getRef
+        .mockRejectedValueOnce(createOctokitError(404, 'Not Found'))
+        // Second call resolves 'main' branch
+        .mockResolvedValueOnce({
+          data: { object: { sha: 'main-sha-456' } },
+        });
+      // repos.get returns the repo's actual default branch
+      mockOctokit.rest.repos.get.mockResolvedValue({
+        data: { default_branch: 'main' },
+      });
+      mockOctokit.rest.git.createRef.mockResolvedValue({
+        data: { ref: 'refs/heads/gitgov-state', object: { sha: 'main-sha-456' } },
+      });
+
+      await git.createBranch('gitgov-state');
+
+      expect(mockOctokit.rest.repos.get).toHaveBeenCalledWith({
+        owner: 'test-org',
+        repo: 'test-repo',
+      });
+      expect(mockOctokit.rest.git.createRef).toHaveBeenCalledWith({
+        owner: 'test-org',
+        repo: 'test-repo',
+        ref: 'refs/heads/gitgov-state',
+        sha: 'main-sha-456',
+      });
+    });
+
     it('[EARS-C7] should return staged file paths from buffer', async () => {
       await git.add(['a.json', 'b.json'], {
         contentMap: { 'a.json': 'a', 'b.json': 'b' },
@@ -736,38 +770,40 @@ describe('GitHubGitModule', () => {
   // ==================== 4.6. Branch Deletion (EARS-F1 to F2) — Cycle 5 identity_key_sync (IKS-A41) ====================
 
   describe('4.6. Branch Deletion (EARS-F1 to F2)', () => {
-    it('[EARS-F1] should call octokit.rest.git.deleteRef and return on success', async () => {
-      mockOctokit.rest.git.deleteRef.mockResolvedValue({ data: undefined });
+    it('[EARS-F1] should delete branch via octokit.request and return on success', async () => {
+      mockOctokit.request.mockResolvedValue({ data: undefined });
 
       await expect(git.deleteBranch('feature-to-delete')).resolves.toBeUndefined();
 
-      expect(mockOctokit.rest.git.deleteRef).toHaveBeenCalledWith({
-        owner: 'test-org',
-        repo: 'test-repo',
-        ref: 'heads/feature-to-delete',
-      });
-      expect(mockOctokit.rest.git.deleteRef).toHaveBeenCalledTimes(1);
+      expect(mockOctokit.request).toHaveBeenCalledWith(
+        'DELETE /repos/{owner}/{repo}/git/refs/heads/{branch}',
+        { owner: 'test-org', repo: 'test-repo', branch: 'feature-to-delete' },
+      );
+      expect(mockOctokit.request).toHaveBeenCalledTimes(1);
     });
 
     it('[EARS-F2] should complete as no-op when GitHub returns 404', async () => {
-      mockOctokit.rest.git.deleteRef.mockRejectedValue(createOctokitError(404, 'Not Found'));
+      mockOctokit.request.mockRejectedValue(createOctokitError(404, 'Not Found'));
 
-      // Idempotent: 404 is swallowed, no throw, no return value
       await expect(git.deleteBranch('never-existed')).resolves.toBeUndefined();
-      expect(mockOctokit.rest.git.deleteRef).toHaveBeenCalledTimes(1);
+      expect(mockOctokit.request).toHaveBeenCalledTimes(1);
     });
 
-    it('[EARS-F2] should throw mapped GitHubApiError for non-404 HTTP errors', async () => {
-      // 401 — authentication error
-      mockOctokit.rest.git.deleteRef.mockRejectedValue(createOctokitError(401, 'Unauthorized'));
+    it('[EARS-F2] should complete as no-op when GitHub returns 422', async () => {
+      mockOctokit.request.mockRejectedValue(createOctokitError(422, 'Reference does not exist'));
+
+      await expect(git.deleteBranch('never-existed')).resolves.toBeUndefined();
+      expect(mockOctokit.request).toHaveBeenCalledTimes(1);
+    });
+
+    it('[EARS-F2] should throw mapped GitHubApiError for non-404/422 HTTP errors', async () => {
+      mockOctokit.request.mockRejectedValue(createOctokitError(401, 'Unauthorized'));
       await expect(git.deleteBranch('protected-branch')).rejects.toThrow(GitHubApiError);
 
-      // 403 — permission error
-      mockOctokit.rest.git.deleteRef.mockRejectedValue(createOctokitError(403, 'Forbidden'));
+      mockOctokit.request.mockRejectedValue(createOctokitError(403, 'Forbidden'));
       await expect(git.deleteBranch('protected-branch')).rejects.toThrow(GitHubApiError);
 
-      // 500 — server error
-      mockOctokit.rest.git.deleteRef.mockRejectedValue(createOctokitError(500, 'Internal Server Error'));
+      mockOctokit.request.mockRejectedValue(createOctokitError(500, 'Internal Server Error'));
       await expect(git.deleteBranch('protected-branch')).rejects.toThrow(GitHubApiError);
     });
   });
