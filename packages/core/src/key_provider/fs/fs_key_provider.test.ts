@@ -107,7 +107,7 @@ describe('FsKeyProvider', () => {
 
       await provider.setPrivateKey(actorId, privateKey);
 
-      const keyPath = path.join(keysDir, 'actor:human:test.key');
+      const keyPath = path.join(keysDir, 'actor_human_test.key');
       const content = await fs.readFile(keyPath, 'utf-8');
 
       expect(content).toBe(privateKey);
@@ -117,7 +117,7 @@ describe('FsKeyProvider', () => {
       const actorId = 'actor:secure';
       await provider.setPrivateKey(actorId, 'secureKey');
 
-      const keyPath = path.join(keysDir, 'actor:secure.key');
+      const keyPath = path.join(keysDir, 'actor_secure.key');
       const stats = await fs.stat(keyPath);
 
       // Check permissions (0600 = owner read/write only)
@@ -152,6 +152,18 @@ describe('FsKeyProvider', () => {
       expect(result).toBe(privateKey);
     });
 
+    it('[EARS-FKP05] should replace colons with underscores in key filename', async () => {
+      const actorId = 'human:cagodoy';
+      await provider.setPrivateKey(actorId, 'colonKey');
+
+      const expectedPath = path.join(keysDir, 'human_cagodoy.key');
+      const content = await fs.readFile(expectedPath, 'utf-8');
+      expect(content).toBe('colonKey');
+
+      const result = await provider.getPrivateKey(actorId);
+      expect(result).toBe('colonKey');
+    });
+
     it('[EARS-FKP06] should return true if key file exists', async () => {
       const actorId = 'actor:human:exists';
 
@@ -164,7 +176,7 @@ describe('FsKeyProvider', () => {
 
     it('[EARS-FKP07] should trim whitespace from key content', async () => {
       const actorId = 'actor:whitespace';
-      const keyPath = path.join(keysDir, 'actor:whitespace.key');
+      const keyPath = path.join(keysDir, 'actor_whitespace.key');
 
       // Manually write key with whitespace
       await fs.mkdir(keysDir, { recursive: true });
@@ -177,7 +189,7 @@ describe('FsKeyProvider', () => {
 
     it('[EARS-FKP08] should return null for empty key file', async () => {
       const actorId = 'actor:empty';
-      const keyPath = path.join(keysDir, 'actor:empty.key');
+      const keyPath = path.join(keysDir, 'actor_empty.key');
 
       await fs.mkdir(keysDir, { recursive: true });
       await fs.writeFile(keyPath, '', 'utf-8');
@@ -203,7 +215,7 @@ describe('FsKeyProvider', () => {
 
       await customProvider.setPrivateKey('actor:test', 'customKey');
 
-      const keyPath = path.join(keysDir, 'actor:test.privkey');
+      const keyPath = path.join(keysDir, 'actor_test.privkey');
       const content = await fs.readFile(keyPath, 'utf-8');
 
       expect(content).toBe('customKey');

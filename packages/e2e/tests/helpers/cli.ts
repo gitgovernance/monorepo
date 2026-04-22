@@ -56,7 +56,8 @@ export function runGitgovCli(args: string, options: { cwd: string; expectError?:
 
 // [HLP-A2] Create a temp git repo with initial commit
 export function createTempGitRepo(): { tmpDir: string; repoDir: string } {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'e2e-'));
+  const rawTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'e2e-'));
+  const tmpDir = fs.realpathSync(rawTmpDir);
   const repoDir = path.join(tmpDir, 'repo');
   fs.mkdirSync(repoDir, { recursive: true });
   execSync('git init --initial-branch=main', { cwd: repoDir, stdio: 'pipe' });
