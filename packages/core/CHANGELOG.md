@@ -1,3 +1,10 @@
+## [3.12.0](https://github.com/gitgovernance/monorepo/compare/core-v3.11.0...core-v3.12.0) (2026-04-23)
+
+
+### ✨ Features
+
+* **core,cli:** deleteBranch + finalize + GitHubProjectInitializer + key succession + smart init ([#147](https://github.com/gitgovernance/monorepo/issues/147)) ([c2f0523](https://github.com/gitgovernance/monorepo/commit/c2f05238630b8c9c2d6c024b5312ca21143c6cd9))
+
 ## [3.11.0](https://github.com/gitgovernance/monorepo/compare/core-v3.10.0...core-v3.11.0) (2026-04-14)
 
 
