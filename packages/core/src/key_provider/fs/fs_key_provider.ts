@@ -206,7 +206,7 @@ export class FsKeyProvider implements KeyProvider {
     // Remove path traversal attempts
     let sanitized = actorId
       .replace(/\.\./g, '')  // Remove ..
-      .replace(/[/\\]/g, '_'); // Replace path separators with underscore
+      .replace(/[/\\:]/g, '_'); // Replace path separators and colons with underscore
 
     // Validate result is not empty
     if (!sanitized || sanitized === '') {

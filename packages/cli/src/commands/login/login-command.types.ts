@@ -45,6 +45,9 @@ export type SyncKeyResponse = {
   success: boolean;
   actorId: string;
   mode: 'full' | 'verify-only';
+  rotated?: boolean;
+  newActorId?: string;
+  oldActorId?: string;
 };
 
 /** Response from identity.getKey tRPC query */
@@ -54,12 +57,10 @@ export type GetKeyResponse = {
   privateKeyEnvelope: EcdhEnvelope;
 };
 
-/** Wrapper for tRPC response envelope */
+/** Wrapper for tRPC v11 response envelope (no superjson) */
 export type TrpcResponse<T> = {
   result: {
-    data: {
-      json: T;
-    };
+    data: T;
   };
 };
 

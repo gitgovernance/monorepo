@@ -60,6 +60,7 @@ const mockSetPrivateKey = jest.fn();
 const mockHasPrivateKey = jest.fn();
 const mockGetPublicKey = jest.fn();
 const mockGetConfig = jest.fn();
+const mockGetCurrentActor = jest.fn();
 
 jest.mock('../../services/dependency-injection', () => ({
   DependencyInjectionService: {
@@ -76,6 +77,9 @@ jest.mock('../../services/dependency-injection', () => ({
         hasPrivateKey: mockHasPrivateKey,
         getPublicKey: mockGetPublicKey,
       } as unknown as IKeyProvider),
+      getIdentityAdapter: jest.fn().mockResolvedValue({
+        getCurrentActor: mockGetCurrentActor,
+      }),
       getConfigManager: jest.fn().mockResolvedValue({
         loadConfig: mockGetConfig,
         getSaasUrl: jest.fn().mockImplementation(async () => {
@@ -97,9 +101,9 @@ const mockProcessExit = jest.spyOn(process, 'exit').mockImplementation(() => und
 
 // ─── tRPC mock helpers ────────────────────────────────────────────────────
 
-/** Wrap a response in tRPC envelope */
+/** Wrap a response in tRPC v11 envelope (no superjson) */
 function trpcWrap<T>(data: T): TrpcResponse<T> {
-  return { result: { data: { json: data } } };
+  return { result: { data } };
 }
 
 /** Default keyStatus response (no key) */
@@ -162,7 +166,7 @@ describe('LoginCommand v2', () => {
 
       expect(deps.openBrowser).toHaveBeenCalledTimes(1);
       const openUrl = (deps.openBrowser as jest.Mock).mock.calls[0][0] as string;
-      expect(openUrl).toContain('/api/auth/cli?callback=');
+      expect(openUrl).toContain('/auth/cli?callback=');
 
       expect(deps.startCallbackServer).toHaveBeenCalledTimes(1);
 
@@ -450,20 +454,16 @@ describe('LoginCommand v2', () => {
       expect(mockProcessExit).toHaveBeenCalledWith(1);
     });
 
-    it('[LOGIN-F4] should verify keyStatus matches after --force-local resolve', async () => {
+    it('[LOGIN-F4] should succeed on --force-local without post-sync re-verification', async () => {
       mockHasPrivateKey.mockResolvedValue(true);
       mockGetPrivateKey.mockResolvedValue('local-priv');
       mockGetPublicKey.mockResolvedValue('local-pub-key');
 
-      let callCount = 0;
       const syncResponse: SyncKeyResponse = { success: true, actorId: 'human:camilo', mode: 'full' };
       const deps = createMockDeps({
         fetchSaas: jest.fn().mockImplementation(async (url: string) => {
           if (url.includes('identity.keyStatus')) {
-            callCount++;
-            // First call: different key. Second call (post-verify): local key uploaded
-            const pub = callCount === 1 ? 'different-saas-key' : 'local-pub-key';
-            return { ok: true, json: async () => trpcWrap(keyStatusWith(pub)) };
+            return { ok: true, json: async () => trpcWrap(keyStatusWith('different-saas-key')) };
           }
           if (url.includes('identity.syncKey')) return { ok: true, json: async () => trpcWrap(syncResponse) };
           return { ok: false, json: async () => ({}) };
@@ -473,11 +473,56 @@ describe('LoginCommand v2', () => {
       const cmd = new LoginCommand(deps);
       await cmd.executeLogin({ ...defaultOptions, forceLocal: true });
 
-      // keyStatus called twice: initial check + post-sync verification
+      // syncKey response is trusted — no second keyStatus call needed
       const keyStatusCalls = (deps.fetchSaas as jest.Mock).mock.calls.filter(
         (c: [string]) => c[0].includes('identity.keyStatus')
       );
-      expect(keyStatusCalls.length).toBeGreaterThanOrEqual(2);
+      expect(keyStatusCalls).toHaveLength(1);
+    });
+  });
+
+  // ==================== §4.13 Key Succession Response (LOGIN-N1) ====================
+
+  describe('4.13. Key Succession Response (LOGIN-N1)', () => {
+    it('[LOGIN-N1] should update session to newActorId on succession response', async () => {
+      mockHasPrivateKey.mockResolvedValue(true);
+      mockGetPrivateKey.mockResolvedValue('local-private-key');
+      mockGetPublicKey.mockResolvedValue('local-public-key');
+
+      const successionResponse: SyncKeyResponse = {
+        success: true,
+        actorId: 'human:camilo-v2',
+        mode: 'full',
+        rotated: true,
+        newActorId: 'human:camilo-v2',
+        oldActorId: 'human:camilo',
+      };
+
+      const deps = createMockDeps({
+        fetchSaas: jest.fn().mockImplementation(async (url: string) => {
+          if (url.includes('identity.keyStatus')) {
+            return { ok: true, json: async () => trpcWrap(keyStatusWith('different-saas-key')) };
+          }
+          if (url.includes('identity.syncKey')) {
+            return { ok: true, json: async () => trpcWrap(successionResponse) };
+          }
+          return { ok: false, json: async () => ({}) };
+        }),
+      });
+
+      const cmd = new LoginCommand(deps);
+      await cmd.executeLogin({ ...defaultOptions, forceLocal: true });
+
+      // Session should be updated to the NEW actorId
+      expect(mockSetLastSession).toHaveBeenCalledWith(
+        'human:camilo-v2',
+        expect.any(String),
+      );
+
+      // Output should mention the identity change
+      const output = mockConsoleLog.mock.calls.map(c => c[0]).join('\n');
+      expect(output).toContain('human:camilo-v2');
+      expect(output).toContain('succession');
     });
   });
 
@@ -591,5 +636,178 @@ describe('LoginCommand v2', () => {
     });
 
     it.todo('[LOGIN-H2] should timeout after 5 minutes with error message (requires timer mock — deferred to E2E)');
+  });
+
+  // ============================================================================
+  // §4.10. Repo Not Connected (LOGIN-K1, Task 5.11)
+  // ============================================================================
+  describe('4.10. Repo Not Connected (LOGIN-K1)', () => {
+    it('[LOGIN-K1] should show actionable error when repo is not connected to SaaS', async () => {
+      mockHasPrivateKey.mockResolvedValue(true);
+
+      const deps = createMockDeps({
+        fetchSaas: jest.fn().mockImplementation(async (url: string) => {
+          if (url.includes('identity.keyStatus')) {
+            return { ok: false, status: 404, text: async () => 'Not found' };
+          }
+          return { ok: false, json: async () => ({}) };
+        }),
+      });
+
+      const cmd = new LoginCommand(deps);
+      await cmd.executeLogin(defaultOptions);
+
+      expect(mockConsoleError).toHaveBeenCalledWith(
+        'This repository is not connected to GitGovernance.'
+      );
+      expect(mockConsoleError).toHaveBeenCalledWith(
+        expect.stringContaining('Connect it at:')
+      );
+      expect(mockProcessExit).toHaveBeenCalledWith(1);
+    });
+  });
+
+  // ============================================================================
+  // §4.11. Post-Sync State Push (LOGIN-L1 to L2)
+  // ============================================================================
+  describe('4.11. Post-Sync State Push (LOGIN-L1 to L2)', () => {
+    it('[LOGIN-L1] should push gitgov-state to remote after key sync succeeds', async () => {
+      const { execSync } = await import('child_process');
+      const mockExecSync = execSync as jest.MockedFunction<typeof execSync>;
+      mockExecSync.mockReturnValue('https://github.com/testorg/testrepo.git\n');
+
+      mockHasPrivateKey.mockResolvedValue(true);
+      mockGetPrivateKey.mockResolvedValue('base64-priv-key');
+      mockGetPublicKey.mockResolvedValue('base64-pub-key');
+
+      const syncResponse = { success: true, actorId: 'human:camilo', mode: 'full' as const };
+      const deps = createMockDeps({
+        fetchSaas: jest.fn().mockImplementation(async (url: string) => {
+          if (url.includes('identity.keyStatus')) return { ok: true, json: async () => trpcWrap(noKeyStatus) };
+          if (url.includes('identity.syncKey')) return { ok: true, json: async () => trpcWrap(syncResponse) };
+          return { ok: false, json: async () => ({}) };
+        }),
+      });
+
+      const cmd = new LoginCommand(deps);
+      await cmd.executeLogin(defaultOptions);
+
+      const pushCalls = mockExecSync.mock.calls.filter(
+        (call) => typeof call[0] === 'string' && call[0].includes('git push origin gitgov-state')
+      );
+      expect(pushCalls.length).toBe(1);
+    });
+
+    it('[LOGIN-L2] should skip push silently when gitgov-state branch does not exist locally', async () => {
+      const { execSync } = await import('child_process');
+      const mockExecSync = execSync as jest.MockedFunction<typeof execSync>;
+      mockExecSync.mockImplementation((cmd: string) => {
+        if (typeof cmd === 'string' && cmd.includes('git push origin gitgov-state')) {
+          throw new Error('error: src refspec gitgov-state does not match any');
+        }
+        return 'https://github.com/testorg/testrepo.git\n';
+      });
+
+      mockHasPrivateKey.mockResolvedValue(true);
+      mockGetPrivateKey.mockResolvedValue('base64-priv-key');
+      mockGetPublicKey.mockResolvedValue('base64-pub-key');
+
+      const syncResponse = { success: true, actorId: 'human:camilo', mode: 'full' as const };
+      const deps = createMockDeps({
+        fetchSaas: jest.fn().mockImplementation(async (url: string) => {
+          if (url.includes('identity.keyStatus')) return { ok: true, json: async () => trpcWrap(noKeyStatus) };
+          if (url.includes('identity.syncKey')) return { ok: true, json: async () => trpcWrap(syncResponse) };
+          return { ok: false, json: async () => ({}) };
+        }),
+      });
+
+      const cmd = new LoginCommand(deps);
+      await cmd.executeLogin(defaultOptions);
+
+      // Login should still succeed despite push failure
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('Logged in as'));
+    });
+  });
+
+  // ============================================================================
+  // §4.9. Cloud-First Bootstrap (LOGIN-J1 to J2, Task 5.5)
+  // ============================================================================
+  describe('4.9. Cloud-First Bootstrap (LOGIN-J1 to J2)', () => {
+    it('[LOGIN-J1] should fetch origin gitgov-state before resolving saasUrl', async () => {
+      const { execSync } = await import('child_process');
+      (execSync as jest.MockedFunction<typeof execSync>).mockReturnValue('https://github.com/testorg/testrepo.git\n');
+
+      mockGetConfig.mockResolvedValue({ saasUrl: 'https://app.gitgov.dev' });
+      mockHasPrivateKey.mockResolvedValue(false);
+
+      const deps = createMockDeps({
+        fetchSaas: createTrpcFetch({
+          'keyStatus': noKeyStatus,
+        }),
+      });
+
+      const cmd = new LoginCommand(deps);
+      await cmd.executeLogin(defaultOptions);
+
+      expect(execSync).toHaveBeenCalledWith(
+        'git fetch origin gitgov-state',
+        expect.objectContaining({ stdio: 'pipe' }),
+      );
+    });
+
+    it('[LOGIN-J3] should use local actor actorId for key sync instead of github login', async () => {
+      const { execSync } = await import('child_process');
+      (execSync as jest.MockedFunction<typeof execSync>).mockImplementation((cmd: unknown) => {
+        if (typeof cmd === 'string' && cmd.includes('fetch')) return '';
+        return 'https://github.com/testorg/testrepo.git\n';
+      });
+
+      mockGetConfig.mockResolvedValue({ saasUrl: 'https://app.gitgov.dev' });
+      mockGetCurrentActor.mockResolvedValue({
+        id: 'human:camilo-acua-godoy',
+        type: 'human',
+        displayName: 'Camilo Acuña Godoy',
+      });
+      mockHasPrivateKey.mockResolvedValue(false);
+
+      const deps = createMockDeps({
+        fetchSaas: createTrpcFetch({ 'keyStatus': noKeyStatus }),
+      });
+
+      const cmd = new LoginCommand(deps);
+      await cmd.executeLogin(defaultOptions);
+
+      // Should use local actorId, not human:camilo (github login)
+      expect(mockSetLastSession).toHaveBeenCalledWith(
+        'human:camilo-acua-godoy',
+        expect.any(String),
+      );
+    });
+
+    it('[LOGIN-J2] should continue login flow when fetch fails (no remote/offline)', async () => {
+      const { execSync } = await import('child_process');
+      (execSync as jest.MockedFunction<typeof execSync>).mockImplementation((cmd: unknown) => {
+        if (typeof cmd === 'string' && cmd.includes('fetch')) {
+          throw new Error('fatal: could not read from remote repository');
+        }
+        return 'https://github.com/testorg/testrepo.git\n';
+      });
+
+      mockGetConfig.mockResolvedValue({ saasUrl: 'https://app.gitgov.dev' });
+      mockHasPrivateKey.mockResolvedValue(false);
+
+      const deps = createMockDeps({
+        fetchSaas: createTrpcFetch({
+          'keyStatus': noKeyStatus,
+        }),
+      });
+
+      const cmd = new LoginCommand(deps);
+      await cmd.executeLogin(defaultOptions);
+
+      // Login should proceed despite fetch failure
+      expect(deps.startCallbackServer).toHaveBeenCalled();
+      expect(mockSetCloudToken).toHaveBeenCalledWith('test-session-token');
+    });
   });
 });

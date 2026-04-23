@@ -16,16 +16,18 @@ import type { IIdentityAdapter, IdentityAdapterDependencies } from './identity_a
 
 import { createActorRecord } from '../../record_factories/actor_factory';
 import { validateFullActorRecord } from '../../record_validations/actor_validator';
-import { generateKeys, signPayload } from '../../crypto/signatures';
-import { createHash } from 'crypto';
+import { generateKeys, signPayload, buildSignatureDigest } from '../../crypto/signatures';
 import { calculatePayloadChecksum } from '../../crypto/checksum';
-import { generateActorId } from '../../utils/id_generator';
+import { generateActorId, computeSuccessorActorId } from '../../utils/id_generator';
 import type { ISessionManager } from '../../session_manager';
 
 export class IdentityAdapter implements IIdentityAdapter {
   private stores: Required<Pick<RecordStores, 'actors'>>;
   private keyProvider: KeyProvider;
-  private sessionManager: ISessionManager;
+  // Optional as of IKS-A46 pre-P9 cleanup. Only `getCurrentActor()` and
+  // `rotateActorKey()` consume it; callers that never use those methods
+  // (e.g., GitHubRemoteInitService) can omit it at construction time.
+  private sessionManager: ISessionManager | undefined;
   private eventBus: IEventStream | undefined;
 
   constructor(dependencies: IdentityAdapterDependencies) {
@@ -169,11 +171,10 @@ export class IdentityAdapter implements IIdentityAdapter {
       throw new Error(`Actor not found: ${actorId}`);
     }
 
-    // [EARS-E1] Calculate payload checksum and build digest
+    // [EARS-E1] Calculate payload checksum and build digest via crypto primitive
     const payloadChecksum = calculatePayloadChecksum(record.payload);
     const timestamp = Math.floor(Date.now() / 1000);
-    const digest = `${payloadChecksum}:${actorId}:${role}:${notes}:${timestamp}`;
-    const digestHash = createHash('sha256').update(digest).digest();
+    const digestHash = buildSignatureDigest(payloadChecksum, actorId, role, notes, timestamp);
 
     // [EARS-E1] [IKS-B7] Delegate signing to keyProvider.sign() — NOT getPrivateKey() + signPayload()
     // [EARS-E2] [IKS-B6] sign() throws KeyProviderError('KEY_NOT_FOUND') if no key exists
@@ -242,6 +243,16 @@ export class IdentityAdapter implements IIdentityAdapter {
    * @returns Promise<ActorRecord> - The current active ActorRecord
    */
   async getCurrentActor(): Promise<ActorRecord> {
+    // sessionManager is required for this method — throw if omitted.
+    // IdentityAdapter accepts an optional sessionManager (IKS-A46 pre-P9
+    // cleanup) because createActor/signRecord/etc. don't need it. But
+    // getCurrentActor resolves "who is logged in" — that requires a session.
+    if (!this.sessionManager) {
+      throw new Error(
+        'IdentityAdapter.getCurrentActor requires a sessionManager. ' +
+        'Construct the adapter with { sessionManager } to use this method.',
+      );
+    }
     // 1. Try to get from session
     const session = await this.sessionManager.loadSession();
 
@@ -277,7 +288,8 @@ export class IdentityAdapter implements IIdentityAdapter {
   }
 
   async rotateActorKey(
-    actorId: string
+    actorId: string,
+    options?: { newPublicKey?: string; newPrivateKey?: string }
   ): Promise<{ oldActor: ActorRecord; newActor: ActorRecord }> {
     // Read existing actor
     const oldActor = await this.getActor(actorId);
@@ -289,25 +301,22 @@ export class IdentityAdapter implements IIdentityAdapter {
       throw new Error(`Cannot rotate key for revoked actor: ${actorId}`);
     }
 
-    // Generate new keys for the new actor
-    const { publicKey: newPublicKey, privateKey: newPrivateKey } = await generateKeys();
+    // [IKS-SUC3] Use provided keys or generate new ones
+    let newPublicKey: string;
+    let newPrivateKey: string;
+    if (options?.newPublicKey && options?.newPrivateKey) {
+      newPublicKey = options.newPublicKey;
+      newPrivateKey = options.newPrivateKey;
+    } else {
+      const generated = await generateKeys();
+      newPublicKey = generated.publicKey;
+      newPrivateKey = generated.privateKey;
+    }
 
     // Generate new actor ID following the pattern from actor_protocol_faq.md
     // Pattern: {baseId}-v{N} where N is the version number (using hyphens to match schema pattern)
-    // Schema pattern: ^(human|agent)(:[a-z0-9-]+)+$ (only allows hyphens, not underscores)
     const baseId = generateActorId(oldActor.type, oldActor.displayName);
-    let newActorId: string;
-
-    // Check if baseId already has a version suffix (e.g., human:camilo-v2)
-    const versionMatch = baseId.match(/^(.+)-v(\d+)$/);
-    if (versionMatch && versionMatch[1] && versionMatch[2]) {
-      const baseWithoutVersion = versionMatch[1];
-      const currentVersion = parseInt(versionMatch[2], 10);
-      newActorId = `${baseWithoutVersion}-v${currentVersion + 1}`;
-    } else {
-      // First rotation: add -v2
-      newActorId = `${baseId}-v2`;
-    }
+    const newActorId = computeSuccessorActorId(baseId);
 
     // Create new actor with same metadata but new keys
     const newActorPayload: ActorRecord = {
@@ -325,8 +334,12 @@ export class IdentityAdapter implements IIdentityAdapter {
     // Calculate checksum for the new payload
     const payloadChecksum = calculatePayloadChecksum(validatedNewPayload);
 
-    // Create signature for the new record (self-signed for bootstrap)
-    const signature = signPayload(validatedNewPayload, newPrivateKey, newActorId, 'author', 'Key rotation');
+    // [IKS-SUC2] Sign new actor with OLD key (proof of ownership per RFC-02 §6.3).
+    // The old key proves "I, human:camilo, authorize human:camilo-v2 as my successor."
+    const notes = `Key rotation — successor of ${actorId}`;
+    const successorSignature = await this.createSignature(
+      payloadChecksum, actorId, 'author', notes
+    );
 
     // Create the complete GitGovRecord structure for new actor
     const newRecord: GitGovActorRecord = {
@@ -334,15 +347,15 @@ export class IdentityAdapter implements IIdentityAdapter {
         version: '1.0',
         type: 'actor',
         payloadChecksum,
-        signatures: [signature]
+        signatures: [successorSignature]
       },
       payload: validatedNewPayload
     };
 
-    // Validate the complete new record
+    // Validate the complete new record using old actor's public key
     await validateFullActorRecord(newRecord, async (keyId) => {
-      if (keyId === newActorId) {
-        return newPublicKey; // Self-referential for bootstrap
+      if (keyId === actorId) {
+        return oldActor.publicKey;
       }
       const signerActor = await this.getActor(keyId);
       return signerActor?.publicKey || null;
@@ -351,27 +364,34 @@ export class IdentityAdapter implements IIdentityAdapter {
     // Store the new actor record
     await this.stores.actors.put(newRecord.payload.id, newRecord);
 
-    // Revoke old actor and mark succession
+    // Revoke old actor and mark succession — signed with OLD key (still available)
     const revokedOldActor = await this.revokeActor(
       actorId,
-      'system',
+      actorId,
       'rotation',
-      newActorId // Mark succession
+      newActorId
     );
 
-    // Update session to point to the new actor using SessionManager
-    try {
-      // Migrate actorState from old actor to new actor
-      const oldState = await this.sessionManager.getActorState(actorId);
-      if (oldState) {
-        await this.sessionManager.updateActorState(newActorId, oldState);
-      } else {
-        // Create initial state for new actor
-        await this.sessionManager.updateActorState(newActorId, {});
+    // Update session to point to the new actor using SessionManager.
+    // IKS-A46 pre-P9 cleanup: sessionManager is optional on the adapter. If
+    // omitted (e.g., saas-api Remote Init context), skip the state migration
+    // entirely — there is no local session store to update. The new keypair
+    // still persists via keyProvider.setPrivateKey below, so rotation itself
+    // succeeds; only the cached actor state is not migrated.
+    if (this.sessionManager) {
+      try {
+        // Migrate actorState from old actor to new actor
+        const oldState = await this.sessionManager.getActorState(actorId);
+        if (oldState) {
+          await this.sessionManager.updateActorState(newActorId, oldState);
+        } else {
+          // Create initial state for new actor
+          await this.sessionManager.updateActorState(newActorId, {});
+        }
+      } catch (error) {
+        // Non-critical: session update failure logged as warning
+        console.warn(`⚠️  Could not update session for ${newActorId}: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
-    } catch (error) {
-      // Non-critical: session update failure logged as warning
-      console.warn(`⚠️  Could not update session for ${newActorId}: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
 
     // Persist new private key via KeyProvider
@@ -387,7 +407,7 @@ export class IdentityAdapter implements IIdentityAdapter {
     };
   }
 
-  async revokeActor(actorId: string, revokedBy: string = "system", reason: "compromised" | "rotation" | "manual" = "manual", supersededBy?: string): Promise<ActorRecord> {
+  async revokeActor(actorId: string, revokedBy: string, reason: "compromised" | "rotation" | "manual" = "manual", supersededBy?: string): Promise<ActorRecord> {
     // Read the existing actor
     const existingRecord = await this.stores.actors.get(actorId);
     if (!existingRecord) {
@@ -401,15 +421,26 @@ export class IdentityAdapter implements IIdentityAdapter {
       ...(supersededBy && { supersededBy })
     };
 
-    // Calculate new checksum for the updated payload
+    // [IKS-SUC1] Calculate new checksum and sign the revocation with the revoker's key.
+    // The original creation signatures remain for historical verification (RFC-02 §10.4).
     const payloadChecksum = calculatePayloadChecksum(revokedPayload);
+    const notes = supersededBy
+      ? `Revoking after key ${reason} — successor is ${supersededBy}`
+      : `Revoking: ${reason}`;
+    const revocationSignature = await this.createSignature(
+      payloadChecksum, revokedBy, 'author', notes
+    );
 
-    // Create updated record
+    // Create updated record with revocation signature. The original creation
+    // signatures are preserved in git history (previous commit). The current
+    // file state has only the revocation signature, which verifies against
+    // the revoked payload's checksum.
     const updatedRecord: GitGovActorRecord = {
       ...existingRecord,
       header: {
         ...existingRecord.header,
-        payloadChecksum
+        payloadChecksum,
+        signatures: [revocationSignature],
       },
       payload: revokedPayload
     };
@@ -439,6 +470,25 @@ export class IdentityAdapter implements IIdentityAdapter {
     }
 
     return revokedPayload;
+  }
+
+  private async createSignature(
+    payloadChecksum: string,
+    signerActorId: string,
+    role: string,
+    notes: string,
+  ): Promise<Signature> {
+    const timestamp = Math.floor(Date.now() / 1000);
+    const digestHash = buildSignatureDigest(payloadChecksum, signerActorId, role, notes, timestamp);
+    const signatureBytes = await this.keyProvider.sign(signerActorId, new Uint8Array(digestHash));
+
+    return {
+      keyId: signerActorId,
+      role,
+      notes,
+      signature: Buffer.from(signatureBytes).toString('base64'),
+      timestamp,
+    };
   }
 
   async authenticate(_sessionToken: string): Promise<void> {

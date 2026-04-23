@@ -1,4 +1,4 @@
-import { generateKeys, signPayload, verifySignatures, derivePublicKey } from './signatures';
+import { generateKeys, signPayload, verifySignatures, derivePublicKey, buildSignatureDigest } from './signatures';
 import type { GitGovRecord, GitGovRecordPayload, GitGovRecordType } from '../record_types';
 import type { ActorRecord } from '../record_types';
 import type { AgentRecord } from '../record_types';
@@ -388,6 +388,60 @@ describe('Crypto Module (Signatures)', () => {
         keyId === 'actor:test' ? derivedPublicKey : null;
 
       await expect(verifySignatures(record, getDerivedKey)).resolves.toBe(true);
+    });
+  });
+
+  describe('4.4. buildSignatureDigest (EARS-18, EARS-19)', () => {
+    it('[EARS-18] should build SHA-256 digest from protocol format string', () => {
+      const { createHash } = require('crypto');
+
+      const checksum = 'abc123def456';
+      const keyId = 'human:camilo';
+      const role = 'author';
+      const notes = 'Test signature';
+      const timestamp = 1752274500;
+
+      const result = buildSignatureDigest(checksum, keyId, role, notes, timestamp);
+
+      // Verify it matches manual computation of the protocol digest format
+      const expectedDigest = `${checksum}:${keyId}:${role}:${notes}:${timestamp}`;
+      const expectedHash = createHash('sha256').update(expectedDigest).digest();
+
+      expect(Buffer.isBuffer(result)).toBe(true);
+      expect(result.length).toBe(32); // SHA-256 = 32 bytes
+      expect(result).toEqual(expectedHash);
+    });
+
+    it('[EARS-19] should return identical hash for same parameters (deterministic)', () => {
+      const args = ['checksum-abc', 'human:dev', 'author', 'Some notes', 1700000000] as const;
+
+      const hash1 = buildSignatureDigest(...args);
+      const hash2 = buildSignatureDigest(...args);
+
+      expect(hash1).toEqual(hash2);
+    });
+
+    it('[EARS-18] signPayload should produce signatures verifiable against buildSignatureDigest', async () => {
+      // Ensures signPayload uses buildSignatureDigest internally —
+      // a signature made by signPayload must verify against a digest
+      // reconstructed by buildSignatureDigest with the same parameters.
+      const { publicKey, privateKey } = await generateKeys();
+      const payload = { id: 'task:verify-digest', title: 'test' } as unknown as GitGovRecordPayload;
+
+      const sig = signPayload(payload, privateKey, 'human:test', 'author', 'Digest consistency');
+      const checksum = calculatePayloadChecksum(payload);
+
+      // Reconstruct the digest using buildSignatureDigest
+      const digestHash = buildSignatureDigest(checksum, sig.keyId, sig.role, sig.notes, sig.timestamp);
+
+      // Verify the signature against the reconstructed digest
+      const { verify: ed25519Verify } = require('crypto');
+      const { ed25519PublicKeyToSpki } = require('./signatures');
+      const spkiKey = ed25519PublicKeyToSpki(publicKey);
+      const sigBuffer = Buffer.from(sig.signature, 'base64');
+
+      const isValid = ed25519Verify(null, digestHash, { key: spkiKey, type: 'spki', format: 'der' }, sigBuffer);
+      expect(isValid).toBe(true);
     });
   });
 

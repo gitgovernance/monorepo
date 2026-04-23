@@ -644,7 +644,7 @@ describe('LocalGitModule', () => {
       await execAsync('git rebase --abort', { cwd: tempRepo });
     });
 
-    it('[EARS-A18] should throw GitCommandError if no rebase/merge in progress', async () => {
+    it('[EARS-A18] should return empty array if no conflicts', async () => {
       // When no conflict, getConflictedFiles should return empty array
       const conflicts = await gitModule.getConflictedFiles();
       expect(conflicts).toEqual([]);
@@ -1407,6 +1407,41 @@ describe('LocalGitModule', () => {
       expect(afterResult.stdout.trim()).toBe('');
 
       removeTempRepo(repoPath);
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // 4.8. Branch Deletion (EARS-H1 to H2) — Cycle 5 identity_key_sync (IKS-A41)
+  // ═══════════════════════════════════════════════════════════════════════
+
+  describe('4.8. Branch Deletion (EARS-H1 to H2)', () => {
+    it('[EARS-H1] should remove existing branch via git branch -D', async () => {
+      // Arrange: create a branch without checking it out so we can delete it
+      // while HEAD stays on the current branch
+      await execAsync('git branch feature-to-delete', { cwd: tempRepo });
+
+      const existsBefore = await gitModule.branchExists('feature-to-delete');
+      expect(existsBefore).toBe(true);
+
+      // Act
+      await gitModule.deleteBranch('feature-to-delete');
+
+      // Assert
+      const existsAfter = await gitModule.branchExists('feature-to-delete');
+      expect(existsAfter).toBe(false);
+    });
+
+    it('[EARS-H2] should complete as no-op when branch does not exist', async () => {
+      // Arrange: confirm branch is absent to begin with
+      const existsBefore = await gitModule.branchExists('never-existed');
+      expect(existsBefore).toBe(false);
+
+      // Act + Assert: no throw, idempotent return
+      await expect(gitModule.deleteBranch('never-existed')).resolves.toBeUndefined();
+
+      // State unchanged — branch still absent
+      const existsAfter = await gitModule.branchExists('never-existed');
+      expect(existsAfter).toBe(false);
     });
   });
 });

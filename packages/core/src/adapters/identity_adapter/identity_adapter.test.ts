@@ -14,7 +14,13 @@ jest.mock('../../record_factories/actor_factory');
 jest.mock('../../record_validations/actor_validator');
 jest.mock('../../crypto/signatures');
 jest.mock('../../crypto/checksum');
-jest.mock('../../utils/id_generator');
+jest.mock('../../utils/id_generator', () => {
+  const actual = jest.requireActual('../../utils/id_generator');
+  return {
+    ...actual,
+    generateActorId: jest.fn(),
+  };
+});
 
 import type { KeyProvider } from '../../key_provider/key_provider';
 
@@ -251,6 +257,63 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       console.warn = originalWarn;
     });
 
+    it('[EARS-C1+IKS-A46] should succeed when constructed WITHOUT sessionManager (pre-P9 cleanup positive path)', async () => {
+      // Construct an adapter without sessionManager — the saas-api Remote Init pattern.
+      // Post-IKS-A46 pre-P9 cleanup, sessionManager is optional in IdentityAdapterDependencies.
+      // createActor does NOT touch sessionManager, so construction + createActor must succeed.
+      const adapterWithoutSession = new IdentityAdapter({
+        stores: { actors: mockActorStore },
+        keyProvider: mockKeyProvider,
+        // sessionManager omitted intentionally
+      });
+
+      const inputPayload = {
+        type: 'human' as const,
+        displayName: 'Remote Init User',
+        roles: ['author'] as [string, ...string[]]
+      };
+
+      mockedGenerateKeys.mockResolvedValue({
+        publicKey: 'remote-init-public-key',
+        privateKey: 'remote-init-private-key'
+      });
+      mockedGenerateActorId.mockReturnValue('human:remote-init-user');
+      mockedCreateActorRecord.mockReturnValue({
+        ...sampleActorPayload,
+        id: 'human:remote-init-user',
+        displayName: 'Remote Init User',
+        publicKey: 'remote-init-public-key',
+      });
+      mockedCalculatePayloadChecksum.mockReturnValue('checksum');
+      mockedSignPayload.mockReturnValue({
+        keyId: 'human:remote-init-user',
+        role: 'author',
+        notes: 'Actor registration',
+        signature: 'remote-init-signature',
+        timestamp: 1234567890
+      });
+      mockedValidateFullActorRecord.mockResolvedValue(undefined);
+      mockActorStore.put.mockResolvedValue(undefined);
+
+      const originalWarn = console.warn;
+      console.warn = jest.fn();
+
+      // Must NOT throw — createActor is sessionManager-independent
+      const result = await adapterWithoutSession.createActor(inputPayload, 'human:remote-init-user');
+
+      expect(result.id).toBe('human:remote-init-user');
+      expect(mockActorStore.put).toHaveBeenCalled();
+      expect(mockKeyProvider.setPrivateKey).toHaveBeenCalledWith(
+        'human:remote-init-user',
+        'remote-init-private-key'
+      );
+      // sessionManager was never touched (no stub to call)
+      expect(mockSessionManager.loadSession).not.toHaveBeenCalled();
+      expect(mockSessionManager.getActorState).not.toHaveBeenCalled();
+
+      console.warn = originalWarn;
+    });
+
     it('[EARS-C3] should persist private key via KeyProvider', async () => {
       const inputPayload = {
         type: 'human' as const,
@@ -307,23 +370,52 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
   });
 
   describe('revokeActor', () => {
-    it('[EARS-D1] should revoke an existing actor', async () => {
+    it('[EARS-D1] should revoke an existing actor and sign the revocation', async () => {
       const existingRecord = { ...sampleRecord };
       mockActorStore.get.mockResolvedValue(existingRecord);
       mockActorStore.put.mockResolvedValue(undefined);
       mockedCalculatePayloadChecksum.mockReturnValue('new-checksum');
 
-      const result = await identityAdapter.revokeActor('human:test-user');
+      const result = await identityAdapter.revokeActor('human:test-user', 'human:test-user');
 
       expect(mockActorStore.get).toHaveBeenCalledWith('human:test-user');
-      expect(mockActorStore.put).toHaveBeenCalled();
       expect(result.status).toBe('revoked');
+
+      // [IKS-SUC1] Verify revocation signature REPLACES original (§6.5)
+      const putCall = mockActorStore.put.mock.calls[0]!;
+      const storedRecord = putCall[1];
+      expect(storedRecord.header.signatures).toHaveLength(1);
+      const revocationSig = storedRecord.header.signatures[0]!;
+      expect(revocationSig.keyId).toBe('human:test-user');
+      expect(revocationSig.role).toBe('author');
+      expect(revocationSig.notes).toContain('Revoking');
+      expect(storedRecord.header.payloadChecksum).toBe('new-checksum');
+    });
+
+    it('[EARS-D1b] should sign revocation with the revokedBy actor keyId', async () => {
+      const existingRecord = { ...sampleRecord };
+      mockActorStore.get.mockResolvedValue(existingRecord);
+      mockActorStore.put.mockResolvedValue(undefined);
+      mockedCalculatePayloadChecksum.mockReturnValue('admin-revoke-checksum');
+
+      await identityAdapter.revokeActor('human:test-user', 'human:admin', 'compromised');
+
+      expect(mockKeyProvider.sign).toHaveBeenCalledWith(
+        'human:admin',
+        expect.any(Uint8Array)
+      );
+      const putCall = mockActorStore.put.mock.calls[0]!;
+      const storedRecord = putCall[1];
+      expect(storedRecord.header.signatures).toHaveLength(1);
+      const revocationSig = storedRecord.header.signatures[0]!;
+      expect(revocationSig.keyId).toBe('human:admin');
+      expect(revocationSig.notes).toContain('compromised');
     });
 
     it('[EARS-D2] should throw error when actor does not exist', async () => {
       mockActorStore.get.mockResolvedValue(null);
 
-      await expect(identityAdapter.revokeActor('non-existent'))
+      await expect(identityAdapter.revokeActor('non-existent', 'human:admin'))
         .rejects.toThrow('ActorRecord with id non-existent not found');
     });
   });
@@ -542,6 +634,71 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
       );
     });
 
+    it('[EARS-F1b] should sign new actor with OLD actorId as keyId (IKS-SUC2)', async () => {
+      const pubKey = 'NEW_PUBLIC_KEY_BASE64_44_CHARS_LONG_AAAAAAAAAAA=';
+      const privKey = 'new-private-key-base64';
+      const successorId = 'human:new-test-user-v2';
+
+      jest.spyOn(identityAdapter, 'getActor').mockResolvedValue(sampleActorPayload);
+      mockedGenerateKeys.mockResolvedValueOnce({ publicKey: pubKey, privateKey: privKey });
+      mockedGenerateActorId.mockReturnValueOnce(successorId);
+      mockedCreateActorRecord.mockReturnValueOnce({ ...sampleActorPayload, id: successorId, publicKey: pubKey });
+      mockedCalculatePayloadChecksum.mockReturnValueOnce('new-checksum');
+      mockedValidateFullActorRecord.mockResolvedValueOnce(undefined);
+      mockActorStore.put.mockResolvedValue(undefined);
+      mockActorStore.get
+        .mockResolvedValueOnce(sampleRecord)
+        .mockResolvedValueOnce(sampleRecord);
+
+      await identityAdapter.rotateActorKey('human:test-user');
+
+      // [IKS-SUC2] Verify keyProvider.sign was called with OLD actorId for the new actor signature
+      expect(mockKeyProvider.sign).toHaveBeenCalledWith(
+        'human:test-user',
+        expect.any(Uint8Array)
+      );
+
+      // Verify new actor record was stored with signature using old actorId as keyId
+      const firstPutCall = mockActorStore.put.mock.calls[0]!;
+      const newActorRecord = firstPutCall[1];
+      expect(newActorRecord.header.signatures[0].keyId).toBe('human:test-user');
+      expect(newActorRecord.header.signatures[0].notes).toContain('successor of human:test-user');
+    });
+
+    it('[EARS-F1b] should accept external keys instead of generating (IKS-SUC3)', async () => {
+      const externalPublicKey = 'external-pub-key-base64-xxxxxxxxxxxxxxx=';
+      const externalPrivateKey = 'external-priv-key-base64-xxxxxxxxxxxxxx=';
+      const baseId = 'human:new-test-user';
+      const successorId = 'human:new-test-user-v2';
+
+      jest.spyOn(identityAdapter, 'getActor').mockResolvedValue(sampleActorPayload);
+      mockedGenerateActorId.mockReturnValueOnce(baseId);
+      mockedCreateActorRecord.mockReturnValueOnce({ ...sampleActorPayload, id: successorId, publicKey: externalPublicKey });
+      mockedCalculatePayloadChecksum.mockReturnValueOnce('ext-checksum');
+      mockedValidateFullActorRecord.mockResolvedValueOnce(undefined);
+      mockActorStore.put.mockResolvedValue(undefined);
+      mockActorStore.get
+        .mockResolvedValueOnce(sampleRecord)
+        .mockResolvedValueOnce(sampleRecord);
+
+      const result = await identityAdapter.rotateActorKey('human:test-user', {
+        newPublicKey: externalPublicKey,
+        newPrivateKey: externalPrivateKey,
+      });
+
+      // [IKS-SUC3] Verify generateKeys was NOT called (external keys used)
+      expect(mockedGenerateKeys).not.toHaveBeenCalled();
+
+      // Verify new actor uses the provided external key
+      expect(result.newActor.publicKey).toBe(externalPublicKey);
+
+      // Verify the external private key was persisted
+      expect(mockKeyProvider.setPrivateKey).toHaveBeenCalledWith(
+        successorId,
+        externalPrivateKey,
+      );
+    });
+
     it('[EARS-F2] should throw error if actor not found', async () => {
       jest.spyOn(identityAdapter, 'getActor').mockResolvedValue(null);
 
@@ -555,6 +712,57 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
 
       await expect(identityAdapter.rotateActorKey('human:test-user'))
         .rejects.toThrow('Cannot rotate key for revoked actor: human:test-user');
+    });
+
+    it('[EARS-F8] should succeed without sessionManager, skipping actorState migration (IKS-A46 pre-P9 cleanup)', async () => {
+      // Construct adapter WITHOUT sessionManager — the saas-api Remote Init pattern
+      const adapterWithoutSession = new IdentityAdapter({
+        stores: { actors: mockActorStore },
+        keyProvider: mockKeyProvider,
+        // sessionManager omitted intentionally
+      });
+
+      const existingActor = sampleActorPayload;
+      const baseActorId = 'human:new-test-user';
+      const newActorId = 'human:new-test-user-v2';
+      const newPublicKey = 'NEW_PUBLIC_KEY_BASE64_44_CHARS_LONG_AAAAAAAAAAA=';
+      const newPrivateKey = 'new-private-key-base64';
+
+      jest.spyOn(adapterWithoutSession, 'getActor').mockResolvedValue(existingActor);
+      mockedGenerateKeys.mockResolvedValueOnce({
+        publicKey: newPublicKey,
+        privateKey: newPrivateKey
+      });
+      mockedGenerateActorId.mockReturnValueOnce(baseActorId);
+      mockedCreateActorRecord.mockReturnValueOnce({
+        ...existingActor,
+        id: newActorId,
+        publicKey: newPublicKey
+      });
+      mockedCalculatePayloadChecksum.mockReturnValueOnce('new-checksum');
+      mockedSignPayload.mockReturnValueOnce({
+        keyId: newActorId,
+        role: 'author',
+        notes: 'Key rotation',
+        signature: 'new-signature',
+        timestamp: Date.now()
+      });
+      mockedValidateFullActorRecord.mockResolvedValueOnce(undefined);
+      mockActorStore.put.mockResolvedValue(undefined);
+      mockActorStore.list.mockResolvedValue(['human:test-user']);
+      mockActorStore.get
+        .mockResolvedValueOnce(sampleRecord)
+        .mockResolvedValueOnce(sampleRecord);
+
+      const result = await adapterWithoutSession.rotateActorKey('human:test-user');
+
+      // Rotation succeeds: new actor created, old revoked, key persisted
+      expect(result.oldActor.status).toBe('revoked');
+      expect(result.newActor.id).toBe(newActorId);
+      expect(mockKeyProvider.setPrivateKey).toHaveBeenCalledWith(newActorId, newPrivateKey);
+      // sessionManager methods were NEVER invoked — the `if (this.sessionManager)` block skipped
+      expect(mockSessionManager.getActorState).not.toHaveBeenCalled();
+      expect(mockSessionManager.updateActorState).not.toHaveBeenCalled();
     });
 
     it('[EARS-F4] should throw error if validateFullActorRecord fails', async () => {
@@ -880,6 +1088,20 @@ describe('IdentityAdapter - ActorRecord Operations', () => {
 
       await expect(identityAdapter.getCurrentActor())
         .rejects.toThrow("❌ No active actors found. Run 'gitgov init' first.");
+    });
+
+    it('[EARS-M4] should throw clear error when sessionManager is undefined (IKS-A46 pre-P9 cleanup)', async () => {
+      // Construct an adapter WITHOUT sessionManager (post-IKS-A46 pre-P9 cleanup: optional field)
+      const adapterWithoutSession = new IdentityAdapter({
+        stores: { actors: mockActorStore },
+        keyProvider: mockKeyProvider,
+        // sessionManager omitted intentionally — this is the saas-api Remote Init pattern
+      });
+
+      await expect(adapterWithoutSession.getCurrentActor())
+        .rejects.toThrow(
+          'IdentityAdapter.getCurrentActor requires a sessionManager. Construct the adapter with { sessionManager } to use this method.'
+        );
     });
   });
 

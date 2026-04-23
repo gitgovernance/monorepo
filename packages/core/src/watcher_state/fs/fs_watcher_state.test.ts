@@ -22,7 +22,8 @@ import { FsWatcherStateModule } from "./fs_watcher_state";
 import { ProjectNotInitializedError } from "../watcher_state.errors";
 
 const TEST_DEBOUNCE = 50;
-const WAIT_MS = 600;
+// CI runners have slower filesystem — need extra margin for watcher debounce
+const WAIT_MS = process.env['CI'] ? 2000 : 600;
 
 function wait(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));

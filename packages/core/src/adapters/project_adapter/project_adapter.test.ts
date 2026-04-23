@@ -164,6 +164,7 @@ describe('ProjectAdapter', () => {
       getActorPath: jest.fn().mockImplementation((actorId: string) => {
         return `/test/project/.gitgov/actors/${actorId}.json`;
       }),
+      finalize: jest.fn().mockResolvedValue(undefined),
     } as jest.Mocked<IProjectInitializer>;
 
     mockFs = fs as jest.Mocked<typeof fs> & { existsSync: jest.MockedFunction<any> };

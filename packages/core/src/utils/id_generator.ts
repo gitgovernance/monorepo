@@ -19,6 +19,23 @@ export function generateActorId(type: 'human' | 'agent', displayName: string): s
 }
 
 /**
+ * Computes the successor actor ID for key rotation (RFC-02 §6.3).
+ * Pattern: first rotation appends '-v2', subsequent increments version.
+ *
+ * @example
+ *   computeSuccessorActorId('human:camilo')     → 'human:camilo-v2'
+ *   computeSuccessorActorId('human:camilo-v2')  → 'human:camilo-v3'
+ *   computeSuccessorActorId('human:camilo-v99') → 'human:camilo-v100'
+ */
+export function computeSuccessorActorId(actorId: string): string {
+  const versionMatch = actorId.match(/^(.+)-v(\d+)$/);
+  if (versionMatch && versionMatch[1] && versionMatch[2]) {
+    return `${versionMatch[1]}-v${parseInt(versionMatch[2], 10) + 1}`;
+  }
+  return `${actorId}-v2`;
+}
+
+/**
  * Generates an Agent ID (e.g., 'agent:code-reviewer').
  * Convenience wrapper over generateActorId for agent-specific use cases.
  */

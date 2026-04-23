@@ -448,6 +448,21 @@ export class MemoryGitModule implements IGitModule {
     this.state.currentBranch = branchName;
   }
 
+  /**
+   * Deletes a branch — idempotent semantics (verifies IGitModule EARS-GM12/GM13).
+   *
+   * Mutates internal state: removes the branch from `state.branches` if present.
+   * If the branch is not in state, returns without mutating (no-op).
+   *
+   * @param branchName - Name of the branch to delete
+   */
+  async deleteBranch(branchName: string): Promise<void> {
+    // [EARS-I1] [EARS-GM12] Remove branch from internal state if present.
+    // [EARS-I2] [EARS-GM13] Set.delete() returns false but does not throw
+    //          when the key is absent — idempotent by construction.
+    this.state.branches.delete(branchName);
+  }
+
   async rebase(_targetBranch: string): Promise<void> {
     // No-op in memory, unless conflicts are set
     if (this.state.conflictedFiles.length > 0) {

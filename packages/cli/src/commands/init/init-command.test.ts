@@ -75,8 +75,13 @@ describe('InitCommand', () => {
       validateEnvironment: jest.fn()
     };
 
-    // Mock execSync for git config
-    (execSync as jest.MockedFunction<typeof execSync>).mockReturnValue('Test User\n');
+    // Mock execSync: git config returns user name, ls-remote returns empty (no remote branch)
+    (execSync as jest.MockedFunction<typeof execSync>).mockImplementation((cmd: unknown) => {
+      if (typeof cmd === 'string' && cmd.includes('ls-remote')) {
+        return '';
+      }
+      return 'Test User\n';
+    });
 
     // Create InitCommand (DI is mocked at module level)
     initCommand = new InitCommand();
@@ -110,15 +115,13 @@ describe('InitCommand', () => {
       });
 
       expect(mockProjectAdapter.validateEnvironment).toHaveBeenCalled();
-      expect(mockProjectAdapter.initializeProject).toHaveBeenCalledWith({
-        name: 'Test Project',
-        template: undefined,
-        actorName: 'Test User',
-        actorEmail: undefined,
-        methodology: undefined,
-        skipValidation: undefined,
-        verbose: undefined
-      });
+      expect(mockProjectAdapter.initializeProject).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'Test Project',
+          actorName: 'Test User',
+          saasUrl: 'https://app.gitgov.dev',
+        })
+      );
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('🚀 Initializing GitGovernance Project...'));
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('✅ GitGovernance initialized successfully!'));
     });
@@ -211,6 +214,22 @@ describe('InitCommand', () => {
       );
     });
 
+    it('[EARS-A9] should create actor with human:${login} when --login provided', async () => {
+      await initCommand.execute({
+        name: 'Login Project',
+        login: 'cagodoy',
+        actorName: 'Camilo Acuña Godoy',
+      });
+
+      expect(mockProjectAdapter.initializeProject).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'Login Project',
+          login: 'cagodoy',
+          actorName: 'Camilo Acuña Godoy',
+        })
+      );
+    });
+
     it('[EARS-A7] should create actor with type=\'human\' by default', async () => {
       await initCommand.execute({
         name: 'Human Project',
@@ -236,15 +255,15 @@ describe('InitCommand', () => {
         template: 'basic'
       });
 
-      expect(mockProjectAdapter.initializeProject).toHaveBeenCalledWith({
-        name: 'Integration Test',
-        template: 'basic',
-        actorName: 'Integration User',
-        actorEmail: undefined,
-        methodology: 'scrum',
-        skipValidation: undefined,
-        verbose: undefined
-      });
+      expect(mockProjectAdapter.initializeProject).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'Integration Test',
+          template: 'basic',
+          actorName: 'Integration User',
+          methodology: 'scrum',
+          saasUrl: 'https://app.gitgov.dev',
+        })
+      );
     });
 
     it('[EARS-B2] should handle ProjectAdapter validation errors', async () => {
@@ -397,15 +416,17 @@ describe('InitCommand', () => {
         cache: false
       });
 
-      expect(mockProjectAdapter.initializeProject).toHaveBeenCalledWith({
-        name: 'Full Test',
-        template: 'enterprise',
-        actorName: 'Full User',
-        actorEmail: 'user@example.com',
-        methodology: 'scrum',
-        skipValidation: undefined,
-        verbose: true
-      });
+      expect(mockProjectAdapter.initializeProject).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'Full Test',
+          template: 'enterprise',
+          actorName: 'Full User',
+          actorEmail: 'user@example.com',
+          methodology: 'scrum',
+          verbose: true,
+          saasUrl: 'https://app.gitgov.dev',
+        })
+      );
     });
 
     it('[EARS-D2] should show user-friendly error messages with troubleshooting suggestions', async () => {
@@ -440,7 +461,10 @@ describe('InitCommand', () => {
     });
 
     it('[EARS-D3] should use interactive prompts and intelligent defaults for UX excellence', async () => {
-      (execSync as jest.MockedFunction<typeof execSync>).mockReturnValue('John Doe\n');
+      (execSync as jest.MockedFunction<typeof execSync>).mockImplementation((cmd: unknown) => {
+        if (typeof cmd === 'string' && cmd.includes('ls-remote')) return '';
+        return 'John Doe\n';
+      });
 
       await initCommand.execute({
         name: 'Test Project'
@@ -478,15 +502,15 @@ describe('InitCommand', () => {
         template: 'enterprise'
       });
 
-      expect(mockProjectAdapter.initializeProject).toHaveBeenCalledWith({
-        name: 'Custom Project',
-        template: 'enterprise',
-        actorName: 'Custom User',
-        actorEmail: undefined,
-        methodology: 'kanban',
-        skipValidation: undefined,
-        verbose: undefined
-      });
+      expect(mockProjectAdapter.initializeProject).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'Custom Project',
+          template: 'enterprise',
+          actorName: 'Custom User',
+          methodology: 'kanban',
+          saasUrl: 'https://app.gitgov.dev',
+        })
+      );
     });
   });
 
@@ -618,6 +642,73 @@ describe('InitCommand', () => {
       const structureIndex = mockConsoleLog.mock.calls.indexOf(structureCall!);
       const pathLine = mockConsoleLog.mock.calls[structureIndex + 1];
       expect(pathLine?.[0]).toContain('~/.gitgov/');
+    });
+  });
+
+  // ============================================================================
+  // §4.6. Smart Init — Remote Detection (Task 5.4, IKS-T7/T8 CLI side)
+  // ============================================================================
+  describe('4.6. Smart Init — Remote Detection (Task 5.4)', () => {
+    it('should abort init when gitgov-state exists on remote', async () => {
+      (execSync as jest.MockedFunction<typeof execSync>).mockImplementation((cmd: unknown) => {
+        if (typeof cmd === 'string' && cmd.includes('ls-remote')) {
+          return 'abc123def456\trefs/heads/gitgov-state\n';
+        }
+        return 'Test User\n';
+      });
+
+      await initCommand.execute({ name: 'Cloud Project' });
+
+      expect(mockConsoleLog).toHaveBeenCalledWith(
+        expect.stringContaining('gitgov login'),
+      );
+      expect(mockProcessExit).toHaveBeenCalledWith(1);
+      expect(mockProjectAdapter.initializeProject).not.toHaveBeenCalled();
+    });
+
+    it('should proceed when gitgov-state does not exist on remote', async () => {
+      (execSync as jest.MockedFunction<typeof execSync>).mockImplementation((cmd: unknown) => {
+        if (typeof cmd === 'string' && cmd.includes('ls-remote')) {
+          return '';
+        }
+        return 'Test User\n';
+      });
+
+      await initCommand.execute({ name: 'Fresh Project' });
+
+      expect(mockProjectAdapter.initializeProject).toHaveBeenCalled();
+    });
+
+    it('should proceed with --force-local even when remote branch exists', async () => {
+      (execSync as jest.MockedFunction<typeof execSync>).mockImplementation((cmd: unknown) => {
+        if (typeof cmd === 'string' && cmd.includes('ls-remote')) {
+          return 'abc123def456\trefs/heads/gitgov-state\n';
+        }
+        return 'Test User\n';
+      });
+
+      await initCommand.execute({ name: 'Force Local Project', forceLocal: true });
+
+      expect(mockProjectAdapter.initializeProject).toHaveBeenCalled();
+    });
+  });
+
+  // ============================================================================
+  // §4.7. Post-Init State Commit (EARS-G1)
+  // ============================================================================
+  describe('4.7. Post-Init State Commit (EARS-G1)', () => {
+    it('[EARS-G1] should commit initialized files to gitgov-state worktree', async () => {
+      await initCommand.execute({ name: 'G1 Test', actorName: 'Test User' });
+
+      const mockExecSync = execSync as jest.MockedFunction<typeof execSync>;
+      const addCalls = mockExecSync.mock.calls.filter(
+        (call) => typeof call[0] === 'string' && call[0].includes('git add') && call[0].includes('config.json')
+      );
+      const commitCalls = mockExecSync.mock.calls.filter(
+        (call) => typeof call[0] === 'string' && call[0].includes('git commit') && call[0].includes('initial project structure')
+      );
+      expect(addCalls.length).toBeGreaterThanOrEqual(1);
+      expect(commitCalls.length).toBeGreaterThanOrEqual(1);
     });
   });
 });

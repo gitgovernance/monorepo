@@ -66,6 +66,10 @@ export type ProjectInitOptions = {
   skipValidation?: boolean;
   /** Verbose logging */
   verbose?: boolean;
+  /** GitHub login for actorId generation. actorId = `human:${login}` (IKS-A48) */
+  login?: string;
+  /** SaaS URL for cloud sync (written to config.json) */
+  saasUrl?: string;
 };
 
 /**

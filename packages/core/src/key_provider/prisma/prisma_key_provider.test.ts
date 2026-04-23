@@ -285,6 +285,23 @@ function createMockActorKeyDelegate(): {
         return { count: matches.length };
       },
     ),
+    deleteMany: jest.fn(
+      async (args: {
+        where: { actorId: string; orgId: string; status: string };
+      }) => {
+        const before = rows.length;
+        const toRemove = rows.filter(
+          (r) =>
+            r.actorId === args.where.actorId &&
+            r.orgId === args.where.orgId &&
+            r.status === args.where.status,
+        );
+        for (const row of toRemove) {
+          rows.splice(rows.indexOf(row), 1);
+        }
+        return { count: before - rows.length };
+      },
+    ),
     update: jest.fn(
       async (args: {
         where: { id: string };
@@ -741,6 +758,27 @@ describe('PrismaKeyProvider v2', () => {
         .length;
       // Cache hit: count didn't increase on subsequent operations
       expect(finalCallCount).toBe(firstCallCount);
+    });
+
+    it('[PKP-F2] should auto-create OrgEncryptionKey on first use when none exists', async () => {
+      const { client, orgKeyRows } = createMockPrismaClient();
+      process.env['MASTER_KEY'] = TEST_MASTER_KEY;
+
+      // NO createOrgEncryptionKey called — provider must auto-create
+      expect(orgKeyRows.size).toBe(0);
+
+      const provider = new PrismaKeyProvider(client, 'org-new');
+      const { privateKey, publicKey } = await generateKeys();
+
+      await provider.storeKey('human:alice', { publicKey, privateKey });
+
+      // OrgEncryptionKey was auto-created
+      expect(orgKeyRows.size).toBe(1);
+      expect(orgKeyRows.has('org-new')).toBe(true);
+
+      // Key was stored successfully using the auto-created org key
+      const retrieved = await provider.getPrivateKey('human:alice');
+      expect(retrieved).toBe(privateKey);
     });
 
     it('[PKP-F3] should encrypt ActorKey with org key, never with MASTER_KEY directly', async () => {

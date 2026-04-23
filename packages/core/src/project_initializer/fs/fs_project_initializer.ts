@@ -141,6 +141,29 @@ export class FsProjectInitializer implements IProjectInitializer {
   }
 
   /**
+   * Finalize the initialization transaction — no-op on filesystem backend.
+   *
+   * Verifies `EARS-FPI15` (FS-specific) and `EARS-PI11` (interface base).
+   *
+   * The filesystem backend has no transaction buffer — all write methods
+   * (`createProjectStructure`, `writeConfig`, `initializeSession`, etc.)
+   * persist immediately to disk via `fs.writeFile`/`fs.mkdir`. By the time
+   * `finalize()` is called, all writes from prior method calls are already
+   * durable, so there is nothing to commit.
+   *
+   * This method exists solely to satisfy the `IProjectInitializer` contract
+   * (LSP: both FS and GitHub backends honor the same interface, with trivial
+   * or non-trivial implementations according to their durability semantics).
+   */
+  async finalize(): Promise<string | undefined> {
+    // [EARS-FPI15] [EARS-PI11] No-op: filesystem writes are persisted immediately
+    // by the individual write methods. No transaction buffer to commit.
+    // Returns undefined — there is no commit SHA for the FS backend (no commit
+    // concept). Transactional backends (GitHub) return the atomic commit SHA.
+    return undefined;
+  }
+
+  /**
    * Validates environment for GitGovernance initialization.
    * Checks: Git repo exists, write permissions, not already initialized.
    */

@@ -54,7 +54,17 @@ export interface IProjectInitializer {
   initializeSession(actorId: string): Promise<void>;
 
   /**
-   * Cleans up partial setup if initialization fails.
+   * Cleanup-on-failure for a failed initialization — NOT an uninstall command.
+   *
+   * Called in the failure path of the sequence `createProjectStructure →
+   * writeConfig → initializeSession → ...` to leave the backend in the state
+   * it was in before the failed init attempt. It is NOT a command to
+   * uninstall an already successfully-initialized project — that would be
+   * a distinct operation outside this contract.
+   *
+   * Implementations should be graceful: if called when there is nothing to
+   * roll back (e.g. no artifacts created yet), it SHALL complete without
+   * throwing.
    */
   rollback(): Promise<void>;
 
@@ -90,6 +100,34 @@ export interface IProjectInitializer {
    * @returns Path or identifier for the actor
    */
   getActorPath(actorId: string): string;
+
+  /**
+   * Finalize the initialization transaction — Unit of Work pattern
+   * (added in Cycle 5, IKS-A40 / EARS-PI11).
+   *
+   * Materializes pending writes on backends with transactional semantics.
+   * Must be called as the final step of an initialization sequence for writes
+   * to become durable on transactional backends.
+   *
+   * - **Filesystem backend (`FsProjectInitializer`):** no-op. All write methods
+   *   persist immediately via `fs.writeFile`/`fs.mkdir` — there is no
+   *   transaction buffer to commit.
+   *
+   * - **GitHub backend (`GitHubProjectInitializer`, Task 5.1a):** triggers the
+   *   commit (`gitModule.commit(message, author)`) that materializes all staged
+   *   writes (config.json, policy.yml, and orchestrator-staged records) into a
+   *   single atomic commit via the 6-step transaction of `GitHubGitModule`.
+   *
+   * Calling `finalize()` more than once in a single initialization sequence
+   * is an error.
+   *
+   * **Return value (added in Cycle 5 Task 5.1b for identity_key_sync):**
+   * Transactional backends return the commit SHA of the atomic commit
+   * (useful for observability and state machine events — e.g.,
+   * `RepoStateMachineService.transition({type: 'INIT_COMPLETE', commitSha})`).
+   * Non-transactional backends (filesystem) return `undefined`.
+   */
+  finalize(): Promise<string | undefined>;
 }
 
 // EnvironmentValidation is defined in ./project_initializer.types.ts

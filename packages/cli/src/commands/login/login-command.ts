@@ -44,6 +44,7 @@ function createDefaultDeps(): LoginDeps {
     startCallbackServer: (port: number) => {
       return new Promise((resolve, reject) => {
         import('http').then(({ createServer }) => {
+          let timeoutHandle: ReturnType<typeof setTimeout>;
           const server = createServer((req, res) => {
             const url = new URL(req.url ?? '/', `http://localhost:${port}`);
             const token = url.searchParams.get('token');
@@ -51,19 +52,20 @@ function createDefaultDeps(): LoginDeps {
             const id = url.searchParams.get('id');
 
             if (token && login && id) {
-              res.writeHead(200, { 'Content-Type': 'text/html' });
+              clearTimeout(timeoutHandle);
+              res.writeHead(200, { 'Content-Type': 'text/html', 'Connection': 'close' });
               res.end('<html><body><h1>Login successful!</h1><p>You can close this window.</p></body></html>');
               server.close();
               resolve({ token, user: { login, id: Number(id) } });
             } else {
-              res.writeHead(400, { 'Content-Type': 'text/plain' });
+              res.writeHead(400, { 'Content-Type': 'text/plain', 'Connection': 'close' });
               res.end('Missing token, login, or id');
             }
           });
           server.listen(port, () => {});
           server.on('error', reject);
           // [LOGIN-H2] Timeout after 5 minutes
-          setTimeout(() => {
+          timeoutHandle = setTimeout(() => {
             server.close();
             reject(new Error('Login timeout — no callback received within 5 minutes'));
           }, CALLBACK_TIMEOUT_MS);
@@ -91,13 +93,26 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
   // [LOGIN-A1] OAuth flow → open browser, start callback server, store session token
   async executeLogin(options: LoginCommandOptions): Promise<void> {
     try {
-      const saasUrl = await this.resolveSaasUrl(options);
+      // [LOGIN-J1] Cloud-first bootstrap: fetch remote gitgov-state so DI can discover it
+      try {
+        const { execSync } = await import('child_process');
+        execSync('git fetch origin gitgov-state', {
+          cwd: process.cwd(),
+          stdio: 'pipe',
+          timeout: 15000,
+        });
+      } catch {
+        // [LOGIN-J2] Fetch failed — continue, DI will use cached refs or fail with clear message
+      }
 
-      console.log(`Opening browser for authentication at ${saasUrl}...`);
+      const saasUrl = await this.resolveSaasUrl(options);
 
       // Start local callback server and open browser in parallel
       const callbackPromise = this.deps.startCallbackServer(CALLBACK_PORT);
-      const oauthUrl = `${saasUrl}/api/auth/cli?callback=http://localhost:${CALLBACK_PORT}/auth/callback`;
+      const webUrl = process.env['GITGOV_WEB_URL'] ?? saasUrl.replace(':3001', ':3000');
+      const oauthUrl = `${webUrl}/auth/cli?callback=http://localhost:${CALLBACK_PORT}/auth/callback`;
+
+      console.log(`Opening browser for authentication at ${oauthUrl}`);
       await this.deps.openBrowser(oauthUrl);
 
       // Wait for callback with token
@@ -106,22 +121,30 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
       // Store session token via SessionManager public API
       const sessionManager = await this.dependencyService.getSessionManager();
       await sessionManager.setCloudToken(token);
-      await sessionManager.setLastSession(`human:${user.login}`, new Date().toISOString());
 
-      console.log(`Logged in as ${user.login} (human:${user.login})`);
+      // Discover local actor — use its actorId for key sync, not github login
+      const localActor = await this.findLocalHumanActor();
+      const actorId = localActor?.actorId ?? `human:${user.login}`;
+
+      await sessionManager.setLastSession(actorId, new Date().toISOString());
+
+      console.log(`Logged in as ${user.login} (${actorId})`);
 
       // [LOGIN-B3] Skip key sync if --no-key-sync
       if (options.noKeySync) {
         this.handleSuccess(
-          { loggedIn: true, user: user.login, actorId: `human:${user.login}`, keySynced: false },
+          { loggedIn: true, user: user.login, actorId, keySynced: false },
           options,
           `Logged in (key sync skipped)`
         );
         return;
       }
 
-      // Key sync detection and execution
-      await this.syncKeys(`human:${user.login}`, saasUrl, token, options);
+      // Key sync: use local actorId for FsKeyProvider, GitHub identity for SaaS context
+      await this.syncKeys(actorId, saasUrl, token, options);
+
+      // [LOGIN-L1, LOGIN-L2] Push gitgov-state so SaaS can index ActorRecord
+      await this.pushGitgovState();
 
     } catch (error) {
       this.handleError(
@@ -232,6 +255,15 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
     const hasLocal = await this.hasLocalKey(actorId);
     const keyStatus = await this.getKeyStatus(saasUrl, token, repo);
 
+    // [LOGIN-K1] Repo not connected — keyStatus returned fallback (empty ecdhPublicKey)
+    if (!keyStatus.exists && keyStatus.ecdhPublicKey === '') {
+      const webUrl = process.env['GITGOV_WEB_URL'] ?? saasUrl.replace(':3001', ':3000');
+      console.error('This repository is not connected to GitGovernance.');
+      console.error(`  Connect it at: ${webUrl}`);
+      console.error('  After connecting, run `gitgov login` again.');
+      process.exit(1);
+    }
+
     // [LOGIN-B1] CLI has key, SaaS does not → upload with ECDH
     if (hasLocal && !keyStatus.exists) {
       await this.uploadKeyToSaas(actorId, saasUrl, token, repo, keyStatus.ecdhPublicKey);
@@ -271,20 +303,30 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
 
       // [LOGIN-D2 / LOGIN-F1..F4] Keys differ → conflict resolution
       if (localPublicKey && saasPublicKey && localPublicKey !== saasPublicKey) {
-        // [LOGIN-F1] --force-local: upload local key, archive SaaS key
+        // [LOGIN-F1] --force-local: upload local key → triggers succession on SaaS
         if (options.forceLocal) {
-          await this.uploadKeyToSaas(actorId, saasUrl, token, repo, keyStatus.ecdhPublicKey);
-          console.log('Previous cloud key archived. Local key is now canonical.');
-          // [LOGIN-F4] Post-sync verification
-          const postStatus = await this.getKeyStatus(saasUrl, token, repo);
-          const newLocalPub = await keyProvider.getPublicKey(actorId);
-          if (postStatus.publicKey === newLocalPub) {
+          const syncResult = await this.uploadKeyToSaas(actorId, saasUrl, token, repo, keyStatus.ecdhPublicKey);
+
+          // [IKS-SUC8] Handle succession response — SaaS created a new versioned actor
+          if (syncResult.rotated && syncResult.newActorId) {
+            const sessionManager = await this.dependencyService.getSessionManager();
+            await sessionManager.setLastSession(syncResult.newActorId, new Date().toISOString());
+            console.log(`Identity updated: ${actorId} → ${syncResult.newActorId}`);
             this.handleSuccess(
-              { loggedIn: true, user: actorId, keySynced: true },
+              { loggedIn: true, user: syncResult.newActorId, keySynced: true, rotated: true, oldActorId: actorId },
               options,
-              `Logged in as ${actorId}\nKey conflict resolved (local key uploaded)`
+              `Logged in as ${syncResult.newActorId}\nKey conflict resolved via succession (local key uploaded)`
             );
+            return;
           }
+
+          // Non-succession upload (legacy path or no ActorRecord in projection)
+          console.log('Previous cloud key archived. Local key is now canonical.');
+          this.handleSuccess(
+            { loggedIn: true, user: actorId, keySynced: true },
+            options,
+            `Logged in as ${actorId}\nKey conflict resolved (local key uploaded)`
+          );
           return;
         }
 
@@ -335,6 +377,26 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
     }
   }
 
+  /**
+   * [LOGIN-L1] Push gitgov-state to remote after successful key sync.
+   * [LOGIN-L2] Skip silently if branch doesn't exist locally (cloud-first flow).
+   * Best-effort — logs warning on failure but does not fail the login.
+   */
+  private async pushGitgovState(): Promise<void> {
+    try {
+      const { execSync } = await import('child_process');
+      execSync('git rev-parse --verify gitgov-state', { cwd: process.cwd(), stdio: 'pipe', timeout: 2000 });
+      execSync('git push origin gitgov-state', {
+        cwd: process.cwd(),
+        stdio: 'pipe',
+        timeout: 5000,
+        env: { ...process.env, GIT_SSH_COMMAND: 'ssh -o ConnectTimeout=3 -o BatchMode=yes' },
+      });
+    } catch {
+      // [LOGIN-L2] No local branch, no remote, offline, or permissions error
+    }
+  }
+
   // ============================================================================
   // tRPC HELPERS (v2 — ECDH encrypted, providerHost+repoPath scoped)
   // ============================================================================
@@ -366,6 +428,19 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
     throw new Error('Could not determine repository. Ensure you are in a git repository with a remote origin.');
   }
 
+  private async findLocalHumanActor(): Promise<{ actorId: string; displayName: string } | null> {
+    try {
+      const identityAdapter = await this.dependencyService.getIdentityAdapter();
+      const currentActor = await identityAdapter.getCurrentActor();
+      if (currentActor && currentActor.type === 'human') {
+        return { actorId: currentActor.id, displayName: currentActor.displayName };
+      }
+    } catch {
+      // No actor found or adapter not available
+    }
+    return null;
+  }
+
   private async hasLocalKey(actorId: string): Promise<boolean> {
     try {
       const keyProvider = this.dependencyService.getKeyProvider();
@@ -377,14 +452,17 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
 
   /** Call identity.keyStatus via tRPC (IKS-A27 wire format) */
   private async getKeyStatus(saasUrl: string, token: string, repo: GitRemoteRef): Promise<KeyStatusResponse> {
-    const input = encodeURIComponent(JSON.stringify({ json: repo }));
+    const input = encodeURIComponent(JSON.stringify(repo));
     const url = `${saasUrl}/trpc/identity.keyStatus?input=${input}`;
     const res = await this.deps.fetchSaas(url, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    if (!res.ok) return { exists: false, hasPrivateKey: false, publicKey: null, ecdhPublicKey: '' };
+    if (!res.ok) {
+      console.error(`[keyStatus] ${res.status}`);
+      return { exists: false, hasPrivateKey: false, publicKey: null, ecdhPublicKey: '' };
+    }
     const body = await res.json() as TrpcResponse<KeyStatusResponse>;
-    return body.result.data.json;
+    return body.result.data;
   }
 
   /**
@@ -418,11 +496,14 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ json: { ...repo, publicKey, privateKeyEnvelope: envelope } }),
+      body: JSON.stringify({ ...repo, publicKey, privateKeyEnvelope: envelope }),
     });
-    if (!res.ok) throw new Error(`Failed to sync key to SaaS: ${res.status}`);
+    if (!res.ok) {
+      const errBody = await res.text().catch(() => '');
+      throw new Error(`Failed to sync key to SaaS: ${res.status} ${errBody.slice(0, 300)}`);
+    }
     const body = await res.json() as TrpcResponse<SyncKeyResponse>;
-    return body.result.data.json;
+    return body.result.data;
   }
 
   /**
@@ -439,7 +520,7 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
     const clientKp = Crypto.generateEphemeralKeypair();
 
     const input = encodeURIComponent(JSON.stringify({
-      json: { ...repo, clientEcdhPublicKey: clientKp.publicKey },
+      ...repo, clientEcdhPublicKey: clientKp.publicKey,
     }));
     const url = `${saasUrl}/trpc/identity.getKey?input=${input}`;
     const res = await this.deps.fetchSaas(url, {
@@ -448,7 +529,7 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
     if (!res.ok) throw new Error(`Failed to download key from SaaS: ${res.status}`);
 
     const body = await res.json() as TrpcResponse<GetKeyResponse>;
-    const { privateKeyEnvelope } = body.result.data.json;
+    const { privateKeyEnvelope } = body.result.data;
 
     // [LOGIN-G2] Decrypt ECDH envelope
     let decryptedKey: Buffer;

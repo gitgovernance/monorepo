@@ -21,6 +21,9 @@ export function createGitHubCoreBackend(octokit: Octokit): unknown {
       ),
     createConfigStore: async (opts: { owner: string; repo: string; ref?: string }) =>
       new GitHubConfigStore({ owner: opts.owner, repo: opts.repo, ref: opts.ref }, octokit),
+    verifyInstallation: async () => true,
+    findInstallationForOrg: async () => null,
+    isRepoInInstallation: async () => false,
   };
 }
 

@@ -97,6 +97,20 @@ export interface IGitModule {
   rebaseContinue(): Promise<string>;
   rebaseAbort(): Promise<void>;
   createBranch(branchName: string, startPoint?: string): Promise<void>;
+  /**
+   * Delete a branch — idempotent semantics (added for Cycle 5, IKS-A41).
+   *
+   * - If the branch exists, it SHALL be removed.
+   * - If the branch does not exist, the operation SHALL complete as a no-op
+   *   without throwing.
+   *
+   * Added to support `GitHubProjectInitializer.rollback()` which needs to undo
+   * branch creation after a failed remote init. Keeping this in the interface
+   * keeps rollback() provider-agnostic across FS / Memory / GitHub backends.
+   *
+   * Verifies EARS-GM12 (branch exists → remove) and EARS-GM13 (branch not exists → no-op).
+   */
+  deleteBranch(branchName: string): Promise<void>;
   rebase(targetBranch: string): Promise<void>;
 }
 
