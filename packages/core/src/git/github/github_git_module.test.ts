@@ -15,14 +15,13 @@
 
 import { GitHubGitModule } from './github_git_module';
 import type { GitHubGitModuleOptions } from './github_git_module.types';
-import type { Octokit } from '@octokit/rest';
 import { GitError, FileNotFoundError, BranchNotFoundError, BranchAlreadyExistsError } from '../errors';
 import { GitHubApiError } from '../../github';
 
 // ==================== Test Helpers ====================
 
 type MockOctokit = {
-  request: ReturnType<typeof jest.fn>;
+  request: jest.Mock;
   rest: {
     repos: {
       get: jest.MockedFunction<any>;
@@ -157,7 +156,7 @@ describe('GitHubGitModule', () => {
 
   beforeEach(() => {
     mockOctokit = createMockOctokit();
-    git = new GitHubGitModule(defaultOptions, mockOctokit);
+    git = new GitHubGitModule(defaultOptions, mockOctokit as never);
   });
 
   // ==================== 4.1. Read Operations — Content & Refs (EARS-A1 to A6) ====================
