@@ -272,10 +272,11 @@ describe('Actor CLI Command - E2E Tests', () => {
       expect(newActorActive).toBe(true);
 
       // 5. Verify new actor has a .key file
-      // FsKeyProvider uses actorId directly (colons preserved) as filename
+      // FsKeyProvider encodes actorId (: → _) for the filename
       const keysDir = path.join(worktreeBasePath, '.gitgov', 'keys');
       const keyFiles = fs.readdirSync(keysDir).filter(f => f.endsWith('.key'));
-      const hasNewKey = keyFiles.some(f => f.includes(newActorId));
+      const encodedNewActorId = newActorId.replace(/:/g, '_');
+      const hasNewKey = keyFiles.some(f => f.includes(encodedNewActorId));
       expect(hasNewKey).toBe(true);
     });
 

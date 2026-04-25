@@ -295,9 +295,9 @@ describe('Sync CLI Commands - E2E Tests', () => {
         fs.writeFileSync(path.join(cloneGitgov, 'keys', keyFiles[0]), keyContent);
       }
 
-      // Create session in clone
+      // Create session in clone (decode _ → : to get real actorId)
       const sessionContent = JSON.stringify({
-        lastSession: { actorId: keyFiles[0]?.replace('.key', ''), timestamp: new Date().toISOString() }
+        lastSession: { actorId: (keyFiles[0]?.replace('.key', '') ?? '').replace(/_/g, ':'), timestamp: new Date().toISOString() }
       });
       fs.writeFileSync(path.join(cloneGitgov, '.session.json'), sessionContent);
 
@@ -352,7 +352,7 @@ describe('Sync CLI Commands - E2E Tests', () => {
         fs.writeFileSync(path.join(cloneGitgov, 'keys', keyFiles[0]), keyContent);
       }
       const sessionContent = JSON.stringify({
-        lastSession: { actorId: keyFiles[0]?.replace('.key', ''), timestamp: new Date().toISOString() }
+        lastSession: { actorId: (keyFiles[0]?.replace('.key', '') ?? '').replace(/_/g, ':'), timestamp: new Date().toISOString() }
       });
       fs.writeFileSync(path.join(cloneGitgov, '.session.json'), sessionContent);
 
@@ -439,7 +439,7 @@ describe('Sync CLI Commands - E2E Tests', () => {
       fs.mkdirSync(path.join(cloneGitgov, 'keys'), { recursive: true });
       fs.writeFileSync(path.join(cloneGitgov, 'keys', keyFileName), keyContentBefore);
       const sessionContent = JSON.stringify({
-        lastSession: { actorId: keyFileName.replace('.key', ''), timestamp: new Date().toISOString() }
+        lastSession: { actorId: keyFileName.replace('.key', '').replace(/_/g, ':'), timestamp: new Date().toISOString() }
       });
       fs.writeFileSync(path.join(cloneGitgov, '.session.json'), sessionContent);
 
@@ -518,7 +518,7 @@ describe('Sync CLI Commands - E2E Tests', () => {
         fs.writeFileSync(path.join(cloneGitgov, 'keys', keyFiles[0]), keyContent);
       }
       const sessionContent = JSON.stringify({
-        lastSession: { actorId: keyFiles[0]?.replace('.key', ''), timestamp: new Date().toISOString() }
+        lastSession: { actorId: (keyFiles[0]?.replace('.key', '') ?? '').replace(/_/g, ':'), timestamp: new Date().toISOString() }
       });
       fs.writeFileSync(path.join(cloneGitgov, '.session.json'), sessionContent);
 
@@ -730,9 +730,9 @@ describe('Sync CLI Commands - E2E Tests', () => {
         fs.readFileSync(path.join(originKeysDir, keyFileName), 'utf-8')
       );
 
-      // Create session for Agent B
+      // Create session for Agent B (decode _ → : to get real actorId)
       const sessionContent = JSON.stringify({
-        lastSession: { actorId: keyFileName.replace('.key', ''), timestamp: new Date().toISOString() }
+        lastSession: { actorId: keyFileName.replace('.key', '').replace(/_/g, ':'), timestamp: new Date().toISOString() }
       });
       fs.writeFileSync(path.join(cloneWorktree, '.gitgov', '.session.json'), sessionContent);
 
@@ -799,7 +799,7 @@ describe('Sync CLI Commands - E2E Tests', () => {
         );
       }
       const sessionContent = JSON.stringify({
-        lastSession: { actorId: keyFiles[0]?.replace('.key', ''), timestamp: new Date().toISOString() }
+        lastSession: { actorId: (keyFiles[0]?.replace('.key', '') ?? '').replace(/_/g, ':'), timestamp: new Date().toISOString() }
       });
       fs.writeFileSync(path.join(cloneWorktree, '.gitgov', '.session.json'), sessionContent);
 
