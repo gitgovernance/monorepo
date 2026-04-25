@@ -22,7 +22,7 @@ import { generateActorId, computeSuccessorActorId } from '../../utils/id_generat
 import type { ISessionManager } from '../../session_manager';
 
 export class IdentityAdapter implements IIdentityAdapter {
-  private stores: Required<Pick<RecordStores, 'actors'>>;
+  readonly stores: Required<Pick<RecordStores, 'actors'>>;
   private keyProvider: KeyProvider;
   // Optional as of IKS-A46 pre-P9 cleanup. Only `getCurrentActor()` and
   // `rotateActorKey()` consume it; callers that never use those methods
@@ -257,7 +257,6 @@ export class IdentityAdapter implements IIdentityAdapter {
     const session = await this.sessionManager.loadSession();
 
     if (session?.lastSession?.actorId) {
-      // Use resolveCurrentActorId to handle succession chain
       const currentActorId = await this.resolveCurrentActorId(session.lastSession.actorId);
       const actor = await this.getActor(currentActorId);
       if (actor) {

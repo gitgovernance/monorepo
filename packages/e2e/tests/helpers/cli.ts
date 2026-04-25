@@ -81,11 +81,11 @@ export function addRemote(repoPath: string, remotePath: string): void {
 }
 
 // [HLP-A4] Spawn gitgov CLI as async child process (for interactive/long-running commands)
-export function spawnGitgovCli(args: string, options: { cwd: string; timeout?: number }): SpawnedCli {
+export function spawnGitgovCli(args: string, options: { cwd: string; timeout?: number; env?: Record<string, string> }): SpawnedCli {
   const child = spawn('gitgov', args.split(/\s+/), {
     cwd: options.cwd,
     stdio: ['pipe', 'pipe', 'pipe'],
-    env: { ...process.env },
+    env: { ...process.env, ...options.env },
   });
 
   let out = '';
