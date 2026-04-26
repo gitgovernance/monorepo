@@ -83,8 +83,8 @@ await batchStore.putMany([
 ```mermaid
 graph LR
     subgraph "@gitgov/core — Pure Logic"
-        Adapters["Adapters (10)"]
-        Modules["Modules (26)"]
+        Adapters["Adapters (7)"]
+        Modules["Modules (30+)"]
         Records["Record System"]
         Projection["RecordProjector + IRecordProjection"]
 
@@ -156,7 +156,7 @@ graph LR
 | `@gitgov/core` | Interfaces, types, pure logic, factories, validators + all audit types | No |
 | `@gitgov/core/audit` | Audit product types: Finding, Waiver, Scan, PolicyDecision, enums, metadata types | No |
 | `@gitgov/core/fs` | Filesystem implementations (FsRecordStore, FsRecordProjection, LocalGitModule, FsLintModule, ...) | Local |
-| `@gitgov/core/github` | GitHub API implementations (GitHubRecordStore, GitHubGitModule, GitHubConfigStore, GitHubFileLister, GithubSyncStateModule, GithubWebhookHandler) | Remote |
+| `@gitgov/core/github` | GitHub API implementations (GitHubRecordStore, GitHubGitModule, GitHubConfigStore, GitHubFileLister, GithubSyncStateModule) | Remote |
 | `@gitgov/core-gitlab` | GitLab API implementations — [separate package](https://gitlab.com/gitgovernance/core-gitlab) | Remote |
 | `@gitgov/core/memory` | In-memory implementations for testing (MemoryRecordStore, MemoryRecordProjection, MemoryGitModule, ...) | No |
 | `@gitgov/core/prisma` | Database-backed implementations via Prisma-compatible client (PrismaRecordProjection) | Remote |
@@ -309,10 +309,7 @@ Adapters are orchestrators that compose modules. All receive dependencies via co
 | `project_initializer/` | GitGovernance project setup |
 | `logger/` | Logging centralizado |
 | `utils/` | ID generation/parsing, array utils, signature utils |
-| `policy_evaluator/` | Pass/block evaluation by severity threshold (stub — Epic 5 formalizes) |
 | `diagram_generator/` | Mermaid diagram generation |
-| `logger/` | Centralized logging |
-| `utils/` | ID generation/parsing, array utils, signature utils |
 
 ## Development
 
