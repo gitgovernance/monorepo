@@ -16,20 +16,31 @@ import type {
 export class PrismaRecordProjection implements IRecordProjection {
   private readonly client: ProjectionClient;
   private readonly tenantFields: Record<string, string>;
+  private readonly metaUniqueFields: string[];
 
   constructor(options: PrismaRecordProjectionOptions) {
     this.client = options.client;
     this.tenantFields = options.tenantFields ?? {};
+    // [EARS-D5] Meta unique fields may be a subset of tenant fields
+    this.metaUniqueFields = options.metaUniqueFields ?? Object.keys(this.tenantFields);
   }
 
   private buildWhere(): Record<string, string> {
     return { ...this.tenantFields };
   }
 
+  // [EARS-D5] Build the composite unique key for GitgovMeta upsert.
+  // Uses metaUniqueFields (not all tenantFields) to match the schema's @@unique constraint.
   private buildMetaWhere(): Record<string, unknown> {
-    const keys = Object.keys(this.tenantFields);
-    if (keys.length > 0) {
-      return { [keys.join('_')]: { ...this.tenantFields } };
+    if (this.metaUniqueFields.length > 0) {
+      const uniqueValues: Record<string, string> = {};
+      for (const key of this.metaUniqueFields) {
+        const value = this.tenantFields[key];
+        if (value !== undefined) {
+          uniqueValues[key] = value;
+        }
+      }
+      return { [this.metaUniqueFields.join('_')]: uniqueValues };
     }
     return {};
   }

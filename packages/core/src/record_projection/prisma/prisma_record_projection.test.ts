@@ -531,6 +531,25 @@ describe('PrismaRecordProjection', () => {
       // Verify createMany is also in the same transaction
       expect(mockClient.gitgovTask.createMany).toHaveBeenCalled();
     });
+
+    it('[EARS-D5] should use metaUniqueFields for GitgovMeta upsert key when tenant fields differ from unique constraint', async () => {
+      const client = createMockClient();
+      const sinkWithMeta = new PrismaRecordProjection({
+        client,
+        tenantFields: { repoId: 'repo-1', orgId: 'org-1', projectionType: 'index' },
+        metaUniqueFields: ['repoId', 'projectionType'],
+      });
+
+      const data = createMockIndexData();
+      await sinkWithMeta.persist(data, {});
+
+      expect(client.gitgovMeta.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { repoId_projectionType: { repoId: 'repo-1', projectionType: 'index' } },
+          create: expect.objectContaining({ repoId: 'repo-1', orgId: 'org-1', projectionType: 'index' }),
+        }),
+      );
+    });
   });
 
   describe('4.5. Metadata Projection (EARS-E1 a E6)', () => {
