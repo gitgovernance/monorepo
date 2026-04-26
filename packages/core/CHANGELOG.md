@@ -1,3 +1,10 @@
+## [3.12.1](https://github.com/gitgovernance/monorepo/compare/core-v3.12.0...core-v3.12.1) (2026-04-26)
+
+
+### 🐛 Bug Fixes
+
+* **core,cli:** IKS Phase 2 Cycle 1 — buildMetaWhere + collab fixes ([#148](https://github.com/gitgovernance/monorepo/issues/148)) ([b108c19](https://github.com/gitgovernance/monorepo/commit/b108c1980565e3393d3fd62be6add6d7554f8cfe))
+
 ## [3.12.0](https://github.com/gitgovernance/monorepo/compare/core-v3.11.0...core-v3.12.0) (2026-04-23)
 
 
