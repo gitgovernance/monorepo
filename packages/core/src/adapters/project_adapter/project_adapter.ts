@@ -66,7 +66,7 @@ export class ProjectAdapter implements IProjectAdapter {
     try {
       // 1. Environment Validation (delegates to IProjectInitializer)
       const envValidation = await this.validateEnvironment();
-      if (!envValidation.isValid) {
+      if (!options.skipValidation && !envValidation.isValid) {
         throw new Error(`Environment validation failed: ${envValidation.warnings.join(', ')}`);
       }
 
