@@ -60,10 +60,10 @@ Agent:  "Sprint is 70% done, 3 tasks active, 1 blocked."
 | Package | Version | Tests | License | Purpose |
 |:--------|:--------|------:|:--------|:--------|
 | **Protocol** | — | — | ![Apache-2.0](https://img.shields.io/badge/Apache--2.0-brightgreen.svg) | The **Standard** — RFCs, schemas, specifications |
-| [`@gitgov/core`](packages/core/README.md) | 2.10.1 | 2,568 | ![MPL-2.0](https://img.shields.io/badge/MPL--2.0-brightgreen.svg) | The **Engine** — SDK for records, validation, storage, adapters |
-| [`@gitgov/cli`](packages/cli/README.md) | 2.1.0 | 475 | ![Apache-2.0](https://img.shields.io/badge/Apache--2.0-brightgreen.svg) | The **Tool** — CLI for humans and AI agents |
+| [`@gitgov/core`](packages/core/README.md) | 3.12.0 | 2,876 | ![MPL-2.0](https://img.shields.io/badge/MPL--2.0-brightgreen.svg) | The **Engine** — SDK for records, validation, storage, adapters |
+| [`@gitgov/cli`](packages/cli/README.md) | 3.0.0 | 547 | ![Apache-2.0](https://img.shields.io/badge/Apache--2.0-brightgreen.svg) | The **Tool** — CLI for humans and AI agents |
 | [`@gitgov/mcp-server`](packages/mcp-server/README.md) | — | 199 | ![Apache-2.0](https://img.shields.io/badge/Apache--2.0-brightgreen.svg) | The **Bridge** — 43 MCP tools for AI agents |
-| [`@gitgov/e2e`](packages/e2e/README.md) | — | 36 | ![Apache-2.0](https://img.shields.io/badge/Apache--2.0-brightgreen.svg) | The **Validation** — Cross-package E2E tests (CLI + core + GitHub) |
+| [`@gitgov/e2e`](packages/e2e/README.md) | — | 80 | ![Apache-2.0](https://img.shields.io/badge/Apache--2.0-brightgreen.svg) | The **Validation** — Cross-package E2E tests (CLI + core + GitHub) |
 
 ## Community
 
