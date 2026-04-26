@@ -41,8 +41,8 @@ export class InitCommand {
    */
   async execute(options: InitCommandOptions): Promise<void> {
     try {
-      // 1. Environment validation (unless skipped)
-      if (!options.skipValidation) {
+      // 1. Environment validation (unless skipped or force-local)
+      if (!options.skipValidation && !options.forceLocal) {
         await this.validateEnvironment(options);
       }
 
@@ -94,7 +94,7 @@ export class InitCommand {
       if (completeOptions.actorEmail) projectInitOptions.actorEmail = completeOptions.actorEmail;
       // [EARS-A4] Configure methodology according to flag
       if (completeOptions.methodology) projectInitOptions.methodology = completeOptions.methodology;
-      if (completeOptions.skipValidation) projectInitOptions.skipValidation = completeOptions.skipValidation;
+      if (completeOptions.skipValidation || completeOptions.forceLocal) projectInitOptions.skipValidation = true;
       if (completeOptions.verbose) projectInitOptions.verbose = completeOptions.verbose;
       if (completeOptions.login) projectInitOptions.login = completeOptions.login;
       const saasUrl = completeOptions.saasUrl || process.env['GITGOV_SAAS_URL'] || 'https://app.gitgov.dev';

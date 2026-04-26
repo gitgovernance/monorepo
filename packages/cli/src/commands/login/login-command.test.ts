@@ -755,7 +755,7 @@ describe('LoginCommand v2', () => {
       );
     });
 
-    it('[LOGIN-J3] should use local actor actorId for key sync instead of github login', async () => {
+    it('[LOGIN-J3] should use local actor actorId when it matches the logged-in user', async () => {
       const { execSync } = await import('child_process');
       (execSync as jest.MockedFunction<typeof execSync>).mockImplementation((cmd: unknown) => {
         if (typeof cmd === 'string' && cmd.includes('fetch')) return '';
@@ -764,7 +764,7 @@ describe('LoginCommand v2', () => {
 
       mockGetConfig.mockResolvedValue({ saasUrl: 'https://app.gitgov.dev' });
       mockGetCurrentActor.mockResolvedValue({
-        id: 'human:camilo-acua-godoy',
+        id: 'human:camilo:v2',
         type: 'human',
         displayName: 'Camilo Acuña Godoy',
       });
@@ -777,9 +777,39 @@ describe('LoginCommand v2', () => {
       const cmd = new LoginCommand(deps);
       await cmd.executeLogin(defaultOptions);
 
-      // Should use local actorId, not human:camilo (github login)
+      // Versioned actorId starts with human:camilo: → matches login → use it
       expect(mockSetLastSession).toHaveBeenCalledWith(
-        'human:camilo-acua-godoy',
+        'human:camilo:v2',
+        expect.any(String),
+      );
+    });
+
+    it('[LOGIN-J3b] should fall back to human:{login} when local actor belongs to a different user', async () => {
+      const { execSync } = await import('child_process');
+      (execSync as jest.MockedFunction<typeof execSync>).mockImplementation((cmd: unknown) => {
+        if (typeof cmd === 'string' && cmd.includes('fetch')) return '';
+        return 'https://github.com/testorg/testrepo.git\n';
+      });
+
+      mockGetConfig.mockResolvedValue({ saasUrl: 'https://app.gitgov.dev' });
+      // Local worktree has the owner's actor, but we're logging in as a different user
+      mockGetCurrentActor.mockResolvedValue({
+        id: 'human:owner-user',
+        type: 'human',
+        displayName: 'Owner User',
+      });
+      mockHasPrivateKey.mockResolvedValue(false);
+
+      const deps = createMockDeps({
+        fetchSaas: createTrpcFetch({ 'keyStatus': noKeyStatus }),
+      });
+
+      const cmd = new LoginCommand(deps);
+      await cmd.executeLogin(defaultOptions);
+
+      // Local actor is human:owner-user but login is camilo → use human:camilo
+      expect(mockSetLastSession).toHaveBeenCalledWith(
+        'human:camilo',
         expect.any(String),
       );
     });

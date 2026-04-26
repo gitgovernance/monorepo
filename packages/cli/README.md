@@ -230,7 +230,7 @@ This package is licensed under the [Apache License 2.0](https://opensource.org/l
 
 > For development rules, conventions, and architecture see the [AGENTS.md](../../packages/blueprints/03_products/cli/AGENTS.md).
 
-**Last updated:** 2026-04-05 — 17 commands (login added). Adapters count fixed (10→7).
+**Last updated:** 2026-04-26 — 17 commands, 547 tests. Note: esbuild uses `--external:@gitgov/core` — core is resolved at runtime, not bundled. Rebuild core + re-link CLI after core changes.
 
 
 ## @gitgov/core — Type System

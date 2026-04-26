@@ -122,9 +122,16 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
       const sessionManager = await this.dependencyService.getSessionManager();
       await sessionManager.setCloudToken(token);
 
-      // Discover local actor — use its actorId for key sync, not github login
+      // Use login from OAuth to derive actorId. Only use local actor if it
+      // belongs to the logged-in user (handles versioned IDs like human:login:v2).
+      // Without this check, a collaborator would incorrectly resolve to the owner's actor.
       const localActor = await this.findLocalHumanActor();
-      const actorId = localActor?.actorId ?? `human:${user.login}`;
+      const expectedBase = `human:${user.login}`;
+      const localMatchesUser = localActor != null && (
+        localActor.actorId === expectedBase ||
+        localActor.actorId.startsWith(`${expectedBase}:`)
+      );
+      const actorId = localMatchesUser ? localActor.actorId : expectedBase;
 
       await sessionManager.setLastSession(actorId, new Date().toISOString());
 

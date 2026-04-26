@@ -194,22 +194,24 @@ describe('FsSessionStore', () => {
   // ==================== §4.3 detectActorFromKeyFiles (EARS-C1 to C6) ====================
 
   describe('4.3. detectActorFromKeyFiles (EARS-C1 to C6)', () => {
-    it('[EARS-C1] WHEN detectActorFromKeyFiles is invoked with .key files, THE SYSTEM SHALL return actor ID', async () => {
+    it('[EARS-C1] WHEN detectActorFromKeyFiles is invoked with .key files, THE SYSTEM SHALL decode filename and return actor ID', async () => {
       const store = new FsSessionStore(projectRoot);
-      mockedFs.readdir.mockResolvedValue(['human:camilo-v2.key'] as any);
+      // FsKeyProvider encodes `:` → `_` in filenames (DEFAULT_ID_ENCODER)
+      mockedFs.readdir.mockResolvedValue(['human_camilo-v2.key'] as never);
 
       const result = await store.detectActorFromKeyFiles();
 
+      // Must decode `_` back to `:` to get the real actorId
       expect(result).toBe('human:camilo-v2');
       expect(mockedFs.readdir).toHaveBeenCalledWith('/test/project/.gitgov/keys');
     });
 
-    it('[EARS-C2] WHEN detectActorFromKeyFiles is invoked with multiple .key files, THE SYSTEM SHALL return first', async () => {
+    it('[EARS-C2] WHEN detectActorFromKeyFiles is invoked with multiple .key files, THE SYSTEM SHALL return first alphabetically (decoded)', async () => {
       const store = new FsSessionStore(projectRoot);
       mockedFs.readdir.mockResolvedValue([
-        'human:alice.key',
-        'human:bob.key',
-      ] as any);
+        'human_alice.key',
+        'human_bob.key',
+      ] as never);
 
       const result = await store.detectActorFromKeyFiles();
 
@@ -218,7 +220,7 @@ describe('FsSessionStore', () => {
 
     it('[EARS-C3] WHEN detectActorFromKeyFiles is invoked without .key files, THE SYSTEM SHALL return null', async () => {
       const store = new FsSessionStore(projectRoot);
-      mockedFs.readdir.mockResolvedValue(['other.txt', 'readme.md'] as any);
+      mockedFs.readdir.mockResolvedValue(['other.txt', 'readme.md'] as never);
 
       const result = await store.detectActorFromKeyFiles();
 
@@ -241,7 +243,7 @@ describe('FsSessionStore', () => {
         'human:bob.json',
         'human:charlie.key',
         'readme.md',
-      ] as any);
+      ] as never);
 
       const result = await store.detectActorFromKeyFiles();
 
@@ -250,7 +252,7 @@ describe('FsSessionStore', () => {
 
     it('[EARS-C6] WHEN detectActorFromKeyFiles is invoked with empty directory, THE SYSTEM SHALL return null', async () => {
       const store = new FsSessionStore(projectRoot);
-      mockedFs.readdir.mockResolvedValue([] as any);
+      mockedFs.readdir.mockResolvedValue([] as never);
 
       const result = await store.detectActorFromKeyFiles();
 

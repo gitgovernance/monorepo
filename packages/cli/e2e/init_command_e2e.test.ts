@@ -248,16 +248,15 @@ describe('Init CLI Command - Edge Cases E2E Tests', () => {
       cleanupWorktree(testProjectRoot, worktreeBasePath);
     });
 
-    it('WHEN remote exists but gitgov-state does not THE SYSTEM SHALL init without creating gitgov-state (lazy)', () => {
+    it('WHEN remote exists but gitgov-state does not THE SYSTEM SHALL init and push gitgov-state to remote', () => {
       const result = runCliCommand(['init', '--name', 'New Remote Project', '--actor-name', 'Test User', '--quiet'], { cwd: testProjectRoot });
 
       expect(result.success).toBe(true);
       expect(fs.existsSync(path.join(worktreeBasePath, '.gitgov'))).toBe(true);
 
-      // With worktree mode, gitgov-state IS created locally for the worktree
-      // but it should NOT be pushed to remote until sync push
+      // With GitHubProjectInitializer, init now pushes gitgov-state to remote automatically
       const remoteBranches = execSync('git ls-remote --heads origin gitgov-state', { cwd: testProjectRoot, encoding: 'utf8' });
-      expect(remoteBranches.trim()).toBe('');
+      expect(remoteBranches.trim()).toContain('gitgov-state');
     });
 
     it('WHEN init completes THE SYSTEM SHALL allow sync push to create remote gitgov-state', () => {
@@ -386,7 +385,8 @@ describe('Init CLI Command - Edge Cases E2E Tests', () => {
     });
 
     it('[EARS-E8] WHEN gitgov-state exists but is empty THE SYSTEM SHALL bootstrap from it or init fresh', () => {
-      const result = runCliCommand(['init', '--name', 'Bootstrap Project', '--actor-name', 'Test User', '--quiet'], { cwd: testProjectRoot });
+      // --force-local bypasses Smart Init which aborts when remote has gitgov-state
+      const result = runCliCommand(['init', '--name', 'Bootstrap Project', '--actor-name', 'Test User', '--force-local', '--quiet'], { cwd: testProjectRoot });
 
       expect(result.success).toBe(true);
       expect(fs.existsSync(path.join(worktreeBasePath, '.gitgov'))).toBe(true);
@@ -394,7 +394,8 @@ describe('Init CLI Command - Edge Cases E2E Tests', () => {
     });
 
     it('[EARS-E9] WHEN bootstrapping from empty state THE SYSTEM SHALL update gitgov-state with new config', () => {
-      runCliCommand(['init', '--name', 'Bootstrap Project', '--actor-name', 'Test User', '--quiet'], { cwd: testProjectRoot });
+      // --force-local bypasses Smart Init which aborts when remote has gitgov-state
+      runCliCommand(['init', '--name', 'Bootstrap Project', '--actor-name', 'Test User', '--force-local', '--quiet'], { cwd: testProjectRoot });
 
       // Ensure we're on main branch (init may leave us on gitgov-state in some edge cases)
       execSync('git checkout main', { cwd: testProjectRoot, stdio: 'pipe' });

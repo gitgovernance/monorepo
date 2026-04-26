@@ -178,4 +178,9 @@ export type ProjectionClient = {
 export type PrismaRecordProjectionOptions = {
   client: ProjectionClient;
   tenantFields?: Record<string, string>;
+  // [EARS-D5] Subset of tenantFields keys that form the GitgovMeta @@unique constraint.
+  // Defaults to all tenantFields keys. Required when the meta unique constraint
+  // excludes fields that are in tenantFields (e.g., orgId is a tenant field but
+  // GitgovMeta's unique is only [repoId, projectionType]).
+  metaUniqueFields?: string[];
 };

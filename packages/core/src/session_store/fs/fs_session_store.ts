@@ -10,6 +10,7 @@ import * as path from 'path';
 import type { SessionStore } from '../session_store';
 import type { GitGovSession } from '../../session_manager/session_manager.types';
 import { SessionManager } from '../../session_manager/session_manager';
+import { DEFAULT_ID_ENCODER } from '../../record_store/record_store';
 
 /**
  * Filesystem-based SessionStore implementation.
@@ -69,8 +70,8 @@ export class FsSessionStore implements SessionStore {
   /**
    * Detect actor from .key files in .gitgov/keys/
    *
-   * [EARS-C1] Returns actor ID from first .key file
-   * [EARS-C2] Returns first .key file alphabetically if multiple exist
+   * [EARS-C1] Returns decoded actor ID from first .key file (filename uses DEFAULT_ID_ENCODER: `_` → `:`)
+   * [EARS-C2] Returns first .key file alphabetically if multiple exist (decoded)
    * [EARS-C3] Returns null if no .key files exist
    * [EARS-C4] Returns null if keys directory doesn't exist
    * [EARS-C5] Ignores non-.key files
@@ -91,10 +92,10 @@ export class FsSessionStore implements SessionStore {
         return null;
       }
 
-      // Extract actor ID from filename (remove .key extension)
-      // e.g., "human:camilo-v2.key" -> "human:camilo-v2"
-      const actorId = firstKeyFile.replace('.key', '');
-      return actorId;
+      // Extract actor ID from filename (remove .key extension, decode _ → :)
+      // e.g., "human_camilo-v2.key" -> "human:camilo-v2"
+      const encoded = firstKeyFile.replace('.key', '');
+      return DEFAULT_ID_ENCODER.decode(encoded);
     } catch {
       // Directory doesn't exist or can't be read
       return null;
