@@ -132,12 +132,38 @@ describe('FeedbackAdapter <-> BacklogAdapter Integration (Real Event Communicati
       sessionManager: mockSessionManager,
     });
 
+    // Create mock signer for integration tests
+    const mockSigner = {
+      createSignedRecord: jest.fn().mockImplementation(async (payload: any, type: string, actorId: string, role: string, _notes: string) => {
+        return {
+          header: {
+            version: '1.0',
+            type,
+            payloadChecksum: 'a'.repeat(64),
+            signatures: [createTestSignature(actorId || 'human:test-dev', role)]
+          },
+          payload
+        };
+      }),
+      signRecord: jest.fn().mockImplementation(async (record: any, actorId: string, role: string) => {
+        return {
+          header: {
+            ...record.header,
+            payloadChecksum: 'a'.repeat(64),
+            signatures: [createTestSignature(actorId || 'human:test-dev', role)]
+          },
+          payload: record.payload
+        };
+      }),
+    };
+
     // Create REAL FeedbackAdapter
     feedbackAdapter = new FeedbackAdapter({
       stores: {
         feedbacks: feedbackStore,
       },
       identity: identityAdapter,
+      signer: mockSigner as any,
       eventBus // REAL EventBus
     });
 
@@ -169,6 +195,7 @@ describe('FeedbackAdapter <-> BacklogAdapter Integration (Real Event Communicati
       metricsAdapter, // REAL RecordMetrics
       workflowAdapter: workflowAdapter,
       identity: identityAdapter,
+      signer: mockSigner as any,
       eventBus, // SAME EventBus instance
       configManager: {
         loadConfig: jest.fn().mockResolvedValue({})

@@ -4,14 +4,14 @@ import type { KeyProvider } from '../key_provider/key_provider';
 import type { ActorRecord, ActorPayload } from '../record_types';
 
 /** IdentityModule Dependencies — sin sessionManager, sin RecordSigner. */
-export interface IdentityModuleDependencies {
+export type IdentityModuleDependencies = {
   /** RecordStore para ActorRecords. */
   stores: Required<Pick<RecordStores, 'actors'>>;
   /** KeyProvider para firma Ed25519 y persistencia de keys. Usado directamente para bootstrap, revocacion, y rotacion. */
   keyProvider: KeyProvider;
   /** EventBus opcional — si omitido, operaciones completan sin emitir eventos. */
   eventBus?: IEventStream;
-}
+};
 
 /** Contrato publico de IdentityModule. */
 export interface IIdentityModule {

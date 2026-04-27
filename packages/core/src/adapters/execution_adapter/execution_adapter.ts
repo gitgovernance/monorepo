@@ -1,7 +1,7 @@
 import { createExecutionRecord } from '../../record_factories/execution_factory';
 import type { RecordStores } from '../../record_store';
-import { IdentityAdapter } from '../identity_adapter';
-import type { ExecutionRecord, GitGovExecutionRecord } from '../../record_types';
+import type { RecordSigner } from '../../record_signer';
+import type { ExecutionRecord } from '../../record_types';
 import type { IEventStream, ExecutionCreatedEvent } from '../../event_bus';
 import type { IExecutionAdapter, ExecutionAdapterDependencies } from './execution_adapter.types';
 
@@ -13,12 +13,12 @@ import type { IExecutionAdapter, ExecutionAdapterDependencies } from './executio
  */
 export class ExecutionAdapter implements IExecutionAdapter {
   private stores: Required<Pick<RecordStores, 'executions'>> & Pick<RecordStores, 'tasks'>;
-  private identity: IdentityAdapter;
+  private signer: RecordSigner;
   private eventBus: IEventStream;
 
   constructor(dependencies: ExecutionAdapterDependencies) {
     this.stores = dependencies.stores;
-    this.identity = dependencies.identity;
+    this.signer = dependencies.signer;
     this.eventBus = dependencies.eventBus;
   }
 
@@ -43,27 +43,10 @@ export class ExecutionAdapter implements IExecutionAdapter {
       // 1. Build the record with factory (factory validates all required fields)
       const validatedPayload = createExecutionRecord(payload);
 
-      // 2. Create unsigned record structure
-      const unsignedRecord: GitGovExecutionRecord = {
-        header: {
-          version: '1.0',
-          type: 'execution',
-          payloadChecksum: 'will-be-calculated-by-signRecord',
-          signatures: [{
-            keyId: actorId,
-            role: 'author',
-            notes: 'Execution recorded',
-            signature: 'placeholder',
-            timestamp: Date.now()
-          }]
-        },
-        payload: validatedPayload,
-      };
+      // 2. Create signed record via RecordSigner
+      const signedRecord = await this.signer.createSignedRecord(validatedPayload, 'execution', actorId, 'author', 'Execution record created');
 
-      // 3. Sign the record
-      const signedRecord = await this.identity.signRecord(unsignedRecord, actorId, 'author', 'Execution record created');
-
-      // 4. Persist the record
+      // 3. Persist the record
       await this.stores.executions.put(validatedPayload.id, signedRecord);
 
       // 5. Emit event - responsibility ends here

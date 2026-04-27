@@ -72,6 +72,10 @@ type MockBacklogAdapterDependencies = {
     signRecord: jest.MockedFunction<(record: GitGovRecord, actorId: string, role?: string) => Promise<GitGovRecord>>;
     getCurrentActor?: jest.MockedFunction<() => Promise<ActorRecord>>;
   };
+  signer: {
+    createSignedRecord: jest.MockedFunction<(payload: unknown, type: string, actorId: string, role: string, notes: string) => Promise<GitGovRecord>>;
+    signRecord: jest.MockedFunction<(record: GitGovRecord, actorId: string, role: string, notes: string) => Promise<GitGovRecord>>;
+  };
   eventBus: {
     publish: jest.MockedFunction<(event: Record<string, unknown>) => void>;
     subscribe: jest.MockedFunction<(eventType: string, handler: (event: Record<string, unknown>) => void) => void>;
@@ -227,7 +231,14 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       },
       identity: {
         getActor: jest.fn(),
-        signRecord: jest.fn().mockImplementation(async (record) => record)
+        signRecord: jest.fn().mockImplementation(async (record: any) => record)
+      },
+      signer: {
+        createSignedRecord: jest.fn().mockImplementation(async (payload: any, type: string) => ({
+          header: { version: '1.0', type, payloadChecksum: 'mock', signatures: [] },
+          payload
+        })),
+        signRecord: jest.fn().mockImplementation(async (record: any) => record),
       },
       eventBus: {
         publish: jest.fn(),
@@ -293,7 +304,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       const { createCycleRecord } = require('../../record_factories/cycle_factory');
       createCycleRecord.mockReturnValue(mockCycle.payload);
 
-      mockDependencies.identity.signRecord.mockResolvedValue(mockCycle);
+      mockDependencies.signer.createSignedRecord.mockResolvedValue(mockCycle);
       mockDependencies.stores.cycles.put.mockResolvedValue(undefined);
 
       const result = await backlogAdapter.createCycle({
@@ -530,7 +541,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         .mockResolvedValueOnce(mockTask2);
       mockDependencies.stores.cycles.put.mockResolvedValue(undefined);
       mockDependencies.stores.tasks.put.mockResolvedValue(undefined);
-      mockDependencies.identity.signRecord.mockImplementation(async (record) => record);
+      mockDependencies.signer.signRecord.mockImplementation(async (record) => record);
 
       // Mock getCurrentActor
       mockDependencies.identity.getCurrentActor = jest.fn().mockResolvedValue({
@@ -620,7 +631,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
 
       mockDependencies.stores.cycles.put.mockResolvedValue(undefined);
       mockDependencies.stores.tasks.put.mockResolvedValue(undefined);
-      mockDependencies.identity.signRecord.mockImplementation(async (record) => record);
+      mockDependencies.signer.signRecord.mockImplementation(async (record) => record);
 
       // Mock getCurrentActor
       mockDependencies.identity.getCurrentActor = jest.fn().mockResolvedValue({
@@ -724,7 +735,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       });
 
       // Mock signRecord to succeed, but make writes fail
-      mockDependencies.identity.signRecord.mockImplementation(async (record) => record);
+      mockDependencies.signer.signRecord.mockImplementation(async (record) => record);
 
       // Make the first cycle write succeed, but second one fail (simulating partial failure)
       mockDependencies.stores.cycles.put
@@ -762,7 +773,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
 
       const result = await backlogAdapter.updateTask('1757687335-task-test-task', { title: 'Updated Title' }, 'human:editor');
 
-      expect(mockDependencies.identity.signRecord).toHaveBeenCalledWith(
+      expect(mockDependencies.signer.signRecord).toHaveBeenCalledWith(
         expect.any(Object),
         'human:editor',
         'editor',
@@ -802,7 +813,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
 
       await backlogAdapter.updateTask('1757687335-task-sign-test', { title: 'Updated Title' }, 'human:editor');
 
-      expect(mockDependencies.identity.signRecord).toHaveBeenCalledWith(
+      expect(mockDependencies.signer.signRecord).toHaveBeenCalledWith(
         expect.objectContaining({
           payload: expect.objectContaining({ title: 'Updated Title' })
         }),
@@ -837,7 +848,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         to: 'active',
         conditions: {}
       });
-      mockDependencies.identity.signRecord.mockResolvedValue({
+      mockDependencies.signer.signRecord.mockResolvedValue({
         ...readyTask,
         payload: activeTask.payload
       });
@@ -852,7 +863,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
           transitionTo: 'active'
         })
       );
-      expect(mockDependencies.identity.signRecord).toHaveBeenCalledWith(
+      expect(mockDependencies.signer.signRecord).toHaveBeenCalledWith(
         expect.objectContaining({
           payload: expect.objectContaining({ status: 'active' })
         }),
@@ -949,7 +960,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         to: 'active',
         conditions: {}
       });
-      mockDependencies.identity.signRecord.mockResolvedValue({
+      mockDependencies.signer.signRecord.mockResolvedValue({
         ...readyTask,
         payload: activeTask.payload
       });
@@ -990,7 +1001,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         to: 'paused',
         conditions: {}
       });
-      mockDependencies.identity.signRecord.mockResolvedValue({
+      mockDependencies.signer.signRecord.mockResolvedValue({
         ...activeTask,
         payload: pausedTask.payload
       });
@@ -1005,7 +1016,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
           transitionTo: 'paused'
         })
       );
-      expect(mockDependencies.identity.signRecord).toHaveBeenCalledWith(
+      expect(mockDependencies.signer.signRecord).toHaveBeenCalledWith(
         expect.objectContaining({
           payload: expect.objectContaining({
             status: 'paused',
@@ -1110,7 +1121,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         to: 'paused',
         conditions: undefined
       });
-      mockDependencies.identity.signRecord.mockImplementation((record) => Promise.resolve(record));
+      mockDependencies.signer.signRecord.mockImplementation((record) => Promise.resolve(record));
       mockDependencies.stores.tasks.put.mockResolvedValue(undefined);
 
       // Act
@@ -1150,7 +1161,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         to: 'paused',
         conditions: {}
       });
-      mockDependencies.identity.signRecord.mockResolvedValue({
+      mockDependencies.signer.signRecord.mockResolvedValue({
         ...activeTask,
         payload: pausedTask.payload
       });
@@ -1199,7 +1210,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         to: 'active',
         conditions: {}
       });
-      mockDependencies.identity.signRecord.mockResolvedValue({
+      mockDependencies.signer.signRecord.mockResolvedValue({
         ...pausedTask,
         payload: activeTask.payload
       });
@@ -1215,7 +1226,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
           transitionTo: 'active'
         })
       );
-      expect(mockDependencies.identity.signRecord).toHaveBeenCalledWith(
+      expect(mockDependencies.signer.signRecord).toHaveBeenCalledWith(
         expect.objectContaining({
           payload: expect.objectContaining({ status: 'active' })
         }),
@@ -1319,7 +1330,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         to: 'active',
         conditions: {}
       });
-      mockDependencies.identity.signRecord.mockResolvedValue({
+      mockDependencies.signer.signRecord.mockResolvedValue({
         ...pausedTask,
         payload: activeTask.payload
       });
@@ -1327,7 +1338,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       const result = await backlogAdapter.resumeTask(taskId, 'human:ops-lead', true);
 
       expect(mockDependencies.metricsAdapter.getTaskHealth).not.toHaveBeenCalled();
-      expect(mockDependencies.identity.signRecord).toHaveBeenCalledWith(
+      expect(mockDependencies.signer.signRecord).toHaveBeenCalledWith(
         expect.objectContaining({
           payload: expect.objectContaining({ status: 'active' })
         }),
@@ -1382,7 +1393,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         to: 'active',
         conditions: {}
       });
-      mockDependencies.identity.signRecord.mockResolvedValue({
+      mockDependencies.signer.signRecord.mockResolvedValue({
         ...pausedTask,
         payload: activeTask.payload
       });
@@ -1423,7 +1434,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         to: 'done',
         conditions: { signatures: { __default__: { role: 'approver', capability_roles: ['approver:quality'], min_approvals: 1 } } }
       });
-      mockDependencies.identity.signRecord.mockResolvedValue(doneTask);
+      mockDependencies.signer.signRecord.mockResolvedValue(doneTask);
 
       const result = await backlogAdapter.completeTask(taskId, 'human:qa-lead');
 
@@ -1516,7 +1527,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         to: 'done',
         conditions: { signatures: { __default__: { role: 'approver', capability_roles: ['approver:quality'], min_approvals: 1 } } }
       });
-      mockDependencies.identity.signRecord.mockResolvedValue(doneTask);
+      mockDependencies.signer.signRecord.mockResolvedValue(doneTask);
 
       const result = await backlogAdapter.completeTask(taskId, actorId);
 
@@ -1557,7 +1568,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         to: 'discarded',
         conditions: { command: 'gitgov task cancel' }
       });
-      mockDependencies.identity.signRecord.mockResolvedValue(cancelledTask);
+      mockDependencies.signer.signRecord.mockResolvedValue(cancelledTask);
 
       const result = await backlogAdapter.discardTask(taskId, 'human:product-manager', 'No longer needed');
 
@@ -1588,7 +1599,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         to: 'discarded',
         conditions: { command: 'gitgov task cancel' }
       });
-      mockDependencies.identity.signRecord.mockResolvedValue({
+      mockDependencies.signer.signRecord.mockResolvedValue({
         ...activeTask,
         payload: { ...activeTask.payload, status: 'discarded' }
       });
@@ -1642,7 +1653,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         to: 'discarded',
         conditions: { command: 'gitgov task reject' }
       });
-      mockDependencies.identity.signRecord.mockResolvedValue({
+      mockDependencies.signer.signRecord.mockResolvedValue({
         ...reviewTask,
         payload: { ...reviewTask.payload, status: 'discarded' }
       });
@@ -1678,7 +1689,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         to: 'discarded',
         conditions: { command: 'gitgov task reject' }
       });
-      mockDependencies.identity.signRecord.mockResolvedValue({
+      mockDependencies.signer.signRecord.mockResolvedValue({
         ...reviewTask,
         payload: { ...reviewTask.payload, status: 'discarded' }
       });
@@ -1713,7 +1724,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         to: 'discarded',
         conditions: { command: 'gitgov task cancel' }
       });
-      mockDependencies.identity.signRecord.mockResolvedValue({
+      mockDependencies.signer.signRecord.mockResolvedValue({
         ...readyTask,
         payload: { ...readyTask.payload, status: 'discarded' }
       });
@@ -1761,7 +1772,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         to: 'discarded',
         conditions: { command: 'gitgov task cancel' }
       });
-      mockDependencies.identity.signRecord.mockResolvedValue(discardedTask);
+      mockDependencies.signer.signRecord.mockResolvedValue(discardedTask);
 
       const result = await backlogAdapter.discardTask(taskId, actorId, 'No longer needed');
 
@@ -2236,7 +2247,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       const { createCycleRecord } = require('../../record_factories/cycle_factory');
       createCycleRecord.mockReturnValue(mockCycle.payload);
 
-      mockDependencies.identity.signRecord.mockResolvedValue(mockCycle);
+      mockDependencies.signer.createSignedRecord.mockResolvedValue(mockCycle);
       mockDependencies.stores.cycles.put.mockResolvedValue(undefined);
 
       const startTime = Date.now();
@@ -2583,7 +2594,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         to: 'paused',
         conditions: undefined
       });
-      mockDependencies.identity.signRecord.mockResolvedValue(activeTask);
+      mockDependencies.signer.signRecord.mockResolvedValue(activeTask);
       mockDependencies.stores.tasks.put.mockResolvedValue(undefined);
 
       // Act
@@ -2601,7 +2612,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
           transitionTo: 'paused'
         })
       );
-      expect(mockDependencies.identity.signRecord).toHaveBeenCalledWith(
+      expect(mockDependencies.signer.signRecord).toHaveBeenCalledWith(
         expect.any(Object),
         actorId,
         'pauser',

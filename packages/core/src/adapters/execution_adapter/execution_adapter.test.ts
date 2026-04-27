@@ -49,6 +49,7 @@ describe('ExecutionAdapter', () => {
   let mockExecutionStore: jest.Mocked<RecordStore<GitGovExecutionRecord>>;
   let mockTaskStore: jest.Mocked<RecordStore<GitGovTaskRecord>>;
   let mockIdentityAdapter: jest.Mocked<IdentityAdapter>;
+  let mockSigner: { createSignedRecord: jest.Mock; signRecord: jest.Mock };
   let mockPublishEvent: jest.Mock;
 
   const mockPayload = {
@@ -106,10 +107,17 @@ describe('ExecutionAdapter', () => {
     (createExecutionRecord as jest.Mock).mockReturnValue(mockCreatedExecutionPayload);
     mockIdentityAdapter.signRecord.mockResolvedValue(mockSignedRecord);
 
+    // Create mock signer
+    mockSigner = {
+      createSignedRecord: jest.fn().mockResolvedValue(mockSignedRecord),
+      signRecord: jest.fn().mockResolvedValue(mockSignedRecord),
+    };
+
     // Create adapter with mocked dependencies
     executionAdapter = new ExecutionAdapter({
       stores: { executions: mockExecutionStore, tasks: mockTaskStore },
       identity: mockIdentityAdapter,
+      signer: mockSigner as any,
       eventBus: {
         publish: jest.fn(),
         subscribe: jest.fn(),
@@ -126,10 +134,9 @@ describe('ExecutionAdapter', () => {
       const result = await executionAdapter.create(mockPayload, mockActorId);
 
       expect(createExecutionRecord).toHaveBeenCalledWith(mockPayload);
-      expect(mockIdentityAdapter.signRecord).toHaveBeenCalledWith(
-        expect.objectContaining({
-          payload: mockCreatedExecutionPayload
-        }),
+      expect(mockSigner.createSignedRecord).toHaveBeenCalledWith(
+        mockCreatedExecutionPayload,
+        'execution',
         mockActorId,
         'author',
         expect.any(String) // notes parameter
@@ -152,7 +159,7 @@ describe('ExecutionAdapter', () => {
         .rejects.toThrow(DetailedValidationError);
 
       // Ensure no side effects occurred
-      expect(mockIdentityAdapter.signRecord).not.toHaveBeenCalled();
+      expect(mockSigner.createSignedRecord).not.toHaveBeenCalled();
       expect(mockExecutionStore.put).not.toHaveBeenCalled();
       expect(mockPublishEvent).not.toHaveBeenCalled();
     });
@@ -314,8 +321,8 @@ describe('ExecutionAdapter', () => {
         .rejects.toThrow('Factory error');
     });
 
-    it('should handle identity errors gracefully', async () => {
-      mockIdentityAdapter.signRecord.mockRejectedValue(new Error('Signing failed'));
+    it('should handle signing errors gracefully', async () => {
+      mockSigner.createSignedRecord.mockRejectedValue(new Error('Signing failed'));
 
       await expect(executionAdapter.create(mockPayload, mockActorId))
         .rejects.toThrow('Signing failed');

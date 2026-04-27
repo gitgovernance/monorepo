@@ -196,3 +196,11 @@ export * as WorkflowAdapter from "./adapters/workflow_adapter/index";
 // per-request (e.g., GitHubRemoteInitService, Cycle 5 Task 5.1b), expose the
 // concrete class under a distinct name to avoid the namespace conflict.
 export { IdentityAdapter as IdentityAdapterClass } from "./adapters/identity_adapter/identity_adapter";
+
+// RecordSigner — cross-cutting signing module (identity_module_v2 Cycle 1)
+export { RecordSigner } from "./record_signer/index";
+export type { RecordSignerDependencies } from "./record_signer/index";
+
+// IdentityModule — domain facade for actor lifecycle (identity_module_v2 Cycle 2)
+export { IdentityModule } from "./identity/index";
+export type { IIdentityModule, IdentityModuleDependencies } from "./identity/index";

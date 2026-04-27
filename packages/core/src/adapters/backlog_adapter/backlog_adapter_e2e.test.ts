@@ -101,6 +101,13 @@ describe('BacklogAdapter - End-to-End Tests', () => {
           getAgentRecord: jest.fn(),
           listAgentRecords: jest.fn()
         } as unknown as IdentityAdapter,
+        signer: {
+          createSignedRecord: jest.fn().mockImplementation(async (payload: any, type: any) => ({
+            header: { version: '1.0', type, payloadChecksum: 'mock', signatures: [] },
+            payload
+          })),
+          signRecord: jest.fn().mockImplementation(async (record: any) => record),
+        } as any,
         eventBus: {
           publish: jest.fn(),
           subscribe: jest.fn(),

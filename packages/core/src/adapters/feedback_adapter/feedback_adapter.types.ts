@@ -1,5 +1,6 @@
 import type { RecordStores } from '../../record_store/record_store.types';
 import type { IdentityAdapter } from '../identity_adapter';
+import type { RecordSigner } from '../../record_signer';
 import type { FeedbackRecord, GitGovFeedbackRecord } from '../../record_types';
 import type { IEventStream } from '../../event_bus';
 
@@ -12,6 +13,7 @@ export interface FeedbackAdapterDependencies {
 
   // Infrastructure Layer
   identity: IdentityAdapter;
+  signer: RecordSigner;
   eventBus: IEventStream; // For emitting events
 }
 

@@ -5,12 +5,12 @@ import { IdentityAdapter } from '../identity_adapter';
 import { FeedbackAdapter } from '../feedback_adapter';
 import { RecordMetrics, type SystemStatus, type TaskHealthReport } from '../../record_metrics';
 import { SessionManager } from '../../session_manager';
+import type { RecordSigner } from '../../record_signer';
 import type {
   TaskRecord,
   CycleRecord,
   ExecutionRecord,
   ActorRecord,
-  GitGovRecord,
 } from '../../record_types';
 import type { IWorkflow } from '../workflow_adapter';
 import type {
@@ -49,6 +49,7 @@ export class BacklogAdapter implements IBacklogAdapter {
 
   private workflowAdapter: IWorkflow;
   private identity: IdentityAdapter;
+  private signer: RecordSigner;
   private eventBus: IEventStream;
   // configManager is required in dependencies but not currently used
   // Reserved for future use (project config access)
@@ -67,6 +68,7 @@ export class BacklogAdapter implements IBacklogAdapter {
     // Business Rules & Infrastructure
     this.workflowAdapter = dependencies.workflowAdapter;
     this.identity = dependencies.identity;
+    this.signer = dependencies.signer;
     this.eventBus = dependencies.eventBus;
     // Note: dependencies.configManager is accepted but not stored (reserved for future use)
     this.sessionManager = dependencies.sessionManager;
@@ -105,27 +107,10 @@ export class BacklogAdapter implements IBacklogAdapter {
     // 1. Build the record with factory
     const validatedPayload = createTaskRecord(payload);
 
-    // 2. Create unsigned record structure
-    const unsignedRecord: GitGovRecord & { payload: TaskRecord } = {
-      header: {
-        version: '1.0',
-        type: 'task',
-        payloadChecksum: 'will-be-calculated-by-signRecord',
-        signatures: [{
-          keyId: actorId,
-          role: 'author',
-          notes: 'Task created',
-          signature: 'placeholder',
-          timestamp: Date.now()
-        }]
-      },
-      payload: validatedPayload,
-    };
+    // 2. Create signed record via RecordSigner
+    const signedRecord = await this.signer.createSignedRecord(validatedPayload, 'task', actorId, 'author', 'Task created');
 
-    // 3. Sign the record
-    const signedRecord = await this.identity.signRecord(unsignedRecord, actorId, 'author', 'Task created');
-
-    // 4. Persist the record with validation
+    // 3. Persist the record with validation
     await this.stores.tasks.put(signedRecord.payload.id, signedRecord);
 
     // 5. Emit event
@@ -208,7 +193,7 @@ export class BacklogAdapter implements IBacklogAdapter {
     const updatedRecord = { ...taskRecord, payload: updatedPayload };
 
     // Sign and persist
-    const signedRecord = await this.identity.signRecord(updatedRecord, actorId, 'submitter', 'Task submitted for review');
+    const signedRecord = await this.signer.signRecord(updatedRecord, actorId, 'submitter', 'Task submitted for review');
     await this.stores.tasks.put(signedRecord.payload.id, signedRecord);
 
     // Emit event
@@ -279,7 +264,7 @@ export class BacklogAdapter implements IBacklogAdapter {
     const updatedPayload: TaskRecord = { ...task, status: targetState as TaskRecord['status'] };
     const updatedRecord = { ...taskRecord, payload: updatedPayload };
 
-    const signedRecord = await this.identity.signRecord(updatedRecord, actorId, 'approver', `Task approved: ${task.status} → ${targetState}`);
+    const signedRecord = await this.signer.signRecord(updatedRecord, actorId, 'approver', `Task approved: ${task.status} → ${targetState}`);
     await this.stores.tasks.put(signedRecord.payload.id, signedRecord);
 
     // 7. Emit event
@@ -334,7 +319,7 @@ export class BacklogAdapter implements IBacklogAdapter {
     const updatedRecord = { ...taskRecord, payload: updatedPayload };
 
     // 5. Sign the record with 'executor' role
-    const signedRecord = await this.identity.signRecord(updatedRecord, actorId, 'executor', 'Task activated');
+    const signedRecord = await this.signer.signRecord(updatedRecord, actorId, 'executor', 'Task activated');
     await this.stores.tasks.put(signedRecord.payload.id, signedRecord);
 
     // 6. Update activeTaskId in session state
@@ -402,7 +387,7 @@ export class BacklogAdapter implements IBacklogAdapter {
     const updatedRecord = { ...taskRecord, payload: updatedPayload };
 
     // 5. Sign and persist with pauser role
-    const signedRecord = await this.identity.signRecord(updatedRecord, actorId, 'pauser', `Task paused: ${reason || 'No reason provided'}`);
+    const signedRecord = await this.signer.signRecord(updatedRecord, actorId, 'pauser', `Task paused: ${reason || 'No reason provided'}`);
     await this.stores.tasks.put(signedRecord.payload.id, signedRecord);
 
     // 6. Clear activeTaskId in session state (task no longer active)
@@ -471,7 +456,7 @@ export class BacklogAdapter implements IBacklogAdapter {
     const updatedRecord = { ...taskRecord, payload: updatedPayload };
 
     // 5. Sign and persist with resumer role
-    const signedRecord = await this.identity.signRecord(updatedRecord, actorId, 'resumer', 'Task resumed');
+    const signedRecord = await this.signer.signRecord(updatedRecord, actorId, 'resumer', 'Task resumed');
     await this.stores.tasks.put(signedRecord.payload.id, signedRecord);
 
     // 6. Update activeTaskId in session state
@@ -531,7 +516,7 @@ export class BacklogAdapter implements IBacklogAdapter {
     const updatedRecord = { ...taskRecord, payload: updatedPayload };
 
     // 5. Sign the record with 'approver' role
-    const signedRecord = await this.identity.signRecord(updatedRecord, actorId, 'approver', 'Task completed');
+    const signedRecord = await this.signer.signRecord(updatedRecord, actorId, 'approver', 'Task completed');
     await this.stores.tasks.put(signedRecord.payload.id, signedRecord);
 
     // 6. Clear activeTaskId in session state (task completed)
@@ -603,7 +588,7 @@ export class BacklogAdapter implements IBacklogAdapter {
     const updatedRecord = { ...taskRecord, payload: updatedPayload };
 
     // 5. Sign the record with 'canceller' role
-    const signedRecord = await this.identity.signRecord(updatedRecord, actorId, 'canceller', `Task discarded: ${reason || 'No reason provided'}`);
+    const signedRecord = await this.signer.signRecord(updatedRecord, actorId, 'canceller', `Task discarded: ${reason || 'No reason provided'}`);
     await this.stores.tasks.put(signedRecord.payload.id, signedRecord);
 
     // 6. Clear activeTaskId in session state (task discarded)
@@ -693,7 +678,7 @@ export class BacklogAdapter implements IBacklogAdapter {
     const updatedRecord = { ...taskRecord, payload: updatedPayload };
 
     // Sign the updated record with editor role
-    const signedRecord = await this.identity.signRecord(updatedRecord, actorId, 'editor', 'Task updated');
+    const signedRecord = await this.signer.signRecord(updatedRecord, actorId, 'editor', 'Task updated');
     await this.stores.tasks.put(signedRecord.payload.id, signedRecord);
 
     return updatedPayload;
@@ -1051,27 +1036,10 @@ export class BacklogAdapter implements IBacklogAdapter {
     // 1. Build the record with factory
     const validatedPayload = createCycleRecord(payload);
 
-    // 2. Create unsigned record structure
-    const unsignedRecord: GitGovRecord & { payload: CycleRecord } = {
-      header: {
-        version: '1.0',
-        type: 'cycle',
-        payloadChecksum: 'will-be-calculated-by-signRecord',
-        signatures: [{
-          keyId: actorId,
-          role: 'author',
-          notes: 'Cycle created',
-          signature: 'placeholder',
-          timestamp: Date.now()
-        }]
-      },
-      payload: validatedPayload,
-    };
+    // 2. Create signed record via RecordSigner
+    const signedRecord = await this.signer.createSignedRecord(validatedPayload, 'cycle', actorId, 'author', 'Cycle created');
 
-    // 3. Sign the record
-    const signedRecord = await this.identity.signRecord(unsignedRecord, actorId, 'author', 'Cycle created');
-
-    // 4. Persist the record
+    // 3. Persist the record
     await this.stores.cycles.put(signedRecord.payload.id, signedRecord);
 
     // 5. Emit event
@@ -1200,13 +1168,13 @@ export class BacklogAdapter implements IBacklogAdapter {
     const currentActor = await this.identity.getCurrentActor();
 
     // Sign and persist both records with current actor
-    const signedCycleRecord = await this.identity.signRecord(
+    const signedCycleRecord = await this.signer.signRecord(
       { ...cycleRecord, payload: updatedCycle },
       currentActor.id,
       'author',
       `Task ${taskId} added to cycle`
     );
-    const signedTaskRecord = await this.identity.signRecord(
+    const signedTaskRecord = await this.signer.signRecord(
       { ...taskRecord, payload: updatedTask },
       currentActor.id,
       'author',
@@ -1266,7 +1234,7 @@ export class BacklogAdapter implements IBacklogAdapter {
     const currentActor = await this.identity.getCurrentActor();
 
     // 7. Sign cycle record
-    const signedCycleRecord = await this.identity.signRecord(
+    const signedCycleRecord = await this.signer.signRecord(
       { ...cycleRecord, payload: updatedCycle },
       currentActor.id,
       'author',
@@ -1281,7 +1249,7 @@ export class BacklogAdapter implements IBacklogAdapter {
           ...record.payload,
           cycleIds: taskCycleIds.filter(id => id !== cycleId)
         };
-        return await this.identity.signRecord(
+        return await this.signer.signRecord(
           { ...record, payload: updatedTask },
           currentActor.id,
           'author',
@@ -1365,13 +1333,13 @@ export class BacklogAdapter implements IBacklogAdapter {
 
     // 7. Sign both cycle records
     const [signedSourceCycle, signedTargetCycle] = await Promise.all([
-      this.identity.signRecord(
+      this.signer.signRecord(
         { ...sourceCycleRecord, payload: updatedSourceCycle },
         currentActor.id,
         'author',
         'Tasks moved from cycle'
       ),
-      this.identity.signRecord(
+      this.signer.signRecord(
         { ...targetCycleRecord, payload: updatedTargetCycle },
         currentActor.id,
         'author',
@@ -1389,7 +1357,7 @@ export class BacklogAdapter implements IBacklogAdapter {
             .filter(id => id !== sourceCycleId)  // Remove source
             .concat(targetCycleId)                // Add target
         };
-        return await this.identity.signRecord(
+        return await this.signer.signRecord(
           { ...record, payload: updatedTask },
           currentActor.id,
           'author',

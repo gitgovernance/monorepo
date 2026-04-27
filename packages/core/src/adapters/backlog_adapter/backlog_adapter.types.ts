@@ -18,6 +18,7 @@ import type {
 } from '../../event_bus';
 import type { ExecutionAdapter } from '../execution_adapter';
 import type { RecordMetrics, SystemStatus, TaskHealthReport } from '../../record_metrics';
+import type { RecordSigner } from '../../record_signer';
 
 /**
  * BacklogAdapter Dependencies - Facade + Dependency Injection Pattern
@@ -36,6 +37,7 @@ export type BacklogAdapterDependencies = {
 
   // Infrastructure Layer
   identity: IdentityAdapter;
+  signer: RecordSigner;
   eventBus: IEventStream; // For listening to events (consumer pattern)
   configManager: ConfigManager; // For accessing project config
   sessionManager: SessionManager; // For updating session state (activeTaskId, activeCycleId)

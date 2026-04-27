@@ -137,7 +137,7 @@ describe('RecordSigner', () => {
       const payload = makeTaskPayload();
 
       // Create an initial record to re-sign
-      const initial = await signer.createSignedRecord(
+      const initial: GitGovRecord = await signer.createSignedRecord(
         payload, 'task', actorId, 'author', 'Initial',
       );
 
@@ -146,7 +146,7 @@ describe('RecordSigner', () => {
       await mockKp.setPrivateKey(cosignerId, cosignerKeys.privateKey);
 
       const result = await signer.signRecord(
-        initial as unknown as GitGovRecord,
+        initial,
         cosignerId,
         'approver',
         'Approved',
@@ -172,27 +172,17 @@ describe('RecordSigner', () => {
       const payload = makeTaskPayload();
 
       // Create an initial record
-      const initial = await signer.createSignedRecord(
+      const initial: GitGovRecord = await signer.createSignedRecord(
         payload, 'task', actorId, 'author', 'Initial',
       );
 
       // Try to sign with a non-existent key
       await expect(
-        signer.signRecord(
-          initial as unknown as GitGovRecord,
-          'actor:human:nonexistent',
-          'approver',
-          'Should fail',
-        ),
+        signer.signRecord(initial, 'actor:human:nonexistent', 'approver', 'Should fail'),
       ).rejects.toThrow(KeyProviderError);
 
       await expect(
-        signer.signRecord(
-          initial as unknown as GitGovRecord,
-          'actor:human:nonexistent',
-          'approver',
-          'Should fail',
-        ),
+        signer.signRecord(initial, 'actor:human:nonexistent', 'approver', 'Should fail'),
       ).rejects.toMatchObject({ code: 'KEY_NOT_FOUND' });
     });
 
