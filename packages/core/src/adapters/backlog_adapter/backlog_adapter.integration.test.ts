@@ -272,36 +272,15 @@ describe.each(backends)('BacklogAdapter Integration Tests with %s backend', (_na
       clearCloudToken: jest.fn(),
     } as unknown as SessionManager;
 
-    // Create mock signer that delegates to identity's mock signRecord
-    const mockSigner = {
-      createSignedRecord: jest.fn().mockImplementation(async (payload, type, actorId, role, _notes) => {
-        return {
-          header: {
-            version: '1.0',
-            type,
-            payloadChecksum: 'a'.repeat(64),
-            signatures: [createTestSignature(actorId || 'human:test-user', role)]
-          },
-          payload
-        };
-      }),
-      signRecord: jest.fn().mockImplementation(async (record, actorId, role) => {
-        return {
-          header: {
-            ...record.header,
-            payloadChecksum: 'a'.repeat(64),
-            signatures: [createTestSignature(actorId || 'human:test-user', role)]
-          },
-          payload: record.payload
-        };
-      }),
-    };
+    // Create real RecordSigner with mock KeyProvider (I/O mock only)
+    const { RecordSigner } = await import('../../record_signer');
+    const signer = new RecordSigner({ keyProvider: mockKeyProvider });
 
     backlogAdapter = new BacklogAdapter({
       stores,
       workflowAdapter: workflowAdapter,
       identity: identityAdapter,
-      signer: mockSigner as never,
+      signer,
       eventBus: eventBus,
       feedbackAdapter: mockFeedbackAdapter as unknown as FeedbackAdapter,
       executionAdapter: mockExecutionAdapter,

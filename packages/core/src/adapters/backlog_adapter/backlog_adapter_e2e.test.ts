@@ -101,13 +101,17 @@ describe('BacklogAdapter - End-to-End Tests', () => {
           getAgentRecord: jest.fn(),
           listAgentRecords: jest.fn()
         } as unknown as IdentityAdapter,
-        signer: {
-          createSignedRecord: jest.fn().mockImplementation(async (payload: any, type: any) => ({
-            header: { version: '1.0', type, payloadChecksum: 'mock', signatures: [] },
-            payload
-          })),
-          signRecord: jest.fn().mockImplementation(async (record: never) => record),
-        } as never,
+        signer: (() => {
+          const { RecordSigner } = require('../../record_signer');
+          const { MockKeyProvider } = require('../../key_provider/memory/mock_key_provider');
+          const s = new RecordSigner({ keyProvider: new MockKeyProvider() });
+          jest.spyOn(s, 'createSignedRecord').mockImplementation(async (...args: unknown[]) => {
+            const [payload, type] = args;
+            return { header: { version: '1.0', type, payloadChecksum: 'mock', signatures: [] }, payload };
+          });
+          jest.spyOn(s, 'signRecord').mockImplementation(async (...args: unknown[]) => args[0]);
+          return s;
+        })(),
         eventBus: {
           publish: jest.fn(),
           subscribe: jest.fn(),

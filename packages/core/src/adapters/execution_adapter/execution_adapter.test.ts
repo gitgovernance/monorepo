@@ -7,6 +7,8 @@ import type { ExecutionRecord, GitGovExecutionRecord, GitGovTaskRecord } from '.
 import type { IEventStream } from '../../event_bus';
 import type { GitGovRecord, Signature } from '../../record_types';
 import { DetailedValidationError } from '../../record_validations/common';
+import { RecordSigner } from '../../record_signer';
+import { MockKeyProvider } from '../../key_provider/memory/mock_key_provider';
 
 // Mock dependencies
 jest.mock('../../record_factories/execution_factory');
@@ -49,7 +51,8 @@ describe('ExecutionAdapter', () => {
   let mockExecutionStore: jest.Mocked<RecordStore<GitGovExecutionRecord>>;
   let mockTaskStore: jest.Mocked<RecordStore<GitGovTaskRecord>>;
   let mockIdentityAdapter: jest.Mocked<IdentityAdapter>;
-  let mockSigner: { createSignedRecord: jest.Mock; signRecord: jest.Mock };
+  let mockSigner: RecordSigner;
+  let createSignedSpy: jest.SpyInstance;
   let mockPublishEvent: jest.Mock;
 
   const mockPayload = {
@@ -107,17 +110,16 @@ describe('ExecutionAdapter', () => {
     (createExecutionRecord as jest.Mock).mockReturnValue(mockCreatedExecutionPayload);
     mockIdentityAdapter.signRecord.mockResolvedValue(mockSignedRecord);
 
-    // Create mock signer
-    mockSigner = {
-      createSignedRecord: jest.fn().mockResolvedValue(mockSignedRecord),
-      signRecord: jest.fn().mockResolvedValue(mockSignedRecord),
-    };
+    // Create real RecordSigner with mock KeyProvider (I/O boundary mock)
+    mockSigner = new RecordSigner({ keyProvider: new MockKeyProvider() });
+    createSignedSpy = jest.spyOn(mockSigner, 'createSignedRecord').mockResolvedValue(mockSignedRecord);
+    jest.spyOn(mockSigner, 'signRecord').mockResolvedValue(mockSignedRecord);
 
     // Create adapter with mocked dependencies
     executionAdapter = new ExecutionAdapter({
       stores: { executions: mockExecutionStore, tasks: mockTaskStore },
       identity: mockIdentityAdapter,
-      signer: mockSigner as never,
+      signer: mockSigner,
       eventBus: {
         publish: jest.fn(),
         subscribe: jest.fn(),
@@ -322,7 +324,7 @@ describe('ExecutionAdapter', () => {
     });
 
     it('should handle signing errors gracefully', async () => {
-      mockSigner.createSignedRecord.mockRejectedValue(new Error('Signing failed'));
+      createSignedSpy.mockRejectedValue(new Error('Signing failed'));
 
       await expect(executionAdapter.create(mockPayload, mockActorId))
         .rejects.toThrow('Signing failed');

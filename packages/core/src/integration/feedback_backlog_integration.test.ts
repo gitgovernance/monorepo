@@ -132,30 +132,9 @@ describe('FeedbackAdapter <-> BacklogAdapter Integration (Real Event Communicati
       sessionManager: mockSessionManager,
     });
 
-    // Create mock signer for integration tests
-    const mockSigner = {
-      createSignedRecord: jest.fn().mockImplementation(async (payload: any, type: string, actorId: string, role: string, _notes: string) => {
-        return {
-          header: {
-            version: '1.0',
-            type,
-            payloadChecksum: 'a'.repeat(64),
-            signatures: [createTestSignature(actorId || 'human:test-dev', role)]
-          },
-          payload
-        };
-      }),
-      signRecord: jest.fn().mockImplementation(async (record: any, actorId: string, role: string) => {
-        return {
-          header: {
-            ...record.header,
-            payloadChecksum: 'a'.repeat(64),
-            signatures: [createTestSignature(actorId || 'human:test-dev', role)]
-          },
-          payload: record.payload
-        };
-      }),
-    };
+    // Create real RecordSigner with the same mock KeyProvider used by identityAdapter
+    const { RecordSigner } = require('../record_signer');
+    const realSigner = new RecordSigner({ keyProvider: mockKeyProvider });
 
     // Create REAL FeedbackAdapter
     feedbackAdapter = new FeedbackAdapter({
@@ -163,7 +142,7 @@ describe('FeedbackAdapter <-> BacklogAdapter Integration (Real Event Communicati
         feedbacks: feedbackStore,
       },
       identity: identityAdapter,
-      signer: mockSigner as never,
+      signer: realSigner,
       eventBus // REAL EventBus
     });
 
@@ -191,11 +170,11 @@ describe('FeedbackAdapter <-> BacklogAdapter Integration (Real Event Communicati
       feedbackAdapter, // REAL FeedbackAdapter
       executionAdapter: {
         isFirstExecution: jest.fn()
-      } as never, // Mock ExecutionAdapter for now
+      } as never, // Mock ExecutionAdapter for now — pre-existing, not part of this migration
       metricsAdapter, // REAL RecordMetrics
       workflowAdapter: workflowAdapter,
       identity: identityAdapter,
-      signer: mockSigner as never,
+      signer: realSigner,
       eventBus, // SAME EventBus instance
       configManager: {
         loadConfig: jest.fn().mockResolvedValue({})
