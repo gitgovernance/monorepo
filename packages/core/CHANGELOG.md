@@ -1,3 +1,10 @@
+## [3.14.0](https://github.com/gitgovernance/monorepo/compare/core-v3.13.0...core-v3.14.0) (2026-04-27)
+
+
+### ✨ Features
+
+* **cli,core:** gitgov agent add + agent runner createRequire + cleanup old schema ([74581b4](https://github.com/gitgovernance/monorepo/commit/74581b48739db13b9b69b6088048697a75b3237d))
+
 ## [3.13.0](https://github.com/gitgovernance/monorepo/compare/core-v3.12.1...core-v3.13.0) (2026-04-27)
 
 
