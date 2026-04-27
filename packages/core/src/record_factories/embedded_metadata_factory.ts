@@ -140,3 +140,39 @@ export function createEmbeddedMetadataRecord<T extends GitGovRecordPayload>(
   return embeddedRecord;
 }
 
+/**
+ * Pre-signing record: header with checksum but no signatures yet.
+ * Designed for production code paths where signRecord() will add the first signature.
+ */
+export type UnsignedRecord<T extends GitGovRecordPayload> = {
+  header: Omit<EmbeddedMetadataHeader, 'signatures'> & { signatures: Signature[] };
+  payload: T;
+};
+
+/**
+ * Creates an unsigned record ready to be signed by IdentityAdapter.signRecord().
+ *
+ * Unlike createEmbeddedMetadataRecord (which generates a test signature),
+ * this creates a record with an empty signatures array — no dummy data.
+ * signRecord() handles empty signatures by adding the first real signature.
+ *
+ * Usage: production code that delegates signing to IdentityService/IdentityAdapter.
+ */
+export function createUnsignedRecord<T extends GitGovRecordPayload>(
+  payload: T,
+  options?: { type?: GitGovRecordType },
+): UnsignedRecord<T> {
+  const type = options?.type ?? inferTypeFromPayload(payload);
+  const payloadChecksum = calculatePayloadChecksum(payload);
+
+  return {
+    header: {
+      version: '1.0',
+      type,
+      payloadChecksum,
+      signatures: [],
+    },
+    payload,
+  };
+}
+
