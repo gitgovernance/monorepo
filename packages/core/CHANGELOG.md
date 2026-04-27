@@ -1,3 +1,10 @@
+## [3.13.0](https://github.com/gitgovernance/monorepo/compare/core-v3.12.1...core-v3.13.0) (2026-04-27)
+
+
+### ✨ Features
+
+* **core:** add createUnsignedRecord factory for pre-signing records ([#149](https://github.com/gitgovernance/monorepo/issues/149)) ([10d555f](https://github.com/gitgovernance/monorepo/commit/10d555fa0127f11af7f89400bc32afdcb4e03664))
+
 ## [3.12.1](https://github.com/gitgovernance/monorepo/compare/core-v3.12.0...core-v3.12.1) (2026-04-26)
 
 
