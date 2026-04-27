@@ -1,4 +1,4 @@
-import { createEmbeddedMetadataRecord, createTestSignature } from './embedded_metadata_factory';
+import { createEmbeddedMetadataRecord, createTestSignature, createUnsignedRecord } from './embedded_metadata_factory';
 import type { ActorRecord, TaskRecord } from '../record_types';
 import { DetailedValidationError } from '../record_validations/common';
 
@@ -174,6 +174,42 @@ describe('EmbeddedMetadata Factory', () => {
       const result = createEmbeddedMetadataRecord(complexPayload);
 
       expect(result.payload).toEqual(complexPayload);
+    });
+  });
+
+  // ── createUnsignedRecord (EARS-UR-1 to UR-4) ───────────────────────────
+  // UR-1..3: unit tests below. UR-4: integration (verified by identity_key_exchange.e2e.test.ts PI-A2)
+
+  describe('createUnsignedRecord', () => {
+    const sampleTaskPayload: TaskRecord = {
+      id: '1700000000-task-test',
+      title: 'Test task',
+      status: 'draft',
+      priority: 'medium',
+      description: 'A test task',
+      tags: [],
+    };
+
+    // [EARS-UR-1]
+    it('[EARS-UR-1] should return record with empty signatures, valid checksum, and version 1.0', () => {
+      const result = createUnsignedRecord(sampleTaskPayload);
+
+      expect(result.header.signatures).toEqual([]);
+      expect(result.header.version).toBe('1.0');
+      expect(result.header.payloadChecksum).toMatch(/^[a-f0-9]{64}$/);
+      expect(result.payload).toEqual(sampleTaskPayload);
+    });
+
+    // [EARS-UR-2]
+    it('[EARS-UR-2] should infer type task from TaskRecord payload', () => {
+      const result = createUnsignedRecord(sampleTaskPayload);
+      expect(result.header.type).toBe('task');
+    });
+
+    // [EARS-UR-3]
+    it('[EARS-UR-3] should use options.type override when provided', () => {
+      const result = createUnsignedRecord(sampleTaskPayload, { type: 'feedback' });
+      expect(result.header.type).toBe('feedback');
     });
   });
 });
