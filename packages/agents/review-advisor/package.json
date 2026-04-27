@@ -9,6 +9,17 @@
     "typecheck": "tsc --noEmit",
     "test": "jest"
   },
+  "gitgov": {
+    "agent": {
+      "purpose": "review",
+      "function": "runReviewAdvisor",
+      "metadata": {
+        "sdk": "claude-agent-sdk",
+        "model": "claude-sonnet-4"
+      },
+      "env": ["ANTHROPIC_API_KEY"]
+    }
+  },
   "dependencies": {
     "@gitgov/core": "workspace:*",
     "@anthropic-ai/claude-agent-sdk": "^0.2.81"

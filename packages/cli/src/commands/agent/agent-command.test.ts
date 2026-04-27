@@ -6,6 +6,7 @@
  * - §4.2 Agent List (EARS-B1 to B3)
  * - §4.3 Agent Show (EARS-C1 to C3)
  * - §4.4 Output & Exit Codes (EARS-D1 to D6)
+ * - §4.6 Agent Add (EARS-F1 to F8, F2b)
  */
 
 // Mock @gitgov/core
@@ -19,6 +20,11 @@ jest.doMock('@gitgov/core', () => ({
   Runner: {
     AgentRunnerModule: jest.fn(),
   }
+}));
+
+// Mock @gitgov/core/fs — DEFAULT_ID_ENCODER used by executeAdd
+jest.doMock('@gitgov/core/fs', () => ({
+  DEFAULT_ID_ENCODER: { encode: (id: string) => id.replace(/:/g, '_'), decode: (id: string) => id.replace(/_/g, ':') },
 }));
 
 // Mock DependencyInjectionService
@@ -420,8 +426,8 @@ describe('AgentCommand', () => {
     });
   });
 
-  describe('4.5. Agent New (ICOMP-C7 to ICOMP-C9)', () => {
-    it('[ICOMP-C7] should create AgentRecord via adapter', async () => {
+  describe('4.5. Agent New (EARS-E1 to E6)', () => {
+    it('[EARS-E1b] should create AgentRecord via adapter (basic new)', async () => {
       await agentCommand.executeNew('agent:test-echo', { engineType: 'local' } as AgentNewOptions);
 
       expect(mockAgentAdapter.createAgentRecord).toHaveBeenCalledWith(
@@ -462,7 +468,7 @@ describe('AgentCommand', () => {
       expect(mockAgentAdapter.createAgentRecord).toHaveBeenCalledTimes(1);
     });
 
-    it('[ICOMP-C8] should error on non-actor related failures', async () => {
+    it('[EARS-E3b] should error on non-actor related failures', async () => {
       mockAgentAdapter.createAgentRecord.mockRejectedValue(
         new Error('Database connection failed'),
       );
@@ -475,7 +481,7 @@ describe('AgentCommand', () => {
       expect(mockProcessExit).toHaveBeenCalledWith(1);
     });
 
-    it('[ICOMP-C9] should output JSON when --json is provided', async () => {
+    it('[EARS-E4b] should output JSON when --json is provided', async () => {
       await agentCommand.executeNew('agent:test-echo', { engineType: 'local', json: true } as AgentNewOptions);
 
       const outputCall = mockConsoleLog.mock.calls.find(call =>
@@ -487,9 +493,7 @@ describe('AgentCommand', () => {
       expect(output.data.id).toBe('agent:test-echo');
       expect(output.data.engine).toEqual({ type: 'local' });
     });
-  });
 
-  describe('4.5. Agent New con Config (EARS-E1 to EARS-E4)', () => {
     it('[EARS-E1] should create AgentRecord with merged config JSON', async () => {
       const config = JSON.stringify({
         engine: {
@@ -609,6 +613,157 @@ describe('AgentCommand', () => {
       expect(errorCall).toBeDefined();
 
       mockExit.mockRestore();
+    });
+  });
+
+  describe('4.6. Agent Add — Package-Driven Registration (EARS-F1 to F8, F2b)', () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const nodeFs = require('node:fs') as typeof import('fs');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const nodePath = require('node:path') as typeof import('path');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const nodeOs = require('node:os') as typeof import('os');
+
+    let tmpAgentDir: string;
+    let mockExit: jest.SpyInstance;
+    let mockConsoleWarn: jest.SpyInstance;
+
+    function createFakeAgent(pkgJson: Record<string, unknown>): string {
+      const dir = nodeFs.mkdtempSync(nodePath.join(nodeOs.tmpdir(), 'agent-test-'));
+      nodeFs.writeFileSync(nodePath.join(dir, 'package.json'), JSON.stringify(pkgJson));
+      nodeFs.mkdirSync(nodePath.join(dir, 'dist'), { recursive: true });
+      nodeFs.writeFileSync(nodePath.join(dir, 'dist', 'index.mjs'), 'export function runAgent() {}');
+      return dir;
+    }
+
+    beforeEach(() => {
+      mockExit = jest.spyOn(process, 'exit').mockImplementation();
+      mockConsoleWarn = jest.spyOn(console, 'warn').mockImplementation();
+      mockAgentStore.list.mockResolvedValue([]);
+    });
+
+    it.skip('[EARS-F1] should resolve NPM package and create agent from gitgov field', () => {
+      // Requires createRequire mock — validated in E2E (gate_agent_flow GF2 with npm install)
+    });
+
+    it.skip('[EARS-F2b] should auto-install NPM package when not found locally', () => {
+      // Requires createRequire + execSync mock — validated in E2E when agents are published to NPM
+    });
+
+    afterEach(() => {
+      mockExit.mockRestore();
+      mockConsoleWarn.mockRestore();
+      if (tmpAgentDir) nodeFs.rmSync(tmpAgentDir, { recursive: true, force: true });
+    });
+
+    it('[EARS-F2] should resolve local path and create agent from gitgov field', async () => {
+      tmpAgentDir = createFakeAgent({
+        name: '@gitgov/agent-security-audit',
+        main: 'dist/index.mjs',
+        gitgov: { agent: { purpose: 'audit', function: 'runAgent', metadata: { target: 'code' } } },
+      });
+
+      await agentCommand.executeAdd(tmpAgentDir, {});
+
+      expect(mockAgentAdapter.createAgentRecord).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'agent:security-audit',
+          engine: expect.objectContaining({
+            entrypoint: nodePath.join(tmpAgentDir, 'dist/index.mjs'),
+          }),
+        }),
+      );
+    });
+
+    it('[EARS-F3] should fail with descriptive error when gitgov.agent field is missing', async () => {
+      tmpAgentDir = createFakeAgent({ name: 'some-package', main: 'index.js' });
+
+      await agentCommand.executeAdd(tmpAgentDir, {});
+
+      expect(mockExit).toHaveBeenCalledWith(1);
+      expect(mockConsoleError).toHaveBeenCalledWith(
+        expect.stringContaining('does not have a gitgov.agent field'),
+      );
+    });
+
+    it('[EARS-F4] should merge --config inline over package.json gitgov.agent values', async () => {
+      tmpAgentDir = createFakeAgent({
+        name: '@gitgov/agent-security-audit',
+        main: 'dist/index.mjs',
+        gitgov: { agent: { purpose: 'audit', function: 'runAgent' } },
+      });
+
+      await agentCommand.executeAdd(tmpAgentDir, { config: '{"purpose":"custom"}' });
+
+      expect(mockAgentAdapter.createAgentRecord).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: expect.objectContaining({ purpose: 'custom' }),
+        }),
+      );
+    });
+
+    it('[EARS-F5] should register --set values in agent metadata.env', async () => {
+      tmpAgentDir = createFakeAgent({
+        name: '@gitgov/agent-security-audit',
+        main: 'dist/index.mjs',
+        gitgov: { agent: { purpose: 'audit', function: 'runAgent' } },
+      });
+
+      await agentCommand.executeAdd(tmpAgentDir, { set: ['API_KEY=sk-123', 'DEBUG=true'] });
+
+      expect(mockAgentAdapter.createAgentRecord).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: expect.objectContaining({
+            env: { API_KEY: 'sk-123', DEBUG: 'true' },
+          }),
+        }),
+      );
+    });
+
+    it('[EARS-F6] should warn when required env vars from gitgov.agent.env are missing', async () => {
+      tmpAgentDir = createFakeAgent({
+        name: '@gitgov/agent-review-advisor',
+        main: 'dist/index.mjs',
+        gitgov: { agent: { purpose: 'review', function: 'runReviewAdvisor', env: ['ANTHROPIC_API_KEY'] } },
+      });
+
+      delete process.env['ANTHROPIC_API_KEY'];
+
+      await agentCommand.executeAdd(tmpAgentDir, {});
+
+      expect(mockConsoleWarn).toHaveBeenCalledWith(
+        expect.stringContaining('ANTHROPIC_API_KEY is required'),
+      );
+    });
+
+    it('[EARS-F7] should show success message with derived actorId from package name', async () => {
+      tmpAgentDir = createFakeAgent({
+        name: '@gitgov/agent-security-audit',
+        main: 'dist/index.mjs',
+        gitgov: { agent: { purpose: 'audit', function: 'runAgent' } },
+      });
+
+      await agentCommand.executeAdd(tmpAgentDir, {});
+
+      expect(mockConsoleLog).toHaveBeenCalledWith(
+        expect.stringContaining('Agent registered: agent:security-audit'),
+      );
+    });
+
+    it('[EARS-F8] should update existing agent without creating duplicates', async () => {
+      tmpAgentDir = createFakeAgent({
+        name: '@gitgov/agent-security-audit',
+        main: 'dist/index.mjs',
+        gitgov: { agent: { purpose: 'audit', function: 'runAgent' } },
+      });
+
+      mockAgentStore.list.mockResolvedValue(['agent_security-audit']);
+
+      await agentCommand.executeAdd(tmpAgentDir, {});
+
+      expect(mockConsoleLog).toHaveBeenCalledWith(
+        expect.stringContaining('Agent updated: agent:security-audit'),
+      );
     });
   });
 });

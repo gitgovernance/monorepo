@@ -1,4 +1,5 @@
 import path from "node:path";
+import { createRequire } from "node:module";
 import {
   LocalEngineConfigError,
   FunctionNotExportedError,
@@ -60,15 +61,12 @@ export class LocalBackend {
     const entrypoint = engine.entrypoint!;
     const hasFileExtension = /\.\w+$/.test(entrypoint);
     const isPackageName = entrypoint.startsWith("@") || (!hasFileExtension && !entrypoint.startsWith(".") && !entrypoint.startsWith("/") && !entrypoint.includes(path.sep));
+    // [EARS-B1] Resolve entrypoint using Node.js standard module resolution.
+    // Supports: project installs, global installs, monorepo hoisting, absolute/relative paths.
     let absolutePath: string;
     if (isPackageName) {
-      // NPM package: resolve from projectRoot/node_modules/
-      // Read the package's exports/main to find the entry file
-      const pkgDir = path.join(ctx.projectRoot, "node_modules", ...entrypoint.split("/"));
-      const pkgJsonPath = path.join(pkgDir, "package.json");
-      const pkgJson = JSON.parse(await (await import("node:fs/promises")).readFile(pkgJsonPath, "utf-8"));
-      const entry = pkgJson.exports?.["."]?.import || pkgJson.exports?.["."] || pkgJson.main || "index.js";
-      absolutePath = path.join(pkgDir, entry);
+      const require = createRequire(path.join(ctx.projectRoot, "package.json"));
+      absolutePath = require.resolve(entrypoint);
     } else {
       absolutePath = path.isAbsolute(entrypoint) ? entrypoint : path.join(this.projectRoot, entrypoint);
     }

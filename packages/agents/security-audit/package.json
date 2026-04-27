@@ -9,6 +9,16 @@
     "typecheck": "tsc --noEmit",
     "test": "jest"
   },
+  "gitgov": {
+    "agent": {
+      "purpose": "audit",
+      "function": "runAgent",
+      "metadata": {
+        "target": "code",
+        "outputFormat": "sarif"
+      }
+    }
+  },
   "dependencies": {
     "@gitgov/core": "workspace:*"
   },
