@@ -117,7 +117,7 @@ describe('ExecutionAdapter', () => {
     executionAdapter = new ExecutionAdapter({
       stores: { executions: mockExecutionStore, tasks: mockTaskStore },
       identity: mockIdentityAdapter,
-      signer: mockSigner as any,
+      signer: mockSigner as never,
       eventBus: {
         publish: jest.fn(),
         subscribe: jest.fn(),

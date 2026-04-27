@@ -163,7 +163,7 @@ describe('FeedbackAdapter <-> BacklogAdapter Integration (Real Event Communicati
         feedbacks: feedbackStore,
       },
       identity: identityAdapter,
-      signer: mockSigner as any,
+      signer: mockSigner as never,
       eventBus // REAL EventBus
     });
 
@@ -191,11 +191,11 @@ describe('FeedbackAdapter <-> BacklogAdapter Integration (Real Event Communicati
       feedbackAdapter, // REAL FeedbackAdapter
       executionAdapter: {
         isFirstExecution: jest.fn()
-      } as any, // Mock ExecutionAdapter for now
+      } as never, // Mock ExecutionAdapter for now
       metricsAdapter, // REAL RecordMetrics
       workflowAdapter: workflowAdapter,
       identity: identityAdapter,
-      signer: mockSigner as any,
+      signer: mockSigner as never,
       eventBus, // SAME EventBus instance
       configManager: {
         loadConfig: jest.fn().mockResolvedValue({})

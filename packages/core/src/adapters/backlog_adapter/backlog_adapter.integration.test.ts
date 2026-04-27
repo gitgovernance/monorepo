@@ -301,7 +301,7 @@ describe.each(backends)('BacklogAdapter Integration Tests with %s backend', (_na
       stores,
       workflowAdapter: workflowAdapter,
       identity: identityAdapter,
-      signer: mockSigner as any,
+      signer: mockSigner as never,
       eventBus: eventBus,
       feedbackAdapter: mockFeedbackAdapter as unknown as FeedbackAdapter,
       executionAdapter: mockExecutionAdapter,

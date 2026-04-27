@@ -103,7 +103,7 @@ describe('FeedbackAdapter', () => {
     feedbackAdapter = new FeedbackAdapter({
       stores: { feedbacks: mockFeedbackStore },
       identity: mockIdentityAdapter,
-      signer: mockSigner as any,
+      signer: mockSigner as never,
       eventBus: mockEventBus,
     });
   });

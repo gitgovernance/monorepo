@@ -106,8 +106,8 @@ describe('BacklogAdapter - End-to-End Tests', () => {
             header: { version: '1.0', type, payloadChecksum: 'mock', signatures: [] },
             payload
           })),
-          signRecord: jest.fn().mockImplementation(async (record: any) => record),
-        } as any,
+          signRecord: jest.fn().mockImplementation(async (record: never) => record),
+        } as never,
         eventBus: {
           publish: jest.fn(),
           subscribe: jest.fn(),
