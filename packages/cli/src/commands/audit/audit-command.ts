@@ -3,6 +3,8 @@ import { BaseCommand } from '../../base/base-command';
 import type { BaseCommandOptions } from '../../interfaces/command';
 import { readFile } from 'node:fs/promises';
 import { Sarif as SarifModule, generateExecutionId } from '@gitgov/core';
+import { formatAuditResult } from '@gitgov/core/audit';
+import { GitHubCiReporter } from '@gitgov/core/github';
 import type {
   AuditOrchestrationOptions,
   AuditOrchestrationResult,
@@ -32,6 +34,12 @@ export interface AuditCommandOptions extends BaseCommandOptions {
   exclude?: string;
   /** Quiet mode - only critical findings */
   quiet?: boolean;
+  /** CI mode: post PR comment in GitHub Actions (G15) */
+  ci?: boolean;
+  /** LLM provider/model override (G18) */
+  llmModel?: string;
+  /** LLM API key override (G18) */
+  llmKey?: string;
 }
 
 /**
@@ -78,6 +86,9 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
       .option('-e, --exclude <globs>', 'Additional globs to exclude (CSV)')
       .option('-q, --quiet', 'Quiet mode - only critical findings', false)
       .option('--json', 'Alias for --output json', false)
+      .option('--ci', 'CI mode: post PR comment in GitHub Actions', false)
+      .option('--llm-model <provider/model>', 'LLM provider/model (G18). Ex: anthropic/claude-sonnet-4-6')
+      .option('--llm-key <key>', 'LLM API key (G18). Overrides LLM_API_KEY env var')
       .action(async (options: AuditCommandOptions & { json?: boolean }) => {
         // Handle --json alias
         if (options.json) {
@@ -103,6 +114,10 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
    */
   async execute(options: AuditCommandOptions): Promise<void> {
     try {
+      // [AORCH-D6] [AORCH-D7] Set LLM env vars before running agents
+      if (options.llmModel) process.env['LLM_MODEL'] = options.llmModel;
+      if (options.llmKey) process.env['LLM_API_KEY'] = options.llmKey;
+
       const orchestrator = await this.container.getAuditOrchestrator();
       const backlogAdapter = await this.container.getBacklogAdapter();
       const { actorId } = await this.requireActor(options);
@@ -140,6 +155,11 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
 
       // Format and display output
       await this.formatOutput(result, options);
+
+      // [AORCH-D1] CI mode: post PR comment before exit
+      if (options.ci) {
+        await this.postPrComment(result);
+      }
 
       // Exit code based on policy decision
       if (result.policyDecision.decision === 'block') {
@@ -186,6 +206,44 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
         break;
       default:
         this.formatTextOutput(result, options);
+    }
+  }
+
+  /**
+   * Post PR comment via ICiReporter in CI environment.
+   * [AORCH-D1] [AORCH-D2] [AORCH-D3] [AORCH-D4] [AORCH-D5]
+   */
+  private async postPrComment(result: AuditOrchestrationResult): Promise<void> {
+    // [AORCH-D4] Validate CI environment
+    if (process.env['GITHUB_ACTIONS'] !== 'true' || !process.env['GITHUB_TOKEN']) {
+      console.warn('⚠ --ci requires GitHub Actions environment (GITHUB_ACTIONS=true + GITHUB_TOKEN)');
+      return;
+    }
+
+    // [AORCH-D3] Skip if no active findings
+    const markdown = formatAuditResult(result);
+    if (markdown === null) return;
+
+    try {
+      const eventPath = process.env['GITHUB_EVENT_PATH'];
+      if (!eventPath) return;
+      const event = JSON.parse(await readFile(eventPath, 'utf-8'));
+      const prNumber = event.pull_request?.number ?? event.number;
+      if (!prNumber) return;
+
+      const [owner, repo] = (process.env['GITHUB_REPOSITORY'] ?? '').split('/');
+      if (!owner || !repo) return;
+
+      // [AORCH-D1] Construct ICiReporter via factory — CLI never imports @octokit/rest directly
+      const reporter = await GitHubCiReporter.fromToken(process.env['GITHUB_TOKEN']!);
+
+      // [AORCH-D2] postOrUpdateComment handles marker-based idempotency (CIREP-A2)
+      // [AORCH-D5] postOrUpdateComment handles API errors internally (CIREP-C1)
+      await reporter.postOrUpdateComment(markdown, { owner, repo, prNumber });
+    } catch (error) {
+      // [AORCH-D5] Parse/import errors don't change exit code
+      const msg = error instanceof Error ? error.message : String(error);
+      console.warn(`⚠ Failed to post PR comment: ${msg}`);
     }
   }
 

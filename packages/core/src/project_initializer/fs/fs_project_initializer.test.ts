@@ -31,12 +31,12 @@ jest.mock('../../logger', () => ({
 }));
 
 // Mock child_process for VCS checks
-jest.mock('child_process', () => ({
+jest.mock('node:child_process', () => ({
   execSync: jest.fn(),
 }));
 
 // Mock fs for controlled filesystem operations
-jest.mock('fs', () => ({
+jest.mock('node:fs', () => ({
   existsSync: jest.fn(),
   promises: {
     mkdir: jest.fn(),
@@ -58,7 +58,7 @@ import { FsProjectInitializer } from './fs_project_initializer';
 // ============================================================================
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const fsMock = require('fs') as {
+const fsMock = require('node:fs') as {
   existsSync: jest.MockedFunction<(path: string) => boolean>;
   promises: {
     mkdir: jest.MockedFunction<(path: string, options?: { recursive?: boolean }) => Promise<void>>;
@@ -76,7 +76,7 @@ const mockFs = fsMock.promises;
 const mockExistsSync = fsMock.existsSync;
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const { execSync: mockExecSync } = require('child_process') as {
+const { execSync: mockExecSync } = require('node:child_process') as {
   execSync: jest.MockedFunction<(cmd: string, opts?: object) => string | Buffer>;
 };
 
@@ -431,6 +431,76 @@ describe('FsProjectInitializer', () => {
 
       expect(result).toBe(fileContent);
       expect(mockFs.readFile).toHaveBeenCalledWith(filePath, 'utf-8');
+    });
+  });
+
+  // ==========================================================================
+  // 4.7. GitHub Workflow Scaffolding (EARS-FPI16 to FPI18)
+  // ==========================================================================
+
+  describe('4.7. GitHub Workflow Scaffolding (EARS-FPI16 to FPI18)', () => {
+    let initializer: FsProjectInitializer;
+
+    beforeEach(() => {
+      initializer = new FsProjectInitializer(testRoot);
+      jest.clearAllMocks();
+      // Default: .gitignore doesn't exist (so gitignore logic creates new)
+      mockFs.readFile.mockRejectedValue(new Error('ENOENT'));
+      mockFs.writeFile.mockResolvedValue(undefined);
+      mockFs.mkdir.mockResolvedValue(undefined);
+    });
+
+    it('[EARS-FPI16] should create .github/workflows/gitgov.yml when GitHub remote detected', async () => {
+      (mockExecSync as jest.Mock).mockReturnValueOnce('git@github.com:myorg/myrepo.git\n');
+
+      await initializer.setupGitIntegration();
+
+      expect(mockFs.mkdir).toHaveBeenCalledWith(
+        path.join(testRoot, '.github', 'workflows'),
+        { recursive: true }
+      );
+      expect(mockFs.writeFile).toHaveBeenCalledWith(
+        path.join(testRoot, '.github', 'workflows', 'gitgov.yml'),
+        expect.stringContaining('gitgov audit --scope full --fail-on critical --ci')
+      );
+      expect(mockFs.writeFile).toHaveBeenCalledWith(
+        path.join(testRoot, '.github', 'workflows', 'gitgov.yml'),
+        expect.stringContaining('LLM_API_KEY')
+      );
+    });
+
+    it('[EARS-FPI17] should write gitgov.yml with current template (overwrites by default)', async () => {
+      (mockExecSync as jest.Mock).mockReturnValueOnce('https://github.com/myorg/myrepo.git\n');
+
+      await initializer.setupGitIntegration();
+
+      // writeFile overwrites by default — no check for existing file
+      expect(mockFs.writeFile).toHaveBeenCalledWith(
+        path.join(testRoot, '.github', 'workflows', 'gitgov.yml'),
+        expect.stringContaining('name: GitGov')
+      );
+    });
+
+    it('[EARS-FPI18] should not create gitgov.yml when remote is not GitHub', async () => {
+      (mockExecSync as jest.Mock).mockReturnValueOnce('git@gitlab.com:myorg/myrepo.git\n');
+
+      await initializer.setupGitIntegration();
+
+      expect(mockFs.writeFile).not.toHaveBeenCalledWith(
+        path.join(testRoot, '.github', 'workflows', 'gitgov.yml'),
+        expect.anything()
+      );
+    });
+
+    it('[EARS-FPI18] should not create gitgov.yml when no remote exists', async () => {
+      (mockExecSync as jest.Mock).mockImplementationOnce(() => { throw new Error('No remote'); });
+
+      await initializer.setupGitIntegration();
+
+      expect(mockFs.mkdir).not.toHaveBeenCalledWith(
+        path.join(testRoot, '.github', 'workflows'),
+        expect.anything()
+      );
     });
   });
 

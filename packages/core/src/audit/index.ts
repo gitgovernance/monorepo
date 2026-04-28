@@ -1,11 +1,14 @@
 /**
- * @gitgov/core/audit — Canonical Audit product types
+ * @gitgov/core/audit — Canonical Audit product types + formatter
  *
  * Central definition. All modules import from here.
  *
  * Import: `import type { Finding, Waiver, Scan, PolicyDecision } from '@gitgov/core/audit'`
  * Also:   `import type { Finding, Waiver, Scan, PolicyDecision } from '@gitgov/core'`
+ * Also:   `import { formatAuditResult, severityBadge } from '@gitgov/core/audit'`
  */
+export { formatAuditResult, severityBadge } from "./formatter";
+
 export type {
   // Enums
   FindingCategory,

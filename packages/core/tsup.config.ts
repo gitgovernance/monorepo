@@ -16,6 +16,6 @@ export default defineConfig({
   outDir: 'dist/src',
   splitting: false,
   treeshake: true,
-  external: ['fast-glob', 'picomatch'],
+  external: ['fast-glob', 'picomatch', '@octokit/rest'],
 });
 
