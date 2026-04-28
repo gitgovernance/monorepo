@@ -6,7 +6,7 @@
  */
 
 import type { Octokit } from '@octokit/rest';
-import type { ConfigManager } from '../../config_manager';
+import type { IConfigManager } from '../../config_manager';
 import type { IIdentityModule } from '../../identity/identity_module.types';
 import type { ILintModule } from '../../lint';
 import type { IRecordProjector } from '../../record_projection';
@@ -27,7 +27,7 @@ export type GithubSyncStateDependencies = {
   /** GitHub repo name */
   repo: string;
   /** Configuration manager (DI consistency — not actively used in initial implementation) */
-  config: ConfigManager;
+  config: IConfigManager;
   /** Identity adapter (DI consistency — not actively used; lint handles validation internally) */
   identity: IIdentityModule;
   /** Lint module for record validation */

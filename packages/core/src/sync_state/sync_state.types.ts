@@ -1,5 +1,5 @@
 import type { IGitModule } from '../git';
-import type { ConfigManager } from "../config_manager";
+import type { IConfigManager } from "../config_manager";
 import type { IIdentityModule } from "../identity/identity_module.types";
 import type { RecordSigner } from "../record_signer";
 import type { LintReport } from "../lint";
@@ -13,7 +13,7 @@ export type SyncStateModuleDependencies = {
   /** Low-level Git module (required) */
   git: IGitModule;
   /** Configuration manager (required) */
-  config: ConfigManager;
+  config: IConfigManager;
   /** Identity module for actor lookup (required) */
   identity: IIdentityModule;
   /** RecordSigner for re-signing during conflict resolution (required) */

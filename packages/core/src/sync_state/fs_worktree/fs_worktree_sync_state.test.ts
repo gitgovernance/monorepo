@@ -21,12 +21,12 @@ import { FsWorktreeSyncStateModule } from './fs_worktree_sync_state';
 import { LocalGitModule } from '../../git/local';
 import type { ExecOptions, ExecResult } from '../../git/types';
 import {
-  ActorIdentityMismatchError,
   ConflictMarkersPresentError,
   NoRebaseInProgressError,
   RebaseAlreadyInProgressError,
 } from '../sync_state.errors';
 import type { IIdentityModule } from '../../identity/identity_module.types';
+import type { IConfigManager } from '../../config_manager';
 import { RecordSigner } from '../../record_signer';
 import { MockKeyProvider } from '../../key_provider/memory/mock_key_provider';
 import type { LintReport } from '../../lint';
@@ -177,16 +177,22 @@ function createModule(
   const indexer = overrides?.indexer ?? createMockRecordProjector();
   const signer = new RecordSigner({ keyProvider: new MockKeyProvider() });
 
-  const configManager = {
-    get: jest.fn().mockReturnValue(null),
-    set: jest.fn(),
-    getAll: jest.fn().mockReturnValue({}),
+  const configManager: IConfigManager = {
+    loadConfig: jest.fn().mockResolvedValue(null),
+    getRootCycle: jest.fn().mockResolvedValue(null),
+    getProjectInfo: jest.fn().mockResolvedValue(null),
+    getSyncConfig: jest.fn().mockResolvedValue(null),
+    getSyncDefaults: jest.fn().mockResolvedValue({ pullScheduler: {}, fileWatcher: {} }),
+    getAuditState: jest.fn().mockResolvedValue({ lastFullAuditCommit: null, lastFullAuditTimestamp: null }),
+    updateAuditState: jest.fn(),
+    getStateBranch: jest.fn().mockResolvedValue('gitgov-state'),
+    getSaasUrl: jest.fn().mockResolvedValue(null),
   };
 
   const module = new FsWorktreeSyncStateModule(
     {
       git: gitModule,
-      config: configManager as any,
+      config: configManager,
       identity,
       signer,
       lint,
@@ -419,7 +425,17 @@ describe('FsWorktreeSyncStateModule', () => {
       const module2 = new FsWorktreeSyncStateModule(
         {
           git: gitModule,
-          config: { get: jest.fn(), set: jest.fn(), getAll: jest.fn().mockReturnValue({}) } as any,
+          config: {
+            loadConfig: jest.fn().mockResolvedValue(null),
+            getRootCycle: jest.fn().mockResolvedValue(null),
+            getProjectInfo: jest.fn().mockResolvedValue(null),
+            getSyncConfig: jest.fn().mockResolvedValue(null),
+            getSyncDefaults: jest.fn().mockResolvedValue({ pullScheduler: {}, fileWatcher: {} }),
+            getAuditState: jest.fn().mockResolvedValue({ lastFullAuditCommit: null, lastFullAuditTimestamp: null }),
+            updateAuditState: jest.fn(),
+            getStateBranch: jest.fn().mockResolvedValue('gitgov-state'),
+            getSaasUrl: jest.fn().mockResolvedValue(null),
+          } satisfies IConfigManager,
           identity: createMockIdentityAdapter(),
           signer: new RecordSigner({ keyProvider: new MockKeyProvider() }),
           lint: createMockLintModule(),
