@@ -378,8 +378,8 @@ export class SyncCommand extends BaseCommand {
       // Get dependencies
       const syncModule = await this.dependencyService.getSyncStateModule();
 
-      if (!options.quiet) {
-        console.log('🔍 Running state audit...');
+      if (!options.quiet && !options.json) {
+        console.error('🔍 Running state audit...');
       }
 
       // [EARS-E1, EARS-E4, EARS-E5, EARS-E6] Execute audit with options

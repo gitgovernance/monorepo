@@ -26,13 +26,13 @@ class ConsoleLogger implements Logger {
 
   debug(message: string, ...args: any[]): void {
     if (this.shouldLog("debug")) {
-      console.log(`${this.prefix}${message}`, ...args);
+      console.error(`${this.prefix}${message}`, ...args);
     }
   }
 
   info(message: string, ...args: any[]): void {
     if (this.shouldLog("info")) {
-      console.log(`${this.prefix}${message}`, ...args);
+      console.error(`${this.prefix}${message}`, ...args);
     }
   }
 

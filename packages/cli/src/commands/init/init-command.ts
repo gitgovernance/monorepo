@@ -208,7 +208,7 @@ export class InitCommand {
    * Creates orphan gitgov-state branch if needed, then creates worktree.
    */
   private async ensureWorktreeForInit(repoRoot: string): Promise<void> {
-    const hash = createHash('sha256').update(repoRoot).digest('hex').slice(0, 12);
+    const hash = createHash('sha256').update(realpathSync(repoRoot)).digest('hex').slice(0, 12);
     const worktreePath = pathUtils.join(os.homedir(), '.gitgov', 'worktrees', hash);
 
     // Idempotent: skip if worktree already exists
