@@ -17,7 +17,8 @@ export const syncResolveTool: McpToolDefinition<SyncResolveInput> = {
   },
   handler: async (input: SyncResolveInput, di: McpDependencyInjectionService) => {
     try {
-      const { syncModule, identityModule } = await di.getContainer();
+      const container = await di.getContainer();
+      const { syncModule } = container;
       const actor = await container.getCurrentActor();
       const result = await syncModule.resolveConflict({
         reason: input.reason,
