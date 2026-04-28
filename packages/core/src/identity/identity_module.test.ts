@@ -307,10 +307,15 @@ describe('IdentityModule', () => {
     });
 
     it('[IDM-E6] should not create actor if validation fails', async () => {
-      const putSpy = jest.spyOn(store, 'put');
-      putSpy.mockRejectedValueOnce(new Error('Simulated store failure'));
+      const signSpy = jest.spyOn(keyProvider, 'sign');
+      signSpy.mockResolvedValueOnce(new Uint8Array(64).fill(0));
 
-      await expect(identityModule.rotateActorKey(actor.id)).rejects.toThrow('Simulated store failure');
+      const putSpy = jest.spyOn(store, 'put');
+
+      await expect(identityModule.rotateActorKey(actor.id)).rejects.toThrow();
+
+      expect(putSpy).not.toHaveBeenCalled();
+      signSpy.mockRestore();
       putSpy.mockRestore();
     });
 
