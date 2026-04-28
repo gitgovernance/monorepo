@@ -88,8 +88,7 @@ export abstract class BaseCommand<TOptions extends BaseCommandOptions = BaseComm
    */
   protected async requireActor(options: TOptions): Promise<{ actorId: string }> {
     try {
-      const identityAdapter = await this.dependencyService.getIdentityAdapter();
-      const currentActor = await identityAdapter.getCurrentActor();
+      const currentActor = await this.dependencyService.getCurrentActor();
       return { actorId: currentActor.id };
     } catch {
       const message = await this.buildNoIdentityMessage();
