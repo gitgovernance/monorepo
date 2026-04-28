@@ -1,7 +1,7 @@
 import type { AgentRecord } from "../record_types";
 import type { IEventStream } from "../event_bus";
 import type { IExecutionAdapter } from "../adapters/execution_adapter";
-import type { IIdentityAdapter } from "../adapters/identity_adapter";
+import type { KeyProvider } from "../key_provider/key_provider";
 import type { IFeedbackAdapter } from "../adapters/feedback_adapter";
 import type { ProtocolHandlerRegistry, RuntimeHandlerRegistry } from "./agent_runner";
 
@@ -147,8 +147,8 @@ export type AgentRunnerDependencies = {
   projectRoot: string;
   /** Path to .gitgov directory (optional, defaults to projectRoot/.gitgov) */
   gitgovPath?: string;
-  /** IdentityAdapter for actor-signature auth (required if that auth type is used) */
-  identityAdapter?: IIdentityAdapter;
+  /** KeyProvider for actor-signature auth (required if that auth type is used) */
+  keyProvider?: KeyProvider;
   /** ExecutionAdapter for persisting executions (REQUIRED) */
   executionAdapter: IExecutionAdapter;
   /** FeedbackAdapter for persisting review agent output (optional — backward compatible) [EARS-L1, L2] */

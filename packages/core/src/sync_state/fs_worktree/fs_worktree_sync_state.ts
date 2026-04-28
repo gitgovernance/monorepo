@@ -28,7 +28,6 @@ import {
   ConflictMarkersPresentError,
   NoRebaseInProgressError,
   RebaseAlreadyInProgressError,
-  ActorIdentityMismatchError,
   WorktreeSetupError,
   StateBranchSetupError,
 } from '../sync_state.errors';
@@ -117,7 +116,7 @@ export class FsWorktreeSyncStateModule implements ISyncStateModule {
   constructor(deps: FsWorktreeSyncStateDependencies, config: FsWorktreeSyncStateConfig) {
     if (!deps.git) throw new Error('GitModule is required for FsWorktreeSyncStateModule');
     if (!deps.config) throw new Error('ConfigManager is required for FsWorktreeSyncStateModule');
-    if (!deps.identity) throw new Error('IdentityAdapter is required for FsWorktreeSyncStateModule');
+    if (!deps.identity) throw new Error('IdentityModule is required for FsWorktreeSyncStateModule');
     if (!deps.lint) throw new Error('LintModule is required for FsWorktreeSyncStateModule');
     if (!deps.indexer) throw new Error('IndexerAdapter is required for FsWorktreeSyncStateModule');
 
@@ -275,12 +274,6 @@ export class FsWorktreeSyncStateModule implements ISyncStateModule {
     // [WTSYNC-B15] Guard: refuse push if rebase is in progress (mirrors git behavior)
     if (await this.isRebaseInProgress()) {
       throw new RebaseAlreadyInProgressError();
-    }
-
-    // [WTSYNC-B1] Verify actor identity
-    const currentActor = await this.deps.identity.getCurrentActor();
-    if (currentActor.id !== actorId) {
-      throw new ActorIdentityMismatchError(actorId, currentActor.id);
     }
 
     // Ensure worktree is ready
@@ -609,12 +602,6 @@ export class FsWorktreeSyncStateModule implements ISyncStateModule {
     // [WTSYNC-D1] Verify rebase in progress
     if (!(await this.isRebaseInProgress())) {
       throw new NoRebaseInProgressError();
-    }
-
-    // Verify actor identity
-    const currentActor = await this.deps.identity.getCurrentActor();
-    if (currentActor.id !== actorId) {
-      throw new ActorIdentityMismatchError(actorId, currentActor.id);
     }
 
     // [WTSYNC-D2/D3] Check conflict markers
@@ -1077,8 +1064,7 @@ export class FsWorktreeSyncStateModule implements ISyncStateModule {
         const content = await fsPromises.readFile(fullPath, 'utf8');
         const record = JSON.parse(content);
 
-        // Re-sign with identity adapter (full 4-arg signature)
-        const signedRecord = await this.deps.identity.signRecord(record, actorId, 'resolver', reason);
+        const signedRecord = await this.deps.signer.signRecord(record, actorId, 'resolver', reason);
 
         await fsPromises.writeFile(fullPath, JSON.stringify(signedRecord, null, 2));
       } catch {

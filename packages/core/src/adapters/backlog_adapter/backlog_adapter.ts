@@ -1,7 +1,7 @@
 import { createTaskRecord } from '../../record_factories/task_factory';
 import { createCycleRecord } from '../../record_factories/cycle_factory';
 import type { RecordStores } from '../../record_store';
-import { IdentityAdapter } from '../identity_adapter';
+import type { IIdentityModule } from '../../identity/identity_module.types';
 import { FeedbackAdapter } from '../feedback_adapter';
 import { RecordMetrics, type SystemStatus, type TaskHealthReport } from '../../record_metrics';
 import { SessionManager } from '../../session_manager';
@@ -48,7 +48,7 @@ export class BacklogAdapter implements IBacklogAdapter {
   private metricsAdapter: RecordMetrics;
 
   private workflowAdapter: IWorkflow;
-  private identity: IdentityAdapter;
+  private identity: IIdentityModule;
   private signer: RecordSigner;
   private eventBus: IEventStream;
   // configManager is required in dependencies but not currently used
@@ -1005,7 +1005,7 @@ export class BacklogAdapter implements IBacklogAdapter {
    * Helper to get actor record
    */
   private async getActor(actorId: string): Promise<ActorRecord> {
-    // Use IdentityAdapter to get real actor data
+    // Use IdentityModule to get real actor data
     const actor = await this.identity.getActor(actorId);
     if (!actor) {
       throw new Error(`RecordNotFoundError: Actor not found: ${actorId}`);
@@ -1142,7 +1142,7 @@ export class BacklogAdapter implements IBacklogAdapter {
   /**
    * Creates bidirectional link between task and cycle
    */
-  async addTaskToCycle(cycleId: string, taskId: string): Promise<void> {
+  async addTaskToCycle(cycleId: string, taskId: string, actorId: string): Promise<void> {
     // Read both records
     const cycleRecord = await this.stores.cycles.get(cycleId);
     const taskRecord = await this.stores.tasks.get(taskId);
@@ -1164,19 +1164,15 @@ export class BacklogAdapter implements IBacklogAdapter {
       cycleIds: [...(taskRecord.payload.cycleIds || []), cycleId]
     };
 
-    // Get current actor for signing (MVP mode)
-    const currentActor = await this.identity.getCurrentActor();
-
-    // Sign and persist both records with current actor
     const signedCycleRecord = await this.signer.signRecord(
       { ...cycleRecord, payload: updatedCycle },
-      currentActor.id,
+      actorId,
       'author',
       `Task ${taskId} added to cycle`
     );
     const signedTaskRecord = await this.signer.signRecord(
       { ...taskRecord, payload: updatedTask },
-      currentActor.id,
+      actorId,
       'author',
       `Task linked to cycle ${cycleId}`
     );
@@ -1191,7 +1187,7 @@ export class BacklogAdapter implements IBacklogAdapter {
    * Removes multiple tasks from a cycle with bidirectional unlinking
    * All business logic and validation happens here in the adapter
    */
-  async removeTasksFromCycle(cycleId: string, taskIds: string[]): Promise<void> {
+  async removeTasksFromCycle(cycleId: string, taskIds: string[], actorId: string): Promise<void> {
     // 1. Validate inputs
     if (!cycleId || typeof cycleId !== 'string') {
       throw new Error('ValidationError: cycleId must be a non-empty string');
@@ -1230,18 +1226,13 @@ export class BacklogAdapter implements IBacklogAdapter {
       taskIds: cycleTaskIds.filter(id => !taskIds.includes(id))
     };
 
-    // 6. Get current actor for signing
-    const currentActor = await this.identity.getCurrentActor();
-
-    // 7. Sign cycle record
     const signedCycleRecord = await this.signer.signRecord(
       { ...cycleRecord, payload: updatedCycle },
-      currentActor.id,
+      actorId,
       'author',
       `Tasks removed from cycle: ${taskIds.join(', ')}`
     );
 
-    // 8. Prepare and sign all task records (remove cycleId from each)
     const signedTaskRecords = await Promise.all(
       taskRecords.map(async ({ record }) => {
         const taskCycleIds = record.payload.cycleIds || [];
@@ -1251,7 +1242,7 @@ export class BacklogAdapter implements IBacklogAdapter {
         };
         return await this.signer.signRecord(
           { ...record, payload: updatedTask },
-          currentActor.id,
+          actorId,
           'author',
           'Task removed from deleted cycle'
         );
@@ -1272,7 +1263,7 @@ export class BacklogAdapter implements IBacklogAdapter {
    * Provides transactional semantics - all tasks move or none do
    * All business logic and validation happens here in the adapter
    */
-  async moveTasksBetweenCycles(targetCycleId: string, taskIds: string[], sourceCycleId: string): Promise<void> {
+  async moveTasksBetweenCycles(targetCycleId: string, taskIds: string[], sourceCycleId: string, actorId: string): Promise<void> {
     // 1. Validate inputs
     if (!sourceCycleId || typeof sourceCycleId !== 'string') {
       throw new Error('ValidationError: sourceCycleId must be a non-empty string');
@@ -1328,38 +1319,33 @@ export class BacklogAdapter implements IBacklogAdapter {
       taskIds: [...(targetCycleRecord.payload.taskIds || []), ...taskIds]
     };
 
-    // 6. Get current actor for signing
-    const currentActor = await this.identity.getCurrentActor();
-
-    // 7. Sign both cycle records
     const [signedSourceCycle, signedTargetCycle] = await Promise.all([
       this.signer.signRecord(
         { ...sourceCycleRecord, payload: updatedSourceCycle },
-        currentActor.id,
+        actorId,
         'author',
         'Tasks moved from cycle'
       ),
       this.signer.signRecord(
         { ...targetCycleRecord, payload: updatedTargetCycle },
-        currentActor.id,
+        actorId,
         'author',
         'Tasks moved to cycle'
       )
     ]);
 
-    // 8. Prepare and sign all task records (update cycleIds)
     const signedTaskRecords = await Promise.all(
       taskRecords.map(async ({ record }) => {
         const taskCycleIds = record.payload.cycleIds || [];
         const updatedTask = {
           ...record.payload,
           cycleIds: taskCycleIds
-            .filter(id => id !== sourceCycleId)  // Remove source
-            .concat(targetCycleId)                // Add target
+            .filter(id => id !== sourceCycleId)
+            .concat(targetCycleId)
         };
         return await this.signer.signRecord(
           { ...record, payload: updatedTask },
-          currentActor.id,
+          actorId,
           'author',
           'Task cycle updated'
         );

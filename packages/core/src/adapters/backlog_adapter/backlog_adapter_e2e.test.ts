@@ -16,7 +16,7 @@ import { RecordMetrics } from '../../record_metrics';
 import { ConfigManager } from '../../config_manager';
 import type { SessionManager } from '../../session_manager';
 import { WorkflowAdapter } from '../workflow_adapter';
-import { IdentityAdapter } from '../identity_adapter';
+import { IdentityModule } from '../../identity';
 import type { SystemDailyTickEvent, IEventStream } from '../../event_bus';
 import type {
   GitGovTaskRecord,
@@ -100,7 +100,7 @@ describe('BacklogAdapter - End-to-End Tests', () => {
           createAgentRecord: jest.fn(),
           getAgentRecord: jest.fn(),
           listAgentRecords: jest.fn()
-        } as unknown as IdentityAdapter,
+        } as unknown as IdentityModule,
         signer: (() => {
           const { RecordSigner } = require('../../record_signer');
           const { MockKeyProvider } = require('../../key_provider/memory/mock_key_provider');

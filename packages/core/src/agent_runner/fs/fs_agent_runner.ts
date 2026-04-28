@@ -18,7 +18,7 @@ import type { AgentRecord, FeedbackRecord } from "../../record_types";
 import type { IEventStream } from "../../event_bus";
 import type { IExecutionAdapter } from "../../adapters/execution_adapter";
 import type { IFeedbackAdapter } from "../../adapters/feedback_adapter";
-import type { IIdentityAdapter } from "../../adapters/identity_adapter";
+import type { KeyProvider } from "../../key_provider/key_provider";
 import type {
   IAgentRunner,
   ProtocolHandlerRegistry,
@@ -51,7 +51,7 @@ const VALID_ENGINE_TYPES = ["local", "api", "mcp", "custom"] as const;
 export class FsAgentRunner implements IAgentRunner {
   private gitgovPath: string;
   private projectRoot: string;
-  private identityAdapter: IIdentityAdapter | undefined;
+  private keyProvider: KeyProvider | undefined;
   private executionAdapter: IExecutionAdapter;
   private feedbackAdapter: IFeedbackAdapter | undefined; // [EARS-L1, L2]
   private eventBus: IEventStream | undefined;
@@ -73,7 +73,7 @@ export class FsAgentRunner implements IAgentRunner {
 
     this.projectRoot = deps.projectRoot;
     this.gitgovPath = deps.gitgovPath ?? path.join(this.projectRoot, ".gitgov");
-    this.identityAdapter = deps.identityAdapter ?? undefined;
+    this.keyProvider = deps.keyProvider ?? undefined;
     this.executionAdapter = deps.executionAdapter;
     this.feedbackAdapter = deps.feedbackAdapter ?? undefined; // [EARS-L1, L2]
     this.eventBus = deps.eventBus ?? undefined;
@@ -82,8 +82,8 @@ export class FsAgentRunner implements IAgentRunner {
 
     // Initialize all engine backends
     this.localBackend = new LocalBackend(this.projectRoot, this.runtimeHandlers);
-    this.apiBackend = new ApiBackend(this.identityAdapter);
-    this.mcpBackend = new McpBackend(this.identityAdapter);
+    this.apiBackend = new ApiBackend(this.keyProvider);
+    this.mcpBackend = new McpBackend(this.keyProvider);
     this.customBackend = new CustomBackend(this.protocolHandlers);
   }
 
@@ -115,15 +115,15 @@ export class FsAgentRunner implements IAgentRunner {
       throw new EngineConfigError(engineType, "url");
     }
 
-    // [EARS-G3] Validate IdentityAdapter for actor-signature auth
+    // [EARS-G3] Validate KeyProvider for actor-signature auth
     if (engineType === "api" || engineType === "mcp") {
       const engineWithAuth = engine as { auth?: { type?: string } };
       if (
         engineWithAuth.auth?.type === "actor-signature" &&
-        !this.identityAdapter
+        !this.keyProvider
       ) {
         throw new MissingDependencyError(
-          "IdentityAdapter",
+          "KeyProvider",
           "required for actor-signature auth"
         );
       }

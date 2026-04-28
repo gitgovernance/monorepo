@@ -3,7 +3,7 @@ import type { IConfigManager } from '../../config_manager';
 import type { TaskRecord } from '../../record_types';
 import type { CycleRecord } from '../../record_types';
 import type { ActorRecord } from '../../record_types';
-import type { IdentityAdapter } from '../identity_adapter';
+import type { IIdentityModule } from '../../identity/identity_module.types';
 import type { BacklogAdapter } from '../backlog_adapter';
 import type { IProjectInitializer, EnvironmentValidation } from '../../project_initializer';
 import { DetailedValidationError } from '../../record_validations/common';
@@ -87,7 +87,7 @@ function createMockTaskRecord(overrides: Partial<TaskRecord> = {}): TaskRecord {
 
 describe('ProjectAdapter', () => {
   let projectAdapter: ProjectAdapter;
-  let mockIdentityAdapter: jest.Mocked<IdentityAdapter>;
+  let mockIIdentityModule: jest.Mocked<IIdentityModule>;
   let mockBacklogAdapter: jest.Mocked<BacklogAdapter>;
   let mockConfigManager: jest.Mocked<IConfigManager>;
   let mockProjectInitializer: jest.Mocked<IProjectInitializer>;
@@ -99,7 +99,7 @@ describe('ProjectAdapter', () => {
     jest.clearAllMocks();
 
     // Mock all adapters
-    mockIdentityAdapter = {
+    mockIIdentityModule = {
       createActor: jest.fn(),
       getActor: jest.fn(),
       listActors: jest.fn(),
@@ -109,7 +109,7 @@ describe('ProjectAdapter', () => {
       listAgentRecords: jest.fn(),
       getCurrentActor: jest.fn(),
       getEffectiveActorForAgent: jest.fn(),
-    } as unknown as jest.Mocked<IdentityAdapter>;
+    } as unknown as jest.Mocked<IIdentityModule>;
 
     mockBacklogAdapter = {
       createTask: jest.fn(),
@@ -200,7 +200,7 @@ describe('ProjectAdapter', () => {
 
     // Create adapter with all dependencies
     projectAdapter = new ProjectAdapter({
-      identityAdapter: mockIdentityAdapter,
+      identityAdapter: mockIIdentityModule,
       backlogAdapter: mockBacklogAdapter,
       configManager: mockConfigManager,
       projectInitializer: mockProjectInitializer,
@@ -305,7 +305,7 @@ describe('ProjectAdapter', () => {
       const mockActor = createMockActorRecord();
       const mockCycle = createMockCycleRecord();
 
-      mockIdentityAdapter.createActor.mockResolvedValueOnce(mockActor);
+      mockIIdentityModule.createActor.mockResolvedValueOnce(mockActor);
       mockBacklogAdapter.createCycle.mockResolvedValueOnce(mockCycle);
 
       const result = await projectAdapter.initializeProject({
@@ -318,7 +318,7 @@ describe('ProjectAdapter', () => {
       expect(result.rootCycle).toBe(mockCycle.id);
       expect(result.actor.id).toBe(mockActor.id);
       expect(result.actor.displayName).toBe(mockActor.displayName);
-      expect(mockIdentityAdapter.createActor).toHaveBeenCalledWith(
+      expect(mockIIdentityModule.createActor).toHaveBeenCalledWith(
         {
           type: 'human',
           displayName: 'Test User',
@@ -344,11 +344,11 @@ describe('ProjectAdapter', () => {
       expect(mockProjectInitializer.validateEnvironment).toHaveBeenCalled();
     });
 
-    it('should pass type to IdentityAdapter when --type agent specified', async () => {
+    it('should pass type to IIdentityModule when --type agent specified', async () => {
       const mockAgentActor = createMockActorRecord({ id: 'agent:ci-bot', type: 'agent' });
       const mockCycle = createMockCycleRecord();
 
-      mockIdentityAdapter.createActor.mockResolvedValueOnce(mockAgentActor);
+      mockIIdentityModule.createActor.mockResolvedValueOnce(mockAgentActor);
       mockBacklogAdapter.createCycle.mockResolvedValueOnce(mockCycle);
 
       const result = await projectAdapter.initializeProject({
@@ -358,7 +358,7 @@ describe('ProjectAdapter', () => {
       });
 
       expect(result.success).toBe(true);
-      expect(mockIdentityAdapter.createActor).toHaveBeenCalledWith(
+      expect(mockIIdentityModule.createActor).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'agent',
           displayName: 'CI Bot',
@@ -371,7 +371,7 @@ describe('ProjectAdapter', () => {
       const mockActor = createMockActorRecord();
       const mockCycle = createMockCycleRecord();
 
-      mockIdentityAdapter.createActor.mockResolvedValueOnce(mockActor);
+      mockIIdentityModule.createActor.mockResolvedValueOnce(mockActor);
       mockBacklogAdapter.createCycle.mockResolvedValueOnce(mockCycle);
 
       await projectAdapter.initializeProject({
@@ -379,7 +379,7 @@ describe('ProjectAdapter', () => {
         actorName: 'Test User',
       });
 
-      expect(mockIdentityAdapter.createActor).toHaveBeenCalledWith(
+      expect(mockIIdentityModule.createActor).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'human',
         }),
@@ -391,7 +391,7 @@ describe('ProjectAdapter', () => {
       const mockActor = createMockActorRecord();
       const mockCycle = createMockCycleRecord();
 
-      mockIdentityAdapter.createActor.mockResolvedValueOnce(mockActor);
+      mockIIdentityModule.createActor.mockResolvedValueOnce(mockActor);
       mockBacklogAdapter.createCycle.mockResolvedValueOnce(mockCycle);
 
       const result = await projectAdapter.initializeProject({
@@ -426,7 +426,7 @@ describe('ProjectAdapter', () => {
       const mockActor = createMockActorRecord();
       const mockCycle = createMockCycleRecord();
 
-      mockIdentityAdapter.createActor.mockResolvedValueOnce(mockActor);
+      mockIIdentityModule.createActor.mockResolvedValueOnce(mockActor);
       mockBacklogAdapter.createCycle.mockResolvedValueOnce(mockCycle);
 
       await projectAdapter.initializeProject({
@@ -522,7 +522,7 @@ describe('ProjectAdapter', () => {
   describe('Error Handling & Rollback (EARS A5, B6, C1, C2, C3)', () => {
     it('[EARS-A5] should invoke rollback automatically when initialization fails', async () => {
       // Setup identity creation to fail
-      mockIdentityAdapter.createActor.mockRejectedValueOnce(new Error('Identity creation failed'));
+      mockIIdentityModule.createActor.mockRejectedValueOnce(new Error('Identity creation failed'));
 
       await expect(
         projectAdapter.initializeProject({
@@ -542,7 +542,7 @@ describe('ProjectAdapter', () => {
       mockFs.mkdir.mockResolvedValue(undefined);
 
       const specificError = new Error('BacklogAdapter connection failed');
-      mockIdentityAdapter.createActor.mockResolvedValueOnce(createMockActorRecord());
+      mockIIdentityModule.createActor.mockResolvedValueOnce(createMockActorRecord());
       mockBacklogAdapter.createCycle.mockRejectedValueOnce(specificError);
 
       await expect(
@@ -623,7 +623,7 @@ describe('ProjectAdapter', () => {
     it('[EARS-D1] should continue without optional dependencies with warnings', async () => {
       // Create adapter with required dependencies only (no future optional deps like eventBus)
       const minimalAdapter = new ProjectAdapter({
-        identityAdapter: mockIdentityAdapter,
+        identityAdapter: mockIIdentityModule,
         backlogAdapter: mockBacklogAdapter,
         configManager: mockConfigManager,
         projectInitializer: mockProjectInitializer,
@@ -638,7 +638,7 @@ describe('ProjectAdapter', () => {
       const mockActor = createMockActorRecord();
       const mockCycle = createMockCycleRecord();
 
-      mockIdentityAdapter.createActor.mockResolvedValueOnce(mockActor);
+      mockIIdentityModule.createActor.mockResolvedValueOnce(mockActor);
       mockBacklogAdapter.createCycle.mockResolvedValueOnce(mockCycle);
 
       const result = await minimalAdapter.initializeProject({
@@ -709,7 +709,7 @@ describe('ProjectAdapter', () => {
         title: 'My Awesome Project - Root Cycle',
       });
 
-      mockIdentityAdapter.createActor.mockResolvedValueOnce(mockActor);
+      mockIIdentityModule.createActor.mockResolvedValueOnce(mockActor);
       mockBacklogAdapter.createCycle.mockResolvedValueOnce(mockCycle);
 
       const envValidation = await projectAdapter.validateEnvironment();
@@ -736,7 +736,7 @@ describe('ProjectAdapter', () => {
       mockFs.mkdir.mockResolvedValue(undefined);
       mockFs.appendFile.mockResolvedValue(undefined);
 
-      mockIdentityAdapter.createActor.mockResolvedValueOnce(createMockActorRecord());
+      mockIIdentityModule.createActor.mockResolvedValueOnce(createMockActorRecord());
       mockBacklogAdapter.createCycle.mockResolvedValueOnce(createMockCycleRecord());
 
       const startTime = Date.now();
@@ -754,7 +754,7 @@ describe('ProjectAdapter', () => {
   describe('Agent Prompt UX (EARS G1)', () => {
     it('[EARS-G1] should copy agent prompt to project root for easy IDE access', async () => {
       // Mock successful initialization
-      mockIdentityAdapter.createActor.mockResolvedValueOnce(createMockActorRecord());
+      mockIIdentityModule.createActor.mockResolvedValueOnce(createMockActorRecord());
       mockBacklogAdapter.createCycle.mockResolvedValueOnce(createMockCycleRecord());
 
       const result = await projectAdapter.initializeProject({
@@ -773,7 +773,7 @@ describe('ProjectAdapter', () => {
       // Mock copyAgentPrompt to throw (simulating file not found)
       mockProjectInitializer.copyAgentPrompt.mockRejectedValueOnce(new Error('Prompt file not found'));
 
-      mockIdentityAdapter.createActor.mockResolvedValueOnce(createMockActorRecord());
+      mockIIdentityModule.createActor.mockResolvedValueOnce(createMockActorRecord());
       mockBacklogAdapter.createCycle.mockResolvedValueOnce(createMockCycleRecord());
 
       // The initialization should still succeed even if copyAgentPrompt fails

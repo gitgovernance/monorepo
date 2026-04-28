@@ -6,7 +6,7 @@ import { calculatePayloadChecksum } from '../../crypto/checksum';
 import type { RecordStore } from '../../record_store';
 import type { AgentRecord, ActorRecord, GitGovAgentRecord, Signature } from '../../record_types';
 import type { IEventStream, BaseEvent } from '../../event_bus';
-import type { IIdentityAdapter } from '../identity_adapter';
+import type { IIdentityModule } from '../../identity/identity_module.types';
 import type { KeyProvider } from '../../key_provider/key_provider';
 
 // Mock dependencies
@@ -63,7 +63,7 @@ function createMockActorRecord(overrides: Partial<ActorRecord> = {}): ActorRecor
 describe('AgentAdapter', () => {
   let agentAdapter: AgentAdapter;
   let mockAgentStore: jest.Mocked<RecordStore<GitGovAgentRecord>>;
-  let mockIdentityAdapter: jest.Mocked<IIdentityAdapter>;
+  let mockIdentityAdapter: jest.Mocked<IIdentityModule>;
   let mockKeyProvider: jest.Mocked<KeyProvider>;
   let mockEventBus: jest.Mocked<IEventStream>;
   let emittedEvents: BaseEvent[];
@@ -97,7 +97,7 @@ describe('AgentAdapter', () => {
       createAgentRecord: jest.fn(),
       getAgentRecord: jest.fn(),
       listAgentRecords: jest.fn(),
-    } as unknown as jest.Mocked<IIdentityAdapter>;
+    } as unknown as jest.Mocked<IIdentityModule>;
 
     // Mock key provider
     mockKeyProvider = {

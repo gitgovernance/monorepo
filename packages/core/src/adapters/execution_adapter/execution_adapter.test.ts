@@ -1,7 +1,6 @@
 import { ExecutionAdapter } from './index';
 import { createExecutionRecord } from '../../record_factories/execution_factory';
 import type { RecordStore } from '../../record_store';
-import { IdentityAdapter } from '../identity_adapter';
 import { publishEvent } from '../../event_bus';
 import type { ExecutionRecord, GitGovExecutionRecord, GitGovTaskRecord } from '../../record_types';
 import type { IEventStream } from '../../event_bus';
@@ -12,7 +11,6 @@ import { MockKeyProvider } from '../../key_provider/memory/mock_key_provider';
 
 // Mock dependencies
 jest.mock('../../record_factories/execution_factory');
-jest.mock('../identity_adapter');
 jest.mock('../../event_bus', () => ({
   ...jest.requireActual('../../event_bus'),
   publishEvent: jest.fn(),
@@ -50,7 +48,7 @@ describe('ExecutionAdapter', () => {
   let executionAdapter: ExecutionAdapter;
   let mockExecutionStore: jest.Mocked<RecordStore<GitGovExecutionRecord>>;
   let mockTaskStore: jest.Mocked<RecordStore<GitGovTaskRecord>>;
-  let mockIdentityAdapter: jest.Mocked<IdentityAdapter>;
+  let mockIdentityAdapter: { signRecord: jest.Mock; createActor: jest.Mock; getActor: jest.Mock; getAllActors: jest.Mock; createAgent: jest.Mock; getAgent: jest.Mock; getAllAgents: jest.Mock };
   let mockSigner: RecordSigner;
   let createSignedSpy: jest.SpyInstance;
   let mockPublishEvent: jest.Mock;
@@ -101,7 +99,7 @@ describe('ExecutionAdapter', () => {
       createAgent: jest.fn(),
       getAgent: jest.fn(),
       getAllAgents: jest.fn()
-    } as unknown as jest.Mocked<IdentityAdapter>;
+    };
 
     // Mock publish event
     mockPublishEvent = publishEvent as jest.Mock;
@@ -118,7 +116,6 @@ describe('ExecutionAdapter', () => {
     // Create adapter with mocked dependencies
     executionAdapter = new ExecutionAdapter({
       stores: { executions: mockExecutionStore, tasks: mockTaskStore },
-      identity: mockIdentityAdapter,
       signer: mockSigner,
       eventBus: {
         publish: jest.fn(),

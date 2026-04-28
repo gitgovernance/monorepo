@@ -1,5 +1,4 @@
 import type { RecordStores } from '../../record_store';
-import type { IdentityAdapter } from '../identity_adapter';
 import type { RecordSigner } from '../../record_signer';
 import type { ExecutionRecord } from '../../record_types';
 import type { IEventStream } from '../../event_bus';
@@ -12,7 +11,6 @@ export type ExecutionAdapterDependencies = {
   stores: Required<Pick<RecordStores, 'tasks' | 'executions'>>;
 
   // Infrastructure Layer
-  identity: IdentityAdapter;
   signer: RecordSigner;
   eventBus: IEventStream; // For emitting events
 }

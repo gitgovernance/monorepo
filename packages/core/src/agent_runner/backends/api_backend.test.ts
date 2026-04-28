@@ -12,7 +12,7 @@ import type {
   ApiEngine,
   AgentExecutionContext,
 } from "../agent_runner.types";
-import type { IIdentityAdapter } from "../../adapters/identity_adapter";
+import type { KeyProvider } from "../../key_provider/key_provider";
 
 // Mock global fetch
 const mockFetch = jest.fn();
@@ -225,18 +225,19 @@ describe("ApiBackend", () => {
     });
 
     describe("[EARS-D3] should sign request for actor-signature auth", () => {
-      it("should add X-GitGov-Signature header using IdentityAdapter", async () => {
+      it("should add X-GitGov-Signature header using KeyProvider", async () => {
         mockFetch.mockResolvedValue(createMockResponse({ data: "ok" }));
 
-        const mockIdentityAdapter: jest.Mocked<IIdentityAdapter> = {
-          signRecord: jest.fn().mockResolvedValue({
-            keyId: "agent:test-api",
-            signature: "mock-signature-base64",
-            timestamp: 1234567890,
-          }),
-        } as any;
+        const mockKeyProvider: KeyProvider = {
+          sign: jest.fn().mockResolvedValue(new Uint8Array(64).fill(42)),
+          getPrivateKey: jest.fn().mockResolvedValue(null),
+          getPublicKey: jest.fn().mockResolvedValue(null),
+          setPrivateKey: jest.fn(),
+          hasPrivateKey: jest.fn().mockResolvedValue(false),
+          deletePrivateKey: jest.fn().mockResolvedValue(false),
+        };
 
-        const backend = new ApiBackend(mockIdentityAdapter);
+        const backend = new ApiBackend(mockKeyProvider);
         const engine: ApiEngine = {
           type: "api",
           url: "https://api.example.com/agent",
@@ -248,8 +249,7 @@ describe("ApiBackend", () => {
 
         await backend.execute(engine, ctx);
 
-        // Verify signRecord was called
-        expect(mockIdentityAdapter.signRecord).toHaveBeenCalled();
+        expect(mockKeyProvider.sign).toHaveBeenCalled();
 
         // Verify headers include signature
         const callArgs = mockFetch.mock.calls[0];
@@ -257,8 +257,8 @@ describe("ApiBackend", () => {
         expect(callArgs[1].headers["X-GitGov-Actor"]).toBe("agent:test-api");
       });
 
-      it("should throw error when IdentityAdapter not available for actor-signature", async () => {
-        const backend = new ApiBackend(undefined); // No identity adapter
+      it("should throw error when KeyProvider not available for actor-signature", async () => {
+        const backend = new ApiBackend(undefined); // No keyProvider
         const engine: ApiEngine = {
           type: "api",
           url: "https://api.example.com/agent",
@@ -269,7 +269,7 @@ describe("ApiBackend", () => {
         const ctx = createTestContext();
 
         await expect(backend.execute(engine, ctx)).rejects.toThrow(
-          "IdentityAdapter required for actor-signature auth"
+          "KeyProvider required for actor-signature auth"
         );
       });
     });

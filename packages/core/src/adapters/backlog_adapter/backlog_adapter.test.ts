@@ -484,7 +484,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         displayName: 'Test User'
       });
 
-      await backlogAdapter.addTaskToCycle(cycleId, taskId);
+      await backlogAdapter.addTaskToCycle(cycleId, taskId, 'human:test-user');
 
       expect(mockDependencies.stores.cycles.put).toHaveBeenCalledWith(
         cycleId,
@@ -549,7 +549,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         displayName: 'Test User'
       });
 
-      await backlogAdapter.removeTasksFromCycle(cycleId, taskIds);
+      await backlogAdapter.removeTasksFromCycle(cycleId, taskIds, 'human:test-user');
 
       // Verify cycle was updated (taskIds removed)
       expect(mockDependencies.stores.cycles.put).toHaveBeenCalledWith(
@@ -590,7 +590,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       mockDependencies.stores.cycles.get.mockResolvedValue(mockCycle);
       mockDependencies.stores.tasks.get.mockResolvedValue(mockTask);
 
-      await expect(backlogAdapter.removeTasksFromCycle(cycleId, [taskId]))
+      await expect(backlogAdapter.removeTasksFromCycle(cycleId, [taskId], 'human:test-user'))
         .rejects.toThrow(`Tasks not linked to cycle ${cycleId}: ${taskId}`);
     });
 
@@ -639,7 +639,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         displayName: 'Test User'
       });
 
-      await backlogAdapter.moveTasksBetweenCycles(targetCycleId, taskIds, sourceCycleId);
+      await backlogAdapter.moveTasksBetweenCycles(targetCycleId, taskIds, sourceCycleId, 'human:test-user');
 
       // Verify source cycle was updated (tasks removed)
       expect(mockDependencies.stores.cycles.put).toHaveBeenCalledWith(
@@ -672,7 +672,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
       const taskIds = ['1757687335-task-test-1'];
 
       // Test 1: Same source and target
-      await expect(backlogAdapter.moveTasksBetweenCycles(cycleId, taskIds, cycleId))
+      await expect(backlogAdapter.moveTasksBetweenCycles(cycleId, taskIds, cycleId, 'human:test-user'))
         .rejects.toThrow('Source and target cycles must be different');
 
       // Test 2: Tasks not in source cycle
@@ -697,7 +697,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
 
       mockDependencies.stores.tasks.get.mockResolvedValue(mockTask);
 
-      await expect(backlogAdapter.moveTasksBetweenCycles('1757687335-cycle-target', taskIds, '1757687335-cycle-source'))
+      await expect(backlogAdapter.moveTasksBetweenCycles('1757687335-cycle-target', taskIds, '1757687335-cycle-source', 'human:test-user'))
         .rejects.toThrow(`Tasks not linked to source cycle 1757687335-cycle-source: ${taskIds[0]}`);
     });
 
@@ -743,7 +743,7 @@ describe('BacklogAdapter - Complete Unit Tests', () => {
         .mockRejectedValueOnce(new Error('Simulated cycle write failure')); // Second cycle write fails
 
       // The operation should fail because writes are atomic (Promise.all)
-      await expect(backlogAdapter.moveTasksBetweenCycles(targetCycleId, taskIds, sourceCycleId))
+      await expect(backlogAdapter.moveTasksBetweenCycles(targetCycleId, taskIds, sourceCycleId, 'human:test-user'))
         .rejects.toThrow('AtomicOperationError');
 
       // Verify that at least one write was attempted

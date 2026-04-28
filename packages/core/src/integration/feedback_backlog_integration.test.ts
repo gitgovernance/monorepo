@@ -7,60 +7,9 @@
  * Coverage: EARS-31 to EARS-35
  */
 
-// Mock IdentityAdapter before importing
-jest.doMock('../adapters/identity_adapter', () => ({
-  IdentityAdapter: jest.fn().mockImplementation(() => ({
-    getActorPublicKey: jest.fn().mockResolvedValue('mock-public-key'),
-    getActor: jest.fn().mockResolvedValue({
-      id: 'human:test-dev',
-      type: 'human',
-      displayName: 'Test Developer',
-      publicKey: 'mock-public-key',
-      roles: ['author', 'executor', 'approver:quality'],
-      status: 'active'
-    }),
-    createActor: jest.fn().mockResolvedValue({
-      id: 'human:test-dev',
-      type: 'human',
-      displayName: 'Test Developer',
-      publicKey: 'mock-public-key',
-      roles: ['author', 'executor', 'approver:quality'],
-      status: 'active'
-    }),
-    listActors: jest.fn(),
-    signRecord: jest.fn().mockImplementation(async (unsignedRecord, actorId, role = 'author') => {
-      // signRecord receives a record with placeholder header and returns it properly signed
-      return {
-        header: {
-          ...unsignedRecord.header,
-          payloadChecksum: 'a'.repeat(64), // Mock checksum
-          signatures: [createTestSignature(actorId || 'human:test-dev', role)]
-        },
-        payload: unsignedRecord.payload
-      };
-    }),
-    rotateActorKey: jest.fn(),
-    revokeActor: jest.fn(),
-    resolveCurrentActorId: jest.fn(),
-    getCurrentActor: jest.fn().mockResolvedValue({
-      id: 'human:test-dev',
-      type: 'human',
-      displayName: 'Test Developer',
-      publicKey: 'mock-public-key',
-      roles: ['author', 'executor', 'approver:quality'],
-      status: 'active'
-    }),
-    getEffectiveActorForAgent: jest.fn(),
-    authenticate: jest.fn(),
-    createAgentRecord: jest.fn(),
-    getAgentRecord: jest.fn(),
-    listAgentRecords: jest.fn(),
-  }))
-}));
-
 import { FeedbackAdapter } from '../adapters/feedback_adapter';
 import { BacklogAdapter } from '../adapters/backlog_adapter';
-import { IdentityAdapter } from '../adapters/identity_adapter';
+import { IdentityModule } from '../identity';
 import { RecordMetrics } from '../record_metrics';
 import { ConfigManager } from '../config_manager';
 import type { SessionManager } from '../session_manager';
@@ -77,7 +26,7 @@ import { createTestSignature } from '../record_factories';
 describe('FeedbackAdapter <-> BacklogAdapter Integration (Real Event Communication)', () => {
   let feedbackAdapter: FeedbackAdapter;
   let backlogAdapter: BacklogAdapter;
-  let identityAdapter: IdentityAdapter;
+  let identityAdapter: IdentityModule;
   let metricsAdapter: RecordMetrics;
   let eventBus: IEventStream;
 
@@ -123,13 +72,12 @@ describe('FeedbackAdapter <-> BacklogAdapter Integration (Real Event Communicati
       clearCloudToken: jest.fn(),
     };
 
-    // Create REAL IdentityAdapter
-    identityAdapter = new IdentityAdapter({
+    // Create REAL IdentityModule
+    identityAdapter = new IdentityModule({
       stores: {
         actors: actorStore,
       },
       keyProvider: mockKeyProvider,
-      sessionManager: mockSessionManager,
     });
 
     // Create real RecordSigner with the same mock KeyProvider used by identityAdapter
@@ -141,7 +89,6 @@ describe('FeedbackAdapter <-> BacklogAdapter Integration (Real Event Communicati
       stores: {
         feedbacks: feedbackStore,
       },
-      identity: identityAdapter,
       signer: realSigner,
       eventBus // REAL EventBus
     });

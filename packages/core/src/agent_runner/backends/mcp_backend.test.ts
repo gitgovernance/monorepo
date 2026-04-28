@@ -355,7 +355,7 @@ describe("McpBackend", () => {
         );
       });
 
-      it("should throw when IdentityAdapter missing for actor-signature", async () => {
+      it("should throw when KeyProvider missing for actor-signature", async () => {
         const backend = new McpBackend(undefined);
         const engine: McpEngine = {
           type: "mcp",
@@ -365,7 +365,7 @@ describe("McpBackend", () => {
         const ctx = createTestContext();
 
         await expect(backend.execute(engine, ctx)).rejects.toThrow(
-          "IdentityAdapter required for actor-signature auth"
+          "KeyProvider required for actor-signature auth"
         );
       });
     });

@@ -17,7 +17,9 @@ import type {
   AgentOutput,
   AuthConfig,
 } from "../agent_runner.types";
-import type { IIdentityAdapter } from "../../adapters/identity_adapter";
+import type { KeyProvider } from "../../key_provider/key_provider";
+import { buildSignatureDigest } from "../../crypto/signatures";
+import { createHash } from "crypto";
 
 /**
  * Error thrown when API backend request fails.
@@ -46,7 +48,7 @@ export class ApiBackendError extends Error {
  * Reference: agent_protocol.md §5.1.2, §5.5, §5.6
  */
 export class ApiBackend {
-  constructor(private identityAdapter?: IIdentityAdapter) {}
+  constructor(private keyProvider?: KeyProvider) {}
 
   /**
    * Executes an agent via API and captures the response.
@@ -149,29 +151,33 @@ export class ApiBackend {
       }
 
       case "actor-signature": {
-        // [EARS-D3] Sign context using IdentityAdapter
-        if (!this.identityAdapter) {
+        // [EARS-D3] Sign context using KeyProvider
+        if (!this.keyProvider) {
           throw new ApiBackendError(
-            "IdentityAdapter required for actor-signature auth"
+            "KeyProvider required for actor-signature auth"
           );
         }
 
-        // Create signature payload
-        const payload = JSON.stringify({
+        const authPayload = {
           agentId: ctx.agentId,
           actorId: ctx.actorId,
           taskId: ctx.taskId,
           runId: ctx.runId,
           timestamp: Date.now(),
-        });
+        };
 
-        // Sign using actor's private key
-        const signature = await this.identityAdapter.signRecord(
-          { header: { version: "1.0", type: "request", payloadChecksum: "", signatures: [] }, payload } as any,
-          ctx.actorId,
-          "executor",
-          "API request signature"
-        );
+        const payloadChecksum = createHash('sha256').update(JSON.stringify(authPayload)).digest('hex');
+        const timestamp = Math.floor(Date.now() / 1000);
+        const digestHash = buildSignatureDigest(payloadChecksum, ctx.actorId, "executor", "API request signature", timestamp);
+        const signatureBytes = await this.keyProvider.sign(ctx.actorId, new Uint8Array(digestHash));
+
+        const signature = {
+          keyId: ctx.actorId,
+          role: "executor",
+          notes: "API request signature",
+          signature: Buffer.from(signatureBytes).toString('base64'),
+          timestamp,
+        };
 
         headers["X-GitGov-Signature"] = JSON.stringify(signature);
         headers["X-GitGov-Actor"] = ctx.actorId;

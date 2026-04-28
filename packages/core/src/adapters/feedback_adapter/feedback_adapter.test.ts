@@ -1,7 +1,6 @@
 import { FeedbackAdapter } from './index';
 import { createFeedbackRecord } from '../../record_factories/feedback_factory';
 import type { RecordStore } from '../../record_store';
-import { IdentityAdapter } from '../identity_adapter';
 import type { FeedbackRecord, GitGovFeedbackRecord } from '../../record_types';
 import type { IEventStream } from '../../event_bus';
 import type { GitGovRecord, Signature } from '../../record_types';
@@ -12,7 +11,6 @@ import { MockKeyProvider } from '../../key_provider/memory/mock_key_provider';
 // Mock dependencies
 jest.mock('../../record_factories/feedback_factory');
 jest.mock('../../record_store');
-jest.mock('../identity_adapter');
 
 // Helper function to create properly typed mock feedback records
 function createMockFeedbackRecord(overrides: Partial<FeedbackRecord> = {}): GitGovRecord & { payload: FeedbackRecord } {
@@ -44,7 +42,6 @@ function createMockFeedbackRecord(overrides: Partial<FeedbackRecord> = {}): GitG
 describe('FeedbackAdapter', () => {
   let feedbackAdapter: FeedbackAdapter;
   let mockFeedbackStore: jest.Mocked<RecordStore<GitGovFeedbackRecord>>;
-  let mockIdentityAdapter: jest.Mocked<IdentityAdapter>;
   let mockSigner: RecordSigner;
   let createSignedSpy: jest.SpyInstance;
   let mockEventBus: jest.Mocked<IEventStream>;
@@ -78,11 +75,6 @@ describe('FeedbackAdapter', () => {
       exists: jest.fn().mockResolvedValue(false),
     } as unknown as jest.Mocked<RecordStore<GitGovFeedbackRecord>>;
 
-    // Mock identity adapter
-    mockIdentityAdapter = {
-      signRecord: jest.fn(),
-    } as unknown as jest.Mocked<IdentityAdapter>;
-
     // Mock EventBus
     mockEventBus = {
       publish: jest.fn(),
@@ -104,7 +96,6 @@ describe('FeedbackAdapter', () => {
     // Create adapter with mocked dependencies - stores container pattern
     feedbackAdapter = new FeedbackAdapter({
       stores: { feedbacks: mockFeedbackStore },
-      identity: mockIdentityAdapter,
       signer: mockSigner,
       eventBus: mockEventBus,
     });

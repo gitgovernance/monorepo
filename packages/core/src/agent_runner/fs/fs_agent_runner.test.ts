@@ -495,7 +495,7 @@ describe("FsAgentRunner", () => {
       await expect(
         runner.runOnce({ agentId: "agent:actor-sig", taskId: "task:1" })
       ).rejects.toThrow(
-        "MissingDependency: IdentityAdapter required for actor-signature auth"
+        "MissingDependency: KeyProvider required for actor-signature auth"
       );
     });
   });

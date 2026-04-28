@@ -19,7 +19,9 @@ import type {
   AgentOutput,
   AuthConfig,
 } from "../agent_runner.types";
-import type { IIdentityAdapter } from "../../adapters/identity_adapter";
+import type { KeyProvider } from "../../key_provider/key_provider";
+import { buildSignatureDigest } from "../../crypto/signatures";
+import { createHash } from "crypto";
 
 /**
  * Error thrown when MCP backend operation fails.
@@ -73,7 +75,7 @@ interface McpResponse {
  * Reference: agent_protocol.md §5.1.3
  */
 export class McpBackend {
-  constructor(private identityAdapter?: IIdentityAdapter) {}
+  constructor(private keyProvider?: KeyProvider) {}
 
   /**
    * Executes an agent via MCP and captures the result.
@@ -215,27 +217,33 @@ export class McpBackend {
       }
 
       case "actor-signature": {
-        if (!this.identityAdapter) {
+        if (!this.keyProvider) {
           throw new McpBackendError(
-            "IdentityAdapter required for actor-signature auth",
-            "AUTH_MISSING_ADAPTER"
+            "KeyProvider required for actor-signature auth",
+            "AUTH_MISSING_KEY_PROVIDER"
           );
         }
 
-        const payload = JSON.stringify({
+        const authPayload = {
           agentId: ctx.agentId,
           actorId: ctx.actorId,
           taskId: ctx.taskId,
           runId: ctx.runId,
           timestamp: Date.now(),
-        });
+        };
 
-        const signature = await this.identityAdapter.signRecord(
-          { header: { version: "1.0", type: "request", payloadChecksum: "", signatures: [] }, payload } as any,
-          ctx.actorId,
-          "executor",
-          "MCP request signature"
-        );
+        const payloadChecksum = createHash('sha256').update(JSON.stringify(authPayload)).digest('hex');
+        const timestamp = Math.floor(Date.now() / 1000);
+        const digestHash = buildSignatureDigest(payloadChecksum, ctx.actorId, "executor", "MCP request signature", timestamp);
+        const signatureBytes = await this.keyProvider.sign(ctx.actorId, new Uint8Array(digestHash));
+
+        const signature = {
+          keyId: ctx.actorId,
+          role: "executor",
+          notes: "MCP request signature",
+          signature: Buffer.from(signatureBytes).toString('base64'),
+          timestamp,
+        };
 
         headers["X-GitGov-Signature"] = JSON.stringify(signature);
         headers["X-GitGov-Actor"] = ctx.actorId;
