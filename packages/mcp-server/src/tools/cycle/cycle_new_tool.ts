@@ -19,7 +19,8 @@ export const cycleNewTool: McpToolDefinition<CycleNewInput> = {
   },
   handler: async (input: CycleNewInput, di: McpDependencyInjectionService) => {
     try {
-      const { backlogAdapter, identityModule } = await di.getContainer();
+      const container = await di.getContainer();
+      const { backlogAdapter } = container;
       const actor = await container.getCurrentActor();
       const cycle = await backlogAdapter.createCycle(
         { title: input.title, tags: input.tags, notes: input.notes },

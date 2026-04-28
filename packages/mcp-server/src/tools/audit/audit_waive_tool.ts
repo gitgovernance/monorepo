@@ -18,7 +18,8 @@ export const auditWaiveTool: McpToolDefinition<AuditWaiveInput> = {
   },
   handler: async (input: AuditWaiveInput, di: McpDependencyInjectionService) => {
     try {
-      const { feedbackAdapter, identityModule } = await di.getContainer();
+      const container = await di.getContainer();
+      const { feedbackAdapter } = container;
       const actor = await container.getCurrentActor();
       const waiver = await feedbackAdapter.create(
         {

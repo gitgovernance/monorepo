@@ -20,7 +20,8 @@ export const actorNewTool: McpToolDefinition<ActorNewInput> = {
   },
   handler: async (input: ActorNewInput, di: McpDependencyInjectionService) => {
     try {
-      const { identityModule, stores } = await di.getContainer();
+      const container = await di.getContainer();
+      const { identityModule, stores } = container;
 
       // Check for duplicate
       const existing = await stores.actors.get(input.id);

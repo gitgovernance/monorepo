@@ -2,7 +2,6 @@ import type { McpToolDefinition } from '../../server/mcp_server.types.js';
 import type { McpDependencyInjectionService } from '../../di/mcp_di.js';
 import type { CycleMoveTaskInput } from './cycle_tools.types.js';
 import { successResult, errorResult } from '../helpers.js';
-import { getCurrentActor } from '@gitgov/core';
 
 /** gitgov_cycle_move_task [MSRV-J3, MSRV-J5] */
 export const cycleMoveTaskTool: McpToolDefinition<CycleMoveTaskInput> = {
@@ -20,8 +19,9 @@ export const cycleMoveTaskTool: McpToolDefinition<CycleMoveTaskInput> = {
   },
   handler: async (input: CycleMoveTaskInput, di: McpDependencyInjectionService) => {
     try {
-      const { backlogAdapter, identityModule, sessionManager } = await di.getContainer();
-      const actor = await getCurrentActor(identityModule, sessionManager);
+      const container = await di.getContainer();
+      const { backlogAdapter } = container;
+      const actor = await container.getCurrentActor();
       await backlogAdapter.moveTasksBetweenCycles(input.toCycleId, [input.taskId], input.fromCycleId, actor.id);
       return successResult({
         moved: true,

@@ -21,7 +21,7 @@ function createMockDi(overrides: Record<string, unknown> = {}) {
       }),
       getAgentRecord: vi.fn().mockResolvedValue(null),
     },
-    identityAdapter: {
+    identityModule: {
       getActor: vi.fn().mockResolvedValue({
         id: 'agent:scribe',
         type: 'agent',
@@ -65,7 +65,7 @@ describe('Agent Tools', () => {
     it('[ICOMP-D2] should return INVALID_ACTOR when actor not found or not agent type', async () => {
       const di = createMockDi();
       const container = di._container;
-      container.identityAdapter.getActor.mockResolvedValue(null);
+      container.identityModule.getActor.mockResolvedValue(null);
 
       const result = await agentNewTool.handler(
         { actorId: 'agent:nonexistent', engineType: 'mcp' },

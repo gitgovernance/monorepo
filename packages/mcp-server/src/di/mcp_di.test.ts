@@ -83,7 +83,7 @@ describe('McpDependencyInjectionService', () => {
       expect(container.backlogAdapter).toBeDefined();
       expect(container.feedbackAdapter).toBeDefined();
       expect(container.executionAdapter).toBeDefined();
-      expect(container.identityAdapter).toBeDefined();
+      expect(container.identityModule).toBeDefined();
       expect(container.agentAdapter).toBeDefined();
       expect(container.workflowAdapter).toBeDefined();
 

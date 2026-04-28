@@ -29,7 +29,7 @@ function createMockDi(overrides: Record<string, unknown> = {}) {
       removeTasksFromCycle: vi.fn().mockResolvedValue(undefined),
       moveTasksBetweenCycles: vi.fn().mockResolvedValue(undefined),
     },
-    identityAdapter: {
+    identityModule: {
       getCurrentActor: vi.fn().mockResolvedValue({ id: 'actor-1', displayName: 'Test', type: 'human' }),
     },
     ...overrides,

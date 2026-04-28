@@ -42,7 +42,7 @@ function createMockDi(overrides: Record<string, unknown> = {}) {
         id: 'task-1', title: 'Task 1', status: 'done',
       }),
     },
-    identityAdapter: {
+    identityModule: {
       getCurrentActor: vi.fn().mockResolvedValue({ id: 'actor-1', displayName: 'Test Actor', type: 'human' }),
     },
     feedbackAdapter: {

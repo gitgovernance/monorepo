@@ -31,7 +31,7 @@ function createMockDi() {
         get: vi.fn().mockResolvedValue({ header: { id: 'actor-1' }, payload: { displayName: 'Alice', type: 'human' } }),
       },
     },
-    identityAdapter: {
+    identityModule: {
       getCurrentActor: vi.fn().mockResolvedValue({ id: 'actor-1', displayName: 'Alice', type: 'human' }),
     },
   };

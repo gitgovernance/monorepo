@@ -45,7 +45,7 @@ function createMockDi() {
         get: vi.fn().mockResolvedValue(null),
       },
     },
-    identityAdapter: {
+    identityModule: {
       getCurrentActor: vi.fn().mockResolvedValue({ id: 'actor-1', displayName: 'Test', type: 'human' }),
       createActor: vi.fn().mockResolvedValue({ id: 'new-actor', type: 'agent', displayName: 'Bot', roles: ['contributor'] }),
     },
@@ -167,7 +167,7 @@ describe('Audit + Agent + Actor Tools', () => {
       expect(result.isError).toBeUndefined();
       expect(data.id).toBe('new-actor');
       expect(data.type).toBe('agent');
-      expect(di._container.identityAdapter.createActor).toHaveBeenCalled();
+      expect(di._container.identityModule.createActor).toHaveBeenCalled();
     });
 
     it('[MSRV-M4] should return error when actor already exists', async () => {

@@ -48,7 +48,7 @@ function createMockContainer(overrides: Partial<McpDiContainer> = {}): McpDiCont
     backlogAdapter: {},
     feedbackAdapter: {},
     executionAdapter: {},
-    identityAdapter: {} as McpDiContainer['identityAdapter'],
+    identityModule: {} as McpDiContainer['identityModule'],
     lintModule: {
       lint: vi.fn(),
       lintFile: vi.fn(),
