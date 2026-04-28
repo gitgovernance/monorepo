@@ -275,8 +275,7 @@ export class AgentCommand extends BaseCommand<RunCommandOptions> {
       // Get dependencies
       const runner = await this.container.getAgentRunnerModule();
       const backlogAdapter = await this.container.getBacklogAdapter();
-      const identityAdapter = await this.container.getIdentityAdapter();
-      const currentActor = await identityAdapter.getCurrentActor();
+      const currentActor = await this.container.getCurrentActor();
 
       // Build agentId
       const agentId = name.startsWith('agent:') ? name : `agent:${name}`;

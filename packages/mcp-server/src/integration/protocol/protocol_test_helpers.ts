@@ -132,13 +132,17 @@ export function createComprehensiveMockContainer(overrides: MockContainerOverrid
       removeTasksFromCycle: vi.fn().mockResolvedValue(undefined),
       moveTasksBetweenCycles: vi.fn().mockResolvedValue(undefined),
     },
-    identityAdapter: {
-      getCurrentActor: vi.fn().mockResolvedValue({
-        id: 'actor-1', displayName: 'Alice', type: 'human',
-      }),
+    identityModule: {
+      getActor: vi.fn().mockResolvedValue(null),
+      listActors: vi.fn().mockResolvedValue([]),
       createActor: vi.fn().mockResolvedValue({
         id: 'new-actor', type: 'agent', displayName: 'Bot', roles: ['contributor'],
       }),
+      getActorPublicKey: vi.fn().mockResolvedValue(null),
+      revokeActor: vi.fn(),
+      resolveCurrentActorId: vi.fn().mockImplementation(async (id: string) => id),
+      getEffectiveActorForAgent: vi.fn().mockResolvedValue(null),
+      rotateActorKey: vi.fn(),
     },
     feedbackAdapter: {
       create: vi.fn().mockResolvedValue({

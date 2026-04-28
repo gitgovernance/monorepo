@@ -1,12 +1,12 @@
 import * as path from 'path';
 import * as os from 'os';
-import { Adapters, Config, Session, EventBus, Lint, Git, SourceAuditor, FindingDetector, Runner, KeyProvider, RecordProjection, RecordMetrics, AuditOrchestrator, PolicyEvaluator } from '@gitgov/core';
+import { Adapters, Config, Session, EventBus, Lint, Git, SourceAuditor, FindingDetector, Runner, KeyProvider, RecordProjection, RecordMetrics, AuditOrchestrator, PolicyEvaluator, IdentityModule, RecordSigner, getCurrentActor } from '@gitgov/core';
 import { FsRecordStore, DEFAULT_ID_ENCODER, FsFileLister, FsProjectInitializer, FsLintModule, FsWorktreeSyncStateModule, GitModule, createAgentRunner, createConfigManager, findProjectRoot, createSessionManager, FsRecordProjection, getWorktreeBasePath } from '@gitgov/core/fs';
 import type { IFsLintModule } from '@gitgov/core/fs';
 import type {
   GitGovTaskRecord, GitGovCycleRecord, GitGovFeedbackRecord, GitGovExecutionRecord, GitGovActorRecord, GitGovAgentRecord,
   // Module types
-  IRecordProjector, IRecordMetrics, IConfigManager, IIdentityAdapter, ISessionManager, IAgentRunner, IKeyProvider,
+  IRecordProjector, IRecordMetrics, IConfigManager, IIdentityModule, ISessionManager, IAgentRunner, IKeyProvider,
   ISyncStateModule,
   // Lint types
   RecordStores as LintRecordStores,
@@ -264,24 +264,23 @@ export class DependencyInjectionService {
         keysDir: path.join(this.projectRoot!, '.gitgov', 'keys')
       });
 
-      // Create IdentityAdapter with correct dependencies
-      const identityAdapter = new Adapters.IdentityAdapter({
+      const identityModule = new IdentityModule({
         stores: { actors: this.stores.actors },
         keyProvider: this.keyProvider,
-        sessionManager: await this.getSessionManager(),
         eventBus,
       });
 
-      // Create other adapters
+      const signer = new RecordSigner({ keyProvider: this.keyProvider });
+
       const feedbackAdapter = new Adapters.FeedbackAdapter({
         stores: { feedbacks: this.stores.feedbacks },
-        identity: identityAdapter,
+        signer,
         eventBus
       });
 
       const executionAdapter = new Adapters.ExecutionAdapter({
         stores: { tasks: this.stores.tasks, executions: this.stores.executions },
-        identity: identityAdapter,
+        signer,
         eventBus
       });
 
@@ -313,7 +312,8 @@ export class DependencyInjectionService {
         executionAdapter,
         metricsAdapter: recordMetrics,
         workflowAdapter,
-        identity: identityAdapter,
+        identity: identityModule,
+        signer,
         eventBus,
         configManager,
         sessionManager: await this.getSessionManager(),
@@ -336,28 +336,24 @@ export class DependencyInjectionService {
   }
 
   /**
-   * [EARS-C4] Creates and returns IdentityAdapter with all required dependencies
+   * [EARS-C4] Creates and returns IdentityModule with all required dependencies
    */
-  async getIdentityAdapter(): Promise<InstanceType<typeof Adapters.IdentityAdapter>> {
+  async getIdentityModule(): Promise<IdentityModule> {
     try {
       await this.initializeStores();
       if (!this.stores) {
         throw new Error("Failed to initialize stores");
       }
 
-      // Create EventBus
       const eventBus = new EventBus.EventBus();
 
-      // Create KeyProvider for filesystem-based key storage
       this.keyProvider = new KeyProvider.FsKeyProvider({
         keysDir: path.join(this.projectRoot!, '.gitgov', 'keys')
       });
 
-      // Create IdentityAdapter with dependencies
-      return new Adapters.IdentityAdapter({
+      return new IdentityModule({
         stores: { actors: this.stores.actors },
         keyProvider: this.keyProvider,
-        sessionManager: await this.getSessionManager(),
         eventBus,
       });
 
@@ -373,6 +369,20 @@ export class DependencyInjectionService {
   }
 
   /**
+   * Backward-compatible alias — delegates to getIdentityModule.
+   * CLI commands call this; will be renamed in a future cleanup.
+   */
+  async getIdentityAdapter(): Promise<IdentityModule> {
+    return this.getIdentityModule();
+  }
+
+  async getCurrentActor(): Promise<import('@gitgov/core').ActorRecord> {
+    const identity = await this.getIdentityModule();
+    const session = await this.getSessionManager();
+    return getCurrentActor(identity, session);
+  }
+
+  /**
    * Creates and returns ProjectAdapter with all required dependencies.
    * Used by InitCommand (via setInitMode) and potentially other commands.
    */
@@ -382,13 +392,13 @@ export class DependencyInjectionService {
       throw new Error("Project root not initialized");
     }
 
-    const identityAdapter = await this.getIdentityAdapter();
+    const identityModule = await this.getIdentityModule();
     const backlogAdapter = await this.getBacklogAdapter();
     const configManager = await this.getConfigManager();
     const projectInitializer = new FsProjectInitializer(this.projectRoot, this.repoRoot ?? undefined);
 
     return new Adapters.ProjectAdapter({
-      identityAdapter,
+      identityAdapter: identityModule,
       backlogAdapter,
       configManager,
       projectInitializer,
@@ -411,18 +421,11 @@ export class DependencyInjectionService {
         keysDir: path.join(this.projectRoot!, '.gitgov', 'keys')
       });
 
-      // Create IdentityAdapter
-      const identityAdapter = new Adapters.IdentityAdapter({
-        stores: { actors: this.stores.actors },
-        keyProvider,
-        sessionManager: await this.getSessionManager(),
-        eventBus,
-      });
+      const signer = new RecordSigner({ keyProvider });
 
-      // Create FeedbackAdapter with dependencies
       return new Adapters.FeedbackAdapter({
         stores: { feedbacks: this.stores.feedbacks },
-        identity: identityAdapter,
+        signer,
         eventBus
       });
 
@@ -608,18 +611,11 @@ export class DependencyInjectionService {
         keysDir: path.join(this.projectRoot!, '.gitgov', 'keys')
       });
 
-      // Create IdentityAdapter
-      const identityAdapter = new Adapters.IdentityAdapter({
-        stores: { actors: this.stores.actors },
-        keyProvider,
-        sessionManager: await this.getSessionManager(),
-        eventBus,
-      });
+      const signer = new RecordSigner({ keyProvider });
 
-      // Create ExecutionAdapter with dependencies
       return new Adapters.ExecutionAdapter({
         stores: { tasks: this.stores.tasks, executions: this.stores.executions },
-        identity: identityAdapter,
+        signer,
         eventBus
       });
 
@@ -649,16 +645,15 @@ export class DependencyInjectionService {
         keysDir: path.join(this.projectRoot!, '.gitgov', 'keys')
       });
 
-      const identityAdapter = new Adapters.IdentityAdapter({
+      const identityModule = new IdentityModule({
         stores: { actors: this.stores.actors },
         keyProvider,
-        sessionManager: await this.getSessionManager(),
         eventBus,
       });
 
       return new Adapters.AgentAdapter({
         stores: { agents: this.stores.agents },
-        identity: identityAdapter,
+        identity: identityModule,
         keyProvider,
         eventBus,
       });
@@ -811,8 +806,13 @@ export class DependencyInjectionService {
       // Get required dependencies
       const projector = await this.getRecordProjector();
       const configManager = await this.getConfigManager();
-      const identityAdapter = await this.getIdentityAdapter();
+      const identityModule = await this.getIdentityModule();
       const lintModule = await this.getLintModule();
+
+      this.keyProvider = this.keyProvider ?? new KeyProvider.FsKeyProvider({
+        keysDir: path.join(this.projectRoot!, '.gitgov', 'keys')
+      });
+      const signer = new RecordSigner({ keyProvider: this.keyProvider });
 
       // Create execCommand function for GitModule — default cwd is repoRoot
       const repoRoot = this.repoRoot || this.projectRoot;
@@ -853,7 +853,8 @@ export class DependencyInjectionService {
         {
           git: gitModule,
           config: configManager,
-          identity: identityAdapter,
+          identity: identityModule,
+          signer,
           lint: lintModule,
           indexer: projector,
         },

@@ -56,8 +56,7 @@ export class ContextCommand {
       if (options.actor) {
         actorId = options.actor;
       } else {
-        const identityAdapter = await this.dependencyService.getIdentityAdapter();
-        const currentActor = await identityAdapter.getCurrentActor();
+        const currentActor = await this.dependencyService.getCurrentActor();
         actorId = currentActor.id;
       }
 

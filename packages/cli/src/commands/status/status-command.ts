@@ -90,8 +90,7 @@ export class StatusCommand {
    */
   private async executePersonalDashboard(options: StatusCommandOptions): Promise<void> {
     // 1. Get current actor
-    const identityAdapter = await this.dependencyService.getIdentityAdapter();
-    const currentActor = await identityAdapter.getCurrentActor();
+    const currentActor = await this.dependencyService.getCurrentActor();
 
     // 2. Get personal work summary, system health, and sync status in parallel
     const [personalWork, systemHealth, syncStatus] = await Promise.all([

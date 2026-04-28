@@ -377,8 +377,7 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
 
       // [EARS-E1] Create waiver
       const feedbackAdapter = await this.container.getFeedbackAdapter();
-      const identityAdapter = await this.container.getIdentityAdapter();
-      const currentActor = await identityAdapter.getCurrentActor();
+      const currentActor = await this.container.getCurrentActor();
 
       await feedbackAdapter.create(
         {

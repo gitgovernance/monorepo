@@ -437,8 +437,7 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
 
   private async findLocalHumanActor(): Promise<{ actorId: string; displayName: string } | null> {
     try {
-      const identityAdapter = await this.dependencyService.getIdentityAdapter();
-      const currentActor = await identityAdapter.getCurrentActor();
+      const currentActor = await this.dependencyService.getCurrentActor();
       if (currentActor && currentActor.type === 'human') {
         return { actorId: currentActor.id, displayName: currentActor.displayName };
       }

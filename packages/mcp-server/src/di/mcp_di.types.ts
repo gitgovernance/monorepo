@@ -11,7 +11,7 @@ import type {
   ISessionManager,
   IAgentRunner,
   ISyncStateModule,
-  IIdentityAdapter,
+  IIdentityModule,
   IBacklogAdapter,
   IFeedbackAdapter,
   IExecutionAdapter,
@@ -46,7 +46,7 @@ export interface McpDiContainer {
   backlogAdapter: IBacklogAdapter;
   feedbackAdapter: IFeedbackAdapter;
   executionAdapter: IExecutionAdapter;
-  identityAdapter: IIdentityAdapter;
+  identityModule: IIdentityModule;
   agentAdapter: IAgentAdapter;
   workflowAdapter: WorkflowAdapter.IWorkflow;
 
