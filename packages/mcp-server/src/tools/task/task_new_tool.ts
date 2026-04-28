@@ -43,9 +43,9 @@ export const taskNewTool: McpToolDefinition<TaskNewInput> = {
   handler: async (input: TaskNewInput, di: McpDependencyInjectionService) => {
     try {
       const container = await di.getContainer();
-      const { backlogAdapter, identityAdapter } = container;
+      const { backlogAdapter, identityModule } = container;
 
-      const actor = await identityAdapter.getCurrentActor();
+      const actor = await container.getCurrentActor();
       const actorId = actor.id;
 
       const task = await backlogAdapter.createTask(

@@ -21,9 +21,9 @@ export const taskSubmitTool: McpToolDefinition<TaskTransitionInput> = {
   handler: async (input: TaskTransitionInput, di: McpDependencyInjectionService) => {
     try {
       const container = await di.getContainer();
-      const { backlogAdapter, identityAdapter } = container;
+      const { backlogAdapter, identityModule } = container;
 
-      const actor = await identityAdapter.getCurrentActor();
+      const actor = await container.getCurrentActor();
       const task = await backlogAdapter.submitTask(input.taskId, actor.id);
 
       return successResult({

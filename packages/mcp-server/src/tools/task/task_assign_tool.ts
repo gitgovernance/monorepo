@@ -23,7 +23,7 @@ export const taskAssignTool: McpToolDefinition<TaskAssignInput> = {
   handler: async (input: TaskAssignInput, di: McpDependencyInjectionService) => {
     try {
       const container = await di.getContainer();
-      const { backlogAdapter, identityAdapter, feedbackAdapter, stores } = container;
+      const { backlogAdapter, identityModule, feedbackAdapter, stores } = container;
 
       // Verify task exists
       const task = await backlogAdapter.getTask(input.taskId);
@@ -38,7 +38,7 @@ export const taskAssignTool: McpToolDefinition<TaskAssignInput> = {
       }
 
       // Create assignment via feedback record
-      const actor = await identityAdapter.getCurrentActor();
+      const actor = await container.getCurrentActor();
       const feedback = await feedbackAdapter.create(
         {
           entityType: 'task',

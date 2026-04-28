@@ -26,10 +26,10 @@ export const actorListTool: McpToolDefinition<ActorListInput> = {
   handler: async (input: ActorListInput, di: McpDependencyInjectionService) => {
     try {
       const container = await di.getContainer();
-      const { identityAdapter } = container;
+      const { identityModule } = container;
 
       // [ICOMP-E5] List all actors
-      let actors = await identityAdapter.listActors();
+      let actors = await identityModule.listActors();
 
       // [ICOMP-E6] Filter by type if specified
       if (input.type) {

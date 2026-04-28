@@ -18,6 +18,7 @@ import type {
   IAgentAdapter,
   SourceAuditor,
   WorkflowAdapter,
+  ActorRecord,
 } from '@gitgov/core';
 import type { IFsLintModule } from '@gitgov/core/fs';
 
@@ -58,4 +59,6 @@ export interface McpDiContainer {
 
   configManager: IConfigManager;
   sessionManager: ISessionManager;
+
+  getCurrentActor(): Promise<ActorRecord>;
 }

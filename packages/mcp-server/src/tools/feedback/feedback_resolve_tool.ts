@@ -23,7 +23,7 @@ export const feedbackResolveTool: McpToolDefinition<FeedbackResolveInput> = {
   handler: async (input: FeedbackResolveInput, di: McpDependencyInjectionService) => {
     try {
       const container = await di.getContainer();
-      const { feedbackAdapter, identityAdapter } = container;
+      const { feedbackAdapter, identityModule } = container;
 
       // Check current status
       const existing = await feedbackAdapter.getFeedback(input.feedbackId);
@@ -38,7 +38,7 @@ export const feedbackResolveTool: McpToolDefinition<FeedbackResolveInput> = {
         );
       }
 
-      const actor = await identityAdapter.getCurrentActor();
+      const actor = await container.getCurrentActor();
       const resolved = await feedbackAdapter.resolve(
         input.feedbackId,
         actor.id,

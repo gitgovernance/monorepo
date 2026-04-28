@@ -25,10 +25,10 @@ export const actorShowTool: McpToolDefinition<ActorShowInput> = {
   handler: async (input: ActorShowInput, di: McpDependencyInjectionService) => {
     try {
       const container = await di.getContainer();
-      const { identityAdapter } = container;
+      const { identityModule } = container;
 
       // [ICOMP-E7] Get actor
-      const actor = await identityAdapter.getActor(input.actorId);
+      const actor = await identityModule.getActor(input.actorId);
       if (!actor) {
         return errorResult(`Actor not found: ${input.actorId}`, 'ACTOR_NOT_FOUND');
       }

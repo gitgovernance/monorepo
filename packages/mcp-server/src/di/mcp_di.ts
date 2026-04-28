@@ -20,6 +20,7 @@ import {
   FindingDetector,
   IdentityModule,
   RecordSigner,
+  getCurrentActor,
 } from '@gitgov/core';
 import type { Git } from '@gitgov/core';
 
@@ -257,6 +258,7 @@ export class McpDependencyInjectionService {
       projector,
       configManager,
       sessionManager,
+      getCurrentActor: () => getCurrentActor(identityModule, sessionManager),
     };
   }
 
