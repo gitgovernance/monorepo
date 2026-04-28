@@ -29,9 +29,9 @@ function createMockDi() {
     feedbackAdapter: {
       create: vi.fn().mockResolvedValue({ id: 'waiver-1', type: 'approval', entityType: 'execution', status: 'resolved' }),
       getAllFeedback: vi.fn().mockResolvedValue([
-        { id: 'w1', type: 'approval', entityType: 'execution', status: 'resolved', entityId: 'fp1', content: 'False positive' },
-        { id: 'w2', type: 'approval', entityType: 'execution', status: 'resolved', entityId: 'fp2', content: 'Accepted risk' },
-        { id: 'w3', type: 'comment', entityType: 'task', status: 'open', entityId: 't1', content: 'Note' },
+        { header: { version: '1.0', type: 'feedback', payloadChecksum: '', signatures: [] }, payload: { id: 'w1', type: 'approval', entityType: 'execution', status: 'resolved', entityId: 'fp1', content: 'False positive' } },
+        { header: { version: '1.0', type: 'feedback', payloadChecksum: '', signatures: [] }, payload: { id: 'w2', type: 'approval', entityType: 'execution', status: 'resolved', entityId: 'fp2', content: 'Accepted risk' } },
+        { header: { version: '1.0', type: 'feedback', payloadChecksum: '', signatures: [] }, payload: { id: 'w3', type: 'comment', entityType: 'task', status: 'open', entityId: 't1', content: 'Note' } },
       ]),
     },
     agentRunner: {

@@ -99,7 +99,7 @@ describe('Cycle Tools', () => {
       const data = parseResult(result);
       expect(result.isError).toBeUndefined();
       expect(data.linked).toBe(true);
-      expect(di._container.backlogAdapter.addTaskToCycle).toHaveBeenCalledWith('cycle-1', 'task-1');
+      expect(di._container.backlogAdapter.addTaskToCycle).toHaveBeenCalledWith('cycle-1', 'task-1', 'actor-1');
     });
 
     it('[MSRV-J2] should unlink task from cycle', async () => {
@@ -108,7 +108,7 @@ describe('Cycle Tools', () => {
       const data = parseResult(result);
       expect(result.isError).toBeUndefined();
       expect(data.unlinked).toBe(true);
-      expect(di._container.backlogAdapter.removeTasksFromCycle).toHaveBeenCalledWith('cycle-1', ['task-1']);
+      expect(di._container.backlogAdapter.removeTasksFromCycle).toHaveBeenCalledWith('cycle-1', ['task-1'], 'actor-1');
     });
 
     it('[MSRV-J3] should move task between cycles atomically', async () => {
@@ -120,7 +120,7 @@ describe('Cycle Tools', () => {
       expect(result.isError).toBeUndefined();
       expect(data.moved).toBe(true);
       expect(di._container.backlogAdapter.moveTasksBetweenCycles)
-        .toHaveBeenCalledWith('cycle-2', ['task-1'], 'cycle-1');
+        .toHaveBeenCalledWith('cycle-2', ['task-1'], 'cycle-1', 'actor-1');
     });
 
     it('[MSRV-J4] should add child cycle to parent', async () => {
