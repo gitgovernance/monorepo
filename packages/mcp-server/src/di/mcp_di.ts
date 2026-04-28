@@ -180,6 +180,7 @@ export class McpDependencyInjectionService {
         feedbacks: stores.feedbacks,
         executions: stores.executions,
         actors: stores.actors,
+        agents: stores.agents,
       },
       sink,
     });

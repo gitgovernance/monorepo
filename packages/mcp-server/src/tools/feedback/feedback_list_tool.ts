@@ -43,11 +43,11 @@ export const feedbackListTool: McpToolDefinition<FeedbackListInput> = {
       let filtered = feedbacks;
 
       if (input.type) {
-        filtered = filtered.filter((f) => f.type === input.type);
+        filtered = filtered.filter((f) => f.payload.type === input.type);
       }
 
       if (input.status) {
-        filtered = filtered.filter((f) => f.status === input.status);
+        filtered = filtered.filter((f) => f.payload.status === input.status);
       }
 
       if (input.limit && input.limit > 0) {
@@ -55,13 +55,13 @@ export const feedbackListTool: McpToolDefinition<FeedbackListInput> = {
       }
 
       const items = filtered.map((f) => ({
-        id: f.id,
-        entityType: f.entityType,
-        entityId: f.entityId,
-        type: f.type,
-        status: f.status,
-        content: f.content,
-        assignee: f.assignee ?? null,
+        id: f.payload.id,
+        entityType: f.payload.entityType,
+        entityId: f.payload.entityId,
+        type: f.payload.type,
+        status: f.payload.status,
+        content: f.payload.content,
+        assignee: f.payload.assignee ?? null,
       }));
 
       return successResult({

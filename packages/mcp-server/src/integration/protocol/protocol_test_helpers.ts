@@ -144,6 +144,10 @@ export function createComprehensiveMockContainer(overrides: MockContainerOverrid
       getEffectiveActorForAgent: vi.fn().mockResolvedValue(null),
       rotateActorKey: vi.fn(),
     },
+    getCurrentActor: vi.fn().mockResolvedValue({
+      id: 'actor-1', type: 'human', displayName: 'Alice',
+      publicKey: 'pk', roles: ['author'], status: 'active',
+    }),
     feedbackAdapter: {
       create: vi.fn().mockResolvedValue({
         id: 'fb-1', entityType: 'task', entityId: 'task-1',
