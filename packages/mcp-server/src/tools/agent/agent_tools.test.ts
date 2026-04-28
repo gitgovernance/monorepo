@@ -30,6 +30,7 @@ function createMockDi(overrides: Record<string, unknown> = {}) {
         roles: ['contributor'],
       }),
     },
+    getCurrentActor: vi.fn().mockResolvedValue({ id: "actor-1", type: "human", displayName: "Test", publicKey: "pk", roles: ["author"], status: "active" }),
     ...overrides,
   };
 

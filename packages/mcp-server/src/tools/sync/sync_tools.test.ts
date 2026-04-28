@@ -26,8 +26,8 @@ function createMockDi() {
       auditState: vi.fn().mockResolvedValue({ passed: true, scope: 'all', totalCommits: 5, rebaseCommits: 0, resolutionCommits: 0, integrityViolations: [], summary: 'All checks passed' }),
     },
     identityModule: {
-      getCurrentActor: vi.fn().mockResolvedValue({ id: 'actor-1', displayName: 'Test', type: 'human' }),
     },
+    getCurrentActor: vi.fn().mockResolvedValue({ id: 'actor-1', type: 'human', displayName: 'Test', publicKey: 'pk', roles: ['author'], status: 'active' }),
   };
   return {
     getContainer: vi.fn().mockResolvedValue(mockContainer),

@@ -46,9 +46,9 @@ function createMockDi() {
       },
     },
     identityModule: {
-      getCurrentActor: vi.fn().mockResolvedValue({ id: 'actor-1', displayName: 'Test', type: 'human' }),
       createActor: vi.fn().mockResolvedValue({ id: 'new-actor', type: 'agent', displayName: 'Bot', roles: ['contributor'] }),
     },
+    getCurrentActor: vi.fn().mockResolvedValue({ id: 'actor-1', type: 'human', displayName: 'Test', publicKey: 'pk', roles: ['author'], status: 'active' }),
   };
   return {
     getContainer: vi.fn().mockResolvedValue(mockContainer),
