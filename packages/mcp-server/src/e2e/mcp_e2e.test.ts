@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as fs from 'fs/promises';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { createTempGitgovProject } from '../integration/core/core_test_helpers.js';
+import { createTempGitgovProject, seedActor } from '../integration/core/core_test_helpers.js';
 import { spawnMcpServer, createE2eContext, callE2eTool } from './e2e_test_helpers.js';
 import type { E2eToolResult } from './mcp_e2e.types.js';
 
@@ -34,6 +34,7 @@ describe('MCP E2E', () => {
 
     beforeAll(async () => {
       const project = await createTempGitgovProject();
+      await seedActor(project.gitgovPath, { id: 'human:test', displayName: 'Test', type: 'human', roles: ['author'] });
       projectRoot = project.projectRoot;
       gitgovPath = project.gitgovPath;
       cleanupProject = project.cleanup;

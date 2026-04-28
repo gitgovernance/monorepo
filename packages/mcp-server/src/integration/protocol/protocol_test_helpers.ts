@@ -160,7 +160,7 @@ export function createComprehensiveMockContainer(overrides: MockContainerOverrid
         { id: 'fb-1', entityType: 'task', entityId: 'task-1', type: 'suggestion', status: 'open', content: 'Test' },
       ]),
       getAllFeedback: vi.fn().mockResolvedValue([
-        { id: 'w1', type: 'approval', entityType: 'execution', status: 'resolved', entityId: 'fp1', content: 'False positive' },
+        { header: { version: '1.0', type: 'feedback', payloadChecksum: '', signatures: [] }, payload: { id: 'w1', type: 'approval', entityType: 'execution', status: 'resolved', entityId: 'fp1', content: 'False positive' } },
       ]),
       resolve: vi.fn().mockResolvedValue({
         id: 'fb-1', status: 'resolved',

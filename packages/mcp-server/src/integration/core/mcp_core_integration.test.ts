@@ -92,6 +92,7 @@ describe('MCP Core Integration', () => {
 
     beforeAll(async () => {
       project = await createTempGitgovProject();
+      await seedActor(project.gitgovPath, { id: 'human:test', displayName: 'Test', type: 'human', roles: ['author'] });
       di = createDI(project.projectRoot);
     });
 
@@ -279,6 +280,7 @@ describe('MCP Core Integration', () => {
 
     beforeAll(async () => {
       project = await createTempGitgovProject();
+      await seedActor(project.gitgovPath, { id: 'human:test', displayName: 'Test', type: 'human', roles: ['author'] });
       di = createDI(project.projectRoot);
     });
 
@@ -449,6 +451,7 @@ describe('MCP Core Integration', () => {
 
     beforeAll(async () => {
       project = await createTempGitgovProject();
+      await seedActor(project.gitgovPath, { id: 'human:test', displayName: 'Test', type: 'human', roles: ['author'] });
       di = createDI(project.projectRoot);
 
       // Create a task to attach feedback to
@@ -546,6 +549,7 @@ describe('MCP Core Integration', () => {
 
     beforeAll(async () => {
       project = await createTempGitgovProject();
+      await seedActor(project.gitgovPath, { id: 'human:test', displayName: 'Test', type: 'human', roles: ['author'] });
       di = createDI(project.projectRoot);
 
       // Seed a task and cycle for read tests
@@ -654,6 +658,7 @@ describe('MCP Core Integration', () => {
 
     beforeAll(async () => {
       project = await createTempGitgovProject();
+      await seedActor(project.gitgovPath, { id: 'human:test', displayName: 'Test', type: 'human', roles: ['author'] });
       di = createDI(project.projectRoot);
 
       // Create an initial git commit so audit tools have something to scan
@@ -757,6 +762,7 @@ describe('MCP Core Integration', () => {
 
     beforeAll(async () => {
       project = await createTempGitgovProject();
+      await seedActor(project.gitgovPath, { id: 'human:test', displayName: 'Test', type: 'human', roles: ['author'] });
       di = createDI(project.projectRoot);
 
       // Seed a task for resource tests
