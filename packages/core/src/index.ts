@@ -44,7 +44,6 @@ export type {
 } from "./record_projection/index";
 // RecordMetrics type exports (calculation engine)
 export type { IRecordMetrics, RecordMetricsDependencies, SystemStatus, ProductivityMetrics, CollaborationMetrics, TaskHealthReport } from "./record_metrics/index";
-export type { IIdentityAdapter } from "./adapters/identity_adapter/index";
 export type { IBacklogAdapter } from "./adapters/backlog_adapter/index";
 export type { IFeedbackAdapter } from "./adapters/feedback_adapter/index";
 export type { IExecutionAdapter } from "./adapters/execution_adapter/index";
@@ -60,7 +59,7 @@ export type { IAgentRunner, RunOptions, AgentResponse } from "./agent_runner/ind
 export type { KeyProvider as IKeyProvider } from "./key_provider/index";
 export type { KeyProviderErrorCode, KeyProviderErrorContext } from "./key_provider/index";
 export { KeyProviderError } from "./key_provider/index";
-// KeyPair type — used by storeKey() in PrismaKeyProvider + createActor() in IdentityAdapter
+// KeyPair type — used by storeKey() in PrismaKeyProvider + createActor() in IdentityModule
 export type { KeyPair } from "./key_provider/index";
 
 // ECDH transport types — used by identity endpoints (CLI + SaaS)
@@ -186,13 +185,16 @@ export * as RecordMetrics from "./record_metrics/index";
 export * as BacklogAdapter from "./adapters/backlog_adapter/index";
 export * as ExecutionAdapter from "./adapters/execution_adapter/index";
 export * as FeedbackAdapter from "./adapters/feedback_adapter/index";
-export * as IdentityAdapter from "./adapters/identity_adapter/index";
 export * as ProjectAdapter from "./adapters/project_adapter/index";
 export * as WorkflowAdapter from "./adapters/workflow_adapter/index";
 
-// Direct class re-exports for saas consumers. The namespace exports above wrap
-// the class under a namespace so `import { IdentityAdapter } from '@gitgov/core'`
-// yields the namespace (not the class). For consumers that construct adapters
-// per-request (e.g., GitHubRemoteInitService, Cycle 5 Task 5.1b), expose the
-// concrete class under a distinct name to avoid the namespace conflict.
-export { IdentityAdapter as IdentityAdapterClass } from "./adapters/identity_adapter/identity_adapter";
+// RecordSigner — cross-cutting signing module (identity_module_v2 Cycle 1)
+export { RecordSigner } from "./record_signer/index";
+export type { RecordSignerDependencies } from "./record_signer/index";
+
+// IdentityModule — domain facade for actor lifecycle (identity_module_v2 Cycle 2)
+export { IdentityModule } from "./identity/index";
+export type { IIdentityModule, IdentityModuleDependencies } from "./identity/index";
+
+// getCurrentActor — session resolution utility (identity_module_v2 Cycle 2)
+export { getCurrentActor } from "./utils/current_actor";

@@ -8,7 +8,7 @@
  */
 
 import type { GitGovConfig, IConfigManager } from '../../config_manager';
-import type { IdentityAdapter } from '../identity_adapter';
+import type { IIdentityModule } from '../../identity/identity_module.types';
 import type { BacklogAdapter } from '../backlog_adapter';
 import type { IProjectInitializer, EnvironmentValidation } from '../../project_initializer';
 
@@ -27,7 +27,7 @@ export type { EnvironmentValidation } from '../../project_initializer';
 export interface ProjectAdapterDependencies {
   // Core Adapters (REQUIRED)
   /** Identity management for actor/trust root creation */
-  identityAdapter: IdentityAdapter;
+  identityAdapter: IIdentityModule;
   /** Backlog management for cycle/task creation */
   backlogAdapter: BacklogAdapter;
 

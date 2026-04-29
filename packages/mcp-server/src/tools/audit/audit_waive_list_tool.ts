@@ -21,18 +21,18 @@ export const auditWaiveListTool: McpToolDefinition<AuditWaiveListInput> = {
 
       // Waivers are feedback records with type 'approval' and entityType 'execution'
       let waivers = allFeedback.filter(
-        (f) => f.type === 'approval' && f.entityType === 'execution',
+        (f) => f.payload.type === 'approval' && f.payload.entityType === 'execution',
       );
 
       if (input.activeOnly !== false) {
-        waivers = waivers.filter((f) => f.status === 'resolved');
+        waivers = waivers.filter((f) => f.payload.status === 'resolved');
       }
 
       const items = waivers.map((f) => ({
-        id: f.id,
-        fingerprint: f.entityId,
-        justification: f.content,
-        status: f.status,
+        id: f.payload.id,
+        fingerprint: f.payload.entityId,
+        justification: f.payload.content,
+        status: f.payload.status,
       }));
 
       return successResult({ total: items.length, waivers: items });

@@ -177,23 +177,23 @@ MCP clients can browse and read these via the standard resources protocol.
 
 ## Scripts
 
-| Script | Descripcion |
+| Script | Description |
 |---|---|
-| `pnpm dev` | Run locally con tsx (stdio transport) |
-| `pnpm build` | Build con tsup (ESM bundle) |
+| `pnpm dev` | Run locally with tsx (stdio transport) |
+| `pnpm build` | Build with tsup (ESM bundle) |
 | `pnpm test` | Vitest run (199 tests, 3 levels) |
 | `pnpm test:watch` | Vitest watch mode |
 | `pnpm typecheck` | tsc --noEmit |
 
 ## Environment
 
-El MCP server no requiere env vars para uso basico (lee `.gitgov/` del filesystem).
+The MCP server requires no env vars for basic usage (reads `.gitgov/` from filesystem).
 
-`process.env` se usa internamente en dos contextos:
-- DI container: pasado a child processes (git commands) cuando ejecuta operaciones Git
-- E2E tests: pasado a spawnMcpServer para heredar el entorno de test
+`process.env` is used internally in two contexts:
+- DI container: passed to child processes (git commands) for Git operations
+- E2E tests: passed to spawnMcpServer to inherit the test environment
 
-No hay env vars que el usuario necesite configurar.
+No env vars need to be configured by the user.
 
 ## Development
 
@@ -204,44 +204,9 @@ pnpm --filter @gitgov/mcp-server typecheck
 pnpm --filter @gitgov/mcp-server build
 ```
 
-## Architecture
-
-```
-src/
-  index.ts                    Entry point (stdio + HTTP transport)
-  server/                     McpServer wrapper + types
-  di/                         Dependency injection (lazy singleton)
-  tools/
-    read/                     9 read-only tools (status, context, lint, list/show)
-    task/                     7 task lifecycle tools (CRUD + state transitions)
-    feedback/                 3 feedback tools (create, list, resolve)
-    cycle/                    8 cycle management tools (CRUD + task linking)
-    execution/                3 execution tools (create, list, show)
-    identity/                 2 identity tools (actor_list, actor_show)
-    workflow/                 1 workflow tool (transitions query)
-    agent/                    1 tool (agent_new)
-    sync/                     4 sync tools (push, pull, resolve, audit)
-    audit/                    5 tools (audit scan/waive + agent_run + actor_new)
-  prompts/                    3 prompt handlers
-  resources/                  gitgov:// resource handler
-  integration/
-    protocol/                 Level 2: InMemoryTransport tests (47 tests)
-    core/                     Level 2: real DI + filesystem tests (32 tests)
-  e2e/                        Level 3: real server process tests (15 tests)
-```
-
-## License
-
-This package is licensed under the [Apache License 2.0](https://opensource.org/licenses/Apache-2.0).
-
-> For development rules, conventions, and architecture see the [AGENTS.md](../../packages/blueprints/03_products/mcp_server/AGENTS.md).
-
-**Last updated:** 2026-04-05 — Tool categorization fixed (Identity 4→2, Agent 1 added, Audit 4→5). Scripts table added. Env section added.
-
-
 ## @gitgov/core — Type System
 
-This package depends on `@gitgov/core`. All record types, audit types, factories, and adapters come from core.
+This package depends on `@gitgov/core`. All record types, audit types, factories, and modules come from core.
 
 **Rules:**
 - Import types from `@gitgov/core` or `@gitgov/core/audit` — never redefine locally
@@ -249,5 +214,9 @@ This package depends on `@gitgov/core`. All record types, audit types, factories
 - Status enums (`FindingSeverity`, `WaiverStatus`, `ScanDisplayStatus`) come from core — never use bare `string`
 - If a type you need does not exist in core, add it to core — do not invent it locally
 
-See [@gitgov/core README](../../core/README.md) for the full type chain (YAML → JSON → TS → generics) and import paths.
+See [@gitgov/core README](../core/README.md) for the full type chain (YAML → JSON → TS → generics) and import paths.
+
+## License
+
+This package is licensed under the [Apache License 2.0](https://opensource.org/licenses/Apache-2.0).
 

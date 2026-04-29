@@ -122,7 +122,6 @@ export class DashboardCommand {
     const backlogAdapter = await this.dependencyService.getBacklogAdapter();
     const recordMetrics = await this.dependencyService.getRecordMetrics();
     const feedbackAdapter = await this.dependencyService.getFeedbackAdapter();
-    const identityAdapter = await this.dependencyService.getIdentityAdapter();
     const projector = await this.dependencyService.getRecordProjector();
 
     // Get index data with immediate regeneration if missing (DEMO OPTIMIZATION)
@@ -149,7 +148,7 @@ export class DashboardCommand {
       backlogAdapter.getAllTasks(),
       backlogAdapter.getAllCycles(),
       feedbackAdapter.getAllFeedback(),
-      identityAdapter.getCurrentActor()
+      this.dependencyService.getCurrentActor()
     ]);
 
     // NUEVO - Use enriched tasks from RecordProjector (with lastUpdated metadata)

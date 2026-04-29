@@ -15,7 +15,7 @@ import { getWorktreeBasePath } from '@gitgov/core/fs';
 import type { ToolResult } from '../../server/mcp_server.types.js';
 import type { TempGitgovProject, ParsedToolResult } from './mcp_core_integration.types.js';
 
-const STORE_DIRS = ['tasks', 'cycles', 'feedback', 'executions', 'actors', 'agents'];
+const STORE_DIRS = ['tasks', 'cycles', 'feedback', 'executions', 'actors', 'agents', 'keys'];
 
 // ─── Crypto Helpers ───
 
@@ -96,9 +96,9 @@ export async function createTempGitgovProject(): Promise<TempGitgovProject> {
     publicKey: keys.publicKey,
   });
 
-  // Store private key in .gitgov/actors/test-actor.key (FsKeyProvider format)
+  // Store private key in .gitgov/keys/ (FsKeyProvider keysDir)
   await fs.writeFile(
-    path.join(gitgovPath, 'actors', 'test-actor.key'),
+    path.join(gitgovPath, 'keys', 'test-actor.key'),
     keys.privateKey,
     { mode: 0o600 },
   );

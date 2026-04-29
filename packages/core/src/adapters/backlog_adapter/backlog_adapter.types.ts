@@ -1,5 +1,5 @@
 import type { RecordStores } from '../../record_store';
-import type { IdentityAdapter } from '../identity_adapter';
+import type { IIdentityModule } from '../../identity/identity_module.types';
 import type { FeedbackAdapter } from '../feedback_adapter';
 import type { ConfigManager } from '../../config_manager/config_manager';
 import type { SessionManager } from '../../session_manager/session_manager';
@@ -18,6 +18,7 @@ import type {
 } from '../../event_bus';
 import type { ExecutionAdapter } from '../execution_adapter';
 import type { RecordMetrics, SystemStatus, TaskHealthReport } from '../../record_metrics';
+import type { RecordSigner } from '../../record_signer';
 
 /**
  * BacklogAdapter Dependencies - Facade + Dependency Injection Pattern
@@ -35,7 +36,8 @@ export type BacklogAdapterDependencies = {
   workflowAdapter: IWorkflow;
 
   // Infrastructure Layer
-  identity: IdentityAdapter;
+  identity: IIdentityModule;
+  signer: RecordSigner;
   eventBus: IEventStream; // For listening to events (consumer pattern)
   configManager: ConfigManager; // For accessing project config
   sessionManager: SessionManager; // For updating session state (activeTaskId, activeCycleId)
@@ -66,9 +68,9 @@ export interface IBacklogAdapter {
   getCycle(cycleId: string): Promise<CycleRecord | null>;
   getAllCycles(): Promise<CycleRecord[]>;
   updateCycle(cycleId: string, payload: Partial<CycleRecord>): Promise<CycleRecord>;
-  addTaskToCycle(cycleId: string, taskId: string): Promise<void>;
-  removeTasksFromCycle(cycleId: string, taskIds: string[]): Promise<void>;
-  moveTasksBetweenCycles(targetCycleId: string, taskIds: string[], sourceCycleId: string): Promise<void>;
+  addTaskToCycle(cycleId: string, taskId: string, actorId: string): Promise<void>;
+  removeTasksFromCycle(cycleId: string, taskIds: string[], actorId: string): Promise<void>;
+  moveTasksBetweenCycles(targetCycleId: string, taskIds: string[], sourceCycleId: string, actorId: string): Promise<void>;
 
   // Phase 2: Agent Navigation
   getTasksAssignedToActor(actorId: string): Promise<TaskRecord[]>;

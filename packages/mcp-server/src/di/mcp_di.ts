@@ -18,6 +18,9 @@ import {
   EventBus,
   SourceAuditor,
   FindingDetector,
+  IdentityModule,
+  RecordSigner,
+  getCurrentActor,
 } from '@gitgov/core';
 import type { Git } from '@gitgov/core';
 
@@ -115,24 +118,23 @@ export class McpDependencyInjectionService {
       keysDir: path.join(gitgovPath, 'keys'),
     });
 
-    // --- Identity (base for all adapters) ---
-    const identityAdapter = new Adapters.IdentityAdapter({
+    const identityModule = new IdentityModule({
       stores: { actors: stores.actors },
       keyProvider,
-      sessionManager,
       eventBus,
     });
 
-    // --- Adapters ---
+    const signer = new RecordSigner({ keyProvider });
+
     const feedbackAdapter = new Adapters.FeedbackAdapter({
       stores: { feedbacks: stores.feedbacks },
-      identity: identityAdapter,
+      signer,
       eventBus,
     });
 
     const executionAdapter = new Adapters.ExecutionAdapter({
       stores: { tasks: stores.tasks, executions: stores.executions },
-      identity: identityAdapter,
+      signer,
       eventBus,
     });
 
@@ -158,7 +160,8 @@ export class McpDependencyInjectionService {
       executionAdapter,
       metricsAdapter: recordMetrics,
       workflowAdapter,
-      identity: identityAdapter,
+      identity: identityModule,
+      signer,
       eventBus,
       configManager,
       sessionManager,
@@ -177,6 +180,7 @@ export class McpDependencyInjectionService {
         feedbacks: stores.feedbacks,
         executions: stores.executions,
         actors: stores.actors,
+        agents: stores.agents,
       },
       sink,
     });
@@ -209,7 +213,8 @@ export class McpDependencyInjectionService {
     const syncModule = new FsWorktreeSyncStateModule({
       git: gitModule,
       config: configManager,
-      identity: identityAdapter,
+      identity: identityModule,
+      signer,
       lint: pureLintModule,
       indexer: projector,
     }, { repoRoot: projectRoot });
@@ -227,16 +232,15 @@ export class McpDependencyInjectionService {
     // --- Agent Adapter ---
     const agentAdapter = new Adapters.AgentAdapter({
       stores: { agents: stores.agents },
-      identity: identityAdapter,
+      identity: identityModule,
       keyProvider,
       eventBus,
     });
 
-    // --- Agent Runner ---
     const agentRunner = new FsAgentRunner({
       projectRoot,
       executionAdapter,
-      identityAdapter,
+      keyProvider,
       eventBus,
     });
 
@@ -245,7 +249,7 @@ export class McpDependencyInjectionService {
       backlogAdapter,
       feedbackAdapter,
       executionAdapter,
-      identityAdapter,
+      identityModule,
       agentAdapter,
       workflowAdapter,
       lintModule,
@@ -255,6 +259,7 @@ export class McpDependencyInjectionService {
       projector,
       configManager,
       sessionManager,
+      getCurrentActor: () => getCurrentActor(identityModule, sessionManager),
     };
   }
 

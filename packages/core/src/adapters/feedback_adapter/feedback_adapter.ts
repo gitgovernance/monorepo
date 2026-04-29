@@ -1,6 +1,6 @@
 import { createFeedbackRecord } from '../../record_factories/feedback_factory';
 import type { RecordStores } from '../../record_store/record_store.types';
-import { IdentityAdapter } from '../identity_adapter';
+import type { RecordSigner } from '../../record_signer';
 import type { FeedbackRecord, GitGovFeedbackRecord } from '../../record_types';
 import type { IEventStream, FeedbackCreatedEvent } from '../../event_bus';
 import type {
@@ -17,12 +17,12 @@ import type {
  */
 export class FeedbackAdapter implements IFeedbackAdapter {
   private stores: Required<Pick<RecordStores, 'feedbacks'>>;
-  private identity: IdentityAdapter;
+  private signer: RecordSigner;
   private eventBus: IEventStream;
 
   constructor(dependencies: FeedbackAdapterDependencies) {
     this.stores = dependencies.stores;
-    this.identity = dependencies.identity;
+    this.signer = dependencies.signer;
     this.eventBus = dependencies.eventBus;
   }
 
@@ -89,27 +89,10 @@ export class FeedbackAdapter implements IFeedbackAdapter {
       // 1. Build the record with factory
       const validatedPayload = createFeedbackRecord(enrichedPayload);
 
-      // 2. Create unsigned record structure
-      const unsignedRecord: GitGovFeedbackRecord = {
-        header: {
-          version: '1.0',
-          type: 'feedback',
-          payloadChecksum: 'will-be-calculated-by-signRecord',
-          signatures: [{
-            keyId: actorId,
-            role: 'author',
-            notes: 'Feedback created',
-            signature: 'placeholder',
-            timestamp: Date.now()
-          }]
-        },
-        payload: validatedPayload,
-      };
+      // 2. Create signed record via RecordSigner
+      const signedRecord = await this.signer.createSignedRecord(validatedPayload, 'feedback', actorId, 'author', 'Feedback record created');
 
-      // 3. Sign the record
-      const signedRecord = await this.identity.signRecord(unsignedRecord, actorId, 'author', 'Feedback record created');
-
-      // 4. Persist the record
+      // 3. Persist the record
       await this.stores.feedbacks.put(signedRecord.payload.id, signedRecord);
 
       // 5. Emit event - responsibility ends here

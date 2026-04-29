@@ -11,13 +11,14 @@ import type {
   ISessionManager,
   IAgentRunner,
   ISyncStateModule,
-  IIdentityAdapter,
+  IIdentityModule,
   IBacklogAdapter,
   IFeedbackAdapter,
   IExecutionAdapter,
   IAgentAdapter,
   SourceAuditor,
   WorkflowAdapter,
+  ActorRecord,
 } from '@gitgov/core';
 import type { IFsLintModule } from '@gitgov/core/fs';
 
@@ -46,7 +47,7 @@ export interface McpDiContainer {
   backlogAdapter: IBacklogAdapter;
   feedbackAdapter: IFeedbackAdapter;
   executionAdapter: IExecutionAdapter;
-  identityAdapter: IIdentityAdapter;
+  identityModule: IIdentityModule;
   agentAdapter: IAgentAdapter;
   workflowAdapter: WorkflowAdapter.IWorkflow;
 
@@ -58,4 +59,6 @@ export interface McpDiContainer {
 
   configManager: IConfigManager;
   sessionManager: ISessionManager;
+
+  getCurrentActor(): Promise<ActorRecord>;
 }

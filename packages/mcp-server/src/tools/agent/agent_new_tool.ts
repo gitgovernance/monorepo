@@ -30,10 +30,10 @@ export const agentNewTool: McpToolDefinition<AgentNewInput> = {
   handler: async (input: AgentNewInput, di: McpDependencyInjectionService) => {
     try {
       const container = await di.getContainer();
-      const { agentAdapter, identityAdapter } = container;
+      const { agentAdapter, identityModule } = container;
 
       // [ICOMP-D2] Validate actor exists and is type agent
-      const actor = await identityAdapter.getActor(input.actorId);
+      const actor = await identityModule.getActor(input.actorId);
       if (!actor) {
         return errorResult(`Actor not found: ${input.actorId}`, 'INVALID_ACTOR');
       }

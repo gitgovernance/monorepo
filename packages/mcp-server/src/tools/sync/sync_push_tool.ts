@@ -17,8 +17,9 @@ export const syncPushTool: McpToolDefinition<SyncPushInput> = {
   },
   handler: async (input: SyncPushInput, di: McpDependencyInjectionService) => {
     try {
-      const { syncModule, identityAdapter } = await di.getContainer();
-      const actor = await identityAdapter.getCurrentActor();
+      const container = await di.getContainer();
+      const { syncModule } = container;
+      const actor = await container.getCurrentActor();
       const result = await syncModule.pushState({
         actorId: actor.id,
         dryRun: input.dryRun,

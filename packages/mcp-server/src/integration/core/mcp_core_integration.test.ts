@@ -42,7 +42,6 @@ import {
   createTempGitgovProject,
   createDI,
   parseToolResult,
-  seedActor,
 } from './core_test_helpers.js';
 import type { TempGitgovProject } from './mcp_core_integration.types.js';
 
@@ -808,7 +807,7 @@ describe('MCP Core Integration', () => {
       // Adapters & modules
       expect(container.backlogAdapter).toBeDefined();
       expect(container.feedbackAdapter).toBeDefined();
-      expect(container.identityAdapter).toBeDefined();
+      expect(container.identityModule).toBeDefined();
       expect(container.lintModule).toBeDefined();
       expect(container.syncModule).toBeDefined();
       expect(container.projector).toBeDefined();

@@ -1,47 +1,9 @@
-// Mock IdentityAdapter before importing
-jest.doMock('../identity_adapter', () => ({
-  IdentityAdapter: jest.fn().mockImplementation(() => ({
-    getActorPublicKey: jest.fn().mockResolvedValue('mock-public-key'),
-    getActor: jest.fn(),
-    createActor: jest.fn(),
-    listActors: jest.fn(),
-    signRecord: jest.fn().mockImplementation(async (unsignedRecord, actorId, role = 'author') => {
-      // signRecord receives a record with placeholder header and returns it properly signed
-      return {
-        header: {
-          ...unsignedRecord.header,
-          payloadChecksum: 'a'.repeat(64), // Mock checksum
-          signatures: [createTestSignature(actorId || 'human:test-user', role)]
-        },
-        payload: unsignedRecord.payload
-      };
-    }),
-    rotateActorKey: jest.fn(),
-    revokeActor: jest.fn(),
-    resolveCurrentActorId: jest.fn(),
-    getCurrentActor: jest.fn().mockResolvedValue({
-      id: 'human:test-user',
-      type: 'human',
-      displayName: 'Test User',
-      publicKey: 'mock-public-key',
-      roles: ['developer'],
-      status: 'active',
-      metadata: {}
-    }),
-    getEffectiveActorForAgent: jest.fn(),
-    authenticate: jest.fn(),
-    createAgentRecord: jest.fn(),
-    getAgentRecord: jest.fn(),
-    listAgentRecords: jest.fn(),
-  }))
-}));
 
 import { BacklogAdapter } from './backlog_adapter';
 import { MemoryRecordStore } from '../../record_store/memory';
 import { FsRecordStore } from '../../record_store/fs';
 import type { RecordStores } from '../../record_store';
-import { createTestSignature } from '../../record_factories';
-import { IdentityAdapter } from '../identity_adapter';
+import { IdentityModule } from '../../identity';
 import { WorkflowAdapter } from '../workflow_adapter';
 import { FeedbackAdapter } from '../feedback_adapter';
 import { ExecutionAdapter } from '../execution_adapter';
@@ -167,7 +129,8 @@ const backends: [string, StoreFactory][] = [
 describe.each(backends)('BacklogAdapter Integration Tests with %s backend', (_name, createStores) => {
   let backlogAdapter: BacklogAdapter;
   let stores: BacklogStores;
-  let identityAdapter: IdentityAdapter;
+  let identityAdapter: IdentityModule;
+  let signer: import('../../record_signer').RecordSigner;
   let workflowAdapter: WorkflowAdapter;
   let feedbackAdapter: IFeedbackAdapter;
 
@@ -181,7 +144,7 @@ describe.each(backends)('BacklogAdapter Integration Tests with %s backend', (_na
     // Create stores using the backend factory
     stores = createStores();
 
-    // Create mock stores for IdentityAdapter constructor
+    // Create mock stores for IdentityModule constructor
     const mockActorStore = new MemoryRecordStore<GitGovActorRecord>();
 
     // Create mock KeyProvider for integration test
@@ -194,27 +157,12 @@ describe.each(backends)('BacklogAdapter Integration Tests with %s backend', (_na
       deletePrivateKey: jest.fn().mockResolvedValue(true),
     };
 
-    const mockIdentitySessionManager = {
-      getActorState: jest.fn().mockResolvedValue({ actorId: 'human:test-user' }),
-      updateActorState: jest.fn().mockResolvedValue(undefined),
-      loadSession: jest.fn().mockResolvedValue(null),
-      detectActorFromKeyFiles: jest.fn().mockResolvedValue('human:test-user'),
-      getCloudSessionToken: jest.fn().mockResolvedValue(null),
-      getSyncPreferences: jest.fn().mockResolvedValue(null),
-      updateSyncPreferences: jest.fn().mockResolvedValue(undefined),
-      getLastSession: jest.fn().mockResolvedValue(null),
-      setCloudToken: jest.fn(),
-      setLastSession: jest.fn(),
-      clearCloudToken: jest.fn(),
-    };
-
-    // Create identity adapter - will be mocked by jest.doMock
-    identityAdapter = new IdentityAdapter({
+    // Create identity module
+    identityAdapter = new IdentityModule({
       stores: {
         actors: mockActorStore,
       },
       keyProvider: mockKeyProvider,
-      sessionManager: mockIdentitySessionManager,
     });
 
     // Create mock feedback adapter for workflow adapter
@@ -272,10 +220,15 @@ describe.each(backends)('BacklogAdapter Integration Tests with %s backend', (_na
       clearCloudToken: jest.fn(),
     } as unknown as SessionManager;
 
+    // Create real RecordSigner with mock KeyProvider (I/O mock only)
+    const { RecordSigner } = await import('../../record_signer');
+    signer = new RecordSigner({ keyProvider: mockKeyProvider });
+
     backlogAdapter = new BacklogAdapter({
       stores,
       workflowAdapter: workflowAdapter,
       identity: identityAdapter,
+      signer,
       eventBus: eventBus,
       feedbackAdapter: mockFeedbackAdapter as unknown as FeedbackAdapter,
       executionAdapter: mockExecutionAdapter,
@@ -315,7 +268,7 @@ describe.each(backends)('BacklogAdapter Integration Tests with %s backend', (_na
 
       // Mock the stores and identity adapter
       jest.spyOn(stores.tasks, 'get').mockResolvedValue(task);
-      jest.spyOn(identityAdapter, 'signRecord').mockImplementation(async (record) => record);
+      jest.spyOn(signer, 'signRecord').mockImplementation(async (record) => record);
       jest.spyOn(stores.tasks, 'put').mockResolvedValue(undefined);
 
       // Both design and product approvers can approve (using their respective signature groups)
@@ -354,7 +307,7 @@ describe.each(backends)('BacklogAdapter Integration Tests with %s backend', (_na
       const writeCycleSpy = jest.spyOn(stores.cycles, 'put').mockResolvedValue(undefined);
 
       // Execute the bidirectional linking
-      await backlogAdapter.addTaskToCycle('cycle-123', 'task-123');
+      await backlogAdapter.addTaskToCycle('cycle-123', 'task-123', 'human:test-user');
 
       // Verify both records were updated with bidirectional links
       expect(writeCycleSpy).toHaveBeenCalledWith(
@@ -391,7 +344,7 @@ describe.each(backends)('BacklogAdapter Integration Tests with %s backend', (_na
 
       // Mock stores and identity
       jest.spyOn(identityAdapter, 'getActor').mockResolvedValue(actor);
-      jest.spyOn(identityAdapter, 'signRecord').mockImplementation(async (record) => record);
+      jest.spyOn(signer, 'signRecord').mockImplementation(async (record) => record);
       jest.spyOn(stores.tasks, 'put').mockResolvedValue(undefined);
 
       let currentTask = createMockTaskRecord({
@@ -441,7 +394,7 @@ describe.each(backends)('BacklogAdapter Integration Tests with %s backend', (_na
 
       // Mock all the stores and adapters
       jest.spyOn(identityAdapter, 'getActor').mockResolvedValue(actor);
-      jest.spyOn(identityAdapter, 'signRecord').mockImplementation(async (record) => record);
+      jest.spyOn(signer, 'signRecord').mockImplementation(async (record) => record);
       jest.spyOn(stores.tasks, 'put').mockResolvedValue(undefined);
       jest.spyOn(stores.tasks, 'get').mockImplementation(async () => currentTask);
 

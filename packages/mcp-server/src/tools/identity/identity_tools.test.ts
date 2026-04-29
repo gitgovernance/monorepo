@@ -20,13 +20,14 @@ const mockActors = [
 
 function createMockDi(overrides: Record<string, unknown> = {}) {
   const mockContainer = {
-    identityAdapter: {
+    identityModule: {
       listActors: vi.fn().mockResolvedValue([...mockActors]),
       getActor: vi.fn().mockImplementation((id: string) => {
         const actor = mockActors.find((a) => a.id === id);
         return Promise.resolve(actor ?? null);
       }),
     },
+    getCurrentActor: vi.fn().mockResolvedValue({ id: "actor-1", type: "human", displayName: "Test", publicKey: "pk", roles: ["author"], status: "active" }),
     ...overrides,
   };
 

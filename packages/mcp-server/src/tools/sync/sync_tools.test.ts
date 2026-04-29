@@ -25,9 +25,9 @@ function createMockDi() {
       resolveConflict: vi.fn().mockResolvedValue({ success: true, rebaseCommitHash: 'def456', resolutionCommitHash: 'ghi789', conflictsResolved: 1, resolvedBy: 'actor-1', reason: 'Manual merge preferred' }),
       auditState: vi.fn().mockResolvedValue({ passed: true, scope: 'all', totalCommits: 5, rebaseCommits: 0, resolutionCommits: 0, integrityViolations: [], summary: 'All checks passed' }),
     },
-    identityAdapter: {
-      getCurrentActor: vi.fn().mockResolvedValue({ id: 'actor-1', displayName: 'Test', type: 'human' }),
+    identityModule: {
     },
+    getCurrentActor: vi.fn().mockResolvedValue({ id: 'actor-1', type: 'human', displayName: 'Test', publicKey: 'pk', roles: ['author'], status: 'active' }),
   };
   return {
     getContainer: vi.fn().mockResolvedValue(mockContainer),

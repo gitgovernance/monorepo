@@ -166,7 +166,7 @@ export class CycleCommand extends BaseCommand<BaseCommandOptions> {
       if (options.taskIds) {
         const taskIds = options.taskIds.split(',').map(id => id.trim());
         for (const taskId of taskIds) {
-          await backlogAdapter.addTaskToCycle(cycle.id, taskId);
+          await backlogAdapter.addTaskToCycle(cycle.id, taskId, actorId);
         }
       }
 
@@ -473,11 +473,10 @@ export class CycleCommand extends BaseCommand<BaseCommandOptions> {
    */
   async executeAddTask(cycleId: string, options: CycleAddTaskOptions): Promise<void> {
     try {
-      // 1. Get dependencies
       const backlogAdapter = await this.dependencyService.getBacklogAdapter();
       const projector = await this.dependencyService.getRecordProjector();
+      const currentActor = await this.dependencyService.getCurrentActor();
 
-      // 2. Validate cycle and tasks exist
       const cycle = await backlogAdapter.getCycle(cycleId);
       if (!cycle) {
         throw new Error(`❌ Cycle not found: ${cycleId}`);
@@ -491,9 +490,8 @@ export class CycleCommand extends BaseCommand<BaseCommandOptions> {
         }
       }
 
-      // 3. Delegate to BacklogAdapter for each task
       for (const taskId of taskIds) {
-        await backlogAdapter.addTaskToCycle(cycleId, taskId);
+        await backlogAdapter.addTaskToCycle(cycleId, taskId, currentActor.id);
       }
 
       // 4. Cache invalidation
@@ -527,9 +525,9 @@ export class CycleCommand extends BaseCommand<BaseCommandOptions> {
       // 1. Parse input (CLI responsibility)
       const taskIds = options.task.split(',').map(id => id.trim());
 
-      // 2. Delegate to BacklogAdapter (all logic happens here)
       const backlogAdapter = await this.dependencyService.getBacklogAdapter();
-      await backlogAdapter.removeTasksFromCycle(cycleId, taskIds);
+      const currentActor = await this.dependencyService.getCurrentActor();
+      await backlogAdapter.removeTasksFromCycle(cycleId, taskIds, currentActor.id);
 
       // 3. Invalidate cache
       const projector = await this.dependencyService.getRecordProjector();
@@ -564,9 +562,9 @@ export class CycleCommand extends BaseCommand<BaseCommandOptions> {
 
       // 2. Delegate to BacklogAdapter (all logic happens here)
       const backlogAdapter = await this.dependencyService.getBacklogAdapter();
-      await backlogAdapter.moveTasksBetweenCycles(targetCycleId, taskIds, options.from);
+      const currentActor = await this.dependencyService.getCurrentActor();
+      await backlogAdapter.moveTasksBetweenCycles(targetCycleId, taskIds, options.from, currentActor.id);
 
-      // 3. Invalidate cache
       const projector = await this.dependencyService.getRecordProjector();
       await projector.invalidateCache();
 

@@ -1,5 +1,5 @@
 import type { RecordStores } from '../../record_store';
-import type { IIdentityAdapter } from '../identity_adapter';
+import type { IIdentityModule } from '../../identity/identity_module.types';
 import type { AgentRecord, AgentPayload } from '../../record_types';
 import type { IEventStream } from '../../event_bus';
 import type { KeyProvider } from '../../key_provider/key_provider';
@@ -12,7 +12,7 @@ export interface AgentAdapterDependencies {
   stores: Required<Pick<RecordStores, 'agents'>>;
 
   // Identity Layer - For ActorRecord validation and public key
-  identity: IIdentityAdapter;
+  identity: IIdentityModule;
 
   // Key Management - For signing AgentRecords
   keyProvider: KeyProvider;

@@ -18,8 +18,10 @@ export const cycleRemoveTaskTool: McpToolDefinition<CycleTaskLinkInput> = {
   },
   handler: async (input: CycleTaskLinkInput, di: McpDependencyInjectionService) => {
     try {
-      const { backlogAdapter } = await di.getContainer();
-      await backlogAdapter.removeTasksFromCycle(input.cycleId, [input.taskId]);
+      const container = await di.getContainer();
+      const { backlogAdapter } = container;
+      const actor = await container.getCurrentActor();
+      await backlogAdapter.removeTasksFromCycle(input.cycleId, [input.taskId], actor.id);
       return successResult({ unlinked: true, cycleId: input.cycleId, taskId: input.taskId });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

@@ -132,14 +132,22 @@ export function createComprehensiveMockContainer(overrides: MockContainerOverrid
       removeTasksFromCycle: vi.fn().mockResolvedValue(undefined),
       moveTasksBetweenCycles: vi.fn().mockResolvedValue(undefined),
     },
-    identityAdapter: {
-      getCurrentActor: vi.fn().mockResolvedValue({
-        id: 'actor-1', displayName: 'Alice', type: 'human',
-      }),
+    identityModule: {
+      getActor: vi.fn().mockResolvedValue(null),
+      listActors: vi.fn().mockResolvedValue([]),
       createActor: vi.fn().mockResolvedValue({
         id: 'new-actor', type: 'agent', displayName: 'Bot', roles: ['contributor'],
       }),
+      getActorPublicKey: vi.fn().mockResolvedValue(null),
+      revokeActor: vi.fn(),
+      resolveCurrentActorId: vi.fn().mockImplementation(async (id: string) => id),
+      getEffectiveActorForAgent: vi.fn().mockResolvedValue(null),
+      rotateActorKey: vi.fn(),
     },
+    getCurrentActor: vi.fn().mockResolvedValue({
+      id: 'actor-1', type: 'human', displayName: 'Alice',
+      publicKey: 'pk', roles: ['author'], status: 'active',
+    }),
     feedbackAdapter: {
       create: vi.fn().mockResolvedValue({
         id: 'fb-1', entityType: 'task', entityId: 'task-1',
@@ -149,10 +157,10 @@ export function createComprehensiveMockContainer(overrides: MockContainerOverrid
         id: 'fb-1', status: 'open', type: 'suggestion',
       }),
       getFeedbackByEntity: vi.fn().mockResolvedValue([
-        { id: 'fb-1', entityType: 'task', entityId: 'task-1', type: 'suggestion', status: 'open', content: 'Test' },
+        { header: { version: '1.0', type: 'feedback', payloadChecksum: '', signatures: [] }, payload: { id: 'fb-1', entityType: 'task', entityId: 'task-1', type: 'suggestion', status: 'open', content: 'Test' } },
       ]),
       getAllFeedback: vi.fn().mockResolvedValue([
-        { id: 'w1', type: 'approval', entityType: 'execution', status: 'resolved', entityId: 'fp1', content: 'False positive' },
+        { header: { version: '1.0', type: 'feedback', payloadChecksum: '', signatures: [] }, payload: { id: 'w1', type: 'approval', entityType: 'execution', status: 'resolved', entityId: 'fp1', content: 'False positive' } },
       ]),
       resolve: vi.fn().mockResolvedValue({
         id: 'fb-1', status: 'resolved',

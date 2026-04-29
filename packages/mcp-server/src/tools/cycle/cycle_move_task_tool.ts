@@ -19,8 +19,10 @@ export const cycleMoveTaskTool: McpToolDefinition<CycleMoveTaskInput> = {
   },
   handler: async (input: CycleMoveTaskInput, di: McpDependencyInjectionService) => {
     try {
-      const { backlogAdapter } = await di.getContainer();
-      await backlogAdapter.moveTasksBetweenCycles(input.toCycleId, [input.taskId], input.fromCycleId);
+      const container = await di.getContainer();
+      const { backlogAdapter } = container;
+      const actor = await container.getCurrentActor();
+      await backlogAdapter.moveTasksBetweenCycles(input.toCycleId, [input.taskId], input.fromCycleId, actor.id);
       return successResult({
         moved: true,
         taskId: input.taskId,

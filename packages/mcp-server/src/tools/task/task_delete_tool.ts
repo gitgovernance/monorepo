@@ -22,7 +22,7 @@ export const taskDeleteTool: McpToolDefinition<TaskDeleteInput> = {
   handler: async (input: TaskDeleteInput, di: McpDependencyInjectionService) => {
     try {
       const container = await di.getContainer();
-      const { backlogAdapter, identityAdapter } = container;
+      const { backlogAdapter, identityModule } = container;
 
       // Check current status before attempting delete
       const task = await backlogAdapter.getTask(input.taskId);
@@ -38,7 +38,7 @@ export const taskDeleteTool: McpToolDefinition<TaskDeleteInput> = {
         );
       }
 
-      const actor = await identityAdapter.getCurrentActor();
+      const actor = await container.getCurrentActor();
       await backlogAdapter.deleteTask(input.taskId, actor.id);
 
       return successResult({

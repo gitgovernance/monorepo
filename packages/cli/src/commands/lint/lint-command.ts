@@ -226,8 +226,7 @@ export class LintCommand extends BaseCommand {
     }
 
     // Get current actor for signing fixed records
-    const identityAdapter = await this.container.getIdentityAdapter();
-    const currentActor = await identityAdapter.getCurrentActor();
+    const currentActor = await this.container.getCurrentActor();
 
     // Load private key via KeyProvider (DI)
     let privateKey: string | undefined;

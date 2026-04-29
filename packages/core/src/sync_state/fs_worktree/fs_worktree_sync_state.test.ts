@@ -21,12 +21,14 @@ import { FsWorktreeSyncStateModule } from './fs_worktree_sync_state';
 import { LocalGitModule } from '../../git/local';
 import type { ExecOptions, ExecResult } from '../../git/types';
 import {
-  ActorIdentityMismatchError,
   ConflictMarkersPresentError,
   NoRebaseInProgressError,
   RebaseAlreadyInProgressError,
 } from '../sync_state.errors';
-import type { IIdentityAdapter } from '../../adapters/identity_adapter';
+import type { IIdentityModule } from '../../identity/identity_module.types';
+import type { IConfigManager } from '../../config_manager';
+import { RecordSigner } from '../../record_signer';
+import { MockKeyProvider } from '../../key_provider/memory/mock_key_provider';
 import type { LintReport } from '../../lint';
 import type { ILintModule } from '../../lint';
 import type { IRecordProjector } from '../../record_projection';
@@ -111,18 +113,17 @@ function removeTempRepo(repoPath: string): void {
   }
 }
 
-function createMockIdentityAdapter(actorId: string = 'test-actor'): IIdentityAdapter {
+function createMockIdentityAdapter(_actorId: string = 'test-actor'): IIdentityModule {
   return {
+    createActor: jest.fn(),
+    getActor: jest.fn().mockResolvedValue(null),
+    listActors: jest.fn().mockResolvedValue([]),
     getActorPublicKey: jest.fn().mockResolvedValue(null),
-    getCurrentActor: jest.fn().mockResolvedValue({
-      id: actorId,
-      type: 'human' as const,
-      displayName: 'Test Actor',
-      publicKey: 'mock-public-key-base64-placeholder',
-      roles: ['developer'],
-    }),
-    signRecord: jest.fn().mockImplementation(async (record: unknown) => record),
-  } as unknown as IIdentityAdapter;
+    revokeActor: jest.fn(),
+    resolveCurrentActorId: jest.fn().mockImplementation(async (id: string) => id),
+    getEffectiveActorForAgent: jest.fn().mockResolvedValue(null),
+    rotateActorKey: jest.fn(),
+  };
 }
 
 function createMockLintModule(passing: boolean = true): ILintModule {
@@ -161,7 +162,7 @@ function createMockRecordProjector(): jest.Mocked<IRecordProjector> {
 function createModule(
   repoRoot: string,
   overrides?: {
-    identity?: IIdentityAdapter;
+    identity?: IIdentityModule;
     lint?: ILintModule;
     indexer?: jest.Mocked<IRecordProjector>;
   }
@@ -174,25 +175,33 @@ function createModule(
   const identity = overrides?.identity ?? createMockIdentityAdapter();
   const lint = overrides?.lint ?? createMockLintModule();
   const indexer = overrides?.indexer ?? createMockRecordProjector();
+  const signer = new RecordSigner({ keyProvider: new MockKeyProvider() });
 
-  const configManager = {
-    get: jest.fn().mockReturnValue(null),
-    set: jest.fn(),
-    getAll: jest.fn().mockReturnValue({}),
+  const configManager: IConfigManager = {
+    loadConfig: jest.fn().mockResolvedValue(null),
+    getRootCycle: jest.fn().mockResolvedValue(null),
+    getProjectInfo: jest.fn().mockResolvedValue(null),
+    getSyncConfig: jest.fn().mockResolvedValue(null),
+    getSyncDefaults: jest.fn().mockResolvedValue({ pullScheduler: {}, fileWatcher: {} }),
+    getAuditState: jest.fn().mockResolvedValue({ lastFullAuditCommit: null, lastFullAuditTimestamp: null }),
+    updateAuditState: jest.fn(),
+    getStateBranch: jest.fn().mockResolvedValue('gitgov-state'),
+    getSaasUrl: jest.fn().mockResolvedValue(null),
   };
 
   const module = new FsWorktreeSyncStateModule(
     {
       git: gitModule,
-      config: configManager as any,
+      config: configManager,
       identity,
+      signer,
       lint,
       indexer,
     },
     { repoRoot },
   );
 
-  return { module, gitModule, identity, lint, indexer };
+  return { module, gitModule, identity, signer, lint, indexer };
 }
 
 /**
@@ -416,8 +425,19 @@ describe('FsWorktreeSyncStateModule', () => {
       const module2 = new FsWorktreeSyncStateModule(
         {
           git: gitModule,
-          config: { get: jest.fn(), set: jest.fn(), getAll: jest.fn().mockReturnValue({}) } as any,
+          config: {
+            loadConfig: jest.fn().mockResolvedValue(null),
+            getRootCycle: jest.fn().mockResolvedValue(null),
+            getProjectInfo: jest.fn().mockResolvedValue(null),
+            getSyncConfig: jest.fn().mockResolvedValue(null),
+            getSyncDefaults: jest.fn().mockResolvedValue({ pullScheduler: {}, fileWatcher: {} }),
+            getAuditState: jest.fn().mockResolvedValue({ lastFullAuditCommit: null, lastFullAuditTimestamp: null }),
+            updateAuditState: jest.fn(),
+            getStateBranch: jest.fn().mockResolvedValue('gitgov-state'),
+            getSaasUrl: jest.fn().mockResolvedValue(null),
+          } satisfies IConfigManager,
           identity: createMockIdentityAdapter(),
+          signer: new RecordSigner({ keyProvider: new MockKeyProvider() }),
           lint: createMockLintModule(),
           indexer: createMockRecordProjector(),
         },
@@ -547,7 +567,7 @@ describe('FsWorktreeSyncStateModule', () => {
       repoPath: string;
       remotePath: string;
       module: FsWorktreeSyncStateModule;
-      identity: IIdentityAdapter;
+      identity: IIdentityModule;
       lint: ILintModule;
       indexer: jest.Mocked<IRecordProjector>;
     }> {
@@ -573,11 +593,11 @@ describe('FsWorktreeSyncStateModule', () => {
       expect(result.success).toBe(true);
     });
 
-    it('[WTSYNC-B1] should throw ActorIdentityMismatchError when identity does not match', async () => {
+    it('[WTSYNC-B1] should accept any actorId (identity verification moved to CLI caller)', async () => {
       const { module } = await setupPushTest();
 
-      await expect(module.pushState({ actorId: 'wrong-actor' }))
-        .rejects.toThrow(ActorIdentityMismatchError);
+      const result = await module.pushState({ actorId: 'any-actor' });
+      expect(result.success).toBe(true);
     });
 
     it('[WTSYNC-B2] should run lint validation on source records', async () => {
@@ -1492,8 +1512,8 @@ describe('FsWorktreeSyncStateModule', () => {
       cleanupPaths.push(repoPath, remotePath);
       await setupStateBranch(repoPath);
 
-      const identity = createMockIdentityAdapter();
-      const { module } = createModule(repoPath, { identity });
+      const { module, signer } = createModule(repoPath);
+      const signRecordSpy = jest.spyOn(signer, 'signRecord');
       await module.ensureWorktree();
       const worktreePath = module.getWorktreePath();
 
@@ -1511,8 +1531,7 @@ describe('FsWorktreeSyncStateModule', () => {
 
       await module.resolveConflict({ reason: 'test resolution', actorId: 'test-actor' });
 
-      // signRecord was called with the resolved record
-      expect(identity.signRecord).toHaveBeenCalledWith(
+      expect(signRecordSpy).toHaveBeenCalledWith(
         expect.objectContaining({ id: 'task-conflict' }),
         'test-actor',
         'resolver',

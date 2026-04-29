@@ -61,9 +61,10 @@ export const reviewMyTasksPrompt: McpPromptDefinition = {
     { name: 'status', description: 'Optional: filter by status (draft, review, ready, active, done).', required: false },
   ],
   handler: async (args: Record<string, string>, di: McpDependencyInjectionService): Promise<McpPromptResult> => {
-    const { stores, identityAdapter } = await di.getContainer();
+    const container = await di.getContainer();
+    const { stores } = container;
 
-    const actor = await identityAdapter.getCurrentActor();
+    const actor = await container.getCurrentActor();
     const allTasks = await loadAll(stores.tasks);
 
     let myTasks = allTasks.filter((t) => {

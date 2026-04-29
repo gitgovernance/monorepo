@@ -16,7 +16,7 @@ import { RecordMetrics } from '../../record_metrics';
 import { ConfigManager } from '../../config_manager';
 import type { SessionManager } from '../../session_manager';
 import { WorkflowAdapter } from '../workflow_adapter';
-import { IdentityAdapter } from '../identity_adapter';
+import { IdentityModule } from '../../identity';
 import type { SystemDailyTickEvent, IEventStream } from '../../event_bus';
 import type {
   GitGovTaskRecord,
@@ -100,7 +100,18 @@ describe('BacklogAdapter - End-to-End Tests', () => {
           createAgentRecord: jest.fn(),
           getAgentRecord: jest.fn(),
           listAgentRecords: jest.fn()
-        } as unknown as IdentityAdapter,
+        } as unknown as IdentityModule,
+        signer: (() => {
+          const { RecordSigner } = require('../../record_signer');
+          const { MockKeyProvider } = require('../../key_provider/memory/mock_key_provider');
+          const s = new RecordSigner({ keyProvider: new MockKeyProvider() });
+          jest.spyOn(s, 'createSignedRecord').mockImplementation(async (...args: unknown[]) => {
+            const [payload, type] = args;
+            return { header: { version: '1.0', type, payloadChecksum: 'mock', signatures: [] }, payload };
+          });
+          jest.spyOn(s, 'signRecord').mockImplementation(async (...args: unknown[]) => args[0]);
+          return s;
+        })(),
         eventBus: {
           publish: jest.fn(),
           subscribe: jest.fn(),

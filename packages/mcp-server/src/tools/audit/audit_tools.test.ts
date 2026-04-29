@@ -29,9 +29,9 @@ function createMockDi() {
     feedbackAdapter: {
       create: vi.fn().mockResolvedValue({ id: 'waiver-1', type: 'approval', entityType: 'execution', status: 'resolved' }),
       getAllFeedback: vi.fn().mockResolvedValue([
-        { id: 'w1', type: 'approval', entityType: 'execution', status: 'resolved', entityId: 'fp1', content: 'False positive' },
-        { id: 'w2', type: 'approval', entityType: 'execution', status: 'resolved', entityId: 'fp2', content: 'Accepted risk' },
-        { id: 'w3', type: 'comment', entityType: 'task', status: 'open', entityId: 't1', content: 'Note' },
+        { header: { version: '1.0', type: 'feedback', payloadChecksum: '', signatures: [] }, payload: { id: 'w1', type: 'approval', entityType: 'execution', status: 'resolved', entityId: 'fp1', content: 'False positive' } },
+        { header: { version: '1.0', type: 'feedback', payloadChecksum: '', signatures: [] }, payload: { id: 'w2', type: 'approval', entityType: 'execution', status: 'resolved', entityId: 'fp2', content: 'Accepted risk' } },
+        { header: { version: '1.0', type: 'feedback', payloadChecksum: '', signatures: [] }, payload: { id: 'w3', type: 'comment', entityType: 'task', status: 'open', entityId: 't1', content: 'Note' } },
       ]),
     },
     agentRunner: {
@@ -45,10 +45,10 @@ function createMockDi() {
         get: vi.fn().mockResolvedValue(null),
       },
     },
-    identityAdapter: {
-      getCurrentActor: vi.fn().mockResolvedValue({ id: 'actor-1', displayName: 'Test', type: 'human' }),
+    identityModule: {
       createActor: vi.fn().mockResolvedValue({ id: 'new-actor', type: 'agent', displayName: 'Bot', roles: ['contributor'] }),
     },
+    getCurrentActor: vi.fn().mockResolvedValue({ id: 'actor-1', type: 'human', displayName: 'Test', publicKey: 'pk', roles: ['author'], status: 'active' }),
   };
   return {
     getContainer: vi.fn().mockResolvedValue(mockContainer),
@@ -167,7 +167,7 @@ describe('Audit + Agent + Actor Tools', () => {
       expect(result.isError).toBeUndefined();
       expect(data.id).toBe('new-actor');
       expect(data.type).toBe('agent');
-      expect(di._container.identityAdapter.createActor).toHaveBeenCalled();
+      expect(di._container.identityModule.createActor).toHaveBeenCalled();
     });
 
     it('[MSRV-M4] should return error when actor already exists', async () => {

@@ -47,9 +47,9 @@ export const executionCreateTool: McpToolDefinition<ExecutionCreateInput> = {
   handler: async (input: ExecutionCreateInput, di: McpDependencyInjectionService) => {
     try {
       const container = await di.getContainer();
-      const { executionAdapter, identityAdapter } = container;
+      const { executionAdapter, identityModule } = container;
 
-      const actor = await identityAdapter.getCurrentActor();
+      const actor = await container.getCurrentActor();
       const execution = await executionAdapter.create(
         {
           taskId: input.taskId,

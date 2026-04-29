@@ -48,7 +48,7 @@ function createMockContainer(overrides: Partial<McpDiContainer> = {}): McpDiCont
     backlogAdapter: {},
     feedbackAdapter: {},
     executionAdapter: {},
-    identityAdapter: {} as McpDiContainer['identityAdapter'],
+    identityModule: {} as McpDiContainer['identityModule'],
     lintModule: {
       lint: vi.fn(),
       lintFile: vi.fn(),
@@ -56,6 +56,7 @@ function createMockContainer(overrides: Partial<McpDiContainer> = {}): McpDiCont
     } as unknown as McpDiContainer['lintModule'],
     syncModule: {} as McpDiContainer['syncModule'],
     sourceAuditorModule: {},
+    getCurrentActor: vi.fn().mockResolvedValue({ id: "actor-1", type: "human", displayName: "Test", publicKey: "pk", roles: ["author"], status: "active" }),
     agentRunner: {} as McpDiContainer['agentRunner'],
     projector: {
       computeProjection: vi.fn(),

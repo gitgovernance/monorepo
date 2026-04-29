@@ -20,7 +20,8 @@ export const actorNewTool: McpToolDefinition<ActorNewInput> = {
   },
   handler: async (input: ActorNewInput, di: McpDependencyInjectionService) => {
     try {
-      const { identityAdapter, stores } = await di.getContainer();
+      const container = await di.getContainer();
+      const { identityModule, stores } = container;
 
       // Check for duplicate
       const existing = await stores.actors.get(input.id);
@@ -28,8 +29,8 @@ export const actorNewTool: McpToolDefinition<ActorNewInput> = {
         return errorResult(`Actor already exists: ${input.id}`, 'DUPLICATE_ACTOR');
       }
 
-      const currentActor = await identityAdapter.getCurrentActor();
-      const actor = await identityAdapter.createActor(
+      const currentActor = await container.getCurrentActor();
+      const actor = await identityModule.createActor(
         {
           id: input.id,
           type: input.type,

@@ -1,23 +1,3 @@
-// Mock IdentityAdapter before importing
-jest.doMock('../adapters/identity_adapter', () => ({
-  IdentityAdapter: jest.fn().mockImplementation(() => ({
-    getActorPublicKey: jest.fn().mockResolvedValue('mock-public-key'),
-    getActor: jest.fn(),
-    createActor: jest.fn(),
-    listActors: jest.fn(),
-    signRecord: jest.fn(),
-    rotateActorKey: jest.fn(),
-    revokeActor: jest.fn(),
-    resolveCurrentActorId: jest.fn(),
-    getCurrentActor: jest.fn(),
-    getEffectiveActorForAgent: jest.fn(),
-    authenticate: jest.fn(),
-    createAgentRecord: jest.fn(),
-    getAgentRecord: jest.fn(),
-    listAgentRecords: jest.fn(),
-  }))
-}));
-
 // Mock crypto module for signature verification
 jest.mock('../crypto', () => {
   const actual = jest.requireActual('../crypto');

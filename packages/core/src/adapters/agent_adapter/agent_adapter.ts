@@ -6,7 +6,7 @@ import type {
 import type { RecordStores } from '../../record_store';
 import type { IEventStream, AgentRegisteredEvent } from '../../event_bus';
 import type { KeyProvider } from '../../key_provider/key_provider';
-import type { IIdentityAdapter } from '../identity_adapter';
+import type { IIdentityModule } from '../../identity/identity_module.types';
 import type { IAgentAdapter, AgentAdapterDependencies } from './agent_adapter.types';
 
 import { createAgentRecord } from '../../record_factories/agent_factory';
@@ -25,7 +25,7 @@ import { calculatePayloadChecksum } from '../../crypto/checksum';
  */
 export class AgentAdapter implements IAgentAdapter {
   private stores: Required<Pick<RecordStores, 'agents'>>;
-  private identity: IIdentityAdapter;
+  private identity: IIdentityModule;
   private keyProvider: KeyProvider;
   private eventBus: IEventStream | undefined;
 

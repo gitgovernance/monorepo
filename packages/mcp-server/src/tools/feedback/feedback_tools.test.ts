@@ -34,9 +34,9 @@ function createMockDi(overrides: Record<string, unknown> = {}) {
         status: 'resolved',
       }),
     },
-    identityAdapter: {
-      getCurrentActor: vi.fn().mockResolvedValue({ id: 'actor-1', displayName: 'Test', type: 'human' }),
+    identityModule: {
     },
+    getCurrentActor: vi.fn().mockResolvedValue({ id: "actor-1", type: "human", displayName: "Test", publicKey: "pk", roles: ["author"], status: "active" }),
     ...overrides,
   };
 
@@ -84,8 +84,8 @@ describe('Feedback Tools', () => {
       const di = createMockDi();
       const container = di._container;
       container.feedbackAdapter.getFeedbackByEntity.mockResolvedValue([
-        { id: 'fb-1', entityType: 'task', entityId: 'task-1', type: 'suggestion', status: 'open', content: 'A' },
-        { id: 'fb-2', entityType: 'task', entityId: 'task-1', type: 'blocking', status: 'open', content: 'B' },
+        { header: { version: '1.0', type: 'feedback', payloadChecksum: '', signatures: [] }, payload: { id: 'fb-1', entityType: 'task', entityId: 'task-1', type: 'suggestion', status: 'open', content: 'A' } },
+        { header: { version: '1.0', type: 'feedback', payloadChecksum: '', signatures: [] }, payload: { id: 'fb-2', entityType: 'task', entityId: 'task-1', type: 'blocking', status: 'open', content: 'B' } },
       ]);
 
       const result = await feedbackListTool.handler({ entityId: 'task-1' }, di);

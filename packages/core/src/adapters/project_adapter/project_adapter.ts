@@ -16,7 +16,7 @@
 
 import type { GitGovConfig, IConfigManager } from '../../config_manager';
 import { DetailedValidationError } from '../../record_validations/common';
-import type { IdentityAdapter } from '../identity_adapter';
+import type { IIdentityModule } from '../../identity/identity_module.types';
 import type { BacklogAdapter } from '../backlog_adapter';
 import { createTaskRecord } from '../../record_factories/task_factory';
 import { createCycleRecord } from '../../record_factories/cycle_factory';
@@ -42,7 +42,7 @@ import type {
  * keeping ProjectAdapter storage-agnostic.
  */
 export class ProjectAdapter implements IProjectAdapter {
-  private identityAdapter: IdentityAdapter;
+  private identityAdapter: IIdentityModule;
   private backlogAdapter: BacklogAdapter;
   private configManager: IConfigManager;
   private projectInitializer: IProjectInitializer;

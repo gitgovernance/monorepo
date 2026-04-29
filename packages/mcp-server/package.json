@@ -21,7 +21,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@gitgov/core": "^2.9.0",
+    "@gitgov/core": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.26.0"
   },
   "devDependencies": {

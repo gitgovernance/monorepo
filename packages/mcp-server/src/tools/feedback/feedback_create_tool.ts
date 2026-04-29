@@ -34,9 +34,9 @@ export const feedbackCreateTool: McpToolDefinition<FeedbackCreateInput> = {
   handler: async (input: FeedbackCreateInput, di: McpDependencyInjectionService) => {
     try {
       const container = await di.getContainer();
-      const { feedbackAdapter, identityAdapter } = container;
+      const { feedbackAdapter, identityModule } = container;
 
-      const actor = await identityAdapter.getCurrentActor();
+      const actor = await container.getCurrentActor();
       const feedback = await feedbackAdapter.create(
         {
           entityType: input.entityType,

@@ -42,8 +42,7 @@ function createMockDi(overrides: Record<string, unknown> = {}) {
         id: 'task-1', title: 'Task 1', status: 'done',
       }),
     },
-    identityAdapter: {
-      getCurrentActor: vi.fn().mockResolvedValue({ id: 'actor-1', displayName: 'Test Actor', type: 'human' }),
+    identityModule: {
     },
     feedbackAdapter: {
       create: vi.fn().mockResolvedValue({ id: 'fb-1' }),
@@ -58,6 +57,7 @@ function createMockDi(overrides: Record<string, unknown> = {}) {
         exists: vi.fn().mockResolvedValue(false),
       },
     },
+    getCurrentActor: vi.fn().mockResolvedValue({ id: "actor-1", type: "human", displayName: "Test", publicKey: "pk", roles: ["author"], status: "active" }),
     ...overrides,
   };
 
