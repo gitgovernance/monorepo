@@ -206,6 +206,7 @@ describe('AgentCommand', () => {
       getIdentityAdapter: jest.fn().mockResolvedValue(mockIdentityAdapter),
       getAgentStore: jest.fn().mockResolvedValue(mockAgentStore),
       getAgentAdapter: jest.fn().mockResolvedValue(mockAgentAdapter),
+      getCurrentActor: jest.fn().mockResolvedValue({ id: 'human:test-dev', type: 'human', displayName: 'Test Dev', publicKey: 'test-key', roles: ['developer'] }),
     } as unknown as DependencyInjectionService);
 
     agentCommand = new AgentCommand();
@@ -262,7 +263,7 @@ describe('AgentCommand', () => {
           description: expect.stringContaining('Automated task'),
           priority: 'medium',
         }),
-        'human:developer'
+        'human:test-dev'
       );
     });
 
