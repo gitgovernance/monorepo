@@ -1,3 +1,10 @@
+## [3.15.0](https://github.com/gitgovernance/monorepo/compare/core-v3.14.0...core-v3.15.0) (2026-04-29)
+
+
+### ✨ Features
+
+* **core:** Identity Module v2 — RecordSigner + IdentityModule + callsite migration ([#151](https://github.com/gitgovernance/monorepo/issues/151)) ([9eab152](https://github.com/gitgovernance/monorepo/commit/9eab15214086aeef8aa947e25b756aa225769b8a))
+
 ## [3.14.0](https://github.com/gitgovernance/monorepo/compare/core-v3.13.0...core-v3.14.0) (2026-04-27)
 
 
