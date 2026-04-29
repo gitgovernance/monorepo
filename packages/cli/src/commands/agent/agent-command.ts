@@ -49,26 +49,12 @@ export interface ShowCommandOptions extends BaseCommandOptions {
   verbose?: boolean;
 }
 
-/**
- * CLI-specific options for agent new command
- * EARS: E1..E6
- */
-export interface AgentNewOptions extends BaseCommandOptions {
-  /** Engine type */
-  engineType: 'local' | 'api' | 'mcp' | 'custom';
-  /** [EARS-E1] Inline JSON config to merge with defaults */
-  config?: string;
-  /** [EARS-E2] Path to JSON config file */
-  configFile?: string;
-}
 
 /**
- * CLI-specific options for agent add command
- * EARS: F1..F8
+ * CLI-specific options for agent new command (G20 — package-driven only)
+ * EARS: E1..E7
  */
-export type AgentAddOptions = BaseCommandOptions & {
-  config?: string;
-  set?: string[];
+export type AgentNewOptions = BaseCommandOptions & {
   json?: boolean;
   quiet?: boolean;
 };
@@ -99,32 +85,16 @@ export class AgentCommand extends BaseCommand<RunCommandOptions> {
       .command('agent')
       .description(this.description);
 
-    // Subcommand: add (package-driven registration)
-    agentCmd
-      .command('add <package>')
-      .alias('a')
-      .description('Register agent from package.json gitgov field')
-      .option('-c, --config <json>', 'JSON config to merge over package.json defaults')
-      .option('-s, --set <key=value>', 'Set env/config value (repeatable)', (val: string, prev: string[]) => [...prev, val], [] as string[])
-      .option('--json', 'Output as JSON', false)
-      .option('-q, --quiet', 'Quiet output', false)
-      .action(async (pkg: string, options: AgentAddOptions) => {
-        await this.executeAdd(pkg, options);
-      });
 
-    // Subcommand: new
+    // Subcommand: new (G20 — package-driven, reads package.json.gitgov.agent)
     agentCmd
-      .command('new <actorId>')
+      .command('new <package>')
       .alias('n')
-      .description('Create a new AgentRecord for an actor of type agent')
-      .addOption(new Option('-e, --engine-type <type>', 'Execution engine type').choices(['local', 'api', 'mcp', 'custom']))
-      .option('-c, --config <json>', 'Inline JSON config to merge with defaults (engine, metadata, triggers)')
-      .option('--config-file <path>', 'Path to JSON config file')
+      .description('Register agent from package.json gitgov.agent field')
       .option('--json', 'Output as JSON', false)
-      .option('-v, --verbose', 'Verbose output', false)
       .option('-q, --quiet', 'Quiet output', false)
-      .action(async (actorId: string, options: AgentNewOptions) => {
-        await this.executeNew(actorId, options);
+      .action(async (pkg: string, options: AgentNewOptions) => {
+        await this.executeNew(pkg, options);
       });
 
     // Subcommand: run
@@ -173,140 +143,21 @@ export class AgentCommand extends BaseCommand<RunCommandOptions> {
   }
 
   /**
-   * Execute agent new subcommand
-   * [EARS-E1 to E6]
+   * Execute agent new subcommand (G20 — package-driven only)
+   * [EARS-E1 to E7]
    */
-  async executeNew(actorId: string, options: AgentNewOptions): Promise<void> {
-    try {
-      const agentAdapter = await this.container.getAgentAdapter();
-
-      // [EARS-E1, E2, E3, E4] Build payload from config sources
-      let configPayload: Record<string, unknown> = {};
-
-      // [EARS-E2] Read from config file first (lowest priority)
-      if (options.configFile) {
-        const { readFileSync } = await import('node:fs');
-        try {
-          const fileContent = readFileSync(options.configFile, 'utf-8');
-          configPayload = JSON.parse(fileContent) as Record<string, unknown>;
-        } catch (err) {
-          // [EARS-E4] Invalid JSON or file not found
-          const message = err instanceof Error ? err.message : String(err);
-          throw new Error(`Failed to read --config-file: ${message}`);
-        }
-      }
-
-      // [EARS-E1] Merge inline config (higher priority than file)
-      if (options.config) {
-        try {
-          const inlineConfig = JSON.parse(options.config) as Record<string, unknown>;
-          configPayload = { ...configPayload, ...inlineConfig };
-        } catch {
-          // [EARS-E4] Invalid JSON
-          throw new Error('Invalid JSON in --config. Provide valid JSON string.');
-        }
-      }
-
-      // [EARS-E3] Engine type shortcut has highest priority
-      // Build engine: start from config, override type if -e provided
-      const configEngine = (configPayload['engine'] ?? {}) as Record<string, unknown>;
-      const engineType = options.engineType ?? (configEngine['type'] as string) ?? 'local';
-      const engine = { ...configEngine, type: engineType } as AgentRecord['engine'];
-
-      // Build full payload: merge config fields + engine
-      const payload: Partial<AgentRecord> & { id: string } = {
-        id: actorId,
-        engine,
-      };
-
-      // Merge metadata if provided in config
-      if (configPayload['metadata']) {
-        (payload as Record<string, unknown>)['metadata'] = configPayload['metadata'];
-      }
-
-      // Merge triggers if provided in config
-      if (configPayload['triggers']) {
-        (payload as Record<string, unknown>)['triggers'] = configPayload['triggers'];
-      }
-
-      // Merge knowledge_dependencies if provided
-      if (configPayload['knowledge_dependencies']) {
-        (payload as Record<string, unknown>)['knowledge_dependencies'] = configPayload['knowledge_dependencies'];
-      }
-
-      // [EARS-E1b] Create AgentRecord via adapter
-      // If actor doesn't exist, auto-create it first, then retry
-      let agent: AgentRecord;
-      try {
-        agent = await agentAdapter.createAgentRecord(payload);
-      } catch (createErr) {
-        const msg = createErr instanceof Error ? createErr.message : '';
-        if (msg.includes('ActorRecord') && msg.includes('not found')) {
-          // Auto-create ActorRecord — eliminates need for separate `gitgov actor new`
-          const identityAdapter = await this.container.getIdentityAdapter();
-          const role = (configPayload['metadata'] as Record<string, unknown> | undefined)?.['role'] as string
-            ?? (configPayload['gitgov'] as Record<string, unknown> | undefined)?.['role'] as string
-            ?? 'agent';
-          const actorName = actorId.replace(/^agent:/, '');
-          await identityAdapter.createActor(
-            { type: 'agent', displayName: actorName, roles: [role] as [string, ...string[]] },
-            'self',
-          );
-          if (!options.quiet) {
-            console.log(`  ActorRecord auto-created: ${actorId}`);
-          }
-          // Retry after actor creation
-          agent = await agentAdapter.createAgentRecord(payload);
-        } else {
-          throw createErr;
-        }
-      }
-
-      // [EARS-E4b] Output
-      if (options.json) {
-        console.log(JSON.stringify({
-          success: true,
-          data: {
-            id: agent.id,
-            actorId: agent.id,
-            engine: agent.engine,
-          }
-        }, null, 2));
-      } else if (!options.quiet) {
-        console.log(`✅ AgentRecord created: ${agent.id}`);
-        console.log(`   Engine: ${agent.engine.type}`);
-      }
-
-    } catch (error) {
-      // [EARS-E3b] Error handling
-      const message = error instanceof Error ? error.message : String(error);
-
-      if (options.json) {
-        console.log(JSON.stringify({ success: false, error: message, exitCode: 1 }, null, 2));
-      } else {
-        console.error(`❌ Failed to create agent: ${message}`);
-      }
-
-      process.exit(1);
-    }
-  }
-
-  /**
-   * Execute agent add subcommand
-   * [EARS-F1 to F8]
-   */
-  async executeAdd(pkg: string, options: AgentAddOptions): Promise<void> {
+  async executeNew(pkg: string, options: AgentNewOptions): Promise<void> {
     try {
       const { readFileSync, existsSync } = await import('node:fs');
       const { createRequire } = await import('node:module');
       const { resolve, isAbsolute, join } = await import('node:path');
 
-      // [EARS-F1, F2] Resolve package.json path
+      // [EARS-E1, E2] Resolve package.json path
       let pkgJsonPath: string;
       let entrypoint: string;
 
       if (pkg.startsWith('.') || pkg.startsWith('/')) {
-        // [EARS-F2] Local path — resolve entry file from package.json main
+        // [EARS-E2] Local path
         const absPath = isAbsolute(pkg) ? pkg : resolve(process.cwd(), pkg);
         pkgJsonPath = join(absPath, 'package.json');
         if (!existsSync(pkgJsonPath)) {
@@ -316,113 +167,69 @@ export class AgentCommand extends BaseCommand<RunCommandOptions> {
         const mainFile = (localPkg['main'] as string) ?? 'index.js';
         entrypoint = join(absPath, mainFile);
       } else {
-        // [EARS-F1] NPM package — try to resolve, auto-install if not found
+        // [EARS-E1] NPM package
         const req = createRequire(join(process.cwd(), 'package.json'));
         try {
           pkgJsonPath = req.resolve(join(pkg, 'package.json'));
         } catch {
-          // [EARS-F2b] Package not installed — auto-install
+          // [EARS-E2b] Auto-install
           const { execSync } = await import('node:child_process');
           const pm = existsSync(join(process.cwd(), 'pnpm-lock.yaml')) ? 'pnpm'
-            : existsSync(join(process.cwd(), 'yarn.lock')) ? 'yarn'
-            : 'npm';
+            : existsSync(join(process.cwd(), 'yarn.lock')) ? 'yarn' : 'npm';
           const installCmd = pm === 'yarn' ? `yarn add ${pkg}` : `${pm} install ${pkg}`;
-          if (!options.quiet) {
-            console.log(`📦 Installing ${pkg}...`);
-          }
-          execSync(installCmd, { cwd: process.cwd(), stdio: options.quiet ? 'pipe' : 'inherit' });
+          if (!options.quiet) console.error(`  Installing ${pkg}...`);
+          execSync(installCmd, { cwd: process.cwd(), stdio: 'pipe' });
           pkgJsonPath = req.resolve(join(pkg, 'package.json'));
         }
         entrypoint = pkg;
       }
 
+      // Read package.json
       const pkgJson = JSON.parse(readFileSync(pkgJsonPath, 'utf-8')) as Record<string, unknown>;
-      const gitgovField = pkgJson['gitgov'] as Record<string, unknown> | undefined;
-      const agentConfig = gitgovField?.['agent'] as Record<string, unknown> | undefined;
+      const pkgName = (pkgJson['name'] as string) ?? pkg;
+      const gitgovField = (pkgJson['gitgov'] as Record<string, unknown> | undefined)?.['agent'] as Record<string, unknown> | undefined;
 
-      // [EARS-F3] Validate gitgov.agent field exists
-      if (!agentConfig) {
-        throw new Error(`Package ${pkgJson['name'] ?? pkg} does not have a gitgov.agent field in package.json`);
+      // [EARS-E3] Require gitgov.agent field
+      if (!gitgovField) {
+        throw new Error(`Package ${pkgName} does not have a gitgov.agent field in package.json`);
       }
 
-      // [EARS-F4] Merge --config override
-      let mergedConfig = { ...agentConfig };
-      if (options.config) {
-        try {
-          const overrides = JSON.parse(options.config) as Record<string, unknown>;
-          mergedConfig = { ...mergedConfig, ...overrides };
-        } catch {
-          throw new Error('Invalid JSON in --config');
+      const purpose = (gitgovField['purpose'] as string) ?? 'agent';
+      const fnName = (gitgovField['function'] as string) ?? 'runAgent';
+      const metadata = (gitgovField['metadata'] as Record<string, unknown>) ?? {};
+      const envVars = (gitgovField['env'] as string[]) ?? [];
+
+      // [EARS-E4] Warn about missing env vars
+      for (const envVar of envVars) {
+        if (!process.env[envVar]) {
+          console.error(`  Warning: ${envVar} is required by this agent`);
         }
       }
 
       // Derive actorId from package name
-      const pkgName = (pkgJson['name'] as string) ?? pkg;
-      const actorId = `agent:${pkgName.replace(/^@gitgov\/agent-/, '').replace(/^@.*\//, '')}`;
+      const actorId = `agent:${pkgName.replace(/^@[^/]+\/agent-/, '').replace(/^@[^/]+\//, '')}`;
+      const engine = { type: 'local' as const, entrypoint, function: fnName };
 
-      // [EARS-F4] Build engine — mergedConfig overrides have priority
-      const configEngine = (mergedConfig['engine'] as Record<string, unknown>) ?? {};
-      const engineType = ((configEngine['type'] as string) ?? 'local') as AgentRecord['engine']['type'];
-      const engine = {
-        type: engineType,
-        entrypoint: (configEngine['entrypoint'] as string) ?? entrypoint,
-        function: (mergedConfig['function'] as string) ?? (configEngine['function'] as string) ?? 'runAgent',
-      } as AgentRecord['engine'];
-
-      // Build metadata
-      const metadata: Record<string, unknown> = {};
-      if (mergedConfig['metadata']) {
-        Object.assign(metadata, mergedConfig['metadata']);
-      }
-      if (mergedConfig['purpose']) {
-        metadata['purpose'] = mergedConfig['purpose'];
-      }
-
-      // [EARS-F5] Process --set KEY=VALUE
-      if (options.set && options.set.length > 0) {
-        const envMap: Record<string, string> = {};
-        for (const pair of options.set) {
-          const eqIdx = pair.indexOf('=');
-          if (eqIdx === -1) throw new Error(`Invalid --set format: "${pair}". Use KEY=VALUE`);
-          envMap[pair.slice(0, eqIdx)] = pair.slice(eqIdx + 1);
-        }
-        metadata['env'] = envMap;
-      }
-
-      // [EARS-F6] Validate required env vars
-      const requiredEnv = agentConfig['env'] as string[] | undefined;
-      if (requiredEnv && requiredEnv.length > 0) {
-        const setKeys = Object.keys((metadata['env'] as Record<string, string>) ?? {});
-        for (const key of requiredEnv) {
-          if (!process.env[key] && !setKeys.includes(key)) {
-            console.warn(`⚠️  Warning: ${key} is required by this agent. Set it with --set ${key}=value`);
-          }
-        }
-      }
-
-      // [EARS-F8] Check if agent already exists → update
+      // Build payload
       const agentAdapter = await this.container.getAgentAdapter();
+      const payload: Partial<AgentRecord> & { id: string } = {
+        id: actorId,
+        engine,
+        metadata: { ...metadata, purpose },
+      };
+
+      // [EARS-E5, E6] Create or update
       const agentStore = await this.container.getAgentStore();
       const existingIds = await agentStore.list();
       const alreadyExists = existingIds.includes(DEFAULT_ID_ENCODER.encode(actorId));
 
-      const payload: Partial<AgentRecord> & { id: string } = {
-        id: actorId,
-        engine,
-      };
-      if (Object.keys(metadata).length > 0) {
-        (payload as Record<string, unknown>)['metadata'] = metadata;
-      }
-
       let agent: AgentRecord;
       if (alreadyExists) {
-        // [EARS-F8] Update existing
+        // [EARS-E6] Update existing
         agent = await agentAdapter.createAgentRecord(payload);
-        if (!options.quiet) {
-          console.log(`✅ Agent updated: ${actorId}`);
-        }
+        if (!options.quiet) console.log(`✅ Agent updated: ${actorId}`);
       } else {
-        // Create new — auto-create ActorRecord if needed (same pattern as executeNew)
+        // [EARS-E5] Create new — auto-create ActorRecord if needed
         try {
           agent = await agentAdapter.createAgentRecord(payload);
         } catch (createErr) {
@@ -441,7 +248,7 @@ export class AgentCommand extends BaseCommand<RunCommandOptions> {
         }
       }
 
-      // [EARS-F7] Output
+      // [EARS-E7] Output
       if (options.json) {
         console.log(JSON.stringify({
           success: true,
@@ -451,7 +258,7 @@ export class AgentCommand extends BaseCommand<RunCommandOptions> {
       } else if (!options.quiet) {
         console.log(`✅ Agent ${alreadyExists ? 'updated' : 'registered'}: ${actorId} [${engine.type}]`);
         console.log(`   Package: ${pkgName}`);
-        console.log(`   Function: ${'function' in engine ? engine.function : 'runAgent'}`);
+        console.log(`   Function: ${fnName}`);
       }
 
     } catch (error) {
@@ -459,16 +266,12 @@ export class AgentCommand extends BaseCommand<RunCommandOptions> {
       if (options.json) {
         console.log(JSON.stringify({ success: false, error: message, exitCode: 1 }, null, 2));
       } else {
-        console.error(`❌ Failed to add agent: ${message}`);
+        console.error(`❌ Failed to register agent: ${message}`);
       }
       process.exit(1);
     }
   }
 
-  /**
-   * Execute agent run subcommand
-   * [EARS-A1 to A6]
-   */
   async executeRun(name: string, options: RunCommandOptions): Promise<void> {
     try {
       // Get dependencies

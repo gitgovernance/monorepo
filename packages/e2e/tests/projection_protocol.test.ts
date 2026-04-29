@@ -134,15 +134,14 @@ describe('Block B: Protocol Record Projection (CB1-CB10)', () => {
     expect(task.relationships).toBeDefined();
   });
 
-  it('[CB5] should store feedback record with approval type and entity reference', async () => {
+  it('[CB5] should store feedback record with assignment type and entity reference', async () => {
     const feedbacks = await prisma.gitgovFeedback.findMany({});
     const assignmentFb = feedbacks.find(fb => fb.type === 'assignment');
 
-    if (assignmentFb) {
-      expect(assignmentFb.entityType).toBeDefined();
-      expect(assignmentFb.entityId).toBeDefined();
-      expect(assignmentFb.status).toBeDefined();
-    }
+    expect(assignmentFb).toBeDefined();
+    expect(assignmentFb!.entityType).toBeDefined();
+    expect(assignmentFb!.entityId).toBeDefined();
+    expect(assignmentFb!.status).toBeDefined();
   });
 
   it('[CB6] should reconstruct equivalent IndexData from read after persist', async () => {
@@ -202,15 +201,11 @@ describe('Block B: Protocol Record Projection (CB1-CB10)', () => {
 
   it('[CB9] should project CLI audit executions to GitgovExecution table', async () => {
     const { tmpDir: cb9TmpDir, repoDir: cb9RepoDir } = createTempGitRepo();
-    const securityAuditEntrypoint = path.resolve(__dirname, '../../../agents/security-audit/dist/index.mjs');
+    const securityAuditPath = path.resolve(__dirname, '../../../packages/agents/security-audit');
 
     try {
       runGitgovCli('init --name "CB9 Test" --actor-name "Dev CB9" --quiet', { cwd: cb9RepoDir });
-      const config = JSON.stringify({
-        metadata: { purpose: 'audit', audit: { target: 'code', outputFormat: 'sarif' } },
-        engine: { type: 'local', entrypoint: securityAuditEntrypoint, function: 'runAgent' },
-      });
-      runGitgovCli(`agent new agent:security-audit --config '${config}'`, { cwd: cb9RepoDir });
+      runGitgovCli(`agent new ${securityAuditPath}`, { cwd: cb9RepoDir });
 
       // Create a fixture file so audit has something to scan
       // Use a pattern that triggers SEC-006 (hardcoded password) without triggering GitHub push protection
@@ -242,7 +237,8 @@ describe('Block B: Protocol Record Projection (CB1-CB10)', () => {
 
     try {
       runGitgovCli('init --name "CB10 Test" --actor-name "Dev CB10" --quiet', { cwd: cb10RepoDir });
-      runGitgovCli('agent new agent:test-echo --config \'{"metadata":{"purpose":"testing"},"engine":{"type":"local","entrypoint":"@gitgov/agent-test-echo","function":"runAgent"}}\'', { cwd: cb10RepoDir });
+      const securityAuditPath = path.resolve(__dirname, '../../../packages/agents/security-audit');
+      runGitgovCli(`agent new ${securityAuditPath}`, { cwd: cb10RepoDir });
 
       // Projection
       await cleanupProtocol(prisma);
@@ -251,7 +247,7 @@ describe('Block B: Protocol Record Projection (CB1-CB10)', () => {
       const agents = await prisma.gitgovAgent.findMany({});
       expect(agents.length).toBeGreaterThanOrEqual(1);
 
-      const testAgent = agents.find(a => a.recordId.includes('test-echo'));
+      const testAgent = agents.find(a => a.recordId.includes('security-audit'));
       expect(testAgent).toBeDefined();
       expect(testAgent!.engine).toBeDefined();
     } finally {

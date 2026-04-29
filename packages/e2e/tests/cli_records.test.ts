@@ -91,15 +91,19 @@ describe('Block A: CLI Record Creation (CA1-CA7, CA9)', () => {
   });
 
   it('[EARS-CA3] should create agent record with engine config', async () => {
-    // agent new requires <actorId> positional — use the agent actor from CA2's repo
+    // G20: agent new reads package.json.gitgov.agent — create fake package
     expect(agentRepoDir).toBeDefined();
-    const actorIds = await listRecordIds(agentRepoDir, 'actors');
-    const agentActorId = actorIds.find(id => id.includes('agent'));
-    expect(agentActorId).toBeDefined();
+    const fakeAgentDir = path.join(agentRepoDir, '.fake-agent');
+    fs.mkdirSync(fakeAgentDir, { recursive: true });
+    fs.writeFileSync(path.join(fakeAgentDir, 'package.json'), JSON.stringify({
+      name: '@test/fake-audit-agent',
+      main: 'index.js',
+      gitgov: { agent: { purpose: 'audit', function: 'runAgent' } },
+    }));
+    fs.writeFileSync(path.join(fakeAgentDir, 'index.js'), 'module.exports.runAgent = async () => ({});');
 
-    const agent = await readRecord(agentRepoDir, 'actors', agentActorId!);
     const result = runGitgovCli(
-      `agent new ${agent.payload.id} --engine-type local`,
+      `agent new ${fakeAgentDir}`,
       { cwd: agentRepoDir },
     );
     expect(result.success).toBe(true);
