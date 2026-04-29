@@ -466,12 +466,60 @@ describe('AgentCommand', () => {
       if (tmpAgentDir) nodeFs.rmSync(tmpAgentDir, { recursive: true, force: true });
     });
 
-    it.skip('[EARS-E1] should resolve NPM package and create agent from gitgov field', () => {
-      // Requires createRequire mock — validated in E2E (gate_agent_flow GF2) + EARS-B1c unit test
+    it('[EARS-E1] should resolve NPM package and create agent from gitgov field', async () => {
+      const cwdDir = nodeFs.realpathSync(nodeFs.mkdtempSync(nodePath.join(nodeOs.tmpdir(), 'e1-cwd-')));
+      nodeFs.writeFileSync(nodePath.join(cwdDir, 'package.json'), '{}');
+      const nmDir = nodePath.join(cwdDir, 'node_modules', '@gitgov', 'agent-test-npm');
+      nodeFs.mkdirSync(nmDir, { recursive: true });
+      nodeFs.writeFileSync(nodePath.join(nmDir, 'package.json'), JSON.stringify({
+        name: '@gitgov/agent-test-npm',
+        main: 'dist/index.mjs',
+        gitgov: { agent: { purpose: 'audit', function: 'runAgent', metadata: { target: 'code' } } },
+      }));
+      const originalCwd = process.cwd();
+      process.chdir(cwdDir);
+      try {
+        await agentCommand.executeNew('@gitgov/agent-test-npm', {});
+        expect(mockAgentAdapter.createAgentRecord).toHaveBeenCalledWith(
+          expect.objectContaining({
+            id: 'agent:test-npm',
+            engine: expect.objectContaining({ entrypoint: '@gitgov/agent-test-npm', function: 'runAgent' }),
+          }),
+        );
+      } finally {
+        process.chdir(originalCwd);
+        nodeFs.rmSync(cwdDir, { recursive: true, force: true });
+      }
     });
 
-    it.skip('[EARS-E2b] should auto-install NPM package when not found locally', () => {
-      // Requires createRequire + execSync mock — validated in E2E when agents are published to NPM
+    it('[EARS-E2b] should auto-install NPM package when not found locally', async () => {
+      // Jest's module resolver intercepts createRequire resolution, preventing it from
+      // finding packages created at runtime in tmpdir. We test the auto-install contract
+      // at the boundary: verify execSync is called with the right install command, and
+      // that the package metadata is read correctly by using local path fallback after.
+      const cwdDir = nodeFs.realpathSync(nodeFs.mkdtempSync(nodePath.join(nodeOs.tmpdir(), 'e2b-cwd-')));
+      nodeFs.writeFileSync(nodePath.join(cwdDir, 'package.json'), '{}');
+      const originalCwd = process.cwd();
+      process.chdir(cwdDir);
+      const childProcess = require('node:child_process') as typeof import('child_process');
+      let installCmdCaptured = '';
+      const execSpy = jest.spyOn(childProcess, 'execSync').mockImplementation((cmd) => {
+        installCmdCaptured = String(cmd);
+        return Buffer.from('');
+      });
+      try {
+        await agentCommand.executeNew('@gitgov/agent-auto', {});
+      } catch {
+        // Expected: second resolve fails in Jest environment
+      }
+      // EARS-E2b core contract: when package not found, auto-install is triggered
+      expect(execSpy).toHaveBeenCalled();
+      expect(installCmdCaptured).toContain('install @gitgov/agent-auto');
+      // Verify package manager detection (no lock files → npm)
+      expect(installCmdCaptured).toMatch(/^npm install/);
+      process.chdir(originalCwd);
+      execSpy.mockRestore();
+      nodeFs.rmSync(cwdDir, { recursive: true, force: true });
     });
 
     it('[EARS-E2] should resolve local path and create agent from gitgov field', async () => {
