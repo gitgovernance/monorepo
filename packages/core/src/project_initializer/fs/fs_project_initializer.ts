@@ -1,6 +1,6 @@
-import { promises as fs, existsSync } from 'fs';
-import * as path from 'path';
-import { execSync } from 'child_process';
+import { promises as fs, existsSync } from 'node:fs';
+import * as path from 'node:path';
+import { execSync } from 'node:child_process';
 import type { GitGovConfig } from '../../config_manager';
 import type { IProjectInitializer, EnvironmentValidation } from '../project_initializer';
 import { createRequire } from 'module';
@@ -326,8 +326,26 @@ export class FsProjectInitializer implements IProjectInitializer {
     );
   }
 
+  // [EARS-FPI16] Canonical workflow template for GitHub Actions
+  private static readonly GITGOV_WORKFLOW_TEMPLATE = `name: GitGov
+on: [push, pull_request]
+permissions:
+  contents: read
+  pull-requests: write
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm install -g @gitgov/cli
+      - run: gitgov audit --scope full --fail-on critical --ci
+        env:
+          LLM_API_KEY: \${{ secrets.LLM_API_KEY }}
+          LLM_MODEL: \${{ vars.LLM_MODEL || 'anthropic/claude-sonnet-4-6' }}
+`;
+
   /**
-   * Sets up .gitignore for GitGovernance files.
+   * Sets up .gitignore + GitHub workflow (if GitHub remote detected).
    */
   async setupGitIntegration(): Promise<void> {
     const gitignorePath = path.join(this.repoRoot, '.gitignore');
@@ -355,6 +373,28 @@ gitgov
       }
     } catch (error) {
       console.warn('Failed to setup Git integration:', error);
+    }
+
+    // [EARS-FPI16] [EARS-FPI17] [EARS-FPI18]
+    try {
+      const remoteUrl = execSync('git remote get-url origin', {
+        cwd: this.repoRoot,
+        encoding: 'utf-8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      }).trim();
+
+      if (remoteUrl.includes('github.com')) {
+        // [EARS-FPI16] [EARS-FPI17] Create or overwrite workflow
+        const workflowDir = path.join(this.repoRoot, '.github', 'workflows');
+        await fs.mkdir(workflowDir, { recursive: true });
+        await fs.writeFile(
+          path.join(workflowDir, 'gitgov.yml'),
+          FsProjectInitializer.GITGOV_WORKFLOW_TEMPLATE,
+        );
+      }
+      // [EARS-FPI18] Non-GitHub remote: no workflow created
+    } catch {
+      // No remote or git not available: no workflow created (EARS-FPI18)
     }
   }
 

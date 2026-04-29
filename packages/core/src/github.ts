@@ -162,3 +162,6 @@ export type { GitHubPolicyConfigLoaderOptions } from './policy_evaluator/github/
 // ProjectInitializer
 export { GitHubProjectInitializer } from './project_initializer/github';
 export type { GitHubProjectInitializerOptions } from './project_initializer/github';
+
+// CiReporter (8th sibling — G19)
+export { GitHubCiReporter } from './ci_reporter/github';

@@ -134,15 +134,14 @@ describe('Block B: Protocol Record Projection (CB1-CB10)', () => {
     expect(task.relationships).toBeDefined();
   });
 
-  it('[CB5] should store feedback record with approval type and entity reference', async () => {
+  it('[CB5] should store feedback record with assignment type and entity reference', async () => {
     const feedbacks = await prisma.gitgovFeedback.findMany({});
     const assignmentFb = feedbacks.find(fb => fb.type === 'assignment');
 
-    if (assignmentFb) {
-      expect(assignmentFb.entityType).toBeDefined();
-      expect(assignmentFb.entityId).toBeDefined();
-      expect(assignmentFb.status).toBeDefined();
-    }
+    expect(assignmentFb).toBeDefined();
+    expect(assignmentFb!.entityType).toBeDefined();
+    expect(assignmentFb!.entityId).toBeDefined();
+    expect(assignmentFb!.status).toBeDefined();
   });
 
   it('[CB6] should reconstruct equivalent IndexData from read after persist', async () => {
@@ -200,17 +199,18 @@ describe('Block B: Protocol Record Projection (CB1-CB10)', () => {
     }
   });
 
-  it.skip('[CB9] should project CLI audit executions to GitgovExecution table — requires @gitgov/agent-security-audit installed', async () => {
+  it('[CB9] should project CLI audit executions to GitgovExecution table', async () => {
     const { tmpDir: cb9TmpDir, repoDir: cb9RepoDir } = createTempGitRepo();
+    const securityAuditPath = path.resolve(__dirname, '../../../packages/agents/security-audit');
 
     try {
       runGitgovCli('init --name "CB9 Test" --actor-name "Dev CB9" --quiet', { cwd: cb9RepoDir });
-      runGitgovCli('agent new agent:security-audit --config \'{"metadata":{"purpose":"audit"},"engine":{"type":"local","entrypoint":"@gitgov/agent-security-audit","function":"runAgent"}}\'', { cwd: cb9RepoDir });
+      runGitgovCli(`agent new ${securityAuditPath}`, { cwd: cb9RepoDir });
 
       // Create a fixture file so audit has something to scan
       // Use a pattern that triggers SEC-006 (hardcoded password) without triggering GitHub push protection
       fs.writeFileSync(path.join(cb9RepoDir, 'config.ts'), 'const password = "SuperSecret123!";\n');
-      runGitgovCli('audit --scope full -q', { cwd: cb9RepoDir });
+      runGitgovCli('audit --scope full -q', { cwd: cb9RepoDir, expectError: true });
 
       // Projection
       await cleanupProtocol(prisma);
@@ -219,8 +219,12 @@ describe('Block B: Protocol Record Projection (CB1-CB10)', () => {
       const executions = await prisma.gitgovExecution.findMany({});
       expect(executions.length).toBeGreaterThanOrEqual(1);
 
-      const auditExec = executions.find(e => e.type === 'analysis');
-      expect(auditExec).toBeDefined();
+      // CB9 verifies projection works, not what type the agent runner uses.
+      // Agent runner sets type per EARS-H1/H2 (completion on success, blocker on block).
+      const exec = executions[0]!;
+      expect(exec.recordId).toBeDefined();
+      expect(exec.taskId).toBeDefined();
+      expect(exec.type).toBeDefined();
     } finally {
       cleanupWorktree(cb9RepoDir);
       await cleanupProtocol(prisma);
@@ -233,7 +237,8 @@ describe('Block B: Protocol Record Projection (CB1-CB10)', () => {
 
     try {
       runGitgovCli('init --name "CB10 Test" --actor-name "Dev CB10" --quiet', { cwd: cb10RepoDir });
-      runGitgovCli('agent new agent:test-echo --config \'{"metadata":{"purpose":"testing"},"engine":{"type":"local","entrypoint":"@gitgov/agent-test-echo","function":"runAgent"}}\'', { cwd: cb10RepoDir });
+      const securityAuditPath = path.resolve(__dirname, '../../../packages/agents/security-audit');
+      runGitgovCli(`agent new ${securityAuditPath}`, { cwd: cb10RepoDir });
 
       // Projection
       await cleanupProtocol(prisma);
@@ -242,7 +247,7 @@ describe('Block B: Protocol Record Projection (CB1-CB10)', () => {
       const agents = await prisma.gitgovAgent.findMany({});
       expect(agents.length).toBeGreaterThanOrEqual(1);
 
-      const testAgent = agents.find(a => a.recordId.includes('test-echo'));
+      const testAgent = agents.find(a => a.recordId.includes('security-audit'));
       expect(testAgent).toBeDefined();
       expect(testAgent!.engine).toBeDefined();
     } finally {

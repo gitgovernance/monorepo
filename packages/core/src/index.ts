@@ -198,3 +198,7 @@ export type { IIdentityModule, IdentityModuleDependencies } from "./identity/ind
 
 // getCurrentActor — session resolution utility (identity_module_v2 Cycle 2)
 export { getCurrentActor } from "./utils/current_actor";
+
+// CiReporter (interface + types — G19)
+export { DEFAULT_GATE_MARKER } from "./ci_reporter";
+export type { ICiReporter, PrContext, RepoContext, CheckInfo } from "./ci_reporter";

@@ -8,6 +8,8 @@ module.exports = {
     '^@gitgov/core$': '<rootDir>/../core/src/index.ts',
     '^@gitgov/core/fs$': '<rootDir>/../core/src/fs.ts',
     '^@gitgov/core/memory$': '<rootDir>/../core/src/memory.ts',
+    '^@gitgov/core/audit$': '<rootDir>/../core/src/audit/index.ts',
+    '^@gitgov/core/github$': '<rootDir>/../core/src/github.ts',
   },
   transform: {
     '^.+\\.tsx?$': ['ts-jest', {

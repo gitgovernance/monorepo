@@ -6,6 +6,26 @@
  * - §4.5 Waiver Management (EARS-E1 to E5)
  */
 
+// Mock @gitgov/core/audit
+const mockFormatAuditResult = jest.fn();
+jest.mock('@gitgov/core/audit', () => ({
+  formatAuditResult: (...args: unknown[]) => mockFormatAuditResult(...args),
+  severityBadge: jest.fn((s: string) => ({ critical: '🔴', high: '🟠', medium: '🟡', low: '🔵' })[s] ?? '⚪'),
+}));
+
+// Mock @gitgov/core/github — CLI uses GitHubCiReporter.fromToken() (no Octokit import)
+const mockPostOrUpdateComment = jest.fn().mockResolvedValue(undefined);
+jest.mock('@gitgov/core/github', () => ({
+  GitHubCiReporter: {
+    fromToken: jest.fn().mockReturnValue({
+      postOrUpdateComment: mockPostOrUpdateComment,
+    }),
+  },
+  GitHubApiError: class extends Error { code = 'UNKNOWN'; },
+  isOctokitRequestError: jest.fn(() => false),
+  mapOctokitError: jest.fn(),
+}));
+
 // Mock @gitgov/core
 jest.doMock('@gitgov/core', () => {
   const actual = jest.requireActual('@gitgov/core');
@@ -518,6 +538,143 @@ describe('AuditCommand', () => {
       await auditCommand.executeWaive(undefined, { list: true });
 
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('No active waivers'));
+    });
+  });
+
+  // ==========================================================================
+  // 4.8. CI Mode + LLM Config (AORCH-D1 to D7) — Cycle 1 gate_product
+  // ==========================================================================
+
+  describe('4.8. CI Mode + LLM Config (AORCH-D1 to D7)', () => {
+    const mockConsoleWarn = jest.spyOn(console, 'warn').mockImplementation();
+    const eventFixture = JSON.stringify({ pull_request: { number: 42 } });
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+      mockOrchestrator.run.mockResolvedValue(mockResultWithFindings);
+      mockFormatAuditResult.mockReturnValue('## 🔴 GitGov Gate: 2 findings');
+      mockPostOrUpdateComment.mockResolvedValue(undefined);
+      // Reset env
+      delete process.env['GITHUB_ACTIONS'];
+      delete process.env['GITHUB_TOKEN'];
+      delete process.env['GITHUB_EVENT_PATH'];
+      delete process.env['GITHUB_REPOSITORY'];
+      delete process.env['LLM_MODEL'];
+      delete process.env['LLM_API_KEY'];
+    });
+
+    // [AORCH-D1]
+    it('[AORCH-D1] should post PR comment when --ci in GitHub Actions', async () => {
+      const fs = require('node:fs/promises');
+      const tmpEvent = '/tmp/gci-event-d1.json';
+      await fs.writeFile(tmpEvent, eventFixture);
+
+      process.env['GITHUB_ACTIONS'] = 'true';
+      process.env['GITHUB_TOKEN'] = 'ghp_test123';
+      process.env['GITHUB_EVENT_PATH'] = tmpEvent;
+      process.env['GITHUB_REPOSITORY'] = 'myorg/myrepo';
+
+      await auditCommand.execute(createDefaultOptions({ ci: true }));
+
+      expect(mockFormatAuditResult).toHaveBeenCalledWith(mockResultWithFindings);
+      expect(mockPostOrUpdateComment).toHaveBeenCalledWith(
+        '## 🔴 GitGov Gate: 2 findings',
+        { owner: 'myorg', repo: 'myrepo', prNumber: 42 },
+      );
+      await fs.unlink(tmpEvent).catch(() => {});
+    });
+
+    // [AORCH-D2]
+    it('[AORCH-D2] should update existing comment instead of creating new', async () => {
+      const fs = require('node:fs/promises');
+      const tmpEvent = '/tmp/gci-event-d2.json';
+      await fs.writeFile(tmpEvent, eventFixture);
+
+      process.env['GITHUB_ACTIONS'] = 'true';
+      process.env['GITHUB_TOKEN'] = 'ghp_test123';
+      process.env['GITHUB_EVENT_PATH'] = tmpEvent;
+      process.env['GITHUB_REPOSITORY'] = 'myorg/myrepo';
+
+      await auditCommand.execute(createDefaultOptions({ ci: true }));
+
+      // postOrUpdateComment handles marker-based update internally (CIREP-A2)
+      expect(mockPostOrUpdateComment).toHaveBeenCalledTimes(1);
+      await fs.unlink(tmpEvent).catch(() => {});
+    });
+
+    // [AORCH-D3]
+    it('[AORCH-D3] should not post comment when formatAuditResult returns null', async () => {
+      const fs = require('node:fs/promises');
+      const tmpEvent = '/tmp/gci-event-d3.json';
+      await fs.writeFile(tmpEvent, eventFixture);
+
+      process.env['GITHUB_ACTIONS'] = 'true';
+      process.env['GITHUB_TOKEN'] = 'ghp_test123';
+      process.env['GITHUB_EVENT_PATH'] = tmpEvent;
+      process.env['GITHUB_REPOSITORY'] = 'myorg/myrepo';
+
+      mockFormatAuditResult.mockReturnValue(null);
+      mockOrchestrator.run.mockResolvedValue(mockEmptyResult);
+
+      await auditCommand.execute(createDefaultOptions({ ci: true }));
+
+      expect(mockPostOrUpdateComment).not.toHaveBeenCalled();
+      await fs.unlink(tmpEvent).catch(() => {});
+    });
+
+    // [AORCH-D4]
+    it('[AORCH-D4] should warn and skip PR comment when not in GitHub Actions', async () => {
+      // No GITHUB_ACTIONS env var set
+      await auditCommand.execute(createDefaultOptions({ ci: true }));
+
+      expect(mockConsoleWarn).toHaveBeenCalledWith(
+        expect.stringContaining('requires GitHub Actions'),
+      );
+      expect(mockPostOrUpdateComment).not.toHaveBeenCalled();
+    });
+
+    // [AORCH-D5]
+    it('[AORCH-D5] should log warning on GitHub API error without changing exit code', async () => {
+      const fs = require('node:fs/promises');
+      const tmpEvent = '/tmp/gci-event-d5.json';
+      await fs.writeFile(tmpEvent, eventFixture);
+
+      process.env['GITHUB_ACTIONS'] = 'true';
+      process.env['GITHUB_TOKEN'] = 'ghp_test123';
+      process.env['GITHUB_EVENT_PATH'] = tmpEvent;
+      process.env['GITHUB_REPOSITORY'] = 'myorg/myrepo';
+
+      // Make dynamic require fail to simulate import error
+      jest.doMock('@gitgov/core/github', () => { throw new Error('module load failed'); });
+
+      await auditCommand.execute(createDefaultOptions({ ci: true }));
+
+      // Exit code should still be based on policy (block → 1), not on comment failure
+      expect(mockProcessExit).toHaveBeenCalledWith(1);
+
+      // Restore mock
+      jest.doMock('@gitgov/core/github', () => ({
+        GitHubCiReporter: jest.fn().mockImplementation(() => ({
+          postOrUpdateComment: mockPostOrUpdateComment,
+        })),
+      }));
+      await fs.unlink(tmpEvent).catch(() => {});
+    });
+
+    // [AORCH-D6]
+    it('[AORCH-D6] should set LLM_MODEL env var from --llm-model flag', async () => {
+      await auditCommand.execute(createDefaultOptions({ llmModel: 'anthropic/claude-sonnet-4-6' }));
+
+      expect(process.env['LLM_MODEL']).toBe('anthropic/claude-sonnet-4-6');
+      expect(mockOrchestrator.run).toHaveBeenCalled();
+    });
+
+    // [AORCH-D7]
+    it('[AORCH-D7] should set LLM_API_KEY env var from --llm-key flag', async () => {
+      await auditCommand.execute(createDefaultOptions({ llmKey: 'sk-ant-test-123' }));
+
+      expect(process.env['LLM_API_KEY']).toBe('sk-ant-test-123');
+      expect(mockOrchestrator.run).toHaveBeenCalled();
     });
   });
 });

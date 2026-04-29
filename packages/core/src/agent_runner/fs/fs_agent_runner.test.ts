@@ -188,10 +188,37 @@ describe("FsAgentRunner", () => {
       expect(response.output?.message).toBe("from absolute");
     });
 
-    it.skip("[EARS-B1c] should resolve NPM package name for entrypoint", () => {
-      // TODO: Requires a real NPM package installed in node_modules
-      // to test import("@gitgov/agent-test-echo") resolution.
-      // Validated in E2E tests (gate_agent_flow.e2e.test.ts).
+    it("[EARS-B1c] should resolve NPM package name via createRequire", async () => {
+      // createRequire is non-configurable on node:module — can't spy it.
+      // Instead: create a fake node_modules structure so createRequire actually resolves.
+      const fakeModuleDir = path.join(tempDir, "node_modules", "@fake", "agent-echo");
+      fs.mkdirSync(fakeModuleDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(fakeModuleDir, "package.json"),
+        JSON.stringify({ name: "@fake/agent-echo", main: "index.js" }),
+      );
+      fs.writeFileSync(
+        path.join(fakeModuleDir, "index.js"),
+        "module.exports.runAgent = async function() { return { message: 'from npm resolve' }; };",
+      );
+
+      writeAgentFile("npm-agent", {
+        engine: { type: "local", entrypoint: "@fake/agent-echo", function: "runAgent" },
+      });
+
+      const runner = new FsAgentRunner({
+        executionAdapter: mockExecutionAdapter,
+        gitgovPath,
+        projectRoot: tempDir,
+      });
+
+      const response = await runner.runOnce({
+        agentId: "agent:npm-agent",
+        taskId: "task:1",
+      });
+
+      expect(response.status).toBe("success");
+      expect(response.output?.message).toBe("from npm resolve");
     });
 
     it("[EARS-B2] should lookup runtime handler", async () => {
