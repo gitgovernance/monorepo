@@ -1,3 +1,10 @@
+## [3.16.0](https://github.com/gitgovernance/monorepo/compare/core-v3.15.0...core-v3.16.0) (2026-04-29)
+
+
+### ✨ Features
+
+* **core,cli:** Gate Cycle 1 — audit --ci, ICiReporter, formatAuditResult, G20 agent new ([#152](https://github.com/gitgovernance/monorepo/issues/152)) ([46ea47e](https://github.com/gitgovernance/monorepo/commit/46ea47e4263549a4a0b65048d7c544996a9f61ee)), closes [#87](https://github.com/gitgovernance/monorepo/issues/87)
+
 ## [3.15.0](https://github.com/gitgovernance/monorepo/compare/core-v3.14.0...core-v3.15.0) (2026-04-29)
 
 
