@@ -210,7 +210,7 @@ describe('Block B: Protocol Record Projection (CB1-CB10)', () => {
       // Create a fixture file so audit has something to scan
       // Use a pattern that triggers SEC-006 (hardcoded password) without triggering GitHub push protection
       fs.writeFileSync(path.join(cb9RepoDir, 'config.ts'), 'const password = "SuperSecret123!";\n');
-      runGitgovCli('audit --scope full -q', { cwd: cb9RepoDir });
+      runGitgovCli('audit --scope full -q', { cwd: cb9RepoDir, expectError: true });
 
       // Projection
       await cleanupProtocol(prisma);
