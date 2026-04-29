@@ -76,11 +76,8 @@ describe('Block BA: Audit Record Projection (CBA1-CBA6)', () => {
 
     // 1. Init project + register agent
     runGitgovCli('init --name "Audit Projection Test" --actor-name "Dev BA" --quiet', { cwd: repoDir });
-    const agentConfig = JSON.stringify({
-      metadata: { purpose: 'audit', audit: { target: 'code', outputFormat: 'sarif' } },
-      engine: { type: 'local', entrypoint: SECURITY_AUDIT_ENTRYPOINT, function: 'runAgent' },
-    });
-    runGitgovCli(`agent new agent:security-audit --config '${agentConfig}'`, { cwd: repoDir });
+    const securityAuditPath = path.join(MONOREPO_ROOT, 'packages/agents/security-audit');
+    runGitgovCli(`agent new ${securityAuditPath}`, { cwd: repoDir });
 
     // 2. Write fixtures (files that trigger detections)
     fs.mkdirSync(path.join(repoDir, 'src'), { recursive: true });
