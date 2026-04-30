@@ -143,7 +143,7 @@ export type {
 export { generateTaskId, generateExecutionId, generateFeedbackId, generateCycleId, generateActorId, generateAgentId, computeSuccessorActorId } from "./utils/id_generator";
 
 // Crypto primitives (protocol-level signing + checksum)
-export { buildSignatureDigest } from "./crypto/signatures";
+export { buildSignatureDigest, generateKeys } from "./crypto/signatures";
 export { calculatePayloadChecksum } from "./crypto/checksum";
 
 // Git direct exports (interface + types + errors)

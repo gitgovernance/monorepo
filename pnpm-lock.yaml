@@ -279,6 +279,9 @@ importers:
       '@gitgov/core':
         specifier: workspace:*
         version: link:../core
+      '@gitgov/core-gitlab':
+        specifier: workspace:*
+        version: link:../core-gitlab
       '@octokit/rest':
         specifier: ^22.0.1
         version: 22.0.1
