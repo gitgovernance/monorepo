@@ -162,8 +162,22 @@ describe('GitHubCiReporter', () => {
     });
   });
 
-  describe('4.5. Check Status (Cycle 3)', () => {
-    it.todo('[CIREP-D1] should create check run with conclusion success when pass');
-    // EARS: Cycle 3 scope — createCheckStatus maps 'pass' → 'success', 'fail' → 'failure'
+  describe('4.4. Check Run Lifecycle (CIREP-D1)', () => {
+    it('[CIREP-D1] should create check run with in_progress status and return id', async () => {
+      const octokit = createMockOctokit();
+      const reporter = new GitHubCiReporter(octokit as unknown as Octokit);
+
+      const result = await reporter.startCheckRun('abc123', 'GitGov Audit', { owner: 'myorg', repo: 'myrepo' });
+
+      expect(octokit.rest.checks.create).toHaveBeenCalledWith({
+        owner: 'myorg',
+        repo: 'myrepo',
+        name: 'GitGov Audit',
+        head_sha: 'abc123',
+        status: 'in_progress',
+      });
+      expect(result.id).toBe(1);
+      expect(result.url).toBe('https://github.com/check/1');
+    });
   });
 });
