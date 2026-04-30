@@ -1,6 +1,6 @@
 packages:
   - packages/core
-  - packages/core-gitlab
+  # - packages/core-gitlab  # submodule, not in worktree
   - packages/cli
   - packages/mcp-server
   - packages/e2e

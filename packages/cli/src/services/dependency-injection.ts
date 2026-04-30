@@ -1,6 +1,6 @@
 import * as path from 'path';
 import * as os from 'os';
-import { Adapters, Config, Session, EventBus, Lint, Git, SourceAuditor, FindingDetector, Runner, KeyProvider, RecordProjection, RecordMetrics, AuditOrchestrator, PolicyEvaluator, IdentityModule, RecordSigner, getCurrentActor } from '@gitgov/core';
+import { Adapters, Config, Session, EventBus, Lint, Git, SourceAuditor, FindingDetector, Runner, KeyProvider, RecordProjection, RecordMetrics, AuditOrchestrator, PolicyEvaluator, IdentityModule, RecordSigner, getCurrentActor, ProjectModule } from '@gitgov/core';
 import { FsRecordStore, DEFAULT_ID_ENCODER, FsFileLister, FsProjectInitializer, FsLintModule, FsWorktreeSyncStateModule, GitModule, createAgentRunner, createConfigManager, findProjectRoot, createSessionManager, FsRecordProjection, getWorktreeBasePath } from '@gitgov/core/fs';
 import type { IFsLintModule } from '@gitgov/core/fs';
 import type {
@@ -382,11 +382,15 @@ export class DependencyInjectionService {
     return getCurrentActor(identity, session);
   }
 
-  /**
-   * Creates and returns ProjectAdapter with all required dependencies.
-   * Used by InitCommand (via setInitMode) and potentially other commands.
-   */
-  async getProjectAdapter(): Promise<Adapters.ProjectAdapter> {
+  async getRecordSigner(): Promise<RecordSigner> {
+    await this.initializeStores();
+    if (!this.keyProvider) {
+      throw new Error("KeyProvider not initialized");
+    }
+    return new RecordSigner({ keyProvider: this.keyProvider });
+  }
+
+  async getProjectModule(): Promise<ProjectModule> {
     await this.initializeStores();
     if (!this.projectRoot) {
       throw new Error("Project root not initialized");
@@ -394,15 +398,39 @@ export class DependencyInjectionService {
 
     const identityModule = await this.getIdentityModule();
     const backlogAdapter = await this.getBacklogAdapter();
-    const configManager = await this.getConfigManager();
-    const projectInitializer = new FsProjectInitializer(this.projectRoot, this.repoRoot ?? undefined);
+    const signer = await this.getRecordSigner();
+    const gitModule = await this.getGitModuleForWorktree(this.projectRoot);
 
-    return new Adapters.ProjectAdapter({
-      identityAdapter: identityModule,
-      backlogAdapter,
-      configManager,
-      projectInitializer,
+    return new ProjectModule({
+      identity: identityModule,
+      backlog: backlogAdapter,
+      signer,
+      git: gitModule,
     });
+  }
+
+  private async getGitModuleForWorktree(worktreePath: string): Promise<Git.IGitModule> {
+    const { spawn } = await import('child_process');
+    const execCommand = (command: string, args: string[], options?: Git.ExecOptions) => {
+      return new Promise<{ exitCode: number; stdout: string; stderr: string }>((resolve) => {
+        const cwd = options?.cwd || worktreePath;
+        const proc = spawn(command, args, {
+          cwd,
+          env: { ...process.env, ...options?.env },
+        });
+        let stdout = '';
+        let stderr = '';
+        proc.stdout?.on('data', (data: Buffer) => { stdout += data.toString(); });
+        proc.stderr?.on('data', (data: Buffer) => { stderr += data.toString(); });
+        proc.on('close', (code: number | null) => {
+          resolve({ exitCode: code || 0, stdout, stderr });
+        });
+        proc.on('error', (error: Error) => {
+          resolve({ exitCode: 1, stdout, stderr: error.message });
+        });
+      });
+    };
+    return new GitModule({ repoRoot: worktreePath, execCommand });
   }
 
   /**

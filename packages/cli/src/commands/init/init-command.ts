@@ -1,4 +1,4 @@
-import type { Adapters } from '@gitgov/core';
+import type { ProjectModule } from '@gitgov/core';
 import { DependencyInjectionService } from '../../services/dependency-injection';
 
 import * as pathUtils from 'path';
@@ -74,41 +74,31 @@ export class InitCommand {
       // 4. Setup visual progress tracking
       const progressTracker = this.createProgressTracker(options);
 
-      // 5. Get ProjectAdapter from dependency injection
-      const projectAdapter = await this.getProjectAdapter();
+      // [EARS-B1] Get ProjectModule from dependency injection
+      const projectModule = await this.getProjectModule();
 
-      // 6. Delegate ALL business logic to ProjectAdapter
+      // [EARS-B1] Delegate ALL business logic to ProjectModule
       progressTracker.start("🚀 Initializing GitGovernance Project...\n");
 
-      // [EARS-D1] Build ProjectInitOptions handling all flag combinations correctly
-      // [EARS-A2] Root cycle created via ProjectAdapter with project name
-      const projectInitOptions: Adapters.ProjectInitOptions = {
-        name: completeOptions.name!,
-      };
-
-      // [EARS-A6, EARS-A7] Pass actor type to ProjectAdapter
-      if (completeOptions.type) projectInitOptions.type = completeOptions.type;
-      // [EARS-A3] Process template when specified
-      if (completeOptions.template) projectInitOptions.template = completeOptions.template;
-      if (completeOptions.actorName) projectInitOptions.actorName = completeOptions.actorName;
-      if (completeOptions.actorEmail) projectInitOptions.actorEmail = completeOptions.actorEmail;
-      // [EARS-A4] Configure methodology according to flag
-      if (completeOptions.methodology) projectInitOptions.methodology = completeOptions.methodology;
-      if (completeOptions.skipValidation || completeOptions.forceLocal) projectInitOptions.skipValidation = true;
-      if (completeOptions.verbose) projectInitOptions.verbose = completeOptions.verbose;
-      if (completeOptions.login) projectInitOptions.login = completeOptions.login;
+      // [EARS-D1] Build ProjectInitOptions — filter undefined for exactOptionalPropertyTypes
       const saasUrl = completeOptions.saasUrl || process.env['GITGOV_SAAS_URL'] || 'https://app.gitgov.dev';
-      projectInitOptions.saasUrl = saasUrl;
-
-      const result = await projectAdapter.initializeProject(projectInitOptions);
+      const initOptions: import('@gitgov/core').ProjectModuleInitOptions = { name: completeOptions.name!, saasUrl };
+      if (completeOptions.login) initOptions.login = completeOptions.login;
+      if (completeOptions.actorName) initOptions.actorName = completeOptions.actorName;
+      if (completeOptions.type) initOptions.type = completeOptions.type;
+      const result = await projectModule.initializeProject(initOptions);
 
       progressTracker.complete();
 
-      // 6. Format success output with visual impact
-      this.showSuccessOutput(result, options);
+      // [EARS-B4] Format success output
+      if (result.alreadyInitialized) {
+        console.log("ℹ️  Project already initialized.");
+      } else {
+        this.showSuccessOutput(result, options);
+      }
 
-      // [EARS-G1] Commit initialized files to gitgov-state branch
-      await this.commitStateToWorktree();
+      // [EARS-G1] Post-init: best-effort push + DX concerns
+      await this.postInitConcerns(options);
 
     } catch (error) {
       // 7. Format errors for user-friendly display
@@ -122,84 +112,100 @@ export class InitCommand {
    * [EARS-C5] Validates environment before initialization
    * [EARS-B2] Shows validation errors with warnings and suggestions
    */
+  // [EARS-B2] Validate environment before init
   private async validateEnvironment(options: InitCommandOptions): Promise<void> {
-    const projectAdapter = await this.getProjectAdapter();
-    const validation = await projectAdapter.validateEnvironment();
+    const { execSync } = await import('child_process');
+    const repoRoot = process.cwd();
 
-    if (!validation.isValid) {
+    const warnings: string[] = [];
+    const suggestions: string[] = [];
+    let isValid = true;
+
+    // Check git repo
+    try {
+      execSync('git rev-parse --git-dir', { cwd: repoRoot, stdio: 'pipe' });
+    } catch {
+      warnings.push('Not a Git repository.');
+      suggestions.push("Run 'git init' first.");
+      isValid = false;
+    }
+
+    // Check already initialized (config.json in worktree)
+    const resolvedRoot = realpathSync(repoRoot);
+    const hash = createHash('sha256').update(resolvedRoot).digest('hex').slice(0, 12);
+    const worktreePath = pathUtils.join(os.homedir(), '.gitgov', 'worktrees', hash);
+    if (existsSync(pathUtils.join(worktreePath, '.gitgov', 'config.json')) && !options.force) {
+      warnings.push('GitGovernance already initialized.');
+      suggestions.push("Use --force to re-initialize.");
+      isValid = false;
+    }
+
+    if (!isValid) {
       if (options.json) {
-        console.log(JSON.stringify({
-          success: false,
-          error: "Environment validation failed",
-          warnings: validation.warnings,
-          suggestions: validation.suggestions,
-          exitCode: 1
-        }, null, 2));
+        console.log(JSON.stringify({ success: false, error: "Environment validation failed", warnings, suggestions, exitCode: 1 }, null, 2));
       } else {
         console.error("❌ Environment validation failed:");
-        validation.warnings.forEach(warning => console.error(`  • ${warning}`));
+        warnings.forEach((w: string) => console.error(`  • ${w}`));
         console.log("\n💡 Suggestions:");
-        validation.suggestions.forEach(suggestion => console.log(`  • ${suggestion}`));
+        suggestions.forEach((s: string) => console.log(`  • ${s}`));
       }
       process.exit(1);
     }
 
-    // Show validation success if verbose
     if (options.verbose && !options.quiet) {
       console.log("✅ Environment validation passed");
     }
   }
 
   /**
-   * [EARS-B1, CLIINT-B1] Gets ProjectAdapter for complete orchestration via DI.
+   * [EARS-B1] Gets ProjectModule for complete orchestration via DI.
    * Creates worktree at ~/.gitgov/worktrees/<hash>/ before initializing.
    */
-  private async getProjectAdapter(): Promise<Adapters.ProjectAdapter> {
+  private async getProjectModule(): Promise<ProjectModule> {
     const projectRoot = process.cwd();
 
-    // [CLIINT-B1] Create worktree BEFORE FsProjectInitializer runs
+    // Create worktree BEFORE ProjectModule runs
     await this.ensureWorktreeForInit(projectRoot);
 
     this.container.setInitMode(projectRoot);
-    return this.container.getProjectAdapter();
+    return this.container.getProjectModule();
   }
 
   /**
-   * [EARS-G1] Commit initialized files to gitgov-state branch in the worktree.
-   * Then best-effort push to remote if available.
+   * [EARS-G1] Post-init: best-effort push + DX concerns.
+   * ProjectModule already committed internally — no commitStateToWorktree needed.
    */
-  private async commitStateToWorktree(): Promise<void> {
+  private async postInitConcerns(options: InitCommandOptions): Promise<void> {
+    const repoRoot = process.cwd();
+
+    // Best-effort push to remote
     try {
       const { execSync } = await import('child_process');
-      const repoRoot = process.cwd();
-      const resolvedRoot = realpathSync(repoRoot);
-      const hash = createHash('sha256').update(resolvedRoot).digest('hex').slice(0, 12);
-      const worktreePath = pathUtils.join(os.homedir(), '.gitgov', 'worktrees', hash);
-
-      // Commit protocol files (exclude .session.json, keys/)
-      execSync('git add .gitgov/config.json .gitgov/policy.yml .gitgov/actors .gitgov/cycles', {
-        cwd: worktreePath,
+      execSync('git push origin gitgov-state', {
+        cwd: repoRoot,
         stdio: 'pipe',
+        timeout: 10000,
+        env: { ...process.env, GIT_SSH_COMMAND: 'ssh -o ConnectTimeout=5 -o BatchMode=yes' },
       });
-      execSync('git commit -m "gitgov: initial project structure"', {
-        cwd: worktreePath,
-        stdio: 'pipe',
-      });
-
-      // Best-effort push to remote
-      try {
-        execSync('git push origin gitgov-state', {
-          cwd: repoRoot,
-          stdio: 'pipe',
-          timeout: 10000,
-          env: { ...process.env, GIT_SSH_COMMAND: 'ssh -o ConnectTimeout=5 -o BatchMode=yes' },
-        });
-      } catch {
+    } catch {
+      if (!options.quiet) {
         console.log('\n⚠️  Could not push to remote.');
         console.log('   Run \'gitgov sync push\' when your remote is ready.\n');
       }
+    }
+
+    // DX concerns: .gitignore + gitgov.yml (in repoRoot), agent prompt, session
+    // Uses FsProjectInitializer temporarily for these 3 DX functions — cleanup in Task 4.6
+    try {
+      const { FsProjectInitializer } = await import('@gitgov/core/fs');
+      const resolvedRoot = realpathSync(repoRoot);
+      const hash = createHash('sha256').update(resolvedRoot).digest('hex').slice(0, 12);
+      const worktreePath = pathUtils.join(os.homedir(), '.gitgov', 'worktrees', hash);
+      const dxHelper = new FsProjectInitializer(worktreePath, repoRoot);
+      await dxHelper.setupGitIntegration();
+      await dxHelper.copyAgentPrompt();
     } catch {
-      // Non-fatal — files stay in worktree, user can sync push later
+      // Non-fatal DX concerns
     }
   }
 
@@ -302,68 +308,37 @@ export class InitCommand {
   /**
    * [EARS-C4] Shows success output with visual impact
    * [EARS-C2] Handles --json output for automation
-   * [EARS-B4] Shows performance metrics in output
+   * [EARS-B4] Shows result with actorId and commitSha
    */
-  private showSuccessOutput(result: Adapters.ProjectInitResult, options: InitCommandOptions): void {
+  private showSuccessOutput(result: import('@gitgov/core').ProjectModuleInitResult, options: InitCommandOptions): void {
     if (options.json) {
       console.log(JSON.stringify({
-        success: result.success,
-        project: {
-          id: result.projectId,
-          name: result.projectName,
-          rootCycle: result.rootCycle
-        },
-        actor: result.actor,
-        template: result.template,
-        performance: {
-          initializationTime: result.initializationTime
-        },
-        nextSteps: result.nextSteps
+        success: true,
+        actorId: result.actorId,
+        productAgentId: result.productAgentId,
+        cycleId: result.cycleId,
+        commitSha: result.commitSha,
       }, null, 2));
     } else {
-      // Demo-optimized visual output
       console.log("✅ GitGovernance initialized successfully!\n");
 
-      console.log("🏗️  Project Structure Created:");
-      console.log("   📁 ~/.gitgov/worktrees/<id>/.gitgov/");
-      console.log("   ├── 📁 actors/     (1 ActorRecord created)");
-      console.log("   ├── 📁 cycles/     (1 Root Cycle created)");
-      console.log("   ├── 📁 tasks/      (ready for work)");
-      console.log("   ├── 📁 feedback/   (ready for collaboration)");
-      console.log("   ├── 📁 executions/ (ready for tracking)");
-      console.log("   └── 📄 config.json (project configuration)\n");
-
       console.log("🔐 Cryptographic Trust Established:");
-      console.log(`   👤 Actor: ${result.actor.displayName} (${result.actor.id})`);
-      console.log(`   🔑 Public key: ${result.actor.publicKeyPath}`);
+      console.log(`   👤 Actor: ${result.actorId}`);
+      console.log(`   🤖 Product Agent: ${result.productAgentId}`);
       console.log("   ✅ Self-signed root of trust created\n");
 
       console.log("🎯 Root Cycle Created:");
-      console.log(`   📋 "${result.projectName}" (${result.rootCycle})`);
-      console.log("   📊 Status: planning");
-      console.log("   🎯 Ready for task creation and planning\n");
+      console.log(`   📋 ${result.cycleId}`);
+      console.log("   📊 Status: planning\n");
 
-      if (result.template) {
-        console.log("📋 Blueprint Template Processed:");
-        console.log(`   ✅ ${result.template.cyclesCreated} cycles created`);
-        console.log(`   ✅ ${result.template.tasksCreated} tasks created`);
-        console.log("   🎯 Project structure ready for work\n");
+      if (result.commitSha) {
+        console.log(`📝 Committed: ${result.commitSha.slice(0, 8)}\n`);
       }
 
-      console.log("⚡ Performance Optimized:");
-      console.log("   🚀 Methodology: GitGovernance Default");
-      console.log(`   ⏱️  Initialization completed in ${result.initializationTime}ms`);
-      console.log("   💡 Configuration persisted in config.json\n");
-
       console.log("🚀 Next Steps:");
-      result.nextSteps.forEach(step => {
-        console.log(`   ${step}`);
-      });
-
-      console.log("\n💡 Pro Tips:");
-      console.log("   • Use 'gitgov task new' to create work items");
-      console.log("   • Use 'gitgov status' for project dashboard");
-      console.log("   • All changes are local until you commit to Git");
+      console.log("   gitgov agent new @gitgov/agent-security-audit");
+      console.log("   gitgov audit");
+      console.log("   gitgov status");
     }
   }
 

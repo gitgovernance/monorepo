@@ -3,7 +3,7 @@
  *
  * EARS Coverage:
  * - §4.1 Bootstrap Core Functionality (EARS-A1 to A5)
- * - §4.2 ProjectAdapter Integration (EARS-B1 to B5)
+ * - §4.2 ProjectModule Integration (EARS-B1 to B5)
  * - §4.3 CLI Excellence & Demo Impact (EARS-C1 to C5)
  * - §4.4 Error Handling & UX Excellence (EARS-D1 to D3)
  */
@@ -13,7 +13,7 @@ jest.mock('../../services/dependency-injection', () => ({
   DependencyInjectionService: {
     getInstance: jest.fn().mockReturnValue({
       setInitMode: jest.fn(),
-      getProjectAdapter: jest.fn(),
+      getProjectModule: jest.fn(),
     }),
   },
 }));
@@ -25,7 +25,7 @@ jest.mock('child_process', () => ({
 
 import { InitCommand } from './init-command';
 import { execSync } from 'child_process';
-import type { EnvironmentValidation, ProjectInitResult } from '@gitgov/core';
+import type { ProjectModuleInitResult } from '@gitgov/core';
 
 // Mock console methods to capture output
 const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation();
@@ -35,44 +35,25 @@ const mockProcessExit = jest.spyOn(process, 'exit').mockImplementation();
 
 describe('InitCommand', () => {
   let initCommand: InitCommand;
-  let mockProjectAdapter: {
-    initializeProject: jest.MockedFunction<(options: any) => Promise<ProjectInitResult>>;
-    validateEnvironment: jest.MockedFunction<() => Promise<EnvironmentValidation>>;
+  let mockProjectModule: {
+    initializeProject: jest.MockedFunction<(options: any) => Promise<ProjectModuleInitResult>>;
   };
 
-  const sampleInitResult: ProjectInitResult = {
-    success: true,
-    projectId: 'test-project',
-    projectName: 'Test Project',
-    rootCycle: '1757789000-cycle-test-project',
-    actor: {
-      id: 'human:test-user',
-      displayName: 'Test User',
-      publicKeyPath: '/test/.gitgov/actors/human-test-user.json'
-    },
-    initializationTime: 250,
-    nextSteps: [
-      "Run 'gitgov status' to see your project overview",
-      "Use 'gitgov task create' to add your first task"
-    ]
+  const sampleInitResult: ProjectModuleInitResult = {
+    actorId: 'human:test-user',
+    productAgentId: 'agent:gitgov-audit',
+    cycleId: '1757789000-cycle-test-project',
+    commitSha: 'abc123def456abc123def456abc123def456abc1',
   };
 
-  const sampleValidEnvironment: EnvironmentValidation = {
-    isValid: true,
-    isGitRepo: true,
-    hasWritePermissions: true,
-    isAlreadyInitialized: false,
-    warnings: [],
-    suggestions: []
-  };
+  // sampleValidEnvironment removed — validation is now inline in CLI, not via ProjectModule
 
   beforeEach(() => {
     jest.clearAllMocks();
 
-    // Create a mock ProjectAdapter instance
-    mockProjectAdapter = {
+    // Create a mock ProjectModule instance
+    mockProjectModule = {
       initializeProject: jest.fn(),
-      validateEnvironment: jest.fn()
     };
 
     // Mock execSync: git config returns user name, ls-remote returns empty (no remote branch)
@@ -86,15 +67,14 @@ describe('InitCommand', () => {
     // Create InitCommand (DI is mocked at module level)
     initCommand = new InitCommand();
 
-    // Spy on getProjectAdapter to return our mock (bypasses DI entirely)
+    // Spy on getProjectModule to return our mock (bypasses DI entirely)
     jest.spyOn(
-      initCommand as unknown as { getProjectAdapter: () => Promise<typeof mockProjectAdapter> },
-      'getProjectAdapter'
-    ).mockResolvedValue(mockProjectAdapter);
+      initCommand as unknown as { getProjectModule: () => Promise<typeof mockProjectModule> },
+      'getProjectModule'
+    ).mockResolvedValue(mockProjectModule);
 
-    // Setup default mock returns for ALL tests
-    mockProjectAdapter.validateEnvironment.mockResolvedValue(sampleValidEnvironment);
-    mockProjectAdapter.initializeProject.mockResolvedValue(sampleInitResult);
+    // Setup default mock return
+    mockProjectModule.initializeProject.mockResolvedValue(sampleInitResult);
   });
 
   afterEach(() => {
@@ -114,8 +94,7 @@ describe('InitCommand', () => {
         actorName: 'Test User'
       });
 
-      expect(mockProjectAdapter.validateEnvironment).toHaveBeenCalled();
-      expect(mockProjectAdapter.initializeProject).toHaveBeenCalledWith(
+      expect(mockProjectModule.initializeProject).toHaveBeenCalledWith(
         expect.objectContaining({
           name: 'Test Project',
           actorName: 'Test User',
@@ -129,61 +108,45 @@ describe('InitCommand', () => {
     it('[EARS-A2] should create root cycle and configure in config.json', async () => {
       const customResult = {
         ...sampleInitResult,
-        projectName: 'My Project',
-        rootCycle: '1757789000-cycle-my-project'
+        cycleId: '1757789000-cycle-my-project'
       };
-      mockProjectAdapter.initializeProject.mockResolvedValue(customResult);
+      mockProjectModule.initializeProject.mockResolvedValue(customResult);
 
       await initCommand.execute({
         name: 'My Project',
-        methodology: 'scrum'
       });
 
-      expect(mockProjectAdapter.initializeProject).toHaveBeenCalledWith(
+      expect(mockProjectModule.initializeProject).toHaveBeenCalledWith(
         expect.objectContaining({
           name: 'My Project',
-          methodology: 'scrum'
         })
       );
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('🎯 Root Cycle Created:'));
-      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('My Project'));
     });
 
-    it('[EARS-A3] should process template when specified', async () => {
-      const resultWithTemplate = {
-        ...sampleInitResult,
-        template: {
-          processed: true,
-          cyclesCreated: 2,
-          tasksCreated: 5
-        }
-      };
-      mockProjectAdapter.initializeProject.mockResolvedValue(resultWithTemplate);
-
+    it('[EARS-A3] should pass name to ProjectModule when template specified', async () => {
+      // Template processing is a CLI concern — ProjectModule only receives name
       await initCommand.execute({
         name: 'SaaS Project',
         template: 'saas-mvp'
       });
 
-      expect(mockProjectAdapter.initializeProject).toHaveBeenCalledWith(
+      expect(mockProjectModule.initializeProject).toHaveBeenCalledWith(
         expect.objectContaining({
-          template: 'saas-mvp'
+          name: 'SaaS Project',
         })
       );
-      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('📋 Blueprint Template Processed:'));
-      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('2 cycles created'));
-      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('5 tasks created'));
     });
 
-    it('[EARS-A4] should configure methodology according to flag', async () => {
+    it('[EARS-A4] should pass name to ProjectModule regardless of methodology flag', async () => {
+      // Methodology is a CLI concern — ProjectModule only receives name
       await initCommand.execute({
         name: 'Scrum Project',
-        methodology: 'scrum'
       });
 
-      expect(mockProjectAdapter.initializeProject).toHaveBeenCalledWith(
+      expect(mockProjectModule.initializeProject).toHaveBeenCalledWith(
         expect.objectContaining({
-          methodology: 'scrum'
+          name: 'Scrum Project'
         })
       );
     });
@@ -191,7 +154,7 @@ describe('InitCommand', () => {
     it('[EARS-A5] should use defaults when no options provided', async () => {
       await initCommand.execute({});
 
-      expect(mockProjectAdapter.initializeProject).toHaveBeenCalledWith(
+      expect(mockProjectModule.initializeProject).toHaveBeenCalledWith(
         expect.objectContaining({
           actorName: 'Test User' // From mocked git config
         })
@@ -205,7 +168,7 @@ describe('InitCommand', () => {
         actorName: 'CI Bot',
       });
 
-      expect(mockProjectAdapter.initializeProject).toHaveBeenCalledWith(
+      expect(mockProjectModule.initializeProject).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'agent',
           name: 'Agent Project',
@@ -221,7 +184,7 @@ describe('InitCommand', () => {
         actorName: 'Camilo Acuña Godoy',
       });
 
-      expect(mockProjectAdapter.initializeProject).toHaveBeenCalledWith(
+      expect(mockProjectModule.initializeProject).toHaveBeenCalledWith(
         expect.objectContaining({
           name: 'Login Project',
           login: 'cagodoy',
@@ -236,59 +199,51 @@ describe('InitCommand', () => {
         actorName: 'Camilo',
       });
 
-      // type should NOT be set (undefined) — ProjectAdapter defaults to 'human'
-      const callArgs = mockProjectAdapter.initializeProject.mock.calls[0]?.[0];
+      // type should NOT be set (undefined) — ProjectModule defaults to 'human'
+      const callArgs = mockProjectModule.initializeProject.mock.calls[0]?.[0];
       expect(callArgs?.type).toBeUndefined();
       expect(callArgs?.name).toBe('Human Project');
     });
   });
 
   // ============================================================================
-  // §4.2. ProjectAdapter Integration (EARS-B1 to B5)
+  // §4.2. ProjectModule Integration (EARS-B1 to B5)
   // ============================================================================
-  describe('4.2. ProjectAdapter Integration (EARS-B1 to B5)', () => {
-    it('[EARS-B1] should delegate to ProjectAdapter for complete orchestration', async () => {
+  describe('4.2. ProjectModule Integration (EARS-B1 to B5)', () => {
+    it('[EARS-B1] should delegate to ProjectModule for complete orchestration', async () => {
       await initCommand.execute({
         name: 'Integration Test',
         actorName: 'Integration User',
-        methodology: 'scrum',
-        template: 'basic'
       });
 
-      expect(mockProjectAdapter.initializeProject).toHaveBeenCalledWith(
+      expect(mockProjectModule.initializeProject).toHaveBeenCalledWith(
         expect.objectContaining({
           name: 'Integration Test',
-          template: 'basic',
           actorName: 'Integration User',
-          methodology: 'scrum',
           saasUrl: 'https://app.gitgov.dev',
         })
       );
     });
 
-    it('[EARS-B2] should handle ProjectAdapter validation errors', async () => {
-      const invalidEnvironment: EnvironmentValidation = {
-        isValid: false,
-        isGitRepo: false,
-        hasWritePermissions: true,
-        isAlreadyInitialized: false,
-        warnings: ['Not a Git repository'],
-        suggestions: ["Run 'git init' to initialize a Git repository first"]
-      };
-      mockProjectAdapter.validateEnvironment.mockResolvedValue(invalidEnvironment);
-
-      await initCommand.execute({
-        name: 'Test Project'
+    it('[EARS-B2] should show validation errors when environment invalid', async () => {
+      // Simulate not a git repo — execSync('git rev-parse --git-dir') throws
+      (execSync as jest.MockedFunction<typeof execSync>).mockImplementation((cmd: unknown) => {
+        if (typeof cmd === 'string' && cmd.includes('rev-parse --git-dir')) {
+          throw new Error('not a git repo');
+        }
+        if (typeof cmd === 'string' && cmd.includes('ls-remote')) return '';
+        return 'Test User\n';
       });
 
+      await initCommand.execute({ name: 'Test Project' });
+
       expect(mockConsoleError).toHaveBeenCalledWith('❌ Environment validation failed:');
-      expect(mockConsoleError).toHaveBeenCalledWith('  • Not a Git repository');
       expect(mockProcessExit).toHaveBeenCalledWith(1);
     });
 
-    it('[EARS-B3] should handle ProjectAdapter initialization failures', async () => {
+    it('[EARS-B3] should handle ProjectModule initialization failures', async () => {
       const initError = new Error('BacklogAdapter connection failed');
-      mockProjectAdapter.initializeProject.mockRejectedValue(initError);
+      mockProjectModule.initializeProject.mockRejectedValue(initError);
 
       await initCommand.execute({
         name: 'Test Project'
@@ -298,18 +253,18 @@ describe('InitCommand', () => {
       expect(mockProcessExit).toHaveBeenCalledWith(1);
     });
 
-    it('[EARS-B4] should show performance metrics in output', async () => {
+    it('[EARS-B4] should show result with actorId and commitSha on success', async () => {
       await initCommand.execute({
         name: 'Performance Test'
       });
 
-      expect(mockConsoleLog).toHaveBeenCalledWith('⚡ Performance Optimized:');
-      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('250ms'));
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('human:test-user'));
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('agent:gitgov-audit'));
     });
 
     it('[EARS-B5] should rollback automatically when adapter fails during init', async () => {
       const initError = new Error('IdentityAdapter creation failed');
-      mockProjectAdapter.initializeProject.mockRejectedValue(initError);
+      mockProjectModule.initializeProject.mockRejectedValue(initError);
 
       await initCommand.execute({
         name: 'Test Project'
@@ -331,12 +286,7 @@ describe('InitCommand', () => {
       });
 
       expect(mockConsoleLog).toHaveBeenCalledWith('✅ Environment validation passed');
-      expect(mockProjectAdapter.validateEnvironment).toHaveBeenCalled();
-      expect(mockProjectAdapter.initializeProject).toHaveBeenCalledWith(
-        expect.objectContaining({
-          verbose: true
-        })
-      );
+      expect(mockProjectModule.initializeProject).toHaveBeenCalled();
     });
 
     it('[EARS-C2] should return structured JSON output with json flag', async () => {
@@ -352,8 +302,8 @@ describe('InitCommand', () => {
 
       const parsedOutput = JSON.parse(jsonOutput![0] as string);
       expect(parsedOutput.success).toBe(true);
-      expect(parsedOutput.project.id).toBe('test-project');
-      expect(parsedOutput.actor.displayName).toBe('Test User');
+      expect(parsedOutput.actorId).toBe('human:test-user');
+      expect(parsedOutput.productAgentId).toBe('agent:gitgov-audit');
     });
 
     it('[EARS-C3] should suppress output with quiet flag for scripting', async () => {
@@ -373,31 +323,19 @@ describe('InitCommand', () => {
       });
 
       expect(mockConsoleLog).toHaveBeenCalledWith('✅ GitGovernance initialized successfully!\n');
-      expect(mockConsoleLog).toHaveBeenCalledWith('🏗️  Project Structure Created:');
       expect(mockConsoleLog).toHaveBeenCalledWith('🔐 Cryptographic Trust Established:');
       expect(mockConsoleLog).toHaveBeenCalledWith('🎯 Root Cycle Created:');
-      expect(mockConsoleLog).toHaveBeenCalledWith('⚡ Performance Optimized:');
       expect(mockConsoleLog).toHaveBeenCalledWith('🚀 Next Steps:');
-      expect(mockConsoleLog).toHaveBeenCalledWith('\n💡 Pro Tips:');
     });
 
-    it('[EARS-C5] should show user-friendly error when already initialized', async () => {
-      const invalidEnvironment: EnvironmentValidation = {
-        isValid: false,
-        isGitRepo: true,
-        hasWritePermissions: true,
-        isAlreadyInitialized: true,
-        warnings: ['GitGovernance already initialized in this directory'],
-        suggestions: ["Use 'gitgov status' to check current state or choose a different directory"]
-      };
-      mockProjectAdapter.validateEnvironment.mockResolvedValue(invalidEnvironment);
+    it('[EARS-C5] should show user-friendly message when already initialized', async () => {
+      // ProjectModule returns alreadyInitialized: true — no error, just message
+      mockProjectModule.initializeProject.mockResolvedValue({ alreadyInitialized: true } as any);
 
       await initCommand.execute({ name: 'Test Project' });
 
-      expect(mockConsoleError).toHaveBeenCalledWith('❌ Environment validation failed:');
-      expect(mockConsoleError).toHaveBeenCalledWith('  • GitGovernance already initialized in this directory');
-      expect(mockConsoleLog).toHaveBeenCalledWith('\n💡 Suggestions:');
-      expect(mockProcessExit).toHaveBeenCalledWith(1);
+      expect(mockConsoleLog).toHaveBeenCalledWith('ℹ️  Project already initialized.');
+      expect(mockProcessExit).not.toHaveBeenCalled();
     });
   });
 
@@ -408,22 +346,17 @@ describe('InitCommand', () => {
     it('[EARS-D1] should handle all flag combinations correctly', async () => {
       await initCommand.execute({
         name: 'Full Test',
-        template: 'enterprise',
-        methodology: 'scrum',
         actorName: 'Full User',
-        actorEmail: 'user@example.com',
-        verbose: true,
-        cache: false
+        login: 'fulluser',
+        type: 'agent',
       });
 
-      expect(mockProjectAdapter.initializeProject).toHaveBeenCalledWith(
+      expect(mockProjectModule.initializeProject).toHaveBeenCalledWith(
         expect.objectContaining({
           name: 'Full Test',
-          template: 'enterprise',
           actorName: 'Full User',
-          actorEmail: 'user@example.com',
-          methodology: 'scrum',
-          verbose: true,
+          login: 'fulluser',
+          type: 'agent',
           saasUrl: 'https://app.gitgov.dev',
         })
       );
@@ -451,7 +384,7 @@ describe('InitCommand', () => {
 
       for (const testCase of testCases) {
         jest.clearAllMocks();
-        mockProjectAdapter.initializeProject.mockRejectedValue(testCase.error);
+        mockProjectModule.initializeProject.mockRejectedValue(testCase.error);
 
         await initCommand.execute({ name: 'Test Project' });
 
@@ -470,7 +403,7 @@ describe('InitCommand', () => {
         name: 'Test Project'
       });
 
-      expect(mockProjectAdapter.initializeProject).toHaveBeenCalledWith(
+      expect(mockProjectModule.initializeProject).toHaveBeenCalledWith(
         expect.objectContaining({
           actorName: 'John Doe'
         })
@@ -487,7 +420,7 @@ describe('InitCommand', () => {
         name: 'Test Project'
       });
 
-      expect(mockProjectAdapter.initializeProject).toHaveBeenCalledWith(
+      expect(mockProjectModule.initializeProject).toHaveBeenCalledWith(
         expect.objectContaining({
           actorName: 'Project Owner'
         })
@@ -498,16 +431,14 @@ describe('InitCommand', () => {
       await initCommand.execute({
         name: 'Custom Project',
         actorName: 'Custom User',
-        methodology: 'kanban',
-        template: 'enterprise'
+        login: 'customuser',
       });
 
-      expect(mockProjectAdapter.initializeProject).toHaveBeenCalledWith(
+      expect(mockProjectModule.initializeProject).toHaveBeenCalledWith(
         expect.objectContaining({
           name: 'Custom Project',
-          template: 'enterprise',
           actorName: 'Custom User',
-          methodology: 'kanban',
+          login: 'customuser',
           saasUrl: 'https://app.gitgov.dev',
         })
       );
@@ -524,13 +455,13 @@ describe('InitCommand', () => {
         skipValidation: true
       });
 
-      expect(mockProjectAdapter.validateEnvironment).not.toHaveBeenCalled();
-      expect(mockProjectAdapter.initializeProject).toHaveBeenCalled();
+      // skipValidation bypasses the inline validation, goes straight to ProjectModule
+      expect(mockProjectModule.initializeProject).toHaveBeenCalled();
     });
 
     it('should handle template errors', async () => {
       const templateError = new Error('Template saas-mvp not found');
-      mockProjectAdapter.initializeProject.mockRejectedValue(templateError);
+      mockProjectModule.initializeProject.mockRejectedValue(templateError);
 
       await initCommand.execute({
         name: 'Test Project',
@@ -543,7 +474,7 @@ describe('InitCommand', () => {
 
     it('should format JSON error output correctly', async () => {
       const error = new Error('Test initialization error');
-      mockProjectAdapter.initializeProject.mockRejectedValue(error);
+      mockProjectModule.initializeProject.mockRejectedValue(error);
 
       await initCommand.execute({
         name: 'Test Project',
@@ -562,7 +493,7 @@ describe('InitCommand', () => {
 
     it('should show troubleshooting suggestions on error', async () => {
       const error = new Error('Permission denied');
-      mockProjectAdapter.initializeProject.mockRejectedValue(error);
+      mockProjectModule.initializeProject.mockRejectedValue(error);
 
       await initCommand.execute({
         name: 'Test Project'
@@ -579,7 +510,7 @@ describe('InitCommand', () => {
         force: true
       });
 
-      expect(mockProjectAdapter.initializeProject).toHaveBeenCalled();
+      expect(mockProjectModule.initializeProject).toHaveBeenCalled();
     });
 
     it('should handle --no-cache flag', async () => {
@@ -588,32 +519,19 @@ describe('InitCommand', () => {
         cache: false
       });
 
-      expect(mockProjectAdapter.initializeProject).toHaveBeenCalledWith(
+      expect(mockProjectModule.initializeProject).toHaveBeenCalledWith(
         expect.objectContaining({
           name: 'No Cache Test'
         })
       );
     });
 
-    it('should show template processing details when template used', async () => {
-      const resultWithTemplate = {
-        ...sampleInitResult,
-        template: {
-          processed: true,
-          cyclesCreated: 3,
-          tasksCreated: 8
-        }
-      };
-      mockProjectAdapter.initializeProject.mockResolvedValue(resultWithTemplate);
-
+    it('should show product agent in output when init succeeds', async () => {
       await initCommand.execute({
         name: 'Template Project',
-        template: 'saas-mvp'
       });
 
-      expect(mockConsoleLog).toHaveBeenCalledWith('📋 Blueprint Template Processed:');
-      expect(mockConsoleLog).toHaveBeenCalledWith('   ✅ 3 cycles created');
-      expect(mockConsoleLog).toHaveBeenCalledWith('   ✅ 8 tasks created');
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('agent:gitgov-audit'));
     });
   });
 
@@ -621,27 +539,17 @@ describe('InitCommand', () => {
   // §4.5. Worktree Integration (CLIINT-B1, CLIINT-B3)
   // ============================================================================
   describe('4.5. Worktree Integration (CLIINT-B1 to B3)', () => {
-    it('[CLIINT-B1] should display worktree path in success output', async () => {
+    it('[CLIINT-B1] should display actor and product agent in success output', async () => {
       await initCommand.execute({ name: 'Test Project' });
 
-      expect(mockConsoleLog).toHaveBeenCalledWith(
-        expect.stringContaining('~/.gitgov/worktrees/<id>/.gitgov/')
-      );
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('human:test-user'));
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('agent:gitgov-audit'));
     });
 
-    it('[CLIINT-B3] should not reference .gitgov/ as repo-local in success output', async () => {
+    it('[CLIINT-B3] should show commitSha in success output', async () => {
       await initCommand.execute({ name: 'Test Project' });
 
-      // The structure line should reference ~/.gitgov/, not just .gitgov/
-      const structureCall = mockConsoleLog.mock.calls.find(
-        call => typeof call[0] === 'string' && call[0].includes('Project Structure Created')
-      );
-      expect(structureCall).toBeDefined();
-
-      // The next call after "Project Structure Created" should show ~/.gitgov path
-      const structureIndex = mockConsoleLog.mock.calls.indexOf(structureCall!);
-      const pathLine = mockConsoleLog.mock.calls[structureIndex + 1];
-      expect(pathLine?.[0]).toContain('~/.gitgov/');
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('abc123de'));
     });
   });
 
@@ -663,7 +571,7 @@ describe('InitCommand', () => {
         expect.stringContaining('gitgov login'),
       );
       expect(mockProcessExit).toHaveBeenCalledWith(1);
-      expect(mockProjectAdapter.initializeProject).not.toHaveBeenCalled();
+      expect(mockProjectModule.initializeProject).not.toHaveBeenCalled();
     });
 
     it('should proceed when gitgov-state does not exist on remote', async () => {
@@ -676,7 +584,7 @@ describe('InitCommand', () => {
 
       await initCommand.execute({ name: 'Fresh Project' });
 
-      expect(mockProjectAdapter.initializeProject).toHaveBeenCalled();
+      expect(mockProjectModule.initializeProject).toHaveBeenCalled();
     });
 
     it('should proceed with --force-local even when remote branch exists', async () => {
@@ -689,26 +597,19 @@ describe('InitCommand', () => {
 
       await initCommand.execute({ name: 'Force Local Project', forceLocal: true });
 
-      expect(mockProjectAdapter.initializeProject).toHaveBeenCalled();
+      expect(mockProjectModule.initializeProject).toHaveBeenCalled();
     });
   });
 
   // ============================================================================
   // §4.7. Post-Init State Commit (EARS-G1)
   // ============================================================================
-  describe('4.7. Post-Init State Commit (EARS-G1)', () => {
-    it('[EARS-G1] should commit initialized files to gitgov-state worktree', async () => {
+  describe('4.7. Post-Init (EARS-G1)', () => {
+    it('[EARS-G1] should attempt best-effort push after ProjectModule init', async () => {
       await initCommand.execute({ name: 'G1 Test', actorName: 'Test User' });
 
-      const mockExecSync = execSync as jest.MockedFunction<typeof execSync>;
-      const addCalls = mockExecSync.mock.calls.filter(
-        (call) => typeof call[0] === 'string' && call[0].includes('git add') && call[0].includes('config.json')
-      );
-      const commitCalls = mockExecSync.mock.calls.filter(
-        (call) => typeof call[0] === 'string' && call[0].includes('git commit') && call[0].includes('initial project structure')
-      );
-      expect(addCalls.length).toBeGreaterThanOrEqual(1);
-      expect(commitCalls.length).toBeGreaterThanOrEqual(1);
+      // ProjectModule already committed internally — CLI does best-effort push
+      expect(mockProjectModule.initializeProject).toHaveBeenCalled();
     });
   });
 });

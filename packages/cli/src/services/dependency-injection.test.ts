@@ -548,6 +548,21 @@ jest.doMock('@gitgov/core', () => {
         detect: jest.fn().mockResolvedValue([]),
       })),
     },
+
+    // Standalone exports (imported directly, not via namespace)
+    IdentityModule: jest.fn().mockImplementation(() => ({
+      getActor: jest.fn().mockResolvedValue({ id: 'human:test-user', type: 'human', displayName: 'Test User', publicKey: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=', roles: ['author'] }),
+      createActor: jest.fn().mockResolvedValue({ id: 'human:new-user', type: 'human', displayName: 'New User', publicKey: 'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=', roles: ['author'] }),
+      getActorPublicKey: jest.fn().mockResolvedValue('AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='),
+      listActors: jest.fn().mockResolvedValue([]),
+    })),
+    RecordSigner: jest.fn().mockImplementation(() => ({
+      createSignedRecord: jest.fn().mockResolvedValue({ header: { version: '1.0', type: 'task', payloadChecksum: 'abc', signatures: [] }, payload: {} }),
+    })),
+    ProjectModule: jest.fn().mockImplementation(() => ({
+      initializeProject: jest.fn().mockResolvedValue({ actorId: 'human:test-user', productAgentId: 'agent:gitgov-audit', cycleId: 'cycle-root', commitSha: 'abc123' }),
+    })),
+    getCurrentActor: jest.fn().mockResolvedValue({ id: 'human:current-user', type: 'human', displayName: 'Current User', publicKey: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=', roles: ['author'] }),
   };
 });
 
@@ -803,14 +818,14 @@ describe('DependencyInjectionService', () => {
       expect(EventBus.EventBus).toHaveBeenCalled();
     });
 
-    it('[EARS-C5] should create FeedbackAdapter with IdentityAdapter', async () => {
+    it('[EARS-C5] should create FeedbackAdapter with signer and eventBus', async () => {
       const feedbackAdapter = await diService.getFeedbackAdapter();
 
       expect(feedbackAdapter).toBeDefined();
       expect(feedbackAdapter.create).toBeDefined();
 
-      // Verify IdentityAdapter was created as dependency
-      expect(Adapters.IdentityAdapter).toHaveBeenCalled();
+      // FeedbackAdapter is constructed with stores + signer + eventBus (no IdentityModule needed)
+      expect(Adapters.FeedbackAdapter).toHaveBeenCalled();
     });
 
     it('[EARS-C6] should create LintModule with RecordProjector', async () => {
