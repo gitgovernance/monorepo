@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as fs from 'fs/promises';
 import { McpDependencyInjectionService } from './mcp_di.js';
 import { getWorktreeBasePath } from '@gitgov/core/fs';
+import { generateCycleId } from '@gitgov/core';
 
 /**
  * McpDependencyInjectionService tests — Block B (MSRV-B1 to MSRV-B5)
@@ -40,7 +41,7 @@ async function createTempProject(): Promise<{ projectRoot: string; worktreeBase:
       protocolVersion: '1.0.0',
       projectId: 'test-project',
       projectName: 'Test Project',
-      rootCycle: 'root',
+      rootCycle: generateCycleId('root', Date.now()),
     }),
   );
 

@@ -82,7 +82,11 @@ export type { ActivityEvent } from "./event_bus/index";
 
 // ProjectInitializer type exports
 export type { EnvironmentValidation } from "./project_initializer/index";
-export type { ProjectInitResult } from "./adapters/project_adapter/index";
+// ProjectInitResult removed — use ProjectModuleInitResult from project_module
+
+// ProjectModule (Cycle 4 — unified init orchestrator)
+export { ProjectModule } from "./project_module/index";
+export type { ProjectModuleDeps, ProjectInitOptions as ProjectModuleInitOptions, ProjectInitResult as ProjectModuleInitResult } from "./project_module/index";
 
 // Store type exports
 export type { RecordStore, IdEncoder } from "./record_store/index";
@@ -139,7 +143,7 @@ export type {
 export { generateTaskId, generateExecutionId, generateFeedbackId, generateCycleId, generateActorId, generateAgentId, computeSuccessorActorId } from "./utils/id_generator";
 
 // Crypto primitives (protocol-level signing + checksum)
-export { buildSignatureDigest } from "./crypto/signatures";
+export { buildSignatureDigest, generateKeys } from "./crypto/signatures";
 export { calculatePayloadChecksum } from "./crypto/checksum";
 
 // Git direct exports (interface + types + errors)
@@ -185,7 +189,7 @@ export * as RecordMetrics from "./record_metrics/index";
 export * as BacklogAdapter from "./adapters/backlog_adapter/index";
 export * as ExecutionAdapter from "./adapters/execution_adapter/index";
 export * as FeedbackAdapter from "./adapters/feedback_adapter/index";
-export * as ProjectAdapter from "./adapters/project_adapter/index";
+// ProjectAdapter removed — replaced by ProjectModule
 export * as WorkflowAdapter from "./adapters/workflow_adapter/index";
 
 // RecordSigner — cross-cutting signing module (identity_module_v2 Cycle 1)

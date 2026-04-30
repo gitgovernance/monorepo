@@ -1025,6 +1025,16 @@ export class LocalGitModule implements IGitModule {
    * await gitModule.add([".gitgov"], { force: true }); // Add ignored files
    */
   async add(filePaths: string[], options?: { force?: boolean; contentMap?: Record<string, string> }): Promise<void> {
+    // [EARS-D1b] Write contentMap entries to disk before git add
+    if (options?.contentMap) {
+      const root = await this.ensureRepoRoot();
+      for (const [filePath, content] of Object.entries(options.contentMap)) {
+        const absPath = path.resolve(root, filePath);
+        fs.mkdirSync(path.dirname(absPath), { recursive: true });
+        fs.writeFileSync(absPath, content, 'utf-8');
+      }
+    }
+
     const args = ['add'];
     if (options?.force) {
       args.push('--force');

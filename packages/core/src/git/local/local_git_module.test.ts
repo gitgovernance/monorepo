@@ -921,6 +921,31 @@ describe('LocalGitModule', () => {
       expect(stdout).toContain('A  file.txt');
     });
 
+    it('[EARS-D1b] should write contentMap entries to disk and stage them', async () => {
+      await gitModule.add(['.gitgov/policy.yml'], {
+        contentMap: { '.gitgov/policy.yml': 'version: "1.0"\nfailOn: critical\n' },
+      });
+
+      const { stdout: status } = await execAsync('git status --porcelain', { cwd: tempRepo });
+      expect(status).toContain('A  .gitgov/policy.yml');
+
+      const content = fs.readFileSync(path.join(tempRepo, '.gitgov/policy.yml'), 'utf-8');
+      expect(content).toBe('version: "1.0"\nfailOn: critical\n');
+    });
+
+    it('[EARS-D1b] should create parent directories for contentMap paths', async () => {
+      await gitModule.add(['.gitgov/actors/agent_gitgov-audit.json'], {
+        contentMap: { '.gitgov/actors/agent_gitgov-audit.json': '{"id":"agent:gitgov-audit"}' },
+      });
+
+      const filePath = path.join(tempRepo, '.gitgov/actors/agent_gitgov-audit.json');
+      expect(fs.existsSync(filePath)).toBe(true);
+      expect(JSON.parse(fs.readFileSync(filePath, 'utf-8'))).toEqual({ id: 'agent:gitgov-audit' });
+
+      const { stdout: status } = await execAsync('git status --porcelain', { cwd: tempRepo });
+      expect(status).toContain('agent_gitgov-audit.json');
+    });
+
     it('[EARS-D2] should create commit and return hash', async () => {
       await execAsync('echo "test" > file.txt', { cwd: tempRepo });
       await gitModule.add(['file.txt']);

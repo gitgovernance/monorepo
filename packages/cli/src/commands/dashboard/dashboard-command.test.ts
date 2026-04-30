@@ -129,6 +129,7 @@ describe('DashboardCommand - EARS Compliance Tests', () => {
     getRecordMetrics: jest.MockedFunction<() => Promise<typeof mockRecordMetrics>>;
     getRecordProjector: jest.MockedFunction<() => Promise<typeof mockProjector>>;
     getIdentityAdapter: jest.MockedFunction<() => Promise<typeof mockIdentityAdapter>>;
+    getCurrentActor: jest.MockedFunction<() => Promise<ActorRecord>>;
   };
 
   // Sample data using factories
@@ -243,7 +244,8 @@ describe('DashboardCommand - EARS Compliance Tests', () => {
       getFeedbackAdapter: jest.fn().mockResolvedValue(mockFeedbackAdapter),
       getRecordMetrics: jest.fn().mockResolvedValue(mockRecordMetrics),
       getRecordProjector: jest.fn().mockResolvedValue(mockProjector),
-      getIdentityAdapter: jest.fn().mockResolvedValue(mockIdentityAdapter)
+      getIdentityAdapter: jest.fn().mockResolvedValue(mockIdentityAdapter),
+      getCurrentActor: jest.fn().mockResolvedValue(sampleActor),
     };
 
     // Mock DependencyInjectionService.getInstance()

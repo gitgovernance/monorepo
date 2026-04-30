@@ -271,37 +271,6 @@ importers:
         specifier: ^5.8.3
         version: 5.9.2
 
-  packages/core-gitlab:
-    dependencies:
-      '@gitbeaker/rest':
-        specifier: ^40.0.0
-        version: 40.6.0
-      '@gitgov/core':
-        specifier: workspace:*
-        version: link:../core
-      picomatch:
-        specifier: ^4.0.2
-        version: 4.0.3
-    devDependencies:
-      '@types/jest':
-        specifier: ^29.5.14
-        version: 29.5.14
-      '@types/node':
-        specifier: ^22.0.0
-        version: 22.18.0
-      '@types/picomatch':
-        specifier: ^4.0.2
-        version: 4.0.2
-      jest:
-        specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.18.0)
-      ts-jest:
-        specifier: ^29.2.0
-        version: 29.4.1(@babel/core@7.28.3)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.28.3))(esbuild@0.25.5)(jest-util@29.7.0)(jest@29.7.0(@types/node@22.18.0))(typescript@5.9.2)
-      typescript:
-        specifier: ^5.7.0
-        version: 5.9.2
-
   packages/e2e:
     devDependencies:
       '@gitbeaker/rest':
@@ -350,8 +319,8 @@ importers:
   packages/mcp-server:
     dependencies:
       '@gitgov/core':
-        specifier: ^2.9.0
-        version: 2.9.0
+        specifier: workspace:*
+        version: link:../core
       '@modelcontextprotocol/sdk':
         specifier: ^1.26.0
         version: 1.26.0(zod@4.3.6)
@@ -1049,9 +1018,6 @@ packages:
   '@gitbeaker/rest@40.6.0':
     resolution: {integrity: sha512-sAwYJclU3NlB/gdxqhH6Hnmy5LWzvW7D3W33eShQEnxMhM0VjnFHPHcgJLQCIux3hMiub1uGtTw1hBJTxDc2mQ==}
     engines: {node: '>=18.20.0'}
-
-  '@gitgov/core@2.9.0':
-    resolution: {integrity: sha512-vIsqH3FLGh31Jr5MgUQc+a2v+gEqZqaKlS9yb4OPxSoyPSUZfWyvffnKonVpRmYD3E/PSxnmSY0PnIQD2g+uOQ==}
 
   '@hono/node-server@1.19.11':
     resolution: {integrity: sha512-dr8/3zEaB+p0D2n/IUrlPF1HZm586qgJNXK1a9fhg/PzdtkK7Ksd5l312tJX2yBuALqDYBlG20QEbayqPyxn+g==}
@@ -5523,16 +5489,6 @@ snapshots:
     dependencies:
       '@gitbeaker/core': 40.6.0
       '@gitbeaker/requester-utils': 40.6.0
-
-  '@gitgov/core@2.9.0':
-    dependencies:
-      '@octokit/rest': 22.0.1
-      ajv: 8.17.1
-      ajv-formats: 3.0.1(ajv@8.17.1)
-      chokidar: 3.6.0
-      fast-glob: 3.3.3
-      js-yaml: 4.1.0
-      picomatch: 4.0.3
 
   '@hono/node-server@1.19.11(hono@4.12.10)':
     dependencies:

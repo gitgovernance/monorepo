@@ -26,7 +26,7 @@ jest.mock('../../services/dependency-injection', () => ({
 import { StatusCommand } from './status-command';
 import { DependencyInjectionService } from '../../services/dependency-injection';
 import { Factories } from "@gitgov/core";
-import type { TaskRecord, CycleRecord, FeedbackRecord, ActorRecord, SystemStatus, ProductivityMetrics, CollaborationMetrics, TaskHealthReport } from "@gitgov/core";
+import type { TaskRecord, CycleRecord, FeedbackRecord, GitGovFeedbackRecord, ActorRecord, SystemStatus, ProductivityMetrics, CollaborationMetrics, TaskHealthReport } from "@gitgov/core";
 
 // Mock console methods to capture output
 const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation();
@@ -41,7 +41,7 @@ describe('StatusCommand - Complete Unit Tests', () => {
     getAllCycles: jest.MockedFunction<() => Promise<CycleRecord[]>>;
   };
   let mockFeedbackAdapter: {
-    getAllFeedback: jest.MockedFunction<() => Promise<FeedbackRecord[]>>;
+    getAllFeedback: jest.MockedFunction<() => Promise<GitGovFeedbackRecord[]>>;
   };
   let mockRecordMetrics: {
     getSystemStatus: jest.MockedFunction<() => Promise<SystemStatus>>;
@@ -53,9 +53,7 @@ describe('StatusCommand - Complete Unit Tests', () => {
     isIndexUpToDate: jest.MockedFunction<() => Promise<boolean>>;
     generateIndex: jest.MockedFunction<() => Promise<void>>;
   };
-  let mockIdentityAdapter: {
-    getCurrentActor: jest.MockedFunction<() => Promise<ActorRecord>>;
-  };
+  let mockIdentityAdapter: Record<string, jest.Mock>;
   let mockSyncStateModule: {
     getPendingChanges: jest.MockedFunction<() => Promise<Array<{ status: 'A' | 'M' | 'D'; file: string }>>>;
     isRebaseInProgress: jest.MockedFunction<() => Promise<boolean>>;
@@ -66,6 +64,7 @@ describe('StatusCommand - Complete Unit Tests', () => {
     getRecordMetrics: jest.MockedFunction<() => Promise<typeof mockRecordMetrics>>;
     getRecordProjector: jest.MockedFunction<() => Promise<typeof mockProjector>>;
     getIdentityAdapter: jest.MockedFunction<() => Promise<typeof mockIdentityAdapter>>;
+    getCurrentActor: jest.MockedFunction<() => Promise<ActorRecord>>;
     getSyncStateModule: jest.MockedFunction<() => Promise<typeof mockSyncStateModule>>;
   };
 
@@ -174,9 +173,7 @@ describe('StatusCommand - Complete Unit Tests', () => {
       generateIndex: jest.fn()
     };
 
-    mockIdentityAdapter = {
-      getCurrentActor: jest.fn()
-    };
+    mockIdentityAdapter = {};
 
     mockSyncStateModule = {
       getPendingChanges: jest.fn(),
@@ -190,6 +187,7 @@ describe('StatusCommand - Complete Unit Tests', () => {
       getRecordMetrics: jest.fn().mockResolvedValue(mockRecordMetrics),
       getRecordProjector: jest.fn().mockResolvedValue(mockProjector),
       getIdentityAdapter: jest.fn().mockResolvedValue(mockIdentityAdapter),
+      getCurrentActor: jest.fn().mockResolvedValue(sampleActor),
       getSyncStateModule: jest.fn().mockResolvedValue(mockSyncStateModule)
     };
 
@@ -199,13 +197,12 @@ describe('StatusCommand - Complete Unit Tests', () => {
     // Create StatusCommand
     statusCommand = new StatusCommand();
 
-    // Setup default mock returns
-    mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
+    // Setup default mock returns (getCurrentActor already set in mockDependencyService construction)
     mockBacklogAdapter.getTasksAssignedToActor.mockResolvedValue([sampleTask]);
     mockBacklogAdapter.getAllTasks.mockResolvedValue([sampleTask]);
     mockBacklogAdapter.getAllCycles.mockResolvedValue([sampleCycle]);
     mockFeedbackAdapter.getAllFeedback.mockResolvedValue([{
-      header: { version: '1.0', type: 'feedback', payloadChecksum: 'sha256:mock', signatures: [] },
+      header: { version: '1.0' as const, type: 'feedback' as const, payloadChecksum: 'sha256:mock', signatures: [{ keyId: 'human:test', role: 'author', notes: 'test', signature: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==', timestamp: 1700000000 }] },
       payload: sampleFeedback,
     }]);
     mockRecordMetrics.getSystemStatus.mockResolvedValue(sampleSystemStatus);
@@ -227,7 +224,7 @@ describe('StatusCommand - Complete Unit Tests', () => {
     it('[EARS-1] should execute personal dashboard by default', async () => {
       await statusCommand.execute({});
 
-      expect(mockIdentityAdapter.getCurrentActor).toHaveBeenCalled();
+      expect(mockDependencyService.getCurrentActor).toHaveBeenCalled();
       expect(mockBacklogAdapter.getTasksAssignedToActor).toHaveBeenCalledWith('human:test-user');
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('👤 Actor: Test User'));
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('✅ My Work (1 tasks)'));
@@ -445,7 +442,7 @@ describe('StatusCommand - Complete Unit Tests', () => {
 
   describe('Error Handling & Edge Cases (EARS 21-24)', () => {
     it('[EARS-21] should handle actor not found error', async () => {
-      mockIdentityAdapter.getCurrentActor.mockRejectedValue(new Error('No active actors'));
+      mockDependencyService.getCurrentActor.mockRejectedValue(new Error('No active actors'));
 
       await statusCommand.execute({});
 
@@ -463,7 +460,7 @@ describe('StatusCommand - Complete Unit Tests', () => {
     });
 
     it('[EARS-23] should output error in JSON format when requested', async () => {
-      mockIdentityAdapter.getCurrentActor.mockRejectedValue(new Error('Test error'));
+      mockDependencyService.getCurrentActor.mockRejectedValue(new Error('Test error'));
 
       await statusCommand.execute({ json: true });
 
@@ -478,7 +475,7 @@ describe('StatusCommand - Complete Unit Tests', () => {
     it('[EARS-24] should show technical details with --verbose on error', async () => {
       const error = new Error('Test error with stack');
       error.stack = 'Error stack trace here';
-      mockIdentityAdapter.getCurrentActor.mockRejectedValue(error);
+      mockDependencyService.getCurrentActor.mockRejectedValue(error);
 
       await statusCommand.execute({ verbose: true });
 
@@ -507,7 +504,7 @@ describe('StatusCommand - Complete Unit Tests', () => {
       await expect(statusCommand.execute({})).resolves.not.toThrow();
 
       // Should still show actor and task sections even if feedback fails
-      expect(mockIdentityAdapter.getCurrentActor).toHaveBeenCalled();
+      expect(mockDependencyService.getCurrentActor).toHaveBeenCalled();
       expect(mockBacklogAdapter.getTasksAssignedToActor).toHaveBeenCalled();
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('👤 Actor: Test User'));
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('✅ My Work'));
@@ -518,7 +515,7 @@ describe('StatusCommand - Complete Unit Tests', () => {
 
       // Verify that the same actor ID is used across all adapter calls
       expect(mockBacklogAdapter.getTasksAssignedToActor).toHaveBeenCalledWith('human:test-user');
-      expect(mockIdentityAdapter.getCurrentActor).toHaveBeenCalled();
+      expect(mockDependencyService.getCurrentActor).toHaveBeenCalled();
     });
   });
 

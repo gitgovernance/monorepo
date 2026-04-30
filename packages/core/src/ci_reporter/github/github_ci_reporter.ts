@@ -65,6 +65,24 @@ export class GitHubCiReporter implements ICiReporter {
     }
   }
 
+  // [CIREP-D1] Create Check Run in_progress — two-step lifecycle
+  async startCheckRun(
+    sha: string,
+    name: string,
+    context: RepoContext,
+  ): Promise<CheckInfo> {
+    const { data } = await this.octokit.rest.checks.create({
+      owner: context.owner,
+      repo: context.repo,
+      name,
+      head_sha: sha,
+      status: 'in_progress',
+    });
+    const result: CheckInfo = { id: data.id, conclusion: 'pass' };
+    if (data.html_url) result.url = data.html_url;
+    return result;
+  }
+
   async createCheckStatus(
     sha: string,
     conclusion: 'pass' | 'fail',

@@ -24,6 +24,8 @@ export const DEFAULT_GATE_MARKER = '<!-- gitgov-gate -->';
 export interface ICiReporter {
   // [CIREP-A1] POST new comment / [CIREP-A2] PATCH existing / [CIREP-A3] default marker / [CIREP-A4] skip empty
   postOrUpdateComment(markdown: string, context: PrContext, marker?: string): Promise<void>;
+  // [CIREP-D1] Create Check Run in_progress — first step of two-step lifecycle
+  startCheckRun?(sha: string, name: string, context: RepoContext): Promise<CheckInfo>;
   // [CIREP-C1] API errors non-blocking
   createCheckStatus?(sha: string, conclusion: 'pass' | 'fail', summary: string, context: RepoContext): Promise<CheckInfo>;
   postInlineSuggestion?(file: string, line: number, suggestion: string, context: PrContext): Promise<void>;

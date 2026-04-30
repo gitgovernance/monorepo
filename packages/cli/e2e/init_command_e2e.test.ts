@@ -630,7 +630,8 @@ describe('Init CLI Command - Edge Cases E2E Tests', () => {
       expect(actorFiles.length).toBeGreaterThanOrEqual(1);
 
       // Read the actor record — payload.id should be human:cagodoy
-      const actorContent = JSON.parse(fs.readFileSync(path.join(actorsDir, actorFiles[0]), 'utf-8'));
+      const firstActorFile = actorFiles[0]!;
+      const actorContent = JSON.parse(fs.readFileSync(path.join(actorsDir, firstActorFile), 'utf-8'));
       expect(actorContent.payload.id).toBe('human:cagodoy');
       expect(actorContent.payload.displayName).toBe('Camilo');
     });

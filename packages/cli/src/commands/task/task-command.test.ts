@@ -279,7 +279,9 @@ describe('TaskCommand - Complete Unit Tests', () => {
       getBacklogAdapter: jest.fn().mockResolvedValue(mockBacklogAdapter),
       getRecordProjector: jest.fn().mockResolvedValue(mockProjector),
       getIdentityAdapter: jest.fn().mockResolvedValue(mockIdentityAdapter),
-      getFeedbackAdapter: jest.fn().mockResolvedValue(mockFeedbackAdapter)
+      getFeedbackAdapter: jest.fn().mockResolvedValue(mockFeedbackAdapter),
+      getCurrentActor: jest.fn().mockResolvedValue(sampleActor),
+      getProjectRoot: jest.fn().mockResolvedValue('/mock/project/root'),
     };
 
     // Mock singleton getInstance

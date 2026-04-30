@@ -168,7 +168,8 @@ describe('LintCommand', () => {
       getLintModule: jest.fn().mockResolvedValue(mockLintModule),
       getIdentityAdapter: jest.fn().mockResolvedValue(mockIdentityAdapter),
       getRecordProjector: jest.fn().mockResolvedValue(mockProjector),
-      getKeyProvider: jest.fn().mockReturnValue(mockKeyProvider)
+      getKeyProvider: jest.fn().mockReturnValue(mockKeyProvider),
+      getCurrentActor: jest.fn().mockResolvedValue(mockActor),
     };
 
     // Mock singleton getInstance

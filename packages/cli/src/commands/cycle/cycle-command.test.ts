@@ -22,9 +22,9 @@ describe('CycleCommand - Complete Unit Tests', () => {
     getCycle: jest.MockedFunction<(cycleId: string) => Promise<CycleRecord | null>>;
     getAllCycles: jest.MockedFunction<() => Promise<CycleRecord[]>>;
     updateCycle: jest.MockedFunction<(cycleId: string, payload: Partial<CycleRecord>) => Promise<CycleRecord>>;
-    addTaskToCycle: jest.MockedFunction<(cycleId: string, taskId: string) => Promise<void>>;
-    removeTasksFromCycle: jest.MockedFunction<(cycleId: string, taskIds: string[]) => Promise<void>>;
-    moveTasksBetweenCycles: jest.MockedFunction<(targetCycleId: string, taskIds: string[], sourceCycleId: string) => Promise<void>>;
+    addTaskToCycle: jest.MockedFunction<(cycleId: string, taskId: string, actorId: string) => Promise<void>>;
+    removeTasksFromCycle: jest.MockedFunction<(cycleId: string, taskIds: string[], actorId: string) => Promise<void>>;
+    moveTasksBetweenCycles: jest.MockedFunction<(targetCycleId: string, taskIds: string[], sourceCycleId: string, actorId: string) => Promise<void>>;
     getTask: jest.MockedFunction<(taskId: string) => Promise<TaskRecord | null>>;
   };
   let mockProjector: {
@@ -105,7 +105,9 @@ describe('CycleCommand - Complete Unit Tests', () => {
     const mockDependencyService = {
       getBacklogAdapter: jest.fn().mockResolvedValue(mockBacklogAdapter),
       getRecordProjector: jest.fn().mockResolvedValue(mockProjector),
-      getIdentityAdapter: jest.fn().mockResolvedValue(mockIdentityAdapter)
+      getIdentityAdapter: jest.fn().mockResolvedValue(mockIdentityAdapter),
+      getCurrentActor: jest.fn().mockResolvedValue(sampleActor),
+      getProjectRoot: jest.fn().mockResolvedValue('/mock/project/root'),
     };
 
     // Mock singleton getInstance
@@ -211,7 +213,7 @@ describe('CycleCommand - Complete Unit Tests', () => {
 
       await cycleCommand.executeAddTask('1757792000-cycle-test-cycle', { task: 'task-123' });
 
-      expect(mockBacklogAdapter.addTaskToCycle).toHaveBeenCalledWith('1757792000-cycle-test-cycle', 'task-123');
+      expect(mockBacklogAdapter.addTaskToCycle).toHaveBeenCalledWith('1757792000-cycle-test-cycle', 'task-123', 'human:test-user');
       expect(mockProjector.invalidateCache).toHaveBeenCalled();
       expect(mockConsoleLog).toHaveBeenCalledWith('✅ Tasks added to cycle: 1757792000-cycle-test-cycle');
     });
@@ -512,7 +514,7 @@ describe('CycleCommand - Complete Unit Tests', () => {
 
       await cycleCommand.executeRemoveTask(cycleId, { task: 'task-123,task-456' });
 
-      expect(mockBacklogAdapter.removeTasksFromCycle).toHaveBeenCalledWith(cycleId, taskIds);
+      expect(mockBacklogAdapter.removeTasksFromCycle).toHaveBeenCalledWith(cycleId, taskIds, 'human:test-user');
       expect(mockProjector.invalidateCache).toHaveBeenCalled();
       expect(mockConsoleLog).toHaveBeenCalledWith(`✅ Tasks removed from cycle: ${cycleId}`);
       expect(mockConsoleLog).toHaveBeenCalledWith(`📋 Removed tasks: ${taskIds.join(', ')}`);
@@ -527,7 +529,7 @@ describe('CycleCommand - Complete Unit Tests', () => {
 
       await cycleCommand.executeRemoveTask(cycleId, { task: taskId });
 
-      expect(mockBacklogAdapter.removeTasksFromCycle).toHaveBeenCalledWith(cycleId, [taskId]);
+      expect(mockBacklogAdapter.removeTasksFromCycle).toHaveBeenCalledWith(cycleId, [taskId], 'human:test-user');
       expect(mockProjector.invalidateCache).toHaveBeenCalled();
     });
 
@@ -578,7 +580,8 @@ describe('CycleCommand - Complete Unit Tests', () => {
       expect(mockBacklogAdapter.moveTasksBetweenCycles).toHaveBeenCalledWith(
         targetCycleId,
         taskIds,
-        sourceCycleId
+        sourceCycleId,
+        'human:test-user'
       );
       expect(mockProjector.invalidateCache).toHaveBeenCalled();
       expect(mockConsoleLog).toHaveBeenCalledWith('✅ Tasks moved successfully');
@@ -603,7 +606,8 @@ describe('CycleCommand - Complete Unit Tests', () => {
       expect(mockBacklogAdapter.moveTasksBetweenCycles).toHaveBeenCalledWith(
         targetCycleId,
         [taskId],
-        sourceCycleId
+        sourceCycleId,
+        'human:test-user'
       );
       expect(mockProjector.invalidateCache).toHaveBeenCalled();
     });
@@ -671,7 +675,7 @@ describe('CycleCommand - Complete Unit Tests', () => {
       // Task IDs with extra whitespace
       await cycleCommand.executeRemoveTask(cycleId, { task: ' task-123 , task-456 ' });
 
-      expect(mockBacklogAdapter.removeTasksFromCycle).toHaveBeenCalledWith(cycleId, taskIds);
+      expect(mockBacklogAdapter.removeTasksFromCycle).toHaveBeenCalledWith(cycleId, taskIds, 'human:test-user');
     });
 
     it('[EARS-12] should trim whitespace from task IDs in move-task', async () => {
@@ -691,7 +695,8 @@ describe('CycleCommand - Complete Unit Tests', () => {
       expect(mockBacklogAdapter.moveTasksBetweenCycles).toHaveBeenCalledWith(
         targetCycleId,
         taskIds,
-        sourceCycleId
+        sourceCycleId,
+        'human:test-user'
       );
     });
   });

@@ -40,6 +40,7 @@ describe('ContextCommand', () => {
     getIdentityAdapter: jest.MockedFunction<() => Promise<typeof mockIdentityAdapter>>;
     getConfigManager: jest.MockedFunction<() => Promise<typeof mockConfigManager>>;
     getSessionManager: jest.MockedFunction<() => Promise<typeof mockSessionManager>>;
+    getCurrentActor: jest.MockedFunction<() => Promise<ActorRecord>>;
   };
 
   const sampleActor: ActorRecord = {
@@ -81,6 +82,7 @@ describe('ContextCommand', () => {
       getIdentityAdapter: jest.fn().mockResolvedValue(mockIdentityAdapter),
       getConfigManager: jest.fn().mockResolvedValue(mockConfigManager),
       getSessionManager: jest.fn().mockResolvedValue(mockSessionManager),
+      getCurrentActor: jest.fn().mockResolvedValue(sampleActor),
     };
 
     (DependencyInjectionService.getInstance as jest.Mock).mockReturnValue(mockDependencyService);
@@ -107,7 +109,7 @@ describe('ContextCommand', () => {
     it('[EARS-A1] should query context for current actor by default', async () => {
       await contextCommand.execute({});
 
-      expect(mockIdentityAdapter.getCurrentActor).toHaveBeenCalled();
+      expect(mockDependencyService.getCurrentActor).toHaveBeenCalled();
       expect(mockSessionManager.getActorState).toHaveBeenCalledWith('human:test-user');
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('👤 Actor: human:test-user'));
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('📁 Project: Test Project'));
@@ -140,7 +142,7 @@ describe('ContextCommand', () => {
 
       await contextCommand.execute({ actor: 'agent:alice:cursor' });
 
-      expect(mockIdentityAdapter.getCurrentActor).not.toHaveBeenCalled();
+      expect(mockDependencyService.getCurrentActor).not.toHaveBeenCalled();
       expect(mockSessionManager.getActorState).toHaveBeenCalledWith('agent:alice:cursor');
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('👤 Actor: agent:alice:cursor'));
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('⚡ Active Cycle: 1757789000-cycle-alice-cycle'));
@@ -159,7 +161,7 @@ describe('ContextCommand', () => {
         json: true
       });
 
-      expect(mockIdentityAdapter.getCurrentActor).not.toHaveBeenCalled();
+      expect(mockDependencyService.getCurrentActor).not.toHaveBeenCalled();
       expect(mockSessionManager.getActorState).toHaveBeenCalledWith('agent:bob:assistant');
 
       expect(mockConsoleLog.mock.calls[0]).toBeDefined();
@@ -259,7 +261,7 @@ describe('ContextCommand', () => {
   describe('4.3. Manejo de Errores (EARS-C1 to C5)', () => {
     it('[EARS-C1] should handle error when getCurrentActor fails', async () => {
       const error = new Error('Failed to get current actor');
-      mockIdentityAdapter.getCurrentActor.mockRejectedValue(error);
+      mockDependencyService.getCurrentActor.mockRejectedValue(error);
 
       await contextCommand.execute({});
 
@@ -307,7 +309,7 @@ describe('ContextCommand', () => {
 
       await contextCommand.execute({ actor: 'agent:nonexistent:agent' });
 
-      expect(mockIdentityAdapter.getCurrentActor).not.toHaveBeenCalled();
+      expect(mockDependencyService.getCurrentActor).not.toHaveBeenCalled();
       expect(mockSessionManager.getActorState).toHaveBeenCalledWith('agent:nonexistent:agent');
       expect(mockConsoleError).toHaveBeenCalledWith(expect.stringContaining('❌ Error: Actor not found in session'));
       expect(mockProcessExit).toHaveBeenCalledWith(1);
