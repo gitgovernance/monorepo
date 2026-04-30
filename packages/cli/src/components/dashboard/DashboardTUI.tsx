@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Box, Text, useInput, useApp, useStdout } from 'ink';
-import type { CycleRecord, FeedbackRecord, ActorRecord, ActivityEvent, SystemStatus, ProductivityMetrics, CollaborationMetrics, EnrichedTaskRecord } from '@gitgov/core';
+import type { CycleRecord, GitGovFeedbackRecord, ActorRecord, ActivityEvent, SystemStatus, ProductivityMetrics, CollaborationMetrics, EnrichedTaskRecord } from '@gitgov/core';
 import clipboard from 'clipboardy';
 
 
@@ -91,7 +91,7 @@ interface DashboardIntelligence {
   collaborationMetrics: CollaborationMetrics;
   tasks: EnrichedTaskRecord[];
   cycles: CycleRecord[];
-  feedback: FeedbackRecord[];
+  feedback: GitGovFeedbackRecord[];
   currentActor: ActorRecord;
   activityHistory: ActivityEvent[];
 }
@@ -526,7 +526,7 @@ export const DashboardTUI: React.FC<Props> = ({
           const identityAdapter = await diService.getIdentityAdapter();
           const projector = await diService.getRecordProjector();
 
-          const currentActor = await identityAdapter.getCurrentActor();
+          const currentActor = await diService.getCurrentActor();
 
           // Delete the task
           await backlogAdapter.deleteTask(selectedTask.id, currentActor.id);

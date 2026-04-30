@@ -12,6 +12,7 @@ import { execSync } from 'child_process';
 import { generateKeyPairSync } from 'crypto';
 import { McpDependencyInjectionService } from '../../di/mcp_di.js';
 import { getWorktreeBasePath } from '@gitgov/core/fs';
+import { generateCycleId } from '@gitgov/core';
 import type { ToolResult } from '../../server/mcp_server.types.js';
 import type { TempGitgovProject, ParsedToolResult } from './mcp_core_integration.types.js';
 
@@ -67,7 +68,7 @@ export async function createTempGitgovProject(): Promise<TempGitgovProject> {
       protocolVersion: '1.0.0',
       projectId: 'test-project',
       projectName: 'Test Project',
-      rootCycle: 'root',
+      rootCycle: generateCycleId('root', Date.now()),
     }),
   );
 

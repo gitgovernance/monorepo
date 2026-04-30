@@ -86,6 +86,8 @@ describe('ExecCommand', () => {
       getExecutionAdapter: jest.fn().mockResolvedValue(mockExecutionAdapter),
       getIdentityAdapter: jest.fn().mockResolvedValue(mockIdentityAdapter),
       getRecordProjector: jest.fn().mockResolvedValue(mockProjector),
+      getCurrentActor: jest.fn().mockResolvedValue({ id: 'human:dev', displayName: 'Dev', type: 'human' }),
+      getProjectRoot: jest.fn().mockResolvedValue('/mock/project/root'),
     };
 
     // Set up mock BEFORE constructing command (critical — BaseCommand reads DI in constructor)

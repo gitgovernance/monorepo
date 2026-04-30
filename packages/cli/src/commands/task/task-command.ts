@@ -354,7 +354,7 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
       if (options.cycleIds) {
         const cycleIds = options.cycleIds.split(',').map(id => id.trim());
         for (const cycleId of cycleIds) {
-          await backlogAdapter.addTaskToCycle(cycleId, task.id);
+          await backlogAdapter.addTaskToCycle(cycleId, task.id, actorId);
         }
       }
 

@@ -40,7 +40,7 @@ jest.doMock('@gitgov/core', () => ({
     RecordMetrics: jest.fn().mockImplementation(() => ({})),
     IdentityAdapter: jest.fn().mockImplementation(() => ({})),
     FeedbackAdapter: jest.fn().mockImplementation(() => ({})),
-    ProjectAdapter: jest.fn().mockImplementation(() => ({})),
+    ProjectModule: jest.fn().mockImplementation(() => ({})),
     BacklogAdapter: jest.fn().mockImplementation(() => ({}))
   },
   Modules: {

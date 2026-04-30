@@ -20,8 +20,10 @@ export async function getCurrentActor(
     if (actor) return actor;
   }
 
-  // [GCA-A3] Fallback to first active actor
+  // [GCA-A3] Fallback to first active human actor (agents are not interactive users)
   const actors = await identity.listActors();
+  const activeHuman = actors.find(a => a.status === 'active' && a.type === 'human');
+  if (activeHuman) return activeHuman;
   const active = actors.find(a => a.status === 'active');
   if (active) return active;
 

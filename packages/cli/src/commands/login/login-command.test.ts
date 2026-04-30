@@ -80,6 +80,7 @@ jest.mock('../../services/dependency-injection', () => ({
       getIdentityAdapter: jest.fn().mockResolvedValue({
         getCurrentActor: mockGetCurrentActor,
       }),
+      getCurrentActor: mockGetCurrentActor,
       getConfigManager: jest.fn().mockResolvedValue({
         loadConfig: mockGetConfig,
         getSaasUrl: jest.fn().mockImplementation(async () => {

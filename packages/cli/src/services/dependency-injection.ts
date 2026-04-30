@@ -398,14 +398,12 @@ export class DependencyInjectionService {
 
     const identityModule = await this.getIdentityModule();
     const backlogAdapter = await this.getBacklogAdapter();
-    const signer = await this.getRecordSigner();
-    const gitModule = await this.getGitModuleForWorktree(this.projectRoot);
+    const initializer = new FsProjectInitializer(this.projectRoot);
 
     return new ProjectModule({
+      initializer,
       identity: identityModule,
       backlog: backlogAdapter,
-      signer,
-      git: gitModule,
     });
   }
 

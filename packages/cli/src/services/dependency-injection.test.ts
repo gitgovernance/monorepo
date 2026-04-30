@@ -265,19 +265,11 @@ jest.doMock('@gitgov/core', () => {
           }))
         }
       ),
-      ProjectAdapter: jest.fn().mockImplementation(() => ({
+      ProjectModule: jest.fn().mockImplementation(() => ({
         initializeProject: jest.fn().mockResolvedValue({
-          projectId: 'test-project-' + Date.now(),
-          rootCycle: createValidId('cycle', 'root-cycle', Date.now()),
-          actor: {
-            id: 'human:project-owner',
-            displayName: 'Project Owner'
-          }
-        }),
-        validateEnvironment: jest.fn().mockResolvedValue({
-          isValid: true,
-          warnings: [],
-          suggestions: []
+          actorId: 'human:project-owner',
+          productAgentId: 'agent:gitgov-audit',
+          cycleId: createValidId('cycle', 'root-cycle', Date.now()),
         })
       }))
     },

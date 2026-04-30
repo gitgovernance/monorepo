@@ -57,6 +57,9 @@ export class ProjectModule {
       };
       await this.deps.initializer.writeConfig(config);
 
+      // Initialize session with human actor (so getCurrentActor resolves to human, not product agent)
+      await this.deps.initializer.initializeSession(human.id);
+
       // [PROJ-C4] Git integration (.gitignore, gitgov.yml)
       await this.deps.initializer.setupGitIntegration();
 

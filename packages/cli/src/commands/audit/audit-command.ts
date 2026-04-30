@@ -4,14 +4,11 @@ import type { BaseCommandOptions } from '../../interfaces/command';
 import { readFile } from 'node:fs/promises';
 import { Sarif as SarifModule, generateExecutionId } from '@gitgov/core';
 import { formatAuditResult } from '@gitgov/core/audit';
+import type { Finding, FindingCategory, DetectorName } from '@gitgov/core/audit';
 import { GitHubCiReporter } from '@gitgov/core/github';
 import type {
   AuditOrchestrationOptions,
   AuditOrchestrationResult,
-  Finding,
-  Finding,
-  FindingCategory,
-  DetectorName,
   GetLineContentFn,
 } from '@gitgov/core';
 
@@ -355,26 +352,7 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
       }
     };
 
-    // Convert Findings to Finding shape for SarifBuilder
-    const findings: Finding[] = result.findings.map(f => {
-      const finding: Finding = {
-        id: f.fingerprint,
-        fingerprint: f.fingerprint,
-        file: f.file,
-        line: f.line,
-        ruleId: f.ruleId ?? 'UNKNOWN',
-        category: f.category as FindingCategory,
-        severity: f.severity,
-        message: f.message,
-        snippet: '',
-        confidence: 1.0,
-        detector: (f.reportedBy[0] ?? 'regex') as DetectorName,
-      };
-      if (f.column !== undefined) {
-        finding.column = f.column;
-      }
-      return finding;
-    });
+    const findings: Finding[] = result.findings;
 
     const sarifLog = await builder.build({
       toolName: 'gitgov-audit',
@@ -413,7 +391,7 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
         waivers.forEach((w, i) => {
           console.log(`${i + 1}. ${w.fingerprint}`);
           console.log(`   Rule: ${w.ruleId}`);
-          console.log(`   Justification: ${w.feedback.content}`);
+          console.log(`   Justification: ${w.feedback.payload.content}`);
           if (w.expiresAt) {
             console.log(`   Expires: ${w.expiresAt.toISOString()}`);
           }

@@ -31,7 +31,7 @@ export interface InitCommandOptions {
  * InitCommand - Perfect First Impression
  * 
  * Implements the cornerstone of GitGovernance CLI following the blueprint specification.
- * Delegates all business logic to ProjectAdapter and focuses on UX excellence.
+ * Delegates all business logic to ProjectModule and focuses on UX excellence.
  */
 export class InitCommand {
   private container = DependencyInjectionService.getInstance();
