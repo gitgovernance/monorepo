@@ -63,8 +63,10 @@ describe('Block A: CLI Record Creation (CA1-CA7, CA9)', () => {
     // Verify config.json exists
     expect(fs.existsSync(path.join(getGitgovDir(repoDir), 'config.json'))).toBe(true);
 
-    // Read actor record and verify shape
-    const actor = await readRecord(repoDir, 'actors', actorIds[0]!);
+    // Read human actor record (filter out product agent which is also created during init)
+    const humanActorId = actorIds.find(id => id.startsWith('human'));
+    expect(humanActorId).toBeDefined();
+    const actor = await readRecord(repoDir, 'actors', humanActorId!);
     expect(actor.payload.type).toBe('human');
     expect(actor.payload.displayName).toBe('E2E Dev');
     expect(actor.payload.publicKey).toBeDefined();
