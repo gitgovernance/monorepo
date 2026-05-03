@@ -400,10 +400,21 @@ export class DependencyInjectionService {
     const backlogAdapter = await this.getBacklogAdapter();
     const initializer = new FsProjectInitializer(this.projectRoot);
 
+    // [PROJ-B4] AgentAdapter for default agent registration
+    const agentAdapter = await this.getAgentAdapter().catch(() => undefined);
+
     return new ProjectModule({
       initializer,
       identity: identityModule,
       backlog: backlogAdapter,
+      agentAdapter,
+      defaultAgents: [{
+        packageName: '@gitgov/agent-security-audit',
+        agentId: 'agent:gitgov-audit',
+        engine: { type: 'local', runtime: 'typescript', entrypoint: '@gitgov/agent-security-audit', function: 'runAgent' },
+        purpose: 'audit',
+        metadata: { target: 'code', outputFormat: 'sarif' },
+      }],
     });
   }
 

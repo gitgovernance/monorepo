@@ -60,6 +60,23 @@ export class ProjectModule {
       // Initialize session with human actor (so getCurrentActor resolves to human, not product agent)
       await this.deps.initializer.initializeSession(human.id);
 
+      // [PROJ-B4] Register default agents via AgentAdapter
+      if (this.deps.agentAdapter && this.deps.defaultAgents?.length) {
+        for (const agentConfig of this.deps.defaultAgents) {
+          try {
+            await this.deps.agentAdapter.createAgentRecord({
+              id: agentConfig.agentId,
+              engine: agentConfig.engine,
+              status: 'active',
+              triggers: [{ type: 'webhook', event: 'audit.completed' }],
+              metadata: agentConfig.metadata,
+            });
+          } catch {
+            // Non-fatal — agent registration failure doesn't block init
+          }
+        }
+      }
+
       // [PROJ-C4] Git integration (.gitignore, gitgov.yml)
       await this.deps.initializer.setupGitIntegration();
 
