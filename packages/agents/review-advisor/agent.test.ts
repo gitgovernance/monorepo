@@ -1,15 +1,14 @@
 /**
- * ReviewAdvisorAgent Tests
+ * ReviewAdvisorAgent Tests — G18 Provider-Agnostic
  *
  * Unit tests for the review-advisor agent implementation.
- * All Claude SDK calls are mocked via analyzer override.
+ * LLM calls are mocked via ILlmProvider mock (not ClaudeAnalyzer).
  *
  * Reference: review_advisor_agent.md §4.1-4.3
  */
 
 import { ReviewAdvisorAgent } from './src/agent';
-import type { ClaudeAnalyzer } from './src/agent';
-import type { ReviewAdvisorInput, ReviewOpinion } from './src/types';
+import type { ReviewAdvisorInput, ReviewOpinion, LlmProvider } from './src/types';
 import type { Finding, PolicyDecision } from '@gitgov/core';
 
 // ============================================================================
@@ -52,20 +51,24 @@ function makeInput(overrides: Partial<ReviewAdvisorInput> = {}): ReviewAdvisorIn
   };
 }
 
-function makeOpinion(overrides: Partial<ReviewOpinion> = {}): ReviewOpinion {
+function makeMockLlm(responseContent: string): LlmProvider {
   return {
-    findingFingerprint: 'fp-test-001',
-    riskExplanation: 'Hardcoded API key can be extracted from source',
-    regulations: ['PCI-DSS Req 6.5.3'],
-    remediationAdvice: 'Use environment variables or secret management',
-    confidence: 'high',
-    isFalsePositive: false,
-    ...overrides,
+    query: jest.fn().mockResolvedValue({ content: responseContent, model: 'test-model' }),
+    providerName: 'test',
+    modelName: 'test-model',
   };
 }
 
-function mockAnalyzer(opinions: ReviewOpinion[]): ClaudeAnalyzer {
-  return jest.fn().mockResolvedValue(opinions);
+function makeOpinionsJson(opinions: Partial<ReviewOpinion>[]): string {
+  return JSON.stringify(opinions.map(o => ({
+    findingFingerprint: o.findingFingerprint ?? 'fp-test-001',
+    riskExplanation: o.riskExplanation ?? 'Risk explanation',
+    regulations: o.regulations ?? ['PCI-DSS Req 6.5.3'],
+    remediationAdvice: o.remediationAdvice ?? 'Use env vars',
+    confidence: o.confidence ?? 'high',
+    isFalsePositive: o.isFalsePositive ?? false,
+    ...(o.falsePositiveReason ? { falsePositiveReason: o.falsePositiveReason } : {}),
+  })));
 }
 
 // ============================================================================
@@ -76,27 +79,19 @@ describe('ReviewAdvisorAgent', () => {
   describe('4.1. Package y Estructura (RAV-A3 to RAV-A4)', () => {
     it('[RAV-A3] should require findings and taskId in ReviewAdvisorInput', async () => {
       const input = makeInput();
-
-      // Verify input has required fields
       expect(input.findings).toBeDefined();
       expect(Array.isArray(input.findings)).toBe(true);
       expect(input.taskId).toBe('task-test-001');
 
-      const agent = new ReviewAdvisorAgent({
-        anthropicApiKey: 'test-key',
-        analyzer: mockAnalyzer([makeOpinion()]),
-      });
-
+      const llm = makeMockLlm(makeOpinionsJson([{}]));
+      const agent = new ReviewAdvisorAgent({ llm });
       const output = await agent.run(input);
       expect(output).toBeDefined();
     });
 
     it('[RAV-A4] should return metadata.kind feedback-review and metadata.data as ReviewResult', async () => {
-      const agent = new ReviewAdvisorAgent({
-        anthropicApiKey: 'test-key',
-        analyzer: mockAnalyzer([makeOpinion()]),
-      });
-
+      const llm = makeMockLlm(makeOpinionsJson([{}]));
+      const agent = new ReviewAdvisorAgent({ llm });
       const output = await agent.run(makeInput());
 
       const metadata = output.metadata as Record<string, unknown>;
@@ -106,59 +101,46 @@ describe('ReviewAdvisorAgent', () => {
       const data = metadata['data'] as Record<string, unknown>;
       expect(data['opinions']).toBeDefined();
       expect(data['summary']).toBeDefined();
-      expect(data['model']).toBe('claude-sonnet-4');
+      expect(data['model']).toBe('test-model');
     });
   });
 
-  describe('4.2. Claude Analysis (RAV-B1 to RAV-B5)', () => {
+  describe('4.2. LLM Analysis — G18 (RAV-B1 to RAV-B7)', () => {
     it('[RAV-B1] should build prompt with finding details, file context, and policy decision', async () => {
-      const analyzerFn = jest.fn().mockResolvedValue([makeOpinion()]);
+      const llm = makeMockLlm(makeOpinionsJson([{}]));
+      const agent = new ReviewAdvisorAgent({ llm });
 
-      const agent = new ReviewAdvisorAgent({
-        anthropicApiKey: 'test-key',
-        analyzer: analyzerFn,
-      });
-
-      const input = makeInput({
+      await agent.run(makeInput({
         findings: [makeFinding({ file: 'checkout.ts', line: 47, category: 'data-transfer' })],
         policyDecision: makePolicyDecision('block'),
-      });
+      }));
 
-      await agent.run(input);
-
-      // Verify analyzer received findings and policy decision
-      expect(analyzerFn).toHaveBeenCalledWith(
-        input.findings,
-        input.policyDecision,
-      );
+      // [RAV-B2] Verify LLM was called with messages containing findings
+      expect(llm.query).toHaveBeenCalledTimes(1);
+      const callArgs = (llm.query as jest.Mock).mock.calls[0][0] as Array<{ role: string; content: string }>;
+      const userMsg = callArgs.find(m => m.role === 'user');
+      expect(userMsg?.content).toContain('checkout.ts');
+      expect(userMsg?.content).toContain('block');
     });
 
-    it('[RAV-B2] should call Claude Agent SDK query with Read tool enabled', async () => {
-      // This test verifies the analyzer is called — real SDK test is in integration
-      const analyzerFn = jest.fn().mockResolvedValue([makeOpinion()]);
-
-      const agent = new ReviewAdvisorAgent({
-        anthropicApiKey: 'test-key',
-        analyzer: analyzerFn,
-      });
-
+    it('[RAV-B2] should call LLM query with system + user messages', async () => {
+      const llm = makeMockLlm(makeOpinionsJson([{}]));
+      const agent = new ReviewAdvisorAgent({ llm });
       await agent.run(makeInput());
 
-      expect(analyzerFn).toHaveBeenCalledTimes(1);
+      const callArgs = (llm.query as jest.Mock).mock.calls[0][0] as Array<{ role: string; content: string }>;
+      expect(callArgs.find(m => m.role === 'system')).toBeDefined();
+      expect(callArgs.find(m => m.role === 'user')).toBeDefined();
     });
 
-    it('[RAV-B3] should parse Claude response into ReviewOpinion with risk, regulations, and confidence', async () => {
-      const opinion = makeOpinion({
+    it('[RAV-B3] should parse LLM response into ReviewOpinion with risk, regulations, and confidence', async () => {
+      const llm = makeMockLlm(makeOpinionsJson([{
         riskExplanation: 'GDPR Art. 44 violation — PII sent to third party',
         regulations: ['GDPR Art. 44', 'GDPR Art. 6'],
         confidence: 'high',
-      });
+      }]));
 
-      const agent = new ReviewAdvisorAgent({
-        anthropicApiKey: 'test-key',
-        analyzer: mockAnalyzer([opinion]),
-      });
-
+      const agent = new ReviewAdvisorAgent({ llm });
       const output = await agent.run(makeInput());
       const data = (output.metadata as Record<string, unknown>)['data'] as Record<string, unknown>;
       const opinions = data['opinions'] as ReviewOpinion[];
@@ -169,17 +151,13 @@ describe('ReviewAdvisorAgent', () => {
       expect(opinions[0]!.confidence).toBe('high');
     });
 
-    it('[RAV-B4] should set isFalsePositive true with reason when Claude identifies false positive', async () => {
-      const opinion = makeOpinion({
+    it('[RAV-B4] should set isFalsePositive true with reason when LLM identifies false positive', async () => {
+      const llm = makeMockLlm(makeOpinionsJson([{
         isFalsePositive: true,
         falsePositiveReason: 'This is a test fixture, not production code',
-      });
+      }]));
 
-      const agent = new ReviewAdvisorAgent({
-        anthropicApiKey: 'test-key',
-        analyzer: mockAnalyzer([opinion]),
-      });
-
+      const agent = new ReviewAdvisorAgent({ llm });
       const output = await agent.run(makeInput());
       const data = (output.metadata as Record<string, unknown>)['data'] as Record<string, unknown>;
       const opinions = data['opinions'] as ReviewOpinion[];
@@ -188,59 +166,58 @@ describe('ReviewAdvisorAgent', () => {
       expect(opinions[0]!.falsePositiveReason).toBe('This is a test fixture, not production code');
     });
 
-    it('[RAV-B5] should return status partial with empty opinions when Claude fails', async () => {
-      const failingAnalyzer: ClaudeAnalyzer = jest.fn().mockRejectedValue(
-        new Error('Claude API unavailable'),
-      );
+    it('[RAV-B5] should return status partial with empty opinions when LLM fails', async () => {
+      const llm: LlmProvider = {
+        query: jest.fn().mockRejectedValue(new Error('LLM API unavailable')),
+        providerName: 'test',
+        modelName: 'test-model',
+      };
 
-      const agent = new ReviewAdvisorAgent({
-        anthropicApiKey: 'test-key',
-        analyzer: failingAnalyzer,
-      });
-
+      const agent = new ReviewAdvisorAgent({ llm });
       const output = await agent.run(makeInput());
 
-      // Should not throw — graceful degradation
       expect(output.data).toEqual({
         status: 'partial',
-        warning: 'Claude analysis failed: Claude API unavailable',
+        warning: 'LLM analysis failed: LLM API unavailable',
       });
 
       const data = (output.metadata as Record<string, unknown>)['data'] as Record<string, unknown>;
-      const opinions = data['opinions'] as ReviewOpinion[];
-      expect(opinions).toHaveLength(0);
+      expect((data['opinions'] as unknown[]).length).toBe(0);
+    });
+
+    it('[RAV-B7] should return partial when no LLM provider configured', async () => {
+      const agent = new ReviewAdvisorAgent({ llm: undefined });
+      const output = await agent.run(makeInput());
+
+      expect(output.data).toEqual(
+        expect.objectContaining({
+          status: 'partial',
+          warning: expect.stringContaining('LLM_API_KEY/LLM_MODEL not configured'),
+        }),
+      );
     });
   });
 
   describe('4.3. FeedbackRecord Production (RAV-C1 to RAV-C2)', () => {
     it('[RAV-C1] should produce AgentOutput compatible with FeedbackRecord type suggestion', async () => {
-      const agent = new ReviewAdvisorAgent({
-        anthropicApiKey: 'test-key',
-        analyzer: mockAnalyzer([makeOpinion()]),
-      });
-
+      const llm = makeMockLlm(makeOpinionsJson([{}]));
+      const agent = new ReviewAdvisorAgent({ llm });
       const output = await agent.run(makeInput());
 
-      // AgentOutput must have metadata that AgentRunner can persist as FeedbackRecord
       expect(output.metadata).toBeDefined();
       const metadata = output.metadata as Record<string, unknown>;
       expect(metadata['kind']).toBe('feedback-review');
-      expect(metadata['data']).toBeDefined();
       expect(output.message).toBeDefined();
       expect(typeof output.message).toBe('string');
     });
 
     it('[RAV-C2] should include finding fingerprints in FeedbackRecord references', async () => {
-      const opinions = [
-        makeOpinion({ findingFingerprint: 'fp-001' }),
-        makeOpinion({ findingFingerprint: 'fp-002' }),
-      ];
+      const llm = makeMockLlm(makeOpinionsJson([
+        { findingFingerprint: 'fp-001' },
+        { findingFingerprint: 'fp-002' },
+      ]));
 
-      const agent = new ReviewAdvisorAgent({
-        anthropicApiKey: 'test-key',
-        analyzer: mockAnalyzer(opinions),
-      });
-
+      const agent = new ReviewAdvisorAgent({ llm });
       const output = await agent.run(makeInput({
         findings: [
           makeFinding({ fingerprint: 'fp-001' }),
@@ -249,36 +226,22 @@ describe('ReviewAdvisorAgent', () => {
       }));
 
       const data = (output.metadata as Record<string, unknown>)['data'] as Record<string, unknown>;
-      const resultOpinions = data['opinions'] as ReviewOpinion[];
+      const opinions = data['opinions'] as ReviewOpinion[];
 
-      expect(resultOpinions).toHaveLength(2);
-      expect(resultOpinions[0]!.findingFingerprint).toBe('fp-001');
-      expect(resultOpinions[1]!.findingFingerprint).toBe('fp-002');
+      expect(opinions).toHaveLength(2);
+      expect(opinions[0]!.findingFingerprint).toBe('fp-001');
+      expect(opinions[1]!.findingFingerprint).toBe('fp-002');
     });
   });
 
   describe('4.4. Entry Point y Error Handling (RAV-D2 to RAV-D3)', () => {
-    it('[RAV-D2] should return status partial when ANTHROPIC_API_KEY is not set', async () => {
-      const agent = new ReviewAdvisorAgent({ anthropicApiKey: undefined });
-
-      const output = await agent.run(makeInput());
-
-      expect(output.data).toEqual(
-        expect.objectContaining({
-          status: 'partial',
-          warning: expect.stringContaining('ANTHROPIC_API_KEY'),
-        }),
-      );
-    });
-
     it('[RAV-D3] should return empty opinions when findings array is empty', async () => {
-      const agent = new ReviewAdvisorAgent({ anthropicApiKey: 'test-key' });
-
+      const llm = makeMockLlm('[]');
+      const agent = new ReviewAdvisorAgent({ llm });
       const output = await agent.run(makeInput({ findings: [] }));
 
       const data = (output.metadata as Record<string, unknown>)['data'] as Record<string, unknown>;
-      const opinions = data['opinions'] as unknown[];
-      expect(opinions).toHaveLength(0);
+      expect((data['opinions'] as unknown[]).length).toBe(0);
       expect(data['summary']).toBe('No findings to review');
     });
   });

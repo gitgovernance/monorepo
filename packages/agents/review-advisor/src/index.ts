@@ -32,12 +32,22 @@ type AgentExecutionContext = {
  * @returns AgentOutput with ReviewResult in metadata
  */
 export async function runReviewAdvisor(ctx: AgentExecutionContext) {
+  // [RAV-A3] Input requires findings + taskId (type-enforced)
   const input = ctx.input as ReviewAdvisorInput;
 
-  // [RAV-D2] API key from environment — agent degrades gracefully if missing
-  const agent = new ReviewAdvisorAgent({
-    anthropicApiKey: process.env['ANTHROPIC_API_KEY'],
-  });
+  // [RAV-B2] [RAV-B7] G18: resolve LLM provider from env vars
+  const modelString = process.env['LLM_MODEL'] ?? 'anthropic/claude-sonnet-4-6';
+  const apiKey = process.env['LLM_API_KEY'];
+
+  let llm: import('./types').LlmProvider | undefined;
+  try {
+    const { resolveLlmProvider } = await import('@gitgov/core/llm');
+    llm = resolveLlmProvider(modelString, apiKey);
+  } catch {
+    // Core not available or provider resolution failed — agent degrades gracefully
+  }
+
+  const agent = new ReviewAdvisorAgent({ llm });
 
   return agent.run(input);
 }

@@ -6,6 +6,7 @@ import type {
   ReviewResult,
   ReviewOpinion,
   ReviewAdvisorMetadata,
+  LlmProvider,
 } from './types';
 
 /**
@@ -20,34 +21,23 @@ type AgentOutput = {
 };
 
 /**
- * Interface for the Claude analysis function.
- * Abstracted for testability — real impl uses Claude Agent SDK.
- */
-export type ClaudeAnalyzer = (
-  findings: ReviewAdvisorInput['findings'],
-  policyDecision: ReviewAdvisorInput['policyDecision'],
-) => Promise<ReviewOpinion[]>;
-
-/**
- * Agente de review semantico.
+ * Agente de review semantico (G18 — provider-agnostic).
  *
- * Analiza findings con Claude y produce opiniones contextuales.
+ * Analiza findings con LLM y produce opiniones contextuales.
  * No detecta findings — los recibe del scanner. Solo opina.
  * No aprueba waivers — solo genera opiniones.
  * AgentRunner firma el FeedbackRecord automaticamente (EARS-L1).
  */
 export class ReviewAdvisorAgent {
-  private readonly apiKey: string | undefined;
-  private readonly analyzerOverride: ClaudeAnalyzer | undefined;
+  private readonly llm: LlmProvider | undefined;
 
-  constructor(deps: ReviewAdvisorAgentDeps & { analyzer?: ClaudeAnalyzer }) {
-    this.apiKey = deps.anthropicApiKey;
-    this.analyzerOverride = deps.analyzer;
+  constructor(deps: ReviewAdvisorAgentDeps) {
+    this.llm = deps.llm;
   }
 
   // [RAV-A4, RAV-C1] Return AgentOutput with feedback-review metadata
   async run(input: ReviewAdvisorInput): Promise<AgentOutput> {
-    // [RAV-D3] Empty findings → return immediately without calling Claude
+    // [RAV-D3] Empty findings → return immediately
     if (!input.findings || input.findings.length === 0) {
       return this.buildOutput({
         opinions: [],
@@ -56,27 +46,57 @@ export class ReviewAdvisorAgent {
       });
     }
 
-    // [RAV-D2] No API key → return partial with warning
-    if (!this.apiKey && !this.analyzerOverride) {
-      return this.buildPartialOutput('ANTHROPIC_API_KEY not set — review skipped');
+    // [RAV-B7] No LLM provider → return partial with warning
+    if (!this.llm) {
+      return this.buildPartialOutput('LLM_API_KEY/LLM_MODEL not configured — review skipped');
     }
 
     // [RAV-B1] Build analysis context with findings + policy decision
     const opinions: ReviewOpinion[] = [];
 
     try {
-      // [RAV-B2] Call Claude (or mock analyzer for tests)
-      const analyzer = this.analyzerOverride ?? this.createClaudeAnalyzer();
-      const results = await analyzer(input.findings, input.policyDecision);
+      const prompt = this.buildPrompt(input.findings, input.policyDecision);
+
+      // [RAV-B2] [RAV-B2b] Query LLM (provider-agnostic)
+      const response = await this.llm.query([
+        { role: 'system', content: 'You are a security compliance reviewer. Analyze each finding and respond with a JSON array of ReviewOpinion objects. Each opinion must have: findingFingerprint, riskExplanation, regulations (array of strings like "GDPR Art. 44"), remediationAdvice, confidence ("high"|"medium"|"low"), isFalsePositive (boolean), and optionally falsePositiveReason.' },
+        { role: 'user', content: prompt },
+      ]);
 
       // [RAV-B3] Parse response into ReviewOpinion[]
-      for (const opinion of results) {
-        opinions.push(opinion);
+      try {
+        const parsed: unknown = JSON.parse(response.content);
+        if (Array.isArray(parsed)) {
+          for (const item of parsed as Record<string, unknown>[]) {
+            opinions.push({
+              findingFingerprint: (item['findingFingerprint'] as string) ?? '',
+              riskExplanation: (item['riskExplanation'] as string) ?? '',
+              regulations: Array.isArray(item['regulations']) ? item['regulations'] as string[] : [],
+              remediationAdvice: (item['remediationAdvice'] as string) ?? '',
+              confidence: (item['confidence'] as ReviewOpinion['confidence']) ?? 'medium',
+              isFalsePositive: item['isFalsePositive'] === true,
+              // [RAV-B4] False positive with reason
+              ...(item['isFalsePositive'] && item['falsePositiveReason']
+                ? { falsePositiveReason: item['falsePositiveReason'] as string }
+                : {}),
+            });
+          }
+        }
+      } catch {
+        // Response not parseable as JSON — treat as raw text opinion
+        opinions.push({
+          findingFingerprint: input.findings[0]?.fingerprint ?? 'unknown',
+          riskExplanation: response.content,
+          regulations: [],
+          remediationAdvice: '',
+          confidence: 'low',
+          isFalsePositive: false,
+        });
       }
     } catch (err) {
-      // [RAV-B5] Claude failure → return partial with empty opinions
+      // [RAV-B5] LLM failure → return partial with empty opinions
       const message = err instanceof Error ? err.message : String(err);
-      return this.buildPartialOutput(`Claude analysis failed: ${message}`);
+      return this.buildPartialOutput(`LLM analysis failed: ${message}`);
     }
 
     // [RAV-C2] Include finding fingerprints in result
@@ -85,7 +105,7 @@ export class ReviewAdvisorAgent {
     const result: ReviewResult = {
       opinions,
       summary: `Reviewed ${opinions.length} finding(s). ${reviewedFingerprints.length} opinions generated.`,
-      model: 'claude-sonnet-4',
+      model: this.llm.modelName,
     };
 
     return this.buildOutput(result);
@@ -104,7 +124,7 @@ export class ReviewAdvisorAgent {
     };
   }
 
-  // [RAV-B5, RAV-D2] Build partial output for graceful degradation
+  // [RAV-B5, RAV-B7] Build partial output for graceful degradation
   private buildPartialOutput(warning: string): AgentOutput {
     const result: ReviewResult = {
       opinions: [],
@@ -121,70 +141,6 @@ export class ReviewAdvisorAgent {
       message: warning,
       data: { status: 'partial', warning },
       metadata: metadata as unknown as Record<string, unknown>,
-    };
-  }
-
-  // [RAV-B2] Create real Claude analyzer using Agent SDK
-  private createClaudeAnalyzer(): ClaudeAnalyzer {
-    return async (findings, policyDecision) => {
-      // Dynamic import to avoid bundling SDK when not used
-      const { query } = await import('@anthropic-ai/claude-agent-sdk');
-
-      const prompt = this.buildPrompt(findings, policyDecision);
-
-      const opinions: ReviewOpinion[] = [];
-
-      const systemPrompt = `You are a security compliance reviewer. Analyze each finding and respond with a JSON array of ReviewOpinion objects. Each opinion must have: findingFingerprint, riskExplanation, regulations (array of strings like "GDPR Art. 44"), remediationAdvice, confidence ("high"|"medium"|"low"), isFalsePositive (boolean), and optionally falsePositiveReason.`;
-
-      // [RAV-B2] Query Claude with Read tool enabled for file context
-      // SDK uses ANTHROPIC_API_KEY from environment automatically
-      for await (const message of query({
-        prompt,
-        options: {
-          model: 'claude-sonnet-4-20250514',
-          systemPrompt,
-          // [RAV-B2] Enable Read tool so Claude can access repo files for context
-          tools: ['Read'],
-          permissionMode: 'default',
-        },
-      }) as AsyncIterable<unknown>) {
-        const msg = message as Record<string, unknown>;
-        if (msg['type'] === 'assistant') {
-          try {
-            // Extract text content from message (SDK format varies)
-            const content = msg['content'];
-            const text = typeof content === 'string'
-              ? content
-              : Array.isArray(content)
-                ? (content as Array<Record<string, unknown>>).map(b => b['text'] ?? '').join('')
-                : '';
-            if (!text) continue;
-
-            const parsed: unknown = JSON.parse(text);
-            if (Array.isArray(parsed)) {
-              for (const item of parsed as Record<string, unknown>[]) {
-                // [RAV-B3] Parse into ReviewOpinion
-                opinions.push({
-                  findingFingerprint: (item['findingFingerprint'] as string) ?? '',
-                  riskExplanation: (item['riskExplanation'] as string) ?? '',
-                  regulations: Array.isArray(item['regulations']) ? item['regulations'] as string[] : [],
-                  remediationAdvice: (item['remediationAdvice'] as string) ?? '',
-                  confidence: (item['confidence'] as ReviewOpinion['confidence']) ?? 'medium',
-                  isFalsePositive: item['isFalsePositive'] === true,
-                  // [RAV-B4] False positive with reason
-                  ...(item['isFalsePositive'] && item['falsePositiveReason']
-                    ? { falsePositiveReason: item['falsePositiveReason'] as string }
-                    : {}),
-                });
-              }
-            }
-          } catch {
-            // Not parseable JSON — skip
-          }
-        }
-      }
-
-      return opinions;
     };
   }
 

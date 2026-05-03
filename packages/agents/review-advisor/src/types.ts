@@ -62,9 +62,19 @@ export type ReviewAdvisorMetadata = {
 };
 
 /**
- * Dependencias inyectadas al agente.
+ * LLM provider interface (G18). Matches ILlmProvider from @gitgov/core/llm.
+ * Defined locally to avoid cross-rootDir import (same pattern as AgentOutput).
+ */
+export type LlmProvider = {
+  query(messages: readonly { role: string; content: string }[]): Promise<{ content: string; model: string }>;
+  readonly providerName: string;
+  readonly modelName: string;
+};
+
+/**
+ * Dependencias inyectadas al agente (G18 — provider-agnostic).
  */
 export type ReviewAdvisorAgentDeps = {
-  /** API key de Anthropic (requerida para Claude) */
-  anthropicApiKey?: string;
+  /** LLM provider resolved via resolveLlmProvider(). If missing, agent degrades gracefully. */
+  llm?: LlmProvider;
 };
