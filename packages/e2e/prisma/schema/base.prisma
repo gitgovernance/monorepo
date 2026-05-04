@@ -1,0 +1,11 @@
+// E2E test database — uses core schemas (single-tenant, no extensions)
+// Generated client goes to e2e/generated/prisma/
+
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../../generated/prisma"
+}
