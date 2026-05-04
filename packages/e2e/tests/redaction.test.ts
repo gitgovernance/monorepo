@@ -23,6 +23,7 @@ import {
   Sarif,
   Redaction,
 } from '@gitgov/core';
+import type { SarifLog } from '@gitgov/core';
 import { FsFileLister } from '@gitgov/core/fs';
 
 // ============================================================================
@@ -32,9 +33,6 @@ import { FsFileLister } from '@gitgov/core/fs';
 function sha256(input: string): string {
   return createHash('sha256').update(input).digest('hex');
 }
-
-type SarifLog = Sarif.SarifLog;
-type SarifResult = SarifLog['runs'][0]['results'][0];
 
 // ============================================================================
 // Fixtures — files with known PII (sensitive) and clean code (non-sensitive)
@@ -123,7 +121,7 @@ async function runScan(fixtureDir: string): Promise<SarifLog> {
     informationUri: 'https://gitgovernance.com/agents/security-audit',
     findings: auditResult.findings,
     taskId: 'task-redaction-e2e',
-    agentId: 'agent:gitgov:security-audit',
+    agentId: 'agent:security-audit',
     scanScope: 'full',
     scannedFiles: auditResult.scannedFiles,
     scannedLines: auditResult.scannedLines,
@@ -183,7 +181,7 @@ async function runScanWithRedactionLevel(
     informationUri: 'https://gitgovernance.com/agents/security-audit',
     findings: auditResult.findings,
     taskId: 'task-redaction-e2e',
-    agentId: 'agent:gitgov:security-audit',
+    agentId: 'agent:security-audit',
     scanScope: 'full',
     scannedFiles: auditResult.scannedFiles,
     scannedLines: auditResult.scannedLines,
@@ -234,7 +232,7 @@ describe('Block I: Redaction Pipeline (CI1 to CI4)', () => {
     expect(l1Results.length).toBeGreaterThan(0);
 
     // Find results with sensitive categories
-    const sensitiveResults = l1Results.filter(r => {
+    const sensitiveResults = l1Results.filter((r: { properties?: Record<string, unknown> }) => {
       const cat = r.properties?.['gitgov/category'] as string | undefined;
       return cat && Redaction.DEFAULT_REDACTION_CONFIG.sensitiveCategories.includes(cat);
     });

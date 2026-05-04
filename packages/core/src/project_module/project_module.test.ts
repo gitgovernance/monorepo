@@ -56,17 +56,13 @@ function createRealDeps() {
   const initializer = createMockInitializer();
   const backlog = createMockBacklog();
 
-  return {
-    deps: {
-      initializer,
-      identity,
-      backlog,
-    } satisfies ProjectModuleDeps,
-    actorStore,
-    keyProvider,
+  const deps: ProjectModuleDeps = {
     initializer,
+    identity,
     backlog,
   };
+
+  return { deps, actorStore, keyProvider, initializer, backlog };
 }
 
 describe('ProjectModule', () => {
@@ -264,6 +260,348 @@ describe('ProjectModule', () => {
       await expect(pm.initializeProject({ name: 'test-project', login: 'dev' }))
         .rejects.toThrow('Commit failed');
       expect(initializer.rollback).toHaveBeenCalled();
+    });
+  });
+
+  function createMockAgentAdapter(overrides?: Partial<Record<string, jest.Mock>>) {
+    return {
+      createAgentRecord: jest.fn().mockResolvedValue({}),
+      getAgentRecord: jest.fn().mockResolvedValue(null),
+      updateAgentRecord: jest.fn().mockResolvedValue({}),
+      ...overrides,
+    };
+  }
+
+  // 4.5. Specialist Agent Creation (PROJ-E1 to E4)
+  describe('4.5. Specialist Agent Creation (PROJ-E1 to E4)', () => {
+    const defaultAgents = [
+      {
+        packageName: '@gitgov/core',
+        agentId: 'agent:gitgov-audit',
+        displayName: 'GitGov Audit',
+        engine: { type: 'local' as const, entrypoint: 'packages/core/dist/index.mjs', function: 'orchestrateAudit' },
+        purpose: 'orchestration',
+        triggers: [{ type: 'webhook' as const, event: 'pull_request.opened' }],
+        metadata: { description: 'Product agent' },
+      },
+      {
+        packageName: '@gitgov/agent-security-audit',
+        agentId: 'agent:security-audit',
+        displayName: 'Security Audit',
+        engine: { type: 'local' as const, entrypoint: '@gitgov/agent-security-audit', function: 'runAgent' },
+        purpose: 'audit',
+        triggers: [] as Array<{ type: 'manual' | 'webhook' | 'scheduled' }>,
+        metadata: { target: 'code', outputFormat: 'sarif' },
+      },
+      {
+        packageName: '@gitgov/agent-review-advisor',
+        agentId: 'agent:review-advisor',
+        displayName: 'Review Advisor',
+        engine: { type: 'local' as const, entrypoint: '@gitgov/agent-review-advisor', function: 'runReviewAdvisor' },
+        purpose: 'review',
+        triggers: [] as Array<{ type: 'manual' | 'webhook' | 'scheduled' }>,
+        metadata: { target: 'findings', outputFormat: 'feedback-review' },
+      },
+    ];
+
+    it('[PROJ-E1] should create ActorRecord for each specialist agent before AgentRecord', async () => {
+      const { deps, actorStore } = createRealDeps();
+      const mockAgentAdapter = createMockAgentAdapter();
+      deps.agentAdapter = mockAgentAdapter;
+      deps.defaultAgents = defaultAgents;
+      const pm = new ProjectModule(deps);
+
+      await pm.initializeProject({ name: 'test-project', login: 'camilo' });
+
+      // security-audit specialist should have its own ActorRecord
+      const securityActor = await actorStore.get('agent:security-audit');
+      expect(securityActor).not.toBeNull();
+      expect(securityActor!.payload.type).toBe('agent');
+      expect(securityActor!.payload.roles).toEqual(['specialist']);
+      expect(securityActor!.payload.metadata).toEqual(expect.objectContaining({ purpose: 'audit' }));
+
+      // review-advisor specialist should have its own ActorRecord
+      const reviewActor = await actorStore.get('agent:review-advisor');
+      expect(reviewActor).not.toBeNull();
+      expect(reviewActor!.payload.type).toBe('agent');
+      expect(reviewActor!.payload.roles).toEqual(['specialist']);
+      expect(reviewActor!.payload.metadata).toEqual(expect.objectContaining({ purpose: 'review' }));
+
+      // AgentRecords created for all 3 (product + 2 specialists)
+      expect(mockAgentAdapter.createAgentRecord).toHaveBeenCalledTimes(3);
+    });
+
+    it('[PROJ-E2] should skip failed specialist and continue with remaining agents', async () => {
+      const { deps } = createRealDeps();
+      const mockAgentAdapter = createMockAgentAdapter();
+      deps.agentAdapter = mockAgentAdapter;
+      deps.defaultAgents = defaultAgents;
+
+      // Make createActor fail for security-audit (2nd specialist) but succeed for others
+      const originalCreateActor = deps.identity.createActor.bind(deps.identity);
+      jest.spyOn(deps.identity, 'createActor').mockImplementation(async (payload, signerId) => {
+        if ((payload as { id?: string }).id === 'agent:security-audit') {
+          throw new Error('KeyProvider unavailable');
+        }
+        return originalCreateActor(payload, signerId);
+      });
+
+      const pm = new ProjectModule(deps);
+      const result = await pm.initializeProject({ name: 'test-project', login: 'camilo' });
+
+      // Init succeeded despite security-audit specialist failure
+      expect(result.actorId).toBe('human:camilo');
+      // Product agent AgentRecord created (createActor skipped for it)
+      // security-audit: createActor failed → entire agent skipped (no createAgentRecord)
+      // review-advisor: createActor succeeded → createAgentRecord called
+      // Total: 2 createAgentRecord calls (product + review-advisor)
+      expect(mockAgentAdapter.createAgentRecord).toHaveBeenCalledTimes(2);
+    });
+
+    it('[PROJ-E3] should not create duplicate ActorRecord for agent:gitgov-audit', async () => {
+      const { deps } = createRealDeps();
+      const mockAgentAdapter = createMockAgentAdapter();
+      deps.agentAdapter = mockAgentAdapter;
+      deps.defaultAgents = defaultAgents;
+      const pm = new ProjectModule(deps);
+
+      const identitySpy = jest.spyOn(deps.identity, 'createActor');
+      await pm.initializeProject({ name: 'test-project', login: 'camilo' });
+
+      // createActor called for: human, product agent (PROJ-B2), security-audit, review-advisor
+      // NOT called again for agent:gitgov-audit in PROJ-B4 loop (already created in PROJ-B2)
+      const agentCalls = identitySpy.mock.calls.filter(
+        call => (call[0] as { id?: string }).id?.startsWith('agent:')
+      );
+      // agent:gitgov-audit (PROJ-B2) + agent:security-audit (PROJ-E1) + agent:review-advisor (PROJ-E1) = 3
+      expect(agentCalls).toHaveLength(3);
+      expect(agentCalls[0]![0]).toEqual(expect.objectContaining({ id: 'agent:gitgov-audit' }));
+      expect(agentCalls[1]![0]).toEqual(expect.objectContaining({ id: 'agent:security-audit' }));
+      expect(agentCalls[2]![0]).toEqual(expect.objectContaining({ id: 'agent:review-advisor' }));
+    });
+
+    it('[PROJ-E4] should include purpose in AgentRecord metadata', async () => {
+      const { deps } = createRealDeps();
+      const mockAgentAdapter = createMockAgentAdapter();
+      deps.agentAdapter = mockAgentAdapter;
+      deps.defaultAgents = defaultAgents;
+      const pm = new ProjectModule(deps);
+
+      await pm.initializeProject({ name: 'test-project', login: 'camilo' });
+
+      const orchestrationCall = mockAgentAdapter.createAgentRecord.mock.calls[0][0];
+      expect(orchestrationCall.metadata).toEqual(expect.objectContaining({ purpose: 'orchestration' }));
+
+      const auditCall = mockAgentAdapter.createAgentRecord.mock.calls[1][0];
+      expect(auditCall.metadata).toEqual(expect.objectContaining({ purpose: 'audit' }));
+
+      const reviewCall = mockAgentAdapter.createAgentRecord.mock.calls[2][0];
+      expect(reviewCall.metadata).toEqual(expect.objectContaining({ purpose: 'review' }));
+    });
+  });
+
+  // 4.6. Default Agent Registration (PROJ-B4 to B5)
+  describe('4.6. Default Agent Registration (PROJ-B4 to B5)', () => {
+    it('[PROJ-B4] should create AgentRecords for each defaultAgent', async () => {
+      const { deps } = createRealDeps();
+      const mockAgentAdapter = createMockAgentAdapter();
+      deps.agentAdapter = mockAgentAdapter;
+      deps.defaultAgents = [{
+        packageName: '@gitgov/core',
+        agentId: 'agent:gitgov-audit',
+        displayName: 'GitGov Audit',
+        engine: { type: 'local' as const, entrypoint: 'packages/core/dist/index.mjs', function: 'orchestrateAudit' },
+        purpose: 'orchestration',
+        triggers: [{ type: 'webhook' as const, event: 'pull_request.opened' }],
+        metadata: { description: 'Product agent' },
+      }];
+      const pm = new ProjectModule(deps);
+
+      await pm.initializeProject({ name: 'test-project', login: 'camilo' });
+
+      expect(mockAgentAdapter.createAgentRecord).toHaveBeenCalledTimes(1);
+      expect(mockAgentAdapter.createAgentRecord).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'agent:gitgov-audit',
+          status: 'active',
+          engine: expect.objectContaining({ entrypoint: 'packages/core/dist/index.mjs' }),
+        }),
+      );
+    });
+
+    it('[PROJ-B5] should continue with remaining agents when one fails', async () => {
+      const { deps } = createRealDeps();
+      const mockAgentAdapter = createMockAgentAdapter({
+        createAgentRecord: jest.fn()
+          .mockRejectedValueOnce(new Error('Agent 1 failed'))
+          .mockResolvedValueOnce({}),
+      });
+      deps.agentAdapter = mockAgentAdapter;
+      deps.defaultAgents = [
+        { packageName: 'pkg1', agentId: 'agent:gitgov-audit', displayName: 'Agent 1', engine: { type: 'local' as const, entrypoint: 'a', function: 'f' }, purpose: 'orchestration', triggers: [], metadata: {} },
+        { packageName: 'pkg2', agentId: 'agent:second', displayName: 'Agent 2', engine: { type: 'local' as const, entrypoint: 'b', function: 'g' }, purpose: 'test', triggers: [], metadata: {} },
+      ];
+      const pm = new ProjectModule(deps);
+
+      const result = await pm.initializeProject({ name: 'test-project', login: 'camilo' });
+
+      // Init succeeded despite first agent failure
+      expect(result.actorId).toBe('human:camilo');
+      // Both agents were attempted
+      expect(mockAgentAdapter.createAgentRecord).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  // 4.7. Agent Config Source of Truth (PROJ-F1 to F3)
+  describe('4.7. Agent Config Source of Truth (PROJ-F1 to F3)', () => {
+    it('[PROJ-F1] should use AgentRecord triggers type not inline union', () => {
+      // Type-level test: DefaultAgentConfig.triggers must accept AgentRecord trigger values.
+      // If the type is wrong, this file won't compile — the assertion is the type check itself.
+      const config: import('./project_module.types').DefaultAgentConfig = {
+        packageName: 'test',
+        agentId: 'agent:test',
+        displayName: 'Test',
+        engine: { type: 'local', entrypoint: 'x', function: 'f' },
+        purpose: 'test',
+        triggers: [{ type: 'webhook', event: 'push' }, { type: 'scheduled', cron: '* * * * *' }],
+        metadata: {},
+      };
+      // The triggers accept the same union as AgentRecord — 'manual' | 'webhook' | 'scheduled'
+      expect(config.triggers[0]!.type).toBe('webhook');
+      expect(config.triggers[1]!.type).toBe('scheduled');
+    });
+
+    it('[PROJ-F2] should export DEFAULT_AGENTS with config from agent packages', () => {
+      const { DEFAULT_AGENTS } = require('./default_agents');
+      expect(DEFAULT_AGENTS).toBeDefined();
+      expect(Array.isArray(DEFAULT_AGENTS)).toBe(true);
+      expect(DEFAULT_AGENTS.length).toBe(3);
+
+      const product = DEFAULT_AGENTS.find((a: { agentId: string }) => a.agentId === 'agent:gitgov-audit');
+      expect(product).toBeDefined();
+      expect(product.purpose).toBe('orchestration');
+      expect(product.displayName).toBe('GitGov Audit');
+
+      const security = DEFAULT_AGENTS.find((a: { agentId: string }) => a.agentId === 'agent:security-audit');
+      expect(security).toBeDefined();
+      expect(security.purpose).toBe('audit');
+      expect(security.metadata.target).toBe('code');
+
+      const review = DEFAULT_AGENTS.find((a: { agentId: string }) => a.agentId === 'agent:review-advisor');
+      expect(review).toBeDefined();
+      expect(review.purpose).toBe('review');
+      expect(review.metadata.outputFormat).toBe('feedback-review');
+    });
+
+    it('[PROJ-F3] github_backends should use DEFAULT_AGENTS from core', () => {
+      // Structural test: DEFAULT_AGENTS has the same shape as what github_backends needs.
+      // The real assertion is in github_backends.ts where `defaultAgents: DEFAULT_AGENTS` compiles.
+      const { DEFAULT_AGENTS } = require('./default_agents');
+      for (const agent of DEFAULT_AGENTS) {
+        expect(agent).toHaveProperty('packageName');
+        expect(agent).toHaveProperty('agentId');
+        expect(agent).toHaveProperty('displayName');
+        expect(agent).toHaveProperty('engine');
+        expect(agent).toHaveProperty('purpose');
+        expect(agent).toHaveProperty('triggers');
+        expect(agent).toHaveProperty('metadata');
+      }
+    });
+  });
+
+  // 4.8. Agent Config Update (GAUD-E1 to E3)
+  describe('4.8. Agent Config Update (GAUD-E1 to E3)', () => {
+    const singleAgent = [{
+      packageName: '@gitgov/core',
+      agentId: 'agent:gitgov-audit',
+      displayName: 'GitGov Audit',
+      engine: { type: 'local' as const, entrypoint: 'v2/index.mjs', function: 'run' },
+      purpose: 'orchestration',
+      triggers: [{ type: 'webhook' as const, event: 'pull_request.opened' }],
+      metadata: { version: '2.0.0' },
+    }];
+
+    it('[GAUD-E1] should update AgentRecord when engine config differs from defaultAgent', async () => {
+      const { deps } = createRealDeps();
+      const existingRecord = {
+        id: 'agent:gitgov-audit',
+        engine: { type: 'local' as const, entrypoint: 'v1/index.mjs', function: 'run' },
+        status: 'active' as const,
+        triggers: [{ type: 'webhook' as const, event: 'pull_request.opened' }],
+        metadata: { version: '1.0.0', purpose: 'orchestration' },
+      };
+      const mockAgentAdapter = createMockAgentAdapter({
+        getAgentRecord: jest.fn().mockResolvedValue(existingRecord),
+      });
+      deps.agentAdapter = mockAgentAdapter;
+      deps.defaultAgents = singleAgent;
+      const pm = new ProjectModule(deps);
+
+      await pm.initializeProject({ name: 'test-project', login: 'camilo' });
+
+      // Engine changed (v1 → v2) → updateAgentRecord called
+      expect(mockAgentAdapter.updateAgentRecord).toHaveBeenCalledTimes(1);
+      expect(mockAgentAdapter.updateAgentRecord).toHaveBeenCalledWith(
+        'agent:gitgov-audit',
+        expect.objectContaining({
+          engine: expect.objectContaining({ entrypoint: 'v2/index.mjs' }),
+        }),
+      );
+      // createAgentRecord NOT called (agent already exists)
+      expect(mockAgentAdapter.createAgentRecord).not.toHaveBeenCalled();
+    });
+
+    it('[GAUD-E2] should preserve agent identity and status when updating config', async () => {
+      const { deps } = createRealDeps();
+      const existingRecord = {
+        id: 'agent:gitgov-audit',
+        engine: { type: 'local' as const, entrypoint: 'old/path.mjs', function: 'run' },
+        status: 'active' as const,
+        triggers: [{ type: 'manual' as const }],
+        metadata: { version: '1.0.0', purpose: 'orchestration' },
+      };
+      const mockAgentAdapter = createMockAgentAdapter({
+        getAgentRecord: jest.fn().mockResolvedValue(existingRecord),
+      });
+      deps.agentAdapter = mockAgentAdapter;
+      deps.defaultAgents = singleAgent;
+      const pm = new ProjectModule(deps);
+
+      await pm.initializeProject({ name: 'test-project', login: 'camilo' });
+
+      // updateAgentRecord was called with engine + metadata only — NOT id, status, triggers
+      const updateCall = mockAgentAdapter.updateAgentRecord.mock.calls[0];
+      expect(updateCall[0]).toBe('agent:gitgov-audit');
+      const updates = updateCall[1];
+      expect(updates).toHaveProperty('engine');
+      expect(updates).toHaveProperty('metadata');
+      expect(updates).not.toHaveProperty('id');
+      expect(updates).not.toHaveProperty('status');
+      expect(updates).not.toHaveProperty('triggers');
+    });
+
+    it('[GAUD-E3] should continue init when agent config update fails', async () => {
+      const { deps } = createRealDeps();
+      const existingRecord = {
+        id: 'agent:gitgov-audit',
+        engine: { type: 'local' as const, entrypoint: 'old.mjs', function: 'run' },
+        status: 'active' as const,
+        triggers: [],
+        metadata: { version: '1.0.0', purpose: 'orchestration' },
+      };
+      const mockAgentAdapter = createMockAgentAdapter({
+        getAgentRecord: jest.fn().mockResolvedValue(existingRecord),
+        updateAgentRecord: jest.fn().mockRejectedValue(new Error('Update failed')),
+      });
+      deps.agentAdapter = mockAgentAdapter;
+      deps.defaultAgents = singleAgent;
+      const pm = new ProjectModule(deps);
+
+      // Init should NOT throw even though update failed
+      const result = await pm.initializeProject({ name: 'test-project', login: 'camilo' });
+
+      expect(result.actorId).toBe('human:camilo');
+      expect(mockAgentAdapter.updateAgentRecord).toHaveBeenCalledTimes(1);
     });
   });
 });

@@ -14,14 +14,28 @@ This package depends on `@gitgov/core` for all record types, audit types, and ad
 # 1. Build CLI (required for CLI-based tests)
 cd packages/cli && pnpm build
 
-# 2. PostgreSQL (required for projection tests)
+# 2. Generate Prisma client (required for DB tests)
+cd packages/e2e && pnpm prisma:generate
+
+# 3. PostgreSQL (required for projection tests)
 docker run -d --name gitgov-pg -e POSTGRES_USER=gitgov -e POSTGRES_PASSWORD=gitgov -e POSTGRES_DB=gitgov_dev -p 5432:5432 postgres:16
 
-# 3. GitHub token (required for T2 tests — T1 tests skip gracefully)
+# 4. GitHub token (required for T2 tests — T1 tests skip gracefully)
 export GITHUB_TOKEN=ghp_xxxxxxxxxxxx
 ```
 
 `globalSetup.ts` creates the 2 E2E databases (`gitgov_e2e_protocol`, `gitgov_e2e_audit`) and runs `prisma db push` automatically.
+
+## Prisma Schema
+
+E2E generates its own PrismaClient from core schemas (single-tenant, no extensions). See [AGENTS.md §2](./AGENTS.md) for details.
+
+```bash
+pnpm prisma:sync      # Copy schemas from core
+pnpm prisma:generate  # Sync + generate client
+```
+
+If core changes its Prisma schemas, re-run `pnpm prisma:generate` in this package.
 
 ## Environment Variables
 

@@ -5,6 +5,8 @@
   "type": "module",
   "description": "Cross-package E2E tests for GitGovernance monorepo",
   "scripts": {
+    "prisma:sync": "tsx scripts/sync-prisma-schemas.ts",
+    "prisma:generate": "pnpm prisma:sync && prisma generate --schema=prisma/schema",
     "test": "vitest run",
     "test:local": "vitest run tests/cli_records.test.ts tests/projection.test.ts tests/parity.test.ts",
     "test:github": "GITHUB_TEST_REPO=git@github.com:gitgovernance/e2e-test-repo.git vitest run",

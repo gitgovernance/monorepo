@@ -316,7 +316,7 @@ describe('Block BA: Audit Record Projection (CBA1-CBA6)', () => {
       create: {
         fingerprint: targetFingerprint,
         ruleId: targetRuleId,
-        justification: feedbackRecord.payload?.content ?? 'Test fixture, accepted for E2E',
+        justification: (feedbackRecord.payload?.content as string) ?? 'Test fixture, accepted for E2E',
         approvedBy: signatures?.[0]?.keyId ?? 'unknown',
         file: (metadata?.file as string) ?? null,
         line: (metadata?.line as number) ?? null,
@@ -343,7 +343,7 @@ describe('Block BA: Audit Record Projection (CBA1-CBA6)', () => {
     const waivers = await prisma.waiver.findMany({ where: { status: 'active' } });
     expect(waivers.length).toBeGreaterThan(0);
 
-    const waiverFingerprints = waivers.map(w => w.fingerprint);
+    const waiverFingerprints = waivers.map((w: { fingerprint: string }) => w.fingerprint);
 
     // Recalculate isWaived
     await prisma.finding.updateMany({

@@ -16,7 +16,7 @@
 import { GitHubGitModule } from './github_git_module';
 import type { GitHubGitModuleOptions } from './github_git_module.types';
 import { GitError, FileNotFoundError, BranchNotFoundError, BranchAlreadyExistsError } from '../errors';
-import { GitHubApiError } from '../../github';
+import { GitHubApiError } from '../../shared/github/github';
 
 // ==================== Test Helpers ====================
 

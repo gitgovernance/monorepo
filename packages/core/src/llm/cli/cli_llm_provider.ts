@@ -124,22 +124,22 @@ export class CliLlmProvider implements ILlmProvider {
         if (this.cli === 'claude') {
           try {
             const parsed = JSON.parse(output) as Record<string, unknown>;
-            const usage = (parsed.usage || {}) as Record<string, unknown>;
-            const inputTokens = (usage.input_tokens as number) || 0;
-            const cacheRead = (usage.cache_read_input_tokens as number) || 0;
-            const cacheCreation = (usage.cache_creation_input_tokens as number) || 0;
-            const outputTokens = (usage.output_tokens as number) || 0;
+            const usage = (parsed['usage'] || {}) as Record<string, unknown>;
+            const inputTokens = (usage['input_tokens'] as number) || 0;
+            const cacheRead = (usage['cache_read_input_tokens'] as number) || 0;
+            const cacheCreation = (usage['cache_creation_input_tokens'] as number) || 0;
+            const outputTokens = (usage['output_tokens'] as number) || 0;
 
             resolve({
-              result: (parsed.result as string) || '',
+              result: (parsed['result'] as string) || '',
               inputTokens,
               outputTokens,
               cacheReadTokens: cacheRead,
               cacheCreationTokens: cacheCreation,
               totalTokens: inputTokens + cacheRead + cacheCreation + outputTokens,
-              costUsd: (parsed.total_cost_usd as number) || 0,
-              durationMs: (parsed.duration_ms as number) || 0,
-              numTurns: (parsed.num_turns as number) || 0,
+              costUsd: (parsed['total_cost_usd'] as number) || 0,
+              durationMs: (parsed['duration_ms'] as number) || 0,
+              numTurns: (parsed['num_turns'] as number) || 0,
               timedOut: false,
               raw: parsed,
             });

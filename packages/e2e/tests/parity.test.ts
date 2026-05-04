@@ -36,10 +36,15 @@ import {
   GITLAB_TEST_PROJECT_ID,
   createGitHubProjectorStores,
 } from './helpers';
+import type { ProtocolClient, RecordProjectorDependencies } from './helpers';
 import type {
-  ProtocolClient,
-  RecordProjectorDependencies,
-} from './helpers';
+  GitGovTaskRecord,
+  GitGovCycleRecord,
+  GitGovFeedbackRecord,
+  GitGovExecutionRecord,
+  GitGovActorRecord,
+  GitGovAgentRecord,
+} from '@gitgov/core';
 
 export type {
   GitGovTaskRecord,
@@ -226,7 +231,7 @@ describe('Block E: Projection Parity (CE1-CE3)', () => {
       // 3. Push records to GitLab via Commits API
       await api.Branches.create(projectId, testBranch, 'main');
 
-      const actions: Array<{ action: 'create'; file_path: string; content: string; encoding: 'base64' }> = [];
+      const actions: Array<{ action: 'create'; filePath: string; content: string; encoding: 'base64' }> = [];
 
       for (const dir of ['tasks', 'actors', 'cycles', 'feedbacks', 'executions']) {
         const dirPath = path.join(gitgovDir, dir);
@@ -236,7 +241,7 @@ describe('Block E: Projection Parity (CE1-CE3)', () => {
           const content = fs.readFileSync(path.join(dirPath, file), 'utf-8');
           actions.push({
             action: 'create',
-            file_path: `.gitgov/${dir}/${file}`,
+            filePath: `.gitgov/${dir}/${file}`,
             content: Buffer.from(content).toString('base64'),
             encoding: 'base64',
           });
@@ -247,7 +252,7 @@ describe('Block E: Projection Parity (CE1-CE3)', () => {
       if (fs.existsSync(configPath)) {
         actions.push({
           action: 'create',
-          file_path: '.gitgov/config.json',
+          filePath: '.gitgov/config.json',
           content: Buffer.from(fs.readFileSync(configPath, 'utf-8')).toString('base64'),
           encoding: 'base64',
         });

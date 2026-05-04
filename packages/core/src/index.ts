@@ -85,8 +85,8 @@ export type { EnvironmentValidation } from "./project_initializer/index";
 // ProjectInitResult removed — use ProjectModuleInitResult from project_module
 
 // ProjectModule (Cycle 4 — unified init orchestrator)
-export { ProjectModule } from "./project_module/index";
-export type { ProjectModuleDeps, ProjectInitOptions as ProjectModuleInitOptions, ProjectInitResult as ProjectModuleInitResult } from "./project_module/index";
+export { ProjectModule, DEFAULT_AGENTS } from "./project_module/index";
+export type { ProjectModuleDeps, DefaultAgentConfig, ProjectInitOptions as ProjectModuleInitOptions, ProjectInitResult as ProjectModuleInitResult } from "./project_module/index";
 
 // Store type exports
 export type { RecordStore, IdEncoder } from "./record_store/index";
@@ -97,6 +97,10 @@ export type { ConfigStore } from "./config_store/index";
 // FileLister direct exports (interface + types + errors)
 export type { FileLister as IFileLister, FileListOptions, FileStats } from "./file_lister/index";
 export { FileListerError } from "./file_lister/index";
+
+// LLM provider abstraction (G18)
+export { resolveLlmProvider } from "./llm/index";
+export type { ILlmProvider, LlmMessage, LlmTool, LlmResponse, LlmProviderConfig } from "./llm/index";
 
 // ─── Audit product types (canonical, from @gitgov/core/audit) ────────────────
 export type {
@@ -177,6 +181,7 @@ export * as AuditOrchestrator from "./audit_orchestrator/index";
 
 // Policy evaluator (stub -- formal implementation in Epic 5)
 export * as PolicyEvaluator from "./policy_evaluator/index";
+export type { PolicyEvaluationInput, PolicyConfig, PolicyEvaluationResult, PolicyExecutionRecordData } from "./policy_evaluator/index";
 
 // Redaction module (Epic 6 — L1/L2 finding redaction)
 export * as Redaction from "./redaction/index";

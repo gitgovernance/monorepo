@@ -69,7 +69,7 @@ describe('security-audit integration', () => {
       const payload = agentRecord['payload'] as Record<string, unknown>;
 
       // Structural validation — required fields per schema
-      expect(payload['id']).toBe('agent:gitgov:security-audit');
+      expect(payload['id']).toBe('agent:security-audit');
       expect(payload['id']).toMatch(/^agent(:[a-z0-9-]+)+$/);
       expect(payload['status']).toBe('active');
 
@@ -93,7 +93,7 @@ describe('security-audit integration', () => {
       const payload = actorRecord['payload'] as Record<string, unknown>;
 
       // Structural validation — required fields per schema
-      expect(payload['id']).toBe('agent:gitgov:security-audit');
+      expect(payload['id']).toBe('agent:security-audit');
       expect(payload['id']).toMatch(/^(human|agent)(:[a-z0-9-]+)+$/);
       expect(payload['type']).toBe('agent');
       expect(payload['displayName']).toBe('Security Audit Agent');
@@ -234,8 +234,8 @@ describe('security-audit integration', () => {
 
     it('[AAV2-G2] should set metadata.kind sarif in ExecutionRecord', async () => {
       const ctx = {
-        agentId: 'agent:gitgov:security-audit',
-        actorId: 'agent:gitgov:security-audit',
+        agentId: 'agent:security-audit',
+        actorId: 'agent:security-audit',
         taskId: 'task-integration-002',
         runId: '550e8400-e29b-41d4-a716-446655440001',
         input: { scope: 'full', taskId: 'task-integration-002', baseDir: '/tmp/test-repo' },
@@ -270,7 +270,7 @@ describe('security-audit integration', () => {
 
       // Same ID links agent engine definition to actor identity
       expect(agentPayload['id']).toBe(actorPayload['id']);
-      expect(agentPayload['id']).toBe('agent:gitgov:security-audit');
+      expect(agentPayload['id']).toBe('agent:security-audit');
 
       // ActorRecord has Ed25519 public key (44 chars = 32 bytes base64)
       const publicKey = actorPayload['publicKey'] as string;
@@ -287,8 +287,8 @@ describe('security-audit integration', () => {
 
     it('[AAV2-G4] should produce finding when file with known PII is in scope', async () => {
       const ctx = {
-        agentId: 'agent:gitgov:security-audit',
-        actorId: 'agent:gitgov:security-audit',
+        agentId: 'agent:security-audit',
+        actorId: 'agent:security-audit',
         taskId: 'task-integration-003',
         runId: '550e8400-e29b-41d4-a716-446655440002',
         input: { scope: 'full', taskId: 'task-integration-003', baseDir: '/tmp/test-repo' },

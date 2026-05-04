@@ -12,18 +12,18 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 
 // === @gitgov/core public API ===
-import type { PolicyEvaluationResult } from '@gitgov/core';
-
-// === Modules not yet in @gitgov/core public API (added in audit_orchestration epic) ===
-import { createPolicyEvaluator } from '../../core/src/policy_evaluator';
+import { PolicyEvaluator as PolicyEvaluatorNS, Factories, calculatePayloadChecksum, generateExecutionId } from '@gitgov/core';
 import type {
-  PolicyEvaluationInput,
-  PolicyConfig,
   Finding,
   Waiver,
-  PolicyEvaluator,
+  PolicyEvaluationInput,
+  PolicyConfig,
+  PolicyEvaluationResult,
   PolicyExecutionRecordData,
-} from '../../core/src/policy_evaluator';
+} from '@gitgov/core';
+
+const createPolicyEvaluator = PolicyEvaluatorNS.createPolicyEvaluator;
+type PolicyEvaluator = ReturnType<typeof createPolicyEvaluator>;
 
 // ============================================================================
 // Fixture builders
@@ -50,7 +50,7 @@ function makeFinding(overrides: {
     detector: 'regex',
     confidence: 1.0,
     executionId: '1700000000-exec-e2e-policy',
-    reportedBy: ['agent:gitgov:security-audit'],
+    reportedBy: ['agent:security-audit'],
     isWaived: overrides.isWaived ?? false,
     waiver: overrides.waiver,
   };
@@ -60,22 +60,32 @@ function makeFinding(overrides: {
  * Creates a Waiver for a given fingerprint.
  */
 function makeWaiver(fingerprint: string, ruleId: string): Waiver {
+  const feedbackPayload = Factories.createFeedbackRecord({
+    entityType: 'execution',
+    entityId: generateExecutionId(`waiver-${fingerprint.slice(0, 8)}`, Math.floor(Date.now() / 1000)),
+    type: 'approval',
+    status: 'resolved',
+    content: `Waiver for ${ruleId} — E2E test`,
+    metadata: { fingerprint, ruleId, file: 'src/test.ts', line: 10 },
+  });
+
   return {
     fingerprint,
     ruleId,
     feedback: {
-      id: `feedback-waiver-${fingerprint.slice(0, 8)}`,
-      entityType: 'execution',
-      entityId: 'exec-e2e-previous',
-      type: 'approval',
-      status: 'acknowledged',
-      content: 'Risk accepted for E2E test',
-      metadata: {
-        fingerprint,
-        ruleId,
-        file: 'src/test.ts',
-        line: 10,
+      header: {
+        version: '1.0',
+        type: 'feedback' as const,
+        payloadChecksum: calculatePayloadChecksum(feedbackPayload),
+        signatures: [{
+          keyId: 'human:e2e-tester',
+          role: 'approver:quality',
+          notes: 'E2E test waiver',
+          signature: 'dGVzdA=='.padEnd(88, '='),
+          timestamp: Date.now(),
+        }],
       },
+      payload: feedbackPayload,
     },
   };
 }

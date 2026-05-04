@@ -15,7 +15,7 @@ import type { Octokit } from '@octokit/rest';
 import type { ConfigStore } from '../config_store';
 import type { GitGovConfig } from '../../config_manager/config_manager.types';
 import type { GitHubConfigStoreOptions, GitHubSaveResult } from './github_config_store.types';
-import { mapOctokitError, isOctokitRequestError } from '../../github';
+import { mapOctokitError, isOctokitRequestError } from '../../shared/github/github';
 
 export class GitHubConfigStore implements ConfigStore<GitHubSaveResult> {
   private readonly owner: string;

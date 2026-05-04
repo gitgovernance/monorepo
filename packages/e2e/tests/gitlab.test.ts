@@ -74,7 +74,7 @@ describe('Block J: GitLab Integration (CJ1-CJ8)', () => {
       await api.Branches.show(projectId, 'main');
     } catch {
       await api.Commits.create(projectId, 'main', 'initial commit', [
-        { action: 'create', file_path: 'README.md', content: '# E2E Test Repo' },
+        { action: 'create', filePath: 'README.md', content: '# E2E Test Repo' },
       ]);
     }
 
@@ -105,7 +105,7 @@ describe('Block J: GitLab Integration (CJ1-CJ8)', () => {
     expect(result).toBeDefined();
     expect(result.commitSha).toBeDefined();
     expect(typeof result.commitSha).toBe('string');
-    expect(result.commitSha.length).toBeGreaterThan(0);
+    expect(result.commitSha!.length).toBeGreaterThan(0);
   }, 30_000);
 
   it('[EARS-CJ2] should list all record IDs from GitLab directory via Tree API', async () => {

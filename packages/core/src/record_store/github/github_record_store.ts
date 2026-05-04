@@ -2,7 +2,7 @@ import type { Octokit } from '@octokit/rest';
 import type { RecordStore, IdEncoder } from '../record_store';
 import type { GitHubRecordStoreOptions, GitHubWriteResult, GitHubWriteOpts } from './github_record_store.types';
 import type { IGitModule } from '../../git/index';
-import { GitHubApiError, mapOctokitError, isOctokitRequestError } from '../../github';
+import { GitHubApiError, mapOctokitError, isOctokitRequestError } from '../../shared/github/github';
 
 /**
  * GitHubRecordStore<V> - GitHub Contents API implementation of RecordStore<V, GitHubWriteResult, GitHubWriteOpts>

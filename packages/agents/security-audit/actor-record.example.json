@@ -6,7 +6,7 @@
     "signatures": []
   },
   "payload": {
-    "id": "agent:gitgov:security-audit",
+    "id": "agent:security-audit",
     "type": "agent",
     "displayName": "Security Audit Agent",
     "publicKey": "f2KDakrcn5NyNveEad5QB0c3zBBvx5bAKyYwf/lK/Bw=",

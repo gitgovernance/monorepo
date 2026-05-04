@@ -38,13 +38,12 @@ import type {
   ProtocolClient,
   ProjectionClient,
   GithubSyncStateDependencies,
-  IRecordProjector,
   GitGovTaskRecord,
   GitGovActorRecord,
   GitGovCycleRecord,
   GitGovFeedbackRecord,
-  ILintModule,
 } from './helpers';
+import type { IRecordProjector, ILintModule } from '@gitgov/core';
 
 // ===== Factory Helpers =====
 
@@ -228,7 +227,7 @@ describe('Block F: Change Detection (CF1-CF7)', () => {
     // Verify DB has the new task with enriched data
     const tasks = await prisma.gitgovTask.findMany({});
     expect(tasks.length).toBeGreaterThanOrEqual(2); // initial + CF3
-    expect(tasks.some(t => t.title === 'CF3 delta task')).toBe(true);
+    expect(tasks.some((t: { title: string }) => t.title === 'CF3 delta task')).toBe(true);
 
     const meta = await prisma.gitgovMeta.findFirst({});
     expect(meta).not.toBeNull();

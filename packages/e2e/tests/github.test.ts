@@ -245,7 +245,7 @@ describe('Block C: GitHub Integration (CC1-CC5)', () => {
 
     const tasks = await prisma.gitgovTask.findMany({});
     expect(tasks.length).toBeGreaterThanOrEqual(1);
-    const dbTask = tasks.find(t => t.recordId === taskId);
+    const dbTask = tasks.find((t: { recordId: string }) => t.recordId === taskId);
     expect(dbTask).toBeDefined();
     expect(typeof dbTask!.healthScore).toBe('number');
     expect(typeof dbTask!.isStalled).toBe('boolean');

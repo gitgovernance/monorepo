@@ -129,8 +129,8 @@ export type IntegrityError = {
  * Integrity validation warning types.
  */
 export type IntegrityWarning = {
-  type: 'missing_reference' | 'deprecated_field' | 'performance_issue';
-  recordId: string;
+  type: 'missing_reference' | 'deprecated_field' | 'performance_issue' | 'store_read_error';
+  recordId?: string;
   message: string;
 };
 

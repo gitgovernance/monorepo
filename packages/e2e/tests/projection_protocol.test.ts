@@ -136,7 +136,7 @@ describe('Block B: Protocol Record Projection (CB1-CB10)', () => {
 
   it('[CB5] should store feedback record with assignment type and entity reference', async () => {
     const feedbacks = await prisma.gitgovFeedback.findMany({});
-    const assignmentFb = feedbacks.find(fb => fb.type === 'assignment');
+    const assignmentFb = feedbacks.find((fb: { type: string }) => fb.type === 'assignment');
 
     expect(assignmentFb).toBeDefined();
     expect(assignmentFb!.entityType).toBeDefined();
@@ -165,7 +165,7 @@ describe('Block B: Protocol Record Projection (CB1-CB10)', () => {
     expect(tasksAfter.length).toBe(tasksBefore.length);
 
     for (const tb of tasksBefore) {
-      const match = tasksAfter.find(ta => ta.recordId === tb.recordId);
+      const match = tasksAfter.find((ta: { recordId: string }) => ta.recordId === tb.recordId);
       expect(match).toBeDefined();
       expect(match!.title).toBe(tb.title);
       expect(match!.status).toBe(tb.status);
@@ -247,7 +247,7 @@ describe('Block B: Protocol Record Projection (CB1-CB10)', () => {
       const agents = await prisma.gitgovAgent.findMany({});
       expect(agents.length).toBeGreaterThanOrEqual(1);
 
-      const testAgent = agents.find(a => a.recordId.includes('security-audit'));
+      const testAgent = agents.find((a: { recordId: string }) => a.recordId.includes('security-audit'));
       expect(testAgent).toBeDefined();
       expect(testAgent!.engine).toBeDefined();
     } finally {

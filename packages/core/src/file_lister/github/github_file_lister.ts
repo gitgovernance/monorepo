@@ -15,7 +15,7 @@ import picomatch from 'picomatch';
 import type { Octokit } from '@octokit/rest';
 import type { FileLister, FileListOptions, FileStats } from '../file_lister';
 import { FileListerError } from '../file_lister';
-import { isOctokitRequestError } from '../../github';
+import { isOctokitRequestError } from '../../shared/github/github';
 import type { GitHubFileListerOptions } from './github_file_lister.types';
 
 /** Tree entry shape from Octokit git.getTree response */

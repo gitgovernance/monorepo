@@ -24,7 +24,7 @@ import type {
   ChangedFile,
   CommitAuthor,
 } from '../types';
-import { isOctokitRequestError, mapOctokitError } from '../../github';
+import { isOctokitRequestError, mapOctokitError } from '../../shared/github/github';
 import type { GitHubGitModuleOptions } from './github_git_module.types';
 import { GitError, FileNotFoundError, BranchNotFoundError, BranchAlreadyExistsError } from '../errors';
 

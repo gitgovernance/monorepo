@@ -2,6 +2,14 @@ import type { RecordStores } from '../record_store';
 import { RecordMetrics } from '../record_metrics';
 import { extractAuthor, extractLastModifier } from '../utils/signature_utils';
 import { calculatePayloadChecksum, verifySignatures } from '../crypto';
+import {
+  isTaskPayload,
+  isCyclePayload,
+  isActorPayload,
+  isAgentPayload,
+  isFeedbackPayload,
+  isExecutionPayload,
+} from '../record_types/type_guards';
 import type {
   GitGovTaskRecord,
   GitGovCycleRecord,
@@ -238,7 +246,7 @@ export class RecordProjector implements IRecordProjector {
    * - Detect broken references between records
    * - Validate timestamp consistency
    */
-  // TODO: Currently validates only tasks and cycles. EARS-A4 requires validating all 6 record types (actors, agents, executions, feedback).
+  // [EARS-V1] Validates all 6 record types (tasks, cycles, actors, agents, feedbacks, executions)
   async validateIntegrity(): Promise<IntegrityReport> {
     const startTime = performance.now();
     const errors: IntegrityError[] = [];
@@ -247,91 +255,58 @@ export class RecordProjector implements IRecordProjector {
     let checksumFailures = 0;
     let signatureFailures = 0;
 
+    // [EARS-V2] Signature verification uses actor public keys
+    const getActorPublicKey = async (keyId: string): Promise<string | null> => {
+      const actor = await this.stores.actors.get(keyId);
+      return actor?.payload.publicKey || null;
+    };
+
+    // [EARS-V1] Record type validation descriptors — declarative, one entry per type
+    type AnyGitGovRecord = GitGovTaskRecord | GitGovCycleRecord | GitGovActorRecord | GitGovAgentRecord | GitGovFeedbackRecord | GitGovExecutionRecord;
+    const validationDescriptors: Array<{
+      reader: () => Promise<AnyGitGovRecord[]>;
+      typeName: string;
+      isValid: (payload: AnyGitGovRecord['payload']) => boolean;
+    }> = [
+      { reader: () => this.readAllTasks(), typeName: 'Task', isValid: (p) => isTaskPayload(p) && !!p.id && !!p.description },
+      { reader: () => this.readAllCycles(), typeName: 'Cycle', isValid: (p) => isCyclePayload(p) && !!p.id && !!p.title },
+      // [EARS-V2] Actors and agents validated with same checksum + signature pattern
+      { reader: () => this.readAllActors(), typeName: 'Actor', isValid: (p) => isActorPayload(p) && !!p.id },
+      { reader: () => this.readAllAgents(), typeName: 'Agent', isValid: (p) => isAgentPayload(p) && !!p.id },
+      { reader: () => this.readAllFeedback(), typeName: 'Feedback', isValid: (p) => isFeedbackPayload(p) && !!p.id },
+      { reader: () => this.readAllExecutions(), typeName: 'Execution', isValid: (p) => isExecutionPayload(p) && !!p.id },
+    ];
+
     try {
-      // Read all records for validation
-      const [tasks, cycles] = await Promise.all([
-        this.readAllTasks(),
-        this.readAllCycles()
-      ]);
-
-      recordsScanned = tasks.length + cycles.length;
-
-      // PHASE 1A: Schema validation - verify required fields
-      for (const task of tasks) {
-        if (!task.payload.id || !task.payload.description) {
-          errors.push({
-            type: 'schema_violation',
-            recordId: task.payload.id || 'unknown',
-            message: 'Task missing required fields'
-          });
+      for (const { reader, typeName, isValid } of validationDescriptors) {
+        // [EARS-V3] Graceful degradation — if a store throws, warn and continue
+        let records: AnyGitGovRecord[];
+        try {
+          records = await reader();
+        } catch (err) {
+          warnings.push({ type: 'store_read_error', message: `Failed to read ${typeName} store: ${err instanceof Error ? err.message : String(err)}` });
+          continue;
         }
-      }
 
-      for (const cycle of cycles) {
-        if (!cycle.payload.id || !cycle.payload.title) {
-          errors.push({
-            type: 'schema_violation',
-            recordId: cycle.payload.id || 'unknown',
-            message: 'Cycle missing required fields'
-          });
-        }
-      }
+        for (const record of records) {
+          recordsScanned++;
+          const id = record.payload.id;
 
-      // PHASE 1B: Checksum verification (EARS-70 to EARS-72)
-      for (const task of tasks) {
-        const calculatedChecksum = calculatePayloadChecksum(task.payload);
-        if (calculatedChecksum !== task.header.payloadChecksum) {
-          checksumFailures++;
-          errors.push({
-            type: 'checksum_failure',
-            recordId: task.payload.id,
-            message: `Checksum mismatch: expected ${task.header.payloadChecksum}, got ${calculatedChecksum}`
-          });
-        }
-      }
+          if (!isValid(record.payload)) {
+            errors.push({ type: 'schema_violation', recordId: id || 'unknown', message: `${typeName} missing required fields` });
+          }
 
-      for (const cycle of cycles) {
-        const calculatedChecksum = calculatePayloadChecksum(cycle.payload);
-        if (calculatedChecksum !== cycle.header.payloadChecksum) {
-          checksumFailures++;
-          errors.push({
-            type: 'checksum_failure',
-            recordId: cycle.payload.id,
-            message: `Checksum mismatch: expected ${cycle.header.payloadChecksum}, got ${calculatedChecksum}`
-          });
-        }
-      }
+          const calculatedChecksum = calculatePayloadChecksum(record.payload);
+          if (calculatedChecksum !== record.header.payloadChecksum) {
+            checksumFailures++;
+            errors.push({ type: 'checksum_failure', recordId: id, message: `Checksum mismatch: expected ${record.header.payloadChecksum}, got ${calculatedChecksum}` });
+          }
 
-      // PHASE 1B: Signature verification (EARS-73 to EARS-76)
-      // Create actor public key lookup function for signature verification
-      const getActorPublicKey = async (keyId: string): Promise<string | null> => {
-        const actor = await this.stores.actors.get(keyId);
-        return actor?.payload.publicKey || null;
-      };
-
-      // Verify signatures for all tasks
-      for (const task of tasks) {
-        const isValid = await verifySignatures(task, getActorPublicKey);
-        if (!isValid) {
-          signatureFailures++;
-          errors.push({
-            type: 'signature_invalid',
-            recordId: task.payload.id,
-            message: 'One or more signatures failed verification'
-          });
-        }
-      }
-
-      // Verify signatures for all cycles
-      for (const cycle of cycles) {
-        const isValid = await verifySignatures(cycle, getActorPublicKey);
-        if (!isValid) {
-          signatureFailures++;
-          errors.push({
-            type: 'signature_invalid',
-            recordId: cycle.payload.id,
-            message: 'One or more signatures failed verification'
-          });
+          const isSignatureValid = await verifySignatures(record, getActorPublicKey);
+          if (!isSignatureValid) {
+            signatureFailures++;
+            errors.push({ type: 'signature_invalid', recordId: id, message: 'One or more signatures failed verification' });
+          }
         }
       }
 

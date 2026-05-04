@@ -26,13 +26,53 @@ import { MemoryRecordStore } from '@gitgov/core/memory';
 import { FsFileLister } from '@gitgov/core/fs';
 import type { IAgentRunner, RunOptions, AgentResponse, GitGovAgentRecord } from '@gitgov/core';
 
-// === Modules not yet in @gitgov/core public API (added in audit_orchestration epic) ===
-import { createAuditOrchestrator } from '../../core/src/audit_orchestrator';
-import { createPolicyEvaluator } from '../../core/src/policy_evaluator';
-import type {
-  AuditOrchestrationResult,
-} from '../../core/src/audit_orchestrator';
-import type { IWaiverReader, Waiver } from '../../core/src/source_auditor/types';
+import {
+  AuditOrchestrator as AuditOrchestratorNS,
+  PolicyEvaluator as PolicyEvaluatorNS,
+  Factories,
+  calculatePayloadChecksum,
+  generateExecutionId,
+} from '@gitgov/core';
+import type { AuditOrchestrationResult, IWaiverReader, Waiver, Finding } from '@gitgov/core';
+
+const createAuditOrchestrator = AuditOrchestratorNS.createAuditOrchestrator;
+const createPolicyEvaluator = PolicyEvaluatorNS.createPolicyEvaluator;
+
+function makeTestWaiver(finding: Finding): Waiver {
+  const feedbackPayload = Factories.createFeedbackRecord({
+    entityType: 'execution',
+    entityId: generateExecutionId(`waiver-${finding.fingerprint.slice(0, 8)}`, Math.floor(Date.now() / 1000)),
+    type: 'approval',
+    status: 'resolved',
+    content: `Waiver for ${finding.ruleId ?? 'unknown'} in ${finding.file}`,
+    metadata: {
+      fingerprint: finding.fingerprint,
+      ruleId: finding.ruleId ?? '',
+      file: finding.file,
+      line: finding.line,
+    },
+  });
+
+  return {
+    fingerprint: finding.fingerprint,
+    ruleId: finding.ruleId ?? '',
+    feedback: {
+      header: {
+        version: '1.0',
+        type: 'feedback',
+        payloadChecksum: calculatePayloadChecksum(feedbackPayload),
+        signatures: [{
+          keyId: 'human:e2e-tester',
+          role: 'approver:quality',
+          notes: 'E2E test waiver',
+          signature: 'dGVzdA=='.padEnd(88, '='),
+          timestamp: Date.now(),
+        }],
+      },
+      payload: feedbackPayload,
+    },
+  };
+}
 
 // ============================================================================
 // Fixture setup
@@ -95,7 +135,7 @@ function makeAgentRecord(): GitGovAgentRecord {
       payloadChecksum: 'e2e-test-checksum',
       signatures: [
         {
-          keyId: 'agent:gitgov:security-audit',
+          keyId: 'agent:security-audit',
           role: 'author',
           notes: 'E2E test fixture',
           signature: 'dGVzdA=='.padEnd(88, '='),
@@ -104,7 +144,7 @@ function makeAgentRecord(): GitGovAgentRecord {
       ],
     },
     payload: {
-      id: 'agent:gitgov:security-audit',
+      id: 'agent:security-audit',
       status: 'active',
       engine: {
         type: 'local' as const,
@@ -123,7 +163,7 @@ function makeAgentRecord(): GitGovAgentRecord {
   };
 }
 
-type SarifLog = Sarif.SarifLog;
+type SarifLog = import('@gitgov/core').SarifLog;
 
 /**
  * Fixture with same PII content but at different line numbers (for CG10).
@@ -431,7 +471,7 @@ describe('Block G: Audit Orchestration Pipeline (CG1 to CG16)', () => {
 
     agentStore = new MemoryRecordStore<GitGovAgentRecord>();
     const agentRecord = makeAgentRecord();
-    await agentStore.put('agent:gitgov:security-audit', agentRecord);
+    await agentStore.put('agent:security-audit', agentRecord);
   });
 
   afterAll(() => {
@@ -447,7 +487,7 @@ describe('Block G: Audit Orchestration Pipeline (CG1 to CG16)', () => {
     waiverReader?: IWaiverReader;
   }) {
     const agentRunner = createIntegrationAgentRunner(tempDir);
-    const policyEvaluator = createPolicyEvaluator();
+    const policyEvaluator = createPolicyEvaluator({});
     const waiverReader = overrides?.waiverReader ?? createNoOpWaiverReader();
 
     return createAuditOrchestrator({
@@ -509,7 +549,7 @@ describe('Block G: Audit Orchestration Pipeline (CG1 to CG16)', () => {
 
       const agentResult = result.agentResults[0]!;
       expect(agentResult.status).toBe('success');
-      expect(agentResult.agentId).toBe('agent:gitgov:security-audit');
+      expect(agentResult.agentId).toBe('agent:security-audit');
       expect(agentResult.executionId).toBeTruthy();
       expect(agentResult.durationMs).toBeGreaterThanOrEqual(0);
 
@@ -544,24 +584,7 @@ describe('Block G: Audit Orchestration Pipeline (CG1 to CG16)', () => {
       expect(baselineResult.findings.length).toBeGreaterThanOrEqual(1);
       const targetFinding = baselineResult.findings[0]!;
 
-      const waiver: Waiver = {
-        fingerprint: targetFinding.fingerprint,
-        ruleId: targetFinding.ruleId ?? 'UNKNOWN',
-        feedback: {
-          id: '1234567890-feedback-waiver-e2e',
-          entityType: 'execution',
-          entityId: 'exec-e2e-previous',
-          type: 'approval',
-          status: 'acknowledged',
-          content: 'Risk accepted for E2E test',
-          metadata: {
-            fingerprint: targetFinding.fingerprint,
-            ruleId: targetFinding.ruleId ?? 'UNKNOWN',
-            file: targetFinding.file,
-            line: targetFinding.line,
-          },
-        },
-      };
+      const waiver = makeTestWaiver(targetFinding);
 
       const mockWaiverReader: IWaiverReader = {
         loadWaivers: async () => [waiver],
@@ -600,24 +623,7 @@ describe('Block G: Audit Orchestration Pipeline (CG1 to CG16)', () => {
       expect(highFinding).toBeDefined();
 
       // Waive ALL findings so nothing is active
-      const waivers: Waiver[] = baselineResult.findings.map((f) => ({
-        fingerprint: f.fingerprint,
-        ruleId: f.ruleId ?? 'UNKNOWN',
-        feedback: {
-          id: `1234567890-feedback-waiver-${f.fingerprint.slice(0, 8)}`,
-          entityType: 'execution' as const,
-          entityId: 'exec-e2e-previous',
-          type: 'approval' as const,
-          status: 'acknowledged' as const,
-          content: 'Risk accepted for E2E test',
-          metadata: {
-            fingerprint: f.fingerprint,
-            ruleId: f.ruleId ?? 'UNKNOWN',
-            file: f.file,
-            line: f.line,
-          },
-        },
-      }));
+      const waivers = baselineResult.findings.map(makeTestWaiver);
 
       const mockWaiverReader: IWaiverReader = {
         loadWaivers: async () => waivers,
@@ -668,24 +674,7 @@ describe('Block G: Audit Orchestration Pipeline (CG1 to CG16)', () => {
         taskId: '1234567890-task-e2e-baseline-for-pass',
       });
 
-      const waivers: Waiver[] = baseResult.findings.map((f) => ({
-        fingerprint: f.fingerprint,
-        ruleId: f.ruleId ?? 'UNKNOWN',
-        feedback: {
-          id: `1234567890-feedback-waiver-${f.fingerprint.slice(0, 8)}`,
-          entityType: 'execution' as const,
-          entityId: 'exec-e2e-previous',
-          type: 'approval' as const,
-          status: 'acknowledged' as const,
-          content: 'All waived for pass test',
-          metadata: {
-            fingerprint: f.fingerprint,
-            ruleId: f.ruleId ?? 'UNKNOWN',
-            file: f.file,
-            line: f.line,
-          },
-        },
-      }));
+      const waivers = baseResult.findings.map(makeTestWaiver);
 
       const mockWaiverReader: IWaiverReader = {
         loadWaivers: async () => waivers,
@@ -776,10 +765,10 @@ describe('Block G: Audit Orchestration Pipeline (CG1 to CG16)', () => {
       try {
         const fpAgentStore = new MemoryRecordStore<GitGovAgentRecord>();
         const fpAgentRecord = makeAgentRecord();
-        await fpAgentStore.put('agent:gitgov:security-audit', fpAgentRecord);
+        await fpAgentStore.put('agent:security-audit', fpAgentRecord);
 
         const fpAgentRunner = createIntegrationAgentRunner(fpDir);
-        const fpPolicyEvaluator = createPolicyEvaluator();
+        const fpPolicyEvaluator = createPolicyEvaluator({});
 
         const fpOrchestrator = createAuditOrchestrator({
           recordStore: fpAgentStore,
@@ -857,18 +846,18 @@ describe('Block G: Audit Orchestration Pipeline (CG1 to CG16)', () => {
       const multiStore = new MemoryRecordStore<GitGovAgentRecord>();
 
       const agent1 = makeAgentRecord();
-      agent1.payload.id = 'agent:gitgov:security-audit-1';
-      agent1.header.signatures[0]!.keyId = 'agent:gitgov:security-audit-1';
-      await multiStore.put('agent:gitgov:security-audit-1', agent1);
+      agent1.payload.id = 'agent:security-audit-1';
+      agent1.header.signatures[0]!.keyId = 'agent:security-audit-1';
+      await multiStore.put('agent:security-audit-1', agent1);
 
       const agent2 = makeAgentRecord();
-      agent2.payload.id = 'agent:gitgov:security-audit-2';
-      agent2.header.signatures[0]!.keyId = 'agent:gitgov:security-audit-2';
-      await multiStore.put('agent:gitgov:security-audit-2', agent2);
+      agent2.payload.id = 'agent:security-audit-2';
+      agent2.header.signatures[0]!.keyId = 'agent:security-audit-2';
+      await multiStore.put('agent:security-audit-2', agent2);
 
       // Both agents scan the same fixtures (same runner)
       const agentRunner = createLabeledAgentRunner(tempDir);
-      const policyEvaluator = createPolicyEvaluator();
+      const policyEvaluator = createPolicyEvaluator({});
 
       const orchestrator = createAuditOrchestrator({
         recordStore: multiStore,
@@ -913,7 +902,7 @@ describe('Block G: Audit Orchestration Pipeline (CG1 to CG16)', () => {
         'agent:gitgov:failing-agent',
         realRunner,
       );
-      const policyEvaluator = createPolicyEvaluator();
+      const policyEvaluator = createPolicyEvaluator({});
 
       const orchestrator = createAuditOrchestrator({
         recordStore: multiStore,
@@ -967,7 +956,7 @@ describe('Block G: Audit Orchestration Pipeline (CG1 to CG16)', () => {
 
       // Both agents scan the same fixture dir -> same findings -> same fingerprints
       const agentRunner = createLabeledAgentRunner(tempDir);
-      const policyEvaluator = createPolicyEvaluator();
+      const policyEvaluator = createPolicyEvaluator({});
 
       const orchestrator = createAuditOrchestrator({
         recordStore: multiStore,
@@ -1013,10 +1002,10 @@ describe('Block G: Audit Orchestration Pipeline (CG1 to CG16)', () => {
       try {
         const cleanAgentStore = new MemoryRecordStore<GitGovAgentRecord>();
         const cleanAgentRecord = makeAgentRecord();
-        await cleanAgentStore.put('agent:gitgov:security-audit', cleanAgentRecord);
+        await cleanAgentStore.put('agent:security-audit', cleanAgentRecord);
 
         const cleanAgentRunner = createIntegrationAgentRunner(cleanDir);
-        const cleanPolicyEvaluator = createPolicyEvaluator();
+        const cleanPolicyEvaluator = createPolicyEvaluator({});
 
         const orchestrator = createAuditOrchestrator({
           recordStore: cleanAgentStore,

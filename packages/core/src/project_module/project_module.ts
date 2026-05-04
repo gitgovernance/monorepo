@@ -64,15 +64,44 @@ export class ProjectModule {
       if (this.deps.agentAdapter && this.deps.defaultAgents?.length) {
         for (const agentConfig of this.deps.defaultAgents) {
           try {
-            await this.deps.agentAdapter.createAgentRecord({
-              id: agentConfig.agentId,
-              engine: agentConfig.engine,
-              status: 'active',
-              triggers: [{ type: 'webhook', event: 'audit.completed' }],
-              metadata: agentConfig.metadata,
-            });
+            // [PROJ-E3] Product agent already has ActorRecord from PROJ-B2 — skip
+            // [PROJ-E1] Specialist agents need their own ActorRecord before AgentRecord
+            if (agentConfig.agentId !== productAgent.id) {
+              await this.deps.identity.createActor({
+                id: agentConfig.agentId,
+                type: 'agent',
+                displayName: agentConfig.displayName,
+                roles: ['specialist'],
+                metadata: { purpose: agentConfig.purpose },
+              }, human.id);
+            }
+
+            const mergedMetadata = { ...agentConfig.metadata, purpose: agentConfig.purpose };
+
+            // [GAUD-E1] Check if AgentRecord already exists — update if config changed, skip if identical
+            const existing = await this.deps.agentAdapter.getAgentRecord(agentConfig.agentId);
+            if (existing) {
+              const engineChanged = JSON.stringify(existing.engine) !== JSON.stringify(agentConfig.engine);
+              const metadataChanged = JSON.stringify(existing.metadata) !== JSON.stringify(mergedMetadata);
+              if (engineChanged || metadataChanged) {
+                // [GAUD-E2] Preserve id, status, triggers — only update engine and metadata
+                await this.deps.agentAdapter.updateAgentRecord(agentConfig.agentId, {
+                  engine: agentConfig.engine,
+                  metadata: mergedMetadata,
+                });
+              }
+            } else {
+              await this.deps.agentAdapter.createAgentRecord({
+                id: agentConfig.agentId,
+                engine: agentConfig.engine,
+                status: 'active',
+                triggers: agentConfig.triggers,
+                // [PROJ-E4] Purpose merged into AgentRecord metadata
+                metadata: mergedMetadata,
+              });
+            }
           } catch {
-            // Non-fatal — agent registration failure doesn't block init
+            // [PROJ-B5] [PROJ-E2] [GAUD-E3] Non-fatal — agent create/update failure doesn't block init
           }
         }
       }

@@ -5,7 +5,7 @@
  */
 import pg from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
-import { PrismaClient } from '../../../core/generated/prisma/index.js';
+import { PrismaClient } from '../../generated/prisma/index.js';
 
 export type { PrismaClient };
 

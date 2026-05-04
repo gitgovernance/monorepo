@@ -15,7 +15,7 @@
 import { GitHubRecordStore } from './github_record_store';
 import type { GitHubRecordStoreOptions } from './github_record_store.types';
 import type { Octokit } from '@octokit/rest';
-import { GitHubApiError } from '../../github';
+import { GitHubApiError } from '../../shared/github/github';
 import type { IGitModule } from '../../git/index';
 
 // ==================== Test Types ====================

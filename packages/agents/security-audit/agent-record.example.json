@@ -6,7 +6,7 @@
     "signatures": []
   },
   "payload": {
-    "id": "agent:gitgov:security-audit",
+    "id": "agent:security-audit",
     "status": "active",
     "engine": {
       "type": "local",

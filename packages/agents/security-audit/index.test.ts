@@ -67,8 +67,8 @@ import * as mod from './src/index';
 
 function makeCtx(input: unknown) {
   return {
-    agentId: 'agent:gitgov:security-audit',
-    actorId: 'agent:gitgov:security-audit',
+    agentId: 'agent:security-audit',
+    actorId: 'agent:security-audit',
     taskId: 'task-001',
     runId: '550e8400-e29b-41d4-a716-446655440000',
     input,

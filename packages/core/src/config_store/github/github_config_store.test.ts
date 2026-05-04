@@ -15,7 +15,7 @@
 import { GitHubConfigStore } from './github_config_store';
 import type { GitHubConfigStoreOptions } from './github_config_store.types';
 import type { Octokit } from '@octokit/rest';
-import { GitHubApiError } from '../../github';
+import { GitHubApiError } from '../../shared/github/github';
 import type { GitGovConfig } from '../../config_manager/config_manager.types';
 
 // ==================== Test Helpers ====================

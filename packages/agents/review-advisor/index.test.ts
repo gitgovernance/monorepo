@@ -38,8 +38,8 @@ describe('ReviewAdvisor Entry Point', () => {
   describe('4.4. Entry Point y Error Handling (RAV-D1 to RAV-D4)', () => {
     it('[RAV-D1] should return AgentOutput with feedback-review kind', async () => {
       const ctx = {
-        agentId: 'agent:gitgov:review-advisor',
-        actorId: 'agent:gitgov:review-advisor',
+        agentId: 'agent:review-advisor',
+        actorId: 'agent:review-advisor',
         taskId: 'task-test',
         runId: 'run-test',
         input: {

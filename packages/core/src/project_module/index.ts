@@ -1,2 +1,3 @@
 export { ProjectModule } from './project_module';
-export type { ProjectModuleDeps, ProjectInitOptions, ProjectInitResult } from './project_module.types';
+export { DEFAULT_AGENTS } from './default_agents';
+export type { ProjectModuleDeps, ProjectInitOptions, ProjectInitResult, DefaultAgentConfig } from './project_module.types';

@@ -2,14 +2,14 @@
 
 Security audit agent for GitGovernance. Scans repositories for PII, secrets, and API keys, producing SARIF 2.1.0 output.
 
-**Agent ID:** `agent:gitgov:security-audit`
+**Agent ID:** `agent:security-audit`
 
 ## Delegation Model
 
 ```
 GitGov signs, the scanner detects.
 
-  agent:gitgov:security-audit (wrapper)
+  agent:security-audit (wrapper)
           │
           ├── ActorRecord (identity)
           │   type: "agent", publicKey: Ed25519
@@ -20,7 +20,7 @@ GitGov signs, the scanner detects.
               FindingDetectorModule ← does NOT sign anything
               SarifBuilder          ← format, not protocol
 
-The agent attests: "I, agent:gitgov:security-audit,
+The agent attests: "I, agent:security-audit,
 executed the scanner and certify these findings."
 ```
 
@@ -31,7 +31,7 @@ The scanner modules are open-source detection logic. The agent wraps them with p
 ### Via AgentRunner (production)
 
 ```bash
-gitgov agent run agent:gitgov:security-audit --task task-001
+gitgov agent run agent:security-audit --task task-001
 ```
 
 AgentRunner reads the AgentRecord, constructs `AgentExecutionContext`, invokes `runAgent`, and creates a signed `ExecutionRecord`.
@@ -46,8 +46,8 @@ The orchestrator discovers this agent and invokes it as part of a multi-agent au
 import { runAgent } from '@gitgov/agent-security-audit';
 
 const output = await runAgent({
-  agentId: 'agent:gitgov:security-audit',
-  actorId: 'agent:gitgov:security-audit',
+  agentId: 'agent:security-audit',
+  actorId: 'agent:security-audit',
   taskId: 'task-001',
   runId: crypto.randomUUID(),
   input: {

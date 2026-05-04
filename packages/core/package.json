@@ -14,24 +14,24 @@
       "import": "./dist/src/index.js"
     },
     "./fs": {
-      "types": "./dist/src/fs.d.ts",
-      "import": "./dist/src/fs.js"
+      "types": "./dist/src/shared/fs/fs.d.ts",
+      "import": "./dist/src/shared/fs/fs.js"
     },
     "./memory": {
-      "types": "./dist/src/memory.d.ts",
-      "import": "./dist/src/memory.js"
+      "types": "./dist/src/shared/memory/memory.d.ts",
+      "import": "./dist/src/shared/memory/memory.js"
     },
     "./audit": {
       "types": "./dist/src/audit/index.d.ts",
       "import": "./dist/src/audit/index.js"
     },
     "./github": {
-      "types": "./dist/src/github.d.ts",
-      "import": "./dist/src/github.js"
+      "types": "./dist/src/shared/github/github.d.ts",
+      "import": "./dist/src/shared/github/github.js"
     },
     "./prisma": {
-      "types": "./dist/src/prisma.d.ts",
-      "import": "./dist/src/prisma.js"
+      "types": "./dist/src/shared/prisma/prisma.d.ts",
+      "import": "./dist/src/shared/prisma/prisma.js"
     },
     "./sarif": {
       "types": "./dist/src/sarif/index.d.ts",
@@ -92,6 +92,7 @@
     "picomatch": "^4.0.3"
   },
   "devDependencies": {
+    "@anthropic-ai/sdk": "^0.92.0",
     "@prisma/adapter-pg": "^7.3.0",
     "@prisma/client": "^7.3.0",
     "@semantic-release/changelog": "^6.0.3",

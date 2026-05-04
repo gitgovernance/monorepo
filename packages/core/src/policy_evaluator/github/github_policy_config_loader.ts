@@ -16,7 +16,7 @@ import type {
   PolicyConfigLoader,
   FindingSeverity,
 } from '../policy_evaluator.types';
-import { isOctokitRequestError, mapOctokitError } from '../../github';
+import { isOctokitRequestError, mapOctokitError } from '../../shared/github/github';
 
 const VALID_SEVERITIES = new Set<string>(['critical', 'high', 'medium', 'low']);
 

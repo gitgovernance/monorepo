@@ -27,7 +27,7 @@ import type { GithubSyncStateDependencies } from './github_sync_state.types';
 import type { LintReport, LintResult } from '../../lint';
 import type { GitGovRecord, GitGovRecordType } from '../../record_types';
 import { shouldSyncFile } from '../sync_state.utils';
-import { isOctokitRequestError } from '../../github';
+import { isOctokitRequestError } from '../../shared/github/github';
 
 /**
  * [EARS-GS-A1..F2] GithubSyncStateModule

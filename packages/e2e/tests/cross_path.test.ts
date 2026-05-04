@@ -140,7 +140,7 @@ describe('Block D: Cross-Path Workflows (CD1-CD5)', () => {
     // 4. Verify DB
     const dbTasks = await prisma.gitgovTask.findMany({});
     expect(dbTasks.length).toBeGreaterThanOrEqual(1);
-    const dbTask = dbTasks.find(t => t.title === 'Cross-path task');
+    const dbTask = dbTasks.find((t: { title: string }) => t.title === 'Cross-path task');
     expect(dbTask).toBeDefined();
     expect(typeof dbTask!.healthScore).toBe('number');
 
@@ -249,7 +249,7 @@ describe('Block D: Cross-Path Workflows (CD1-CD5)', () => {
     // 3. API Actor: feedback via GitHubRecordStore.put() (simulates saas-api)
 
     let userBTmpDir: string;
-    let userBRepo: string;
+    let userBRepo = '';
 
     try {
       // User B: fresh repo, join existing project via sync pull (NOT init — project exists on remote)
@@ -323,7 +323,7 @@ describe('Block D: Cross-Path Workflows (CD1-CD5)', () => {
       // Verify multiple tasks from different users
       const dbTasks = await prisma.gitgovTask.findMany({});
       expect(dbTasks.length).toBeGreaterThanOrEqual(2);
-      const titles = dbTasks.map(t => t.title);
+      const titles = dbTasks.map((t: { title: string }) => t.title);
       expect(titles).toContain('Cross-path task');
       expect(titles).toContain('User B task');
 
@@ -334,7 +334,7 @@ describe('Block D: Cross-Path Workflows (CD1-CD5)', () => {
       // Verify API actor's feedback made it into the unified projection
       const dbFeedbacks = await prisma.gitgovFeedback.findMany({});
       expect(dbFeedbacks.length).toBeGreaterThanOrEqual(1);
-      const apiFb = dbFeedbacks.find(fb => fb.recordId === apiFeedbackId);
+      const apiFb = dbFeedbacks.find((fb: { recordId: string }) => fb.recordId === apiFeedbackId);
       expect(apiFb).toBeDefined();
       expect(apiFb!.type).toBe('suggestion');
     } finally {

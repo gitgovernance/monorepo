@@ -29,7 +29,7 @@ describe('security-audit README', () => {
 
       // Must describe the wrapper relationship
       expect(readmeContent).toContain('wrapper');
-      expect(readmeContent).toContain('agent:gitgov:security-audit');
+      expect(readmeContent).toContain('agent:security-audit');
     });
 
     it('[AAV2-F2] should document all three scope examples in README', () => {
