@@ -8,7 +8,7 @@ import type { Octokit } from '@octokit/rest';
 
 export const GITHUB_WEBHOOK_SECRET = process.env['GITHUB_WEBHOOK_SECRET'] ?? '';
 
-export function createGitHubCoreBackend(octokit: Octokit): unknown {
+export function createGitHubCoreBackend(octokit: Octokit): Record<string, unknown> {
   return {
     createGitModule: async (opts: { owner: string; repo: string; defaultBranch?: string }) =>
       new GitHubGitModule({ owner: opts.owner, repo: opts.repo, defaultBranch: opts.defaultBranch }, octokit),
@@ -60,7 +60,7 @@ import { DEFAULT_ID_ENCODER } from '@gitgov/core/fs';
 import { GitHubRecordStore } from '@gitgov/core/github';
 import type {
   RecordProjectorDependencies,
-} from '../../node_modules/@gitgov/core/src/record_projection/record_projection.types';
+} from '@gitgov/core';
 import type {
   GitGovTaskRecord,
   GitGovActorRecord,
