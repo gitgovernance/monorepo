@@ -150,6 +150,45 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
       }
       const result = await orchestrator.run(orchestrationOptions);
 
+      // [AORCH-P1] Write L1 ExecutionRecords to .gitgov/executions/ (redacted SARIF)
+      if (result.l1AgentResults) {
+        try {
+          const executionAdapter = await this.container.getExecutionAdapter();
+          for (const l1 of result.l1AgentResults) {
+            await executionAdapter.create({
+              taskId: auditTask.id,
+              type: 'completion',
+              title: `Agent execution: ${l1.agentId}`,
+              result: `Scan completed (L1 redacted)`,
+              metadata: { kind: 'sarif', data: l1.sarif },
+            }, actorId);
+          }
+        } catch {
+          // L1 persistence errors are non-fatal
+        }
+      }
+      // [AORCH-P3] If l1AgentResults absent → skip, scan still completes
+
+      // [AORCH-P2] Write FeedbackRecords for review agent opinions
+      if (result.reviewResults) {
+        try {
+          const feedbackAdapter = await this.container.getFeedbackAdapter();
+          for (const review of result.reviewResults) {
+            if (review.status !== 'success' || !review.feedbackRecordId) continue;
+            await feedbackAdapter.create({
+              entityType: 'execution',
+              entityId: review.feedbackRecordId,
+              type: 'suggestion',
+              status: 'open',
+              content: `Review by ${review.agentId}`,
+              metadata: { agentId: review.agentId, kind: 'feedback-review' },
+            }, review.agentId);
+          }
+        } catch {
+          // Review persistence errors are non-fatal
+        }
+      }
+
       // Format and display output
       await this.formatOutput(result, options);
 

@@ -13,7 +13,7 @@ import { FsAgentRunner, createFsAgentRunner } from "./fs_agent_runner";
 import { DEFAULT_ID_ENCODER } from "../../record_store/fs/fs_record_store";
 import type { IExecutionAdapter } from "../../adapters/execution_adapter";
 import type { IEventStream, BaseEvent } from "../../event_bus";
-import type { AgentRecord, ExecutionRecord } from "../../record_types";
+import type { AgentRecord } from "../../record_types";
 import type { RuntimeHandlerRegistry } from "../agent_runner";
 
 describe("FsAgentRunner", () => {
@@ -527,8 +527,9 @@ describe("FsAgentRunner", () => {
     });
   });
 
-  describe("4.8. ExecutionRecord Writing (EARS-H1 to EARS-H4)", () => {
-    it("[EARS-H1] should create ExecutionRecord on success", async () => {
+  // [RLDX-E1] Runner is pure — no record writing. Tests verify output capture, not persistence.
+  describe("4.8. Pure Runner Output (EARS-H1 to EARS-H4) — RLDX-E1 refactor", () => {
+    it("[EARS-H1] should return AgentResponse with output on success (no record creation)", async () => {
       const entrypoint = writeAgentEntrypoint(
         "success.js",
         "module.exports.runAgent = async () => ({ data: 'ok' })"
@@ -538,33 +539,20 @@ describe("FsAgentRunner", () => {
       });
 
       const runner = new FsAgentRunner({
-        executionAdapter: mockExecutionAdapter,
         gitgovPath,
         projectRoot: tempDir,
       });
 
-      await runner.runOnce({
+      const response = await runner.runOnce({
         agentId: "agent:success",
         taskId: "task:1",
       });
 
-      expect(mockExecutionAdapter.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          taskId: "task:1",
-          type: "completion",
-          title: "Agent execution: agent:success",
-          result: expect.stringContaining("completed successfully"),
-          metadata: expect.objectContaining({
-            agentId: "agent:success",
-            status: "success",
-            output: expect.objectContaining({ data: "ok" }),
-          }),
-        }),
-        expect.any(String)
-      );
+      expect(response.status).toBe("success");
+      expect(response.output).toEqual(expect.objectContaining({ data: "ok" }));
     });
 
-    it("[EARS-H2] should create ExecutionRecord on error", async () => {
+    it("[EARS-H2] should return AgentResponse with error on failure (no record creation)", async () => {
       const entrypoint = writeAgentEntrypoint(
         "error.js",
         "module.exports.runAgent = async () => { throw new Error('fail'); }"
@@ -574,34 +562,20 @@ describe("FsAgentRunner", () => {
       });
 
       const runner = new FsAgentRunner({
-        executionAdapter: mockExecutionAdapter,
         gitgovPath,
         projectRoot: tempDir,
       });
 
-      await runner.runOnce({
+      const response = await runner.runOnce({
         agentId: "agent:error",
         taskId: "task:1",
       });
 
-      expect(mockExecutionAdapter.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          taskId: "task:1",
-          type: "blocker",
-          title: "Agent execution: agent:error",
-          result: expect.stringContaining("failed"),
-          metadata: expect.objectContaining({
-            agentId: "agent:error",
-            status: "error",
-            error: "fail",
-            output: undefined,
-          }),
-        }),
-        expect.any(String)
-      );
+      expect(response.status).toBe("error");
+      expect(response.error).toBe("fail");
     });
 
-    it("[EARS-H3] should include executionRecordId in AgentResponse", async () => {
+    it("[EARS-H3] should include generated executionRecordId in AgentResponse", async () => {
       const entrypoint = writeAgentEntrypoint(
         "exec-id.js",
         "module.exports.runAgent = async () => ({})"
@@ -610,12 +584,7 @@ describe("FsAgentRunner", () => {
         engine: { type: "local", entrypoint },
       });
 
-      mockExecutionAdapter.create.mockResolvedValueOnce({
-        id: "exec:test-123",
-      } as ExecutionRecord);
-
       const runner = new FsAgentRunner({
-        executionAdapter: mockExecutionAdapter,
         gitgovPath,
         projectRoot: tempDir,
       });
@@ -625,17 +594,18 @@ describe("FsAgentRunner", () => {
         taskId: "task:1",
       });
 
-      expect(response.executionRecordId).toBe("exec:test-123");
+      // executionRecordId is generated (not from a persisted record)
+      expect(response.executionRecordId).toBeDefined();
+      expect(response.executionRecordId).toMatch(/^\d{10}-exec-/);
     });
 
-    it("[EARS-H4] should throw MissingDependency when ExecutionAdapter missing", () => {
+    it("[EARS-H4] should NOT throw when executionAdapter is missing (optional now)", () => {
       expect(() => {
         new FsAgentRunner({
-          executionAdapter: undefined as unknown as IExecutionAdapter,
           gitgovPath,
           projectRoot: tempDir,
         });
-      }).toThrow("MissingDependency: ExecutionAdapter required");
+      }).not.toThrow();
     });
   });
 
@@ -850,22 +820,10 @@ describe("FsAgentRunner", () => {
     });
   });
 
-  describe("4.12. FeedbackRecord Support for Review Agents (EARS-L1 to EARS-L4)", () => {
-    const mockFeedbackAdapter = {
-      create: jest.fn().mockResolvedValue({ id: "feedback:review-001" }),
-      resolve: jest.fn(),
-      getFeedback: jest.fn(),
-      getFeedbackByEntity: jest.fn(),
-      getAllFeedback: jest.fn(),
-      getFeedbackThread: jest.fn(),
-    };
-
-    beforeEach(() => {
-      mockFeedbackAdapter.create.mockClear().mockResolvedValue({ id: "feedback:review-001" } as never);
-      mockExecutionAdapter.create.mockClear().mockResolvedValue({ id: "exec:test-123" } as never);
-    });
-
-    it("[EARS-L1] should create FeedbackRecord when agent purpose is review", async () => {
+  // [RLDX-E1] Runner is pure — returns output regardless of agent purpose.
+  // Record creation is now the caller's responsibility.
+  describe("4.12. Pure Runner for All Agent Types (EARS-L1 to EARS-L4) — RLDX-E1", () => {
+    it("[EARS-L1] should return output for review agents without creating FeedbackRecord", async () => {
       const entrypoint = writeAgentEntrypoint(
         "review-agent.js",
         "module.exports.runReviewAdvisor = async () => ({ data: 'review-ok' })"
@@ -876,8 +834,6 @@ describe("FsAgentRunner", () => {
       });
 
       const runner = new FsAgentRunner({
-        executionAdapter: mockExecutionAdapter,
-        feedbackAdapter: mockFeedbackAdapter,
         gitgovPath,
         projectRoot: tempDir,
       });
@@ -888,25 +844,11 @@ describe("FsAgentRunner", () => {
       });
 
       expect(response.status).toBe("success");
-      expect(mockFeedbackAdapter.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          entityType: "execution",
-          entityId: expect.stringMatching(/^\d{10}-exec-review-/),
-          type: "suggestion",
-          status: "open",
-          metadata: expect.objectContaining({
-            agentId: "agent:review-agent",
-            purpose: "review",
-            taskId: "task:1",
-            executionStatus: "success",
-          }),
-        }),
-        expect.any(String)
-      );
-      expect(response.executionRecordId).toBe("feedback:review-001");
+      expect(response.output).toEqual(expect.objectContaining({ data: "review-ok" }));
+      expect(response.executionRecordId).toMatch(/^\d{10}-exec-/);
     });
 
-    it("[EARS-L2] should fallback to ExecutionRecord when feedbackAdapter missing", async () => {
+    it("[EARS-L2] should work without feedbackAdapter (no longer needed)", async () => {
       const entrypoint = writeAgentEntrypoint(
         "review-no-feedback.js",
         "module.exports.runReviewAdvisor = async () => ({ data: 'review-fallback' })"
@@ -916,9 +858,7 @@ describe("FsAgentRunner", () => {
         metadata: { purpose: "review" },
       });
 
-      // No feedbackAdapter provided
       const runner = new FsAgentRunner({
-        executionAdapter: mockExecutionAdapter,
         gitgovPath,
         projectRoot: tempDir,
       });
@@ -929,13 +869,10 @@ describe("FsAgentRunner", () => {
       });
 
       expect(response.status).toBe("success");
-      // Should fallback to executionAdapter
-      expect(mockExecutionAdapter.create).toHaveBeenCalled();
-      expect(mockFeedbackAdapter.create).not.toHaveBeenCalled();
-      expect(response.executionRecordId).toBe("exec:test-123");
+      expect(response.output).toEqual(expect.objectContaining({ data: "review-fallback" }));
     });
 
-    it("[EARS-L3] should create ExecutionRecord when agent purpose is audit (no regression)", async () => {
+    it("[EARS-L3] should return output for audit agents without creating ExecutionRecord", async () => {
       const entrypoint = writeAgentEntrypoint(
         "audit-agent.js",
         "module.exports.runAgent = async () => ({ data: 'audit-ok' })"
@@ -945,11 +882,7 @@ describe("FsAgentRunner", () => {
         metadata: { purpose: "audit" },
       });
 
-      mockFeedbackAdapter.create.mockClear();
-
       const runner = new FsAgentRunner({
-        executionAdapter: mockExecutionAdapter,
-        feedbackAdapter: mockFeedbackAdapter,
         gitgovPath,
         projectRoot: tempDir,
       });
@@ -960,13 +893,10 @@ describe("FsAgentRunner", () => {
       });
 
       expect(response.status).toBe("success");
-      // Should use executionAdapter, NOT feedbackAdapter
-      expect(mockExecutionAdapter.create).toHaveBeenCalled();
-      expect(mockFeedbackAdapter.create).not.toHaveBeenCalled();
-      expect(response.executionRecordId).toBe("exec:test-123");
+      expect(response.output).toEqual(expect.objectContaining({ data: "audit-ok" }));
     });
 
-    it("[EARS-L4] should include feedbackRecordId in AgentResponse for review agents", async () => {
+    it("[EARS-L4] should include generated executionRecordId for all agent types", async () => {
       const entrypoint = writeAgentEntrypoint(
         "review-id.js",
         "module.exports.runReviewAdvisor = async () => ({ data: 'review-id-test' })"
@@ -976,11 +906,7 @@ describe("FsAgentRunner", () => {
         metadata: { purpose: "review" },
       });
 
-      mockFeedbackAdapter.create.mockResolvedValue({ id: "feedback:L4-test" });
-
       const runner = new FsAgentRunner({
-        executionAdapter: mockExecutionAdapter,
-        feedbackAdapter: mockFeedbackAdapter,
         gitgovPath,
         projectRoot: tempDir,
       });
@@ -990,7 +916,9 @@ describe("FsAgentRunner", () => {
         taskId: "task:1",
       });
 
-      expect(response.executionRecordId).toBe("feedback:L4-test");
+      // executionRecordId is generated (not from a persisted record)
+      expect(response.executionRecordId).toBeDefined();
+      expect(response.executionRecordId).toMatch(/^\d{10}-exec-/);
     });
   });
 });

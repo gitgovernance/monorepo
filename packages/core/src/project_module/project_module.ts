@@ -5,9 +5,10 @@ export class ProjectModule {
 
   // [PROJ-A1] [PROJ-A2] [PROJ-A3]
   async initializeProject(options: ProjectInitOptions): Promise<ProjectInitResult> {
-    // [PROJ-A2] Idempotency
+    // [PROJ-A2] Idempotency — return commitSha so callers can sync DB cursor
     if (await this.deps.initializer.isInitialized()) {
-      return { alreadyInitialized: true } as ProjectInitResult;
+      const commitSha = await this.deps.initializer.getHeadSha();
+      return { alreadyInitialized: true, commitSha } as ProjectInitResult;
     }
 
     try {

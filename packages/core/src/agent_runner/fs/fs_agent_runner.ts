@@ -14,10 +14,8 @@ import {
   EngineConfigError,
   MissingDependencyError,
 } from "../agent_runner.errors";
-import type { AgentRecord, FeedbackRecord } from "../../record_types";
+import type { AgentRecord } from "../../record_types";
 import type { IEventStream } from "../../event_bus";
-import type { IExecutionAdapter } from "../../adapters/execution_adapter";
-import type { IFeedbackAdapter } from "../../adapters/feedback_adapter";
 import type { KeyProvider } from "../../key_provider/key_provider";
 import type {
   IAgentRunner,
@@ -52,8 +50,6 @@ export class FsAgentRunner implements IAgentRunner {
   private gitgovPath: string;
   private projectRoot: string;
   private keyProvider: KeyProvider | undefined;
-  private executionAdapter: IExecutionAdapter;
-  private feedbackAdapter: IFeedbackAdapter | undefined; // [EARS-L1, L2]
   private eventBus: IEventStream | undefined;
   /** Protocol handlers for CustomBackend */
   public readonly protocolHandlers: ProtocolHandlerRegistry | undefined;
@@ -66,16 +62,10 @@ export class FsAgentRunner implements IAgentRunner {
   private customBackend: CustomBackend;
 
   constructor(deps: AgentRunnerDependencies) {
-    // [EARS-H4] Validate ExecutionAdapter is provided
-    if (!deps.executionAdapter) {
-      throw new MissingDependencyError("ExecutionAdapter", "required");
-    }
-
+    // [RLDX-E1] Runner is pure — no longer requires executionAdapter/feedbackAdapter
     this.projectRoot = deps.projectRoot;
     this.gitgovPath = deps.gitgovPath ?? path.join(this.projectRoot, ".gitgov");
     this.keyProvider = deps.keyProvider ?? undefined;
-    this.executionAdapter = deps.executionAdapter;
-    this.feedbackAdapter = deps.feedbackAdapter ?? undefined; // [EARS-L1, L2]
     this.eventBus = deps.eventBus ?? undefined;
     this.protocolHandlers = deps.protocolHandlers ?? undefined;
     this.runtimeHandlers = deps.runtimeHandlers ?? undefined;
@@ -174,82 +164,9 @@ export class FsAgentRunner implements IAgentRunner {
     const durationMs =
       new Date(completedAt).getTime() - new Date(startedAt).getTime();
 
-    // Determine agent purpose from metadata [EARS-L1, L3]
-    const agentMeta = agent.metadata as Record<string, unknown> | undefined;
-    const agentPurpose = agentMeta?.["purpose"] as string | undefined;
-    const isReviewAgent = agentPurpose === "review";
-
-    // Build result message (min 10 chars required by schema)
-    const resultMessage = status === "success"
-      ? output?.message || `Agent ${opts.agentId} completed successfully`
-      : `Agent ${opts.agentId} failed: ${error || 'Unknown error'}`;
-
-    let recordId: string;
-
-    // [EARS-L1] Review agents create FeedbackRecord when feedbackAdapter available
-    // [EARS-L2] Fallback to ExecutionRecord if feedbackAdapter missing
-    // [EARS-L3] Non-review agents always create ExecutionRecord (no regression)
-    if (isReviewAgent && this.feedbackAdapter) {
-      // [EARS-L1] Create FeedbackRecord(type: 'suggestion') for review agents
-      // entityType=execution, entityId=scan execution ID (from input if available)
-      // Schema requires entityId to match ^\d{10}-exec-[a-z0-9-]{1,50}$
-      // entityId references the execution being reviewed. Use scanExecutionId from input
-      // if available (orchestrator passes it), otherwise generate a valid execution-style ID.
-      const inputData = opts.input as Record<string, unknown> | undefined;
-      const scanExecutionId = inputData?.["scanExecutionId"] as string | undefined;
-      const timestamp = Math.floor(Date.now() / 1000);
-      const entityId = scanExecutionId || generateExecutionId(`review-${opts.agentId}`, timestamp);
-
-      const feedbackRecord = await this.feedbackAdapter.create(
-        {
-          entityType: "execution",
-          entityId,
-          type: "suggestion",
-          status: "open",
-          content: resultMessage.length >= 10 ? resultMessage : resultMessage.padEnd(10, '.'),
-          metadata: {
-            agentId: opts.agentId,
-            purpose: "review",
-            taskId: opts.taskId,
-            runId,
-            executionStatus: status,
-            output: status === "success" ? output : undefined,
-            error: status === "error" ? error : undefined,
-            startedAt,
-            completedAt,
-            durationMs,
-          },
-        } as Partial<FeedbackRecord>,
-        ctx.actorId
-      );
-      // [EARS-L4] feedbackRecordId in response (reuses executionRecordId field)
-      recordId = feedbackRecord.id;
-    } else {
-      // [EARS-H1, H2, L2, L3] Write ExecutionRecord
-      const executionRecord = await this.executionAdapter.create(
-        {
-          taskId: opts.taskId,
-          type: status === "success" ? "completion" : "blocker",
-          title: `Agent execution: ${opts.agentId}`,
-          result: resultMessage.length >= 10 ? resultMessage : resultMessage.padEnd(10, '.'),
-          metadata: {
-            agentId: opts.agentId,
-            runId,
-            status,
-            output: status === "success" ? output : undefined,
-            error: status === "error" ? error : undefined,
-            startedAt,
-            completedAt,
-            durationMs,
-          },
-        },
-        ctx.actorId
-      );
-      recordId = executionRecord.id;
-    }
-
-    // [EARS-H3, L4] recordId in response
-    const executionRecordId = recordId;
+    // [RLDX-E1] Runner is pure — no record writing. Caller persists post-redaction.
+    // Generate a placeholder executionRecordId for downstream use (orchestrator, findings).
+    const executionRecordId = generateExecutionId(opts.agentId, Math.floor(Date.now() / 1000));
 
     // [EARS-I2, I3] Emit completion event
     if (status === "success") {

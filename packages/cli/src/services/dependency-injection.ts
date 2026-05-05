@@ -720,19 +720,13 @@ export class DependencyInjectionService {
         throw new Error("Failed to initialize stores");
       }
 
-      // Get required dependencies
-      const executionAdapter = await this.getExecutionAdapter();
       const eventBus = new EventBus.EventBus();
 
-      // Create AgentRunnerModule with dependencies
-      // projectRoot = repoRoot (user's repo) so agents scan source files there.
-      // gitgovPath = worktree .gitgov/ (where records live).
-      const feedbackAdapter = await this.getFeedbackAdapter();
+      // [RLDX-E1] Runner is pure — no executionAdapter/feedbackAdapter needed.
+      // Record writing is handled by the caller (audit-command) post-redaction.
       this.agentRunnerModule = createAgentRunner({
         gitgovPath: path.join(this.projectRoot, '.gitgov'),
         projectRoot: this.repoRoot ?? this.projectRoot,
-        executionAdapter,
-        feedbackAdapter,
         eventBus
       });
 

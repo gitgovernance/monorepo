@@ -37,6 +37,7 @@ function createMockInitializer(): IProjectInitializer {
     readFile: jest.fn().mockResolvedValue(''),
     getActorPath: jest.fn().mockReturnValue('.gitgov/actors/test.json'),
     finalize: jest.fn().mockResolvedValue('abc123def456abc123def456abc123def456abc1'),
+    getHeadSha: jest.fn().mockResolvedValue('abc123def456abc123def456abc123def456abc1'),
   };
 }
 
@@ -88,14 +89,17 @@ describe('ProjectModule', () => {
       expect(productAgent).not.toBeNull();
     });
 
-    it('[PROJ-A2] should return alreadyInitialized when initializer.isInitialized is true', async () => {
+    it('[PROJ-A2] should return alreadyInitialized with commitSha when initializer.isInitialized is true', async () => {
       const { deps, initializer } = createRealDeps();
       (initializer.isInitialized as jest.Mock).mockResolvedValue(true);
+      (initializer.getHeadSha as jest.Mock).mockResolvedValue('sha-from-gitgov-state');
       const pm = new ProjectModule(deps);
 
       const result = await pm.initializeProject({ name: 'test-project' });
 
       expect(result.alreadyInitialized).toBe(true);
+      expect(result.commitSha).toBe('sha-from-gitgov-state');
+      expect(initializer.getHeadSha).toHaveBeenCalled();
       expect(initializer.createProjectStructure).not.toHaveBeenCalled();
       expect(initializer.finalize).not.toHaveBeenCalled();
     });

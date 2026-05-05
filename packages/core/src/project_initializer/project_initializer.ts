@@ -128,6 +128,18 @@ export interface IProjectInitializer {
    * Non-transactional backends (filesystem) return `undefined`.
    */
   finalize(): Promise<string | undefined>;
+
+  /**
+   * [EARS-PI12] Returns the HEAD commit SHA of the state branch (e.g. gitgov-state).
+   *
+   * Used by ProjectModule when `isInitialized()` returns true to provide
+   * `commitSha` in the `alreadyInitialized` result. Without this, callers
+   * (like ProjectService) cannot sync the DB cursor with the real branch state.
+   *
+   * - **GitHub backend:** `gitModule.getCommitHash('gitgov-state')`
+   * - **Filesystem backend:** `undefined` (no remote branch concept)
+   */
+  getHeadSha(): Promise<string | undefined>;
 }
 
 // EnvironmentValidation is defined in ./project_initializer.types.ts

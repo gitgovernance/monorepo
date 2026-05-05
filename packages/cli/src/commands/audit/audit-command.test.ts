@@ -255,6 +255,7 @@ describe('AuditCommand', () => {
       getBacklogAdapter: jest.fn().mockResolvedValue(mockBacklogAdapter),
       getWaiverReader: jest.fn().mockResolvedValue(mockWaiverReader),
       getFeedbackAdapter: jest.fn().mockResolvedValue(mockFeedbackAdapter),
+      getExecutionAdapter: jest.fn().mockResolvedValue({ create: jest.fn().mockResolvedValue({ id: 'exec-l1-test' }) }),
       getIdentityAdapter: jest.fn().mockResolvedValue(mockIdentityAdapter),
       getCurrentActor: jest.fn().mockResolvedValue({ id: 'human:developer' }),
       getProjectRoot: jest.fn().mockResolvedValue('/mock/project/root'),
@@ -680,6 +681,79 @@ describe('AuditCommand', () => {
 
       expect(process.env['LLM_API_KEY']).toBe('sk-ant-test-123');
       expect(mockOrchestrator.run).toHaveBeenCalled();
+    });
+  });
+
+  // 4.9. L1 Record Persistence (AORCH-P1 to P3)
+  describe('4.9. L1 Record Persistence (AORCH-P1 to P3)', () => {
+    it('[AORCH-P1] should write redacted ExecutionRecords to git after orchestrator.run', async () => {
+      const resultWithL1: AuditOrchestrationResult = {
+        ...mockResultWithFindings,
+        l1AgentResults: [{
+          agentId: 'agent:security-audit',
+          executionId: 'exec-scan-1',
+          sarif: { $schema: 'https://sarif.spec', version: '2.1.0', runs: [] },
+          status: 'success' as const,
+          durationMs: 100,
+        }],
+      };
+
+      mockOrchestrator.run.mockResolvedValueOnce(resultWithL1);
+
+      await auditCommand.execute({ scope: 'full', output: 'text', failOn: 'critical' } as AuditCommandOptions);
+
+      // The container's executionAdapter.create was called for L1 write
+      const container = mockDI.getInstance() as { getExecutionAdapter: jest.Mock };
+      const execAdapter = await container.getExecutionAdapter();
+      expect(execAdapter.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'completion',
+          title: expect.stringContaining('agent:security-audit'),
+          metadata: expect.objectContaining({ kind: 'sarif' }),
+        }),
+        expect.any(String),
+      );
+    });
+
+    it('[AORCH-P2] should write review FeedbackRecords to git after orchestrator.run', async () => {
+      const mockFbCreate = jest.fn().mockResolvedValue({ id: 'fb-review-1' });
+      const container = mockDI.getInstance() as { getFeedbackAdapter: jest.Mock };
+      container.getFeedbackAdapter = jest.fn().mockResolvedValue({ create: mockFbCreate });
+
+      const resultWithReviews: AuditOrchestrationResult = {
+        ...mockResultWithFindings,
+        reviewResults: [{
+          agentId: 'agent:review-advisor',
+          status: 'success' as const,
+          durationMs: 200,
+          feedbackRecordId: 'exec-review-1',
+        }],
+      };
+
+      mockOrchestrator.run.mockResolvedValueOnce(resultWithReviews);
+
+      await auditCommand.execute({ scope: 'full', output: 'text', failOn: 'critical' } as AuditCommandOptions);
+
+      expect(mockFbCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          entityType: 'execution',
+          type: 'suggestion',
+          metadata: expect.objectContaining({ agentId: 'agent:review-advisor' }),
+        }),
+        'agent:review-advisor',
+      );
+    });
+
+    it('[AORCH-P3] should skip L1 persistence when l1AgentResults is undefined', async () => {
+      mockOrchestrator.run.mockResolvedValueOnce(mockResultWithFindings);
+
+      const mockExecCreate = jest.fn();
+      const container = mockDI.getInstance() as { getExecutionAdapter: jest.Mock };
+      container.getExecutionAdapter = jest.fn().mockResolvedValue({ create: mockExecCreate });
+
+      await auditCommand.execute({ scope: 'full', output: 'text', failOn: 'critical' } as AuditCommandOptions);
+
+      expect(mockExecCreate).not.toHaveBeenCalled();
     });
   });
 });

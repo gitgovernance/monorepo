@@ -163,6 +163,11 @@ export class FsProjectInitializer implements IProjectInitializer {
     return undefined;
   }
 
+  // [EARS-PI12] FS has no remote branch — return undefined
+  async getHeadSha(): Promise<string | undefined> {
+    return undefined;
+  }
+
   /**
    * Validates environment for GitGovernance initialization.
    * Checks: Git repo exists, write permissions, not already initialized.

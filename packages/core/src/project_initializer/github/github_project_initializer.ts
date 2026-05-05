@@ -162,4 +162,13 @@ export class GitHubProjectInitializer implements IProjectInitializer {
   async finalize(): Promise<string | undefined> {
     return await this.gitModule.commit(this.commitMessage, this.commitAuthor);
   }
+
+  // [EARS-PI12] Returns HEAD SHA of gitgov-state branch
+  async getHeadSha(): Promise<string | undefined> {
+    try {
+      return await this.gitModule.getCommitHash(this.branch);
+    } catch {
+      return undefined;
+    }
+  }
 }

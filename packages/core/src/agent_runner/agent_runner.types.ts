@@ -149,9 +149,9 @@ export type AgentRunnerDependencies = {
   gitgovPath?: string;
   /** KeyProvider for actor-signature auth (required if that auth type is used) */
   keyProvider?: KeyProvider;
-  /** ExecutionAdapter for persisting executions (REQUIRED) */
-  executionAdapter: IExecutionAdapter;
-  /** FeedbackAdapter for persisting review agent output (optional — backward compatible) [EARS-L1, L2] */
+  /** @deprecated Runner no longer writes records (RLDX-E1). Caller persists post-redaction. Kept optional for backward compat. */
+  executionAdapter?: IExecutionAdapter;
+  /** @deprecated Runner no longer writes records (RLDX-E1). Caller persists post-redaction. Kept optional for backward compat. */
   feedbackAdapter?: IFeedbackAdapter;
   /** EventBus for emitting events (optional, no events if not provided) */
   eventBus?: IEventStream;
