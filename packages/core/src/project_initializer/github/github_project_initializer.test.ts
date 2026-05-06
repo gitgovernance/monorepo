@@ -341,6 +341,41 @@ describe('GitHubProjectInitializer', () => {
     });
   });
 
+  describe('4.8. Branch Check Caching (PROJ-G1)', () => {
+    it('[PROJ-G1] should not call branchExists twice when isInitialized precedes createProjectStructure', async () => {
+      gitModule.branchExists.mockResolvedValue(false);
+      const initializer = createInitializer(gitModule, configStore);
+
+      await initializer.isInitialized();
+      await initializer.createProjectStructure();
+
+      expect(gitModule.branchExists).toHaveBeenCalledTimes(1);
+      expect(gitModule.createBranch).toHaveBeenCalledWith('gitgov-state', undefined);
+    });
+
+    it('[PROJ-G1] should still call branchExists when createProjectStructure is called without prior isInitialized', async () => {
+      gitModule.branchExists.mockResolvedValue(false);
+      const initializer = createInitializer(gitModule, configStore);
+
+      await initializer.createProjectStructure();
+
+      expect(gitModule.branchExists).toHaveBeenCalledTimes(1);
+      expect(gitModule.createBranch).toHaveBeenCalledWith('gitgov-state', undefined);
+    });
+
+    it('[PROJ-G1] should consume cache after use so retries re-check', async () => {
+      gitModule.branchExists.mockResolvedValue(false);
+      const initializer = createInitializer(gitModule, configStore);
+
+      await initializer.isInitialized();
+      await initializer.createProjectStructure();
+      // Second call should make a fresh branchExists check
+      await initializer.createProjectStructure();
+
+      expect(gitModule.branchExists).toHaveBeenCalledTimes(2);
+    });
+  });
+
   describe('4.7. Transaction Boundary (GPI13)', () => {
     it('[GPI13] should call gitModule.commit with configured commitMessage and author', async () => {
       gitModule.commit.mockResolvedValue('abc123');

@@ -46,6 +46,9 @@ export class GitHubProjectInitializer implements IProjectInitializer {
    */
   private branchCreatedByThisInit: boolean = false;
 
+  // [PROJ-G1] One-shot cache from isInitialized() → createProjectStructure()
+  private branchExistsCache: boolean | null = null;
+
   constructor(
     private readonly gitModule: IGitModule,
     private readonly configStore: ConfigStore<unknown>,
@@ -64,8 +67,10 @@ export class GitHubProjectInitializer implements IProjectInitializer {
   }
 
   // GPI01/GPI02/GPI03 — IKS-T1: create branch (if needed) + stage policy.yml
+  // [PROJ-G1] Consumes cached branchExists from isInitialized() if available
   async createProjectStructure(): Promise<void> {
-    const exists = await this.gitModule.branchExists(this.branch);
+    const exists = this.branchExistsCache ?? await this.gitModule.branchExists(this.branch);
+    this.branchExistsCache = null;
     if (!exists) {
       // startPoint undefined → create from default branch via GitHubGitModule semantics
       await this.gitModule.createBranch(this.branch, undefined);
@@ -81,9 +86,11 @@ export class GitHubProjectInitializer implements IProjectInitializer {
   }
 
   // GPI10 — project is initialized iff branch exists AND config.json is loadable
+  // [PROJ-G1] Caches branchExists for createProjectStructure() to consume
   async isInitialized(): Promise<boolean> {
-    const branchExists = await this.gitModule.branchExists(this.branch);
-    if (!branchExists) return false;
+    const exists = await this.gitModule.branchExists(this.branch);
+    this.branchExistsCache = exists;
+    if (!exists) return false;
     const config = await this.configStore.loadConfig();
     return config !== null;
   }
