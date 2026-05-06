@@ -1,3 +1,26 @@
+## [3.17.0](https://github.com/gitgovernance/monorepo/compare/core-v3.16.0...core-v3.17.0) (2026-05-06)
+
+
+### ✨ Features
+
+* **core,agents,e2e:** session 40 — registry pattern, Two-Tier agents, shared/ refactor, E2E Prisma local ([ce01ce1](https://github.com/gitgovernance/monorepo/commit/ce01ce1703c31b13f3594a5814aefd1fcb8f171e))
+* **core,agents:** G18 LLM provider abstraction + review-advisor refactor ([69a2368](https://github.com/gitgovernance/monorepo/commit/69a2368ada5ed5aa1f9691c1a48f9645218a2bb7))
+* **core,cli:** Gate Cycle 3+4 — ProjectModule, signed scans, webhook PR handler ([#155](https://github.com/gitgovernance/monorepo/issues/155)) ([5bc1650](https://github.com/gitgovernance/monorepo/commit/5bc1650b34b674a0b85f3a177cd36bd94beab288))
+* **core,cli:** PROJ-B4 — register default AgentRecord during init ([ada0c36](https://github.com/gitgovernance/monorepo/commit/ada0c3625bbe7d1c7be046869bfb5ca8478cebf2))
+* **core,cli:** RLDX-E1 pure runner, CLI L1 persistence, PI12 getHeadSha ([8f33926](https://github.com/gitgovernance/monorepo/commit/8f339260e445af9261ca118661f6d11f19e5e485))
+
+
+### 🐛 Bug Fixes
+
+* **core,agents,e2e:** complete session 40 changes — modified files ([4457d2a](https://github.com/gitgovernance/monorepo/commit/4457d2a7685aa67701eef63d9b89244fdc74b17b))
+* **core:** PROJ-G1 cache branchExists in GitHubProjectInitializer ([cabdb63](https://github.com/gitgovernance/monorepo/commit/cabdb6327ea89d5f8531006601bf27f7d38f6dad))
+* **e2e:** import RecordProjectorDependencies from barrel, PrismaClient from saas-api ([67dc069](https://github.com/gitgovernance/monorepo/commit/67dc069e4af309a935fdec5849f388b0a62e2466))
+
+
+### 📝 Documentation
+
+* translate Spanish docs to English in public repo ([636d563](https://github.com/gitgovernance/monorepo/commit/636d563cb390b2d4940b7a808f99da754ce1ab21))
+
 ## [3.16.0](https://github.com/gitgovernance/monorepo/compare/core-v3.15.0...core-v3.16.0) (2026-04-29)
 
 
