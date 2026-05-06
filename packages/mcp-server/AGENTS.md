@@ -51,26 +51,26 @@ src/
 | Prompts | 3 | plan-sprint, review-my-tasks, prepare-pr-summary |
 | Resources | 3 types | gitgov://tasks/{id}, gitgov://cycles/{id}, gitgov://actors/{id} |
 
-## Deuda Tecnica
+## Technical Debt
 
-| Deuda | Prioridad | Input |
+| Debt | Priority | Input |
 |-------|-----------|-------|
 | 18 `payload as unknown as Record<string, unknown>` casts in tools/prompts/resources | alta | [mcp_type_safety_input.md](../../packages/blueprints/03_products/epics/inputs/mcp_type_safety_input.md) |
 | 14 `as unknown as McpDependencyInjectionService` casts in tests | alta | mismo input |
 | `seedActor` in core_test_helpers uses invented header instead of core factories | alta | mismo input |
 | `Lint.RecordStores` cast in mcp_di.ts | media | mismo input |
 
-## Trabajo Futuro
+## Future Work
 
-Mejoras identificadas con input documentado. No es deuda técnica — son oportunidades para épicas futuras.
+Identified improvements with documented input. Not technical debt — opportunities for future epics.
 
 | Item | Input | Prioridad | Estado |
 |:-----|:------|:----------|:-------|
 | Eliminar 40 cast violations (payload casts, DI class casts, seedActor) | [mcp_type_safety_input.md](../../packages/blueprints/03_products/epics/inputs/mcp_type_safety_input.md) | alta | proposed |
 
-## Si tocaste / Actualizar
+## If You Touched / Update
 
-| Si tocaste... | Actualizar |
+| If you touched... | Update |
 |:-------------|:-----------|
 | Nuevo tool en `tools/` | README.md tool count + tabla de tools |
 | Nuevo prompt en `prompts/` | README.md prompt count + tabla |

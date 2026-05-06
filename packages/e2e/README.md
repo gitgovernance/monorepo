@@ -2,7 +2,7 @@
 
 Cross-package E2E tests for the GitGovernance monorepo. Tests run against real infrastructure: CLI binary (`node gitgov.mjs`), PostgreSQL database, GitHub API, and filesystem.
 
-> Para reglas de desarrollo, blocks, tiempos, y arquitectura ver el [AGENTS.md del package](../../packages/blueprints/03_products/e2e/AGENTS.md).
+> For development rules, test blocks, timing, and architecture see [AGENTS.md](./AGENTS.md).
 
 ## Core Dependency
 

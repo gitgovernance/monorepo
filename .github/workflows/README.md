@@ -5,7 +5,7 @@
 ### Trigger
 
 - **Push to `main` branch** with changes in `packages/cli/`
-- Ignora cambios solo en archivos `.md`
+- Ignores changes to `.md`-only files
 
 ### What it does
 
