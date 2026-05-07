@@ -13,10 +13,13 @@
 
 import picomatch from 'picomatch';
 import type { Octokit } from '@octokit/rest';
-import type { FileLister, FileListOptions, FileStats } from '../file_lister';
+import type { FileLister, FileListOptions, FileListerErrorDetails, FileStats } from '../file_lister';
 import { FileListerError } from '../file_lister';
-import { isOctokitRequestError } from '../../shared/github/github';
+import { isOctokitRequestError, getOctokitRateLimitReset } from '../../shared/github/github';
 import type { GitHubFileListerOptions } from './github_file_lister.types';
+
+/** [EARS-D1] Max parallel Blob fetches in readBatch */
+const READ_BATCH_CONCURRENCY = 10;
 
 /** Tree entry shape from Octokit git.getTree response */
 type TreeEntry = {
@@ -165,9 +168,24 @@ export class GitHubFileLister implements FileLister {
    * [EARS-A3] Reads file content as string.
    * [EARS-B2] Decodes base64 content from Contents API.
    * [EARS-B7] Falls back to Blobs API for files >1MB (null content).
+   * [EARS-D2] When tree cache is populated AND the path resolves to a blob SHA,
+   *           uses Blobs API directly (no path resolution overhead, no 1MB limit).
+   *           Otherwise falls back to the Contents API path below.
    */
   async read(filePath: string): Promise<string> {
     const fullPath = this.buildFullPath(filePath);
+
+    // [EARS-D2] Tree cache populated → use Blobs API via SHA from cache
+    if (this.treeCache !== null) {
+      const entry = this.treeCache.find(
+        e => e.type === 'blob' && e.path === fullPath && typeof e.sha === 'string',
+      );
+      if (entry?.sha) {
+        return this.readViaBlobs(entry.sha, filePath);
+      }
+      // Tree populated but path not in cache → fall through to Contents API
+      // (preserves backwards compat for files added between list() and read())
+    }
 
     try {
       const { data } = await this.octokit.rest.repos.getContent({
@@ -294,6 +312,104 @@ export class GitHubFileLister implements FileLister {
         filePath,
       );
     }
+  }
+
+  /**
+   * [EARS-D1] Reads multiple files in parallel via the Blobs API.
+   *
+   * Resolves each path's blob SHA from the tree cache (lazily fetched if not
+   * populated by a prior list() call), then fetches blobs in parallel with a
+   * concurrency cap of READ_BATCH_CONCURRENCY. Decodes each from base64 and
+   * returns a Map of path → content.
+   *
+   * - Throws FILE_NOT_FOUND if any input path is not present as a blob in the tree.
+   * - [EARS-D3] On HTTP 403 (rate limit) mid-batch, stops remaining fetches and
+   *   throws RATE_LIMITED with details.partialResults / pathsNotFetched / resetTime.
+   * - Other errors propagate as-is.
+   */
+  async readBatch(paths: string[]): Promise<Map<string, string>> {
+    // [EARS-D1] Lazy fetchTree: idempotent (cache hit if list() was called)
+    const tree = await this.fetchTree();
+
+    // Build path → SHA lookup (only blobs, only entries with both path and sha)
+    const blobShaByFullPath = new Map<string, string>();
+    for (const entry of tree) {
+      if (entry.type === 'blob' && entry.path && entry.sha) {
+        blobShaByFullPath.set(entry.path, entry.sha);
+      }
+    }
+
+    // [EARS-D1] Resolve all paths upfront — throw FILE_NOT_FOUND on any miss
+    const resolved: Array<{ path: string; sha: string }> = [];
+    for (const p of paths) {
+      const fullPath = this.buildFullPath(p);
+      const sha = blobShaByFullPath.get(fullPath);
+      if (!sha) {
+        throw new FileListerError(
+          `File not found in tree: ${p}`,
+          'FILE_NOT_FOUND',
+          p,
+        );
+      }
+      resolved.push({ path: p, sha });
+    }
+
+    // [EARS-D1] Parallel fetch via Blobs API with concurrency cap
+    const results = new Map<string, string>();
+    let stopped = false;
+    let resetTime: number | undefined;
+    let nextIndex = 0;
+
+    const worker = async (): Promise<void> => {
+      while (!stopped) {
+        const i = nextIndex++;
+        if (i >= resolved.length) return;
+        const item = resolved[i];
+        if (!item) return;
+        try {
+          const { data } = await this.octokit.rest.git.getBlob({
+            owner: this.owner,
+            repo: this.repo,
+            file_sha: item.sha,
+          });
+          if (!stopped) {
+            results.set(item.path, Buffer.from(data.content, 'base64').toString('utf-8'));
+          }
+        } catch (error: unknown) {
+          // [EARS-D3] Rate limit (403): stop remaining workers, capture reset time
+          if (isOctokitRequestError(error) && error.status === 403) {
+            stopped = true;
+            resetTime = getOctokitRateLimitReset(error);
+            return;
+          }
+          throw error;
+        }
+      }
+    };
+
+    const workerCount = Math.min(READ_BATCH_CONCURRENCY, resolved.length);
+    await Promise.all(Array.from({ length: workerCount }, () => worker()));
+
+    // [EARS-D3] Rate limit triggered → throw with partial results + details
+    if (stopped) {
+      const fetched = new Set(results.keys());
+      const pathsNotFetched = paths.filter(p => !fetched.has(p));
+      const details: FileListerErrorDetails = {
+        pathsNotFetched,
+        partialResults: results,
+      };
+      if (resetTime !== undefined) {
+        details.resetTime = resetTime;
+      }
+      throw new FileListerError(
+        `Rate limit hit during batch read; ${results.size}/${paths.length} fetched`,
+        'RATE_LIMITED',
+        undefined,
+        details,
+      );
+    }
+
+    return results;
   }
 
   // ═══════════════════════════════════════════════════════════════════════
