@@ -365,6 +365,31 @@ export type AuditOrchestrationResult = {
   reviewResults?: ReviewAgentResult[];
 };
 
+// ─── Orchestration Input ──────────────────────────────────────────────────────
+
+/**
+ * Options passed to AuditOrchestrator.run() — the public input contract.
+ *
+ * Consumers: CLI (audit-command.ts), SaaS (scan_orchestrator.service.ts).
+ * Counterpart of AuditOrchestrationResult (output).
+ */
+export type AuditOrchestrationOptions = {
+  /** Scan scope: diff (changed files), full (all files), baseline (full + save baseline) */
+  scope: "diff" | "full" | "baseline";
+  /** Optional: run only this specific agent */
+  agentId?: string;
+  /** Glob patterns to include in scan */
+  include?: string[];
+  /** Glob patterns to exclude from scan */
+  exclude?: string[];
+  /** TaskRecord ID for traceability */
+  taskId: string;
+  /** Minimum severity to block on (optional) */
+  failOn?: FindingSeverity;
+  /** Target commit/branch to scan. Passed to agents for SARIF versionControlProvenance. */
+  ref?: string;
+};
+
 // ─── Scan ─────────────────────────────────────────────────────────────────────
 
 /**

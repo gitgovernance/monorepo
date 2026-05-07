@@ -160,6 +160,7 @@ async function executeAgent(
     ...(options.include !== undefined ? { include: options.include } : {}),
     ...(options.exclude !== undefined ? { exclude: options.exclude } : {}),
     taskId: options.taskId,
+    ...(options.ref !== undefined ? { ref: options.ref } : {}),
   };
 
   const runOpts: RunOptions = {
