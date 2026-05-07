@@ -1,10 +1,9 @@
 import type { SarifLog, SarifPhysicalLocation } from "../sarif/sarif.types";
 import type { IAgentRunner } from "../agent_runner/agent_runner";
-import type { RecordStore } from "../record_store/record_store";
-import type { GitGovAgentRecord } from "../record_types";
 import type { Waiver } from "../source_auditor/types";
 import type { RunOptions } from "../agent_runner/agent_runner.types";
 import type {
+  AgentRecordReader,
   AuditOrchestratorDeps,
   AuditOrchestrationOptions,
   AuditOrchestrationResult,
@@ -53,7 +52,7 @@ function levelToSeverity(level: string | undefined): FindingSeverity {
  * RecordStore.get(id) returns the full record with payload.metadata.
  */
 async function discoverAuditAgents(
-  agentStore: RecordStore<GitGovAgentRecord>,
+  agentStore: AgentRecordReader,
   agentId?: string,
 ): Promise<string[]> {
   const agentIds = await agentStore.list();
@@ -81,7 +80,7 @@ async function discoverAuditAgents(
  * [AORCH-F1] Discovers AgentRecords with metadata.purpose === "review".
  */
 async function discoverReviewAgents(
-  agentStore: RecordStore<GitGovAgentRecord>,
+  agentStore: AgentRecordReader,
 ): Promise<string[]> {
   const agentIds = await agentStore.list();
   const reviewAgentIds: string[] = [];

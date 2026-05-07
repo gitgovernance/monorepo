@@ -6,7 +6,6 @@
  * This file re-exports them and defines orchestrator-specific types.
  */
 
-import type { RecordStore } from "../record_store/record_store";
 import type { GitGovAgentRecord } from "../record_types";
 import type { IAgentRunner } from "../agent_runner/agent_runner";
 import type { IWaiverReader } from "../source_auditor/types";
@@ -53,11 +52,19 @@ export type AgentAuditInput = {
 };
 
 /**
+ * Read-only contract for agent discovery. Any RecordStore backend satisfies this.
+ */
+export type AgentRecordReader = {
+  get(id: string): Promise<GitGovAgentRecord | null>;
+  list(): Promise<string[]>;
+};
+
+/**
  * Dependencies injected into createAuditOrchestrator().
  */
 export type AuditOrchestratorDeps = {
-  /** RecordStore for reading AgentRecords (typed for agent records) */
-  recordStore: RecordStore<GitGovAgentRecord>;
+  /** Reader for AgentRecords — only get/list needed for discovery */
+  recordStore: AgentRecordReader;
   /** AgentRunner interface for executing agents */
   agentRunner: IAgentRunner;
   /** WaiverReader for loading active waivers */

@@ -1,5 +1,6 @@
 export { createAuditOrchestrator } from "./audit_orchestrator";
 export type {
+  AgentRecordReader,
   AuditOrchestratorDeps,
   AuditOrchestrationOptions,
   AuditOrchestrationResult,
