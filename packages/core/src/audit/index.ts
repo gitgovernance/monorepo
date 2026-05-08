@@ -36,6 +36,7 @@ export type {
   PolicyDecision,
   PolicyRuleResult,
   // Orchestration
+  AuditOrchestrationOptions,
   AuditOrchestrationResult,
   AuditSummary,
   AgentAuditResult,

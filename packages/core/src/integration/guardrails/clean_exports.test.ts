@@ -88,7 +88,7 @@ describe('CI Guardrail: Clean Exports', () => {
 
   describe('Subpath: @gitgov/core/memory', () => {
     it('[EARS-CI04] should NOT import fs, path, child_process, or chokidar', () => {
-      const memoryPath = path.join(distPath, 'memory.js');
+      const memoryPath = path.join(distPath, 'shared/memory/memory.js');
 
       if (!fs.existsSync(memoryPath)) {
         throw new Error(`Build output not found: ${memoryPath}. Run 'pnpm build' first.`);
@@ -112,7 +112,7 @@ describe('CI Guardrail: Clean Exports', () => {
 
   describe('Subpath: @gitgov/core/fs', () => {
     it('[EARS-CI05] should import fs and path (expected for filesystem implementations)', () => {
-      const fsPath = path.join(distPath, 'fs.js');
+      const fsPath = path.join(distPath, 'shared/fs/fs.js');
 
       if (!fs.existsSync(fsPath)) {
         throw new Error(`Build output not found: ${fsPath}. Run 'pnpm build' first.`);

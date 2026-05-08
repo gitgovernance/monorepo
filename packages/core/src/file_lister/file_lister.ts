@@ -13,7 +13,7 @@ import type { FileListOptions, FileStats } from './file_lister.types';
 // Re-export types and errors for barrel consumers
 export type { FileListOptions, FileStats, FsFileListerOptions, MemoryFileListerOptions } from './file_lister.types';
 export { FileListerError } from './file_lister.errors';
-export type { FileListerErrorCode } from './file_lister.errors';
+export type { FileListerErrorCode, FileListerErrorDetails } from './file_lister.errors';
 
 /**
  * Interface for listing and reading files.
@@ -65,4 +65,16 @@ export interface FileLister {
    * @throws FileListerError if file doesn't exist
    */
   stat(filePath: string): Promise<FileStats>;
+
+  /**
+   * Batch read multiple files in parallel.
+   * Optional — API-based backends (GitHub) benefit from parallel fetching.
+   * Filesystem backends can implement trivially or leave undefined.
+   * Consumers check `if (lister.readBatch)` and fall back to sequential read().
+   *
+   * @param paths - Array of file paths relative to cwd
+   * @returns Map of path → content
+   * @throws FileListerError if any path doesn't exist or rate limit hit
+   */
+  readBatch?(paths: string[]): Promise<Map<string, string>>;
 }

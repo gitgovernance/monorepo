@@ -60,12 +60,71 @@ export class GitHubApiError extends GitError {
 /**
  * Type guard: checks if an error is an Octokit RequestError (duck-typing).
  * Avoids runtime import of ESM-only @octokit/request-error.
+ *
+ * Uses TypeScript 4.9+ structural narrowing (`'status' in error`) — no casts.
  */
 export function isOctokitRequestError(error: unknown): error is { status: number; message: string } {
-  return (
-    error instanceof Error &&
-    typeof (error as unknown as Record<string, unknown>)['status'] === 'number'
-  );
+  if (!(error instanceof Error)) return false;
+  if (!('status' in error)) return false;
+  return typeof error.status === 'number';
+}
+
+/**
+ * [EARS-D4] Detects whether an unknown error is a GitHub rate-limit failure
+ * (primary or secondary), using the canonical detection pattern documented at
+ * https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api
+ *
+ * Returns `true` only when ALL of the following hold:
+ *   - error is an Error with numeric `status` of 403 OR 429 (both are valid
+ *     rate-limit codes per GitHub docs — primary uses 403/429, secondary same)
+ *   - error.response.headers['x-ratelimit-remaining'] is present AND equals 0
+ *     (true for both primary AND secondary rate limit per docs)
+ *
+ * Used to distinguish rate-limit failures from permission-denial 403s (which
+ * carry the same status but no `x-ratelimit-remaining: 0` header).
+ *
+ * Never throws — graceful `false` on any structural mismatch.
+ */
+export function isOctokitRateLimitError(error: unknown): boolean {
+  if (!isOctokitRequestError(error)) return false;
+  if (error.status !== 403 && error.status !== 429) return false;
+  if (!('response' in error)) return false;
+  const response = error.response;
+  if (typeof response !== 'object' || response === null) return false;
+  if (!('headers' in response)) return false;
+  const headers = response.headers;
+  if (typeof headers !== 'object' || headers === null) return false;
+  if (!('x-ratelimit-remaining' in headers)) return false;
+  const remaining = headers['x-ratelimit-remaining'];
+  if (typeof remaining === 'string') return parseInt(remaining, 10) === 0;
+  if (typeof remaining === 'number') return remaining === 0;
+  return false;
+}
+
+/**
+ * [EARS-D1][EARS-D2][EARS-D3] Extracts the `x-ratelimit-reset` Unix timestamp from an
+ * Octokit error's response headers. Returns `undefined` if the input is not an Error,
+ * lacks `response.headers`, or the header is missing/invalid. Never throws.
+ *
+ * Used by GitHubFileLister.readBatch to populate FileListerError.details.resetTime
+ * when a 403 rate limit is hit mid-batch (see github_file_lister §4.4 EARS-D3).
+ */
+export function getOctokitRateLimitReset(error: unknown): number | undefined {
+  if (!(error instanceof Error)) return undefined;
+  if (!('response' in error)) return undefined;
+  const response = error.response;
+  if (typeof response !== 'object' || response === null) return undefined;
+  if (!('headers' in response)) return undefined;
+  const headers = response.headers;
+  if (typeof headers !== 'object' || headers === null) return undefined;
+  if (!('x-ratelimit-reset' in headers)) return undefined;
+  const reset = headers['x-ratelimit-reset'];
+  if (typeof reset === 'string') {
+    const n = parseInt(reset, 10);
+    return Number.isFinite(n) ? n : undefined;
+  }
+  if (typeof reset === 'number') return reset;
+  return undefined;
 }
 
 /**

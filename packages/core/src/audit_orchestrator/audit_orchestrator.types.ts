@@ -6,7 +6,6 @@
  * This file re-exports them and defines orchestrator-specific types.
  */
 
-import type { RecordStore } from "../record_store/record_store";
 import type { GitGovAgentRecord } from "../record_types";
 import type { IAgentRunner } from "../agent_runner/agent_runner";
 import type { IWaiverReader } from "../source_auditor/types";
@@ -21,6 +20,7 @@ export type {
   Waiver,
   PolicyDecision,
   AuditOrchestrationResult,
+  AuditOrchestrationOptions,
   AuditSummary,
   AgentAuditResult,
   ReviewAgentResult,
@@ -30,26 +30,8 @@ export type {
 export type { PolicyEvaluationResult } from "../policy_evaluator/policy_evaluator.types";
 
 // ============================================================================
-// ORCHESTRATOR-SPECIFIC TYPES (not in audit/types.ts)
+// ORCHESTRATOR-SPECIFIC TYPES (internal — not in audit/types.ts)
 // ============================================================================
-
-/**
- * Options passed to AuditOrchestrator.run().
- */
-export type AuditOrchestrationOptions = {
-  /** Scan scope: diff (changed files), full (all files), baseline (full + save baseline) */
-  scope: "diff" | "full" | "baseline";
-  /** Optional: run only this specific agent */
-  agentId?: string;
-  /** Glob patterns to include in scan */
-  include?: string[];
-  /** Glob patterns to exclude from scan */
-  exclude?: string[];
-  /** TaskRecord ID for traceability */
-  taskId: string;
-  /** Minimum severity to block on (optional) */
-  failOn?: import("../audit/types").FindingSeverity;
-};
 
 /**
  * Input passed to each audit agent via AgentRunner ctx.input.
@@ -65,14 +47,24 @@ export type AgentAuditInput = {
   taskId: string;
   /** Base directory for scanning (resolved by orchestrator from project root) */
   baseDir?: string;
+  /** Target commit/branch being scanned. Agents use this for SARIF versionControlProvenance. */
+  ref?: string;
+};
+
+/**
+ * Read-only contract for agent discovery. Any RecordStore backend satisfies this.
+ */
+export type AgentRecordReader = {
+  get(id: string): Promise<GitGovAgentRecord | null>;
+  list(): Promise<string[]>;
 };
 
 /**
  * Dependencies injected into createAuditOrchestrator().
  */
 export type AuditOrchestratorDeps = {
-  /** RecordStore for reading AgentRecords (typed for agent records) */
-  recordStore: RecordStore<GitGovAgentRecord>;
+  /** Reader for AgentRecords — only get/list needed for discovery */
+  recordStore: AgentRecordReader;
   /** AgentRunner interface for executing agents */
   agentRunner: IAgentRunner;
   /** WaiverReader for loading active waivers */

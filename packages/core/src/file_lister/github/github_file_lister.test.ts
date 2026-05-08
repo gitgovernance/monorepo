@@ -45,10 +45,21 @@ function createMockOctokit(): MockOctokit {
   } as unknown as MockOctokit;
 }
 
-function createOctokitError(status: number, message = 'Error'): Error & { status: number } {
-  const error = new Error(message) as Error & { status: number };
-  error.status = status;
-  return error;
+function createOctokitError(status: number, message = 'Error') {
+  // Object.assign returns the merged type via inference — no cast required.
+  // Equivalent shape to Octokit RequestError for the fields we test against.
+  return Object.assign(new Error(message), { status });
+}
+
+/**
+ * Builds an Octokit-like 403 error with x-ratelimit-reset header.
+ * Used by EARS-D3 tests to simulate GitHub rate limit cascade.
+ */
+function createOctokitRateLimitError(resetTimestamp: string) {
+  return Object.assign(new Error('API rate limit exceeded'), {
+    status: 403,
+    response: { headers: { 'x-ratelimit-reset': resetTimestamp } },
+  });
 }
 
 const defaultOptions: GitHubFileListerOptions = {
@@ -466,6 +477,120 @@ describe('GitHubFileLister', () => {
       await expect(lister.list(['**/*'])).rejects.toMatchObject({
         code: 'FILE_NOT_FOUND',
       });
+    });
+  });
+
+  // ==================== 4.4. Batch Read via Blobs API (EARS-D1 to D3) ====================
+
+  describe('4.4. Batch Read via Blobs API (EARS-D1 to D3)', () => {
+    it('[EARS-D1] should fetch blobs in parallel using SHAs from tree cache', async () => {
+      mockOctokit.rest.git.getTree.mockResolvedValue(createTreeResponse([
+        { path: '.gitgov/tasks/task-1.json', type: 'blob', sha: 'sha-task-1' },
+        { path: '.gitgov/actors/camilo.json', type: 'blob', sha: 'sha-camilo' },
+        { path: '.gitgov/config.json', type: 'blob', sha: 'sha-config' },
+      ]));
+      mockOctokit.rest.git.getBlob
+        .mockResolvedValueOnce(createBlobResponse('task-content', 'sha-task-1'))
+        .mockResolvedValueOnce(createBlobResponse('actor-content', 'sha-camilo'))
+        .mockResolvedValueOnce(createBlobResponse('config-content', 'sha-config'));
+
+      const result = await lister.readBatch([
+        'tasks/task-1.json',
+        'actors/camilo.json',
+        'config.json',
+      ]);
+
+      expect(result.size).toBe(3);
+      expect(result.get('tasks/task-1.json')).toBe('task-content');
+      expect(result.get('actors/camilo.json')).toBe('actor-content');
+      expect(result.get('config.json')).toBe('config-content');
+      expect(mockOctokit.rest.git.getBlob).toHaveBeenCalledTimes(3);
+      expect(mockOctokit.rest.git.getBlob).toHaveBeenCalledWith({
+        owner: 'test-org',
+        repo: 'test-repo',
+        file_sha: 'sha-task-1',
+      });
+      // Tree fetched once via lazy fetchTree on first readBatch call
+      expect(mockOctokit.rest.git.getTree).toHaveBeenCalledTimes(1);
+      // Contents API not used at all
+      expect(mockOctokit.rest.repos.getContent).not.toHaveBeenCalled();
+    });
+
+    it('[EARS-D1] should throw FILE_NOT_FOUND when path is not in tree cache', async () => {
+      mockOctokit.rest.git.getTree.mockResolvedValue(createTreeResponse([
+        { path: '.gitgov/actors/camilo.json', type: 'blob', sha: 'sha-camilo' },
+      ]));
+
+      await expect(
+        lister.readBatch(['actors/camilo.json', 'actors/missing.json']),
+      ).rejects.toThrow(FileListerError);
+      await expect(
+        lister.readBatch(['actors/camilo.json', 'actors/missing.json']),
+      ).rejects.toMatchObject({
+        code: 'FILE_NOT_FOUND',
+        filePath: 'actors/missing.json',
+      });
+      // No blob fetches happen — validation fails upfront
+      expect(mockOctokit.rest.git.getBlob).not.toHaveBeenCalled();
+    });
+
+    it('[EARS-D2] should use blob SHA from tree cache instead of Contents API when cache populated', async () => {
+      mockOctokit.rest.git.getTree.mockResolvedValue(createTreeResponse([
+        { path: '.gitgov/config.json', type: 'blob', sha: 'cached-sha' },
+      ]));
+      mockOctokit.rest.git.getBlob.mockResolvedValue(createBlobResponse('cached content', 'cached-sha'));
+
+      // Populate tree cache via list()
+      await lister.list(['**/*']);
+      // read() should now use Blobs API via cached SHA
+      const content = await lister.read('config.json');
+
+      expect(content).toBe('cached content');
+      expect(mockOctokit.rest.git.getBlob).toHaveBeenCalledWith({
+        owner: 'test-org',
+        repo: 'test-repo',
+        file_sha: 'cached-sha',
+      });
+      // Contents API never called for the read — cache short-circuit hit
+      expect(mockOctokit.rest.repos.getContent).not.toHaveBeenCalled();
+    });
+
+    it('[EARS-D2] should fall back to Contents API when tree cache not populated', async () => {
+      mockOctokit.rest.repos.getContent.mockResolvedValue(createContentsResponse('contents-content'));
+
+      // No list() — tree cache is empty
+      const content = await lister.read('config.json');
+
+      expect(content).toBe('contents-content');
+      expect(mockOctokit.rest.repos.getContent).toHaveBeenCalledTimes(1);
+      expect(mockOctokit.rest.git.getBlob).not.toHaveBeenCalled();
+    });
+
+    it('[EARS-D3] should stop fetching and return partial results on rate limit error', async () => {
+      mockOctokit.rest.git.getTree.mockResolvedValue(createTreeResponse([
+        { path: '.gitgov/tasks/task-1.json', type: 'blob', sha: 'sha-task-1' },
+        { path: '.gitgov/tasks/task-2.json', type: 'blob', sha: 'sha-task-2' },
+      ]));
+      mockOctokit.rest.git.getBlob
+        .mockResolvedValueOnce(createBlobResponse('task-1-content', 'sha-task-1'))
+        .mockRejectedValueOnce(createOctokitRateLimitError('1700000000'));
+
+      const err: unknown = await lister
+        .readBatch(['tasks/task-1.json', 'tasks/task-2.json'])
+        .then(
+          () => null,
+          (e: unknown) => e,
+        );
+
+      expect(err).toBeInstanceOf(FileListerError);
+      if (err instanceof FileListerError) {
+        expect(err.code).toBe('RATE_LIMITED');
+        expect(err.details).toBeDefined();
+        expect(err.details?.partialResults?.size).toBe(1);
+        expect(err.details?.partialResults?.get('tasks/task-1.json')).toBe('task-1-content');
+        expect(err.details?.pathsNotFetched).toEqual(['tasks/task-2.json']);
+        expect(err.details?.resetTime).toBe(1700000000);
+      }
     });
   });
 
