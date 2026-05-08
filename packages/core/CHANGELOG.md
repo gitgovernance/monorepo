@@ -1,3 +1,22 @@
+## [3.18.0](https://github.com/gitgovernance/monorepo/compare/core-v3.17.0...core-v3.18.0) (2026-05-08)
+
+
+### ✨ Features
+
+* **core:** add ref to AuditOrchestrationOptions — PR-scoped scanning ([6216fb1](https://github.com/gitgovernance/monorepo/commit/6216fb1e7cf17cb9ca324c5fd1d23401b68ed739))
+* **core:** D-EARS file_lister readBatch + shared/github rate limit helpers ([31c1397](https://github.com/gitgovernance/monorepo/commit/31c1397181c9c2e75081d276cf8f355af8d3ac3e))
+
+
+### 🐛 Bug Fixes
+
+* **core:** audit.prisma — checkRunId Int? → BigInt? (drift correction) ([b287383](https://github.com/gitgovernance/monorepo/commit/b28738311243cb3ee608d46c40fe509cbd1ef3d3))
+* **core:** update clean_exports test paths after shared/ refactor ([94afb58](https://github.com/gitgovernance/monorepo/commit/94afb58adffbbeb8c0661b4d669bfdb8cd4cde59))
+
+
+### ♻️ Refactoring
+
+* **core:** ISP — AgentRecordReader replaces RecordStore in orchestrator deps ([7aeeff6](https://github.com/gitgovernance/monorepo/commit/7aeeff67e9686252cd5a22a742744fa930ed0878))
+
 ## [3.17.0](https://github.com/gitgovernance/monorepo/compare/core-v3.16.0...core-v3.17.0) (2026-05-06)
 
 
