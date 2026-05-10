@@ -59,9 +59,10 @@ export class GitHubCiReporter implements ICiReporter {
         });
       }
     } catch (error) {
-      // [CIREP-C1]
+      // [CIREP-C1] Log then re-throw — callers handle (CLI warns, SaaS surfaces via errorCode)
       const msg = error instanceof Error ? error.message : String(error);
       console.warn(`⚠ Failed to post PR comment: ${msg}`);
+      throw error;
     }
   }
 
@@ -70,6 +71,7 @@ export class GitHubCiReporter implements ICiReporter {
     sha: string,
     name: string,
     context: RepoContext,
+    externalId?: string,
   ): Promise<CheckInfo> {
     const { data } = await this.octokit.rest.checks.create({
       owner: context.owner,
@@ -77,6 +79,7 @@ export class GitHubCiReporter implements ICiReporter {
       name,
       head_sha: sha,
       status: 'in_progress',
+      ...(externalId ? { external_id: externalId } : {}),
     });
     const result: CheckInfo = { id: data.id, conclusion: 'pass' };
     if (data.html_url) result.url = data.html_url;

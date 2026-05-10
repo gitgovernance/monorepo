@@ -139,13 +139,13 @@ describe('GitHubCiReporter', () => {
   });
 
   describe('4.3. Error Handling (CIREP-C1 to C2)', () => {
-    it('[CIREP-C1] should warn on API error without throwing', async () => {
+    it('[CIREP-C1] should warn and re-throw on API error', async () => {
       const octokit = createMockOctokit([]);
       octokit.rest.issues.createComment.mockRejectedValueOnce(new Error('403 Forbidden'));
       const reporter = new GitHubCiReporter(octokit as unknown as Octokit);
       const warnSpy = jest.spyOn(console, 'warn').mockImplementation();
 
-      await reporter.postOrUpdateComment('test', PR_CONTEXT);
+      await expect(reporter.postOrUpdateComment('test', PR_CONTEXT)).rejects.toThrow('403 Forbidden');
 
       expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('403 Forbidden'));
       warnSpy.mockRestore();
