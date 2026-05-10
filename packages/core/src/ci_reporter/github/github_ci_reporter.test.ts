@@ -179,5 +179,31 @@ describe('GitHubCiReporter', () => {
       expect(result.id).toBe(1);
       expect(result.url).toBe('https://github.com/check/1');
     });
+
+    it('[CIREP-D1] should pass external_id to checks.create when externalId provided', async () => {
+      const octokit = createMockOctokit();
+      const reporter = new GitHubCiReporter(octokit as unknown as Octokit);
+
+      await reporter.startCheckRun('abc123', 'GitGov Audit', { owner: 'myorg', repo: 'myrepo' }, 'scan-42');
+
+      expect(octokit.rest.checks.create).toHaveBeenCalledWith({
+        owner: 'myorg',
+        repo: 'myrepo',
+        name: 'GitGov Audit',
+        head_sha: 'abc123',
+        status: 'in_progress',
+        external_id: 'scan-42',
+      });
+    });
+
+    it('[CIREP-D1] should not include external_id when externalId is undefined', async () => {
+      const octokit = createMockOctokit();
+      const reporter = new GitHubCiReporter(octokit as unknown as Octokit);
+
+      await reporter.startCheckRun('abc123', 'GitGov Audit', { owner: 'myorg', repo: 'myrepo' });
+
+      const call = (octokit.rest.checks.create as jest.Mock).mock.calls[0][0];
+      expect(call).not.toHaveProperty('external_id');
+    });
   });
 });
