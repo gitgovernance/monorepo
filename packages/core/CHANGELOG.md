@@ -1,3 +1,15 @@
+## [3.19.0](https://github.com/gitgovernance/monorepo/compare/core-v3.18.0...core-v3.19.0) (2026-05-10)
+
+
+### ✨ Features
+
+* **core:** ICiReporter — startCheckRun externalId + postOrUpdateComment re-throws ([05d8c9e](https://github.com/gitgovernance/monorepo/commit/05d8c9ed5bd3c476a80903066e7a68ab6c9e84c7))
+
+
+### ♻️ Refactoring
+
+* **core,cli:** rename GitGov Gate → GitGov Audit in Check Runs and PR comments ([1794e36](https://github.com/gitgovernance/monorepo/commit/1794e3642385dcb511fb958f773290c204302a33))
+
 ## [3.18.0](https://github.com/gitgovernance/monorepo/compare/core-v3.17.0...core-v3.18.0) (2026-05-08)
 
 
