@@ -31,7 +31,7 @@ export function formatAuditResult(result: AuditOrchestrationResult): string | nu
   const headerBadge = decision === 'block' ? '🔴' : '✅';
 
   // [AFMT-A4]
-  let md = `## ${headerBadge} GitGov Gate: ${active.length} findings — ${statusLabel}\n\n`;
+  let md = `## ${headerBadge} GitGov Audit: ${active.length} findings — ${statusLabel}\n\n`;
 
   // [AFMT-A1]
   md += '| # | Severity | Category | File | Line | Message |\n';
@@ -53,7 +53,7 @@ export function formatAuditResult(result: AuditOrchestrationResult): string | nu
   // [AFMT-B3]
   md += '\n> 💡 To waive: `gitgov audit waive <fingerprint> -j "reason"`\n';
 
-  md += '\n---\n*GitGov Gate v1*\n';
+  md += '\n---\n*GitGov Audit v1*\n';
 
   return md;
 }

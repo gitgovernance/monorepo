@@ -108,7 +108,7 @@ describe('AuditFormatter', () => {
       const result = makeResult({ decision: 'block' });
       const md = formatAuditResult(result)!;
 
-      expect(md).toContain('## 🔴 GitGov Gate: 1 findings — blocked');
+      expect(md).toContain('## 🔴 GitGov Audit: 1 findings — blocked');
     });
   });
 

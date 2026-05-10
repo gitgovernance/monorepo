@@ -95,11 +95,11 @@ export class GitHubCiReporter implements ICiReporter {
     const { data } = await this.octokit.rest.checks.create({
       owner: context.owner,
       repo: context.repo,
-      name: 'GitGov Gate',
+      name: 'GitGov Audit',
       head_sha: sha,
       status: 'completed',
       conclusion: conclusion === 'pass' ? 'success' : 'failure',
-      output: { title: 'GitGov Gate', summary },
+      output: { title: 'GitGov Audit', summary },
     });
     const result: CheckInfo = { id: data.id, conclusion };
     if (data.html_url) result.url = data.html_url;
