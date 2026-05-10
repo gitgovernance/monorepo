@@ -139,13 +139,13 @@ describe('GitHubCiReporter', () => {
   });
 
   describe('4.3. Error Handling (CIREP-C1 to C2)', () => {
-    it('[CIREP-C1] should warn on API error without throwing', async () => {
+    it('[CIREP-C1] should warn and re-throw on API error', async () => {
       const octokit = createMockOctokit([]);
       octokit.rest.issues.createComment.mockRejectedValueOnce(new Error('403 Forbidden'));
       const reporter = new GitHubCiReporter(octokit as unknown as Octokit);
       const warnSpy = jest.spyOn(console, 'warn').mockImplementation();
 
-      await reporter.postOrUpdateComment('test', PR_CONTEXT);
+      await expect(reporter.postOrUpdateComment('test', PR_CONTEXT)).rejects.toThrow('403 Forbidden');
 
       expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('403 Forbidden'));
       warnSpy.mockRestore();
@@ -178,6 +178,32 @@ describe('GitHubCiReporter', () => {
       });
       expect(result.id).toBe(1);
       expect(result.url).toBe('https://github.com/check/1');
+    });
+
+    it('[CIREP-D1] should pass external_id to checks.create when externalId provided', async () => {
+      const octokit = createMockOctokit();
+      const reporter = new GitHubCiReporter(octokit as unknown as Octokit);
+
+      await reporter.startCheckRun('abc123', 'GitGov Audit', { owner: 'myorg', repo: 'myrepo' }, 'scan-42');
+
+      expect(octokit.rest.checks.create).toHaveBeenCalledWith({
+        owner: 'myorg',
+        repo: 'myrepo',
+        name: 'GitGov Audit',
+        head_sha: 'abc123',
+        status: 'in_progress',
+        external_id: 'scan-42',
+      });
+    });
+
+    it('[CIREP-D1] should not include external_id when externalId is undefined', async () => {
+      const octokit = createMockOctokit();
+      const reporter = new GitHubCiReporter(octokit as unknown as Octokit);
+
+      await reporter.startCheckRun('abc123', 'GitGov Audit', { owner: 'myorg', repo: 'myrepo' });
+
+      const call = (octokit.rest.checks.create as jest.Mock).mock.calls[0][0];
+      expect(call).not.toHaveProperty('external_id');
     });
   });
 });

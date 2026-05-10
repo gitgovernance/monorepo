@@ -558,7 +558,7 @@ describe('AuditCommand', () => {
     beforeEach(() => {
       jest.clearAllMocks();
       mockOrchestrator.run.mockResolvedValue(mockResultWithFindings);
-      mockFormatAuditResult.mockReturnValue('## 🔴 GitGov Gate: 2 findings');
+      mockFormatAuditResult.mockReturnValue('## 🔴 GitGov Audit: 2 findings');
       mockPostOrUpdateComment.mockResolvedValue(undefined);
       // Reset env
       delete process.env['GITHUB_ACTIONS'];
@@ -584,7 +584,7 @@ describe('AuditCommand', () => {
 
       expect(mockFormatAuditResult).toHaveBeenCalledWith(mockResultWithFindings);
       expect(mockPostOrUpdateComment).toHaveBeenCalledWith(
-        '## 🔴 GitGov Gate: 2 findings',
+        '## 🔴 GitGov Audit: 2 findings',
         { owner: 'myorg', repo: 'myrepo', prNumber: 42 },
       );
       await fs.unlink(tmpEvent).catch(() => {});
