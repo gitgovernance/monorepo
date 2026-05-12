@@ -61,6 +61,7 @@ const mockHasPrivateKey = jest.fn();
 const mockGetPublicKey = jest.fn();
 const mockGetConfig = jest.fn();
 const mockGetCurrentActor = jest.fn();
+const mockEnsureActorInProject = jest.fn().mockResolvedValue({ actorId: 'human:testuser', created: true });
 
 jest.mock('../../services/dependency-injection', () => ({
   DependencyInjectionService: {
@@ -81,6 +82,9 @@ jest.mock('../../services/dependency-injection', () => ({
         getCurrentActor: mockGetCurrentActor,
       }),
       getCurrentActor: mockGetCurrentActor,
+      getProjectModule: jest.fn().mockResolvedValue({
+        ensureActorInProject: mockEnsureActorInProject,
+      }),
       getConfigManager: jest.fn().mockResolvedValue({
         loadConfig: mockGetConfig,
         getSaasUrl: jest.fn().mockImplementation(async () => {
@@ -838,6 +842,57 @@ describe('LoginCommand v2', () => {
 
       // Login should proceed despite fetch failure
       expect(deps.startCallbackServer).toHaveBeenCalled();
+      expect(mockSetCloudToken).toHaveBeenCalledWith('test-session-token');
+    });
+  });
+
+  // ==========================================================================
+  // §4.14. Actor Materialization on Login (LOGIN-O1 to O2)
+  // ==========================================================================
+  describe('4.14. Actor Materialization on Login (LOGIN-O1 to O2)', () => {
+    it('[LOGIN-O1] should call ensureActorInProject after key download', async () => {
+      mockGetCurrentActor.mockResolvedValue(null);
+      mockGetConfig.mockResolvedValue({ saasUrl: 'https://app.gitgov.dev' });
+      mockHasPrivateKey.mockResolvedValue(false);
+
+      const deps = createMockDeps({
+        fetchSaas: createTrpcFetch({
+          'keyStatus': keyStatusWith('saas-pub-key'),
+          'getKey': { privateKeyEnvelope: { ephemeralPublicKey: 'eph', ciphertext: 'ct', iv: 'iv', authTag: 'tag' } },
+        }),
+      });
+
+      const cmd = new LoginCommand(deps);
+      await cmd.executeLogin(defaultOptions);
+
+      expect(mockEnsureActorInProject).toHaveBeenCalledWith(
+        expect.objectContaining({
+          login: 'camilo',
+          type: 'human',
+          joinedVia: 'saas-oauth',
+        }),
+      );
+    });
+
+    it('[LOGIN-O2] should succeed login but warn when ensureActorInProject fails', async () => {
+      mockGetCurrentActor.mockResolvedValue(null);
+      mockGetConfig.mockResolvedValue({ saasUrl: 'https://app.gitgov.dev' });
+      mockHasPrivateKey.mockResolvedValue(false);
+      mockEnsureActorInProject.mockRejectedValueOnce(new Error('GitHub API unavailable'));
+
+      const deps = createMockDeps({
+        fetchSaas: createTrpcFetch({
+          'keyStatus': keyStatusWith('saas-pub-key'),
+          'getKey': { privateKeyEnvelope: { ephemeralPublicKey: 'eph', ciphertext: 'ct', iv: 'iv', authTag: 'tag' } },
+        }),
+      });
+
+      const cmd = new LoginCommand(deps);
+      await cmd.executeLogin(defaultOptions);
+
+      expect(mockConsoleLog).toHaveBeenCalledWith(
+        expect.stringContaining('actor could not be written to git'),
+      );
       expect(mockSetCloudToken).toHaveBeenCalledWith('test-session-token');
     });
   });

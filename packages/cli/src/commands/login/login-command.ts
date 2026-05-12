@@ -150,6 +150,24 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
       // Key sync: use local actorId for FsKeyProvider, GitHub identity for SaaS context
       await this.syncKeys(actorId, saasUrl, token, options);
 
+      // [LOGIN-O1] Materialize actor in local worktree after key sync
+      try {
+        const existingActor = await this.findLocalHumanActor();
+        if (!existingActor || existingActor.actorId !== actorId) {
+          const projectModule = await this.dependencyService.getProjectModule();
+          await projectModule.ensureActorInProject({
+            login: user.login,
+            type: 'human',
+            repoId: '',
+            joinedVia: 'saas-oauth',
+          });
+        }
+      } catch {
+        // [LOGIN-O2] Login succeeds even if actor materialization fails
+        console.log('⚠️  Key downloaded but actor could not be written to git.');
+        console.log('   Run `gitgov login` again when GitHub is available.');
+      }
+
       // [LOGIN-L1, LOGIN-L2] Push gitgov-state so SaaS can index ActorRecord
       await this.pushGitgovState();
 
