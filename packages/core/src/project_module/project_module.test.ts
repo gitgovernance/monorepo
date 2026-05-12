@@ -144,7 +144,7 @@ describe('ProjectModule', () => {
       expect(stored).not.toBeNull();
       expect(stored!.payload.type).toBe('agent');
       expect(stored!.payload.roles).toEqual(['orchestrator']);
-      expect(stored!.payload.metadata).toEqual(expect.objectContaining({ purpose: 'orchestration' }));
+      expect(stored!.payload.metadata).toEqual(expect.objectContaining({ joinedVia: 'cli' }));
     });
 
     it('[PROJ-B3] should rollback and include step context when product agent creation fails', async () => {
@@ -209,7 +209,7 @@ describe('ProjectModule', () => {
       expect(result.commitSha).toBe('abc123def456abc123def456abc123def456abc1');
     });
 
-    it('[PROJ-C4] should call setupGitIntegration before finalize', async () => {
+    it('[PROJ-C4] should call setupGitIntegration before the final finalize', async () => {
       const { deps, initializer } = createRealDeps();
       const callOrder: string[] = [];
       (initializer.setupGitIntegration as jest.Mock).mockImplementation(() => { callOrder.push('gitIntegration'); return Promise.resolve(); });
@@ -219,8 +219,9 @@ describe('ProjectModule', () => {
       await pm.initializeProject({ name: 'test-project', login: 'dev' });
 
       const gitIdx = callOrder.indexOf('gitIntegration');
-      const finIdx = callOrder.indexOf('finalize');
-      expect(gitIdx).toBeLessThan(finIdx);
+      const lastFinIdx = callOrder.lastIndexOf('finalize');
+      expect(gitIdx).toBeLessThan(lastFinIdx);
+      expect(callOrder.filter(c => c === 'finalize').length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -232,18 +233,19 @@ describe('ProjectModule', () => {
       const pm = new ProjectModule(deps);
 
       await expect(pm.initializeProject({ name: 'test-project', login: 'dev' }))
-        .rejects.toThrow('Finalize failed');
+        .rejects.toMatchObject({ code: 'GIT_WRITE_FAILED' });
       expect(initializer.rollback).toHaveBeenCalled();
     });
 
-    it('[PROJ-D2] should throw original error even if rollback fails', async () => {
+    it('[PROJ-D2] should throw wrapped error even if rollback fails', async () => {
       const { deps, initializer } = createRealDeps();
       (initializer.finalize as jest.Mock).mockRejectedValue(new Error('Original error'));
       (initializer.rollback as jest.Mock).mockRejectedValue(new Error('Rollback failed'));
       const pm = new ProjectModule(deps);
 
-      await expect(pm.initializeProject({ name: 'test-project', login: 'dev' }))
-        .rejects.toThrow('Original error');
+      const err = await pm.initializeProject({ name: 'test-project', login: 'dev' }).catch(e => e);
+      expect(err.code).toBe('GIT_WRITE_FAILED');
+      expect(err.context.cause).toContain('Original error');
     });
 
     it('[PROJ-D3] should rollback when createProjectStructure fails', async () => {
@@ -261,8 +263,9 @@ describe('ProjectModule', () => {
       (initializer.finalize as jest.Mock).mockRejectedValue(new Error('Commit failed'));
       const pm = new ProjectModule(deps);
 
-      await expect(pm.initializeProject({ name: 'test-project', login: 'dev' }))
-        .rejects.toThrow('Commit failed');
+      const err = await pm.initializeProject({ name: 'test-project', login: 'dev' }).catch(e => e);
+      expect(err.code).toBe('GIT_WRITE_FAILED');
+      expect(err.context.cause).toContain('Commit failed');
       expect(initializer.rollback).toHaveBeenCalled();
     });
   });
@@ -322,14 +325,14 @@ describe('ProjectModule', () => {
       expect(securityActor).not.toBeNull();
       expect(securityActor!.payload.type).toBe('agent');
       expect(securityActor!.payload.roles).toEqual(['specialist']);
-      expect(securityActor!.payload.metadata).toEqual(expect.objectContaining({ purpose: 'audit' }));
+      expect(securityActor!.payload.metadata).toEqual(expect.objectContaining({ joinedVia: 'cli' }));
 
       // review-advisor specialist should have its own ActorRecord
       const reviewActor = await actorStore.get('agent:review-advisor');
       expect(reviewActor).not.toBeNull();
       expect(reviewActor!.payload.type).toBe('agent');
       expect(reviewActor!.payload.roles).toEqual(['specialist']);
-      expect(reviewActor!.payload.metadata).toEqual(expect.objectContaining({ purpose: 'review' }));
+      expect(reviewActor!.payload.metadata).toEqual(expect.objectContaining({ joinedVia: 'cli' }));
 
       // AgentRecords created for all 3 (product + 2 specialists)
       expect(mockAgentAdapter.createAgentRecord).toHaveBeenCalledTimes(3);
@@ -606,6 +609,108 @@ describe('ProjectModule', () => {
 
       expect(result.actorId).toBe('human:camilo');
       expect(mockAgentAdapter.updateAgentRecord).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('4.9. ensureActorInProject (PROJ-H1 to H6)', () => {
+    it('[PROJ-H1] should create actor and commit when actor not in store', async () => {
+      const { deps, initializer } = createRealDeps();
+      initializer.finalize = jest.fn().mockResolvedValue('sha-join-commit');
+      const pm = new ProjectModule(deps);
+
+      const result = await pm.ensureActorInProject({
+        login: 'collab', type: 'human', repoId: 'repo-1', joinedVia: 'cli',
+      });
+
+      expect(result.created).toBe(true);
+      expect(result.actorId).toBe('human:collab');
+      expect(result.commitSha).toBe('sha-join-commit');
+    });
+
+    it('[PROJ-H2] should return created false when actor already exists', async () => {
+      const { deps, initializer } = createRealDeps();
+      initializer.finalize = jest.fn().mockResolvedValue('sha-first');
+      const pm = new ProjectModule(deps);
+
+      await pm.ensureActorInProject({
+        login: 'collab', type: 'human', repoId: 'repo-1', joinedVia: 'cli',
+      });
+
+      const result = await pm.ensureActorInProject({
+        login: 'collab', type: 'human', repoId: 'repo-1', joinedVia: 'saas-oauth',
+      });
+
+      expect(result.created).toBe(false);
+      expect(result.actorId).toBe('human:collab');
+    });
+
+    it('[PROJ-H3] should throw GIT_WRITE_FAILED when finalize fails, then resume commit on retry', async () => {
+      const { deps, initializer } = createRealDeps();
+      initializer.finalize = jest.fn()
+        .mockRejectedValueOnce(new Error('GitHub API timeout'))
+        .mockResolvedValueOnce('sha-retry-commit');
+      const pm = new ProjectModule(deps);
+
+      await expect(pm.ensureActorInProject({
+        login: 'retry-user', type: 'human', repoId: 'repo-1', joinedVia: 'cli',
+      })).rejects.toMatchObject({ code: 'GIT_WRITE_FAILED' });
+
+      expect(initializer.finalize).toHaveBeenCalledTimes(1);
+
+      // Retry — actor exists in store, finalize is re-called to complete the git write
+      const result = await pm.ensureActorInProject({
+        login: 'retry-user', type: 'human', repoId: 'repo-1', joinedVia: 'cli',
+      });
+
+      expect(result.created).toBe(false);
+      expect(result.actorId).toBe('human:retry-user');
+      expect(initializer.finalize).toHaveBeenCalledTimes(2);
+      expect(result.commitSha).toBe('sha-retry-commit');
+    });
+
+    it('[PROJ-H4] should emit ACTOR_JOINED event with wasCreated field', async () => {
+      const emitSpy = jest.fn();
+      const { deps, initializer } = createRealDeps();
+      initializer.finalize = jest.fn().mockResolvedValue('sha-event');
+      deps.eventBus = { emit: emitSpy };
+      const pm = new ProjectModule(deps);
+
+      await pm.ensureActorInProject({
+        login: 'event-user', type: 'human', repoId: 'repo-42', joinedVia: 'mcp',
+      });
+
+      expect(emitSpy).toHaveBeenCalledWith('ACTOR_JOINED', expect.objectContaining({
+        actorId: 'human:event-user',
+        repoId: 'repo-42',
+        joinedVia: 'mcp',
+        wasCreated: true,
+      }));
+    });
+
+    it('[PROJ-H5] should write only to the repo where called', async () => {
+      const { deps, initializer } = createRealDeps();
+      initializer.finalize = jest.fn().mockResolvedValue('sha-lazy');
+      const pm = new ProjectModule(deps);
+
+      const result = await pm.ensureActorInProject({
+        login: 'lazy-user', type: 'human', repoId: 'repo-specific', joinedVia: 'saas-webhook',
+      });
+
+      expect(result.created).toBe(true);
+      expect(initializer.finalize).toHaveBeenCalled();
+    });
+
+    it('[PROJ-H6] should throw UNAUTHORIZED when authzCheck returns false', async () => {
+      const { deps } = createRealDeps();
+      const pm = new ProjectModule(deps);
+
+      await expect(pm.ensureActorInProject({
+        login: 'blocked-user', type: 'agent', repoId: 'repo-1', joinedVia: 'mcp',
+        authzCheck: async () => false,
+      })).rejects.toMatchObject({
+        code: 'UNAUTHORIZED',
+        context: expect.objectContaining({ login: 'blocked-user' }),
+      });
     });
   });
 });

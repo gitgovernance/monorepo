@@ -1,13 +1,28 @@
-import type { ProjectModuleDeps, ProjectInitOptions, ProjectInitResult } from './project_module.types';
+import type { ProjectModuleDeps, ProjectInitOptions, ProjectInitResult, EnsureActorInput, EnsureActorResult } from './project_module.types';
+import { EnsureActorError } from './project_module.types';
 
 export class ProjectModule {
   constructor(private readonly deps: ProjectModuleDeps) {}
 
   // [PROJ-A1] [PROJ-A2] [PROJ-A3]
   async initializeProject(options: ProjectInitOptions): Promise<ProjectInitResult> {
-    // [PROJ-A2] Idempotency — return commitSha so callers can sync DB cursor
+    const joinedVia = options.joinedVia ?? 'cli';
+    const repoId = options.repoId ?? '';
+
+    // [PROJ-A2] Idempotency — if already initialized, ensure caller's actor exists
     if (await this.deps.initializer.isInitialized()) {
       const commitSha = await this.deps.initializer.getHeadSha();
+      if (options.login) {
+        const ensureInput: EnsureActorInput = {
+          login: options.login,
+          type: options.type ?? 'human',
+          repoId,
+          joinedVia,
+        };
+        if (options.actorName) ensureInput.displayName = options.actorName;
+        const actorResult = await this.ensureActorInProject(ensureInput);
+        return { alreadyInitialized: true, actorId: actorResult.actorId, commitSha: actorResult.commitSha ?? commitSha } as ProjectInitResult;
+      }
       return { alreadyInitialized: true, commitSha } as ProjectInitResult;
     }
 
@@ -15,26 +30,28 @@ export class ProjectModule {
       // [PROJ-C1] Structure (dirs + policy.yml) — before actors
       await this.deps.initializer.createProjectStructure();
 
-      // [PROJ-B1] Human actor
+      // [PROJ-A1] [PROJ-B1] Human actor — via ensureActorInProject for consistent metadata + events
       const actorType = options.type ?? 'human';
-      const actorId = options.login ? `${actorType}:${options.login}` : undefined;
-      const human = await this.deps.identity.createActor({
-        ...(actorId && { id: actorId }),
+      const humanResult = await this.ensureActorInProject({
+        login: options.login || 'owner',
         type: actorType as 'human' | 'agent',
+        repoId,
         displayName: options.actorName || options.login || 'Project Owner',
         roles: ['admin', 'author', 'approver:product', 'approver:quality', 'developer'],
-      }, 'bootstrap');
+        joinedVia,
+      });
 
-      // [PROJ-B2] Product agent (G21 Two-Tier Actor Model)
-      let productAgent;
+      // [PROJ-B2] Product agent (G21 Two-Tier Actor Model) — via ensureActorInProject
+      let productAgentResult: EnsureActorResult;
       try {
-        productAgent = await this.deps.identity.createActor({
-          id: 'agent:gitgov-audit',
+        productAgentResult = await this.ensureActorInProject({
+          login: 'gitgov-audit',
           type: 'agent',
+          repoId,
           displayName: 'GitGov Audit',
           roles: ['orchestrator'],
-          metadata: { purpose: 'orchestration' },
-        }, human.id);
+          joinedVia,
+        });
       } catch (err) {
         // [PROJ-B3] Include step context
         const message = err instanceof Error ? err.message : String(err);
@@ -46,7 +63,7 @@ export class ProjectModule {
         title: 'root',
         status: 'planning' as const,
         taskIds: [],
-      }, human.id);
+      }, humanResult.actorId);
 
       // [PROJ-C2] Config
       const config = {
@@ -59,22 +76,22 @@ export class ProjectModule {
       await this.deps.initializer.writeConfig(config);
 
       // Initialize session with human actor (so getCurrentActor resolves to human, not product agent)
-      await this.deps.initializer.initializeSession(human.id);
+      await this.deps.initializer.initializeSession(humanResult.actorId);
 
       // [PROJ-B4] Register default agents via AgentAdapter
       if (this.deps.agentAdapter && this.deps.defaultAgents?.length) {
         for (const agentConfig of this.deps.defaultAgents) {
           try {
-            // [PROJ-E3] Product agent already has ActorRecord from PROJ-B2 — skip
+            // [PROJ-E3] Product agent already has ActorRecord — skip
             // [PROJ-E1] Specialist agents need their own ActorRecord before AgentRecord
-            if (agentConfig.agentId !== productAgent.id) {
-              await this.deps.identity.createActor({
-                id: agentConfig.agentId,
+            if (agentConfig.agentId !== productAgentResult.actorId) {
+              await this.ensureActorInProject({
+                login: agentConfig.agentId.replace('agent:', ''),
                 type: 'agent',
+                repoId,
                 displayName: agentConfig.displayName,
-                roles: ['specialist'],
-                metadata: { purpose: agentConfig.purpose },
-              }, human.id);
+                joinedVia,
+              });
             }
 
             const mergedMetadata = { ...agentConfig.metadata, purpose: agentConfig.purpose };
@@ -114,8 +131,8 @@ export class ProjectModule {
       const finalized = await this.deps.initializer.finalize();
 
       const result: ProjectInitResult = {
-        actorId: human.id,
-        productAgentId: productAgent.id,
+        actorId: humanResult.actorId,
+        productAgentId: productAgentResult.actorId,
         cycleId: rootCycle.id,
       };
       if (finalized) result.commitSha = finalized;
@@ -129,6 +146,83 @@ export class ProjectModule {
       }
       throw err;
     }
+  }
+
+  // [PROJ-H1] [PROJ-H2] [PROJ-H3] [PROJ-H4] [PROJ-H5] [PROJ-H6]
+  async ensureActorInProject(input: EnsureActorInput): Promise<EnsureActorResult> {
+    const actorId = `${input.type}:${input.login}`;
+
+    // [PROJ-H6] authzCheck — invoke before any creation
+    if (input.authzCheck) {
+      const allowed = await input.authzCheck(input);
+      if (!allowed) {
+        throw new EnsureActorError('UNAUTHORIZED', { login: input.login, type: input.type, reason: 'authz check denied' });
+      }
+    }
+
+    // [PROJ-H2] [PROJ-H3] Check if actor already exists in store
+    const existing = await this.deps.identity.getActor(actorId);
+    if (existing) {
+      // [PROJ-H3] Detect-and-resume: actor in store but maybe not in git.
+      // Re-attempt finalize — if already committed, finalize is a no-op or
+      // produces an empty commit (safe). This closes the gap where call 1
+      // created the actor but finalize failed.
+      let commitSha: string | undefined;
+      try {
+        const finalized = await this.deps.initializer.finalize();
+        if (finalized) commitSha = finalized;
+      } catch {
+        // finalize failed again — actor still in store, not in git.
+        // Return idempotent without throwing — caller can retry later.
+      }
+
+      // [PROJ-H4] Emit ACTOR_JOINED with wasCreated: false
+      this.deps.eventBus?.emit?.('ACTOR_JOINED', {
+        actorId, repoId: input.repoId, type: input.type,
+        joinedVia: input.joinedVia, wasCreated: false,
+        timestamp: new Date().toISOString(),
+      });
+
+      const result: EnsureActorResult = { actorId, created: false };
+      if (commitSha) result.commitSha = commitSha;
+      return result;
+    }
+
+    // [PROJ-H1] Create actor — with joinedVia + joinedAt metadata
+    // [PROJ-H5] Writes only to the repo where called (lazy per-repo)
+    await this.deps.identity.createActor({
+      id: actorId,
+      type: input.type,
+      displayName: input.displayName || input.login,
+      roles: (input.roles && input.roles.length > 0 ? input.roles : (input.type === 'human'
+        ? ['author', 'developer']
+        : ['specialist'])) as [string, ...string[]],
+      metadata: {
+        joinedVia: input.joinedVia,
+        joinedAt: new Date().toISOString(),
+      },
+    }, 'bootstrap');
+
+    // [PROJ-H3] Finalize commits the actor to git
+    let commitSha: string | undefined;
+    try {
+      const finalized = await this.deps.initializer.finalize();
+      if (finalized) commitSha = finalized;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      throw new EnsureActorError('GIT_WRITE_FAILED', { actorId, cause: message });
+    }
+
+    // [PROJ-H4] Emit ACTOR_JOINED with wasCreated: true
+    this.deps.eventBus?.emit?.('ACTOR_JOINED', {
+      actorId, repoId: input.repoId, type: input.type,
+      joinedVia: input.joinedVia, wasCreated: true,
+      timestamp: new Date().toISOString(),
+    });
+
+    const result: EnsureActorResult = { actorId, created: true };
+    if (commitSha) result.commitSha = commitSha;
+    return result;
   }
 
   private generateProjectId(name: string): string {
