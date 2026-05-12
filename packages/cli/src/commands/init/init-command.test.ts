@@ -156,7 +156,8 @@ describe('InitCommand', () => {
 
       expect(mockProjectModule.initializeProject).toHaveBeenCalledWith(
         expect.objectContaining({
-          actorName: 'Test User' // From mocked git config
+          actorName: 'Test User', // From mocked git config
+          login: 'test-user', // [INIT-K1] Derived from git config user.name (slugified)
         })
       );
     });
@@ -416,13 +417,45 @@ describe('InitCommand', () => {
         throw new Error('git config failed');
       });
 
+      // --login provided explicitly so login derivation failure doesn't abort
       await initCommand.execute({
-        name: 'Test Project'
+        name: 'Test Project',
+        login: 'test-user',
+        skipValidation: true,
       });
 
       expect(mockProjectModule.initializeProject).toHaveBeenCalledWith(
         expect.objectContaining({
-          actorName: 'Project Owner'
+          actorName: 'Project Owner',
+          login: 'test-user',
+        })
+      );
+    });
+
+    it('[INIT-K1] should fail with clear message when no --login and git config unavailable', async () => {
+      (execSync as jest.MockedFunction<typeof execSync>).mockImplementation((cmd: unknown) => {
+        if (typeof cmd === 'string' && cmd.includes('ls-remote')) return '';
+        throw new Error('git config failed');
+      });
+
+      await initCommand.execute({ name: 'Test Project', skipValidation: true });
+
+      expect(mockConsoleError).toHaveBeenCalledWith('❌ Cannot determine your login.');
+      expect(mockProcessExit).toHaveBeenCalledWith(1);
+      expect(mockProjectModule.initializeProject).not.toHaveBeenCalled();
+    });
+
+    it('[INIT-K1] should derive login from git config user.name when --login not provided', async () => {
+      (execSync as jest.MockedFunction<typeof execSync>).mockImplementation((cmd: unknown) => {
+        if (typeof cmd === 'string' && cmd.includes('ls-remote')) return '';
+        return 'Camilo Acuña\n';
+      });
+
+      await initCommand.execute({ name: 'Test Project', skipValidation: true });
+
+      expect(mockProjectModule.initializeProject).toHaveBeenCalledWith(
+        expect.objectContaining({
+          login: 'camilo-acu-a',
         })
       );
     });

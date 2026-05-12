@@ -71,6 +71,24 @@ export class InitCommand {
       // 3. Interactive prompts for missing information
       const completeOptions = await this.gatherMissingInfo(options);
 
+      // [INIT-K1] Login is required — derived from --login flag or git config user.name
+      if (!completeOptions.login) {
+        if (options.json) {
+          console.log(JSON.stringify({
+            success: false,
+            error: 'Cannot determine login',
+            suggestion: 'gitgov init --login <your-github-login>',
+            exitCode: 1,
+          }, null, 2));
+        } else {
+          console.error("❌ Cannot determine your login.");
+          console.log("   Set git config user.name or provide --login explicitly:");
+          console.log("   gitgov init --login <your-github-login>");
+        }
+        process.exit(1);
+        return;
+      }
+
       // 4. Setup visual progress tracking
       const progressTracker = this.createProgressTracker(options);
 
@@ -83,7 +101,7 @@ export class InitCommand {
       // [EARS-D1] Build ProjectInitOptions — filter undefined for exactOptionalPropertyTypes
       const saasUrl = completeOptions.saasUrl || process.env['GITGOV_SAAS_URL'] || 'https://app.gitgov.dev';
       const initOptions: import('@gitgov/core').ProjectModuleInitOptions = { name: completeOptions.name!, saasUrl };
-      if (completeOptions.login) initOptions.login = completeOptions.login;
+      initOptions.login = completeOptions.login;
       if (completeOptions.actorName) initOptions.actorName = completeOptions.actorName;
       if (completeOptions.type) initOptions.type = completeOptions.type;
       const result = await projectModule.initializeProject(initOptions);
@@ -275,11 +293,31 @@ export class InitCommand {
     // Get actor name
     const actorName = options.actorName || await this.getActorNameDefault();
 
-    return {
+    // [INIT-K1] Derive login: --login flag > git config user.name (slugified)
+    const login = options.login || await this.deriveLoginDefault();
+
+    const result: Required<Pick<InitCommandOptions, 'name' | 'actorName'>> & InitCommandOptions = {
       ...options,
       name: projectName,
       actorName: actorName,
     };
+    if (login) result.login = login;
+    return result;
+  }
+
+  /**
+   * [INIT-K1] Derives a login slug from git config user.name.
+   * Returns undefined if git config is unavailable.
+   */
+  private async deriveLoginDefault(): Promise<string | undefined> {
+    try {
+      const { execSync } = await import('child_process');
+      const gitUserName = execSync('git config user.name', { encoding: 'utf8' }).trim();
+      if (!gitUserName) return undefined;
+      return gitUserName.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+    } catch {
+      return undefined;
+    }
   }
 
   /**

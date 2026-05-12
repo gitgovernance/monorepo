@@ -1,6 +1,6 @@
 import * as path from 'path';
 import * as os from 'os';
-import { Adapters, Config, Session, EventBus, Lint, Git, SourceAuditor, FindingDetector, Runner, KeyProvider, RecordProjection, RecordMetrics, AuditOrchestrator, PolicyEvaluator, IdentityModule, RecordSigner, getCurrentActor, ProjectModule } from '@gitgov/core';
+import { Adapters, Config, Session, EventBus, Lint, Git, SourceAuditor, FindingDetector, Runner, KeyProvider, RecordProjection, RecordMetrics, AuditOrchestrator, PolicyEvaluator, IdentityModule, RecordSigner, getCurrentActor, ProjectModule, DEFAULT_AGENTS } from '@gitgov/core';
 import { FsRecordStore, DEFAULT_ID_ENCODER, FsFileLister, FsProjectInitializer, FsLintModule, FsWorktreeSyncStateModule, GitModule, createAgentRunner, createConfigManager, findProjectRoot, createSessionManager, FsRecordProjection, getWorktreeBasePath } from '@gitgov/core/fs';
 import type { IFsLintModule } from '@gitgov/core/fs';
 import type {
@@ -8,6 +8,7 @@ import type {
   // Module types
   IRecordProjector, IRecordMetrics, IConfigManager, IIdentityModule, ISessionManager, IAgentRunner, IKeyProvider,
   ISyncStateModule,
+  ProjectModuleDeps,
   // Lint types
   RecordStores as LintRecordStores,
   RecordStore,
@@ -400,22 +401,17 @@ export class DependencyInjectionService {
     const backlogAdapter = await this.getBacklogAdapter();
     const initializer = new FsProjectInitializer(this.projectRoot);
 
-    // [PROJ-B4] AgentAdapter for default agent registration
+    // [PROJ-B4] [PROJ-F3] AgentAdapter + DEFAULT_AGENTS from core registry
     const agentAdapter = await this.getAgentAdapter().catch(() => undefined);
 
-    return new ProjectModule({
+    const deps: ProjectModuleDeps = {
       initializer,
       identity: identityModule,
       backlog: backlogAdapter,
-      agentAdapter,
-      defaultAgents: [{
-        packageName: '@gitgov/agent-security-audit',
-        agentId: 'agent:gitgov-audit',
-        engine: { type: 'local', runtime: 'typescript', entrypoint: '@gitgov/agent-security-audit', function: 'runAgent' },
-        purpose: 'audit',
-        metadata: { target: 'code', outputFormat: 'sarif' },
-      }],
-    });
+      defaultAgents: DEFAULT_AGENTS,
+    };
+    if (agentAdapter) deps.agentAdapter = agentAdapter;
+    return new ProjectModule(deps);
   }
 
   private async getGitModuleForWorktree(worktreePath: string): Promise<Git.IGitModule> {
