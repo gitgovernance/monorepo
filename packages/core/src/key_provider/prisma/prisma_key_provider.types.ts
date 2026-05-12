@@ -37,7 +37,7 @@ export type ActorKeyRow = {
   iv: string | null;
   /** Hex-encoded 16-byte AES-GCM auth tag. Null when verify-only. */
   authTag: string | null;
-  status: ActorKeyStatus;
+  status: string;
   lastUsedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
