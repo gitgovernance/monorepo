@@ -203,14 +203,27 @@ export class ProjectModule {
       },
     }, 'bootstrap');
 
-    // [PROJ-H3] Finalize commits the actor to git
+    // [PROJ-H3] Finalize commits the actor to git.
+    // If the store already committed (e.g. GitHubRecordStore commits on put()),
+    // finalize() may have nothing to commit — that's not an error if the actor
+    // is now in the store.
     let commitSha: string | undefined;
     try {
       const finalized = await this.deps.initializer.finalize();
       if (finalized) commitSha = finalized;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      throw new EnsureActorError('GIT_WRITE_FAILED', { actorId, cause: message });
+      if (message.includes('Nothing to commit')) {
+        const verified = await this.deps.identity.getActor(actorId);
+        if (verified) {
+          // Actor was written by the store directly (GitHub Contents API).
+          // finalize() had nothing left to commit. This is success.
+        } else {
+          throw new EnsureActorError('GIT_WRITE_FAILED', { actorId, cause: message });
+        }
+      } else {
+        throw new EnsureActorError('GIT_WRITE_FAILED', { actorId, cause: message });
+      }
     }
 
     // [PROJ-H4] Emit ACTOR_JOINED with wasCreated: true

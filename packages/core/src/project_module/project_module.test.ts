@@ -668,6 +668,34 @@ describe('ProjectModule', () => {
       expect(result.commitSha).toBe('sha-retry-commit');
     });
 
+    it('[PROJ-H3] should succeed when store already committed and finalize has nothing to commit', async () => {
+      const { deps, initializer } = createRealDeps();
+      initializer.finalize = jest.fn()
+        .mockRejectedValue(new Error('Nothing to commit: staging buffer is empty'));
+      const pm = new ProjectModule(deps);
+
+      const result = await pm.ensureActorInProject({
+        login: 'store-committed', type: 'human', repoId: 'repo-1', joinedVia: 'saas-oauth',
+      });
+
+      expect(result.actorId).toBe('human:store-committed');
+      expect(result.created).toBe(true);
+    });
+
+    it('[PROJ-H3] should throw GIT_WRITE_FAILED when finalize fails and actor not in store', async () => {
+      const { deps, initializer } = createRealDeps();
+      // finalize fails with "Nothing to commit" BUT getActor returns null (store didn't write either)
+      initializer.finalize = jest.fn()
+        .mockRejectedValue(new Error('Nothing to commit: staging buffer is empty'));
+      deps.identity.getActor = jest.fn().mockResolvedValue(null);
+      const pm = new ProjectModule(deps);
+
+      // First create the actor so it's in the store
+      await expect(pm.ensureActorInProject({
+        login: 'ghost-actor', type: 'human', repoId: 'repo-1', joinedVia: 'cli',
+      })).rejects.toMatchObject({ code: 'GIT_WRITE_FAILED' });
+    });
+
     it('[PROJ-H4] should emit ACTOR_JOINED event with wasCreated field', async () => {
       const emitSpy = jest.fn();
       const { deps, initializer } = createRealDeps();
