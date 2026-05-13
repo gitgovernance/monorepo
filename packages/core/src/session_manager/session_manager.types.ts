@@ -82,9 +82,9 @@ export interface ISessionManager {
   loadSession(): Promise<GitGovSession | null>;
 
   /**
-   * [EARS-B9] Detect actor from .key files in .gitgov/actors/
+   * [EARS-E2] Detect actors from .key files in .gitgov/keys/
    */
-  detectActorFromKeyFiles(): Promise<string | null>;
+  detectActorFromKeyFiles(): Promise<string[]>;
 
   /**
    * Get actor state for a specific actor

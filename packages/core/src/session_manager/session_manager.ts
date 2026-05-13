@@ -44,30 +44,32 @@ export class SessionManager implements ISessionManager {
 
   /**
    * Load GitGovernance session state
-   * [EARS-E1] Auto-detects actor from .key files if no session or no actorId exists
+   * [EARS-E1] Auto-detects actor from .key files if exactly 1 key exists
+   * [EARS-E1b] Same logic when session exists but has no actorId
    */
   async loadSession(): Promise<GitGovSession | null> {
     let session = await this.sessionStore.loadSession();
 
-    // [EARS-E1] If session exists but no lastSession.actorId, try to auto-detect
+    // [EARS-E1b] If session exists but no lastSession.actorId, try to auto-detect
     if (session && !session.lastSession?.actorId) {
-      const detectedActorId = await this.detectActorFromKeyFiles();
-      if (detectedActorId) {
+      const detectedActorIds = await this.detectActorFromKeyFiles();
+      if (detectedActorIds.length === 1) {
         session.lastSession = {
-          actorId: detectedActorId,
+          actorId: detectedActorIds[0]!,
           timestamp: new Date().toISOString()
         };
         await this.sessionStore.saveSession(session);
       }
+      // N>1 keys: cannot choose for the user — leave actorId unset
     }
 
-    // [EARS-E1] If no session, try to create from .key files
+    // [EARS-E1] If no session, try to create from .key files (only if unambiguous)
     if (!session) {
-      const detectedActorId = await this.detectActorFromKeyFiles();
-      if (detectedActorId) {
+      const detectedActorIds = await this.detectActorFromKeyFiles();
+      if (detectedActorIds.length === 1) {
         const newSession: GitGovSession = {
           lastSession: {
-            actorId: detectedActorId,
+            actorId: detectedActorIds[0]!,
             timestamp: new Date().toISOString()
           },
           actorState: {}
@@ -79,19 +81,20 @@ export class SessionManager implements ISessionManager {
           return newSession;
         }
       }
+      // N>1 keys or 0 keys: return null, let the caller decide
     }
 
     return session;
   }
 
   /**
-   * [EARS-E1] Detect actor from .key files in .gitgov/actors/
+   * [EARS-E2] Detect actors from .key files in .gitgov/keys/
    */
-  async detectActorFromKeyFiles(): Promise<string | null> {
+  async detectActorFromKeyFiles(): Promise<string[]> {
     if (this.sessionStore.detectActorFromKeyFiles) {
       return this.sessionStore.detectActorFromKeyFiles();
     }
-    return null;
+    return [];
   }
 
   /**

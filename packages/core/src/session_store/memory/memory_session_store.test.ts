@@ -81,39 +81,39 @@ describe('MemorySessionStore', () => {
   // ==================== §3.2 detectActorFromKeyFiles (EARS-B) ====================
 
   describe('detectActorFromKeyFiles (EARS-B)', () => {
-    it('[EARS-B1] WHEN detectActorFromKeyFiles is invoked without key files, THE SYSTEM SHALL return null', async () => {
+    it('[EARS-B1] WHEN detectActorFromKeyFiles is invoked without key files, THE SYSTEM SHALL return []', async () => {
       const store = new MemorySessionStore();
 
       const result = await store.detectActorFromKeyFiles();
 
-      expect(result).toBeNull();
+      expect(result).toEqual([]);
     });
 
-    it('[EARS-B2] WHEN detectActorFromKeyFiles is invoked with key files, THE SYSTEM SHALL return actor ID', async () => {
+    it('[EARS-B2] WHEN detectActorFromKeyFiles is invoked with key files, THE SYSTEM SHALL return array of actor IDs', async () => {
       const store = new MemorySessionStore();
       store.setKeyFiles(['human:camilo.key']);
 
       const result = await store.detectActorFromKeyFiles();
 
-      expect(result).toBe('human:camilo');
+      expect(result).toEqual(['human:camilo']);
     });
 
-    it('[EARS-B3] WHEN detectActorFromKeyFiles is invoked with multiple key files, THE SYSTEM SHALL return first', async () => {
+    it('[EARS-B3] WHEN detectActorFromKeyFiles is invoked with multiple key files, THE SYSTEM SHALL return all actor IDs', async () => {
       const store = new MemorySessionStore();
       store.setKeyFiles(['human:alice.key', 'human:bob.key']);
 
       const result = await store.detectActorFromKeyFiles();
 
-      expect(result).toBe('human:alice');
+      expect(result).toEqual(['human:alice', 'human:bob']);
     });
 
-    it('[EARS-B4] WHEN detectActorFromKeyFiles is invoked with empty array, THE SYSTEM SHALL return null', async () => {
+    it('[EARS-B4] WHEN detectActorFromKeyFiles is invoked with empty array, THE SYSTEM SHALL return []', async () => {
       const store = new MemorySessionStore();
       store.setKeyFiles([]);
 
       const result = await store.detectActorFromKeyFiles();
 
-      expect(result).toBeNull();
+      expect(result).toEqual([]);
     });
   });
 
@@ -169,7 +169,7 @@ describe('MemorySessionStore', () => {
       store.setKeyFiles(['human:test.key', 'agent:bot.key']);
 
       const result = await store.detectActorFromKeyFiles();
-      expect(result).toBe('human:test');
+      expect(result).toEqual(['human:test', 'agent:bot']);
     });
 
     it('[EARS-C5] WHEN clear is invoked, THE SYSTEM SHALL reset store to initial state', async () => {
@@ -182,7 +182,7 @@ describe('MemorySessionStore', () => {
       store.clear();
 
       expect(store.getSession()).toBeNull();
-      expect(await store.detectActorFromKeyFiles()).toBeNull();
+      expect(await store.detectActorFromKeyFiles()).toEqual([]);
     });
   });
 
@@ -246,7 +246,7 @@ describe('MemorySessionStore', () => {
       const session = await store.loadSession();
       expect(session?.cloud?.sessionToken).toBe('test-token');
       expect(session?.actorState?.['human:test-user']?.activeTaskId).toBe('task-existing');
-      expect(await store.detectActorFromKeyFiles()).toBe('human:test-user');
+      expect(await store.detectActorFromKeyFiles()).toEqual(['human:test-user']);
     });
   });
 });

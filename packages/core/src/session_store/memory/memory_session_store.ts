@@ -49,19 +49,14 @@ export class MemorySessionStore implements SessionStore {
   }
 
   /**
-   * Detect actor from simulated .key files
+   * Detect actors from simulated .key files
    *
    * In MemorySessionStore, .key files are simulated via setKeyFiles().
    *
-   * @returns Actor ID or null if no key files configured
+   * @returns Array of actor IDs or empty array if no key files configured
    */
-  async detectActorFromKeyFiles(): Promise<string | null> {
-    const firstKeyFile = this.keyFiles[0];
-    if (!firstKeyFile) {
-      return null;
-    }
-    // Extract actor ID from filename (remove .key extension)
-    return firstKeyFile.replace('.key', '');
+  async detectActorFromKeyFiles(): Promise<string[]> {
+    return this.keyFiles.map(f => f.replace('.key', ''));
   }
 
   // ==================== Test Helper Methods ====================

@@ -39,12 +39,12 @@ export interface SessionStore {
   saveSession(session: GitGovSession): Promise<void>;
 
   /**
-   * Detect actor from private key files.
+   * Detect actors from private key files.
    *
    * Optional method for implementations that support actor auto-detection
-   * from .key files in the actors directory.
+   * from .key files in the keys directory.
    *
-   * @returns Actor ID (e.g., "human:camilo-v2") or null if not detectable
+   * @returns Array of actor IDs (e.g., ["human:camilo", "agent:cagodoy"]) or empty array
    */
-  detectActorFromKeyFiles?(): Promise<string | null>;
+  detectActorFromKeyFiles?(): Promise<string[]>;
 }
