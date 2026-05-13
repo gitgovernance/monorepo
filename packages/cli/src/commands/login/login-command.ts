@@ -122,16 +122,22 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
       const sessionManager = await this.dependencyService.getSessionManager();
       await sessionManager.setCloudToken(token);
 
-      // Use login from OAuth to derive actorId. Only use local actor if it
-      // belongs to the logged-in user (handles versioned IDs like human:login:v2).
-      // Without this check, a collaborator would incorrectly resolve to the owner's actor.
-      const localActor = await this.findLocalHumanActor();
-      const expectedBase = `human:${user.login}`;
-      const localMatchesUser = localActor != null && (
-        localActor.actorId === expectedBase ||
-        localActor.actorId.startsWith(`${expectedBase}:`)
-      );
-      const actorId = localMatchesUser ? localActor.actorId : expectedBase;
+      // [LOGIN-A1] Resolve actorId from local keys matching the OAuth login
+      const allKeys = await sessionManager.detectActorFromKeyFiles();
+      const matchingKeys = allKeys.filter(id => id.endsWith(`:${user.login}`));
+
+      let actorId: string;
+      let actorType: 'human' | 'agent' = 'human';
+
+      if (matchingKeys.length === 1) {
+        actorId = matchingKeys[0]!;
+        actorType = actorId.startsWith('agent:') ? 'agent' : 'human';
+      } else if (matchingKeys.length === 0) {
+        actorId = `human:${user.login}`;
+      } else {
+        actorId = await this.promptActorSelection(matchingKeys, user.login);
+        actorType = actorId.startsWith('agent:') ? 'agent' : 'human';
+      }
 
       await sessionManager.setLastSession(actorId, new Date().toISOString());
 
@@ -150,22 +156,19 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
       // Key sync: use local actorId for FsKeyProvider, GitHub identity for SaaS context
       await this.syncKeys(actorId, saasUrl, token, options);
 
-      // [LOGIN-O1] Materialize actor in local worktree after key sync
+      // [LOGIN-O1] Materialize actor in local worktree after key sync (idempotent via PROJ-H2)
       try {
-        const existingActor = await this.findLocalHumanActor();
-        if (!existingActor || existingActor.actorId !== actorId) {
-          const projectModule = await this.dependencyService.getProjectModule();
-          await projectModule.ensureActorInProject({
-            login: user.login,
-            type: 'human',
-            repoId: '',
-            joinedVia: 'saas-oauth',
-          });
-        }
-      } catch {
+        const projectModule = await this.dependencyService.getProjectModule();
+        await projectModule.ensureActorInProject({
+          login: user.login,
+          type: actorType,
+          repoId: '',
+          joinedVia: 'saas-oauth',
+        });
+      } catch (err) {
         // [LOGIN-O2] Login succeeds even if actor materialization fails
-        console.log('⚠️  Key downloaded but actor could not be written to git.');
-        console.log('   Run `gitgov login` again when GitHub is available.');
+        console.warn('⚠️  Actor materialization failed:', err instanceof Error ? err.message : String(err));
+        console.warn('   Run `gitgov login` again when GitHub is available.');
       }
 
       // [LOGIN-L1, LOGIN-L2] Push gitgov-state so SaaS can index ActorRecord
@@ -453,16 +456,25 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
     throw new Error('Could not determine repository. Ensure you are in a git repository with a remote origin.');
   }
 
-  private async findLocalHumanActor(): Promise<{ actorId: string; displayName: string } | null> {
-    try {
-      const currentActor = await this.dependencyService.getCurrentActor();
-      if (currentActor && currentActor.type === 'human') {
-        return { actorId: currentActor.id, displayName: currentActor.displayName };
-      }
-    } catch {
-      // No actor found or adapter not available
-    }
-    return null;
+  private async promptActorSelection(actorIds: string[], login: string): Promise<string> {
+    const { createInterface } = await import('readline');
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
+
+    console.log(`\nMultiple actors found for ${login}:`);
+    actorIds.forEach((id, i) => console.log(`  ${i + 1}. ${id}`));
+
+    return new Promise<string>((resolve) => {
+      rl.question(`Select actor [1-${actorIds.length}]: `, (answer) => {
+        rl.close();
+        const idx = parseInt(answer, 10) - 1;
+        if (idx >= 0 && idx < actorIds.length) {
+          resolve(actorIds[idx]!);
+        } else {
+          console.log(`Invalid selection, using ${actorIds[0]}`);
+          resolve(actorIds[0]!);
+        }
+      });
+    });
   }
 
   private async hasLocalKey(actorId: string): Promise<boolean> {

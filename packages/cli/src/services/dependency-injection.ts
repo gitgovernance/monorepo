@@ -1,12 +1,12 @@
 import * as path from 'path';
 import * as os from 'os';
-import { Adapters, Config, Session, EventBus, Lint, Git, SourceAuditor, FindingDetector, Runner, KeyProvider, RecordProjection, RecordMetrics, AuditOrchestrator, PolicyEvaluator, IdentityModule, RecordSigner, getCurrentActor, ProjectModule, DEFAULT_AGENTS } from '@gitgov/core';
+import { Adapters, Config, Session, EventBus, Lint, Git, SourceAuditor, FindingDetector, KeyProvider, RecordProjection, RecordMetrics, AuditOrchestrator, PolicyEvaluator, IdentityModule, RecordSigner, getCurrentActor, ActorSelectionRequiredError, ProjectModule, DEFAULT_AGENTS } from '@gitgov/core';
 import { FsRecordStore, DEFAULT_ID_ENCODER, FsFileLister, FsProjectInitializer, FsLintModule, FsWorktreeSyncStateModule, GitModule, createAgentRunner, createConfigManager, findProjectRoot, createSessionManager, FsRecordProjection, getWorktreeBasePath } from '@gitgov/core/fs';
 import type { IFsLintModule } from '@gitgov/core/fs';
 import type {
   GitGovTaskRecord, GitGovCycleRecord, GitGovFeedbackRecord, GitGovExecutionRecord, GitGovActorRecord, GitGovAgentRecord,
   // Module types
-  IRecordProjector, IRecordMetrics, IConfigManager, IIdentityModule, ISessionManager, IAgentRunner, IKeyProvider,
+  IRecordProjector, IRecordMetrics, IAgentRunner, IKeyProvider,
   ISyncStateModule,
   ProjectModuleDeps,
   // Lint types
@@ -140,7 +140,7 @@ export class DependencyInjectionService {
    */
   private async bootstrapWorktree(
     gitModule: Git.IGitModule,
-    repoRoot: string,
+    _repoRoot: string,
     worktreeBasePath: string,
   ): Promise<void> {
     const { promises: fsPromises } = await import('fs');
@@ -379,8 +379,34 @@ export class DependencyInjectionService {
 
   async getCurrentActor(): Promise<import('@gitgov/core').ActorRecord> {
     const identity = await this.getIdentityModule();
-    const session = await this.getSessionManager();
-    return getCurrentActor(identity, session);
+    const sessionManager = await this.getSessionManager();
+
+    try {
+      return await getCurrentActor(identity, sessionManager);
+    } catch (err) {
+      // [EARS-C14] Multiple local keys — prompt user to select
+      if (err instanceof ActorSelectionRequiredError) {
+        const { createInterface } = await import('readline');
+        const rl = createInterface({ input: process.stdin, output: process.stdout });
+
+        console.log('\nMultiple actors found on this machine:');
+        err.actorIds.forEach((id, i) => console.log(`  ${i + 1}. ${id}`));
+
+        const selected = await new Promise<string>((resolve) => {
+          rl.question(`Select actor [1-${err.actorIds.length}]: `, (answer) => {
+            rl.close();
+            const idx = parseInt(answer, 10) - 1;
+            resolve(idx >= 0 && idx < err.actorIds.length ? err.actorIds[idx]! : err.actorIds[0]!);
+          });
+        });
+
+        await sessionManager.setLastSession(selected, new Date().toISOString());
+        console.log(`Selected: ${selected}\n`);
+
+        return await getCurrentActor(identity, sessionManager);
+      }
+      throw err;
+    }
   }
 
   async getRecordSigner(): Promise<RecordSigner> {
@@ -412,30 +438,6 @@ export class DependencyInjectionService {
     };
     if (agentAdapter) deps.agentAdapter = agentAdapter;
     return new ProjectModule(deps);
-  }
-
-  private async getGitModuleForWorktree(worktreePath: string): Promise<Git.IGitModule> {
-    const { spawn } = await import('child_process');
-    const execCommand = (command: string, args: string[], options?: Git.ExecOptions) => {
-      return new Promise<{ exitCode: number; stdout: string; stderr: string }>((resolve) => {
-        const cwd = options?.cwd || worktreePath;
-        const proc = spawn(command, args, {
-          cwd,
-          env: { ...process.env, ...options?.env },
-        });
-        let stdout = '';
-        let stderr = '';
-        proc.stdout?.on('data', (data: Buffer) => { stdout += data.toString(); });
-        proc.stderr?.on('data', (data: Buffer) => { stderr += data.toString(); });
-        proc.on('close', (code: number | null) => {
-          resolve({ exitCode: code || 0, stdout, stderr });
-        });
-        proc.on('error', (error: Error) => {
-          resolve({ exitCode: 1, stdout, stderr: error.message });
-        });
-      });
-    };
-    return new GitModule({ repoRoot: worktreePath, execCommand });
   }
 
   /**

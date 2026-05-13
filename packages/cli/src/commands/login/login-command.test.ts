@@ -21,6 +21,16 @@ jest.mock('child_process', () => ({
   execSync: jest.fn().mockReturnValue('https://github.com/testorg/testrepo.git\n'),
 }));
 
+// Mock readline for interactive prompt (LOGIN-A1b)
+const mockRlQuestion = jest.fn();
+const mockRlClose = jest.fn();
+jest.mock('readline', () => ({
+  createInterface: jest.fn().mockReturnValue({
+    question: mockRlQuestion,
+    close: mockRlClose,
+  }),
+}));
+
 // Mock @gitgov/core Crypto for ECDH (avoids real X25519 operations with mock keys)
 const mockEcdhEncrypt = jest.fn().mockResolvedValue({
   ephemeralPublicKey: 'mock-eph-pub',
@@ -55,6 +65,7 @@ const mockSetCloudToken = jest.fn();
 const mockSetLastSession = jest.fn();
 const mockClearCloudToken = jest.fn();
 const mockLoadSession = jest.fn();
+const mockDetectActorFromKeyFiles = jest.fn().mockResolvedValue([]);
 const mockGetPrivateKey = jest.fn();
 const mockSetPrivateKey = jest.fn();
 const mockHasPrivateKey = jest.fn();
@@ -68,6 +79,7 @@ jest.mock('../../services/dependency-injection', () => ({
     getInstance: jest.fn().mockReturnValue({
       getSessionManager: jest.fn().mockResolvedValue({
         loadSession: mockLoadSession,
+        detectActorFromKeyFiles: mockDetectActorFromKeyFiles,
         setCloudToken: mockSetCloudToken,
         setLastSession: mockSetLastSession,
         clearCloudToken: mockClearCloudToken,
@@ -101,6 +113,7 @@ import type { LoginCommandOptions, LoginDeps, TrpcResponse, KeyStatusResponse, S
 
 // Mock console and process.exit
 const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation();
+const mockConsoleWarn = jest.spyOn(console, 'warn').mockImplementation();
 const mockConsoleError = jest.spyOn(console, 'error').mockImplementation();
 const mockProcessExit = jest.spyOn(process, 'exit').mockImplementation(() => undefined as never);
 
@@ -760,7 +773,7 @@ describe('LoginCommand v2', () => {
       );
     });
 
-    it('[LOGIN-J3] should use local actor actorId when it matches the logged-in user', async () => {
+    it('[LOGIN-J3] should always derive actorId as human:{login} from OAuth', async () => {
       const { execSync } = await import('child_process');
       (execSync as jest.MockedFunction<typeof execSync>).mockImplementation((cmd: unknown) => {
         if (typeof cmd === 'string' && cmd.includes('fetch')) return '';
@@ -768,11 +781,6 @@ describe('LoginCommand v2', () => {
       });
 
       mockGetConfig.mockResolvedValue({ saasUrl: 'https://app.gitgov.dev' });
-      mockGetCurrentActor.mockResolvedValue({
-        id: 'human:camilo:v2',
-        type: 'human',
-        displayName: 'Camilo Acuña Godoy',
-      });
       mockHasPrivateKey.mockResolvedValue(false);
 
       const deps = createMockDeps({
@@ -782,9 +790,9 @@ describe('LoginCommand v2', () => {
       const cmd = new LoginCommand(deps);
       await cmd.executeLogin(defaultOptions);
 
-      // Versioned actorId starts with human:camilo: → matches login → use it
+      // actorId is always human:${login} from OAuth — no versioned ID lookup
       expect(mockSetLastSession).toHaveBeenCalledWith(
-        'human:camilo:v2',
+        'human:camilo',
         expect.any(String),
       );
     });
@@ -797,12 +805,6 @@ describe('LoginCommand v2', () => {
       });
 
       mockGetConfig.mockResolvedValue({ saasUrl: 'https://app.gitgov.dev' });
-      // Local worktree has the owner's actor, but we're logging in as a different user
-      mockGetCurrentActor.mockResolvedValue({
-        id: 'human:owner-user',
-        type: 'human',
-        displayName: 'Owner User',
-      });
       mockHasPrivateKey.mockResolvedValue(false);
 
       const deps = createMockDeps({
@@ -812,7 +814,7 @@ describe('LoginCommand v2', () => {
       const cmd = new LoginCommand(deps);
       await cmd.executeLogin(defaultOptions);
 
-      // Local actor is human:owner-user but login is camilo → use human:camilo
+      // actorId derived from OAuth login, not from worktree actors
       expect(mockSetLastSession).toHaveBeenCalledWith(
         'human:camilo',
         expect.any(String),
@@ -890,10 +892,67 @@ describe('LoginCommand v2', () => {
       const cmd = new LoginCommand(deps);
       await cmd.executeLogin(defaultOptions);
 
-      expect(mockConsoleLog).toHaveBeenCalledWith(
-        expect.stringContaining('actor could not be written to git'),
+      expect(mockConsoleWarn).toHaveBeenCalledWith(
+        expect.stringContaining('Actor materialization failed'),
+        expect.any(String),
       );
       expect(mockSetCloudToken).toHaveBeenCalledWith('test-session-token');
+    });
+  });
+
+  // ==========================================================================
+  // §4.1. Actor Selection from Local Keys (LOGIN-A1b)
+  // ==========================================================================
+  describe('4.1. Actor Selection from Local Keys (LOGIN-A1b)', () => {
+    it('[LOGIN-A1b] should prompt user to select actor when multiple keys match login', async () => {
+      mockDetectActorFromKeyFiles.mockResolvedValue(['human:camilo', 'agent:camilo']);
+      mockGetConfig.mockResolvedValue({ saasUrl: 'https://app.gitgov.dev' });
+      mockHasPrivateKey.mockResolvedValue(false);
+
+      // Simulate user selecting option 2 (agent:camilo)
+      mockRlQuestion.mockImplementation((_prompt: string, cb: (answer: string) => void) => cb('2'));
+
+      const deps = createMockDeps({
+        fetchSaas: createTrpcFetch({ 'keyStatus': noKeyStatus }),
+      });
+
+      const cmd = new LoginCommand(deps);
+      await cmd.executeLogin(defaultOptions);
+
+      expect(mockSetLastSession).toHaveBeenCalledWith('agent:camilo', expect.any(String));
+      expect(mockRlClose).toHaveBeenCalled();
+    });
+
+    it('[LOGIN-A1] should use single matching key without prompt', async () => {
+      // One key matches the OAuth login — agent type from init
+      mockDetectActorFromKeyFiles.mockResolvedValue(['agent:camilo']);
+      mockGetConfig.mockResolvedValue({ saasUrl: 'https://app.gitgov.dev' });
+      mockHasPrivateKey.mockResolvedValue(false);
+
+      const deps = createMockDeps({
+        fetchSaas: createTrpcFetch({ 'keyStatus': noKeyStatus }),
+      });
+
+      const cmd = new LoginCommand(deps);
+      await cmd.executeLogin(defaultOptions);
+
+      expect(mockSetLastSession).toHaveBeenCalledWith('agent:camilo', expect.any(String));
+    });
+
+    it('[LOGIN-A1] should default to human:{login} when no keys match', async () => {
+      // No keys match (first login)
+      mockDetectActorFromKeyFiles.mockResolvedValue([]);
+      mockGetConfig.mockResolvedValue({ saasUrl: 'https://app.gitgov.dev' });
+      mockHasPrivateKey.mockResolvedValue(false);
+
+      const deps = createMockDeps({
+        fetchSaas: createTrpcFetch({ 'keyStatus': noKeyStatus }),
+      });
+
+      const cmd = new LoginCommand(deps);
+      await cmd.executeLogin(defaultOptions);
+
+      expect(mockSetLastSession).toHaveBeenCalledWith('human:camilo', expect.any(String));
     });
   });
 });
