@@ -99,6 +99,18 @@ let mockIdentityAdapter: {
   getCurrentActor: jest.MockedFunction<() => Promise<ActorRecord>>;
 };
 
+let mockDIInstance: {
+  getAuditOrchestrator: jest.Mock;
+  getBacklogAdapter: jest.Mock;
+  getWaiverReader: jest.Mock;
+  getFeedbackAdapter: jest.Mock;
+  getExecutionAdapter: jest.Mock;
+  getIdentityAdapter: jest.Mock;
+  getCurrentActor: jest.Mock;
+  getProjectRoot: jest.Mock;
+  getSessionManager: jest.Mock;
+};
+
 describe('AuditCommand', () => {
   let auditCommand: AuditCommand;
 
@@ -250,7 +262,7 @@ describe('AuditCommand', () => {
     };
 
     // Configure DI mock
-    mockDI.getInstance.mockReturnValue({
+    mockDIInstance = {
       getAuditOrchestrator: jest.fn().mockResolvedValue(mockOrchestrator),
       getBacklogAdapter: jest.fn().mockResolvedValue(mockBacklogAdapter),
       getWaiverReader: jest.fn().mockResolvedValue(mockWaiverReader),
@@ -262,7 +274,8 @@ describe('AuditCommand', () => {
       getSessionManager: jest.fn().mockResolvedValue({
         getState: jest.fn().mockReturnValue({ actorId: 'human:developer' }),
       }),
-    } as unknown as DependencyInjectionService);
+    };
+    mockDI.getInstance.mockReturnValue(mockDIInstance as unknown as DependencyInjectionService);
 
     auditCommand = new AuditCommand();
   });
@@ -703,8 +716,7 @@ describe('AuditCommand', () => {
       await auditCommand.execute({ scope: 'full', output: 'text', failOn: 'critical' } as AuditCommandOptions);
 
       // The container's executionAdapter.create was called for L1 write
-      const container = mockDI.getInstance() as { getExecutionAdapter: jest.Mock };
-      const execAdapter = await container.getExecutionAdapter();
+      const execAdapter = await mockDIInstance.getExecutionAdapter();
       expect(execAdapter.create).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'completion',
@@ -717,8 +729,7 @@ describe('AuditCommand', () => {
 
     it('[AORCH-P2] should write review FeedbackRecords to git after orchestrator.run', async () => {
       const mockFbCreate = jest.fn().mockResolvedValue({ id: 'fb-review-1' });
-      const container = mockDI.getInstance() as { getFeedbackAdapter: jest.Mock };
-      container.getFeedbackAdapter = jest.fn().mockResolvedValue({ create: mockFbCreate });
+      mockDIInstance.getFeedbackAdapter = jest.fn().mockResolvedValue({ create: mockFbCreate });
 
       const resultWithReviews: AuditOrchestrationResult = {
         ...mockResultWithFindings,
@@ -748,8 +759,7 @@ describe('AuditCommand', () => {
       mockOrchestrator.run.mockResolvedValueOnce(mockResultWithFindings);
 
       const mockExecCreate = jest.fn();
-      const container = mockDI.getInstance() as { getExecutionAdapter: jest.Mock };
-      container.getExecutionAdapter = jest.fn().mockResolvedValue({ create: mockExecCreate });
+      mockDIInstance.getExecutionAdapter = jest.fn().mockResolvedValue({ create: mockExecCreate });
 
       await auditCommand.execute({ scope: 'full', output: 'text', failOn: 'critical' } as AuditCommandOptions);
 
