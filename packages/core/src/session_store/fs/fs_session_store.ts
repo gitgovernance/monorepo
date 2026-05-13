@@ -7,6 +7,7 @@
 
 import { promises as fs } from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 import type { SessionStore } from '../session_store';
 import type { GitGovSession } from '../../session_manager/session_manager.types';
 import { SessionManager } from '../../session_manager/session_manager';
@@ -33,7 +34,8 @@ export class FsSessionStore implements SessionStore {
 
   constructor(projectRootPath: string) {
     this.sessionPath = path.join(projectRootPath, '.gitgov', '.session.json');
-    this.keysPath = path.join(projectRootPath, '.gitgov', 'keys');
+    // [G29] Keys are global per-machine, not per-project
+    this.keysPath = path.join(os.homedir(), '.gitgov', 'keys');
   }
 
   /**
@@ -68,7 +70,7 @@ export class FsSessionStore implements SessionStore {
   }
 
   /**
-   * Detect actors from .key files in .gitgov/keys/
+   * Detect actors from .key files in ~/.gitgov/keys/ (G29)
    *
    * [EARS-C1] Returns array of decoded actor IDs from all .key files
    * [EARS-C2] Returns all actor IDs ordered alphabetically by filename

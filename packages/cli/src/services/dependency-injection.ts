@@ -262,7 +262,7 @@ export class DependencyInjectionService {
 
       // Create KeyProvider for filesystem-based key storage
       this.keyProvider = new KeyProvider.FsKeyProvider({
-        keysDir: path.join(this.projectRoot!, '.gitgov', 'keys')
+        keysDir: path.join(os.homedir(), '.gitgov', 'keys')
       });
 
       const identityModule = new IdentityModule({
@@ -349,7 +349,7 @@ export class DependencyInjectionService {
       const eventBus = new EventBus.EventBus();
 
       this.keyProvider = new KeyProvider.FsKeyProvider({
-        keysDir: path.join(this.projectRoot!, '.gitgov', 'keys')
+        keysDir: path.join(os.homedir(), '.gitgov', 'keys')
       });
 
       return new IdentityModule({
@@ -453,7 +453,7 @@ export class DependencyInjectionService {
       // Create EventBus and KeyProvider
       const eventBus = new EventBus.EventBus();
       const keyProvider = new KeyProvider.FsKeyProvider({
-        keysDir: path.join(this.projectRoot!, '.gitgov', 'keys')
+        keysDir: path.join(os.homedir(), '.gitgov', 'keys')
       });
 
       const signer = new RecordSigner({ keyProvider });
@@ -643,7 +643,7 @@ export class DependencyInjectionService {
       // Create EventBus and KeyProvider
       const eventBus = new EventBus.EventBus();
       const keyProvider = new KeyProvider.FsKeyProvider({
-        keysDir: path.join(this.projectRoot!, '.gitgov', 'keys')
+        keysDir: path.join(os.homedir(), '.gitgov', 'keys')
       });
 
       const signer = new RecordSigner({ keyProvider });
@@ -677,7 +677,7 @@ export class DependencyInjectionService {
 
       const eventBus = new EventBus.EventBus();
       const keyProvider = new KeyProvider.FsKeyProvider({
-        keysDir: path.join(this.projectRoot!, '.gitgov', 'keys')
+        keysDir: path.join(os.homedir(), '.gitgov', 'keys')
       });
 
       const identityModule = new IdentityModule({
@@ -839,7 +839,7 @@ export class DependencyInjectionService {
       const lintModule = await this.getLintModule();
 
       this.keyProvider = this.keyProvider ?? new KeyProvider.FsKeyProvider({
-        keysDir: path.join(this.projectRoot!, '.gitgov', 'keys')
+        keysDir: path.join(os.homedir(), '.gitgov', 'keys')
       });
       const signer = new RecordSigner({ keyProvider: this.keyProvider });
 

@@ -21,6 +21,16 @@ jest.mock('child_process', () => ({
   execSync: jest.fn().mockReturnValue('https://github.com/testorg/testrepo.git\n'),
 }));
 
+// Mock @gitgov/core/fs for G29 global FsKeyProvider (dynamic import in login-command)
+jest.mock('@gitgov/core/fs', () => ({
+  FsKeyProvider: jest.fn().mockImplementation(() => ({
+    hasPrivateKey: mockHasPrivateKey,
+    getPrivateKey: mockGetPrivateKey,
+    getPublicKey: mockGetPublicKey,
+    setPrivateKey: mockSetPrivateKey,
+  })),
+}));
+
 // Mock readline for interactive prompt (LOGIN-A1b)
 const mockRlQuestion = jest.fn();
 const mockRlClose = jest.fn();
