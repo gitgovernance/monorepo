@@ -110,7 +110,15 @@ export class InitCommand {
 
       // [EARS-B4] Format success output
       if (result.alreadyInitialized) {
-        console.log("ℹ️  Project already initialized.");
+        if (result.actorId && result.created) {
+          // [INIT-J1] Joined as new member
+          console.log(`Joined existing project as ${result.actorId}`);
+        } else if (result.actorId) {
+          // [INIT-J2] Already a member
+          console.log(`Already a member of this project as ${result.actorId}`);
+        } else {
+          console.log("ℹ️  Project already initialized.");
+        }
       } else {
         this.showSuccessOutput(result, options);
       }

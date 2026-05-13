@@ -329,14 +329,37 @@ describe('InitCommand', () => {
       expect(mockConsoleLog).toHaveBeenCalledWith('🚀 Next Steps:');
     });
 
-    it('[EARS-C5] should show user-friendly message when already initialized', async () => {
-      // ProjectModule returns alreadyInitialized: true — no error, just message
+    it('[EARS-C5] should show user-friendly message when already initialized without actorId', async () => {
       mockProjectModule.initializeProject.mockResolvedValue({ alreadyInitialized: true } as any);
 
       await initCommand.execute({ name: 'Test Project' });
 
       expect(mockConsoleLog).toHaveBeenCalledWith('ℹ️  Project already initialized.');
       expect(mockProcessExit).not.toHaveBeenCalled();
+    });
+
+    it('[INIT-J1] should call ensureActorInProject when alreadyInitialized and actor missing', async () => {
+      mockProjectModule.initializeProject.mockResolvedValue({
+        alreadyInitialized: true,
+        actorId: 'human:test-user',
+        created: true,
+      } as any);
+
+      await initCommand.execute({ name: 'Test Project' });
+
+      expect(mockConsoleLog).toHaveBeenCalledWith('Joined existing project as human:test-user');
+    });
+
+    it('[INIT-J2] should report already a member when actor exists', async () => {
+      mockProjectModule.initializeProject.mockResolvedValue({
+        alreadyInitialized: true,
+        actorId: 'human:test-user',
+        created: false,
+      } as any);
+
+      await initCommand.execute({ name: 'Test Project' });
+
+      expect(mockConsoleLog).toHaveBeenCalledWith('Already a member of this project as human:test-user');
     });
   });
 

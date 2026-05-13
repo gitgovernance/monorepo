@@ -21,7 +21,7 @@ export class ProjectModule {
         };
         if (options.actorName) ensureInput.displayName = options.actorName;
         const actorResult = await this.ensureActorInProject(ensureInput);
-        return { alreadyInitialized: true, actorId: actorResult.actorId, commitSha: actorResult.commitSha ?? commitSha } as ProjectInitResult;
+        return { alreadyInitialized: true, actorId: actorResult.actorId, created: actorResult.created, commitSha: actorResult.commitSha ?? commitSha } as ProjectInitResult;
       }
       return { alreadyInitialized: true, commitSha } as ProjectInitResult;
     }

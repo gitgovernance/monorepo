@@ -45,6 +45,7 @@ export type ProjectInitResult = {
   cycleId: string;
   commitSha?: string;
   alreadyInitialized?: boolean;
+  created?: boolean;
 };
 
 // --- ensureActorInProject primitive (PROJ-H1..H6) ---
