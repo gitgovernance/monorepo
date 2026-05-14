@@ -16,45 +16,48 @@
 import type { IKeyProvider } from '@gitgov/core';
 
 // Mock child_process for resolveOrgId
-jest.mock('child_process', () => ({
-  exec: jest.fn(),
-  execSync: jest.fn().mockReturnValue('https://github.com/testorg/testrepo.git\n'),
+vi.mock('child_process', () => ({
+  exec: vi.fn(),
+  execSync: vi.fn().mockReturnValue('https://github.com/testorg/testrepo.git\n'),
 }));
 
-// Mock @gitgov/core/fs for G29 global FsKeyProvider (dynamic import in login-command)
-jest.mock('@gitgov/core/fs', () => ({
-  FsKeyProvider: jest.fn().mockImplementation(() => ({
+// Mock @gitgov/core/fs for FsKeyProvider (dynamic import in login-command)
+vi.mock('@gitgov/core/fs', () => ({
+  FsKeyProvider: vi.fn().mockImplementation(function() { return {
     hasPrivateKey: mockHasPrivateKey,
     getPrivateKey: mockGetPrivateKey,
     getPublicKey: mockGetPublicKey,
     setPrivateKey: mockSetPrivateKey,
-  })),
+  }; }),
+  findProjectRoot: vi.fn(() => '/mock/repo'),
+  getWorktreeBasePath: vi.fn(() => '/mock/worktree'),
+  getKeysDir: vi.fn(() => '/mock/worktree/.gitgov/keys'),
 }));
 
 // Mock readline for interactive prompt (LOGIN-A1b)
-const mockRlQuestion = jest.fn();
-const mockRlClose = jest.fn();
-jest.mock('readline', () => ({
-  createInterface: jest.fn().mockReturnValue({
+const mockRlQuestion = vi.fn();
+const mockRlClose = vi.fn();
+vi.mock('readline', () => ({
+  createInterface: vi.fn().mockReturnValue({
     question: mockRlQuestion,
     close: mockRlClose,
   }),
 }));
 
 // Mock @gitgov/core Crypto for ECDH (avoids real X25519 operations with mock keys)
-const mockEcdhEncrypt = jest.fn().mockResolvedValue({
+const mockEcdhEncrypt = vi.fn().mockResolvedValue({
   ephemeralPublicKey: 'mock-eph-pub',
   ciphertext: 'mock-ciphertext',
   iv: 'mock-iv',
   authTag: 'mock-tag',
 });
-const mockEcdhDecrypt = jest.fn().mockResolvedValue(Buffer.from('decrypted-private-key'));
-const mockGenerateEphemeralKeypair = jest.fn().mockReturnValue({
+const mockEcdhDecrypt = vi.fn().mockResolvedValue(Buffer.from('decrypted-private-key'));
+const mockGenerateEphemeralKeypair = vi.fn().mockReturnValue({
   publicKey: 'mock-client-pub',
   privateKey: 'mock-client-priv',
 });
 
-jest.mock('@gitgov/core', () => ({
+vi.mock('@gitgov/core', () => ({
   Crypto: {
     ecdhEncrypt: (...args: unknown[]) => mockEcdhEncrypt(...args),
     ecdhDecrypt: (...args: unknown[]) => mockEcdhDecrypt(...args),
@@ -70,46 +73,53 @@ jest.mock('@gitgov/core', () => ({
   },
 }));
 
-// Mock DependencyInjectionService
-const mockSetCloudToken = jest.fn();
-const mockSetLastSession = jest.fn();
-const mockClearCloudToken = jest.fn();
-const mockLoadSession = jest.fn();
-const mockDetectActorFromKeyFiles = jest.fn().mockResolvedValue([]);
-const mockGetPrivateKey = jest.fn();
-const mockSetPrivateKey = jest.fn();
-const mockHasPrivateKey = jest.fn();
-const mockGetPublicKey = jest.fn();
-const mockGetConfig = jest.fn();
-const mockGetCurrentActor = jest.fn();
-const mockEnsureActorInProject = jest.fn().mockResolvedValue({ actorId: 'human:testuser', created: true });
+// vi.hoisted ensures variables exist when vi.mock factory runs (hoisted to top)
+const {
+  mockSetCloudToken, mockSetLastSession, mockClearCloudToken, mockLoadSession,
+  mockDetectActorFromKeyFiles, mockGetPrivateKey, mockSetPrivateKey,
+  mockHasPrivateKey, mockGetPublicKey, mockGetConfig, mockGetCurrentActor,
+  mockEnsureActorInProject,
+} = vi.hoisted(() => ({
+  mockSetCloudToken: vi.fn(),
+  mockSetLastSession: vi.fn(),
+  mockClearCloudToken: vi.fn(),
+  mockLoadSession: vi.fn(),
+  mockDetectActorFromKeyFiles: vi.fn().mockResolvedValue([]),
+  mockGetPrivateKey: vi.fn(),
+  mockSetPrivateKey: vi.fn(),
+  mockHasPrivateKey: vi.fn(),
+  mockGetPublicKey: vi.fn(),
+  mockGetConfig: vi.fn(),
+  mockGetCurrentActor: vi.fn(),
+  mockEnsureActorInProject: vi.fn().mockResolvedValue({ actorId: 'human:testuser', created: true }),
+}));
 
-jest.mock('../../services/dependency-injection', () => ({
+vi.mock('../../services/dependency-injection', () => ({
   DependencyInjectionService: {
-    getInstance: jest.fn().mockReturnValue({
-      getSessionManager: jest.fn().mockResolvedValue({
+    getInstance: vi.fn().mockReturnValue({
+      getSessionManager: vi.fn().mockResolvedValue({
         loadSession: mockLoadSession,
         detectActorFromKeyFiles: mockDetectActorFromKeyFiles,
         setCloudToken: mockSetCloudToken,
         setLastSession: mockSetLastSession,
         clearCloudToken: mockClearCloudToken,
       }),
-      getKeyProvider: jest.fn().mockReturnValue({
+      getKeyProvider: vi.fn().mockReturnValue({
         getPrivateKey: mockGetPrivateKey,
         setPrivateKey: mockSetPrivateKey,
         hasPrivateKey: mockHasPrivateKey,
         getPublicKey: mockGetPublicKey,
       } as unknown as IKeyProvider),
-      getIdentityAdapter: jest.fn().mockResolvedValue({
+      getIdentityAdapter: vi.fn().mockResolvedValue({
         getCurrentActor: mockGetCurrentActor,
       }),
       getCurrentActor: mockGetCurrentActor,
-      getProjectModule: jest.fn().mockResolvedValue({
+      getProjectModule: vi.fn().mockResolvedValue({
         ensureActorInProject: mockEnsureActorInProject,
       }),
-      getConfigManager: jest.fn().mockResolvedValue({
+      getConfigManager: vi.fn().mockResolvedValue({
         loadConfig: mockGetConfig,
-        getSaasUrl: jest.fn().mockImplementation(async () => {
+        getSaasUrl: vi.fn().mockImplementation(async () => {
           const config = await mockGetConfig();
           return config?.saasUrl ?? null;
         }),
@@ -122,10 +132,10 @@ import { LoginCommand } from './login-command';
 import type { LoginCommandOptions, LoginDeps, TrpcResponse, KeyStatusResponse, SyncKeyResponse } from './login-command.types';
 
 // Mock console and process.exit
-const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation();
-const mockConsoleWarn = jest.spyOn(console, 'warn').mockImplementation();
-const mockConsoleError = jest.spyOn(console, 'error').mockImplementation();
-const mockProcessExit = jest.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation();
+const mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation();
+const mockConsoleError = vi.spyOn(console, 'error').mockImplementation();
+const mockProcessExit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
 
 // ─── tRPC mock helpers ────────────────────────────────────────────────────
 
@@ -146,12 +156,12 @@ function keyStatusWith(publicKey: string): KeyStatusResponse {
 
 function createMockDeps(overrides?: Partial<LoginDeps>): LoginDeps {
   return {
-    openBrowser: jest.fn().mockResolvedValue(undefined),
-    startCallbackServer: jest.fn().mockResolvedValue({
+    openBrowser: vi.fn().mockResolvedValue(undefined),
+    startCallbackServer: vi.fn().mockResolvedValue({
       token: 'test-session-token',
       user: { login: 'camilo', id: 12345 },
     }),
-    fetchSaas: jest.fn().mockResolvedValue({
+    fetchSaas: vi.fn().mockResolvedValue({
       ok: true,
       json: async () => trpcWrap(noKeyStatus),
     }),
@@ -161,7 +171,7 @@ function createMockDeps(overrides?: Partial<LoginDeps>): LoginDeps {
 
 /** Create fetchSaas mock that routes by URL pattern */
 function createTrpcFetch(routes: Record<string, unknown>): LoginDeps['fetchSaas'] {
-  return jest.fn().mockImplementation(async (url: string) => {
+  return vi.fn().mockImplementation(async (url: string) => {
     for (const [pattern, response] of Object.entries(routes)) {
       if (url.includes(pattern)) {
         return { ok: true, json: async () => trpcWrap(response) };
@@ -175,7 +185,7 @@ const defaultOptions: LoginCommandOptions = {};
 
 describe('LoginCommand v2', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockGetConfig.mockResolvedValue({ projectId: 'test-repo', saasUrl: 'https://test.gitgov.dev' });
     mockLoadSession.mockResolvedValue(null);
   });
@@ -193,7 +203,7 @@ describe('LoginCommand v2', () => {
       await cmd.executeLogin(defaultOptions);
 
       expect(deps.openBrowser).toHaveBeenCalledTimes(1);
-      const openUrl = (deps.openBrowser as jest.Mock).mock.calls[0][0] as string;
+      const openUrl = (deps.openBrowser as vi.Mock).mock.calls[0][0] as string;
       expect(openUrl).toContain('/auth/cli?callback=');
 
       expect(deps.startCallbackServer).toHaveBeenCalledTimes(1);
@@ -247,7 +257,7 @@ describe('LoginCommand v2', () => {
 
       const syncResponse: SyncKeyResponse = { success: true, actorId: 'human:camilo', mode: 'full' };
       const deps = createMockDeps({
-        fetchSaas: jest.fn().mockImplementation(async (url: string) => {
+        fetchSaas: vi.fn().mockImplementation(async (url: string) => {
           if (url.includes('identity.keyStatus')) return { ok: true, json: async () => trpcWrap(noKeyStatus) };
           if (url.includes('identity.syncKey')) return { ok: true, json: async () => trpcWrap(syncResponse) };
           return { ok: false, json: async () => ({}) };
@@ -274,7 +284,7 @@ describe('LoginCommand v2', () => {
 
       const syncResponse: SyncKeyResponse = { success: true, actorId: 'human:camilo', mode: 'full' };
       const deps = createMockDeps({
-        fetchSaas: jest.fn().mockImplementation(async (url: string) => {
+        fetchSaas: vi.fn().mockImplementation(async (url: string) => {
           if (url.includes('identity.keyStatus')) return { ok: true, json: async () => trpcWrap(noKeyStatus) };
           if (url.includes('identity.syncKey')) return { ok: true, json: async () => trpcWrap(syncResponse) };
           return { ok: false, json: async () => ({}) };
@@ -317,7 +327,7 @@ describe('LoginCommand v2', () => {
       };
 
       const deps = createMockDeps({
-        fetchSaas: jest.fn().mockImplementation(async (url: string) => {
+        fetchSaas: vi.fn().mockImplementation(async (url: string) => {
           if (url.includes('identity.keyStatus')) {
             return { ok: true, json: async () => trpcWrap(keyStatusWith('saas-pub-key')) };
           }
@@ -345,7 +355,7 @@ describe('LoginCommand v2', () => {
       mockHasPrivateKey.mockResolvedValue(false);
 
       const deps = createMockDeps({
-        fetchSaas: jest.fn().mockImplementation(async (url: string) => {
+        fetchSaas: vi.fn().mockImplementation(async (url: string) => {
           if (url.includes('identity.keyStatus')) {
             return { ok: true, json: async () => trpcWrap(keyStatusWith('saas-pub')) };
           }
@@ -416,7 +426,7 @@ describe('LoginCommand v2', () => {
 
       const syncResponse: SyncKeyResponse = { success: true, actorId: 'human:camilo', mode: 'full' };
       const deps = createMockDeps({
-        fetchSaas: jest.fn().mockImplementation(async (url: string) => {
+        fetchSaas: vi.fn().mockImplementation(async (url: string) => {
           if (url.includes('identity.keyStatus')) {
             return { ok: true, json: async () => trpcWrap(keyStatusWith('different-saas-key')) };
           }
@@ -442,7 +452,7 @@ describe('LoginCommand v2', () => {
 
       const mockEnvelope = { ephemeralPublicKey: 'ep', ciphertext: 'ct', iv: 'iv', authTag: 'at' };
       const deps = createMockDeps({
-        fetchSaas: jest.fn().mockImplementation(async (url: string) => {
+        fetchSaas: vi.fn().mockImplementation(async (url: string) => {
           if (url.includes('identity.keyStatus')) {
             return { ok: true, json: async () => trpcWrap(keyStatusWith('different-saas-pub')) };
           }
@@ -489,7 +499,7 @@ describe('LoginCommand v2', () => {
 
       const syncResponse: SyncKeyResponse = { success: true, actorId: 'human:camilo', mode: 'full' };
       const deps = createMockDeps({
-        fetchSaas: jest.fn().mockImplementation(async (url: string) => {
+        fetchSaas: vi.fn().mockImplementation(async (url: string) => {
           if (url.includes('identity.keyStatus')) {
             return { ok: true, json: async () => trpcWrap(keyStatusWith('different-saas-key')) };
           }
@@ -502,7 +512,7 @@ describe('LoginCommand v2', () => {
       await cmd.executeLogin({ ...defaultOptions, forceLocal: true });
 
       // syncKey response is trusted — no second keyStatus call needed
-      const keyStatusCalls = (deps.fetchSaas as jest.Mock).mock.calls.filter(
+      const keyStatusCalls = (deps.fetchSaas as vi.Mock).mock.calls.filter(
         (c: [string]) => c[0].includes('identity.keyStatus')
       );
       expect(keyStatusCalls).toHaveLength(1);
@@ -527,7 +537,7 @@ describe('LoginCommand v2', () => {
       };
 
       const deps = createMockDeps({
-        fetchSaas: jest.fn().mockImplementation(async (url: string) => {
+        fetchSaas: vi.fn().mockImplementation(async (url: string) => {
           if (url.includes('identity.keyStatus')) {
             return { ok: true, json: async () => trpcWrap(keyStatusWith('different-saas-key')) };
           }
@@ -564,7 +574,7 @@ describe('LoginCommand v2', () => {
 
       const syncResponse = { success: true, actorId: 'human:camilo', mode: 'full' as const };
       const deps = createMockDeps({
-        fetchSaas: jest.fn().mockImplementation(async (url: string) => {
+        fetchSaas: vi.fn().mockImplementation(async (url: string) => {
           if (url.includes('identity.keyStatus')) return { ok: true, json: async () => trpcWrap(noKeyStatus) };
           if (url.includes('identity.syncKey')) return { ok: true, json: async () => trpcWrap(syncResponse) };
           return { ok: false, json: async () => ({}) };
@@ -584,7 +594,7 @@ describe('LoginCommand v2', () => {
 
       const mockEnvelope = { ephemeralPublicKey: 'ep', ciphertext: 'ct', iv: 'iv', authTag: 'at' };
       const deps = createMockDeps({
-        fetchSaas: jest.fn().mockImplementation(async (url: string) => {
+        fetchSaas: vi.fn().mockImplementation(async (url: string) => {
           if (url.includes('identity.keyStatus')) return { ok: true, json: async () => trpcWrap(keyStatusWith('saas-pub')) };
           if (url.includes('identity.getKey')) return { ok: true, json: async () => trpcWrap({ publicKey: 'saas-pub', privateKeyEnvelope: mockEnvelope }) };
           return { ok: false, json: async () => ({}) };
@@ -606,7 +616,7 @@ describe('LoginCommand v2', () => {
 
       const mockEnvelope = { ephemeralPublicKey: 'ep', ciphertext: 'tampered', iv: 'iv', authTag: 'at' };
       const deps = createMockDeps({
-        fetchSaas: jest.fn().mockImplementation(async (url: string) => {
+        fetchSaas: vi.fn().mockImplementation(async (url: string) => {
           if (url.includes('identity.keyStatus')) return { ok: true, json: async () => trpcWrap(keyStatusWith('saas-pub')) };
           if (url.includes('identity.getKey')) return { ok: true, json: async () => trpcWrap({ publicKey: 'saas-pub', privateKeyEnvelope: mockEnvelope }) };
           return { ok: false, json: async () => ({}) };
@@ -643,7 +653,7 @@ describe('LoginCommand v2', () => {
       mockHasPrivateKey.mockResolvedValue(false);
 
       const deps = createMockDeps({
-        fetchSaas: jest.fn().mockImplementation(async (url: string) => {
+        fetchSaas: vi.fn().mockImplementation(async (url: string) => {
           if (url.includes('identity.keyStatus')) {
             // Verify the repoFullName is passed correctly in the tRPC input
             expect(url).toContain('testorg');
@@ -674,7 +684,7 @@ describe('LoginCommand v2', () => {
       mockHasPrivateKey.mockResolvedValue(true);
 
       const deps = createMockDeps({
-        fetchSaas: jest.fn().mockImplementation(async (url: string) => {
+        fetchSaas: vi.fn().mockImplementation(async (url: string) => {
           if (url.includes('identity.keyStatus')) {
             return { ok: false, status: 404, text: async () => 'Not found' };
           }
@@ -701,7 +711,7 @@ describe('LoginCommand v2', () => {
   describe('4.11. Post-Sync State Push (LOGIN-L1 to L2)', () => {
     it('[LOGIN-L1] should push gitgov-state to remote after key sync succeeds', async () => {
       const { execSync } = await import('child_process');
-      const mockExecSync = execSync as jest.MockedFunction<typeof execSync>;
+      const mockExecSync = execSync as Mock<typeof execSync>;
       mockExecSync.mockReturnValue('https://github.com/testorg/testrepo.git\n');
 
       mockHasPrivateKey.mockResolvedValue(true);
@@ -710,7 +720,7 @@ describe('LoginCommand v2', () => {
 
       const syncResponse = { success: true, actorId: 'human:camilo', mode: 'full' as const };
       const deps = createMockDeps({
-        fetchSaas: jest.fn().mockImplementation(async (url: string) => {
+        fetchSaas: vi.fn().mockImplementation(async (url: string) => {
           if (url.includes('identity.keyStatus')) return { ok: true, json: async () => trpcWrap(noKeyStatus) };
           if (url.includes('identity.syncKey')) return { ok: true, json: async () => trpcWrap(syncResponse) };
           return { ok: false, json: async () => ({}) };
@@ -728,7 +738,7 @@ describe('LoginCommand v2', () => {
 
     it('[LOGIN-L2] should skip push silently when gitgov-state branch does not exist locally', async () => {
       const { execSync } = await import('child_process');
-      const mockExecSync = execSync as jest.MockedFunction<typeof execSync>;
+      const mockExecSync = execSync as Mock<typeof execSync>;
       mockExecSync.mockImplementation((cmd: string) => {
         if (typeof cmd === 'string' && cmd.includes('git push origin gitgov-state')) {
           throw new Error('error: src refspec gitgov-state does not match any');
@@ -742,7 +752,7 @@ describe('LoginCommand v2', () => {
 
       const syncResponse = { success: true, actorId: 'human:camilo', mode: 'full' as const };
       const deps = createMockDeps({
-        fetchSaas: jest.fn().mockImplementation(async (url: string) => {
+        fetchSaas: vi.fn().mockImplementation(async (url: string) => {
           if (url.includes('identity.keyStatus')) return { ok: true, json: async () => trpcWrap(noKeyStatus) };
           if (url.includes('identity.syncKey')) return { ok: true, json: async () => trpcWrap(syncResponse) };
           return { ok: false, json: async () => ({}) };
@@ -763,7 +773,7 @@ describe('LoginCommand v2', () => {
   describe('4.9. Cloud-First Bootstrap (LOGIN-J1 to J2)', () => {
     it('[LOGIN-J1] should fetch origin gitgov-state before resolving saasUrl', async () => {
       const { execSync } = await import('child_process');
-      (execSync as jest.MockedFunction<typeof execSync>).mockReturnValue('https://github.com/testorg/testrepo.git\n');
+      (execSync as Mock<typeof execSync>).mockReturnValue('https://github.com/testorg/testrepo.git\n');
 
       mockGetConfig.mockResolvedValue({ saasUrl: 'https://app.gitgov.dev' });
       mockHasPrivateKey.mockResolvedValue(false);
@@ -785,7 +795,7 @@ describe('LoginCommand v2', () => {
 
     it('[LOGIN-J3] should always derive actorId as human:{login} from OAuth', async () => {
       const { execSync } = await import('child_process');
-      (execSync as jest.MockedFunction<typeof execSync>).mockImplementation((cmd: unknown) => {
+      (execSync as Mock<typeof execSync>).mockImplementation((cmd: unknown) => {
         if (typeof cmd === 'string' && cmd.includes('fetch')) return '';
         return 'https://github.com/testorg/testrepo.git\n';
       });
@@ -809,7 +819,7 @@ describe('LoginCommand v2', () => {
 
     it('[LOGIN-J3b] should fall back to human:{login} when local actor belongs to a different user', async () => {
       const { execSync } = await import('child_process');
-      (execSync as jest.MockedFunction<typeof execSync>).mockImplementation((cmd: unknown) => {
+      (execSync as Mock<typeof execSync>).mockImplementation((cmd: unknown) => {
         if (typeof cmd === 'string' && cmd.includes('fetch')) return '';
         return 'https://github.com/testorg/testrepo.git\n';
       });
@@ -833,7 +843,7 @@ describe('LoginCommand v2', () => {
 
     it('[LOGIN-J2] should continue login flow when fetch fails (no remote/offline)', async () => {
       const { execSync } = await import('child_process');
-      (execSync as jest.MockedFunction<typeof execSync>).mockImplementation((cmd: unknown) => {
+      (execSync as Mock<typeof execSync>).mockImplementation((cmd: unknown) => {
         if (typeof cmd === 'string' && cmd.includes('fetch')) {
           throw new Error('fatal: could not read from remote repository');
         }

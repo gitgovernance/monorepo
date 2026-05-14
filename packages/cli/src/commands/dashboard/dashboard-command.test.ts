@@ -1,25 +1,25 @@
 // Mock DependencyInjectionService before importing
-jest.mock('../../services/dependency-injection', () => ({
+vi.mock('../../services/dependency-injection', () => ({
   DependencyInjectionService: {
-    getInstance: jest.fn()
+    getInstance: vi.fn()
   }
 }));
 
 // Mock all external dependencies BEFORE importing DashboardCommand
-jest.mock('ink', () => ({
-  render: jest.fn(() => ({ waitUntilExit: jest.fn() }))
+vi.mock('ink', () => ({
+  render: vi.fn(() => ({ waitUntilExit: vi.fn() }))
 }));
-jest.mock('react', () => ({
-  createElement: jest.fn()
+vi.mock('react', () => ({
+  createElement: vi.fn()
 }));
-jest.mock('../../components/dashboard/DashboardTUI', () => ({
-  default: jest.fn()
+vi.mock('../../components/dashboard/DashboardTUI', () => ({
+  default: vi.fn()
 }));
 
 // Mock @gitgov/core with all required modules
-jest.doMock('@gitgov/core', () => ({
+vi.mock('@gitgov/core', () => ({
   Factories: {
-    createActorRecord: jest.fn().mockResolvedValue({
+    createActorRecord: vi.fn().mockResolvedValue({
       id: 'human:demo-user',
       displayName: 'Demo User',
       type: 'human',
@@ -28,7 +28,7 @@ jest.doMock('@gitgov/core', () => ({
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     }),
-    createTaskRecord: jest.fn().mockResolvedValue({
+    createTaskRecord: vi.fn().mockResolvedValue({
       id: '1757789000-task-demo-task',
       title: 'Demo Task',
       status: 'active',
@@ -38,7 +38,7 @@ jest.doMock('@gitgov/core', () => ({
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     }),
-    createCycleRecord: jest.fn().mockResolvedValue({
+    createCycleRecord: vi.fn().mockResolvedValue({
       id: '1757789000-cycle-demo-cycle',
       title: 'Demo Cycle',
       status: 'active',
@@ -47,7 +47,7 @@ jest.doMock('@gitgov/core', () => ({
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     }),
-    createFeedbackRecord: jest.fn().mockResolvedValue({
+    createFeedbackRecord: vi.fn().mockResolvedValue({
       id: '1757789000-feedback-demo',
       entityType: 'task',
       entityId: '1757789000-task-demo-task',
@@ -74,9 +74,9 @@ import type {
 } from '@gitgov/core';
 
 // Mock console methods to capture output
-const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation();
-const mockConsoleError = jest.spyOn(console, 'error').mockImplementation();
-const mockProcessExit = jest.spyOn(process, 'exit').mockImplementation();
+const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation();
+const mockConsoleError = vi.spyOn(console, 'error').mockImplementation();
+const mockProcessExit = vi.spyOn(process, 'exit').mockImplementation();
 
 /**
  * Helper to convert TaskRecord payload to GitGovTaskRecord with mock header.
@@ -103,33 +103,33 @@ function createMockGitGovTaskRecord(taskPayload: TaskRecord): GitGovTaskRecord {
 describe('DashboardCommand - EARS Compliance Tests', () => {
   let dashboardCommand: DashboardCommand;
   let mockBacklogAdapter: {
-    getAllTasks: jest.MockedFunction<() => Promise<TaskRecord[]>>;
-    getAllCycles: jest.MockedFunction<() => Promise<CycleRecord[]>>;
+    getAllTasks: Mock<() => Promise<TaskRecord[]>>;
+    getAllCycles: Mock<() => Promise<CycleRecord[]>>;
   };
   let mockFeedbackAdapter: {
-    getAllFeedback: jest.MockedFunction<() => Promise<FeedbackRecord[]>>;
+    getAllFeedback: Mock<() => Promise<FeedbackRecord[]>>;
   };
   let mockRecordMetrics: {
-    getSystemStatus: jest.MockedFunction<() => Promise<SystemStatus>>;
-    getProductivityMetrics: jest.MockedFunction<() => Promise<ProductivityMetrics>>;
-    getCollaborationMetrics: jest.MockedFunction<() => Promise<CollaborationMetrics>>;
+    getSystemStatus: Mock<() => Promise<SystemStatus>>;
+    getProductivityMetrics: Mock<() => Promise<ProductivityMetrics>>;
+    getCollaborationMetrics: Mock<() => Promise<CollaborationMetrics>>;
   };
   let mockProjector: {
-    getIndexData: jest.MockedFunction<() => Promise<IndexData | null>>;
-    generateIndex: jest.MockedFunction<() => Promise<IndexGenerationReport>>;
-    isIndexUpToDate: jest.MockedFunction<() => Promise<boolean>>;
-    calculateActivityHistory: jest.MockedFunction<() => Promise<ActivityEvent[]>>;
+    getIndexData: Mock<() => Promise<IndexData | null>>;
+    generateIndex: Mock<() => Promise<IndexGenerationReport>>;
+    isIndexUpToDate: Mock<() => Promise<boolean>>;
+    calculateActivityHistory: Mock<() => Promise<ActivityEvent[]>>;
   };
   let mockIdentityAdapter: {
-    getCurrentActor: jest.MockedFunction<() => Promise<ActorRecord>>;
+    getCurrentActor: Mock<() => Promise<ActorRecord>>;
   };
   let mockDependencyService: {
-    getBacklogAdapter: jest.MockedFunction<() => Promise<typeof mockBacklogAdapter>>;
-    getFeedbackAdapter: jest.MockedFunction<() => Promise<typeof mockFeedbackAdapter>>;
-    getRecordMetrics: jest.MockedFunction<() => Promise<typeof mockRecordMetrics>>;
-    getRecordProjector: jest.MockedFunction<() => Promise<typeof mockProjector>>;
-    getIdentityAdapter: jest.MockedFunction<() => Promise<typeof mockIdentityAdapter>>;
-    getCurrentActor: jest.MockedFunction<() => Promise<ActorRecord>>;
+    getBacklogAdapter: Mock<() => Promise<typeof mockBacklogAdapter>>;
+    getFeedbackAdapter: Mock<() => Promise<typeof mockFeedbackAdapter>>;
+    getRecordMetrics: Mock<() => Promise<typeof mockRecordMetrics>>;
+    getRecordProjector: Mock<() => Promise<typeof mockProjector>>;
+    getIdentityAdapter: Mock<() => Promise<typeof mockIdentityAdapter>>;
+    getCurrentActor: Mock<() => Promise<ActorRecord>>;
   };
 
   // Sample data using factories
@@ -203,7 +203,7 @@ describe('DashboardCommand - EARS Compliance Tests', () => {
 
   beforeEach(async () => {
     // Reset all mocks
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     // Get sample data from mocked factories
     sampleActor = await Factories.createActorRecord({});
@@ -213,43 +213,43 @@ describe('DashboardCommand - EARS Compliance Tests', () => {
 
     // Create mock adapters
     mockBacklogAdapter = {
-      getAllTasks: jest.fn(),
-      getAllCycles: jest.fn()
+      getAllTasks: vi.fn(),
+      getAllCycles: vi.fn()
     };
 
     mockFeedbackAdapter = {
-      getAllFeedback: jest.fn()
+      getAllFeedback: vi.fn()
     };
 
     mockRecordMetrics = {
-      getSystemStatus: jest.fn(),
-      getProductivityMetrics: jest.fn(),
-      getCollaborationMetrics: jest.fn()
+      getSystemStatus: vi.fn(),
+      getProductivityMetrics: vi.fn(),
+      getCollaborationMetrics: vi.fn()
     };
 
     mockProjector = {
-      getIndexData: jest.fn(),
-      generateIndex: jest.fn(),
-      isIndexUpToDate: jest.fn(),
-      calculateActivityHistory: jest.fn()
+      getIndexData: vi.fn(),
+      generateIndex: vi.fn(),
+      isIndexUpToDate: vi.fn(),
+      calculateActivityHistory: vi.fn()
     };
 
     mockIdentityAdapter = {
-      getCurrentActor: jest.fn()
+      getCurrentActor: vi.fn()
     };
 
     // Create mock dependency service
     mockDependencyService = {
-      getBacklogAdapter: jest.fn().mockResolvedValue(mockBacklogAdapter),
-      getFeedbackAdapter: jest.fn().mockResolvedValue(mockFeedbackAdapter),
-      getRecordMetrics: jest.fn().mockResolvedValue(mockRecordMetrics),
-      getRecordProjector: jest.fn().mockResolvedValue(mockProjector),
-      getIdentityAdapter: jest.fn().mockResolvedValue(mockIdentityAdapter),
-      getCurrentActor: jest.fn().mockResolvedValue(sampleActor),
+      getBacklogAdapter: vi.fn().mockResolvedValue(mockBacklogAdapter),
+      getFeedbackAdapter: vi.fn().mockResolvedValue(mockFeedbackAdapter),
+      getRecordMetrics: vi.fn().mockResolvedValue(mockRecordMetrics),
+      getRecordProjector: vi.fn().mockResolvedValue(mockProjector),
+      getIdentityAdapter: vi.fn().mockResolvedValue(mockIdentityAdapter),
+      getCurrentActor: vi.fn().mockResolvedValue(sampleActor),
     };
 
     // Mock DependencyInjectionService.getInstance()
-    (DependencyInjectionService.getInstance as jest.Mock).mockReturnValue(mockDependencyService);
+    (DependencyInjectionService.getInstance as vi.Mock).mockReturnValue(mockDependencyService);
 
     // Create DashboardCommand
     dashboardCommand = new DashboardCommand();
@@ -377,7 +377,7 @@ describe('DashboardCommand - EARS Compliance Tests', () => {
       mockProjector.generateIndex.mockResolvedValue(mockGenerationReport);
 
       // Capture JSON output
-      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation();
 
       // Act
       await dashboardCommand.execute({ json: true });
@@ -398,9 +398,9 @@ describe('DashboardCommand - EARS Compliance Tests', () => {
       mockProjector.getIndexData.mockResolvedValue(sampleIndexData);
 
       // Mock Ink render to capture props
-      const { render } = require('ink');
-      const mockRender = render as jest.Mock;
-      mockRender.mockReturnValue({ waitUntilExit: jest.fn() });
+      const ink = await import('ink');
+      const mockRender = vi.mocked(ink.render);
+      mockRender.mockReturnValue({ waitUntilExit: vi.fn() });
 
       // Act: Execute dashboard without explicit refresh interval
       await dashboardCommand.execute({});
@@ -417,9 +417,9 @@ describe('DashboardCommand - EARS Compliance Tests', () => {
       // Arrange: Mock successful cache
       mockProjector.getIndexData.mockResolvedValue(sampleIndexData);
 
-      const { render } = require('ink');
-      const mockRender = render as jest.Mock;
-      mockRender.mockReturnValue({ waitUntilExit: jest.fn() });
+      const ink = await import('ink');
+      const mockRender = vi.mocked(ink.render);
+      mockRender.mockReturnValue({ waitUntilExit: vi.fn() });
 
       // Act: Execute with custom refresh interval
       await dashboardCommand.execute({ refreshInterval: 10 });
@@ -532,7 +532,7 @@ describe('DashboardCommand - EARS Compliance Tests', () => {
 
       mockProjector.generateIndex.mockResolvedValue(mockGenerationReport);
 
-      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation();
 
       // Act: Execute complete demo flow
       await dashboardCommand.execute({ json: true });

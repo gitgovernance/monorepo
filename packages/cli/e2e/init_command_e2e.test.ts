@@ -473,6 +473,16 @@ describe('Init CLI Command - Edge Cases E2E Tests', () => {
       // Pull without init
       runCliCommand(['sync', 'pull', '--json'], { cwd: cloneRepoPath });
 
+      // Copy keys from origin worktree to clone worktree (per-repo keys)
+      const originKeysDir = path.join(getWorktreeBasePath(originRepoPath), '.gitgov', 'keys');
+      const cloneKeysDir = path.join(getWorktreeBasePath(cloneRepoPath), '.gitgov', 'keys');
+      if (fs.existsSync(originKeysDir)) {
+        fs.mkdirSync(cloneKeysDir, { recursive: true });
+        for (const f of fs.readdirSync(originKeysDir).filter(f => f.endsWith('.key'))) {
+          fs.copyFileSync(path.join(originKeysDir, f), path.join(cloneKeysDir, f));
+        }
+      }
+
       // Status should work after bootstrap pull (read-only command)
       const statusResult = runCliCommand(['status', '--json'], { cwd: cloneRepoPath });
       expect(statusResult.success).toBe(true);

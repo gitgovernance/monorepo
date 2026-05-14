@@ -15,8 +15,6 @@
  */
 
 import { Command } from 'commander';
-import * as path from 'path';
-import * as os from 'os';
 import { BaseCommand } from '../../base/base-command';
 import { Crypto, parseRemoteUrl } from '@gitgov/core';
 import type { IKeyProvider } from '@gitgov/core';
@@ -319,7 +317,7 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
 
     // [LOGIN-D1] Both have key — compare PUBLIC keys
     if (hasLocal && keyStatus.exists) {
-      const keyProvider = await this.getGlobalKeyProvider();
+      const keyProvider = await this.getLocalKeyProvider();
       const localPublicKey = await keyProvider.getPublicKey(actorId);
       const saasPublicKey = keyStatus.publicKey;
 
@@ -480,15 +478,17 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
     });
   }
 
-  // [G29] Global key provider — no DI dependency, no worktree needed
-  private async getGlobalKeyProvider(): Promise<IKeyProvider> {
-    const { FsKeyProvider } = await import('@gitgov/core/fs');
-    return new FsKeyProvider({ keysDir: path.join(os.homedir(), '.gitgov', 'keys') });
+  private async getLocalKeyProvider(): Promise<IKeyProvider> {
+    const { FsKeyProvider, findProjectRoot, getWorktreeBasePath, getKeysDir } = await import('@gitgov/core/fs');
+    const repoRoot = findProjectRoot(process.cwd());
+    if (!repoRoot) throw new Error('Not in a git repository');
+    const worktreePath = getWorktreeBasePath(repoRoot);
+    return new FsKeyProvider({ keysDir: getKeysDir(worktreePath) });
   }
 
   private async hasLocalKey(actorId: string): Promise<boolean> {
     try {
-      const kp = await this.getGlobalKeyProvider();
+      const kp = await this.getLocalKeyProvider();
       return await kp.hasPrivateKey(actorId);
     } catch {
       return false;
@@ -521,7 +521,7 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
     repo: GitRemoteRef,
     serverEcdhPublicKey: string,
   ): Promise<SyncKeyResponse> {
-    const keyProvider = await this.getGlobalKeyProvider();
+    const keyProvider = await this.getLocalKeyProvider();
     const privateKey = await keyProvider.getPrivateKey(actorId);
     const publicKey = await keyProvider.getPublicKey(actorId);
     if (!privateKey || !publicKey) throw new Error('Local key not found');
@@ -585,8 +585,8 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
       throw new Error('Key transfer failed: ECDH decryption error. Try again or contact support.');
     }
 
-    // [LOGIN-C2] Store with FsKeyProvider in ~/.gitgov/keys/ (G29, handles 0600 permissions)
-    const keyProvider = await this.getGlobalKeyProvider();
+    // [LOGIN-C2] Store with FsKeyProvider in {worktree}/.gitgov/keys/ (handles 0600 permissions)
+    const keyProvider = await this.getLocalKeyProvider();
     await keyProvider.setPrivateKey(actorId, decryptedKey.toString('base64'));
     console.log('Key downloaded from SaaS');
   }

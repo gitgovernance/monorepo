@@ -13,15 +13,15 @@
 
 // Mock all dependencies to avoid import-time execution
 // Mock fs promises
-jest.doMock('fs', () => ({
+vi.mock('fs', () => ({
   promises: {
-    access: jest.fn().mockResolvedValue(undefined),
-    mkdir: jest.fn().mockResolvedValue(undefined),
+    access: vi.fn().mockResolvedValue(undefined),
+    mkdir: vi.fn().mockResolvedValue(undefined),
   }
 }));
 
 // Mock @gitgov/core with all required modules
-jest.doMock('@gitgov/core', () => {
+vi.mock('@gitgov/core', () => {
   // 🎯 HYBRID STRATEGY: Mock Adapters + Valid Data Helpers
   // Create valid data using GitGovernance patterns without importing real factories
 
@@ -51,29 +51,29 @@ jest.doMock('@gitgov/core', () => {
 
   // Create ConfigManager mock with static methods
   const ConfigManagerMock = Object.assign(
-    jest.fn().mockImplementation(() => ({
-      loadConfig: jest.fn().mockResolvedValue({
+    vi.fn().mockImplementation(function() { return {
+      loadConfig: vi.fn().mockResolvedValue({
         protocolVersion: '1.0.0',
         projectId: 'test-project',
         projectName: 'Test Project'
       }),
-      loadSession: jest.fn().mockResolvedValue({
+      loadSession: vi.fn().mockResolvedValue({
         lastSession: {
           actorId: 'human:test-user',
           timestamp: new Date().toISOString()
         },
         actorState: {}
       }),
-      saveConfig: jest.fn().mockResolvedValue(undefined),
-      saveSession: jest.fn().mockResolvedValue(undefined),
-      updateActorState: jest.fn().mockResolvedValue(undefined)
-    })),
+      saveConfig: vi.fn().mockResolvedValue(undefined),
+      saveSession: vi.fn().mockResolvedValue(undefined),
+      updateActorState: vi.fn().mockResolvedValue(undefined)
+    }; }),
     {
       // Static methods (legacy — code uses standalone functions from @gitgov/core/fs)
-      findProjectRoot: jest.fn().mockReturnValue('/mock/project/root'),
-      findGitgovRoot: jest.fn().mockReturnValue('/mock/project/root'),
-      getGitgovPath: jest.fn().mockReturnValue('/mock/project/root/.gitgov'),
-      isGitgovProject: jest.fn().mockReturnValue(true)
+      findProjectRoot: vi.fn().mockReturnValue('/mock/project/root'),
+      findGitgovRoot: vi.fn().mockReturnValue('/mock/project/root'),
+      getGitgovPath: vi.fn().mockReturnValue('/mock/project/root/.gitgov'),
+      isGitgovProject: vi.fn().mockReturnValue(true)
     }
   );
 
@@ -81,89 +81,89 @@ jest.doMock('@gitgov/core', () => {
     // 🎭 MOCK CONFIG: Mock configuration management
     Config: {
       ConfigManager: ConfigManagerMock,
-      createConfigManager: jest.fn().mockImplementation(() => ({
-        loadConfig: jest.fn().mockResolvedValue({
+      createConfigManager: vi.fn().mockImplementation(function() { return {
+        loadConfig: vi.fn().mockResolvedValue({
           protocolVersion: '1.0.0',
           projectId: 'test-project',
           projectName: 'Test Project'
         }),
-        loadSession: jest.fn().mockResolvedValue({
+        loadSession: vi.fn().mockResolvedValue({
           lastSession: {
             actorId: 'human:test-user',
             timestamp: new Date().toISOString()
           },
           actorState: {}
         }),
-        saveConfig: jest.fn().mockResolvedValue(undefined),
-        saveSession: jest.fn().mockResolvedValue(undefined),
-        updateActorState: jest.fn().mockResolvedValue(undefined),
-        getStateBranch: jest.fn().mockResolvedValue('gitgov-state'),
-      }))
+        saveConfig: vi.fn().mockResolvedValue(undefined),
+        saveSession: vi.fn().mockResolvedValue(undefined),
+        updateActorState: vi.fn().mockResolvedValue(undefined),
+        getStateBranch: vi.fn().mockResolvedValue('gitgov-state'),
+      }; })
     },
 
     // 🎭 MOCK STORE: Mock data persistence
     Store: {
-      RecordStore: jest.fn().mockImplementation(() => ({
-        create: jest.fn().mockResolvedValue(undefined),
-        read: jest.fn().mockResolvedValue(null),
-        write: jest.fn().mockResolvedValue(undefined),
-        update: jest.fn().mockResolvedValue(undefined),
-        delete: jest.fn().mockResolvedValue(undefined),
-        list: jest.fn().mockResolvedValue([])
-      })),
-      FsStore: jest.fn().mockImplementation(() => ({
-        get: jest.fn().mockResolvedValue(null),
-        put: jest.fn().mockResolvedValue(undefined),
-        delete: jest.fn().mockResolvedValue(undefined),
-        exists: jest.fn().mockResolvedValue(false),
-        list: jest.fn().mockResolvedValue([])
-      }))
+      RecordStore: vi.fn().mockImplementation(function() { return {
+        create: vi.fn().mockResolvedValue(undefined),
+        read: vi.fn().mockResolvedValue(null),
+        write: vi.fn().mockResolvedValue(undefined),
+        update: vi.fn().mockResolvedValue(undefined),
+        delete: vi.fn().mockResolvedValue(undefined),
+        list: vi.fn().mockResolvedValue([])
+      }; }),
+      FsStore: vi.fn().mockImplementation(function() { return {
+        get: vi.fn().mockResolvedValue(null),
+        put: vi.fn().mockResolvedValue(undefined),
+        delete: vi.fn().mockResolvedValue(undefined),
+        exists: vi.fn().mockResolvedValue(false),
+        list: vi.fn().mockResolvedValue([])
+      }; })
     },
 
     // Direct RecordStore export (for verbatimModuleSyntax compatibility)
-    RecordStore: jest.fn().mockImplementation(() => ({
-      create: jest.fn().mockResolvedValue(undefined),
-      read: jest.fn().mockResolvedValue(null),
-      write: jest.fn().mockResolvedValue(undefined),
-      update: jest.fn().mockResolvedValue(undefined),
-      delete: jest.fn().mockResolvedValue(undefined),
-      list: jest.fn().mockResolvedValue([])
-    })),
+    RecordStore: vi.fn().mockImplementation(function() { return {
+      create: vi.fn().mockResolvedValue(undefined),
+      read: vi.fn().mockResolvedValue(null),
+      write: vi.fn().mockResolvedValue(undefined),
+      update: vi.fn().mockResolvedValue(undefined),
+      delete: vi.fn().mockResolvedValue(undefined),
+      list: vi.fn().mockResolvedValue([])
+    }; }),
 
     // 🎭 MOCK FACTORIES: Mock record loaders
     Factories: {
-      loadTaskRecord: jest.fn((data) => data),
-      loadCycleRecord: jest.fn((data) => data),
-      loadFeedbackRecord: jest.fn((data) => data),
-      loadExecutionRecord: jest.fn((data) => data),
-      loadActorRecord: jest.fn((data) => data),
-      loadAgentRecord: jest.fn((data) => data)
+      loadTaskRecord: vi.fn((data) => data),
+      loadCycleRecord: vi.fn((data) => data),
+      loadFeedbackRecord: vi.fn((data) => data),
+      loadExecutionRecord: vi.fn((data) => data),
+      loadActorRecord: vi.fn((data) => data),
+      loadAgentRecord: vi.fn((data) => data)
     },
 
     // 🎭 MOCK RECORD_PROJECTOR: Separate namespace (moved from Adapters)
     RecordProjection: {
-      RecordProjector: jest.fn().mockImplementation(() => ({
-        generateIndex: jest.fn().mockResolvedValue({
+      RecordProjector: vi.fn().mockImplementation(function() { return {
+        generateIndex: vi.fn().mockResolvedValue({
           recordsProcessed: 146,
           generatedAt: Date.now()
         }),
-        validateIntegrity: jest.fn().mockResolvedValue({
+        validateIntegrity: vi.fn().mockResolvedValue({
           isValid: true,
           errors: [],
           recordsValidated: 146
         }),
-        getIndexData: jest.fn().mockResolvedValue({
+        getIndexData: vi.fn().mockResolvedValue({
           tasks: [],
           cycles: [],
           lastGenerated: Date.now()
         })
-      })),
+      }; }),
     },
 
     // 🎭 MOCK RECORD_METRICS: Separate namespace (moved from Adapters)
     RecordMetrics: {
-      RecordMetrics: jest.fn().mockImplementation(() => ({
-        getSystemStatus: jest.fn().mockResolvedValue({
+      RecordMetrics: vi.fn().mockImplementation(function() { return {
+        getSystemStatus: vi.fn().mockResolvedValue({
           health: {
             overallScore: 85,
             blockedTasks: 0,
@@ -174,140 +174,140 @@ jest.doMock('@gitgov/core', () => {
             byStatus: { draft: 10, review: 5, ready: 8, active: 12, done: 111 }
           }
         }),
-        getTaskHealth: jest.fn().mockResolvedValue({
+        getTaskHealth: vi.fn().mockResolvedValue({
           healthScore: 90,
           timeInCurrentStage: 2,
           recommendations: []
         }),
-        getProductivityMetrics: jest.fn().mockResolvedValue({
+        getProductivityMetrics: vi.fn().mockResolvedValue({
           throughput: 12,
           leadTime: 5.2,
           cycleTime: 3.1
         })
-      })),
+      }; }),
     },
 
     // 🎭 MOCK ADAPTERS: Mock business logic behavior with valid data
     Adapters: {
-      BacklogAdapter: jest.fn().mockImplementation(() => ({
-        createTask: jest.fn().mockImplementation((payload) =>
+      BacklogAdapter: vi.fn().mockImplementation(function() { return {
+        createTask: vi.fn().mockImplementation((payload) =>
           Promise.resolve(createValidTaskRecord(payload))
         ),
-        getAllTasks: jest.fn().mockResolvedValue([]),
-        getTask: jest.fn().mockResolvedValue(null),
-        submitTask: jest.fn().mockImplementation((taskId) =>
+        getAllTasks: vi.fn().mockResolvedValue([]),
+        getTask: vi.fn().mockResolvedValue(null),
+        submitTask: vi.fn().mockImplementation((taskId) =>
           Promise.resolve(createValidTaskRecord({ id: taskId, status: 'review' }))
         ),
-        approveTask: jest.fn().mockImplementation((taskId) =>
+        approveTask: vi.fn().mockImplementation((taskId) =>
           Promise.resolve(createValidTaskRecord({ id: taskId, status: 'ready' }))
         ),
-        activateTask: jest.fn().mockImplementation((taskId) =>
+        activateTask: vi.fn().mockImplementation((taskId) =>
           Promise.resolve(createValidTaskRecord({ id: taskId, status: 'active' }))
         ),
-        completeTask: jest.fn().mockImplementation((taskId) =>
+        completeTask: vi.fn().mockImplementation((taskId) =>
           Promise.resolve(createValidTaskRecord({ id: taskId, status: 'done' }))
         )
-      })),
-      IdentityAdapter: jest.fn().mockImplementation(() => ({
-        getActor: jest.fn().mockResolvedValue({
+      }; }),
+      IdentityAdapter: vi.fn().mockImplementation(function() { return {
+        getActor: vi.fn().mockResolvedValue({
           id: 'human:test-user',
           type: 'human',
           displayName: 'Test User',
           roles: ['author']
         }),
-        createActor: jest.fn().mockResolvedValue({
+        createActor: vi.fn().mockResolvedValue({
           id: 'human:new-user',
           type: 'human',
           displayName: 'New User',
           roles: ['author']
         }),
-        getCurrentActor: jest.fn().mockResolvedValue({
+        getCurrentActor: vi.fn().mockResolvedValue({
           id: 'human:current-user',
           type: 'human',
           displayName: 'Current User',
           roles: ['author']
         })
-      })),
-      FeedbackAdapter: jest.fn().mockImplementation(() => ({
-        create: jest.fn().mockResolvedValue({
+      }; }),
+      FeedbackAdapter: vi.fn().mockImplementation(function() { return {
+        create: vi.fn().mockResolvedValue({
           id: createValidId('feedback', 'test-feedback', Date.now()),
           entityType: 'task',
           entityId: 'task-123',
           type: 'comment',
           content: 'Test feedback'
         }),
-        getAllFeedback: jest.fn().mockResolvedValue([])
-      })),
-      ExecutionAdapter: jest.fn().mockImplementation(() => ({
-        create: jest.fn().mockResolvedValue({
+        getAllFeedback: vi.fn().mockResolvedValue([])
+      }; }),
+      ExecutionAdapter: vi.fn().mockImplementation(function() { return {
+        create: vi.fn().mockResolvedValue({
           id: createValidId('exec', 'test-execution', Date.now()),
           taskId: 'task-123',
           type: 'progress',
           status: 'completed'
         }),
-        getAllExecutions: jest.fn().mockResolvedValue([])
-      })),
+        getAllExecutions: vi.fn().mockResolvedValue([])
+      }; }),
       WorkflowAdapter: Object.assign(
-        jest.fn().mockImplementation(() => ({
-          getTransitionRule: jest.fn().mockResolvedValue({
+        vi.fn().mockImplementation(function() { return {
+          getTransitionRule: vi.fn().mockResolvedValue({
             to: 'active',
             conditions: { signatures: { __default__: { role: 'author' } } }
           }),
-          validateSignature: jest.fn().mockResolvedValue(true)
-        })),
+          validateSignature: vi.fn().mockResolvedValue(true)
+        }; }),
         {
-          createDefault: jest.fn().mockImplementation(() => ({
-            getTransitionRule: jest.fn().mockResolvedValue({
+          createDefault: vi.fn().mockImplementation(function() { return {
+            getTransitionRule: vi.fn().mockResolvedValue({
               to: 'active',
               conditions: { signatures: { __default__: { role: 'author' } } }
             }),
-            validateSignature: jest.fn().mockResolvedValue(true)
-          }))
+            validateSignature: vi.fn().mockResolvedValue(true)
+          }; })
         }
       ),
-      ProjectModule: jest.fn().mockImplementation(() => ({
-        initializeProject: jest.fn().mockResolvedValue({
+      ProjectModule: vi.fn().mockImplementation(function() { return {
+        initializeProject: vi.fn().mockResolvedValue({
           actorId: 'human:project-owner',
           productAgentId: 'agent:gitgov-audit',
           cycleId: createValidId('cycle', 'root-cycle', Date.now()),
         })
-      }))
+      }; })
     },
 
     // 🎭 MOCK MODULES: Mock infrastructure services
     EventBus: {
-      EventBus: jest.fn().mockImplementation(() => ({
-        publish: jest.fn(),
-        subscribe: jest.fn().mockReturnValue({ id: 'mock-subscription-' + Date.now() }),
-        unsubscribe: jest.fn(),
-        getActiveEventTypes: jest.fn().mockReturnValue(['task.created', 'task.status.changed']),
-        getSubscriptionCount: jest.fn().mockReturnValue(3)
-      }))
+      EventBus: vi.fn().mockImplementation(function() { return {
+        publish: vi.fn(),
+        subscribe: vi.fn().mockReturnValue({ id: 'mock-subscription-' + Date.now() }),
+        unsubscribe: vi.fn(),
+        getActiveEventTypes: vi.fn().mockReturnValue(['task.created', 'task.status.changed']),
+        getSubscriptionCount: vi.fn().mockReturnValue(3)
+      }; })
     },
 
     // 🎭 MOCK KEY PROVIDER: Mock key storage operations
     KeyProvider: {
-      FsKeyProvider: jest.fn().mockImplementation(() => ({
-        sign: jest.fn().mockResolvedValue(new Uint8Array(64)),
-        getPrivateKey: jest.fn().mockResolvedValue('mock-private-key-base64'),
-        setPrivateKey: jest.fn().mockResolvedValue(undefined),
-        hasPrivateKey: jest.fn().mockResolvedValue(true),
-        deletePrivateKey: jest.fn().mockResolvedValue(true)
-      })),
-      EnvKeyProvider: jest.fn().mockImplementation(() => ({
-        sign: jest.fn().mockResolvedValue(new Uint8Array(64)),
-        getPrivateKey: jest.fn().mockResolvedValue('mock-private-key-base64'),
-        setPrivateKey: jest.fn().mockResolvedValue(undefined),
-        hasPrivateKey: jest.fn().mockResolvedValue(true),
-        deletePrivateKey: jest.fn().mockResolvedValue(true)
-      })),
-      MockKeyProvider: jest.fn().mockImplementation(() => ({
-        sign: jest.fn().mockResolvedValue(new Uint8Array(64)),
-        getPrivateKey: jest.fn().mockResolvedValue('mock-private-key-base64'),
-        setPrivateKey: jest.fn().mockResolvedValue(undefined),
-        hasPrivateKey: jest.fn().mockResolvedValue(true),
-        deletePrivateKey: jest.fn().mockResolvedValue(true)
-      })),
+      FsKeyProvider: vi.fn().mockImplementation(function() { return {
+        sign: vi.fn().mockResolvedValue(new Uint8Array(64)),
+        getPrivateKey: vi.fn().mockResolvedValue('mock-private-key-base64'),
+        setPrivateKey: vi.fn().mockResolvedValue(undefined),
+        hasPrivateKey: vi.fn().mockResolvedValue(true),
+        deletePrivateKey: vi.fn().mockResolvedValue(true)
+      }; }),
+      EnvKeyProvider: vi.fn().mockImplementation(function() { return {
+        sign: vi.fn().mockResolvedValue(new Uint8Array(64)),
+        getPrivateKey: vi.fn().mockResolvedValue('mock-private-key-base64'),
+        setPrivateKey: vi.fn().mockResolvedValue(undefined),
+        hasPrivateKey: vi.fn().mockResolvedValue(true),
+        deletePrivateKey: vi.fn().mockResolvedValue(true)
+      }; }),
+      MockKeyProvider: vi.fn().mockImplementation(function() { return {
+        sign: vi.fn().mockResolvedValue(new Uint8Array(64)),
+        getPrivateKey: vi.fn().mockResolvedValue('mock-private-key-base64'),
+        setPrivateKey: vi.fn().mockResolvedValue(undefined),
+        hasPrivateKey: vi.fn().mockResolvedValue(true),
+        deletePrivateKey: vi.fn().mockResolvedValue(true)
+      }; }),
       KeyProviderError: class KeyProviderError extends Error {
         constructor(message: string, public code: string, public context: Record<string, unknown> = {}) {
           super(message);
@@ -318,41 +318,41 @@ jest.doMock('@gitgov/core', () => {
 
     // 🎭 MOCK GIT: Mock Git operations
     Git: {
-      GitModule: jest.fn().mockImplementation(() => ({
-        getRepoRoot: jest.fn().mockResolvedValue('/mock/project/root'),
-        getCurrentBranch: jest.fn().mockResolvedValue('main'),
-        branchExists: jest.fn().mockResolvedValue(true),
-        checkoutFilesFromBranch: jest.fn().mockResolvedValue(undefined),
-        fetch: jest.fn().mockResolvedValue(undefined),
-        listRemoteBranches: jest.fn().mockResolvedValue([]),
-        checkoutBranch: jest.fn().mockResolvedValue(undefined),
-        pushWithUpstream: jest.fn().mockResolvedValue(undefined),
-        setUpstream: jest.fn().mockResolvedValue(undefined),
-        getBranchRemote: jest.fn().mockResolvedValue(null),
-        checkoutOrphanBranch: jest.fn().mockResolvedValue(undefined),
-        pullRebase: jest.fn().mockResolvedValue(undefined),
-        getChangedFiles: jest.fn().mockResolvedValue([]),
-        add: jest.fn().mockResolvedValue(undefined),
-        commit: jest.fn().mockResolvedValue('mock-commit-hash'),
-        push: jest.fn().mockResolvedValue(undefined),
-        hasUncommittedChanges: jest.fn().mockResolvedValue(false),
-        stash: jest.fn().mockResolvedValue('mock-stash-hash'),
-        stashPop: jest.fn().mockResolvedValue(true),
-        getConflictedFiles: jest.fn().mockResolvedValue([]),
-        rebaseAbort: jest.fn().mockResolvedValue(undefined),
-        isRebaseInProgress: jest.fn().mockResolvedValue(false),
-        getCommitHistory: jest.fn().mockResolvedValue([]),
-        getStagedFiles: jest.fn().mockResolvedValue([]),
-        rebaseContinue: jest.fn().mockResolvedValue('mock-commit-hash'),
-        commitAllowEmpty: jest.fn().mockResolvedValue('mock-commit-hash')
-      }))
+      GitModule: vi.fn().mockImplementation(function() { return {
+        getRepoRoot: vi.fn().mockResolvedValue('/mock/project/root'),
+        getCurrentBranch: vi.fn().mockResolvedValue('main'),
+        branchExists: vi.fn().mockResolvedValue(true),
+        checkoutFilesFromBranch: vi.fn().mockResolvedValue(undefined),
+        fetch: vi.fn().mockResolvedValue(undefined),
+        listRemoteBranches: vi.fn().mockResolvedValue([]),
+        checkoutBranch: vi.fn().mockResolvedValue(undefined),
+        pushWithUpstream: vi.fn().mockResolvedValue(undefined),
+        setUpstream: vi.fn().mockResolvedValue(undefined),
+        getBranchRemote: vi.fn().mockResolvedValue(null),
+        checkoutOrphanBranch: vi.fn().mockResolvedValue(undefined),
+        pullRebase: vi.fn().mockResolvedValue(undefined),
+        getChangedFiles: vi.fn().mockResolvedValue([]),
+        add: vi.fn().mockResolvedValue(undefined),
+        commit: vi.fn().mockResolvedValue('mock-commit-hash'),
+        push: vi.fn().mockResolvedValue(undefined),
+        hasUncommittedChanges: vi.fn().mockResolvedValue(false),
+        stash: vi.fn().mockResolvedValue('mock-stash-hash'),
+        stashPop: vi.fn().mockResolvedValue(true),
+        getConflictedFiles: vi.fn().mockResolvedValue([]),
+        rebaseAbort: vi.fn().mockResolvedValue(undefined),
+        isRebaseInProgress: vi.fn().mockResolvedValue(false),
+        getCommitHistory: vi.fn().mockResolvedValue([]),
+        getStagedFiles: vi.fn().mockResolvedValue([]),
+        rebaseContinue: vi.fn().mockResolvedValue('mock-commit-hash'),
+        commitAllowEmpty: vi.fn().mockResolvedValue('mock-commit-hash')
+      }; })
     },
 
     // 🎭 MOCK SYNC STATE: Mock sync state operations
     SyncState: {
       SyncStateModule: Object.assign(
-        jest.fn().mockImplementation(() => ({
-          pushState: jest.fn().mockResolvedValue({
+        vi.fn().mockImplementation(function() { return {
+          pushState: vi.fn().mockResolvedValue({
             success: true,
             filesSynced: 0,
             sourceBranch: 'main',
@@ -360,14 +360,14 @@ jest.doMock('@gitgov/core', () => {
             commitMessage: 'mock commit message',
             conflictDetected: false
           }),
-          pullState: jest.fn().mockResolvedValue({
+          pullState: vi.fn().mockResolvedValue({
             success: true,
             hasChanges: false,
             filesUpdated: 0,
             reindexed: false,
             conflictDetected: false
           }),
-          resolveConflict: jest.fn().mockResolvedValue({
+          resolveConflict: vi.fn().mockResolvedValue({
             success: true,
             rebaseCommitHash: 'mock-rebase-hash',
             resolutionCommitHash: 'mock-resolution-hash',
@@ -375,7 +375,7 @@ jest.doMock('@gitgov/core', () => {
             resolvedBy: 'human:test-user',
             reason: 'test reason'
           }),
-          auditState: jest.fn().mockResolvedValue({
+          auditState: vi.fn().mockResolvedValue({
             passed: true,
             scope: 'current',
             totalCommits: 0,
@@ -384,29 +384,29 @@ jest.doMock('@gitgov/core', () => {
             integrityViolations: [],
             summary: 'Audit passed'
           }),
-          ensureStateBranch: jest.fn().mockResolvedValue(undefined),
-          getStateBranchName: jest.fn().mockResolvedValue('gitgov-state'),
-          calculateStateDelta: jest.fn().mockResolvedValue([]),
-          isRebaseInProgress: jest.fn().mockResolvedValue(false),
-          checkConflictMarkers: jest.fn().mockResolvedValue([]),
-          getConflictDiff: jest.fn().mockResolvedValue({
+          ensureStateBranch: vi.fn().mockResolvedValue(undefined),
+          getStateBranchName: vi.fn().mockResolvedValue('gitgov-state'),
+          calculateStateDelta: vi.fn().mockResolvedValue([]),
+          isRebaseInProgress: vi.fn().mockResolvedValue(false),
+          checkConflictMarkers: vi.fn().mockResolvedValue([]),
+          getConflictDiff: vi.fn().mockResolvedValue({
             files: [],
             message: 'No conflicted files found',
             resolutionSteps: []
           }),
-          verifyResolutionIntegrity: jest.fn().mockResolvedValue([])
-        })),
+          verifyResolutionIntegrity: vi.fn().mockResolvedValue([])
+        }; }),
         {
           // Static method for bootstrapping from gitgov-state branch
-          bootstrapFromStateBranch: jest.fn().mockResolvedValue({ success: false, error: 'State branch does not exist' })
+          bootstrapFromStateBranch: vi.fn().mockResolvedValue({ success: false, error: 'State branch does not exist' })
         }
       )
     },
 
     // 🎭 MOCK LINT: Mock lint operations
     Lint: {
-      LintModule: jest.fn().mockImplementation(() => ({
-        lint: jest.fn().mockResolvedValue({
+      LintModule: vi.fn().mockImplementation(function() { return {
+        lint: vi.fn().mockResolvedValue({
           summary: {
             filesChecked: 0,
             errors: 0,
@@ -421,7 +421,7 @@ jest.doMock('@gitgov/core', () => {
             version: '1.0.0'
           }
         }),
-        lintFile: jest.fn().mockResolvedValue({
+        lintFile: vi.fn().mockResolvedValue({
           summary: {
             filesChecked: 1,
             errors: 0,
@@ -436,7 +436,7 @@ jest.doMock('@gitgov/core', () => {
             version: '1.0.0'
           }
         }),
-        fix: jest.fn().mockResolvedValue({
+        fix: vi.fn().mockResolvedValue({
           summary: {
             fixed: 0,
             failed: 0,
@@ -444,9 +444,9 @@ jest.doMock('@gitgov/core', () => {
           },
           fixes: []
         })
-      })),
-      FsLintModule: jest.fn().mockImplementation(() => ({
-        lint: jest.fn().mockResolvedValue({
+      }; }),
+      FsLintModule: vi.fn().mockImplementation(function() { return {
+        lint: vi.fn().mockResolvedValue({
           summary: {
             filesChecked: 0,
             errors: 0,
@@ -461,7 +461,7 @@ jest.doMock('@gitgov/core', () => {
             version: '1.0.0'
           }
         }),
-        lintFile: jest.fn().mockResolvedValue({
+        lintFile: vi.fn().mockResolvedValue({
           summary: {
             filesChecked: 1,
             errors: 0,
@@ -476,7 +476,7 @@ jest.doMock('@gitgov/core', () => {
             version: '1.0.0'
           }
         }),
-        fix: jest.fn().mockResolvedValue({
+        fix: vi.fn().mockResolvedValue({
           summary: {
             fixed: 0,
             failed: 0,
@@ -484,7 +484,7 @@ jest.doMock('@gitgov/core', () => {
           },
           fixes: []
         })
-      }))
+      }; })
     },
 
     // 📋 MOCK TYPES: Provide empty namespaces for type imports
@@ -493,199 +493,201 @@ jest.doMock('@gitgov/core', () => {
 
     // 🔧 MOCK UTILS: Mock utilities (could add real ID generation later)
     Utils: {
-      generateTaskId: jest.fn().mockImplementation((title) => createValidId('task', title, Date.now())),
-      generateActorId: jest.fn().mockImplementation((type, name) => createValidId(type, name))
+      generateTaskId: vi.fn().mockImplementation((title) => createValidId('task', title, Date.now())),
+      generateActorId: vi.fn().mockImplementation((type, name) => createValidId(type, name))
     },
 
     // ✅ MOCK VALIDATION: Mock validation functions
     Validation: {
-      isTaskRecord: jest.fn().mockReturnValue(true),
-      validateTaskRecordDetailed: jest.fn().mockReturnValue({ isValid: true, errors: [] })
+      isTaskRecord: vi.fn().mockReturnValue(true),
+      validateTaskRecordDetailed: vi.fn().mockReturnValue({ isValid: true, errors: [] })
     },
 
     // 🎭 MOCK AUDIT ORCHESTRATOR: Mock audit orchestration
     AuditOrchestrator: {
-      createAuditOrchestrator: jest.fn().mockImplementation(() => ({
-        run: jest.fn().mockResolvedValue({
+      createAuditOrchestrator: vi.fn().mockImplementation(function() { return {
+        run: vi.fn().mockResolvedValue({
           findings: [],
           agentResults: [],
           policyDecision: { decision: 'pass', reason: 'No findings', blockingFindings: [], waivedFindings: [], summary: { critical: 0, high: 0, medium: 0, low: 0 }, rulesEvaluated: [], evaluatedAt: new Date().toISOString() },
           summary: { total: 0, critical: 0, high: 0, medium: 0, low: 0, suppressed: 0, agentsRun: 0, agentsFailed: 0 },
           executionIds: { scans: [], policy: 'exec-policy-1' },
         }),
-      })),
+      }; }),
     },
 
     // 🎭 MOCK POLICY EVALUATOR: Mock policy evaluation
     PolicyEvaluator: {
-      createPolicyEvaluator: jest.fn().mockImplementation(() => ({
-        evaluate: jest.fn().mockReturnValue({ decision: 'pass', reason: 'No findings' }),
-      })),
+      createPolicyEvaluator: vi.fn().mockImplementation(function() { return {
+        evaluate: vi.fn().mockReturnValue({ decision: 'pass', reason: 'No findings' }),
+      }; }),
     },
 
     // 🎭 MOCK SOURCE AUDITOR: Mock source auditor (for WaiverReader/WaiverWriter)
     SourceAuditor: {
-      SourceAuditorModule: jest.fn(),
-      WaiverReader: jest.fn().mockImplementation(() => ({
-        loadWaivers: jest.fn().mockResolvedValue([]),
-      })),
-      WaiverWriter: jest.fn().mockImplementation(() => ({
-        createWaiver: jest.fn().mockResolvedValue(undefined),
-      })),
+      SourceAuditorModule: vi.fn(),
+      WaiverReader: vi.fn().mockImplementation(function() { return {
+        loadWaivers: vi.fn().mockResolvedValue([]),
+      }; }),
+      WaiverWriter: vi.fn().mockImplementation(function() { return {
+        createWaiver: vi.fn().mockResolvedValue(undefined),
+      }; }),
     },
 
     // 🎭 MOCK FINDING DETECTOR: Mock finding detection
     FindingDetector: {
-      FindingDetectorModule: jest.fn().mockImplementation(() => ({
-        detect: jest.fn().mockResolvedValue([]),
-      })),
+      FindingDetectorModule: vi.fn().mockImplementation(function() { return {
+        detect: vi.fn().mockResolvedValue([]),
+      }; }),
     },
 
     // Standalone exports (imported directly, not via namespace)
-    IdentityModule: jest.fn().mockImplementation(() => ({
-      getActor: jest.fn().mockResolvedValue({ id: 'human:test-user', type: 'human', displayName: 'Test User', publicKey: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=', roles: ['author'] }),
-      createActor: jest.fn().mockResolvedValue({ id: 'human:new-user', type: 'human', displayName: 'New User', publicKey: 'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=', roles: ['author'] }),
-      getActorPublicKey: jest.fn().mockResolvedValue('AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='),
-      listActors: jest.fn().mockResolvedValue([]),
-    })),
-    RecordSigner: jest.fn().mockImplementation(() => ({
-      createSignedRecord: jest.fn().mockResolvedValue({ header: { version: '1.0', type: 'task', payloadChecksum: 'abc', signatures: [] }, payload: {} }),
-    })),
-    ProjectModule: jest.fn().mockImplementation(() => ({
-      initializeProject: jest.fn().mockResolvedValue({ actorId: 'human:test-user', productAgentId: 'agent:gitgov-audit', cycleId: 'cycle-root', commitSha: 'abc123' }),
-    })),
-    getCurrentActor: jest.fn().mockResolvedValue({ id: 'human:current-user', type: 'human', displayName: 'Current User', publicKey: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=', roles: ['author'] }),
+    IdentityModule: vi.fn().mockImplementation(function() { return {
+      getActor: vi.fn().mockResolvedValue({ id: 'human:test-user', type: 'human', displayName: 'Test User', publicKey: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=', roles: ['author'] }),
+      createActor: vi.fn().mockResolvedValue({ id: 'human:new-user', type: 'human', displayName: 'New User', publicKey: 'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=', roles: ['author'] }),
+      getActorPublicKey: vi.fn().mockResolvedValue('AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='),
+      listActors: vi.fn().mockResolvedValue([]),
+    }; }),
+    RecordSigner: vi.fn().mockImplementation(function() { return {
+      createSignedRecord: vi.fn().mockResolvedValue({ header: { version: '1.0', type: 'task', payloadChecksum: 'abc', signatures: [] }, payload: {} }),
+    }; }),
+    ProjectModule: vi.fn().mockImplementation(function() { return {
+      initializeProject: vi.fn().mockResolvedValue({ actorId: 'human:test-user', productAgentId: 'agent:gitgov-audit', cycleId: 'cycle-root', commitSha: 'abc123' }),
+    }; }),
+    getCurrentActor: vi.fn().mockResolvedValue({ id: 'human:current-user', type: 'human', displayName: 'Current User', publicKey: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=', roles: ['author'] }),
   };
 });
 
 // Mock @gitgov/core/fs — standalone functions + filesystem classes
-jest.doMock('@gitgov/core/fs', () => ({
-  FsRecordProjection: jest.fn().mockImplementation(() => ({
-    persist: jest.fn().mockResolvedValue(undefined),
-    read: jest.fn().mockResolvedValue(null),
-    exists: jest.fn().mockResolvedValue(false),
-    clear: jest.fn().mockResolvedValue(undefined),
-  })),
-  FsRecordStore: jest.fn().mockImplementation(() => ({
-    get: jest.fn().mockResolvedValue(null),
-    put: jest.fn().mockResolvedValue(undefined),
-    delete: jest.fn().mockResolvedValue(undefined),
-    list: jest.fn().mockResolvedValue([]),
-    exists: jest.fn().mockResolvedValue(false),
-  })),
-  FsFileLister: jest.fn().mockImplementation(() => ({
-    list: jest.fn().mockResolvedValue([]),
-    read: jest.fn().mockResolvedValue(''),
-    exists: jest.fn().mockResolvedValue(false),
-    stat: jest.fn().mockResolvedValue({ isFile: true, isDirectory: false, size: 0, mtime: new Date() })
-  })),
-  FsProjectInitializer: jest.fn().mockImplementation(() => ({})),
-  FsLintModule: jest.fn().mockImplementation(() => ({
-    lint: jest.fn().mockResolvedValue({
+vi.mock('@gitgov/core/fs', () => ({
+  FsRecordProjection: vi.fn().mockImplementation(function() { return {
+    persist: vi.fn().mockResolvedValue(undefined),
+    read: vi.fn().mockResolvedValue(null),
+    exists: vi.fn().mockResolvedValue(false),
+    clear: vi.fn().mockResolvedValue(undefined),
+  }; }),
+  FsRecordStore: vi.fn().mockImplementation(function() { return {
+    get: vi.fn().mockResolvedValue(null),
+    put: vi.fn().mockResolvedValue(undefined),
+    delete: vi.fn().mockResolvedValue(undefined),
+    list: vi.fn().mockResolvedValue([]),
+    exists: vi.fn().mockResolvedValue(false),
+  }; }),
+  FsFileLister: vi.fn().mockImplementation(function() { return {
+    list: vi.fn().mockResolvedValue([]),
+    read: vi.fn().mockResolvedValue(''),
+    exists: vi.fn().mockResolvedValue(false),
+    stat: vi.fn().mockResolvedValue({ isFile: true, isDirectory: false, size: 0, mtime: new Date() })
+  }; }),
+  FsProjectInitializer: vi.fn().mockImplementation(function() { return {}; }),
+  FsLintModule: vi.fn().mockImplementation(function() { return {
+    lint: vi.fn().mockResolvedValue({
       summary: { filesChecked: 0, errors: 0, warnings: 0, fixable: 0, executionTime: 0 },
       results: [],
       metadata: { timestamp: new Date().toISOString(), options: {}, version: '1.0.0' }
     }),
-    lintFile: jest.fn().mockResolvedValue({
+    lintFile: vi.fn().mockResolvedValue({
       summary: { filesChecked: 1, errors: 0, warnings: 0, fixable: 0, executionTime: 0 },
       results: [],
       metadata: { timestamp: new Date().toISOString(), options: {}, version: '1.0.0' }
     }),
-    fix: jest.fn().mockResolvedValue({
+    fix: vi.fn().mockResolvedValue({
       summary: { fixed: 0, failed: 0, backupsCreated: 0 },
       fixes: []
     })
-  })),
-  FsWorktreeSyncStateModule: jest.fn().mockImplementation(() => ({
-    pushState: jest.fn().mockResolvedValue({
+  }; }),
+  FsWorktreeSyncStateModule: vi.fn().mockImplementation(function() { return {
+    pushState: vi.fn().mockResolvedValue({
       success: true, filesSynced: 0, sourceBranch: 'main',
       commitHash: 'mock-commit-hash', commitMessage: 'mock commit message', conflictDetected: false
     }),
-    pullState: jest.fn().mockResolvedValue({
+    pullState: vi.fn().mockResolvedValue({
       success: true, hasChanges: false, filesUpdated: 0, reindexed: false, conflictDetected: false
     }),
-    resolveConflict: jest.fn().mockResolvedValue({ success: true }),
-    auditState: jest.fn().mockResolvedValue({ passed: true, scope: 'current', totalCommits: 0 }),
-    ensureStateBranch: jest.fn().mockResolvedValue(undefined),
-    ensureWorktree: jest.fn().mockResolvedValue(undefined),
-    getStateBranchName: jest.fn().mockResolvedValue('gitgov-state'),
-    getWorktreePath: jest.fn().mockReturnValue('/mock/worktree/path'),
-    isRebaseInProgress: jest.fn().mockResolvedValue(false),
-    checkConflictMarkers: jest.fn().mockResolvedValue([]),
-    calculateStateDelta: jest.fn().mockResolvedValue([]),
-    getConflictDiff: jest.fn().mockResolvedValue({ files: [], message: '', resolutionSteps: [] }),
-    verifyResolutionIntegrity: jest.fn().mockResolvedValue([]),
-  })),
-  GitModule: jest.fn().mockImplementation(() => ({
-    getRepoRoot: jest.fn().mockResolvedValue('/tmp/test-gitgov'),
-    getCurrentBranch: jest.fn().mockResolvedValue('main'),
-    branchExists: jest.fn().mockResolvedValue(true),
-    checkoutFilesFromBranch: jest.fn().mockResolvedValue(undefined),
-    fetch: jest.fn().mockResolvedValue(undefined),
-    listRemoteBranches: jest.fn().mockResolvedValue([]),
-    checkoutBranch: jest.fn().mockResolvedValue(undefined),
-    pushWithUpstream: jest.fn().mockResolvedValue(undefined),
-    setUpstream: jest.fn().mockResolvedValue(undefined),
-    getBranchRemote: jest.fn().mockResolvedValue(null),
-    checkoutOrphanBranch: jest.fn().mockResolvedValue(undefined),
-    pullRebase: jest.fn().mockResolvedValue(undefined),
-    getChangedFiles: jest.fn().mockResolvedValue([]),
-    add: jest.fn().mockResolvedValue(undefined),
-    commit: jest.fn().mockResolvedValue('mock-commit-hash'),
-    push: jest.fn().mockResolvedValue(undefined),
-    hasUncommittedChanges: jest.fn().mockResolvedValue(false),
-    stash: jest.fn().mockResolvedValue('mock-stash-hash'),
-    stashPop: jest.fn().mockResolvedValue(true),
-    getConflictedFiles: jest.fn().mockResolvedValue([]),
-    rebaseAbort: jest.fn().mockResolvedValue(undefined),
-    isRebaseInProgress: jest.fn().mockResolvedValue(false),
-    getCommitHistory: jest.fn().mockResolvedValue([]),
-    getStagedFiles: jest.fn().mockResolvedValue([]),
-    rebaseContinue: jest.fn().mockResolvedValue('mock-commit-hash'),
-    commitAllowEmpty: jest.fn().mockResolvedValue('mock-commit-hash'),
-    exec: jest.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' }),
-  })),
-  createAgentRunner: jest.fn().mockImplementation(() => ({
-    run: jest.fn().mockResolvedValue({ success: true }),
-  })),
-  createConfigManager: jest.fn().mockImplementation(() => ({
-    loadConfig: jest.fn().mockResolvedValue({
+    resolveConflict: vi.fn().mockResolvedValue({ success: true }),
+    auditState: vi.fn().mockResolvedValue({ passed: true, scope: 'current', totalCommits: 0 }),
+    ensureStateBranch: vi.fn().mockResolvedValue(undefined),
+    ensureWorktree: vi.fn().mockResolvedValue(undefined),
+    getStateBranchName: vi.fn().mockResolvedValue('gitgov-state'),
+    getWorktreePath: vi.fn().mockReturnValue('/mock/worktree/path'),
+    isRebaseInProgress: vi.fn().mockResolvedValue(false),
+    checkConflictMarkers: vi.fn().mockResolvedValue([]),
+    calculateStateDelta: vi.fn().mockResolvedValue([]),
+    getConflictDiff: vi.fn().mockResolvedValue({ files: [], message: '', resolutionSteps: [] }),
+    verifyResolutionIntegrity: vi.fn().mockResolvedValue([]),
+  }; }),
+  GitModule: vi.fn().mockImplementation(function() { return {
+    getRepoRoot: vi.fn().mockResolvedValue('/tmp/test-gitgov'),
+    getCurrentBranch: vi.fn().mockResolvedValue('main'),
+    branchExists: vi.fn().mockResolvedValue(true),
+    checkoutFilesFromBranch: vi.fn().mockResolvedValue(undefined),
+    fetch: vi.fn().mockResolvedValue(undefined),
+    listRemoteBranches: vi.fn().mockResolvedValue([]),
+    checkoutBranch: vi.fn().mockResolvedValue(undefined),
+    pushWithUpstream: vi.fn().mockResolvedValue(undefined),
+    setUpstream: vi.fn().mockResolvedValue(undefined),
+    getBranchRemote: vi.fn().mockResolvedValue(null),
+    checkoutOrphanBranch: vi.fn().mockResolvedValue(undefined),
+    pullRebase: vi.fn().mockResolvedValue(undefined),
+    getChangedFiles: vi.fn().mockResolvedValue([]),
+    add: vi.fn().mockResolvedValue(undefined),
+    commit: vi.fn().mockResolvedValue('mock-commit-hash'),
+    push: vi.fn().mockResolvedValue(undefined),
+    hasUncommittedChanges: vi.fn().mockResolvedValue(false),
+    stash: vi.fn().mockResolvedValue('mock-stash-hash'),
+    stashPop: vi.fn().mockResolvedValue(true),
+    getConflictedFiles: vi.fn().mockResolvedValue([]),
+    rebaseAbort: vi.fn().mockResolvedValue(undefined),
+    isRebaseInProgress: vi.fn().mockResolvedValue(false),
+    getCommitHistory: vi.fn().mockResolvedValue([]),
+    getStagedFiles: vi.fn().mockResolvedValue([]),
+    rebaseContinue: vi.fn().mockResolvedValue('mock-commit-hash'),
+    commitAllowEmpty: vi.fn().mockResolvedValue('mock-commit-hash'),
+    exec: vi.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' }),
+  }; }),
+  createAgentRunner: vi.fn().mockImplementation(function() { return {
+    run: vi.fn().mockResolvedValue({ success: true }),
+  }; }),
+  createConfigManager: vi.fn().mockImplementation(function() { return {
+    loadConfig: vi.fn().mockResolvedValue({
       protocolVersion: '1.0.0',
       projectId: 'test-project',
       projectName: 'Test Project'
     }),
-    loadSession: jest.fn().mockResolvedValue({
+    loadSession: vi.fn().mockResolvedValue({
       lastSession: {
         actorId: 'human:test-user',
         timestamp: new Date().toISOString()
       },
       actorState: {}
     }),
-    saveConfig: jest.fn().mockResolvedValue(undefined),
-    saveSession: jest.fn().mockResolvedValue(undefined),
-    updateActorState: jest.fn().mockResolvedValue(undefined),
-    getStateBranch: jest.fn().mockResolvedValue('gitgov-state'),
-  })),
+    saveConfig: vi.fn().mockResolvedValue(undefined),
+    saveSession: vi.fn().mockResolvedValue(undefined),
+    updateActorState: vi.fn().mockResolvedValue(undefined),
+    getStateBranch: vi.fn().mockResolvedValue('gitgov-state'),
+  }; }),
   DEFAULT_ID_ENCODER: { encode: (id: string) => id, decode: (encoded: string) => encoded },
-  findProjectRoot: jest.fn().mockReturnValue('/tmp/test-gitgov'),
-  findGitgovRoot: jest.fn().mockReturnValue('/tmp/test-gitgov'),
-  getWorktreeBasePath: jest.fn((repoRoot: string) => {
+  findProjectRoot: vi.fn().mockReturnValue('/tmp/test-gitgov'),
+  findGitgovRoot: vi.fn().mockReturnValue('/tmp/test-gitgov'),
+  getWorktreeBasePath: vi.fn((repoRoot: string) => {
     const { createHash } = require('crypto');
     const hash = createHash('sha256').update(repoRoot).digest('hex').slice(0, 12);
     return require('path').join(require('os').homedir(), '.gitgov', 'worktrees', hash);
   }),
-  createSessionManager: jest.fn().mockReturnValue({
-    loadSession: jest.fn().mockResolvedValue(null),
-    saveSession: jest.fn().mockResolvedValue(undefined),
+  createSessionManager: vi.fn().mockReturnValue({
+    loadSession: vi.fn().mockResolvedValue(null),
+    saveSession: vi.fn().mockResolvedValue(undefined),
   }),
+  getKeysDir: vi.fn().mockImplementation((worktreePath: string) => require('path').join(worktreePath, '.gitgov', 'keys')),
 }));
 
 import { DependencyInjectionService } from './dependency-injection';
 
-// Mocked module references (require once after doMock, use everywhere)
-const mockFs = require('fs');
-const corefs = require('@gitgov/core/fs');
-const { Git, Adapters, KeyProvider, EventBus, RecordProjection, RecordMetrics, AuditOrchestrator: AuditOrchestratorMock, PolicyEvaluator: PolicyEvaluatorMock } = require('@gitgov/core');
+// Mocked module references — vitest hoists vi.mock, so imports resolve to mocks
+import * as mockFsModule from 'fs';
+import * as corefs from '@gitgov/core/fs';
+import { Git, Adapters, KeyProvider, EventBus, RecordProjection, RecordMetrics, AuditOrchestrator as AuditOrchestratorMock, PolicyEvaluator as PolicyEvaluatorMock } from '@gitgov/core';
+const mockFs = vi.mocked(mockFsModule);
 
 describe('DependencyInjectionService', () => {
   let diService: DependencyInjectionService;
@@ -694,7 +696,7 @@ describe('DependencyInjectionService', () => {
   const mockWorktreeBasePath = corefs.getWorktreeBasePath(mockRepoRoot);
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     // Reset singleton for each test
     DependencyInjectionService.reset();
@@ -896,7 +898,7 @@ describe('DependencyInjectionService', () => {
       await diService.getAuditOrchestrator();
 
       // Verify createAgentRunner was called with repoRoot (not worktree path)
-      const { createAgentRunner } = jest.requireMock('@gitgov/core/fs');
+      const { createAgentRunner } = corefs;
       expect(createAgentRunner).toHaveBeenCalled();
       const callArgs = createAgentRunner.mock.calls[0][0];
       expect(callArgs.projectRoot).toBe(mockRepoRoot);
@@ -924,13 +926,13 @@ describe('DependencyInjectionService', () => {
       // Mock GitModule to simulate worktree bootstrap
       const mockGitModule = new Git.GitModule({
         repoRoot: mockRepoRoot,
-        execCommand: jest.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' })
+        execCommand: vi.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' })
       });
-      mockGitModule.getRepoRoot = jest.fn().mockResolvedValue(mockRepoRoot);
-      mockGitModule.branchExists = jest.fn().mockResolvedValue(true);
-      mockGitModule.exec = jest.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+      mockGitModule.getRepoRoot = vi.fn().mockResolvedValue(mockRepoRoot);
+      mockGitModule.branchExists = vi.fn().mockResolvedValue(true);
+      mockGitModule.exec = vi.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
 
-      diService.getGitModule = jest.fn().mockResolvedValue(mockGitModule);
+      diService.getGitModule = vi.fn().mockResolvedValue(mockGitModule);
 
       // Get the projector (this should trigger bootstrap + reindex)
       const projector = await diService.getRecordProjector();
@@ -968,13 +970,13 @@ describe('DependencyInjectionService', () => {
       // Mock GitModule — branch doesn't exist locally or remotely
       const mockGitModule = new Git.GitModule({
         repoRoot: mockRepoRoot,
-        execCommand: jest.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' })
+        execCommand: vi.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' })
       });
-      mockGitModule.branchExists = jest.fn().mockResolvedValue(false);
-      mockGitModule.listRemoteBranches = jest.fn().mockResolvedValue([]);
-      mockGitModule.getRepoRoot = jest.fn().mockResolvedValue(mockRepoRoot);
+      mockGitModule.branchExists = vi.fn().mockResolvedValue(false);
+      mockGitModule.listRemoteBranches = vi.fn().mockResolvedValue([]);
+      mockGitModule.getRepoRoot = vi.fn().mockResolvedValue(mockRepoRoot);
 
-      diService.getGitModule = jest.fn().mockResolvedValue(mockGitModule);
+      diService.getGitModule = vi.fn().mockResolvedValue(mockGitModule);
 
       await expect(diService.getRecordProjector())
         .rejects.toThrow("❌ GitGovernance not initialized. Run 'gitgov init' first.");
@@ -987,13 +989,13 @@ describe('DependencyInjectionService', () => {
       // Mock GitModule — branch doesn't exist locally or remotely
       const mockGitModule = new Git.GitModule({
         repoRoot: mockRepoRoot,
-        execCommand: jest.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' })
+        execCommand: vi.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' })
       });
-      mockGitModule.branchExists = jest.fn().mockResolvedValue(false);
-      mockGitModule.listRemoteBranches = jest.fn().mockResolvedValue([]);
-      mockGitModule.getRepoRoot = jest.fn().mockResolvedValue(mockRepoRoot);
+      mockGitModule.branchExists = vi.fn().mockResolvedValue(false);
+      mockGitModule.listRemoteBranches = vi.fn().mockResolvedValue([]);
+      mockGitModule.getRepoRoot = vi.fn().mockResolvedValue(mockRepoRoot);
 
-      diService.getGitModule = jest.fn().mockResolvedValue(mockGitModule);
+      diService.getGitModule = vi.fn().mockResolvedValue(mockGitModule);
 
       await expect(diService.getBacklogAdapter())
         .rejects.toThrow("❌ GitGovernance not initialized. Run 'gitgov init' first.");
@@ -1004,7 +1006,7 @@ describe('DependencyInjectionService', () => {
       mockFs.promises.access.mockResolvedValue(undefined);
 
       // Mock RecordProjector constructor to throw
-      RecordProjection.RecordProjector.mockImplementationOnce(() => {
+      RecordProjection.RecordProjector.mockImplementationOnce(function() {
         throw new Error('Connection failed');
       });
 
@@ -1016,7 +1018,7 @@ describe('DependencyInjectionService', () => {
       mockFs.promises.access.mockResolvedValue(undefined);
 
       // Mock BacklogAdapter constructor to throw
-      Adapters.BacklogAdapter.mockImplementationOnce(() => {
+      Adapters.BacklogAdapter.mockImplementationOnce(function() {
         throw new Error('Database connection failed');
       });
 
@@ -1028,7 +1030,7 @@ describe('DependencyInjectionService', () => {
       mockFs.promises.access.mockResolvedValue(undefined);
 
       // Mock RecordProjector to throw a string instead of Error
-      RecordProjection.RecordProjector.mockImplementationOnce(() => {
+      RecordProjection.RecordProjector.mockImplementationOnce(function() {
         throw 'String error instead of Error object';
       });
 

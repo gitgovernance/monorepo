@@ -5,7 +5,7 @@
  */
 import pg from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
-import { PrismaClient } from '@gitgov/saas-api/prisma';
+import { PrismaClient } from '../../generated/prisma';
 
 export type { PrismaClient };
 

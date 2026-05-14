@@ -75,6 +75,11 @@ export function resetDiscoveryCache(): void {
  * @param repoRoot - Absolute path to the git repo root
  * @returns Path under ~/.gitgov/worktrees/{hash}
  */
+// [EARS-D1] Keys directory for a given worktree — per-repo cryptographic isolation
+export function getKeysDir(worktreePath: string): string {
+  return path.join(worktreePath, '.gitgov', 'keys');
+}
+
 export function getWorktreeBasePath(repoRoot: string): string {
   const resolvedPath = realpathSync(repoRoot);
   const hash = createHash('sha256').update(resolvedPath).digest('hex').slice(0, 12);

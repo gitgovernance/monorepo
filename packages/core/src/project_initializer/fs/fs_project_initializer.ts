@@ -13,13 +13,13 @@ const logger = createLogger('[FsProjectInitializer] ');
 /**
  * Canonical directory structure for .gitgov/
  */
-// [G29] 'keys' removed — private keys live in ~/.gitgov/keys/ (global per-machine)
 const GITGOV_DIRECTORIES = [
   'actors',
   'cycles',
   'tasks',
   'executions',
   'feedbacks',
+  'keys',
 ] as const;
 
 /**

@@ -24,11 +24,6 @@ jest.mock('fs', () => ({
   },
 }));
 
-// Mock os.homedir for G29 global keys path
-jest.mock('os', () => ({
-  homedir: jest.fn().mockReturnValue('/mock/home'),
-}));
-
 import { promises as fs } from 'fs';
 
 const mockedFs = fs as jest.Mocked<typeof fs>;
@@ -206,7 +201,7 @@ describe('FsSessionStore', () => {
       const result = await store.detectActorFromKeyFiles();
 
       expect(result).toEqual(['human:camilo-v2']);
-      expect(mockedFs.readdir).toHaveBeenCalledWith('/mock/home/.gitgov/keys');
+      expect(mockedFs.readdir).toHaveBeenCalledWith('/test/project/.gitgov/keys');
     });
 
     it('[EARS-C2] WHEN detectActorFromKeyFiles is invoked with multiple .key files, THE SYSTEM SHALL return all actor IDs', async () => {

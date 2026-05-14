@@ -247,7 +247,6 @@ describe('FsProjectInitializer', () => {
 
       await initializer.createProjectStructure();
 
-      // [G29] 'keys' removed — lives in ~/.gitgov/keys/ (global)
       const expectedDirs = [
         '.gitgov',
         '.gitgov/actors',
@@ -255,6 +254,7 @@ describe('FsProjectInitializer', () => {
         '.gitgov/tasks',
         '.gitgov/executions',
         '.gitgov/feedbacks',
+        '.gitgov/keys',
       ];
 
       for (const dir of expectedDirs) {
@@ -264,8 +264,8 @@ describe('FsProjectInitializer', () => {
         );
       }
 
-      // Total: 1 (.gitgov) + 5 subdirectories = 6 calls (G29: keys removed)
-      expect(mockFs.mkdir).toHaveBeenCalledTimes(6);
+      // Total: 1 (.gitgov) + 6 subdirectories = 7 calls
+      expect(mockFs.mkdir).toHaveBeenCalledTimes(7);
     });
 
     it('[EARS-FPI02] should check for config.json existence', async () => {

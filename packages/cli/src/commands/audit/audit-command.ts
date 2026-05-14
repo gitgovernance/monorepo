@@ -5,7 +5,6 @@ import { readFile } from 'node:fs/promises';
 import { Sarif as SarifModule, generateExecutionId } from '@gitgov/core';
 import { formatAuditResult } from '@gitgov/core/audit';
 import type { Finding, FindingCategory, DetectorName } from '@gitgov/core/audit';
-import { GitHubCiReporter } from '@gitgov/core/github';
 import type {
   AuditOrchestrationOptions,
   AuditOrchestrationResult,
@@ -270,7 +269,8 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
       const [owner, repo] = (process.env['GITHUB_REPOSITORY'] ?? '').split('/');
       if (!owner || !repo) return;
 
-      // [AORCH-D1] Construct ICiReporter via factory — CLI never imports @octokit/rest directly
+      // [AORCH-D1] Dynamic import — avoids loading @octokit/rest at module level
+      const { GitHubCiReporter } = await import('@gitgov/core/github');
       const reporter = await GitHubCiReporter.fromToken(process.env['GITHUB_TOKEN']!);
 
       // [AORCH-D2] postOrUpdateComment handles marker-based idempotency (CIREP-A2)
