@@ -54,6 +54,9 @@ export class DependencyInjectionService {
    */
   private initModeEnabled = false;
 
+  // [EARS-C15] Override for bootstrapWorktree branch name (default: 'gitgov-state')
+  private stateBranchOverride: string | null = null;
+
   private constructor() { }
 
   /**
@@ -75,6 +78,14 @@ export class DependencyInjectionService {
     this.repoRoot = projectRoot;
     this.projectRoot = getWorktreeBasePath(projectRoot);
     this.initModeEnabled = true;
+  }
+
+  /**
+   * [EARS-C15] Override state branch for worktree bootstrap.
+   * Called by LoginCommand when --state-branch is provided, before DI bootstrap.
+   */
+  setStateBranchOverride(branchName: string): void {
+    this.stateBranchOverride = branchName;
   }
 
   /**
@@ -135,8 +146,9 @@ export class DependencyInjectionService {
   }
 
   /**
-   * [CLIINT-A1] Bootstrap worktree from gitgov-state branch.
-   * Creates a git worktree at ~/.gitgov/worktrees/<hash>/ pointing to gitgov-state.
+   * [CLIINT-A1] [EARS-C15] Bootstrap worktree from state branch.
+   * Creates a git worktree at ~/.gitgov/worktrees/<hash>/ pointing to the state branch.
+   * Uses stateBranchOverride if set (LOGIN-P1), otherwise defaults to 'gitgov-state'.
    */
   private async bootstrapWorktree(
     gitModule: Git.IGitModule,
@@ -144,18 +156,19 @@ export class DependencyInjectionService {
     worktreeBasePath: string,
   ): Promise<void> {
     const { promises: fsPromises } = await import('fs');
+    const stateBranch = this.stateBranchOverride || 'gitgov-state';
 
     // Ensure ~/.gitgov/worktrees/ exists
     await fsPromises.mkdir(path.join(os.homedir(), '.gitgov', 'worktrees'), { recursive: true });
 
-    // Check if gitgov-state branch exists locally
-    const branchExists = await gitModule.branchExists('gitgov-state');
+    // Check if state branch exists locally
+    const branchExists = await gitModule.branchExists(stateBranch);
     if (!branchExists) {
       // Check remote
       const remoteBranches = await gitModule.listRemoteBranches('origin');
-      if (remoteBranches.includes('gitgov-state') || remoteBranches.includes('origin/gitgov-state')) {
+      if (remoteBranches.includes(stateBranch) || remoteBranches.includes(`origin/${stateBranch}`)) {
         // Create local tracking branch
-        await gitModule.exec('git', ['branch', 'gitgov-state', 'origin/gitgov-state']);
+        await gitModule.exec('git', ['branch', stateBranch, `origin/${stateBranch}`]);
       } else {
         // Neither exists — not initialized
         throw new Error("❌ GitGovernance not initialized. Run 'gitgov init' first.");
@@ -163,7 +176,7 @@ export class DependencyInjectionService {
     }
 
     // Create worktree
-    await gitModule.exec('git', ['worktree', 'add', worktreeBasePath, 'gitgov-state']);
+    await gitModule.exec('git', ['worktree', 'add', worktreeBasePath, stateBranch]);
   }
 
   /**

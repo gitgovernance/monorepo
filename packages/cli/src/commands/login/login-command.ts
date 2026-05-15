@@ -108,6 +108,11 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
         // [LOGIN-J2] Fetch failed — continue, DI will use cached refs or fail with clear message
       }
 
+      // [EARS-C15] Tell DI which branch to use for worktree bootstrap (before any DI call)
+      if (options.stateBranch) {
+        this.dependencyService.setStateBranchOverride(options.stateBranch);
+      }
+
       const saasUrl = await this.resolveSaasUrl(options);
 
       // Start local callback server and open browser in parallel
