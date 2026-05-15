@@ -35,6 +35,7 @@ export type ProjectInitOptions = {
   actorName?: string;
   type?: 'human' | 'agent';
   saasUrl?: string;
+  stateBranch?: string;
   repoId?: string;
   joinedVia?: EnsureActorInput['joinedVia'];
 };

@@ -20,6 +20,7 @@ export interface InitCommandOptions {
   forceLocal?: boolean;
   login?: string;
   saasUrl?: string;
+  stateBranch?: string;
   cache?: boolean; // Note: --no-cache sets this to false
   skipValidation?: boolean;
   json?: boolean;
@@ -73,15 +74,18 @@ export class InitCommand {
       // 4. Setup visual progress tracking
       const progressTracker = this.createProgressTracker(options);
 
+      // [INIT-L1] [INIT-L2] Resolve state branch name
+      const stateBranch = completeOptions.stateBranch || 'gitgov-state';
+
       // [EARS-B1] Get ProjectModule from dependency injection
-      const projectModule = await this.getProjectModule();
+      const projectModule = await this.getProjectModule(stateBranch);
 
       // [EARS-B1] Delegate ALL business logic to ProjectModule
       progressTracker.start("🚀 Initializing GitGovernance Project...\n");
 
       // [EARS-D1] Build ProjectInitOptions — filter undefined for exactOptionalPropertyTypes
       const saasUrl = completeOptions.saasUrl || process.env['GITGOV_SAAS_URL'] || 'https://app.gitgov.dev';
-      const initOptions: import('@gitgov/core').ProjectModuleInitOptions = { name: completeOptions.name!, saasUrl };
+      const initOptions: import('@gitgov/core').ProjectModuleInitOptions = { name: completeOptions.name!, saasUrl, stateBranch };
       initOptions.login = completeOptions.login;
       if (completeOptions.actorName) initOptions.actorName = completeOptions.actorName;
       if (completeOptions.type) initOptions.type = completeOptions.type;
@@ -163,11 +167,11 @@ export class InitCommand {
    * [EARS-B1] Gets ProjectModule for complete orchestration via DI.
    * Creates worktree at ~/.gitgov/worktrees/<hash>/ before initializing.
    */
-  private async getProjectModule(): Promise<ProjectModule> {
+  private async getProjectModule(stateBranch: string): Promise<ProjectModule> {
     const projectRoot = process.cwd();
 
-    // Create worktree BEFORE ProjectModule runs
-    await this.ensureWorktreeForInit(projectRoot);
+    // [INIT-L1] Create worktree with configured branch name
+    await this.ensureWorktreeForInit(projectRoot, stateBranch);
 
     this.container.setInitMode(projectRoot);
     return this.container.getProjectModule();
@@ -179,11 +183,12 @@ export class InitCommand {
    */
   private async postInitConcerns(options: InitCommandOptions): Promise<void> {
     const repoRoot = process.cwd();
+    const stateBranch = options.stateBranch || 'gitgov-state';
 
-    // Best-effort push to remote
+    // [EARS-G1] [INIT-L1] Best-effort push to remote using configured branch
     try {
       const { execSync } = await import('child_process');
-      execSync('git push origin gitgov-state', {
+      execSync(`git push origin ${stateBranch}`, {
         cwd: repoRoot,
         stdio: 'pipe',
         timeout: 10000,
@@ -212,10 +217,10 @@ export class InitCommand {
   }
 
   /**
-   * [CLIINT-B1] Create worktree at ~/.gitgov/worktrees/<hash>/ for init.
-   * Creates orphan gitgov-state branch if needed, then creates worktree.
+   * [CLIINT-B1] [INIT-L1] Create worktree at ~/.gitgov/worktrees/<hash>/ for init.
+   * Creates state branch (configurable name) if needed, then creates worktree.
    */
-  private async ensureWorktreeForInit(repoRoot: string): Promise<void> {
+  private async ensureWorktreeForInit(repoRoot: string, stateBranch: string): Promise<void> {
     const hash = createHash('sha256').update(realpathSync(repoRoot)).digest('hex').slice(0, 12);
     const worktreePath = pathUtils.join(os.homedir(), '.gitgov', 'worktrees', hash);
 
@@ -225,15 +230,15 @@ export class InitCommand {
     // Ensure ~/.gitgov/worktrees/ exists
     await fsPromises.mkdir(pathUtils.join(os.homedir(), '.gitgov', 'worktrees'), { recursive: true });
 
-    // Create or fetch gitgov-state branch
+    // Create or fetch state branch
     const { execSync } = await import('child_process');
     try {
-      execSync('git rev-parse --verify gitgov-state', { cwd: repoRoot, stdio: 'pipe' });
+      execSync(`git rev-parse --verify ${stateBranch}`, { cwd: repoRoot, stdio: 'pipe' });
     } catch {
       // Local branch doesn't exist — try fetching from remote (collaborator clone scenario)
       try {
-        execSync('git fetch origin gitgov-state', { cwd: repoRoot, stdio: 'pipe' });
-        execSync('git branch gitgov-state origin/gitgov-state', { cwd: repoRoot, stdio: 'pipe' });
+        execSync(`git fetch origin ${stateBranch}`, { cwd: repoRoot, stdio: 'pipe' });
+        execSync(`git branch ${stateBranch} origin/${stateBranch}`, { cwd: repoRoot, stdio: 'pipe' });
       } catch {
         // No remote branch either — create orphan (fresh project)
         const emptyTree = execSync('git hash-object -t tree /dev/null', { cwd: repoRoot, encoding: 'utf8' }).trim();
@@ -241,12 +246,12 @@ export class InitCommand {
           `git commit-tree ${emptyTree} -m "gitgov: initialize state branch"`,
           { cwd: repoRoot, encoding: 'utf8' },
         ).trim();
-        execSync(`git update-ref refs/heads/gitgov-state ${commitHash}`, { cwd: repoRoot, stdio: 'pipe' });
+        execSync(`git update-ref refs/heads/${stateBranch} ${commitHash}`, { cwd: repoRoot, stdio: 'pipe' });
       }
     }
 
     // Create worktree at ~/.gitgov/worktrees/<hash>/
-    execSync(`git worktree add "${worktreePath}" gitgov-state`, { cwd: repoRoot, stdio: 'pipe' });
+    execSync(`git worktree add "${worktreePath}" ${stateBranch}`, { cwd: repoRoot, stdio: 'pipe' });
   }
 
   /**

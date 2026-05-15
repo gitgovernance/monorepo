@@ -662,4 +662,54 @@ describe('Init CLI Command - Edge Cases E2E Tests', () => {
       expect(fs.existsSync(path.join(worktreeBasePath, '.gitgov'))).toBe(true);
     });
   });
+
+  // ============================================================================
+  // CASE 6: Custom state branch via --state-branch (EARS-E15)
+  // ============================================================================
+  describe('CASE 6: Custom state branch', () => {
+    it('[EARS-E15] WHEN --state-branch custom-name THEN init SHALL create custom branch and sync push works', () => {
+      const customBranch = `gitgov-state-test-${Date.now()}`;
+      const projRoot = path.join(tempDir, `case6-custom-branch-${Date.now()}`);
+      const remoteDir = path.join(tempDir, `case6-custom-branch-remote-${Date.now()}`);
+
+      createGitRepo(projRoot, true);
+      createBareRemote(remoteDir);
+      addRemote(projRoot, remoteDir);
+      execSync('git push -u origin main', { cwd: projRoot, stdio: 'pipe' });
+      const wtPath = getWorktreeBasePath(projRoot);
+
+      // Init with custom state branch
+      const initResult = runCliCommand(
+        ['init', '--name', 'Custom Branch Project', '--actor-name', 'Test User', '--quiet', '--state-branch', customBranch],
+        { cwd: projRoot },
+      );
+      expect(initResult.success).toBe(true);
+
+      // Verify worktree created with .gitgov/
+      expect(fs.existsSync(path.join(wtPath, '.gitgov'))).toBe(true);
+
+      // Verify config.json has state.branch set to custom name
+      const configPath = path.join(wtPath, '.gitgov', 'config.json');
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      expect(config.state?.branch).toBe(customBranch);
+
+      // Verify the custom branch exists locally (not gitgov-state)
+      const branches = execSync('git branch', { cwd: projRoot, encoding: 'utf8' });
+      expect(branches).toContain(customBranch);
+
+      // Verify default gitgov-state was NOT created (exact match, not substring)
+      const branchList = branches.split('\n').map((b: string) => b.trim().replace('* ', ''));
+      expect(branchList).not.toContain('gitgov-state');
+
+      // Sync push should work against the custom branch
+      const pushResult = runCliCommand(['sync', 'push'], { cwd: projRoot });
+      expect(pushResult.success).toBe(true);
+
+      // Verify custom branch exists on remote
+      const lsRemote = execSync(`git ls-remote --heads origin ${customBranch}`, { cwd: projRoot, encoding: 'utf8' });
+      expect(lsRemote.trim()).not.toBe('');
+
+      cleanupWorktree(projRoot, wtPath);
+    });
+  });
 });

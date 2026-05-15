@@ -123,6 +123,7 @@ vi.mock('../../services/dependency-injection', () => ({
           const config = await mockGetConfig();
           return config?.saasUrl ?? null;
         }),
+        getStateBranch: vi.fn().mockResolvedValue('gitgov-state'),
       }),
     }),
   },

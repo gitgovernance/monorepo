@@ -75,8 +75,11 @@ function createOctokitError(status: number, message = 'Error'): Error & { status
   return error;
 }
 
-function createModule(octokit: MockOctokit): GithubSyncStateModule {
-  const mockConfig = {} as ConfigManager;
+function createModule(octokit: MockOctokit, configOverrides?: Partial<ConfigManager>): GithubSyncStateModule {
+  const mockConfig = {
+    getStateBranch: jest.fn().mockResolvedValue('gitgov-state'),
+    ...configOverrides,
+  } as unknown as ConfigManager;
   const mockIdentity = {} as IIdentityModule;
   const mockLint: ILintModule = {
     lintRecord: jest.fn().mockReturnValue([]),
@@ -181,9 +184,17 @@ describe('GithubSyncStateModule', () => {
       expect(octokit.rest.git.createRef).not.toHaveBeenCalled();
     });
 
-    it('[EARS-GS-A3] should return configured branch name', async () => {
+    it('[EARS-GS-A3] should return default branch name from ConfigManager', async () => {
       const name = await module.getStateBranchName();
       expect(name).toBe('gitgov-state');
+    });
+
+    it('[EARS-GS-A3] should return custom branch name when configured', async () => {
+      const customModule = createModule(createMockOctokit(), {
+        getStateBranch: jest.fn().mockResolvedValue('gitgov-state-custom-123'),
+      });
+      const name = await customModule.getStateBranchName();
+      expect(name).toBe('gitgov-state-custom-123');
     });
   });
 

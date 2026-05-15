@@ -672,4 +672,25 @@ describe('InitCommand', () => {
       expect(mockProjectModule.initializeProject).toHaveBeenCalled();
     });
   });
+
+  // ============================================================================
+  // §4.10. State Branch Configuration (INIT-L1 to L2)
+  // ============================================================================
+  describe('4.10. State Branch Configuration (INIT-L1 to L2)', () => {
+    it('[INIT-L1] should pass custom stateBranch to ProjectModule when --state-branch provided', async () => {
+      await initCommand.execute({ name: 'L1 Test', actorName: 'Test User', stateBranch: 'gitgov-state-custom-123' });
+
+      expect(mockProjectModule.initializeProject).toHaveBeenCalledWith(
+        expect.objectContaining({ stateBranch: 'gitgov-state-custom-123' })
+      );
+    });
+
+    it('[INIT-L2] should pass default stateBranch to ProjectModule when --state-branch not provided', async () => {
+      await initCommand.execute({ name: 'L2 Test', actorName: 'Test User' });
+
+      expect(mockProjectModule.initializeProject).toHaveBeenCalledWith(
+        expect.objectContaining({ stateBranch: 'gitgov-state' })
+      );
+    });
+  });
 });

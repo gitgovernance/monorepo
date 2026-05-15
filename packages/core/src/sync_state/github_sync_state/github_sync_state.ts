@@ -49,7 +49,7 @@ export class GithubSyncStateModule implements ISyncStateModule {
    * [EARS-GS-A3] Returns the configured state branch name.
    */
   async getStateBranchName(): Promise<string> {
-    return 'gitgov-state';
+    return this.deps.config.getStateBranch();
   }
 
   /**

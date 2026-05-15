@@ -94,10 +94,12 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
   // [LOGIN-A1] OAuth flow → open browser, start callback server, store session token
   async executeLogin(options: LoginCommandOptions): Promise<void> {
     try {
-      // [LOGIN-J1] Cloud-first bootstrap: fetch remote gitgov-state so DI can discover it
+      // [LOGIN-J1] Cloud-first bootstrap: fetch remote state branch so DI can discover it
+      // Read branch name from existing worktree config if available, fallback to 'gitgov-state'
+      const stateBranchForFetch = await this.resolveStateBranchPreDI();
       try {
         const { execSync } = await import('child_process');
-        execSync('git fetch origin gitgov-state', {
+        execSync(`git fetch origin ${stateBranchForFetch}`, {
           cwd: process.cwd(),
           stdio: 'pipe',
           timeout: 15000,
@@ -407,15 +409,17 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
   }
 
   /**
-   * [LOGIN-L1] Push gitgov-state to remote after successful key sync.
+   * [LOGIN-L1] Push state branch to remote after successful key sync.
    * [LOGIN-L2] Skip silently if branch doesn't exist locally (cloud-first flow).
    * Best-effort — logs warning on failure but does not fail the login.
    */
   private async pushGitgovState(): Promise<void> {
     try {
+      const configManager = await this.dependencyService.getConfigManager();
+      const stateBranch = await configManager.getStateBranch();
       const { execSync } = await import('child_process');
-      execSync('git rev-parse --verify gitgov-state', { cwd: process.cwd(), stdio: 'pipe', timeout: 2000 });
-      execSync('git push origin gitgov-state', {
+      execSync(`git rev-parse --verify ${stateBranch}`, { cwd: process.cwd(), stdio: 'pipe', timeout: 2000 });
+      execSync(`git push origin ${stateBranch}`, {
         cwd: process.cwd(),
         stdio: 'pipe',
         timeout: 5000,
@@ -423,6 +427,25 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
       });
     } catch {
       // [LOGIN-L2] No local branch, no remote, offline, or permissions error
+    }
+  }
+
+  /**
+   * [LOGIN-J1] Best-effort branch name resolution before DI is available.
+   * Reads config.json from existing worktree if present. Falls back to 'gitgov-state'.
+   */
+  private async resolveStateBranchPreDI(): Promise<string> {
+    try {
+      const { findProjectRoot, getWorktreeBasePath } = await import('@gitgov/core/fs');
+      const repoRoot = findProjectRoot(process.cwd());
+      if (!repoRoot) return 'gitgov-state';
+      const worktreePath = getWorktreeBasePath(repoRoot);
+      const configPath = (await import('path')).join(worktreePath, '.gitgov', 'config.json');
+      const { readFileSync } = await import('fs');
+      const config = JSON.parse(readFileSync(configPath, 'utf-8'));
+      return config?.state?.branch || 'gitgov-state';
+    } catch {
+      return 'gitgov-state';
     }
   }
 
