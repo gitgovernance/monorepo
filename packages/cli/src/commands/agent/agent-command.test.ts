@@ -10,27 +10,27 @@
  */
 
 // Mock @gitgov/core
-jest.doMock('@gitgov/core', () => ({
+vi.mock('@gitgov/core', () => ({
   Config: {
     ConfigManager: {
-      findProjectRoot: jest.fn().mockReturnValue('/mock/project/root'),
-      findGitgovRoot: jest.fn().mockReturnValue('/mock/project/root/.gitgov'),
+      findProjectRoot: vi.fn().mockReturnValue('/mock/project/root'),
+      findGitgovRoot: vi.fn().mockReturnValue('/mock/project/root/.gitgov'),
     }
   },
   Runner: {
-    AgentRunnerModule: jest.fn(),
+    AgentRunnerModule: vi.fn(),
   }
 }));
 
 // Mock @gitgov/core/fs — DEFAULT_ID_ENCODER used by executeNew
-jest.doMock('@gitgov/core/fs', () => ({
+vi.mock('@gitgov/core/fs', () => ({
   DEFAULT_ID_ENCODER: { encode: (id: string) => id.replace(/:/g, '_'), decode: (id: string) => id.replace(/_/g, ':') },
 }));
 
 // Mock DependencyInjectionService
-jest.mock('../../services/dependency-injection', () => ({
+vi.mock('../../services/dependency-injection', () => ({
   DependencyInjectionService: {
-    getInstance: jest.fn()
+    getInstance: vi.fn()
   }
 }));
 
@@ -47,36 +47,36 @@ type TestAgentMetadata = {
 };
 
 // Mock console methods
-const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation();
-const mockConsoleError = jest.spyOn(console, 'error').mockImplementation();
-const mockProcessExit = jest.spyOn(process, 'exit').mockImplementation();
+const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation();
+const mockConsoleError = vi.spyOn(console, 'error').mockImplementation();
+const mockProcessExit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
 
 // Get mocked DI
-const mockDI = jest.mocked(DependencyInjectionService);
+const mockDI = vi.mocked(DependencyInjectionService);
 
 // Mock adapters and modules
 let mockAgentRunnerModule: {
-  runOnce: jest.MockedFunction<(opts: RunOptions) => Promise<AgentResponse>>;
+  runOnce: Mock<(opts: RunOptions) => Promise<AgentResponse>>;
 };
 
 let mockBacklogAdapter: {
-  createTask: jest.MockedFunction<(data: Record<string, unknown>, actorId: string) => Promise<TaskRecord>>;
+  createTask: Mock<(data: Record<string, unknown>, actorId: string) => Promise<TaskRecord>>;
 };
 
 let mockIdentityAdapter: {
-  getCurrentActor: jest.MockedFunction<() => Promise<ActorRecord>>;
-  getActor: jest.MockedFunction<(id: string) => Promise<ActorRecord>>;
-  createActor: jest.MockedFunction<(data: Record<string, unknown>, signAs: string) => Promise<ActorRecord>>;
+  getCurrentActor: Mock<() => Promise<ActorRecord>>;
+  getActor: Mock<(id: string) => Promise<ActorRecord>>;
+  createActor: Mock<(data: Record<string, unknown>, signAs: string) => Promise<ActorRecord>>;
 };
 
 let mockAgentStore: {
-  list: jest.MockedFunction<() => Promise<string[]>>;
-  get: jest.MockedFunction<(id: string) => Promise<AgentRecord<TestAgentMetadata> | null>>;
+  list: Mock<() => Promise<string[]>>;
+  get: Mock<(id: string) => Promise<AgentRecord<TestAgentMetadata> | null>>;
 };
 
 let mockAgentAdapter: {
-  createAgentRecord: jest.MockedFunction<(payload: Partial<AgentRecord>) => Promise<AgentRecord>>;
-  getAgentRecord: jest.MockedFunction<(agentId: string) => Promise<AgentRecord | null>>;
+  createAgentRecord: Mock<(payload: Partial<AgentRecord>) => Promise<AgentRecord>>;
+  getAgentRecord: Mock<(agentId: string) => Promise<AgentRecord | null>>;
 };
 
 describe('AgentCommand', () => {
@@ -152,35 +152,35 @@ describe('AgentCommand', () => {
   };
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     // Setup mock adapters
     mockAgentRunnerModule = {
-      runOnce: jest.fn().mockResolvedValue(mockSuccessResponse),
+      runOnce: vi.fn().mockResolvedValue(mockSuccessResponse),
     };
 
     mockBacklogAdapter = {
-      createTask: jest.fn().mockResolvedValue(mockTaskRecord),
+      createTask: vi.fn().mockResolvedValue(mockTaskRecord),
     };
 
     mockIdentityAdapter = {
-      getCurrentActor: jest.fn().mockResolvedValue(mockActor),
-      getActor: jest.fn().mockResolvedValue(mockActor),
-      createActor: jest.fn().mockResolvedValue(mockActor),
+      getCurrentActor: vi.fn().mockResolvedValue(mockActor),
+      getActor: vi.fn().mockResolvedValue(mockActor),
+      createActor: vi.fn().mockResolvedValue(mockActor),
     };
 
     mockAgentAdapter = {
-      createAgentRecord: jest.fn().mockResolvedValue({
+      createAgentRecord: vi.fn().mockResolvedValue({
         id: 'agent:test-echo',
         status: 'active',
         engine: { type: 'local' },
       }),
-      getAgentRecord: jest.fn().mockResolvedValue(null),
+      getAgentRecord: vi.fn().mockResolvedValue(null),
     };
 
     mockAgentStore = {
-      list: jest.fn().mockResolvedValue(['agent-test-echo', 'agent-jira-manager']),
-      get: jest.fn().mockImplementation((id: string) => {
+      list: vi.fn().mockResolvedValue(['agent-test-echo', 'agent-jira-manager']),
+      get: vi.fn().mockImplementation((id: string) => {
         if (id === 'agent-test-echo') {
           return Promise.resolve(mockAgentRecord);
         }
@@ -201,12 +201,12 @@ describe('AgentCommand', () => {
 
     // Configure DI mock
     mockDI.getInstance.mockReturnValue({
-      getAgentRunnerModule: jest.fn().mockResolvedValue(mockAgentRunnerModule),
-      getBacklogAdapter: jest.fn().mockResolvedValue(mockBacklogAdapter),
-      getIdentityAdapter: jest.fn().mockResolvedValue(mockIdentityAdapter),
-      getAgentStore: jest.fn().mockResolvedValue(mockAgentStore),
-      getAgentAdapter: jest.fn().mockResolvedValue(mockAgentAdapter),
-      getCurrentActor: jest.fn().mockResolvedValue({ id: 'human:test-dev', type: 'human', displayName: 'Test Dev', publicKey: 'test-key', roles: ['developer'] }),
+      getAgentRunnerModule: vi.fn().mockResolvedValue(mockAgentRunnerModule),
+      getBacklogAdapter: vi.fn().mockResolvedValue(mockBacklogAdapter),
+      getIdentityAdapter: vi.fn().mockResolvedValue(mockIdentityAdapter),
+      getAgentStore: vi.fn().mockResolvedValue(mockAgentStore),
+      getAgentAdapter: vi.fn().mockResolvedValue(mockAgentAdapter),
+      getCurrentActor: vi.fn().mockResolvedValue({ id: 'human:test-dev', type: 'human', displayName: 'Test Dev', publicKey: 'test-key', roles: ['developer'] }),
     } as unknown as DependencyInjectionService);
 
     agentCommand = new AgentCommand();
@@ -443,8 +443,8 @@ describe('AgentCommand', () => {
     const nodeOs = require('node:os') as typeof import('os');
 
     let tmpAgentDir: string;
-    let mockExit: jest.SpyInstance;
-    let mockConsoleErrorLocal: jest.SpyInstance;
+    let mockExit: vi.SpyInstance;
+    let mockConsoleErrorLocal: vi.SpyInstance;
 
     function createFakeAgent(pkgJson: Record<string, unknown>): string {
       const dir = nodeFs.mkdtempSync(nodePath.join(nodeOs.tmpdir(), 'agent-test-'));
@@ -455,8 +455,8 @@ describe('AgentCommand', () => {
     }
 
     beforeEach(() => {
-      mockExit = jest.spyOn(process, 'exit').mockImplementation();
-      mockConsoleErrorLocal = jest.spyOn(console, 'error').mockImplementation();
+      mockExit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+      mockConsoleErrorLocal = vi.spyOn(console, 'error').mockImplementation();
       mockAgentStore.list.mockResolvedValue([]);
     });
 
@@ -503,7 +503,7 @@ describe('AgentCommand', () => {
       process.chdir(cwdDir);
       const childProcess = require('node:child_process') as typeof import('child_process');
       let installCmdCaptured = '';
-      const execSpy = jest.spyOn(childProcess, 'execSync').mockImplementation((cmd) => {
+      const execSpy = vi.spyOn(childProcess, 'execSync').mockImplementation((cmd) => {
         installCmdCaptured = String(cmd);
         return Buffer.from('');
       });

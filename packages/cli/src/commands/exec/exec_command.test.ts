@@ -4,20 +4,20 @@
  */
 
 // Mock @gitgov/core FIRST to avoid import.meta issues
-jest.mock('@gitgov/core', () => ({
+vi.mock('@gitgov/core', () => ({
   Records: {},
   Factories: {
-    createExecutionRecord: jest.fn((data) => data),
-    createTestSignature: jest.fn((keyId, role, notes) => ({
+    createExecutionRecord: vi.fn((data) => data),
+    createTestSignature: vi.fn((keyId, role, notes) => ({
       keyId, role, notes, timestamp: Date.now(), signature: 'A'.repeat(86) + '=='
     })),
   }
 }));
 
 // Mock DependencyInjectionService
-jest.mock('../../services/dependency-injection', () => ({
+vi.mock('../../services/dependency-injection', () => ({
   DependencyInjectionService: {
-    getInstance: jest.fn()
+    getInstance: vi.fn()
   }
 }));
 
@@ -45,53 +45,53 @@ const mockExecution2 = {
 };
 
 // Mock console and process.exit at module level (task-command pattern)
-const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation();
-const mockConsoleError = jest.spyOn(console, 'error').mockImplementation();
-const mockProcessExit = jest.spyOn(process, 'exit').mockImplementation();
+const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation();
+const mockConsoleError = vi.spyOn(console, 'error').mockImplementation();
+const mockProcessExit = vi.spyOn(process, 'exit').mockImplementation();
 
 describe('ExecCommand', () => {
   let execCommand: ExecCommand;
   let mockExecutionAdapter: {
-    create: jest.MockedFunction<any>;
-    getExecution: jest.MockedFunction<any>;
-    getExecutionsByTask: jest.MockedFunction<any>;
-    getAllExecutions: jest.MockedFunction<any>;
+    create: Mock<any>;
+    getExecution: Mock<any>;
+    getExecutionsByTask: Mock<any>;
+    getAllExecutions: Mock<any>;
   };
   let mockIdentityAdapter: {
-    getCurrentActor: jest.MockedFunction<any>;
+    getCurrentActor: Mock<any>;
   };
   let mockProjector: {
-    invalidateCache: jest.MockedFunction<any>;
+    invalidateCache: Mock<any>;
   };
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     mockExecutionAdapter = {
-      create: jest.fn().mockResolvedValue(mockExecution),
-      getExecution: jest.fn().mockResolvedValue(null),
-      getExecutionsByTask: jest.fn().mockResolvedValue([]),
-      getAllExecutions: jest.fn().mockResolvedValue([]),
+      create: vi.fn().mockResolvedValue(mockExecution),
+      getExecution: vi.fn().mockResolvedValue(null),
+      getExecutionsByTask: vi.fn().mockResolvedValue([]),
+      getAllExecutions: vi.fn().mockResolvedValue([]),
     };
 
     mockIdentityAdapter = {
-      getCurrentActor: jest.fn().mockResolvedValue({ id: 'human:dev', displayName: 'Dev', type: 'human' }),
+      getCurrentActor: vi.fn().mockResolvedValue({ id: 'human:dev', displayName: 'Dev', type: 'human' }),
     };
 
     mockProjector = {
-      invalidateCache: jest.fn().mockResolvedValue(undefined),
+      invalidateCache: vi.fn().mockResolvedValue(undefined),
     };
 
     const mockDependencyService = {
-      getExecutionAdapter: jest.fn().mockResolvedValue(mockExecutionAdapter),
-      getIdentityAdapter: jest.fn().mockResolvedValue(mockIdentityAdapter),
-      getRecordProjector: jest.fn().mockResolvedValue(mockProjector),
-      getCurrentActor: jest.fn().mockResolvedValue({ id: 'human:dev', displayName: 'Dev', type: 'human' }),
-      getProjectRoot: jest.fn().mockResolvedValue('/mock/project/root'),
+      getExecutionAdapter: vi.fn().mockResolvedValue(mockExecutionAdapter),
+      getIdentityAdapter: vi.fn().mockResolvedValue(mockIdentityAdapter),
+      getRecordProjector: vi.fn().mockResolvedValue(mockProjector),
+      getCurrentActor: vi.fn().mockResolvedValue({ id: 'human:dev', displayName: 'Dev', type: 'human' }),
+      getProjectRoot: vi.fn().mockResolvedValue('/mock/project/root'),
     };
 
     // Set up mock BEFORE constructing command (critical — BaseCommand reads DI in constructor)
-    (DependencyInjectionService.getInstance as jest.MockedFunction<typeof DependencyInjectionService.getInstance>)
+    (DependencyInjectionService.getInstance as Mock<typeof DependencyInjectionService.getInstance>)
       .mockReturnValue(mockDependencyService as never);
 
     execCommand = new ExecCommand();

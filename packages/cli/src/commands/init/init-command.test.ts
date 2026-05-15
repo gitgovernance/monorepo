@@ -9,18 +9,18 @@
  */
 
 // Mock DependencyInjectionService (InitCommand now uses DI)
-jest.mock('../../services/dependency-injection', () => ({
+vi.mock('../../services/dependency-injection', () => ({
   DependencyInjectionService: {
-    getInstance: jest.fn().mockReturnValue({
-      setInitMode: jest.fn(),
-      getProjectModule: jest.fn(),
+    getInstance: vi.fn().mockReturnValue({
+      setInitMode: vi.fn(),
+      getProjectModule: vi.fn(),
     }),
   },
 }));
 
 // Mock child_process for git config
-jest.mock('child_process', () => ({
-  execSync: jest.fn()
+vi.mock('child_process', () => ({
+  execSync: vi.fn()
 }));
 
 import { InitCommand } from './init-command';
@@ -28,15 +28,15 @@ import { execSync } from 'child_process';
 import type { ProjectModuleInitResult } from '@gitgov/core';
 
 // Mock console methods to capture output
-const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation();
-const mockConsoleError = jest.spyOn(console, 'error').mockImplementation();
-const mockConsoleWarn = jest.spyOn(console, 'warn').mockImplementation();
-const mockProcessExit = jest.spyOn(process, 'exit').mockImplementation();
+const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation();
+const mockConsoleError = vi.spyOn(console, 'error').mockImplementation();
+const mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation();
+const mockProcessExit = vi.spyOn(process, 'exit').mockImplementation();
 
 describe('InitCommand', () => {
   let initCommand: InitCommand;
   let mockProjectModule: {
-    initializeProject: jest.MockedFunction<(options: any) => Promise<ProjectModuleInitResult>>;
+    initializeProject: Mock<(options: any) => Promise<ProjectModuleInitResult>>;
   };
 
   const sampleInitResult: ProjectModuleInitResult = {
@@ -49,15 +49,15 @@ describe('InitCommand', () => {
   // sampleValidEnvironment removed — validation is now inline in CLI, not via ProjectModule
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     // Create a mock ProjectModule instance
     mockProjectModule = {
-      initializeProject: jest.fn(),
+      initializeProject: vi.fn(),
     };
 
     // Mock execSync: git config returns user name, ls-remote returns empty (no remote branch)
-    (execSync as jest.MockedFunction<typeof execSync>).mockImplementation((cmd: unknown) => {
+    (execSync as Mock<typeof execSync>).mockImplementation((cmd: unknown) => {
       if (typeof cmd === 'string' && cmd.includes('ls-remote')) {
         return '';
       }
@@ -68,7 +68,7 @@ describe('InitCommand', () => {
     initCommand = new InitCommand();
 
     // Spy on getProjectModule to return our mock (bypasses DI entirely)
-    jest.spyOn(
+    vi.spyOn(
       initCommand as unknown as { getProjectModule: () => Promise<typeof mockProjectModule> },
       'getProjectModule'
     ).mockResolvedValue(mockProjectModule);
@@ -228,7 +228,7 @@ describe('InitCommand', () => {
 
     it('[EARS-B2] should show validation errors when environment invalid', async () => {
       // Simulate not a git repo — execSync('git rev-parse --git-dir') throws
-      (execSync as jest.MockedFunction<typeof execSync>).mockImplementation((cmd: unknown) => {
+      (execSync as Mock<typeof execSync>).mockImplementation((cmd: unknown) => {
         if (typeof cmd === 'string' && cmd.includes('rev-parse --git-dir')) {
           throw new Error('not a git repo');
         }
@@ -407,7 +407,7 @@ describe('InitCommand', () => {
       ];
 
       for (const testCase of testCases) {
-        jest.clearAllMocks();
+        vi.clearAllMocks();
         mockProjectModule.initializeProject.mockRejectedValue(testCase.error);
 
         await initCommand.execute({ name: 'Test Project' });
@@ -418,7 +418,7 @@ describe('InitCommand', () => {
     });
 
     it('[EARS-D3] should use interactive prompts and intelligent defaults for UX excellence', async () => {
-      (execSync as jest.MockedFunction<typeof execSync>).mockImplementation((cmd: unknown) => {
+      (execSync as Mock<typeof execSync>).mockImplementation((cmd: unknown) => {
         if (typeof cmd === 'string' && cmd.includes('ls-remote')) return '';
         return 'John Doe\n';
       });
@@ -436,7 +436,7 @@ describe('InitCommand', () => {
 
     // Additional tests for D3 edge cases
     it('[EARS-D3] should fallback to default actor name when git config fails', async () => {
-      (execSync as jest.MockedFunction<typeof execSync>).mockImplementation(() => {
+      (execSync as Mock<typeof execSync>).mockImplementation(() => {
         throw new Error('git config failed');
       });
 
@@ -456,7 +456,7 @@ describe('InitCommand', () => {
     });
 
     it('[INIT-K1] should fail with clear message when no --login and git config unavailable', async () => {
-      (execSync as jest.MockedFunction<typeof execSync>).mockImplementation((cmd: unknown) => {
+      (execSync as Mock<typeof execSync>).mockImplementation((cmd: unknown) => {
         if (typeof cmd === 'string' && cmd.includes('ls-remote')) return '';
         throw new Error('git config failed');
       });
@@ -469,7 +469,7 @@ describe('InitCommand', () => {
     });
 
     it('[INIT-K1] should derive login from git config user.name when --login not provided', async () => {
-      (execSync as jest.MockedFunction<typeof execSync>).mockImplementation((cmd: unknown) => {
+      (execSync as Mock<typeof execSync>).mockImplementation((cmd: unknown) => {
         if (typeof cmd === 'string' && cmd.includes('ls-remote')) return '';
         return 'Camilo Acuña\n';
       });
@@ -614,7 +614,7 @@ describe('InitCommand', () => {
   // ============================================================================
   describe('4.6. Smart Init — Remote Detection (Task 5.4)', () => {
     it('should abort init when gitgov-state exists on remote', async () => {
-      (execSync as jest.MockedFunction<typeof execSync>).mockImplementation((cmd: unknown) => {
+      (execSync as Mock<typeof execSync>).mockImplementation((cmd: unknown) => {
         if (typeof cmd === 'string' && cmd.includes('ls-remote')) {
           return 'abc123def456\trefs/heads/gitgov-state\n';
         }
@@ -631,7 +631,7 @@ describe('InitCommand', () => {
     });
 
     it('should proceed when gitgov-state does not exist on remote', async () => {
-      (execSync as jest.MockedFunction<typeof execSync>).mockImplementation((cmd: unknown) => {
+      (execSync as Mock<typeof execSync>).mockImplementation((cmd: unknown) => {
         if (typeof cmd === 'string' && cmd.includes('ls-remote')) {
           return '';
         }
@@ -644,7 +644,7 @@ describe('InitCommand', () => {
     });
 
     it('should proceed with --force-local even when remote branch exists', async () => {
-      (execSync as jest.MockedFunction<typeof execSync>).mockImplementation((cmd: unknown) => {
+      (execSync as Mock<typeof execSync>).mockImplementation((cmd: unknown) => {
         if (typeof cmd === 'string' && cmd.includes('ls-remote')) {
           return 'abc123def456\trefs/heads/gitgov-state\n';
         }

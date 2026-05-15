@@ -10,33 +10,33 @@
  */
 
 // Mock @gitgov/core with complete adapter mocks
-jest.doMock('@gitgov/core', () => ({
+vi.mock('@gitgov/core', () => ({
   Config: {
     ConfigManager: {
-      findProjectRoot: jest.fn().mockReturnValue('/mock/project/root'),
-      findGitgovRoot: jest.fn().mockReturnValue('/mock/project/root/.gitgov'),
-      getGitgovPath: jest.fn().mockReturnValue('/mock/project/root/.gitgov'),
-      isGitgovProject: jest.fn().mockReturnValue(true)
+      findProjectRoot: vi.fn().mockReturnValue('/mock/project/root'),
+      findGitgovRoot: vi.fn().mockReturnValue('/mock/project/root/.gitgov'),
+      getGitgovPath: vi.fn().mockReturnValue('/mock/project/root/.gitgov'),
+      isGitgovProject: vi.fn().mockReturnValue(true)
     }
   },
   Lint: {
-    LintModule: jest.fn(),
+    LintModule: vi.fn(),
     ValidatorType: {}
   }
 }));
 
 // Mock DependencyInjectionService before importing
-jest.mock('../../services/dependency-injection', () => ({
+vi.mock('../../services/dependency-injection', () => ({
   DependencyInjectionService: {
-    getInstance: jest.fn()
+    getInstance: vi.fn()
   }
 }));
 
 // Mock fs for file detection
-jest.mock('fs', () => ({
+vi.mock('fs', () => ({
   promises: {
-    stat: jest.fn(),
-    readFile: jest.fn()
+    stat: vi.fn(),
+    readFile: vi.fn()
   }
 }));
 
@@ -47,27 +47,27 @@ import type { ActorRecord, FixReport, LintOptions, LintReport, LintResult } from
 import type { FsLintOptions, FsFixOptions } from '@gitgov/core/fs';
 
 // Mock console methods to capture output
-const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation();
-const mockConsoleError = jest.spyOn(console, 'error').mockImplementation();
-const mockProcessExit = jest.spyOn(process, 'exit').mockImplementation();
+const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation();
+const mockConsoleError = vi.spyOn(console, 'error').mockImplementation();
+const mockProcessExit = vi.spyOn(process, 'exit').mockImplementation();
 
 // Global references to the mock adapters for easy access in tests
 let mockLintModule: {
-  lint: jest.MockedFunction<(options?: Partial<FsLintOptions>) => Promise<LintReport>>;
-  lintFile: jest.MockedFunction<(filePath: string, options?: Partial<FsLintOptions>) => Promise<LintReport>>;
-  fix: jest.MockedFunction<(lintReport: LintReport, fixOptions?: Partial<FsFixOptions>) => Promise<FixReport>>;
+  lint: Mock<(options?: Partial<FsLintOptions>) => Promise<LintReport>>;
+  lintFile: Mock<(filePath: string, options?: Partial<FsLintOptions>) => Promise<LintReport>>;
+  fix: Mock<(lintReport: LintReport, fixOptions?: Partial<FsFixOptions>) => Promise<FixReport>>;
 };
 
 let mockIdentityAdapter: {
-  getCurrentActor: jest.MockedFunction<() => Promise<ActorRecord>>;
+  getCurrentActor: Mock<() => Promise<ActorRecord>>;
 };
 
 let mockProjector: {
-  generateIndex: jest.MockedFunction<() => Promise<{ success: boolean }>>;
+  generateIndex: Mock<() => Promise<{ success: boolean }>>;
 };
 
 let mockKeyProvider: {
-  getPrivateKey: jest.MockedFunction<(actorId: string) => Promise<string | null>>;
+  getPrivateKey: Mock<(actorId: string) => Promise<string | null>>;
 };
 
 describe('LintCommand', () => {
@@ -142,38 +142,38 @@ describe('LintCommand', () => {
 
   beforeEach(async () => {
     // Reset all mocks
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     // Create simple mock adapters
     mockLintModule = {
-      lint: jest.fn(),
-      lintFile: jest.fn(),
-      fix: jest.fn()
+      lint: vi.fn(),
+      lintFile: vi.fn(),
+      fix: vi.fn()
     };
 
     mockIdentityAdapter = {
-      getCurrentActor: jest.fn()
+      getCurrentActor: vi.fn()
     };
 
     mockProjector = {
-      generateIndex: jest.fn().mockResolvedValue({ success: true })
+      generateIndex: vi.fn().mockResolvedValue({ success: true })
     };
 
     mockKeyProvider = {
-      getPrivateKey: jest.fn().mockResolvedValue('mock-private-key')
+      getPrivateKey: vi.fn().mockResolvedValue('mock-private-key')
     };
 
     // Create mock dependency service
     const mockDependencyService = {
-      getLintModule: jest.fn().mockResolvedValue(mockLintModule),
-      getIdentityAdapter: jest.fn().mockResolvedValue(mockIdentityAdapter),
-      getRecordProjector: jest.fn().mockResolvedValue(mockProjector),
-      getKeyProvider: jest.fn().mockReturnValue(mockKeyProvider),
-      getCurrentActor: jest.fn().mockResolvedValue(mockActor),
+      getLintModule: vi.fn().mockResolvedValue(mockLintModule),
+      getIdentityAdapter: vi.fn().mockResolvedValue(mockIdentityAdapter),
+      getRecordProjector: vi.fn().mockResolvedValue(mockProjector),
+      getKeyProvider: vi.fn().mockReturnValue(mockKeyProvider),
+      getCurrentActor: vi.fn().mockResolvedValue(mockActor),
     };
 
     // Mock singleton getInstance
-    (DependencyInjectionService.getInstance as jest.MockedFunction<typeof DependencyInjectionService.getInstance>)
+    (DependencyInjectionService.getInstance as Mock<typeof DependencyInjectionService.getInstance>)
       .mockReturnValue(mockDependencyService as never);
 
     // Create fresh LintCommand instance
@@ -186,7 +186,7 @@ describe('LintCommand', () => {
     mockIdentityAdapter.getCurrentActor.mockResolvedValue(mockActor);
 
     // Mock fs.stat for file detection
-    (fs.stat as jest.Mock).mockRejectedValue(new Error('Not a file'));
+    (fs.stat as vi.Mock).mockRejectedValue(new Error('Not a file'));
   });
 
   afterEach(() => {
@@ -232,10 +232,10 @@ describe('LintCommand', () => {
     it('[EARS-A3] should handle module initialization errors', async () => {
       const error = new Error('LintModule initialization failed');
       const mockDependencyService = {
-        getLintModule: jest.fn().mockRejectedValue(error),
-        getIdentityAdapter: jest.fn().mockResolvedValue(mockIdentityAdapter)
+        getLintModule: vi.fn().mockRejectedValue(error),
+        getIdentityAdapter: vi.fn().mockResolvedValue(mockIdentityAdapter)
       };
-      (DependencyInjectionService.getInstance as jest.MockedFunction<typeof DependencyInjectionService.getInstance>)
+      (DependencyInjectionService.getInstance as Mock<typeof DependencyInjectionService.getInstance>)
         .mockReturnValue(mockDependencyService as never);
 
       // Create new command instance to use the new mock
@@ -261,7 +261,7 @@ describe('LintCommand', () => {
     });
 
     it('[EARS-A4] should detect file by checking filesystem when extension is not .json', async () => {
-      (fs.stat as jest.Mock).mockResolvedValueOnce({ isFile: () => true });
+      (fs.stat as vi.Mock).mockResolvedValueOnce({ isFile: () => true });
 
       await lintCommand.execute({
         path: '.gitgov/tasks/task1'
@@ -791,7 +791,7 @@ describe('LintCommand', () => {
     });
 
     it('should handle file path detection errors gracefully', async () => {
-      (fs.stat as jest.Mock).mockRejectedValueOnce(new Error('Permission denied'));
+      (fs.stat as vi.Mock).mockRejectedValueOnce(new Error('Permission denied'));
 
       await lintCommand.execute({
         path: '.gitgov/tasks/unknown'

@@ -9,12 +9,12 @@
  */
 
 // Mock @gitgov/core FIRST to avoid import.meta issues in Jest
-jest.mock('@gitgov/core', () => ({
+vi.mock('@gitgov/core', () => ({
   Config: {
     ConfigManager: {
-      findGitgovRoot: jest.fn().mockReturnValue('/mock/project/root'),
-      findProjectRoot: jest.fn().mockReturnValue('/mock/project/root'),
-      getGitgovPath: jest.fn().mockReturnValue('/mock/project/root/.gitgov')
+      findGitgovRoot: vi.fn().mockReturnValue('/mock/project/root'),
+      findProjectRoot: vi.fn().mockReturnValue('/mock/project/root'),
+      getGitgovPath: vi.fn().mockReturnValue('/mock/project/root/.gitgov')
     }
   },
   Git: {},
@@ -23,40 +23,39 @@ jest.mock('@gitgov/core', () => ({
   Factories: {}
 }));
 
-// Mock DependencyInjectionService BEFORE importing SyncCommand
-const mockSyncModule = {
-  pushState: jest.fn(),
-  pullState: jest.fn(),
-  resolveConflict: jest.fn(),
-  auditState: jest.fn(),
-  calculateStateDelta: jest.fn().mockResolvedValue([]),
-  getStateBranchName: jest.fn().mockResolvedValue('gitgov-state'),
-  hasUncommittedChanges: jest.fn().mockResolvedValue(false),
-  isRebaseInProgress: jest.fn().mockResolvedValue(false),
-  getConflictedFiles: jest.fn().mockResolvedValue([]),
-  checkConflictMarkers: jest.fn().mockResolvedValue([])
-};
+// vi.hoisted ensures these variables exist when vi.mock factory runs (hoisted)
+const { mockSyncModule, mockConfigManager, mockSessionManager, mockGitModule } = vi.hoisted(() => ({
+  mockSyncModule: {
+  pushState: vi.fn(),
+  pullState: vi.fn(),
+  resolveConflict: vi.fn(),
+  auditState: vi.fn(),
+  calculateStateDelta: vi.fn().mockResolvedValue([]),
+  getStateBranchName: vi.fn().mockResolvedValue('gitgov-state'),
+  hasUncommittedChanges: vi.fn().mockResolvedValue(false),
+  isRebaseInProgress: vi.fn().mockResolvedValue(false),
+  getConflictedFiles: vi.fn().mockResolvedValue([]),
+  checkConflictMarkers: vi.fn().mockResolvedValue([])
+  },
+  mockConfigManager: {},
+  mockSessionManager: {
+    loadSession: vi.fn(),
+    updateActorState: vi.fn().mockResolvedValue(undefined)
+  },
+  mockGitModule: {
+    getCurrentBranch: vi.fn().mockResolvedValue('main'),
+    isRebaseInProgress: vi.fn().mockResolvedValue(false)
+  },
+}));
 
-const mockConfigManager = {};
-
-const mockSessionManager = {
-  loadSession: jest.fn(),
-  updateActorState: jest.fn().mockResolvedValue(undefined)
-};
-
-const mockGitModule = {
-  getCurrentBranch: jest.fn().mockResolvedValue('main'),
-  isRebaseInProgress: jest.fn().mockResolvedValue(false)
-};
-
-jest.mock('../../services/dependency-injection', () => ({
+vi.mock('../../services/dependency-injection', () => ({
   DependencyInjectionService: {
-    getInstance: jest.fn().mockReturnValue({
-      getSyncStateModule: jest.fn().mockResolvedValue(mockSyncModule),
-      getConfigManager: jest.fn().mockResolvedValue(mockConfigManager),
-      getSessionManager: jest.fn().mockResolvedValue(mockSessionManager),
-      getGitModule: jest.fn().mockResolvedValue(mockGitModule),
-      wasBootstrapped: jest.fn().mockReturnValue(false)
+    getInstance: vi.fn().mockReturnValue({
+      getSyncStateModule: vi.fn().mockResolvedValue(mockSyncModule),
+      getConfigManager: vi.fn().mockResolvedValue(mockConfigManager),
+      getSessionManager: vi.fn().mockResolvedValue(mockSessionManager),
+      getGitModule: vi.fn().mockResolvedValue(mockGitModule),
+      wasBootstrapped: vi.fn().mockReturnValue(false)
     })
   }
 }));
@@ -64,15 +63,15 @@ jest.mock('../../services/dependency-injection', () => ({
 import { SyncCommand } from './sync-command';
 
 // Mock console methods (igual que task-command.test.ts)
-const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation();
-const mockConsoleError = jest.spyOn(console, 'error').mockImplementation();
-const mockProcessExit = jest.spyOn(process, 'exit').mockImplementation();
+const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation();
+const mockConsoleError = vi.spyOn(console, 'error').mockImplementation();
+const mockProcessExit = vi.spyOn(process, 'exit').mockImplementation();
 
 describe('SyncCommand - Unit Tests', () => {
   let syncCommand: SyncCommand;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     syncCommand = new SyncCommand();
 
     // Reset all mocks to default values

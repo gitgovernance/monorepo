@@ -1,13 +1,13 @@
 // Mock @gitgov/core FIRST to avoid import.meta issues in Jest
-jest.mock('@gitgov/core', () => ({
+vi.mock('@gitgov/core', () => ({
   Records: {},
   Factories: {}
 }));
 
 // Mock DependencyInjectionService before importing
-jest.mock('../../services/dependency-injection', () => ({
+vi.mock('../../services/dependency-injection', () => ({
   DependencyInjectionService: {
-    getInstance: jest.fn()
+    getInstance: vi.fn()
   }
 }));
 
@@ -16,15 +16,16 @@ import { DependencyInjectionService } from '../../services/dependency-injection'
 import type { ActorRecord } from '@gitgov/core';
 
 // Mock console methods to capture output
-const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation();
-const mockConsoleError = jest.spyOn(console, 'error').mockImplementation();
-const mockProcessExit = jest.spyOn(process, 'exit').mockImplementation();
+const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation();
+const mockConsoleError = vi.spyOn(console, 'error').mockImplementation();
+const mockProcessExit = vi.spyOn(process, 'exit').mockImplementation();
 
 describe('ActorCommand', () => {
   let actorCommand: ActorCommand;
+  let mockSetLastSession: ReturnType<typeof vi.fn>;
   let mockIdentityAdapter: {
-    createActor: jest.MockedFunction<(payload: Partial<ActorRecord>, signerId: string) => Promise<ActorRecord>>;
-    rotateActorKey: jest.MockedFunction<(actorId: string) => Promise<{ oldActor: ActorRecord; newActor: ActorRecord }>>;
+    createActor: Mock<(payload: Partial<ActorRecord>, signerId: string) => Promise<ActorRecord>>;
+    rotateActorKey: Mock<(actorId: string) => Promise<{ oldActor: ActorRecord; newActor: ActorRecord }>>;
   };
 
   const sampleActor: ActorRecord = {
@@ -37,18 +38,22 @@ describe('ActorCommand', () => {
   };
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     mockIdentityAdapter = {
-      createActor: jest.fn(),
-      rotateActorKey: jest.fn()
+      createActor: vi.fn(),
+      rotateActorKey: vi.fn()
     };
 
+    mockSetLastSession = vi.fn();
     const mockDependencyService = {
-      getIdentityAdapter: jest.fn().mockResolvedValue(mockIdentityAdapter)
+      getIdentityAdapter: vi.fn().mockResolvedValue(mockIdentityAdapter),
+      getSessionManager: vi.fn().mockResolvedValue({
+        setLastSession: mockSetLastSession,
+      }),
     };
 
-    (DependencyInjectionService.getInstance as jest.MockedFunction<typeof DependencyInjectionService.getInstance>)
+    (DependencyInjectionService.getInstance as Mock<typeof DependencyInjectionService.getInstance>)
       .mockReturnValue(mockDependencyService as never);
 
     actorCommand = new ActorCommand();
@@ -60,7 +65,7 @@ describe('ActorCommand', () => {
     mockProcessExit.mockClear();
   });
 
-  describe('4.1. Actor Creation (ICOMP-C4 to ICOMP-C6)', () => {
+  describe('4.1. Actor Creation (ICOMP-C4 to ICOMP-C7)', () => {
     it('[ICOMP-C4] WHEN actor new is executed with valid flags THE SYSTEM SHALL create ActorRecord with keys', async () => {
       mockIdentityAdapter.createActor.mockResolvedValue(sampleActor);
 
@@ -133,6 +138,21 @@ describe('ActorCommand', () => {
       expect(output.data.type).toBeDefined();
       expect(output.data.displayName).toBeDefined();
       expect(output.data.roles).toBeDefined();
+    });
+
+    it('[ICOMP-C7] WHEN actor new creates an actor THE SYSTEM SHALL save actorId to session via setLastSession', async () => {
+      mockIdentityAdapter.createActor.mockResolvedValue(sampleActor);
+
+      await actorCommand.executeNew({
+        type: 'human',
+        name: 'Test User',
+        role: ['developer'],
+      });
+
+      expect(mockSetLastSession).toHaveBeenCalledWith(
+        'human:test-user',
+        expect.any(String),
+      );
     });
   });
 

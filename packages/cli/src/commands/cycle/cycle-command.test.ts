@@ -1,7 +1,7 @@
 // Mock DependencyInjectionService before importing
-jest.mock('../../services/dependency-injection', () => ({
+vi.mock('../../services/dependency-injection', () => ({
   DependencyInjectionService: {
-    getInstance: jest.fn()
+    getInstance: vi.fn()
   }
 }));
 
@@ -10,32 +10,32 @@ import { CycleCommand } from './cycle-command';
 import { DependencyInjectionService } from '../../services/dependency-injection';
 
 // Mock console methods to capture output
-const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation();
-const mockConsoleError = jest.spyOn(console, 'error').mockImplementation();
-const mockConsoleWarn = jest.spyOn(console, 'warn').mockImplementation();
-const mockProcessExit = jest.spyOn(process, 'exit').mockImplementation();
+const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation();
+const mockConsoleError = vi.spyOn(console, 'error').mockImplementation();
+const mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation();
+const mockProcessExit = vi.spyOn(process, 'exit').mockImplementation();
 
 describe('CycleCommand - Complete Unit Tests', () => {
   let cycleCommand: CycleCommand;
   let mockBacklogAdapter: {
-    createCycle: jest.MockedFunction<(payload: Partial<CycleRecord>, actorId: string) => Promise<CycleRecord>>;
-    getCycle: jest.MockedFunction<(cycleId: string) => Promise<CycleRecord | null>>;
-    getAllCycles: jest.MockedFunction<() => Promise<CycleRecord[]>>;
-    updateCycle: jest.MockedFunction<(cycleId: string, payload: Partial<CycleRecord>) => Promise<CycleRecord>>;
-    addTaskToCycle: jest.MockedFunction<(cycleId: string, taskId: string, actorId: string) => Promise<void>>;
-    removeTasksFromCycle: jest.MockedFunction<(cycleId: string, taskIds: string[], actorId: string) => Promise<void>>;
-    moveTasksBetweenCycles: jest.MockedFunction<(targetCycleId: string, taskIds: string[], sourceCycleId: string, actorId: string) => Promise<void>>;
-    getTask: jest.MockedFunction<(taskId: string) => Promise<TaskRecord | null>>;
+    createCycle: Mock<(payload: Partial<CycleRecord>, actorId: string) => Promise<CycleRecord>>;
+    getCycle: Mock<(cycleId: string) => Promise<CycleRecord | null>>;
+    getAllCycles: Mock<() => Promise<CycleRecord[]>>;
+    updateCycle: Mock<(cycleId: string, payload: Partial<CycleRecord>) => Promise<CycleRecord>>;
+    addTaskToCycle: Mock<(cycleId: string, taskId: string, actorId: string) => Promise<void>>;
+    removeTasksFromCycle: Mock<(cycleId: string, taskIds: string[], actorId: string) => Promise<void>>;
+    moveTasksBetweenCycles: Mock<(targetCycleId: string, taskIds: string[], sourceCycleId: string, actorId: string) => Promise<void>>;
+    getTask: Mock<(taskId: string) => Promise<TaskRecord | null>>;
   };
   let mockProjector: {
-    isIndexUpToDate: jest.MockedFunction<() => Promise<boolean>>;
-    getIndexData: jest.MockedFunction<() => Promise<{ cycles: GitGovCycleRecord[]; metadata: { generatedAt: string } } | null>>;
-    generateIndex: jest.MockedFunction<() => Promise<void>>;
-    invalidateCache: jest.MockedFunction<() => Promise<void>>;
+    isIndexUpToDate: Mock<() => Promise<boolean>>;
+    getIndexData: Mock<() => Promise<{ cycles: GitGovCycleRecord[]; metadata: { generatedAt: string } } | null>>;
+    generateIndex: Mock<() => Promise<void>>;
+    invalidateCache: Mock<() => Promise<void>>;
   };
   let mockIdentityAdapter: {
-    getCurrentActor: jest.MockedFunction<() => Promise<ActorRecord>>;
-    getActor: jest.MockedFunction<(actorId: string) => Promise<ActorRecord | null>>;
+    getCurrentActor: Mock<() => Promise<ActorRecord>>;
+    getActor: Mock<(actorId: string) => Promise<ActorRecord | null>>;
   };
 
   const sampleCycle: CycleRecord = {
@@ -75,43 +75,43 @@ describe('CycleCommand - Complete Unit Tests', () => {
   });
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     // Create simple mock adapters
     mockBacklogAdapter = {
-      createCycle: jest.fn(),
-      getCycle: jest.fn(),
-      getAllCycles: jest.fn(),
-      updateCycle: jest.fn(),
-      addTaskToCycle: jest.fn(),
-      removeTasksFromCycle: jest.fn(),
-      moveTasksBetweenCycles: jest.fn(),
-      getTask: jest.fn()
+      createCycle: vi.fn(),
+      getCycle: vi.fn(),
+      getAllCycles: vi.fn(),
+      updateCycle: vi.fn(),
+      addTaskToCycle: vi.fn(),
+      removeTasksFromCycle: vi.fn(),
+      moveTasksBetweenCycles: vi.fn(),
+      getTask: vi.fn()
     };
 
     mockProjector = {
-      isIndexUpToDate: jest.fn(),
-      getIndexData: jest.fn(),
-      generateIndex: jest.fn(),
-      invalidateCache: jest.fn()
+      isIndexUpToDate: vi.fn(),
+      getIndexData: vi.fn(),
+      generateIndex: vi.fn(),
+      invalidateCache: vi.fn()
     };
 
     mockIdentityAdapter = {
-      getCurrentActor: jest.fn(),
-      getActor: jest.fn()
+      getCurrentActor: vi.fn(),
+      getActor: vi.fn()
     };
 
     // Create mock dependency service
     const mockDependencyService = {
-      getBacklogAdapter: jest.fn().mockResolvedValue(mockBacklogAdapter),
-      getRecordProjector: jest.fn().mockResolvedValue(mockProjector),
-      getIdentityAdapter: jest.fn().mockResolvedValue(mockIdentityAdapter),
-      getCurrentActor: jest.fn().mockResolvedValue(sampleActor),
-      getProjectRoot: jest.fn().mockResolvedValue('/mock/project/root'),
+      getBacklogAdapter: vi.fn().mockResolvedValue(mockBacklogAdapter),
+      getRecordProjector: vi.fn().mockResolvedValue(mockProjector),
+      getIdentityAdapter: vi.fn().mockResolvedValue(mockIdentityAdapter),
+      getCurrentActor: vi.fn().mockResolvedValue(sampleActor),
+      getProjectRoot: vi.fn().mockResolvedValue('/mock/project/root'),
     };
 
     // Mock singleton getInstance
-    (DependencyInjectionService.getInstance as jest.MockedFunction<typeof DependencyInjectionService.getInstance>)
+    (DependencyInjectionService.getInstance as Mock<typeof DependencyInjectionService.getInstance>)
       .mockReturnValue(mockDependencyService as never);
 
     cycleCommand = new CycleCommand();
