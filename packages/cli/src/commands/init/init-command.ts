@@ -46,27 +46,8 @@ export class InitCommand {
         await this.validateEnvironment(options);
       }
 
-      // 2. Smart Init: check if gitgov-state exists on remote (Task 5.4, IKS-T7/T8)
-      if (!options.forceLocal && !options.skipValidation) {
-        const remoteHasBranch = await this.checkRemoteForGitgovState();
-        if (remoteHasBranch) {
-          if (options.json) {
-            console.log(JSON.stringify({
-              success: false,
-              error: 'Project already initialized from cloud',
-              suggestion: 'gitgov login',
-              exitCode: 1,
-            }, null, 2));
-          } else {
-            console.log("⚠️  The branch 'gitgov-state' already exists on the remote.");
-            console.log("    This project was initialized from the cloud (Remote Init).\n");
-            console.log("💡 Run 'gitgov login' to download your identity and sync.\n");
-            console.log("    If you want to force a local init anyway, use --force-local.");
-          }
-          process.exit(1);
-          return;
-        }
-      }
+      // 2. [EARS-C5] Remote gitgov-state check: if exists, allow join path (INIT-J1/J2).
+      // ensureWorktreeForInit will fetch the remote branch and ProjectModule detects alreadyInitialized.
 
       // 3. Interactive prompts for missing information
       const completeOptions = await this.gatherMissingInfo(options);
@@ -135,8 +116,9 @@ export class InitCommand {
   // ===== PRIVATE HELPER METHODS =====
 
   /**
-   * [EARS-C5] Validates environment before initialization
-   * [EARS-B2] Shows validation errors with warnings and suggestions
+   * [EARS-C5] Validates environment — blocks only if not a git repo.
+   * [EARS-B2] Shows validation errors with warnings and suggestions.
+   * Already initialized without --force is allowed (join path INIT-J1/J2).
    */
   // [EARS-B2] Validate environment before init
   private async validateEnvironment(options: InitCommandOptions): Promise<void> {
@@ -156,15 +138,9 @@ export class InitCommand {
       isValid = false;
     }
 
-    // Check already initialized (config.json in worktree)
-    const resolvedRoot = realpathSync(repoRoot);
-    const hash = createHash('sha256').update(resolvedRoot).digest('hex').slice(0, 12);
-    const worktreePath = pathUtils.join(os.homedir(), '.gitgov', 'worktrees', hash);
-    if (existsSync(pathUtils.join(worktreePath, '.gitgov', 'config.json')) && !options.force) {
-      warnings.push('GitGovernance already initialized.');
-      suggestions.push("Use --force to re-initialize.");
-      isValid = false;
-    }
+    // [EARS-C5] Already initialized without --force → allow join path (INIT-J1/J2)
+    // ProjectModule.initializeProject() handles idempotency internally:
+    // returns { alreadyInitialized: true } → join path creates collaborator actor
 
     if (!isValid) {
       if (options.json) {
@@ -249,18 +225,24 @@ export class InitCommand {
     // Ensure ~/.gitgov/worktrees/ exists
     await fsPromises.mkdir(pathUtils.join(os.homedir(), '.gitgov', 'worktrees'), { recursive: true });
 
-    // Create orphan gitgov-state branch if it doesn't exist
+    // Create or fetch gitgov-state branch
     const { execSync } = await import('child_process');
     try {
       execSync('git rev-parse --verify gitgov-state', { cwd: repoRoot, stdio: 'pipe' });
     } catch {
-      // Branch doesn't exist — create orphan
-      const emptyTree = execSync('git hash-object -t tree /dev/null', { cwd: repoRoot, encoding: 'utf8' }).trim();
-      const commitHash = execSync(
-        `git commit-tree ${emptyTree} -m "gitgov: initialize state branch"`,
-        { cwd: repoRoot, encoding: 'utf8' },
-      ).trim();
-      execSync(`git update-ref refs/heads/gitgov-state ${commitHash}`, { cwd: repoRoot, stdio: 'pipe' });
+      // Local branch doesn't exist — try fetching from remote (collaborator clone scenario)
+      try {
+        execSync('git fetch origin gitgov-state', { cwd: repoRoot, stdio: 'pipe' });
+        execSync('git branch gitgov-state origin/gitgov-state', { cwd: repoRoot, stdio: 'pipe' });
+      } catch {
+        // No remote branch either — create orphan (fresh project)
+        const emptyTree = execSync('git hash-object -t tree /dev/null', { cwd: repoRoot, encoding: 'utf8' }).trim();
+        const commitHash = execSync(
+          `git commit-tree ${emptyTree} -m "gitgov: initialize state branch"`,
+          { cwd: repoRoot, encoding: 'utf8' },
+        ).trim();
+        execSync(`git update-ref refs/heads/gitgov-state ${commitHash}`, { cwd: repoRoot, stdio: 'pipe' });
+      }
     }
 
     // Create worktree at ~/.gitgov/worktrees/<hash>/

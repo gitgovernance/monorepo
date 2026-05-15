@@ -329,7 +329,7 @@ describe('InitCommand', () => {
       expect(mockConsoleLog).toHaveBeenCalledWith('🚀 Next Steps:');
     });
 
-    it('[EARS-C5] should show user-friendly message when already initialized without actorId', async () => {
+    it('[EARS-C5] should allow join path when already initialized without --force', async () => {
       mockProjectModule.initializeProject.mockResolvedValue({ alreadyInitialized: true } as any);
 
       await initCommand.execute({ name: 'Test Project' });
@@ -613,7 +613,7 @@ describe('InitCommand', () => {
   // §4.6. Smart Init — Remote Detection (Task 5.4, IKS-T7/T8 CLI side)
   // ============================================================================
   describe('4.6. Smart Init — Remote Detection (Task 5.4)', () => {
-    it('should abort init when gitgov-state exists on remote', async () => {
+    it('[EARS-E12] should allow join path when gitgov-state exists on remote', async () => {
       (execSync as Mock<typeof execSync>).mockImplementation((cmd: unknown) => {
         if (typeof cmd === 'string' && cmd.includes('ls-remote')) {
           return 'abc123def456\trefs/heads/gitgov-state\n';
@@ -621,13 +621,17 @@ describe('InitCommand', () => {
         return 'Test User\n';
       });
 
+      mockProjectModule.initializeProject.mockResolvedValue({
+        alreadyInitialized: true,
+        actorId: 'human:cloud-project',
+        created: true,
+      } as any);
+
       await initCommand.execute({ name: 'Cloud Project' });
 
-      expect(mockConsoleLog).toHaveBeenCalledWith(
-        expect.stringContaining('gitgov login'),
-      );
-      expect(mockProcessExit).toHaveBeenCalledWith(1);
-      expect(mockProjectModule.initializeProject).not.toHaveBeenCalled();
+      expect(mockProjectModule.initializeProject).toHaveBeenCalled();
+      expect(mockConsoleLog).toHaveBeenCalledWith('Joined existing project as human:cloud-project');
+      expect(mockProcessExit).not.toHaveBeenCalled();
     });
 
     it('should proceed when gitgov-state does not exist on remote', async () => {

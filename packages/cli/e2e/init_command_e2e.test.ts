@@ -534,16 +534,9 @@ describe('Init CLI Command - Edge Cases E2E Tests', () => {
       const result1 = runCliCommand(['init', '--name', 'Idempotent Test', '--actor-name', 'Test User', '--quiet'], { cwd: testProjectRoot });
       expect(result1.success).toBe(true);
 
-      // Second init: worktree already exists, should either succeed or give clear "already initialized" message
-      const result2 = runCliCommand(['init', '--name', 'Idempotent Test', '--actor-name', 'Test User', '--quiet'], { cwd: testProjectRoot, expectError: true });
-
-      if (result2.success) {
-        // Init succeeded idempotently
-        expect(result2.success).toBe(true);
-      } else {
-        // Init correctly detected existing project - this IS idempotent behavior (state preserved)
-        expect(result2.error || result2.output).toMatch(/already initialized/i);
-      }
+      // Second init: worktree already exists, enters join path (EARS-C5) — idempotent
+      const result2 = runCliCommand(['init', '--name', 'Idempotent Test', '--actor-name', 'Test User', '--quiet'], { cwd: testProjectRoot });
+      expect(result2.success).toBe(true);
 
       // KEY ASSERTION: worktree state is preserved regardless of second init outcome
       expect(fs.existsSync(path.join(worktreeBasePath, '.gitgov', 'config.json'))).toBe(true);
@@ -593,21 +586,20 @@ describe('Init CLI Command - Edge Cases E2E Tests', () => {
       if (worktreeBasePath) cleanupWorktree(testProjectRoot, worktreeBasePath);
     });
 
-    it('[EARS-E12] WHEN remote has gitgov-state THEN init SHALL abort suggesting gitgov login', () => {
-      setupWithRemoteGitgovState('case5-abort');
+    it('[EARS-E12] WHEN remote has gitgov-state THEN init SHALL enter join path', () => {
+      setupWithRemoteGitgovState('case5-join');
 
-      // Verify remote actually has the branch
       const lsRemote = execSync('git ls-remote --heads origin gitgov-state', { cwd: testProjectRoot, encoding: 'utf8' });
       expect(lsRemote.trim()).not.toBe('');
 
       const result = runCliCommand(
-        ['init', '--name', 'Cloud Project', '--actor-name', 'Test User'],
-        { cwd: testProjectRoot, expectError: true },
+        ['init', '--name', 'Cloud Project', '--actor-name', 'Test User', '--quiet'],
+        { cwd: testProjectRoot },
       );
 
-      expect(result.success).toBe(false);
-      expect(result.output + (result.error ?? '')).toMatch(/gitgov login/i);
-      expect(fs.existsSync(path.join(worktreeBasePath, '.gitgov'))).toBe(false);
+      expect(result.success).toBe(true);
+      expect(result.output).toMatch(/Joined existing project|Already a member|initialized/i);
+      expect(fs.existsSync(path.join(worktreeBasePath, '.gitgov'))).toBe(true);
     });
 
     it('[EARS-E13] WHEN remote has gitgov-state AND --force-local THEN init SHALL proceed', () => {
