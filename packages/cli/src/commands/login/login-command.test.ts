@@ -872,15 +872,15 @@ describe('LoginCommand v2', () => {
   // §4.14. Actor Materialization on Login (LOGIN-O1 to O2)
   // ==========================================================================
   describe('4.14. Actor Materialization on Login (LOGIN-O1 to O2)', () => {
-    it('[LOGIN-O1] should call ensureActorInProject after key download', async () => {
+    it('[LOGIN-O1] should call ensureActorInProject before key sync', async () => {
       mockGetCurrentActor.mockResolvedValue(null);
       mockGetConfig.mockResolvedValue({ saasUrl: 'https://app.gitgov.dev' });
-      mockHasPrivateKey.mockResolvedValue(false);
+      mockHasPrivateKey.mockResolvedValue(true);
 
       const deps = createMockDeps({
         fetchSaas: createTrpcFetch({
-          'keyStatus': keyStatusWith('saas-pub-key'),
-          'getKey': { privateKeyEnvelope: { ephemeralPublicKey: 'eph', ciphertext: 'ct', iv: 'iv', authTag: 'tag' } },
+          'keyStatus': keyStatusWith(null),
+          'syncKey': { success: true, actorId: 'human:camilo', mode: 'full' },
         }),
       });
 
@@ -896,7 +896,7 @@ describe('LoginCommand v2', () => {
       );
     });
 
-    it('[LOGIN-O2] should succeed login but warn when ensureActorInProject fails', async () => {
+    it('[LOGIN-O2] should warn and continue when ensureActorInProject fails', async () => {
       mockGetCurrentActor.mockResolvedValue(null);
       mockGetConfig.mockResolvedValue({ saasUrl: 'https://app.gitgov.dev' });
       mockHasPrivateKey.mockResolvedValue(false);
@@ -904,8 +904,7 @@ describe('LoginCommand v2', () => {
 
       const deps = createMockDeps({
         fetchSaas: createTrpcFetch({
-          'keyStatus': keyStatusWith('saas-pub-key'),
-          'getKey': { privateKeyEnvelope: { ephemeralPublicKey: 'eph', ciphertext: 'ct', iv: 'iv', authTag: 'tag' } },
+          'keyStatus': keyStatusWith(null),
         }),
       });
 

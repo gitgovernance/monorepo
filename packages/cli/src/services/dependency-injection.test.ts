@@ -779,7 +779,7 @@ describe('DependencyInjectionService', () => {
   // ============================================================================
   // §4.3. Adapter Factories (EARS-C1 to C12)
   // ============================================================================
-  describe('4.3. Adapter Factories (EARS-C1 to C12)', () => {
+  describe('4.3. Adapter Factories (EARS-C1 to C14)', () => {
     it('[EARS-C1] should create RecordProjector with all dependencies', async () => {
       const projector = await diService.getRecordProjector();
       expect(projector).toBeDefined();
@@ -913,6 +913,8 @@ describe('DependencyInjectionService', () => {
       expect(keyProvider.hasPrivateKey).toBeDefined();
       expect(keyProvider.sign).toBeDefined();
     });
+
+    it.todo('[EARS-C14] should prompt actor selection and save to session when multiple keys exist');
   });
 
   // ============================================================================

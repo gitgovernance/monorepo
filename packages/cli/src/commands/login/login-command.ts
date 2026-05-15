@@ -144,6 +144,21 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
 
       console.log(`Logged in as ${user.login} (${actorId})`);
 
+      // [LOGIN-O1] Materialize actor BEFORE key sync — generates keypair if collaborator is new
+      try {
+        const projectModule = await this.dependencyService.getProjectModule();
+        await projectModule.ensureActorInProject({
+          login: user.login,
+          type: actorType,
+          repoId: '',
+          joinedVia: 'saas-oauth',
+        });
+      } catch (err) {
+        // [LOGIN-O2] Warn and continue to syncKeys — if keypair wasn't generated, syncKeys handles case e
+        console.warn('⚠️  Actor materialization failed:', err instanceof Error ? err.message : String(err));
+        console.warn('   Key sync may fail if no local key exists.');
+      }
+
       // [LOGIN-B3] Skip key sync if --no-key-sync
       if (options.noKeySync) {
         this.handleSuccess(
@@ -156,21 +171,6 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
 
       // Key sync: use local actorId for FsKeyProvider, GitHub identity for SaaS context
       await this.syncKeys(actorId, saasUrl, token, options);
-
-      // [LOGIN-O1] Materialize actor in local worktree after key sync (idempotent via PROJ-H2)
-      try {
-        const projectModule = await this.dependencyService.getProjectModule();
-        await projectModule.ensureActorInProject({
-          login: user.login,
-          type: actorType,
-          repoId: '',
-          joinedVia: 'saas-oauth',
-        });
-      } catch (err) {
-        // [LOGIN-O2] Login succeeds even if actor materialization fails
-        console.warn('⚠️  Actor materialization failed:', err instanceof Error ? err.message : String(err));
-        console.warn('   Run `gitgov login` again when GitHub is available.');
-      }
 
       // [LOGIN-L1, LOGIN-L2] Push gitgov-state so SaaS can index ActorRecord
       await this.pushGitgovState();

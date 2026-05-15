@@ -40,14 +40,23 @@ import { HookCommand } from './hook_command';
 
 // ─── Helpers ────────────────────────────────────────────────
 
-/** Simulate piped stdin by overriding readStdin on instance */
-function mockStdin(data: string, cmd: HookCommand): void {
-  (cmd as any).readStdin = vi.fn().mockResolvedValue(data);
+/** Simulate piped stdin with given data */
+function mockStdin(data: string): void {
+  Object.defineProperty(process.stdin, 'isTTY', { value: false, writable: true, configurable: true });
+  vi.spyOn(process.stdin, 'setEncoding').mockImplementation(() => process.stdin);
+  vi.spyOn(process.stdin, 'on').mockImplementation((event: string, handler: (...args: unknown[]) => void) => {
+    if (event === 'data') {
+      setImmediate(() => handler(data));
+    } else if (event === 'end') {
+      setImmediate(() => setImmediate(() => handler()));
+    }
+    return process.stdin;
+  });
 }
 
-/** Simulate TTY stdin (no pipe) — readStdin returns empty */
-function mockStdinTTY(cmd: HookCommand): void {
-  (cmd as any).readStdin = vi.fn().mockResolvedValue('');
+/** Simulate TTY stdin (no pipe) */
+function mockStdinTTY(): void {
+  Object.defineProperty(process.stdin, 'isTTY', { value: true, writable: true, configurable: true });
 }
 
 /** Setup DI mocks to simulate valid .gitgov/ project */
@@ -96,7 +105,7 @@ describe('HookCommand', () => {
   describe('4.1. Common Behavior (EARS-A1 to A5)', () => {
     it('[EARS-A1] should return immediately when GITGOV_PASSIVE is false', async () => {
       process.env['GITGOV_PASSIVE'] = 'false';
-      mockStdinTTY(command);
+      mockStdinTTY();
 
       await command.processEvent('command-executed', {});
 
@@ -107,7 +116,7 @@ describe('HookCommand', () => {
 
     it('[EARS-A2] should return when .gitgov directory does not exist', async () => {
       mockValidateDependencies.mockResolvedValue(false);
-      mockStdin('{"tool_name":"Bash","tool_input":{"command":"ls"},"exit_code":0}', command);
+      mockStdin('{"tool_name":"Bash","tool_input":{"command":"ls"},"exit_code":0}');
 
       await command.processEvent('command-executed', {});
 
@@ -115,7 +124,7 @@ describe('HookCommand', () => {
     });
 
     it('[EARS-A3] should return without error when stdin JSON is invalid', async () => {
-      mockStdin('not valid json {{{', command);
+      mockStdin('not valid json {{{');
 
       await command.processEvent('command-executed', {});
 
@@ -126,7 +135,7 @@ describe('HookCommand', () => {
     });
 
     it('[EARS-A3] should return without error when stdin is empty', async () => {
-      mockStdin('', command);
+      mockStdin('');
 
       await command.processEvent('command-executed', {});
 
@@ -135,7 +144,7 @@ describe('HookCommand', () => {
     });
 
     it('[EARS-A3] should return without error when stdin is TTY (not piped)', async () => {
-      mockStdinTTY(command);
+      mockStdinTTY();
 
       await command.processEvent('command-executed', {});
 
@@ -145,7 +154,7 @@ describe('HookCommand', () => {
 
     it('[EARS-A4] should catch internal errors and not throw', async () => {
       setupValidProject();
-      mockStdin('{"tool_name":"Bash","tool_input":{"command":"git commit -m \\"test\\""},"exit_code":0}', command);
+      mockStdin('{"tool_name":"Bash","tool_input":{"command":"git commit -m \\"test\\""},"exit_code":0}');
       mockHandleEvent.mockImplementation(() => { throw new Error('internal failure'); });
 
       // Should NOT throw
@@ -157,7 +166,7 @@ describe('HookCommand', () => {
 
     it('[EARS-A4] should output error diagnostics to stderr when --verbose and error occurs', async () => {
       setupValidProject();
-      mockStdin('{"tool_name":"Bash","tool_input":{"command":"git commit -m \\"test\\""},"exit_code":0}', command);
+      mockStdin('{"tool_name":"Bash","tool_input":{"command":"git commit -m \\"test\\""},"exit_code":0}');
       mockHandleEvent.mockImplementation(() => { throw new Error('adapter exploded'); });
 
       await command.processEvent('command-executed', { verbose: true });
@@ -168,7 +177,7 @@ describe('HookCommand', () => {
 
     it('[EARS-A5] should output HookCommandResult JSON to stdout without creating records in dry-run', async () => {
       setupValidProject();
-      mockStdin('{"tool_name":"Bash","tool_input":{"command":"git commit -m \\"test\\""},"tool_output":"[main abc1234] test","exit_code":0}', command);
+      mockStdin('{"tool_name":"Bash","tool_input":{"command":"git commit -m \\"test\\""},"tool_output":"[main abc1234] test","exit_code":0}');
       mockHandleEvent.mockResolvedValue({ action: 'recorded', executionId: 'exec-001' });
 
       await command.processEvent('command-executed', { dryRun: true });
@@ -188,7 +197,7 @@ describe('HookCommand', () => {
 
     it('[EARS-B1] should delegate git commit event to HookHandler', async () => {
       const payload = '{"tool_name":"Bash","tool_input":{"command":"git commit -m \\"feat: auth\\""},"tool_output":"[main abc1234] feat: auth\\n 3 files changed","exit_code":0}';
-      mockStdin(payload, command);
+      mockStdin(payload);
       mockHandleEvent.mockResolvedValue({ action: 'recorded', executionId: 'exec-001' });
 
       await command.executeCommandExecuted({});
@@ -203,7 +212,7 @@ describe('HookCommand', () => {
 
     it('[EARS-B2] should delegate gh pr create event to HookHandler', async () => {
       const payload = '{"tool_name":"Bash","tool_input":{"command":"gh pr create --title \\"feat\\" --body \\"...\\""},"tool_output":"https://github.com/org/repo/pull/42","exit_code":0}';
-      mockStdin(payload, command);
+      mockStdin(payload);
       mockHandleEvent.mockResolvedValue({ action: 'recorded', executionId: 'exec-002' });
 
       await command.executeCommandExecuted({});
@@ -218,7 +227,7 @@ describe('HookCommand', () => {
 
     it('[EARS-B3] should delegate test runner event to HookHandler', async () => {
       const payload = '{"tool_name":"Bash","tool_input":{"command":"pnpm test"},"tool_output":"Tests  12 passed | 2 failed | 14 total","exit_code":0}';
-      mockStdin(payload, command);
+      mockStdin(payload);
       mockHandleEvent.mockResolvedValue({ action: 'recorded', executionId: 'exec-003' });
 
       await command.executeCommandExecuted({});
@@ -233,7 +242,7 @@ describe('HookCommand', () => {
 
     it('[EARS-B4] should delegate unrecognized command to HookHandler which skips it', async () => {
       const payload = '{"tool_name":"Bash","tool_input":{"command":"ls -la"},"tool_output":"total 42","exit_code":0}';
-      mockStdin(payload, command);
+      mockStdin(payload);
       mockHandleEvent.mockResolvedValue({ action: 'skipped', reason: 'unrecognized command' });
 
       await command.executeCommandExecuted({});
@@ -249,7 +258,7 @@ describe('HookCommand', () => {
 
     it('[EARS-C1] should delegate file-changed event to HookHandler and skip', async () => {
       const payload = '{"tool_name":"Write","tool_input":{"file_path":"/src/main.ts","content":"export const x = 1;"}}';
-      mockStdin(payload, command);
+      mockStdin(payload);
       mockHandleEvent.mockResolvedValue({ action: 'skipped', reason: 'file changes are not recorded' });
 
       await command.executeFileChanged({});
@@ -261,7 +270,7 @@ describe('HookCommand', () => {
 
     it('[EARS-C2] should delegate task-completed event to HookHandler', async () => {
       const payload = '{"hook_type":"TaskCompleted","task":{"id":"3","subject":"Implement auth","status":"completed","owner":"transport"},"session_id":"sess-123"}';
-      mockStdin(payload, command);
+      mockStdin(payload);
       mockHandleEvent.mockResolvedValue({ action: 'recorded', executionId: 'exec-004' });
 
       await command.executeTaskCompleted({});
@@ -276,7 +285,7 @@ describe('HookCommand', () => {
 
     it('[EARS-C3] should delegate teammate-idle event to HookHandler', async () => {
       const payload = '{"hook_type":"TeammateIdle","agent":{"name":"transport","agent_id":"abc-123"},"session_id":"sess-123"}';
-      mockStdin(payload, command);
+      mockStdin(payload);
       mockHandleEvent.mockResolvedValue({ action: 'skipped', reason: 'activity logged' });
 
       await command.executeTeammateIdle({});
@@ -291,7 +300,7 @@ describe('HookCommand', () => {
 
     it('[EARS-C4] should delegate session-end event to HookHandler', async () => {
       const payload = '{"hook_type":"Stop","session_id":"sess-xyz","cwd":"/project"}';
-      mockStdin(payload, command);
+      mockStdin(payload);
       mockHandleEvent.mockResolvedValue({ action: 'recorded', executionId: 'exec-005' });
 
       await command.executeSessionEnd({});
@@ -312,7 +321,7 @@ describe('HookCommand', () => {
 
     it('[EARS-D1] should output diagnostic information to stderr when --verbose is provided', async () => {
       const payload = '{"tool_name":"Bash","tool_input":{"command":"git commit -m \\"test\\""},"tool_output":"[main abc1234] test","exit_code":0}';
-      mockStdin(payload, command);
+      mockStdin(payload);
       mockHandleEvent.mockResolvedValue({ action: 'recorded', executionId: 'exec-006' });
 
       await command.processEvent('command-executed', { verbose: true });
@@ -325,7 +334,7 @@ describe('HookCommand', () => {
 
     it('[EARS-D1] should output skip reason to stderr when --verbose and event is skipped', async () => {
       const payload = '{"tool_name":"Bash","tool_input":{"command":"ls -la"},"tool_output":"total 42","exit_code":0}';
-      mockStdin(payload, command);
+      mockStdin(payload);
       mockHandleEvent.mockResolvedValue({ action: 'skipped', reason: 'unrecognized command' });
 
       await command.processEvent('command-executed', { verbose: true });
@@ -336,7 +345,7 @@ describe('HookCommand', () => {
 
     it('[EARS-D2] should output HookCommandResult JSON to stdout when --dry-run is provided', async () => {
       const payload = '{"tool_name":"Write","tool_input":{"file_path":"/src/main.ts"}}';
-      mockStdin(payload, command);
+      mockStdin(payload);
       mockHandleEvent.mockResolvedValue({ action: 'skipped', reason: 'file changes are not recorded' });
 
       await command.processEvent('file-changed', { dryRun: true });
