@@ -67,7 +67,7 @@ export class InitCommand {
           console.log("   gitgov init --login <your-github-login>");
         }
         process.exit(1);
-        return;
+        return; // needed for test mocks where process.exit doesn't terminate
       }
 
       // 4. Setup visual progress tracking
@@ -372,23 +372,6 @@ export class InitCommand {
 
   /**
    * [EARS-F1/F2] Check if gitgov-state branch exists on the remote (Task 5.4).
-   * Uses `git ls-remote` — no API needed, works with any git remote.
-   * Returns false on any error (no remote, offline, etc.) — conservative fallback.
-   */
-  private async checkRemoteForGitgovState(): Promise<boolean> {
-    try {
-      const { execSync } = await import('child_process');
-      const output = execSync('git ls-remote --heads origin gitgov-state', {
-        cwd: process.cwd(),
-        encoding: 'utf8',
-        timeout: 10000,
-      }).trim();
-      return output.length > 0;
-    } catch {
-      return false;
-    }
-  }
-
   /**
    * [EARS-D2] Handles errors with user-friendly messages and troubleshooting suggestions
    * [EARS-B3] Captures adapter errors with specific context
