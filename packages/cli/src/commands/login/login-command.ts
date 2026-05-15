@@ -94,9 +94,9 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
   // [LOGIN-A1] OAuth flow → open browser, start callback server, store session token
   async executeLogin(options: LoginCommandOptions): Promise<void> {
     try {
-      // [LOGIN-J1] Cloud-first bootstrap: fetch remote state branch so DI can discover it
-      // Read branch name from existing worktree config if available, fallback to 'gitgov-state'
-      const stateBranchForFetch = await this.resolveStateBranchPreDI();
+      // [LOGIN-J1] [LOGIN-P1] Cloud-first bootstrap: fetch remote state branch so DI can discover it
+      // Priority: --state-branch flag > existing worktree config > fallback 'gitgov-state'
+      const stateBranchForFetch = options.stateBranch || await this.resolveStateBranchPreDI();
       try {
         const { execSync } = await import('child_process');
         execSync(`git fetch origin ${stateBranchForFetch}`, {

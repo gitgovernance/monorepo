@@ -25,6 +25,8 @@ export interface LoginCommandOptions extends BaseCommandOptions {
   forceLocal?: boolean;
   /** On key conflict: download SaaS key, archive local key */
   forceCloud?: boolean;
+  /** State branch name for pre-DI fetch (LOGIN-P1). Overrides resolveStateBranchPreDI() */
+  stateBranch?: string;
 }
 
 // ============================================================================

@@ -975,4 +975,42 @@ describe('LoginCommand v2', () => {
       expect(mockSetLastSession).toHaveBeenCalledWith('human:camilo', expect.any(String));
     });
   });
+
+  // ============================================================================
+  // §4.15. State Branch Override (LOGIN-P1)
+  // ============================================================================
+  describe('4.15. State Branch Override (LOGIN-P1)', () => {
+    it('[LOGIN-P1] should use custom branch name for fetch when --state-branch provided', async () => {
+      const { execSync } = await import('child_process');
+      const mockExecSync = execSync as Mock<typeof execSync>;
+      mockExecSync.mockReturnValue('https://github.com/testorg/testrepo.git\n');
+
+      mockHasPrivateKey.mockResolvedValue(true);
+      mockGetPrivateKey.mockResolvedValue('base64-priv-key');
+      mockGetPublicKey.mockResolvedValue('base64-pub-key');
+
+      const deps = createMockDeps({
+        fetchSaas: vi.fn().mockImplementation(async (url: string) => {
+          if (url.includes('identity.keyStatus')) return { ok: true, json: async () => trpcWrap(noKeyStatus) };
+          if (url.includes('identity.syncKey')) return { ok: true, json: async () => trpcWrap({ success: true, actorId: 'human:camilo', mode: 'full' as const }) };
+          return { ok: false, json: async () => ({}) };
+        }),
+      });
+
+      const cmd = new LoginCommand(deps);
+      await cmd.executeLogin({ ...defaultOptions, stateBranch: 'gitgov-state-custom-test' });
+
+      // Verify the fetch used the custom branch name, not default
+      const fetchCalls = mockExecSync.mock.calls.filter(
+        (call) => typeof call[0] === 'string' && call[0].includes('git fetch origin gitgov-state-custom-test')
+      );
+      expect(fetchCalls.length).toBe(1);
+
+      // Verify default gitgov-state was NOT fetched
+      const defaultFetchCalls = mockExecSync.mock.calls.filter(
+        (call) => typeof call[0] === 'string' && call[0] === 'git fetch origin gitgov-state'
+      );
+      expect(defaultFetchCalls.length).toBe(0);
+    });
+  });
 });
