@@ -233,19 +233,18 @@ describe('ProjectModule', () => {
       const pm = new ProjectModule(deps);
 
       await expect(pm.initializeProject({ name: 'test-project', login: 'dev' }))
-        .rejects.toMatchObject({ code: 'GIT_WRITE_FAILED' });
+        .rejects.toThrow('Finalize failed');
       expect(initializer.rollback).toHaveBeenCalled();
     });
 
-    it('[PROJ-D2] should throw wrapped error even if rollback fails', async () => {
+    it('[PROJ-D2] should throw original error even if rollback fails', async () => {
       const { deps, initializer } = createRealDeps();
       (initializer.finalize as jest.Mock).mockRejectedValue(new Error('Original error'));
       (initializer.rollback as jest.Mock).mockRejectedValue(new Error('Rollback failed'));
       const pm = new ProjectModule(deps);
 
       const err = await pm.initializeProject({ name: 'test-project', login: 'dev' }).catch(e => e);
-      expect(err.code).toBe('GIT_WRITE_FAILED');
-      expect(err.context.cause).toContain('Original error');
+      expect(err.message).toBe('Original error');
     });
 
     it('[PROJ-D3] should rollback when createProjectStructure fails', async () => {
@@ -264,8 +263,7 @@ describe('ProjectModule', () => {
       const pm = new ProjectModule(deps);
 
       const err = await pm.initializeProject({ name: 'test-project', login: 'dev' }).catch(e => e);
-      expect(err.code).toBe('GIT_WRITE_FAILED');
-      expect(err.context.cause).toContain('Commit failed');
+      expect(err.message).toBe('Commit failed');
       expect(initializer.rollback).toHaveBeenCalled();
     });
   });

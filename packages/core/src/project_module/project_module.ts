@@ -31,6 +31,7 @@ export class ProjectModule {
       await this.deps.initializer.createProjectStructure();
 
       // [PROJ-A1] [PROJ-B1] Human actor — via ensureActorInProject for consistent metadata + events
+      // skipFinalize: true — initializeProject calls finalize() once at the end
       const actorType = options.type ?? 'human';
       const humanResult = await this.ensureActorInProject({
         login: options.login || 'owner',
@@ -39,6 +40,7 @@ export class ProjectModule {
         displayName: options.actorName || options.login || 'Project Owner',
         roles: ['admin', 'author', 'approver:product', 'approver:quality', 'developer'],
         joinedVia,
+        skipFinalize: true,
       });
 
       // [PROJ-B2] Product agent (G21 Two-Tier Actor Model) — via ensureActorInProject
@@ -47,6 +49,7 @@ export class ProjectModule {
         productAgentResult = await this.ensureActorInProject({
           login: 'gitgov-audit',
           type: 'agent',
+          skipFinalize: true,
           repoId,
           displayName: 'GitGov Audit',
           roles: ['orchestrator'],
@@ -91,6 +94,7 @@ export class ProjectModule {
                 repoId,
                 displayName: agentConfig.displayName,
                 joinedVia,
+                skipFinalize: true,
               });
             }
 
@@ -164,16 +168,14 @@ export class ProjectModule {
     const existing = await this.deps.identity.getActor(actorId);
     if (existing) {
       // [PROJ-H3] Detect-and-resume: actor in store but maybe not in git.
-      // Re-attempt finalize — if already committed, finalize is a no-op or
-      // produces an empty commit (safe). This closes the gap where call 1
-      // created the actor but finalize failed.
       let commitSha: string | undefined;
-      try {
-        const finalized = await this.deps.initializer.finalize();
-        if (finalized) commitSha = finalized;
-      } catch {
-        // finalize failed again — actor still in store, not in git.
-        // Return idempotent without throwing — caller can retry later.
+      if (!input.skipFinalize) {
+        try {
+          const finalized = await this.deps.initializer.finalize();
+          if (finalized) commitSha = finalized;
+        } catch {
+          // finalize failed — caller can retry later.
+        }
       }
 
       // [PROJ-H4] Emit ACTOR_JOINED with wasCreated: false
@@ -204,25 +206,23 @@ export class ProjectModule {
     }, 'bootstrap');
 
     // [PROJ-H3] Finalize commits the actor to git.
-    // If the store already committed (e.g. GitHubRecordStore commits on put()),
-    // finalize() may have nothing to commit — that's not an error if the actor
-    // is now in the store.
+    // When skipFinalize is set (called from initializeProject), the caller
+    // will finalize once at the end for all staged files atomically.
     let commitSha: string | undefined;
-    try {
-      const finalized = await this.deps.initializer.finalize();
-      if (finalized) commitSha = finalized;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      if (message.includes('Nothing to commit')) {
-        const verified = await this.deps.identity.getActor(actorId);
-        if (verified) {
-          // Actor was written by the store directly (GitHub Contents API).
-          // finalize() had nothing left to commit. This is success.
+    if (!input.skipFinalize) {
+      try {
+        const finalized = await this.deps.initializer.finalize();
+        if (finalized) commitSha = finalized;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        if (message.includes('Nothing to commit')) {
+          const verified = await this.deps.identity.getActor(actorId);
+          if (!verified) {
+            throw new EnsureActorError('GIT_WRITE_FAILED', { actorId, cause: message });
+          }
         } else {
           throw new EnsureActorError('GIT_WRITE_FAILED', { actorId, cause: message });
         }
-      } else {
-        throw new EnsureActorError('GIT_WRITE_FAILED', { actorId, cause: message });
       }
     }
 

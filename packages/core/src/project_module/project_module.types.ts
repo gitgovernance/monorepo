@@ -58,6 +58,7 @@ export type EnsureActorInput = {
   roles?: string[];
   joinedVia: 'cli' | 'saas-oauth' | 'saas-webhook' | 'mcp';
   authzCheck?: (input: EnsureActorInput) => Promise<boolean>;
+  skipFinalize?: boolean;
 };
 
 export type EnsureActorResult = {
