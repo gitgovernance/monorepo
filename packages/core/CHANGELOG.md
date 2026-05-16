@@ -1,3 +1,10 @@
+## [3.20.0](https://github.com/gitgovernance/monorepo/compare/core-v3.19.0...core-v3.20.0) (2026-05-16)
+
+
+### ✨ Features
+
+* **gate:** configurable state branch + E2E test isolation ([#159](https://github.com/gitgovernance/monorepo/issues/159)) ([f4485a4](https://github.com/gitgovernance/monorepo/commit/f4485a41e8fcb287e650abdb9f5c6c4b8075f129))
+
 ## [3.19.0](https://github.com/gitgovernance/monorepo/compare/core-v3.18.0...core-v3.19.0) (2026-05-10)
 
 
