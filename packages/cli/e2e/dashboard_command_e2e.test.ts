@@ -296,7 +296,7 @@ describe('Dashboard TUI - Interactive Testing with ink-testing-library', () => {
       // 
       // Expected implementation:
       // 
-      // const mockDeleteTask = jest.fn();
+      // const mockDeleteTask = vi.fn();
       // const { lastFrame, stdin } = render(
       //   <DashboardTUI onDelete={mockDeleteTask} {...mockProps} />
       // );
@@ -333,7 +333,7 @@ describe('Dashboard TUI - Interactive Testing with ink-testing-library', () => {
       // 
       // Expected implementation:
       // 
-      // const mockInvalidateCache = jest.fn();
+      // const mockInvalidateCache = vi.fn();
       // const { stdin } = render(
       //   <DashboardTUI onCacheInvalidate={mockInvalidateCache} {...mockProps} />
       // );

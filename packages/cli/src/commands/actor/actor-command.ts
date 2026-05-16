@@ -31,6 +31,10 @@ export class ActorCommand extends BaseCommand {
         'self'
       );
 
+      // [ICOMP-C7] Save session so the next command knows who the active actor is
+      const sessionManager = await this.dependencyService.getSessionManager();
+      await sessionManager.setLastSession(actor.id, new Date().toISOString());
+
       this.handleSuccess(
         { actorId: actor.id, type: actor.type, displayName: actor.displayName, roles: actor.roles },
         options,

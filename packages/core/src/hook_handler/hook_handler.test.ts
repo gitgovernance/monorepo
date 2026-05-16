@@ -21,7 +21,7 @@ function createMockDependencies(overrides?: Partial<{
   configReturns: unknown;
   actorStateReturns: unknown;
   lastSessionReturns: unknown;
-  detectActorReturns: string | null;
+  detectActorReturns: string[];
   createReturns: unknown;
   createThrows: Error;
 }>): HookHandlerDependencies {
@@ -41,7 +41,7 @@ function createMockDependencies(overrides?: Partial<{
 
     sessionManager: {
       loadSession: jest.fn(),
-      detectActorFromKeyFiles: jest.fn().mockResolvedValue('detectActorReturns' in opts ? opts.detectActorReturns : 'actor-123'),
+      detectActorFromKeyFiles: jest.fn().mockResolvedValue('detectActorReturns' in opts ? opts.detectActorReturns : ['actor-123']),
       getActorState: jest.fn().mockResolvedValue(opts.actorStateReturns ?? { activeTaskId: 'task-001' }),
       updateActorState: jest.fn(),
       getCloudSessionToken: jest.fn(),
@@ -363,7 +363,7 @@ describe('HookHandler', () => {
     it('[EARS-C3] should return skipped with reason "no actor" when actorId cannot be resolved', async () => {
       deps = createMockDependencies({
         lastSessionReturns: null,
-        detectActorReturns: null,
+        detectActorReturns: [],
       });
       handler = new HookHandler(deps);
 

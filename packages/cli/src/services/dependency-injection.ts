@@ -1,13 +1,14 @@
 import * as path from 'path';
 import * as os from 'os';
-import { Adapters, Config, Session, EventBus, Lint, Git, SourceAuditor, FindingDetector, Runner, KeyProvider, RecordProjection, RecordMetrics, AuditOrchestrator, PolicyEvaluator, IdentityModule, RecordSigner, getCurrentActor, ProjectModule } from '@gitgov/core';
-import { FsRecordStore, DEFAULT_ID_ENCODER, FsFileLister, FsProjectInitializer, FsLintModule, FsWorktreeSyncStateModule, GitModule, createAgentRunner, createConfigManager, findProjectRoot, createSessionManager, FsRecordProjection, getWorktreeBasePath } from '@gitgov/core/fs';
+import { Adapters, Config, Session, EventBus, Lint, Git, SourceAuditor, FindingDetector, KeyProvider, RecordProjection, RecordMetrics, AuditOrchestrator, PolicyEvaluator, IdentityModule, RecordSigner, getCurrentActor, ActorSelectionRequiredError, ProjectModule, DEFAULT_AGENTS } from '@gitgov/core';
+import { FsRecordStore, DEFAULT_ID_ENCODER, FsFileLister, FsProjectInitializer, FsLintModule, FsWorktreeSyncStateModule, GitModule, createAgentRunner, createConfigManager, findProjectRoot, createSessionManager, FsRecordProjection, getWorktreeBasePath, getKeysDir } from '@gitgov/core/fs';
 import type { IFsLintModule } from '@gitgov/core/fs';
 import type {
   GitGovTaskRecord, GitGovCycleRecord, GitGovFeedbackRecord, GitGovExecutionRecord, GitGovActorRecord, GitGovAgentRecord,
   // Module types
-  IRecordProjector, IRecordMetrics, IConfigManager, IIdentityModule, ISessionManager, IAgentRunner, IKeyProvider,
+  IRecordProjector, IRecordMetrics, IAgentRunner, IKeyProvider,
   ISyncStateModule,
+  ProjectModuleDeps,
   // Lint types
   RecordStores as LintRecordStores,
   RecordStore,
@@ -53,6 +54,9 @@ export class DependencyInjectionService {
    */
   private initModeEnabled = false;
 
+  // [EARS-C15] Override for bootstrapWorktree branch name (default: 'gitgov-state')
+  private stateBranchOverride: string | null = null;
+
   private constructor() { }
 
   /**
@@ -74,6 +78,14 @@ export class DependencyInjectionService {
     this.repoRoot = projectRoot;
     this.projectRoot = getWorktreeBasePath(projectRoot);
     this.initModeEnabled = true;
+  }
+
+  /**
+   * [EARS-C15] Override state branch for worktree bootstrap.
+   * Called by LoginCommand when --state-branch is provided, before DI bootstrap.
+   */
+  setStateBranchOverride(branchName: string): void {
+    this.stateBranchOverride = branchName;
   }
 
   /**
@@ -134,27 +146,29 @@ export class DependencyInjectionService {
   }
 
   /**
-   * [CLIINT-A1] Bootstrap worktree from gitgov-state branch.
-   * Creates a git worktree at ~/.gitgov/worktrees/<hash>/ pointing to gitgov-state.
+   * [CLIINT-A1] [EARS-C15] Bootstrap worktree from state branch.
+   * Creates a git worktree at ~/.gitgov/worktrees/<hash>/ pointing to the state branch.
+   * Uses stateBranchOverride if set (LOGIN-P1), otherwise defaults to 'gitgov-state'.
    */
   private async bootstrapWorktree(
     gitModule: Git.IGitModule,
-    repoRoot: string,
+    _repoRoot: string,
     worktreeBasePath: string,
   ): Promise<void> {
     const { promises: fsPromises } = await import('fs');
+    const stateBranch = this.stateBranchOverride || 'gitgov-state';
 
     // Ensure ~/.gitgov/worktrees/ exists
     await fsPromises.mkdir(path.join(os.homedir(), '.gitgov', 'worktrees'), { recursive: true });
 
-    // Check if gitgov-state branch exists locally
-    const branchExists = await gitModule.branchExists('gitgov-state');
+    // Check if state branch exists locally
+    const branchExists = await gitModule.branchExists(stateBranch);
     if (!branchExists) {
       // Check remote
       const remoteBranches = await gitModule.listRemoteBranches('origin');
-      if (remoteBranches.includes('gitgov-state') || remoteBranches.includes('origin/gitgov-state')) {
+      if (remoteBranches.includes(stateBranch) || remoteBranches.includes(`origin/${stateBranch}`)) {
         // Create local tracking branch
-        await gitModule.exec('git', ['branch', 'gitgov-state', 'origin/gitgov-state']);
+        await gitModule.exec('git', ['branch', stateBranch, `origin/${stateBranch}`]);
       } else {
         // Neither exists — not initialized
         throw new Error("❌ GitGovernance not initialized. Run 'gitgov init' first.");
@@ -162,7 +176,7 @@ export class DependencyInjectionService {
     }
 
     // Create worktree
-    await gitModule.exec('git', ['worktree', 'add', worktreeBasePath, 'gitgov-state']);
+    await gitModule.exec('git', ['worktree', 'add', worktreeBasePath, stateBranch]);
   }
 
   /**
@@ -261,7 +275,7 @@ export class DependencyInjectionService {
 
       // Create KeyProvider for filesystem-based key storage
       this.keyProvider = new KeyProvider.FsKeyProvider({
-        keysDir: path.join(this.projectRoot!, '.gitgov', 'keys')
+        keysDir: getKeysDir(this.projectRoot!)
       });
 
       const identityModule = new IdentityModule({
@@ -348,7 +362,7 @@ export class DependencyInjectionService {
       const eventBus = new EventBus.EventBus();
 
       this.keyProvider = new KeyProvider.FsKeyProvider({
-        keysDir: path.join(this.projectRoot!, '.gitgov', 'keys')
+        keysDir: getKeysDir(this.projectRoot!)
       });
 
       return new IdentityModule({
@@ -378,8 +392,34 @@ export class DependencyInjectionService {
 
   async getCurrentActor(): Promise<import('@gitgov/core').ActorRecord> {
     const identity = await this.getIdentityModule();
-    const session = await this.getSessionManager();
-    return getCurrentActor(identity, session);
+    const sessionManager = await this.getSessionManager();
+
+    try {
+      return await getCurrentActor(identity, sessionManager);
+    } catch (err) {
+      // [EARS-C14] Multiple local keys — prompt user to select
+      if (err instanceof ActorSelectionRequiredError) {
+        const { createInterface } = await import('readline');
+        const rl = createInterface({ input: process.stdin, output: process.stdout });
+
+        console.log('\nMultiple actors found on this machine:');
+        err.actorIds.forEach((id, i) => console.log(`  ${i + 1}. ${id}`));
+
+        const selected = await new Promise<string>((resolve) => {
+          rl.question(`Select actor [1-${err.actorIds.length}]: `, (answer) => {
+            rl.close();
+            const idx = parseInt(answer, 10) - 1;
+            resolve(idx >= 0 && idx < err.actorIds.length ? err.actorIds[idx]! : err.actorIds[0]!);
+          });
+        });
+
+        await sessionManager.setLastSession(selected, new Date().toISOString());
+        console.log(`Selected: ${selected}\n`);
+
+        return await getCurrentActor(identity, sessionManager);
+      }
+      throw err;
+    }
   }
 
   async getRecordSigner(): Promise<RecordSigner> {
@@ -400,46 +440,17 @@ export class DependencyInjectionService {
     const backlogAdapter = await this.getBacklogAdapter();
     const initializer = new FsProjectInitializer(this.projectRoot);
 
-    // [PROJ-B4] AgentAdapter for default agent registration
+    // [PROJ-B4] [PROJ-F3] AgentAdapter + DEFAULT_AGENTS from core registry
     const agentAdapter = await this.getAgentAdapter().catch(() => undefined);
 
-    return new ProjectModule({
+    const deps: ProjectModuleDeps = {
       initializer,
       identity: identityModule,
       backlog: backlogAdapter,
-      agentAdapter,
-      defaultAgents: [{
-        packageName: '@gitgov/agent-security-audit',
-        agentId: 'agent:gitgov-audit',
-        engine: { type: 'local', runtime: 'typescript', entrypoint: '@gitgov/agent-security-audit', function: 'runAgent' },
-        purpose: 'audit',
-        metadata: { target: 'code', outputFormat: 'sarif' },
-      }],
-    });
-  }
-
-  private async getGitModuleForWorktree(worktreePath: string): Promise<Git.IGitModule> {
-    const { spawn } = await import('child_process');
-    const execCommand = (command: string, args: string[], options?: Git.ExecOptions) => {
-      return new Promise<{ exitCode: number; stdout: string; stderr: string }>((resolve) => {
-        const cwd = options?.cwd || worktreePath;
-        const proc = spawn(command, args, {
-          cwd,
-          env: { ...process.env, ...options?.env },
-        });
-        let stdout = '';
-        let stderr = '';
-        proc.stdout?.on('data', (data: Buffer) => { stdout += data.toString(); });
-        proc.stderr?.on('data', (data: Buffer) => { stderr += data.toString(); });
-        proc.on('close', (code: number | null) => {
-          resolve({ exitCode: code || 0, stdout, stderr });
-        });
-        proc.on('error', (error: Error) => {
-          resolve({ exitCode: 1, stdout, stderr: error.message });
-        });
-      });
+      defaultAgents: DEFAULT_AGENTS,
     };
-    return new GitModule({ repoRoot: worktreePath, execCommand });
+    if (agentAdapter) deps.agentAdapter = agentAdapter;
+    return new ProjectModule(deps);
   }
 
   /**
@@ -455,7 +466,7 @@ export class DependencyInjectionService {
       // Create EventBus and KeyProvider
       const eventBus = new EventBus.EventBus();
       const keyProvider = new KeyProvider.FsKeyProvider({
-        keysDir: path.join(this.projectRoot!, '.gitgov', 'keys')
+        keysDir: getKeysDir(this.projectRoot!)
       });
 
       const signer = new RecordSigner({ keyProvider });
@@ -645,7 +656,7 @@ export class DependencyInjectionService {
       // Create EventBus and KeyProvider
       const eventBus = new EventBus.EventBus();
       const keyProvider = new KeyProvider.FsKeyProvider({
-        keysDir: path.join(this.projectRoot!, '.gitgov', 'keys')
+        keysDir: getKeysDir(this.projectRoot!)
       });
 
       const signer = new RecordSigner({ keyProvider });
@@ -679,7 +690,7 @@ export class DependencyInjectionService {
 
       const eventBus = new EventBus.EventBus();
       const keyProvider = new KeyProvider.FsKeyProvider({
-        keysDir: path.join(this.projectRoot!, '.gitgov', 'keys')
+        keysDir: getKeysDir(this.projectRoot!)
       });
 
       const identityModule = new IdentityModule({
@@ -841,7 +852,7 @@ export class DependencyInjectionService {
       const lintModule = await this.getLintModule();
 
       this.keyProvider = this.keyProvider ?? new KeyProvider.FsKeyProvider({
-        keysDir: path.join(this.projectRoot!, '.gitgov', 'keys')
+        keysDir: getKeysDir(this.projectRoot!)
       });
       const signer = new RecordSigner({ keyProvider: this.keyProvider });
 

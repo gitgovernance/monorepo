@@ -8,47 +8,46 @@
  */
 
 // Mock DI — provide real-ish adapters
-const mockCreate = jest.fn();
-const mockGetActorState = jest.fn();
-const mockGetLastSession = jest.fn();
-const mockDetectActorFromKeyFiles = jest.fn();
-const mockLoadConfig = jest.fn();
+const mockCreate = vi.fn();
+const mockGetActorState = vi.fn();
+const mockGetLastSession = vi.fn();
+const mockDetectActorFromKeyFiles = vi.fn();
+const mockLoadConfig = vi.fn();
 
-jest.mock('@gitgov/core', () => {
-  // Import the real HookHandler but with mock-able dependencies
-  const actual = jest.requireActual('@gitgov/core');
+vi.mock('@gitgov/core', async () => {
+  const actual = await vi.importActual('@gitgov/core');
   return actual;
 });
 
-jest.mock('../../services/dependency-injection', () => ({
+vi.mock('../../services/dependency-injection', () => ({
   DependencyInjectionService: {
-    getInstance: jest.fn(() => ({
-      validateDependencies: jest.fn().mockResolvedValue(true),
-      getExecutionAdapter: jest.fn().mockResolvedValue({
+    getInstance: vi.fn(() => ({
+      validateDependencies: vi.fn().mockResolvedValue(true),
+      getExecutionAdapter: vi.fn().mockResolvedValue({
         create: mockCreate,
-        getExecution: jest.fn(),
-        getExecutionsByTask: jest.fn(),
-        getAllExecutions: jest.fn(),
+        getExecution: vi.fn(),
+        getExecutionsByTask: vi.fn(),
+        getAllExecutions: vi.fn(),
       }),
-      getSessionManager: jest.fn().mockResolvedValue({
-        loadSession: jest.fn(),
+      getSessionManager: vi.fn().mockResolvedValue({
+        loadSession: vi.fn(),
         detectActorFromKeyFiles: mockDetectActorFromKeyFiles,
         getActorState: mockGetActorState,
-        updateActorState: jest.fn(),
-        getCloudSessionToken: jest.fn(),
-        getSyncPreferences: jest.fn(),
-        updateSyncPreferences: jest.fn(),
+        updateActorState: vi.fn(),
+        getCloudSessionToken: vi.fn(),
+        getSyncPreferences: vi.fn(),
+        updateSyncPreferences: vi.fn(),
         getLastSession: mockGetLastSession,
       }),
-      getConfigManager: jest.fn().mockResolvedValue({
+      getConfigManager: vi.fn().mockResolvedValue({
         loadConfig: mockLoadConfig,
-        getRootCycle: jest.fn(),
-        getProjectInfo: jest.fn(),
-        getSyncConfig: jest.fn(),
-        getSyncDefaults: jest.fn(),
-        getAuditState: jest.fn(),
-        updateAuditState: jest.fn(),
-        getStateBranch: jest.fn(),
+        getRootCycle: vi.fn(),
+        getProjectInfo: vi.fn(),
+        getSyncConfig: vi.fn(),
+        getSyncDefaults: vi.fn(),
+        getAuditState: vi.fn(),
+        updateAuditState: vi.fn(),
+        getStateBranch: vi.fn(),
       }),
     })),
   },
@@ -60,8 +59,8 @@ import { HookCommand } from './hook_command';
 
 function mockStdin(data: string): void {
   Object.defineProperty(process.stdin, 'isTTY', { value: false, writable: true, configurable: true });
-  jest.spyOn(process.stdin, 'setEncoding').mockImplementation(() => process.stdin);
-  jest.spyOn(process.stdin, 'on').mockImplementation((event: string, handler: (...args: unknown[]) => void) => {
+  vi.spyOn(process.stdin, 'setEncoding').mockImplementation(() => process.stdin);
+  vi.spyOn(process.stdin, 'on').mockImplementation((event: string, handler: (...args: unknown[]) => void) => {
     if (event === 'data') {
       setImmediate(() => handler(data));
     } else if (event === 'end') {
@@ -76,16 +75,16 @@ function mockStdin(data: string): void {
 describe('HookCommand Integration', () => {
   let command: HookCommand;
   let stdoutOutput: string;
-  let stdoutSpy: jest.SpyInstance;
+  let stdoutSpy: vi.SpyInstance;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     stdoutOutput = '';
-    stdoutSpy = jest.spyOn(process.stdout, 'write').mockImplementation((chunk: string | Uint8Array) => {
+    stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation((chunk: string | Uint8Array) => {
       stdoutOutput += String(chunk);
       return true;
     });
-    jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
 
     // Setup default mocks
     mockLoadConfig.mockResolvedValue({ projectId: 'test', projectName: 'Test' });
@@ -99,7 +98,7 @@ describe('HookCommand Integration', () => {
 
   afterEach(() => {
     stdoutSpy.mockRestore();
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('should classify git commit event in dry-run without persisting (full pipeline)', async () => {

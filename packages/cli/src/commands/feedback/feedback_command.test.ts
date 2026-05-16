@@ -6,20 +6,20 @@
  */
 
 // Mock @gitgov/core FIRST to avoid import.meta issues
-jest.mock('@gitgov/core', () => ({
+vi.mock('@gitgov/core', () => ({
   Records: {},
   Factories: {
-    createFeedbackRecord: jest.fn((data) => data),
-    createTestSignature: jest.fn((keyId, role, notes) => ({
+    createFeedbackRecord: vi.fn((data) => data),
+    createTestSignature: vi.fn((keyId, role, notes) => ({
       keyId, role, notes, timestamp: Date.now(), signature: 'A'.repeat(86) + '=='
     })),
   }
 }));
 
 // Mock DependencyInjectionService
-jest.mock('../../services/dependency-injection', () => ({
+vi.mock('../../services/dependency-injection', () => ({
   DependencyInjectionService: {
-    getInstance: jest.fn()
+    getInstance: vi.fn()
   }
 }));
 
@@ -36,47 +36,47 @@ const mockFeedback = {
 };
 
 // Mock console and process.exit at module level (task-command pattern)
-const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation();
-const mockConsoleError = jest.spyOn(console, 'error').mockImplementation();
-const mockProcessExit = jest.spyOn(process, 'exit').mockImplementation();
+const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation();
+const mockConsoleError = vi.spyOn(console, 'error').mockImplementation();
+const mockProcessExit = vi.spyOn(process, 'exit').mockImplementation();
 
 describe('FeedbackCommand', () => {
   let feedbackCommand: FeedbackCommand;
   let mockFeedbackAdapter: {
-    create: jest.MockedFunction<any>;
+    create: Mock<any>;
   };
   let mockIdentityAdapter: {
-    getCurrentActor: jest.MockedFunction<any>;
+    getCurrentActor: Mock<any>;
   };
   let mockProjector: {
-    invalidateCache: jest.MockedFunction<any>;
+    invalidateCache: Mock<any>;
   };
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     mockFeedbackAdapter = {
-      create: jest.fn().mockResolvedValue(mockFeedback),
+      create: vi.fn().mockResolvedValue(mockFeedback),
     };
 
     mockIdentityAdapter = {
-      getCurrentActor: jest.fn().mockResolvedValue({ id: 'human:dev', displayName: 'Dev', type: 'human' }),
+      getCurrentActor: vi.fn().mockResolvedValue({ id: 'human:dev', displayName: 'Dev', type: 'human' }),
     };
 
     mockProjector = {
-      invalidateCache: jest.fn().mockResolvedValue(undefined),
+      invalidateCache: vi.fn().mockResolvedValue(undefined),
     };
 
     const mockDependencyService = {
-      getFeedbackAdapter: jest.fn().mockResolvedValue(mockFeedbackAdapter),
-      getIdentityAdapter: jest.fn().mockResolvedValue(mockIdentityAdapter),
-      getRecordProjector: jest.fn().mockResolvedValue(mockProjector),
-      getCurrentActor: jest.fn().mockResolvedValue({ id: 'human:dev', displayName: 'Dev', type: 'human' }),
-      getProjectRoot: jest.fn().mockResolvedValue('/mock/project/root'),
+      getFeedbackAdapter: vi.fn().mockResolvedValue(mockFeedbackAdapter),
+      getIdentityAdapter: vi.fn().mockResolvedValue(mockIdentityAdapter),
+      getRecordProjector: vi.fn().mockResolvedValue(mockProjector),
+      getCurrentActor: vi.fn().mockResolvedValue({ id: 'human:dev', displayName: 'Dev', type: 'human' }),
+      getProjectRoot: vi.fn().mockResolvedValue('/mock/project/root'),
     };
 
     // Set up mock BEFORE constructing command (critical — BaseCommand reads DI in constructor)
-    (DependencyInjectionService.getInstance as jest.MockedFunction<typeof DependencyInjectionService.getInstance>)
+    (DependencyInjectionService.getInstance as Mock<typeof DependencyInjectionService.getInstance>)
       .mockReturnValue(mockDependencyService as never);
 
     feedbackCommand = new FeedbackCommand();

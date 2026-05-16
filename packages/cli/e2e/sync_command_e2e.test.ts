@@ -4,6 +4,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 
+// Keys dir is per-worktree: {worktreeBasePath}/.gitgov/keys/
+const getKeysDir = (worktreePath: string): string => path.join(worktreePath, '.gitgov', 'keys');
+
 /**
  * E2E Tests for Sync CLI Commands
  *
@@ -220,10 +223,13 @@ describe('Sync CLI Commands - E2E Tests', () => {
         fs.unlinkSync(sessionPath);
       }
 
-      // 3. Verify .key file exists
-      const keysDir = path.join(worktreeBasePath, '.gitgov', 'keys');
+      // 3. [G29] Keep only the human key (auto-detect requires exactly 1 key)
+      const keysDir = getKeysDir(worktreeBasePath);
+      fs.readdirSync(keysDir).filter(f => f.endsWith('.key') && f.startsWith('agent_')).forEach(f => {
+        fs.unlinkSync(path.join(keysDir, f));
+      });
       const keyFiles = fs.readdirSync(keysDir).filter(f => f.endsWith('.key'));
-      expect(keyFiles.length).toBeGreaterThan(0);
+      expect(keyFiles.length).toBe(1);
 
       // 4. Run sync push - should succeed by auto-detecting actor from .key file
       const pushResult = runCliCommand(['sync', 'push'], { cwd: testProjectRoot });
@@ -287,7 +293,7 @@ describe('Sync CLI Commands - E2E Tests', () => {
       // Copy actor key from original project so we can sign records
       const gitgovDir = path.join(worktreeBasePath, '.gitgov');
       const cloneGitgov = path.join(cloneWorktree, '.gitgov');
-      const keysDir = path.join(gitgovDir, 'keys');
+      const keysDir = getKeysDir(worktreeBasePath);
       const keyFiles = fs.readdirSync(keysDir).filter(f => f.endsWith('.key'));
       if (keyFiles[0]) {
         const keyContent = fs.readFileSync(path.join(keysDir, keyFiles[0]), 'utf-8');
@@ -344,7 +350,7 @@ describe('Sync CLI Commands - E2E Tests', () => {
       // 4. Initialize actor in the clone (copy key and create session)
       const gitgovDir = path.join(worktreeBasePath, '.gitgov');
       const cloneGitgov = path.join(cloneWorktree, '.gitgov');
-      const keysDir = path.join(gitgovDir, 'keys');
+      const keysDir = getKeysDir(worktreeBasePath);
       const keyFiles = fs.readdirSync(keysDir).filter(f => f.endsWith('.key'));
       if (keyFiles[0]) {
         const keyContent = fs.readFileSync(path.join(keysDir, keyFiles[0]), 'utf-8');
@@ -416,7 +422,7 @@ describe('Sync CLI Commands - E2E Tests', () => {
 
       // 2. Get the .key file content before any operations
       const gitgovDir = path.join(worktreeBasePath, '.gitgov');
-      const keysDir = path.join(gitgovDir, 'keys');
+      const keysDir = getKeysDir(worktreeBasePath);
       const keyFiles = fs.readdirSync(keysDir).filter(f => f.endsWith('.key'));
       expect(keyFiles.length).toBeGreaterThan(0);
       const keyFileName = keyFiles[0] as string;
@@ -510,7 +516,7 @@ describe('Sync CLI Commands - E2E Tests', () => {
       runCliCommand(['sync', 'pull'], { cwd: clonePath });
       const gitgovDir = path.join(worktreeBasePath, '.gitgov');
       const cloneGitgov = path.join(cloneWorktree, '.gitgov');
-      const keysDir = path.join(gitgovDir, 'keys');
+      const keysDir = getKeysDir(worktreeBasePath);
       const keyFiles = fs.readdirSync(keysDir).filter(f => f.endsWith('.key'));
       if (keyFiles[0]) {
         const keyContent = fs.readFileSync(path.join(keysDir, keyFiles[0]), 'utf-8');
@@ -715,28 +721,11 @@ describe('Sync CLI Commands - E2E Tests', () => {
       const cloneWorktree = getWorktreeBasePath(clonePath);
       worktreesToClean.push(cloneWorktree);
 
-      // 3. Agent B: pull to get shared task
+      // 3. Agent B: init (join path) — generates own keypair + pulls state
+      runCliCommand(['init', '--name', 'Resolve Test', '--actor-name', 'Clone User', '--quiet'], { cwd: clonePath });
       runCliCommand(['sync', 'pull'], { cwd: clonePath });
 
-      // 4. Copy actor key from Agent A to Agent B (simulate same user)
-      const originKeysDir = path.join(worktreeBasePath, '.gitgov', 'keys');
-      const keyFiles = fs.readdirSync(originKeysDir).filter(f => f.endsWith('.key'));
-      expect(keyFiles.length).toBeGreaterThan(0);
-      const keyFileName = keyFiles[0] as string;
-      const cloneKeysDir = path.join(cloneWorktree, '.gitgov', 'keys');
-      fs.mkdirSync(cloneKeysDir, { recursive: true });
-      fs.writeFileSync(
-        path.join(cloneKeysDir, keyFileName),
-        fs.readFileSync(path.join(originKeysDir, keyFileName), 'utf-8')
-      );
-
-      // Create session for Agent B (decode _ → : to get real actorId)
-      const sessionContent = JSON.stringify({
-        lastSession: { actorId: keyFileName.replace('.key', '').replace(/_/g, ':'), timestamp: new Date().toISOString() }
-      });
-      fs.writeFileSync(path.join(cloneWorktree, '.gitgov', '.session.json'), sessionContent);
-
-      // 5. Find the shared task file
+      // 4. Find the shared task file
       const originTasksDir = path.join(worktreeBasePath, '.gitgov', 'tasks');
       const taskFiles = fs.readdirSync(originTasksDir).filter(f => f.endsWith('.json'));
       expect(taskFiles.length).toBeGreaterThan(0);
@@ -784,26 +773,11 @@ describe('Sync CLI Commands - E2E Tests', () => {
       const cloneWorktree = getWorktreeBasePath(clonePath);
       worktreesToClean.push(cloneWorktree);
 
-      // 3. Agent B: pull to get initial state
+      // 3. Agent B: init (join path) — generates own keypair + pulls state
+      runCliCommand(['init', '--name', 'Auto-merge Test', '--actor-name', 'Clone User', '--quiet'], { cwd: clonePath });
       runCliCommand(['sync', 'pull'], { cwd: clonePath });
 
-      // 4. Copy actor key from Agent A to Agent B
-      const originKeysDir = path.join(worktreeBasePath, '.gitgov', 'keys');
-      const keyFiles = fs.readdirSync(originKeysDir).filter(f => f.endsWith('.key'));
-      if (keyFiles[0]) {
-        const cloneKeysDir = path.join(cloneWorktree, '.gitgov', 'keys');
-        fs.mkdirSync(cloneKeysDir, { recursive: true });
-        fs.writeFileSync(
-          path.join(cloneKeysDir, keyFiles[0]),
-          fs.readFileSync(path.join(originKeysDir, keyFiles[0]), 'utf-8')
-        );
-      }
-      const sessionContent = JSON.stringify({
-        lastSession: { actorId: (keyFiles[0]?.replace('.key', '') ?? '').replace(/_/g, ':'), timestamp: new Date().toISOString() }
-      });
-      fs.writeFileSync(path.join(cloneWorktree, '.gitgov', '.session.json'), sessionContent);
-
-      // 5. Agent A: create Task A (unique file) and push
+      // 4. Agent A: create Task A (unique file) and push
       runCliCommand(['task', 'new', 'Task A from Agent A', '-d', 'Created by Agent A'], { cwd: testProjectRoot });
       const pushA = runCliCommand(['sync', 'push'], { cwd: testProjectRoot });
       expect(pushA.success).toBe(true);

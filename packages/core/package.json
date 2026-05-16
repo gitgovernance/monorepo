@@ -11,31 +11,38 @@
   "exports": {
     ".": {
       "types": "./dist/src/index.d.ts",
-      "import": "./dist/src/index.js"
+      "import": "./dist/src/index.js",
+      "default": "./dist/src/index.js"
     },
     "./fs": {
       "types": "./dist/src/shared/fs/fs.d.ts",
-      "import": "./dist/src/shared/fs/fs.js"
+      "import": "./dist/src/shared/fs/fs.js",
+      "default": "./dist/src/shared/fs/fs.js"
     },
     "./memory": {
       "types": "./dist/src/shared/memory/memory.d.ts",
-      "import": "./dist/src/shared/memory/memory.js"
+      "import": "./dist/src/shared/memory/memory.js",
+      "default": "./dist/src/shared/memory/memory.js"
     },
     "./audit": {
       "types": "./dist/src/audit/index.d.ts",
-      "import": "./dist/src/audit/index.js"
+      "import": "./dist/src/audit/index.js",
+      "default": "./dist/src/audit/index.js"
     },
     "./github": {
       "types": "./dist/src/shared/github/github.d.ts",
-      "import": "./dist/src/shared/github/github.js"
+      "import": "./dist/src/shared/github/github.js",
+      "default": "./dist/src/shared/github/github.js"
     },
     "./prisma": {
       "types": "./dist/src/shared/prisma/prisma.d.ts",
-      "import": "./dist/src/shared/prisma/prisma.js"
+      "import": "./dist/src/shared/prisma/prisma.js",
+      "default": "./dist/src/shared/prisma/prisma.js"
     },
     "./sarif": {
       "types": "./dist/src/sarif/index.d.ts",
-      "import": "./dist/src/sarif/index.js"
+      "import": "./dist/src/sarif/index.js",
+      "default": "./dist/src/sarif/index.js"
     },
     "./package.json": "./package.json"
   },

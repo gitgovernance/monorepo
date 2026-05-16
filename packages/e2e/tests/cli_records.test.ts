@@ -11,6 +11,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
+import { getKeysDir, getWorktreeBasePath } from '@gitgov/core/fs';
 
 import {
   runGitgovCli,
@@ -55,8 +56,7 @@ describe('Block A: CLI Record Creation (CA1-CA7, CA9)', () => {
     const actorIds = await listRecordIds(repoDir, 'actors');
     expect(actorIds.length).toBeGreaterThanOrEqual(1);
 
-    // Verify .key file exists in keys/ directory (CLI stores keys separately from actor JSON)
-    const keysDir = path.join(getGitgovDir(repoDir), 'keys');
+    const keysDir = getKeysDir(getWorktreeBasePath(repoDir));
     const keyFiles = fs.readdirSync(keysDir).filter(f => f.endsWith('.key'));
     expect(keyFiles.length).toBeGreaterThanOrEqual(1);
 

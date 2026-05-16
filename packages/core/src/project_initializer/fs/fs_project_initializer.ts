@@ -15,11 +15,11 @@ const logger = createLogger('[FsProjectInitializer] ');
  */
 const GITGOV_DIRECTORIES = [
   'actors',
-  'keys',
   'cycles',
   'tasks',
   'executions',
   'feedbacks',
+  'keys',
 ] as const;
 
 /**

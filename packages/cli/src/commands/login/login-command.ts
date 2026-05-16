@@ -17,6 +17,7 @@
 import { Command } from 'commander';
 import { BaseCommand } from '../../base/base-command';
 import { Crypto, parseRemoteUrl } from '@gitgov/core';
+import type { IKeyProvider } from '@gitgov/core';
 import type { GitRemoteRef } from '@gitgov/core';
 import type {
   LoginCommandOptions,
@@ -93,16 +94,23 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
   // [LOGIN-A1] OAuth flow → open browser, start callback server, store session token
   async executeLogin(options: LoginCommandOptions): Promise<void> {
     try {
-      // [LOGIN-J1] Cloud-first bootstrap: fetch remote gitgov-state so DI can discover it
+      // [LOGIN-J1] [LOGIN-P1] Cloud-first bootstrap: fetch remote state branch so DI can discover it
+      // Priority: --state-branch flag > existing worktree config > fallback 'gitgov-state'
+      const stateBranchForFetch = options.stateBranch || await this.resolveStateBranchPreDI();
       try {
         const { execSync } = await import('child_process');
-        execSync('git fetch origin gitgov-state', {
+        execSync(`git fetch origin ${stateBranchForFetch}`, {
           cwd: process.cwd(),
           stdio: 'pipe',
           timeout: 15000,
         });
       } catch {
         // [LOGIN-J2] Fetch failed — continue, DI will use cached refs or fail with clear message
+      }
+
+      // [EARS-C15] Tell DI which branch to use for worktree bootstrap (before any DI call)
+      if (options.stateBranch) {
+        this.dependencyService.setStateBranchOverride(options.stateBranch);
       }
 
       const saasUrl = await this.resolveSaasUrl(options);
@@ -122,20 +130,41 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
       const sessionManager = await this.dependencyService.getSessionManager();
       await sessionManager.setCloudToken(token);
 
-      // Use login from OAuth to derive actorId. Only use local actor if it
-      // belongs to the logged-in user (handles versioned IDs like human:login:v2).
-      // Without this check, a collaborator would incorrectly resolve to the owner's actor.
-      const localActor = await this.findLocalHumanActor();
-      const expectedBase = `human:${user.login}`;
-      const localMatchesUser = localActor != null && (
-        localActor.actorId === expectedBase ||
-        localActor.actorId.startsWith(`${expectedBase}:`)
-      );
-      const actorId = localMatchesUser ? localActor.actorId : expectedBase;
+      // [LOGIN-A1] Resolve actorId from local keys matching the OAuth login
+      const allKeys = await sessionManager.detectActorFromKeyFiles();
+      const matchingKeys = allKeys.filter(id => id.endsWith(`:${user.login}`));
+
+      let actorId: string;
+      let actorType: 'human' | 'agent' = 'human';
+
+      if (matchingKeys.length === 1) {
+        actorId = matchingKeys[0]!;
+        actorType = actorId.startsWith('agent:') ? 'agent' : 'human';
+      } else if (matchingKeys.length === 0) {
+        actorId = `human:${user.login}`;
+      } else {
+        actorId = await this.promptActorSelection(matchingKeys, user.login);
+        actorType = actorId.startsWith('agent:') ? 'agent' : 'human';
+      }
 
       await sessionManager.setLastSession(actorId, new Date().toISOString());
 
       console.log(`Logged in as ${user.login} (${actorId})`);
+
+      // [LOGIN-O1] Materialize actor BEFORE key sync — generates keypair if collaborator is new
+      try {
+        const projectModule = await this.dependencyService.getProjectModule();
+        await projectModule.ensureActorInProject({
+          login: user.login,
+          type: actorType,
+          repoId: '',
+          joinedVia: 'saas-oauth',
+        });
+      } catch (err) {
+        // [LOGIN-O2] Warn and continue to syncKeys — if keypair wasn't generated, syncKeys handles case e
+        console.warn('⚠️  Actor materialization failed:', err instanceof Error ? err.message : String(err));
+        console.warn('   Key sync may fail if no local key exists.');
+      }
 
       // [LOGIN-B3] Skip key sync if --no-key-sync
       if (options.noKeySync) {
@@ -295,7 +324,7 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
 
     // [LOGIN-D1] Both have key — compare PUBLIC keys
     if (hasLocal && keyStatus.exists) {
-      const keyProvider = this.dependencyService.getKeyProvider();
+      const keyProvider = await this.getLocalKeyProvider();
       const localPublicKey = await keyProvider.getPublicKey(actorId);
       const saasPublicKey = keyStatus.publicKey;
 
@@ -385,15 +414,17 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
   }
 
   /**
-   * [LOGIN-L1] Push gitgov-state to remote after successful key sync.
+   * [LOGIN-L1] Push state branch to remote after successful key sync.
    * [LOGIN-L2] Skip silently if branch doesn't exist locally (cloud-first flow).
    * Best-effort — logs warning on failure but does not fail the login.
    */
   private async pushGitgovState(): Promise<void> {
     try {
+      const configManager = await this.dependencyService.getConfigManager();
+      const stateBranch = await configManager.getStateBranch();
       const { execSync } = await import('child_process');
-      execSync('git rev-parse --verify gitgov-state', { cwd: process.cwd(), stdio: 'pipe', timeout: 2000 });
-      execSync('git push origin gitgov-state', {
+      execSync(`git rev-parse --verify ${stateBranch}`, { cwd: process.cwd(), stdio: 'pipe', timeout: 2000 });
+      execSync(`git push origin ${stateBranch}`, {
         cwd: process.cwd(),
         stdio: 'pipe',
         timeout: 5000,
@@ -401,6 +432,25 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
       });
     } catch {
       // [LOGIN-L2] No local branch, no remote, offline, or permissions error
+    }
+  }
+
+  /**
+   * [LOGIN-J1] Best-effort branch name resolution before DI is available.
+   * Reads config.json from existing worktree if present. Falls back to 'gitgov-state'.
+   */
+  private async resolveStateBranchPreDI(): Promise<string> {
+    try {
+      const { findProjectRoot, getWorktreeBasePath } = await import('@gitgov/core/fs');
+      const repoRoot = findProjectRoot(process.cwd());
+      if (!repoRoot) return 'gitgov-state';
+      const worktreePath = getWorktreeBasePath(repoRoot);
+      const configPath = (await import('path')).join(worktreePath, '.gitgov', 'config.json');
+      const { readFileSync } = await import('fs');
+      const config = JSON.parse(readFileSync(configPath, 'utf-8'));
+      return config?.state?.branch || 'gitgov-state';
+    } catch {
+      return 'gitgov-state';
     }
   }
 
@@ -435,22 +485,39 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
     throw new Error('Could not determine repository. Ensure you are in a git repository with a remote origin.');
   }
 
-  private async findLocalHumanActor(): Promise<{ actorId: string; displayName: string } | null> {
-    try {
-      const currentActor = await this.dependencyService.getCurrentActor();
-      if (currentActor && currentActor.type === 'human') {
-        return { actorId: currentActor.id, displayName: currentActor.displayName };
-      }
-    } catch {
-      // No actor found or adapter not available
-    }
-    return null;
+  private async promptActorSelection(actorIds: string[], login: string): Promise<string> {
+    const { createInterface } = await import('readline');
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
+
+    console.log(`\nMultiple actors found for ${login}:`);
+    actorIds.forEach((id, i) => console.log(`  ${i + 1}. ${id}`));
+
+    return new Promise<string>((resolve) => {
+      rl.question(`Select actor [1-${actorIds.length}]: `, (answer) => {
+        rl.close();
+        const idx = parseInt(answer, 10) - 1;
+        if (idx >= 0 && idx < actorIds.length) {
+          resolve(actorIds[idx]!);
+        } else {
+          console.log(`Invalid selection, using ${actorIds[0]}`);
+          resolve(actorIds[0]!);
+        }
+      });
+    });
+  }
+
+  private async getLocalKeyProvider(): Promise<IKeyProvider> {
+    const { FsKeyProvider, findProjectRoot, getWorktreeBasePath, getKeysDir } = await import('@gitgov/core/fs');
+    const repoRoot = findProjectRoot(process.cwd());
+    if (!repoRoot) throw new Error('Not in a git repository');
+    const worktreePath = getWorktreeBasePath(repoRoot);
+    return new FsKeyProvider({ keysDir: getKeysDir(worktreePath) });
   }
 
   private async hasLocalKey(actorId: string): Promise<boolean> {
     try {
-      const keyProvider = this.dependencyService.getKeyProvider();
-      return await keyProvider.hasPrivateKey(actorId);
+      const kp = await this.getLocalKeyProvider();
+      return await kp.hasPrivateKey(actorId);
     } catch {
       return false;
     }
@@ -482,7 +549,7 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
     repo: GitRemoteRef,
     serverEcdhPublicKey: string,
   ): Promise<SyncKeyResponse> {
-    const keyProvider = this.dependencyService.getKeyProvider();
+    const keyProvider = await this.getLocalKeyProvider();
     const privateKey = await keyProvider.getPrivateKey(actorId);
     const publicKey = await keyProvider.getPublicKey(actorId);
     if (!privateKey || !publicKey) throw new Error('Local key not found');
@@ -546,8 +613,8 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
       throw new Error('Key transfer failed: ECDH decryption error. Try again or contact support.');
     }
 
-    // [LOGIN-C2] Store with FsKeyProvider (handles 0600 permissions)
-    const keyProvider = this.dependencyService.getKeyProvider();
+    // [LOGIN-C2] Store with FsKeyProvider in {worktree}/.gitgov/keys/ (handles 0600 permissions)
+    const keyProvider = await this.getLocalKeyProvider();
     await keyProvider.setPrivateKey(actorId, decryptedKey.toString('base64'));
     console.log('Key downloaded from SaaS');
   }

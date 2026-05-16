@@ -13,6 +13,7 @@
 import {
   findProjectRoot,
   getWorktreeBasePath,
+  getKeysDir,
   resetDiscoveryCache,
 } from './project_discovery';
 
@@ -23,6 +24,7 @@ jest.mock('fs', () => ({
 }));
 
 import { existsSync, realpathSync } from 'fs';
+import * as path from 'path';
 
 const mockedExistsSync = existsSync as jest.MockedFunction<typeof existsSync>;
 const mockedRealpathSync = realpathSync as jest.MockedFunction<typeof realpathSync>;
@@ -146,6 +148,16 @@ describe('Project Discovery', () => {
       // Third call - should search again
       findProjectRoot('/test/project/src');
       expect(mockedExistsSync).toHaveBeenCalled();
+    });
+  });
+
+  // ==================== §4.3. getKeysDir (EARS-D1) ====================
+
+  describe('4.3. getKeysDir (EARS-D1)', () => {
+    it('[EARS-D1] WHEN getKeysDir is called with worktree path, THE SYSTEM SHALL return {worktreePath}/.gitgov/keys/', () => {
+      const result = getKeysDir('/test/worktree');
+
+      expect(result).toBe(path.join('/test/worktree', '.gitgov', 'keys'));
     });
   });
 });

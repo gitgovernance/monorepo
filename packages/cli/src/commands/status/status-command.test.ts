@@ -1,25 +1,25 @@
 // Mock @gitgov/core with all required modules
-jest.doMock('@gitgov/core', () => ({
+vi.mock('@gitgov/core', () => ({
   Adapters: {
-    BacklogAdapter: jest.fn().mockImplementation(() => ({})),
-    IdentityAdapter: jest.fn().mockImplementation(() => ({})),
-    RecordMetrics: jest.fn().mockImplementation(() => ({}))
+    BacklogAdapter: vi.fn().mockImplementation(() => ({})),
+    IdentityAdapter: vi.fn().mockImplementation(() => ({})),
+    RecordMetrics: vi.fn().mockImplementation(() => ({}))
   },
   Factories: {
-    createRecordMetrics: jest.fn(),
-    createActorRecord: jest.fn().mockImplementation((data) => Promise.resolve(data)),
-    createTaskRecord: jest.fn().mockImplementation((data) => Promise.resolve(data)),
-    createCycleRecord: jest.fn().mockImplementation((data) => Promise.resolve(data)),
-    createFeedbackRecord: jest.fn().mockImplementation((data) => Promise.resolve(data))
+    createRecordMetrics: vi.fn(),
+    createActorRecord: vi.fn().mockImplementation((data) => Promise.resolve(data)),
+    createTaskRecord: vi.fn().mockImplementation((data) => Promise.resolve(data)),
+    createCycleRecord: vi.fn().mockImplementation((data) => Promise.resolve(data)),
+    createFeedbackRecord: vi.fn().mockImplementation((data) => Promise.resolve(data))
   },
   Records: {},
-  RecordMetrics: jest.fn().mockImplementation(() => ({}))
+  RecordMetrics: vi.fn().mockImplementation(() => ({}))
 }));
 
 // Mock DependencyInjectionService before importing
-jest.mock('../../services/dependency-injection', () => ({
+vi.mock('../../services/dependency-injection', () => ({
   DependencyInjectionService: {
-    getInstance: jest.fn()
+    getInstance: vi.fn()
   }
 }));
 
@@ -29,43 +29,43 @@ import { Factories } from "@gitgov/core";
 import type { TaskRecord, CycleRecord, FeedbackRecord, GitGovFeedbackRecord, ActorRecord, SystemStatus, ProductivityMetrics, CollaborationMetrics, TaskHealthReport } from "@gitgov/core";
 
 // Mock console methods to capture output
-const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation();
-const mockConsoleError = jest.spyOn(console, 'error').mockImplementation();
-const mockProcessExit = jest.spyOn(process, 'exit').mockImplementation();
+const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation();
+const mockConsoleError = vi.spyOn(console, 'error').mockImplementation();
+const mockProcessExit = vi.spyOn(process, 'exit').mockImplementation();
 
 describe('StatusCommand - Complete Unit Tests', () => {
   let statusCommand: StatusCommand;
   let mockBacklogAdapter: {
-    getTasksAssignedToActor: jest.MockedFunction<(actorId: string) => Promise<TaskRecord[]>>;
-    getAllTasks: jest.MockedFunction<() => Promise<TaskRecord[]>>;
-    getAllCycles: jest.MockedFunction<() => Promise<CycleRecord[]>>;
+    getTasksAssignedToActor: Mock<(actorId: string) => Promise<TaskRecord[]>>;
+    getAllTasks: Mock<() => Promise<TaskRecord[]>>;
+    getAllCycles: Mock<() => Promise<CycleRecord[]>>;
   };
   let mockFeedbackAdapter: {
-    getAllFeedback: jest.MockedFunction<() => Promise<GitGovFeedbackRecord[]>>;
+    getAllFeedback: Mock<() => Promise<GitGovFeedbackRecord[]>>;
   };
   let mockRecordMetrics: {
-    getSystemStatus: jest.MockedFunction<() => Promise<SystemStatus>>;
-    getProductivityMetrics: jest.MockedFunction<() => Promise<ProductivityMetrics>>;
-    getCollaborationMetrics: jest.MockedFunction<() => Promise<CollaborationMetrics>>;
-    getTaskHealth: jest.MockedFunction<(taskId: string) => Promise<TaskHealthReport>>;
+    getSystemStatus: Mock<() => Promise<SystemStatus>>;
+    getProductivityMetrics: Mock<() => Promise<ProductivityMetrics>>;
+    getCollaborationMetrics: Mock<() => Promise<CollaborationMetrics>>;
+    getTaskHealth: Mock<(taskId: string) => Promise<TaskHealthReport>>;
   };
   let mockProjector: {
-    isIndexUpToDate: jest.MockedFunction<() => Promise<boolean>>;
-    generateIndex: jest.MockedFunction<() => Promise<void>>;
+    isIndexUpToDate: Mock<() => Promise<boolean>>;
+    generateIndex: Mock<() => Promise<void>>;
   };
-  let mockIdentityAdapter: Record<string, jest.Mock>;
+  let mockIdentityAdapter: Record<string, vi.Mock>;
   let mockSyncStateModule: {
-    getPendingChanges: jest.MockedFunction<() => Promise<Array<{ status: 'A' | 'M' | 'D'; file: string }>>>;
-    isRebaseInProgress: jest.MockedFunction<() => Promise<boolean>>;
+    getPendingChanges: Mock<() => Promise<Array<{ status: 'A' | 'M' | 'D'; file: string }>>>;
+    isRebaseInProgress: Mock<() => Promise<boolean>>;
   };
   let mockDependencyService: {
-    getBacklogAdapter: jest.MockedFunction<() => Promise<typeof mockBacklogAdapter>>;
-    getFeedbackAdapter: jest.MockedFunction<() => Promise<typeof mockFeedbackAdapter>>;
-    getRecordMetrics: jest.MockedFunction<() => Promise<typeof mockRecordMetrics>>;
-    getRecordProjector: jest.MockedFunction<() => Promise<typeof mockProjector>>;
-    getIdentityAdapter: jest.MockedFunction<() => Promise<typeof mockIdentityAdapter>>;
-    getCurrentActor: jest.MockedFunction<() => Promise<ActorRecord>>;
-    getSyncStateModule: jest.MockedFunction<() => Promise<typeof mockSyncStateModule>>;
+    getBacklogAdapter: Mock<() => Promise<typeof mockBacklogAdapter>>;
+    getFeedbackAdapter: Mock<() => Promise<typeof mockFeedbackAdapter>>;
+    getRecordMetrics: Mock<() => Promise<typeof mockRecordMetrics>>;
+    getRecordProjector: Mock<() => Promise<typeof mockProjector>>;
+    getIdentityAdapter: Mock<() => Promise<typeof mockIdentityAdapter>>;
+    getCurrentActor: Mock<() => Promise<ActorRecord>>;
+    getSyncStateModule: Mock<() => Promise<typeof mockSyncStateModule>>;
   };
 
   // Sample data using factories
@@ -110,7 +110,7 @@ describe('StatusCommand - Complete Unit Tests', () => {
 
   beforeEach(async () => {
     // Reset all mocks
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     // Create sample data using factories
     sampleActor = await Factories.createActorRecord({
@@ -152,47 +152,47 @@ describe('StatusCommand - Complete Unit Tests', () => {
 
     // Create mock adapters
     mockBacklogAdapter = {
-      getTasksAssignedToActor: jest.fn(),
-      getAllTasks: jest.fn(),
-      getAllCycles: jest.fn()
+      getTasksAssignedToActor: vi.fn(),
+      getAllTasks: vi.fn(),
+      getAllCycles: vi.fn()
     };
 
     mockFeedbackAdapter = {
-      getAllFeedback: jest.fn()
+      getAllFeedback: vi.fn()
     };
 
     mockRecordMetrics = {
-      getSystemStatus: jest.fn(),
-      getProductivityMetrics: jest.fn(),
-      getCollaborationMetrics: jest.fn(),
-      getTaskHealth: jest.fn()
+      getSystemStatus: vi.fn(),
+      getProductivityMetrics: vi.fn(),
+      getCollaborationMetrics: vi.fn(),
+      getTaskHealth: vi.fn()
     };
 
     mockProjector = {
-      isIndexUpToDate: jest.fn(),
-      generateIndex: jest.fn()
+      isIndexUpToDate: vi.fn(),
+      generateIndex: vi.fn()
     };
 
     mockIdentityAdapter = {};
 
     mockSyncStateModule = {
-      getPendingChanges: jest.fn(),
-      isRebaseInProgress: jest.fn()
+      getPendingChanges: vi.fn(),
+      isRebaseInProgress: vi.fn()
     };
 
     // Create mock dependency service
     mockDependencyService = {
-      getBacklogAdapter: jest.fn().mockResolvedValue(mockBacklogAdapter),
-      getFeedbackAdapter: jest.fn().mockResolvedValue(mockFeedbackAdapter),
-      getRecordMetrics: jest.fn().mockResolvedValue(mockRecordMetrics),
-      getRecordProjector: jest.fn().mockResolvedValue(mockProjector),
-      getIdentityAdapter: jest.fn().mockResolvedValue(mockIdentityAdapter),
-      getCurrentActor: jest.fn().mockResolvedValue(sampleActor),
-      getSyncStateModule: jest.fn().mockResolvedValue(mockSyncStateModule)
+      getBacklogAdapter: vi.fn().mockResolvedValue(mockBacklogAdapter),
+      getFeedbackAdapter: vi.fn().mockResolvedValue(mockFeedbackAdapter),
+      getRecordMetrics: vi.fn().mockResolvedValue(mockRecordMetrics),
+      getRecordProjector: vi.fn().mockResolvedValue(mockProjector),
+      getIdentityAdapter: vi.fn().mockResolvedValue(mockIdentityAdapter),
+      getCurrentActor: vi.fn().mockResolvedValue(sampleActor),
+      getSyncStateModule: vi.fn().mockResolvedValue(mockSyncStateModule)
     };
 
     // Mock DependencyInjectionService.getInstance()
-    (DependencyInjectionService.getInstance as jest.Mock).mockReturnValue(mockDependencyService);
+    (DependencyInjectionService.getInstance as vi.Mock).mockReturnValue(mockDependencyService);
 
     // Create StatusCommand
     statusCommand = new StatusCommand();

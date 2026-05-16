@@ -6,49 +6,42 @@
  * - §4.5 Waiver Management (EARS-E1 to E5)
  */
 
-// Mock @gitgov/core/audit
-const mockFormatAuditResult = jest.fn();
-jest.mock('@gitgov/core/audit', () => ({
-  formatAuditResult: (...args: unknown[]) => mockFormatAuditResult(...args),
-  severityBadge: jest.fn((s: string) => ({ critical: '🔴', high: '🟠', medium: '🟡', low: '🔵' })[s] ?? '⚪'),
+// vi.hoisted ensures variables exist when vi.mock factory runs (hoisted to top)
+const { mockFormatAuditResult, mockPostOrUpdateComment } = vi.hoisted(() => ({
+  mockFormatAuditResult: vi.fn(),
+  mockPostOrUpdateComment: vi.fn().mockResolvedValue(undefined),
 }));
 
-// Mock @gitgov/core/github — CLI uses GitHubCiReporter.fromToken() (no Octokit import)
-const mockPostOrUpdateComment = jest.fn().mockResolvedValue(undefined);
-jest.mock('@gitgov/core/github', () => ({
-  GitHubCiReporter: {
-    fromToken: jest.fn().mockReturnValue({
-      postOrUpdateComment: mockPostOrUpdateComment,
-    }),
-  },
-  GitHubApiError: class extends Error { code = 'UNKNOWN'; },
-  isOctokitRequestError: jest.fn(() => false),
-  mapOctokitError: jest.fn(),
+vi.mock('@gitgov/core/audit', () => ({
+  formatAuditResult: (...args: unknown[]) => mockFormatAuditResult(...args),
+  severityBadge: vi.fn((s: string) => ({ critical: '🔴', high: '🟠', medium: '🟡', low: '🔵' })[s] ?? '⚪'),
 }));
+// GitHubCiReporter mock: spy on fromToken after import (vi.mock doesn't intercept this subpath export)
+import { GitHubCiReporter } from '@gitgov/core/github';
 
 // Mock @gitgov/core
-jest.doMock('@gitgov/core', () => {
-  const actual = jest.requireActual('@gitgov/core');
+vi.mock('@gitgov/core', async () => {
+  const actual = await vi.importActual('@gitgov/core');
   return {
     Config: {
       ConfigManager: {
-        findProjectRoot: jest.fn().mockReturnValue('/mock/project/root'),
-        findGitgovRoot: jest.fn().mockReturnValue('/mock/project/root/.gitgov'),
+        findProjectRoot: vi.fn().mockReturnValue('/mock/project/root'),
+        findGitgovRoot: vi.fn().mockReturnValue('/mock/project/root/.gitgov'),
       }
     },
     SourceAuditor: {
-      SourceAuditorModule: jest.fn(),
-      WaiverReader: jest.fn(),
-      WaiverWriter: jest.fn(),
+      SourceAuditorModule: vi.fn(),
+      WaiverReader: vi.fn(),
+      WaiverWriter: vi.fn(),
     },
     AuditOrchestrator: {
-      createAuditOrchestrator: jest.fn(),
+      createAuditOrchestrator: vi.fn(),
     },
     PolicyEvaluator: {
-      createPolicyEvaluator: jest.fn(),
+      createPolicyEvaluator: vi.fn(),
     },
     FindingDetector: {
-      FindingDetectorModule: jest.fn(),
+      FindingDetectorModule: vi.fn(),
     },
     Sarif: actual.Sarif,
     generateExecutionId: actual.generateExecutionId ?? ((title: string, ts: number) => `${ts}-exec-${title}`),
@@ -56,9 +49,9 @@ jest.doMock('@gitgov/core', () => {
 });
 
 // Mock DependencyInjectionService
-jest.mock('../../services/dependency-injection', () => ({
+vi.mock('../../services/dependency-injection', () => ({
   DependencyInjectionService: {
-    getInstance: jest.fn()
+    getInstance: vi.fn()
   }
 }));
 
@@ -75,28 +68,40 @@ import type {
 } from '@gitgov/core';
 
 // Mock console methods
-const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation();
-const mockConsoleError = jest.spyOn(console, 'error').mockImplementation();
-const mockProcessExit = jest.spyOn(process, 'exit').mockImplementation();
+const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation();
+const mockConsoleError = vi.spyOn(console, 'error').mockImplementation();
+const mockProcessExit = vi.spyOn(process, 'exit').mockImplementation();
 
 // Get mocked DI
-const mockDI = jest.mocked(DependencyInjectionService);
+const mockDI = vi.mocked(DependencyInjectionService);
 
 // Mock orchestrator
 let mockOrchestrator: {
-  run: jest.MockedFunction<(options: AuditOrchestrationOptions) => Promise<AuditOrchestrationResult>>;
+  run: Mock<(options: AuditOrchestrationOptions) => Promise<AuditOrchestrationResult>>;
 };
 
 let mockWaiverReader: {
-  loadWaivers: jest.MockedFunction<() => Promise<Waiver[]>>;
+  loadWaivers: Mock<() => Promise<Waiver[]>>;
 };
 
 let mockFeedbackAdapter: {
-  create: jest.MockedFunction<(data: Partial<FeedbackRecord>, actorId: string) => Promise<FeedbackRecord>>;
+  create: Mock<(data: Partial<FeedbackRecord>, actorId: string) => Promise<FeedbackRecord>>;
 };
 
 let mockIdentityAdapter: {
-  getCurrentActor: jest.MockedFunction<() => Promise<ActorRecord>>;
+  getCurrentActor: Mock<() => Promise<ActorRecord>>;
+};
+
+let mockDIInstance: {
+  getAuditOrchestrator: vi.Mock;
+  getBacklogAdapter: vi.Mock;
+  getWaiverReader: vi.Mock;
+  getFeedbackAdapter: vi.Mock;
+  getExecutionAdapter: vi.Mock;
+  getIdentityAdapter: vi.Mock;
+  getCurrentActor: vi.Mock;
+  getProjectRoot: vi.Mock;
+  getSessionManager: vi.Mock;
 };
 
 describe('AuditCommand', () => {
@@ -221,28 +226,28 @@ describe('AuditCommand', () => {
   };
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     // Setup mock orchestrator
     mockOrchestrator = {
-      run: jest.fn().mockResolvedValue(mockResultWithFindings),
+      run: vi.fn().mockResolvedValue(mockResultWithFindings),
     };
 
     mockWaiverReader = {
-      loadWaivers: jest.fn().mockResolvedValue([]),
+      loadWaivers: vi.fn().mockResolvedValue([]),
     };
 
     mockFeedbackAdapter = {
-      create: jest.fn().mockResolvedValue({ id: 'feedback-123' } as FeedbackRecord),
+      create: vi.fn().mockResolvedValue({ id: 'feedback-123' } as FeedbackRecord),
     };
 
     mockIdentityAdapter = {
-      getCurrentActor: jest.fn().mockResolvedValue({ id: 'human:developer' } as ActorRecord),
+      getCurrentActor: vi.fn().mockResolvedValue({ id: 'human:developer' } as ActorRecord),
     };
 
     // Mock backlog adapter for TaskRecord creation (AORCH-C1)
     const mockBacklogAdapter = {
-      createTask: jest.fn().mockResolvedValue({
+      createTask: vi.fn().mockResolvedValue({
         id: '1774524476-task-audit-full-scan',
         title: 'Audit: diff scan',
         status: 'active',
@@ -250,19 +255,20 @@ describe('AuditCommand', () => {
     };
 
     // Configure DI mock
-    mockDI.getInstance.mockReturnValue({
-      getAuditOrchestrator: jest.fn().mockResolvedValue(mockOrchestrator),
-      getBacklogAdapter: jest.fn().mockResolvedValue(mockBacklogAdapter),
-      getWaiverReader: jest.fn().mockResolvedValue(mockWaiverReader),
-      getFeedbackAdapter: jest.fn().mockResolvedValue(mockFeedbackAdapter),
-      getExecutionAdapter: jest.fn().mockResolvedValue({ create: jest.fn().mockResolvedValue({ id: 'exec-l1-test' }) }),
-      getIdentityAdapter: jest.fn().mockResolvedValue(mockIdentityAdapter),
-      getCurrentActor: jest.fn().mockResolvedValue({ id: 'human:developer' }),
-      getProjectRoot: jest.fn().mockResolvedValue('/mock/project/root'),
-      getSessionManager: jest.fn().mockResolvedValue({
-        getState: jest.fn().mockReturnValue({ actorId: 'human:developer' }),
+    mockDIInstance = {
+      getAuditOrchestrator: vi.fn().mockResolvedValue(mockOrchestrator),
+      getBacklogAdapter: vi.fn().mockResolvedValue(mockBacklogAdapter),
+      getWaiverReader: vi.fn().mockResolvedValue(mockWaiverReader),
+      getFeedbackAdapter: vi.fn().mockResolvedValue(mockFeedbackAdapter),
+      getExecutionAdapter: vi.fn().mockResolvedValue({ create: vi.fn().mockResolvedValue({ id: 'exec-l1-test' }) }),
+      getIdentityAdapter: vi.fn().mockResolvedValue(mockIdentityAdapter),
+      getCurrentActor: vi.fn().mockResolvedValue({ id: 'human:developer' }),
+      getProjectRoot: vi.fn().mockResolvedValue('/mock/project/root'),
+      getSessionManager: vi.fn().mockResolvedValue({
+        getState: vi.fn().mockReturnValue({ actorId: 'human:developer' }),
       }),
-    } as unknown as DependencyInjectionService);
+    };
+    mockDI.getInstance.mockReturnValue(mockDIInstance as unknown as DependencyInjectionService);
 
     auditCommand = new AuditCommand();
   });
@@ -403,11 +409,12 @@ describe('AuditCommand', () => {
       expect(callArg.agentId).toBeUndefined();
     });
 
-    it('[AORCH-C6] should not accept --detector, --target, --max-findings, --group-by flags', () => {
+    it('[AORCH-C6] should not accept --detector, --target, --max-findings, --group-by flags', async () => {
       // Verify these options are not in AuditCommandOptions type
       // This is a type-level test enforced by the interface.
       // At runtime, we verify the register method does not add these options.
-      const program = new (jest.requireActual('commander').Command)();
+      const { Command } = await vi.importActual<typeof import('commander')>('commander');
+      const program = new Command();
       auditCommand.register(program);
 
       const auditCmd = program.commands.find((c: { name: () => string }) => c.name() === 'audit');
@@ -428,7 +435,7 @@ describe('AuditCommand', () => {
       const diInstance = mockDI.getInstance();
       const backlogAdapter = await diInstance.getBacklogAdapter();
       expect(backlogAdapter.createTask).toHaveBeenCalledTimes(1);
-      const createTaskArgs = (backlogAdapter.createTask as jest.Mock).mock.calls[0];
+      const createTaskArgs = (backlogAdapter.createTask as vi.Mock).mock.calls[0];
       expect(createTaskArgs[0]).toMatchObject({
         title: expect.stringContaining('Audit:'),
         status: 'active',
@@ -443,7 +450,7 @@ describe('AuditCommand', () => {
 
     it('should handle initialization errors gracefully', async () => {
       mockDI.getInstance.mockReturnValue({
-        getAuditOrchestrator: jest.fn().mockRejectedValue(new Error('Init failed')),
+        getAuditOrchestrator: vi.fn().mockRejectedValue(new Error('Init failed')),
       } as unknown as DependencyInjectionService);
 
       auditCommand = new AuditCommand();
@@ -552,14 +559,18 @@ describe('AuditCommand', () => {
   // ==========================================================================
 
   describe('4.8. CI Mode + LLM Config (AORCH-D1 to D7)', () => {
-    const mockConsoleWarn = jest.spyOn(console, 'warn').mockImplementation();
+    const mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation();
     const eventFixture = JSON.stringify({ pull_request: { number: 42 } });
 
     beforeEach(() => {
-      jest.clearAllMocks();
+      vi.clearAllMocks();
       mockOrchestrator.run.mockResolvedValue(mockResultWithFindings);
       mockFormatAuditResult.mockReturnValue('## 🔴 GitGov Audit: 2 findings');
       mockPostOrUpdateComment.mockResolvedValue(undefined);
+      // Override fromToken to return mock reporter (vi.mock can't intercept @gitgov/core/github subpath)
+      GitHubCiReporter.fromToken = vi.fn().mockResolvedValue({
+        postOrUpdateComment: mockPostOrUpdateComment,
+      });
       // Reset env
       delete process.env['GITHUB_ACTIONS'];
       delete process.env['GITHUB_TOKEN'];
@@ -651,7 +662,7 @@ describe('AuditCommand', () => {
       process.env['GITHUB_REPOSITORY'] = 'myorg/myrepo';
 
       // Make dynamic require fail to simulate import error
-      jest.doMock('@gitgov/core/github', () => { throw new Error('module load failed'); });
+      vi.mock('@gitgov/core/github', () => { throw new Error('module load failed'); });
 
       await auditCommand.execute(createDefaultOptions({ ci: true }));
 
@@ -659,10 +670,10 @@ describe('AuditCommand', () => {
       expect(mockProcessExit).toHaveBeenCalledWith(1);
 
       // Restore mock
-      jest.doMock('@gitgov/core/github', () => ({
-        GitHubCiReporter: jest.fn().mockImplementation(() => ({
+      vi.mock('@gitgov/core/github', () => ({
+        GitHubCiReporter: vi.fn().mockImplementation(function() { return {
           postOrUpdateComment: mockPostOrUpdateComment,
-        })),
+        }; }),
       }));
       await fs.unlink(tmpEvent).catch(() => {});
     });
@@ -703,8 +714,7 @@ describe('AuditCommand', () => {
       await auditCommand.execute({ scope: 'full', output: 'text', failOn: 'critical' } as AuditCommandOptions);
 
       // The container's executionAdapter.create was called for L1 write
-      const container = mockDI.getInstance() as { getExecutionAdapter: jest.Mock };
-      const execAdapter = await container.getExecutionAdapter();
+      const execAdapter = await mockDIInstance.getExecutionAdapter();
       expect(execAdapter.create).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'completion',
@@ -716,9 +726,8 @@ describe('AuditCommand', () => {
     });
 
     it('[AORCH-P2] should write review FeedbackRecords to git after orchestrator.run', async () => {
-      const mockFbCreate = jest.fn().mockResolvedValue({ id: 'fb-review-1' });
-      const container = mockDI.getInstance() as { getFeedbackAdapter: jest.Mock };
-      container.getFeedbackAdapter = jest.fn().mockResolvedValue({ create: mockFbCreate });
+      const mockFbCreate = vi.fn().mockResolvedValue({ id: 'fb-review-1' });
+      mockDIInstance.getFeedbackAdapter = vi.fn().mockResolvedValue({ create: mockFbCreate });
 
       const resultWithReviews: AuditOrchestrationResult = {
         ...mockResultWithFindings,
@@ -747,9 +756,8 @@ describe('AuditCommand', () => {
     it('[AORCH-P3] should skip L1 persistence when l1AgentResults is undefined', async () => {
       mockOrchestrator.run.mockResolvedValueOnce(mockResultWithFindings);
 
-      const mockExecCreate = jest.fn();
-      const container = mockDI.getInstance() as { getExecutionAdapter: jest.Mock };
-      container.getExecutionAdapter = jest.fn().mockResolvedValue({ create: mockExecCreate });
+      const mockExecCreate = vi.fn();
+      mockDIInstance.getExecutionAdapter = vi.fn().mockResolvedValue({ create: mockExecCreate });
 
       await auditCommand.execute({ scope: 'full', output: 'text', failOn: 'critical' } as AuditCommandOptions);
 

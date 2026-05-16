@@ -9,9 +9,9 @@
  */
 
 // Mock DependencyInjectionService before importing
-jest.mock('../../services/dependency-injection', () => ({
+vi.mock('../../services/dependency-injection', () => ({
   DependencyInjectionService: {
-    getInstance: jest.fn()
+    getInstance: vi.fn()
   }
 }));
 
@@ -20,27 +20,27 @@ import { DependencyInjectionService } from '../../services/dependency-injection'
 import type { ActorRecord } from '@gitgov/core';
 
 // Mock console methods to capture output
-const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation();
-const mockConsoleError = jest.spyOn(console, 'error').mockImplementation();
-const mockProcessExit = jest.spyOn(process, 'exit').mockImplementation();
+const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation();
+const mockConsoleError = vi.spyOn(console, 'error').mockImplementation();
+const mockProcessExit = vi.spyOn(process, 'exit').mockImplementation();
 
 describe('ContextCommand', () => {
   let contextCommand: ContextCommand;
   let mockIdentityAdapter: {
-    getCurrentActor: jest.MockedFunction<() => Promise<ActorRecord>>;
+    getCurrentActor: Mock<() => Promise<ActorRecord>>;
   };
   let mockConfigManager: {
-    getProjectInfo: jest.MockedFunction<() => Promise<{ id: string; name: string } | null>>;
-    getRootCycle: jest.MockedFunction<() => Promise<string | null>>;
+    getProjectInfo: Mock<() => Promise<{ id: string; name: string } | null>>;
+    getRootCycle: Mock<() => Promise<string | null>>;
   };
   let mockSessionManager: {
-    getActorState: jest.MockedFunction<() => Promise<unknown>>;
+    getActorState: Mock<() => Promise<unknown>>;
   };
   let mockDependencyService: {
-    getIdentityAdapter: jest.MockedFunction<() => Promise<typeof mockIdentityAdapter>>;
-    getConfigManager: jest.MockedFunction<() => Promise<typeof mockConfigManager>>;
-    getSessionManager: jest.MockedFunction<() => Promise<typeof mockSessionManager>>;
-    getCurrentActor: jest.MockedFunction<() => Promise<ActorRecord>>;
+    getIdentityAdapter: Mock<() => Promise<typeof mockIdentityAdapter>>;
+    getConfigManager: Mock<() => Promise<typeof mockConfigManager>>;
+    getSessionManager: Mock<() => Promise<typeof mockSessionManager>>;
+    getCurrentActor: Mock<() => Promise<ActorRecord>>;
   };
 
   const sampleActor: ActorRecord = {
@@ -63,29 +63,29 @@ describe('ContextCommand', () => {
   };
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     mockIdentityAdapter = {
-      getCurrentActor: jest.fn()
+      getCurrentActor: vi.fn()
     };
 
     mockConfigManager = {
-      getProjectInfo: jest.fn(),
-      getRootCycle: jest.fn(),
+      getProjectInfo: vi.fn(),
+      getRootCycle: vi.fn(),
     };
 
     mockSessionManager = {
-      getActorState: jest.fn(),
+      getActorState: vi.fn(),
     };
 
     mockDependencyService = {
-      getIdentityAdapter: jest.fn().mockResolvedValue(mockIdentityAdapter),
-      getConfigManager: jest.fn().mockResolvedValue(mockConfigManager),
-      getSessionManager: jest.fn().mockResolvedValue(mockSessionManager),
-      getCurrentActor: jest.fn().mockResolvedValue(sampleActor),
+      getIdentityAdapter: vi.fn().mockResolvedValue(mockIdentityAdapter),
+      getConfigManager: vi.fn().mockResolvedValue(mockConfigManager),
+      getSessionManager: vi.fn().mockResolvedValue(mockSessionManager),
+      getCurrentActor: vi.fn().mockResolvedValue(sampleActor),
     };
 
-    (DependencyInjectionService.getInstance as jest.Mock).mockReturnValue(mockDependencyService);
+    (DependencyInjectionService.getInstance as vi.Mock).mockReturnValue(mockDependencyService);
 
     contextCommand = new ContextCommand();
 

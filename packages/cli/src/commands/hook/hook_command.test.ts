@@ -9,25 +9,25 @@
  */
 
 // Mock @gitgov/core — provide the HookHandler namespace
-const mockHandleEvent = jest.fn();
-jest.mock('@gitgov/core', () => ({
+const mockHandleEvent = vi.fn();
+vi.mock('@gitgov/core', () => ({
   HookHandler: {
-    HookHandler: jest.fn().mockImplementation(() => ({
-      handleEvent: mockHandleEvent,
-    })),
-    classifyCommand: jest.fn(),
+    HookHandler: vi.fn().mockImplementation(function() {
+      return { handleEvent: mockHandleEvent };
+    }),
+    classifyCommand: vi.fn(),
   },
 }));
 
 // Mock DependencyInjectionService
-const mockValidateDependencies = jest.fn();
-const mockGetExecutionAdapter = jest.fn();
-const mockGetSessionManager = jest.fn();
-const mockGetConfigManager = jest.fn();
+const mockValidateDependencies = vi.fn();
+const mockGetExecutionAdapter = vi.fn();
+const mockGetSessionManager = vi.fn();
+const mockGetConfigManager = vi.fn();
 
-jest.mock('../../services/dependency-injection', () => ({
+vi.mock('../../services/dependency-injection', () => ({
   DependencyInjectionService: {
-    getInstance: jest.fn(() => ({
+    getInstance: vi.fn(() => ({
       validateDependencies: mockValidateDependencies,
       getExecutionAdapter: mockGetExecutionAdapter,
       getSessionManager: mockGetSessionManager,
@@ -42,26 +42,16 @@ import { HookCommand } from './hook_command';
 
 /** Simulate piped stdin with given data */
 function mockStdin(data: string): void {
-  const originalIsTTY = process.stdin.isTTY;
   Object.defineProperty(process.stdin, 'isTTY', { value: false, writable: true, configurable: true });
-
-  const originalSetEncoding = process.stdin.setEncoding;
-  const originalOn = process.stdin.on;
-
-  // Queue the data delivery after event listeners are attached
-  jest.spyOn(process.stdin, 'setEncoding').mockImplementation(() => process.stdin);
-  jest.spyOn(process.stdin, 'on').mockImplementation((event: string, handler: (...args: unknown[]) => void) => {
+  vi.spyOn(process.stdin, 'setEncoding').mockImplementation(() => process.stdin);
+  vi.spyOn(process.stdin, 'on').mockImplementation((event: string, handler: (...args: unknown[]) => void) => {
     if (event === 'data') {
-      // Deliver data asynchronously
       setImmediate(() => handler(data));
     } else if (event === 'end') {
-      // End after data
       setImmediate(() => setImmediate(() => handler()));
     }
     return process.stdin;
   });
-
-  // Restore after test via afterEach
 }
 
 /** Simulate TTY stdin (no pipe) */
@@ -80,8 +70,8 @@ function setupValidProject(): void {
 // Capture stderr and stdout
 let stderrOutput: string;
 let stdoutOutput: string;
-let stderrSpy: jest.SpyInstance;
-let stdoutSpy: jest.SpyInstance;
+let stderrSpy: vi.SpyInstance;
+let stdoutSpy: vi.SpyInstance;
 
 // ─── Tests ──────────────────────────────────────────────────
 
@@ -90,14 +80,14 @@ describe('HookCommand', () => {
   const originalEnv = process.env;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     stderrOutput = '';
     stdoutOutput = '';
-    stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation((chunk: string | Uint8Array) => {
+    stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation((chunk: string | Uint8Array) => {
       stderrOutput += String(chunk);
       return true;
     });
-    stdoutSpy = jest.spyOn(process.stdout, 'write').mockImplementation((chunk: string | Uint8Array) => {
+    stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation((chunk: string | Uint8Array) => {
       stdoutOutput += String(chunk);
       return true;
     });
@@ -109,7 +99,7 @@ describe('HookCommand', () => {
     process.env = originalEnv;
     stderrSpy.mockRestore();
     stdoutSpy.mockRestore();
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   describe('4.1. Common Behavior (EARS-A1 to A5)', () => {

@@ -1,4 +1,4 @@
-import { getCurrentActor } from './current_actor';
+import { getCurrentActor, ActorSelectionRequiredError } from './current_actor';
 import type { IIdentityModule } from '../identity/identity_module.types';
 import type { ISessionManager } from '../session_manager';
 import type { ActorRecord } from '../record_types';
@@ -12,12 +12,12 @@ const activeActor: ActorRecord = {
   status: 'active',
 };
 
-const secondActor: ActorRecord = {
-  id: 'human:bob',
-  type: 'human',
-  displayName: 'Bob',
-  publicKey: 'pk-bob',
-  roles: ['author'],
+const agentActor: ActorRecord = {
+  id: 'agent:gitgov-audit',
+  type: 'agent',
+  displayName: 'GitGov Audit',
+  publicKey: 'pk-agent',
+  roles: ['orchestrator'],
   status: 'active',
 };
 
@@ -44,12 +44,12 @@ function createMockIdentity(overrides: Partial<IIdentityModule> = {}): IIdentity
   };
 }
 
-function createMockSessionManager(actorId?: string): ISessionManager {
+function createMockSessionManager(actorId?: string, keyFiles: string[] = []): ISessionManager {
   return {
     loadSession: jest.fn().mockResolvedValue(
       actorId ? { lastSession: { actorId } } : null,
     ),
-    detectActorFromKeyFiles: jest.fn().mockResolvedValue(null),
+    detectActorFromKeyFiles: jest.fn().mockResolvedValue(keyFiles),
     getActorState: jest.fn().mockResolvedValue(null),
     updateActorState: jest.fn(),
     getCloudSessionToken: jest.fn().mockResolvedValue(null),
@@ -93,63 +93,51 @@ describe('getCurrentActor', () => {
     });
   });
 
-  describe('4.2. Fallback and error (GCA-A3 to GCA-A4)', () => {
-    it('[GCA-A3] should return first active actor when no session exists', async () => {
+  describe('4.2. Key-based fallback (GCA-A3 to GCA-A4)', () => {
+    it('[GCA-A3] WHEN no session and 1 local key, THE SYSTEM SHALL return that actor', async () => {
       const identity = createMockIdentity({
-        listActors: jest.fn().mockResolvedValue([activeActor, secondActor]),
+        getActor: jest.fn().mockResolvedValue(activeActor),
       });
-      const session = createMockSessionManager();
+      const session = createMockSessionManager(undefined, ['human:alice']);
 
       const result = await getCurrentActor(identity, session);
 
       expect(result).toEqual(activeActor);
-      expect(identity.listActors).toHaveBeenCalled();
+      expect(identity.getActor).toHaveBeenCalledWith('human:alice');
     });
 
-    it('[GCA-A3] should prefer active human over agent when no session exists', async () => {
-      const agentActor: ActorRecord = {
-        id: 'agent:gitgov-audit',
-        type: 'agent',
-        displayName: 'GitGov Audit',
-        publicKey: 'pk-agent',
-        roles: ['orchestrator'],
-        status: 'active',
-      };
+    it('[GCA-A3] WHEN no session and 1 agent key, THE SYSTEM SHALL return the agent actor', async () => {
       const identity = createMockIdentity({
-        listActors: jest.fn().mockResolvedValue([agentActor, activeActor]),
+        getActor: jest.fn().mockResolvedValue(agentActor),
       });
-      const session = createMockSessionManager();
-
-      const result = await getCurrentActor(identity, session);
-
-      expect(result).toEqual(activeActor);
-      expect(result.type).toBe('human');
-    });
-
-    it('[GCA-A3] should return agent if no active humans exist and no session', async () => {
-      const agentActor: ActorRecord = {
-        id: 'agent:gitgov-audit',
-        type: 'agent',
-        displayName: 'GitGov Audit',
-        publicKey: 'pk-agent',
-        roles: ['orchestrator'],
-        status: 'active',
-      };
-      const identity = createMockIdentity({
-        listActors: jest.fn().mockResolvedValue([agentActor]),
-      });
-      const session = createMockSessionManager();
+      const session = createMockSessionManager(undefined, ['agent:gitgov-audit']);
 
       const result = await getCurrentActor(identity, session);
 
       expect(result).toEqual(agentActor);
+      expect(identity.getActor).toHaveBeenCalledWith('agent:gitgov-audit');
     });
 
-    it('[GCA-A4] should throw when no active actors exist', async () => {
-      const identity = createMockIdentity({
-        listActors: jest.fn().mockResolvedValue([]),
+    it('[GCA-A3b] WHEN no session and N local keys, THE SYSTEM SHALL throw ActorSelectionRequiredError', async () => {
+      const identity = createMockIdentity();
+      const session = createMockSessionManager(undefined, ['human:alice', 'human:bob']);
+
+      await expect(getCurrentActor(identity, session)).rejects.toThrow(ActorSelectionRequiredError);
+      await expect(getCurrentActor(identity, session)).rejects.toMatchObject({
+        actorIds: ['human:alice', 'human:bob'],
       });
-      const session = createMockSessionManager();
+    });
+
+    it('[GCA-A3b] WHEN no session and mixed type keys, THE SYSTEM SHALL throw ActorSelectionRequiredError', async () => {
+      const identity = createMockIdentity();
+      const session = createMockSessionManager(undefined, ['human:alice', 'agent:gitgov-audit']);
+
+      await expect(getCurrentActor(identity, session)).rejects.toThrow(ActorSelectionRequiredError);
+    });
+
+    it('[GCA-A4] WHEN no local keys exist, THE SYSTEM SHALL throw', async () => {
+      const identity = createMockIdentity();
+      const session = createMockSessionManager(undefined, []);
 
       await expect(getCurrentActor(identity, session)).rejects.toThrow(
         "No active actors found. Run 'gitgov init' first.",

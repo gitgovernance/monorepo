@@ -55,6 +55,7 @@ export { FsOpaRuleFactory, createOpaRule } from '../../policy_evaluator/fs';
 export {
   findProjectRoot,
   getWorktreeBasePath,
+  getKeysDir,
   resetDiscoveryCache,
 } from '../../utils/project_discovery';
 

@@ -1,5 +1,6 @@
 import type { Octokit } from '@octokit/rest';
 import type { RecordStore, IdEncoder } from '../record_store';
+import { DEFAULT_ID_ENCODER } from '../record_store';
 import type { GitHubRecordStoreOptions, GitHubWriteResult, GitHubWriteOpts } from './github_record_store.types';
 import type { IGitModule } from '../../git/index';
 import { GitHubApiError, mapOctokitError, isOctokitRequestError } from '../../shared/github/github';
@@ -31,7 +32,7 @@ export class GitHubRecordStore<V> implements RecordStore<V, GitHubWriteResult, G
     this.ref = options.ref ?? 'gitgov-state';
     this.basePath = options.basePath;
     this.extension = options.extension ?? '.json';
-    this.idEncoder = options.idEncoder;
+    this.idEncoder = options.idEncoder ?? DEFAULT_ID_ENCODER;
     this.octokit = octokit;
     this.gitModule = gitModule;
   }

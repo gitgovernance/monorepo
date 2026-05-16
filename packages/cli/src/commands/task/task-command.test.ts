@@ -1,23 +1,23 @@
 // Mock @gitgov/core FIRST to avoid import.meta issues in Jest
 // This prevents Jest from executing project_adapter which uses import.meta.url
 // Must be before any other mocks or imports
-jest.mock('@gitgov/core', () => ({
+vi.mock('@gitgov/core', () => ({
   Records: {},
   Factories: {
-    createTaskRecord: jest.fn((data) => data),
-    createCycleRecord: jest.fn((data) => data),
-    createActorRecord: jest.fn((data) => data),
-    createAgentRecord: jest.fn((data) => data),
-    createFeedbackRecord: jest.fn((data) => data),
-    createExecutionRecord: jest.fn((data) => data),
-    createTestSignature: jest.fn((keyId, role, notes) => ({
+    createTaskRecord: vi.fn((data) => data),
+    createCycleRecord: vi.fn((data) => data),
+    createActorRecord: vi.fn((data) => data),
+    createAgentRecord: vi.fn((data) => data),
+    createFeedbackRecord: vi.fn((data) => data),
+    createExecutionRecord: vi.fn((data) => data),
+    createTestSignature: vi.fn((keyId, role, notes) => ({
       keyId,
       role,
       notes,
       timestamp: Date.now(),
       signature: 'A'.repeat(86) + '=='
     })),
-    createEmbeddedMetadataRecord: jest.fn((payload, options) => ({
+    createEmbeddedMetadataRecord: vi.fn((payload, options) => ({
       header: {
         version: '1.0',
         type: 'task',
@@ -30,9 +30,9 @@ jest.mock('@gitgov/core', () => ({
 }));
 
 // Mock DependencyInjectionService before importing
-jest.mock('../../services/dependency-injection', () => ({
+vi.mock('../../services/dependency-injection', () => ({
   DependencyInjectionService: {
-    getInstance: jest.fn()
+    getInstance: vi.fn()
   }
 }));
 
@@ -184,39 +184,39 @@ function createMockIndexData(
 }
 
 // Mock console methods to capture output
-const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation();
-const mockConsoleError = jest.spyOn(console, 'error').mockImplementation();
-const mockConsoleWarn = jest.spyOn(console, 'warn').mockImplementation();
-const mockProcessExit = jest.spyOn(process, 'exit').mockImplementation();
+const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation();
+const mockConsoleError = vi.spyOn(console, 'error').mockImplementation();
+const mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation();
+const mockProcessExit = vi.spyOn(process, 'exit').mockImplementation();
 
 describe('TaskCommand - Complete Unit Tests', () => {
   let taskCommand: TaskCommand;
   let mockBacklogAdapter: {
-    createTask: jest.MockedFunction<(payload: Partial<TaskRecord>, actorId: string) => Promise<TaskRecord>>;
-    getTask: jest.MockedFunction<(taskId: string) => Promise<TaskRecord | null>>;
-    getAllTasks: jest.MockedFunction<() => Promise<TaskRecord[]>>;
-    submitTask: jest.MockedFunction<(taskId: string, actorId: string) => Promise<TaskRecord>>;
-    approveTask: jest.MockedFunction<(taskId: string, actorId: string) => Promise<TaskRecord>>;
-    updateTask: jest.MockedFunction<(taskId: string, payload: Partial<TaskRecord>, actorId: string) => Promise<TaskRecord>>;
-    pauseTask: jest.MockedFunction<(taskId: string, actorId: string, reason?: string) => Promise<TaskRecord>>;
-    resumeTask: jest.MockedFunction<(taskId: string, actorId: string, force?: boolean) => Promise<TaskRecord>>;
-    deleteTask: jest.MockedFunction<(taskId: string, actorId: string) => Promise<void>>;
-    discardTask: jest.MockedFunction<(taskId: string, actorId: string, reason?: string) => Promise<TaskRecord>>;
-    activateTask: jest.MockedFunction<(taskId: string, actorId: string) => Promise<TaskRecord>>;
-    completeTask: jest.MockedFunction<(taskId: string, actorId: string) => Promise<TaskRecord>>;
+    createTask: Mock<(payload: Partial<TaskRecord>, actorId: string) => Promise<TaskRecord>>;
+    getTask: Mock<(taskId: string) => Promise<TaskRecord | null>>;
+    getAllTasks: Mock<() => Promise<TaskRecord[]>>;
+    submitTask: Mock<(taskId: string, actorId: string) => Promise<TaskRecord>>;
+    approveTask: Mock<(taskId: string, actorId: string) => Promise<TaskRecord>>;
+    updateTask: Mock<(taskId: string, payload: Partial<TaskRecord>, actorId: string) => Promise<TaskRecord>>;
+    pauseTask: Mock<(taskId: string, actorId: string, reason?: string) => Promise<TaskRecord>>;
+    resumeTask: Mock<(taskId: string, actorId: string, force?: boolean) => Promise<TaskRecord>>;
+    deleteTask: Mock<(taskId: string, actorId: string) => Promise<void>>;
+    discardTask: Mock<(taskId: string, actorId: string, reason?: string) => Promise<TaskRecord>>;
+    activateTask: Mock<(taskId: string, actorId: string) => Promise<TaskRecord>>;
+    completeTask: Mock<(taskId: string, actorId: string) => Promise<TaskRecord>>;
   };
   let mockProjector: {
-    isIndexUpToDate: jest.MockedFunction<() => Promise<boolean>>;
-    getIndexData: jest.MockedFunction<() => Promise<IndexData | null>>;
-    generateIndex: jest.MockedFunction<() => Promise<void>>;
-    invalidateCache: jest.MockedFunction<() => Promise<void>>;
+    isIndexUpToDate: Mock<() => Promise<boolean>>;
+    getIndexData: Mock<() => Promise<IndexData | null>>;
+    generateIndex: Mock<() => Promise<void>>;
+    invalidateCache: Mock<() => Promise<void>>;
   };
   let mockIdentityAdapter: {
-    getCurrentActor: jest.MockedFunction<() => Promise<ActorRecord>>;
-    getActor: jest.MockedFunction<(actorId: string) => Promise<ActorRecord | null>>;
+    getCurrentActor: Mock<() => Promise<ActorRecord>>;
+    getActor: Mock<(actorId: string) => Promise<ActorRecord | null>>;
   };
   let mockFeedbackAdapter: {
-    create: jest.MockedFunction<(payload: Record<string, string>, actorId: string) => Promise<{ id: string; type: string }>>;
+    create: Mock<(payload: Record<string, string>, actorId: string) => Promise<{ id: string; type: string }>>;
   };
 
   const sampleTask: TaskRecord = {
@@ -240,52 +240,52 @@ describe('TaskCommand - Complete Unit Tests', () => {
   };
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     // Create simple mock adapters
     mockBacklogAdapter = {
-      createTask: jest.fn(),
-      getTask: jest.fn(),
-      getAllTasks: jest.fn(),
-      submitTask: jest.fn(),
-      approveTask: jest.fn(),
-      updateTask: jest.fn(),
-      pauseTask: jest.fn(),
-      resumeTask: jest.fn(),
-      deleteTask: jest.fn(),
-      discardTask: jest.fn(),
-      activateTask: jest.fn(),
-      completeTask: jest.fn()
+      createTask: vi.fn(),
+      getTask: vi.fn(),
+      getAllTasks: vi.fn(),
+      submitTask: vi.fn(),
+      approveTask: vi.fn(),
+      updateTask: vi.fn(),
+      pauseTask: vi.fn(),
+      resumeTask: vi.fn(),
+      deleteTask: vi.fn(),
+      discardTask: vi.fn(),
+      activateTask: vi.fn(),
+      completeTask: vi.fn()
     };
 
     mockProjector = {
-      isIndexUpToDate: jest.fn(),
-      getIndexData: jest.fn(),
-      generateIndex: jest.fn(),
-      invalidateCache: jest.fn()
+      isIndexUpToDate: vi.fn(),
+      getIndexData: vi.fn(),
+      generateIndex: vi.fn(),
+      invalidateCache: vi.fn()
     };
 
     mockIdentityAdapter = {
-      getCurrentActor: jest.fn(),
-      getActor: jest.fn()
+      getCurrentActor: vi.fn(),
+      getActor: vi.fn()
     };
 
     mockFeedbackAdapter = {
-      create: jest.fn()
+      create: vi.fn()
     };
 
     // Create mock dependency service
     const mockDependencyService = {
-      getBacklogAdapter: jest.fn().mockResolvedValue(mockBacklogAdapter),
-      getRecordProjector: jest.fn().mockResolvedValue(mockProjector),
-      getIdentityAdapter: jest.fn().mockResolvedValue(mockIdentityAdapter),
-      getFeedbackAdapter: jest.fn().mockResolvedValue(mockFeedbackAdapter),
-      getCurrentActor: jest.fn().mockResolvedValue(sampleActor),
-      getProjectRoot: jest.fn().mockResolvedValue('/mock/project/root'),
+      getBacklogAdapter: vi.fn().mockResolvedValue(mockBacklogAdapter),
+      getRecordProjector: vi.fn().mockResolvedValue(mockProjector),
+      getIdentityAdapter: vi.fn().mockResolvedValue(mockIdentityAdapter),
+      getFeedbackAdapter: vi.fn().mockResolvedValue(mockFeedbackAdapter),
+      getCurrentActor: vi.fn().mockResolvedValue(sampleActor),
+      getProjectRoot: vi.fn().mockResolvedValue('/mock/project/root'),
     };
 
     // Mock singleton getInstance
-    (DependencyInjectionService.getInstance as jest.MockedFunction<typeof DependencyInjectionService.getInstance>)
+    (DependencyInjectionService.getInstance as Mock<typeof DependencyInjectionService.getInstance>)
       .mockReturnValue(mockDependencyService as never);
 
     taskCommand = new TaskCommand();
@@ -330,9 +330,9 @@ This is a long description with proper markdown formatting.
 ## Solution
 The solution involves multiple steps...`;
 
-      jest.spyOn(fs, 'readFile').mockResolvedValue(mockFileContent);
-      jest.spyOn(path, 'isAbsolute').mockReturnValue(false);
-      jest.spyOn(path, 'resolve').mockReturnValue('/mock/path/description.md');
+      vi.spyOn(fs, 'readFile').mockResolvedValue(mockFileContent);
+      vi.spyOn(path, 'isAbsolute').mockReturnValue(false);
+      vi.spyOn(path, 'resolve').mockReturnValue('/mock/path/description.md');
 
       mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
       mockBacklogAdapter.createTask.mockResolvedValue(sampleTask);
@@ -358,9 +358,9 @@ The solution involves multiple steps...`;
       const mockError = new Error('ENOENT: no such file or directory');
       (mockError as any).code = 'ENOENT';
 
-      jest.spyOn(fs, 'readFile').mockRejectedValue(mockError);
-      jest.spyOn(path, 'isAbsolute').mockReturnValue(false);
-      jest.spyOn(path, 'resolve').mockReturnValue('/mock/path/nonexistent.md');
+      vi.spyOn(fs, 'readFile').mockRejectedValue(mockError);
+      vi.spyOn(path, 'isAbsolute').mockReturnValue(false);
+      vi.spyOn(path, 'resolve').mockReturnValue('/mock/path/nonexistent.md');
 
       mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
 
@@ -374,9 +374,9 @@ The solution involves multiple steps...`;
       const fs = require('fs/promises');
       const path = require('path');
 
-      jest.spyOn(fs, 'readFile').mockResolvedValue('   \n\n   '); // Only whitespace
-      jest.spyOn(path, 'isAbsolute').mockReturnValue(false);
-      jest.spyOn(path, 'resolve').mockReturnValue('/mock/path/empty.md');
+      vi.spyOn(fs, 'readFile').mockResolvedValue('   \n\n   '); // Only whitespace
+      vi.spyOn(path, 'isAbsolute').mockReturnValue(false);
+      vi.spyOn(path, 'resolve').mockReturnValue('/mock/path/empty.md');
 
       mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
 
@@ -393,9 +393,9 @@ The solution involves multiple steps...`;
       const mockError = new Error('EACCES: permission denied');
       (mockError as any).code = 'EACCES';
 
-      jest.spyOn(fs, 'readFile').mockRejectedValue(mockError);
-      jest.spyOn(path, 'isAbsolute').mockReturnValue(false);
-      jest.spyOn(path, 'resolve').mockReturnValue('/mock/path/restricted.md');
+      vi.spyOn(fs, 'readFile').mockRejectedValue(mockError);
+      vi.spyOn(path, 'isAbsolute').mockReturnValue(false);
+      vi.spyOn(path, 'resolve').mockReturnValue('/mock/path/restricted.md');
 
       mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
 
@@ -412,9 +412,9 @@ The solution involves multiple steps...`;
       const mockFileContent = '# Relative Path Test\n\nThis file uses a relative path.';
       const relativePath = 'tasks/description.md';
 
-      jest.spyOn(fs, 'readFile').mockResolvedValue(mockFileContent);
-      jest.spyOn(path, 'isAbsolute').mockReturnValue(false);
-      jest.spyOn(path, 'resolve').mockReturnValue('/current/working/dir/tasks/description.md');
+      vi.spyOn(fs, 'readFile').mockResolvedValue(mockFileContent);
+      vi.spyOn(path, 'isAbsolute').mockReturnValue(false);
+      vi.spyOn(path, 'resolve').mockReturnValue('/current/working/dir/tasks/description.md');
 
       mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
       mockBacklogAdapter.createTask.mockResolvedValue(sampleTask);
@@ -439,8 +439,8 @@ The solution involves multiple steps...`;
       const mockFileContent = '# Absolute Path Test\n\nThis file uses an absolute path.';
       const absolutePath = '/tmp/absolute-test.md';
 
-      jest.spyOn(fs, 'readFile').mockResolvedValue(mockFileContent);
-      jest.spyOn(path, 'isAbsolute').mockReturnValue(true);
+      vi.spyOn(fs, 'readFile').mockResolvedValue(mockFileContent);
+      vi.spyOn(path, 'isAbsolute').mockReturnValue(true);
 
       mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
       mockBacklogAdapter.createTask.mockResolvedValue(sampleTask);
@@ -479,9 +479,9 @@ const test = "value";
 |--------|-------|
 | A      | 1     |`;
 
-      jest.spyOn(fs, 'readFile').mockResolvedValue(complexMarkdown);
-      jest.spyOn(path, 'isAbsolute').mockReturnValue(false);
-      jest.spyOn(path, 'resolve').mockReturnValue('/mock/path/complex.md');
+      vi.spyOn(fs, 'readFile').mockResolvedValue(complexMarkdown);
+      vi.spyOn(path, 'isAbsolute').mockReturnValue(false);
+      vi.spyOn(path, 'resolve').mockReturnValue('/mock/path/complex.md');
 
       mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
       mockBacklogAdapter.createTask.mockResolvedValue(sampleTask);
@@ -516,10 +516,10 @@ const test = "value";
 
       const mockFileContent = '# Test Cleanup\n\nThis file should be deleted.';
 
-      jest.spyOn(fs, 'readFile').mockResolvedValue(mockFileContent);
-      jest.spyOn(fs, 'unlink').mockResolvedValue(undefined);
-      jest.spyOn(path, 'isAbsolute').mockReturnValue(false);
-      jest.spyOn(path, 'resolve').mockReturnValue('/tmp/test-cleanup.md');
+      vi.spyOn(fs, 'readFile').mockResolvedValue(mockFileContent);
+      vi.spyOn(fs, 'unlink').mockResolvedValue(undefined);
+      vi.spyOn(path, 'isAbsolute').mockReturnValue(false);
+      vi.spyOn(path, 'resolve').mockReturnValue('/tmp/test-cleanup.md');
 
       mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
       mockBacklogAdapter.createTask.mockResolvedValue(sampleTask);
@@ -543,10 +543,10 @@ const test = "value";
       const mockFileContent = '# Test Cleanup Failure\n\nCleanup will fail but task should be created.';
       const cleanupError = new Error('EACCES: permission denied');
 
-      jest.spyOn(fs, 'readFile').mockResolvedValue(mockFileContent);
-      jest.spyOn(fs, 'unlink').mockRejectedValue(cleanupError);
-      jest.spyOn(path, 'isAbsolute').mockReturnValue(false);
-      jest.spyOn(path, 'resolve').mockReturnValue('/tmp/readonly.md');
+      vi.spyOn(fs, 'readFile').mockResolvedValue(mockFileContent);
+      vi.spyOn(fs, 'unlink').mockRejectedValue(cleanupError);
+      vi.spyOn(path, 'isAbsolute').mockReturnValue(false);
+      vi.spyOn(path, 'resolve').mockReturnValue('/tmp/readonly.md');
 
       mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
       mockBacklogAdapter.createTask.mockResolvedValue(sampleTask);
@@ -572,10 +572,10 @@ const test = "value";
       const mockFileContent = '# Test Quiet Mode\n\nCleanup fails but quiet mode suppresses warning.';
       const cleanupError = new Error('EACCES: permission denied');
 
-      jest.spyOn(fs, 'readFile').mockResolvedValue(mockFileContent);
-      jest.spyOn(fs, 'unlink').mockRejectedValue(cleanupError);
-      jest.spyOn(path, 'isAbsolute').mockReturnValue(false);
-      jest.spyOn(path, 'resolve').mockReturnValue('/tmp/quiet-test.md');
+      vi.spyOn(fs, 'readFile').mockResolvedValue(mockFileContent);
+      vi.spyOn(fs, 'unlink').mockRejectedValue(cleanupError);
+      vi.spyOn(path, 'isAbsolute').mockReturnValue(false);
+      vi.spyOn(path, 'resolve').mockReturnValue('/tmp/quiet-test.md');
 
       mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
       mockBacklogAdapter.createTask.mockResolvedValue(sampleTask);

@@ -158,6 +158,18 @@ export const cleanupWorktree = (repoPath: string, wtPath: string) => {
   }
 };
 
+// Clean up keys created by gitgov init during E2E tests (per-worktree)
+export const cleanupWorktreeKeys = (worktreePath: string) => {
+  const { getKeysDir } = require('@gitgov/core/fs');
+  const keysDir = getKeysDir(worktreePath);
+  if (fs.existsSync(keysDir)) {
+    const files = fs.readdirSync(keysDir).filter((f: string) => f.endsWith('.key'));
+    for (const file of files) {
+      try { fs.unlinkSync(path.join(keysDir, file)); } catch {}
+    }
+  }
+};
+
 // ============================================================================
 // Compound Setup Helpers
 // ============================================================================

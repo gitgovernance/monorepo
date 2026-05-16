@@ -3,6 +3,8 @@ import { createHash } from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+// Keys dir is per-worktree: {worktreeBasePath}/.gitgov/keys/
+const getKeysDir = (worktreePath: string): string => path.join(worktreePath, '.gitgov', 'keys');
 
 /**
  * E2E Tests for Actor CLI Command
@@ -169,7 +171,7 @@ describe('Actor CLI Command - E2E Tests', () => {
       expect(actorFiles.length).toBeGreaterThanOrEqual(2);
 
       // 4. Verify .key file exists on disk for the new actor
-      const keysDir = path.join(worktreeBasePath, '.gitgov', 'keys');
+      const keysDir = getKeysDir(worktreeBasePath);
       const keyFiles = fs.readdirSync(keysDir).filter(f => f.endsWith('.key'));
       // Should have at least 2 keys: the init actor + the new one
       expect(keyFiles.length).toBeGreaterThanOrEqual(2);
@@ -273,7 +275,7 @@ describe('Actor CLI Command - E2E Tests', () => {
 
       // 5. Verify new actor has a .key file
       // FsKeyProvider encodes actorId (: → _) for the filename
-      const keysDir = path.join(worktreeBasePath, '.gitgov', 'keys');
+      const keysDir = getKeysDir(worktreeBasePath);
       const keyFiles = fs.readdirSync(keysDir).filter(f => f.endsWith('.key'));
       const encodedNewActorId = newActorId.replace(/:/g, '_');
       const hasNewKey = keyFiles.some(f => f.includes(encodedNewActorId));

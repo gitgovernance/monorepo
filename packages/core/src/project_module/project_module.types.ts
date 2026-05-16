@@ -26,6 +26,7 @@ export type ProjectModuleDeps = {
   backlog: Pick<IBacklogAdapter, 'createCycle'>;
   agentAdapter?: IProjectAgentOps;
   defaultAgents?: DefaultAgentConfig[];
+  eventBus?: { emit?: (event: string, payload: Record<string, unknown>) => void };
 };
 
 export type ProjectInitOptions = {
@@ -34,6 +35,9 @@ export type ProjectInitOptions = {
   actorName?: string;
   type?: 'human' | 'agent';
   saasUrl?: string;
+  stateBranch?: string;
+  repoId?: string;
+  joinedVia?: EnsureActorInput['joinedVia'];
 };
 
 export type ProjectInitResult = {
@@ -42,4 +46,35 @@ export type ProjectInitResult = {
   cycleId: string;
   commitSha?: string;
   alreadyInitialized?: boolean;
+  created?: boolean;
 };
+
+// --- ensureActorInProject primitive (PROJ-H1..H6) ---
+
+export type EnsureActorInput = {
+  login: string;
+  type: 'human' | 'agent';
+  repoId: string;
+  displayName?: string;
+  roles?: string[];
+  joinedVia: 'cli' | 'saas-oauth' | 'saas-webhook' | 'mcp';
+  authzCheck?: (input: EnsureActorInput) => Promise<boolean>;
+  skipFinalize?: boolean;
+};
+
+export type EnsureActorResult = {
+  actorId: string;
+  created: boolean;
+  commitSha?: string;
+};
+
+export class EnsureActorError extends Error {
+  public readonly code: string;
+  public readonly context: Record<string, unknown>;
+  constructor(code: string, context: Record<string, unknown> = {}) {
+    super(`EnsureActorError(${code})`);
+    this.name = 'EnsureActorError';
+    this.code = code;
+    this.context = context;
+  }
+}

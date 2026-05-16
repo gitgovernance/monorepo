@@ -214,8 +214,8 @@ export class HookHandler {
     const lastSession = await this.sessionManager.getLastSession();
     if (lastSession) return lastSession.actorId;
 
-    const detectedId = await this.sessionManager.detectActorFromKeyFiles();
-    return detectedId;
+    const detectedIds = await this.sessionManager.detectActorFromKeyFiles();
+    return detectedIds.length === 1 ? detectedIds[0]! : null;
   }
 }
 

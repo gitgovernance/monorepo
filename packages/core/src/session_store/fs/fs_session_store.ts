@@ -11,6 +11,7 @@ import type { SessionStore } from '../session_store';
 import type { GitGovSession } from '../../session_manager/session_manager.types';
 import { SessionManager } from '../../session_manager/session_manager';
 import { DEFAULT_ID_ENCODER } from '../../record_store/record_store';
+import { getKeysDir } from '../../utils/project_discovery';
 
 /**
  * Filesystem-based SessionStore implementation.
@@ -33,7 +34,8 @@ export class FsSessionStore implements SessionStore {
 
   constructor(projectRootPath: string) {
     this.sessionPath = path.join(projectRootPath, '.gitgov', '.session.json');
-    this.keysPath = path.join(projectRootPath, '.gitgov', 'keys');
+    // [EARS-D1] Keys are per-repo (cryptographic isolation)
+    this.keysPath = getKeysDir(projectRootPath);
   }
 
   /**
@@ -68,37 +70,27 @@ export class FsSessionStore implements SessionStore {
   }
 
   /**
-   * Detect actor from .key files in .gitgov/keys/
+   * Detect actors from .key files in {projectRoot}/.gitgov/keys/
    *
-   * [EARS-C1] Returns decoded actor ID from first .key file (filename uses DEFAULT_ID_ENCODER: `_` → `:`)
-   * [EARS-C2] Returns first .key file alphabetically if multiple exist (decoded)
-   * [EARS-C3] Returns null if no .key files exist
-   * [EARS-C4] Returns null if keys directory doesn't exist
+   * [EARS-C1] Returns array of decoded actor IDs from all .key files
+   * [EARS-C2] Returns all actor IDs ordered alphabetically by filename
+   * [EARS-C3] Returns [] if no .key files exist
+   * [EARS-C4] Returns [] if keys directory doesn't exist
    * [EARS-C5] Ignores non-.key files
-   * [EARS-C6] Returns null for empty directory
-   *
-   * @returns Actor ID (e.g., "human:camilo-v2") or null
+   * [EARS-C6] Returns [] for empty directory
    */
-  async detectActorFromKeyFiles(): Promise<string | null> {
+  async detectActorFromKeyFiles(): Promise<string[]> {
     try {
       const files = await fs.readdir(this.keysPath);
 
-      // Find all .key files
+      // [EARS-C5] Filter to .key files only
       const keyFiles = files.filter(f => f.endsWith('.key'));
 
-      // Get first .key file
-      const firstKeyFile = keyFiles[0];
-      if (!firstKeyFile) {
-        return null;
-      }
-
-      // Extract actor ID from filename (remove .key extension, decode _ → :)
-      // e.g., "human_camilo-v2.key" -> "human:camilo-v2"
-      const encoded = firstKeyFile.replace('.key', '');
-      return DEFAULT_ID_ENCODER.decode(encoded);
+      // [EARS-C1] Decode all filenames: "human_camilo-v2.key" → "human:camilo-v2"
+      return keyFiles.map(f => DEFAULT_ID_ENCODER.decode(f.replace('.key', '')));
     } catch {
-      // Directory doesn't exist or can't be read
-      return null;
+      // [EARS-C4] Directory doesn't exist or can't be read
+      return [];
     }
   }
 }

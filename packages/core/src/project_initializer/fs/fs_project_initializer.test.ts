@@ -250,11 +250,11 @@ describe('FsProjectInitializer', () => {
       const expectedDirs = [
         '.gitgov',
         '.gitgov/actors',
-        '.gitgov/keys',
         '.gitgov/cycles',
         '.gitgov/tasks',
         '.gitgov/executions',
         '.gitgov/feedbacks',
+        '.gitgov/keys',
       ];
 
       for (const dir of expectedDirs) {

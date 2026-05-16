@@ -21,6 +21,7 @@ export function registerInitCommands(program: Command): void {
     .option('--force-local', 'Proceed with local init even if gitgov-state exists on remote')
     .option('-l, --login <login>', 'GitHub login for actorId (creates human:${login})')
     .option('--saas-url <url>', 'SaaS URL for cloud sync (written to config.json)')
+    .option('--state-branch <name>', 'State branch name (default: gitgov-state)')
     .option('--no-cache', 'Skip RecordProjector initialization (faster init)')
     .option('--skip-validation', 'Skip environment validation (advanced users)')
     .option('--json', 'Output in JSON format for automation')

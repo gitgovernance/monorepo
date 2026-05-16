@@ -104,6 +104,9 @@ describe('Block F: Change Detection (CF1-CF7)', () => {
     execSync(`git checkout -b ${testBranch}`, { cwd: repoDir, stdio: 'pipe' });
     execSync(`git push -u origin ${testBranch}`, { cwd: repoDir, stdio: 'pipe' });
 
+    // 2b. Clean up residual local worktree from previous failed runs
+    cleanupWorktree(repoDir);
+
     // 3. Clean up residual gitgov-state from previous runs
     try {
       await octokit.rest.git.deleteRef({

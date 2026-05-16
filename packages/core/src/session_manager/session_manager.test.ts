@@ -227,8 +227,7 @@ describe('SessionManager', () => {
   // ==================== §4.5 detectActorFromKeyFiles (EARS-E) ====================
 
   describe('detectActorFromKeyFiles (EARS-E)', () => {
-    it('[EARS-E1] WHEN session exists without actorId and .key files exist, loadSession SHALL auto-detect and set actorId', async () => {
-      // Session exists but without lastSession.actorId
+    it('[EARS-E1b] WHEN session exists without actorId and 1 .key file exists, loadSession SHALL auto-detect and set actorId', async () => {
       const sessionWithoutActor: GitGovSession = {
         actorState: {}
       };
@@ -238,18 +237,36 @@ describe('SessionManager', () => {
 
       const result = await sessionManager.loadSession();
 
-      // Should auto-detect actor from .key file
       expect(result?.lastSession?.actorId).toBe('human:camilo-v2');
     });
 
-    it('[EARS-E1] WHEN session does not exist but .key files exist, loadSession SHALL create session with auto-detected actorId', async () => {
-      // No session set
+    it('[EARS-E1b] WHEN session exists without actorId and N .key files exist, loadSession SHALL NOT auto-set actorId', async () => {
+      const sessionWithoutActor: GitGovSession = {
+        actorState: {}
+      };
+
+      store.setSession(sessionWithoutActor);
+      store.setKeyFiles(['human:alice.key', 'human:bob.key']);
+
+      const result = await sessionManager.loadSession();
+
+      expect(result?.lastSession).toBeUndefined();
+    });
+
+    it('[EARS-E1] WHEN no session and 1 .key file exists, loadSession SHALL create session with that actorId', async () => {
+      store.setKeyFiles(['human:developer.key']);
+
+      const result = await sessionManager.loadSession();
+
+      expect(result?.lastSession?.actorId).toBe('human:developer');
+    });
+
+    it('[EARS-E1] WHEN no session and N .key files exist, loadSession SHALL return null', async () => {
       store.setKeyFiles(['human:developer.key', 'agent:assistant.key']);
 
       const result = await sessionManager.loadSession();
 
-      // Should create session with first .key file actor
-      expect(result?.lastSession?.actorId).toBe('human:developer');
+      expect(result).toBeNull();
     });
 
     it('[EARS-E1] WHEN session has valid actorId, loadSession SHALL NOT override with .key file detection', async () => {
@@ -259,20 +276,17 @@ describe('SessionManager', () => {
       };
 
       store.setSession(sessionWithActor);
-      store.setKeyFiles(['human:other-user.key']); // Different actor
+      store.setKeyFiles(['human:other-user.key']);
 
       const result = await sessionManager.loadSession();
 
-      // Should preserve existing actorId
       expect(result?.lastSession?.actorId).toBe('human:existing-user');
     });
 
-    it('[EARS-E2] WHEN no .key files exist, detectActorFromKeyFiles SHALL return null', async () => {
-      // No key files configured (default)
-
+    it('[EARS-E2] WHEN no .key files exist, detectActorFromKeyFiles SHALL return []', async () => {
       const result = await sessionManager.detectActorFromKeyFiles();
 
-      expect(result).toBeNull();
+      expect(result).toEqual([]);
     });
   });
 

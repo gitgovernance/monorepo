@@ -13,6 +13,7 @@ export function registerLoginCommands(program: Command): void {
     .option('--no-key-sync', 'Login without syncing keys')
     .option('--force-local', 'On key conflict: keep local key, upload to cloud')
     .option('--force-cloud', 'On key conflict: keep cloud key, download to local')
+    .option('--state-branch <name>', 'State branch name (overrides config for pre-DI fetch)')
     .option('--json', 'Output as JSON')
     .option('-v, --verbose', 'Verbose output')
     .option('-q, --quiet', 'Quiet output')

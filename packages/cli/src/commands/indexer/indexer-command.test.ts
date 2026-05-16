@@ -1,32 +1,32 @@
 // Mock @gitgov/core with complete adapter mocks
-jest.doMock('@gitgov/core', () => ({
+vi.doMock('@gitgov/core', () => ({
   Config: {
     ConfigManager: {
-      findProjectRoot: jest.fn().mockReturnValue('/mock/project/root'),
-      findGitgovRoot: jest.fn().mockReturnValue('/mock/project/root/.gitgov'),
-      getGitgovPath: jest.fn().mockReturnValue('/mock/project/root/.gitgov'),
-      isGitgovProject: jest.fn().mockReturnValue(true)
+      findProjectRoot: vi.fn().mockReturnValue('/mock/project/root'),
+      findGitgovRoot: vi.fn().mockReturnValue('/mock/project/root/.gitgov'),
+      getGitgovPath: vi.fn().mockReturnValue('/mock/project/root/.gitgov'),
+      isGitgovProject: vi.fn().mockReturnValue(true)
     }
   },
   Store: {
-    RecordStore: jest.fn().mockImplementation(() => ({
-      findAll: jest.fn().mockResolvedValue([]),
-      findById: jest.fn().mockResolvedValue(null),
-      save: jest.fn().mockResolvedValue({}),
-      delete: jest.fn().mockResolvedValue(true)
+    RecordStore: vi.fn().mockImplementation(() => ({
+      findAll: vi.fn().mockResolvedValue([]),
+      findById: vi.fn().mockResolvedValue(null),
+      save: vi.fn().mockResolvedValue({}),
+      delete: vi.fn().mockResolvedValue(true)
     }))
   },
   Adapters: {
-    IRecordProjector: jest.fn(),
-    RecordProjector: jest.fn().mockImplementation(() => ({
-      generateIndex: jest.fn().mockResolvedValue({
+    IRecordProjector: vi.fn(),
+    RecordProjector: vi.fn().mockImplementation(() => ({
+      generateIndex: vi.fn().mockResolvedValue({
         success: true,
         recordsProcessed: 10,
         metricsCalculated: 5,
         generationTime: 250,
         errors: []
       }),
-      validateIntegrity: jest.fn().mockResolvedValue({
+      validateIntegrity: vi.fn().mockResolvedValue({
         status: 'valid',
         recordsScanned: 10,
         errorsFound: [],
@@ -35,38 +35,38 @@ jest.doMock('@gitgov/core', () => ({
         signatureFailures: 0,
         validationTime: 150
       }),
-      invalidateCache: jest.fn().mockResolvedValue(undefined)
+      invalidateCache: vi.fn().mockResolvedValue(undefined)
     })),
-    RecordMetrics: jest.fn().mockImplementation(() => ({})),
-    IdentityAdapter: jest.fn().mockImplementation(() => ({})),
-    FeedbackAdapter: jest.fn().mockImplementation(() => ({})),
-    ProjectModule: jest.fn().mockImplementation(() => ({})),
-    BacklogAdapter: jest.fn().mockImplementation(() => ({}))
+    RecordMetrics: vi.fn().mockImplementation(() => ({})),
+    IdentityAdapter: vi.fn().mockImplementation(() => ({})),
+    FeedbackAdapter: vi.fn().mockImplementation(() => ({})),
+    ProjectModule: vi.fn().mockImplementation(() => ({})),
+    BacklogAdapter: vi.fn().mockImplementation(() => ({}))
   },
   Modules: {
-    EventBus: jest.fn().mockImplementation(() => ({
-      emit: jest.fn(),
-      on: jest.fn(),
-      off: jest.fn()
+    EventBus: vi.fn().mockImplementation(() => ({
+      emit: vi.fn(),
+      on: vi.fn(),
+      off: vi.fn()
     }))
   }
 }));
 
-// Mock RecordProjector will be created inside the jest.mock factory
+// Mock RecordProjector will be created inside the vi.mock factory
 
 // Mock DependencyInjectionService to return our controllable mock
-jest.mock('../../services/dependency-injection', () => {
+vi.mock('../../services/dependency-injection', () => {
   // Define mock inside the factory function to avoid closure issues
   const mockAdapter = {
-    generateIndex: jest.fn(),
-    validateIntegrity: jest.fn(),
-    invalidateCache: jest.fn()
+    generateIndex: vi.fn(),
+    validateIntegrity: vi.fn(),
+    invalidateCache: vi.fn()
   };
 
   return {
     DependencyInjectionService: {
-      getInstance: jest.fn().mockReturnValue({
-        getRecordProjector: jest.fn().mockResolvedValue(mockAdapter)
+      getInstance: vi.fn().mockReturnValue({
+        getRecordProjector: vi.fn().mockResolvedValue(mockAdapter)
       })
     }
   };
@@ -76,13 +76,13 @@ import { IndexerCommand } from './indexer-command';
 import { DependencyInjectionService } from '../../services/dependency-injection';
 
 // Mock console methods to capture output
-const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation();
-const mockConsoleError = jest.spyOn(console, 'error').mockImplementation();
-const mockProcessExit = jest.spyOn(process, 'exit').mockImplementation();
+const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation();
+const mockConsoleError = vi.spyOn(console, 'error').mockImplementation();
+const mockProcessExit = vi.spyOn(process, 'exit').mockImplementation();
 
 // Get access to the mocked DependencyInjectionService
-const mockDI = jest.mocked(DependencyInjectionService);
-let mockGetRecordProjector: jest.MockedFunction<any>;
+const mockDI = vi.mocked(DependencyInjectionService);
+let mockGetRecordProjector: Mock<any>;
 
 // Global reference to the mock adapter for easy access in tests
 let mockProjector: any;
@@ -92,14 +92,14 @@ describe('IndexerCommand - Complete Unit Tests', () => {
 
   beforeEach(async () => {
     // Reset all mocks
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     // Create fresh IndexerCommand instance
     indexerCommand = new IndexerCommand();
 
     // Get the mocked adapter from DI
     const diInstance = mockDI.getInstance();
-    mockGetRecordProjector = diInstance.getRecordProjector as jest.MockedFunction<any>;
+    mockGetRecordProjector = diInstance.getRecordProjector as Mock<any>;
 
     // Set up default successful responses
     mockProjector = await mockGetRecordProjector();

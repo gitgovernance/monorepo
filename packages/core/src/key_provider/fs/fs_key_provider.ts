@@ -72,8 +72,8 @@ export class FsKeyProvider implements KeyProvider {
   }
 
   /**
-   * [EARS-KP07] Derives and returns the raw Ed25519 public key from the stored private key.
-   * [EARS-KP08] Returns null if no private key exists for the actor.
+   * [EARS-FKP12] Derives and returns the raw Ed25519 public key from the stored private key.
+   * [EARS-FKP13] Returns null if no private key exists for the actor.
    * FsKeyProvider does not cache the public key — it's derived on-demand via ed25519 SPKI extraction.
    */
   async getPublicKey(actorId: string): Promise<string | null> {
