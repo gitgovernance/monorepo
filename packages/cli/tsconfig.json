@@ -28,13 +28,16 @@
     "jsx": "react-jsx",
     "jsxImportSource": "react",
     "types": [
-      "node",
-      "jest"
+      "node"
     ]
   },
   "include": [
     "src",
     "scripts",
     "e2e"
+  ],
+  "exclude": [
+    "src/**/*.test.ts",
+    "e2e/**/*.test.ts"
   ]
 }
