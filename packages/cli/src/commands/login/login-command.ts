@@ -54,6 +54,7 @@ function createDefaultDeps(): LoginDeps {
 
             if (token && login && id) {
               clearTimeout(timeoutHandle);
+              // [LOGIN-M1] Connection: close prevents socket hang
               res.writeHead(200, { 'Content-Type': 'text/html', 'Connection': 'close' });
               res.end('<html><body><h1>Login successful!</h1><p>You can close this window.</p></body></html>');
               server.close();
@@ -143,6 +144,7 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
       } else if (matchingKeys.length === 0) {
         actorId = `human:${user.login}`;
       } else {
+        // [LOGIN-A1b]
         actorId = await this.promptActorSelection(matchingKeys, user.login);
         actorType = actorId.startsWith('agent:') ? 'agent' : 'human';
       }
@@ -176,7 +178,7 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
         return;
       }
 
-      // Key sync: use local actorId for FsKeyProvider, GitHub identity for SaaS context
+      // [LOGIN-J3] Key sync: use local actorId for FsKeyProvider, GitHub identity for SaaS context
       await this.syncKeys(actorId, saasUrl, token, options);
 
       // [LOGIN-L1, LOGIN-L2] Push gitgov-state so SaaS can index ActorRecord
@@ -303,6 +305,7 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
     // [LOGIN-B1] CLI has key, SaaS does not → upload with ECDH
     if (hasLocal && !keyStatus.exists) {
       await this.uploadKeyToSaas(actorId, saasUrl, token, repo, keyStatus.ecdhPublicKey);
+      // [LOGIN-B2] Confirmation after sync
       this.handleSuccess(
         { loggedIn: true, user: actorId, keySynced: true },
         options,
@@ -343,7 +346,7 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
         if (options.forceLocal) {
           const syncResult = await this.uploadKeyToSaas(actorId, saasUrl, token, repo, keyStatus.ecdhPublicKey);
 
-          // [IKS-SUC8] Handle succession response — SaaS created a new versioned actor
+          // [LOGIN-N1] [IKS-SUC8] Handle succession response — SaaS created a new versioned actor
           if (syncResult.rotated && syncResult.newActorId) {
             const sessionManager = await this.dependencyService.getSessionManager();
             await sessionManager.setLastSession(syncResult.newActorId, new Date().toISOString());
@@ -430,8 +433,9 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
         timeout: 5000,
         env: { ...process.env, GIT_SSH_COMMAND: 'ssh -o ConnectTimeout=3 -o BatchMode=yes' },
       });
-    } catch {
-      // [LOGIN-L2] No local branch, no remote, offline, or permissions error
+    } catch (err) {
+      // [LOGIN-L1] Warning on push failure — does not fail login
+      console.warn('⚠️  Push gitgov-state failed:', err instanceof Error ? err.message : String(err));
     }
   }
 
