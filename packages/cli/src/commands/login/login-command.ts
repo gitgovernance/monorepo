@@ -153,6 +153,7 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
         actorId = matchingKeys[0]!;
         actorType = actorId.startsWith('agent:') ? 'agent' : 'human';
       } else if (matchingKeys.length === 0) {
+        // [LOGIN-J3b]
         actorId = `human:${user.login}`;
       } else {
         // [LOGIN-A1b]
