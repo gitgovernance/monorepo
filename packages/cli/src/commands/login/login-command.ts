@@ -95,6 +95,14 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
   // [LOGIN-A1] OAuth flow → open browser, start callback server, store session token
   async executeLogin(options: LoginCommandOptions): Promise<void> {
     try {
+      // [LOGIN-Q1] Validate git repo BEFORE opening browser
+      try {
+        const { execSync } = await import('child_process');
+        execSync('git rev-parse --git-dir', { cwd: process.cwd(), stdio: 'pipe', timeout: 5000 });
+      } catch {
+        throw new Error('Not in a git repository. Run gitgov login from inside a git project.');
+      }
+
       // [LOGIN-J1] [LOGIN-P1] Cloud-first bootstrap: fetch remote state branch so DI can discover it
       // Priority: --state-branch flag > existing worktree config > fallback 'gitgov-state'
       const stateBranchForFetch = options.stateBranch || await this.resolveStateBranchPreDI();
@@ -122,7 +130,10 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
       const oauthUrl = `${webUrl}/auth/cli?callback=http://localhost:${CALLBACK_PORT}/auth/callback`;
 
       console.log(`Opening browser for authentication at ${oauthUrl}`);
-      await this.deps.openBrowser(oauthUrl);
+      // [LOGIN-Q2] BROWSER=none suppresses system browser (E2E tests use Playwright)
+      if (process.env['BROWSER'] !== 'none') {
+        await this.deps.openBrowser(oauthUrl);
+      }
 
       // Wait for callback with token
       const { token, user } = await callbackPromise;

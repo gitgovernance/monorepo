@@ -1013,4 +1013,58 @@ describe('LoginCommand v2', () => {
       expect(defaultFetchCalls.length).toBe(0);
     });
   });
+
+  // ==========================================================================
+  // §4.16. Pre-browser Git Validation (LOGIN-Q1, Q2)
+  // ==========================================================================
+  describe('4.16. Pre-browser Git Validation (LOGIN-Q1, Q2)', () => {
+    it('[LOGIN-Q1] should exit 1 without opening browser when not in git repo', async () => {
+      const { execSync } = await import('child_process');
+      const mockExecSync = execSync as Mock<typeof execSync>;
+      mockExecSync.mockImplementation((cmd: string) => {
+        if (typeof cmd === 'string' && cmd.includes('git rev-parse --git-dir')) {
+          throw new Error('fatal: not a git repository');
+        }
+        return 'https://github.com/testorg/testrepo.git\n';
+      });
+
+      const deps = createMockDeps();
+      const cmd = new LoginCommand(deps);
+      await cmd.executeLogin(defaultOptions);
+
+      expect(deps.openBrowser).not.toHaveBeenCalled();
+      expect(mockConsoleError).toHaveBeenCalledWith(
+        expect.stringContaining('Not in a git repository'),
+      );
+
+      mockExecSync.mockReturnValue('https://github.com/testorg/testrepo.git\n');
+    });
+
+    it('[LOGIN-Q2] should not open browser when BROWSER=none is set', async () => {
+      // Ensure git check passes (restore from Q1 contamination)
+      const { execSync } = await import('child_process');
+      (execSync as Mock<typeof execSync>).mockReturnValue('https://github.com/testorg/testrepo.git\n');
+
+      const originalBrowser = process.env['BROWSER'];
+      process.env['BROWSER'] = 'none';
+
+      mockGetCurrentActor.mockResolvedValue(null);
+      mockGetConfig.mockResolvedValue({ saasUrl: 'https://app.gitgov.dev' });
+
+      const deps = createMockDeps({
+        fetchSaas: createTrpcFetch({
+          'keyStatus': keyStatusWith(null),
+          'syncKey': { success: true, actorId: 'human:camilo', mode: 'full' },
+        }),
+      });
+
+      const cmd = new LoginCommand(deps);
+      await cmd.executeLogin(defaultOptions);
+
+      expect(deps.openBrowser).not.toHaveBeenCalled();
+
+      if (originalBrowser === undefined) delete process.env['BROWSER'];
+      else process.env['BROWSER'] = originalBrowser;
+    });
+  });
 });
