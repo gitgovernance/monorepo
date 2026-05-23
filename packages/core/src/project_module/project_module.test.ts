@@ -199,6 +199,31 @@ describe('ProjectModule', () => {
       );
     });
 
+    it('[PROJ-C2b] should create root cycle with a deterministic id (not Date.now-based)', async () => {
+      const { deps, backlog } = createRealDeps();
+      const pm = new ProjectModule(deps);
+
+      await pm.initializeProject({ name: 'Test Project', login: 'dev' });
+
+      // The root cycle ID must be the deterministic sentinel so two inits of the same repo
+      // produce a byte-identical config.json (no gitgov-state divergence).
+      expect(backlog.createCycle).toHaveBeenCalledWith(
+        expect.objectContaining({ id: '0000000000-cycle-root', title: 'root' }),
+        expect.any(String),
+      );
+    });
+
+    it('[PROJ-C2b] two inits request the same deterministic root cycle id', async () => {
+      const a = createRealDeps();
+      const b = createRealDeps();
+      await new ProjectModule(a.deps).initializeProject({ name: 'Same Repo', login: 'dev' });
+      await new ProjectModule(b.deps).initializeProject({ name: 'Same Repo', login: 'dev' });
+
+      const idA = (a.backlog.createCycle.mock.calls[0][0] as { id: string }).id;
+      const idB = (b.backlog.createCycle.mock.calls[0][0] as { id: string }).id;
+      expect(idA).toBe(idB); // deterministic — no timestamp drift between inits
+    });
+
     it('[PROJ-C3] should call finalize and return commitSha', async () => {
       const { deps, initializer } = createRealDeps();
       const pm = new ProjectModule(deps);

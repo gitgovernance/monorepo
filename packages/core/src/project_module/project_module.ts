@@ -1,6 +1,13 @@
 import type { ProjectModuleDeps, ProjectInitOptions, ProjectInitResult, EnsureActorInput, EnsureActorResult } from './project_module.types';
 import { EnsureActorError } from './project_module.types';
 
+// [PROJ-C2b] Deterministic root cycle ID. The root cycle is unique per project, so its ID
+// must be stable across inits (not Date.now()). Two inits of the same repo then produce a
+// byte-identical config.json (rootCycle field), so gitgov-state cannot diverge → no conflict.
+// The 10-zero prefix is a sentinel ("not a real timestamp") satisfying the cycle ID schema
+// ^\d{10}-cycle-[a-z0-9-]{1,50}$. Per-repo scope means no cross-repo collision.
+const ROOT_CYCLE_ID = '0000000000-cycle-root';
+
 export class ProjectModule {
   constructor(private readonly deps: ProjectModuleDeps) {}
 
@@ -10,7 +17,9 @@ export class ProjectModule {
     const repoId = options.repoId ?? '';
 
     // [PROJ-A2] Idempotency — if already initialized, ensure caller's actor exists
-    if (await this.deps.initializer.isInitialized()) {
+    const _diagInit = await this.deps.initializer.isInitialized();
+    console.error(`[DIAG-INIT] initializeProject called: isInitialized=${_diagInit} login=${options.login} joinedVia=${joinedVia} stateBranch=${options.stateBranch}`);
+    if (_diagInit) {
       const commitSha = await this.deps.initializer.getHeadSha();
       if (options.login) {
         const ensureInput: EnsureActorInput = {
@@ -61,12 +70,14 @@ export class ProjectModule {
         throw new Error(`Init failed at step createProductAgent: ${message}`);
       }
 
-      // Root cycle
+      // Root cycle — [PROJ-C2b] deterministic ID so two inits converge on identical config.json
       const rootCycle = await this.deps.backlog.createCycle({
+        id: ROOT_CYCLE_ID,
         title: 'root',
         status: 'planning' as const,
         taskIds: [],
       }, humanResult.actorId);
+      console.error(`[DIAG-INIT] CREATED NEW rootCycle=${rootCycle.id} (isInitialized was false → full init ran)`);
 
       // [PROJ-C2] Config
       const config = {

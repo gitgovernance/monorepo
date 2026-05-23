@@ -763,7 +763,10 @@ describe('LoginCommand v2', () => {
       const cmd = new LoginCommand(deps);
       await cmd.executeLogin(defaultOptions);
 
-      // Login should still succeed despite push failure
+      expect(mockConsoleWarn).toHaveBeenCalledWith(
+        expect.stringContaining('Push gitgov-state failed'),
+        expect.any(String),
+      );
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('Logged in as'));
     });
   });
