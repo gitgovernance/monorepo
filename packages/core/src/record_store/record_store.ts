@@ -43,6 +43,12 @@ export interface RecordStore<V, R = void, O = void> {
    */
   put(id: string, value: V, ...opts: O extends void ? [] : [opts?: O]): Promise<R>;
 
+  // [EARS-A13] Stages a record for a posterior commit without committing immediately.
+  // Backends without transaction-boundary (Fs, Memory) persist immediately (= put).
+  // GitHub backend serializes + gitModule.add (stage) without commit — the caller
+  // commits via finalize() or gitModule.commit(). Closes IKS-P9.
+  putDeferred(id: string, value: V, ...opts: O extends void ? [] : [opts?: O]): Promise<R>;
+
   /**
    * Persists multiple records in a single operation.
    * Local backends iterate sequentially; GitHub backend uses atomic commits.

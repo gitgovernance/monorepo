@@ -429,4 +429,35 @@ describe('IdentityModule', () => {
       expect(eventBus.publish).not.toHaveBeenCalled();
     });
   });
+
+  describe('4.7. Deferred Persistence — UoW Participation (IDM-G1)', () => {
+    it('[IDM-G1] should use putDeferred when defer option is true', async () => {
+      const putDeferredSpy = jest.spyOn(store, 'putDeferred');
+
+      await identityModule.createActor(
+        { type: 'human', displayName: 'Deferred User' },
+        'self',
+        { defer: true },
+      );
+
+      expect(putDeferredSpy).toHaveBeenCalledTimes(1);
+      expect(putDeferredSpy).toHaveBeenCalledWith(
+        expect.stringContaining('human:'),
+        expect.objectContaining({ header: expect.any(Object), payload: expect.any(Object) }),
+      );
+    });
+
+    it('[IDM-G1] should use put when defer option is not set', async () => {
+      const putDeferredSpy = jest.spyOn(store, 'putDeferred');
+      const putSpy = jest.spyOn(store, 'put');
+
+      await identityModule.createActor(
+        { type: 'human', displayName: 'Normal User' },
+        'self',
+      );
+
+      expect(putSpy).toHaveBeenCalled();
+      expect(putDeferredSpy).not.toHaveBeenCalled();
+    });
+  });
 });

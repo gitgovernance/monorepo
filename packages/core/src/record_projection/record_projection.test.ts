@@ -208,6 +208,7 @@ describe('RecordProjector', () => {
       tasks: {
         get: jest.fn(),
         put: jest.fn().mockResolvedValue(undefined),
+        putDeferred: jest.fn().mockResolvedValue(undefined),
         putMany: jest.fn().mockResolvedValue(undefined),
         delete: jest.fn().mockResolvedValue(undefined),
         list: jest.fn(),
@@ -216,6 +217,7 @@ describe('RecordProjector', () => {
       cycles: {
         get: jest.fn(),
         put: jest.fn().mockResolvedValue(undefined),
+        putDeferred: jest.fn().mockResolvedValue(undefined),
         putMany: jest.fn().mockResolvedValue(undefined),
         delete: jest.fn().mockResolvedValue(undefined),
         list: jest.fn(),
@@ -224,6 +226,7 @@ describe('RecordProjector', () => {
       actors: {
         get: jest.fn(),
         put: jest.fn().mockResolvedValue(undefined),
+        putDeferred: jest.fn().mockResolvedValue(undefined),
         putMany: jest.fn().mockResolvedValue(undefined),
         delete: jest.fn().mockResolvedValue(undefined),
         list: jest.fn(),
@@ -232,6 +235,7 @@ describe('RecordProjector', () => {
       feedbacks: {
         get: jest.fn().mockResolvedValue(null),
         put: jest.fn().mockResolvedValue(undefined),
+        putDeferred: jest.fn().mockResolvedValue(undefined),
         putMany: jest.fn().mockResolvedValue(undefined),
         delete: jest.fn().mockResolvedValue(undefined),
         list: jest.fn().mockResolvedValue([]),
@@ -240,6 +244,7 @@ describe('RecordProjector', () => {
       executions: {
         get: jest.fn().mockResolvedValue(null),
         put: jest.fn().mockResolvedValue(undefined),
+        putDeferred: jest.fn().mockResolvedValue(undefined),
         putMany: jest.fn().mockResolvedValue(undefined),
         delete: jest.fn().mockResolvedValue(undefined),
         list: jest.fn().mockResolvedValue([]),
@@ -248,6 +253,7 @@ describe('RecordProjector', () => {
       agents: {
         get: jest.fn().mockResolvedValue(null),
         put: jest.fn().mockResolvedValue(undefined),
+        putDeferred: jest.fn().mockResolvedValue(undefined),
         putMany: jest.fn().mockResolvedValue(undefined),
         delete: jest.fn().mockResolvedValue(undefined),
         list: jest.fn().mockResolvedValue([]),

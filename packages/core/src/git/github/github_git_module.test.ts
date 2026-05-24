@@ -533,7 +533,7 @@ describe('GitHubGitModule', () => {
         data: { ref: 'refs/heads/new-branch', object: { sha: 'start-sha-123' } },
       });
 
-      await git.createBranch('new-branch', 'main');
+      await git.createBranch('new-branch', { startPoint: 'main' });
 
       expect(mockOctokit.rest.git.createRef).toHaveBeenCalledWith({
         owner: 'test-org',
@@ -551,7 +551,7 @@ describe('GitHubGitModule', () => {
       // Create branch fails with 422
       mockOctokit.rest.git.createRef.mockRejectedValue(createOctokitError(422, 'Reference already exists'));
 
-      await expect(git.createBranch('existing-branch', 'main'))
+      await expect(git.createBranch('existing-branch', { startPoint: 'main' }))
         .rejects.toThrow(BranchAlreadyExistsError);
     });
 
@@ -583,6 +583,78 @@ describe('GitHubGitModule', () => {
         ref: 'refs/heads/gitgov-state',
         sha: 'main-sha-456',
       });
+    });
+
+    it('[EARS-C6c] should set orphanPending and activeRef without API calls', async () => {
+      await git.createBranch('gitgov-state', { orphan: true });
+
+      // No API calls — orphan is deferred to commit()
+      expect(mockOctokit.rest.git.createRef).not.toHaveBeenCalled();
+      expect(mockOctokit.rest.git.createTree).not.toHaveBeenCalled();
+      expect(mockOctokit.rest.git.createCommit).not.toHaveBeenCalled();
+      expect(mockOctokit.rest.git.getRef).not.toHaveBeenCalled();
+    });
+
+    it('[EARS-C6c] should create orphan root commit with only staged files and no parents', async () => {
+      // Setup: orphan + stage files + commit
+      await git.createBranch('orphan-branch', { orphan: true });
+
+      mockOctokit.rest.git.createBlob.mockResolvedValue({ data: { sha: 'blob-sha' } });
+      mockOctokit.rest.git.createTree.mockResolvedValue({ data: { sha: 'tree-sha' } });
+      mockOctokit.rest.git.createCommit.mockResolvedValue({ data: { sha: 'orphan-commit-sha' } });
+      mockOctokit.rest.git.createRef.mockResolvedValue({ data: {} });
+
+      await git.add(['.gitgov/config.json'], { contentMap: { '.gitgov/config.json': '{}' } });
+      const sha = await git.commit('gitgov: remote init', { name: 'bot', email: 'bot@test.com' });
+
+      expect(sha).toBe('orphan-commit-sha');
+      // createTree WITHOUT base_tree (only staged files, no main inheritance)
+      expect(mockOctokit.rest.git.createTree).toHaveBeenCalledWith({
+        owner: 'test-org',
+        repo: 'test-repo',
+        tree: [{ path: '.gitgov/config.json', mode: '100644', type: 'blob', sha: 'blob-sha' }],
+      });
+      // createCommit with parents:[] (orphan root)
+      expect(mockOctokit.rest.git.createCommit).toHaveBeenCalledWith(
+        expect.objectContaining({ parents: [] }),
+      );
+      // createRef (not updateRef — branch didn't exist)
+      expect(mockOctokit.rest.git.createRef).toHaveBeenCalledWith({
+        owner: 'test-org',
+        repo: 'test-repo',
+        ref: 'refs/heads/orphan-branch',
+        sha: 'orphan-commit-sha',
+      });
+      expect(mockOctokit.rest.git.updateRef).not.toHaveBeenCalled();
+    });
+
+    it('[EARS-C6c] should reset orphanPending after successful orphan commit', async () => {
+      await git.createBranch('orphan-branch', { orphan: true });
+
+      // First commit: orphan (createRef)
+      mockOctokit.rest.git.createBlob.mockResolvedValue({ data: { sha: 'b1' } });
+      mockOctokit.rest.git.createTree.mockResolvedValue({ data: { sha: 't1' } });
+      mockOctokit.rest.git.createCommit.mockResolvedValue({ data: { sha: 'c1' } });
+      mockOctokit.rest.git.createRef.mockResolvedValue({ data: {} });
+
+      await git.add(['.gitgov/test.json'], { contentMap: { '.gitgov/test.json': '{}' } });
+      await git.commit('first');
+
+      // Second commit: normal (updateRef, not createRef)
+      mockOctokit.rest.git.getRef.mockResolvedValue({ data: { object: { sha: 'c1' } } });
+      mockOctokit.rest.git.getCommit.mockResolvedValue({ data: { tree: { sha: 't1' } } });
+      mockOctokit.rest.git.createBlob.mockResolvedValue({ data: { sha: 'b2' } });
+      mockOctokit.rest.git.createTree.mockResolvedValue({ data: { sha: 't2' } });
+      mockOctokit.rest.git.createCommit.mockResolvedValue({ data: { sha: 'c2' } });
+      mockOctokit.rest.git.updateRef.mockResolvedValue({ data: {} });
+
+      await git.add(['.gitgov/another.json'], { contentMap: { '.gitgov/another.json': '{}' } });
+      await git.commit('second');
+
+      // Second commit used updateRef (not createRef) — orphanPending was reset
+      expect(mockOctokit.rest.git.updateRef).toHaveBeenCalledTimes(1);
+      // createRef was called only once (for the orphan commit)
+      expect(mockOctokit.rest.git.createRef).toHaveBeenCalledTimes(1);
     });
 
     it('[EARS-C7] should return staged file paths from buffer', async () => {
@@ -703,7 +775,7 @@ describe('GitHubGitModule', () => {
       });
       mockOctokit.rest.git.createRef.mockRejectedValue(createOctokitError(422, 'Reference already exists'));
 
-      await expect(git.createBranch('existing', 'main')).rejects.toThrow(BranchAlreadyExistsError);
+      await expect(git.createBranch('existing', { startPoint: 'main' })).rejects.toThrow(BranchAlreadyExistsError);
     });
 
     it('[EARS-E4] should throw GitError with non-fast-forward message on updateRef 422', async () => {

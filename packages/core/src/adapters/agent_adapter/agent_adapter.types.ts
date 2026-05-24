@@ -41,7 +41,7 @@ export interface IAgentAdapter {
    * @throws Error if corresponding ActorRecord not found
    * @throws Error if ActorRecord type is not 'agent'
    */
-  createAgentRecord(payload: Partial<AgentPayload>): Promise<AgentRecord>;
+  createAgentRecord(payload: Partial<AgentPayload>, options?: { defer?: boolean }): Promise<AgentRecord>;
 
   /**
    * Gets an AgentRecord by ID.

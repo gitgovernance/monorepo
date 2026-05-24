@@ -456,6 +456,7 @@ describe('ProjectModule', () => {
           status: 'active',
           engine: expect.objectContaining({ entrypoint: 'packages/core/dist/index.mjs' }),
         }),
+        { defer: true },
       );
     });
 

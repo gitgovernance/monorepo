@@ -16,7 +16,7 @@ export type DefaultAgentConfig = {
 
 export interface IProjectAgentOps {
   getAgentRecord(agentId: string): Promise<AgentRecord | null>;
-  createAgentRecord(payload: Partial<AgentPayload>): Promise<AgentRecord>;
+  createAgentRecord(payload: Partial<AgentPayload>, options?: { defer?: boolean }): Promise<AgentRecord>;
   updateAgentRecord(agentId: string, updates: Partial<AgentPayload>): Promise<AgentRecord>;
 }
 
@@ -60,6 +60,7 @@ export type EnsureActorInput = {
   joinedVia: 'cli' | 'saas-oauth' | 'saas-webhook' | 'mcp';
   authzCheck?: (input: EnsureActorInput) => Promise<boolean>;
   skipFinalize?: boolean;
+  defer?: boolean;
 };
 
 export type EnsureActorResult = {

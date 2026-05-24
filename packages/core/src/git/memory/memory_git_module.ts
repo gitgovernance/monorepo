@@ -440,7 +440,10 @@ export class MemoryGitModule implements IGitModule {
     this.state.conflictedFiles = [];
   }
 
-  async createBranch(branchName: string, _startPoint?: string): Promise<void> {
+  async createBranch(branchName: string, options?: { startPoint?: string; orphan?: boolean }): Promise<void> {
+    if (options?.orphan) {
+      throw new Error('createBranch with orphan is not supported in MemoryGitModule');
+    }
     if (this.state.branches.has(branchName)) {
       throw new BranchAlreadyExistsError(branchName);
     }

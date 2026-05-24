@@ -73,7 +73,8 @@ export class GitHubProjectInitializer implements IProjectInitializer {
     this.branchExistsCache = null;
     if (!exists) {
       // startPoint undefined → create from default branch via GitHubGitModule semantics
-      await this.gitModule.createBranch(this.branch, undefined);
+      // [GPI01] [EARS-C6c] Orphan branch — satellite with only .gitgov/ files
+      await this.gitModule.createBranch(this.branch, { orphan: true });
       this.branchCreatedByThisInit = true;
     }
 
@@ -170,7 +171,7 @@ export class GitHubProjectInitializer implements IProjectInitializer {
     return await this.gitModule.commit(this.commitMessage, this.commitAuthor);
   }
 
-  // [EARS-PI12] Returns HEAD SHA of gitgov-state branch
+  // [GPI15] Returns HEAD SHA of gitgov-state branch (maps to PI12)
   async getHeadSha(): Promise<string | undefined> {
     try {
       return await this.gitModule.getCommitHash(this.branch);

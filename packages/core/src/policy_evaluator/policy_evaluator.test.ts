@@ -697,6 +697,7 @@ describe("PolicyEvaluator", () => {
           return recordsMap.get(id) ?? null;
         }),
         put: jest.fn().mockResolvedValue(undefined),
+        putDeferred: jest.fn().mockResolvedValue(undefined),
         putMany: jest.fn().mockResolvedValue(undefined),
         delete: jest.fn().mockResolvedValue(undefined),
         list: jest.fn().mockResolvedValue([...recordsMap.keys()]),

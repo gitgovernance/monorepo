@@ -140,6 +140,7 @@ function createMockDeps(overrides?: Partial<AuditOrchestratorDeps>): AuditOrches
     list: jest.fn().mockResolvedValue([]),
     get: jest.fn().mockResolvedValue(null),
     put: jest.fn().mockResolvedValue(undefined),
+    putDeferred: jest.fn().mockResolvedValue(undefined),
     putMany: jest.fn().mockResolvedValue(undefined),
     delete: jest.fn().mockResolvedValue(undefined),
     exists: jest.fn().mockResolvedValue(false),

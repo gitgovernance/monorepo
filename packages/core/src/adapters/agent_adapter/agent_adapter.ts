@@ -43,7 +43,7 @@ export class AgentAdapter implements IAgentAdapter {
    * [EARS-A4] Throws if ActorRecord type is not 'agent'.
    * [EARS-A5] Emits event on success.
    */
-  async createAgentRecord(payload: Partial<AgentPayload>): Promise<AgentRecord> {
+  async createAgentRecord(payload: Partial<AgentPayload>, options?: { defer?: boolean }): Promise<AgentRecord> {
     // [EARS-A2] Validate required fields
     if (!payload.id || !payload.engine) {
       throw new Error('AgentRecord requires id and engine');
@@ -117,8 +117,12 @@ export class AgentAdapter implements IAgentAdapter {
       return signerActor?.publicKey || null;
     });
 
-    // Store the record
-    await this.stores.agents.put(record.payload.id, record);
+    // [EARS-F1] Store the record — defer stages for posterior commit (UoW participation)
+    if (options?.defer) {
+      await this.stores.agents.putDeferred(record.payload.id, record);
+    } else {
+      await this.stores.agents.put(record.payload.id, record);
+    }
 
     // [EARS-A5] Emit agent registered event
     if (this.eventBus) {

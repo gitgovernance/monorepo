@@ -168,32 +168,12 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
       // [LOGIN-O1] Materialize actor BEFORE key sync — generates keypair if collaborator is new
       try {
         const projectModule = await this.dependencyService.getProjectModule();
-        // [DIAG] Capture worktree state right after bootstrap, before ensureActorInProject
-        try {
-          const { findProjectRoot, getWorktreeBasePath } = await import('@gitgov/core/fs');
-          const fsmod = await import('fs');
-          const pr = findProjectRoot(process.cwd());
-          if (pr) {
-            const wt = getWorktreeBasePath(fsmod.realpathSync(pr));
-            const actorsDir = `${wt}/.gitgov/actors`;
-            const keysDir = `${wt}/.gitgov/keys`;
-            const actors = fsmod.existsSync(actorsDir) ? fsmod.readdirSync(actorsDir).join(',') : 'NONE';
-            const keys = fsmod.existsSync(keysDir) ? fsmod.readdirSync(keysDir).join(',') : 'NONE';
-            console.error(`[DIAG] post-bootstrap worktree=${wt}`);
-            console.error(`[DIAG] post-bootstrap actors=[${actors}]`);
-            console.error(`[DIAG] post-bootstrap keys=[${keys}]`);
-            console.error(`[DIAG] resolved actorId=${actorId} (will ensureActorInProject login=${user.login} type=${actorType})`);
-          }
-        } catch (e) { console.error('[DIAG] capture failed:', e instanceof Error ? e.message : String(e)); }
-
-        const before = await projectModule.ensureActorInProject({
+        await projectModule.ensureActorInProject({
           login: user.login,
           type: actorType,
           repoId: '',
           joinedVia: 'saas-oauth',
         });
-        console.error(`[DIAG] ensureActorInProject result: created=${before.created} actorId=${before.actorId}`);
-        await this.diagCapture('post-ensureActor');
       } catch (err) {
         // [LOGIN-O2] Warn and continue to syncKeys — if keypair wasn't generated, syncKeys handles case e
         console.warn('⚠️  Actor materialization failed:', err instanceof Error ? err.message : String(err));
@@ -212,11 +192,9 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
 
       // [LOGIN-J3] Key sync: use local actorId for FsKeyProvider, GitHub identity for SaaS context
       await this.syncKeys(actorId, saasUrl, token, options);
-      await this.diagCapture('post-syncKeys');
 
       // [LOGIN-L1, LOGIN-L2] Push gitgov-state so SaaS can index ActorRecord
       await this.pushGitgovState();
-      await this.diagCapture('post-pushGitgovState');
 
     } catch (error) {
       this.handleError(
@@ -326,9 +304,6 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
 
     const hasLocal = await this.hasLocalKey(actorId);
     const keyStatus = await this.getKeyStatus(saasUrl, token, repo);
-
-    // [DIAG] Capture key state before sync branching
-    console.error(`[DIAG] syncKeys actorId=${actorId} hasLocal=${hasLocal} saas.exists=${keyStatus.exists} saas.hasPrivateKey=${keyStatus.hasPrivateKey} saas.publicKey=${keyStatus.publicKey?.slice(0, 12) ?? 'null'}`);
 
     // [LOGIN-K1] Repo not connected — keyStatus returned fallback (empty ecdhPublicKey)
     if (!keyStatus.exists && keyStatus.ecdhPublicKey === '') {
@@ -458,25 +433,6 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
    * [LOGIN-L2] Skip silently if branch doesn't exist locally (cloud-first flow).
    * Best-effort — logs warning on failure but does not fail the login.
    */
-  // [DIAG] Temporary instrumentation — capture worktree state at a transition point
-  private async diagCapture(label: string): Promise<void> {
-    try {
-      const { findProjectRoot, getWorktreeBasePath } = await import('@gitgov/core/fs');
-      const fsmod = await import('fs');
-      const cp = await import('child_process');
-      const pr = findProjectRoot(process.cwd());
-      if (!pr) { console.error(`[DIAG] ${label}: no project root`); return; }
-      const wt = getWorktreeBasePath(fsmod.realpathSync(pr));
-      const actorsDir = `${wt}/.gitgov/actors`;
-      const keysDir = `${wt}/.gitgov/keys`;
-      const actors = fsmod.existsSync(actorsDir) ? fsmod.readdirSync(actorsDir).join(',') : 'NONE';
-      const keys = fsmod.existsSync(keysDir) ? fsmod.readdirSync(keysDir).join(',') : 'NONE';
-      let gitlog = 'n/a';
-      try { gitlog = cp.execSync('git log --oneline -3', { cwd: wt, encoding: 'utf8' }).trim().replace(/\n/g, ' | '); } catch { /* ignore */ }
-      console.error(`[DIAG] ${label} actors=[${actors}] keys=[${keys}] gitlog="${gitlog}"`);
-    } catch (e) { console.error(`[DIAG] ${label} capture failed:`, e instanceof Error ? e.message : String(e)); }
-  }
-
   private async pushGitgovState(): Promise<void> {
     try {
       const configManager = await this.dependencyService.getConfigManager();

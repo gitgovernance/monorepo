@@ -101,6 +101,19 @@ export class GitHubRecordStore<V> implements RecordStore<V, GitHubWriteResult, G
     }
   }
 
+  // [EARS-D1] Stage record for posterior commit via gitModule.add — no commit.
+  // Reuses buildFilePath + idEncoder (no path duplication). Requires gitModule injected.
+  async putDeferred(id: string, value: V): Promise<GitHubWriteResult> {
+    this.validateId(id);
+    if (!this.gitModule) {
+      throw new Error('putDeferred requires IGitModule dependency for staging');
+    }
+    const filePath = this.buildFilePath(id);
+    const content = JSON.stringify(value, null, 2);
+    await this.gitModule.add([filePath], { contentMap: { [filePath]: content } });
+    return {};
+  }
+
   /**
    * [EARS-A11, EARS-A12, EARS-B8] Persists multiple records in a single atomic commit.
    * Uses GitHubGitModule staging buffer: add() with contentMap, then commit().

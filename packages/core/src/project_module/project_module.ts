@@ -17,9 +17,8 @@ export class ProjectModule {
     const repoId = options.repoId ?? '';
 
     // [PROJ-A2] Idempotency — if already initialized, ensure caller's actor exists
-    const _diagInit = await this.deps.initializer.isInitialized();
-    console.error(`[DIAG-INIT] initializeProject called: isInitialized=${_diagInit} login=${options.login} joinedVia=${joinedVia} stateBranch=${options.stateBranch}`);
-    if (_diagInit) {
+    const isInit = await this.deps.initializer.isInitialized();
+    if (isInit) {
       const commitSha = await this.deps.initializer.getHeadSha();
       if (options.login) {
         const ensureInput: EnsureActorInput = {
@@ -50,6 +49,7 @@ export class ProjectModule {
         roles: ['admin', 'author', 'approver:product', 'approver:quality', 'developer'],
         joinedVia,
         skipFinalize: true,
+        defer: true,
       });
 
       // [PROJ-B2] Product agent (G21 Two-Tier Actor Model) — via ensureActorInProject
@@ -59,6 +59,7 @@ export class ProjectModule {
           login: 'gitgov-audit',
           type: 'agent',
           skipFinalize: true,
+          defer: true,
           repoId,
           displayName: 'GitGov Audit',
           roles: ['orchestrator'],
@@ -77,7 +78,6 @@ export class ProjectModule {
         status: 'planning' as const,
         taskIds: [],
       }, humanResult.actorId);
-      console.error(`[DIAG-INIT] CREATED NEW rootCycle=${rootCycle.id} (isInitialized was false → full init ran)`);
 
       // [PROJ-C2] Config
       const config = {
@@ -108,6 +108,7 @@ export class ProjectModule {
                 displayName: agentConfig.displayName,
                 joinedVia,
                 skipFinalize: true,
+                defer: true,
               });
             }
 
@@ -133,7 +134,7 @@ export class ProjectModule {
                 triggers: agentConfig.triggers,
                 // [PROJ-E4] Purpose merged into AgentRecord metadata
                 metadata: mergedMetadata,
-              });
+              }, { defer: true });
             }
           } catch {
             // [PROJ-B5] [PROJ-E2] [GAUD-E3] Non-fatal — agent create/update failure doesn't block init
@@ -216,7 +217,7 @@ export class ProjectModule {
         joinedVia: input.joinedVia,
         joinedAt: new Date().toISOString(),
       },
-    }, 'bootstrap');
+    }, 'bootstrap', input.defer ? { defer: true } : undefined);
 
     // [PROJ-H3] Finalize commits the actor to git.
     // When skipFinalize is set (called from initializeProject), the caller
