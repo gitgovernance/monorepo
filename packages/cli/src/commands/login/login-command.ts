@@ -165,29 +165,59 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
 
       console.log(`Logged in as ${user.login} (${actorId})`);
 
-      // [LOGIN-O1] Materialize actor BEFORE key sync — generates keypair if collaborator is new
-      try {
-        const projectModule = await this.dependencyService.getProjectModule();
-        await projectModule.ensureActorInProject({
-          login: user.login,
-          type: actorType,
-          repoId: '',
-          joinedVia: 'saas-oauth',
-        });
-      } catch (err) {
-        // [LOGIN-O2] Warn and continue to syncKeys — if keypair wasn't generated, syncKeys handles case e
-        console.warn('⚠️  Actor materialization failed:', err instanceof Error ? err.message : String(err));
-        console.warn('   Key sync may fail if no local key exists.');
-      }
-
       // [LOGIN-B3] Skip key sync if --no-key-sync
+      // Materializes actor locally (LOGIN-O1) but does NOT contact SaaS for key state.
       if (options.noKeySync) {
+        try {
+          const projectModule = await this.dependencyService.getProjectModule();
+          await projectModule.ensureActorInProject({
+            login: user.login,
+            type: actorType,
+            repoId: '',
+            joinedVia: 'saas-oauth',
+          });
+        } catch (err) {
+          console.warn('⚠️  Actor materialization failed:', err instanceof Error ? err.message : String(err));
+        }
         this.handleSuccess(
           { loggedIn: true, user: user.login, actorId, keySynced: false },
           options,
           `Logged in (key sync skipped)`
         );
         return;
+      }
+
+      // [LOGIN-R1] [LOGIN-R2] Identity convergence: check SaaS key state BEFORE materializing.
+      // If SaaS already has the key, skip ensureActorInProject (avoids generating a competing keypair).
+      // The actual download happens in syncKeys (case b/C1) — here we only CHECK.
+      let skipActorMaterialization = false;
+      try {
+        const repo = await this.resolveRepoIdentity();
+        const keyStatus = await this.getKeyStatus(saasUrl, token, repo);
+        // [LOGIN-R1] SaaS has key → syncKeys will download it (case b). Skip ensureActorInProject.
+        if (keyStatus.exists && keyStatus.publicKey) {
+          skipActorMaterialization = true;
+        }
+      } catch {
+        // Non-fatal: SaaS unreachable or repo not connected — fall through to LOGIN-O1
+      }
+
+      if (!skipActorMaterialization) {
+        // [LOGIN-R2] SaaS has no key → materialize actor (generates keypair)
+        // [LOGIN-O1] Materialize actor BEFORE key sync — generates keypair if collaborator is new
+        try {
+          const projectModule = await this.dependencyService.getProjectModule();
+          await projectModule.ensureActorInProject({
+            login: user.login,
+            type: actorType,
+            repoId: '',
+            joinedVia: 'saas-oauth',
+          });
+        } catch (err) {
+          // [LOGIN-O2] Warn and continue to syncKeys — if keypair wasn't generated, syncKeys handles case e
+          console.warn('⚠️  Actor materialization failed:', err instanceof Error ? err.message : String(err));
+          console.warn('   Key sync may fail if no local key exists.');
+        }
       }
 
       // [LOGIN-J3] Key sync: use local actorId for FsKeyProvider, GitHub identity for SaaS context

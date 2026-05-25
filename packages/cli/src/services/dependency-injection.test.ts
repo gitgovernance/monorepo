@@ -949,6 +949,31 @@ describe('DependencyInjectionService', () => {
       expect(projector.generateIndex).toHaveBeenCalledTimes(1);
     });
 
+    it('[LOGIN-R3] should fetch with refspec to update local branch when it exists', async () => {
+      mockFs.promises.access.mockRejectedValue(new Error('.gitgov directory not found'));
+
+      const mockGitModule = new Git.GitModule({
+        repoRoot: mockRepoRoot,
+        execCommand: vi.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' })
+      });
+      mockGitModule.getRepoRoot = vi.fn().mockResolvedValue(mockRepoRoot);
+      mockGitModule.branchExists = vi.fn().mockResolvedValue(true);
+      mockGitModule.exec = vi.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+
+      diService.getGitModule = vi.fn().mockResolvedValue(mockGitModule);
+
+      await diService.getRecordProjector();
+
+      const execCalls = (mockGitModule.exec as ReturnType<typeof vi.fn>).mock.calls;
+      // fetch origin X:X updates the local ref directly without checkout/merge
+      const fetchCall = execCalls.find((c: string[][]) => c[1]?.[0] === 'fetch' && c[1]?.[2]?.includes(':'));
+      expect(fetchCall).toBeDefined();
+      expect(fetchCall![1]).toEqual(['fetch', 'origin', 'gitgov-state:gitgov-state']);
+      // no merge call — refspec update is sufficient
+      const mergeCall = execCalls.find((c: string[][]) => c[1]?.includes('--ff-only'));
+      expect(mergeCall).toBeUndefined();
+    });
+
     it('[EARS-D2] should NOT call generateIndex() when worktree .gitgov/ already exists', async () => {
       // Mock fs.access to succeed (worktree .gitgov exists)
       mockFs.promises.access.mockResolvedValue(undefined);

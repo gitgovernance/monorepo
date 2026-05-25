@@ -173,6 +173,15 @@ export class DependencyInjectionService {
         // Neither exists — not initialized
         throw new Error("❌ GitGovernance not initialized. Run 'gitgov init' first.");
       }
+    } else {
+      // [LOGIN-R3] Branch exists locally — update ref to match remote.
+      // fetch origin X:X updates the local ref without checkout (no merge in user's branch).
+      // ff-only implicit: if local has divergent commits, git rejects the update (preserves local work).
+      try {
+        await gitModule.exec('git', ['fetch', 'origin', `${stateBranch}:${stateBranch}`]);
+      } catch {
+        // Non-fatal: offline, no remote, or diverged — proceed with local branch as-is
+      }
     }
 
     // Create worktree

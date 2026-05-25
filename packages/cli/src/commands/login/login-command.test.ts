@@ -310,6 +310,8 @@ describe('LoginCommand v2', () => {
 
       expect(mockSetCloudToken).toHaveBeenCalled();
       expect(deps.fetchSaas).not.toHaveBeenCalled();
+      // Actor materialization still runs even with --no-key-sync (LOGIN-O1)
+      expect(mockEnsureActorInProject).toHaveBeenCalled();
     });
   });
 
@@ -512,11 +514,12 @@ describe('LoginCommand v2', () => {
       const cmd = new LoginCommand(deps);
       await cmd.executeLogin({ ...defaultOptions, forceLocal: true });
 
-      // syncKey response is trusted — no second keyStatus call needed
+      // syncKey response is trusted — no post-sync keyStatus call needed
+      // 2 calls expected: 1 from LOGIN-R1 pre-materialization check + 1 from syncKeys detection
       const keyStatusCalls = (deps.fetchSaas as vi.Mock).mock.calls.filter(
         (c: [string]) => c[0].includes('identity.keyStatus')
       );
-      expect(keyStatusCalls).toHaveLength(1);
+      expect(keyStatusCalls).toHaveLength(2);
     });
   });
 
@@ -920,6 +923,77 @@ describe('LoginCommand v2', () => {
         expect.any(String),
       );
       expect(mockSetCloudToken).toHaveBeenCalledWith('test-session-token');
+    });
+  });
+
+  // ==========================================================================
+  // §4.17. Identity Convergence (LOGIN-R1 to R3)
+  // ==========================================================================
+  describe('4.17. Identity Convergence (LOGIN-R1 to R3)', () => {
+    it('[LOGIN-R1] should skip ensureActorInProject when SaaS has key', async () => {
+      mockGetCurrentActor.mockResolvedValue(null);
+      mockGetConfig.mockResolvedValue({ saasUrl: 'https://app.gitgov.dev' });
+      mockHasPrivateKey.mockResolvedValue(false);
+
+      const mockEnvelope = {
+        ephemeralPublicKey: 'server-eph-pub',
+        ciphertext: 'encrypted-data',
+        iv: 'mock-iv-base64',
+        authTag: 'mock-tag-base64',
+      };
+
+      const deps = createMockDeps({
+        fetchSaas: vi.fn().mockImplementation(async (url: string) => {
+          if (url.includes('identity.keyStatus')) {
+            return { ok: true, json: async () => trpcWrap(keyStatusWith('saas-pub-key')) };
+          }
+          if (url.includes('identity.getKey')) {
+            return { ok: true, json: async () => trpcWrap({ publicKey: 'saas-pub-key', privateKeyEnvelope: mockEnvelope }) };
+          }
+          if (url.includes('identity.syncKey')) {
+            return { ok: true, json: async () => trpcWrap({ success: true, actorId: 'human:camilo', mode: 'full' }) };
+          }
+          return { ok: false, json: async () => ({}) };
+        }),
+      });
+
+      const cmd = new LoginCommand(deps);
+      await cmd.executeLogin(defaultOptions);
+
+      // [LOGIN-R1] SaaS has key → ensureActorInProject NOT called (no competing keypair)
+      expect(mockEnsureActorInProject).not.toHaveBeenCalled();
+      // AND the key was downloaded via syncKeys (case b → downloadKeyFromSaas → setPrivateKey)
+      expect(mockSetPrivateKey).toHaveBeenCalledWith('human:camilo', expect.any(String));
+      // AND getKey was called (the download endpoint)
+      expect(deps.fetchSaas).toHaveBeenCalledWith(
+        expect.stringContaining('/trpc/identity.getKey'),
+        expect.any(Object),
+      );
+    });
+
+    it('[LOGIN-R2] should call ensureActorInProject when SaaS has no key', async () => {
+      mockGetCurrentActor.mockResolvedValue(null);
+      mockGetConfig.mockResolvedValue({ saasUrl: 'https://app.gitgov.dev' });
+      mockHasPrivateKey.mockResolvedValue(true);
+
+      const deps = createMockDeps({
+        fetchSaas: createTrpcFetch({
+          'keyStatus': noKeyStatus,
+          'syncKey': { success: true, actorId: 'human:camilo', mode: 'full' },
+        }),
+      });
+
+      const cmd = new LoginCommand(deps);
+      await cmd.executeLogin(defaultOptions);
+
+      // [LOGIN-R2] SaaS has no key → ensureActorInProject called (generates keypair)
+      expect(mockEnsureActorInProject).toHaveBeenCalledWith(
+        expect.objectContaining({
+          login: 'camilo',
+          type: 'human',
+          joinedVia: 'saas-oauth',
+        }),
+      );
     });
   });
 
