@@ -87,7 +87,7 @@ export class ProjectModule {
         rootCycle: rootCycle.id,
         ...(options.saasUrl && { saasUrl: options.saasUrl }),
         // [INIT-L1] State branch written to config for all commands to read
-        state: { branch: options.stateBranch || 'gitgov-state' },
+        state: { branch: options.stateBranch },
       };
       await this.deps.initializer.writeConfig(config);
 

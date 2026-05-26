@@ -440,7 +440,7 @@ describe('ConfigManager', () => {
       expect(result).toBe('custom-state-branch');
     });
 
-    it('[EARS-H2] WHEN getStateBranch is invoked without branch in config, THE SYSTEM SHALL return default branch', async () => {
+    it('[EARS-H2] WHEN getStateBranch is invoked without branch in config, THE SYSTEM SHALL throw', async () => {
       const mockConfig: GitGovConfig = {
         protocolVersion: '1.0',
         projectId: 'test-project',
@@ -451,17 +451,13 @@ describe('ConfigManager', () => {
 
       store.setConfig(mockConfig);
 
-      const result = await configManager.getStateBranch();
-
-      expect(result).toBe('gitgov-state');
+      await expect(configManager.getStateBranch()).rejects.toThrow('config.json missing state.branch');
     });
 
-    it('[EARS-H2] WHEN getStateBranch is invoked with no config, THE SYSTEM SHALL return default branch', async () => {
+    it('[EARS-H2] WHEN getStateBranch is invoked with no config, THE SYSTEM SHALL throw', async () => {
       // No config set
 
-      const result = await configManager.getStateBranch();
-
-      expect(result).toBe('gitgov-state');
+      await expect(configManager.getStateBranch()).rejects.toThrow('config.json missing state.branch');
     });
   });
 

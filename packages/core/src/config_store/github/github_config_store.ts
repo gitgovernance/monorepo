@@ -30,7 +30,7 @@ export class GitHubConfigStore implements ConfigStore<GitHubSaveResult> {
   constructor(options: GitHubConfigStoreOptions, octokit: Octokit) {
     this.owner = options.owner;
     this.repo = options.repo;
-    this.ref = options.ref ?? 'gitgov-state';
+    this.ref = options.ref;
     this.basePath = options.basePath ?? '.gitgov';
     this.octokit = octokit;
   }

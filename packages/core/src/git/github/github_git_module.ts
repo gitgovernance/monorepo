@@ -47,7 +47,7 @@ export class GitHubGitModule implements IGitModule {
   constructor(options: GitHubGitModuleOptions, octokit: Octokit) {
     this.owner = options.owner;
     this.repo = options.repo;
-    this.defaultBranch = options.defaultBranch ?? 'gitgov-state';
+    this.defaultBranch = options.defaultBranch;
     this.octokit = octokit;
     this.activeRef = this.defaultBranch;
   }

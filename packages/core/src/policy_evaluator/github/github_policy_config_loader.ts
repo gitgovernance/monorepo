@@ -27,8 +27,8 @@ const DEFAULT_CONFIG: PolicyConfig = {
 export type GitHubPolicyConfigLoaderOptions = {
   owner: string;
   repo: string;
-  /** Branch to read from (default: 'gitgov-state') */
-  ref?: string;
+  /** Branch to read from — required, caller must resolve */
+  ref: string;
   /** Base path within repo (default: '.gitgov') */
   basePath?: string;
 };
@@ -43,7 +43,7 @@ export class GitHubPolicyConfigLoader implements PolicyConfigLoader {
   constructor(options: GitHubPolicyConfigLoaderOptions, octokit: Octokit) {
     this.owner = options.owner;
     this.repo = options.repo;
-    this.ref = options.ref ?? 'gitgov-state';
+    this.ref = options.ref;
     this.basePath = options.basePath ?? '.gitgov';
     this.octokit = octokit;
   }

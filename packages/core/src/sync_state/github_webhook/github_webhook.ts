@@ -14,7 +14,6 @@
 import crypto from "crypto";
 import type { StateDeltaFile } from "../sync_state.types";
 import { shouldSyncFile } from "../sync_state.utils";
-import { DEFAULT_STATE_BRANCH } from "../fs_worktree/fs_worktree_sync_state.types";
 import type {
   GithubWebhookOptions,
   WebhookPayload,
@@ -36,7 +35,7 @@ export class GithubWebhookHandler {
 
   constructor(options: GithubWebhookOptions) {
     this.secret = options.secret;
-    this.stateBranch = options.stateBranch ?? DEFAULT_STATE_BRANCH;
+    this.stateBranch = options.stateBranch;
   }
 
   /**

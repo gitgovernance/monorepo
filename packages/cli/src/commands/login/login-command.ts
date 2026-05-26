@@ -16,7 +16,7 @@
 
 import { Command } from 'commander';
 import { BaseCommand } from '../../base/base-command';
-import { Crypto, parseRemoteUrl } from '@gitgov/core';
+import { Crypto, parseRemoteUrl, SyncState } from '@gitgov/core';
 import type { IKeyProvider } from '@gitgov/core';
 import type { GitRemoteRef } from '@gitgov/core';
 import type {
@@ -118,25 +118,33 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
       }
 
       // [EARS-C15] Tell DI which branch to use for worktree bootstrap (before any DI call)
-      if (options.stateBranch) {
-        this.dependencyService.setStateBranchOverride(options.stateBranch);
-      }
+      this.dependencyService.setStateBranchOverride(stateBranchForFetch);
 
       const saasUrl = await this.resolveSaasUrl(options);
 
-      // Start local callback server and open browser in parallel
-      const callbackPromise = this.deps.startCallbackServer(CALLBACK_PORT);
-      const webUrl = process.env['GITGOV_WEB_URL'] ?? saasUrl.replace(':3001', ':3000');
-      const oauthUrl = `${webUrl}/auth/cli?callback=http://localhost:${CALLBACK_PORT}/auth/callback`;
+      let token: string;
+      let user: { login: string; id: number };
 
-      console.log(`Opening browser for authentication at ${oauthUrl}`);
-      // [LOGIN-Q2] BROWSER=none suppresses system browser (E2E tests use Playwright)
-      if (process.env['BROWSER'] !== 'none') {
-        await this.deps.openBrowser(oauthUrl);
+      if (options.token && options.login) {
+        // [LOGIN-S1] --token mode: bypass OAuth, use pre-minted JWE. Test-only.
+        token = options.token;
+        user = { login: options.login, id: 0 };
+      } else {
+        // [LOGIN-S2] Standard OAuth browser flow
+        // Start local callback server and open browser in parallel
+        const callbackPromise = this.deps.startCallbackServer(CALLBACK_PORT);
+        const webUrl = process.env['GITGOV_WEB_URL'] ?? saasUrl.replace(':3001', ':3000');
+        const oauthUrl = `${webUrl}/auth/cli?callback=http://localhost:${CALLBACK_PORT}/auth/callback`;
+
+        console.log(`Opening browser for authentication at ${oauthUrl}`);
+        // [LOGIN-Q2] BROWSER=none suppresses system browser (E2E tests use Playwright)
+        if (process.env['BROWSER'] !== 'none') {
+          await this.deps.openBrowser(oauthUrl);
+        }
+
+        // Wait for callback with token
+        ({ token, user } = await callbackPromise);
       }
-
-      // Wait for callback with token
-      const { token, user } = await callbackPromise;
 
       // Store session token via SessionManager public API
       const sessionManager = await this.dependencyService.getSessionManager();
@@ -165,59 +173,29 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
 
       console.log(`Logged in as ${user.login} (${actorId})`);
 
+      // [LOGIN-O1] Materialize actor BEFORE key sync — generates keypair if collaborator is new
+      try {
+        const projectModule = await this.dependencyService.getProjectModule();
+        await projectModule.ensureActorInProject({
+          login: user.login,
+          type: actorType,
+          repoId: '',
+          joinedVia: 'saas-oauth',
+        });
+      } catch (err) {
+        // [LOGIN-O2] Warn and continue to syncKeys — if keypair wasn't generated, syncKeys handles case e
+        console.warn('⚠️  Actor materialization failed:', err instanceof Error ? err.message : String(err));
+        console.warn('   Key sync may fail if no local key exists.');
+      }
+
       // [LOGIN-B3] Skip key sync if --no-key-sync
-      // Materializes actor locally (LOGIN-O1) but does NOT contact SaaS for key state.
       if (options.noKeySync) {
-        try {
-          const projectModule = await this.dependencyService.getProjectModule();
-          await projectModule.ensureActorInProject({
-            login: user.login,
-            type: actorType,
-            repoId: '',
-            joinedVia: 'saas-oauth',
-          });
-        } catch (err) {
-          console.warn('⚠️  Actor materialization failed:', err instanceof Error ? err.message : String(err));
-        }
         this.handleSuccess(
           { loggedIn: true, user: user.login, actorId, keySynced: false },
           options,
           `Logged in (key sync skipped)`
         );
         return;
-      }
-
-      // [LOGIN-R1] [LOGIN-R2] Identity convergence: check SaaS key state BEFORE materializing.
-      // If SaaS already has the key, skip ensureActorInProject (avoids generating a competing keypair).
-      // The actual download happens in syncKeys (case b/C1) — here we only CHECK.
-      let skipActorMaterialization = false;
-      try {
-        const repo = await this.resolveRepoIdentity();
-        const keyStatus = await this.getKeyStatus(saasUrl, token, repo);
-        // [LOGIN-R1] SaaS has key → syncKeys will download it (case b). Skip ensureActorInProject.
-        if (keyStatus.exists && keyStatus.publicKey) {
-          skipActorMaterialization = true;
-        }
-      } catch {
-        // Non-fatal: SaaS unreachable or repo not connected — fall through to LOGIN-O1
-      }
-
-      if (!skipActorMaterialization) {
-        // [LOGIN-R2] SaaS has no key → materialize actor (generates keypair)
-        // [LOGIN-O1] Materialize actor BEFORE key sync — generates keypair if collaborator is new
-        try {
-          const projectModule = await this.dependencyService.getProjectModule();
-          await projectModule.ensureActorInProject({
-            login: user.login,
-            type: actorType,
-            repoId: '',
-            joinedVia: 'saas-oauth',
-          });
-        } catch (err) {
-          // [LOGIN-O2] Warn and continue to syncKeys — if keypair wasn't generated, syncKeys handles case e
-          console.warn('⚠️  Actor materialization failed:', err instanceof Error ? err.message : String(err));
-          console.warn('   Key sync may fail if no local key exists.');
-        }
       }
 
       // [LOGIN-J3] Key sync: use local actorId for FsKeyProvider, GitHub identity for SaaS context
@@ -489,14 +467,14 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
     try {
       const { findProjectRoot, getWorktreeBasePath } = await import('@gitgov/core/fs');
       const repoRoot = findProjectRoot(process.cwd());
-      if (!repoRoot) return 'gitgov-state';
+      if (!repoRoot) return SyncState.DEFAULT_STATE_BRANCH;
       const worktreePath = getWorktreeBasePath(repoRoot);
       const configPath = (await import('path')).join(worktreePath, '.gitgov', 'config.json');
       const { readFileSync } = await import('fs');
       const config = JSON.parse(readFileSync(configPath, 'utf-8'));
-      return config?.state?.branch || 'gitgov-state';
+      return config?.state?.branch || SyncState.DEFAULT_STATE_BRANCH;
     } catch {
-      return 'gitgov-state';
+      return SyncState.DEFAULT_STATE_BRANCH;
     }
   }
 

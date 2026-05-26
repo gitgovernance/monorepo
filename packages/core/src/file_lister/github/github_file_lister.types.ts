@@ -13,8 +13,8 @@ export type GitHubFileListerOptions = {
   owner: string;
   /** GitHub repository name */
   repo: string;
-  /** Git ref to use (branch, tag, or SHA). Default: 'gitgov-state' */
-  ref?: string;
+  /** Git ref to use (branch, tag, or SHA) — required, caller must resolve */
+  ref: string;
   /** Base path within the repo to scope operations. Default: '' (repo root) */
   basePath?: string;
 };

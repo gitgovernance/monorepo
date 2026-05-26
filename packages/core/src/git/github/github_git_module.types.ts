@@ -14,6 +14,6 @@ export type GitHubGitModuleOptions = {
   owner: string;
   /** GitHub repository name */
   repo: string;
-  /** Default branch name (default: 'gitgov-state') */
-  defaultBranch?: string;
+  /** Default branch name — required, caller must resolve */
+  defaultBranch: string;
 };

@@ -14,8 +14,8 @@ export type GitHubConfigStoreOptions = {
   owner: string;
   /** GitHub repository name */
   repo: string;
-  /** Branch to read from / write to (default: 'gitgov-state'). Must be a branch name for saves. */
-  ref?: string;
+  /** Branch to read from / write to. Must be a branch name for saves. Required — caller must resolve. */
+  ref: string;
   /** Base path within the repo (default: '.gitgov') */
   basePath?: string;
 };

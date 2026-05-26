@@ -29,7 +29,7 @@ export class GitHubRecordStore<V> implements RecordStore<V, GitHubWriteResult, G
   constructor(options: GitHubRecordStoreOptions, octokit: Octokit, gitModule?: IGitModule) {
     this.owner = options.owner;
     this.repo = options.repo;
-    this.ref = options.ref ?? 'gitgov-state';
+    this.ref = options.ref;
     this.basePath = options.basePath;
     this.extension = options.extension ?? '.json';
     this.idEncoder = options.idEncoder ?? DEFAULT_ID_ENCODER;

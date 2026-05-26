@@ -18,6 +18,7 @@ import * as os from 'os';
 import { promisify } from 'util';
 import { exec } from 'child_process';
 import { FsWorktreeSyncStateModule } from './fs_worktree_sync_state';
+import { DEFAULT_STATE_BRANCH } from './fs_worktree_sync_state.types';
 import { LocalGitModule } from '../../git/local';
 import type { ExecOptions, ExecResult } from '../../git/types';
 import {
@@ -198,7 +199,7 @@ function createModule(
       lint,
       indexer,
     },
-    { repoRoot },
+    { repoRoot, stateBranchName: DEFAULT_STATE_BRANCH },
   );
 
   return { module, gitModule, identity, signer, lint, indexer };

@@ -12,8 +12,8 @@ export type FsWorktreeSyncStateDependencies = SyncStateModuleDependencies;
 export type FsWorktreeSyncStateConfig = {
   /** Root directory of the git repository */
   repoRoot: string;
-  /** State branch name (default: "gitgov-state") */
-  stateBranchName?: string;
+  /** State branch name — required, caller resolves from config.json */
+  stateBranchName: string;
   /** Absolute path to worktree. Default: path.join(repoRoot, '.gitgov-worktree') */
   worktreePath?: string;
 };

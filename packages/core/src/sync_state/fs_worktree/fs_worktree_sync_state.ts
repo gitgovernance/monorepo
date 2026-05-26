@@ -21,7 +21,7 @@ import {
   LOCAL_ONLY_FILES,
 } from '../sync_state.types';
 import type { FsWorktreeSyncStateConfig, FsWorktreeSyncStateDependencies, WorktreeHealthResult } from './fs_worktree_sync_state.types';
-import { WORKTREE_DIR_NAME, DEFAULT_STATE_BRANCH } from './fs_worktree_sync_state.types';
+import { WORKTREE_DIR_NAME } from './fs_worktree_sync_state.types';
 import type { ExecOptions } from '../../git/types';
 import { createLogger } from '../../logger/logger';
 import {
@@ -124,7 +124,7 @@ export class FsWorktreeSyncStateModule implements ISyncStateModule {
 
     this.deps = deps;
     this.repoRoot = config.repoRoot;
-    this.stateBranchName = config.stateBranchName ?? DEFAULT_STATE_BRANCH;
+    this.stateBranchName = config.stateBranchName;
     this.worktreePath = config.worktreePath ?? path.join(this.repoRoot, WORKTREE_DIR_NAME);
     this.gitgovPath = path.join(this.worktreePath, '.gitgov');
   }

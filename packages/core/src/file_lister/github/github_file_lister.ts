@@ -65,7 +65,7 @@ export class GitHubFileLister implements FileLister {
   constructor(options: GitHubFileListerOptions, octokit: Octokit) {
     this.owner = options.owner;
     this.repo = options.repo;
-    this.ref = options.ref ?? 'gitgov-state';
+    this.ref = options.ref;
     this.basePath = options.basePath ?? '';
     this.octokit = octokit;
   }

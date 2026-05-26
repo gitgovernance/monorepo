@@ -57,7 +57,7 @@ export class GitHubProjectInitializer implements IProjectInitializer {
     // owner/repo are required options for caller-declared intent + future extensibility,
     // but not stored internally — the injected gitModule and configStore already carry
     // them. Re-storing would be dead state (TypeScript noUnusedLocals rejects unused private fields).
-    this.branch = options.branch ?? 'gitgov-state';
+    this.branch = options.branch;
     this.basePath = options.basePath ?? '.gitgov';
     this.commitMessage = options.commitMessage ?? 'gitgov: remote init';
     this.commitAuthor = options.commitAuthor ?? {

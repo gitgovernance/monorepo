@@ -14,6 +14,7 @@ import { GitHubProjectInitializer } from './github_project_initializer';
 import type { IGitModule, CommitAuthor } from '../../git';
 import type { ConfigStore } from '../../config_store';
 import type { GitGovConfig } from '../../config_manager';
+import { DEFAULT_STATE_BRANCH } from '../../sync_state/fs_worktree/fs_worktree_sync_state.types';
 
 // ==================== Mock Helpers ====================
 
@@ -105,6 +106,7 @@ function createInitializer(
     {
       owner: 'myorg',
       repo: 'myrepo',
+      branch: DEFAULT_STATE_BRANCH,
       ...overrides,
     },
   );
