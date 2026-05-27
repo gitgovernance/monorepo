@@ -14,6 +14,7 @@ import { GitHubProjectInitializer } from './github_project_initializer';
 import type { IGitModule, CommitAuthor } from '../../git';
 import type { ConfigStore } from '../../config_store';
 import type { GitGovConfig } from '../../config_manager';
+import { DEFAULT_STATE_BRANCH } from '../../sync_state/fs_worktree/fs_worktree_sync_state.types';
 
 // ==================== Mock Helpers ====================
 
@@ -105,6 +106,7 @@ function createInitializer(
     {
       owner: 'myorg',
       repo: 'myrepo',
+      branch: DEFAULT_STATE_BRANCH,
       ...overrides,
     },
   );
@@ -129,7 +131,7 @@ describe('GitHubProjectInitializer', () => {
       await initializer.createProjectStructure();
 
       expect(gitModule.branchExists).toHaveBeenCalledWith('gitgov-state');
-      expect(gitModule.createBranch).toHaveBeenCalledWith('gitgov-state', undefined);
+      expect(gitModule.createBranch).toHaveBeenCalledWith('gitgov-state', { orphan: true });
 
       // Verify rollback deletes the branch (flag must have been set)
       await initializer.rollback();
@@ -341,7 +343,7 @@ describe('GitHubProjectInitializer', () => {
     });
   });
 
-  describe('4.8. Branch Check Caching (PROJ-G1)', () => {
+  describe('Branch Check Caching (PROJ-G1)', () => {
     it('[PROJ-G1] should not call branchExists twice when isInitialized precedes createProjectStructure', async () => {
       gitModule.branchExists.mockResolvedValue(false);
       const initializer = createInitializer(gitModule, configStore);
@@ -350,7 +352,7 @@ describe('GitHubProjectInitializer', () => {
       await initializer.createProjectStructure();
 
       expect(gitModule.branchExists).toHaveBeenCalledTimes(1);
-      expect(gitModule.createBranch).toHaveBeenCalledWith('gitgov-state', undefined);
+      expect(gitModule.createBranch).toHaveBeenCalledWith('gitgov-state', { orphan: true });
     });
 
     it('[PROJ-G1] should still call branchExists when createProjectStructure is called without prior isInitialized', async () => {
@@ -360,7 +362,7 @@ describe('GitHubProjectInitializer', () => {
       await initializer.createProjectStructure();
 
       expect(gitModule.branchExists).toHaveBeenCalledTimes(1);
-      expect(gitModule.createBranch).toHaveBeenCalledWith('gitgov-state', undefined);
+      expect(gitModule.createBranch).toHaveBeenCalledWith('gitgov-state', { orphan: true });
     });
 
     it('[PROJ-G1] should consume cache after use so retries re-check', async () => {
@@ -408,6 +410,25 @@ describe('GitHubProjectInitializer', () => {
       const initializer = createInitializer(gitModule, configStore);
 
       await expect(initializer.finalize()).rejects.toThrow('commit failed');
+    });
+  });
+
+  describe('4.9. HEAD SHA Query (GPI15)', () => {
+    it('[GPI15] should return HEAD SHA from gitModule.getCommitHash', async () => {
+      gitModule.getCommitHash.mockResolvedValue('abc123def456');
+      const initializer = createInitializer(gitModule, configStore);
+
+      const sha = await initializer.getHeadSha();
+      expect(sha).toBe('abc123def456');
+      expect(gitModule.getCommitHash).toHaveBeenCalledWith('gitgov-state');
+    });
+
+    it('[GPI15] should return undefined when getCommitHash throws', async () => {
+      gitModule.getCommitHash.mockRejectedValue(new Error('branch not found'));
+      const initializer = createInitializer(gitModule, configStore);
+
+      const sha = await initializer.getHeadSha();
+      expect(sha).toBeUndefined();
     });
   });
 });

@@ -16,7 +16,7 @@
 
 import { Command } from 'commander';
 import { BaseCommand } from '../../base/base-command';
-import { Crypto, parseRemoteUrl } from '@gitgov/core';
+import { Crypto, parseRemoteUrl, SyncState } from '@gitgov/core';
 import type { IKeyProvider } from '@gitgov/core';
 import type { GitRemoteRef } from '@gitgov/core';
 import type {
@@ -54,6 +54,7 @@ function createDefaultDeps(): LoginDeps {
 
             if (token && login && id) {
               clearTimeout(timeoutHandle);
+              // [LOGIN-M1] Connection: close prevents socket hang
               res.writeHead(200, { 'Content-Type': 'text/html', 'Connection': 'close' });
               res.end('<html><body><h1>Login successful!</h1><p>You can close this window.</p></body></html>');
               server.close();
@@ -94,6 +95,14 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
   // [LOGIN-A1] OAuth flow → open browser, start callback server, store session token
   async executeLogin(options: LoginCommandOptions): Promise<void> {
     try {
+      // [LOGIN-Q1] Validate git repo BEFORE opening browser
+      try {
+        const { execSync } = await import('child_process');
+        execSync('git rev-parse --git-dir', { cwd: process.cwd(), stdio: 'pipe', timeout: 5000 });
+      } catch {
+        throw new Error('Not in a git repository. Run gitgov login from inside a git project.');
+      }
+
       // [LOGIN-J1] [LOGIN-P1] Cloud-first bootstrap: fetch remote state branch so DI can discover it
       // Priority: --state-branch flag > existing worktree config > fallback 'gitgov-state'
       const stateBranchForFetch = options.stateBranch || await this.resolveStateBranchPreDI();
@@ -109,22 +118,33 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
       }
 
       // [EARS-C15] Tell DI which branch to use for worktree bootstrap (before any DI call)
-      if (options.stateBranch) {
-        this.dependencyService.setStateBranchOverride(options.stateBranch);
-      }
+      this.dependencyService.setStateBranchOverride(stateBranchForFetch);
 
       const saasUrl = await this.resolveSaasUrl(options);
 
-      // Start local callback server and open browser in parallel
-      const callbackPromise = this.deps.startCallbackServer(CALLBACK_PORT);
-      const webUrl = process.env['GITGOV_WEB_URL'] ?? saasUrl.replace(':3001', ':3000');
-      const oauthUrl = `${webUrl}/auth/cli?callback=http://localhost:${CALLBACK_PORT}/auth/callback`;
+      let token: string;
+      let user: { login: string; id: number };
 
-      console.log(`Opening browser for authentication at ${oauthUrl}`);
-      await this.deps.openBrowser(oauthUrl);
+      if (options.token && options.login) {
+        // [LOGIN-S1] --token mode: bypass OAuth, use pre-minted JWE. Test-only.
+        token = options.token;
+        user = { login: options.login, id: 0 };
+      } else {
+        // [LOGIN-S2] Standard OAuth browser flow
+        // Start local callback server and open browser in parallel
+        const callbackPromise = this.deps.startCallbackServer(CALLBACK_PORT);
+        const webUrl = process.env['GITGOV_WEB_URL'] ?? saasUrl.replace(':3001', ':3000');
+        const oauthUrl = `${webUrl}/auth/cli?callback=http://localhost:${CALLBACK_PORT}/auth/callback`;
 
-      // Wait for callback with token
-      const { token, user } = await callbackPromise;
+        console.log(`Opening browser for authentication at ${oauthUrl}`);
+        // [LOGIN-Q2] BROWSER=none suppresses system browser (E2E tests use Playwright)
+        if (process.env['BROWSER'] !== 'none') {
+          await this.deps.openBrowser(oauthUrl);
+        }
+
+        // Wait for callback with token
+        ({ token, user } = await callbackPromise);
+      }
 
       // Store session token via SessionManager public API
       const sessionManager = await this.dependencyService.getSessionManager();
@@ -141,8 +161,10 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
         actorId = matchingKeys[0]!;
         actorType = actorId.startsWith('agent:') ? 'agent' : 'human';
       } else if (matchingKeys.length === 0) {
+        // [LOGIN-J3b]
         actorId = `human:${user.login}`;
       } else {
+        // [LOGIN-A1b]
         actorId = await this.promptActorSelection(matchingKeys, user.login);
         actorType = actorId.startsWith('agent:') ? 'agent' : 'human';
       }
@@ -176,7 +198,7 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
         return;
       }
 
-      // Key sync: use local actorId for FsKeyProvider, GitHub identity for SaaS context
+      // [LOGIN-J3] Key sync: use local actorId for FsKeyProvider, GitHub identity for SaaS context
       await this.syncKeys(actorId, saasUrl, token, options);
 
       // [LOGIN-L1, LOGIN-L2] Push gitgov-state so SaaS can index ActorRecord
@@ -303,6 +325,7 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
     // [LOGIN-B1] CLI has key, SaaS does not → upload with ECDH
     if (hasLocal && !keyStatus.exists) {
       await this.uploadKeyToSaas(actorId, saasUrl, token, repo, keyStatus.ecdhPublicKey);
+      // [LOGIN-B2] Confirmation after sync
       this.handleSuccess(
         { loggedIn: true, user: actorId, keySynced: true },
         options,
@@ -343,7 +366,7 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
         if (options.forceLocal) {
           const syncResult = await this.uploadKeyToSaas(actorId, saasUrl, token, repo, keyStatus.ecdhPublicKey);
 
-          // [IKS-SUC8] Handle succession response — SaaS created a new versioned actor
+          // [LOGIN-N1] [IKS-SUC8] Handle succession response — SaaS created a new versioned actor
           if (syncResult.rotated && syncResult.newActorId) {
             const sessionManager = await this.dependencyService.getSessionManager();
             await sessionManager.setLastSession(syncResult.newActorId, new Date().toISOString());
@@ -430,8 +453,9 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
         timeout: 5000,
         env: { ...process.env, GIT_SSH_COMMAND: 'ssh -o ConnectTimeout=3 -o BatchMode=yes' },
       });
-    } catch {
-      // [LOGIN-L2] No local branch, no remote, offline, or permissions error
+    } catch (err) {
+      // [LOGIN-L1] Warning on push failure — does not fail login
+      console.warn('⚠️  Push gitgov-state failed:', err instanceof Error ? err.message : String(err));
     }
   }
 
@@ -443,14 +467,14 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
     try {
       const { findProjectRoot, getWorktreeBasePath } = await import('@gitgov/core/fs');
       const repoRoot = findProjectRoot(process.cwd());
-      if (!repoRoot) return 'gitgov-state';
+      if (!repoRoot) return SyncState.DEFAULT_STATE_BRANCH;
       const worktreePath = getWorktreeBasePath(repoRoot);
       const configPath = (await import('path')).join(worktreePath, '.gitgov', 'config.json');
       const { readFileSync } = await import('fs');
       const config = JSON.parse(readFileSync(configPath, 'utf-8'));
-      return config?.state?.branch || 'gitgov-state';
+      return config?.state?.branch || SyncState.DEFAULT_STATE_BRANCH;
     } catch {
-      return 'gitgov-state';
+      return SyncState.DEFAULT_STATE_BRANCH;
     }
   }
 

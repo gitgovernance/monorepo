@@ -14,8 +14,8 @@ import type { StateDeltaFile } from "../sync_state.types";
 export type GithubWebhookOptions = {
   /** Webhook secret for HMAC-SHA256 signature verification */
   secret: string;
-  /** State branch name to filter (default: 'gitgov-state') */
-  stateBranch?: string;
+  /** State branch name to filter — required, caller must resolve */
+  stateBranch: string;
 };
 
 /**

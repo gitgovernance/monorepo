@@ -9,8 +9,8 @@ export type GitHubRecordStoreOptions = {
   owner: string;
   /** GitHub repository name */
   repo: string;
-  /** Branch ref (default: 'gitgov-state') */
-  ref?: string;
+  /** Branch ref — required, caller must resolve */
+  ref: string;
   /** Base directory path in the repo (e.g., '.gitgov/actors') */
   basePath: string;
   /** File extension for records (default: '.json') */

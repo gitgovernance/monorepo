@@ -91,12 +91,12 @@ async function setupCommands() {
   } catch (error) {
     // Handle initialization errors gracefully
     if (error instanceof Error) {
-      if (error.message.includes('GitGovernance not initialized')) {
-        // Check if user is running 'init' command - don't show warning in that case
+      if (error.message.includes('GitGovernance not initialized') || error.message.includes('stateBranchOverride not set')) {
+        // Check if user is running 'init' or 'login' command - don't show warning in that case
         const commandArg = process.argv[2];
-        const isInitCommand = commandArg === 'init';
+        const isBootstrapCommand = commandArg === 'init' || commandArg === 'login';
 
-        if (!isInitCommand) {
+        if (!isBootstrapCommand) {
           console.warn("⚠️  GitGovernance not initialized. Some commands may not be available.\n");
           console.warn("💡 Run 'gitgov init' to initialize GitGovernance in this repository.\n");
         }

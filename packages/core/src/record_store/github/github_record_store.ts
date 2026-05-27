@@ -29,7 +29,7 @@ export class GitHubRecordStore<V> implements RecordStore<V, GitHubWriteResult, G
   constructor(options: GitHubRecordStoreOptions, octokit: Octokit, gitModule?: IGitModule) {
     this.owner = options.owner;
     this.repo = options.repo;
-    this.ref = options.ref ?? 'gitgov-state';
+    this.ref = options.ref;
     this.basePath = options.basePath;
     this.extension = options.extension ?? '.json';
     this.idEncoder = options.idEncoder ?? DEFAULT_ID_ENCODER;
@@ -99,6 +99,19 @@ export class GitHubRecordStore<V> implements RecordStore<V, GitHubWriteResult, G
     } catch (error: unknown) {
       throw mapOctokitError(error, `PUT ${filePath}`);
     }
+  }
+
+  // [EARS-D1] Stage record for posterior commit via gitModule.add — no commit.
+  // Reuses buildFilePath + idEncoder (no path duplication). Requires gitModule injected.
+  async putDeferred(id: string, value: V): Promise<GitHubWriteResult> {
+    this.validateId(id);
+    if (!this.gitModule) {
+      throw new Error('putDeferred requires IGitModule dependency for staging');
+    }
+    const filePath = this.buildFilePath(id);
+    const content = JSON.stringify(value, null, 2);
+    await this.gitModule.add([filePath], { contentMap: { [filePath]: content } });
+    return {};
   }
 
   /**

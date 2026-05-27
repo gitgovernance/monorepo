@@ -25,6 +25,7 @@ import type {
 import {
   GitCommandError,
   BranchNotFoundError,
+  GitError,
   BranchAlreadyExistsError,
   FileNotFoundError,
   MergeConflictError,
@@ -1271,7 +1272,10 @@ export class LocalGitModule implements IGitModule {
    * @throws GitCommandError if branch already exists or operation fails
    * @throws BranchAlreadyExistsError if the branch already exists locally
    */
-  async createBranch(branchName: string, startPoint?: string): Promise<void> {
+  async createBranch(branchName: string, options?: { startPoint?: string; orphan?: boolean }): Promise<void> {
+    if (options?.orphan) {
+      throw new GitError('createBranch with orphan is not supported in LocalGitModule — use checkoutOrphanBranch via FsWorktreeSyncState (WTSYNC-A6) instead');
+    }
     // Check if branch already exists
     const exists = await this.branchExists(branchName);
     if (exists) {
@@ -1279,8 +1283,8 @@ export class LocalGitModule implements IGitModule {
     }
 
     const args = ['checkout', '-b', branchName];
-    if (startPoint) {
-      args.push(startPoint);
+    if (options?.startPoint) {
+      args.push(options.startPoint);
     }
 
     const result = await this.execGit(args);

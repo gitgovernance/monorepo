@@ -347,4 +347,13 @@ describe('FsRecordStore', () => {
       expect(await encodedStore.exists('agent:unknown')).toBe(false);
     });
   });
+
+  describe('4.5. Deferred Persistence (EARS-E1)', () => {
+    it('[EARS-E1] should persist to disk same as put', async () => {
+      await store.putDeferred('deferred-1', { id: 'deferred-1', name: 'Deferred' });
+
+      const result = await store.get('deferred-1');
+      expect(result).toEqual({ id: 'deferred-1', name: 'Deferred' });
+    });
+  });
 });

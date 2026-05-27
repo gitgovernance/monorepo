@@ -58,6 +58,7 @@ const mockGenerateEphemeralKeypair = vi.fn().mockReturnValue({
 });
 
 vi.mock('@gitgov/core', () => ({
+  SyncState: { DEFAULT_STATE_BRANCH: 'gitgov-state' },
   Crypto: {
     ecdhEncrypt: (...args: unknown[]) => mockEcdhEncrypt(...args),
     ecdhDecrypt: (...args: unknown[]) => mockEcdhDecrypt(...args),
@@ -97,6 +98,7 @@ const {
 vi.mock('../../services/dependency-injection', () => ({
   DependencyInjectionService: {
     getInstance: vi.fn().mockReturnValue({
+      setStateBranchOverride: vi.fn(),
       getSessionManager: vi.fn().mockResolvedValue({
         loadSession: mockLoadSession,
         detectActorFromKeyFiles: mockDetectActorFromKeyFiles,
@@ -763,7 +765,10 @@ describe('LoginCommand v2', () => {
       const cmd = new LoginCommand(deps);
       await cmd.executeLogin(defaultOptions);
 
-      // Login should still succeed despite push failure
+      expect(mockConsoleWarn).toHaveBeenCalledWith(
+        expect.stringContaining('Push gitgov-state failed'),
+        expect.any(String),
+      );
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('Logged in as'));
     });
   });
@@ -1011,6 +1016,101 @@ describe('LoginCommand v2', () => {
         (call) => typeof call[0] === 'string' && call[0] === 'git fetch origin gitgov-state'
       );
       expect(defaultFetchCalls.length).toBe(0);
+    });
+  });
+
+  // ==========================================================================
+  // §4.16. Pre-browser Git Validation (LOGIN-Q1, Q2)
+  // ==========================================================================
+  describe('4.16. Pre-browser Git Validation (LOGIN-Q1, Q2)', () => {
+    it('[LOGIN-Q1] should exit 1 without opening browser when not in git repo', async () => {
+      const { execSync } = await import('child_process');
+      const mockExecSync = execSync as Mock<typeof execSync>;
+      mockExecSync.mockImplementation((cmd: string) => {
+        if (typeof cmd === 'string' && cmd.includes('git rev-parse --git-dir')) {
+          throw new Error('fatal: not a git repository');
+        }
+        return 'https://github.com/testorg/testrepo.git\n';
+      });
+
+      const deps = createMockDeps();
+      const cmd = new LoginCommand(deps);
+      await cmd.executeLogin(defaultOptions);
+
+      expect(deps.openBrowser).not.toHaveBeenCalled();
+      expect(mockConsoleError).toHaveBeenCalledWith(
+        expect.stringContaining('Not in a git repository'),
+      );
+
+      mockExecSync.mockReturnValue('https://github.com/testorg/testrepo.git\n');
+    });
+
+    it('[LOGIN-Q2] should not open browser when BROWSER=none is set', async () => {
+      // Ensure git check passes (restore from Q1 contamination)
+      const { execSync } = await import('child_process');
+      (execSync as Mock<typeof execSync>).mockReturnValue('https://github.com/testorg/testrepo.git\n');
+
+      const originalBrowser = process.env['BROWSER'];
+      process.env['BROWSER'] = 'none';
+
+      mockGetCurrentActor.mockResolvedValue(null);
+      mockGetConfig.mockResolvedValue({ saasUrl: 'https://app.gitgov.dev' });
+
+      const deps = createMockDeps({
+        fetchSaas: createTrpcFetch({
+          'keyStatus': keyStatusWith(null),
+          'syncKey': { success: true, actorId: 'human:camilo', mode: 'full' },
+        }),
+      });
+
+      const cmd = new LoginCommand(deps);
+      await cmd.executeLogin(defaultOptions);
+
+      expect(deps.openBrowser).not.toHaveBeenCalled();
+
+      if (originalBrowser === undefined) delete process.env['BROWSER'];
+      else process.env['BROWSER'] = originalBrowser;
+    });
+  });
+
+  // ==========================================================================
+  // §4.17. Token Mode (LOGIN-S1 to S2)
+  // ==========================================================================
+  describe('4.17. Token Mode (LOGIN-S1 to S2)', () => {
+    it('[LOGIN-S1] should use token directly without OAuth when --token provided', async () => {
+      mockHasPrivateKey.mockResolvedValue(true);
+      mockGetConfig.mockResolvedValue({ saasUrl: 'https://app.gitgov.dev' });
+
+      const deps = createMockDeps({
+        fetchSaas: createTrpcFetch({
+          'keyStatus': keyStatusWith(null),
+          'syncKey': { success: true, actorId: 'human:testuser', mode: 'full' },
+        }),
+      });
+
+      const cmd = new LoginCommand(deps);
+      await cmd.executeLogin({ ...defaultOptions, token: 'pre-minted-jwe-token', login: 'testuser' });
+
+      // [LOGIN-S1] No callback server, no browser — token used directly
+      expect(deps.startCallbackServer).not.toHaveBeenCalled();
+      expect(deps.openBrowser).not.toHaveBeenCalled();
+      expect(mockSetCloudToken).toHaveBeenCalledWith('pre-minted-jwe-token');
+    });
+
+    it('[LOGIN-S2] should use OAuth flow when --token not provided', async () => {
+      mockHasPrivateKey.mockResolvedValue(false);
+
+      const deps = createMockDeps({
+        fetchSaas: createTrpcFetch({
+          'keyStatus': noKeyStatus,
+        }),
+      });
+
+      const cmd = new LoginCommand(deps);
+      await cmd.executeLogin(defaultOptions);
+
+      // [LOGIN-S2] Standard OAuth: callback server started, browser opened
+      expect(deps.startCallbackServer).toHaveBeenCalled();
     });
   });
 });

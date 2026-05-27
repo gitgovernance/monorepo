@@ -152,7 +152,10 @@ export class ConfigManager implements IConfigManager {
    */
   async getStateBranch(): Promise<string> {
     const config = await this.loadConfig();
-    return config?.state?.branch || 'gitgov-state';
+    if (!config?.state?.branch) {
+      throw new Error('config.json missing state.branch — project was not initialized correctly. Re-run gitgov init.');
+    }
+    return config.state.branch;
   }
 
   /**

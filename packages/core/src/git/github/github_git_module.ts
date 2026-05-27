@@ -40,10 +40,14 @@ export class GitHubGitModule implements IGitModule {
   /** Active ref for operations (can be changed via checkoutBranch) */
   private activeRef: string;
 
+  /** [EARS-C6c] Orphan pending: createBranch({orphan:true}) was called but no commit yet.
+   * commitInternal will create the root commit (parents:[]) + createRef instead of updateRef. */
+  private orphanPending = false;
+
   constructor(options: GitHubGitModuleOptions, octokit: Octokit) {
     this.owner = options.owner;
     this.repo = options.repo;
-    this.defaultBranch = options.defaultBranch ?? 'gitgov-state';
+    this.defaultBranch = options.defaultBranch;
     this.octokit = octokit;
     this.activeRef = this.defaultBranch;
   }
@@ -309,18 +313,30 @@ export class GitHubGitModule implements IGitModule {
   }
 
   /**
-   * [EARS-C6] Create branch via Refs API POST
+   * [EARS-C6] [EARS-C6b] [EARS-C6c] Create branch via Refs API POST
    *
    * When startPoint is undefined, resolves the starting SHA from activeRef.
-   * If activeRef doesn't exist (e.g., creating gitgov-state for the first
-   * time via Remote Init), falls back to the repo's default branch via
-   * repos.get API. This supports GitHubProjectInitializer.createProjectStructure()
-   * which calls createBranch(branchName, undefined) before the target branch exists.
+   * [EARS-C6b] If activeRef doesn't exist, falls back to the repo's default branch.
+   * [EARS-C6c] If options.orphan is true, marks orphan intent (orphanPending=true,
+   * activeRef=branchName) WITHOUT creating any commit or ref. The orphan root commit
+   * is deferred to commitInternal: createTree without base_tree + parents:[] + createRef.
+   * Mirrors CLI path (WTSYNC-A6: checkout --orphan + first commit = root).
    */
-  async createBranch(branchName: string, startPoint?: string): Promise<void> {
+  async createBranch(branchName: string, options?: { startPoint?: string; orphan?: boolean }): Promise<void> {
+    // [EARS-C6c] Orphan branch: mark intent only. The actual orphan commit (parents:[],
+    // tree from staged files) is created by commitInternal when it detects the ref doesn't exist.
+    // This mirrors the CLI path: `git checkout --orphan` doesn't commit — the first `git commit` does.
+    // Result: 1 commit (the init's), orphan, with only .gitgov/ files. No empty tree, no placeholder.
+    if (options?.orphan) {
+      this.orphanPending = true;
+      this.activeRef = branchName;
+      return;
+    }
+
+    // [EARS-C6] [EARS-C6b] Standard branch creation
     let sha: string;
-    if (startPoint) {
-      sha = await this.getCommitHash(startPoint);
+    if (options?.startPoint) {
+      sha = await this.getCommitHash(options.startPoint);
     } else {
       try {
         sha = await this.getCommitHash(this.activeRef);
@@ -403,23 +419,31 @@ export class GitHubGitModule implements IGitModule {
     }
 
     try {
-    // Step 1: GET current ref SHA
-    const { data: refData } = await this.octokit.rest.git.getRef({
-      owner: this.owner,
-      repo: this.repo,
-      ref: `heads/${this.activeRef}`,
-    });
-    const currentSha = refData.object.sha;
+    // [EARS-C6c] Orphan path: no existing ref — create root commit + createRef
+    const isOrphan = this.orphanPending;
 
-    // Step 2: GET commit to obtain tree SHA
-    const { data: commitData } = await this.octokit.rest.git.getCommit({
-      owner: this.owner,
-      repo: this.repo,
-      commit_sha: currentSha,
-    });
-    const treeSha = commitData.tree.sha;
+    let currentSha: string | undefined;
+    let basTreeSha: string | undefined;
 
-    // Step 3: POST blobs for each staged file (adds/updates only, not deletes)
+    if (!isOrphan) {
+      // Step 1: GET current ref SHA
+      const { data: refData } = await this.octokit.rest.git.getRef({
+        owner: this.owner,
+        repo: this.repo,
+        ref: `heads/${this.activeRef}`,
+      });
+      currentSha = refData.object.sha;
+
+      // Step 2: GET commit to obtain tree SHA
+      const { data: commitData } = await this.octokit.rest.git.getCommit({
+        owner: this.owner,
+        repo: this.repo,
+        commit_sha: currentSha,
+      });
+      basTreeSha = commitData.tree.sha;
+    }
+
+    // Step 3: POST blobs for each staged file
     const treeEntries: Array<{
       path: string;
       mode: '100644';
@@ -429,41 +453,28 @@ export class GitHubGitModule implements IGitModule {
 
     for (const [path, content] of this.stagingBuffer) {
       if (content === null) {
-        // Delete entry
-        treeEntries.push({
-          path,
-          mode: '100644',
-          type: 'blob',
-          sha: null,
-        });
+        treeEntries.push({ path, mode: '100644', type: 'blob', sha: null });
       } else {
-        // Create blob
         const { data: blobData } = await this.octokit.rest.git.createBlob({
           owner: this.owner,
           repo: this.repo,
           content: Buffer.from(content).toString('base64'),
           encoding: 'base64',
         });
-
-        treeEntries.push({
-          path,
-          mode: '100644',
-          type: 'blob',
-          sha: blobData.sha,
-        });
+        treeEntries.push({ path, mode: '100644', type: 'blob', sha: blobData.sha });
       }
     }
 
-    // Step 4: POST new tree
+    // Step 4: POST new tree (orphan: no base_tree → tree has ONLY staged files)
     const { data: treeData } = await this.octokit.rest.git.createTree({
       owner: this.owner,
       repo: this.repo,
-      base_tree: treeSha,
+      ...(basTreeSha ? { base_tree: basTreeSha } : {}),
       tree: treeEntries,
     });
     const newTreeSha = treeData.sha;
 
-    // Step 5: POST new commit
+    // Step 5: POST new commit (orphan: parents:[] → root commit, no history)
     const commitParams: {
       owner: string;
       repo: string;
@@ -476,7 +487,7 @@ export class GitHubGitModule implements IGitModule {
       repo: this.repo,
       message,
       tree: newTreeSha,
-      parents: [currentSha],
+      parents: isOrphan ? [] : [currentSha!],
     };
 
     if (author) {
@@ -490,19 +501,30 @@ export class GitHubGitModule implements IGitModule {
     const { data: newCommitData } = await this.octokit.rest.git.createCommit(commitParams);
     const newCommitSha = newCommitData.sha;
 
-    // Step 6: PATCH ref to point to new commit
-    try {
-      await this.octokit.rest.git.updateRef({
+    // Step 6: create or update ref
+    if (isOrphan) {
+      // [EARS-C6c] Orphan: create the ref (branch didn't exist before)
+      await this.octokit.rest.git.createRef({
         owner: this.owner,
         repo: this.repo,
-        ref: `heads/${this.activeRef}`,
+        ref: `refs/heads/${this.activeRef}`,
         sha: newCommitSha,
       });
-    } catch (error: unknown) {
-      if (isOctokitRequestError(error) && error.status === 422) {
-        throw new GitError('non-fast-forward update rejected');
+      this.orphanPending = false;
+    } else {
+      try {
+        await this.octokit.rest.git.updateRef({
+          owner: this.owner,
+          repo: this.repo,
+          ref: `heads/${this.activeRef}`,
+          sha: newCommitSha,
+        });
+      } catch (error: unknown) {
+        if (isOctokitRequestError(error) && error.status === 422) {
+          throw new GitError('non-fast-forward update rejected');
+        }
+        throw error;
       }
-      throw error;
     }
 
     // [EARS-C4] Clear staging buffer after successful commit

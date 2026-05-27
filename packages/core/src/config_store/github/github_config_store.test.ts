@@ -16,6 +16,7 @@ import { GitHubConfigStore } from './github_config_store';
 import type { GitHubConfigStoreOptions } from './github_config_store.types';
 import type { Octokit } from '@octokit/rest';
 import { GitHubApiError } from '../../shared/github/github';
+import { DEFAULT_STATE_BRANCH } from '../../sync_state/fs_worktree/fs_worktree_sync_state.types';
 import type { GitGovConfig } from '../../config_manager/config_manager.types';
 
 // ==================== Test Helpers ====================
@@ -250,7 +251,7 @@ describe('GitHubConfigStore', () => {
 
     it('[EARS-B6] should use default values for optional options', async () => {
       const minimalStore = new GitHubConfigStore(
-        { owner: 'org', repo: 'repo' },
+        { owner: 'org', repo: 'repo', ref: DEFAULT_STATE_BRANCH },
         mockOctokit,
       );
 

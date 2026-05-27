@@ -111,6 +111,11 @@ export class FsRecordStore<T> implements RecordStore<T> {
     await fs.writeFile(filePath, content, 'utf-8');
   }
 
+  // [EARS-E1] putDeferred = put (Fs has no transaction-boundary; commit is external via push)
+  async putDeferred(id: string, value: T): Promise<void> {
+    return this.put(id, value);
+  }
+
   async putMany(entries: Array<{ id: string; value: T }>): Promise<void> {
     for (const { id, value } of entries) {
       await this.put(id, value);

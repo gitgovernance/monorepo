@@ -45,6 +45,7 @@ export class IdentityModule implements IIdentityModule {
   async createActor(
     payload: ActorPayload,
     _signerId: string,
+    options?: { defer?: boolean },
   ): Promise<ActorRecord> {
     // [IDM-A3] Throw if required fields missing
     if (!payload.type || !payload.displayName) {
@@ -103,8 +104,12 @@ export class IdentityModule implements IIdentityModule {
       return signerActor?.publicKey || null;
     });
 
-    // [IDM-A1] Persist to store
-    await this.stores.actors.put(record.payload.id, record);
+    // [IDM-A1] [IDM-G1] Persist to store — defer stages for posterior commit (UoW participation)
+    if (options?.defer) {
+      await this.stores.actors.putDeferred(record.payload.id, record);
+    } else {
+      await this.stores.actors.put(record.payload.id, record);
+    }
 
     // [IDM-A2] Persist private key via KeyProvider (non-blocking failure)
     try {

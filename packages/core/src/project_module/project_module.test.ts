@@ -11,6 +11,7 @@
 
 import { ProjectModule } from './project_module';
 import type { ProjectModuleDeps } from './project_module.types';
+import { DEFAULT_STATE_BRANCH } from '../sync_state/fs_worktree/fs_worktree_sync_state.types';
 import type { IProjectInitializer } from '../project_initializer';
 import { IdentityModule } from '../identity/identity_module';
 import { MemoryRecordStore } from '../record_store/memory/memory_record_store';
@@ -73,7 +74,7 @@ describe('ProjectModule', () => {
       const { deps, actorStore, initializer } = createRealDeps();
       const pm = new ProjectModule(deps);
 
-      const result = await pm.initializeProject({ name: 'test-project', login: 'camilo' });
+      const result = await pm.initializeProject({ name: 'test-project', login: 'camilo', stateBranch: DEFAULT_STATE_BRANCH });
 
       expect(initializer.createProjectStructure).toHaveBeenCalled();
       expect(initializer.writeConfig).toHaveBeenCalled();
@@ -95,7 +96,7 @@ describe('ProjectModule', () => {
       (initializer.getHeadSha as jest.Mock).mockResolvedValue('sha-from-gitgov-state');
       const pm = new ProjectModule(deps);
 
-      const result = await pm.initializeProject({ name: 'test-project' });
+      const result = await pm.initializeProject({ name: 'test-project', stateBranch: DEFAULT_STATE_BRANCH });
 
       expect(result.alreadyInitialized).toBe(true);
       expect(result.commitSha).toBe('sha-from-gitgov-state');
@@ -108,7 +109,7 @@ describe('ProjectModule', () => {
       const { deps } = createRealDeps();
       const pm = new ProjectModule(deps);
 
-      const result = await pm.initializeProject({ name: 'test-project', login: 'dev' });
+      const result = await pm.initializeProject({ name: 'test-project', login: 'dev', stateBranch: DEFAULT_STATE_BRANCH });
 
       expect(result.actorId).toBe('human:dev');
     });
@@ -120,7 +121,7 @@ describe('ProjectModule', () => {
       const { deps, actorStore } = createRealDeps();
       const pm = new ProjectModule(deps);
 
-      await pm.initializeProject({ name: 'test-project', login: 'camilo', actorName: 'Camilo' });
+      await pm.initializeProject({ name: 'test-project', login: 'camilo', actorName: 'Camilo', stateBranch: DEFAULT_STATE_BRANCH });
 
       const stored = await actorStore.get('human:camilo');
       expect(stored).not.toBeNull();
@@ -137,7 +138,7 @@ describe('ProjectModule', () => {
       const { deps, actorStore } = createRealDeps();
       const pm = new ProjectModule(deps);
 
-      const result = await pm.initializeProject({ name: 'test-project', login: 'camilo' });
+      const result = await pm.initializeProject({ name: 'test-project', login: 'camilo', stateBranch: DEFAULT_STATE_BRANCH });
 
       expect(result.productAgentId).toBe('agent:gitgov-audit');
       const stored = await actorStore.get('agent:gitgov-audit');
@@ -158,7 +159,7 @@ describe('ProjectModule', () => {
       });
       const pm = new ProjectModule(deps);
 
-      await expect(pm.initializeProject({ name: 'test-project', login: 'dev' }))
+      await expect(pm.initializeProject({ name: 'test-project', login: 'dev', stateBranch: DEFAULT_STATE_BRANCH }))
         .rejects.toThrow('createProductAgent');
       expect(initializer.rollback).toHaveBeenCalled();
     });
@@ -176,7 +177,7 @@ describe('ProjectModule', () => {
       });
       const pm = new ProjectModule(deps);
 
-      await pm.initializeProject({ name: 'test-project', login: 'dev' });
+      await pm.initializeProject({ name: 'test-project', login: 'dev', stateBranch: DEFAULT_STATE_BRANCH });
 
       expect(callOrder[0]).toBe('structure');
       expect(callOrder[1]).toBe('actor');
@@ -186,7 +187,7 @@ describe('ProjectModule', () => {
       const { deps, initializer } = createRealDeps();
       const pm = new ProjectModule(deps);
 
-      await pm.initializeProject({ name: 'Test Project', login: 'dev', saasUrl: 'https://app.gitgov.com' });
+      await pm.initializeProject({ name: 'Test Project', login: 'dev', saasUrl: 'https://app.gitgov.com', stateBranch: DEFAULT_STATE_BRANCH });
 
       expect(initializer.writeConfig).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -199,11 +200,36 @@ describe('ProjectModule', () => {
       );
     });
 
+    it('[PROJ-C2b] should create root cycle with a deterministic id (not Date.now-based)', async () => {
+      const { deps, backlog } = createRealDeps();
+      const pm = new ProjectModule(deps);
+
+      await pm.initializeProject({ name: 'Test Project', login: 'dev', stateBranch: DEFAULT_STATE_BRANCH });
+
+      // The root cycle ID must be the deterministic sentinel so two inits of the same repo
+      // produce a byte-identical config.json (no gitgov-state divergence).
+      expect(backlog.createCycle).toHaveBeenCalledWith(
+        expect.objectContaining({ id: '0000000000-cycle-root', title: 'root' }),
+        expect.any(String),
+      );
+    });
+
+    it('[PROJ-C2b] two inits request the same deterministic root cycle id', async () => {
+      const a = createRealDeps();
+      const b = createRealDeps();
+      await new ProjectModule(a.deps).initializeProject({ name: 'Same Repo', login: 'dev', stateBranch: DEFAULT_STATE_BRANCH });
+      await new ProjectModule(b.deps).initializeProject({ name: 'Same Repo', login: 'dev', stateBranch: DEFAULT_STATE_BRANCH });
+
+      const idA = (a.backlog.createCycle.mock.calls[0][0] as { id: string }).id;
+      const idB = (b.backlog.createCycle.mock.calls[0][0] as { id: string }).id;
+      expect(idA).toBe(idB); // deterministic — no timestamp drift between inits
+    });
+
     it('[PROJ-C3] should call finalize and return commitSha', async () => {
       const { deps, initializer } = createRealDeps();
       const pm = new ProjectModule(deps);
 
-      const result = await pm.initializeProject({ name: 'test-project', login: 'dev' });
+      const result = await pm.initializeProject({ name: 'test-project', login: 'dev', stateBranch: DEFAULT_STATE_BRANCH });
 
       expect(initializer.finalize).toHaveBeenCalled();
       expect(result.commitSha).toBe('abc123def456abc123def456abc123def456abc1');
@@ -216,7 +242,7 @@ describe('ProjectModule', () => {
       (initializer.finalize as jest.Mock).mockImplementation(() => { callOrder.push('finalize'); return Promise.resolve('sha'); });
       const pm = new ProjectModule(deps);
 
-      await pm.initializeProject({ name: 'test-project', login: 'dev' });
+      await pm.initializeProject({ name: 'test-project', login: 'dev', stateBranch: DEFAULT_STATE_BRANCH });
 
       const gitIdx = callOrder.indexOf('gitIntegration');
       const lastFinIdx = callOrder.lastIndexOf('finalize');
@@ -232,7 +258,7 @@ describe('ProjectModule', () => {
       (initializer.finalize as jest.Mock).mockRejectedValue(new Error('Finalize failed'));
       const pm = new ProjectModule(deps);
 
-      await expect(pm.initializeProject({ name: 'test-project', login: 'dev' }))
+      await expect(pm.initializeProject({ name: 'test-project', login: 'dev', stateBranch: DEFAULT_STATE_BRANCH }))
         .rejects.toThrow('Finalize failed');
       expect(initializer.rollback).toHaveBeenCalled();
     });
@@ -243,7 +269,7 @@ describe('ProjectModule', () => {
       (initializer.rollback as jest.Mock).mockRejectedValue(new Error('Rollback failed'));
       const pm = new ProjectModule(deps);
 
-      const err = await pm.initializeProject({ name: 'test-project', login: 'dev' }).catch(e => e);
+      const err = await pm.initializeProject({ name: 'test-project', login: 'dev', stateBranch: DEFAULT_STATE_BRANCH }).catch(e => e);
       expect(err.message).toBe('Original error');
     });
 
@@ -252,7 +278,7 @@ describe('ProjectModule', () => {
       (initializer.createProjectStructure as jest.Mock).mockRejectedValue(new Error('Structure failed'));
       const pm = new ProjectModule(deps);
 
-      await expect(pm.initializeProject({ name: 'test-project', login: 'dev' }))
+      await expect(pm.initializeProject({ name: 'test-project', login: 'dev', stateBranch: DEFAULT_STATE_BRANCH }))
         .rejects.toThrow('Structure failed');
       expect(initializer.rollback).toHaveBeenCalled();
     });
@@ -262,7 +288,7 @@ describe('ProjectModule', () => {
       (initializer.finalize as jest.Mock).mockRejectedValue(new Error('Commit failed'));
       const pm = new ProjectModule(deps);
 
-      const err = await pm.initializeProject({ name: 'test-project', login: 'dev' }).catch(e => e);
+      const err = await pm.initializeProject({ name: 'test-project', login: 'dev', stateBranch: DEFAULT_STATE_BRANCH }).catch(e => e);
       expect(err.message).toBe('Commit failed');
       expect(initializer.rollback).toHaveBeenCalled();
     });
@@ -316,7 +342,7 @@ describe('ProjectModule', () => {
       deps.defaultAgents = defaultAgents;
       const pm = new ProjectModule(deps);
 
-      await pm.initializeProject({ name: 'test-project', login: 'camilo' });
+      await pm.initializeProject({ name: 'test-project', login: 'camilo', stateBranch: DEFAULT_STATE_BRANCH });
 
       // security-audit specialist should have its own ActorRecord
       const securityActor = await actorStore.get('agent:security-audit');
@@ -352,7 +378,7 @@ describe('ProjectModule', () => {
       });
 
       const pm = new ProjectModule(deps);
-      const result = await pm.initializeProject({ name: 'test-project', login: 'camilo' });
+      const result = await pm.initializeProject({ name: 'test-project', login: 'camilo', stateBranch: DEFAULT_STATE_BRANCH });
 
       // Init succeeded despite security-audit specialist failure
       expect(result.actorId).toBe('human:camilo');
@@ -371,7 +397,7 @@ describe('ProjectModule', () => {
       const pm = new ProjectModule(deps);
 
       const identitySpy = jest.spyOn(deps.identity, 'createActor');
-      await pm.initializeProject({ name: 'test-project', login: 'camilo' });
+      await pm.initializeProject({ name: 'test-project', login: 'camilo', stateBranch: DEFAULT_STATE_BRANCH });
 
       // createActor called for: human, product agent (PROJ-B2), security-audit, review-advisor
       // NOT called again for agent:gitgov-audit in PROJ-B4 loop (already created in PROJ-B2)
@@ -392,7 +418,7 @@ describe('ProjectModule', () => {
       deps.defaultAgents = defaultAgents;
       const pm = new ProjectModule(deps);
 
-      await pm.initializeProject({ name: 'test-project', login: 'camilo' });
+      await pm.initializeProject({ name: 'test-project', login: 'camilo', stateBranch: DEFAULT_STATE_BRANCH });
 
       const orchestrationCall = mockAgentAdapter.createAgentRecord.mock.calls[0][0];
       expect(orchestrationCall.metadata).toEqual(expect.objectContaining({ purpose: 'orchestration' }));
@@ -422,7 +448,7 @@ describe('ProjectModule', () => {
       }];
       const pm = new ProjectModule(deps);
 
-      await pm.initializeProject({ name: 'test-project', login: 'camilo' });
+      await pm.initializeProject({ name: 'test-project', login: 'camilo', stateBranch: DEFAULT_STATE_BRANCH });
 
       expect(mockAgentAdapter.createAgentRecord).toHaveBeenCalledTimes(1);
       expect(mockAgentAdapter.createAgentRecord).toHaveBeenCalledWith(
@@ -431,6 +457,7 @@ describe('ProjectModule', () => {
           status: 'active',
           engine: expect.objectContaining({ entrypoint: 'packages/core/dist/index.mjs' }),
         }),
+        { defer: true },
       );
     });
 
@@ -448,7 +475,7 @@ describe('ProjectModule', () => {
       ];
       const pm = new ProjectModule(deps);
 
-      const result = await pm.initializeProject({ name: 'test-project', login: 'camilo' });
+      const result = await pm.initializeProject({ name: 'test-project', login: 'camilo', stateBranch: DEFAULT_STATE_BRANCH });
 
       // Init succeeded despite first agent failure
       expect(result.actorId).toBe('human:camilo');
@@ -542,7 +569,7 @@ describe('ProjectModule', () => {
       deps.defaultAgents = singleAgent;
       const pm = new ProjectModule(deps);
 
-      await pm.initializeProject({ name: 'test-project', login: 'camilo' });
+      await pm.initializeProject({ name: 'test-project', login: 'camilo', stateBranch: DEFAULT_STATE_BRANCH });
 
       // Engine changed (v1 → v2) → updateAgentRecord called
       expect(mockAgentAdapter.updateAgentRecord).toHaveBeenCalledTimes(1);
@@ -572,7 +599,7 @@ describe('ProjectModule', () => {
       deps.defaultAgents = singleAgent;
       const pm = new ProjectModule(deps);
 
-      await pm.initializeProject({ name: 'test-project', login: 'camilo' });
+      await pm.initializeProject({ name: 'test-project', login: 'camilo', stateBranch: DEFAULT_STATE_BRANCH });
 
       // updateAgentRecord was called with engine + metadata only — NOT id, status, triggers
       const updateCall = mockAgentAdapter.updateAgentRecord.mock.calls[0];
@@ -603,7 +630,7 @@ describe('ProjectModule', () => {
       const pm = new ProjectModule(deps);
 
       // Init should NOT throw even though update failed
-      const result = await pm.initializeProject({ name: 'test-project', login: 'camilo' });
+      const result = await pm.initializeProject({ name: 'test-project', login: 'camilo', stateBranch: DEFAULT_STATE_BRANCH });
 
       expect(result.actorId).toBe('human:camilo');
       expect(mockAgentAdapter.updateAgentRecord).toHaveBeenCalledTimes(1);

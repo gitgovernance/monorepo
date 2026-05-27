@@ -20,8 +20,8 @@ import type { CommitAuthor } from '../../git';
 export type GitHubProjectInitializerOptions = {
   owner: string;
   repo: string;
-  /** Branch to initialize (default 'gitgov-state') */
-  branch?: string;
+  /** Branch to initialize — required, caller must resolve */
+  branch: string;
   /** Base path for all .gitgov files (default '.gitgov') */
   basePath?: string;
   /** Commit message used by finalize() (default 'gitgov: remote init') */

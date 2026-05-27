@@ -350,6 +350,7 @@ vi.mock('@gitgov/core', () => {
 
     // 🎭 MOCK SYNC STATE: Mock sync state operations
     SyncState: {
+      DEFAULT_STATE_BRANCH: 'gitgov-state',
       SyncStateModule: Object.assign(
         vi.fn().mockImplementation(function() { return {
           pushState: vi.fn().mockResolvedValue({
@@ -686,7 +687,7 @@ import { DependencyInjectionService } from './dependency-injection';
 // Mocked module references — vitest hoists vi.mock, so imports resolve to mocks
 import * as mockFsModule from 'fs';
 import * as corefs from '@gitgov/core/fs';
-import { Git, Adapters, KeyProvider, EventBus, RecordProjection, RecordMetrics, AuditOrchestrator as AuditOrchestratorMock, PolicyEvaluator as PolicyEvaluatorMock } from '@gitgov/core';
+import { Git, Adapters, KeyProvider, EventBus, RecordProjection, RecordMetrics, AuditOrchestrator as AuditOrchestratorMock, PolicyEvaluator as PolicyEvaluatorMock, SyncState } from '@gitgov/core';
 const mockFs = vi.mocked(mockFsModule);
 
 describe('DependencyInjectionService', () => {
@@ -710,6 +711,7 @@ describe('DependencyInjectionService', () => {
 
     // Create fresh instance
     diService = DependencyInjectionService.getInstance();
+    diService.setStateBranchOverride(SyncState.DEFAULT_STATE_BRANCH);
   });
 
   afterEach(() => {

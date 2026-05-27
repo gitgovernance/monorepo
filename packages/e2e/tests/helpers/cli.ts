@@ -26,7 +26,7 @@ export type SpawnedCli = {
 };
 
 // [HLP-A1] Execute the globally installed gitgov CLI
-export function runGitgovCli(args: string, options: { cwd: string; expectError?: boolean; timeout?: number }): CliResult {
+export function runGitgovCli(args: string, options: { cwd: string; expectError?: boolean; timeout?: number; env?: Record<string, string> }): CliResult {
   const command = `gitgov ${args}`;
   try {
     const result = execSync(command, {
@@ -34,6 +34,7 @@ export function runGitgovCli(args: string, options: { cwd: string; expectError?:
       encoding: 'utf8',
       stdio: 'pipe',
       timeout: options.timeout ?? 30000,
+      env: options.env ? { ...process.env, ...options.env } : undefined,
     });
 
     if (options.expectError) {

@@ -28,6 +28,7 @@ function createMockStore(records: ReadonlyMap<string, unknown> = new Map()) {
     list: vi.fn().mockResolvedValue(Array.from(records.keys())),
     get: vi.fn().mockImplementation(async (id: string) => records.get(id) ?? null),
     put: vi.fn(),
+    putDeferred: vi.fn(),
     putMany: vi.fn(),
     delete: vi.fn(),
     exists: vi.fn().mockImplementation(async (id: string) => records.has(id)),

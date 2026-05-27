@@ -75,6 +75,7 @@ describe('AgentAdapter', () => {
     // Mock agent store
     mockAgentStore = {
       put: jest.fn().mockResolvedValue(undefined),
+      putDeferred: jest.fn().mockResolvedValue(undefined),
       get: jest.fn().mockResolvedValue(null),
       list: jest.fn().mockResolvedValue([]),
       delete: jest.fn().mockResolvedValue(undefined),
@@ -321,6 +322,33 @@ describe('AgentAdapter', () => {
       await expect(
         agentAdapter.archiveAgentRecord('agent:nonexistent')
       ).rejects.toThrow('AgentRecord with id agent:nonexistent not found');
+    });
+  });
+
+  describe('4.6. Deferred Persistence — UoW Participation (EARS-F1)', () => {
+    it('[EARS-F1] should use putDeferred when defer option is true', async () => {
+      mockAgentStore.putDeferred.mockResolvedValue(undefined);
+      const payload = {
+        id: 'agent:deferred-agent',
+        engine: { type: 'local' as const, entrypoint: 'index.ts', function: 'run' },
+      };
+
+      await agentAdapter.createAgentRecord(payload, { defer: true });
+
+      expect(mockAgentStore.putDeferred).toHaveBeenCalledTimes(1);
+      expect(mockAgentStore.put).not.toHaveBeenCalled();
+    });
+
+    it('[EARS-F1] should use put when defer option is not set', async () => {
+      const payload = {
+        id: 'agent:normal-agent',
+        engine: { type: 'local' as const, entrypoint: 'index.ts', function: 'run' },
+      };
+
+      await agentAdapter.createAgentRecord(payload);
+
+      expect(mockAgentStore.put).toHaveBeenCalledTimes(1);
+      expect(mockAgentStore.putDeferred).not.toHaveBeenCalled();
     });
   });
 });

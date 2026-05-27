@@ -204,4 +204,13 @@ describe('MemoryRecordStore', () => {
       expect(preloadedStore.size()).toBe(2);
     });
   });
+
+  describe('4.3. Deferred Persistence (EARS-C1)', () => {
+    it('[EARS-C1] should persist to Map same as put', async () => {
+      await store.putDeferred('deferred-1', { id: 'deferred-1', name: 'Deferred' });
+
+      const result = await store.get('deferred-1');
+      expect(result).toEqual({ id: 'deferred-1', name: 'Deferred' });
+    });
+  });
 });

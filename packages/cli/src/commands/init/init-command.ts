@@ -1,4 +1,5 @@
 import type { ProjectModule } from '@gitgov/core';
+import { SyncState } from '@gitgov/core';
 import { DependencyInjectionService } from '../../services/dependency-injection';
 
 import * as pathUtils from 'path';
@@ -42,6 +43,11 @@ export class InitCommand {
    */
   async execute(options: InitCommandOptions): Promise<void> {
     try {
+      // [INIT-L1] Set the state-branch override BEFORE anything can trigger the worktree
+      // bootstrap. The DI guard throws if a store init happens pre-setInitMode without it
+      // (mirror LoginCommand). Without this, `gitgov init --state-branch X` fails to init cache.
+      this.container.setStateBranchOverride(options.stateBranch ?? SyncState.DEFAULT_STATE_BRANCH);
+
       // 1. Environment validation (unless skipped or force-local)
       if (!options.skipValidation && !options.forceLocal) {
         await this.validateEnvironment(options);
@@ -75,7 +81,7 @@ export class InitCommand {
       const progressTracker = this.createProgressTracker(options);
 
       // [INIT-L1] [INIT-L2] Resolve state branch name
-      const stateBranch = completeOptions.stateBranch || 'gitgov-state';
+      const stateBranch = completeOptions.stateBranch || SyncState.DEFAULT_STATE_BRANCH;
 
       // [EARS-B1] Get ProjectModule from dependency injection
       const projectModule = await this.getProjectModule(stateBranch);
@@ -183,7 +189,7 @@ export class InitCommand {
    */
   private async postInitConcerns(options: InitCommandOptions): Promise<void> {
     const repoRoot = process.cwd();
-    const stateBranch = options.stateBranch || 'gitgov-state';
+    const stateBranch = options.stateBranch || SyncState.DEFAULT_STATE_BRANCH;
 
     // [EARS-G1] [INIT-L1] Best-effort push to remote using configured branch
     try {

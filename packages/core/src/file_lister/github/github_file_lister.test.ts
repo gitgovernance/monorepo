@@ -16,6 +16,7 @@ import { GitHubFileLister } from './github_file_lister';
 import type { GitHubFileListerOptions } from './github_file_lister.types';
 import type { Octokit } from '@octokit/rest';
 import { FileListerError } from '../file_lister';
+import { DEFAULT_STATE_BRANCH } from '../../sync_state/fs_worktree/fs_worktree_sync_state.types';
 
 // ==================== Test Helpers ====================
 
@@ -599,7 +600,7 @@ describe('GitHubFileLister', () => {
   describe('4.2+ Constructor Defaults (EARS-B8)', () => {
     it('[EARS-B8] should use gitgov-state as default ref when not specified', async () => {
       const listerNoRef = new GitHubFileLister(
-        { owner: 'org', repo: 'repo' },
+        { owner: 'org', repo: 'repo', ref: DEFAULT_STATE_BRANCH },
         mockOctokit,
       );
       mockOctokit.rest.repos.getContent.mockResolvedValue(createContentsResponse('content'));

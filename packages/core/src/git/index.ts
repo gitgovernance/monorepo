@@ -96,7 +96,7 @@ export interface IGitModule {
   // Rebase Operations
   rebaseContinue(): Promise<string>;
   rebaseAbort(): Promise<void>;
-  createBranch(branchName: string, startPoint?: string): Promise<void>;
+  createBranch(branchName: string, options?: { startPoint?: string; orphan?: boolean }): Promise<void>;
   /**
    * Delete a branch — idempotent semantics (added for Cycle 5, IKS-A41).
    *

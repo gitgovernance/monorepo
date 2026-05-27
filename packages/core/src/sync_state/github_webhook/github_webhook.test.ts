@@ -10,6 +10,7 @@
 import crypto from "crypto";
 import { GithubWebhookHandler } from "./github_webhook";
 import type { WebhookPayload } from "./github_webhook.types";
+import { DEFAULT_STATE_BRANCH } from "../fs_worktree/fs_worktree_sync_state.types";
 
 const TEST_SECRET = "test-webhook-secret-abc123";
 
@@ -70,7 +71,7 @@ describe("GithubWebhookHandler", () => {
   let handler: GithubWebhookHandler;
 
   beforeEach(() => {
-    handler = new GithubWebhookHandler({ secret: TEST_SECRET });
+    handler = new GithubWebhookHandler({ secret: TEST_SECRET, stateBranch: DEFAULT_STATE_BRANCH });
   });
 
   // ===== EARS-GW-A1 to A3: Signature Verification =====

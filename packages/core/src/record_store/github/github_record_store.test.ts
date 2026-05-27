@@ -537,4 +537,42 @@ describe('GitHubRecordStore', () => {
       });
     });
   });
+
+  // ==================== 4.4. Deferred Persistence (EARS-D1) ====================
+
+  describe('4.4. Deferred Persistence (EARS-D1)', () => {
+    it('[EARS-D1] should stage record via gitModule.add without committing', async () => {
+      const mockGit = createMockGitModule();
+      const storeWithGit = new GitHubRecordStore<TestRecord>(defaultOptions, mockOctokit, mockGit);
+
+      await storeWithGit.putDeferred('actor-1', { name: 'Alice', score: 90 });
+
+      expect(mockGit.add).toHaveBeenCalledWith(
+        ['.gitgov/actors/actor-1.json'],
+        { contentMap: { '.gitgov/actors/actor-1.json': JSON.stringify({ name: 'Alice', score: 90 }, null, 2) } },
+      );
+      expect(mockGit.commit).not.toHaveBeenCalled();
+    });
+
+    it('[EARS-D1] should use buildFilePath with idEncoder for staging path', async () => {
+      const mockGit = createMockGitModule();
+      const storeWithEncoder = new GitHubRecordStore<TestRecord>(
+        { ...defaultOptions, idEncoder: { encode: (id: string) => id.replace(/:/g, '_'), decode: (e: string) => e.replace(/_/g, ':') } },
+        mockOctokit,
+        mockGit,
+      );
+
+      await storeWithEncoder.putDeferred('human:camilo', { name: 'Camilo', score: 100 });
+
+      expect(mockGit.add).toHaveBeenCalledWith(
+        ['.gitgov/actors/human_camilo.json'],
+        expect.objectContaining({ contentMap: expect.objectContaining({ '.gitgov/actors/human_camilo.json': expect.any(String) }) }),
+      );
+    });
+
+    it('[EARS-D1] should throw when putDeferred called without gitModule', async () => {
+      await expect(store.putDeferred('alice', { name: 'Alice', score: 90 }))
+        .rejects.toThrow('putDeferred requires IGitModule dependency for staging');
+    });
+  });
 });

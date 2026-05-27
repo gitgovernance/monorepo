@@ -1,6 +1,13 @@
 import type { ProjectModuleDeps, ProjectInitOptions, ProjectInitResult, EnsureActorInput, EnsureActorResult } from './project_module.types';
 import { EnsureActorError } from './project_module.types';
 
+// [PROJ-C2b] Deterministic root cycle ID. The root cycle is unique per project, so its ID
+// must be stable across inits (not Date.now()). Two inits of the same repo then produce a
+// byte-identical config.json (rootCycle field), so gitgov-state cannot diverge → no conflict.
+// The 10-zero prefix is a sentinel ("not a real timestamp") satisfying the cycle ID schema
+// ^\d{10}-cycle-[a-z0-9-]{1,50}$. Per-repo scope means no cross-repo collision.
+const ROOT_CYCLE_ID = '0000000000-cycle-root';
+
 export class ProjectModule {
   constructor(private readonly deps: ProjectModuleDeps) {}
 
@@ -10,7 +17,8 @@ export class ProjectModule {
     const repoId = options.repoId ?? '';
 
     // [PROJ-A2] Idempotency — if already initialized, ensure caller's actor exists
-    if (await this.deps.initializer.isInitialized()) {
+    const isInit = await this.deps.initializer.isInitialized();
+    if (isInit) {
       const commitSha = await this.deps.initializer.getHeadSha();
       if (options.login) {
         const ensureInput: EnsureActorInput = {
@@ -41,6 +49,7 @@ export class ProjectModule {
         roles: ['admin', 'author', 'approver:product', 'approver:quality', 'developer'],
         joinedVia,
         skipFinalize: true,
+        defer: true,
       });
 
       // [PROJ-B2] Product agent (G21 Two-Tier Actor Model) — via ensureActorInProject
@@ -50,6 +59,7 @@ export class ProjectModule {
           login: 'gitgov-audit',
           type: 'agent',
           skipFinalize: true,
+          defer: true,
           repoId,
           displayName: 'GitGov Audit',
           roles: ['orchestrator'],
@@ -61,8 +71,9 @@ export class ProjectModule {
         throw new Error(`Init failed at step createProductAgent: ${message}`);
       }
 
-      // Root cycle
+      // Root cycle — [PROJ-C2b] deterministic ID so two inits converge on identical config.json
       const rootCycle = await this.deps.backlog.createCycle({
+        id: ROOT_CYCLE_ID,
         title: 'root',
         status: 'planning' as const,
         taskIds: [],
@@ -76,7 +87,7 @@ export class ProjectModule {
         rootCycle: rootCycle.id,
         ...(options.saasUrl && { saasUrl: options.saasUrl }),
         // [INIT-L1] State branch written to config for all commands to read
-        state: { branch: options.stateBranch || 'gitgov-state' },
+        state: { branch: options.stateBranch },
       };
       await this.deps.initializer.writeConfig(config);
 
@@ -97,6 +108,7 @@ export class ProjectModule {
                 displayName: agentConfig.displayName,
                 joinedVia,
                 skipFinalize: true,
+                defer: true,
               });
             }
 
@@ -122,7 +134,7 @@ export class ProjectModule {
                 triggers: agentConfig.triggers,
                 // [PROJ-E4] Purpose merged into AgentRecord metadata
                 metadata: mergedMetadata,
-              });
+              }, { defer: true });
             }
           } catch {
             // [PROJ-B5] [PROJ-E2] [GAUD-E3] Non-fatal — agent create/update failure doesn't block init
@@ -205,7 +217,7 @@ export class ProjectModule {
         joinedVia: input.joinedVia,
         joinedAt: new Date().toISOString(),
       },
-    }, 'bootstrap');
+    }, 'bootstrap', input.defer ? { defer: true } : undefined);
 
     // [PROJ-H3] Finalize commits the actor to git.
     // When skipFinalize is set (called from initializeProject), the caller
