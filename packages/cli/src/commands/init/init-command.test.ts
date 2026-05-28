@@ -338,7 +338,7 @@ describe('InitCommand', () => {
       expect(mockProcessExit).not.toHaveBeenCalled();
     });
 
-    it('[INIT-J1] should call ensureActorInProject when alreadyInitialized and actor missing', async () => {
+    it('[INIT-J1] should call addActor when alreadyInitialized and actor missing', async () => {
       mockProjectModule.initializeProject.mockResolvedValue({
         alreadyInitialized: true,
         actorId: 'human:test-user',

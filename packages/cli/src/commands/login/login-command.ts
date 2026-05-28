@@ -176,7 +176,7 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
       // [LOGIN-O1] Materialize actor BEFORE key sync — generates keypair if collaborator is new
       try {
         const projectModule = await this.dependencyService.getProjectModule();
-        await projectModule.ensureActorInProject({
+        await projectModule.addActor({
           login: user.login,
           type: actorType,
           repoId: '',
