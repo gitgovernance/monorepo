@@ -637,13 +637,13 @@ describe('ProjectModule', () => {
     });
   });
 
-  describe('4.9. ensureActorInProject (PROJ-H1 to H6)', () => {
+  describe('4.9. addActor (PROJ-H1 to H6)', () => {
     it('[PROJ-H1] should create actor and commit when actor not in store', async () => {
       const { deps, initializer } = createRealDeps();
       initializer.finalize = jest.fn().mockResolvedValue('sha-join-commit');
       const pm = new ProjectModule(deps);
 
-      const result = await pm.ensureActorInProject({
+      const result = await pm.addActor({
         login: 'collab', type: 'human', repoId: 'repo-1', joinedVia: 'cli',
       });
 
@@ -657,11 +657,11 @@ describe('ProjectModule', () => {
       initializer.finalize = jest.fn().mockResolvedValue('sha-first');
       const pm = new ProjectModule(deps);
 
-      await pm.ensureActorInProject({
+      await pm.addActor({
         login: 'collab', type: 'human', repoId: 'repo-1', joinedVia: 'cli',
       });
 
-      const result = await pm.ensureActorInProject({
+      const result = await pm.addActor({
         login: 'collab', type: 'human', repoId: 'repo-1', joinedVia: 'saas-oauth',
       });
 
@@ -676,14 +676,14 @@ describe('ProjectModule', () => {
         .mockResolvedValueOnce('sha-retry-commit');
       const pm = new ProjectModule(deps);
 
-      await expect(pm.ensureActorInProject({
+      await expect(pm.addActor({
         login: 'retry-user', type: 'human', repoId: 'repo-1', joinedVia: 'cli',
       })).rejects.toMatchObject({ code: 'GIT_WRITE_FAILED' });
 
       expect(initializer.finalize).toHaveBeenCalledTimes(1);
 
       // Retry — actor exists in store, finalize is re-called to complete the git write
-      const result = await pm.ensureActorInProject({
+      const result = await pm.addActor({
         login: 'retry-user', type: 'human', repoId: 'repo-1', joinedVia: 'cli',
       });
 
@@ -699,7 +699,7 @@ describe('ProjectModule', () => {
         .mockRejectedValue(new Error('Nothing to commit: staging buffer is empty'));
       const pm = new ProjectModule(deps);
 
-      const result = await pm.ensureActorInProject({
+      const result = await pm.addActor({
         login: 'store-committed', type: 'human', repoId: 'repo-1', joinedVia: 'saas-oauth',
       });
 
@@ -716,7 +716,7 @@ describe('ProjectModule', () => {
       const pm = new ProjectModule(deps);
 
       // First create the actor so it's in the store
-      await expect(pm.ensureActorInProject({
+      await expect(pm.addActor({
         login: 'ghost-actor', type: 'human', repoId: 'repo-1', joinedVia: 'cli',
       })).rejects.toMatchObject({ code: 'GIT_WRITE_FAILED' });
     });
@@ -728,7 +728,7 @@ describe('ProjectModule', () => {
       deps.eventBus = { emit: emitSpy };
       const pm = new ProjectModule(deps);
 
-      await pm.ensureActorInProject({
+      await pm.addActor({
         login: 'event-user', type: 'human', repoId: 'repo-42', joinedVia: 'mcp',
       });
 
@@ -745,7 +745,7 @@ describe('ProjectModule', () => {
       initializer.finalize = jest.fn().mockResolvedValue('sha-lazy');
       const pm = new ProjectModule(deps);
 
-      const result = await pm.ensureActorInProject({
+      const result = await pm.addActor({
         login: 'lazy-user', type: 'human', repoId: 'repo-specific', joinedVia: 'saas-webhook',
       });
 
@@ -757,7 +757,7 @@ describe('ProjectModule', () => {
       const { deps } = createRealDeps();
       const pm = new ProjectModule(deps);
 
-      await expect(pm.ensureActorInProject({
+      await expect(pm.addActor({
         login: 'blocked-user', type: 'agent', repoId: 'repo-1', joinedVia: 'mcp',
         authzCheck: async () => false,
       })).rejects.toMatchObject({

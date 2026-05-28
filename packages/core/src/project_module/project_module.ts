@@ -1,5 +1,5 @@
-import type { ProjectModuleDeps, ProjectInitOptions, ProjectInitResult, EnsureActorInput, EnsureActorResult } from './project_module.types';
-import { EnsureActorError } from './project_module.types';
+import type { ProjectModuleDeps, ProjectInitOptions, ProjectInitResult, AddActorInput, AddActorResult } from './project_module.types';
+import { AddActorError } from './project_module.types';
 
 // [PROJ-C2b] Deterministic root cycle ID. The root cycle is unique per project, so its ID
 // must be stable across inits (not Date.now()). Two inits of the same repo then produce a
@@ -21,14 +21,14 @@ export class ProjectModule {
     if (isInit) {
       const commitSha = await this.deps.initializer.getHeadSha();
       if (options.login) {
-        const ensureInput: EnsureActorInput = {
+        const ensureInput: AddActorInput = {
           login: options.login,
           type: options.type ?? 'human',
           repoId,
           joinedVia,
         };
         if (options.actorName) ensureInput.displayName = options.actorName;
-        const actorResult = await this.ensureActorInProject(ensureInput);
+        const actorResult = await this.addActor(ensureInput);
         return { alreadyInitialized: true, actorId: actorResult.actorId, created: actorResult.created, commitSha: actorResult.commitSha ?? commitSha } as ProjectInitResult;
       }
       return { alreadyInitialized: true, commitSha } as ProjectInitResult;
@@ -38,10 +38,10 @@ export class ProjectModule {
       // [PROJ-C1] Structure (dirs + policy.yml) — before actors
       await this.deps.initializer.createProjectStructure();
 
-      // [PROJ-A1] [PROJ-B1] Human actor — via ensureActorInProject for consistent metadata + events
+      // [PROJ-A1] [PROJ-B1] Human actor — via addActor for consistent metadata + events
       // skipFinalize: true — initializeProject calls finalize() once at the end
       const actorType = options.type ?? 'human';
-      const humanResult = await this.ensureActorInProject({
+      const humanResult = await this.addActor({
         login: options.login || 'owner',
         type: actorType as 'human' | 'agent',
         repoId,
@@ -52,10 +52,10 @@ export class ProjectModule {
         defer: true,
       });
 
-      // [PROJ-B2] Product agent (G21 Two-Tier Actor Model) — via ensureActorInProject
-      let productAgentResult: EnsureActorResult;
+      // [PROJ-B2] Product agent (G21 Two-Tier Actor Model) — via addActor
+      let productAgentResult: AddActorResult;
       try {
-        productAgentResult = await this.ensureActorInProject({
+        productAgentResult = await this.addActor({
           login: 'gitgov-audit',
           type: 'agent',
           skipFinalize: true,
@@ -101,7 +101,7 @@ export class ProjectModule {
             // [PROJ-E3] Product agent already has ActorRecord — skip
             // [PROJ-E1] Specialist agents need their own ActorRecord before AgentRecord
             if (agentConfig.agentId !== productAgentResult.actorId) {
-              await this.ensureActorInProject({
+              await this.addActor({
                 login: agentConfig.agentId.replace('agent:', ''),
                 type: 'agent',
                 repoId,
@@ -167,14 +167,14 @@ export class ProjectModule {
   }
 
   // [PROJ-H1] [PROJ-H2] [PROJ-H3] [PROJ-H4] [PROJ-H5] [PROJ-H6]
-  async ensureActorInProject(input: EnsureActorInput): Promise<EnsureActorResult> {
+  async addActor(input: AddActorInput): Promise<AddActorResult> {
     const actorId = `${input.type}:${input.login}`;
 
     // [PROJ-H6] authzCheck — invoke before any creation
     if (input.authzCheck) {
       const allowed = await input.authzCheck(input);
       if (!allowed) {
-        throw new EnsureActorError('UNAUTHORIZED', { login: input.login, type: input.type, reason: 'authz check denied' });
+        throw new AddActorError('UNAUTHORIZED', { login: input.login, type: input.type, reason: 'authz check denied' });
       }
     }
 
@@ -199,7 +199,7 @@ export class ProjectModule {
         timestamp: new Date().toISOString(),
       });
 
-      const result: EnsureActorResult = { actorId, created: false };
+      const result: AddActorResult = { actorId, created: false };
       if (commitSha) result.commitSha = commitSha;
       return result;
     }
@@ -232,10 +232,10 @@ export class ProjectModule {
         if (message.includes('Nothing to commit')) {
           const verified = await this.deps.identity.getActor(actorId);
           if (!verified) {
-            throw new EnsureActorError('GIT_WRITE_FAILED', { actorId, cause: message });
+            throw new AddActorError('GIT_WRITE_FAILED', { actorId, cause: message });
           }
         } else {
-          throw new EnsureActorError('GIT_WRITE_FAILED', { actorId, cause: message });
+          throw new AddActorError('GIT_WRITE_FAILED', { actorId, cause: message });
         }
       }
     }
@@ -247,7 +247,7 @@ export class ProjectModule {
       timestamp: new Date().toISOString(),
     });
 
-    const result: EnsureActorResult = { actorId, created: true };
+    const result: AddActorResult = { actorId, created: true };
     if (commitSha) result.commitSha = commitSha;
     return result;
   }
