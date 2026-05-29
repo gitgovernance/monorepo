@@ -164,6 +164,7 @@ export class GitHubProjectInitializer implements IProjectInitializer {
     return `${this.basePath}/actors/${actorId}.json`;
   }
 
+
   // GPI13 — IKS-T6: transaction boundary. Materializes all staged writes in 1 commit.
   // Returns the commit SHA for observability (used by RemoteInitService to emit
   // `INIT_COMPLETE` event via `RepoStateMachineService.transition` with commitSha).

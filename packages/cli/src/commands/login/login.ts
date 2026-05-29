@@ -14,6 +14,8 @@ export function registerLoginCommands(program: Command): void {
     .option('--force-local', 'On key conflict: keep local key, upload to cloud')
     .option('--force-cloud', 'On key conflict: keep cloud key, download to local')
     .option('--state-branch <name>', 'State branch name (overrides config for pre-DI fetch)')
+    .option('--token <jwe>', 'Pre-minted session token (bypasses OAuth). Test-only')
+    .option('--login <name>', 'GitHub login (required with --token)')
     .option('--json', 'Output as JSON')
     .option('-v, --verbose', 'Verbose output')
     .option('-q, --quiet', 'Quiet output')
