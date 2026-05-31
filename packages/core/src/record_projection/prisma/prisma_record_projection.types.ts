@@ -153,6 +153,7 @@ export type SingletonDelegate<TRow> = {
 };
 
 export type RecordDelegate<TRow> = {
+  count(args: { where: WhereClause }): PromiseLike<number>;
   createMany(args: {
     data: Array<Omit<TRow, 'id' | 'createdAt' | 'updatedAt'> & Record<string, unknown>>;
   }): PromiseLike<unknown>;

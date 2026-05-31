@@ -175,6 +175,21 @@ export class PrismaRecordProjection implements IRecordProjection {
     }
 
     await this.client.$transaction(ops);
+
+    // [PP-C2] Post-persist integrity check: verify counts match what was written.
+    // Only check the 3 most critical tables (actors, tasks, cycles).
+    const actualActors = await this.client.gitgovActor.count({ where });
+    const actualTasks = await this.client.gitgovTask.count({ where });
+    const actualCycles = await this.client.gitgovCycle.count({ where });
+    if (actualActors !== actorRows.length || actualTasks !== taskRows.length || actualCycles !== cycleRows.length) {
+      const id = this.tenantFields['repoId'] ?? 'unknown';
+      throw new Error(
+        `Persist integrity check failed for repo ${id}: ` +
+        `actors expected=${actorRows.length} actual=${actualActors}, ` +
+        `tasks expected=${taskRows.length} actual=${actualTasks}, ` +
+        `cycles expected=${cycleRows.length} actual=${actualCycles}`
+      );
+    }
   }
 
   async read(_context: ProjectionContext): Promise<IndexData | null> {
