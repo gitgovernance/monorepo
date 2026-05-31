@@ -280,6 +280,7 @@ export class GitHubGitModule implements IGitModule {
       const { data } = await this.octokit.rest.repos.listBranches({
         owner: this.owner,
         repo: this.repo,
+        per_page: 100,
       });
       return data.map(b => b.name);
     } catch (error: unknown) {
