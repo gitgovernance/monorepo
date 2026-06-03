@@ -332,6 +332,7 @@ describe("AuditOrchestrator", () => {
 
       expect(result.findings).toHaveLength(0);
       expect(result.agentResults).toHaveLength(0);
+      expect(result.l1AgentResults).toEqual([]);
       expect(result.summary.total).toBe(0);
       expect(result.summary.agentsRun).toBe(0);
       expect(deps.agentRunner.runOnce).not.toHaveBeenCalled();
@@ -1036,7 +1037,7 @@ describe("AuditOrchestrator", () => {
       expect(result.l1AgentResults).toHaveLength(1);
 
       // L1 SARIF should have redacted snippet for pii-email (sensitive)
-      const l1Sarif = result.l1AgentResults![0]!.sarif;
+      const l1Sarif = result.l1AgentResults[0]!.sarif;
       const l1Snippet =
         l1Sarif.runs[0]!.results[0]!.locations[0]!.physicalLocation.region.snippet;
       expect(l1Snippet).toBeDefined();
@@ -1045,6 +1046,9 @@ describe("AuditOrchestrator", () => {
       // snippetHash should be present
       const l1Props = l1Sarif.runs[0]!.results[0]!.properties;
       expect(l1Props?.["gitgov/snippetHash"]).toBeDefined();
+
+      // L1 SARIF must be a distinct object from L2 (copy, not mutation)
+      expect(result.l1AgentResults[0]!.sarif).not.toBe(result.agentResults[0]!.sarif);
     });
 
     it("[AORCH-E2] should preserve original unredacted agent results for L2", async () => {
@@ -1113,7 +1117,7 @@ describe("AuditOrchestrator", () => {
 
       // L1 should be redacted
       const l1Snippet =
-        result.l1AgentResults![0]!.sarif.runs[0]!.results[0]!.locations[0]!
+        result.l1AgentResults[0]!.sarif.runs[0]!.results[0]!.locations[0]!
           .physicalLocation.region.snippet;
       expect(l1Snippet!.text).toBe("[REDACTED]");
     });

@@ -44,6 +44,11 @@
       "import": "./dist/src/sarif/index.js",
       "default": "./dist/src/sarif/index.js"
     },
+    "./redaction": {
+      "types": "./dist/src/redaction/index.d.ts",
+      "import": "./dist/src/redaction/index.js",
+      "default": "./dist/src/redaction/index.js"
+    },
     "./package.json": "./package.json"
   },
   "scripts": {

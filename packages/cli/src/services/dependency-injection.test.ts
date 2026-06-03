@@ -697,7 +697,7 @@ import { DependencyInjectionService } from './dependency-injection';
 // Mocked module references — vitest hoists vi.mock, so imports resolve to mocks
 import * as mockFsModule from 'fs';
 import * as corefs from '@gitgov/core/fs';
-import { Git, Adapters, KeyProvider, EventBus, RecordProjection, RecordMetrics, AuditOrchestrator as AuditOrchestratorMock, PolicyEvaluator as PolicyEvaluatorMock, SyncState } from '@gitgov/core';
+import { Git, Adapters, KeyProvider, EventBus, RecordProjection, RecordMetrics, AuditOrchestrator as AuditOrchestratorMock, PolicyEvaluator as PolicyEvaluatorMock, SyncState, Redaction as RedactionMock } from '@gitgov/core';
 const mockFs = vi.mocked(mockFsModule);
 
 describe('DependencyInjectionService', () => {
@@ -907,8 +907,10 @@ describe('DependencyInjectionService', () => {
       expect(depsArg.agentRunner).toBeDefined();
       expect(depsArg.waiverReader).toBeDefined();
       expect(depsArg.recordStore).toBeDefined();
+      expect(depsArg.policyEvaluator).toBeDefined();
 
-      // Verify PolicyEvaluator was created as dependency
+      // Verify FindingRedactor constructor was called
+      expect(RedactionMock.FindingRedactor).toHaveBeenCalled();
       expect(PolicyEvaluatorMock.createPolicyEvaluator).toHaveBeenCalled();
     });
 

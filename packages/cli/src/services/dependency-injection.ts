@@ -760,6 +760,7 @@ export class DependencyInjectionService {
   /**
    * Creates and returns AuditOrchestrator with all required dependencies
    */
+  // [EARS-C11] AuditOrchestrator with AgentRunner, WaiverReader, RecordStore, PolicyEvaluator, FindingRedactor
   async getAuditOrchestrator(): Promise<ReturnType<typeof AuditOrchestrator.createAuditOrchestrator>> {
     if (this.auditOrchestrator) {
       return this.auditOrchestrator;
