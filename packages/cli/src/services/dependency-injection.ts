@@ -1,6 +1,6 @@
 import * as path from 'path';
 import * as os from 'os';
-import { Adapters, Config, Session, EventBus, Lint, Git, SourceAuditor, FindingDetector, KeyProvider, RecordProjection, RecordMetrics, AuditOrchestrator, PolicyEvaluator, IdentityModule, RecordSigner, getCurrentActor, ActorSelectionRequiredError, ProjectModule, DEFAULT_AGENTS } from '@gitgov/core';
+import { Adapters, Config, Session, EventBus, Lint, Git, SourceAuditor, FindingDetector, KeyProvider, RecordProjection, RecordMetrics, AuditOrchestrator, PolicyEvaluator, IdentityModule, RecordSigner, getCurrentActor, ActorSelectionRequiredError, ProjectModule, DEFAULT_AGENTS, Redaction } from '@gitgov/core';
 import { FsRecordStore, DEFAULT_ID_ENCODER, FsFileLister, FsProjectInitializer, FsLintModule, FsWorktreeSyncStateModule, GitModule, createAgentRunner, createConfigManager, findProjectRoot, createSessionManager, FsRecordProjection, getWorktreeBasePath, getKeysDir } from '@gitgov/core/fs';
 import type { IFsLintModule } from '@gitgov/core/fs';
 import type {
@@ -776,11 +776,14 @@ export class DependencyInjectionService {
       const recordStore = this.stores.agents;
       const policyEvaluator = PolicyEvaluator.createPolicyEvaluator({});
 
+      const redactor = new Redaction.FindingRedactor(Redaction.DEFAULT_REDACTION_CONFIG);
+
       this.auditOrchestrator = AuditOrchestrator.createAuditOrchestrator({
         recordStore,
         agentRunner,
         waiverReader,
         policyEvaluator,
+        redactor,
       });
 
       return this.auditOrchestrator;

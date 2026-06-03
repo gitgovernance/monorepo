@@ -346,8 +346,8 @@ export type AuditOrchestrationResult = {
   findings: Finding[];
   /** Per-agent execution results (original, unredacted — for L2 persistence) */
   agentResults: AgentAuditResult[];
-  /** Per-agent results with redacted SARIF for L1 (Git) persistence */
-  l1AgentResults?: AgentAuditResult[];
+  /** Per-agent results with redacted SARIF for L1 (Git) persistence — always present (redactor required) */
+  l1AgentResults: AgentAuditResult[];
   /** Policy evaluation decision */
   policyDecision: PolicyDecision;
   /** Aggregated summary */
