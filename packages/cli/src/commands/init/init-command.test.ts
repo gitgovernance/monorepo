@@ -361,6 +361,21 @@ describe('InitCommand', () => {
 
       expect(mockConsoleLog).toHaveBeenCalledWith('Already a member of this project as human:test-user');
     });
+
+    it('[INIT-J2b] should not run postInitConcerns when already a member', async () => {
+      mockProjectModule.initializeProject.mockResolvedValue({
+        alreadyInitialized: true,
+        actorId: 'human:test-user',
+        created: false,
+      } as any);
+      (execSync as Mock<typeof execSync>).mockClear();
+
+      await initCommand.execute({ name: 'Test Project' });
+
+      const pushCalls = (execSync as Mock<typeof execSync>).mock.calls
+        .filter(([cmd]) => typeof cmd === 'string' && cmd.includes('git push'));
+      expect(pushCalls).toHaveLength(0);
+    });
   });
 
   // ============================================================================
