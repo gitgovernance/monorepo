@@ -18,7 +18,10 @@ import type { IKeyProvider } from '@gitgov/core';
 // Mock child_process for resolveOrgId
 vi.mock('child_process', () => ({
   exec: vi.fn(),
-  execSync: vi.fn().mockReturnValue('https://github.com/testorg/testrepo.git\n'),
+  execSync: vi.fn().mockImplementation((cmd: string) => {
+    if (cmd.startsWith('ssh -G')) return 'hostname github.com\n';
+    return 'https://github.com/testorg/testrepo.git\n';
+  }),
 }));
 
 // Mock @gitgov/core/fs for FsKeyProvider (dynamic import in login-command)
@@ -637,9 +640,9 @@ describe('LoginCommand v2', () => {
     });
   });
 
-  // ==================== §4.8 Config Requirements (LOGIN-H1 to H3) ====================
+  // ==================== §4.8 Config Requirements (LOGIN-H1 to H4) ====================
 
-  describe('4.8. Config Requirements (LOGIN-H1 to H3)', () => {
+  describe('4.8. Config Requirements (LOGIN-H1 to H4)', () => {
     it('[LOGIN-H1] should exit with error when saasUrl is not configured', async () => {
       mockGetConfig.mockResolvedValue({ projectId: 'test' }); // no saasUrl
 
@@ -672,6 +675,35 @@ describe('LoginCommand v2', () => {
       // keyStatus should have been called with repoFullName from git remote
       expect(deps.fetchSaas).toHaveBeenCalledWith(
         expect.stringContaining('testorg'),
+        expect.any(Object)
+      );
+    });
+
+    it('[LOGIN-H4] should resolve SSH alias to real hostname via ssh -G', async () => {
+      const { execSync } = await import('child_process');
+      const mockExecSync = execSync as Mock<typeof execSync>;
+      mockExecSync.mockImplementation((cmd: string) => {
+        if (cmd === 'git remote get-url origin') return 'git@github-triad:testorg/testrepo.git\n';
+        if (cmd === 'ssh -G github-triad') return 'hostname github.com\n';
+        return '';
+      });
+      mockHasPrivateKey.mockResolvedValue(false);
+
+      const deps = createMockDeps({
+        fetchSaas: vi.fn().mockImplementation(async (url: string) => {
+          if (url.includes('identity.keyStatus')) {
+            expect(url).toContain('github.com');
+            return { ok: true, json: async () => trpcWrap(noKeyStatus) };
+          }
+          return { ok: false, json: async () => ({}) };
+        }),
+      });
+
+      const cmd = new LoginCommand(deps);
+      await cmd.executeLogin(defaultOptions);
+
+      expect(deps.fetchSaas).toHaveBeenCalledWith(
+        expect.stringContaining('github.com'),
         expect.any(Object)
       );
     });

@@ -3,7 +3,7 @@
  *
  * Spec: cli/specs/login_command.md (v2)
  * EARS: LOGIN-A1..A4, LOGIN-B1..B3, LOGIN-C1..C2, LOGIN-D1..D2,
- *       LOGIN-E1..E4 (E2E), LOGIN-F1..F4, LOGIN-G1..G3, LOGIN-H1..H3
+ *       LOGIN-E1..E4 (E2E), LOGIN-F1..F4, LOGIN-G1..G3, LOGIN-H1..H4
  *
  * v2 changes (Cycle 4, identity_key_sync):
  *   - REST → tRPC wire format (IKS-A27)
@@ -56,7 +56,7 @@ function createDefaultDeps(): LoginDeps {
               clearTimeout(timeoutHandle);
               // [LOGIN-M1] Connection: close prevents socket hang
               res.writeHead(200, { 'Content-Type': 'text/html', 'Connection': 'close' });
-              res.end('<html><body><h1>Login successful!</h1><p>You can close this window.</p></body></html>');
+              res.end(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>GitGovernance</title><style>*{margin:0;padding:0;box-sizing:border-box}body{min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0a0a0a;color:#fafafa;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}.card{text-align:center;max-width:400px;padding:2rem}h1{font-size:1.5rem;margin-bottom:.75rem}p{color:#888;font-size:.9rem;line-height:1.5}.check{font-size:2.5rem;margin-bottom:1rem}</style></head><body><div class="card"><div class="check">✓</div><h1>Authentication received</h1><p>Check your terminal for login status.</p></div></body></html>`);
               server.close();
               resolve({ token, user: { login, id: Number(id) } });
             } else {
@@ -502,7 +502,14 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
       const { execSync } = await import('child_process');
       const remoteUrl = execSync('git remote get-url origin', { encoding: 'utf-8' }).trim();
       const ref = parseRemoteUrl(remoteUrl);
-      if (ref) return ref;
+      if (ref) {
+        // [LOGIN-H4] Resolve SSH alias to real hostname via ssh -G
+        // Handles multi-account SSH configs (e.g. Host github-work → HostName github.com)
+        const resolved = execSync(`ssh -G ${ref.providerHost}`, { encoding: 'utf-8' });
+        const hostMatch = resolved.match(/^hostname\s+(.+)$/m);
+        if (hostMatch?.[1]) ref.providerHost = hostMatch[1];
+        return ref;
+      }
     } catch {
       // Git not available or no remote
     }
