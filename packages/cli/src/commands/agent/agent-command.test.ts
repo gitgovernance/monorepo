@@ -610,12 +610,31 @@ describe('AgentCommand', () => {
         gitgov: { agent: { purpose: 'audit', function: 'runAgent' } },
       });
 
-      mockAgentStore.list.mockResolvedValue(['agent_security-audit']);
+      mockAgentStore.list.mockResolvedValue(['agent:security-audit']);
 
       await agentCommand.executeNew(tmpAgentDir, {});
 
       expect(mockConsoleLog).toHaveBeenCalledWith(
         expect.stringContaining('Agent updated: agent:security-audit'),
+      );
+    });
+
+    it('[EARS-E8] should show updated message with engine type transition', async () => {
+      tmpAgentDir = createFakeAgent({
+        name: '@gitgov/agent-security-audit',
+        main: 'dist/index.mjs',
+        gitgov: { agent: { purpose: 'audit', function: 'runAgent' } },
+      });
+
+      mockAgentStore.list.mockResolvedValue(['agent:security-audit']);
+      mockAgentStore.get.mockResolvedValue({
+        payload: { engine: { type: 'npm' } },
+      });
+
+      await agentCommand.executeNew(tmpAgentDir, {});
+
+      expect(mockConsoleLog).toHaveBeenCalledWith(
+        expect.stringContaining('[npm → local]'),
       );
     });
   });
