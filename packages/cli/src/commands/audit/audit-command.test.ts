@@ -7,15 +7,34 @@
  */
 
 // vi.hoisted ensures variables exist when vi.mock factory runs (hoisted to top)
-const { mockFormatAuditResult, mockPostOrUpdateComment } = vi.hoisted(() => ({
+const { mockFormatAuditResult, mockPostOrUpdateComment, mockAuditFsProjectionPersist } = vi.hoisted(() => ({
   mockFormatAuditResult: vi.fn(),
   mockPostOrUpdateComment: vi.fn().mockResolvedValue(undefined),
+  mockAuditFsProjectionPersist: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('@gitgov/core/audit', () => ({
   formatAuditResult: (...args: unknown[]) => mockFormatAuditResult(...args),
   severityBadge: vi.fn((s: string) => ({ critical: '🔴', high: '🟠', medium: '🟡', low: '🔵' })[s] ?? '⚪'),
 }));
+
+// Mock @gitgov/core/fs for AORCH-P4 (AuditFsProjection)
+vi.mock('@gitgov/core/fs', () => ({
+  AuditFsProjection: class MockAuditFsProjection {
+    persist = mockAuditFsProjectionPersist;
+  },
+  findProjectRoot: vi.fn().mockReturnValue('/mock/project/root'),
+}));
+
+// Mock child_process for AORCH-C8 (branch + commit resolution)
+vi.mock('child_process', () => ({
+  execSync: vi.fn().mockImplementation((cmd: string) => {
+    if (cmd === 'git branch --show-current') return 'main\n';
+    if (cmd === 'git rev-parse HEAD') return 'abc123def456\n';
+    return '';
+  }),
+}));
+
 // GitHubCiReporter mock: spy on fromToken after import (vi.mock doesn't intercept this subpath export)
 import { GitHubCiReporter } from '@gitgov/core/github';
 
@@ -448,6 +467,20 @@ describe('AuditCommand', () => {
       expect(callArg.taskId).toBe('1774524476-task-audit-full-scan');
     });
 
+    it('[AORCH-C8] should include branch and commit references in TaskRecord', async () => {
+      await auditCommand.execute(createDefaultOptions({ scope: 'full' }));
+
+      const diInstance = mockDI.getInstance();
+      const backlogAdapter = await diInstance.getBacklogAdapter();
+      const createTaskArgs = (backlogAdapter.createTask as vi.Mock).mock.calls[0];
+      expect(createTaskArgs[0].references).toEqual(
+        expect.arrayContaining([
+          expect.stringMatching(/^branch:/),
+          expect.stringMatching(/^commit:/),
+        ]),
+      );
+    });
+
     it('should handle initialization errors gracefully', async () => {
       mockDI.getInstance.mockReturnValue({
         getAuditOrchestrator: vi.fn().mockRejectedValue(new Error('Init failed')),
@@ -762,6 +795,33 @@ describe('AuditCommand', () => {
       await auditCommand.execute({ scope: 'full', output: 'text', failOn: 'critical' } as AuditCommandOptions);
 
       expect(mockExecCreate).not.toHaveBeenCalled();
+    });
+  });
+
+  // 4.11. Project Guard (AORCH-P5)
+  describe('4.11. Project Guard (AORCH-P5)', () => {
+    it('[AORCH-P5] should exit with error when project not initialized', async () => {
+      const coreFsMock = await import('@gitgov/core/fs');
+      vi.mocked(coreFsMock.findProjectRoot).mockReturnValueOnce(null);
+
+      await auditCommand.execute(createDefaultOptions());
+
+      expect(mockConsoleError).toHaveBeenCalledWith(
+        expect.stringContaining('Project not initialized'),
+      );
+      expect(mockProcessExit).toHaveBeenCalledWith(1);
+    });
+  });
+
+  // 4.10. FS Audit Projection (AORCH-P4)
+  describe('4.10. FS Audit Projection (AORCH-P4)', () => {
+    it('[AORCH-P4] should persist audit result to .gitgov/audit-index.json after orchestrator.run', async () => {
+      mockOrchestrator.run.mockResolvedValueOnce(mockResultWithFindings);
+
+      await auditCommand.execute(createDefaultOptions({ scope: 'full' }));
+
+      expect(mockAuditFsProjectionPersist).toHaveBeenCalledTimes(1);
+      expect(mockAuditFsProjectionPersist).toHaveBeenCalledWith(mockResultWithFindings);
     });
   });
 });

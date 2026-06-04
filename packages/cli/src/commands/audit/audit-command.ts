@@ -5,6 +5,7 @@ import { readFile } from 'node:fs/promises';
 import { Sarif as SarifModule, generateExecutionId } from '@gitgov/core';
 import { formatAuditResult } from '@gitgov/core/audit';
 import type { Finding, FindingCategory, DetectorName } from '@gitgov/core/audit';
+import { AuditFsProjection, findProjectRoot } from '@gitgov/core/fs';
 import type {
   AuditOrchestrationOptions,
   AuditOrchestrationResult,
@@ -110,6 +111,9 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
    */
   async execute(options: AuditCommandOptions): Promise<void> {
     try {
+      // [AORCH-P5] Guard: project must be initialized
+      await this.requireProject(options);
+
       // [AORCH-D6] [AORCH-D7] Set LLM env vars before running agents
       if (options.llmModel) process.env['LLM_MODEL'] = options.llmModel;
       if (options.llmKey) process.env['LLM_API_KEY'] = options.llmKey;
@@ -118,18 +122,32 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
       const backlogAdapter = await this.container.getBacklogAdapter();
       const { actorId } = await this.requireActor(options);
 
-      if (!options.quiet && options.output !== 'json') {
+      if (!options.quiet && options.output !== 'json' && options.output !== 'sarif') {
         this.logger.log(`Scanning repository (scope: ${options.scope})...`);
       }
 
+      // [AORCH-C8] Resolve git context for traceability (branch + commit in TaskRecord.references)
+      let branch = '';
+      let commitSha = '';
+      try {
+        const { execSync } = await import('child_process');
+        branch = execSync('git branch --show-current', { encoding: 'utf-8' }).trim();
+        commitSha = execSync('git rev-parse HEAD', { encoding: 'utf-8' }).trim();
+      } catch { /* git not available — leave empty */ }
+
       // Create a real TaskRecord for the audit run — serves as correlation
       // node linking ExecutionRecords (scan, policy) and FeedbackRecords (review)
+      const references: string[] = [];
+      if (branch) references.push(`branch:${branch}`);
+      if (commitSha) references.push(`commit:${commitSha}`);
+
       const auditTask = await backlogAdapter.createTask({
         title: `Audit: ${options.scope} scan`,
         status: 'active',
         priority: 'high',
         description: `Automated audit scan (scope: ${options.scope})`,
         tags: ['audit', 'automated'],
+        references,
       }, actorId);
 
       // Invoke orchestrator - ALL logic lives here
@@ -148,6 +166,17 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
         orchestrationOptions.exclude = options.exclude.split(',').map(g => g.trim());
       }
       const result = await orchestrator.run(orchestrationOptions);
+
+      // [AORCH-P4] Persist AuditOrchestrationResult to .gitgov/audit-index.json
+      try {
+        const projectRoot = findProjectRoot() ?? process.cwd();
+        const auditProjection = new AuditFsProjection({
+          basePath: `${projectRoot}/.gitgov`,
+        });
+        await auditProjection.persist(result);
+      } catch {
+        // FS persistence errors are non-fatal
+      }
 
       // [AORCH-P1] Write L1 ExecutionRecords to .gitgov/executions/ (redacted SARIF)
       if (result.l1AgentResults) {
@@ -463,8 +492,8 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
           content: options.justification,
           metadata: {
             fingerprint,
-            ruleId: 'CLI-WAIVER',
-            file: 'unknown',
+            ruleId: 'CLI-WAIVER', // TODO: Resolve ruleId from local ExecutionRecord SARIF by fingerprint lookup (Bug 15)
+            file: 'unknown', // TODO: Resolve file/line from local SARIF by fingerprint lookup (Bug 7/EARS-E1)
             line: 0,
           },
         },

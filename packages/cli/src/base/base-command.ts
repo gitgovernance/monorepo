@@ -83,6 +83,26 @@ export abstract class BaseCommand<TOptions extends BaseCommandOptions = BaseComm
   }
 
   /**
+   * Guard: require .gitgov/ directory exists (project initialized).
+   * Exits with user-friendly error if not initialized.
+   */
+  protected async requireProject(options: TOptions): Promise<void> {
+    const { existsSync } = await import('fs');
+    const path = await import('path');
+    const { getWorktreeBasePath } = await import('@gitgov/core/fs');
+    try {
+      const gitModule = await this.container.getGitModule();
+      const repoRoot = await gitModule.getRepoRoot();
+      const worktreePath = getWorktreeBasePath(repoRoot);
+      if (!existsSync(path.join(worktreePath, '.gitgov'))) {
+        this.handleError('Project not initialized. Run `gitgov init` first.', options);
+      }
+    } catch {
+      this.handleError('Project not initialized. Run `gitgov init` first.', options);
+    }
+  }
+
+  /**
    * Guard: require active actor identity for write operations.
    * Returns actor ID or exits with user-friendly error message.
    */
