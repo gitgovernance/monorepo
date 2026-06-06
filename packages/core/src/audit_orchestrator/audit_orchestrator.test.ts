@@ -1356,4 +1356,40 @@ describe("AuditOrchestrator", () => {
       expect(result.reviewResults![0]!.errorMessage).toBe("Claude API unavailable");
     });
   });
+
+  describe("4.9. Agent Entrypoint Validation (AORCH-G1 to G2)", () => {
+    it("[AORCH-G1] should add warning when agent entrypoint is unresolvable", async () => {
+      const agentRecord = makeAgentRecord("agent:security-audit", "audit");
+      const deps = createMockDeps();
+      (deps.recordStore.list as jest.Mock).mockResolvedValue(["agent:security-audit"]);
+      (deps.recordStore.get as jest.Mock).mockResolvedValue(agentRecord);
+      (deps.agentRunner.runOnce as jest.Mock).mockRejectedValue(
+        new Error("Cannot find module '@gitgov/agent-security-audit'"),
+      );
+
+      const orchestrator = createAuditOrchestrator(deps);
+      const result = await orchestrator.run(defaultOptions);
+
+      expect(result.warning).toBeDefined();
+      expect(result.warning).toContain("failed to load");
+      expect(result.warning).toContain("gitgov agent new");
+    });
+
+    it("[AORCH-G2] should warn when all audit agents failed with entrypoint errors", async () => {
+      const agentRecord = makeAgentRecord("agent:security-audit", "audit");
+      const deps = createMockDeps();
+      (deps.recordStore.list as jest.Mock).mockResolvedValue(["agent:security-audit"]);
+      (deps.recordStore.get as jest.Mock).mockResolvedValue(agentRecord);
+      (deps.agentRunner.runOnce as jest.Mock).mockRejectedValue(
+        new Error("Cannot find module '@gitgov/agent-security-audit'"),
+      );
+
+      const orchestrator = createAuditOrchestrator(deps);
+      const result = await orchestrator.run(defaultOptions);
+
+      expect(result.warning).toContain("All audit agents failed");
+      expect(result.agentResults[0]!.status).toBe("error");
+      expect(result.findings).toHaveLength(0);
+    });
+  });
 });

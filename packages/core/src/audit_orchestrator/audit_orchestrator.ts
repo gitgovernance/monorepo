@@ -426,6 +426,20 @@ export function createAuditOrchestrator(deps: AuditOrchestratorDeps) {
         return f;
       });
 
+      // [AORCH-G1] [AORCH-G2] Detect agents that failed due to unresolvable entrypoint
+      const failedAgents = agentResults.filter(
+        r => r.status === 'error' && r.errorMessage &&
+          (r.errorMessage.includes('MODULE_NOT_FOUND') || r.errorMessage.includes('ERR_MODULE_NOT_FOUND') || r.errorMessage.includes('Cannot find module')),
+      );
+      let entrypointWarning: string | undefined;
+      if (failedAgents.length > 0) {
+        const details = failedAgents.map(a => `  ${a.agentId}: entrypoint not found`).join('\n');
+        const successCount = agentResults.filter(r => r.status === 'success').length;
+        entrypointWarning = successCount === 0
+          ? `All audit agents failed to load:\n${details}\n\nRegister with a local path: gitgov agent new <path-to-agent>`
+          : `Some audit agents failed to load:\n${details}`;
+      }
+
       const result: AuditOrchestrationResult = {
         findings: findingsWithWaivers,
         agentResults,
@@ -436,6 +450,7 @@ export function createAuditOrchestrator(deps: AuditOrchestratorDeps) {
           scans: scanExecutionIds,
           policy: policyResult.executionRecord.id,
         },
+        ...(entrypointWarning ? { warning: entrypointWarning } : {}),
       };
 
       // [AORCH-F1] Discover and execute review agents post-policy

@@ -103,6 +103,22 @@ export abstract class BaseCommand<TOptions extends BaseCommandOptions = BaseComm
   }
 
   /**
+   * Guard: require at least one commit in the repo.
+   * A repo without commits cannot run audit, sync, or status.
+   */
+  protected async requireWorkingRepo(options: TOptions): Promise<void> {
+    try {
+      const gitModule = await this.container.getGitModule();
+      await gitModule.getCommitHash('HEAD');
+    } catch {
+      this.handleError(
+        'No commits found. Commit your code first before running gitgov commands.',
+        options,
+      );
+    }
+  }
+
+  /**
    * Guard: require active actor identity for write operations.
    * Returns actor ID or exits with user-friendly error message.
    */

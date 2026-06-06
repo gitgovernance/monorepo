@@ -113,6 +113,8 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
     try {
       // [AORCH-P5] Guard: project must be initialized
       await this.requireProject(options);
+      // [AORCH-P6] Guard: repo must have at least one commit
+      await this.requireWorkingRepo(options);
 
       // [AORCH-D6] [AORCH-D7] Set LLM env vars before running agents
       if (options.llmModel) process.env['LLM_MODEL'] = options.llmModel;
@@ -215,6 +217,11 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
         } catch {
           // Review persistence errors are non-fatal
         }
+      }
+
+      // [AORCH-P7] Display orchestrator warnings before output
+      if (result.warning) {
+        console.warn(`\n⚠️  ${result.warning}\n`);
       }
 
       // Format and display output
@@ -356,10 +363,6 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
       console.log(`Exit code:  \x1b[31m1 (${options.failOn} findings detected)\x1b[0m`);
     } else {
       console.log(`Exit code:  \x1b[32m0 (no ${options.failOn} findings)\x1b[0m`);
-    }
-
-    if (result.warning) {
-      console.log(`\n⚠️  ${result.warning}`);
     }
 
     if (summary.total > 0) {

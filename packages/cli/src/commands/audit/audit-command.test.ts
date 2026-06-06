@@ -24,6 +24,7 @@ vi.mock('@gitgov/core/fs', () => ({
     persist = mockAuditFsProjectionPersist;
   },
   findProjectRoot: vi.fn().mockReturnValue('/mock/project/root'),
+  getWorktreeBasePath: vi.fn().mockReturnValue('/mock/worktree'),
 }));
 
 // Mock child_process for AORCH-C8 (branch + commit resolution)
@@ -283,6 +284,7 @@ describe('AuditCommand', () => {
       getIdentityAdapter: vi.fn().mockResolvedValue(mockIdentityAdapter),
       getCurrentActor: vi.fn().mockResolvedValue({ id: 'human:developer' }),
       getProjectRoot: vi.fn().mockResolvedValue('/mock/project/root'),
+      getGitModule: vi.fn().mockResolvedValue({ getCommitHash: vi.fn().mockResolvedValue('abc123'), getRepoRoot: vi.fn().mockResolvedValue('/mock/repo') }),
       getSessionManager: vi.fn().mockResolvedValue({
         getState: vi.fn().mockReturnValue({ actorId: 'human:developer' }),
       }),
@@ -801,15 +803,51 @@ describe('AuditCommand', () => {
   // 4.11. Project Guard (AORCH-P5)
   describe('4.11. Project Guard (AORCH-P5)', () => {
     it('[AORCH-P5] should exit with error when project not initialized', async () => {
-      const coreFsMock = await import('@gitgov/core/fs');
-      vi.mocked(coreFsMock.findProjectRoot).mockReturnValueOnce(null);
-
+      // getWorktreeBasePath returns /mock/worktree, existsSync('/mock/worktree/.gitgov') = false
+      // → requireProject detects no .gitgov/ and exits
       await auditCommand.execute(createDefaultOptions());
 
       expect(mockConsoleError).toHaveBeenCalledWith(
         expect.stringContaining('Project not initialized'),
       );
       expect(mockProcessExit).toHaveBeenCalledWith(1);
+    });
+  });
+
+  // 4.12. Working Repo Guard (AORCH-P6)
+  describe('4.12. Working Repo Guard (AORCH-P6)', () => {
+    it('[AORCH-P6] should exit with error when repo has no commits', async () => {
+      // Bypass requireProject so we reach requireWorkingRepo
+      vi.spyOn(auditCommand as any, 'requireProject').mockResolvedValue(undefined);
+      mockDIInstance.getGitModule = vi.fn().mockResolvedValue({
+        getCommitHash: vi.fn().mockRejectedValue(new Error('fatal: ambiguous argument HEAD')),
+      });
+
+      await auditCommand.execute(createDefaultOptions());
+
+      expect(mockConsoleError).toHaveBeenCalledWith(
+        expect.stringContaining('No commits found'),
+      );
+      expect(mockProcessExit).toHaveBeenCalledWith(1);
+    });
+  });
+
+  // 4.13. Orchestrator Warnings Display (AORCH-P7)
+  describe('4.13. Orchestrator Warnings Display (AORCH-P7)', () => {
+    it('[AORCH-P7] should display orchestrator warnings before summary', async () => {
+      const resultWithWarning = {
+        ...mockResultWithFindings,
+        warning: 'All audit agents failed to load:\n  agent:security-audit: entrypoint not found',
+      };
+      mockOrchestrator.run.mockResolvedValueOnce(resultWithWarning);
+      const mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation();
+
+      await auditCommand.execute(createDefaultOptions());
+
+      expect(mockConsoleWarn).toHaveBeenCalledWith(
+        expect.stringContaining('All audit agents failed'),
+      );
+      mockConsoleWarn.mockRestore();
     });
   });
 
