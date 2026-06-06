@@ -1,6 +1,8 @@
 import type { CommitAuthor, IGitModule } from '../../git';
 import type { ConfigStore } from '../../config_store';
 import type { GitGovConfig } from '../../config_manager';
+import type { GitGovAgentRecord } from '../../record_types';
+import { DEFAULT_ID_ENCODER } from '../../record_store';
 import type {
   IProjectInitializer,
   EnvironmentValidation,
@@ -84,6 +86,13 @@ export class GitHubProjectInitializer implements IProjectInitializer {
     await this.gitModule.add([policyPath], {
       contentMap: { [policyPath]: DEFAULT_POLICY_YML },
     });
+
+    // [GPI17] Stage security .gitignore to prevent keys from being committed
+    const gitignorePath = `${this.basePath}/.gitignore`;
+    const securityGitignore = '# Security: prevent private keys and local files from being committed\n*.key\n.session.json\nindex.json\n';
+    await this.gitModule.add([gitignorePath], {
+      contentMap: { [gitignorePath]: securityGitignore },
+    });
   }
 
   // GPI10 — project is initialized iff branch exists AND config.json is loadable
@@ -104,6 +113,21 @@ export class GitHubProjectInitializer implements IProjectInitializer {
     const content = JSON.stringify(config, null, 2);
     await this.gitModule.add([configPath], {
       contentMap: { [configPath]: content },
+    });
+  }
+
+  // [GPI18] Stage a signed AgentRecord at {basePath}/agents/{encodedId}.json in the
+  // shared gitModule buffer — materialized atomically with actors/cycle/config at
+  // finalize(). The record arrives already signed (no signing, no committed-read).
+  // encodedId uses DEFAULT_ID_ENCODER so the file matches the record store / indexer.
+  async addAgent(record: GitGovAgentRecord): Promise<void> {
+    const id = record.payload?.id;
+    if (!id) {
+      throw new Error('addAgent requires record.payload.id');
+    }
+    const agentPath = `${this.basePath}/agents/${DEFAULT_ID_ENCODER.encode(id)}.json`;
+    await this.gitModule.add([agentPath], {
+      contentMap: { [agentPath]: JSON.stringify(record, null, 2) },
     });
   }
 

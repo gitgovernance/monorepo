@@ -127,14 +127,19 @@ export class ProjectModule {
                 });
               }
             } else {
-              await this.deps.agentAdapter.createAgentRecord({
+              // [PROJ-B4] Build+sign without committed-read, then persist via the initializer
+              // (homologated FS/GitHub). Avoids createAgentRecord's committed-read of the
+              // corresponding ActorRecord, which on the GitHub atomic init is staged-but-not-
+              // committed and invisible to the store's get() → throw → swallowed (Bug A).
+              const signed = await this.deps.agentAdapter.buildSignedAgentRecord({
                 id: agentConfig.agentId,
                 engine: agentConfig.engine,
                 status: 'active',
                 triggers: agentConfig.triggers,
                 // [PROJ-E4] Purpose merged into AgentRecord metadata
                 metadata: mergedMetadata,
-              }, { defer: true });
+              });
+              await this.deps.initializer.addAgent(signed);
             }
           } catch {
             // [PROJ-B5] [PROJ-E2] [GAUD-E3] Non-fatal — agent create/update failure doesn't block init

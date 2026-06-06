@@ -305,6 +305,8 @@ export const SYNC_DIRECTORIES = [
  */
 export const SYNC_ROOT_FILES = [
   'config.json',
+  'policy.yml',
+  '.gitignore',
 ] as const;
 
 /**

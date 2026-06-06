@@ -1,4 +1,5 @@
 import type { GitGovConfig } from '../config_manager';
+import type { GitGovAgentRecord } from '../record_types';
 import type { EnvironmentValidation } from './project_initializer.types';
 
 /**
@@ -100,6 +101,21 @@ export interface IProjectInitializer {
    * @returns Path or identifier for the actor
    */
   getActorPath(actorId: string): string;
+
+  /**
+   * [EARS-PI14] Persists a signed AgentRecord according to the backend.
+   *
+   * - **Filesystem backend (`FsProjectInitializer`, EARS-FPI21):** writes the
+   *   JSON to `.gitgov/agents/{encodedId}.json` immediately.
+   * - **GitHub backend (`GitHubProjectInitializer`, GPI18):** stages the content
+   *   via `gitModule.add` for the atomic commit at `finalize()`.
+   *
+   * Receives the AgentRecord ALREADY signed (header + payload) — it does NOT sign
+   * nor read committed state. `{encodedId}` uses `DEFAULT_ID_ENCODER` (same as the
+   * record store) so the file is readable by the store/indexer. Throws if
+   * `record.payload.id` is missing.
+   */
+  addAgent(record: GitGovAgentRecord): Promise<void>;
 
   /**
    * Finalize the initialization transaction — Unit of Work pattern

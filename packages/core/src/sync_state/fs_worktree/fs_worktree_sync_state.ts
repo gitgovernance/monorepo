@@ -44,14 +44,12 @@ const logger = createLogger('[WorktreeSyncState] ');
  * Check if a file should be synced to gitgov-state.
  * Returns true only for allowed *.json files in SYNC_DIRECTORIES or SYNC_ROOT_FILES.
  */
-function shouldSyncFile(filePath: string): boolean {
+export function shouldSyncFile(filePath: string): boolean {
   const fileName = path.basename(filePath);
   const ext = path.extname(filePath);
 
-  if (!SYNC_ALLOWED_EXTENSIONS.includes(ext as typeof SYNC_ALLOWED_EXTENSIONS[number])) {
-    return false;
-  }
-
+  // Never sync excluded patterns (private keys, backups, temp) or local-only files.
+  // Checked FIRST so the root-file extension exemption (B17) can never leak a key.
   for (const pattern of SYNC_EXCLUDED_PATTERNS) {
     if (pattern.test(fileName)) {
       return false;
@@ -76,18 +74,22 @@ function shouldSyncFile(filePath: string): boolean {
     );
     if (syncDirIndex !== -1) {
       relativeParts = parts.slice(syncDirIndex);
-    } else if (SYNC_ROOT_FILES.includes(fileName as typeof SYNC_ROOT_FILES[number])) {
-      return true;
     } else {
+      // [WTSYNC-B17] No .gitgov/ context and not under a sync dir → not a .gitgov state
+      // file (e.g. a worktree-root or repo-root .gitignore). Root files only sync under .gitgov/.
       return false;
     }
   }
 
   if (relativeParts.length === 1) {
+    // [WTSYNC-B17] Root files (config.json, policy.yml, .gitignore) sync by exact name,
+    // EXEMPT from SYNC_ALLOWED_EXTENSIONS (policy.yml is .yml, .gitignore has no extension).
     return SYNC_ROOT_FILES.includes(relativeParts[0] as typeof SYNC_ROOT_FILES[number]);
   } else if (relativeParts.length >= 2) {
+    // [WTSYNC-B9] Files inside SYNC_DIRECTORIES must have an allowed extension (.json).
     const dirName = relativeParts[0];
-    return SYNC_DIRECTORIES.includes(dirName as typeof SYNC_DIRECTORIES[number]);
+    return SYNC_DIRECTORIES.includes(dirName as typeof SYNC_DIRECTORIES[number])
+      && SYNC_ALLOWED_EXTENSIONS.includes(ext as typeof SYNC_ALLOWED_EXTENSIONS[number]);
   }
 
   return false;
@@ -144,8 +146,8 @@ export class FsWorktreeSyncStateModule implements ISyncStateModule {
 
     if (health.healthy) {
       logger.debug('Worktree is healthy');
-      // [WTSYNC-A7] Clean up legacy .gitignore even on healthy worktrees
-      await this.removeLegacyGitignore();
+      // [WTSYNC-A8] Ensure security .gitignore exists
+      await this.ensureSecurityGitignore();
       return; // [WTSYNC-A2]
     }
 
@@ -157,7 +159,7 @@ export class FsWorktreeSyncStateModule implements ISyncStateModule {
         await this.ensureStateBranch();
         try {
           await this.execGit(['-C', this.worktreePath, 'checkout', '-B', this.stateBranchName]);
-          await this.removeLegacyGitignore();
+          await this.ensureSecurityGitignore();
           return;
         } catch {
           // If checkout fails, fall through to recreate
@@ -186,30 +188,28 @@ export class FsWorktreeSyncStateModule implements ISyncStateModule {
       );
     }
 
-    // [WTSYNC-A7] Clean up legacy .gitignore after worktree creation
-    await this.removeLegacyGitignore();
+    // [WTSYNC-A8] Ensure security .gitignore after worktree creation
+    await this.ensureSecurityGitignore();
   }
 
   /**
-   * [WTSYNC-A7] Remove .gitignore from state branch if it exists.
-   * The worktree module filters files in code (shouldSyncFile()), not via .gitignore.
-   * Legacy state branches initialized by FsSyncState may have a .gitignore — remove it.
+   * [WTSYNC-A8] Ensure security .gitignore exists in worktree.
+   * Defense-in-depth: shouldSyncFile() filters in code, but .gitignore prevents
+   * accidental `git add .gitgov/` from staging private keys during manual
+   * git operations or conflict resolution.
    */
-  private async removeLegacyGitignore(): Promise<void> {
+  private async ensureSecurityGitignore(): Promise<void> {
     const gitignorePath = path.join(this.worktreePath, '.gitignore');
-    if (!existsSync(gitignorePath)) return;
+    const expectedContent = '# Security: prevent private keys and local files from being committed\n*.key\n.session.json\nindex.json\n';
 
-    logger.info('Removing legacy .gitignore from state branch');
     try {
-      await this.execInWorktree(['rm', '.gitignore']);
-      await this.execInWorktree(['commit', '-m', 'gitgov: remove legacy .gitignore (filtering is in code)']);
-    } catch {
-      // If rm/commit fails (e.g., .gitignore is untracked), just delete the file
-      try {
-        await fsPromises.unlink(gitignorePath);
-      } catch {
-        // Ignore — file may have been removed by git rm
+      if (existsSync(gitignorePath)) {
+        const current = await fsPromises.readFile(gitignorePath, 'utf-8');
+        if (current === expectedContent) return;
       }
+      await fsPromises.writeFile(gitignorePath, expectedContent, 'utf-8');
+    } catch {
+      // Non-fatal — code filtering is the primary protection
     }
   }
 

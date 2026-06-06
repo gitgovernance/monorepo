@@ -14,6 +14,7 @@
 
 import * as path from 'path';
 import type { GitGovConfig } from '../../config_manager';
+import type { GitGovAgentRecord } from '../../record_types';
 
 // Mock ESM helper to avoid import.meta issues in Jest
 jest.mock('../../utils/esm_helper', () => ({
@@ -582,7 +583,8 @@ describe('FsProjectInitializer', () => {
     });
 
     it('[EARS-FPI14] should create policy.yml with default configuration', async () => {
-      // policy.yml does not exist — fs.access rejects
+      // policy.yml does not exist, .gitignore does not exist
+      mockFs.access.mockRejectedValueOnce(new Error('ENOENT'));
       mockFs.access.mockRejectedValueOnce(new Error('ENOENT'));
 
       await initializer.createProjectStructure();
@@ -597,8 +599,9 @@ describe('FsProjectInitializer', () => {
     });
 
     it('[EARS-FPI14] should not overwrite existing policy.yml on re-initialization', async () => {
-      // policy.yml exists — fs.access resolves
+      // policy.yml exists, .gitignore does not exist
       mockFs.access.mockResolvedValueOnce(undefined);
+      mockFs.access.mockRejectedValueOnce(new Error('ENOENT'));
 
       await initializer.createProjectStructure();
 
@@ -606,6 +609,50 @@ describe('FsProjectInitializer', () => {
         (call) => String(call[0]).includes('policy.yml'),
       );
       expect(policyWrite).toBeUndefined();
+    });
+  });
+
+  // ==========================================================================
+  // 4.9. Security .gitignore (EARS-FPI20) — flow_verification sesión 63
+  // ==========================================================================
+
+  describe('4.9. Security .gitignore (EARS-FPI20)', () => {
+    let initializer: FsProjectInitializer;
+
+    beforeEach(() => {
+      initializer = new FsProjectInitializer(testRoot);
+      mockFs.mkdir.mockResolvedValue(undefined);
+      mockFs.writeFile.mockResolvedValue(undefined);
+    });
+
+    it('[EARS-FPI20] should create .gitgov/.gitignore with security exclusions', async () => {
+      // policy.yml does not exist, .gitignore does not exist
+      mockFs.access.mockRejectedValueOnce(new Error('ENOENT'));
+      mockFs.access.mockRejectedValueOnce(new Error('ENOENT'));
+
+      await initializer.createProjectStructure();
+
+      const gitignoreWrite = mockFs.writeFile.mock.calls.find(
+        (call) => String(call[0]).includes('.gitignore'),
+      );
+      expect(gitignoreWrite).toBeDefined();
+      const content = String(gitignoreWrite![1]);
+      expect(content).toContain('*.key');
+      expect(content).toContain('.session.json');
+      expect(content).toContain('index.json');
+    });
+
+    it('[EARS-FPI20] should not overwrite existing .gitgov/.gitignore on re-initialization', async () => {
+      // policy.yml does not exist, .gitignore exists
+      mockFs.access.mockRejectedValueOnce(new Error('ENOENT'));
+      mockFs.access.mockResolvedValueOnce(undefined);
+
+      await initializer.createProjectStructure();
+
+      const gitignoreWrite = mockFs.writeFile.mock.calls.find(
+        (call) => String(call[0]).includes('.gitignore'),
+      );
+      expect(gitignoreWrite).toBeUndefined();
     });
   });
 
@@ -654,6 +701,44 @@ describe('FsProjectInitializer', () => {
       expect(mockFs.unlink).not.toHaveBeenCalled();
       expect(mockFs.copyFile).not.toHaveBeenCalled();
       expect(mockFs.appendFile).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('4.10. Agent Persistence (EARS-FPI21)', () => {
+    const signedAgent: GitGovAgentRecord = {
+      header: {
+        version: '1.0',
+        type: 'agent',
+        payloadChecksum: 'checksum',
+        signatures: [{ keyId: 'agent:security-audit', role: 'author', notes: '', signature: 'sig', timestamp: 1 }],
+      },
+      payload: {
+        id: 'agent:security-audit',
+        engine: { type: 'local', entrypoint: '@gitgov/agent-security-audit', function: 'runAgent' },
+        status: 'active',
+        triggers: [],
+        knowledge_dependencies: [],
+        prompt_engine_requirements: {},
+      },
+    };
+
+    it('[EARS-FPI21] should write signed agent JSON to .gitgov/agents/{id}.json', async () => {
+      const initializer = new FsProjectInitializer(testRoot);
+      mockFs.mkdir.mockResolvedValue(undefined);
+      mockFs.writeFile.mockResolvedValue(undefined);
+
+      await initializer.addAgent(signedAgent);
+
+      // agent:security-audit → agent_security-audit.json (DEFAULT_ID_ENCODER)
+      expect(mockFs.mkdir).toHaveBeenCalledWith(
+        path.join(testRoot, '.gitgov', 'agents'),
+        { recursive: true },
+      );
+      expect(mockFs.writeFile).toHaveBeenCalledWith(
+        path.join(testRoot, '.gitgov', 'agents', 'agent_security-audit.json'),
+        JSON.stringify(signedAgent, null, 2),
+        'utf-8',
+      );
     });
   });
 });

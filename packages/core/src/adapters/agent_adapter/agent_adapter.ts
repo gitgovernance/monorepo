@@ -237,4 +237,66 @@ export class AgentAdapter implements IAgentAdapter {
   async archiveAgentRecord(agentId: string): Promise<AgentRecord> {
     return this.updateAgentRecord(agentId, { status: 'archived' });
   }
+
+  /**
+   * [EARS-G1] Builds + signs an AgentRecord WITHOUT a committed-read and WITHOUT
+   * persisting. Mirrors createAgentRecord's build+sign, but resolves the public
+   * key from the KeyProvider (not identity.getActor / the record store) — so it
+   * works during atomic init where the corresponding ActorRecord is staged but
+   * not yet committed. The caller persists the result via initializer.addAgent.
+   */
+  async buildSignedAgentRecord(payload: Partial<AgentPayload>): Promise<GitGovAgentRecord> {
+    // [EARS-G1] Validate required fields (same guard as EARS-A2)
+    if (!payload.id || !payload.engine) {
+      throw new Error('AgentRecord requires id and engine');
+    }
+
+    // [EARS-G1] Build the complete AgentRecord payload (same shape as createAgentRecord)
+    const completePayload: AgentRecord = {
+      id: payload.id,
+      engine: payload.engine,
+      status: payload.status || 'active',
+      triggers: payload.triggers || [],
+      knowledge_dependencies: payload.knowledge_dependencies || [],
+      prompt_engine_requirements: payload.prompt_engine_requirements || {},
+      ...payload
+    };
+    const validatedPayload = createAgentRecord(completePayload);
+    const payloadChecksum = calculatePayloadChecksum(validatedPayload);
+
+    // [EARS-G1] Load private key from KeyProvider — NO record store read (same guard as EARS-A6)
+    let privateKey: string;
+    try {
+      const key = await this.keyProvider.getPrivateKey(payload.id);
+      if (!key) {
+        throw new Error(`Private key not found for ${payload.id}`);
+      }
+      privateKey = key;
+    } catch (error) {
+      throw new Error(
+        `Private key not found for actor ${payload.id}. ` +
+        `AgentRecord requires a valid private key for cryptographic signing. ` +
+        `Original error: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
+
+    // [EARS-G1] Self-sign with the agent's key
+    const signature = signPayload(validatedPayload, privateKey, payload.id, 'author', 'Agent registration');
+
+    const record: GitGovAgentRecord = {
+      header: {
+        version: '1.0',
+        type: 'agent',
+        payloadChecksum,
+        signatures: [signature]
+      },
+      payload: validatedPayload
+    };
+
+    // [EARS-G1] Validate resolving the public key via the KeyProvider — NOT identity.getActor (no committed-read)
+    await validateFullAgentRecord(record, (keyId) => this.keyProvider.getPublicKey(keyId));
+
+    // [EARS-G1] Return the signed record WITHOUT persisting — caller persists via initializer.addAgent (EARS-PI14)
+    return record;
+  }
 }

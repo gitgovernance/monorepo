@@ -104,6 +104,7 @@ describe('AgentAdapter', () => {
     mockKeyProvider = {
       sign: jest.fn().mockResolvedValue(new Uint8Array(64)),
       getPrivateKey: jest.fn().mockResolvedValue('mock-private-key'),
+      getPublicKey: jest.fn().mockResolvedValue('mock-public-key'),
       setPrivateKey: jest.fn().mockResolvedValue(undefined),
       deletePrivateKey: jest.fn().mockResolvedValue(undefined),
       listKeys: jest.fn().mockResolvedValue([]),
@@ -349,6 +350,41 @@ describe('AgentAdapter', () => {
 
       expect(mockAgentStore.put).toHaveBeenCalledTimes(1);
       expect(mockAgentStore.putDeferred).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('4.7. buildSignedAgentRecord (EARS-G1)', () => {
+    const agentPayload = {
+      id: 'agent:test-agent',
+      engine: { type: 'local' as const, entrypoint: 'index.ts', function: 'run' },
+    };
+
+    it('[EARS-G1] should build and sign AgentRecord using keyProvider without reading the store', async () => {
+      // Make validate invoke the public-key resolver so we can assert its source
+      mockValidateFullAgentRecord.mockImplementation(
+        async (_record: GitGovAgentRecord, getPublicKey: (keyId: string) => Promise<string | null>) => {
+          await getPublicKey('agent:test-agent');
+        }
+      );
+
+      const result = await agentAdapter.buildSignedAgentRecord(agentPayload);
+
+      // Returns a signed record
+      expect(result.header.signatures.length).toBeGreaterThan(0);
+      expect(result.payload.id).toBe('agent:test-agent');
+      // Public key resolved from the KeyProvider — NOT identity.getActor / the store (no committed-read)
+      expect(mockKeyProvider.getPublicKey).toHaveBeenCalledWith('agent:test-agent');
+      expect(mockIdentityAdapter.getActor).not.toHaveBeenCalled();
+      // NOT persisted — the caller persists via initializer.addAgent (EARS-PI14)
+      expect(mockAgentStore.put).not.toHaveBeenCalled();
+      expect(mockAgentStore.putDeferred).not.toHaveBeenCalled();
+    });
+
+    it('[EARS-G1] should throw when private key is not available', async () => {
+      mockKeyProvider.getPrivateKey.mockResolvedValue(null);
+
+      await expect(agentAdapter.buildSignedAgentRecord(agentPayload))
+        .rejects.toThrow('Private key not found');
     });
   });
 });
