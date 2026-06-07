@@ -1,7 +1,7 @@
 // ⚠️ COPIED from core — DO NOT EDIT
 // Source: packages/core/prisma/schema/
 // Re-generate: pnpm prisma:sync (in packages/e2e)
-// Synced at: 2026-05-04T12:22:04.837Z
+// Synced at: 2026-05-31T02:26:50.048Z
 
 // GitGovernance Core — Audit Product Projection Tables
 // Finding, Waiver, Scan — derived from protocol records
@@ -151,7 +151,10 @@ model Scan {
   status               String           @default("pending")
   prNumber             Int?
   prUrl                String?
-  checkRunId           Int?
+  // [SCAN-Q1] GitHub Check Run ID. BIGINT in DB (GitHub IDs can exceed
+  // Int32 range). Migration 20260506042653_index_status_enum_and_scan_updates
+  // set the column type to BIGINT — the schema must match for client codegen.
+  checkRunId           BigInt?
   branch               String?
   commitSha            String?
   commitAuthor         String?

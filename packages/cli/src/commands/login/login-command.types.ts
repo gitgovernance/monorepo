@@ -27,6 +27,10 @@ export interface LoginCommandOptions extends BaseCommandOptions {
   forceCloud?: boolean;
   /** State branch name for pre-DI fetch (LOGIN-P1). Overrides resolveStateBranchPreDI() */
   stateBranch?: string;
+  /** Pre-minted session token (JWE). Bypasses OAuth browser flow. Test-only. */
+  token?: string;
+  /** GitHub login for --token mode (required with --token). */
+  login?: string;
 }
 
 // ============================================================================

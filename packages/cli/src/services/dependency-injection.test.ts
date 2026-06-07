@@ -510,6 +510,7 @@ vi.mock('@gitgov/core', () => {
         run: vi.fn().mockResolvedValue({
           findings: [],
           agentResults: [],
+          l1AgentResults: [],
           policyDecision: { decision: 'pass', reason: 'No findings', blockingFindings: [], waivedFindings: [], summary: { critical: 0, high: 0, medium: 0, low: 0 }, rulesEvaluated: [], evaluatedAt: new Date().toISOString() },
           summary: { total: 0, critical: 0, high: 0, medium: 0, low: 0, suppressed: 0, agentsRun: 0, agentsFailed: 0 },
           executionIds: { scans: [], policy: 'exec-policy-1' },
@@ -522,6 +523,15 @@ vi.mock('@gitgov/core', () => {
       createPolicyEvaluator: vi.fn().mockImplementation(function() { return {
         evaluate: vi.fn().mockReturnValue({ decision: 'pass', reason: 'No findings' }),
       }; }),
+    },
+
+    // 🎭 MOCK REDACTION: FindingRedactor for L1/L2 separation
+    Redaction: {
+      FindingRedactor: vi.fn().mockImplementation(function() { return {
+        redact: vi.fn().mockImplementation((f: unknown) => f),
+        redactSarif: vi.fn().mockImplementation((s: unknown) => s),
+      }; }),
+      DEFAULT_REDACTION_CONFIG: { sensitiveCategories: [], safeCategories: [], defaultBehavior: 'redact' },
     },
 
     // 🎭 MOCK SOURCE AUDITOR: Mock source auditor (for WaiverReader/WaiverWriter)
@@ -687,7 +697,7 @@ import { DependencyInjectionService } from './dependency-injection';
 // Mocked module references — vitest hoists vi.mock, so imports resolve to mocks
 import * as mockFsModule from 'fs';
 import * as corefs from '@gitgov/core/fs';
-import { Git, Adapters, KeyProvider, EventBus, RecordProjection, RecordMetrics, AuditOrchestrator as AuditOrchestratorMock, PolicyEvaluator as PolicyEvaluatorMock, SyncState } from '@gitgov/core';
+import { Git, Adapters, KeyProvider, EventBus, RecordProjection, RecordMetrics, AuditOrchestrator as AuditOrchestratorMock, PolicyEvaluator as PolicyEvaluatorMock, SyncState, Redaction as RedactionMock } from '@gitgov/core';
 const mockFs = vi.mocked(mockFsModule);
 
 describe('DependencyInjectionService', () => {
@@ -781,8 +791,8 @@ describe('DependencyInjectionService', () => {
   // ============================================================================
   // §4.3. Adapter Factories (EARS-C1 to C12)
   // ============================================================================
-  describe('4.3. Adapter Factories (EARS-C1 to C14)', () => {
-    it('[EARS-C1] should create RecordProjector with all dependencies', async () => {
+  describe('4.3. Adapter Factories (EARS-C1 to C15)', () => {
+    it('[EARS-C1] should create IndexerAdapter with all dependencies', async () => {
       const projector = await diService.getRecordProjector();
       expect(projector).toBeDefined();
       expect(projector.generateIndex).toBeDefined();
@@ -794,7 +804,7 @@ describe('DependencyInjectionService', () => {
       expect(backlogAdapter.createTask).toBeDefined();
     });
 
-    it('[EARS-C3] should create RecordMetrics with stores', async () => {
+    it('[EARS-C3] should create MetricsAdapter with stores', async () => {
       const recordMetrics = await diService.getRecordMetrics();
 
       expect(recordMetrics).toBeDefined();
@@ -814,7 +824,7 @@ describe('DependencyInjectionService', () => {
       expect(EventBus.EventBus).toHaveBeenCalled();
     });
 
-    it('[EARS-C5] should create FeedbackAdapter with signer and eventBus', async () => {
+    it('[EARS-C5] should create FeedbackAdapter with IdentityAdapter', async () => {
       const feedbackAdapter = await diService.getFeedbackAdapter();
 
       expect(feedbackAdapter).toBeDefined();
@@ -830,7 +840,7 @@ describe('DependencyInjectionService', () => {
       expect(lintModule).toBeDefined();
     });
 
-    it('[EARS-C7] should create FsWorktreeSyncStateModule with repoRoot and worktreePath', async () => {
+    it('[EARS-C7] should create SyncStateModule with all dependencies', async () => {
       const syncModule = await diService.getSyncStateModule();
 
       expect(syncModule).toBeDefined();
@@ -863,7 +873,7 @@ describe('DependencyInjectionService', () => {
       expect(sync1).toBe(sync2);
     });
 
-    it('[EARS-C9] should create ConfigManager with worktree base path', async () => {
+    it('[EARS-C9] should create ConfigManager with projectRoot', async () => {
       const configManager = await diService.getConfigManager();
 
       expect(configManager).toBeDefined();
@@ -873,7 +883,7 @@ describe('DependencyInjectionService', () => {
       expect(corefs.createConfigManager).toHaveBeenCalledWith(mockWorktreeBasePath);
     });
 
-    it('[EARS-C10] should create SessionManager with worktree base path', async () => {
+    it('[EARS-C10] should create SessionManager with projectRoot', async () => {
       const sessionManager = await diService.getSessionManager();
 
       expect(sessionManager).toBeDefined();
@@ -882,16 +892,25 @@ describe('DependencyInjectionService', () => {
       expect(corefs.createSessionManager).toHaveBeenCalledWith(mockWorktreeBasePath);
     });
 
-    it('[EARS-C11] should create AuditOrchestrator with all dependencies', async () => {
+    it('[EARS-C11] should create AuditOrchestrator with all dependencies including FindingRedactor', async () => {
       const orchestrator = await diService.getAuditOrchestrator();
 
       expect(orchestrator).toBeDefined();
       expect(orchestrator.run).toBeDefined();
 
-      // Verify AuditOrchestrator factory was called
+      // Verify AuditOrchestrator factory was called with redactor
       expect(AuditOrchestratorMock.createAuditOrchestrator).toHaveBeenCalled();
+      const depsArg = (AuditOrchestratorMock.createAuditOrchestrator as ReturnType<typeof vi.fn>).mock.calls[0]?.[0];
+      expect(depsArg).toBeDefined();
+      expect(depsArg.redactor).toBeDefined();
+      expect(depsArg.redactor.redactSarif).toBeDefined();
+      expect(depsArg.agentRunner).toBeDefined();
+      expect(depsArg.waiverReader).toBeDefined();
+      expect(depsArg.recordStore).toBeDefined();
+      expect(depsArg.policyEvaluator).toBeDefined();
 
-      // Verify PolicyEvaluator was created as dependency
+      // Verify FindingRedactor constructor was called
+      expect(RedactionMock.FindingRedactor).toHaveBeenCalled();
       expect(PolicyEvaluatorMock.createPolicyEvaluator).toHaveBeenCalled();
     });
 
@@ -923,7 +942,7 @@ describe('DependencyInjectionService', () => {
   // §4.4. Bootstrap Reindex (EARS-D1 to D2)
   // ============================================================================
   describe('4.4. Bootstrap Reindex (EARS-D1 to D2)', () => {
-    it('[EARS-D1] should call generateIndex() after successful worktree bootstrap', async () => {
+    it('[EARS-D1] should call generateIndex() after successful bootstrap from gitgov-state', async () => {
       // Mock fs.access to reject (no worktree .gitgov directory exists)
       mockFs.promises.access.mockRejectedValue(new Error('.gitgov directory not found'));
 
@@ -951,7 +970,7 @@ describe('DependencyInjectionService', () => {
       expect(projector.generateIndex).toHaveBeenCalledTimes(1);
     });
 
-    it('[EARS-D2] should NOT call generateIndex() when worktree .gitgov/ already exists', async () => {
+    it('[EARS-D2] should NOT call generateIndex() when .gitgov/ already exists (no bootstrap)', async () => {
       // Mock fs.access to succeed (worktree .gitgov exists)
       mockFs.promises.access.mockResolvedValue(undefined);
 
@@ -967,7 +986,7 @@ describe('DependencyInjectionService', () => {
   // §4.5. Error Handling (EARS-E1 to E4)
   // ============================================================================
   describe('4.5. Error Handling (EARS-E1 to E4)', () => {
-    it('[EARS-E1] should throw error when worktree bootstrap fails (RecordProjector)', async () => {
+    it('[EARS-E1] should throw error when project root not found (IndexerAdapter)', async () => {
       // Mock fs.access to reject (no worktree .gitgov directory)
       mockFs.promises.access.mockRejectedValue(new Error('Directory not found'));
 
@@ -986,7 +1005,7 @@ describe('DependencyInjectionService', () => {
         .rejects.toThrow("❌ GitGovernance not initialized. Run 'gitgov init' first.");
     });
 
-    it('[EARS-E1] should throw error when worktree bootstrap fails (BacklogAdapter)', async () => {
+    it('[EARS-E1] should throw error when project root not found (BacklogAdapter)', async () => {
       // Mock fs.access to reject (no worktree .gitgov directory)
       mockFs.promises.access.mockRejectedValue(new Error('Directory not found'));
 

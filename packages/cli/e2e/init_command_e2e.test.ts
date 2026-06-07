@@ -712,4 +712,29 @@ describe('Init CLI Command - Edge Cases E2E Tests', () => {
       cleanupWorktree(projRoot, wtPath);
     });
   });
+
+  describe('4.9. Security .gitignore (EARS-FPI20)', () => {
+    it('[EARS-FPI20] should create .gitgov/.gitignore with security exclusions after init', () => {
+      const projRoot = path.join(tempDir, 'gitignore-test');
+      fs.mkdirSync(projRoot, { recursive: true });
+      createGitRepo(projRoot);
+
+      const initResult = runCliCommand(
+        ['init', '--name', 'GitignoreTest', '--actor-name', 'Test'],
+        { cwd: projRoot },
+      );
+      expect(initResult.success).toBe(true);
+
+      const wtPath = getWorktreeBasePath(projRoot);
+      const gitignorePath = path.join(wtPath, '.gitgov', '.gitignore');
+      expect(fs.existsSync(gitignorePath)).toBe(true);
+
+      const content = fs.readFileSync(gitignorePath, 'utf-8');
+      expect(content).toContain('*.key');
+      expect(content).toContain('.session.json');
+      expect(content).toContain('index.json');
+
+      cleanupWorktree(projRoot, wtPath);
+    });
+  });
 });

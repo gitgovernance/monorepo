@@ -1,7 +1,7 @@
 import type { IProjectInitializer } from '../project_initializer';
 import type { IdentityModule } from '../identity/identity_module';
 import type { IBacklogAdapter } from '../adapters/backlog_adapter/backlog_adapter.types';
-import type { AgentPayload, AgentRecord } from '../record_types';
+import type { AgentPayload, AgentRecord, GitGovAgentRecord } from '../record_types';
 
 // [PROJ-F1] Trigger type derived from AgentRecord — single source of truth
 export type DefaultAgentConfig = {
@@ -18,6 +18,8 @@ export interface IProjectAgentOps {
   getAgentRecord(agentId: string): Promise<AgentRecord | null>;
   createAgentRecord(payload: Partial<AgentPayload>, options?: { defer?: boolean }): Promise<AgentRecord>;
   updateAgentRecord(agentId: string, updates: Partial<AgentPayload>): Promise<AgentRecord>;
+  // [EARS-G1] Build+sign without committed-read — caller persists via initializer.addAgent (PROJ-B4)
+  buildSignedAgentRecord(payload: Partial<AgentPayload>): Promise<GitGovAgentRecord>;
 }
 
 export type ProjectModuleDeps = {
@@ -37,7 +39,7 @@ export type ProjectInitOptions = {
   saasUrl?: string;
   stateBranch: string;
   repoId?: string;
-  joinedVia?: EnsureActorInput['joinedVia'];
+  joinedVia?: AddActorInput['joinedVia'];
 };
 
 export type ProjectInitResult = {
@@ -49,32 +51,32 @@ export type ProjectInitResult = {
   created?: boolean;
 };
 
-// --- ensureActorInProject primitive (PROJ-H1..H6) ---
+// --- addActor primitive (PROJ-H1..H6) ---
 
-export type EnsureActorInput = {
+export type AddActorInput = {
   login: string;
   type: 'human' | 'agent';
   repoId: string;
   displayName?: string;
   roles?: string[];
   joinedVia: 'cli' | 'saas-oauth' | 'saas-webhook' | 'mcp';
-  authzCheck?: (input: EnsureActorInput) => Promise<boolean>;
+  authzCheck?: (input: AddActorInput) => Promise<boolean>;
   skipFinalize?: boolean;
   defer?: boolean;
 };
 
-export type EnsureActorResult = {
+export type AddActorResult = {
   actorId: string;
   created: boolean;
   commitSha?: string;
 };
 
-export class EnsureActorError extends Error {
+export class AddActorError extends Error {
   public readonly code: string;
   public readonly context: Record<string, unknown>;
   constructor(code: string, context: Record<string, unknown> = {}) {
-    super(`EnsureActorError(${code})`);
-    this.name = 'EnsureActorError';
+    super(`AddActorError(${code})`);
+    this.name = 'AddActorError';
     this.code = code;
     this.context = context;
   }

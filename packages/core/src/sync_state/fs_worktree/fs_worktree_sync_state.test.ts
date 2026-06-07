@@ -17,7 +17,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { promisify } from 'util';
 import { exec } from 'child_process';
-import { FsWorktreeSyncStateModule } from './fs_worktree_sync_state';
+import { FsWorktreeSyncStateModule, shouldSyncFile } from './fs_worktree_sync_state';
 import { DEFAULT_STATE_BRANCH } from './fs_worktree_sync_state.types';
 import { LocalGitModule } from '../../git/local';
 import type { ExecOptions, ExecResult } from '../../git/types';
@@ -341,7 +341,7 @@ describe('FsWorktreeSyncStateModule', () => {
   // 4.1. Worktree Management (WTSYNC-A1 to A6)
   // ═══════════════════════════════════════════════
 
-  describe('4.1. Worktree Management (WTSYNC-A1 to A7)', () => {
+  describe('4.1. Worktree Management (WTSYNC-A1 to A8)', () => {
     it('[WTSYNC-A1] should create worktree when none exists', async () => {
       const { repoPath, remotePath } = await setupRepoWithRemote();
       cleanupPaths.push(repoPath, remotePath);
@@ -504,58 +504,42 @@ describe('FsWorktreeSyncStateModule', () => {
       expect(branches).toContain('gitgov-state');
     });
 
-    it('[WTSYNC-A7] should NOT create .gitignore on fresh state branch initialization', async () => {
+    it('[WTSYNC-A8] should create security .gitignore excluding keys and local files', async () => {
       const { repoPath, remotePath } = await setupRepoWithRemote();
       cleanupPaths.push(repoPath, remotePath);
 
       const { module } = createModule(repoPath);
       await module.ensureWorktree();
 
-      // Verify the worktree has NO .gitignore at root
       const worktreePath = module.getWorktreePath();
-      expect(fs.existsSync(path.join(worktreePath, '.gitignore'))).toBe(false);
+      const gitignorePath = path.join(worktreePath, '.gitignore');
+      expect(fs.existsSync(gitignorePath)).toBe(true);
 
-      // Verify the state branch tree has NO .gitignore
-      const { stdout: tree } = await execAsync(
-        'git ls-tree -r --name-only gitgov-state',
-        { cwd: repoPath }
-      );
-      expect(tree.trim()).toBe(''); // orphan empty tree — no files at all
+      const content = fs.readFileSync(gitignorePath, 'utf-8');
+      expect(content).toContain('*.key');
+      expect(content).toContain('.session.json');
+      expect(content).toContain('index.json');
     });
 
-    it('[WTSYNC-A7] should remove legacy .gitignore from existing state branch', async () => {
+    it('[WTSYNC-A8] should overwrite .gitignore when content differs from expected', async () => {
       const { repoPath, remotePath } = await setupRepoWithRemote();
       cleanupPaths.push(repoPath, remotePath);
 
-      // Simulate legacy FsSyncState init: create state branch WITH .gitignore
-      await execAsync('git checkout --orphan gitgov-state', { cwd: repoPath });
-      await execAsync('git rm -rf . 2>/dev/null || true', { cwd: repoPath });
-      fs.writeFileSync(path.join(repoPath, '.gitignore'), '# Legacy\nindex.json\n.session.json\n');
-      await execAsync('git add .gitignore', { cwd: repoPath });
-      await execAsync('git commit -m "Initialize state branch with .gitignore"', { cwd: repoPath });
-      await execAsync('git checkout main', { cwd: repoPath });
-
-      // Verify .gitignore exists on state branch before cleanup
-      const { stdout: treeBefore } = await execAsync(
-        'git ls-tree --name-only gitgov-state',
-        { cwd: repoPath }
-      );
-      expect(treeBefore.trim()).toContain('.gitignore');
-
-      // Now create worktree — should clean up legacy .gitignore
       const { module } = createModule(repoPath);
       await module.ensureWorktree();
 
-      // Verify .gitignore is GONE
       const worktreePath = module.getWorktreePath();
-      expect(fs.existsSync(path.join(worktreePath, '.gitignore'))).toBe(false);
+      const gitignorePath = path.join(worktreePath, '.gitignore');
 
-      // Verify the state branch no longer has .gitignore
-      const { stdout: treeAfter } = await execAsync(
-        'git ls-tree --name-only gitgov-state',
-        { cwd: repoPath }
-      );
-      expect(treeAfter.trim()).not.toContain('.gitignore');
+      // Write wrong content
+      fs.writeFileSync(gitignorePath, '# Legacy\nindex.json\n');
+
+      // Re-run ensureWorktree — should overwrite
+      await module.ensureWorktree();
+
+      const content = fs.readFileSync(gitignorePath, 'utf-8');
+      expect(content).toContain('*.key');
+      expect(content).toContain('.session.json');
     });
   });
 
@@ -1085,6 +1069,31 @@ describe('FsWorktreeSyncStateModule', () => {
       expect(result.conflictInfo?.affectedFiles).toContain('.gitgov/tasks/conflict-file.json');
       expect(result.filesSynced).toBe(0);
       expect(result.commitHash).toBeNull();
+    });
+  });
+
+  // ═══════════════════════════════════════════════
+  // 4.2b. Root File Sync Exemption (WTSYNC-B17)
+  // ═══════════════════════════════════════════════
+
+  describe('4.2b. Root File Sync Exemption (WTSYNC-B17)', () => {
+    it('[WTSYNC-B17] should sync policy.yml and .gitignore as root files despite non-json extension', () => {
+      // Root files under .gitgov/ sync by exact name, exempt from the .json filter
+      expect(shouldSyncFile('.gitgov/policy.yml')).toBe(true);
+      expect(shouldSyncFile('.gitgov/.gitignore')).toBe(true);
+      expect(shouldSyncFile('.gitgov/config.json')).toBe(true);
+      // A file under a sync dir still requires the .json extension (B9 unchanged)
+      expect(shouldSyncFile('.gitgov/actors/agent_x.json')).toBe(true);
+      expect(shouldSyncFile('.gitgov/actors/notes.yml')).toBe(false);
+    });
+
+    it('[WTSYNC-B17] should not sync a .gitignore outside .gitgov/', () => {
+      // A worktree-root or repo-root .gitignore is NOT a .gitgov state file
+      expect(shouldSyncFile('.gitignore')).toBe(false);
+      expect(shouldSyncFile('some/repo/.gitignore')).toBe(false);
+      // Local-only and excluded patterns are still rejected despite the root-file exemption
+      expect(shouldSyncFile('.gitgov/index.json')).toBe(false);
+      expect(shouldSyncFile('.gitgov/keys/agent.key')).toBe(false);
     });
   });
 

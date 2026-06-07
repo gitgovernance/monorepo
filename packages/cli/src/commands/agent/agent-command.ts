@@ -220,14 +220,20 @@ export class AgentCommand extends BaseCommand<RunCommandOptions> {
 
       // [EARS-E5, E6] Create or update
       const agentStore = await this.container.getAgentStore();
+      // list() returns decoded IDs (e.g. 'agent:security-audit'), not encoded filenames
       const existingIds = await agentStore.list();
-      const alreadyExists = existingIds.includes(DEFAULT_ID_ENCODER.encode(actorId));
+      const alreadyExists = existingIds.includes(actorId);
 
       let agent: AgentRecord;
+      // [EARS-E8] Read previous engine type before overwrite
+      let previousEngineType: string | null = null;
       if (alreadyExists) {
+        try {
+          const prev = await agentStore.get(actorId);
+          if (prev) previousEngineType = (prev.payload as { engine?: { type?: string } })?.engine?.type ?? null;
+        } catch { /* read failure is non-fatal */ }
         // [EARS-E6] Update existing
         agent = await agentAdapter.createAgentRecord(payload);
-        if (!options.quiet) console.log(`✅ Agent updated: ${actorId}`);
       } else {
         // [EARS-E5] Create new — auto-create ActorRecord if needed
         try {
@@ -248,15 +254,18 @@ export class AgentCommand extends BaseCommand<RunCommandOptions> {
         }
       }
 
-      // [EARS-E7] Output
+      // [EARS-E7] [EARS-E8] Output — distinguish register vs update
       if (options.json) {
         console.log(JSON.stringify({
           success: true,
           action: alreadyExists ? 'updated' : 'created',
-          data: { id: agent.id, actorId, engine: agent.engine },
+          data: { id: agent.id, actorId, engine: agent.engine, previousEngineType },
         }, null, 2));
       } else if (!options.quiet) {
-        console.log(`✅ Agent ${alreadyExists ? 'updated' : 'registered'}: ${actorId} [${engine.type}]`);
+        const typeLabel = alreadyExists && previousEngineType
+          ? `[${previousEngineType} → ${engine.type}]`
+          : `[${engine.type}]`;
+        console.log(`✅ Agent ${alreadyExists ? 'updated' : 'registered'}: ${actorId} ${typeLabel}`);
         console.log(`   Package: ${pkgName}`);
         console.log(`   Function: ${fnName}`);
       }

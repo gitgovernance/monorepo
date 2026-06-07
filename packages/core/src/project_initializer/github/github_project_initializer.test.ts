@@ -14,6 +14,7 @@ import { GitHubProjectInitializer } from './github_project_initializer';
 import type { IGitModule, CommitAuthor } from '../../git';
 import type { ConfigStore } from '../../config_store';
 import type { GitGovConfig } from '../../config_manager';
+import type { GitGovAgentRecord } from '../../record_types';
 import { DEFAULT_STATE_BRANCH } from '../../sync_state/fs_worktree/fs_worktree_sync_state.types';
 
 // ==================== Mock Helpers ====================
@@ -429,6 +430,66 @@ describe('GitHubProjectInitializer', () => {
 
       const sha = await initializer.getHeadSha();
       expect(sha).toBeUndefined();
+    });
+  });
+
+  describe('4.11. Security .gitignore (GPI17)', () => {
+    it('[GPI17] should stage .gitgov/.gitignore with security exclusions in gitModule buffer', async () => {
+      gitModule.branchExists.mockResolvedValue(true);
+      const initializer = createInitializer(gitModule, configStore);
+
+      await initializer.createProjectStructure();
+
+      expect(gitModule.add).toHaveBeenCalledWith(
+        ['.gitgov/.gitignore'],
+        {
+          contentMap: {
+            '.gitgov/.gitignore': expect.stringContaining('*.key'),
+          },
+        },
+      );
+      const gitignoreCall = gitModule.add.mock.calls.find(
+        (call: unknown[]) => (call[0] as string[])[0] === '.gitgov/.gitignore',
+      );
+      const content = (gitignoreCall![1] as { contentMap: Record<string, string> }).contentMap['.gitgov/.gitignore'];
+      expect(content).toContain('.session.json');
+      expect(content).toContain('index.json');
+    });
+  });
+
+  describe('4.12. Agent Persistence (GPI18)', () => {
+    const signedAgent: GitGovAgentRecord = {
+      header: {
+        version: '1.0',
+        type: 'agent',
+        payloadChecksum: 'checksum',
+        signatures: [{ keyId: 'agent:security-audit', role: 'author', notes: '', signature: 'sig', timestamp: 1 }],
+      },
+      payload: {
+        id: 'agent:security-audit',
+        engine: { type: 'local', entrypoint: '@gitgov/agent-security-audit', function: 'runAgent' },
+        status: 'active',
+        triggers: [],
+        knowledge_dependencies: [],
+        prompt_engine_requirements: {},
+      },
+    };
+
+    it('[GPI18] should stage signed agent JSON at basePath/agents/{id}.json via gitModule.add', async () => {
+      const initializer = createInitializer(gitModule, configStore);
+
+      await initializer.addAgent(signedAgent);
+
+      // agent:security-audit → agent_security-audit.json (DEFAULT_ID_ENCODER), staged not committed
+      expect(gitModule.add).toHaveBeenCalledWith(
+        ['.gitgov/agents/agent_security-audit.json'],
+        {
+          contentMap: {
+            '.gitgov/agents/agent_security-audit.json': JSON.stringify(signedAgent, null, 2),
+          },
+        },
+      );
+      expect(gitModule.commit).not.toHaveBeenCalled();
     });
   });
 });

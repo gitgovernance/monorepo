@@ -37,6 +37,7 @@ function createMockInitializer(): IProjectInitializer {
     validateEnvironment: jest.fn().mockResolvedValue({ isValid: true, isGitRepo: true, hasWritePermissions: true, isAlreadyInitialized: false, warnings: [], suggestions: [] }),
     readFile: jest.fn().mockResolvedValue(''),
     getActorPath: jest.fn().mockReturnValue('.gitgov/actors/test.json'),
+    addAgent: jest.fn().mockResolvedValue(undefined),
     finalize: jest.fn().mockResolvedValue('abc123def456abc123def456abc123def456abc1'),
     getHeadSha: jest.fn().mockResolvedValue('abc123def456abc123def456abc123def456abc1'),
   };
@@ -299,6 +300,10 @@ describe('ProjectModule', () => {
       createAgentRecord: jest.fn().mockResolvedValue({}),
       getAgentRecord: jest.fn().mockResolvedValue(null),
       updateAgentRecord: jest.fn().mockResolvedValue({}),
+      buildSignedAgentRecord: jest.fn().mockImplementation(async (payload: { id?: string }) => ({
+        header: { version: '1.0', type: 'agent', payloadChecksum: 'mock-checksum', signatures: [] },
+        payload,
+      })),
       ...overrides,
     };
   }
@@ -358,8 +363,9 @@ describe('ProjectModule', () => {
       expect(reviewActor!.payload.roles).toEqual(['specialist']);
       expect(reviewActor!.payload.metadata).toEqual(expect.objectContaining({ joinedVia: 'cli' }));
 
-      // AgentRecords created for all 3 (product + 2 specialists)
-      expect(mockAgentAdapter.createAgentRecord).toHaveBeenCalledTimes(3);
+      // AgentRecords built+persisted for all 3 (product + 2 specialists) via the homologated path
+      expect(mockAgentAdapter.buildSignedAgentRecord).toHaveBeenCalledTimes(3);
+      expect(deps.initializer.addAgent as jest.Mock).toHaveBeenCalledTimes(3);
     });
 
     it('[PROJ-E2] should skip failed specialist and continue with remaining agents', async () => {
@@ -382,11 +388,11 @@ describe('ProjectModule', () => {
 
       // Init succeeded despite security-audit specialist failure
       expect(result.actorId).toBe('human:camilo');
-      // Product agent AgentRecord created (createActor skipped for it)
-      // security-audit: createActor failed → entire agent skipped (no createAgentRecord)
-      // review-advisor: createActor succeeded → createAgentRecord called
-      // Total: 2 createAgentRecord calls (product + review-advisor)
-      expect(mockAgentAdapter.createAgentRecord).toHaveBeenCalledTimes(2);
+      // Product agent AgentRecord built (createActor skipped for it)
+      // security-audit: createActor failed → entire agent skipped (no buildSignedAgentRecord)
+      // review-advisor: createActor succeeded → buildSignedAgentRecord called
+      // Total: 2 buildSignedAgentRecord calls (product + review-advisor)
+      expect(mockAgentAdapter.buildSignedAgentRecord).toHaveBeenCalledTimes(2);
     });
 
     it('[PROJ-E3] should not create duplicate ActorRecord for agent:gitgov-audit', async () => {
@@ -420,20 +426,20 @@ describe('ProjectModule', () => {
 
       await pm.initializeProject({ name: 'test-project', login: 'camilo', stateBranch: DEFAULT_STATE_BRANCH });
 
-      const orchestrationCall = mockAgentAdapter.createAgentRecord.mock.calls[0][0];
+      const orchestrationCall = mockAgentAdapter.buildSignedAgentRecord.mock.calls[0][0];
       expect(orchestrationCall.metadata).toEqual(expect.objectContaining({ purpose: 'orchestration' }));
 
-      const auditCall = mockAgentAdapter.createAgentRecord.mock.calls[1][0];
+      const auditCall = mockAgentAdapter.buildSignedAgentRecord.mock.calls[1][0];
       expect(auditCall.metadata).toEqual(expect.objectContaining({ purpose: 'audit' }));
 
-      const reviewCall = mockAgentAdapter.createAgentRecord.mock.calls[2][0];
+      const reviewCall = mockAgentAdapter.buildSignedAgentRecord.mock.calls[2][0];
       expect(reviewCall.metadata).toEqual(expect.objectContaining({ purpose: 'review' }));
     });
   });
 
   // 4.6. Default Agent Registration (PROJ-B4 to B5)
   describe('4.6. Default Agent Registration (PROJ-B4 to B5)', () => {
-    it('[PROJ-B4] should create AgentRecords for each defaultAgent', async () => {
+    it('[PROJ-B4] should build+sign each defaultAgent and persist via initializer.addAgent', async () => {
       const { deps } = createRealDeps();
       const mockAgentAdapter = createMockAgentAdapter();
       deps.agentAdapter = mockAgentAdapter;
@@ -450,23 +456,24 @@ describe('ProjectModule', () => {
 
       await pm.initializeProject({ name: 'test-project', login: 'camilo', stateBranch: DEFAULT_STATE_BRANCH });
 
-      expect(mockAgentAdapter.createAgentRecord).toHaveBeenCalledTimes(1);
-      expect(mockAgentAdapter.createAgentRecord).toHaveBeenCalledWith(
+      expect(mockAgentAdapter.buildSignedAgentRecord).toHaveBeenCalledTimes(1);
+      expect(mockAgentAdapter.buildSignedAgentRecord).toHaveBeenCalledWith(
         expect.objectContaining({
           id: 'agent:gitgov-audit',
           status: 'active',
           engine: expect.objectContaining({ entrypoint: 'packages/core/dist/index.mjs' }),
         }),
-        { defer: true },
       );
+      // Signed record persisted via the initializer (homologated FS/GitHub), not the store
+      expect(deps.initializer.addAgent as jest.Mock).toHaveBeenCalledTimes(1);
     });
 
     it('[PROJ-B5] should continue with remaining agents when one fails', async () => {
       const { deps } = createRealDeps();
       const mockAgentAdapter = createMockAgentAdapter({
-        createAgentRecord: jest.fn()
+        buildSignedAgentRecord: jest.fn()
           .mockRejectedValueOnce(new Error('Agent 1 failed'))
-          .mockResolvedValueOnce({}),
+          .mockResolvedValueOnce({ header: {}, payload: { id: 'agent:second' } }),
       });
       deps.agentAdapter = mockAgentAdapter;
       deps.defaultAgents = [
@@ -480,7 +487,7 @@ describe('ProjectModule', () => {
       // Init succeeded despite first agent failure
       expect(result.actorId).toBe('human:camilo');
       // Both agents were attempted
-      expect(mockAgentAdapter.createAgentRecord).toHaveBeenCalledTimes(2);
+      expect(mockAgentAdapter.buildSignedAgentRecord).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -637,13 +644,13 @@ describe('ProjectModule', () => {
     });
   });
 
-  describe('4.9. ensureActorInProject (PROJ-H1 to H6)', () => {
+  describe('4.9. addActor (PROJ-H1 to H6)', () => {
     it('[PROJ-H1] should create actor and commit when actor not in store', async () => {
       const { deps, initializer } = createRealDeps();
       initializer.finalize = jest.fn().mockResolvedValue('sha-join-commit');
       const pm = new ProjectModule(deps);
 
-      const result = await pm.ensureActorInProject({
+      const result = await pm.addActor({
         login: 'collab', type: 'human', repoId: 'repo-1', joinedVia: 'cli',
       });
 
@@ -657,11 +664,11 @@ describe('ProjectModule', () => {
       initializer.finalize = jest.fn().mockResolvedValue('sha-first');
       const pm = new ProjectModule(deps);
 
-      await pm.ensureActorInProject({
+      await pm.addActor({
         login: 'collab', type: 'human', repoId: 'repo-1', joinedVia: 'cli',
       });
 
-      const result = await pm.ensureActorInProject({
+      const result = await pm.addActor({
         login: 'collab', type: 'human', repoId: 'repo-1', joinedVia: 'saas-oauth',
       });
 
@@ -676,14 +683,14 @@ describe('ProjectModule', () => {
         .mockResolvedValueOnce('sha-retry-commit');
       const pm = new ProjectModule(deps);
 
-      await expect(pm.ensureActorInProject({
+      await expect(pm.addActor({
         login: 'retry-user', type: 'human', repoId: 'repo-1', joinedVia: 'cli',
       })).rejects.toMatchObject({ code: 'GIT_WRITE_FAILED' });
 
       expect(initializer.finalize).toHaveBeenCalledTimes(1);
 
       // Retry — actor exists in store, finalize is re-called to complete the git write
-      const result = await pm.ensureActorInProject({
+      const result = await pm.addActor({
         login: 'retry-user', type: 'human', repoId: 'repo-1', joinedVia: 'cli',
       });
 
@@ -699,7 +706,7 @@ describe('ProjectModule', () => {
         .mockRejectedValue(new Error('Nothing to commit: staging buffer is empty'));
       const pm = new ProjectModule(deps);
 
-      const result = await pm.ensureActorInProject({
+      const result = await pm.addActor({
         login: 'store-committed', type: 'human', repoId: 'repo-1', joinedVia: 'saas-oauth',
       });
 
@@ -716,7 +723,7 @@ describe('ProjectModule', () => {
       const pm = new ProjectModule(deps);
 
       // First create the actor so it's in the store
-      await expect(pm.ensureActorInProject({
+      await expect(pm.addActor({
         login: 'ghost-actor', type: 'human', repoId: 'repo-1', joinedVia: 'cli',
       })).rejects.toMatchObject({ code: 'GIT_WRITE_FAILED' });
     });
@@ -728,7 +735,7 @@ describe('ProjectModule', () => {
       deps.eventBus = { emit: emitSpy };
       const pm = new ProjectModule(deps);
 
-      await pm.ensureActorInProject({
+      await pm.addActor({
         login: 'event-user', type: 'human', repoId: 'repo-42', joinedVia: 'mcp',
       });
 
@@ -745,7 +752,7 @@ describe('ProjectModule', () => {
       initializer.finalize = jest.fn().mockResolvedValue('sha-lazy');
       const pm = new ProjectModule(deps);
 
-      const result = await pm.ensureActorInProject({
+      const result = await pm.addActor({
         login: 'lazy-user', type: 'human', repoId: 'repo-specific', joinedVia: 'saas-webhook',
       });
 
@@ -757,7 +764,7 @@ describe('ProjectModule', () => {
       const { deps } = createRealDeps();
       const pm = new ProjectModule(deps);
 
-      await expect(pm.ensureActorInProject({
+      await expect(pm.addActor({
         login: 'blocked-user', type: 'agent', repoId: 'repo-1', joinedVia: 'mcp',
         authzCheck: async () => false,
       })).rejects.toMatchObject({

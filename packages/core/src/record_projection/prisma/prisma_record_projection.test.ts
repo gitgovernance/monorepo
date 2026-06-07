@@ -3,10 +3,15 @@ import type { IndexData, ProjectionContext, EnrichedTaskRecord } from '../record
 import type { ProjectionClient, GitgovExecutionRow, GitgovAgentRow } from './prisma_record_projection.types';
 
 function createMockDelegate() {
+  let rowCount = 0;
   return {
-    createMany: jest.fn().mockResolvedValue({ count: 0 }),
+    count: jest.fn().mockImplementation(() => Promise.resolve(rowCount)),
+    createMany: jest.fn().mockImplementation((args: { data: unknown[] }) => {
+      rowCount = args.data.length;
+      return Promise.resolve({ count: args.data.length });
+    }),
     findMany: jest.fn().mockResolvedValue([]),
-    deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+    deleteMany: jest.fn().mockImplementation(() => { rowCount = 0; return Promise.resolve({ count: 0 }); }),
   };
 }
 
@@ -873,6 +878,28 @@ describe('PrismaRecordProjection', () => {
       ];
       const orphanedFields = taskFieldNames.filter((f: string) => !knownTaskFields.includes(f));
       expect(orphanedFields).toEqual([]);
+    });
+  });
+
+  describe('4.11. Post-Persist Integrity (PP-C2)', () => {
+    it('[PP-C2] should throw when post-persist count mismatches expected', async () => {
+      const client = createMockClient();
+      // Simulate: createMany succeeds but count returns wrong number (corruption)
+      (client.gitgovActor.count as jest.Mock).mockResolvedValue(999);
+
+      const sink = new PrismaRecordProjection({ client, tenantFields: { repoId: 'repo-1', projectionType: 'index' } });
+      const data = createMockIndexData();
+
+      await expect(sink.persist(data, { lastCommitHash: 'sha-1' }))
+        .rejects.toThrow(/Persist integrity check failed.*repo-1.*actors expected=\d+ actual=999/);
+    });
+
+    it('[PP-C2] should not throw when counts match', async () => {
+      const client = createMockClient();
+      const sink = new PrismaRecordProjection({ client, tenantFields: { repoId: 'repo-1', projectionType: 'index' } });
+      const data = createMockIndexData();
+
+      await expect(sink.persist(data, { lastCommitHash: 'sha-1' })).resolves.not.toThrow();
     });
   });
 });

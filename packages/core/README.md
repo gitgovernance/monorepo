@@ -264,7 +264,7 @@ Adapters are orchestrators that compose modules. All receive dependencies via co
 
 | Adapter | Purpose |
 |---------|---------|
-| `ProjectAdapter` | Project initialization, environment validation |
+| `ProjectModule` | Project initialization, addActor, environment validation |
 | `IdentityAdapter` | Actor and agent identity management |
 | `BacklogAdapter` | Task and cycle lifecycle, workflow validation |
 | `ExecutionAdapter` | Execution audit log tracking |

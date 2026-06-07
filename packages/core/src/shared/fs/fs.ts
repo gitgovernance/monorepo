@@ -72,3 +72,7 @@ export type { FsAgentRunnerDependencies } from '../../agent_runner/fs';
 // RecordProjection (filesystem-based index.json persistence)
 export { FsRecordProjection } from '../../record_projection/fs';
 export type { FsRecordProjectionOptions } from '../../record_projection/fs';
+
+// AuditFsProjection (filesystem-based audit result persistence)
+export { AuditFsProjection } from '../../audit/fs';
+export type { IAuditFsProjection, AuditFsProjectionOptions } from '../../audit/fs';

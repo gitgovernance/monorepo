@@ -352,6 +352,9 @@ describe('GitHubGitModule', () => {
       const branches = await git.listRemoteBranches('origin');
 
       expect(branches).toEqual(['main', 'develop', 'feature/test']);
+      expect(mockOctokit.rest.repos.listBranches).toHaveBeenCalledWith(
+        expect.objectContaining({ per_page: 100 }),
+      );
     });
 
     it('[EARS-B3] should return CommitInfo array from compare endpoint', async () => {

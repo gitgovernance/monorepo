@@ -72,9 +72,8 @@ export type AuditOrchestratorDeps = {
   /** PolicyEvaluator for pass/block decision */
   policyEvaluator: PolicyEvaluator;
   /**
-   * Optional FindingRedactor for L1/L2 separation (RLDX-E1..E3).
-   * When provided, the orchestrator produces redacted SARIF copies for L1 persistence.
-   * Agents do not need to know about RedactionLevel — the orchestrator applies the policy.
+   * FindingRedactor for L1/L2 separation (AORCH-E1..E3).
+   * Required — the orchestrator always produces redacted SARIF copies for L1 persistence.
    */
-  redactor?: FindingRedactor;
+  redactor: FindingRedactor;
 };

@@ -2,6 +2,8 @@ import { promises as fs, existsSync } from 'node:fs';
 import * as path from 'node:path';
 import { execSync } from 'node:child_process';
 import type { GitGovConfig } from '../../config_manager';
+import type { GitGovAgentRecord } from '../../record_types';
+import { DEFAULT_ID_ENCODER } from '../../record_store';
 import type { IProjectInitializer, EnvironmentValidation } from '../project_initializer';
 import { createRequire } from 'module';
 import { fileURLToPath } from 'url';
@@ -74,11 +76,18 @@ export class FsProjectInitializer implements IProjectInitializer {
     const policyPath = path.join(gitgovPath, 'policy.yml');
     try {
       await fs.access(policyPath);
-      // policy.yml exists — do not overwrite
     } catch {
-      // policy.yml does not exist — create with defaults
       const defaultPolicy = 'version: "1.0"\nfailOn: critical\n';
       await fs.writeFile(policyPath, defaultPolicy, 'utf-8');
+    }
+
+    // [EARS-FPI20] Create security .gitignore to prevent keys from being committed
+    const gitignorePath = path.join(gitgovPath, '.gitignore');
+    try {
+      await fs.access(gitignorePath);
+    } catch {
+      const securityGitignore = '# Security: prevent private keys and local files from being committed\n*.key\n.session.json\nindex.json\n';
+      await fs.writeFile(gitignorePath, securityGitignore, 'utf-8');
     }
   }
 
@@ -138,6 +147,23 @@ export class FsProjectInitializer implements IProjectInitializer {
    */
   getActorPath(actorId: string): string {
     return path.join(this.projectRoot, '.gitgov', 'actors', `${actorId}.json`);
+  }
+
+  /**
+   * [EARS-FPI21] Persists a signed AgentRecord to disk at
+   * `.gitgov/agents/{encodedId}.json`. The record arrives already signed — this
+   * method does NOT sign. `{encodedId}` uses DEFAULT_ID_ENCODER so the file
+   * matches what the record store / indexer expects.
+   */
+  async addAgent(record: GitGovAgentRecord): Promise<void> {
+    const id = record.payload?.id;
+    if (!id) {
+      throw new Error('addAgent requires record.payload.id');
+    }
+    const agentsDir = path.join(this.projectRoot, '.gitgov', 'agents');
+    await fs.mkdir(agentsDir, { recursive: true });
+    const agentPath = path.join(agentsDir, `${DEFAULT_ID_ENCODER.encode(id)}.json`);
+    await fs.writeFile(agentPath, JSON.stringify(record, null, 2), 'utf-8');
   }
 
   /**

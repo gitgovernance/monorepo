@@ -86,9 +86,6 @@ export class InitCommand {
       // [EARS-B1] Get ProjectModule from dependency injection
       const projectModule = await this.getProjectModule(stateBranch);
 
-      // [EARS-B1] Delegate ALL business logic to ProjectModule
-      progressTracker.start("🚀 Initializing GitGovernance Project...\n");
-
       // [EARS-D1] Build ProjectInitOptions — filter undefined for exactOptionalPropertyTypes
       const saasUrl = completeOptions.saasUrl || process.env['GITGOV_SAAS_URL'] || 'https://app.gitgov.dev';
       const initOptions: import('@gitgov/core').ProjectModuleInitOptions = { name: completeOptions.name!, saasUrl, stateBranch };
@@ -97,25 +94,31 @@ export class InitCommand {
       if (completeOptions.type) initOptions.type = completeOptions.type;
       const result = await projectModule.initializeProject(initOptions);
 
-      progressTracker.complete();
+      // [EARS-B1] Show progress only for actual initialization (not re-runs)
+      if (!result.alreadyInitialized) {
+        progressTracker.start("🚀 Initializing GitGovernance Project...\n");
+        progressTracker.complete();
+      }
 
       // [EARS-B4] Format success output
       if (result.alreadyInitialized) {
         if (result.actorId && result.created) {
-          // [INIT-J1] Joined as new member
+          // [INIT-J1] Joined as new member — run postInitConcerns for push + DX
           console.log(`Joined existing project as ${result.actorId}`);
+          await this.postInitConcerns(options);
         } else if (result.actorId) {
-          // [INIT-J2] Already a member
+          // [INIT-J2] [INIT-J2b] Already a member — skip postInitConcerns
           console.log(`Already a member of this project as ${result.actorId}`);
+          return;
         } else {
           console.log("ℹ️  Project already initialized.");
+          return;
         }
       } else {
         this.showSuccessOutput(result, options);
+        // [EARS-G1] Post-init: best-effort push + DX concerns
+        await this.postInitConcerns(options);
       }
-
-      // [EARS-G1] Post-init: best-effort push + DX concerns
-      await this.postInitConcerns(options);
 
     } catch (error) {
       // 7. Format errors for user-friendly display

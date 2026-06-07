@@ -313,7 +313,7 @@ export function createAuditOrchestrator(deps: AuditOrchestratorDeps) {
     async run(
       options: AuditOrchestrationOptions,
     ): Promise<AuditOrchestrationResult> {
-      // 1. Discover audit agents
+      // [AORCH-B1, B2] Discover audit agents (filter by purpose + optional agentId)
       const auditAgents = await discoverAuditAgents(
         deps.recordStore,
         options.agentId,
@@ -341,6 +341,7 @@ export function createAuditOrchestrator(deps: AuditOrchestratorDeps) {
         return {
           findings: [],
           agentResults: [],
+          l1AgentResults: [],
           policyDecision: policyResult.decision,
           summary: {
             total: 0,
@@ -360,7 +361,7 @@ export function createAuditOrchestrator(deps: AuditOrchestratorDeps) {
         };
       }
 
-      // 3. Execute each agent (allSettled: one failure doesn't abort batch -- AORCH-B5)
+      // [AORCH-A1, B4, B5, B8] Execute each agent (allSettled: one failure doesn't abort batch)
       const settled = await Promise.allSettled(
         auditAgents.map((agentId) =>
           executeAgent(deps.agentRunner, agentId, options),
@@ -383,22 +384,18 @@ export function createAuditOrchestrator(deps: AuditOrchestratorDeps) {
             },
       );
 
-      // 4. Produce L1-redacted SARIF copies when redactor is provided (AORCH-E1)
-      // The redactor applies redactSarif(sarif, 'l1') to each agent's SarifLog.
-      // Original agentResults remain unredacted for L2 (AORCH-E2).
-      // Agents do not need knowledge of RedactionLevel (AORCH-E3).
-      let l1AgentResults: AgentAuditResult[] | undefined;
-      if (deps.redactor) {
-        l1AgentResults = agentResults.map((r) => ({
-          ...r,
-          sarif: deps.redactor!.redactSarif(r.sarif, "l1"),
-        }));
-      }
+      // [AORCH-E1] Produce L1-redacted SARIF copies (redactor is required)
+      // [AORCH-E2] Original agentResults remain unredacted for L2
+      // [AORCH-E3] Agents do not need knowledge of RedactionLevel
+      const l1AgentResults: AgentAuditResult[] = agentResults.map((r) => ({
+        ...r,
+        sarif: deps.redactor.redactSarif(r.sarif, "l1"),
+      }));
 
-      // 5. Consolidate findings with dedup by fingerprint
+      // [AORCH-B6, B12, B13] Consolidate findings with dedup by fingerprint
       const rawFindings = consolidateFindings(agentResults);
 
-      // 5-6. Pass raw findings + waivers to PolicyEvaluator (it handles waiver application internally)
+      // [AORCH-B7, D1, D4] Pass raw findings + waivers to PolicyEvaluator
       const scanExecutionIds = agentResults.map((r) => r.executionId);
       const policyInput: PolicyEvaluationInput = {
         findings: rawFindings,
@@ -429,20 +426,32 @@ export function createAuditOrchestrator(deps: AuditOrchestratorDeps) {
         return f;
       });
 
+      // [AORCH-G1] [AORCH-G2] Detect agents that failed due to unresolvable entrypoint
+      const failedAgents = agentResults.filter(
+        r => r.status === 'error' && r.errorMessage &&
+          (r.errorMessage.includes('MODULE_NOT_FOUND') || r.errorMessage.includes('ERR_MODULE_NOT_FOUND') || r.errorMessage.includes('Cannot find module')),
+      );
+      let entrypointWarning: string | undefined;
+      if (failedAgents.length > 0) {
+        const details = failedAgents.map(a => `  ${a.agentId}: entrypoint not found`).join('\n');
+        const successCount = agentResults.filter(r => r.status === 'success').length;
+        entrypointWarning = successCount === 0
+          ? `All audit agents failed to load:\n${details}\n\nRegister with a local path: gitgov agent new <path-to-agent>`
+          : `Some audit agents failed to load:\n${details}`;
+      }
+
       const result: AuditOrchestrationResult = {
         findings: findingsWithWaivers,
         agentResults,
+        l1AgentResults,
         policyDecision: policyResult.decision,
         summary: buildSummary(findingsWithWaivers, agentResults),
         executionIds: {
           scans: scanExecutionIds,
           policy: policyResult.executionRecord.id,
         },
+        ...(entrypointWarning ? { warning: entrypointWarning } : {}),
       };
-
-      if (l1AgentResults) {
-        result.l1AgentResults = l1AgentResults;
-      }
 
       // [AORCH-F1] Discover and execute review agents post-policy
       // [AORCH-F3] If no review agents found, skip silently (no warning, no error)

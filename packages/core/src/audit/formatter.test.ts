@@ -34,6 +34,7 @@ function makeResult(overrides: {
   return {
     findings,
     agentResults: [],
+    l1AgentResults: [],
     policyDecision: {
       decision,
       reason: overrides.reason ?? 'critical findings present',

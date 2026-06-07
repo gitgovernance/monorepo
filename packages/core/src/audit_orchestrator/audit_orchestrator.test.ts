@@ -159,11 +159,14 @@ function createMockDeps(overrides?: Partial<AuditOrchestratorDeps>): AuditOrches
     evaluate: jest.fn().mockResolvedValue(makePolicyResult()),
   };
 
+  const redactor = new FindingRedactor(DEFAULT_REDACTION_CONFIG);
+
   return {
     recordStore,
     agentRunner,
     waiverReader,
     policyEvaluator,
+    redactor,
     ...overrides,
   };
 }
@@ -329,6 +332,7 @@ describe("AuditOrchestrator", () => {
 
       expect(result.findings).toHaveLength(0);
       expect(result.agentResults).toHaveLength(0);
+      expect(result.l1AgentResults).toEqual([]);
       expect(result.summary.total).toBe(0);
       expect(result.summary.agentsRun).toBe(0);
       expect(deps.agentRunner.runOnce).not.toHaveBeenCalled();
@@ -459,8 +463,10 @@ describe("AuditOrchestrator", () => {
       const orchestrator = createAuditOrchestrator(deps);
       const result = await orchestrator.run(defaultOptions);
 
-      // AgentRunner was called once per agent
+      // AgentRunner was called once per agent with type context
       expect(deps.agentRunner.runOnce).toHaveBeenCalledTimes(2);
+      const firstCall = (deps.agentRunner.runOnce as jest.Mock).mock.calls[0]![0];
+      expect(firstCall.input.taskId).toBe(defaultOptions.taskId);
 
       // ExecutionRecord IDs are captured from AgentRunner responses
       expect(result.executionIds.scans).toEqual(["exec-scan-001", "exec-scan-002"]);
@@ -573,8 +579,8 @@ describe("AuditOrchestrator", () => {
     });
   });
 
-  describe("4.3b. Snippet Extraction (AORCH-B13)", () => {
-    it("[AORCH-B13] should extract snippet from SARIF region.snippet.text into Finding", async () => {
+  describe("4.3. Consolidation and Dedup — Snippet Extraction (AORCH-B13)", () => {
+    it("[AORCH-B13] should include snippet text in Finding when SARIF result has region.snippet.text", async () => {
       const agentRecord = makeAgentRecord("agent:security-audit", "audit");
       const sarifResultWithSnippet = {
         ruleId: "SEC-001",
@@ -856,6 +862,8 @@ describe("AuditOrchestrator", () => {
       const evaluateCall = (deps.policyEvaluator.evaluate as jest.Mock).mock.calls[0][0];
       expect(evaluateCall.findings).toHaveLength(1);
       expect(evaluateCall.findings[0].fingerprint).toBe("hash-sec-001");
+      expect(evaluateCall.activeWaivers).toBeDefined();
+      expect(Array.isArray(evaluateCall.activeWaivers)).toBe(true);
       expect(evaluateCall.scanExecutionIds).toContain("exec-scan-g1");
       expect(evaluateCall.taskId).toBe(defaultOptions.taskId);
     });
@@ -968,7 +976,7 @@ describe("AuditOrchestrator", () => {
   });
 
   describe("4.7. Redaction Integration (AORCH-E1 to E3)", () => {
-    it("[AORCH-E1] should apply redactSarif to agent results for L1 when redactor is provided", async () => {
+    it("[AORCH-E1] should always apply redactSarif to agent results for L1", async () => {
       const agentRecord = makeAgentRecord("agent:security-audit", "audit");
       const sarifWithSnippet: SarifLog = {
         $schema:
@@ -1029,7 +1037,7 @@ describe("AuditOrchestrator", () => {
       expect(result.l1AgentResults).toHaveLength(1);
 
       // L1 SARIF should have redacted snippet for pii-email (sensitive)
-      const l1Sarif = result.l1AgentResults![0]!.sarif;
+      const l1Sarif = result.l1AgentResults[0]!.sarif;
       const l1Snippet =
         l1Sarif.runs[0]!.results[0]!.locations[0]!.physicalLocation.region.snippet;
       expect(l1Snippet).toBeDefined();
@@ -1038,6 +1046,9 @@ describe("AuditOrchestrator", () => {
       // snippetHash should be present
       const l1Props = l1Sarif.runs[0]!.results[0]!.properties;
       expect(l1Props?.["gitgov/snippetHash"]).toBeDefined();
+
+      // L1 SARIF must be a distinct object from L2 (copy, not mutation)
+      expect(result.l1AgentResults[0]!.sarif).not.toBe(result.agentResults[0]!.sarif);
     });
 
     it("[AORCH-E2] should preserve original unredacted agent results for L2", async () => {
@@ -1106,7 +1117,7 @@ describe("AuditOrchestrator", () => {
 
       // L1 should be redacted
       const l1Snippet =
-        result.l1AgentResults![0]!.sarif.runs[0]!.results[0]!.locations[0]!
+        result.l1AgentResults[0]!.sarif.runs[0]!.results[0]!.locations[0]!
           .physicalLocation.region.snippet;
       expect(l1Snippet!.text).toBe("[REDACTED]");
     });
@@ -1136,7 +1147,7 @@ describe("AuditOrchestrator", () => {
     });
   });
 
-  describe("4.5. Review Agent Execution (AORCH-F1 to AORCH-F4)", () => {
+  describe("4.8. Review Agent Execution (AORCH-F1 to AORCH-F4)", () => {
     it("[AORCH-F1] should discover and execute review agents after policy evaluation", async () => {
       // Setup: 1 audit agent + 1 review agent
       const auditRecord = makeAgentRecord("agent:scanner", "audit");
@@ -1266,11 +1277,15 @@ describe("AuditOrchestrator", () => {
 
       await orchestrator.run(defaultOptions);
 
-      // Verify review agent received findings + policyDecision + taskId
+      // Verify review agent received findings + policyDecision + taskId with content
       expect(reviewInput).toBeDefined();
-      expect(reviewInput!["findings"]).toBeDefined();
-      expect(Array.isArray(reviewInput!["findings"])).toBe(true);
-      expect(reviewInput!["policyDecision"]).toBeDefined();
+      const findings = reviewInput!["findings"] as Array<Record<string, unknown>>;
+      expect(Array.isArray(findings)).toBe(true);
+      expect(findings.length).toBeGreaterThan(0);
+      expect(findings[0]!["ruleId"]).toBe("PII-001");
+      const pd = reviewInput!["policyDecision"] as Record<string, unknown>;
+      expect(pd).toBeDefined();
+      expect(pd["decision"]).toBeDefined();
       expect(reviewInput!["taskId"]).toBe(defaultOptions.taskId);
     });
 
@@ -1339,6 +1354,42 @@ describe("AuditOrchestrator", () => {
       expect(result.reviewResults).toHaveLength(1);
       expect(result.reviewResults![0]!.status).toBe("error");
       expect(result.reviewResults![0]!.errorMessage).toBe("Claude API unavailable");
+    });
+  });
+
+  describe("4.9. Agent Entrypoint Validation (AORCH-G1 to G2)", () => {
+    it("[AORCH-G1] should add warning when agent entrypoint is unresolvable", async () => {
+      const agentRecord = makeAgentRecord("agent:security-audit", "audit");
+      const deps = createMockDeps();
+      (deps.recordStore.list as jest.Mock).mockResolvedValue(["agent:security-audit"]);
+      (deps.recordStore.get as jest.Mock).mockResolvedValue(agentRecord);
+      (deps.agentRunner.runOnce as jest.Mock).mockRejectedValue(
+        new Error("Cannot find module '@gitgov/agent-security-audit'"),
+      );
+
+      const orchestrator = createAuditOrchestrator(deps);
+      const result = await orchestrator.run(defaultOptions);
+
+      expect(result.warning).toBeDefined();
+      expect(result.warning).toContain("failed to load");
+      expect(result.warning).toContain("gitgov agent new");
+    });
+
+    it("[AORCH-G2] should warn when all audit agents failed with entrypoint errors", async () => {
+      const agentRecord = makeAgentRecord("agent:security-audit", "audit");
+      const deps = createMockDeps();
+      (deps.recordStore.list as jest.Mock).mockResolvedValue(["agent:security-audit"]);
+      (deps.recordStore.get as jest.Mock).mockResolvedValue(agentRecord);
+      (deps.agentRunner.runOnce as jest.Mock).mockRejectedValue(
+        new Error("Cannot find module '@gitgov/agent-security-audit'"),
+      );
+
+      const orchestrator = createAuditOrchestrator(deps);
+      const result = await orchestrator.run(defaultOptions);
+
+      expect(result.warning).toContain("All audit agents failed");
+      expect(result.agentResults[0]!.status).toBe("error");
+      expect(result.findings).toHaveLength(0);
     });
   });
 });
