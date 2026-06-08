@@ -363,6 +363,21 @@ describe('IdentityModule', () => {
       expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Could not persist private key'));
       warnSpy.mockRestore();
     });
+
+    it('[IDM-E10] should archive old ActorKey so only 1 remains active', async () => {
+      const deleteSpy = jest.spyOn(keyProvider, 'deletePrivateKey');
+
+      await identityModule.rotateActorKey(actor.id);
+
+      // Old actor's key should be archived (deletePrivateKey called with old actorId)
+      expect(deleteSpy).toHaveBeenCalledWith(actor.id);
+
+      // Old key should no longer be active
+      const oldKeyExists = await keyProvider.hasPrivateKey(actor.id);
+      expect(oldKeyExists).toBe(false);
+
+      deleteSpy.mockRestore();
+    });
   });
 
   // ── 4.6. Event Emission (IDM-F1 to F3) ────────────────────────────

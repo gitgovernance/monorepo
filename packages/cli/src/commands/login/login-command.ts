@@ -16,7 +16,7 @@
 
 import { Command } from 'commander';
 import { BaseCommand } from '../../base/base-command';
-import { Crypto, parseRemoteUrl, SyncState } from '@gitgov/core';
+import { Crypto, parseRemoteUrl, SyncState, calculatePayloadChecksum } from '@gitgov/core';
 import type { IKeyProvider } from '@gitgov/core';
 import type { GitRemoteRef } from '@gitgov/core';
 import type {
@@ -648,5 +648,88 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
     const keyProvider = await this.getLocalKeyProvider();
     await keyProvider.setPrivateKey(actorId, decryptedKey.toString('base64'));
     console.log('Key downloaded from SaaS');
+
+    // [LOGIN-F5] Reconcile local ActorRecord + session with the downloaded key.
+    // The ActorRecord's publicKey may differ from the downloaded key (the whole point of
+    // force-cloud). Update it so the repo's committed identity matches the org canonical key.
+    await this.reconcileActorRecordAfterDownload(actorId, decryptedKey.toString('base64'));
+  }
+
+  /**
+   * [LOGIN-F5] After downloading a key from SaaS (force-cloud or case b), reconcile:
+   * (a) Update the local ActorRecord's publicKey to match the downloaded key
+   * (b) Re-sign the record (self-signed, genesis pattern — NOT succession)
+   * (c) Fix .session.json if it references a phantom -v2 actorId
+   * (d) Push gitgov-state (best-effort)
+   *
+   * If the ActorRecord doesn't exist locally (cloud-first flow), skip silently.
+   */
+  private async reconcileActorRecordAfterDownload(actorId: string, privateKeyBase64: string): Promise<void> {
+    try {
+      const { findProjectRoot, getWorktreeBasePath } = await import('@gitgov/core/fs');
+      const path = await import('path');
+      const fs = await import('node:fs/promises');
+
+      const { DEFAULT_ID_ENCODER } = await import('@gitgov/core');
+      const repoRoot = findProjectRoot(process.cwd());
+      if (!repoRoot) return;
+      const worktreePath = getWorktreeBasePath(repoRoot);
+      const encodedId = DEFAULT_ID_ENCODER.encode(actorId);
+      const actorPath = path.join(worktreePath, '.gitgov', 'actors', `${encodedId}.json`);
+
+      // [LOGIN-F5](b) Check if ActorRecord exists locally
+      let rawContent: string;
+      try {
+        rawContent = await fs.readFile(actorPath, 'utf-8');
+      } catch {
+        return; // No local ActorRecord — cloud-first flow, skip
+      }
+
+      const record = JSON.parse(rawContent);
+      const payload = record.payload ?? record;
+
+      // [LOGIN-F5](a) Derive public key from downloaded private key
+      const newPublicKey = Crypto.derivePublicKey(privateKeyBase64);
+
+      if (payload.publicKey === newPublicKey) {
+        return; // Already matches — nothing to reconcile
+      }
+
+      // [LOGIN-F5](a) Update publicKey
+      payload.publicKey = newPublicKey;
+
+      // [LOGIN-F5](e) Recalculate checksum
+      const payloadChecksum = calculatePayloadChecksum(payload);
+
+      // [LOGIN-F5](d) Re-sign (self-signed, genesis pattern — same as IdentityModule.createActor L78)
+      const signature = Crypto.signPayload(payload, privateKeyBase64, actorId, 'author', 'Key reconciliation (force-cloud)');
+
+      // [LOGIN-F5](f) Write updated record
+      const updatedRecord = {
+        header: {
+          version: '1.0',
+          type: 'actor',
+          payloadChecksum,
+          signatures: [signature],
+        },
+        payload,
+      };
+      await fs.writeFile(actorPath, JSON.stringify(updatedRecord, null, 2), 'utf-8');
+
+      // [LOGIN-F5](g) Fix phantom -v2 in session
+      const sessionManager = await this.dependencyService.getSessionManager();
+      const session = await sessionManager.loadSession();
+      if (session?.lastSession?.actorId && session.lastSession.actorId !== actorId) {
+        const currentSessionActor = session.lastSession.actorId;
+        if (currentSessionActor.includes('-v') && currentSessionActor.startsWith(actorId.split('-v')[0]!)) {
+          await sessionManager.setLastSession(actorId, new Date().toISOString());
+        }
+      }
+
+      // [LOGIN-F5](h) Push gitgov-state (best-effort, reuses LOGIN-L1)
+      await this.pushGitgovState();
+    } catch (err) {
+      console.warn('⚠️  ActorRecord reconciliation failed:', err instanceof Error ? err.message : String(err));
+    }
   }
 }

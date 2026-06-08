@@ -60,12 +60,28 @@ const mockGenerateEphemeralKeypair = vi.fn().mockReturnValue({
   privateKey: 'mock-client-priv',
 });
 
+const mockDerivePublicKey = vi.fn().mockReturnValue('derived-cloud-pub-key');
+const mockSignPayload = vi.fn().mockReturnValue({ keyId: 'human:testuser', role: 'author', notes: 'Key reconciliation (force-cloud)', signature: 'mock-sig', timestamp: 1 });
+const mockCalculatePayloadChecksum = vi.fn().mockReturnValue('mock-checksum');
+
+// Mock node:fs/promises for LOGIN-F5 (ActorRecord read/write in reconcileActorRecordAfterDownload)
+const mockFsReadFile = vi.fn().mockRejectedValue(new Error('ENOENT'));
+const mockFsWriteFile = vi.fn().mockResolvedValue(undefined);
+vi.mock('node:fs/promises', () => ({
+  readFile: (...args: unknown[]) => mockFsReadFile(...args),
+  writeFile: (...args: unknown[]) => mockFsWriteFile(...args),
+}));
+
 vi.mock('@gitgov/core', () => ({
   SyncState: { DEFAULT_STATE_BRANCH: 'gitgov-state' },
+  calculatePayloadChecksum: (...args: unknown[]) => mockCalculatePayloadChecksum(...args),
+  DEFAULT_ID_ENCODER: { encode: (id: string) => id.replace(/:/g, '_'), decode: (s: string) => s.replace(/_/g, ':') },
   Crypto: {
     ecdhEncrypt: (...args: unknown[]) => mockEcdhEncrypt(...args),
     ecdhDecrypt: (...args: unknown[]) => mockEcdhDecrypt(...args),
     generateEphemeralKeypair: () => mockGenerateEphemeralKeypair(),
+    derivePublicKey: (...args: unknown[]) => mockDerivePublicKey(...args),
+    signPayload: (...args: unknown[]) => mockSignPayload(...args),
   },
   parseRemoteUrl: (url: string) => {
     // Parse the mock URL: https://github.com/testorg/testrepo.git
@@ -522,6 +538,91 @@ describe('LoginCommand v2', () => {
         (c: [string]) => c[0].includes('identity.keyStatus')
       );
       expect(keyStatusCalls).toHaveLength(1);
+    });
+  });
+
+  // ==================== §4.6b Force-Cloud ActorRecord Reconciliation (LOGIN-F5) ====================
+
+  describe('4.6b. Force-Cloud ActorRecord Reconciliation (LOGIN-F5)', () => {
+    const mockEnvelope = { ephemeralPublicKey: 'ep', ciphertext: 'ct', iv: 'iv', authTag: 'at' };
+    const existingActorRecord = {
+      header: { version: '1.0', type: 'actor', payloadChecksum: 'old-checksum', signatures: [{ keyId: 'human:camilo', role: 'author', signature: 'old-sig', timestamp: 1 }] },
+      payload: { id: 'human:camilo', type: 'human', displayName: 'Camilo', publicKey: 'old-local-pub-key', roles: ['admin'], status: 'active' },
+    };
+
+    it('[LOGIN-F5] should update local ActorRecord publicKey and session after force-cloud download', async () => {
+      mockHasPrivateKey.mockResolvedValue(true);
+      mockGetPublicKey.mockResolvedValue('old-local-pub-key');
+      mockDerivePublicKey.mockReturnValue('new-cloud-pub-key');
+      mockFsReadFile.mockResolvedValue(JSON.stringify(existingActorRecord));
+      mockFsWriteFile.mockResolvedValue(undefined);
+
+      const deps = createMockDeps({
+        fetchSaas: vi.fn().mockImplementation(async (url: string) => {
+          if (url.includes('identity.keyStatus')) return { ok: true, json: async () => trpcWrap(keyStatusWith('new-cloud-pub-key')) };
+          if (url.includes('identity.getKey')) return { ok: true, json: async () => trpcWrap({ publicKey: 'new-cloud-pub-key', privateKeyEnvelope: mockEnvelope }) };
+          return { ok: false, json: async () => ({}) };
+        }),
+      });
+
+      const cmd = new LoginCommand(deps);
+      await cmd.executeLogin({ ...defaultOptions, forceCloud: true });
+
+      // ActorRecord was written with the new publicKey
+      expect(mockFsWriteFile).toHaveBeenCalledWith(
+        expect.stringContaining('human_camilo.json'),
+        expect.stringContaining('new-cloud-pub-key'),
+        'utf-8',
+      );
+      expect(mockDerivePublicKey).toHaveBeenCalled();
+      expect(mockSignPayload).toHaveBeenCalled();
+    });
+
+    it('[LOGIN-F5] should skip ActorRecord reconciliation when no local record exists (cloud-first)', async () => {
+      mockHasPrivateKey.mockResolvedValue(true);
+      mockGetPublicKey.mockResolvedValue('old-local-pub-key');
+      mockFsReadFile.mockRejectedValue(new Error('ENOENT'));
+      mockFsWriteFile.mockClear();
+
+      const deps = createMockDeps({
+        fetchSaas: vi.fn().mockImplementation(async (url: string) => {
+          if (url.includes('identity.keyStatus')) return { ok: true, json: async () => trpcWrap(keyStatusWith('cloud-pub')) };
+          if (url.includes('identity.getKey')) return { ok: true, json: async () => trpcWrap({ publicKey: 'cloud-pub', privateKeyEnvelope: mockEnvelope }) };
+          return { ok: false, json: async () => ({}) };
+        }),
+      });
+
+      const cmd = new LoginCommand(deps);
+      await cmd.executeLogin({ ...defaultOptions, forceCloud: true });
+
+      expect(mockSetPrivateKey).toHaveBeenCalled();
+      // ActorRecord NOT written (no local file to reconcile)
+      expect(mockFsWriteFile).not.toHaveBeenCalled();
+    });
+
+    it('[LOGIN-F5] should reset session actorId from phantom -v2 to base actorId', async () => {
+      mockHasPrivateKey.mockResolvedValue(true);
+      mockGetPublicKey.mockResolvedValue('old-pub');
+      mockDerivePublicKey.mockReturnValue('new-pub');
+      mockLoadSession.mockResolvedValue({
+        lastSession: { actorId: 'human:camilo-v2', timestamp: '2026-01-01' },
+        cloud: { sessionToken: 'tok' },
+      });
+      mockFsReadFile.mockResolvedValue(JSON.stringify(existingActorRecord));
+      mockFsWriteFile.mockResolvedValue(undefined);
+
+      const deps = createMockDeps({
+        fetchSaas: vi.fn().mockImplementation(async (url: string) => {
+          if (url.includes('identity.keyStatus')) return { ok: true, json: async () => trpcWrap(keyStatusWith('new-pub')) };
+          if (url.includes('identity.getKey')) return { ok: true, json: async () => trpcWrap({ publicKey: 'new-pub', privateKeyEnvelope: mockEnvelope }) };
+          return { ok: false, json: async () => ({}) };
+        }),
+      });
+
+      const cmd = new LoginCommand(deps);
+      await cmd.executeLogin({ ...defaultOptions, forceCloud: true });
+
+      expect(mockSetLastSession).toHaveBeenCalledWith('human:camilo', expect.any(String));
     });
   });
 

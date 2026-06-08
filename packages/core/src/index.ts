@@ -149,6 +149,7 @@ export { generateTaskId, generateExecutionId, generateFeedbackId, generateCycleI
 // Crypto primitives (protocol-level signing + checksum)
 export { buildSignatureDigest, generateKeys } from "./crypto/signatures";
 export { calculatePayloadChecksum } from "./crypto/checksum";
+export { DEFAULT_ID_ENCODER } from "./record_store/index";
 
 // Git direct exports (interface + types + errors)
 export type { IGitModule, ExecOptions, ExecResult, GetCommitHistoryOptions, CommitInfo, ChangedFile, CommitAuthor, GitRemoteRef } from "./git/index";

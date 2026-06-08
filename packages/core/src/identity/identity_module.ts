@@ -45,15 +45,15 @@ export class IdentityModule implements IIdentityModule {
   async createActor(
     payload: ActorPayload,
     _signerId: string,
-    options?: { defer?: boolean },
+    options?: { defer?: boolean; existingKeypair?: { publicKey: string; privateKey: string } },
   ): Promise<ActorRecord> {
     // [IDM-A3] Throw if required fields missing
     if (!payload.type || !payload.displayName) {
       throw new Error('ActorRecord requires type and displayName');
     }
 
-    // [IDM-A1] Generate Ed25519 keypair
-    const { publicKey, privateKey } = await generateKeys();
+    // [IDM-A1] [P1] Use existing keypair if provided (org convergence), otherwise generate new
+    const { publicKey, privateKey } = options?.existingKeypair ?? await generateKeys();
 
     // Generate ID if not provided
     const actorId = payload.id || generateActorId(payload.type, payload.displayName);
@@ -361,6 +361,15 @@ export class IdentityModule implements IIdentityModule {
       console.warn(
         `Could not persist private key for ${newActorId}: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
+    }
+
+    // [IDM-E10] Archive old ActorKey so only 1 remains active for this identity.
+    // Without this, a succession leaves 2 active keys → KEY_MISMATCH downstream.
+    // deletePrivateKey delegates to archiveKey (soft delete, not hard) in PrismaKeyProvider.
+    try {
+      await this.keyProvider.deletePrivateKey(actorId);
+    } catch {
+      // Non-fatal — the old key is archived best-effort. The new key is already active.
     }
 
     return {
