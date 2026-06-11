@@ -29,10 +29,6 @@ export type ProjectModuleDeps = {
   agentAdapter?: IProjectAgentOps;
   defaultAgents?: DefaultAgentConfig[];
   eventBus?: { emit?: (event: string, payload: Record<string, unknown>) => void };
-  // [P1] Optional: resolves existing keypair for an actor from the org (SaaS API).
-  // If present and returns a keypair, createActor uses it instead of generating a new one.
-  // If absent or returns null → generate new key (standalone CLI, no SaaS).
-  keyResolver?: (actorId: string) => Promise<{ publicKey: string; privateKey: string } | null>;
 };
 
 export type ProjectInitOptions = {
@@ -67,8 +63,6 @@ export type AddActorInput = {
   authzCheck?: (input: AddActorInput) => Promise<boolean>;
   skipFinalize?: boolean;
   defer?: boolean;
-  // [P1] Pre-resolved keypair from the org (skips key generation in createActor)
-  existingKeypair?: { publicKey: string; privateKey: string };
 };
 
 export type AddActorResult = {

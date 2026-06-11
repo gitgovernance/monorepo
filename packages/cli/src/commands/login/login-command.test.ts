@@ -624,23 +624,57 @@ describe('LoginCommand v2', () => {
 
       expect(mockSetLastSession).toHaveBeenCalledWith('human:camilo', expect.any(String));
     });
+
+    it('[LOGIN-F5] should reset revoked status and clear supersededBy on force-cloud reconciliation', async () => {
+      mockHasPrivateKey.mockResolvedValue(true);
+      mockGetPublicKey.mockResolvedValue('old-pub');
+      mockDerivePublicKey.mockReturnValue('new-pub');
+
+      // ActorRecord was previously revoked by --force-local (succession)
+      const revokedRecord = {
+        header: { version: '1.0', type: 'actor', payloadChecksum: 'old', signatures: [{ keyId: 'human:camilo', role: 'author', signature: 'old-sig', timestamp: 1 }] },
+        payload: { id: 'human:camilo', type: 'human', displayName: 'Camilo', publicKey: 'old-pub', roles: ['admin'], status: 'revoked', supersededBy: 'human:camilo-v2' },
+      };
+      mockFsReadFile.mockResolvedValue(JSON.stringify(revokedRecord));
+      mockFsWriteFile.mockResolvedValue(undefined);
+
+      const deps = createMockDeps({
+        fetchSaas: vi.fn().mockImplementation(async (url: string) => {
+          if (url.includes('identity.keyStatus')) return { ok: true, json: async () => trpcWrap(keyStatusWith('new-pub')) };
+          if (url.includes('identity.getKey')) return { ok: true, json: async () => trpcWrap({ publicKey: 'new-pub', privateKeyEnvelope: mockEnvelope }) };
+          return { ok: false, json: async () => ({}) };
+        }),
+      });
+
+      const cmd = new LoginCommand(deps);
+      await cmd.executeLogin({ ...defaultOptions, forceCloud: true });
+
+      // The written record should have status: 'active' and NO supersededBy
+      const writeCall = mockFsWriteFile.mock.calls.find(
+        (c: unknown[]) => (c[0] as string).includes('human_camilo.json')
+      );
+      expect(writeCall).toBeDefined();
+      const writtenRecord = JSON.parse(writeCall![1] as string);
+      expect(writtenRecord.payload.status).toBe('active');
+      expect(writtenRecord.payload.supersededBy).toBeUndefined();
+      expect(writtenRecord.payload.publicKey).toBe('new-pub');
+    });
   });
 
-  // ==================== §4.13 Key Succession Response (LOGIN-N1) ====================
+  // ==================== §4.13 Key Overwrite Response (force-local, no succession) ====================
 
-  describe('4.13. Key Succession Response (LOGIN-N1)', () => {
-    it('[LOGIN-N1] should update session to newActorId on succession response', async () => {
+  describe('4.13. Key Overwrite Response (force-local)', () => {
+    it('[LOGIN-F1] should keep same actorId on force-local (no succession, no -v2)', async () => {
       mockHasPrivateKey.mockResolvedValue(true);
       mockGetPrivateKey.mockResolvedValue('local-private-key');
       mockGetPublicKey.mockResolvedValue('local-public-key');
 
-      const successionResponse: SyncKeyResponse = {
+      const overwriteResponse: SyncKeyResponse = {
         success: true,
-        actorId: 'human:camilo-v2',
+        actorId: 'human:camilo',
         mode: 'full',
-        rotated: true,
-        newActorId: 'human:camilo-v2',
-        oldActorId: 'human:camilo',
+        verified: false,
+        projectInitialized: true,
       };
 
       const deps = createMockDeps({
@@ -649,7 +683,7 @@ describe('LoginCommand v2', () => {
             return { ok: true, json: async () => trpcWrap(keyStatusWith('different-saas-key')) };
           }
           if (url.includes('identity.syncKey')) {
-            return { ok: true, json: async () => trpcWrap(successionResponse) };
+            return { ok: true, json: async () => trpcWrap(overwriteResponse) };
           }
           return { ok: false, json: async () => ({}) };
         }),
@@ -658,16 +692,9 @@ describe('LoginCommand v2', () => {
       const cmd = new LoginCommand(deps);
       await cmd.executeLogin({ ...defaultOptions, forceLocal: true });
 
-      // Session should be updated to the NEW actorId
-      expect(mockSetLastSession).toHaveBeenCalledWith(
-        'human:camilo-v2',
-        expect.any(String),
-      );
-
-      // Output should mention the identity change
       const output = mockConsoleLog.mock.calls.map(c => c[0]).join('\n');
-      expect(output).toContain('human:camilo-v2');
-      expect(output).toContain('succession');
+      expect(output).toContain('canonical');
+      expect(output).not.toContain('-v2');
     });
   });
 

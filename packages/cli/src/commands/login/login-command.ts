@@ -362,24 +362,10 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
 
       // [LOGIN-D2 / LOGIN-F1..F4] Keys differ → conflict resolution
       if (localPublicKey && saasPublicKey && localPublicKey !== saasPublicKey) {
-        // [LOGIN-F1] --force-local: upload local key → triggers succession on SaaS
+        // [LOGIN-F1] --force-local: upload local key to SaaS (SaaS overwrites under same actorId,
+        // PKP-G2 archives the old key automatically — no succession, no -v2)
         if (options.forceLocal) {
-          const syncResult = await this.uploadKeyToSaas(actorId, saasUrl, token, repo, keyStatus.ecdhPublicKey);
-
-          // [LOGIN-N1] [IKS-SUC8] Handle succession response — SaaS created a new versioned actor
-          if (syncResult.rotated && syncResult.newActorId) {
-            const sessionManager = await this.dependencyService.getSessionManager();
-            await sessionManager.setLastSession(syncResult.newActorId, new Date().toISOString());
-            console.log(`Identity updated: ${actorId} → ${syncResult.newActorId}`);
-            this.handleSuccess(
-              { loggedIn: true, user: syncResult.newActorId, keySynced: true, rotated: true, oldActorId: actorId },
-              options,
-              `Logged in as ${syncResult.newActorId}\nKey conflict resolved via succession (local key uploaded)`
-            );
-            return;
-          }
-
-          // Non-succession upload (legacy path or no ActorRecord in projection)
+          await this.uploadKeyToSaas(actorId, saasUrl, token, repo, keyStatus.ecdhPublicKey);
           console.log('Previous cloud key archived. Local key is now canonical.');
           this.handleSuccess(
             { loggedIn: true, user: actorId, keySynced: true },
@@ -697,6 +683,17 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
 
       // [LOGIN-F5](a) Update publicKey
       payload.publicKey = newPublicKey;
+
+      // [LOGIN-F5] Reset status to active + clear supersededBy if record was
+      // previously revoked (e.g. by a prior --force-local succession). Without
+      // this, the record stays revoked with the new pubkey — corrupt state where
+      // resolveCurrentActorId follows the supersededBy chain to a phantom -v2.
+      if (payload.status === 'revoked') {
+        payload.status = 'active';
+      }
+      if (payload.supersededBy) {
+        delete payload.supersededBy;
+      }
 
       // [LOGIN-F5](e) Recalculate checksum
       const payloadChecksum = calculatePayloadChecksum(payload);

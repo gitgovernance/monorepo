@@ -38,23 +38,9 @@ export class ProjectModule {
       // [PROJ-C1] Structure (dirs + policy.yml) — before actors
       await this.deps.initializer.createProjectStructure();
 
-      // [P1] If keyResolver is available (SaaS connected), try to resolve existing keypair
-      // for the human actor before creating. If the org already has a key → reuse it
-      // (no new key generated → no KEY_MISMATCH). If not → generate as usual.
-      const actorType = options.type ?? 'human';
-      const humanActorId = `${actorType}:${options.login || 'owner'}`;
-      let existingKeypair: { publicKey: string; privateKey: string } | undefined;
-      if (this.deps.keyResolver) {
-        try {
-          const resolved = await this.deps.keyResolver(humanActorId);
-          if (resolved) existingKeypair = resolved;
-        } catch {
-          // [P1] keyResolver failure is non-fatal — fall through to generate new key
-        }
-      }
-
       // [PROJ-A1] [PROJ-B1] Human actor — via addActor for consistent metadata + events
       // skipFinalize: true — initializeProject calls finalize() once at the end
+      const actorType = options.type ?? 'human';
       const humanResult = await this.addActor({
         login: options.login || 'owner',
         type: actorType as 'human' | 'agent',
@@ -64,7 +50,6 @@ export class ProjectModule {
         joinedVia,
         skipFinalize: true,
         defer: true,
-        ...(existingKeypair ? { existingKeypair } : {}),
       });
 
       // [PROJ-B2] Product agent (G21 Two-Tier Actor Model) — via addActor
@@ -237,10 +222,7 @@ export class ProjectModule {
         joinedVia: input.joinedVia,
         joinedAt: new Date().toISOString(),
       },
-    }, 'bootstrap', {
-      ...(input.defer ? { defer: true } : {}),
-      ...(input.existingKeypair ? { existingKeypair: input.existingKeypair } : {}),
-    });
+    }, 'bootstrap', input.defer ? { defer: true } : undefined);
 
     // [PROJ-H3] Finalize commits the actor to git.
     // When skipFinalize is set (called from initializeProject), the caller

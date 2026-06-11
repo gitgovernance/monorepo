@@ -16,7 +16,6 @@ import type { IProjectInitializer } from '../project_initializer';
 import { IdentityModule } from '../identity/identity_module';
 import { MemoryRecordStore } from '../record_store/memory/memory_record_store';
 import { MockKeyProvider } from '../key_provider/memory/mock_key_provider';
-import { generateKeys } from '../crypto/signatures';
 import type { GitGovActorRecord } from '../record_types';
 
 const mockCycle = {
@@ -489,62 +488,6 @@ describe('ProjectModule', () => {
       expect(result.actorId).toBe('human:camilo');
       // Both agents were attempted
       expect(mockAgentAdapter.buildSignedAgentRecord).toHaveBeenCalledTimes(2);
-    });
-  });
-
-  // P1: Init reuses key from org when keyResolver is available
-  describe('P1: Init reuses key from org', () => {
-    it('[P1] should use existing keypair from keyResolver instead of generating new', async () => {
-      const { deps, actorStore, keyProvider } = createRealDeps();
-
-      // Use real Ed25519 keys so signPayload works (it needs a real private key)
-      const existingKeypair = await generateKeys();
-      deps.keyResolver = jest.fn().mockResolvedValue(existingKeypair);
-
-      const pm = new ProjectModule(deps);
-      const result = await pm.initializeProject({ name: 'test-project', login: 'camilo', stateBranch: 'gitgov-state' });
-
-      // keyResolver was called with the human actorId
-      expect(deps.keyResolver).toHaveBeenCalledWith('human:camilo');
-
-      // The actor was created with the org's key (not a new one)
-      const actor = await actorStore.get('human:camilo');
-      expect(actor).not.toBeNull();
-      expect(actor!.payload.publicKey).toBe(existingKeypair.publicKey);
-
-      // The key was stored in the keyProvider
-      const hasKey = await keyProvider.hasPrivateKey('human:camilo');
-      expect(hasKey).toBe(true);
-
-      expect(result.actorId).toBe('human:camilo');
-    });
-
-    it('[P1] should generate new key when keyResolver returns null (standalone)', async () => {
-      const { deps, actorStore } = createRealDeps();
-
-      deps.keyResolver = jest.fn().mockResolvedValue(null);
-
-      const pm = new ProjectModule(deps);
-      await pm.initializeProject({ name: 'test-project', login: 'camilo', stateBranch: 'gitgov-state' });
-
-      // Actor created with a GENERATED key (not the null resolver result)
-      const actor = await actorStore.get('human:camilo');
-      expect(actor).not.toBeNull();
-      expect(actor!.payload.publicKey).toBeTruthy();
-      // Key was generated (not the org's key) — should be a valid 44-char base64
-      expect(actor!.payload.publicKey).toHaveLength(44);
-    });
-
-    it('[P1] should generate new key when no keyResolver (no SaaS)', async () => {
-      const { deps, actorStore } = createRealDeps();
-      // No keyResolver at all (standalone CLI)
-
-      const pm = new ProjectModule(deps);
-      await pm.initializeProject({ name: 'test-project', login: 'camilo', stateBranch: 'gitgov-state' });
-
-      const actor = await actorStore.get('human:camilo');
-      expect(actor).not.toBeNull();
-      expect(actor!.payload.publicKey).toBeTruthy();
     });
   });
 
