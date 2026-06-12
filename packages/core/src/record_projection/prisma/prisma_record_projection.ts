@@ -62,6 +62,10 @@ export class PrismaRecordProjection implements IRecordProjection {
       metadata: c.payload.metadata ? toJson(c.payload.metadata) : null,
       header: toJson(c.header),
     }));
+    // [EARS-PM-F1] Actor projection preserves status + supersededBy from the record.
+    // If an ActorRecord has status:'revoked' + supersededBy (post-succession), the projected
+    // row reflects it. The delete-all + createMany pattern (L123-131) ensures at most 1 row
+    // per recordId per repo — old rows are wiped, fresh rows inserted from git state.
     const actorRows = data.actors.map((a) => ({
       ...tenantFields,
       recordId: a.payload.id,
