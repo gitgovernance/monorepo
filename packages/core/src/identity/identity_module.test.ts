@@ -1,4 +1,4 @@
-import { IdentityModule } from './identity_module';
+import { IdentityModule, reconcileActorRecord } from './identity_module';
 import type { ActorRecord, GitGovActorRecord } from '../record_types';
 import { MemoryRecordStore } from '../record_store/memory/memory_record_store';
 import { MockKeyProvider } from '../key_provider/memory/mock_key_provider';
@@ -378,6 +378,37 @@ describe('IdentityModule', () => {
 
       deleteSpy.mockRestore();
     });
+
+    it('[IDM-E11] should preserve metadata and all fields except id/publicKey/status (and NOT drag supersededBy) on rotation', async () => {
+      const withMeta = await identityModule.createActor(
+        {
+          type: 'human',
+          displayName: 'Meta User',
+          roles: ['author', 'approver'],
+          metadata: { team: 'core', employeeId: 'E-42' },
+        },
+        'self',
+      );
+
+      // Inject a stray supersededBy onto the (still active) source record to prove the
+      // rotation RESETS it rather than blindly copying the spread (preserve ≠ blind copy).
+      const stored = (await store.get(withMeta.id))!;
+      await store.put(withMeta.id, { ...stored, payload: { ...stored.payload, supersededBy: 'human:ghost-v2' } });
+
+      const { newActor } = await identityModule.rotateActorKey(withMeta.id);
+
+      // id / publicKey / status are the only fields that change
+      expect(newActor.id).not.toBe(withMeta.id);
+      expect(newActor.publicKey).not.toBe(withMeta.publicKey);
+      expect(newActor.status).toBe('active');
+      // everything else is preserved — including metadata (the hardcoded subset dropped it)
+      expect(newActor.type).toBe(withMeta.type);
+      expect(newActor.displayName).toBe(withMeta.displayName);
+      expect(newActor.roles).toEqual(withMeta.roles);
+      expect(newActor.metadata).toEqual({ team: 'core', employeeId: 'E-42' });
+      // ...but supersededBy is NOT dragged from the spread — a fresh actor must not be born superseded
+      expect(newActor.supersededBy).toBeUndefined();
+    });
   });
 
   // ── 4.6. Event Emission (IDM-F1 to F3) ────────────────────────────
@@ -473,6 +504,96 @@ describe('IdentityModule', () => {
 
       expect(putSpy).toHaveBeenCalled();
       expect(putDeferredSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── 4.8. Key Reconciliation — Canonical Overwrite (IDM-H1) ─────────
+
+  describe('4.8. Key Reconciliation (IDM-H1)', () => {
+    let actor: ActorRecord;
+    let canonical: { publicKey: string; privateKey: string };
+
+    beforeEach(async () => {
+      const { generateKeys } = await import('../crypto/signatures');
+      actor = await identityModule.createActor(
+        { type: 'human', displayName: 'Reconcilable', metadata: { team: 'core' } },
+        'self',
+      );
+      canonical = await generateKeys();
+    });
+
+    it('[IDM-H1] should overwrite pubkey to canonical and re-sign genesis', async () => {
+      const result = await identityModule.reconcileActorKey(actor.id, canonical);
+
+      expect(result).not.toBeNull();
+      expect(result!.publicKey).toBe(canonical.publicKey);
+      // non-key fields preserved
+      expect(result!.metadata).toEqual({ team: 'core' });
+
+      const stored = await store.get(actor.id);
+      expect(stored!.payload.publicKey).toBe(canonical.publicKey);
+      // re-signed as self-signed genesis with the canonical key (keyId = actorId, NOT succession)
+      expect(stored!.header.signatures).toHaveLength(1);
+      expect(stored!.header.signatures[0].keyId).toBe(actor.id);
+      expect(stored!.header.payloadChecksum).toBe(calculatePayloadChecksum(stored!.payload));
+      const valid = await verifySignatures(stored!, async (keyId) =>
+        keyId === actor.id ? canonical.publicKey : null,
+      );
+      expect(valid).toBe(true);
+    });
+
+    it('[IDM-H1] should heal a revoked record on reconciliation', async () => {
+      // Simulate a prior --force-local succession that left this record revoked + superseded
+      await identityModule.revokeActor(actor.id, actor.id, 'rotation', `${actor.id}-v2`);
+      const revoked = await store.get(actor.id);
+      expect(revoked!.payload.status).toBe('revoked');
+      expect(revoked!.payload.supersededBy).toBe(`${actor.id}-v2`);
+
+      const result = await identityModule.reconcileActorKey(actor.id, canonical);
+
+      // the divergence the worker overwrite omitted: status healed, supersededBy cleared
+      expect(result!.status).toBe('active');
+      expect(result!.supersededBy).toBeUndefined();
+      const stored = await store.get(actor.id);
+      expect(stored!.payload.status).toBe('active');
+      expect(stored!.payload.supersededBy).toBeUndefined();
+    });
+
+    it('[IDM-H1] should be idempotent when already canonical', async () => {
+      await identityModule.reconcileActorKey(actor.id, canonical);
+      const putSpy = jest.spyOn(store, 'put');
+
+      // second reconcile with the same canonical key → no re-sign, no persist
+      const result = await identityModule.reconcileActorKey(actor.id, canonical);
+
+      expect(result!.publicKey).toBe(canonical.publicKey);
+      expect(putSpy).not.toHaveBeenCalled();
+      putSpy.mockRestore();
+    });
+
+    it('[IDM-H1] should return null when actor does not exist', async () => {
+      const result = await identityModule.reconcileActorKey('human:ghost', canonical);
+      expect(result).toBeNull();
+    });
+
+    it('[IDM-H1] reconcileActorRecord (pure) should return the reconciled record with the canonical key', async () => {
+      const record = (await store.get(actor.id))!;
+      const result = reconcileActorRecord(record, actor.id, canonical);
+
+      expect(result).not.toBeNull();
+      expect(result!.payload.publicKey).toBe(canonical.publicKey);
+      expect(result!.payload.metadata).toEqual({ team: 'core' });
+      const valid = await verifySignatures(result!, async (keyId) =>
+        keyId === actor.id ? canonical.publicKey : null,
+      );
+      expect(valid).toBe(true);
+    });
+
+    it('[IDM-H1] reconcileActorRecord (pure) should return null when already canonical (idempotent)', async () => {
+      const record = (await store.get(actor.id))!;
+      const once = reconcileActorRecord(record, actor.id, canonical)!;
+      const twice = reconcileActorRecord(once, actor.id, canonical);
+      expect(twice).toBeNull();
     });
   });
 });

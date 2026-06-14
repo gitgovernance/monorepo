@@ -31,4 +31,8 @@ export interface IIdentityModule {
     actorId: string,
     options?: { newPublicKey?: string; newPrivateKey?: string },
   ): Promise<{ oldActor: ActorRecord; newActor: ActorRecord }>;
+  reconcileActorKey(
+    actorId: string,
+    canonicalKey: { publicKey: string; privateKey: string },
+  ): Promise<ActorRecord | null>;
 }

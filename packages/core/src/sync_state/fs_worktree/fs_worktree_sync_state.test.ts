@@ -124,6 +124,7 @@ function createMockIdentityAdapter(_actorId: string = 'test-actor'): IIdentityMo
     resolveCurrentActorId: jest.fn().mockImplementation(async (id: string) => id),
     getEffectiveActorForAgent: jest.fn().mockResolvedValue(null),
     rotateActorKey: jest.fn(),
+    reconcileActorKey: jest.fn(),
   };
 }
 

@@ -203,7 +203,7 @@ export { RecordSigner } from "./record_signer/index";
 export type { RecordSignerDependencies } from "./record_signer/index";
 
 // IdentityModule — domain facade for actor lifecycle (identity_module_v2 Cycle 2)
-export { IdentityModule } from "./identity/index";
+export { IdentityModule, reconcileActorRecord } from "./identity/index";
 export type { IIdentityModule, IdentityModuleDependencies } from "./identity/index";
 
 // getCurrentActor — session resolution utility (identity_module_v2 Cycle 2)

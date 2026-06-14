@@ -16,9 +16,10 @@
 
 import { Command } from 'commander';
 import { BaseCommand } from '../../base/base-command';
-import { Crypto, parseRemoteUrl, SyncState, calculatePayloadChecksum } from '@gitgov/core';
+import { Crypto, parseRemoteUrl, SyncState, reconcileActorRecord } from '@gitgov/core';
 import type { IKeyProvider } from '@gitgov/core';
 import type { GitRemoteRef } from '@gitgov/core';
+import type { GitGovActorRecord } from '@gitgov/core';
 import type {
   LoginCommandOptions,
   LoginDeps,
@@ -671,47 +672,25 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
         return; // No local ActorRecord — cloud-first flow, skip
       }
 
-      const record = JSON.parse(rawContent);
-      const payload = record.payload ?? record;
+      const record = JSON.parse(rawContent) as GitGovActorRecord;
 
       // [LOGIN-F5](a) Derive public key from downloaded private key
       const newPublicKey = Crypto.derivePublicKey(privateKeyBase64);
 
-      if (payload.publicKey === newPublicKey) {
-        return; // Already matches — nothing to reconcile
+      // [LOGIN-F5] Delegate the overwrite (pubkey + heal revoked + re-sign genesis) to the
+      // shared core primitive — the SAME mutation the worker's sync_org_keys uses. This
+      // replaces the hand-rolled block that diverged from the worker. null → already
+      // canonical → nothing to reconcile.
+      const reconciled = reconcileActorRecord(record, actorId, {
+        publicKey: newPublicKey,
+        privateKey: privateKeyBase64,
+      });
+      if (!reconciled) {
+        return;
       }
 
-      // [LOGIN-F5](a) Update publicKey
-      payload.publicKey = newPublicKey;
-
-      // [LOGIN-F5] Reset status to active + clear supersededBy if record was
-      // previously revoked (e.g. by a prior --force-local succession). Without
-      // this, the record stays revoked with the new pubkey — corrupt state where
-      // resolveCurrentActorId follows the supersededBy chain to a phantom -v2.
-      if (payload.status === 'revoked') {
-        payload.status = 'active';
-      }
-      if (payload.supersededBy) {
-        delete payload.supersededBy;
-      }
-
-      // [LOGIN-F5](e) Recalculate checksum
-      const payloadChecksum = calculatePayloadChecksum(payload);
-
-      // [LOGIN-F5](d) Re-sign (self-signed, genesis pattern — same as IdentityModule.createActor L78)
-      const signature = Crypto.signPayload(payload, privateKeyBase64, actorId, 'author', 'Key reconciliation (force-cloud)');
-
-      // [LOGIN-F5](f) Write updated record
-      const updatedRecord = {
-        header: {
-          version: '1.0',
-          type: 'actor',
-          payloadChecksum,
-          signatures: [signature],
-        },
-        payload,
-      };
-      await fs.writeFile(actorPath, JSON.stringify(updatedRecord, null, 2), 'utf-8');
+      // [LOGIN-F5](f) Write the reconciled record
+      await fs.writeFile(actorPath, JSON.stringify(reconciled, null, 2), 'utf-8');
 
       // [LOGIN-F5](g) Fix phantom -v2 in session
       const sessionManager = await this.dependencyService.getSessionManager();
