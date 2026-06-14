@@ -40,7 +40,6 @@ function createMockIdentity(overrides: Partial<IIdentityModule> = {}): IIdentity
     resolveCurrentActorId: jest.fn().mockImplementation(async (id: string) => id),
     getEffectiveActorForAgent: jest.fn().mockResolvedValue(null),
     rotateActorKey: jest.fn(),
-    reconcileActorKey: jest.fn(),
     ...overrides,
   };
 }

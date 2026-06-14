@@ -437,39 +437,6 @@ export class IdentityModule implements IIdentityModule {
     };
   }
 
-  // ── reconcileActorKey ──────────────────────────────────────────────
-
-  /**
-   * [IDM-H1] Reconcile an actor's record to the canonical key (overwrite genesis).
-   * Single core primitive for the "make this record match the canonical key" operation
-   * that login (force-cloud, fs store) and the worker (sync_org_keys, GitHub store) both
-   * consume — previously hand-reimplemented and DIVERGENT (login healed a revoked record,
-   * the worker did not → corrupt remote records). Authority is OAuth/SaaS (FV49), NOT
-   * crypto succession. The verifiable lineage (previousChecksum) hangs off here in E5.
-   */
-  async reconcileActorKey(
-    actorId: string,
-    canonicalKey: { publicKey: string; privateKey: string },
-  ): Promise<ActorRecord | null> {
-    // [IDM-H1] Absent actor → no-op so per-repo callers can skip
-    const existing = await this.stores.actors.get(actorId);
-    if (!existing) {
-      return null;
-    }
-
-    // [IDM-H1] Delegate the mutation to the shared pure primitive (the single source of
-    // truth the worker's sync_org_keys consumes directly). null → already canonical → no
-    // re-sign / no persist (idempotent).
-    const updated = reconcileActorRecord(existing, actorId, canonicalKey);
-    if (!updated) {
-      return existing.payload;
-    }
-
-    // [IDM-H1] Persist via the injected store (Fs local for login)
-    await this.stores.actors.put(actorId, updated);
-    return updated.payload;
-  }
-
   // ── Private helpers ────────────────────────────────────────────────
 
   // [IDM-F3] Operations complete without events when no eventBus configured

@@ -522,76 +522,46 @@ describe('IdentityModule', () => {
       canonical = await generateKeys();
     });
 
-    it('[IDM-H1] should overwrite pubkey to canonical and re-sign genesis', async () => {
-      const result = await identityModule.reconcileActorKey(actor.id, canonical);
-
-      expect(result).not.toBeNull();
-      expect(result!.publicKey).toBe(canonical.publicKey);
-      // non-key fields preserved
-      expect(result!.metadata).toEqual({ team: 'core' });
-
-      const stored = await store.get(actor.id);
-      expect(stored!.payload.publicKey).toBe(canonical.publicKey);
-      // re-signed as self-signed genesis with the canonical key (keyId = actorId, NOT succession)
-      expect(stored!.header.signatures).toHaveLength(1);
-      expect(stored!.header.signatures[0].keyId).toBe(actor.id);
-      expect(stored!.header.payloadChecksum).toBe(calculatePayloadChecksum(stored!.payload));
-      const valid = await verifySignatures(stored!, async (keyId) =>
-        keyId === actor.id ? canonical.publicKey : null,
-      );
-      expect(valid).toBe(true);
-    });
-
-    it('[IDM-H1] should heal a revoked record on reconciliation', async () => {
-      // Simulate a prior --force-local succession that left this record revoked + superseded
-      await identityModule.revokeActor(actor.id, actor.id, 'rotation', `${actor.id}-v2`);
-      const revoked = await store.get(actor.id);
-      expect(revoked!.payload.status).toBe('revoked');
-      expect(revoked!.payload.supersededBy).toBe(`${actor.id}-v2`);
-
-      const result = await identityModule.reconcileActorKey(actor.id, canonical);
-
-      // the divergence the worker overwrite omitted: status healed, supersededBy cleared
-      expect(result!.status).toBe('active');
-      expect(result!.supersededBy).toBeUndefined();
-      const stored = await store.get(actor.id);
-      expect(stored!.payload.status).toBe('active');
-      expect(stored!.payload.supersededBy).toBeUndefined();
-    });
-
-    it('[IDM-H1] should be idempotent when already canonical', async () => {
-      await identityModule.reconcileActorKey(actor.id, canonical);
-      const putSpy = jest.spyOn(store, 'put');
-
-      // second reconcile with the same canonical key → no re-sign, no persist
-      const result = await identityModule.reconcileActorKey(actor.id, canonical);
-
-      expect(result!.publicKey).toBe(canonical.publicKey);
-      expect(putSpy).not.toHaveBeenCalled();
-      putSpy.mockRestore();
-    });
-
-    it('[IDM-H1] should return null when actor does not exist', async () => {
-      const result = await identityModule.reconcileActorKey('human:ghost', canonical);
-      expect(result).toBeNull();
-    });
-
-    it('[IDM-H1] reconcileActorRecord (pure) should return the reconciled record with the canonical key', async () => {
+    it('[IDM-H1] should overwrite pubkey to canonical, preserve fields, and re-sign genesis (signature verifies)', async () => {
       const record = (await store.get(actor.id))!;
       const result = reconcileActorRecord(record, actor.id, canonical);
 
       expect(result).not.toBeNull();
       expect(result!.payload.publicKey).toBe(canonical.publicKey);
+      // non-key fields preserved (incl. metadata)
       expect(result!.payload.metadata).toEqual({ team: 'core' });
+      // re-signed as self-signed genesis with the canonical key (keyId = actorId, NOT succession)
+      expect(result!.header.signatures).toHaveLength(1);
+      expect(result!.header.signatures[0].keyId).toBe(actor.id);
+      expect(result!.header.payloadChecksum).toBe(calculatePayloadChecksum(result!.payload));
       const valid = await verifySignatures(result!, async (keyId) =>
         keyId === actor.id ? canonical.publicKey : null,
       );
       expect(valid).toBe(true);
     });
 
-    it('[IDM-H1] reconcileActorRecord (pure) should return null when already canonical (idempotent)', async () => {
+    it('[IDM-H1] should heal a revoked record on reconciliation (status active, supersededBy cleared)', async () => {
+      // A prior --force-local succession left this record revoked + superseded. This is the
+      // divergence the worker overwrite omitted (login cured, worker did not) — the latent
+      // bug E6 killed. The cure must live in the single primitive.
+      await identityModule.revokeActor(actor.id, actor.id, 'rotation', `${actor.id}-v2`);
+      const revoked = (await store.get(actor.id))!;
+      expect(revoked.payload.status).toBe('revoked');
+      expect(revoked.payload.supersededBy).toBe(`${actor.id}-v2`);
+
+      const result = reconcileActorRecord(revoked, actor.id, canonical);
+
+      expect(result).not.toBeNull();
+      expect(result!.payload.status).toBe('active');
+      expect(result!.payload.supersededBy).toBeUndefined();
+      expect(result!.payload.publicKey).toBe(canonical.publicKey);
+    });
+
+    it('[IDM-H1] should return null when already canonical AND healthy (idempotent — no re-sign)', async () => {
       const record = (await store.get(actor.id))!;
       const once = reconcileActorRecord(record, actor.id, canonical)!;
+      expect(once).not.toBeNull();
+      // already canonical + active + no supersededBy → no-op
       const twice = reconcileActorRecord(once, actor.id, canonical);
       expect(twice).toBeNull();
     });
