@@ -723,6 +723,21 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
         }
       }
 
+      // [LOGIN-F5](f2) Commit the reconciled record in the WORKTREE before pushing.
+      // A push without a commit is a no-op: the remote keeps the stale key and
+      // "1 command = full recovery" (P0/KS12) breaks — the worktree converges but
+      // the committed identity on gitgov-state does not. Best-effort, bot identity.
+      try {
+        const { execSync } = await import('child_process');
+        const relativeActorPath = path.join('.gitgov', 'actors', `${encodedId}.json`);
+        execSync(`git add "${relativeActorPath}"`, { cwd: worktreePath, stdio: 'pipe', timeout: 5000 });
+        execSync('git -c user.name=gitgov -c user.email=bot@gitgov.dev commit -m "gitgov: reconcile actor key (force-cloud)"', {
+          cwd: worktreePath, stdio: 'pipe', timeout: 5000,
+        });
+      } catch {
+        // Nothing to commit (already committed) or git unavailable — push below is best-effort anyway
+      }
+
       // [LOGIN-F5](h) Push gitgov-state (best-effort, reuses LOGIN-L1)
       await this.pushGitgovState();
     } catch (err) {

@@ -17,6 +17,8 @@ export interface LintCommandOptions extends BaseCommandOptions {
   references?: boolean;
   /** Validar resolución de actores (mapea a validateActors) */
   actors?: boolean;
+  /** [EARS-L2] Three Gates completo: checksum recompute + verificación Ed25519 real (default: false) */
+  strict?: boolean;
   /** Intentar reparar errores automáticamente (default: false) */
   fix?: boolean;
   /** Lista de validadores específicos a arreglar con --fix (separados por comas, ej: SIGNATURE_STRUCTURE) */
@@ -66,6 +68,7 @@ export class LintCommand extends BaseCommand {
       .description(this.description)
       .option('-r, --references', 'Validate typed references', false)
       .option('-a, --actors', 'Validate actor resolution', false)
+      .option('--strict', 'Full Three Gates validation: recompute checksums + verify Ed25519 signatures cryptographically + identity coherence', false)
       .option('--fix', 'Auto-fix problems (creates backups)', false)
       .option('--fix-validators <validators>', 'Comma-separated list of validator types to fix (e.g., SIGNATURE_STRUCTURE). If not specified, fixes all fixable problems.', '')
       .option('--check-migrations', 'List legacy records without fixing', false)
@@ -128,6 +131,8 @@ export class LintCommand extends BaseCommand {
         path: isFile ? path.dirname(inputPath) : inputPath,
         validateReferences: options.references || false,
         validateActors: options.actors || false,
+        // [EARS-L2] strict: full Three Gates (checksum + Ed25519) + identity coherence (EARS-L3)
+        strict: options.strict || false,
         validateFileNaming: true // Always validate file naming conventions
       };
 
@@ -188,6 +193,10 @@ export class LintCommand extends BaseCommand {
           options.summary || false,
           maxErrors
         );
+        // [EARS-L1] Honest output: default lint does NOT verify signatures cryptographically
+        if (filteredReport.metadata.disclaimer && format === 'text' && !quiet) {
+          console.log(`\nℹ️  ${filteredReport.metadata.disclaimer}`);
+        }
         // [EARS-D2] Exit code 1 when errors, [EARS-D3] Exit code 0 when no errors
         const exitCode = filteredReport.summary.errors > 0 ? 1 : 0;
         process.exit(exitCode);

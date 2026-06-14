@@ -208,6 +208,7 @@ describe('LintCommand', () => {
         path: '.gitgov/',
         validateReferences: false,
         validateActors: false,
+        strict: false,
         validateFileNaming: true
       });
     });
@@ -225,8 +226,17 @@ describe('LintCommand', () => {
         path: '.gitgov/custom',
         validateReferences: true,
         validateActors: true,
+        strict: false,
         validateFileNaming: true
       });
+    });
+
+    it('[EARS-L2] should pass strict flag through to FsLintModule options', async () => {
+      await lintCommand.execute({ strict: true });
+
+      expect(mockLintModule.lint).toHaveBeenCalledWith(
+        expect.objectContaining({ strict: true })
+      );
     });
 
     it('[EARS-A3] should handle module initialization errors', async () => {

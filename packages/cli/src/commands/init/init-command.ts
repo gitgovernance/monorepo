@@ -116,6 +116,12 @@ export class InitCommand {
         }
       } else {
         this.showSuccessOutput(result, options);
+        // [PROJ-B6] Surface non-runnable agent warnings (engine unresolvable, EARS-M1)
+        if (result.agentWarnings?.length && !options.quiet) {
+          console.warn('\n⚠️  Some agents were registered but are not runnable:');
+          for (const w of result.agentWarnings) console.warn(`   - ${w}`);
+          console.warn('   Install the package or re-register with: gitgov agent new <path-to-agent>');
+        }
         // [EARS-G1] Post-init: best-effort push + DX concerns
         await this.postInitConcerns(options);
       }

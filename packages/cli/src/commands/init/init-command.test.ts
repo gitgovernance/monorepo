@@ -14,6 +14,8 @@ vi.mock('../../services/dependency-injection', () => ({
     getInstance: vi.fn().mockReturnValue({
       setInitMode: vi.fn(),
       getProjectModule: vi.fn(),
+      // [INIT-L1] init-command.ts:49 sets the state branch override before initializing
+      setStateBranchOverride: vi.fn(),
     }),
   },
 }));

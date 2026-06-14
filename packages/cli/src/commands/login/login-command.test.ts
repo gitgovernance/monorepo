@@ -659,6 +659,35 @@ describe('LoginCommand v2', () => {
       expect(writtenRecord.payload.supersededBy).toBeUndefined();
       expect(writtenRecord.payload.publicKey).toBe('new-pub');
     });
+
+    it('[LOGIN-F5] should commit the reconciled record in the worktree before pushing', async () => {
+      mockHasPrivateKey.mockResolvedValue(true);
+      mockGetPublicKey.mockResolvedValue('old-local-pub-key');
+      mockDerivePublicKey.mockReturnValue('new-cloud-pub-key');
+      mockFsReadFile.mockResolvedValue(JSON.stringify(existingActorRecord));
+      mockFsWriteFile.mockResolvedValue(undefined);
+
+      const { execSync } = await import('child_process');
+      const mockExecSync = execSync as Mock<typeof execSync>;
+      mockExecSync.mockClear();
+
+      const deps = createMockDeps({
+        fetchSaas: vi.fn().mockImplementation(async (url: string) => {
+          if (url.includes('identity.keyStatus')) return { ok: true, json: async () => trpcWrap(keyStatusWith('new-cloud-pub-key')) };
+          if (url.includes('identity.getKey')) return { ok: true, json: async () => trpcWrap({ publicKey: 'new-cloud-pub-key', privateKeyEnvelope: mockEnvelope }) };
+          return { ok: false, json: async () => ({}) };
+        }),
+      });
+
+      const cmd = new LoginCommand(deps);
+      await cmd.executeLogin({ ...defaultOptions, forceCloud: true });
+
+      // [LOGIN-F5](f2) A push without a commit is a no-op — the reconciled record
+      // must be git add + committed in the worktree so (h) actually moves the remote
+      const calls = mockExecSync.mock.calls.map((c) => String(c[0]));
+      expect(calls.some((c) => c.startsWith('git add') && c.includes('human_camilo.json'))).toBe(true);
+      expect(calls.some((c) => c.includes('commit') && c.includes('reconcile actor key'))).toBe(true);
+    });
   });
 
   // ==================== §4.13 Key Overwrite Response (force-local, no succession) ====================

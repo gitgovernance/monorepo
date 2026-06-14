@@ -24,7 +24,7 @@ vi.mock('@gitgov/core', () => ({
 }));
 
 // vi.hoisted ensures these variables exist when vi.mock factory runs (hoisted)
-const { mockSyncModule, mockConfigManager, mockSessionManager, mockGitModule } = vi.hoisted(() => ({
+const { mockSyncModule, mockConfigManager, mockSessionManager, mockGitModule, mockKeyProvider, mockIdentityModule } = vi.hoisted(() => ({
   mockSyncModule: {
   pushState: vi.fn(),
   pullState: vi.fn(),
@@ -46,6 +46,14 @@ const { mockSyncModule, mockConfigManager, mockSessionManager, mockGitModule } =
     getCurrentBranch: vi.fn().mockResolvedValue('main'),
     isRebaseInProgress: vi.fn().mockResolvedValue(false)
   },
+  // [EARS-C12] Post-pull key detection deps
+  mockKeyProvider: {
+    hasPrivateKey: vi.fn().mockResolvedValue(false),
+    getPublicKey: vi.fn().mockResolvedValue(null)
+  },
+  mockIdentityModule: {
+    getActor: vi.fn().mockResolvedValue(null)
+  },
 }));
 
 vi.mock('../../services/dependency-injection', () => ({
@@ -55,6 +63,8 @@ vi.mock('../../services/dependency-injection', () => ({
       getConfigManager: vi.fn().mockResolvedValue(mockConfigManager),
       getSessionManager: vi.fn().mockResolvedValue(mockSessionManager),
       getGitModule: vi.fn().mockResolvedValue(mockGitModule),
+      getKeyProvider: vi.fn().mockReturnValue(mockKeyProvider),
+      getIdentityModule: vi.fn().mockResolvedValue(mockIdentityModule),
       wasBootstrapped: vi.fn().mockReturnValue(false)
     })
   }
@@ -65,6 +75,7 @@ import { SyncCommand } from './sync-command';
 // Mock console methods (igual que task-command.test.ts)
 const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation();
 const mockConsoleError = vi.spyOn(console, 'error').mockImplementation();
+const mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation();
 const mockProcessExit = vi.spyOn(process, 'exit').mockImplementation();
 
 describe('SyncCommand - Unit Tests', () => {
@@ -82,6 +93,10 @@ describe('SyncCommand - Unit Tests', () => {
     mockSyncModule.isRebaseInProgress.mockResolvedValue(false);
     mockSyncModule.getConflictedFiles.mockResolvedValue([]);
     mockSyncModule.checkConflictMarkers.mockResolvedValue([]);
+    // [EARS-C12] defaults: no local key → detection skips silently
+    mockKeyProvider.hasPrivateKey.mockResolvedValue(false);
+    mockKeyProvider.getPublicKey.mockResolvedValue(null);
+    mockIdentityModule.getActor.mockResolvedValue(null);
     mockSyncModule.auditState.mockResolvedValue({
       passed: true,
       scope: 'all',
@@ -800,6 +815,56 @@ describe('SyncCommand - Unit Tests', () => {
           force: true
         })
       );
+    });
+
+    it('[EARS-C12] should warn when pulled ActorRecord publicKey differs from local key', async () => {
+      // Setup: successful pull + session actor has local key that differs from pulled record
+      mockSyncModule.pullState.mockResolvedValue({
+        success: true,
+        hasChanges: true,
+        filesUpdated: 1,
+        reindexed: true,
+        conflictDetected: false
+      });
+      mockKeyProvider.hasPrivateKey.mockResolvedValue(true);
+      mockKeyProvider.getPublicKey.mockResolvedValue('local-public-key-AAA');
+      mockIdentityModule.getActor.mockResolvedValue({
+        id: 'human:test-user',
+        type: 'human',
+        displayName: 'Test User',
+        publicKey: 'canonical-public-key-BBB', // org key propagated by sync_org_keys
+        roles: ['author'],
+        status: 'active'
+      });
+
+      await syncCommand.executePull({});
+
+      // Warning shown with actionable suggestion
+      const warnOutput = mockConsoleWarn.mock.calls.map(c => String(c[0])).join('\n');
+      expect(warnOutput).toContain('Key changed');
+      expect(warnOutput).toContain('gitgov login --force-cloud');
+      // And the pull still succeeded (no error exit)
+      expect(mockProcessExit).not.toHaveBeenCalledWith(1);
+    });
+
+    it('[EARS-C12] should not warn when actor has no local private key', async () => {
+      // Setup: successful pull but the session actor has NO local private key
+      // (e.g. collaborator's repo where this actor's key lives elsewhere)
+      mockSyncModule.pullState.mockResolvedValue({
+        success: true,
+        hasChanges: true,
+        filesUpdated: 1,
+        reindexed: true,
+        conflictDetected: false
+      });
+      mockKeyProvider.hasPrivateKey.mockResolvedValue(false);
+
+      await syncCommand.executePull({});
+
+      const warnOutput = mockConsoleWarn.mock.calls.map(c => String(c[0])).join('\n');
+      expect(warnOutput).not.toContain('Key changed');
+      // Detection skipped before reading the record (best-effort short-circuit)
+      expect(mockIdentityModule.getActor).not.toHaveBeenCalled();
     });
   });
 
