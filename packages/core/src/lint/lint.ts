@@ -39,7 +39,7 @@ import type { Signature } from "../record_types/embedded.types";
 import { DetailedValidationError } from "../record_validations/common";
 import { createLogger } from "../logger";
 import { calculatePayloadChecksum } from "../crypto/checksum";
-import { signPayload } from "../crypto/signatures";
+import { signPayload, verifySignatures } from "../crypto/signatures";
 import {
   loadTaskRecord,
   loadActorRecord,
@@ -51,6 +51,15 @@ import {
 import { Schemas } from "../record_schemas/generated";
 
 const logger = createLogger("[Lint] ");
+
+/**
+ * [EARS-L1] Disclaimer attached to LintReport.metadata when validateSignatures=true
+ * without strict mode. The default "signature validation" only checks structure and
+ * actor existence — it does NOT verify Ed25519 signatures cryptographically.
+ * Shared by LintModule.lint() and FsLintModule.lint().
+ */
+export const SIGNATURES_NOT_VERIFIED_DISCLAIMER =
+  "schema + timestamps OK (signatures NOT cryptographically verified — run lint --strict for full validation)";
 
 /**
  * [EARS-F2] Mapping from entity type to schema name for payload cleaning.
@@ -185,6 +194,71 @@ export class LintModule implements ILintModule {
   }
 
   /**
+   * [EARS-L2] Strict Three Gates validation for a single record.
+   * Reuses the same primitives as validateFullActorRecord/validateFullAgentRecord
+   * (calculatePayloadChecksum + verifySignatures) but reports granular LintResults
+   * instead of throwing on the first failure — lint must accumulate ALL errors.
+   *
+   * @param record - The record to verify cryptographically
+   * @param context - Context with recordId and entityType
+   * @param getActorPublicKey - Resolver for signer public keys (store- or file-backed)
+   * @returns Array of lint results (empty when both gates pass)
+   */
+  async lintRecordStrict(
+    record: GitGovRecord,
+    context: LintRecordContext,
+    getActorPublicKey: (keyId: string) => Promise<string | null>
+  ): Promise<LintResult[]> {
+    const results: LintResult[] = [];
+    const { recordId, entityType, filePath = `unknown/${recordId}.json` } = context;
+
+    // [EARS-L2](a) Gate 2: recompute payloadChecksum and compare
+    const expectedChecksum = calculatePayloadChecksum(record.payload);
+    if (expectedChecksum !== record.header.payloadChecksum) {
+      results.push({
+        level: "error",
+        filePath,
+        validator: "CHECKSUM_VERIFICATION",
+        message: `payloadChecksum mismatch: header has '${record.header.payloadChecksum}' but recomputed checksum is '${expectedChecksum}'`,
+        entity: { type: entityType, id: recordId },
+        fixable: true,
+        context: {
+          field: "header.payloadChecksum",
+          actual: record.header.payloadChecksum,
+          expected: expectedChecksum
+        }
+      });
+    }
+
+    // [EARS-L2](b) Gate 3: verify Ed25519 signatures against the signer's publicKey
+    try {
+      const signaturesValid = await verifySignatures(record, getActorPublicKey);
+      if (!signaturesValid) {
+        results.push({
+          level: "error",
+          filePath,
+          validator: "SIGNATURE_STRUCTURE",
+          message: `Ed25519 signature verification failed: at least one signature is cryptographically invalid or the signer's publicKey could not be resolved`,
+          entity: { type: entityType, id: recordId },
+          fixable: false,
+          context: { field: "header.signatures" }
+        });
+      }
+    } catch (error) {
+      results.push({
+        level: "error",
+        filePath,
+        validator: "SIGNATURE_STRUCTURE",
+        message: `Ed25519 signature verification error: ${error instanceof Error ? error.message : String(error)}`,
+        entity: { type: entityType, id: recordId },
+        fixable: false
+      });
+    }
+
+    return results;
+  }
+
+  /**
    * Validates all records from stores.
    * Iterates this.stores to collect records, then validates each one.
    *
@@ -201,9 +275,17 @@ export class LintModule implements ILintModule {
       validateChecksums: options?.validateChecksums ?? true,
       validateSignatures: options?.validateSignatures ?? true,
       validateTimestamps: options?.validateTimestamps ?? true,
+      strict: options?.strict ?? false,
       failFast: options?.failFast ?? false,
       concurrent: options?.concurrent ?? true,
       concurrencyLimit: options?.concurrencyLimit ?? 10
+    };
+
+    // [EARS-L2] Strict mode resolves signer public keys from the actors store
+    const getActorPublicKey = async (keyId: string): Promise<string | null> => {
+      const actorRecord = await this.stores.actors?.get(keyId);
+      const payload = actorRecord?.payload as { publicKey?: string } | undefined;
+      return payload?.publicKey ?? null;
     };
 
     const results: LintResult[] = [];
@@ -239,6 +321,12 @@ export class LintModule implements ILintModule {
 
       const recordResults = this.lintRecord(entry.record, context);
       results.push(...recordResults);
+
+      // [EARS-L2] Strict mode: full Three Gates (checksum recompute + Ed25519 verify)
+      if (opts.strict) {
+        const strictResults = await this.lintRecordStrict(entry.record, context, getActorPublicKey);
+        results.push(...strictResults);
+      }
 
       // Reference validation (async - uses stores)
       if (opts.validateReferences) {
@@ -278,7 +366,11 @@ export class LintModule implements ILintModule {
       metadata: {
         timestamp: new Date().toISOString(),
         options: opts,
-        version: "1.0.0"
+        version: "1.0.0",
+        // [EARS-L1] Honest output: without strict, "validateSignatures" never verifies crypto
+        ...(opts.validateSignatures && !opts.strict
+          ? { disclaimer: SIGNATURES_NOT_VERIFIED_DISCLAIMER }
+          : {})
       }
     };
   }

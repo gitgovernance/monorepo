@@ -13,6 +13,28 @@ import type {
 } from "../agent_runner.types";
 
 /**
+ * [EARS-B1] Resolves a local engine entrypoint to an absolute path using the
+ * SAME rules as agent execution: npm package names (scoped or bare) via Node's
+ * `require.resolve` anchored at the project root; absolute/relative paths joined
+ * with the project root. Throws when the entrypoint cannot be resolved.
+ *
+ * Shared by `LocalBackend.executeEntrypoint` (execution) and
+ * `validateAgentEngine` (EARS-M1, creation-time validation) — single source of
+ * truth for resolution, no duplication.
+ */
+export function resolveLocalEntrypoint(entrypoint: string, projectRoot: string): string {
+  // NPM packages: start with @ (scoped) or have no file extension and no path separators
+  // File paths: start with . or / or have file extension (.mjs, .js, .ts)
+  const hasFileExtension = /\.\w+$/.test(entrypoint);
+  const isPackageName = entrypoint.startsWith("@") || (!hasFileExtension && !entrypoint.startsWith(".") && !entrypoint.startsWith("/") && !entrypoint.includes(path.sep));
+  if (isPackageName) {
+    const require = createRequire(path.join(projectRoot, "package.json"));
+    return require.resolve(entrypoint);
+  }
+  return path.isAbsolute(entrypoint) ? entrypoint : path.join(projectRoot, entrypoint);
+}
+
+/**
  * Backend for executing local agents (engine.type: "local").
  * Supports entrypoint (dynamic import) and runtime (registered handler).
  * RETURNS AgentOutput captured from the agent function.
@@ -55,21 +77,13 @@ export class LocalBackend {
     engine: LocalEngine,
     ctx: AgentExecutionContext
   ): Promise<AgentOutput> {
-    // [EARS-B1] Resolve entrypoint: NPM package name or filesystem path
-    // NPM packages: start with @ (scoped) or have no file extension and no path separators
-    // File paths: start with . or / or have file extension (.mjs, .js, .ts)
+    // [EARS-B1] Resolve entrypoint via the shared resolver (npm package via
+    // require.resolve, absolute/relative path). Package resolution anchors at
+    // ctx.projectRoot; path resolution at this.projectRoot (same as before).
     const entrypoint = engine.entrypoint!;
     const hasFileExtension = /\.\w+$/.test(entrypoint);
     const isPackageName = entrypoint.startsWith("@") || (!hasFileExtension && !entrypoint.startsWith(".") && !entrypoint.startsWith("/") && !entrypoint.includes(path.sep));
-    // [EARS-B1] Resolve entrypoint using Node.js standard module resolution.
-    // Supports: project installs, global installs, monorepo hoisting, absolute/relative paths.
-    let absolutePath: string;
-    if (isPackageName) {
-      const require = createRequire(path.join(ctx.projectRoot, "package.json"));
-      absolutePath = require.resolve(entrypoint);
-    } else {
-      absolutePath = path.isAbsolute(entrypoint) ? entrypoint : path.join(this.projectRoot, entrypoint);
-    }
+    const absolutePath = resolveLocalEntrypoint(entrypoint, isPackageName ? ctx.projectRoot : this.projectRoot);
 
     // [EARS-B4] Dynamic import
     const mod = await import(absolutePath);

@@ -489,6 +489,33 @@ describe('ProjectModule', () => {
       // Both agents were attempted
       expect(mockAgentAdapter.buildSignedAgentRecord).toHaveBeenCalledTimes(2);
     });
+
+    it('[PROJ-B6] should collect agentWarnings when a default agent engine is unresolvable', async () => {
+      const { deps } = createRealDeps();
+      const mockAgentAdapter = createMockAgentAdapter();
+      deps.agentAdapter = mockAgentAdapter;
+      // The session-63 phantom-agent case: npm entrypoint not installed anywhere
+      deps.defaultAgents = [{
+        packageName: '@gitgov/agent-does-not-exist',
+        agentId: 'agent:phantom',
+        displayName: 'Phantom Agent',
+        engine: { type: 'local' as const, entrypoint: '@gitgov/agent-does-not-exist', function: 'runAgent' },
+        purpose: 'audit',
+        triggers: [],
+        metadata: {},
+      }];
+      const pm = new ProjectModule(deps);
+
+      const result = await pm.initializeProject({ name: 'test-project', login: 'camilo', stateBranch: DEFAULT_STATE_BRANCH });
+
+      // Non-fatal: the agent IS registered (valid declaration)...
+      expect(mockAgentAdapter.buildSignedAgentRecord).toHaveBeenCalledTimes(1);
+      // ...but the caller is warned that it won't run (EARS-M1 validation)
+      expect(result.agentWarnings).toBeDefined();
+      expect(result.agentWarnings).toHaveLength(1);
+      expect(result.agentWarnings![0]).toContain('agent:phantom');
+      expect(result.agentWarnings![0]).toContain('not runnable');
+    });
   });
 
   // 4.7. Agent Config Source of Truth (PROJ-F1 to F3)

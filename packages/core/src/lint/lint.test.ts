@@ -2303,5 +2303,183 @@ describe('LintModule + FsLintModule', () => {
       expect(ourRecordResults.length).toBe(0);
     });
   });
+
+  // ============================================================================
+  // Bloque L: Crypto Verification + Honest Output (EARS-L1 a L3)
+  // flow_verification session 63 — lint_module.md §4.12
+  // Uses REAL Ed25519 crypto (jest.requireActual) — mocking Crypto would defeat
+  // the purpose of verifying that strict mode performs real verification.
+  // ============================================================================
+
+  describe('Bloque L: Crypto Verification + Honest Output (EARS-L1 a L3)', () => {
+    const realCrypto = jest.requireActual('../crypto/signatures') as typeof import('../crypto/signatures');
+    const { calculatePayloadChecksum: realChecksum } = jest.requireActual('../crypto/checksum') as typeof import('../crypto/checksum');
+
+    /** Creates an ActorRecord signed with a REAL Ed25519 keypair (genesis pattern). */
+    async function createRealSignedActorRecord(actorId = 'human:strict-test') {
+      const keys = await realCrypto.generateKeys();
+      const payload = createActorRecord({
+        id: actorId,
+        type: 'human',
+        displayName: 'Strict Test',
+        publicKey: keys.publicKey,
+        roles: ['author'],
+        status: 'active'
+      });
+      const signature = realCrypto.signPayload(payload, keys.privateKey, actorId, 'author', 'strict-test');
+      const record = {
+        header: {
+          version: '1.0',
+          type: 'actor' as const,
+          payloadChecksum: realChecksum(payload),
+          signatures: [signature]
+        },
+        payload
+      };
+      return { record, keys };
+    }
+
+    beforeEach(() => {
+      lintModule = new LintModule(mocks.lintModuleDeps);
+      mocks.fileSystem.exists.mockResolvedValue(false); // no session file by default
+    });
+
+    // [EARS-L1]
+    it('[EARS-L1] should include disclaimer that signatures are NOT cryptographically verified', async () => {
+      mockFilesystemDiscovery(mockReaddir, []);
+
+      // Default lint (validateSignatures=true, no strict) → disclaimer present
+      const report = await fsLintModule.lint({ path: `${testRoot}/.gitgov/` });
+      expect(report.metadata.disclaimer).toBeDefined();
+      expect(report.metadata.disclaimer).toContain('NOT cryptographically verified');
+
+      // Strict mode DOES verify crypto → no disclaimer
+      const strictReport = await fsLintModule.lint({ path: `${testRoot}/.gitgov/`, strict: true });
+      expect(strictReport.metadata.disclaimer).toBeUndefined();
+    });
+
+    // [EARS-L2] — happy path: valid record passes Three Gates
+    it('[EARS-L2] should verify checksum + crypto signature in strict mode', async () => {
+      const { record } = await createRealSignedActorRecord();
+
+      mockFilesystemDiscovery(mockReaddir, [{ id: record.payload.id, type: 'actor' }]);
+      mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify(record));
+
+      // validateFileNaming: false — naming convention for colon-ids is a separate
+      // concern (FILE_NAMING_CONVENTION); these tests isolate the crypto gates.
+      const report = await fsLintModule.lint({ path: `${testRoot}/.gitgov/`, strict: true, validateFileNaming: false });
+
+      expect(report.summary.filesChecked).toBe(1);
+      expect(report.summary.errors).toBe(0);
+    });
+
+    // [EARS-L2] — Gate 2: checksum mismatch detected
+    it('[EARS-L2] should report error when payloadChecksum does not match', async () => {
+      const { record } = await createRealSignedActorRecord();
+      // Tamper the payload AFTER signing: recomputed checksum ≠ header checksum.
+      // (The signature digest is built from header.payloadChecksum, so the signature
+      // itself still verifies — this isolates the checksum gate.)
+      const tampered = {
+        ...record,
+        payload: { ...record.payload, displayName: 'Tampered Name' }
+      };
+
+      mockFilesystemDiscovery(mockReaddir, [{ id: record.payload.id, type: 'actor' }]);
+      mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify(tampered));
+
+      const report = await fsLintModule.lint({ path: `${testRoot}/.gitgov/`, strict: true });
+
+      const checksumErrors = report.results.filter(
+        r => r.validator === 'CHECKSUM_VERIFICATION' && r.level === 'error'
+      );
+      expect(checksumErrors.length).toBe(1);
+      expect(checksumErrors[0]!.message).toContain('payloadChecksum mismatch');
+
+      // Without strict, the same tampered record passes silently (RC4 — the lie)
+      const defaultReport = await fsLintModule.lint({ path: `${testRoot}/.gitgov/` });
+      expect(defaultReport.results.filter(r => r.validator === 'CHECKSUM_VERIFICATION').length).toBe(0);
+    });
+
+    // [EARS-L2] — Gate 3: invalid Ed25519 signature detected
+    it('[EARS-L2] should report error when Ed25519 signature is invalid', async () => {
+      const { record } = await createRealSignedActorRecord();
+      // Corrupt the signature bytes (valid base64, wrong content)
+      const corrupted = JSON.parse(JSON.stringify(record)) as typeof record;
+      corrupted.header.signatures[0]!.signature = Buffer.alloc(64, 7).toString('base64');
+
+      mockFilesystemDiscovery(mockReaddir, [{ id: record.payload.id, type: 'actor' }]);
+      mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify(corrupted));
+
+      const report = await fsLintModule.lint({ path: `${testRoot}/.gitgov/`, strict: true });
+
+      const signatureErrors = report.results.filter(
+        r => r.validator === 'SIGNATURE_STRUCTURE' && r.level === 'error' && r.message.includes('Ed25519')
+      );
+      expect(signatureErrors.length).toBe(1);
+
+      // Without strict, the corrupted signature passes silently (RC4 — the lie)
+      const defaultReport = await fsLintModule.lint({ path: `${testRoot}/.gitgov/`, validateFileNaming: false });
+      expect(defaultReport.summary.errors).toBe(0);
+    });
+
+    // [EARS-L3] — identity coherence: record publicKey vs local KeyProvider
+    it('[EARS-L3] should report error when publicKey has no matching active key', async () => {
+      const { record } = await createRealSignedActorRecord('human:mismatch-test');
+      // Local KeyProvider holds a DIFFERENT key for this actor (the KEY_MISMATCH autopsy case)
+      const otherKeys = await realCrypto.generateKeys();
+      const keyProvider: import('../key_provider/key_provider').KeyProvider = {
+        sign: jest.fn(),
+        getPrivateKey: jest.fn().mockResolvedValue(otherKeys.privateKey),
+        getPublicKey: jest.fn().mockResolvedValue(otherKeys.publicKey),
+        setPrivateKey: jest.fn(),
+        hasPrivateKey: jest.fn().mockResolvedValue(true),
+        deletePrivateKey: jest.fn()
+      };
+
+      const fsModuleWithKeys = new FsLintModule({
+        ...mocks.fsLintModuleDeps,
+        keyProvider
+      });
+
+      mockFilesystemDiscovery(mockReaddir, [{ id: record.payload.id, type: 'actor' }]);
+      mocks.fileSystem.readFile.mockResolvedValue(JSON.stringify(record));
+
+      const report = await fsModuleWithKeys.lint({ path: `${testRoot}/.gitgov/`, strict: true });
+
+      const coherenceErrors = report.results.filter(
+        r => r.validator === 'IDENTITY_COHERENCE' && r.level === 'error'
+      );
+      expect(coherenceErrors.length).toBe(1);
+      expect(coherenceErrors[0]!.message).toContain('KEY_MISMATCH');
+      expect(coherenceErrors[0]!.entity.id).toBe('human:mismatch-test');
+    });
+
+    // [EARS-L3] — phantom session: lastSession.actorId references non-existent actor
+    it('[EARS-L3] should report error when session references non-existent actor', async () => {
+      mockFilesystemDiscovery(mockReaddir, []);
+      // Session file exists pointing to a phantom -v2 actor; the actor file does NOT exist
+      mocks.fileSystem.exists.mockImplementation(async (path: string) =>
+        path.endsWith('.session.json')
+      );
+      mocks.fileSystem.readFile.mockImplementation(async (path: string) => {
+        if (path.endsWith('.session.json')) {
+          return JSON.stringify({ lastSession: { actorId: 'human:phantom-v2' } });
+        }
+        throw new Error('ENOENT');
+      });
+
+      const report = await fsLintModule.lint({ path: `${testRoot}/.gitgov/`, strict: true });
+
+      const phantomErrors = report.results.filter(
+        r => r.validator === 'IDENTITY_COHERENCE' && r.message.includes('phantom session')
+      );
+      expect(phantomErrors.length).toBe(1);
+      expect(phantomErrors[0]!.entity.id).toBe('human:phantom-v2');
+
+      // Without strict, the phantom session is invisible (RC4 — the lie)
+      const defaultReport = await fsLintModule.lint({ path: `${testRoot}/.gitgov/` });
+      expect(defaultReport.results.filter(r => r.validator === 'IDENTITY_COHERENCE').length).toBe(0);
+    });
+  });
 });
 

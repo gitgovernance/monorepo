@@ -49,6 +49,9 @@ export type ProjectInitResult = {
   commitSha?: string;
   alreadyInitialized?: boolean;
   created?: boolean;
+  // [PROJ-B6] Agents registered but not runnable (engine unresolvable, EARS-M1).
+  // Non-fatal — the CLI surfaces these so the user learns at creation time.
+  agentWarnings?: string[];
 };
 
 // --- addActor primitive (PROJ-H1..H6) ---
