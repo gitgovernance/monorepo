@@ -16,6 +16,63 @@ import { generateKeys, signPayload, buildSignatureDigest } from '../crypto/signa
 import { calculatePayloadChecksum } from '../crypto/checksum';
 import { generateActorId, computeSuccessorActorId } from '../utils/id_generator';
 
+/**
+ * [IDM-H1] Reconcile an ActorRecord to a canonical key (overwrite genesis). PURE — takes
+ * the current record, returns the reconciled record, or `null` if the record is already
+ * canonical and healthy (idempotent no-op, so the caller can skip persisting/committing).
+ *
+ * This is the SINGLE source of truth for the "make this record match the canonical key"
+ * mutation that login (force-cloud, fs transport) and the worker (sync_org_keys, gitModule
+ * transport) both consume — previously hand-reimplemented in each and DIVERGENT (login
+ * healed a revoked record, the worker did not → corrupt remote records). The caller owns
+ * I/O (read + persist); this owns only the mutation. Authority is OAuth/SaaS (FV49), NOT
+ * crypto succession. The verifiable lineage (`previousChecksum`) hangs off here in E5.
+ */
+export function reconcileActorRecord(
+  record: GitGovActorRecord,
+  actorId: string,
+  canonicalKey: { publicKey: string; privateKey: string },
+): GitGovActorRecord | null {
+  const payload = record.payload;
+  const needsHeal = payload.status === 'revoked' || payload.supersededBy != null;
+
+  // [IDM-H1] Already canonical + healthy → idempotent no-op (caller skips persist/commit)
+  if (payload.publicKey === canonicalKey.publicKey && !needsHeal) {
+    return null;
+  }
+
+  // [IDM-H1] Overwrite pubkey + heal a revoked record (status→active, clear supersededBy,
+  // D1/FV51 — the divergence the worker overwrite omitted), preserving ALL other fields
+  const reconciledPayload: ActorRecord = {
+    ...payload,
+    publicKey: canonicalKey.publicKey,
+    status: 'active',
+  };
+  delete reconciledPayload.supersededBy;
+
+  // [IDM-H1] Recalculate checksum + re-sign as self-signed genesis with the canonical key
+  const payloadChecksum = calculatePayloadChecksum(reconciledPayload);
+  const signature = signPayload(
+    reconciledPayload,
+    canonicalKey.privateKey,
+    actorId,
+    'author',
+    'Key reconciliation',
+  );
+
+  // [IDM-H1] Preserve the existing header (incl. version) — overwrite only checksum +
+  // signatures, mirroring revokeActor. Avoids downgrading a '1.1' record to '1.0'.
+  return {
+    ...record,
+    header: {
+      ...record.header,
+      payloadChecksum,
+      signatures: [signature],
+    },
+    payload: reconciledPayload,
+  };
+}
+
 export class IdentityModule implements IIdentityModule {
   private stores: IdentityModuleDependencies['stores'];
   private keyProvider: IdentityModuleDependencies['keyProvider'];
@@ -301,14 +358,16 @@ export class IdentityModule implements IIdentityModule {
     const baseId = generateActorId(oldActor.type, oldActor.displayName);
     const newActorId = computeSuccessorActorId(baseId);
 
+    // [IDM-E11] Preserve ALL fields of the old actor (incl. metadata and any future
+    // fields) by spreading; only id/publicKey/status change. The previous hardcoded
+    // subset silently dropped metadata on every succession.
     const newActorPayload: ActorRecord = {
+      ...oldActor,
       id: newActorId,
-      type: oldActor.type,
-      displayName: oldActor.displayName,
       publicKey: newPublicKey,
-      roles: oldActor.roles,
       status: 'active',
     };
+    delete newActorPayload.supersededBy;
 
     const validatedNewPayload = createActorRecord(newActorPayload);
 
@@ -361,6 +420,15 @@ export class IdentityModule implements IIdentityModule {
       console.warn(
         `Could not persist private key for ${newActorId}: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
+    }
+
+    // [IDM-E10] Archive old ActorKey so only 1 remains active for this identity.
+    // Without this, a succession leaves 2 active keys → KEY_MISMATCH downstream.
+    // deletePrivateKey delegates to archiveKey (soft delete, not hard) in PrismaKeyProvider.
+    try {
+      await this.keyProvider.deletePrivateKey(actorId);
+    } catch {
+      // Non-fatal — the old key is archived best-effort. The new key is already active.
     }
 
     return {

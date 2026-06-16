@@ -22,9 +22,14 @@ vi.mock('@gitgov/core', () => ({
   }
 }));
 
-// Mock @gitgov/core/fs — DEFAULT_ID_ENCODER used by executeNew
+// Mock @gitgov/core/fs — DEFAULT_ID_ENCODER + validateAgentEngine used by executeNew
+const { mockValidateAgentEngine } = vi.hoisted(() => ({
+  // [EARS-E9] Default: engines resolve — individual tests override to simulate phantom agents
+  mockValidateAgentEngine: vi.fn().mockResolvedValue({ resolvable: true }),
+}));
 vi.mock('@gitgov/core/fs', () => ({
   DEFAULT_ID_ENCODER: { encode: (id: string) => id.replace(/:/g, '_'), decode: (id: string) => id.replace(/_/g, ':') },
+  validateAgentEngine: mockValidateAgentEngine,
 }));
 
 // Mock DependencyInjectionService
@@ -571,6 +576,28 @@ describe('AgentCommand', () => {
       expect(mockConsoleErrorLocal).toHaveBeenCalledWith(
         expect.stringContaining('does not have a gitgov.agent field'),
       );
+    });
+
+    it('[EARS-E9] should fail and not register when agent engine entrypoint does not resolve', async () => {
+      tmpAgentDir = createFakeAgent({
+        name: '@gitgov/agent-phantom',
+        main: 'dist/index.mjs',
+        gitgov: { agent: { purpose: 'audit', function: 'runAgent' } },
+      });
+      // The session-63 phantom-agent case: engine validation reports unresolvable
+      mockValidateAgentEngine.mockResolvedValueOnce({
+        resolvable: false,
+        reason: "entrypoint '@gitgov/agent-phantom' does not resolve: Cannot find module",
+      });
+
+      await agentCommand.executeNew(tmpAgentDir, {});
+
+      // Fail-fast: clear error + exit 1, agent NOT registered
+      expect(mockExit).toHaveBeenCalledWith(1);
+      expect(mockConsoleErrorLocal).toHaveBeenCalledWith(
+        expect.stringContaining('not runnable'),
+      );
+      expect(mockAgentAdapter.createAgentRecord).not.toHaveBeenCalled();
     });
 
     it('[EARS-E4] should warn when required env vars from gitgov.agent.env are missing', async () => {

@@ -13,7 +13,7 @@
  * - I: getSaasUrl (EARS-I1 to I2) — tested in config_manager.test.ts
  */
 
-import type { IKeyProvider } from '@gitgov/core';
+import type { IKeyProvider, GitGovActorRecord } from '@gitgov/core';
 
 // Mock child_process for resolveOrgId
 vi.mock('child_process', () => ({
@@ -60,22 +60,39 @@ const mockGenerateEphemeralKeypair = vi.fn().mockReturnValue({
   privateKey: 'mock-client-priv',
 });
 
-vi.mock('@gitgov/core', () => ({
-  SyncState: { DEFAULT_STATE_BRANCH: 'gitgov-state' },
-  Crypto: {
-    ecdhEncrypt: (...args: unknown[]) => mockEcdhEncrypt(...args),
-    ecdhDecrypt: (...args: unknown[]) => mockEcdhDecrypt(...args),
-    generateEphemeralKeypair: () => mockGenerateEphemeralKeypair(),
-  },
-  parseRemoteUrl: (url: string) => {
-    // Parse the mock URL: https://github.com/testorg/testrepo.git
-    const httpsMatch = url.match(/^https?:\/\/([^/]+)\/(.+?)(?:\.git)?$/);
-    if (httpsMatch?.[1] && httpsMatch[2]) return { providerHost: httpsMatch[1], repoPath: httpsMatch[2] };
-    const sshMatch = url.match(/^[^@]+@([^:]+):(.+?)(?:\.git)?$/);
-    if (sshMatch?.[1] && sshMatch[2]) return { providerHost: sshMatch[1], repoPath: sshMatch[2] };
-    return null;
-  },
+// Mock node:fs/promises for LOGIN-F5 (ActorRecord read/write in reconcileActorRecordAfterDownload)
+const mockFsReadFile = vi.fn().mockRejectedValue(new Error('ENOENT'));
+const mockFsWriteFile = vi.fn().mockResolvedValue(undefined);
+vi.mock('node:fs/promises', () => ({
+  readFile: (...args: unknown[]) => mockFsReadFile(...args),
+  writeFile: (...args: unknown[]) => mockFsWriteFile(...args),
 }));
+
+// REAL @gitgov/core for the record-crypto chain (derivePublicKey, signPayload,
+// reconcileActorRecord, calculatePayloadChecksum) so LOGIN-F5 exercises the ACTUAL core
+// primitive — no mock theatre. Only ECDH (X25519, heavy) and parseRemoteUrl (would run
+// `ssh -G`) are stubbed.
+vi.mock('@gitgov/core', async (importActual) => {
+  const actual = await importActual<typeof import('@gitgov/core')>();
+  return {
+    ...actual,
+    SyncState: { DEFAULT_STATE_BRANCH: 'gitgov-state' },
+    DEFAULT_ID_ENCODER: { encode: (id: string) => id.replace(/:/g, '_'), decode: (s: string) => s.replace(/_/g, ':') },
+    Crypto: {
+      ...actual.Crypto,
+      ecdhEncrypt: (...args: unknown[]) => mockEcdhEncrypt(...args),
+      ecdhDecrypt: (...args: unknown[]) => mockEcdhDecrypt(...args),
+      generateEphemeralKeypair: () => mockGenerateEphemeralKeypair(),
+    },
+    parseRemoteUrl: (url: string) => {
+      const httpsMatch = url.match(/^https?:\/\/([^/]+)\/(.+?)(?:\.git)?$/);
+      if (httpsMatch?.[1] && httpsMatch[2]) return { providerHost: httpsMatch[1], repoPath: httpsMatch[2] };
+      const sshMatch = url.match(/^[^@]+@([^:]+):(.+?)(?:\.git)?$/);
+      if (sshMatch?.[1] && sshMatch[2]) return { providerHost: sshMatch[1], repoPath: sshMatch[2] };
+      return null;
+    },
+  };
+});
 
 // vi.hoisted ensures variables exist when vi.mock factory runs (hoisted to top)
 const {
@@ -525,21 +542,151 @@ describe('LoginCommand v2', () => {
     });
   });
 
-  // ==================== §4.13 Key Succession Response (LOGIN-N1) ====================
+  // ==================== §4.6b Force-Cloud ActorRecord Reconciliation (LOGIN-F5) ====================
 
-  describe('4.13. Key Succession Response (LOGIN-N1)', () => {
-    it('[LOGIN-N1] should update session to newActorId on succession response', async () => {
+  describe('4.6b. Force-Cloud ActorRecord Reconciliation (LOGIN-F5)', () => {
+    const mockEnvelope = { ephemeralPublicKey: 'ep', ciphertext: 'ct', iv: 'iv', authTag: 'at' };
+    let real: typeof import('@gitgov/core');
+    let cloudKeys: { publicKey: string; privateKey: string };
+
+    beforeEach(async () => {
+      // Real canonical keypair "downloaded" from SaaS — drives the REAL reconcileActorRecord
+      real = await vi.importActual<typeof import('@gitgov/core')>('@gitgov/core');
+      cloudKeys = await real.Crypto.generateKeys();
+      // login does decryptedBuffer.toString('base64') to recover the private key, so the
+      // stubbed decrypt must return the RAW bytes that round-trip back to cloudKeys.privateKey
+      mockEcdhDecrypt.mockResolvedValue(Buffer.from(cloudKeys.privateKey, 'base64'));
+    });
+
+    afterEach(() => {
+      // Restore the default so later describes (e.g. LOGIN-G2) are not polluted
+      mockEcdhDecrypt.mockResolvedValue(Buffer.from('decrypted-private-key'));
+    });
+
+    // Typed via the core GitGovActorRecord type (the actor payload factory is not in the
+    // public barrel) so TS validates the shape — no untyped hand-rolled JSON. The OLD key
+    // here is a placeholder; the real reconcileActorRecord overwrites it with cloudKeys.
+    function localRecord(payloadOverrides: Partial<GitGovActorRecord['payload']> = {}): GitGovActorRecord {
+      return {
+        header: { version: '1.1', type: 'actor', payloadChecksum: 'old-checksum', signatures: [{ keyId: 'human:camilo', role: 'author', notes: 'genesis', signature: 'old-sig', timestamp: 1 }] },
+        payload: { id: 'human:camilo', type: 'human', displayName: 'Camilo', publicKey: 'old-local-pub-key', roles: ['admin'], status: 'active', ...payloadOverrides },
+      };
+    }
+
+    function forceCloudDeps() {
+      return createMockDeps({
+        fetchSaas: vi.fn().mockImplementation(async (url: string) => {
+          if (url.includes('identity.keyStatus')) return { ok: true, json: async () => trpcWrap(keyStatusWith(cloudKeys.publicKey)) };
+          if (url.includes('identity.getKey')) return { ok: true, json: async () => trpcWrap({ publicKey: cloudKeys.publicKey, privateKeyEnvelope: mockEnvelope }) };
+          return { ok: false, json: async () => ({}) };
+        }),
+      });
+    }
+
+    it('[LOGIN-F5] should update local ActorRecord publicKey and session after force-cloud download', async () => {
+      mockHasPrivateKey.mockResolvedValue(true);
+      mockGetPublicKey.mockResolvedValue('old-local-pub-key');
+      mockFsReadFile.mockResolvedValue(JSON.stringify(localRecord()));
+      mockFsWriteFile.mockResolvedValue(undefined);
+
+      const cmd = new LoginCommand(forceCloudDeps());
+      await cmd.executeLogin({ ...defaultOptions, forceCloud: true });
+
+      const writeCall = mockFsWriteFile.mock.calls.find((c: unknown[]) => (c[0] as string).includes('human_camilo.json'));
+      expect(writeCall).toBeDefined();
+      const written = JSON.parse(writeCall![1] as string);
+      // overwritten to the canonical key + re-signed by the REAL primitive (signature verifies)
+      expect(written.payload.publicKey).toBe(cloudKeys.publicKey);
+      const valid = await real.Crypto.verifySignatures(written, async () => cloudKeys.publicKey);
+      expect(valid).toBe(true);
+    });
+
+    it('[LOGIN-F5] should skip ActorRecord reconciliation when no local record exists (cloud-first)', async () => {
+      mockHasPrivateKey.mockResolvedValue(true);
+      mockGetPublicKey.mockResolvedValue('old-local-pub-key');
+      mockFsReadFile.mockRejectedValue(new Error('ENOENT'));
+      mockFsWriteFile.mockClear();
+
+      const cmd = new LoginCommand(forceCloudDeps());
+      await cmd.executeLogin({ ...defaultOptions, forceCloud: true });
+
+      expect(mockSetPrivateKey).toHaveBeenCalled();
+      // ActorRecord NOT written (no local file to reconcile)
+      expect(mockFsWriteFile).not.toHaveBeenCalled();
+    });
+
+    it('[LOGIN-F5] should reset session actorId from phantom -v2 to base actorId', async () => {
+      mockHasPrivateKey.mockResolvedValue(true);
+      mockGetPublicKey.mockResolvedValue('old-pub');
+      mockLoadSession.mockResolvedValue({
+        lastSession: { actorId: 'human:camilo-v2', timestamp: '2026-01-01' },
+        cloud: { sessionToken: 'tok' },
+      });
+      mockFsReadFile.mockResolvedValue(JSON.stringify(localRecord()));
+      mockFsWriteFile.mockResolvedValue(undefined);
+
+      const cmd = new LoginCommand(forceCloudDeps());
+      await cmd.executeLogin({ ...defaultOptions, forceCloud: true });
+
+      expect(mockSetLastSession).toHaveBeenCalledWith('human:camilo', expect.any(String));
+    });
+
+    it('[LOGIN-F5] should reset revoked status and clear supersededBy on force-cloud reconciliation', async () => {
+      mockHasPrivateKey.mockResolvedValue(true);
+      mockGetPublicKey.mockResolvedValue('old-pub');
+      // ActorRecord was previously revoked by a prior --force-local succession
+      mockFsReadFile.mockResolvedValue(JSON.stringify(localRecord({ status: 'revoked', supersededBy: 'human:camilo-v2' })));
+      mockFsWriteFile.mockResolvedValue(undefined);
+
+      const cmd = new LoginCommand(forceCloudDeps());
+      await cmd.executeLogin({ ...defaultOptions, forceCloud: true });
+
+      // The REAL primitive healed the record (the divergence the worker overwrite omitted)
+      const writeCall = mockFsWriteFile.mock.calls.find(
+        (c: unknown[]) => (c[0] as string).includes('human_camilo.json')
+      );
+      expect(writeCall).toBeDefined();
+      const writtenRecord = JSON.parse(writeCall![1] as string);
+      expect(writtenRecord.payload.status).toBe('active');
+      expect(writtenRecord.payload.supersededBy).toBeUndefined();
+      expect(writtenRecord.payload.publicKey).toBe(cloudKeys.publicKey);
+    });
+
+    it('[LOGIN-F5] should commit the reconciled record in the worktree before pushing', async () => {
+      mockHasPrivateKey.mockResolvedValue(true);
+      mockGetPublicKey.mockResolvedValue('old-local-pub-key');
+      mockFsReadFile.mockResolvedValue(JSON.stringify(localRecord()));
+      mockFsWriteFile.mockResolvedValue(undefined);
+
+      const { execSync } = await import('child_process');
+      const mockExecSync = execSync as Mock<typeof execSync>;
+      mockExecSync.mockClear();
+
+      const cmd = new LoginCommand(forceCloudDeps());
+      await cmd.executeLogin({ ...defaultOptions, forceCloud: true });
+
+      // [LOGIN-F5](f2) A push without a commit is a no-op — the reconciled record
+      // must be git add + committed in the worktree so (h) actually moves the remote
+      const calls = mockExecSync.mock.calls.map((c) => String(c[0]));
+      expect(calls.some((c) => c.startsWith('git add') && c.includes('human_camilo.json'))).toBe(true);
+      expect(calls.some((c) => c.includes('commit') && c.includes('reconcile actor key'))).toBe(true);
+    });
+  });
+
+  // ==================== §4.13 Key Overwrite Response (force-local, no succession) ====================
+
+  describe('4.13. Key Overwrite Response (force-local)', () => {
+    it('[LOGIN-F1] should keep same actorId on force-local (no succession, no -v2)', async () => {
       mockHasPrivateKey.mockResolvedValue(true);
       mockGetPrivateKey.mockResolvedValue('local-private-key');
       mockGetPublicKey.mockResolvedValue('local-public-key');
 
-      const successionResponse: SyncKeyResponse = {
+      const overwriteResponse: SyncKeyResponse = {
         success: true,
-        actorId: 'human:camilo-v2',
+        actorId: 'human:camilo',
         mode: 'full',
-        rotated: true,
-        newActorId: 'human:camilo-v2',
-        oldActorId: 'human:camilo',
+        verified: false,
+        projectInitialized: true,
       };
 
       const deps = createMockDeps({
@@ -548,7 +695,7 @@ describe('LoginCommand v2', () => {
             return { ok: true, json: async () => trpcWrap(keyStatusWith('different-saas-key')) };
           }
           if (url.includes('identity.syncKey')) {
-            return { ok: true, json: async () => trpcWrap(successionResponse) };
+            return { ok: true, json: async () => trpcWrap(overwriteResponse) };
           }
           return { ok: false, json: async () => ({}) };
         }),
@@ -557,16 +704,9 @@ describe('LoginCommand v2', () => {
       const cmd = new LoginCommand(deps);
       await cmd.executeLogin({ ...defaultOptions, forceLocal: true });
 
-      // Session should be updated to the NEW actorId
-      expect(mockSetLastSession).toHaveBeenCalledWith(
-        'human:camilo-v2',
-        expect.any(String),
-      );
-
-      // Output should mention the identity change
       const output = mockConsoleLog.mock.calls.map(c => c[0]).join('\n');
-      expect(output).toContain('human:camilo-v2');
-      expect(output).toContain('succession');
+      expect(output).toContain('canonical');
+      expect(output).not.toContain('-v2');
     });
   });
 

@@ -149,6 +149,7 @@ export { generateTaskId, generateExecutionId, generateFeedbackId, generateCycleI
 // Crypto primitives (protocol-level signing + checksum)
 export { buildSignatureDigest, generateKeys } from "./crypto/signatures";
 export { calculatePayloadChecksum } from "./crypto/checksum";
+export { DEFAULT_ID_ENCODER } from "./record_store/index";
 
 // Git direct exports (interface + types + errors)
 export type { IGitModule, ExecOptions, ExecResult, GetCommitHistoryOptions, CommitInfo, ChangedFile, CommitAuthor, GitRemoteRef } from "./git/index";
@@ -202,7 +203,7 @@ export { RecordSigner } from "./record_signer/index";
 export type { RecordSignerDependencies } from "./record_signer/index";
 
 // IdentityModule — domain facade for actor lifecycle (identity_module_v2 Cycle 2)
-export { IdentityModule } from "./identity/index";
+export { IdentityModule, reconcileActorRecord } from "./identity/index";
 export type { IIdentityModule, IdentityModuleDependencies } from "./identity/index";
 
 // getCurrentActor — session resolution utility (identity_module_v2 Cycle 2)

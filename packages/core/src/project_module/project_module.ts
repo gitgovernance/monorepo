@@ -1,5 +1,7 @@
 import type { ProjectModuleDeps, ProjectInitOptions, ProjectInitResult, AddActorInput, AddActorResult } from './project_module.types';
 import { AddActorError } from './project_module.types';
+// [PROJ-B6] Creation-time engine validation (agent_runner EARS-M1)
+import { validateAgentEngine } from '../agent_runner/engine_validator';
 
 // [PROJ-C2b] Deterministic root cycle ID. The root cycle is unique per project, so its ID
 // must be stable across inits (not Date.now()). Two inits of the same repo then produce a
@@ -95,9 +97,22 @@ export class ProjectModule {
       await this.deps.initializer.initializeSession(humanResult.actorId);
 
       // [PROJ-B4] Register default agents via AgentAdapter
+      const agentWarnings: string[] = [];
       if (this.deps.agentAdapter && this.deps.defaultAgents?.length) {
         for (const agentConfig of this.deps.defaultAgents) {
           try {
+            // [PROJ-B6] Creation-time engine validation (EARS-M1): the agent is still
+            // registered (valid declaration) but the user learns NOW that it won't run —
+            // not 3 steps later at audit time. Non-fatal. Resolution anchors at cwd
+            // (where init runs) — same anchor the runner uses for npm packages.
+            try {
+              const validation = await validateAgentEngine(agentConfig.engine, process.cwd());
+              if (!validation.resolvable) {
+                agentWarnings.push(`${agentConfig.agentId}: registered but not runnable — ${validation.reason}`);
+              }
+            } catch {
+              // Validation itself must never block registration
+            }
             // [PROJ-E3] Product agent already has ActorRecord — skip
             // [PROJ-E1] Specialist agents need their own ActorRecord before AgentRecord
             if (agentConfig.agentId !== productAgentResult.actorId) {
@@ -159,6 +174,8 @@ export class ProjectModule {
         cycleId: rootCycle.id,
       };
       if (finalized) result.commitSha = finalized;
+      // [PROJ-B6] Surface non-runnable agent warnings to the caller (CLI prints them)
+      if (agentWarnings.length > 0) result.agentWarnings = agentWarnings;
       return result;
     } catch (err) {
       // [PROJ-D1] [PROJ-D3] [PROJ-D4] Rollback via initializer

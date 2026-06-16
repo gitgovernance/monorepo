@@ -16,9 +16,10 @@
 
 import { Command } from 'commander';
 import { BaseCommand } from '../../base/base-command';
-import { Crypto, parseRemoteUrl, SyncState } from '@gitgov/core';
+import { Crypto, parseRemoteUrl, SyncState, reconcileActorRecord } from '@gitgov/core';
 import type { IKeyProvider } from '@gitgov/core';
 import type { GitRemoteRef } from '@gitgov/core';
+import type { GitGovActorRecord } from '@gitgov/core';
 import type {
   LoginCommandOptions,
   LoginDeps,
@@ -362,24 +363,10 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
 
       // [LOGIN-D2 / LOGIN-F1..F4] Keys differ → conflict resolution
       if (localPublicKey && saasPublicKey && localPublicKey !== saasPublicKey) {
-        // [LOGIN-F1] --force-local: upload local key → triggers succession on SaaS
+        // [LOGIN-F1] --force-local: upload local key to SaaS (SaaS overwrites under same actorId,
+        // PKP-G2 archives the old key automatically — no succession, no -v2)
         if (options.forceLocal) {
-          const syncResult = await this.uploadKeyToSaas(actorId, saasUrl, token, repo, keyStatus.ecdhPublicKey);
-
-          // [LOGIN-N1] [IKS-SUC8] Handle succession response — SaaS created a new versioned actor
-          if (syncResult.rotated && syncResult.newActorId) {
-            const sessionManager = await this.dependencyService.getSessionManager();
-            await sessionManager.setLastSession(syncResult.newActorId, new Date().toISOString());
-            console.log(`Identity updated: ${actorId} → ${syncResult.newActorId}`);
-            this.handleSuccess(
-              { loggedIn: true, user: syncResult.newActorId, keySynced: true, rotated: true, oldActorId: actorId },
-              options,
-              `Logged in as ${syncResult.newActorId}\nKey conflict resolved via succession (local key uploaded)`
-            );
-            return;
-          }
-
-          // Non-succession upload (legacy path or no ActorRecord in projection)
+          await this.uploadKeyToSaas(actorId, saasUrl, token, repo, keyStatus.ecdhPublicKey);
           console.log('Previous cloud key archived. Local key is now canonical.');
           this.handleSuccess(
             { loggedIn: true, user: actorId, keySynced: true },
@@ -648,5 +635,92 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
     const keyProvider = await this.getLocalKeyProvider();
     await keyProvider.setPrivateKey(actorId, decryptedKey.toString('base64'));
     console.log('Key downloaded from SaaS');
+
+    // [LOGIN-F5] Reconcile local ActorRecord + session with the downloaded key.
+    // The ActorRecord's publicKey may differ from the downloaded key (the whole point of
+    // force-cloud). Update it so the repo's committed identity matches the org canonical key.
+    await this.reconcileActorRecordAfterDownload(actorId, decryptedKey.toString('base64'));
+  }
+
+  /**
+   * [LOGIN-F5] After downloading a key from SaaS (force-cloud or case b), reconcile:
+   * (a) Update the local ActorRecord's publicKey to match the downloaded key
+   * (b) Re-sign the record (self-signed, genesis pattern — NOT succession)
+   * (c) Fix .session.json if it references a phantom -v2 actorId
+   * (d) Push gitgov-state (best-effort)
+   *
+   * If the ActorRecord doesn't exist locally (cloud-first flow), skip silently.
+   */
+  private async reconcileActorRecordAfterDownload(actorId: string, privateKeyBase64: string): Promise<void> {
+    try {
+      const { findProjectRoot, getWorktreeBasePath } = await import('@gitgov/core/fs');
+      const path = await import('path');
+      const fs = await import('node:fs/promises');
+
+      const { DEFAULT_ID_ENCODER } = await import('@gitgov/core');
+      const repoRoot = findProjectRoot(process.cwd());
+      if (!repoRoot) return;
+      const worktreePath = getWorktreeBasePath(repoRoot);
+      const encodedId = DEFAULT_ID_ENCODER.encode(actorId);
+      const actorPath = path.join(worktreePath, '.gitgov', 'actors', `${encodedId}.json`);
+
+      // [LOGIN-F5](b) Check if ActorRecord exists locally
+      let rawContent: string;
+      try {
+        rawContent = await fs.readFile(actorPath, 'utf-8');
+      } catch {
+        return; // No local ActorRecord — cloud-first flow, skip
+      }
+
+      const record = JSON.parse(rawContent) as GitGovActorRecord;
+
+      // [LOGIN-F5](a) Derive public key from downloaded private key
+      const newPublicKey = Crypto.derivePublicKey(privateKeyBase64);
+
+      // [LOGIN-F5] Delegate the overwrite (pubkey + heal revoked + re-sign genesis) to the
+      // shared core primitive — the SAME mutation the worker's sync_org_keys uses. This
+      // replaces the hand-rolled block that diverged from the worker. null → already
+      // canonical → nothing to reconcile.
+      const reconciled = reconcileActorRecord(record, actorId, {
+        publicKey: newPublicKey,
+        privateKey: privateKeyBase64,
+      });
+      if (!reconciled) {
+        return;
+      }
+
+      // [LOGIN-F5](f) Write the reconciled record
+      await fs.writeFile(actorPath, JSON.stringify(reconciled, null, 2), 'utf-8');
+
+      // [LOGIN-F5](g) Fix phantom -v2 in session
+      const sessionManager = await this.dependencyService.getSessionManager();
+      const session = await sessionManager.loadSession();
+      if (session?.lastSession?.actorId && session.lastSession.actorId !== actorId) {
+        const currentSessionActor = session.lastSession.actorId;
+        if (currentSessionActor.includes('-v') && currentSessionActor.startsWith(actorId.split('-v')[0]!)) {
+          await sessionManager.setLastSession(actorId, new Date().toISOString());
+        }
+      }
+
+      // [LOGIN-F5](f2) Commit the reconciled record in the WORKTREE before pushing.
+      // A push without a commit is a no-op: the remote keeps the stale key and
+      // "1 command = full recovery" (P0/KS12) breaks — the worktree converges but
+      // the committed identity on gitgov-state does not. Best-effort, bot identity.
+      try {
+        const { execSync } = await import('child_process');
+        const relativeActorPath = path.join('.gitgov', 'actors', `${encodedId}.json`);
+        execSync(`git add "${relativeActorPath}"`, { cwd: worktreePath, stdio: 'pipe', timeout: 5000 });
+        execSync('git -c user.name=gitgov -c user.email=bot@gitgov.dev commit -m "gitgov: reconcile actor key (force-cloud)"', {
+          cwd: worktreePath, stdio: 'pipe', timeout: 5000,
+        });
+      } catch {
+        // Nothing to commit (already committed) or git unavailable — push below is best-effort anyway
+      }
+
+      // [LOGIN-F5](h) Push gitgov-state (best-effort, reuses LOGIN-L1)
+      await this.pushGitgovState();
+    } catch (err) {
+      console.warn('⚠️  ActorRecord reconciliation failed:', err instanceof Error ? err.message : String(err));
+    }
   }
 }

@@ -563,11 +563,13 @@ export class DependencyInjectionService {
       });
 
       // Create FsLintModule (with I/O) wrapping the pure module
+      // [EARS-L3] keyProvider enables identity coherence checks in strict mode
       const fsLint = new FsLintModule({
         lintModule: pureLintModule,
         stores: lintStores,
         projector,
         projectRoot: this.projectRoot!,
+        ...(this.keyProvider ? { keyProvider: this.keyProvider } : {}),
       });
       this.lintModule = fsLint;
 

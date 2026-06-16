@@ -4,6 +4,7 @@
 export { GithubSyncStateModule, GitHubRecordStore, GitHubGitModule, GitHubFileLister, GitHubConfigStore } from '@gitgov/core/github';
 export type { GithubSyncStateDependencies } from '@gitgov/core/github';
 import { GitHubGitModule, GitHubFileLister, GitHubRecordStore as GHRecordStore, GitHubConfigStore } from '@gitgov/core/github';
+import type { Git, IdEncoder } from '@gitgov/core';
 import type { Octokit } from '@octokit/rest';
 
 export const GITHUB_WEBHOOK_SECRET = process.env['GITHUB_WEBHOOK_SECRET'] ?? '';
@@ -11,16 +12,20 @@ export const GITHUB_WEBHOOK_SECRET = process.env['GITHUB_WEBHOOK_SECRET'] ?? '';
 export function createGitHubCoreBackend(octokit: Octokit): Record<string, unknown> {
   return {
     createGitModule: async (opts: { owner: string; repo: string; defaultBranch?: string }) =>
-      new GitHubGitModule({ owner: opts.owner, repo: opts.repo, defaultBranch: opts.defaultBranch }, octokit),
+      new GitHubGitModule({ owner: opts.owner, repo: opts.repo, defaultBranch: opts.defaultBranch ?? 'gitgov-state' }, octokit),
     createFileLister: async (opts: { owner: string; repo: string; ref?: string }) =>
-      new GitHubFileLister({ owner: opts.owner, repo: opts.repo, ref: opts.ref }, octokit),
-    createRecordStore: async <V>(opts: { owner: string; repo: string; ref?: string; basePath: string; idEncoder?: unknown }) =>
+      new GitHubFileLister({ owner: opts.owner, repo: opts.repo, ref: opts.ref ?? 'gitgov-state' }, octokit),
+    createRecordStore: async <V>(opts: { owner: string; repo: string; ref?: string; basePath: string; idEncoder?: IdEncoder; sharedGitModule?: Git.IGitModule }) =>
+      // Thread sharedGitModule (3rd ctor arg) so putDeferred can stage into the shared
+      // buffer. Without it, putDeferred throws "requires IGitModule" and atomic init
+      // fails silently inside the worker (AGENTS.md §Patrones #12 — debt cleared s65).
       new GHRecordStore<V>(
-        { owner: opts.owner, repo: opts.repo, ref: opts.ref, basePath: opts.basePath, ...(opts.idEncoder ? { idEncoder: opts.idEncoder as any } : {}) },
+        { owner: opts.owner, repo: opts.repo, basePath: opts.basePath, ref: opts.ref ?? 'gitgov-state', ...(opts.idEncoder ? { idEncoder: opts.idEncoder } : {}) },
         octokit,
+        opts.sharedGitModule,
       ),
     createConfigStore: async (opts: { owner: string; repo: string; ref?: string }) =>
-      new GitHubConfigStore({ owner: opts.owner, repo: opts.repo, ref: opts.ref }, octokit),
+      new GitHubConfigStore({ owner: opts.owner, repo: opts.repo, ref: opts.ref ?? 'gitgov-state' }, octokit),
     verifyInstallation: async () => true,
     findInstallationForOrg: async () => null,
     isRepoInInstallation: async () => false,

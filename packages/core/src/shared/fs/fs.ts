@@ -68,6 +68,9 @@ export { FsWatcherStateModule } from '../../watcher_state/fs';
 // AgentRunner (filesystem-based agent execution)
 export { FsAgentRunner, createAgentRunner } from '../../agent_runner/fs';
 export type { FsAgentRunnerDependencies } from '../../agent_runner/fs';
+// [EARS-M1] Creation-time engine validation (agent new fail-fast EARS-E9, init warnings PROJ-B6)
+export { validateAgentEngine } from '../../agent_runner/engine_validator';
+export type { EngineValidationResult } from '../../agent_runner/engine_validator';
 
 // RecordProjection (filesystem-based index.json persistence)
 export { FsRecordProjection } from '../../record_projection/fs';

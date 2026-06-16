@@ -75,6 +75,22 @@ export interface ILintModule {
   ): LintResult[];
 
   /**
+   * [EARS-L2] Strict Three Gates validation for a single record:
+   * recomputes payloadChecksum and verifies Ed25519 signatures cryptographically.
+   * Returns granular LintResults (does not throw on first failure).
+   *
+   * @param record - The record to verify
+   * @param context - Context with recordId and entityType
+   * @param getActorPublicKey - Resolver for signer public keys
+   * @returns Array of lint results (empty when both gates pass)
+   */
+  lintRecordStrict(
+    record: GitGovRecord,
+    context: LintRecordContext,
+    getActorPublicKey: (keyId: string) => Promise<string | null>
+  ): Promise<LintResult[]>;
+
+  /**
    * Applies fixes to a record and returns the fixed version.
    * Does NOT write to disk - returns modified object.
    *
@@ -196,6 +212,13 @@ export interface LintOptions {
   validateTimestamps?: boolean;
 
   /**
+   * [EARS-L2] Modo strict: Three Gates completo (default: false)
+   * Recomputa payloadChecksum y verifica firmas Ed25519 criptográficamente.
+   * Sin strict, validateSignatures solo verifica estructura/existencia (ver disclaimer EARS-L1).
+   */
+  strict?: boolean;
+
+  /**
    * Modo fail-fast o acumular todos los errores (default: false)
    * Si true, detiene al primer error fatal.
    */
@@ -232,6 +255,12 @@ export interface LintReport {
     options: LintOptions;
     /** Versión del módulo lint */
     version: string;
+    /**
+     * [EARS-L1] Disclaimer cuando validateSignatures=true sin strict:
+     * la "validación de firmas" default solo verifica estructura/existencia,
+     * NO criptografía. Presente para que el caller (CLI) lo muestre.
+     */
+    disclaimer?: string;
   };
 }
 
@@ -305,7 +334,9 @@ export type ValidatorType =
   | "TEMPORAL_CONSISTENCY"
   | "ACTOR_RESOLUTION"
   | "SOFT_DELETE_DETECTION"
-  | "SCHEMA_VERSION_MISMATCH";
+  | "SCHEMA_VERSION_MISMATCH"
+  // [EARS-L3] Coherencia de identidad (strict): publicKey vs KeyProvider local, session fantasma
+  | "IDENTITY_COHERENCE";
 
 /**
  * Contexto de ejecución para validación de un record individual.

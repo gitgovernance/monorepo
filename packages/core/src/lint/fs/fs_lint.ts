@@ -75,6 +75,8 @@ import type {
 } from "../../record_types";
 import { isTaskPayload, isCyclePayload } from "../../record_types/type_guards";
 import { extractRecordIdFromPath, getEntityTypeFromPath, inferEntityTypeFromId } from "../../utils/id_parser";
+import type { KeyProvider } from "../../key_provider/key_provider";
+import { SIGNATURES_NOT_VERIFIED_DISCLAIMER } from "../lint";
 import { chunkArray } from "../../utils/array_utils";
 import { createLogger } from "../../logger";
 import { calculatePayloadChecksum } from "../../crypto/checksum";
@@ -100,6 +102,8 @@ export class FsLintModule implements IFsLintModule {
   private readonly projectRoot: string;
   private readonly lintModule: ILintModule;
   private readonly fileSystem: FileSystem;
+  // [EARS-L3] Optional local KeyProvider for identity coherence checks in strict mode
+  private readonly keyProvider: KeyProvider | null;
   private lastBackupPath: string | null = null;
 
   /**
@@ -116,6 +120,7 @@ export class FsLintModule implements IFsLintModule {
     }
     this.projectRoot = dependencies.projectRoot;
     this.lintModule = dependencies.lintModule;
+    this.keyProvider = dependencies.keyProvider ?? null;
     // Note: projector is passed to LintModule, not used directly here
 
     // FileSystem with fallback to Node.js fs
@@ -160,6 +165,33 @@ export class FsLintModule implements IFsLintModule {
   }
 
   /**
+   * [EARS-L2] Delegates to LintModule.lintRecordStrict() for Three Gates verification.
+   */
+  lintRecordStrict(
+    record: GitGovRecord,
+    context: LintRecordContext,
+    getActorPublicKey: (keyId: string) => Promise<string | null>
+  ): Promise<LintResult[]> {
+    return this.lintModule.lintRecordStrict(record, context, getActorPublicKey);
+  }
+
+  /**
+   * [EARS-L2] File-backed public key resolver: reads the signer's ActorRecord
+   * from .gitgov/actors/ and returns its publicKey. Used by strict mode —
+   * FsLintModule has no stores, it reads files directly.
+   */
+  private resolveActorPublicKeyFromFile = async (keyId: string): Promise<string | null> => {
+    try {
+      const actorPath = this.getFilePath(keyId, 'actor');
+      const content = await this.fileSystem.readFile(actorPath, 'utf-8');
+      const raw = JSON.parse(content) as { payload?: { publicKey?: string } };
+      return raw.payload?.publicKey ?? null;
+    } catch {
+      return null;
+    }
+  };
+
+  /**
    * Delegates to LintModule.fixRecord() for pure fix.
    */
   fixRecord(record: GitGovRecord, results: LintResult[], options: FixRecordOptions): GitGovRecord {
@@ -185,6 +217,7 @@ export class FsLintModule implements IFsLintModule {
       validateSignatures: options?.validateSignatures ?? true,
       validateTimestamps: options?.validateTimestamps ?? true,
       validateFileNaming: options?.validateFileNaming ?? true,
+      strict: options?.strict ?? false,
       failFast: options?.failFast ?? false,
       concurrent: options?.concurrent ?? true,
       concurrencyLimit: options?.concurrencyLimit ?? 10
@@ -228,6 +261,12 @@ export class FsLintModule implements IFsLintModule {
         }
       }
 
+      // [EARS-L3] Strict mode: identity coherence checks (KeyProvider + session)
+      if (opts.strict) {
+        const coherenceResults = await this.validateIdentityCoherence(recordsWithTypes);
+        results.push(...coherenceResults);
+      }
+
       const executionTime = Date.now() - startTime;
       const errors = results.filter(r => r.level === "error").length;
       const warnings = results.filter(r => r.level === "warning").length;
@@ -238,7 +277,15 @@ export class FsLintModule implements IFsLintModule {
       return {
         summary: { filesChecked: recordsWithTypes.length, errors, warnings, fixable, executionTime },
         results,
-        metadata: { timestamp: new Date().toISOString(), options: opts, version: "1.0.0" }
+        metadata: {
+          timestamp: new Date().toISOString(),
+          options: opts,
+          version: "1.0.0",
+          // [EARS-L1] Honest output: without strict, "validateSignatures" never verifies crypto
+          ...(opts.validateSignatures && !opts.strict
+            ? { disclaimer: SIGNATURES_NOT_VERIFIED_DISCLAIMER }
+            : {})
+        }
       };
     } finally {
       console.warn = originalWarn;
@@ -444,6 +491,16 @@ export class FsLintModule implements IFsLintModule {
       });
       results.push(...lintResults);
 
+      // [EARS-L2] Strict mode: Three Gates with file-backed public key resolution
+      if (options.strict) {
+        const strictResults = await this.lintModule.lintRecordStrict(
+          record,
+          { recordId, entityType, filePath },
+          this.resolveActorPublicKeyFromFile
+        );
+        results.push(...strictResults);
+      }
+
       // [EARS-D2] Reference validation via LintModule
       if (options.validateReferences) {
         const refResults = this.lintModule.lintRecordReferences(record, {
@@ -594,6 +651,88 @@ export class FsLintModule implements IFsLintModule {
    * Gets file path for a record.
    * @private
    */
+  /**
+   * [EARS-L3] Identity coherence checks (strict mode only):
+   * (a) For each active ActorRecord whose private key IS in the local KeyProvider:
+   *     the derived publicKey must match the record's publicKey. Records of OTHER
+   *     actors (collaborators without local private keys) are NOT errors.
+   * (b) `.session.json` lastSession.actorId must reference an existing ActorRecord
+   *     (phantom -v2 detection).
+   * Note: ">1 active actor with same recordId" (spec clause) is unrepresentable in
+   * the FS store — one recordId maps to exactly one file — so it is not checked here.
+   * Skips (a) gracefully when no keyProvider was injected.
+   */
+  private async validateIdentityCoherence(
+    recordsWithTypes: Array<{ id: string; type: GitGovRecordType }>
+  ): Promise<LintResult[]> {
+    const results: LintResult[] = [];
+
+    // (a) publicKey ↔ local private key coherence (requires keyProvider)
+    if (this.keyProvider) {
+      const actorIds = recordsWithTypes.filter(r => r.type === 'actor').map(r => r.id);
+      for (const actorId of actorIds) {
+        try {
+          const hasKey = await this.keyProvider.hasPrivateKey(actorId);
+          if (!hasKey) continue; // not our actor — no local key to compare
+
+          const derivedPublicKey = await this.keyProvider.getPublicKey(actorId);
+          if (!derivedPublicKey) continue;
+
+          const actorPath = this.getFilePath(actorId, 'actor');
+          const content = await this.fileSystem.readFile(actorPath, 'utf-8');
+          const raw = JSON.parse(content) as { payload?: { publicKey?: string; status?: string } };
+          if (raw.payload?.status === 'revoked') continue; // revoked records are expected to diverge
+
+          if (raw.payload?.publicKey && raw.payload.publicKey !== derivedPublicKey) {
+            results.push({
+              level: "error",
+              filePath: actorPath,
+              validator: "IDENTITY_COHERENCE",
+              message: `ActorRecord publicKey does not match the local private key for '${actorId}' (KEY_MISMATCH) — run 'gitgov login --force-cloud' or '--force-local' to reconcile`,
+              entity: { type: 'actor', id: actorId },
+              fixable: false,
+              context: {
+                field: "payload.publicKey",
+                actual: raw.payload.publicKey,
+                expected: derivedPublicKey
+              }
+            });
+          }
+        } catch {
+          // Unreadable actor file — already reported by the validation loop
+        }
+      }
+    }
+
+    // (b) Session phantom: lastSession.actorId must reference an existing ActorRecord
+    try {
+      const sessionPath = join(this.projectRoot, ".gitgov", ".session.json");
+      if (await this.fileSystem.exists(sessionPath)) {
+        const sessionContent = await this.fileSystem.readFile(sessionPath, 'utf-8');
+        const session = JSON.parse(sessionContent) as { lastSession?: { actorId?: string } };
+        const sessionActorId = session.lastSession?.actorId;
+        if (sessionActorId) {
+          const actorPath = this.getFilePath(sessionActorId, 'actor');
+          if (!(await this.fileSystem.exists(actorPath))) {
+            results.push({
+              level: "error",
+              filePath: sessionPath,
+              validator: "IDENTITY_COHERENCE",
+              message: `.session.json references non-existent actor '${sessionActorId}' (phantom session) — run 'gitgov login' to re-establish a valid session`,
+              entity: { type: 'actor', id: sessionActorId },
+              fixable: false,
+              context: { field: "lastSession.actorId", actual: sessionActorId }
+            });
+          }
+        }
+      }
+    } catch {
+      // Unreadable/invalid session file — out of lint scope (session_manager owns that)
+    }
+
+    return results;
+  }
+
   private getFilePath(recordId: string, entityType: GitGovRecordType): string {
     const dirNameMap: Record<GitGovRecordType, string> = {
       'task': 'tasks', 'cycle': 'cycles', 'execution': 'executions',

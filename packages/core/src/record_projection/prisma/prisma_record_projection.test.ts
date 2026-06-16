@@ -902,4 +902,84 @@ describe('PrismaRecordProjection', () => {
       await expect(sink.persist(data, { lastCommitHash: 'sha-1' })).resolves.not.toThrow();
     });
   });
+
+  describe('4.12. Succession Integrity in Projection (EARS-PM-F1)', () => {
+    it('[EARS-PM-F1] should set GitgovActor status to revoked with supersededBy when ActorRecord is revoked', async () => {
+      // A revoked ActorRecord (CLI standalone succession, RFC-02 §6.3) reaches the projector
+      const data = createMockIndexData({
+        actors: [
+          {
+            header: { ...mockHeader, type: 'actor' as const },
+            payload: {
+              id: 'human:test',
+              type: 'human',
+              displayName: 'Test User',
+              publicKey: 'old-pk-base64-44chars-padded-xxxxxxxxxxxx',
+              roles: ['admin'] as [string, ...string[]],
+              status: 'revoked',
+              supersededBy: 'human:test-v2',
+            },
+          },
+        ],
+      } as Partial<IndexData>);
+
+      await sink.persist(data, { lastCommitHash: 'sha-1' });
+
+      const call = (mockClient.gitgovActor.createMany as jest.Mock).mock.calls[0]![0];
+      expect(call.data).toHaveLength(1);
+      const row = call.data[0];
+      expect(row.recordId).toBe('human:test');
+      expect(row.status).toBe('revoked');
+      expect(row.supersededBy).toBe('human:test-v2');
+    });
+
+    it('[EARS-PM-F1] should have at most 1 active GitgovActor per recordId per repo after succession projection', async () => {
+      // Full succession state in git: old actor revoked + successor active.
+      // The delete-all + createMany pattern wipes prior rows, so the projection
+      // always mirrors git state: exactly 1 active row per logical identity.
+      const data = createMockIndexData({
+        actors: [
+          {
+            header: { ...mockHeader, type: 'actor' as const },
+            payload: {
+              id: 'human:test',
+              type: 'human',
+              displayName: 'Test User',
+              publicKey: 'old-pk-base64-44chars-padded-xxxxxxxxxxxx',
+              roles: ['admin'] as [string, ...string[]],
+              status: 'revoked',
+              supersededBy: 'human:test-v2',
+            },
+          },
+          {
+            header: { ...mockHeader, type: 'actor' as const },
+            payload: {
+              id: 'human:test-v2',
+              type: 'human',
+              displayName: 'Test User',
+              publicKey: 'new-pk-base64-44chars-padded-xxxxxxxxxxxx',
+              roles: ['admin'] as [string, ...string[]],
+              status: 'active',
+            },
+          },
+        ],
+      } as Partial<IndexData>);
+
+      await sink.persist(data, { lastCommitHash: 'sha-1' });
+
+      // Old rows wiped before insert (no accumulation of stale active rows)
+      expect(mockClient.gitgovActor.deleteMany).toHaveBeenCalled();
+
+      const call = (mockClient.gitgovActor.createMany as jest.Mock).mock.calls[0]![0];
+      expect(call.data).toHaveLength(2);
+      const activeRows = call.data.filter((r: { status: string | null }) => r.status === 'active');
+      const revokedRows = call.data.filter((r: { status: string | null }) => r.status === 'revoked');
+      // At most 1 active per logical identity: the successor
+      expect(activeRows).toHaveLength(1);
+      expect(activeRows[0].recordId).toBe('human:test-v2');
+      // The old identity is preserved as revoked (audit trail), pointing to its successor
+      expect(revokedRows).toHaveLength(1);
+      expect(revokedRows[0].supersededBy).toBe('human:test-v2');
+    });
+  });
 });

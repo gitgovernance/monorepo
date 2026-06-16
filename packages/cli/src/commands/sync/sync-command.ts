@@ -238,6 +238,11 @@ export class SyncCommand extends BaseCommand {
             }
           });
         }
+
+        // [EARS-C12] Post-pull key detection: if the pulled ActorRecord's publicKey
+        // differs from the local key, the org's canonical key changed (e.g. propagated
+        // by sync_org_keys). Warn and suggest force-cloud. Best-effort — never fails the pull.
+        await this.detectKeyChangeAfterPull(session?.lastSession?.actorId);
       }
 
       // Format output
@@ -446,6 +451,38 @@ export class SyncCommand extends BaseCommand {
   private async checkConflictMarkersViaSyncModule(syncModule: ISyncStateModule): Promise<boolean> {
     const markers = await syncModule.checkConflictMarkers([]);
     return markers.length > 0;
+  }
+
+  /**
+   * [EARS-C12] Post-pull key change detection (best-effort, never throws).
+   * If the pulled ActorRecord's publicKey differs from the key derived from the
+   * local KeyProvider, the org's canonical key changed (propagated by sync_org_keys).
+   * Warn and suggest `gitgov login --force-cloud`. Skips silently when there is no
+   * session actor, no local private key, or the record is unreadable.
+   */
+  private async detectKeyChangeAfterPull(actorId: string | undefined): Promise<void> {
+    if (!actorId) return;
+    try {
+      const keyProvider = this.dependencyService.getKeyProvider();
+      if (!(await keyProvider.hasPrivateKey(actorId))) return; // not our actor locally
+
+      const localPublicKey = await keyProvider.getPublicKey(actorId);
+      if (!localPublicKey) return;
+
+      const identity = await this.dependencyService.getIdentityModule();
+      const actor = await identity.getActor(actorId);
+      if (!actor?.publicKey) return;
+
+      if (actor.publicKey !== localPublicKey) {
+        console.warn(
+          `\n⚠️  Key changed: the ActorRecord for '${actorId}' now has a different publicKey than your local key.\n` +
+          `   The org's canonical key was likely rotated (sync_org_keys).\n` +
+          `   Run 'gitgov login --force-cloud' to adopt the canonical key.`
+        );
+      }
+    } catch {
+      // Best-effort — detection must never fail the pull
+    }
   }
 
   /**

@@ -14,6 +14,7 @@ import type {
   FixReport,
 } from '../lint.types';
 import type { IRecordProjector } from '../../record_projection';
+import type { KeyProvider } from '../../key_provider/key_provider';
 
 /**
  * Public interface for FsLintModule operations (with I/O).
@@ -77,6 +78,12 @@ export interface FsLintModuleDependencies {
 
   /** FileSystem abstraction for I/O (OPTIONAL, default: Node.js fs) */
   fileSystem?: FileSystem;
+
+  /**
+   * [EARS-L3] KeyProvider local para checks de coherencia de identidad en strict mode (OPTIONAL).
+   * Si ausente, los checks de publicKey↔private key se skipean (graceful degradation).
+   */
+  keyProvider?: KeyProvider;
 }
 
 /**
