@@ -59,7 +59,7 @@ export type DetectorName = "regex" | "heuristic" | "llm";
 /**
  * Waiver lifecycle status.
  */
-export type WaiverStatus = "active" | "expired" | "revoked";
+export type WaiverStatus = "pending" | "active" | "expired" | "revoked";
 
 /**
  * Derived finding status (not stored in DB — computed from tracking fields).
