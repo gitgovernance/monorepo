@@ -124,6 +124,7 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
       const backlogAdapter = await this.container.getBacklogAdapter();
       const { actorId } = await this.requireActor(options);
 
+      // [AORCH-C7] Suppress progress text for json/sarif stdout purity
       if (!options.quiet && options.output !== 'json' && options.output !== 'sarif') {
         this.logger.log(`Scanning repository (scope: ${options.scope})...`);
       }
@@ -438,18 +439,19 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
 
   /**
    * Execute waive subcommand
-   * [EARS-E1, EARS-E2, EARS-E3, EARS-E4]
+   * [AORCH-E1, EARS-E2, EARS-E3, EARS-E4]
    */
   async executeWaive(
     fingerprint: string | undefined,
     options: WaiveCommandOptions
   ): Promise<void> {
     try {
-      // [EARS-E3] List waivers
+      // [AORCH-E3] List waivers
       if (options.list) {
         const waiverReader = await this.container.getWaiverReader();
         const waivers = await waiverReader.loadWaivers();
 
+        // [AORCH-E5] Empty waivers message
         if (waivers.length === 0) {
           console.log('\nNo active waivers found.\n');
           return;
@@ -471,7 +473,7 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
         return;
       }
 
-      // [EARS-E2] Require justification for creating waiver
+      // [AORCH-E2] Require justification for creating waiver
       if (!fingerprint) {
         console.error('❌ Fingerprint required. Usage: gitgov audit waive <fingerprint> -j "reason"');
         process.exit(1);
@@ -482,9 +484,28 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
         process.exit(1);
       }
 
-      // [EARS-E1] Create waiver
+      // [AORCH-E1] Create waiver
       const feedbackAdapter = await this.container.getFeedbackAdapter();
       const currentActor = await this.container.getCurrentActor();
+
+      // [WAIV-UI-G2] Resolve ruleId + file + line from local audit-index.json by fingerprint
+      let resolvedRuleId = 'CLI-WAIVER';
+      let resolvedFile = 'unknown';
+      let resolvedLine = 0;
+      try {
+        const projectRoot = findProjectRoot(process.cwd());
+        if (!projectRoot) throw new Error('No project root');
+        const auditProjection = new AuditFsProjection({ basePath: projectRoot });
+        const latest = await auditProjection.readLatest();
+        if (latest?.findings) {
+          const match = latest.findings.find((f: any) => f.fingerprint === fingerprint);
+          if (match) {
+            resolvedRuleId = match.ruleId ?? resolvedRuleId;
+            resolvedFile = match.file ?? resolvedFile;
+            resolvedLine = match.line ?? resolvedLine;
+          }
+        }
+      } catch { /* best-effort — fallback to CLI-WAIVER if no audit-index */ }
 
       await feedbackAdapter.create(
         {
@@ -495,15 +516,15 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
           content: options.justification,
           metadata: {
             fingerprint,
-            ruleId: 'CLI-WAIVER', // TODO: Resolve ruleId from local ExecutionRecord SARIF by fingerprint lookup (Bug 15)
-            file: 'unknown', // TODO: Resolve file/line from local SARIF by fingerprint lookup (Bug 7/EARS-E1)
-            line: 0,
+            ruleId: resolvedRuleId,
+            file: resolvedFile,
+            line: resolvedLine,
           },
         },
         currentActor.id
       );
 
-      // [EARS-E4] Show confirmation
+      // [AORCH-E4] Show confirmation
       console.log('\n✅ Waiver created successfully');
       console.log(`   Fingerprint: ${fingerprint}`);
       console.log(`   Justification: ${options.justification}`);
