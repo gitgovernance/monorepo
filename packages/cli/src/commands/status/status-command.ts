@@ -196,7 +196,7 @@ export class StatusCommand {
 
     if (!isUpToDate) {
       if (!options.quiet) {
-        console.log("🔄 Updating cache for optimal dashboard performance...");
+        console.log("Updating cache...");
       }
       await projector.generateIndex();
     }
@@ -395,8 +395,8 @@ export class StatusCommand {
     if (!syncStatus.available) return;
 
     if (syncStatus.rebaseInProgress) {
-      console.log('🔄 Sync Status: ⚠️  Conflict in progress');
-      console.log('  💡 Run: gitgov sync resolve');
+      console.log('Sync: Conflict in progress');
+      console.log('  Run: gitgov sync resolve');
     } else if (syncStatus.unpushedChanges.length > 0) {
       const added = syncStatus.unpushedChanges.filter(f => f.status === 'A').length;
       const modified = syncStatus.unpushedChanges.filter(f => f.status === 'M').length;
@@ -405,14 +405,14 @@ export class StatusCommand {
       if (added > 0) parts.push(`${added} added`);
       if (modified > 0) parts.push(`${modified} modified`);
       if (deleted > 0) parts.push(`${deleted} deleted`);
-      console.log(`🔄 Sync: ${syncStatus.unpushedChanges.length} unpushed changes (${parts.join(', ')})`);
+      console.log(`Sync: ${syncStatus.unpushedChanges.length} unpushed changes (${parts.join(', ')})`);
       for (const change of syncStatus.unpushedChanges) {
         const icon = change.status === 'A' ? '  + ' : change.status === 'M' ? '  ~ ' : '  - ';
         console.log(`${icon}${change.file}`);
       }
-      console.log('  💡 Run: gitgov sync push');
+      console.log('  Run: gitgov sync push');
     } else {
-      console.log('🔄 Sync: Up to date ✓');
+      console.log('Sync: Up to date');
     }
     console.log('');
   }
@@ -427,15 +427,17 @@ export class StatusCommand {
     syncStatus: SyncStatus,
     options: StatusCommandOptions
   ): void {
-    console.log(`👤 Actor: ${actor.displayName} (${actor.id})`);
+    // [EARS-31] Project context for debugging
+    console.log(`  Project:  ${process.cwd()}`);
+    console.log(`  Actor:    ${actor.displayName} (${actor.id})`);
     console.log('');
 
     // My Work section
-    console.log(`✅ My Work (${personalWork.assignedTasks.length} tasks)`);
+    console.log(`My Work (${personalWork.assignedTasks.length} tasks)`);
     if (personalWork.assignedTasks.length > 0) {
       personalWork.assignedTasks.forEach(task => {
         const statusIcon = this.getStatusIcon(task.status);
-        const priorityFlag = task.priority === 'critical' ? '🔴' : task.priority === 'high' ? '🟠' : '';
+        const priorityFlag = task.priority === 'critical' ? '[!]' : task.priority === 'high' ? '[H]' : '';
         console.log(`  ${statusIcon} [${task.status}] ${task.id} - ${task.title} ${priorityFlag}`);
         if (options.verbose) {
           console.log(`    Priority: ${task.priority}, Tags: ${task.tags?.join(', ') || 'none'}`);
@@ -448,9 +450,9 @@ export class StatusCommand {
 
     // Pending Feedback section
     if (personalWork.pendingFeedback.length > 0) {
-      console.log(`❗️ Pending Feedback (${personalWork.pendingFeedback.length})`);
+      console.log(`Pending Feedback (${personalWork.pendingFeedback.length})`);
       personalWork.pendingFeedback.forEach(feedback => {
-        const typeIcon = feedback.payload.type === 'blocking' ? '🔴' : feedback.payload.type === 'question' ? '🟡' : '🔵';
+        const typeIcon = feedback.payload.type === 'blocking' ? '[!]' : feedback.payload.type === 'question' ? '[?]' : '[-]';
         console.log(`  ${typeIcon} [${feedback.payload.type}] ${feedback.payload.id} - ${feedback.payload.content}`);
       });
       console.log('');
@@ -458,22 +460,22 @@ export class StatusCommand {
 
     // Active Cycles section
     if (personalWork.activeCycles.length > 0 && (options.cycles || options.verbose)) {
-      console.log(`🚀 Active Cycles (${personalWork.activeCycles.length})`);
+      console.log(`Active Cycles (${personalWork.activeCycles.length})`);
       personalWork.activeCycles.forEach(cycle => {
         const taskCount = cycle.taskIds?.length || 0;
-        console.log(`  📊 ${cycle.title}: ${taskCount} tasks - Status: ${cycle.status}`);
+        console.log(`  ${cycle.title}: ${taskCount} tasks - Status: ${cycle.status}`);
       });
       console.log('');
     }
 
     // System Health section
-    const healthIcon = systemHealth.healthScore >= 80 ? '🟢' : systemHealth.healthScore >= 60 ? '🟡' : '🔴';
-    console.log(`⚡ System Health: ${healthIcon} ${systemHealth.healthScore}%`);
+    const healthIcon = systemHealth.healthScore >= 80 ? 'Good' : systemHealth.healthScore >= 60 ? 'Fair' : 'Poor';
+    console.log(`System Health: ${healthIcon} ${systemHealth.healthScore}%`);
 
     if (systemHealth.alerts.length > 0) {
       console.log('🚨 Alerts:');
       systemHealth.alerts.forEach(alert => {
-        const alertIcon = alert.severity === 'critical' ? '🔴' : alert.severity === 'high' ? '🟠' : '🔵';
+        const alertIcon = alert.severity === 'critical' ? '[!]' : alert.severity === 'high' ? '[H]' : '[-]';
         console.log(`  ${alertIcon} ${alert.message}`);
       });
     }
@@ -484,7 +486,7 @@ export class StatusCommand {
 
     // Suggested Actions
     if (personalWork.suggestedActions.length > 0) {
-      console.log('💡 Suggested Actions:');
+      console.log('Suggested Actions:');
       personalWork.suggestedActions.forEach(action => {
         console.log(`  • ${action}`);
       });
@@ -501,11 +503,11 @@ export class StatusCommand {
     collaborationMetrics: CollaborationMetrics | null,
     options: StatusCommandOptions
   ): void {
-    console.log('📊 GitGovernance Project Status');
+    console.log('GitGovernance Project Status');
     console.log('');
 
     // Tasks Overview
-    console.log('📋 Tasks Overview');
+    console.log('Tasks Overview');
     console.log(`  Total: ${overview.taskStats.total} tasks`);
     const statusCounts = Object.entries(overview.taskStats.byStatus)
       .map(([status, count]) => `${this.getStatusIcon(status)} ${status}: ${count}`)
@@ -514,7 +516,7 @@ export class StatusCommand {
     console.log('');
 
     // Cycles Overview
-    console.log('🔄 Cycles Overview');
+    console.log('Cycles Overview');
     console.log(`  Total: ${overview.cycleStats.total} cycles`);
     const cycleStatusCounts = Object.entries(overview.cycleStats.byStatus)
       .map(([status, count]) => `${this.getStatusIcon(status)} ${status}: ${count}`)
@@ -523,8 +525,8 @@ export class StatusCommand {
     console.log('');
 
     // System Health
-    const healthIcon = overview.healthScore >= 80 ? '🟢' : overview.healthScore >= 60 ? '🟡' : '🔴';
-    console.log(`⚡ System Health: ${healthIcon} ${overview.healthScore}%`);
+    const healthIcon = overview.healthScore >= 80 ? 'Good' : overview.healthScore >= 60 ? 'Fair' : 'Poor';
+    console.log(`System Health: ${healthIcon} ${overview.healthScore}%`);
 
     // Productivity Metrics
     if (productivityMetrics && (options.health || options.verbose)) {
@@ -536,7 +538,7 @@ export class StatusCommand {
 
     // Collaboration Metrics
     if (collaborationMetrics && (options.team || options.verbose)) {
-      console.log('🤖 Collaboration Metrics:');
+      console.log('Collaboration Metrics:');
       console.log(`  • Active Agents: ${collaborationMetrics.activeAgents}/${collaborationMetrics.totalAgents}`);
       console.log(`  • Agent Utilization: ${collaborationMetrics.agentUtilization.toFixed(1)}%`);
       console.log(`  • Collaboration Index: ${collaborationMetrics.collaborationIndex.toFixed(0)}%`);
@@ -547,7 +549,7 @@ export class StatusCommand {
       console.log('');
       console.log('🚨 Alerts & Warnings');
       overview.alerts.forEach(alert => {
-        const alertIcon = alert.severity === 'critical' ? '🔴' : alert.severity === 'high' ? '🟠' : '🔵';
+        const alertIcon = alert.severity === 'critical' ? '[!]' : alert.severity === 'high' ? '[H]' : '[-]';
         console.log(`  ${alertIcon} ${alert.message}`);
       });
     }
@@ -566,13 +568,13 @@ export class StatusCommand {
     const icons: Record<string, string> = {
       'draft': '📝',
       'review': '👀',
-      'ready': '🟢',
-      'active': '⚡',
-      'done': '✅',
+      'ready': '>',
+      'active': '*',
+      'done': 'v',
       'paused': '⏸️',
       'archived': '📦',
       'planning': '📝',
-      'completed': '✅'
+      'completed': 'v'
     };
     return icons[status] || '❓';
   }
@@ -611,14 +613,14 @@ export class StatusCommand {
       if (error.message.includes('RecordNotFoundError')) {
         message = error.message;
       } else if (error.message.includes('not initialized')) {
-        message = "❌ GitGovernance not initialized. Run 'gitgov init' first.";
+        message = "Error: GitGovernance not initialized. Run 'gitgov init' first.";
       } else if (error.message.includes('No active actors')) {
-        message = "❌ No current actor configured. Run 'gitgov actor create' first.";
+        message = "Error: No current actor configured. Run 'gitgov actor create' first.";
       } else {
-        message = `❌ Dashboard generation failed: ${error.message}`;
+        message = `Error: Dashboard generation failed: ${error.message}`;
       }
     } else {
-      message = "❌ Unknown error occurred during dashboard generation.";
+      message = "Error: Unknown error occurred during dashboard generation.";
     }
 
     if (options.json) {

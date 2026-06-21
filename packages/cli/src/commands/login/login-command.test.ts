@@ -852,10 +852,10 @@ describe('LoginCommand v2', () => {
   });
 
   // ============================================================================
-  // §4.10. Repo Not Connected (LOGIN-K1, Task 5.11)
+  // §4.10. Repo Not Connected (LOGIN-K1 + LOGIN-H5)
   // ============================================================================
-  describe('4.10. Repo Not Connected (LOGIN-K1)', () => {
-    it('[LOGIN-K1] should show actionable error when repo is not connected to SaaS', async () => {
+  describe('4.10. Repo Not Connected (LOGIN-K1, LOGIN-H5)', () => {
+    it('[LOGIN-K1] [LOGIN-H5] should show step-by-step instructions when repo not connected', async () => {
       mockHasPrivateKey.mockResolvedValue(true);
 
       const deps = createMockDeps({
@@ -871,10 +871,10 @@ describe('LoginCommand v2', () => {
       await cmd.executeLogin(defaultOptions);
 
       expect(mockConsoleError).toHaveBeenCalledWith(
-        'This repository is not connected to GitGovernance.'
+        'Repository not connected to GitGovernance.\n'
       );
       expect(mockConsoleError).toHaveBeenCalledWith(
-        expect.stringContaining('Connect it at:')
+        expect.stringContaining('Install the GitHub App')
       );
       expect(mockProcessExit).toHaveBeenCalledWith(1);
     });
