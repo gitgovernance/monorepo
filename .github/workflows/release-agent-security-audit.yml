@@ -1,6 +1,14 @@
 name: Release Agent — security-audit
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - "packages/agents/security-audit/**"
+      - ".github/workflows/release-agent-security-audit.yml"
+      - "!packages/agents/security-audit/**/*.md"
+      - "!packages/agents/security-audit/**/*.test.*"
   workflow_dispatch:
 
 jobs:

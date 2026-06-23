@@ -1,6 +1,14 @@
 name: Release Agent — test-echo
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - "packages/agents/test-echo/**"
+      - ".github/workflows/release-agent-test-echo.yml"
+      - "!packages/agents/test-echo/**/*.md"
+      - "!packages/agents/test-echo/**/*.test.*"
   workflow_dispatch:
 
 jobs:
