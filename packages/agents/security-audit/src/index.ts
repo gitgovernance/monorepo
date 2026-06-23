@@ -3,25 +3,13 @@ import {
   FindingDetector,
   Sarif,
 } from '@gitgov/core';
+import type { Runner } from '@gitgov/core';
 import { FsFileLister } from '@gitgov/core/fs';
 import type { SecurityAuditInput } from './types';
 import { SecurityAuditAgent } from './agent';
 import { buildConfig } from './config';
 
-/**
- * AgentExecutionContext from the framework (Runner namespace).
- * Defined locally to avoid deep namespace import — shape is stable.
- * Decision A8: ctx.input is `unknown`, cast explicitly in this function.
- */
-type AgentExecutionContext = {
-  agentId: string;
-  actorId: string;
-  taskId: string;
-  runId: string;
-  input?: unknown;
-  /** Root directory of the project. Use instead of process.cwd(). */
-  projectRoot: string;
-};
+type AgentExecutionContext = Runner.AgentExecutionContext;
 
 /**
  * Entry point del agente, invocado por AgentRunner.
@@ -61,5 +49,5 @@ export type {
   SecurityAuditMetadata,
   AgentDetectorConfig,
   DetectorStage,
-  AuditSummary,
+  ScanSummary,
 } from './types';

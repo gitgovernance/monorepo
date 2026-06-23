@@ -72,6 +72,7 @@ function makeCtx(input: unknown) {
     taskId: 'task-001',
     runId: '550e8400-e29b-41d4-a716-446655440000',
     input,
+    projectRoot: '/tmp/test-repo',
   };
 }
 

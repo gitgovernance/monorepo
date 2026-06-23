@@ -6,6 +6,6 @@ module.exports = {
   testTimeout: 30000,
   moduleNameMapper: {
     '^@gitgov/core$': '<rootDir>/node_modules/@gitgov/core/src/index.ts',
-    '^@gitgov/core/fs$': '<rootDir>/node_modules/@gitgov/core/src/fs.ts',
+    '^@gitgov/core/fs$': '<rootDir>/node_modules/@gitgov/core/src/shared/fs/fs.ts',
   },
 };

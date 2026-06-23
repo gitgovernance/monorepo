@@ -1,8 +1,22 @@
 {
   "name": "@gitgov/agent-security-audit",
   "version": "2.0.0",
+  "description": "Security audit agent for GitGovernance — scans repos for PII, secrets, and API keys, producing SARIF 2.1.0 output",
+  "license": "UNLICENSED",
   "type": "module",
   "main": "dist/index.mjs",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gitgovernance/monorepo.git",
+    "directory": "packages/agents/security-audit"
+  },
   "scripts": {
     "build": "esbuild src/index.ts --bundle --platform=node --format=esm --target=node20 --outfile=dist/index.mjs --external:@gitgov/core",
     "clean": "rm -rf dist",

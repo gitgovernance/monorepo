@@ -17,8 +17,6 @@ export type SecurityAuditInput = {
   include?: string[];
   /** Globs de exclusion (default: node_modules, .git, dist) */
   exclude?: string[];
-  /** Severidad minima para incluir en el output */
-  minSeverity?: 'critical' | 'high' | 'medium' | 'low';
 };
 
 /**
@@ -29,14 +27,15 @@ export type SecurityAuditMetadata = {
   kind: 'sarif';
   version: '2.1.0';
   data: SarifLog;
-  summary?: AuditSummary;
+  summary?: ScanSummary;
 };
 
 /**
- * Summary agregado del scan.
- * No incluye waivedCount — el agente NO aplica waivers (Decision A12/A13).
+ * Summary of a single scan execution.
+ * Different from core AuditSummary (orchestrator-level with suppressed/agentsRun).
+ * Agent emits ALL findings without filtering (Decision A12/A13).
  */
-export type AuditSummary = {
+export type ScanSummary = {
   totalFindings: number;
   bySeverity: Record<string, number>;
   byCategory: Record<string, number>;

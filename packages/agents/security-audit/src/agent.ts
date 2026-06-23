@@ -1,27 +1,17 @@
-import type { SourceAuditor, Sarif } from '@gitgov/core';
+import type { SourceAuditor, Sarif, Runner } from '@gitgov/core';
 
 type SarifBuilder = Sarif.SarifBuilder;
 type SarifLog = Sarif.SarifLog;
+type AgentOutput = Runner.AgentOutput;
 import type {
   SecurityAuditInput,
   AgentDetectorConfig,
-  AuditSummary,
+  ScanSummary,
   SecurityAuditMetadata,
 } from './types';
 
 type AuditResult = SourceAuditor.AuditResult;
 type ScopeConfig = SourceAuditor.ScopeConfig;
-
-/**
- * AgentOutput from the framework (Runner namespace).
- * Defined locally to avoid deep namespace import — shape is stable.
- */
-type AgentOutput = {
-  data?: unknown;
-  message?: string;
-  artifacts?: string[];
-  metadata?: Record<string, unknown>;
-};
 
 /**
  * Dependencias inyectadas del agente.
@@ -122,7 +112,7 @@ function buildScopeConfig(input: SecurityAuditInput): ScopeConfig {
 function buildSummary(
   result: AuditResult,
   scope: SecurityAuditInput['scope'],
-): AuditSummary {
+): ScanSummary {
   const bySeverity: Record<string, number> = {};
   const byCategory: Record<string, number> = {};
 
