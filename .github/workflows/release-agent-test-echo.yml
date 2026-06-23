@@ -1,15 +1,7 @@
-name: Release Agent
+name: Release Agent — test-echo
 
 on:
   workflow_dispatch:
-    inputs:
-      agent:
-        description: 'Agent to release'
-        required: true
-        type: choice
-        options:
-          - security-audit
-          - test-echo
 
 jobs:
   release:
@@ -53,21 +45,13 @@ jobs:
         run: cd packages/core && pnpm build
 
       - name: Build Agent
-        run: cd packages/agents/${{ inputs.agent }} && pnpm build
+        run: cd packages/agents/test-echo && pnpm build
 
       - name: Run Agent Tests
-        run: cd packages/agents/${{ inputs.agent }} && pnpm test
+        run: cd packages/agents/test-echo && pnpm test
 
       - name: Semantic Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          cd packages/agents/${{ inputs.agent }}
-          npx semantic-release
-
-      - name: Get Version
-        id: version
-        run: |
-          cd packages/agents/${{ inputs.agent }}
-          echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+        run: cd packages/agents/test-echo && npx semantic-release
