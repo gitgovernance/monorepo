@@ -41,9 +41,12 @@
   },
   "license": "MPL-2.0",
   "gitgov": {
-    "agentId": "agent:test-echo",
-    "role": "tester",
-    "purpose": "testing",
-    "function": "runAgent"
+    "agent": {
+      "purpose": "testing",
+      "function": "runAgent",
+      "metadata": {
+        "description": "Echo agent for testing and demonstration"
+      }
+    }
   }
 }
