@@ -165,7 +165,8 @@ export class AgentCommand extends BaseCommand<RunCommandOptions> {
         }
         const localPkg = JSON.parse(readFileSync(pkgJsonPath, 'utf-8')) as Record<string, unknown>;
         const mainFile = (localPkg['main'] as string) ?? 'index.js';
-        entrypoint = join(absPath, mainFile);
+        // [EARS-E2] main absoluto → usar directo; relativo → resolver desde package dir
+        entrypoint = isAbsolute(mainFile) ? mainFile : join(absPath, mainFile);
       } else {
         // [EARS-E1] NPM package
         const req = createRequire(join(process.cwd(), 'package.json'));
@@ -373,6 +374,25 @@ export class AgentCommand extends BaseCommand<RunCommandOptions> {
         runOptions.tool = options.tool;
       }
       const response: AgentResponse = await runner.runOnce(runOptions);
+
+      // [GCI-D5] Persist ExecutionRecord to .gitgov/executions/ (runner is pure — caller persists)
+      try {
+        const executionAdapter = await this.container.getExecutionAdapter();
+        const execPayload: Record<string, unknown> = {
+          taskId,
+          type: 'completion',
+          title: `Agent execution: ${name}`,
+          result: response.status === 'success'
+            ? `Agent completed (${response.durationMs}ms)`
+            : `Agent failed: ${response.error ?? 'unknown'}`,
+        };
+        if (response.output?.data) {
+          execPayload['metadata'] = { kind: 'agent', data: response.output.data };
+        }
+        await executionAdapter.create(execPayload, currentActor.id);
+      } catch {
+        // Persistence errors are non-fatal (same pattern as audit-command AORCH-P1)
+      }
 
       // [EARS-D1, D2] Format output
       if (options.output === 'json') {
