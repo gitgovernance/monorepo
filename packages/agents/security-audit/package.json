@@ -33,6 +33,12 @@
       }
     }
   },
+  "publishConfig": {
+    "access": "public"
+  },
+  "peerDependencies": {
+    "@gitgov/core": ">=3.0.0"
+  },
   "dependencies": {
     "@gitgov/core": "workspace:*"
   },

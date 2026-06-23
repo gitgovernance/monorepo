@@ -46,18 +46,17 @@ describe('test-echo agent', () => {
       expect(context['projectRoot']).toBe('/tmp/test-project');
     });
   });
-});
 
-  describe('4.2. NPM Package Resolution (ECHO-B1 to ECHO-B3) — integration/E2E', () => {
-    it.skip('[ECHO-B1] should be importable from @gitgov/agent-test-echo', () => {
-      // Integration test: requires npm publish + install. See e2e-private.
-    });
+  // [ECHO-B1..B3] NPM Package Resolution — integration tests.
+  // B1/B2: require npm publish → implemented post-publish.
+  // B3: resolved path import — verified here + GF16 (gate_agent_flow) verifies npm link E2E.
+  describe('4.2. NPM Package Resolution (ECHO-B3)', () => {
+    it('[ECHO-B3] should be importable from relative path and export runAgent', async () => {
+      const mod = await import('./index');
+      expect(typeof mod.runAgent).toBe('function');
 
-    it.skip('[ECHO-B2] should resolve NPM package entrypoint via AgentRunner', () => {
-      // Integration test: requires AgentRunner + npm installed package. See e2e-private.
-    });
-
-    it.skip('[ECHO-B3] should resolve relative path entrypoint via AgentRunner', () => {
-      // Integration test: requires AgentRunner + built dist. See e2e-private.
+      const result = await mod.runAgent(baseCtx);
+      expect(result.message).toContain('Echo agent executed successfully');
     });
   });
+});
