@@ -1,5 +1,5 @@
 import { MemoryRecordProjection } from './memory_record_projection';
-import type { IndexData, ProjectionContext } from '../record_projection.types';
+import type { PersistContext, IndexData } from '../record_projection.types';
 
 /**
  * Creates a minimal valid IndexData for testing.
@@ -56,7 +56,7 @@ describe('MemoryRecordProjection', () => {
   describe('4.1. Core IRecordProjection Operations (EARS-A1 a A4)', () => {
     it('[EARS-A1] should store IndexData in Map by repoIdentifier', async () => {
       const data = createMockIndexData();
-      const context: ProjectionContext = { repoIdentifier: 'repo-1' };
+      const context: PersistContext = { lastCommitHash: 'test-sha', repoIdentifier: 'repo-1' };
 
       await sink.persist(data, context);
 
@@ -67,7 +67,7 @@ describe('MemoryRecordProjection', () => {
 
     it('[EARS-A1] should use __default__ key when repoIdentifier is undefined', async () => {
       const data = createMockIndexData();
-      const context: ProjectionContext = {};
+      const context: PersistContext = { lastCommitHash: 'test-sha' };
 
       await sink.persist(data, context);
 
@@ -78,7 +78,7 @@ describe('MemoryRecordProjection', () => {
 
     it('[EARS-A2] should return stored IndexData for existing context', async () => {
       const data = createMockIndexData({ metadata: { ...createMockIndexData().metadata, lastCommitHash: 'def456' } });
-      const context: ProjectionContext = { repoIdentifier: 'my-repo' };
+      const context: PersistContext = { lastCommitHash: 'test-sha', repoIdentifier: 'my-repo' };
 
       await sink.persist(data, context);
       const result = await sink.read(context);
@@ -100,7 +100,7 @@ describe('MemoryRecordProjection', () => {
 
     it('[EARS-A4] should clear Map entry for context', async () => {
       const data = createMockIndexData();
-      const context: ProjectionContext = { repoIdentifier: 'repo-to-clear' };
+      const context: PersistContext = { lastCommitHash: 'test-sha', repoIdentifier: 'repo-to-clear' };
 
       await sink.persist(data, context);
       expect(await sink.exists(context)).toBe(true);
@@ -114,8 +114,8 @@ describe('MemoryRecordProjection', () => {
       const data1 = createMockIndexData();
       const data2 = createMockIndexData({ metadata: { ...createMockIndexData().metadata, lastCommitHash: 'other' } });
 
-      await sink.persist(data1, { repoIdentifier: 'repo-1' });
-      await sink.persist(data2, { repoIdentifier: 'repo-2' });
+      await sink.persist(data1, { lastCommitHash: 'test-sha', repoIdentifier: 'repo-1' });
+      await sink.persist(data2, { lastCommitHash: 'test-sha', repoIdentifier: 'repo-2' });
 
       await sink.clear({ repoIdentifier: 'repo-1' });
 
@@ -136,7 +136,7 @@ describe('MemoryRecordProjection', () => {
           payload: { id: 'agent-1', engine: { type: 'local' as const }, status: 'active' as const },
         }] as unknown as IndexData['agents'],
       });
-      const context: ProjectionContext = { repoIdentifier: 'repo-both' };
+      const context: PersistContext = { lastCommitHash: 'test-sha', repoIdentifier: 'repo-both' };
 
       await sink.persist(data, context);
       const result = await sink.read(context);
@@ -159,7 +159,7 @@ describe('MemoryRecordProjection', () => {
           payload: { id: 'agent-rt', engine: { type: 'local' as const }, status: 'active' as const },
         }] as unknown as IndexData['agents'],
       });
-      const context: ProjectionContext = { repoIdentifier: 'repo-roundtrip' };
+      const context: PersistContext = { lastCommitHash: 'test-sha', repoIdentifier: 'repo-roundtrip' };
 
       await sink.persist(data, context);
       const result = await sink.read(context);
@@ -174,7 +174,7 @@ describe('MemoryRecordProjection', () => {
   describe('4.2. MemoryRecordProjection-Specific Behavior (EARS-B1 a B2)', () => {
     it('[EARS-B1] should return true when data exists for context', async () => {
       const data = createMockIndexData();
-      await sink.persist(data, { repoIdentifier: 'exists-repo' });
+      await sink.persist(data, { lastCommitHash: 'test-sha', repoIdentifier: 'exists-repo' });
 
       expect(await sink.exists({ repoIdentifier: 'exists-repo' })).toBe(true);
     });

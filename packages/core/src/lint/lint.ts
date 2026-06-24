@@ -33,7 +33,8 @@ import type {
 import {
   isTaskPayload,
   isCyclePayload,
-  isExecutionPayload
+  isExecutionPayload,
+  isFeedbackPayload
 } from "../record_types/type_guards";
 import type { Signature } from "../record_types/embedded.types";
 import { DetailedValidationError } from "../record_validations/common";
@@ -347,6 +348,12 @@ export class LintModule implements ILintModule {
       if (opts.failFast && recordResults.some(r => r.level === "error")) {
         break;
       }
+    }
+
+    // [EARS-M1, M2, M3] Cross-record integrity — Gate 4
+    if (opts.validateReferences || opts.strict) {
+      const crossResults = this.validateCrossRecordIntegrity(recordEntries);
+      results.push(...crossResults);
     }
 
     const executionTime = Date.now() - startTime;
@@ -692,6 +699,102 @@ export class LintModule implements ILintModule {
         } catch {
           // Store lookup failed, skip
         }
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * [EARS-M1, M2, M3] Cross-record integrity — Gate 4.
+   * Validates coherence BETWEEN records: dangling references, orphans, duplicate IDs.
+   * @private
+   */
+  private validateCrossRecordIntegrity(entries: RecordEntry[]): LintResult[] {
+    const results: LintResult[] = [];
+
+    // Build index: id → { type, count }
+    const idIndex = new Map<string, { type: GitGovRecordType; count: number }>();
+    const referencedIds = new Set<string>();
+
+    for (const entry of entries) {
+      const existing = idIndex.get(entry.id);
+      if (existing) {
+        // [EARS-M3] Duplicate ID across stores
+        existing.count++;
+        results.push({
+          level: 'error',
+          filePath: `${entry.type}/${entry.id}.json`,
+          validator: 'CROSS_RECORD_INTEGRITY',
+          message: `duplicate record ID '${entry.id}' found in '${entry.type}' store (also in '${existing.type}')`,
+          entity: { type: entry.type, id: entry.id },
+          fixable: false,
+        });
+      } else {
+        idIndex.set(entry.id, { type: entry.type, count: 1 });
+      }
+
+      const payload = entry.record.payload;
+
+      if (isExecutionPayload(payload) && payload.taskId) {
+        referencedIds.add(payload.taskId);
+      }
+      if (isFeedbackPayload(payload) && payload.entityId) {
+        referencedIds.add(payload.entityId);
+      }
+      if (isTaskPayload(payload) && payload.cycleIds) {
+        for (const cid of payload.cycleIds) referencedIds.add(cid);
+      }
+      if (isCyclePayload(payload) && payload.taskIds) {
+        for (const tid of payload.taskIds) referencedIds.add(tid);
+      }
+
+      // [EARS-M1] Validate entityId on FeedbackRecords
+      if (entry.type === 'feedback' && isFeedbackPayload(payload) && payload.entityId) {
+        const entityExists = entries.some(e => e.id === payload.entityId);
+        if (!entityExists) {
+          results.push({
+            level: 'error',
+            filePath: entry.filePath ?? `${entry.type}/${entry.id}.json`,
+            validator: 'CROSS_RECORD_INTEGRITY',
+            message: `Dangling entityId '${payload.entityId}' — referenced record not found`,
+            entity: { type: entry.type, id: entry.id },
+            fixable: false,
+            context: { field: 'entityId', actual: payload.entityId, expected: 'existing record' },
+          });
+        }
+      }
+
+      // [EARS-M1] Validate taskId on ExecutionRecords
+      if (entry.type === 'execution' && isExecutionPayload(payload) && payload.taskId) {
+        const taskExists = entries.some(e => e.id === payload.taskId);
+        if (!taskExists) {
+          results.push({
+            level: 'error',
+            filePath: entry.filePath ?? `${entry.type}/${entry.id}.json`,
+            validator: 'CROSS_RECORD_INTEGRITY',
+            message: `Dangling taskId '${payload.taskId}' — referenced task not found`,
+            entity: { type: entry.type, id: entry.id },
+            fixable: false,
+            context: { field: 'taskId', actual: payload.taskId, expected: 'existing task record' },
+          });
+        }
+      }
+    }
+
+    // [EARS-M2] Orphan detection — records not referenced by any other
+    const rootTypes: GitGovRecordType[] = ['actor', 'agent', 'cycle'];
+    for (const entry of entries) {
+      if (rootTypes.includes(entry.type)) continue;
+      if (!referencedIds.has(entry.id)) {
+        results.push({
+          level: 'warning',
+          filePath: `${entry.type}/${entry.id}.json`,
+          validator: 'CROSS_RECORD_INTEGRITY',
+          message: `Record '${entry.id}' (${entry.type}) is an orphan — not referenced by any other record`,
+          entity: { type: entry.type, id: entry.id },
+          fixable: false,
+        });
       }
     }
 

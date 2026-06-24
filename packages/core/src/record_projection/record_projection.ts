@@ -26,7 +26,7 @@ import type {
   EnrichedTaskRecord,
   IndexData,
   IRecordProjection,
-  ProjectionContext,
+  PersistContext,
   RecordProjectorDependencies,
   IntegrityError,
   IntegrityWarning,
@@ -508,7 +508,7 @@ export class RecordProjector implements IRecordProjector {
    * [EARS-U4] No-op when sink is undefined (writeTime=0).
    * [EARS-14] Sink implementation handles atomicity internally.
    */
-  private async persistToSink(indexData: IndexData, context: ProjectionContext): Promise<void> {
+  private async persistToSink(indexData: IndexData, context: PersistContext): Promise<void> {
     if (!this.sink) {
       return; // EARS-U4: skip persist, writeTime=0
     }

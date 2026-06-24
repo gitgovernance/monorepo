@@ -173,6 +173,12 @@ export type ProjectionContext = {
   lastCommitHash?: string;
 };
 
+// [PP-C3b] Narrowed context for persist() — lastCommitHash is required
+// Every persist must know its source commit. Read/exists/clear don't need it.
+export type PersistContext = ProjectionContext & {
+  lastCommitHash: string;
+};
+
 /**
  * IRecordProjection - Driver pattern for projection output.
  *
@@ -183,7 +189,7 @@ export type ProjectionContext = {
  *    GitgovActivity, GitgovExecution, GitgovAgent, GitgovWorkflow)
  */
 export interface IRecordProjection {
-  persist(data: IndexData, context: ProjectionContext): Promise<void>;
+  persist(data: IndexData, context: PersistContext): Promise<void>;
   read(context: ProjectionContext): Promise<IndexData | null>;
   exists(context: ProjectionContext): Promise<boolean>;
   clear(context: ProjectionContext): Promise<void>;

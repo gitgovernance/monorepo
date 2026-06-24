@@ -88,26 +88,27 @@ class FindingRedactor {
   redactSarif(sarif: SarifLog, level: RedactionLevel): SarifLog {
     const copy: SarifLog = JSON.parse(JSON.stringify(sarif));
 
-    if (level === 'l2') {
-      return copy;
-    }
-
+    // [RLDX-F2] Compute snippetHash for ALL levels (L1 and L2).
+    // L1: snippet redacted + hash stored. L2: snippet preserved + hash stored.
+    // This ensures every consumer receives snippetHash regardless of redaction path.
     for (const run of copy.runs ?? []) {
       for (const result of run.results ?? []) {
-        const category = result.properties?.['gitgov/category'] as string | undefined;
-        if (!category || !this.isSensitiveCategory(category)) continue;
-
-        // Redact snippet in all locations
         for (const location of result.locations ?? []) {
           const snippet = location.physicalLocation?.region?.snippet;
           if (snippet?.text) {
             const originalText = snippet.text;
-            snippet.text = '[REDACTED]';
-            // Store hash for L1 <-> L2 integrity verification
             if (!result.properties) {
               result.properties = {} as SarifResultProperties;
             }
             result.properties['gitgov/snippetHash'] = sha256(originalText);
+
+            // L1 only: redact sensitive snippets
+            if (level === 'l1') {
+              const category = result.properties['gitgov/category'] as string | undefined;
+              if (category && this.isSensitiveCategory(category)) {
+                snippet.text = '[REDACTED]';
+              }
+            }
           }
         }
       }

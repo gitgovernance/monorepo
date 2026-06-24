@@ -17,8 +17,8 @@
  * | RLDX-B6  | should apply full redaction for unregistered category when defaultBehavior is redact            |
  * | RLDX-B7  | should return original fields intact for unregistered category when defaultBehavior is keep     |
  * | RLDX-B8  | should redact snippet.text in SARIF for sensitive categories at l1                              |
- * | RLDX-B9  | should store snippetHash in SARIF properties for redacted results                               |
- * | RLDX-B10 | should return unchanged deep copy for l2                                                       |
+ * | RLDX-B9  | should store snippetHash in SARIF properties for all results with snippets                               |
+ * | RLDX-B10 | should preserve snippet and add snippetHash for l2                                              |
  * | RLDX-B11 | should not mutate the original SarifLog                                                        |
  */
 
@@ -267,7 +267,7 @@ describe('FindingRedactor', () => {
       expect(snippetText).toBe('[REDACTED]');
     });
 
-    it('[RLDX-B9] should store snippetHash in SARIF properties for redacted results', () => {
+    it('[RLDX-B9] should store snippetHash in SARIF properties for all results with snippets', () => {
       const originalSnippet = "const secret = 'my-secret-key'";
       const sarif = buildSarifLog('hardcoded-secret', originalSnippet);
       const result = redactor.redactSarif(sarif, 'l1');
@@ -276,15 +276,18 @@ describe('FindingRedactor', () => {
       expect(props?.['gitgov/snippetHash']).toBe(sha256(originalSnippet));
     });
 
-    it('[RLDX-B10] should return unchanged deep copy for l2', () => {
+    it('[RLDX-B10] should preserve snippet and add snippetHash for l2', () => {
       const originalSnippet = "const secret = 'my-secret-key'";
       const sarif = buildSarifLog('hardcoded-secret', originalSnippet);
       const result = redactor.redactSarif(sarif, 'l2');
 
       const sarifResult = result.runs[0]!.results[0]!;
       const snippetText = sarifResult.locations[0]!.physicalLocation.region.snippet?.text;
+      // [RLDX-F2] Snippet preserved (NOT redacted) for L2
       expect(snippetText).toBe(originalSnippet);
-      expect(sarifResult.properties?.['gitgov/snippetHash']).toBeUndefined();
+      // [RLDX-F2] snippetHash added even for L2 (enables integrity verification)
+      expect(sarifResult.properties?.['gitgov/snippetHash']).toBeDefined();
+      expect(sarifResult.properties?.['gitgov/snippetHash']).toMatch(/^[a-f0-9]{64}$/);
     });
 
     it('[RLDX-B11] should not mutate the original SarifLog', () => {

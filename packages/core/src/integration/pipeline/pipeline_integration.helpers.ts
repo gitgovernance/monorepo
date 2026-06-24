@@ -407,7 +407,7 @@ export async function projectAndCompare(
 
   // 2. Persist to FS (CLI path)
   const fsSink = new FsRecordProjection({ basePath: path.join(repoDir, '.gitgov') });
-  await fsSink.persist(indexData, {});
+  await fsSink.persist(indexData, { lastCommitHash: 'integration-test' });
 
   // 3. Persist to Prisma (SaaS path)
   const prismaSink = new PrismaRecordProjection({
@@ -415,7 +415,7 @@ export async function projectAndCompare(
     repoId,
     projectionType: 'index',
   });
-  await prismaSink.persist(indexData, {});
+  await prismaSink.persist(indexData, { lastCommitHash: 'integration-test' });
 
   // 4. Read back from both
   const fsIndexData = await fsSink.read({});
@@ -457,7 +457,7 @@ async function runProjection(
     const computeTime = performance.now() - startTime;
     indexData.metadata.generationTime = computeTime;
 
-    await sink.persist(indexData, {});
+    await sink.persist(indexData, { lastCommitHash: 'integration-test' });
 
     const totalTime = performance.now() - startTime;
     const taskCount = indexData.metadata.recordCounts['tasks'] || 0;

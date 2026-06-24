@@ -1,4 +1,4 @@
-import type { IRecordProjection, IndexData, ProjectionContext } from '../record_projection.types';
+import type { IRecordProjection, IndexData, PersistContext, ProjectionContext } from '../record_projection.types';
 
 /**
  * MemoryRecordProjection - In-memory IRecordProjection for testing.
@@ -9,7 +9,7 @@ import type { IRecordProjection, IndexData, ProjectionContext } from '../record_
 export class MemoryRecordProjection implements IRecordProjection {
   private storage = new Map<string, IndexData>();
 
-  async persist(data: IndexData, context: ProjectionContext): Promise<void> {
+  async persist(data: IndexData, context: PersistContext): Promise<void> {
     const key = context.repoIdentifier ?? '__default__';
     this.storage.set(key, data);
   }
