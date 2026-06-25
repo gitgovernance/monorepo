@@ -2,7 +2,7 @@
  * GitHubProjectInitializer Unit Tests
  *
  * Tests the seventh sibling of @gitgov/core/github against the
- * github_project_initializer blueprint (GPI01-GPI13).
+ * github_project_initializer spec (GPI01-GPI19).
  *
  * Tests mock IGitModule and ConfigStore directly — this keeps the suite
  * isolated from Octokit/network details. The real Octokit interaction is
@@ -99,6 +99,7 @@ function createInitializer(
     basePath: string;
     commitMessage: string;
     commitAuthor: CommitAuthor;
+    octokit: { request: jest.MockedFunction<(...args: unknown[]) => Promise<unknown>> };
   }> = {},
 ): GitHubProjectInitializer {
   return new GitHubProjectInitializer(
@@ -490,6 +491,73 @@ describe('GitHubProjectInitializer', () => {
         },
       );
       expect(gitModule.commit).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('4.13. Branch Protection (GPI19)', () => {
+    it('[GPI19] should call PUT branches protection after creating new branch', async () => {
+      gitModule.branchExists.mockResolvedValue(false);
+      const mockOctokit = {
+        request: jest.fn().mockResolvedValue({ status: 200 }),
+      };
+      const initializer = createInitializer(gitModule, configStore, {
+        octokit: mockOctokit,
+      });
+
+      await initializer.createProjectStructure();
+
+      expect(mockOctokit.request).toHaveBeenCalledWith(
+        'PUT /repos/{owner}/{repo}/branches/{branch}/protection',
+        expect.objectContaining({
+          owner: 'myorg',
+          repo: 'myrepo',
+          branch: DEFAULT_STATE_BRANCH,
+          allow_deletions: false,
+          allow_force_pushes: false,
+        }),
+      );
+    });
+
+    it('[GPI19] should log warning and continue when protection API returns 403', async () => {
+      gitModule.branchExists.mockResolvedValue(false);
+      const mockOctokit = {
+        request: jest.fn().mockRejectedValue(Object.assign(new Error('Forbidden'), { status: 403 })),
+      };
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation();
+      const initializer = createInitializer(gitModule, configStore, {
+        octokit: mockOctokit,
+      });
+
+      await initializer.createProjectStructure();
+
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('branch protection'));
+      expect(gitModule.add).toHaveBeenCalled();
+      warnSpy.mockRestore();
+    });
+
+    it('[GPI19] should skip protection when options.octokit is undefined', async () => {
+      gitModule.branchExists.mockResolvedValue(false);
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation();
+      const initializer = createInitializer(gitModule, configStore);
+
+      await initializer.createProjectStructure();
+
+      expect(warnSpy).not.toHaveBeenCalled();
+      warnSpy.mockRestore();
+    });
+
+    it('[GPI19] should not attempt protection when branch already existed', async () => {
+      gitModule.branchExists.mockResolvedValue(true);
+      const mockOctokit = {
+        request: jest.fn().mockResolvedValue({ status: 200 }),
+      };
+      const initializer = createInitializer(gitModule, configStore, {
+        octokit: mockOctokit,
+      });
+
+      await initializer.createProjectStructure();
+
+      expect(mockOctokit.request).not.toHaveBeenCalled();
     });
   });
 });

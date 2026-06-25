@@ -956,6 +956,7 @@ describe('DependencyInjectionService', () => {
       mockGitModule.exec = vi.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
 
       diService.getGitModule = vi.fn().mockResolvedValue(mockGitModule);
+      diService.getHeadSha = vi.fn().mockResolvedValue('mock-head-sha');
 
       // Get the projector (this should trigger bootstrap + reindex)
       const projector = await diService.getRecordProjector();
@@ -966,8 +967,9 @@ describe('DependencyInjectionService', () => {
         expect.arrayContaining(['worktree', 'add']),
       );
 
-      // Verify indexer.generateIndex() was called after bootstrap
+      // Verify indexer.generateIndex() was called with lastCommitHash after bootstrap
       expect(projector.generateIndex).toHaveBeenCalledTimes(1);
+      expect(projector.generateIndex).toHaveBeenCalledWith(expect.objectContaining({ lastCommitHash: expect.any(String) }));
     });
 
     it('[EARS-D2] should NOT call generateIndex() when .gitgov/ already exists (no bootstrap)', async () => {

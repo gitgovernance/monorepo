@@ -1,4 +1,5 @@
-import type { IRecordProjection, IndexData, ProjectionContext, EnrichedTaskRecord } from '../record_projection.types';
+import { createHash } from 'node:crypto';
+import type { IRecordProjection, IndexData, ProjectionContext, PersistContext, EnrichedTaskRecord } from '../record_projection.types';
 import type {
   JsonValue,
   ProjectionClient,
@@ -45,11 +46,13 @@ export class PrismaRecordProjection implements IRecordProjection {
     return {};
   }
 
-  async persist(data: IndexData, context: ProjectionContext): Promise<void> {
+  async persist(data: IndexData, context: PersistContext): Promise<void> {
     const where = this.buildWhere();
     const tenantFields = this.tenantFields;
+    // [PP-C3b] Projection provenance — same commit for all rows in delete+recreate model
+    const sourceCommitSha = context.lastCommitHash;
 
-    const taskRows = data.enrichedTasks.map((t) => this.buildTaskRow(t, data));
+    const taskRows = data.enrichedTasks.map((t) => this.buildTaskRow(t, data, sourceCommitSha));
     const cycleRows = data.cycles.map((c) => ({
       ...tenantFields,
       recordId: c.payload.id,
@@ -61,6 +64,7 @@ export class PrismaRecordProjection implements IRecordProjection {
       notes: c.payload.notes ?? null,
       metadata: c.payload.metadata ? toJson(c.payload.metadata) : null,
       header: toJson(c.header),
+      sourceCommitSha,
     }));
     // [EARS-PM-F1] Actor projection preserves status + supersededBy from the record.
     // If an ActorRecord has status:'revoked' + supersededBy (post-succession), the projected
@@ -77,6 +81,7 @@ export class PrismaRecordProjection implements IRecordProjection {
       supersededBy: a.payload.supersededBy ?? null,
       metadata: a.payload.metadata ? toJson(a.payload.metadata) : null,
       header: toJson(a.header),
+      sourceCommitSha,
     }));
     const feedbackRows = data.feedback.map((f) => ({
       ...tenantFields,
@@ -90,6 +95,7 @@ export class PrismaRecordProjection implements IRecordProjection {
       resolvesFeedbackId: f.payload.resolvesFeedbackId ?? null,
       metadata: f.payload.metadata ? toJson(f.payload.metadata) : null,
       header: toJson(f.header),
+      sourceCommitSha,
     }));
     const activityRows = data.activityHistory.map((ev) => ({
       ...tenantFields,
@@ -111,6 +117,7 @@ export class PrismaRecordProjection implements IRecordProjection {
       metadata: e.payload.metadata ? toJson(e.payload.metadata) : null,
       references: e.payload.references ?? [],
       header: toJson(e.header),
+      sourceCommitSha,
     }));
     const agentRows = data.agents.map((a) => ({
       ...tenantFields,
@@ -122,6 +129,7 @@ export class PrismaRecordProjection implements IRecordProjection {
       knowledgeDependencies: a.payload.knowledge_dependencies ? toJson(a.payload.knowledge_dependencies) : null,
       promptEngineRequirements: a.payload.prompt_engine_requirements ? toJson(a.payload.prompt_engine_requirements) : null,
       header: toJson(a.header),
+      sourceCommitSha,
     }));
 
     const ops: PromiseLike<unknown>[] = [
@@ -137,7 +145,7 @@ export class PrismaRecordProjection implements IRecordProjection {
 
     const metaData = {
       ...tenantFields,
-      lastCommitHash: context.lastCommitHash ?? null,
+      lastCommitHash: context.lastCommitHash,
       generatedAt: data.metadata.generatedAt,
       integrityStatus: data.metadata.integrityStatus,
       recordCountsJson: toJson(data.metadata.recordCounts),
@@ -194,6 +202,25 @@ export class PrismaRecordProjection implements IRecordProjection {
         `cycles expected=${cycleRows.length} actual=${actualCycles}`
       );
     }
+
+    // [PP-C3] Persist integrity hashes — SHA-256 of each table sorted by recordId
+    const hashRows = (rows: Array<{ recordId: string }>) =>
+      createHash('sha256').update(JSON.stringify(rows.sort((a, b) => a.recordId.localeCompare(b.recordId)))).digest('hex');
+
+    const persistIntegrity = {
+      actors: { count: actorRows.length, hash: hashRows(actorRows as Array<{ recordId: string }>) },
+      tasks: { count: taskRows.length, hash: hashRows(taskRows as Array<{ recordId: string }>) },
+      cycles: { count: cycleRows.length, hash: hashRows(cycleRows as Array<{ recordId: string }>) },
+      verifiedAt: new Date().toISOString(),
+    };
+
+    const metaUpdateWhere = this.buildMetaWhere();
+    if (Object.keys(metaUpdateWhere).length > 0) {
+      await (this.client.gitgovMeta as unknown as { update: (args: unknown) => Promise<unknown> }).update({
+        where: metaUpdateWhere,
+        data: { metricsJson: { ...data.metrics, persistIntegrity } },
+      });
+    }
   }
 
   async read(_context: ProjectionContext): Promise<IndexData | null> {
@@ -244,6 +271,7 @@ export class PrismaRecordProjection implements IRecordProjection {
   private buildTaskRow(
     enriched: EnrichedTaskRecord,
     data: IndexData,
+    sourceCommitSha: string,
   ): Omit<GitgovTaskRow, 'id' | 'createdAt' | 'updatedAt'> {
     const gitgovTask = data.tasks.find((t) => t.payload.id === enriched.id);
     if (!gitgovTask) throw new Error(`Invariant: enrichedTask ${enriched.id} has no matching task record`);
@@ -278,11 +306,12 @@ export class PrismaRecordProjection implements IRecordProjection {
       recentActivity: enriched.recentActivity ?? null,
       relationships: toJson(enriched.relationships),
       header: toJson(header),
+      sourceCommitSha,
     };
   }
 
   private reconstructIndexData(
-    meta: { generatedAt: string; integrityStatus: string; recordCountsJson: JsonValue; generationTime: number; derivedStatesJson: JsonValue; metricsJson: JsonValue; lastCommitHash: string | null },
+    meta: { generatedAt: string; integrityStatus: string; recordCountsJson: JsonValue; generationTime: number; derivedStatesJson: JsonValue; metricsJson: JsonValue; lastCommitHash: string },
     taskRows: GitgovTaskRow[],
     cycleRows: GitgovCycleRow[],
     actorRows: GitgovActorRow[],
@@ -294,7 +323,7 @@ export class PrismaRecordProjection implements IRecordProjection {
     return {
       metadata: {
         generatedAt: meta.generatedAt,
-        lastCommitHash: meta.lastCommitHash ?? '',
+        lastCommitHash: meta.lastCommitHash,
         integrityStatus: meta.integrityStatus as IndexData['metadata']['integrityStatus'],
         recordCounts: meta.recordCountsJson as unknown as Record<string, number>,
         generationTime: meta.generationTime,

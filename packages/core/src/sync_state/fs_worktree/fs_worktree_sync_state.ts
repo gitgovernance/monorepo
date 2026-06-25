@@ -1076,7 +1076,8 @@ export class FsWorktreeSyncStateModule implements ISyncStateModule {
   /** Re-index records from worktree */
   private async reindex(): Promise<void> {
     try {
-      await this.deps.indexer.generateIndex();
+      const lastCommitHash = (await this.execInWorktree(['rev-parse', 'HEAD'])).trim();
+      await this.deps.indexer.generateIndex({ lastCommitHash });
     } catch {
       logger.warn('Re-index failed');
     }

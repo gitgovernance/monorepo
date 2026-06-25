@@ -282,6 +282,7 @@ describe('TaskCommand - Complete Unit Tests', () => {
       getFeedbackAdapter: vi.fn().mockResolvedValue(mockFeedbackAdapter),
       getCurrentActor: vi.fn().mockResolvedValue(sampleActor),
       getProjectRoot: vi.fn().mockResolvedValue('/mock/project/root'),
+      getHeadSha: vi.fn().mockResolvedValue('test-sha'),
     };
 
     // Mock singleton getInstance

@@ -1,17 +1,19 @@
 import { formatAuditResult, severityBadge } from './formatter';
-import type {
-  AuditOrchestrationResult,
-  Finding,
-  AuditSummary,
+import {
+  createFinding,
+  type AuditOrchestrationResult,
+  type Finding,
+  type AuditSummary,
 } from './types';
 
-function makeFinding(overrides: Partial<Finding> = {}): Finding {
-  return {
+function makeFinding(overrides: Partial<Omit<Finding, 'snippetHash'>> = {}): Finding {
+  return createFinding({
     fingerprint: 'sha256:abc123',
     ruleId: 'SEC-001',
     file: 'src/config.ts',
     line: 3,
     message: 'Hardcoded secret detected',
+    snippet: 'const secret = "sk-live-123"',
     category: 'hardcoded-secret',
     severity: 'critical',
     detector: 'regex',
@@ -20,7 +22,7 @@ function makeFinding(overrides: Partial<Finding> = {}): Finding {
     reportedBy: ['agent:security-audit'],
     isWaived: false,
     ...overrides,
-  };
+  });
 }
 
 function makeResult(overrides: {

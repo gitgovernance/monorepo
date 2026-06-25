@@ -276,7 +276,8 @@ export class LintCommand extends BaseCommand {
       }
       try {
         const projector = await this.container.getRecordProjector();
-        await projector.generateIndex();
+        const lastCommitHash = await this.container.getHeadSha();
+        await projector.generateIndex({ lastCommitHash });
         if (!quiet) {
           this.logger.info('✅ Index regenerated');
         }

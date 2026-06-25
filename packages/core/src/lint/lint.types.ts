@@ -336,7 +336,9 @@ export type ValidatorType =
   | "SOFT_DELETE_DETECTION"
   | "SCHEMA_VERSION_MISMATCH"
   // [EARS-L3] Coherencia de identidad (strict): publicKey vs KeyProvider local, session fantasma
-  | "IDENTITY_COHERENCE";
+  | "IDENTITY_COHERENCE"
+  // [EARS-M1..M3] Cross-record integrity (strict Gate 4): dangling refs, orphans, duplicate IDs
+  | "CROSS_RECORD_INTEGRITY";
 
 /**
  * Contexto de ejecución para validación de un record individual.

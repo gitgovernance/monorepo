@@ -28,4 +28,6 @@ export type GitHubProjectInitializerOptions = {
   commitMessage?: string;
   /** Commit author used by finalize() (default gitgov bot) */
   commitAuthor?: CommitAuthor;
+  /** [GPI19] Octokit instance for branch protection API. Optional — without it, protection is skipped silently. */
+  octokit?: { request: (route: string, options: Record<string, unknown>) => Promise<unknown> };
 };

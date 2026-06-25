@@ -103,8 +103,8 @@ describe('InitCommand', () => {
           saasUrl: 'https://app.gitgov.dev',
         })
       );
-      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('🚀 Initializing GitGovernance Project...'));
-      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('✅ GitGovernance initialized successfully!'));
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('Initializing GitGovernance...'));
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('Initialized GitGovernance in'));
     });
 
     it('[EARS-A2] should create root cycle and configure in config.json', async () => {
@@ -123,7 +123,7 @@ describe('InitCommand', () => {
           name: 'My Project',
         })
       );
-      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('🎯 Root Cycle Created:'));
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('Cycle:'));
     });
 
     it('[EARS-A3] should pass name to ProjectModule when template specified', async () => {
@@ -240,7 +240,7 @@ describe('InitCommand', () => {
 
       await initCommand.execute({ name: 'Test Project' });
 
-      expect(mockConsoleError).toHaveBeenCalledWith('❌ Environment validation failed:');
+      expect(mockConsoleError).toHaveBeenCalledWith('Error: Environment validation failed:');
       expect(mockProcessExit).toHaveBeenCalledWith(1);
     });
 
@@ -252,7 +252,7 @@ describe('InitCommand', () => {
         name: 'Test Project'
       });
 
-      expect(mockConsoleError).toHaveBeenCalledWith('❌ Initialization failed: BacklogAdapter connection failed');
+      expect(mockConsoleError).toHaveBeenCalledWith('Error: Initialization failed: BacklogAdapter connection failed');
       expect(mockProcessExit).toHaveBeenCalledWith(1);
     });
 
@@ -273,7 +273,7 @@ describe('InitCommand', () => {
         name: 'Test Project'
       });
 
-      expect(mockConsoleError).toHaveBeenCalledWith('❌ Initialization failed: IdentityAdapter creation failed');
+      expect(mockConsoleError).toHaveBeenCalledWith('Error: Initialization failed: IdentityAdapter creation failed');
       expect(mockProcessExit).toHaveBeenCalledWith(1);
     });
   });
@@ -288,7 +288,7 @@ describe('InitCommand', () => {
         verbose: true
       });
 
-      expect(mockConsoleLog).toHaveBeenCalledWith('✅ Environment validation passed');
+      expect(mockConsoleLog).toHaveBeenCalledWith('Environment validation passed');
       expect(mockProjectModule.initializeProject).toHaveBeenCalled();
     });
 
@@ -315,7 +315,7 @@ describe('InitCommand', () => {
         quiet: true
       });
 
-      expect(mockConsoleLog).not.toHaveBeenCalledWith('🚀 Initializing GitGovernance Project...');
+      expect(mockConsoleLog).not.toHaveBeenCalledWith('Initializing GitGovernance...');
       expect(mockConsoleLog).not.toHaveBeenCalledWith('🎉 GitGovernance initialization completed successfully!');
     });
 
@@ -325,10 +325,10 @@ describe('InitCommand', () => {
         actorName: 'Demo User'
       });
 
-      expect(mockConsoleLog).toHaveBeenCalledWith('✅ GitGovernance initialized successfully!\n');
-      expect(mockConsoleLog).toHaveBeenCalledWith('🔐 Cryptographic Trust Established:');
-      expect(mockConsoleLog).toHaveBeenCalledWith('🎯 Root Cycle Created:');
-      expect(mockConsoleLog).toHaveBeenCalledWith('🚀 Next Steps:');
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('Initialized GitGovernance in'));
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('Actor:'));
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('Cycle:'));
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('Next: gitgov audit'));
     });
 
     it('[EARS-C5] should allow join path when already initialized without --force', async () => {
@@ -336,7 +336,7 @@ describe('InitCommand', () => {
 
       await initCommand.execute({ name: 'Test Project' });
 
-      expect(mockConsoleLog).toHaveBeenCalledWith('ℹ️  Project already initialized.');
+      expect(mockConsoleLog).toHaveBeenCalledWith('Project already initialized.');
       expect(mockProcessExit).not.toHaveBeenCalled();
     });
 
@@ -411,15 +411,15 @@ describe('InitCommand', () => {
         },
         {
           error: new Error('GitGovernance already initialized'),
-          expectedMessage: '❌ GitGovernance already initialized. Use --force to re-initialize.'
+          expectedMessage: 'Error: GitGovernance already initialized. Use --force to re-initialize.'
         },
         {
           error: new Error('Not a Git repository'),
-          expectedMessage: "❌ Not a Git repository. Please run 'git init' first."
+          expectedMessage: "Error: Not a Git repository. Run 'git init' first."
         },
         {
           error: new Error('Template saas-enterprise not found'),
-          expectedMessage: '❌ Template not found. Available: basic, saas-mvp, ai-product, enterprise.'
+          expectedMessage: 'Error: Template not found. Available: basic, saas-mvp, ai-product, enterprise.'
         }
       ];
 
@@ -480,7 +480,7 @@ describe('InitCommand', () => {
 
       await initCommand.execute({ name: 'Test Project', skipValidation: true });
 
-      expect(mockConsoleError).toHaveBeenCalledWith('❌ Cannot determine your login.');
+      expect(mockConsoleError).toHaveBeenCalledWith('Error: Cannot determine your login.');
       expect(mockProcessExit).toHaveBeenCalledWith(1);
       expect(mockProjectModule.initializeProject).not.toHaveBeenCalled();
     });
@@ -541,7 +541,7 @@ describe('InitCommand', () => {
         template: 'invalid-template'
       });
 
-      expect(mockConsoleError).toHaveBeenCalledWith('❌ Template not found. Available: basic, saas-mvp, ai-product, enterprise.');
+      expect(mockConsoleError).toHaveBeenCalledWith('Error: Template not found. Available: basic, saas-mvp, ai-product, enterprise.');
       expect(mockProcessExit).toHaveBeenCalledWith(1);
     });
 
@@ -561,7 +561,7 @@ describe('InitCommand', () => {
 
       const parsedOutput = JSON.parse(jsonOutput![0] as string);
       expect(parsedOutput.success).toBe(false);
-      expect(parsedOutput.error).toContain('❌ Initialization failed: Test initialization error');
+      expect(parsedOutput.error).toContain('Error: Initialization failed: Test initialization error');
     });
 
     it('should show troubleshooting suggestions on error', async () => {
@@ -572,7 +572,7 @@ describe('InitCommand', () => {
         name: 'Test Project'
       });
 
-      expect(mockConsoleLog).toHaveBeenCalledWith('\n💡 Troubleshooting:');
+      expect(mockConsoleLog).toHaveBeenCalledWith('\nTroubleshooting:');
       expect(mockConsoleLog).toHaveBeenCalledWith("   • Ensure you're in a Git repository");
       expect(mockConsoleLog).toHaveBeenCalledWith('   • Check file permissions in current directory');
     });

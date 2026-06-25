@@ -21,12 +21,13 @@ type PrismaRowBase = {
 type PrismaRecordRowBase = PrismaRowBase & {
   recordId: string;
   header: JsonValue;
+  sourceCommitSha: string; // [PP-C3b] commit that produced this row — required since PersistContext guarantees lastCommitHash
 };
 
 // --- Row types (match Prisma model fields) ---
 
 export type GitgovMetaRow = PrismaRowBase & {
-  lastCommitHash: string | null;
+  lastCommitHash: string;
   generatedAt: string;
   integrityStatus: string;
   recordCountsJson: JsonValue;

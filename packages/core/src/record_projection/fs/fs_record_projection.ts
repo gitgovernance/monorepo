@@ -1,6 +1,6 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import type { IRecordProjection, IndexData, ProjectionContext } from '../record_projection.types';
+import type { IRecordProjection, IndexData, PersistContext, ProjectionContext } from '../record_projection.types';
 import type { FsRecordProjectionOptions } from './fs_record_projection.types';
 
 /**
@@ -16,7 +16,7 @@ export class FsRecordProjection implements IRecordProjection {
     this.indexPath = path.join(options.basePath, 'index.json');
   }
 
-  async persist(data: IndexData, _context: ProjectionContext): Promise<void> {
+  async persist(data: IndexData, _context: PersistContext): Promise<void> {
     const dir = path.dirname(this.indexPath);
     await fs.mkdir(dir, { recursive: true });
 

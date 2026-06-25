@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { Detector, Finding, RegexRule } from "../types";
+import { createFinding } from "../../audit/types";
 import { REGEX_RULES } from "../rules/regex_rules";
 
 const MAX_SNIPPET_LENGTH = 300;
@@ -72,7 +73,7 @@ export class RegexDetector implements Detector {
         const line = getLineNumber(content, match.index);
         const snippet = extractSnippet(content, match.index);
 
-        const finding: Finding = {
+        const finding = createFinding({
           fingerprint: generateFingerprint(rule.id, filePath, line),
           ruleId: rule.id,
           file: filePath,
@@ -86,9 +87,9 @@ export class RegexDetector implements Detector {
           executionId: "",      // filled post-orchestration
           reportedBy: [],       // filled post-orchestration
           isWaived: false,      // filled post-orchestration
-        };
-        if (rule.fixes?.length) finding.fixes = rule.fixes;
-        if (rule.legalReference) finding.legalReference = rule.legalReference;
+          ...(rule.fixes?.length ? { fixes: rule.fixes } : {}),
+          ...(rule.legalReference ? { legalReference: rule.legalReference } : {}),
+        });
         findings.push(finding);
       }
     }

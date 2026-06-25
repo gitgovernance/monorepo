@@ -1,7 +1,7 @@
 // ⚠️ COPIED from core — DO NOT EDIT
 // Source: packages/core/prisma/schema/
 // Re-generate: pnpm prisma:sync (in packages/e2e)
-// Synced at: 2026-05-31T02:26:50.048Z
+// Synced at: 2026-06-24T12:24:46.304Z
 
 // GitGovernance Core — Protocol Record Projection Tables
 // Fields match record types from core/src/record_types/generated/
@@ -17,7 +17,7 @@
 
 model GitgovMeta {
   id                String   @id @default(cuid())
-  lastCommitHash    String?
+  lastCommitHash    String   @default("legacy") // required — every projection knows its source commit
   generatedAt       String
   integrityStatus   String
   recordCountsJson  Json
@@ -77,6 +77,9 @@ model GitgovTask {
   // ── EmbeddedMetadataRecord.header (signatures, checksums) ──
   header      Json
 
+  // ── Projection provenance ──
+  sourceCommitSha String   @default("legacy") // [PP-C3b] commit that produced this row — required, 'legacy' for pre-PP-C3b rows
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -106,6 +109,9 @@ model GitgovCycle {
   // ── EmbeddedMetadataRecord.header ──
   header        Json
 
+  // ── Projection provenance ──
+  sourceCommitSha String   @default("legacy") // [PP-C3b] required, 'legacy' for pre-PP-C3b rows
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -133,6 +139,9 @@ model GitgovActor {
   // ── EmbeddedMetadataRecord.header ──
   header       Json
 
+  // ── Projection provenance ──
+  sourceCommitSha String   @default("legacy") // [PP-C3b] required, 'legacy' for pre-PP-C3b rows
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -158,6 +167,9 @@ model GitgovFeedback {
 
   // ── EmbeddedMetadataRecord.header ──
   header             Json
+
+  // ── Projection provenance ──
+  sourceCommitSha String   @default("legacy") // [PP-C3b] required, 'legacy' for pre-PP-C3b rows
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -207,6 +219,9 @@ model GitgovExecution {
   // ── EmbeddedMetadataRecord.header ──
   header     Json
 
+  // ── Projection provenance ──
+  sourceCommitSha String   @default("legacy") // [PP-C3b] required, 'legacy' for pre-PP-C3b rows
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -233,6 +248,9 @@ model GitgovAgent {
 
   // ── EmbeddedMetadataRecord.header ──
   header                     Json
+
+  // ── Projection provenance ──
+  sourceCommitSha String   @default("legacy") // [PP-C3b] required, 'legacy' for pre-PP-C3b rows
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

@@ -209,6 +209,7 @@ describe('security-audit integration', () => {
         taskId: 'task-integration-001',
         runId: '550e8400-e29b-41d4-a716-446655440000',
         input: { scope: 'full', taskId: 'task-integration-001', baseDir: '/tmp/test-repo' },
+        projectRoot: '/tmp/test-repo',
       };
 
       const output = await runAgent(ctx);
@@ -239,6 +240,7 @@ describe('security-audit integration', () => {
         taskId: 'task-integration-002',
         runId: '550e8400-e29b-41d4-a716-446655440001',
         input: { scope: 'full', taskId: 'task-integration-002', baseDir: '/tmp/test-repo' },
+        projectRoot: '/tmp/test-repo',
       };
 
       const output = await runAgent(ctx);
@@ -292,6 +294,7 @@ describe('security-audit integration', () => {
         taskId: 'task-integration-003',
         runId: '550e8400-e29b-41d4-a716-446655440002',
         input: { scope: 'full', taskId: 'task-integration-003', baseDir: '/tmp/test-repo' },
+        projectRoot: '/tmp/test-repo',
       };
 
       const output = await runAgent(ctx);

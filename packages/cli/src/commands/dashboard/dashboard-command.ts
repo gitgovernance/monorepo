@@ -108,7 +108,8 @@ export class DashboardCommand {
       if (!options.quiet) {
         console.log("🔄 Updating intelligence cache for dashboard...");
       }
-      await projector.generateIndex();
+      const lastCommitHash = await this.dependencyService.getHeadSha();
+      await projector.generateIndex({ lastCommitHash });
     }
   }
 
@@ -127,8 +128,8 @@ export class DashboardCommand {
     // Get index data with immediate regeneration if missing (DEMO OPTIMIZATION)
     let indexData = await projector.getIndexData();
     if (!indexData) {
-      // Immediate regeneration for demo - keeps activity stream alive (~100ms)
-      await projector.generateIndex();
+      const lastCommitHash = await this.dependencyService.getHeadSha();
+      await projector.generateIndex({ lastCommitHash });
       indexData = await projector.getIndexData();
     }
 

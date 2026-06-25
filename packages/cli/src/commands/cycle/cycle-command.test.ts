@@ -108,6 +108,7 @@ describe('CycleCommand - Complete Unit Tests', () => {
       getIdentityAdapter: vi.fn().mockResolvedValue(mockIdentityAdapter),
       getCurrentActor: vi.fn().mockResolvedValue(sampleActor),
       getProjectRoot: vi.fn().mockResolvedValue('/mock/project/root'),
+      getHeadSha: vi.fn().mockResolvedValue('test-sha'),
     };
 
     // Mock singleton getInstance

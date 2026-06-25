@@ -173,6 +173,12 @@ export type ProjectionContext = {
   lastCommitHash?: string;
 };
 
+// [PP-C3b] Narrowed context for persist() — lastCommitHash is required
+// Every persist must know its source commit. Read/exists/clear don't need it.
+export type PersistContext = ProjectionContext & {
+  lastCommitHash: string;
+};
+
 /**
  * IRecordProjection - Driver pattern for projection output.
  *
@@ -183,10 +189,19 @@ export type ProjectionContext = {
  *    GitgovActivity, GitgovExecution, GitgovAgent, GitgovWorkflow)
  */
 export interface IRecordProjection {
-  persist(data: IndexData, context: ProjectionContext): Promise<void>;
+  persist(data: IndexData, context: PersistContext): Promise<void>;
   read(context: ProjectionContext): Promise<IndexData | null>;
   exists(context: ProjectionContext): Promise<boolean>;
   clear(context: ProjectionContext): Promise<void>;
+}
+
+/**
+ * Options for generateIndex / computeProjection — lastCommitHash is required.
+ * The DB schema has lastCommitHash NOT NULL @default("legacy"), and PersistContext
+ * requires it. Every caller must provide the real SHA.
+ */
+export type ProjectionOpts = {
+  lastCommitHash: string;
 }
 
 /**
@@ -204,8 +219,8 @@ export type RecordProjectorDependencies = {
  * RecordProjector Interface - The Projection Engine.
  */
 export interface IRecordProjector {
-  generateIndex(): Promise<IndexGenerationReport>;
-  computeProjection(opts?: { lastCommitHash?: string }): Promise<IndexData>;
+  generateIndex(opts: ProjectionOpts): Promise<IndexGenerationReport>;
+  computeProjection(opts: ProjectionOpts): Promise<IndexData>;
   getIndexData(): Promise<IndexData | null>;
   validateIntegrity(): Promise<IntegrityReport>;
   calculateDerivedStates(allRecords: AllRecords): Promise<DerivedStates>;

@@ -69,7 +69,7 @@ export class InitCommand {
             exitCode: 1,
           }, null, 2));
         } else {
-          console.error("❌ Cannot determine your login.");
+          console.error("Error: Cannot determine your login.");
           console.log("   Set git config user.name or provide --login explicitly:");
           console.log("   gitgov init --login <your-github-login>");
         }
@@ -96,7 +96,7 @@ export class InitCommand {
 
       // [EARS-B1] Show progress only for actual initialization (not re-runs)
       if (!result.alreadyInitialized) {
-        progressTracker.start("🚀 Initializing GitGovernance Project...\n");
+        progressTracker.start("Initializing GitGovernance...\n");
         progressTracker.complete();
       }
 
@@ -111,7 +111,7 @@ export class InitCommand {
           console.log(`Already a member of this project as ${result.actorId}`);
           return;
         } else {
-          console.log("ℹ️  Project already initialized.");
+          console.log("Project already initialized.");
           return;
         }
       } else {
@@ -165,16 +165,16 @@ export class InitCommand {
       if (options.json) {
         console.log(JSON.stringify({ success: false, error: "Environment validation failed", warnings, suggestions, exitCode: 1 }, null, 2));
       } else {
-        console.error("❌ Environment validation failed:");
-        warnings.forEach((w: string) => console.error(`  • ${w}`));
-        console.log("\n💡 Suggestions:");
+        console.error("Error: Environment validation failed:");
+        warnings.forEach((w: string) => console.error(`  - ${w}`));
+        console.log("\nSuggestions:");
         suggestions.forEach((s: string) => console.log(`  • ${s}`));
       }
       process.exit(1);
     }
 
     if (options.verbose && !options.quiet) {
-      console.log("✅ Environment validation passed");
+      console.log("Environment validation passed");
     }
   }
 
@@ -216,8 +216,7 @@ export class InitCommand {
       }
     }
 
-    // DX concerns: .gitignore + gitgov.yml (in repoRoot), agent prompt, session
-    // Uses FsProjectInitializer temporarily for these 3 DX functions — cleanup in Task 4.6
+    // DX concerns: .gitignore + gitgov.yml (in repoRoot)
     try {
       const { FsProjectInitializer } = await import('@gitgov/core/fs');
       const resolvedRoot = realpathSync(repoRoot);
@@ -225,7 +224,6 @@ export class InitCommand {
       const worktreePath = pathUtils.join(os.homedir(), '.gitgov', 'worktrees', hash);
       const dxHelper = new FsProjectInitializer(worktreePath, repoRoot);
       await dxHelper.setupGitIntegration();
-      await dxHelper.copyAgentPrompt();
     } catch {
       // Non-fatal DX concerns
     }
@@ -368,25 +366,18 @@ export class InitCommand {
         commitSha: result.commitSha,
       }, null, 2));
     } else {
-      console.log("✅ GitGovernance initialized successfully!\n");
+      console.log(`Initialized GitGovernance in ${process.cwd()}\n`);
 
-      console.log("🔐 Cryptographic Trust Established:");
-      console.log(`   👤 Actor: ${result.actorId}`);
-      console.log(`   🤖 Product Agent: ${result.productAgentId}`);
-      console.log("   ✅ Self-signed root of trust created\n");
-
-      console.log("🎯 Root Cycle Created:");
-      console.log(`   📋 ${result.cycleId}`);
-      console.log("   📊 Status: planning\n");
+      console.log(`  Actor:   ${result.actorId}`);
+      console.log(`  Agent:   ${result.productAgentId}`);
+      console.log(`  Cycle:   ${result.cycleId} (planning)`);
+      console.log(`  Keys:    Ed25519 keypair created`);
 
       if (result.commitSha) {
-        console.log(`📝 Committed: ${result.commitSha.slice(0, 8)}\n`);
+        console.log(`  Commit:  ${result.commitSha.slice(0, 8)}`);
       }
 
-      console.log("🚀 Next Steps:");
-      console.log("   gitgov agent new @gitgov/agent-security-audit");
-      console.log("   gitgov audit");
-      console.log("   gitgov status");
+      console.log(`\nNext: gitgov audit --scope full`);
     }
   }
 
@@ -405,20 +396,20 @@ export class InitCommand {
       if (error.message.includes('Environment validation failed')) {
         message = error.message;
       } else if (error.message.includes('already initialized')) {
-        message = "❌ GitGovernance already initialized. Use --force to re-initialize.";
+        message = "Error: GitGovernance already initialized. Use --force to re-initialize.";
       } else if (error.message.includes('Not a Git repository')) {
-        message = "❌ Not a Git repository. Please run 'git init' first.";
+        message = "Error: Not a Git repository. Run 'git init' first.";
       } else if (error.message.includes('No write permissions')) {
-        message = "❌ Cannot write to directory. Please check file permissions.";
+        message = "Error: Cannot write to directory. Check file permissions.";
       } else if (error.message.includes('Template') && error.message.includes('not found')) {
-        message = "❌ Template not found. Available: basic, saas-mvp, ai-product, enterprise.";
+        message = "Error: Template not found. Available: basic, saas-mvp, ai-product, enterprise.";
       } else if (error.message.includes('DetailedValidationError')) {
-        message = `❌ Invalid configuration: ${error.message}`;
+        message = `Error: Invalid configuration: ${error.message}`;
       } else {
-        message = `❌ Initialization failed: ${error.message}`;
+        message = `Error: Initialization failed: ${error.message}`;
       }
     } else {
-      message = "❌ Unknown error occurred during initialization.";
+      message = "Error: Unknown error occurred during initialization.";
     }
 
     if (options.json) {
@@ -435,7 +426,7 @@ export class InitCommand {
 
       // Show helpful suggestions
       if (!options.quiet) {
-        console.log("\n💡 Troubleshooting:");
+        console.log("\nTroubleshooting:");
         console.log("   • Ensure you're in a Git repository");
         console.log("   • Check file permissions in current directory");
         console.log("   • Use --verbose for detailed error information");

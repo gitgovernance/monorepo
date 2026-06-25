@@ -147,5 +147,5 @@ export interface LlmRawFinding {
   confidence: number;
   fixes?: Array<{ description: string }>;
   legalReference?: string;
-  snippet?: string;
+  snippet: string;
 }

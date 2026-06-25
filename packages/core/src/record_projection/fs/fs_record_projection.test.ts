@@ -2,7 +2,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 import { FsRecordProjection } from './fs_record_projection';
-import type { IndexData, ProjectionContext } from '../record_projection.types';
+import type { PersistContext, IndexData } from '../record_projection.types';
 
 /**
  * Creates a minimal valid IndexData for testing.
@@ -52,7 +52,7 @@ function createMockIndexData(overrides: Partial<IndexData> = {}): IndexData {
 describe('FsRecordProjection', () => {
   let tmpDir: string;
   let sink: FsRecordProjection;
-  const context: ProjectionContext = {};
+  const context: PersistContext = { lastCommitHash: 'test-sha' };
 
   beforeEach(async () => {
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'fs-sink-test-'));

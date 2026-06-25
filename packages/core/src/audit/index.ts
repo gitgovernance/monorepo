@@ -8,6 +8,7 @@
  * Also:   `import { formatAuditResult, severityBadge } from '@gitgov/core/audit'`
  */
 export { formatAuditResult, severityBadge } from "./formatter";
+export { createFinding, verifySnippet } from "./types";
 
 export type {
   // Enums

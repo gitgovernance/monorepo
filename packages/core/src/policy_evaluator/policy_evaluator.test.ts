@@ -46,18 +46,16 @@ import type { FeedbackRecord, GitGovExecutionRecord } from "../record_types";
 import type { WaiverMetadata } from "../source_auditor/types";
 import type { RecordStore } from "../record_store/record_store";
 import type { SarifLog, SarifResult } from "../sarif/sarif.types";
-
-// ============================================================================
-// Test helpers
-// ============================================================================
+import { createFinding } from "../audit/types";
 
 function makeFinding(
-  overrides: Partial<Finding> = {},
+  overrides: Partial<Omit<Finding, 'snippetHash'>> = {},
 ): Finding {
-  return {
+  return createFinding({
     fingerprint: "fp-test-001",
     ruleId: "TEST-001",
     message: "test finding",
+    snippet: "const x = 'secret'",
     severity: "high",
     category: "unknown-risk",
     file: "src/foo.ts",
@@ -68,7 +66,7 @@ function makeFinding(
     reportedBy: ["agent-1"],
     isWaived: false,
     ...overrides,
-  };
+  });
 }
 
 function makeConfig(

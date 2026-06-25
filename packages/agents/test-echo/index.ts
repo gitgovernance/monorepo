@@ -5,15 +5,12 @@
  * Echoes input and returns a success message.
  */
 
-import type { Records } from '@gitgov/core';
-
 type AgentExecutionContext = {
   agentId: string;
   actorId: string;
   taskId: string;
   runId: string;
   input?: unknown;
-  /** Root directory of the project. Use instead of process.cwd(). */
   projectRoot: string;
 };
 

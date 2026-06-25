@@ -19,6 +19,7 @@ function createMockSingletonDelegate() {
   return {
     upsert: jest.fn().mockResolvedValue({}),
     create: jest.fn().mockResolvedValue({}),
+    update: jest.fn().mockResolvedValue({}),
     findUnique: jest.fn().mockResolvedValue(null),
     findFirst: jest.fn().mockResolvedValue(null),
     deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
@@ -259,7 +260,7 @@ describe('PrismaRecordProjection', () => {
 
     it('[EARS-A3] should store each cycle as individual row with header', async () => {
       const data = createMockIndexData();
-      await sink.persist(data, {});
+      await sink.persist(data, { lastCommitHash: 'test-sha' });
 
       expect(mockClient.gitgovCycle.createMany).toHaveBeenCalledTimes(1);
       const call = (mockClient.gitgovCycle.createMany as jest.Mock).mock.calls[0]![0];
@@ -273,7 +274,7 @@ describe('PrismaRecordProjection', () => {
 
     it('[EARS-A4] should store each actor as individual row with header', async () => {
       const data = createMockIndexData();
-      await sink.persist(data, {});
+      await sink.persist(data, { lastCommitHash: 'test-sha' });
 
       expect(mockClient.gitgovActor.createMany).toHaveBeenCalledTimes(1);
       const call = (mockClient.gitgovActor.createMany as jest.Mock).mock.calls[0]![0];
@@ -287,7 +288,7 @@ describe('PrismaRecordProjection', () => {
 
     it('[EARS-A5] should store each feedback as individual row with header', async () => {
       const data = createMockIndexData();
-      await sink.persist(data, {});
+      await sink.persist(data, { lastCommitHash: 'test-sha' });
 
       expect(mockClient.gitgovFeedback.createMany).toHaveBeenCalledTimes(1);
       const call = (mockClient.gitgovFeedback.createMany as jest.Mock).mock.calls[0]![0];
@@ -304,7 +305,7 @@ describe('PrismaRecordProjection', () => {
     it('[EARS-B1] should persist GitgovMeta with metadata, derivedStates, metrics, and lastCommitHash', async () => {
       const data = createMockIndexData();
       const context: ProjectionContext = { lastCommitHash: 'commit-abc' };
-      await sink.persist(data, context);
+      await sink.persist(data, context as any);
 
       // Single-tenant (no tenantFields) uses deleteMany + create, not upsert
       expect(mockClient.gitgovMeta.deleteMany).toHaveBeenCalled();
@@ -313,7 +314,7 @@ describe('PrismaRecordProjection', () => {
 
     it('[EARS-B2] should store activity history as individual rows in GitgovActivity', async () => {
       const data = createMockIndexData();
-      await sink.persist(data, {});
+      await sink.persist(data, { lastCommitHash: 'test-sha' });
 
       expect(mockClient.gitgovActivity.createMany).toHaveBeenCalledTimes(1);
       const call = (mockClient.gitgovActivity.createMany as jest.Mock).mock.calls[0]![0];
@@ -335,7 +336,7 @@ describe('PrismaRecordProjection', () => {
         executions: [],
         agents: [],
       });
-      await sink.persist(data, {});
+      await sink.persist(data, { lastCommitHash: 'test-sha' });
 
       expect(mockClient.gitgovTask.createMany).not.toHaveBeenCalled();
       expect(mockClient.gitgovCycle.createMany).not.toHaveBeenCalled();
@@ -452,7 +453,7 @@ describe('PrismaRecordProjection', () => {
         recordCountsJson: {}, generationTime: 50,
         derivedStatesJson: { stalledTasks: [], atRiskTasks: [], needsClarificationTasks: [], blockedByDependencyTasks: [] },
         metricsJson: {},
-        lastCommitHash: null, createdAt: new Date(), updatedAt: new Date(),
+        lastCommitHash: 'legacy', createdAt: new Date(), updatedAt: new Date(),
       });
 
       (mockClient.gitgovTask.findMany as jest.Mock).mockResolvedValue([{
@@ -523,7 +524,7 @@ describe('PrismaRecordProjection', () => {
 
     it('[EARS-D4] should use atomic delete+createMany for full replacement', async () => {
       const data = createMockIndexData();
-      await sink.persist(data, {});
+      await sink.persist(data, { lastCommitHash: 'test-sha' });
 
       expect(mockClient.$transaction).toHaveBeenCalledTimes(1);
       // Verify deletes are in the transaction
@@ -546,7 +547,7 @@ describe('PrismaRecordProjection', () => {
       });
 
       const data = createMockIndexData();
-      await sinkWithMeta.persist(data, {});
+      await sinkWithMeta.persist(data, { lastCommitHash: 'test-sha' });
 
       expect(client.gitgovMeta.upsert).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -576,7 +577,7 @@ describe('PrismaRecordProjection', () => {
           },
         }],
       });
-      await sink.persist(data, {});
+      await sink.persist(data, { lastCommitHash: 'test-sha' });
 
       const call = (mockClient.gitgovTask.createMany as jest.Mock).mock.calls[0]![0];
       const row = call.data[0];
@@ -585,7 +586,7 @@ describe('PrismaRecordProjection', () => {
 
     it('[EARS-E2] should set task metadata to null when metadata is absent', async () => {
       const data = createMockIndexData();
-      await sink.persist(data, {});
+      await sink.persist(data, { lastCommitHash: 'test-sha' });
 
       const call = (mockClient.gitgovTask.createMany as jest.Mock).mock.calls[0]![0];
       const row = call.data[0];
@@ -605,7 +606,7 @@ describe('PrismaRecordProjection', () => {
           },
         }],
       });
-      await sink.persist(data, {});
+      await sink.persist(data, { lastCommitHash: 'test-sha' });
 
       const call = (mockClient.gitgovCycle.createMany as jest.Mock).mock.calls[0]![0];
       const row = call.data[0];
@@ -614,7 +615,7 @@ describe('PrismaRecordProjection', () => {
 
     it('[EARS-E4] should set cycle metadata to null when metadata is absent', async () => {
       const data = createMockIndexData();
-      await sink.persist(data, {});
+      await sink.persist(data, { lastCommitHash: 'test-sha' });
 
       const call = (mockClient.gitgovCycle.createMany as jest.Mock).mock.calls[0]![0];
       const row = call.data[0];
@@ -627,7 +628,7 @@ describe('PrismaRecordProjection', () => {
         generatedAt: '2026-01-01T00:00:00.000Z', integrityStatus: 'valid',
         recordCountsJson: {}, generationTime: 50,
         derivedStatesJson: { stalledTasks: [], atRiskTasks: [], needsClarificationTasks: [], blockedByDependencyTasks: [] },
-        metricsJson: {}, lastCommitHash: null, createdAt: new Date(), updatedAt: new Date(),
+        metricsJson: {}, lastCommitHash: 'legacy', createdAt: new Date(), updatedAt: new Date(),
       });
 
       (mockClient.gitgovTask.findMany as jest.Mock).mockResolvedValue([{
@@ -660,7 +661,7 @@ describe('PrismaRecordProjection', () => {
         generatedAt: '2026-01-01T00:00:00.000Z', integrityStatus: 'valid',
         recordCountsJson: {}, generationTime: 50,
         derivedStatesJson: { stalledTasks: [], atRiskTasks: [], needsClarificationTasks: [], blockedByDependencyTasks: [] },
-        metricsJson: {}, lastCommitHash: null, createdAt: new Date(), updatedAt: new Date(),
+        metricsJson: {}, lastCommitHash: 'legacy', createdAt: new Date(), updatedAt: new Date(),
       });
 
       (mockClient.gitgovTask.findMany as jest.Mock).mockResolvedValue([]);
@@ -727,7 +728,7 @@ describe('PrismaRecordProjection', () => {
         generatedAt: '2026-01-01T00:00:00.000Z', integrityStatus: 'valid',
         recordCountsJson: {}, generationTime: 50,
         derivedStatesJson: { stalledTasks: [], atRiskTasks: [], needsClarificationTasks: [], blockedByDependencyTasks: [] },
-        metricsJson: {}, lastCommitHash: null, createdAt: new Date(), updatedAt: new Date(),
+        metricsJson: {}, lastCommitHash: 'legacy', createdAt: new Date(), updatedAt: new Date(),
       });
 
       (mockClient.gitgovTask.findMany as jest.Mock).mockResolvedValue([]);
@@ -742,6 +743,7 @@ describe('PrismaRecordProjection', () => {
         metadata: null,
         references: ['commit:abc123'],
         header: { ...mockHeader, type: 'execution' },
+        sourceCommitSha: 'test-sha',
         createdAt: new Date(), updatedAt: new Date(),
       };
       (mockClient.gitgovExecution.findMany as jest.Mock).mockResolvedValue([readExec]);
@@ -766,7 +768,7 @@ describe('PrismaRecordProjection', () => {
         generatedAt: '2026-01-01T00:00:00.000Z', integrityStatus: 'valid',
         recordCountsJson: {}, generationTime: 50,
         derivedStatesJson: { stalledTasks: [], atRiskTasks: [], needsClarificationTasks: [], blockedByDependencyTasks: [] },
-        metricsJson: {}, lastCommitHash: null, createdAt: new Date(), updatedAt: new Date(),
+        metricsJson: {}, lastCommitHash: 'legacy', createdAt: new Date(), updatedAt: new Date(),
       });
 
       (mockClient.gitgovTask.findMany as jest.Mock).mockResolvedValue([]);
@@ -784,6 +786,7 @@ describe('PrismaRecordProjection', () => {
         promptEngineRequirements: null,
         metadata: { framework: 'langchain' },
         header: { ...mockHeader, type: 'agent' },
+        sourceCommitSha: 'test-sha',
         createdAt: new Date(), updatedAt: new Date(),
       };
       (mockClient.gitgovAgent.findMany as jest.Mock).mockResolvedValue([readAgent]);
@@ -875,6 +878,7 @@ describe('PrismaRecordProjection', () => {
         'blockingFeedbackCount', 'openQuestionCount', 'timeToResolution',
         'isReleased', 'lastReleaseVersion',
         'lastUpdated', 'lastActivityType', 'recentActivity', 'relationships',
+        'sourceCommitSha',
       ];
       const orphanedFields = taskFieldNames.filter((f: string) => !knownTaskFields.includes(f));
       expect(orphanedFields).toEqual([]);
@@ -980,6 +984,90 @@ describe('PrismaRecordProjection', () => {
       // The old identity is preserved as revoked (audit trail), pointing to its successor
       expect(revokedRows).toHaveLength(1);
       expect(revokedRows[0].supersededBy).toBe('human:test-v2');
+    });
+  });
+
+  describe('4.11b. Persist Integrity Hashes (PP-C3)', () => {
+    it('[PP-C3] should store persistIntegrity hashes in metricsJson after persist', async () => {
+      const client = createMockClient();
+      // Mock the update call for persistIntegrity (happens after $transaction + PP-C2)
+      (client.gitgovMeta as unknown as { update: jest.Mock }).update = jest.fn().mockResolvedValue({});
+
+      const sink = new PrismaRecordProjection({ client, tenantFields: { repoId: 'repo-1', projectionType: 'index' } });
+      const data = createMockIndexData();
+
+      await sink.persist(data, { lastCommitHash: 'sha-1' });
+
+      const updateCall = (client.gitgovMeta as unknown as { update: jest.Mock }).update;
+      expect(updateCall).toHaveBeenCalled();
+      const updateArg = updateCall.mock.calls[0][0];
+      const integrity = JSON.parse(JSON.stringify(updateArg.data.metricsJson)).persistIntegrity;
+      expect(integrity).toBeDefined();
+      expect(integrity.actors).toBeDefined();
+      expect(integrity.actors.count).toBe(data.actors.length);
+      expect(integrity.actors.hash).toMatch(/^[a-f0-9]{64}$/);
+      expect(integrity.tasks).toBeDefined();
+      expect(integrity.cycles).toBeDefined();
+      expect(integrity.verifiedAt).toBeDefined();
+    });
+  });
+
+  describe('4.11c. Source Commit SHA per Row (PP-C3b)', () => {
+    it('[PP-C3b] should include sourceCommitSha in projection rows', async () => {
+      const client = createMockClient();
+      // PP-C3 update mock
+      (client.gitgovMeta as unknown as { update: jest.Mock }).update = jest.fn().mockResolvedValue({});
+
+      const sink = new PrismaRecordProjection({ client, tenantFields: { repoId: 'repo-1', projectionType: 'index' } });
+      const data = createMockIndexData();
+      const commitSha = 'abc123def456';
+
+      await sink.persist(data, { lastCommitHash: commitSha });
+
+      // Check actor rows have sourceCommitSha
+      const actorCreateMany = client.gitgovActor.createMany as jest.Mock;
+      expect(actorCreateMany).toHaveBeenCalled();
+      const actorRows = actorCreateMany.mock.calls[0][0].data;
+      for (const row of actorRows) {
+        expect(row.sourceCommitSha).toBe(commitSha);
+      }
+
+      // Check task rows have sourceCommitSha
+      const taskCreateMany = client.gitgovTask.createMany as jest.Mock;
+      expect(taskCreateMany).toHaveBeenCalled();
+      const taskRows = taskCreateMany.mock.calls[0][0].data;
+      for (const row of taskRows) {
+        expect(row.sourceCommitSha).toBe(commitSha);
+      }
+
+      // Check cycle rows have sourceCommitSha
+      const cycleCreateMany = client.gitgovCycle.createMany as jest.Mock;
+      expect(cycleCreateMany).toHaveBeenCalled();
+      const cycleRows = cycleCreateMany.mock.calls[0][0].data;
+      for (const row of cycleRows) {
+        expect(row.sourceCommitSha).toBe(commitSha);
+      }
+
+      // Check feedback rows have sourceCommitSha
+      const feedbackCreateMany = client.gitgovFeedback.createMany as jest.Mock;
+      expect(feedbackCreateMany).toHaveBeenCalled();
+      for (const row of feedbackCreateMany.mock.calls[0][0].data) {
+        expect(row.sourceCommitSha).toBe(commitSha);
+      }
+
+      // Check execution rows have sourceCommitSha
+      const executionCreateMany = client.gitgovExecution.createMany as jest.Mock;
+      expect(executionCreateMany).toHaveBeenCalled();
+      for (const row of executionCreateMany.mock.calls[0][0].data) {
+        expect(row.sourceCommitSha).toBe(commitSha);
+      }
+
+      // Check agent rows have sourceCommitSha
+      const agentCreateMany = client.gitgovAgent.createMany as jest.Mock;
+      expect(agentCreateMany).toHaveBeenCalled();
+      for (const row of agentCreateMany.mock.calls[0][0].data) {
+        expect(row.sourceCommitSha).toBe(commitSha);
+      }
     });
   });
 });

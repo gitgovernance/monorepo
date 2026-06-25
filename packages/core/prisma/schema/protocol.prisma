@@ -12,7 +12,7 @@
 
 model GitgovMeta {
   id                String   @id @default(cuid())
-  lastCommitHash    String?
+  lastCommitHash    String   @default("legacy") // required — every projection knows its source commit
   generatedAt       String
   integrityStatus   String
   recordCountsJson  Json
@@ -72,6 +72,9 @@ model GitgovTask {
   // ── EmbeddedMetadataRecord.header (signatures, checksums) ──
   header      Json
 
+  // ── Projection provenance ──
+  sourceCommitSha String   @default("legacy") // [PP-C3b] commit that produced this row — required, 'legacy' for pre-PP-C3b rows
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -101,6 +104,9 @@ model GitgovCycle {
   // ── EmbeddedMetadataRecord.header ──
   header        Json
 
+  // ── Projection provenance ──
+  sourceCommitSha String   @default("legacy") // [PP-C3b] required, 'legacy' for pre-PP-C3b rows
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -128,6 +134,9 @@ model GitgovActor {
   // ── EmbeddedMetadataRecord.header ──
   header       Json
 
+  // ── Projection provenance ──
+  sourceCommitSha String   @default("legacy") // [PP-C3b] required, 'legacy' for pre-PP-C3b rows
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -153,6 +162,9 @@ model GitgovFeedback {
 
   // ── EmbeddedMetadataRecord.header ──
   header             Json
+
+  // ── Projection provenance ──
+  sourceCommitSha String   @default("legacy") // [PP-C3b] required, 'legacy' for pre-PP-C3b rows
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -202,6 +214,9 @@ model GitgovExecution {
   // ── EmbeddedMetadataRecord.header ──
   header     Json
 
+  // ── Projection provenance ──
+  sourceCommitSha String   @default("legacy") // [PP-C3b] required, 'legacy' for pre-PP-C3b rows
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -228,6 +243,9 @@ model GitgovAgent {
 
   // ── EmbeddedMetadataRecord.header ──
   header                     Json
+
+  // ── Projection provenance ──
+  sourceCommitSha String   @default("legacy") // [PP-C3b] required, 'legacy' for pre-PP-C3b rows
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

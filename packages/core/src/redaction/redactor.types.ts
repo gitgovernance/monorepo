@@ -49,11 +49,10 @@ type RedactedFinding<T extends RedactableInput = Finding> = T & {
    */
   redactionLevel: RedactionLevel;
   /**
-   * SHA256 hex del snippet original antes de redaccion.
-   * Presente solo cuando el snippet fue redactado (hasFullSnippet === false).
-   * Permite verificar: sha256(snippet_l2) === snippetHash_l1.
+   * SHA256 hex del snippet original. Always present — inherited from Finding.snippetHash (required).
+   * Enables L1↔L2 integrity verification: sha256(snippet_l2) === snippetHash_l1.
    */
-  snippetHash?: string;
+  snippetHash: string;
   /**
    * True si el snippet completo esta disponible en este nivel.
    * False cuando snippet === '[REDACTED]'.

@@ -737,4 +737,30 @@ describe('Init CLI Command - Edge Cases E2E Tests', () => {
       cleanupWorktree(projRoot, wtPath);
     });
   });
+
+  describe('4.10. Professional Output (Bug 17 + 18, s68)', () => {
+    it('[EARS-C4] should show professional output without emojis', () => {
+      const projRoot = path.join(tempDir, 'output-test');
+      fs.mkdirSync(projRoot, { recursive: true });
+      createGitRepo(projRoot);
+
+      const result = runCliCommand(
+        ['init', '--name', 'OutputTest', '--actor-name', 'Test'],
+        { cwd: projRoot },
+      );
+      expect(result.success).toBe(true);
+
+      expect(result.output).toContain('Initialized GitGovernance in');
+      expect(result.output).toContain('Actor:');
+      expect(result.output).toContain('Cycle:');
+      expect(result.output).toContain('Next: gitgov audit');
+      expect(result.output).not.toContain('🚀');
+      expect(result.output).not.toContain('🔐');
+      expect(result.output).not.toContain('🎯');
+      expect(result.output).not.toContain('Cryptographic Trust Established');
+      expect(result.output).not.toContain('agent new @gitgov/agent-security-audit');
+
+      cleanupWorktree(projRoot, getWorktreeBasePath(projRoot));
+    });
+  });
 });

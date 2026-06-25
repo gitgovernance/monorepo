@@ -1,4 +1,5 @@
 import type { SarifLog, SarifPhysicalLocation } from "../sarif/sarif.types";
+import { createFinding } from "../audit/types";
 import type { IAgentRunner } from "../agent_runner/agent_runner";
 import type { Waiver } from "../source_auditor/types";
 import type { RunOptions } from "../agent_runner/agent_runner.types";
@@ -241,12 +242,13 @@ function consolidateFindings(
           const detector = (props?.["gitgov/detector"] as string | undefined) ?? "regex";
           const confidence = (props?.["gitgov/confidence"] as number | undefined) ?? 1.0;
 
-          const finding: Finding = {
+          const finding = createFinding({
             fingerprint,
             ruleId: sarifResult.ruleId,
             file: location?.artifactLocation?.uri ?? "",
             line: location?.region?.startLine ?? 0,
             message: sarifResult.message.text,
+            snippet: snippet ?? '',
             category,
             severity: levelToSeverity(sarifResult.level),
             detector: detector as import("../audit/types").DetectorName,
@@ -254,8 +256,7 @@ function consolidateFindings(
             executionId: result.executionId,
             reportedBy: [result.agentId],
             isWaived: false,
-            ...(snippet ? { snippet } : {}),
-          };
+          });
           const col = location?.region?.startColumn;
           if (col !== undefined) {
             finding.column = col;
@@ -385,12 +386,16 @@ export function createAuditOrchestrator(deps: AuditOrchestratorDeps) {
       );
 
       // [AORCH-E1] Produce L1-redacted SARIF copies (redactor is required)
-      // [AORCH-E2] Original agentResults remain unredacted for L2
       // [AORCH-E3] Agents do not need knowledge of RedactionLevel
       const l1AgentResults: AgentAuditResult[] = agentResults.map((r) => ({
         ...r,
         sarif: deps.redactor.redactSarif(r.sarif, "l1"),
       }));
+
+      // [AORCH-E2] [RLDX-F2] Enrich L2 agentResults with snippetHash (snippet preserved, hash added)
+      for (const r of agentResults) {
+        r.sarif = deps.redactor.redactSarif(r.sarif, "l2");
+      }
 
       // [AORCH-B6, B12, B13] Consolidate findings with dedup by fingerprint
       const rawFindings = consolidateFindings(agentResults);
@@ -433,11 +438,16 @@ export function createAuditOrchestrator(deps: AuditOrchestratorDeps) {
       );
       let entrypointWarning: string | undefined;
       if (failedAgents.length > 0) {
-        const details = failedAgents.map(a => `  ${a.agentId}: entrypoint not found`).join('\n');
+        const details = failedAgents.map(a => {
+          const m = a.errorMessage?.match(/['"]([^'"]+)['"]/);
+          const pkg = m?.[1] ?? 'unknown';
+          return `  ${a.agentId} — ${pkg} not found`;
+        }).join('\n');
         const successCount = agentResults.filter(r => r.status === 'success').length;
+        const guidance = '\n\nRegister an agent with: gitgov agent new <path-to-agent>\nOr install from npm:    npm install <package>';
         entrypointWarning = successCount === 0
-          ? `All audit agents failed to load:\n${details}\n\nRegister with a local path: gitgov agent new <path-to-agent>`
-          : `Some audit agents failed to load:\n${details}`;
+          ? `All audit agents failed to load:\n${details}${guidance}`
+          : `Some audit agents failed to load:\n${details}${guidance}`;
       }
 
       const result: AuditOrchestrationResult = {

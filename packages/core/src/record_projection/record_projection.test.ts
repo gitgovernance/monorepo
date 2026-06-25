@@ -324,7 +324,7 @@ describe('RecordProjector', () => {
 
   describe('4.1. Core Cache Operations (EARS-A1 a A6)', () => {
     it('[EARS-A1] should generate complete index with all required fields', async () => {
-      const report = await recordProjector.generateIndex();
+      const report = await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
       const indexData = await recordProjector.getIndexData();
 
       // Validate generation report
@@ -345,7 +345,7 @@ describe('RecordProjector', () => {
     });
 
     it('[EARS-A1] should include complete metadata (generatedAt, lastCommitHash, integrityStatus, etc)', async () => {
-      await recordProjector.generateIndex();
+      await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
       const indexData = await recordProjector.getIndexData();
 
       const metadata = indexData?.metadata;
@@ -379,7 +379,7 @@ describe('RecordProjector', () => {
     });
 
     it('[EARS-A1] should include all metrics from RecordMetrics (system, productivity, collaboration)', async () => {
-      await recordProjector.generateIndex();
+      await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
       const indexData = await recordProjector.getIndexData();
 
       const metrics = indexData?.metrics;
@@ -409,7 +409,7 @@ describe('RecordProjector', () => {
     });
 
     it('[EARS-A1] should include derivedStates with all arrays (stalled, atRisk, clarification, blocked)', async () => {
-      await recordProjector.generateIndex();
+      await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
       const indexData = await recordProjector.getIndexData();
 
       const derivedStates = indexData?.derivedStates;
@@ -430,7 +430,7 @@ describe('RecordProjector', () => {
     });
 
     it('[EARS-A1] should include activityHistory array with events', async () => {
-      await recordProjector.generateIndex();
+      await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
       const indexData = await recordProjector.getIndexData();
 
       const activityHistory = indexData?.activityHistory;
@@ -451,7 +451,7 @@ describe('RecordProjector', () => {
     });
 
     it('[EARS-A1] should filter NaN/invalid timestamps from activityHistory before persisting', async () => {
-      const report = await recordProjector.generateIndex();
+      const report = await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
       expect(report.success).toBe(true);
 
       const indexData = await recordProjector.getIndexData();
@@ -466,7 +466,7 @@ describe('RecordProjector', () => {
     });
 
     it('[EARS-A1] should include tasks array with full GitGovTaskRecord (headers + payloads)', async () => {
-      await recordProjector.generateIndex();
+      await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
       const indexData = await recordProjector.getIndexData();
 
       const tasks = indexData?.tasks;
@@ -491,7 +491,7 @@ describe('RecordProjector', () => {
     });
 
     it('[EARS-A1] should include enrichedTasks array with calculated fields', async () => {
-      await recordProjector.generateIndex();
+      await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
       const indexData = await recordProjector.getIndexData();
 
       const enrichedTasks = indexData?.enrichedTasks;
@@ -514,7 +514,7 @@ describe('RecordProjector', () => {
     });
 
     it('[EARS-A1] should include cycles array with full GitGovCycleRecord (headers + payloads)', async () => {
-      await recordProjector.generateIndex();
+      await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
       const indexData = await recordProjector.getIndexData();
 
       const cycles = indexData?.cycles;
@@ -532,7 +532,7 @@ describe('RecordProjector', () => {
     });
 
     it('[EARS-A1] should include actors array with full GitGovActorRecord (headers + payloads)', async () => {
-      await recordProjector.generateIndex();
+      await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
       const indexData = await recordProjector.getIndexData();
 
       const actors = indexData?.actors;
@@ -550,7 +550,7 @@ describe('RecordProjector', () => {
     });
 
     it('[EARS-A1] should include feedback array with full GitGovFeedbackRecord (headers + payloads)', async () => {
-      await recordProjector.generateIndex();
+      await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
       const indexData = await recordProjector.getIndexData();
 
       const feedback = indexData?.feedback;
@@ -570,7 +570,7 @@ describe('RecordProjector', () => {
 
     it('[EARS-A2] should return data from cache in under 10ms', async () => {
       // Generate cache first
-      await recordProjector.generateIndex();
+      await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
 
       // Measure cache read performance (EARS-A2: < 10ms requirement)
       const startTime = performance.now();
@@ -666,7 +666,7 @@ describe('RecordProjector', () => {
 
     it('[EARS-A5] should determine cache freshness correctly', async () => {
       // Generate cache first
-      await recordProjector.generateIndex();
+      await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
 
       // Should be fresh immediately after generation
       const isUpToDate = await recordProjector.isIndexUpToDate();
@@ -675,7 +675,7 @@ describe('RecordProjector', () => {
 
     it('[EARS-A6] should invalidate cache successfully', async () => {
       // Generate cache first
-      await recordProjector.generateIndex();
+      await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
       let indexData = await recordProjector.getIndexData();
       expect(indexData).not.toBeNull();
 
@@ -691,7 +691,7 @@ describe('RecordProjector', () => {
   describe('4.1. RecordMetrics Integration (EARS-C5)', () => {
     // TODO: This test lacks an EARS prefix — consider mapping to an existing EARS or adding one to the spec
     it('should delegate all calculations to RecordMetrics without duplicating logic', async () => {
-      const report = await recordProjector.generateIndex();
+      const report = await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
 
       expect(report.success).toBe(true);
       expect(mockRecordMetrics.getSystemStatus).toHaveBeenCalledTimes(1);
@@ -702,7 +702,7 @@ describe('RecordProjector', () => {
     it('[EARS-C5] should handle RecordMetrics errors gracefully', async () => {
       mockRecordMetrics.getSystemStatus.mockRejectedValue(new Error('RecordMetrics error'));
 
-      const report = await recordProjector.generateIndex();
+      const report = await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
 
       expect(report.success).toBe(false);
       expect(report.errors).toContain('RecordMetrics error');
@@ -712,7 +712,7 @@ describe('RecordProjector', () => {
   describe('4.1. Error Handling & Graceful Degradation (EARS-C2 a C4)', () => {
     it('[EARS-C4] should report sink write errors in IndexGenerationReport', async () => {
       // Step 1: Generate initial valid cache
-      const report1 = await recordProjector.generateIndex();
+      const report1 = await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
       expect(report1.success).toBe(true);
 
       // Step 2: Verify initial cache exists and is valid
@@ -723,7 +723,7 @@ describe('RecordProjector', () => {
       mockSink.persist.mockRejectedValueOnce(new Error('Simulated write error'));
 
       // Step 4: Attempt to generate index again (should fail)
-      const report2 = await recordProjector.generateIndex();
+      const report2 = await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
       expect(report2.success).toBe(false);
       expect(report2.errors).toContain('Simulated write error');
 
@@ -740,7 +740,7 @@ describe('RecordProjector', () => {
         sink: fullSink,
       });
 
-      const report = await fullAdapter.generateIndex();
+      const report = await fullAdapter.generateIndex({ lastCommitHash: 'test-sha' });
       expect(report.success).toBe(true);
     });
 
@@ -790,7 +790,7 @@ describe('RecordProjector', () => {
       expect(recordCount).toBeLessThan(500); // EARS-C1: Phase 1 constraint (0-500 records)
 
       const startTime = Date.now();
-      const report = await recordProjector.generateIndex();
+      const report = await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
       const endTime = Date.now();
 
       expect(report.success).toBe(true);
@@ -802,7 +802,7 @@ describe('RecordProjector', () => {
     });
 
     it('should provide detailed performance metrics', async () => {
-      const report = await recordProjector.generateIndex();
+      const report = await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
 
       expect(report.performance).toHaveProperty('readTime');
       expect(report.performance).toHaveProperty('calculationTime');
@@ -813,7 +813,7 @@ describe('RecordProjector', () => {
   describe('4.1. Cache Lifecycle Management (EARS-C6)', () => {
     it('should handle complete cache lifecycle', async () => {
       // 1. Generate cache
-      const report = await recordProjector.generateIndex();
+      const report = await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
       expect(report.success).toBe(true);
 
       // 2. Verify cache data
@@ -832,7 +832,7 @@ describe('RecordProjector', () => {
 
     it('[EARS-C6] should detect when cache becomes stale', async () => {
       // Generate initial cache
-      await recordProjector.generateIndex();
+      await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
 
       // Simulate new record with newer timestamp
       const newerTimestamp = Math.floor(Date.now() / 1000) + 100;
@@ -874,7 +874,7 @@ describe('RecordProjector', () => {
       mockStores.tasks.get.mockResolvedValue(realisticTask);
       mockStores.cycles.get.mockResolvedValue(realisticCycle);
 
-      const report = await recordProjector.generateIndex();
+      const report = await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
       expect(report.success).toBe(true);
 
       const indexData = await recordProjector.getIndexData();
@@ -894,7 +894,7 @@ describe('RecordProjector', () => {
         health: { overallScore: 100, blockedTasks: 0, staleTasks: 0 }
       });
 
-      const report = await recordProjector.generateIndex();
+      const report = await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
 
       expect(report.success).toBe(true);
       expect(report.recordsProcessed).toBe(0);
@@ -908,7 +908,7 @@ describe('RecordProjector', () => {
 
   describe('4.1. DerivedStates Calculation (EARS-B1 a B4)', () => {
     it('[EARS-B1] should apply derived data protocol rules', async () => {
-      await recordProjector.generateIndex();
+      await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
       const indexData = await recordProjector.getIndexData();
 
       const enrichedTask = indexData?.enrichedTasks?.[0];
@@ -935,7 +935,7 @@ describe('RecordProjector', () => {
       mockStores.tasks.get.mockResolvedValue(stalledTask);
       mockStores.executions.list.mockResolvedValue([]);
 
-      await recordProjector.generateIndex();
+      await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
       const indexData = await recordProjector.getIndexData();
 
       expect(indexData?.derivedStates.stalledTasks).toContain(`${fourteenDaysAgo}-task-stalled`);
@@ -967,7 +967,7 @@ describe('RecordProjector', () => {
       mockStores.feedbacks.list.mockResolvedValue(['1757687336-feedback-question']);
       mockStores.feedbacks.get.mockResolvedValue(feedbackRecord);
 
-      await recordProjector.generateIndex();
+      await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
       const indexData = await recordProjector.getIndexData();
 
       expect(indexData?.derivedStates.needsClarificationTasks).toContain(taskId);
@@ -993,7 +993,7 @@ describe('RecordProjector', () => {
         .mockResolvedValueOnce(blockerTask)
         .mockResolvedValueOnce(blockedTask);
 
-      await recordProjector.generateIndex();
+      await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
       const indexData = await recordProjector.getIndexData();
 
       expect(indexData?.derivedStates.blockedByDependencyTasks).toContain('1757687336-task-blocked');
@@ -1004,7 +1004,7 @@ describe('RecordProjector', () => {
 
   describe('4.1. Activity History & LastUpdated (EARS-D1 a E6)', () => {
     it('[EARS-D1] should calculate activity history from record timestamps', async () => {
-      await recordProjector.generateIndex();
+      await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
       const indexData = await recordProjector.getIndexData();
 
       expect(indexData?.activityHistory).toBeDefined();
@@ -1065,7 +1065,7 @@ describe('RecordProjector', () => {
     });
 
     it('[EARS-D2] should include last 15 events ordered chronologically', async () => {
-      await recordProjector.generateIndex();
+      await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
       const indexData = await recordProjector.getIndexData();
 
       const activityHistory = indexData?.activityHistory || [];
@@ -1084,7 +1084,7 @@ describe('RecordProjector', () => {
     });
 
     it('[EARS-E1] should calculate lastUpdated using signature timestamps and related records', async () => {
-      await recordProjector.generateIndex();
+      await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
       const indexData = await recordProjector.getIndexData();
 
       const enrichedTask = indexData?.enrichedTasks?.[0];
@@ -1140,7 +1140,7 @@ describe('RecordProjector', () => {
     });
 
     it('[EARS-E2] should consider related executions and feedback', async () => {
-      await recordProjector.generateIndex();
+      await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
       const indexData = await recordProjector.getIndexData();
 
       const enrichedTask = indexData?.enrichedTasks?.[0];
@@ -1172,7 +1172,7 @@ describe('RecordProjector', () => {
       mockStores.executions.list.mockResolvedValue([`${execTimestamp}-exec-recent`]);
       mockStores.executions.get.mockResolvedValue(execution);
 
-      await recordProjector.generateIndex();
+      await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
       const indexData = await recordProjector.getIndexData();
 
       const enrichedTask = indexData?.enrichedTasks?.[0];
@@ -1203,7 +1203,7 @@ describe('RecordProjector', () => {
       mockStores.tasks.list.mockResolvedValue([`${baseTimestamp}-task-with-sigs`]);
       mockStores.tasks.get.mockResolvedValue(taskWithSigs);
 
-      await recordProjector.generateIndex();
+      await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
       let indexData = await recordProjector.getIndexData();
       let enrichedTask = indexData?.enrichedTasks?.[0];
 
@@ -1222,7 +1222,7 @@ describe('RecordProjector', () => {
       mockStores.tasks.get.mockResolvedValue(taskNoModifier);
       await mockSink.clear({});
 
-      await recordProjector.generateIndex();
+      await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
       indexData = await recordProjector.getIndexData();
       enrichedTask = indexData?.enrichedTasks?.[0];
 
@@ -1232,7 +1232,7 @@ describe('RecordProjector', () => {
     });
 
     it('[EARS-E5] should use timestamps in milliseconds for consistency', async () => {
-      await recordProjector.generateIndex();
+      await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
       const indexData = await recordProjector.getIndexData();
 
       const enrichedTask = indexData?.enrichedTasks?.[0];
@@ -1262,7 +1262,7 @@ describe('RecordProjector', () => {
       mockStores.tasks.list.mockResolvedValue([`${baseTimestamp}-task-modified-late`]);
       mockStores.tasks.get.mockResolvedValue(task);
 
-      await recordProjector.generateIndex();
+      await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
       const indexData = await recordProjector.getIndexData();
 
       const enrichedTask = indexData?.enrichedTasks?.[0];
@@ -1275,7 +1275,7 @@ describe('RecordProjector', () => {
     describe('Activity Metadata (EARS-F1 a F2)', () => {
       it('[EARS-F1] should enrich tasks with lastUpdated lastActivityType and recentActivity', async () => {
         // Generate index which calls enrichTaskRecord internally
-        await recordProjector.generateIndex();
+        await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
         const indexData = await recordProjector.getIndexData();
 
         expect(indexData?.enrichedTasks).toBeDefined();
@@ -1288,7 +1288,7 @@ describe('RecordProjector', () => {
       });
 
       it('[EARS-F2] should include enrichedTasks in IndexData for dashboard consumption', async () => {
-        await recordProjector.generateIndex();
+        await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
         const indexData = await recordProjector.getIndexData();
 
         expect(indexData).toHaveProperty('enrichedTasks');
@@ -1308,7 +1308,7 @@ describe('RecordProjector', () => {
         mockStores.tasks.list.mockResolvedValue(['1757687335-task-with-author']);
         mockStores.tasks.get.mockResolvedValue(taskWithSignatures);
 
-        await recordProjector.generateIndex();
+        await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
         const indexData = await recordProjector.getIndexData();
 
         const enrichedTask = indexData?.enrichedTasks?.[0];
@@ -1345,7 +1345,7 @@ describe('RecordProjector', () => {
         mockStores.tasks.list.mockResolvedValue(['1757687335-task-multi-sig']);
         mockStores.tasks.get.mockResolvedValue(taskWithMultipleSignatures);
 
-        await recordProjector.generateIndex();
+        await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
         const indexData = await recordProjector.getIndexData();
 
         const enrichedTask = indexData?.enrichedTasks?.[0];
@@ -1382,7 +1382,7 @@ describe('RecordProjector', () => {
         mockStores.tasks.get.mockResolvedValue(taskWithoutProperSignatures as unknown as GitGovTaskRecord);
 
         // Should not throw error
-        await expect(recordProjector.generateIndex()).resolves.toBeDefined();
+        await expect(recordProjector.generateIndex({ lastCommitHash: 'test-sha' })).resolves.toBeDefined();
       });
 
       it('[EARS-K2] should continue enrichment with undefined author lastModifier', async () => {
@@ -1410,7 +1410,7 @@ describe('RecordProjector', () => {
         mockStores.tasks.list.mockResolvedValue(['1757687335-task-no-author']);
         mockStores.tasks.get.mockResolvedValue(taskWithoutProperSignatures as unknown as GitGovTaskRecord);
 
-        await recordProjector.generateIndex();
+        await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
         const indexData = await recordProjector.getIndexData();
 
         const enrichedTask = indexData?.enrichedTasks?.[0];
@@ -1428,7 +1428,7 @@ describe('RecordProjector', () => {
         // Default setup has no executions (mockStores.executions.list returns [])
         // TODO: add execution to shared setup for exact count verification (e.g., toBe(1))
         // TODO: This test only verifies zero-state (0 count). Add positive-path test with real data.
-        await recordProjector.generateIndex();
+        await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
         const indexData = await recordProjector.getIndexData();
 
         const enrichedTask = indexData?.enrichedTasks?.[0];
@@ -1440,7 +1440,7 @@ describe('RecordProjector', () => {
         // Default setup has no feedback (mockStores.feedbacks.list returns [])
         // TODO: add blocking feedback to shared setup for exact count verification (e.g., toBe(1))
         // TODO: This test only verifies zero-state (0 count). Add positive-path test with real data.
-        await recordProjector.generateIndex();
+        await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
         const indexData = await recordProjector.getIndexData();
 
         const enrichedTask = indexData?.enrichedTasks?.[0];
@@ -1451,7 +1451,7 @@ describe('RecordProjector', () => {
         // Default setup has no feedback (mockStores.feedbacks.list returns [])
         // TODO: add question feedback to shared setup for exact count verification (e.g., toBe(1))
         // TODO: This test only verifies zero-state (0 count). Add positive-path test with real data.
-        await recordProjector.generateIndex();
+        await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
         const indexData = await recordProjector.getIndexData();
 
         const enrichedTask = indexData?.enrichedTasks?.[0];
@@ -1468,7 +1468,7 @@ describe('RecordProjector', () => {
         mockStores.tasks.list.mockResolvedValue(['1757687335-task-done']);
         mockStores.tasks.get.mockResolvedValue(doneTask);
 
-        await recordProjector.generateIndex();
+        await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
         const indexData = await recordProjector.getIndexData();
 
         const enrichedTask = indexData?.enrichedTasks?.[0];
@@ -1478,7 +1478,7 @@ describe('RecordProjector', () => {
       });
 
       it('[EARS-G7] should determine and store the release status of the task', async () => {
-        await recordProjector.generateIndex();
+        await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
         const indexData = await recordProjector.getIndexData();
 
         const enrichedTask = indexData?.enrichedTasks?.[0];
@@ -1517,7 +1517,7 @@ describe('RecordProjector', () => {
         mockStores.tasks.list.mockResolvedValue(['1757687335-task-modified']);
         mockStores.tasks.get.mockResolvedValue(taskWithModifier);
 
-        await recordProjector.generateIndex();
+        await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
         const indexData = await recordProjector.getIndexData();
 
         const enrichedTask = indexData?.enrichedTasks?.[0];
@@ -1542,7 +1542,7 @@ describe('RecordProjector', () => {
         mockStores.cycles.list.mockResolvedValue(['1757687335-cycle-test']);
         mockStores.cycles.get.mockResolvedValue(cycle);
 
-        await recordProjector.generateIndex();
+        await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
         const indexData = await recordProjector.getIndexData();
 
         const enrichedTask = indexData?.enrichedTasks?.[0];
@@ -1556,7 +1556,7 @@ describe('RecordProjector', () => {
         // Default setup has no assignment feedback (mockStores.feedbacks.list returns [])
         // TODO: add assignment feedback to shared setup for exact assignee verification
         // TODO: This test only verifies zero-state (0 count). Add positive-path test with real data.
-        await recordProjector.generateIndex();
+        await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
         const indexData = await recordProjector.getIndexData();
 
         const enrichedTask = indexData?.enrichedTasks?.[0];
@@ -1582,7 +1582,7 @@ describe('RecordProjector', () => {
         mockStores.tasks.list.mockResolvedValue(['1757687335-task-all-refs']);
         mockStores.tasks.get.mockResolvedValue(taskWithAllRefs);
 
-        await recordProjector.generateIndex();
+        await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
         const indexData = await recordProjector.getIndexData();
 
         const enrichedTask = indexData?.enrichedTasks?.[0];
@@ -1656,7 +1656,7 @@ describe('RecordProjector', () => {
           .mockResolvedValueOnce(activeTask)
           .mockResolvedValueOnce(mainTask);
 
-        await recordProjector.generateIndex();
+        await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
         const indexData = await recordProjector.getIndexData();
 
         // Find the main task in enriched tasks
@@ -1679,7 +1679,7 @@ describe('RecordProjector', () => {
         // Default setup has a single task with no references pointing to it
         // TODO: add a task referencing the test task to shared setup for exact blockedBy verification
         // TODO: This test only verifies zero-state (0 count). Add positive-path test with real data.
-        await recordProjector.generateIndex();
+        await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
         const indexData = await recordProjector.getIndexData();
 
         const enrichedTask = indexData?.enrichedTasks?.[0];
@@ -1715,7 +1715,7 @@ describe('RecordProjector', () => {
           throw new Error('Cycle not found');
         });
 
-        await recordProjector.generateIndex();
+        await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
         const indexData = await recordProjector.getIndexData();
 
         const enrichedTask = indexData?.enrichedTasks?.[0];
@@ -1736,7 +1736,7 @@ describe('RecordProjector', () => {
         mockStores.tasks.list.mockResolvedValue(['1757687335-task-no-cycles']);
         mockStores.tasks.get.mockResolvedValue(taskWithoutCycles);
 
-        await recordProjector.generateIndex();
+        await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
         const indexData = await recordProjector.getIndexData();
 
         const enrichedTask = indexData?.enrichedTasks?.[0];
@@ -1748,7 +1748,7 @@ describe('RecordProjector', () => {
 
     describe('Derived States (EARS-J1 a J6)', () => {
       it('[EARS-J1] should calculate healthScore using multi-factor algorithm', async () => {
-        await recordProjector.generateIndex();
+        await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
         const indexData = await recordProjector.getIndexData();
 
         const enrichedTask = indexData?.enrichedTasks?.[0];
@@ -1758,7 +1758,7 @@ describe('RecordProjector', () => {
       });
 
       it('[EARS-J2] should calculate timeInCurrentStage in days', async () => {
-        await recordProjector.generateIndex();
+        await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
         const indexData = await recordProjector.getIndexData();
 
         const enrichedTask = indexData?.enrichedTasks?.[0];
@@ -1767,7 +1767,7 @@ describe('RecordProjector', () => {
       });
 
       it('[EARS-J3] should REUSE pre-calculated DerivedStates (NOT recalculate per-task)', async () => {
-        await recordProjector.generateIndex();
+        await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
         const indexData = await recordProjector.getIndexData();
 
         // Verify system-wide derivedStates exist
@@ -1815,7 +1815,7 @@ describe('RecordProjector', () => {
         mockStores.tasks.get.mockResolvedValue(stalledTask);
         mockStores.executions.list.mockResolvedValue([]);
 
-        await recordProjector.generateIndex();
+        await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
         const indexData = await recordProjector.getIndexData();
 
         const enrichedTask = indexData?.enrichedTasks?.[0];
@@ -1834,7 +1834,7 @@ describe('RecordProjector', () => {
         mockStores.tasks.list.mockResolvedValue(['1757687335-task-critical-paused']);
         mockStores.tasks.get.mockResolvedValue(criticalPausedTask);
 
-        await recordProjector.generateIndex();
+        await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
         const indexData = await recordProjector.getIndexData();
 
         expect(indexData?.derivedStates.atRiskTasks).toContain('1757687335-task-critical-paused');
@@ -1867,7 +1867,7 @@ describe('RecordProjector', () => {
         mockStores.feedbacks.list.mockResolvedValue(['1757687336-feedback-question-j6']);
         mockStores.feedbacks.get.mockResolvedValue(feedbackRecord);
 
-        await recordProjector.generateIndex();
+        await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
         const indexData = await recordProjector.getIndexData();
 
         const enrichedTask = indexData?.enrichedTasks?.[0];
@@ -2225,7 +2225,7 @@ describe('RecordProjector', () => {
 
   describe('4.5. Projection Pipeline (EARS-U1 a U7)', () => {
     it('[EARS-U1] should return IndexData without writing to any sink', async () => {
-      const result = await recordProjector.computeProjection();
+      const result = await recordProjector.computeProjection({ lastCommitHash: 'test-sha' });
 
       // Result should be a complete IndexData
       expect(result).not.toBeNull();
@@ -2248,7 +2248,7 @@ describe('RecordProjector', () => {
     });
 
     it('[EARS-U3] should delegate to computeProjection from generateIndex', async () => {
-      const report = await recordProjector.generateIndex();
+      const report = await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
 
       expect(report.success).toBe(true);
 
@@ -2273,7 +2273,7 @@ describe('RecordProjector', () => {
         stores: mockStores,
       });
 
-      const report = await projectorNoSink.generateIndex();
+      const report = await projectorNoSink.generateIndex({ lastCommitHash: 'test-sha' });
 
       expect(report.success).toBe(true);
       // writeTime should be negligible (< 1ms) since no sink write occurs
@@ -2330,7 +2330,7 @@ describe('RecordProjector', () => {
       (verifySignatures as jest.Mock).mockResolvedValue(true);
 
       // Then call generateIndex (which internally calls computeProjection)
-      const report = await recordProjector.generateIndex();
+      const report = await recordProjector.generateIndex({ lastCommitHash: 'test-sha' });
       expect(report.success).toBe(true);
 
       // Get persisted data from generateIndex
@@ -2345,6 +2345,21 @@ describe('RecordProjector', () => {
       expect(persistedData.enrichedTasks.length).toBe(projectionResult.enrichedTasks.length);
       expect(persistedData.derivedStates).toEqual(projectionResult.derivedStates);
       expect(persistedData.metadata.recordCounts).toEqual(projectionResult.metadata.recordCounts);
+    });
+
+    it('[EARS-U8] should pass lastCommitHash from generateIndex to computeProjection', async () => {
+      const report = await recordProjector.generateIndex({ lastCommitHash: 'real-sha-u8' });
+      expect(report.success).toBe(true);
+
+      const persistCall = mockSink.persist.mock.calls[0];
+      expect(persistCall).toBeDefined();
+      const persistedData = persistCall![0] as IndexData;
+      // [EARS-U8] lastCommitHash must flow through to metadata
+      expect(persistedData.metadata.lastCommitHash).toBe('real-sha-u8');
+
+      // PersistContext must also carry the same value
+      const persistContext = persistCall![1] as { lastCommitHash: string };
+      expect(persistContext.lastCommitHash).toBe('real-sha-u8');
     });
   });
 

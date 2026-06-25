@@ -2481,5 +2481,179 @@ describe('LintModule + FsLintModule', () => {
       expect(defaultReport.results.filter(r => r.validator === 'IDENTITY_COHERENCE').length).toBe(0);
     });
   });
+
+  // ==========================================================================
+  // Bloque M: Cross-Record Integrity — Gate 4 in strict mode (EARS-M1 a M3)
+  // ==========================================================================
+
+  describe('Bloque M: Cross-Record Integrity (EARS-M1 a M3)', () => {
+    it('[EARS-M1] should report error when FeedbackRecord.entityId references non-existent record in strict mode', async () => {
+      // Create a feedback whose entityId points to a valid-format execution that doesn't exist in store
+      const ghostExecution = createMockExecutionRecord();
+      const ghostEntityId = ghostExecution.payload.id;
+      const feedback = createMockFeedbackRecord({ entityId: ghostEntityId, entityType: 'execution' });
+      const feedbackId = feedback.payload.id;
+
+      const feedbackStore = createMockStore();
+      feedbackStore.list.mockResolvedValue([feedbackId]);
+      feedbackStore.get.mockResolvedValue(feedback);
+
+      // Execution store is empty — the referenced entityId won't resolve
+      const executionStore = createMockStore();
+      executionStore.list.mockResolvedValue([]);
+      executionStore.get.mockResolvedValue(null);
+
+      const pureModule = new LintModule({
+        stores: { feedbacks: feedbackStore, executions: executionStore, tasks: createMockStore() } as unknown as import('./lint.types').RecordStores
+      });
+
+      const report = await pureModule.lint({ validateReferences: true });
+
+      const crossRecordFindings = report.results.filter(
+        r => r.validator === 'CROSS_RECORD_INTEGRITY' && r.message.includes('entityId')
+      );
+      expect(crossRecordFindings.length).toBeGreaterThanOrEqual(1);
+      expect(crossRecordFindings[0]!.level).toBe('error');
+    });
+
+    it('[EARS-M1] should report error when ExecutionRecord.taskId references non-existent task in strict mode', async () => {
+      const execution = createMockExecutionRecord();
+      const executionId = execution.payload.id;
+
+      const executionStore = createMockStore();
+      executionStore.list.mockResolvedValue([executionId]);
+      executionStore.get.mockResolvedValue(execution);
+
+      // Task store is EMPTY — the taskId in the execution won't resolve
+      const taskStore = createMockStore();
+      taskStore.list.mockResolvedValue([]);
+
+      const pureModule = new LintModule({
+        stores: { executions: executionStore, tasks: taskStore } as unknown as import('./lint.types').RecordStores
+      });
+
+      const report = await pureModule.lint({ strict: true });
+
+      const crossRecordFindings = report.results.filter(
+        r => r.validator === 'CROSS_RECORD_INTEGRITY' && r.message.includes('taskId')
+      );
+      expect(crossRecordFindings.length).toBeGreaterThanOrEqual(1);
+      expect(crossRecordFindings[0]!.level).toBe('error');
+    });
+
+    it('[EARS-M1] should pass when all cross-record references resolve', async () => {
+      const task = createMockTaskRecord();
+      const taskId = task.payload.id;
+      const execution = createMockExecutionRecord({ taskId });
+      const executionId = execution.payload.id;
+
+      const taskStore = createMockStore();
+      taskStore.list.mockResolvedValue([taskId]);
+      taskStore.get.mockResolvedValue(task);
+
+      const executionStore = createMockStore();
+      executionStore.list.mockResolvedValue([executionId]);
+      executionStore.get.mockResolvedValue(execution);
+
+      const pureModule = new LintModule({
+        stores: { tasks: taskStore, executions: executionStore } as unknown as import('./lint.types').RecordStores
+      });
+
+      const report = await pureModule.lint({ validateReferences: true });
+
+      const danglingFindings = report.results.filter(
+        r => r.validator === 'CROSS_RECORD_INTEGRITY' && r.level === 'error'
+      );
+      expect(danglingFindings).toHaveLength(0);
+    });
+
+    it('[EARS-M2] should warn about records not referenced by any other record', async () => {
+      const task = createMockTaskRecord();
+      const taskId = task.payload.id;
+      const orphanExecution = createMockExecutionRecord({ taskId });
+      const orphanId = orphanExecution.payload.id;
+
+      const unreferencedTask = createMockTaskRecord({ title: 'Orphan Task' });
+      const unreferencedTaskId = unreferencedTask.payload.id;
+
+      const taskStore = createMockStore();
+      taskStore.list.mockResolvedValue([taskId, unreferencedTaskId]);
+      taskStore.get.mockImplementation(async (id: string) => {
+        if (id === taskId) return task;
+        if (id === unreferencedTaskId) return unreferencedTask;
+        return null;
+      });
+
+      const executionStore = createMockStore();
+      executionStore.list.mockResolvedValue([orphanId]);
+      executionStore.get.mockResolvedValue(orphanExecution);
+
+      const pureModule = new LintModule({
+        stores: { tasks: taskStore, executions: executionStore } as unknown as import('./lint.types').RecordStores
+      });
+
+      const report = await pureModule.lint({ validateReferences: true });
+
+      const orphanFindings = report.results.filter(
+        r => r.validator === 'CROSS_RECORD_INTEGRITY' && r.message.includes('orphan')
+      );
+      expect(orphanFindings.length).toBeGreaterThanOrEqual(1);
+      expect(orphanFindings[0]!.level).toBe('warning');
+    });
+
+    it('[EARS-M2] should not flag ActorRecords or AgentRecords as orphans', async () => {
+      const actor = createMockActorRecord();
+      const actorId = actor.payload.id;
+      const agent = createMockAgentRecord();
+      const agentId = agent.payload.id;
+
+      const actorStore = createMockStore();
+      actorStore.list.mockResolvedValue([actorId]);
+      actorStore.get.mockResolvedValue(actor);
+
+      const agentStore = createMockStore();
+      agentStore.list.mockResolvedValue([agentId]);
+      agentStore.get.mockResolvedValue(agent);
+
+      const pureModule = new LintModule({
+        stores: { actors: actorStore, agents: agentStore } as unknown as import('./lint.types').RecordStores
+      });
+
+      const report = await pureModule.lint({ validateReferences: true });
+
+      const orphanFindings = report.results.filter(
+        r => r.validator === 'CROSS_RECORD_INTEGRITY' && r.message.includes('orphan')
+      );
+      expect(orphanFindings).toHaveLength(0);
+    });
+
+    it('[EARS-M3] should report error when same ID exists in multiple stores', async () => {
+      const task = createMockTaskRecord();
+      const duplicateId = task.payload.id;
+      const execution = createMockExecutionRecord()
+      // Force the execution to have the same payload.id as the task
+      ;(execution.payload as any).id = duplicateId;
+
+      const taskStore = createMockStore();
+      taskStore.list.mockResolvedValue([duplicateId]);
+      taskStore.get.mockResolvedValue(task);
+
+      const executionStore = createMockStore();
+      executionStore.list.mockResolvedValue([duplicateId]);
+      executionStore.get.mockResolvedValue(execution);
+
+      const pureModule = new LintModule({
+        stores: { tasks: taskStore, executions: executionStore } as unknown as import('./lint.types').RecordStores
+      });
+
+      const report = await pureModule.lint({ validateReferences: true });
+
+      const dupFindings = report.results.filter(
+        r => r.validator === 'CROSS_RECORD_INTEGRITY' && r.message.includes('duplicate')
+      );
+      expect(dupFindings.length).toBeGreaterThanOrEqual(1);
+      expect(dupFindings[0]!.level).toBe('error');
+    });
+  });
 });
 

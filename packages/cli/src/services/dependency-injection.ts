@@ -234,7 +234,8 @@ export class DependencyInjectionService {
       // [EARS-D1, D2] If bootstrap occurred, regenerate index; otherwise skip
       if (this.bootstrapOccurred) {
         try {
-          await this.projector.generateIndex();
+          const headSha = await this.getHeadSha();
+          await this.projector.generateIndex({ lastCommitHash: headSha });
           // Note: bootstrapOccurred NOT reset — consumer commands (sync pull) check it via wasBootstrapped()
         } catch (reindexError) {
           // Non-critical: log warning but don't fail
@@ -822,6 +823,12 @@ export class DependencyInjectionService {
       throw new Error("Repo root not initialized");
     }
     return this.repoRoot;
+  }
+
+  async getHeadSha(): Promise<string> {
+    const projectRoot = await this.getProjectRoot();
+    const { execSync } = await import('node:child_process');
+    return execSync('git rev-parse HEAD', { cwd: projectRoot, encoding: 'utf-8' }).trim();
   }
 
   /**

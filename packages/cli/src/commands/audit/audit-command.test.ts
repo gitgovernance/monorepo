@@ -2,8 +2,10 @@
  * AuditCommand Unit Tests — AuditOrchestrator integration
  *
  * EARS Coverage:
- * - §4.1 CLI -> Orchestrator Integration (AORCH-C1 to C6)
+ * - §4.1 CLI -> Orchestrator Integration (AORCH-C1 to C8)
  * - §4.5 Waiver Management (EARS-E1 to E5)
+ * - §4.8 Finding Display (AORCH-D1 to D7)
+ * - §4.9-4.13 Persistence (AORCH-P1 to P7)
  */
 
 // vi.hoisted ensures variables exist when vi.mock factory runs (hoisted to top)
@@ -308,7 +310,7 @@ describe('AuditCommand', () => {
     ...overrides,
   });
 
-  describe('4.1. CLI -> Orchestrator Integration (AORCH-C1 to C6)', () => {
+  describe('4.1. CLI -> Orchestrator Integration (AORCH-C1 to C8)', () => {
     it('[AORCH-C1] should pass scope to orchestrator', async () => {
       await auditCommand.execute(createDefaultOptions({ scope: 'full' }));
 
@@ -514,7 +516,7 @@ describe('AuditCommand', () => {
   });
 
   describe('4.5. Waiver Management (EARS-E1 to E5)', () => {
-    it('[EARS-E1] should create FeedbackRecord with waiver metadata', async () => {
+    it('[AORCH-E1] should create FeedbackRecord with waiver metadata', async () => {
       await auditCommand.executeWaive('sha256:abc123', {
         justification: 'Test data for unit tests',
       });
@@ -532,14 +534,14 @@ describe('AuditCommand', () => {
       );
     });
 
-    it('[EARS-E2] should require --justification for waive command', async () => {
+    it('[AORCH-E2] should require --justification for waive command', async () => {
       await auditCommand.executeWaive('sha256:abc123', {});
 
       expect(mockConsoleError).toHaveBeenCalledWith(expect.stringContaining('Justification required'));
       expect(mockProcessExit).toHaveBeenCalledWith(1);
     });
 
-    it('[EARS-E3] should list active waivers with --list', async () => {
+    it('[AORCH-E3] should list active waivers with --list', async () => {
       mockWaiverReader.loadWaivers.mockResolvedValue([
         {
           fingerprint: 'sha256:waiver1',
@@ -571,7 +573,7 @@ describe('AuditCommand', () => {
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('sha256:waiver1'));
     });
 
-    it('[EARS-E4] should show confirmation when waiver created', async () => {
+    it('[AORCH-E4] should show confirmation when waiver created', async () => {
       await auditCommand.executeWaive('sha256:abc123', {
         justification: 'False positive',
       });
@@ -580,7 +582,7 @@ describe('AuditCommand', () => {
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('sha256:abc123'));
     });
 
-    it('[EARS-E5] should show empty message when no active waivers', async () => {
+    it('[AORCH-E5] should show empty message when no active waivers', async () => {
       mockWaiverReader.loadWaivers.mockResolvedValue([]);
 
       await auditCommand.executeWaive(undefined, { list: true });

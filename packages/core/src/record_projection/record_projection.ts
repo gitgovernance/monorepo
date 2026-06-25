@@ -26,7 +26,7 @@ import type {
   EnrichedTaskRecord,
   IndexData,
   IRecordProjection,
-  ProjectionContext,
+  PersistContext,
   RecordProjectorDependencies,
   IntegrityError,
   IntegrityWarning,
@@ -56,10 +56,10 @@ export class RecordProjector implements IRecordProjector {
 
   /**
    * [EARS-U1] Pure computation: projects raw Records into IndexData without I/O.
-   * [EARS-U2] Uses opts.lastCommitHash if provided, otherwise falls back to getGitCommitHash().
+   * [EARS-U2] Uses opts.lastCommitHash in metadata.lastCommitHash.
    * [EARS-U7] Output is identical to what generateIndex() would produce.
    */
-  async computeProjection(opts?: { lastCommitHash?: string }): Promise<IndexData> {
+  async computeProjection(opts: { lastCommitHash: string }): Promise<IndexData> {
     // 1. Read all stores (Phase 1: Read everything into memory)
     const [tasks, cycles, actors] = await Promise.all([
       this.readAllTasks(),
@@ -112,8 +112,8 @@ export class RecordProjector implements IRecordProjector {
     // 3.8. Validate integrity to populate integrityStatus (EARS-4 integration)
     const integrityReport = await this.validateIntegrity();
 
-    // [EARS-U2] Use provided lastCommitHash or fall back to getGitCommitHash()
-    const lastCommitHash = opts?.lastCommitHash ?? await this.getGitCommitHash();
+    // [EARS-U2] lastCommitHash is required — no fallback
+    const lastCommitHash = opts.lastCommitHash;
 
     // 4. Build IndexData structure
     const indexData: IndexData = {
@@ -151,7 +151,8 @@ export class RecordProjector implements IRecordProjector {
    * [EARS-U3] Delegates computation to computeProjection().
    * [EARS-U4] Skips persist and sets writeTime=0 when no sink is configured.
    */
-  async generateIndex(): Promise<IndexGenerationReport> {
+  // [EARS-U8] generateIndex requires lastCommitHash — passes it to computeProjection
+  async generateIndex(opts: { lastCommitHash: string }): Promise<IndexGenerationReport> {
     const startTime = performance.now();
     const performance_metrics = {
       readTime: 0,
@@ -165,7 +166,7 @@ export class RecordProjector implements IRecordProjector {
       // calculationTime remains 0 because computation cannot be separated from reads inside
       // computeProjection() — they are interleaved (e.g., RecordMetrics reads + calculates).
       const readAndCalcStart = performance.now();
-      const indexData = await this.computeProjection();
+      const indexData = await this.computeProjection(opts);
       performance_metrics.readTime = performance.now() - readAndCalcStart;
 
       // Persist to sink if available (EARS-U4: skip if no sink)
@@ -508,7 +509,7 @@ export class RecordProjector implements IRecordProjector {
    * [EARS-U4] No-op when sink is undefined (writeTime=0).
    * [EARS-14] Sink implementation handles atomicity internally.
    */
-  private async persistToSink(indexData: IndexData, context: ProjectionContext): Promise<void> {
+  private async persistToSink(indexData: IndexData, context: PersistContext): Promise<void> {
     if (!this.sink) {
       return; // EARS-U4: skip persist, writeTime=0
     }
@@ -518,15 +519,6 @@ export class RecordProjector implements IRecordProjector {
   /**
    * Gets current git commit hash (simplified)
    */
-  // TODO: Returns hardcoded 'mock-commit-hash'. Should obtain from git context (IGitModule).
-  private async getGitCommitHash(): Promise<string> {
-    try {
-      // Simplified implementation - would use git commands in real implementation
-      return "mock-commit-hash";
-    } catch {
-      return "unknown";
-    }
-  }
 
   /**
    * [EARS-7 to EARS-10] Calculates system-wide derived states for analytics and filtering.

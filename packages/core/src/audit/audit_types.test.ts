@@ -8,7 +8,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-// ─── Type imports for AUDIT-A tests ─────────────────────────────────────────
+// ─── Type + value imports for AUDIT-A/D tests ──────────────────────────────
+import { createFinding } from './types';
 import type {
   Finding,
   FindingSeverity,
@@ -131,6 +132,8 @@ describe('Audit Record Types (audit_record_types_module.md)', () => {
         file: 'test.ts',
         line: 1,
         message: 'test finding',
+        snippet: 'const x = "secret"',
+        snippetHash: '7b10787e8626afad655037099dfb965ca0f65b3d57004a6677bf9146b8f449a5',
         category: 'hardcoded-secret',
         severity: 'critical',
         detector: 'regex',
@@ -423,6 +426,45 @@ describe('Audit Prisma Schema Verification (audit_prisma_record_projection_modul
       const allExpectedScanFields = [...SCAN_BASE_FIELDS, ...SCAN_PROJECTION_FIELDS];
       const orphanedScanFields = scanFieldNames.filter(f => !allExpectedScanFields.includes(f));
       expect(orphanedScanFields).toEqual([]);
+    });
+  });
+
+  // ============================================================================
+  // §4.4. Finding Factory (AUDIT-D1 to D2)
+  // ============================================================================
+  describe('4.4. Finding Factory (AUDIT-D1 to D2)', () => {
+    it('[AUDIT-D1] should compute snippetHash as sha256 of snippet', () => {
+      const { createHash } = require('node:crypto');
+      const finding = createFinding({
+        fingerprint: 'fp-d1',
+        ruleId: 'TEST-001',
+        file: 'src/test.ts',
+        line: 1,
+        message: 'test',
+        snippet: 'const secret = "abc123"',
+        category: 'hardcoded-secret',
+        severity: 'critical',
+        detector: 'regex',
+        confidence: 1.0,
+        executionId: '',
+        reportedBy: [],
+        isWaived: false,
+      });
+      const expected = createHash('sha256').update('const secret = "abc123"').digest('hex');
+      expect(finding.snippetHash).toBe(expected);
+      expect(finding.snippetHash).toMatch(/^[a-f0-9]{64}$/);
+    });
+
+    it('[AUDIT-D2] should be used by all Finding constructors (structural verification)', () => {
+      const { execSync } = require('node:child_process');
+      const coreRoot = require('node:path').resolve(__dirname, '..');
+      // Verify no production file constructs Finding inline (without createFinding)
+      // Pattern: "const finding: Finding = {" or "const finding = {" followed by snippetHash
+      const inlineFindings = execSync(
+        `grep -rn "const finding.*: Finding = {\\|const finding = {" ${coreRoot}/finding_detector/ ${coreRoot}/audit_orchestrator/ ${coreRoot}/policy_evaluator/ --include="*.ts" | grep -v test | grep -v createFinding || true`,
+        { encoding: 'utf-8' },
+      ).trim();
+      expect(inlineFindings).toBe('');
     });
   });
 });

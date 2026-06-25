@@ -1,27 +1,17 @@
-import type { SourceAuditor, Sarif } from '@gitgov/core';
+import type { SourceAuditor, Sarif, Runner } from '@gitgov/core';
 
 type SarifBuilder = Sarif.SarifBuilder;
 type SarifLog = Sarif.SarifLog;
+type AgentOutput = Runner.AgentOutput;
 import type {
   SecurityAuditInput,
   AgentDetectorConfig,
-  AuditSummary,
+  ScanSummary,
   SecurityAuditMetadata,
 } from './types';
 
 type AuditResult = SourceAuditor.AuditResult;
 type ScopeConfig = SourceAuditor.ScopeConfig;
-
-/**
- * AgentOutput from the framework (Runner namespace).
- * Defined locally to avoid deep namespace import — shape is stable.
- */
-type AgentOutput = {
-  data?: unknown;
-  message?: string;
-  artifacts?: string[];
-  metadata?: Record<string, unknown>;
-};
 
 /**
  * Dependencias inyectadas del agente.
@@ -32,6 +22,7 @@ type AuditOptions = SourceAuditor.AuditOptions;
 export type SecurityAuditAgentDeps = {
   sourceAuditor: { audit(options: AuditOptions): Promise<AuditResult> };
   sarifBuilder: SarifBuilder;
+  getLineContent: (file: string, line: number) => Promise<string | null>;
 };
 
 /**
@@ -84,15 +75,7 @@ export class SecurityAuditAgent {
       toolVersion: '2.0.0',
       informationUri: 'https://github.com/gitgovernance/monorepo/tree/main/packages/agents/security-audit',
       findings: auditResult.findings,
-      getLineContent: async (file: string, line: number) => {
-        const fs = await import('node:fs/promises');
-        try {
-          const content = await fs.readFile(file, 'utf-8');
-          return content.split('\n')[line - 1] ?? null;
-        } catch {
-          return null;
-        }
-      },
+      getLineContent: this.deps.getLineContent,
     });
 
     const summary = buildSummary(auditResult, input.scope);
@@ -122,7 +105,7 @@ function buildScopeConfig(input: SecurityAuditInput): ScopeConfig {
 function buildSummary(
   result: AuditResult,
   scope: SecurityAuditInput['scope'],
-): AuditSummary {
+): ScanSummary {
   const bySeverity: Record<string, number> = {};
   const byCategory: Record<string, number> = {};
 

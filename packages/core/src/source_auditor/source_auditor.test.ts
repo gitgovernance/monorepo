@@ -6,6 +6,7 @@ import { SourceAuditorModule } from "./source_auditor";
 import { FsFileLister } from "../file_lister";
 import type { FindingDetectorModule } from "../finding_detector";
 import type { Finding } from "../finding_detector/types";
+import { createFinding as coreCreateFinding } from "../audit/types";
 import type { IWaiverReader, Waiver, SourceAuditorDependencies } from "./types";
 
 describe("SourceAuditorModule", () => {
@@ -50,7 +51,7 @@ describe("SourceAuditorModule", () => {
     fileLister: new FsFileLister({ cwd: tempDir }),
   });
 
-  const createFinding = (overrides: Partial<Finding> = {}): Finding => ({
+  const createFinding = (overrides: Partial<Omit<Finding, 'snippetHash'>> = {}): Finding => coreCreateFinding({
     ruleId: "PII-001",
     category: "pii-email",
     severity: "high",

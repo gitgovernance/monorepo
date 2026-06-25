@@ -1,7 +1,7 @@
 // ⚠️ COPIED from core — DO NOT EDIT
 // Source: packages/core/prisma/schema/
 // Re-generate: pnpm prisma:sync (in packages/e2e)
-// Synced at: 2026-05-31T02:26:50.048Z
+// Synced at: 2026-06-24T12:24:46.304Z
 
 // GitGovernance Core — Audit Product Projection Tables
 // Finding, Waiver, Scan — derived from protocol records

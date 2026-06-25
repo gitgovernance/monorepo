@@ -1,11 +1,12 @@
 import { createHash } from "node:crypto";
 import type {
   CodeSnippet,
-  FindingCategory,
   Finding,
+  FindingCategory,
   LlmDetector,
   LlmRawFinding,
 } from "../types";
+import { createFinding } from "../../audit/types";
 
 const MAX_SNIPPET_LENGTH = 300;
 
@@ -105,13 +106,14 @@ export class HttpLlmDetector implements LlmDetector {
         ? raw.category
         : "unknown-risk";
 
-      const finding: Finding = {
+      const snippet = truncateSnippet(raw.snippet);
+      const finding = createFinding({
         fingerprint: generateFingerprint(raw.ruleId, raw.file, raw.line),
         ruleId: raw.ruleId,
         file: raw.file,
         line: raw.line,
         message: raw.message,
-        snippet: truncateSnippet(raw.snippet ?? ""),
+        snippet,
         category,
         severity: raw.severity,
         detector: "llm",
@@ -119,7 +121,7 @@ export class HttpLlmDetector implements LlmDetector {
         executionId: "",      // filled post-orchestration
         reportedBy: [],       // filled post-orchestration
         isWaived: false,      // filled post-orchestration
-      };
+      });
 
       if (raw.fixes?.length) finding.fixes = raw.fixes;
       if (raw.legalReference) finding.legalReference = raw.legalReference;

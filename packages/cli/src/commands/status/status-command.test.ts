@@ -188,7 +188,8 @@ describe('StatusCommand - Complete Unit Tests', () => {
       getRecordProjector: vi.fn().mockResolvedValue(mockProjector),
       getIdentityAdapter: vi.fn().mockResolvedValue(mockIdentityAdapter),
       getCurrentActor: vi.fn().mockResolvedValue(sampleActor),
-      getSyncStateModule: vi.fn().mockResolvedValue(mockSyncStateModule)
+      getSyncStateModule: vi.fn().mockResolvedValue(mockSyncStateModule),
+      getHeadSha: vi.fn().mockResolvedValue('test-sha'),
     };
 
     // Mock DependencyInjectionService.getInstance()
@@ -226,8 +227,8 @@ describe('StatusCommand - Complete Unit Tests', () => {
 
       expect(mockDependencyService.getCurrentActor).toHaveBeenCalled();
       expect(mockBacklogAdapter.getTasksAssignedToActor).toHaveBeenCalledWith('human:test-user');
-      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('👤 Actor: Test User'));
-      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('✅ My Work (1 tasks)'));
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('Actor:    Test User'));
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('My Work (1 tasks)'));
     });
 
     it('[EARS-2] should execute global dashboard with --all flag', async () => {
@@ -249,8 +250,8 @@ describe('StatusCommand - Complete Unit Tests', () => {
 
       expect(mockBacklogAdapter.getAllTasks).toHaveBeenCalled();
       expect(mockBacklogAdapter.getAllCycles).toHaveBeenCalled();
-      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('📊 GitGovernance Project Status'));
-      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('📋 Tasks Overview'));
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('GitGovernance Project Status'));
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('Tasks Overview'));
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('Total: 10 tasks'));
     });
 
@@ -267,7 +268,7 @@ describe('StatusCommand - Complete Unit Tests', () => {
       await statusCommand.execute({ all: true, team: true });
 
       expect(mockRecordMetrics.getCollaborationMetrics).toHaveBeenCalled();
-      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('🤖 Collaboration Metrics:'));
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('Collaboration Metrics:'));
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('Active Agents: 2/5'));
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('Agent Utilization: 40.0%'));
     });
@@ -278,7 +279,7 @@ describe('StatusCommand - Complete Unit Tests', () => {
       expect(mockRecordMetrics.getProductivityMetrics).toHaveBeenCalled();
       expect(mockRecordMetrics.getCollaborationMetrics).toHaveBeenCalled();
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('📈 Productivity Metrics:'));
-      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('🤖 Collaboration Metrics:'));
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('Collaboration Metrics:'));
     });
   });
 
@@ -290,7 +291,7 @@ describe('StatusCommand - Complete Unit Tests', () => {
 
       expect(mockProjector.isIndexUpToDate).toHaveBeenCalled();
       expect(mockProjector.generateIndex).toHaveBeenCalled();
-      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('🔄 Updating cache'));
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('Updating cache'));
     });
 
     it('[EARS-7] should skip cache update when index is up to date', async () => {
@@ -356,7 +357,7 @@ describe('StatusCommand - Complete Unit Tests', () => {
       await statusCommand.execute({});
 
       expect(mockBacklogAdapter.getTasksAssignedToActor).toHaveBeenCalledWith('human:test-user');
-      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('✅ My Work (1 tasks)'));
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('My Work (1 tasks)'));
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('Test Task'));
     });
 
@@ -364,14 +365,14 @@ describe('StatusCommand - Complete Unit Tests', () => {
       await statusCommand.execute({});
 
       expect(mockFeedbackAdapter.getAllFeedback).toHaveBeenCalled();
-      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('❗️ Pending Feedback (1)'));
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('Pending Feedback (1)'));
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('Test blocking feedback'));
     });
 
     it('[EARS-14] should show active cycles with --cycles flag', async () => {
       await statusCommand.execute({ cycles: true });
 
-      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('🚀 Active Cycles (1)'));
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('Active Cycles (1)'));
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('Test Cycle'));
     });
   });
@@ -381,7 +382,7 @@ describe('StatusCommand - Complete Unit Tests', () => {
       await statusCommand.execute({});
 
       expect(mockRecordMetrics.getSystemStatus).toHaveBeenCalled();
-      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('⚡ System Health: 🟡 75%'));
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('System Health: Fair 75%'));
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('🚨 Alerts:'));
     });
 
@@ -398,7 +399,7 @@ describe('StatusCommand - Complete Unit Tests', () => {
 
       await statusCommand.execute({});
 
-      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('⚡ System Health: 🔴 30%'));
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('System Health: Poor 30%'));
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('10 tasks stalled >7 days'));
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('5 tasks blocked by feedback'));
     });
@@ -408,7 +409,7 @@ describe('StatusCommand - Complete Unit Tests', () => {
 
       await statusCommand.execute({});
 
-      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('⚡ System Health: 🔴 0%'));
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('System Health: Poor 0%'));
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('Metrics unavailable'));
     });
   });
@@ -419,7 +420,7 @@ describe('StatusCommand - Complete Unit Tests', () => {
 
       await statusCommand.execute({ quiet: true });
 
-      expect(mockConsoleLog).not.toHaveBeenCalledWith(expect.stringContaining('🔄 Updating cache'));
+      expect(mockConsoleLog).not.toHaveBeenCalledWith(expect.stringContaining('Updating cache'));
     });
 
     it('[EARS-19] should show detailed task information with --verbose flag', async () => {
@@ -436,7 +437,7 @@ describe('StatusCommand - Complete Unit Tests', () => {
       await statusCommand.execute({});
 
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('No tasks assigned'));
-      expect(mockConsoleLog).not.toHaveBeenCalledWith(expect.stringContaining('❗️ Feedback Pendiente'));
+      expect(mockConsoleLog).not.toHaveBeenCalledWith(expect.stringContaining('Feedback Pendiente'));
     });
   });
 
@@ -506,8 +507,8 @@ describe('StatusCommand - Complete Unit Tests', () => {
       // Should still show actor and task sections even if feedback fails
       expect(mockDependencyService.getCurrentActor).toHaveBeenCalled();
       expect(mockBacklogAdapter.getTasksAssignedToActor).toHaveBeenCalled();
-      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('👤 Actor: Test User'));
-      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('✅ My Work'));
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('Actor:    Test User'));
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('My Work'));
     });
 
     it('[EARS-27] should maintain data consistency across adapters', async () => {
@@ -531,12 +532,12 @@ describe('StatusCommand - Complete Unit Tests', () => {
 
       expect(mockDependencyService.getSyncStateModule).toHaveBeenCalled();
       expect(mockSyncStateModule.getPendingChanges).toHaveBeenCalled();
-      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('🔄 Sync: 3 unpushed changes (2 added, 1 modified)'));
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('Sync: 3 unpushed changes (2 added, 1 modified)'));
       // Verify individual file names are listed
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('+ .gitgov/tasks/task-1.yaml'));
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('+ .gitgov/tasks/task-2.yaml'));
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('~ .gitgov/actors/actor-1.yaml'));
-      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('💡 Run: gitgov sync push'));
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('Run: gitgov sync push'));
       // Verify suggestion is added
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining("Run 'gitgov sync push' to publish 3 local change(s)"));
     });
@@ -546,8 +547,8 @@ describe('StatusCommand - Complete Unit Tests', () => {
 
       await statusCommand.execute({});
 
-      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('🔄 Sync Status: ⚠️  Conflict in progress'));
-      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('💡 Run: gitgov sync resolve'));
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('Sync: Conflict in progress'));
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('Run: gitgov sync resolve'));
       // Verify suggestion is added
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining("Run 'gitgov sync resolve' to resolve sync conflict"));
     });
@@ -559,11 +560,11 @@ describe('StatusCommand - Complete Unit Tests', () => {
 
       // Should NOT contain any sync-related output
       const allLogCalls = mockConsoleLog.mock.calls.map(call => call[0]);
-      const hasSyncOutput = allLogCalls.some(msg => typeof msg === 'string' && msg.includes('🔄 Sync'));
+      const hasSyncOutput = allLogCalls.some(msg => typeof msg === 'string' && msg.includes('Sync'));
       expect(hasSyncOutput).toBe(false);
 
       // Dashboard should still render without errors
-      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('👤 Actor: Test User'));
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('Actor:    Test User'));
     });
 
     it('[EARS-28] should include syncStatus in JSON output', async () => {
@@ -589,7 +590,7 @@ describe('StatusCommand - Complete Unit Tests', () => {
 
       await statusCommand.execute({});
 
-      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('🔄 Sync: Up to date ✓'));
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('Sync: Up to date'));
     });
 
     it('[EARS-28] should include syncStatus in global dashboard JSON output', async () => {
@@ -606,6 +607,14 @@ describe('StatusCommand - Complete Unit Tests', () => {
         rebaseInProgress: false,
         available: true
       });
+    });
+  });
+
+  describe('Project Context (EARS 31)', () => {
+    it('[EARS-31] should show project path in dashboard header', async () => {
+      const statusCmd = new StatusCommand();
+      await statusCmd.execute({});
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('Project:'));
     });
   });
 });

@@ -14,6 +14,7 @@ const baseFindings: Finding[] = [
     column: 5,
     message: 'PII email detected in source code',
     snippet: 'const email = user.email;',
+    snippetHash: 'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2',
     category: 'pii-email',
     severity: 'high',
     detector: 'regex',
@@ -118,9 +119,10 @@ describe('SarifBuilder', () => {
       expect(result.partialFingerprints!['primaryLocationLineHash/v1']).toMatch(/^[0-9a-f]{16}:1$/);
     });
 
-    it('[SARIF-C5] build: should not include partialFingerprints when getLineContent not provided', async () => {
+    it('[SARIF-C5] build: should use Finding.fingerprint as partialFingerprints when getLineContent not provided', async () => {
       const sarif = await builder.build(baseOptions);
-      expect(firstResult(sarif).partialFingerprints).toBeUndefined();
+      expect(firstResult(sarif).partialFingerprints).toBeDefined();
+      expect(firstResult(sarif).partialFingerprints!['primaryLocationLineHash/v1']).toBe(baseFindings[0]!.fingerprint);
     });
 
     it('[SARIF-C6] build: $schema should point to OASIS Errata 01 official URL', async () => {
@@ -139,7 +141,7 @@ describe('SarifBuilder', () => {
     });
 
     it('[SARIF-C8] build: finding without snippet should not include snippet in region', async () => {
-      const findingNoSnippet: Finding = { ...baseFindings[0]!, fingerprint: 'f-no-snippet', snippet: '' };
+      const findingNoSnippet: Finding = { ...baseFindings[0]!, fingerprint: 'f-no-snippet', snippet: '', snippetHash: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855' };
       const sarif = await builder.build({ ...baseOptions, findings: [findingNoSnippet] });
       const loc = firstResult(sarif).locations[0];
       // Empty string snippet should be omitted (falsy)
@@ -433,6 +435,7 @@ describe('SarifBuilder', () => {
         fingerprint: 'finding-custom-cfg',
         category: 'logging-pii',
         snippet: 'console.log(user.email);',
+      snippetHash: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
       };
 
       const sarif = await builder.build({

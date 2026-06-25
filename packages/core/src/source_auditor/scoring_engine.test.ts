@@ -1,5 +1,6 @@
 // Sections: §2.3 (Internal Component - ScoringEngine)
 import { ScoringEngine } from "./scoring_engine";
+import { createFinding } from "../audit/types";
 import type { Finding } from "../finding_detector/types";
 
 describe("ScoringEngine", () => {
@@ -12,7 +13,7 @@ describe("ScoringEngine", () => {
   describe("§2.3 Internal Component - ScoringEngine (Step 5: Scoring)", () => {
     it("[Step-5] should return findings unchanged (pass-through for now)", () => {
       const findings: Finding[] = [
-        {
+        createFinding({
           ruleId: "PII-001",
           category: "pii-email",
           severity: "high",
@@ -26,7 +27,7 @@ describe("ScoringEngine", () => {
           executionId: "",
           reportedBy: [],
           isWaived: false,
-        },
+        }),
       ];
 
       const scored = engine.score(findings);

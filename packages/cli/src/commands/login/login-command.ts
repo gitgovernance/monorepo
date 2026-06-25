@@ -314,12 +314,13 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
     const hasLocal = await this.hasLocalKey(actorId);
     const keyStatus = await this.getKeyStatus(saasUrl, token, repo);
 
-    // [LOGIN-K1] Repo not connected — keyStatus returned fallback (empty ecdhPublicKey)
+    // [LOGIN-K1] [LOGIN-H5] Repo not connected — guide the user step by step
     if (!keyStatus.exists && keyStatus.ecdhPublicKey === '') {
-      const webUrl = process.env['GITGOV_WEB_URL'] ?? saasUrl.replace(':3001', ':3000');
-      console.error('This repository is not connected to GitGovernance.');
-      console.error(`  Connect it at: ${webUrl}`);
-      console.error('  After connecting, run `gitgov login` again.');
+      console.error('Repository not connected to GitGovernance.\n');
+      console.error('To connect:');
+      console.error('  1. Install the GitHub App: https://github.com/apps/gitgov-app/installations/new');
+      console.error('  2. Run: gitgov init');
+      console.error('  3. Then: gitgov login');
       process.exit(1);
     }
 
