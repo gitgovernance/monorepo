@@ -78,7 +78,7 @@ export class GitHubProjectInitializer implements IProjectInitializer {
       this.branchCreatedByThisInit = true;
     }
 
-    // Stage policy.yml in the shared gitModule buffer. No .gitkeep —
+    // [GPI03] Stage policy.yml in the shared gitModule buffer. No .gitkeep —
     // directories emerge naturally from the files written in the final commit.
     const policyPath = `${this.basePath}/policy.yml`;
     await this.gitModule.add([policyPath], {
@@ -117,15 +117,20 @@ export class GitHubProjectInitializer implements IProjectInitializer {
       });
     } catch (err: unknown) {
       const status = (err as { status?: number }).status;
-      if (status === 403 || status === 404) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.includes('Upgrade to GitHub Pro') || message.includes('make this repository public')) {
+        console.warn(`[gitgov] branch protection for '${this.branch}' skipped — requires GitHub Pro/Team/Enterprise plan for private repos.`);
+      } else if (status === 403) {
         console.warn(`[gitgov] branch protection for '${this.branch}' skipped — add 'administration:write' to the GitHub App or configure manually.`);
+      } else if (status === 404) {
+        console.warn(`[gitgov] branch protection for '${this.branch}' skipped — branch not found (may have been deleted).`);
       } else {
-        console.warn(`[gitgov] branch protection for '${this.branch}' failed: ${err instanceof Error ? err.message : String(err)}`);
+        console.warn(`[gitgov] branch protection for '${this.branch}' failed: ${message}`);
       }
     }
   }
 
-  // GPI10 — project is initialized iff branch exists AND config.json is loadable
+  // [GPI02] [GPI10] project is initialized iff branch exists AND config.json is loadable
   // [PROJ-G1] Caches branchExists for createProjectStructure() to consume
   async isInitialized(): Promise<boolean> {
     const exists = await this.gitModule.branchExists(this.branch);
@@ -135,7 +140,7 @@ export class GitHubProjectInitializer implements IProjectInitializer {
     return config !== null;
   }
 
-  // GPI05 — IKS-T4: stage config.json in the shared gitModule buffer.
+  // [GPI03] [GPI05] IKS-T4: stage config.json in the shared gitModule buffer.
   // Does NOT delegate to configStore.saveConfig() — that makes an immediate
   // Contents API PUT which would violate IKS-T6 "all in 1 commit".
   async writeConfig(config: GitGovConfig): Promise<void> {
@@ -161,12 +166,12 @@ export class GitHubProjectInitializer implements IProjectInitializer {
     });
   }
 
-  // GPI07 — no-op in remote backend
+  // [GPI07] no-op in remote backend
   async initializeSession(_actorId: string): Promise<void> {
     // intentional no-op: sessions tracked via JWE tokens in saas-api, not gitgov-state
   }
 
-  // GPI04 — IKS-T5: cleanup on init failure. Delete branch if we created it.
+  // [GPI04] IKS-T5: cleanup on init failure. Delete branch if we created it.
   async rollback(): Promise<void> {
     if (this.branchCreatedByThisInit) {
       await this.gitModule.deleteBranch(this.branch);
@@ -175,7 +180,7 @@ export class GitHubProjectInitializer implements IProjectInitializer {
     // If the branch preexisted, rollback is a no-op — we do not touch state we did not create.
   }
 
-  // GPI11 — environment validation for remote backend
+  // [GPI11] environment validation for remote backend
   async validateEnvironment(): Promise<EnvironmentValidation> {
     const branchExists = await this.gitModule.branchExists(this.branch);
     const config = branchExists ? await this.configStore.loadConfig() : null;
@@ -198,22 +203,22 @@ export class GitHubProjectInitializer implements IProjectInitializer {
     };
   }
 
-  // GPI06 — read via gitModule Contents API
+  // [GPI06] read via gitModule Contents API
   async readFile(filePath: string): Promise<string> {
     return this.gitModule.getFileContent(this.branch, filePath);
   }
 
-  // GPI08 — no-op in remote (no local agent prompt in remote init)
+  // [GPI08] no-op in remote (no local agent prompt in remote init)
   async copyAgentPrompt(): Promise<void> {
     // intentional no-op
   }
 
-  // GPI09 — no-op in remote (no local .gitignore in remote state)
+  // [GPI09] no-op in remote (no local .gitignore in remote state)
   async setupGitIntegration(): Promise<void> {
     // intentional no-op
   }
 
-  // GPI12 — canonical remote path for an actor record
+  // [GPI12] canonical remote path for an actor record
   getActorPath(actorId: string): string {
     return `${this.basePath}/actors/${actorId}.json`;
   }

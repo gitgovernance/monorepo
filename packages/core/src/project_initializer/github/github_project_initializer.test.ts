@@ -537,12 +537,13 @@ describe('GitHubProjectInitializer', () => {
 
     it('[GPI19] should skip protection when options.octokit is undefined', async () => {
       gitModule.branchExists.mockResolvedValue(false);
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation();
       const initializer = createInitializer(gitModule, configStore);
 
       await initializer.createProjectStructure();
 
-      expect(gitModule.createBranch).toHaveBeenCalled();
-      expect(gitModule.add).toHaveBeenCalled();
+      expect(warnSpy).not.toHaveBeenCalled();
+      warnSpy.mockRestore();
     });
 
     it('[GPI19] should not attempt protection when branch already existed', async () => {
