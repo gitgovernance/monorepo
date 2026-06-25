@@ -66,7 +66,8 @@ vi.mock('../../services/dependency-injection', () => {
   return {
     DependencyInjectionService: {
       getInstance: vi.fn().mockReturnValue({
-        getRecordProjector: vi.fn().mockResolvedValue(mockAdapter)
+        getRecordProjector: vi.fn().mockResolvedValue(mockAdapter),
+        getHeadSha: vi.fn().mockResolvedValue('test-sha'),
       })
     }
   };

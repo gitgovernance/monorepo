@@ -188,7 +188,8 @@ describe('StatusCommand - Complete Unit Tests', () => {
       getRecordProjector: vi.fn().mockResolvedValue(mockProjector),
       getIdentityAdapter: vi.fn().mockResolvedValue(mockIdentityAdapter),
       getCurrentActor: vi.fn().mockResolvedValue(sampleActor),
-      getSyncStateModule: vi.fn().mockResolvedValue(mockSyncStateModule)
+      getSyncStateModule: vi.fn().mockResolvedValue(mockSyncStateModule),
+      getHeadSha: vi.fn().mockResolvedValue('test-sha'),
     };
 
     // Mock DependencyInjectionService.getInstance()

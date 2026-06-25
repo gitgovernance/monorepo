@@ -198,7 +198,8 @@ export class StatusCommand {
       if (!options.quiet) {
         console.log("Updating cache...");
       }
-      await projector.generateIndex();
+      const lastCommitHash = await this.dependencyService.getHeadSha();
+      await projector.generateIndex({ lastCommitHash });
     }
   }
 

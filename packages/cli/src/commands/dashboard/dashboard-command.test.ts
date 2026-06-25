@@ -246,6 +246,7 @@ describe('DashboardCommand - EARS Compliance Tests', () => {
       getRecordProjector: vi.fn().mockResolvedValue(mockProjector),
       getIdentityAdapter: vi.fn().mockResolvedValue(mockIdentityAdapter),
       getCurrentActor: vi.fn().mockResolvedValue(sampleActor),
+      getHeadSha: vi.fn().mockResolvedValue('test-sha'),
     };
 
     // Mock DependencyInjectionService.getInstance()

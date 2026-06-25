@@ -170,6 +170,7 @@ describe('LintCommand', () => {
       getRecordProjector: vi.fn().mockResolvedValue(mockProjector),
       getKeyProvider: vi.fn().mockReturnValue(mockKeyProvider),
       getCurrentActor: vi.fn().mockResolvedValue(mockActor),
+      getHeadSha: vi.fn().mockResolvedValue('test-sha'),
     };
 
     // Mock singleton getInstance

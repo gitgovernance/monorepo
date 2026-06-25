@@ -409,7 +409,8 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
           if (!options.quiet) {
             console.log("🔄 Updating cache...");
           }
-          await projector.generateIndex();
+          const lastCommitHash = await this.dependencyService.getHeadSha();
+          await projector.generateIndex({ lastCommitHash });
         }
 
         // 3. Use cache for performance
@@ -495,7 +496,8 @@ export class TaskCommand extends BaseCommand<BaseCommandOptions> {
         const isUpToDate = await projector.isIndexUpToDate();
 
         if (!isUpToDate) {
-          await projector.generateIndex();
+          const lastCommitHash = await this.dependencyService.getHeadSha();
+          await projector.generateIndex({ lastCommitHash });
         }
 
         // Use cache first

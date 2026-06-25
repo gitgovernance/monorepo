@@ -96,7 +96,8 @@ export class IndexerCommand extends SimpleCommand<IndexerCommandOptions> {
       console.log("🔄 Generating fresh index...");
     }
 
-    const report = await projector.generateIndex();
+    const lastCommitHash = await this.dependencyService.getHeadSha();
+    const report = await projector.generateIndex({ lastCommitHash });
     this.formatGenerationReport(report, options);
   }
 
@@ -108,7 +109,8 @@ export class IndexerCommand extends SimpleCommand<IndexerCommandOptions> {
       console.log("🔄 Generating index...");
     }
 
-    const report = await projector.generateIndex();
+    const lastCommitHash = await this.dependencyService.getHeadSha();
+    const report = await projector.generateIndex({ lastCommitHash });
     this.formatGenerationReport(report, options);
   }
 
