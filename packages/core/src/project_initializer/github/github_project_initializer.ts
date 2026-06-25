@@ -40,12 +40,10 @@ export class GitHubProjectInitializer implements IProjectInitializer {
   private readonly basePath: string;
   private readonly commitMessage: string;
   private readonly commitAuthor: CommitAuthor;
+  private readonly owner: string;
+  private readonly repo: string;
+  private readonly octokit: GitHubProjectInitializerOptions['octokit'];
 
-  /**
-   * Tracks whether createProjectStructure() created the branch in this init run.
-   * Used by rollback() to decide whether to delete the branch (we created it)
-   * or leave it alone (it preexisted).
-   */
   private branchCreatedByThisInit: boolean = false;
 
   // [PROJ-G1] One-shot cache from isInitialized() → createProjectStructure()
@@ -56,9 +54,8 @@ export class GitHubProjectInitializer implements IProjectInitializer {
     private readonly configStore: ConfigStore<unknown>,
     options: GitHubProjectInitializerOptions,
   ) {
-    // owner/repo are required options for caller-declared intent + future extensibility,
-    // but not stored internally — the injected gitModule and configStore already carry
-    // them. Re-storing would be dead state (TypeScript noUnusedLocals rejects unused private fields).
+    this.owner = options.owner;
+    this.repo = options.repo;
     this.branch = options.branch;
     this.basePath = options.basePath ?? '.gitgov';
     this.commitMessage = options.commitMessage ?? 'gitgov: remote init';
@@ -66,6 +63,7 @@ export class GitHubProjectInitializer implements IProjectInitializer {
       name: 'gitgov bot',
       email: 'bot@gitgov.dev',
     };
+    this.octokit = options.octokit;
   }
 
   // GPI01/GPI02/GPI03 — IKS-T1: create branch (if needed) + stage policy.yml
@@ -93,6 +91,38 @@ export class GitHubProjectInitializer implements IProjectInitializer {
     await this.gitModule.add([gitignorePath], {
       contentMap: { [gitignorePath]: securityGitignore },
     });
+
+    // [GPI19] Attempt branch protection after creating a new branch
+    if (this.branchCreatedByThisInit) {
+      await this.protectBranch();
+    }
+  }
+
+  // [GPI19] Private — attempt to protect the state branch via platform API.
+  // Graceful degradation: 403 (no administration:write) → warn and continue.
+  // No octokit → skip silently (backward-compatible).
+  private async protectBranch(): Promise<void> {
+    if (!this.octokit) return;
+    try {
+      await this.octokit.request('PUT /repos/{owner}/{repo}/branches/{branch}/protection', {
+        owner: this.owner,
+        repo: this.repo,
+        branch: this.branch,
+        required_status_checks: null,
+        enforce_admins: false,
+        required_pull_request_reviews: null,
+        restrictions: null,
+        allow_deletions: false,
+        allow_force_pushes: false,
+      });
+    } catch (err: unknown) {
+      const status = (err as { status?: number }).status;
+      if (status === 403 || status === 404) {
+        console.warn(`[gitgov] branch protection for '${this.branch}' skipped — add 'administration:write' to the GitHub App or configure manually.`);
+      } else {
+        console.warn(`[gitgov] branch protection for '${this.branch}' failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
   }
 
   // GPI10 — project is initialized iff branch exists AND config.json is loadable
@@ -189,7 +219,7 @@ export class GitHubProjectInitializer implements IProjectInitializer {
   }
 
 
-  // GPI13 — IKS-T6: transaction boundary. Materializes all staged writes in 1 commit.
+  // [GPI13] [GPI14] IKS-T6: transaction boundary. Materializes all staged writes in 1 commit.
   // Returns the commit SHA for observability (used by RemoteInitService to emit
   // `INIT_COMPLETE` event via `RepoStateMachineService.transition` with commitSha).
   async finalize(): Promise<string | undefined> {

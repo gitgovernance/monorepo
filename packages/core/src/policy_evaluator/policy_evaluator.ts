@@ -1,3 +1,4 @@
+import { createFinding } from "../audit/types";
 /**
  * PolicyEvaluator -- Epic 5: policy_evaluation.
  *
@@ -320,21 +321,21 @@ function extractFindingsFromSarif(sarif: SarifLog): Finding[] {
         const confidence = (props?.["gitgov/confidence"] as number | undefined) ?? 1.0;
         const snippet = location?.region?.snippet?.text;
 
-        const finding: Finding = {
+        const finding = createFinding({
           fingerprint,
           ruleId: sarifResult.ruleId,
           file: location?.artifactLocation?.uri ?? "",
           line: location?.region?.startLine ?? 0,
           message: sarifResult.message.text,
+          snippet: snippet ?? '',
           category: rawCategory as import("../audit/types").FindingCategory,
           severity: levelToSeverity(sarifResult.level),
           detector: detector as import("../audit/types").DetectorName,
           confidence,
-          executionId: "",  // policy evaluator doesn't have exec context here
+          executionId: "",
           reportedBy: [agentId],
           isWaived: false,
-          ...(snippet ? { snippet } : {}),
-        };
+        });
         const col = location?.region?.startColumn;
         if (col !== undefined) {
           finding.column = col;

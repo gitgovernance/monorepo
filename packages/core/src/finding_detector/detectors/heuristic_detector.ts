@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import type { Detector, FindingCategory, FindingSeverity, Finding } from "../types";
+import type { Detector, Finding, FindingCategory, FindingSeverity } from "../types";
+import { createFinding } from "../../audit/types";
 
 const MAX_SNIPPET_LENGTH = 300;
 
@@ -113,7 +114,7 @@ export class HeuristicDetector implements Detector {
         const line = getLineNumber(content, match.index);
         const snippet = extractSnippet(content, match.index);
 
-        const finding: Finding = {
+        const finding = createFinding({
           fingerprint: generateFingerprint(rule.id, filePath, line),
           ruleId: rule.id,
           file: filePath,
@@ -127,8 +128,8 @@ export class HeuristicDetector implements Detector {
           executionId: "",      // filled post-orchestration
           reportedBy: [],       // filled post-orchestration
           isWaived: false,      // filled post-orchestration
-        };
-        if (rule.fixes?.length) finding.fixes = rule.fixes;
+          ...(rule.fixes?.length ? { fixes: rule.fixes } : {}),
+        });
         findings.push(finding);
       }
     }

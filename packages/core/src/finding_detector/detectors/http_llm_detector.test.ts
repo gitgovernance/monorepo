@@ -15,6 +15,7 @@ describe("HttpLlmDetector", () => {
               category: "pii-email",
               severity: "high",
               message: "Email detected by LLM",
+              snippet: "const email = user.email",
               confidence: 0.95,
             },
           ],

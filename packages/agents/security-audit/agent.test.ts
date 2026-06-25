@@ -56,8 +56,9 @@ function makeDeps(overrides: Partial<SecurityAuditAgentDeps> = {}): SecurityAudi
     },
     sarifBuilder: {
       build: jest.fn().mockResolvedValue(makeSarifLog()),
-      validate: jest.fn(), // required by SarifBuilder interface, not called by agent
+      validate: jest.fn(),
     },
+    getLineContent: jest.fn().mockResolvedValue(null),
     ...overrides,
   };
 }

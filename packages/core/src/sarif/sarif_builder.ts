@@ -153,15 +153,20 @@ class SarifBuilderImpl implements SarifBuilder {
         }
         const context = fileContexts.get(finding.file)!;
 
-        const partial = await buildPartialFingerprints(
+        // [SARIF-C7b] Use Finding.fingerprint as the canonical partialFingerprint.
+        // If getLineContent is available, recompute (first-time scan). If not (export from DB),
+        // fall back to Finding.fingerprint which was computed at scan time. This ensures the
+        // SARIF output is IDENTICAL regardless of whether it's produced during scan or export.
+        let partial = await buildPartialFingerprints(
           finding.file,
           finding.line,
           options.getLineContent,
           context
         );
+        if (!partial['primaryLocationLineHash/v1'] && finding.fingerprint) {
+          partial = { 'primaryLocationLineHash/v1': finding.fingerprint };
+        }
 
-        // Note: if getLineContent is not provided, partial is {} and fingerprint is undefined,
-        // so waivers cannot match. Callers MUST provide getLineContent for waiver matching to work.
         const waiver = findMatchingWaiver(
           partial['primaryLocationLineHash/v1'],
           options.waivers
@@ -179,6 +184,7 @@ class SarifBuilderImpl implements SarifBuilder {
         if (options.payloadChecksum) props['gitgov/payloadChecksum'] = options.payloadChecksum;
         if (options.protocolVersion) props['gitgov/protocolVersion'] = options.protocolVersion;
         if (finding.legalReference)  props['gitgov/legalReference']  = finding.legalReference;
+        if (finding.snippetHash)     props['gitgov/snippetHash']     = finding.snippetHash;
 
         const region: SarifResult['locations'][0]['physicalLocation']['region'] = {
           startLine: finding.line,

@@ -2,6 +2,7 @@
 import { WaiverWriter } from "./waiver_writer";
 import type { IFeedbackAdapter } from "../adapters/feedback_adapter";
 import type { Finding } from "../finding_detector/types";
+import { createFinding } from "../audit/types";
 import type { FeedbackRecord } from "../record_types";
 
 describe("WaiverWriter", () => {
@@ -20,7 +21,7 @@ describe("WaiverWriter", () => {
     writer = new WaiverWriter(mockFeedbackAdapter);
   });
 
-  const mockFinding: Finding = {
+  const mockFinding: Finding = createFinding({
     ruleId: "PII-001",
     category: "pii-email",
     severity: "high",
@@ -34,7 +35,7 @@ describe("WaiverWriter", () => {
     executionId: "",
     reportedBy: [],
     isWaived: false,
-  };
+  });
 
   describe("4.7. WaiverWriter (EARS-G1 to EARS-G5)", () => {
     it("[EARS-G1] should create waiver with correct metadata", async () => {

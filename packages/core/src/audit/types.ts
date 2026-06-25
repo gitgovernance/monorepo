@@ -173,8 +173,10 @@ export interface Finding {
   // ── Description ──
   /** Problem description */
   message: string;
-  /** Source code snippet (optional — may be redacted in L1, absent in some detectors) */
-  snippet?: string;
+  /** Source code snippet — evidence of the finding. Required: every detector MUST produce snippet. */
+  snippet: string;
+  /** SHA-256 hex digest of the original snippet, computed at detection time. Enables L1↔L2 integrity verification. */
+  snippetHash: string;
   /** Semantic category */
   category: FindingCategory;
   /** Severity for governance prioritization */
@@ -419,3 +421,31 @@ export type Scan = {
   /** Aggregated summary counts */
   summary: AuditSummary;
 };
+
+// ─── Finding Factory ─────────────────────────────────────────────────────────
+
+import { createHash } from 'node:crypto';
+
+/**
+ * [AUDIT-D1] Factory for creating Finding objects with guaranteed snippet↔snippetHash integrity.
+ * snippetHash is ALWAYS computed from snippet — callers MUST NOT provide it.
+ * [AUDIT-D2] This is the ONLY way to construct a Finding.
+ */
+export function createFinding(input: Omit<Finding, 'snippetHash'>): Finding {
+  return {
+    ...input,
+    snippetHash: createHash('sha256').update(input.snippet).digest('hex'),
+  };
+}
+
+/**
+ * [RLDX-F4] Verify snippet integrity — pure function.
+ * Compares sha256(snippet) against snippetHash.
+ * Returns 'verified' if match, 'unverified' if mismatch, null if unverifiable.
+ */
+export function verifySnippet(snippet: string, snippetHash: string): 'verified' | 'unverified' | null {
+  if (!snippet || !snippetHash) return null;
+  if (snippet.includes('[REDACTED]')) return null;
+  const computed = createHash('sha256').update(snippet).digest('hex');
+  return computed === snippetHash ? 'verified' : 'unverified';
+}

@@ -196,6 +196,15 @@ export interface IRecordProjection {
 }
 
 /**
+ * Options for generateIndex / computeProjection — lastCommitHash is required.
+ * The DB schema has lastCommitHash NOT NULL @default("legacy"), and PersistContext
+ * requires it. Every caller must provide the real SHA.
+ */
+export type ProjectionOpts = {
+  lastCommitHash: string;
+}
+
+/**
  * RecordProjector Dependencies - Facade + Dependency Injection Pattern.
  *
  * @see record_projection.md Section 2 - Architecture
@@ -210,8 +219,8 @@ export type RecordProjectorDependencies = {
  * RecordProjector Interface - The Projection Engine.
  */
 export interface IRecordProjector {
-  generateIndex(): Promise<IndexGenerationReport>;
-  computeProjection(opts?: { lastCommitHash?: string }): Promise<IndexData>;
+  generateIndex(opts: ProjectionOpts): Promise<IndexGenerationReport>;
+  computeProjection(opts: ProjectionOpts): Promise<IndexData>;
   getIndexData(): Promise<IndexData | null>;
   validateIntegrity(): Promise<IntegrityReport>;
   calculateDerivedStates(allRecords: AllRecords): Promise<DerivedStates>;

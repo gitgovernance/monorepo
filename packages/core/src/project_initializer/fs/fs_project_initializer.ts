@@ -63,6 +63,7 @@ export class FsProjectInitializer implements IProjectInitializer {
   /**
    * Creates the .gitgov/ directory structure.
    */
+  // [EARS-FPI01] Creates .gitgov/ + 6 subdirectories
   async createProjectStructure(): Promise<void> {
     const gitgovPath = path.join(this.projectRoot, '.gitgov');
 
@@ -72,7 +73,7 @@ export class FsProjectInitializer implements IProjectInitializer {
       await fs.mkdir(path.join(gitgovPath, dir), { recursive: true });
     }
 
-    // EARS-FPI14: Create default policy.yml if it doesn't exist
+    // [EARS-FPI14] Create default policy.yml if it doesn't exist
     const policyPath = path.join(gitgovPath, 'policy.yml');
     try {
       await fs.access(policyPath);
@@ -94,6 +95,7 @@ export class FsProjectInitializer implements IProjectInitializer {
   /**
    * Checks if .gitgov/config.json exists.
    */
+  // [EARS-FPI02] Checks .gitgov/config.json existence
   async isInitialized(): Promise<boolean> {
     const configPath = path.join(this.projectRoot, '.gitgov', 'config.json');
     try {
@@ -107,6 +109,7 @@ export class FsProjectInitializer implements IProjectInitializer {
   /**
    * Writes config.json to .gitgov/
    */
+  // [EARS-FPI07] Writes config.json with JSON.stringify(config, null, 2)
   async writeConfig(config: GitGovConfig): Promise<void> {
     const configPath = path.join(this.projectRoot, '.gitgov', 'config.json');
     await fs.writeFile(configPath, JSON.stringify(config, null, 2), 'utf-8');
@@ -115,6 +118,7 @@ export class FsProjectInitializer implements IProjectInitializer {
   /**
    * Creates .session.json with initial actor state.
    */
+  // [EARS-FPI08] Creates .session.json with actor bootstrap state
   async initializeSession(actorId: string): Promise<void> {
     const sessionPath = path.join(this.projectRoot, '.gitgov', '.session.json');
     const session = {
@@ -138,6 +142,7 @@ export class FsProjectInitializer implements IProjectInitializer {
   /**
    * Reads a file from the filesystem.
    */
+  // [EARS-FPI12] Reads file with utf-8 encoding
   async readFile(filePath: string): Promise<string> {
     return fs.readFile(filePath, 'utf-8');
   }
@@ -145,6 +150,7 @@ export class FsProjectInitializer implements IProjectInitializer {
   /**
    * Gets the path for an actor record.
    */
+  // [EARS-FPI09] Returns actor path under .gitgov/actors/
   getActorPath(actorId: string): string {
     return path.join(this.projectRoot, '.gitgov', 'actors', `${actorId}.json`);
   }
@@ -198,6 +204,7 @@ export class FsProjectInitializer implements IProjectInitializer {
    * Validates environment for GitGovernance initialization.
    * Checks: Git repo exists, write permissions, not already initialized.
    */
+  // [EARS-FPI03] [EARS-FPI04] [EARS-FPI05] [EARS-FPI13] Validates environment + VCS status
   async validateEnvironment(): Promise<EnvironmentValidation> {
     const warnings: string[] = [];
     const suggestions: string[] = [];
@@ -305,6 +312,7 @@ export class FsProjectInitializer implements IProjectInitializer {
   /**
    * Copies the @gitgov agent prompt to project root for IDE access.
    */
+  // [EARS-FPI10] Copies agent prompt from multiple sources (graceful degradation)
   async copyAgentPrompt(): Promise<void> {
     const targetPrompt = path.join(this.repoRoot, 'gitgov');
     const potentialSources: string[] = [];
@@ -378,6 +386,7 @@ jobs:
   /**
    * Sets up .gitignore + GitHub workflow (if GitHub remote detected).
    */
+  // [EARS-FPI11] [EARS-FPI16] [EARS-FPI17] [EARS-FPI18] .gitignore + GitHub workflow
   async setupGitIntegration(): Promise<void> {
     const gitignorePath = path.join(this.repoRoot, '.gitignore');
     const gitignoreContent = `
@@ -430,7 +439,7 @@ gitgov
   }
 
   /**
-   * Removes .gitgov/ directory (for rollback on failed init).
+   * [EARS-FPI06] Removes .gitgov/ directory (for rollback on failed init).
    */
   async rollback(): Promise<void> {
     const gitgovPath = path.join(this.projectRoot, '.gitgov');

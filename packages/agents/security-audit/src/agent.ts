@@ -22,6 +22,7 @@ type AuditOptions = SourceAuditor.AuditOptions;
 export type SecurityAuditAgentDeps = {
   sourceAuditor: { audit(options: AuditOptions): Promise<AuditResult> };
   sarifBuilder: SarifBuilder;
+  getLineContent: (file: string, line: number) => Promise<string | null>;
 };
 
 /**
@@ -74,15 +75,7 @@ export class SecurityAuditAgent {
       toolVersion: '2.0.0',
       informationUri: 'https://github.com/gitgovernance/monorepo/tree/main/packages/agents/security-audit',
       findings: auditResult.findings,
-      getLineContent: async (file: string, line: number) => {
-        const fs = await import('node:fs/promises');
-        try {
-          const content = await fs.readFile(file, 'utf-8');
-          return content.split('\n')[line - 1] ?? null;
-        } catch {
-          return null;
-        }
-      },
+      getLineContent: this.deps.getLineContent,
     });
 
     const summary = buildSummary(auditResult, input.scope);

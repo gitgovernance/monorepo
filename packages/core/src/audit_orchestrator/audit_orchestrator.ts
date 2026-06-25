@@ -1,4 +1,5 @@
 import type { SarifLog, SarifPhysicalLocation } from "../sarif/sarif.types";
+import { createFinding } from "../audit/types";
 import type { IAgentRunner } from "../agent_runner/agent_runner";
 import type { Waiver } from "../source_auditor/types";
 import type { RunOptions } from "../agent_runner/agent_runner.types";
@@ -241,12 +242,13 @@ function consolidateFindings(
           const detector = (props?.["gitgov/detector"] as string | undefined) ?? "regex";
           const confidence = (props?.["gitgov/confidence"] as number | undefined) ?? 1.0;
 
-          const finding: Finding = {
+          const finding = createFinding({
             fingerprint,
             ruleId: sarifResult.ruleId,
             file: location?.artifactLocation?.uri ?? "",
             line: location?.region?.startLine ?? 0,
             message: sarifResult.message.text,
+            snippet: snippet ?? '',
             category,
             severity: levelToSeverity(sarifResult.level),
             detector: detector as import("../audit/types").DetectorName,
@@ -254,8 +256,7 @@ function consolidateFindings(
             executionId: result.executionId,
             reportedBy: [result.agentId],
             isWaived: false,
-            ...(snippet ? { snippet } : {}),
-          };
+          });
           const col = location?.region?.startColumn;
           if (col !== undefined) {
             finding.column = col;

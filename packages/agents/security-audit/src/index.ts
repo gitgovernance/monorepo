@@ -39,6 +39,14 @@ export async function runAgent(ctx: AgentExecutionContext) {
   const agent = new SecurityAuditAgent({
     sourceAuditor,
     sarifBuilder: Sarif.createSarifBuilder(),
+    getLineContent: async (file: string, line: number) => {
+      try {
+        const content = await fileLister.read(file);
+        return content.split('\n')[line - 1] ?? null;
+      } catch {
+        return null;
+      }
+    },
   });
 
   return agent.run(input, config);

@@ -624,7 +624,7 @@ describe("AuditOrchestrator", () => {
       expect(finding.snippet).toBe('const API_KEY = "sk-secret-12345";');
     });
 
-    it("[AORCH-B13] should omit snippet when SARIF region has no snippet.text", async () => {
+    it("[AORCH-B13] should set empty string snippet when SARIF region has no snippet.text", async () => {
       const agentRecord = makeAgentRecord("agent:security-audit", "audit");
       const sarif = makeSarifLog([
         makeSarifResult({
@@ -651,7 +651,7 @@ describe("AuditOrchestrator", () => {
       expect(result.findings).toHaveLength(1);
       const finding = result.findings[0]!;
       expect(finding).toBeDefined();
-      expect(finding.snippet).toBeUndefined();
+      expect(finding.snippet).toBe('');
     });
   });
 
@@ -743,6 +743,8 @@ describe("AuditOrchestrator", () => {
         fingerprint: "waived-hash-001",
         ruleId: "SEC-001",
         message: "Hardcoded secret",
+        snippet: 'const secret = "sk-live-123"',
+        snippetHash: 'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2',
         severity: "critical",
         category: "hardcoded-secret",
         file: "src/config.ts",

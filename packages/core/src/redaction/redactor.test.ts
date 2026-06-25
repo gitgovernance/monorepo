@@ -41,6 +41,7 @@ const sensitiveFinding: Finding = {
   category: 'hardcoded-secret',
   severity: 'critical',
   snippet: "const apiKey = 'sk-1234567890abcdef'",
+  snippetHash: 'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2',
   message: 'Hardcoded API key detected at line 12',
   fixes: [{ description: 'Move to environment variable API_KEY' }],
   detector: 'regex',
@@ -58,6 +59,7 @@ const safeFinding: Finding = {
   category: 'tracking-cookie',
   severity: 'low',
   snippet: "document.cookie = '_ga=' + gaId",
+  snippetHash: 'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2',
   message: 'Analytics tracking cookie set',
   fixes: [{ description: 'Ensure cookie consent is obtained' }],
   detector: 'regex',
@@ -80,6 +82,7 @@ const consolidatedFinding: Finding = {
   executionId: '',
   reportedBy: ['agent-a', 'agent-b'],
   snippet: "const email = user.email; // john@example.com",
+  snippetHash: 'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2',
   isWaived: false,
 };
 

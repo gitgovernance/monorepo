@@ -375,7 +375,7 @@ export class GithubSyncStateModule implements ISyncStateModule {
     let reindexed = false;
     if (filesUpdated > 0 || options?.forceReindex) {
       try {
-        await this.deps.indexer.computeProjection();
+        await this.deps.indexer.computeProjection({ lastCommitHash: remoteSha });
         reindexed = true;
       } catch {
         // Re-indexing failure is non-fatal for pull
