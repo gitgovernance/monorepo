@@ -30,18 +30,52 @@ import type { SarifLog } from "../sarif/sarif.types";
  * Finding categories detectable by the Audit product.
  */
 export type FindingCategory =
+  // Original 6 sensitive
   | "pii-email"
   | "pii-phone"
   | "pii-financial"
   | "pii-health"
   | "pii-generic"
   | "hardcoded-secret"
+  // PCI (Group A) sensitive
+  | "pci-pan"
+  | "pci-cvv"
+  | "pci-track"
+  | "pci-logging"
+  | "pci-token-misuse"
+  | "pci-last4"
+  // PII extended (Group B) sensitive
+  | "pii-dob"
+  | "pii-address"
+  | "pii-national-id"
+  | "pii-passport"
+  | "pii-bank-account"
+  | "pii-biometric"
+  // Storage/Crypto (Group E) sensitive
+  | "storage-pii"
+  | "storage-pci"
+  | "crypto-weak"
+  | "crypto-key"
+  | "crypto-tls"
+  // Original 6 safe
   | "logging-pii"
   | "tracking-cookie"
   | "tracking-analytics-id"
   | "unencrypted-storage"
   | "third-party-transfer"
-  | "unknown-risk";
+  | "unknown-risk"
+  // Logging extended (Group C) safe
+  | "logging-auth"
+  | "logging-error"
+  | "logging-debug"
+  | "logging-trace"
+  // Transfer/Consent (Group D) safe
+  | "data-transfer"
+  | "privacy-consent"
+  | "privacy-retention"
+  // SAST categories (semgrep, CodeQL, etc.)
+  | "security-vulnerability"
+  | "code-quality";
 
 /**
  * Severity levels for governance prioritization.
@@ -52,7 +86,7 @@ export type FindingSeverity = "critical" | "high" | "medium" | "low";
 /**
  * Identifier of the detector that generated the finding.
  */
-export type DetectorName = "regex" | "heuristic" | "llm";
+export type DetectorName = "regex" | "heuristic" | "llm" | "sast";
 
 // ─── Status enums (product-level) ────────────────────────────────────────────
 
