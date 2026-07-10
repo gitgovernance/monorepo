@@ -129,6 +129,9 @@ export type {
   Scan,
 } from "./audit/index";
 
+// Audit value exports (factories)
+export { createFinding } from "./audit/index";
+
 // ─── Non-audit type exports (module-specific) ───────────────────────────────
 export type { AuditOrchestrationOptions, AuditOrchestratorDeps } from "./audit_orchestrator/index";
 export type { RegexRule } from "./finding_detector/index";

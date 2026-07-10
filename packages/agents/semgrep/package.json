@@ -1,0 +1,54 @@
+{
+  "name": "@gitgov/agent-semgrep",
+  "version": "1.0.0",
+  "description": "SAST agent for GitGovernance — wraps semgrep CLI, produces SARIF 2.1.0 with gitgov fingerprints",
+  "license": "UNLICENSED",
+  "type": "module",
+  "main": "dist/index.mjs",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gitgovernance/monorepo.git",
+    "directory": "packages/agents/semgrep"
+  },
+  "scripts": {
+    "build": "esbuild src/index.ts --bundle --platform=node --format=esm --target=node20 --outfile=dist/index.mjs --external:@gitgov/core",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit",
+    "test": "jest"
+  },
+  "gitgov": {
+    "agent": {
+      "purpose": "audit",
+      "function": "runAgent",
+      "metadata": {
+        "target": "code",
+        "outputFormat": "sarif",
+        "requires": "semgrep"
+      }
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "peerDependencies": {
+    "@gitgov/core": ">=3.0.0"
+  },
+  "dependencies": {
+    "@gitgov/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.0.0",
+    "@types/node": "^20.0.0",
+    "esbuild": "^0.19.0",
+    "jest": "^29.0.0",
+    "ts-jest": "^29.0.0",
+    "typescript": "^5.0.0"
+  }
+}
