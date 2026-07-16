@@ -488,18 +488,20 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
       const feedbackAdapter = await this.container.getFeedbackAdapter();
       const currentActor = await this.container.getCurrentActor();
 
-      // [WAIV-UI-G2] Resolve ruleId + file + line from local audit-index.json by fingerprint
+      // [AORCH-E1] Resolve partial fingerprint to full + metadata from audit-index.json
+      let resolvedFingerprint = fingerprint;
       let resolvedRuleId = 'CLI-WAIVER';
       let resolvedFile = 'unknown';
       let resolvedLine = 0;
       try {
         const projectRoot = findProjectRoot(process.cwd());
         if (!projectRoot) throw new Error('No project root');
-        const auditProjection = new AuditFsProjection({ basePath: projectRoot });
+        const auditProjection = new AuditFsProjection({ basePath: `${projectRoot}/.gitgov` });
         const latest = await auditProjection.readLatest();
         if (latest?.findings) {
-          const match = latest.findings.find((f: any) => f.fingerprint === fingerprint);
+          const match = latest.findings.find((f: any) => f.fingerprint.startsWith(fingerprint));
           if (match) {
+            resolvedFingerprint = match.fingerprint;
             resolvedRuleId = match.ruleId ?? resolvedRuleId;
             resolvedFile = match.file ?? resolvedFile;
             resolvedLine = match.line ?? resolvedLine;
@@ -515,7 +517,7 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
           status: 'resolved',
           content: options.justification,
           metadata: {
-            fingerprint,
+            fingerprint: resolvedFingerprint,
             ruleId: resolvedRuleId,
             file: resolvedFile,
             line: resolvedLine,
