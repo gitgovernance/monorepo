@@ -190,5 +190,19 @@ describe('SecurityAuditAgent', () => {
       expect(auditMock).toHaveBeenCalledTimes(1);
     });
 
+    it('[AAV2-C7] should include .gitgov/** in default exclude patterns', async () => {
+      const deps = makeDeps();
+      const agent = new SecurityAuditAgent(deps);
+
+      await agent.run(baseInput, DEFAULT_CONFIG);
+
+      const callArgs = (deps.sourceAuditor.audit as jest.Mock).mock.calls[0]![0] as Record<string, unknown>;
+      const scope = callArgs['scope'] as Record<string, unknown>;
+      const excludes = scope['exclude'] as string[];
+      expect(excludes).toContain('.gitgov/**');
+      expect(excludes).toContain('node_modules/**');
+      expect(excludes).toContain('.git/**');
+    });
+
   });
 });

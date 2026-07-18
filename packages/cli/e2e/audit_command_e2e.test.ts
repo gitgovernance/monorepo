@@ -1,9 +1,11 @@
 /**
  * E2E Tests for Audit CLI Command
  *
- * Blueprint: audit_command.md §4.11 (AORCH-P5), §4.12 (AORCH-P6)
+ * Blueprint: audit_command.md §4.5 (AORCH-E1), §4.10 (AORCH-P4b), §4.11 (AORCH-P5), §4.12 (AORCH-P6)
  *
  * Tests the `gitgov audit` command in edge cases:
+ * - AORCH-E1: Partial fingerprint → full resolution → re-audit suppression
+ * - AORCH-P4b: audit-index.json written to worktree, not local project dir
  * - AORCH-P5: Repo without .gitgov → clear error message
  * - AORCH-P6: Repo without commits → clear error message
  */
@@ -65,6 +67,41 @@ describe('Audit CLI Command E2E', () => {
       cleanupWorktree(repoPath, wtPath);
       fs.rmSync(tempDir, { recursive: true, force: true });
     });
+  });
+
+  describe('4.10. FS Audit Projection — Worktree Path (AORCH-P4b)', () => {
+    it('[AORCH-P4b] should write audit-index.json to worktree, not local project dir', () => {
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gitgov-p4b-e2e-'));
+      const { testProjectRoot, worktreeBasePath, cleanup } = setupGitgovProject(tempDir, 'p4b');
+
+      try {
+        const srcDir = path.join(testProjectRoot, 'src');
+        fs.mkdirSync(srcDir, { recursive: true });
+        fs.writeFileSync(
+          path.join(srcDir, 'config.ts'),
+          'export const STRIPE_KEY = "sk_live_4eC39HqLyjWDarjtT1zdp7dc";\n',
+        );
+
+        const agentPath = path.resolve(__dirname, '..', '..', 'agents', 'security-audit');
+        runCliCommand(['agent', 'new', agentPath], { cwd: testProjectRoot });
+
+        const { execSync } = require('child_process');
+        execSync('git add -A && git commit -m "add secret"', { cwd: testProjectRoot, stdio: 'pipe' });
+
+        runCliCommand(['audit', '--scope', 'full'], { cwd: testProjectRoot, expectError: true });
+
+        // [AORCH-P4b] audit-index.json must NOT exist in local project dir
+        const localAuditIndex = path.join(testProjectRoot, '.gitgov', 'audit-index.json');
+        expect(fs.existsSync(localAuditIndex)).toBe(false);
+
+        // [AORCH-P4b] audit-index.json MUST exist in worktree
+        const worktreeAuditIndex = path.join(worktreeBasePath, '.gitgov', 'audit-index.json');
+        expect(fs.existsSync(worktreeAuditIndex)).toBe(true);
+      } finally {
+        cleanup();
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    }, 60000);
   });
 
   describe('4.5. Waiver Management — Partial Fingerprint (AORCH-E1)', () => {
