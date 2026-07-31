@@ -571,6 +571,12 @@ vi.mock('@gitgov/core', () => {
 
 // Mock @gitgov/core/fs — standalone functions + filesystem classes
 vi.mock('@gitgov/core/fs', () => ({
+  AuditFsProjection: vi.fn().mockImplementation(function() { return {
+    persist: vi.fn().mockResolvedValue(undefined),
+    readLatest: vi.fn().mockResolvedValue(null),
+    read: vi.fn().mockResolvedValue(null),
+    list: vi.fn().mockResolvedValue([]),
+  }; }),
   FsRecordProjection: vi.fn().mockImplementation(function() { return {
     persist: vi.fn().mockResolvedValue(undefined),
     read: vi.fn().mockResolvedValue(null),
@@ -751,9 +757,9 @@ describe('DependencyInjectionService', () => {
   });
 
   // ============================================================================
-  // §4.2. Store Initialization & Bootstrap (EARS-B1 to B4)
+  // §4.2. Store Initialization & Bootstrap (EARS-B1 to B4, B2b)
   // ============================================================================
-  describe('4.2. Store Initialization & Bootstrap (EARS-B1 to B4)', () => {
+  describe('4.2. Store Initialization & Bootstrap (EARS-B1 to B4, B2b)', () => {
     it('[EARS-B1] should create RecordStores when .gitgov exists', async () => {
       // Mock fs.access to succeed (.gitgov exists)
       mockFs.promises.access.mockResolvedValue(undefined);
@@ -789,19 +795,21 @@ describe('DependencyInjectionService', () => {
   });
 
   // ============================================================================
-  // §4.3. Adapter Factories (EARS-C1 to C12)
+  // §4.3. Adapter Factories (EARS-C1 to C15)
   // ============================================================================
   describe('4.3. Adapter Factories (EARS-C1 to C15)', () => {
     it('[EARS-C1] should create IndexerAdapter with all dependencies', async () => {
       const projector = await diService.getRecordProjector();
       expect(projector).toBeDefined();
       expect(projector.generateIndex).toBeDefined();
+      expect(RecordProjection.RecordProjector).toHaveBeenCalled();
     });
 
     it('[EARS-C2] should create BacklogAdapter with all dependencies', async () => {
       const backlogAdapter = await diService.getBacklogAdapter();
       expect(backlogAdapter).toBeDefined();
       expect(backlogAdapter.createTask).toBeDefined();
+      expect(Adapters.BacklogAdapter).toHaveBeenCalled();
     });
 
     it('[EARS-C3] should create MetricsAdapter with stores', async () => {
@@ -809,6 +817,7 @@ describe('DependencyInjectionService', () => {
 
       expect(recordMetrics).toBeDefined();
       expect(recordMetrics.getSystemStatus).toBeDefined();
+      expect(RecordMetrics.RecordMetrics).toHaveBeenCalled();
     });
 
     it('[EARS-C4] should create IdentityAdapter with KeyProvider and EventBus', async () => {
@@ -838,6 +847,7 @@ describe('DependencyInjectionService', () => {
       const lintModule = await diService.getLintModule();
 
       expect(lintModule).toBeDefined();
+      expect(corefs.FsLintModule).toHaveBeenCalled();
     });
 
     it('[EARS-C7] should create SyncStateModule with all dependencies', async () => {
@@ -1088,6 +1098,20 @@ describe('DependencyInjectionService', () => {
       const isValid = await diService.validateDependencies();
 
       expect(isValid).toBe(false);
+    });
+  });
+
+  // §4.7. AuditFsProjection Factory (EARS-G1)
+  describe('4.7. AuditFsProjection Factory (EARS-G1)', () => {
+    it('[EARS-G1] should return AuditFsProjection with worktree basePath', async () => {
+      const projection = await diService.getAuditFsProjection();
+
+      expect(projection).toBeDefined();
+      expect(projection.persist).toBeDefined();
+      expect(projection.readLatest).toBeDefined();
+      expect(corefs.AuditFsProjection).toHaveBeenCalledWith({
+        basePath: expect.stringContaining('.gitgov'),
+      });
     });
   });
 });

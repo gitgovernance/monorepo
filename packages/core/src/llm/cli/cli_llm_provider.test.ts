@@ -39,13 +39,15 @@ describe('CliLlmProvider', () => {
       expect(provider.providerName).toBe('cli');
     });
 
-    it('[LLM-C1] should throw when no CLI found', () => {
+    it('[LLM-C1] should throw when no CLI found on first query', async () => {
       mockExecSync.mockImplementation((cmd: string) => {
         if (cmd === 'claude --version' || cmd === 'opencode --version') throw new Error('not found');
         throw new Error(`Unexpected: ${cmd}`);
       });
 
-      expect(() => new CliLlmProvider({ model: 'haiku' })).toThrow('No LLM CLI found');
+      const provider = new CliLlmProvider({ model: 'haiku' });
+      expect(provider.providerName).toBe('cli');
+      await expect(provider.query([{ role: 'user', content: 'test' }])).rejects.toThrow('No LLM CLI found');
     });
 
     it('[LLM-C2] should execute CLI with user message and model', async () => {

@@ -18,24 +18,59 @@ enum FindingSeverity {
 }
 
 enum FindingCategory {
+  // Original 6 sensitive
   pii_email
   pii_phone
   pii_financial
   pii_health
   pii_generic
   hardcoded_secret
+  // PCI (Group A) sensitive
+  pci_pan
+  pci_cvv
+  pci_track
+  pci_logging
+  pci_token_misuse
+  pci_last4
+  // PII extended (Group B) sensitive
+  pii_dob
+  pii_address
+  pii_national_id
+  pii_passport
+  pii_bank_account
+  pii_biometric
+  // Storage/Crypto (Group E) sensitive
+  storage_pii
+  storage_pci
+  crypto_weak
+  crypto_key
+  crypto_tls
+  // Original 6 safe
   logging_pii
   tracking_cookie
   tracking_analytics_id
   unencrypted_storage
   third_party_transfer
   unknown_risk
+  // Logging extended (Group C) safe
+  logging_auth
+  logging_error
+  logging_debug
+  logging_trace
+  // Transfer/Consent (Group D) safe
+  data_transfer
+  privacy_consent
+  privacy_retention
+  // SAST categories
+  security_vulnerability
+  code_quality
 }
 
 enum DetectorName {
   regex
   heuristic
   llm
+  sast
 }
 
 // ──────────────────────────────────────────

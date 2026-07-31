@@ -3,16 +3,17 @@
  *
  * EARS Coverage:
  * - §4.1 CLI -> Orchestrator Integration (AORCH-C1 to C8)
- * - §4.5 Waiver Management (EARS-E1 to E5)
- * - §4.8 Finding Display (AORCH-D1 to D7)
+ * - §4.5 Waiver Management (AORCH-E1 to E5)
+ * - §4.8 CI Mode + LLM Config (AORCH-D1 to D7)
  * - §4.9-4.13 Persistence (AORCH-P1 to P7)
  */
 
 // vi.hoisted ensures variables exist when vi.mock factory runs (hoisted to top)
-const { mockFormatAuditResult, mockPostOrUpdateComment, mockAuditFsProjectionPersist } = vi.hoisted(() => ({
+const { mockFormatAuditResult, mockPostOrUpdateComment, mockAuditFsProjectionPersist, mockAuditFsProjectionReadLatest } = vi.hoisted(() => ({
   mockFormatAuditResult: vi.fn(),
   mockPostOrUpdateComment: vi.fn().mockResolvedValue(undefined),
   mockAuditFsProjectionPersist: vi.fn().mockResolvedValue(undefined),
+  mockAuditFsProjectionReadLatest: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock('@gitgov/core/audit', () => ({
@@ -20,11 +21,8 @@ vi.mock('@gitgov/core/audit', () => ({
   severityBadge: vi.fn((s: string) => ({ critical: '🔴', high: '🟠', medium: '🟡', low: '🔵' })[s] ?? '⚪'),
 }));
 
-// Mock @gitgov/core/fs for AORCH-P4 (AuditFsProjection)
+// Mock @gitgov/core/fs — AuditFsProjection now comes from DI (AORCH-P4c), not direct construction
 vi.mock('@gitgov/core/fs', () => ({
-  AuditFsProjection: class MockAuditFsProjection {
-    persist = mockAuditFsProjectionPersist;
-  },
   findProjectRoot: vi.fn().mockReturnValue('/mock/project/root'),
   getWorktreeBasePath: vi.fn().mockReturnValue('/mock/worktree'),
 }));
@@ -285,6 +283,7 @@ describe('AuditCommand', () => {
       getExecutionAdapter: vi.fn().mockResolvedValue({ create: vi.fn().mockResolvedValue({ id: 'exec-l1-test' }) }),
       getIdentityAdapter: vi.fn().mockResolvedValue(mockIdentityAdapter),
       getCurrentActor: vi.fn().mockResolvedValue({ id: 'human:developer' }),
+      getAuditFsProjection: vi.fn().mockResolvedValue({ persist: mockAuditFsProjectionPersist, readLatest: mockAuditFsProjectionReadLatest }),
       getProjectRoot: vi.fn().mockResolvedValue('/mock/project/root'),
       getGitModule: vi.fn().mockResolvedValue({ getCommitHash: vi.fn().mockResolvedValue('abc123'), getRepoRoot: vi.fn().mockResolvedValue('/mock/repo') }),
       getSessionManager: vi.fn().mockResolvedValue({
@@ -515,7 +514,7 @@ describe('AuditCommand', () => {
     });
   });
 
-  describe('4.5. Waiver Management (EARS-E1 to E5)', () => {
+  describe('4.5. Waiver Management (AORCH-E1 to E5)', () => {
     it('[AORCH-E1] should create FeedbackRecord with waiver metadata', async () => {
       await auditCommand.executeWaive('sha256:abc123', {
         justification: 'Test data for unit tests',
@@ -853,8 +852,8 @@ describe('AuditCommand', () => {
     });
   });
 
-  // 4.10. FS Audit Projection (AORCH-P4)
-  describe('4.10. FS Audit Projection (AORCH-P4)', () => {
+  // 4.10. FS Audit Projection (AORCH-P4 to AORCH-P4c)
+  describe('4.10. FS Audit Projection (AORCH-P4 to AORCH-P4c)', () => {
     it('[AORCH-P4] should persist audit result to .gitgov/audit-index.json after orchestrator.run', async () => {
       mockOrchestrator.run.mockResolvedValueOnce(mockResultWithFindings);
 
@@ -862,6 +861,14 @@ describe('AuditCommand', () => {
 
       expect(mockAuditFsProjectionPersist).toHaveBeenCalledTimes(1);
       expect(mockAuditFsProjectionPersist).toHaveBeenCalledWith(mockResultWithFindings);
+    });
+
+    it('[AORCH-P4c] should obtain AuditFsProjection from DI container', async () => {
+      mockOrchestrator.run.mockResolvedValueOnce(mockResultWithFindings);
+
+      await auditCommand.execute(createDefaultOptions({ scope: 'full' }));
+
+      expect(mockDIInstance.getAuditFsProjection).toHaveBeenCalled();
     });
   });
 });

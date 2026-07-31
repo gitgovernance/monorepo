@@ -5,7 +5,6 @@ import { readFile } from 'node:fs/promises';
 import { Sarif as SarifModule, generateExecutionId } from '@gitgov/core';
 import { formatAuditResult } from '@gitgov/core/audit';
 import type { Finding, FindingCategory, DetectorName } from '@gitgov/core/audit';
-import { AuditFsProjection, findProjectRoot } from '@gitgov/core/fs';
 import type {
   AuditOrchestrationOptions,
   AuditOrchestrationResult,
@@ -43,7 +42,7 @@ export interface AuditCommandOptions extends BaseCommandOptions {
  * Options for waive subcommand
  */
 export interface WaiveCommandOptions extends BaseCommandOptions {
-  /** Justification for the waiver (required by EARS-E2 at runtime) */
+  /** Justification for the waiver (required by AORCH-E2 at runtime) */
   justification?: string;
   /** List active waivers */
   list?: boolean;
@@ -170,12 +169,9 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
       }
       const result = await orchestrator.run(orchestrationOptions);
 
-      // [AORCH-P4] Persist AuditOrchestrationResult to .gitgov/audit-index.json
+      // [AORCH-P4] [AORCH-P4c] Persist AuditOrchestrationResult via DI-resolved projection
       try {
-        const projectRoot = findProjectRoot() ?? process.cwd();
-        const auditProjection = new AuditFsProjection({
-          basePath: `${projectRoot}/.gitgov`,
-        });
+        const auditProjection = await this.container.getAuditFsProjection();
         await auditProjection.persist(result);
       } catch {
         // FS persistence errors are non-fatal
@@ -439,7 +435,7 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
 
   /**
    * Execute waive subcommand
-   * [AORCH-E1, EARS-E2, EARS-E3, EARS-E4]
+   * [AORCH-E1, AORCH-E2, AORCH-E3, AORCH-E4]
    */
   async executeWaive(
     fingerprint: string | undefined,
@@ -488,18 +484,18 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
       const feedbackAdapter = await this.container.getFeedbackAdapter();
       const currentActor = await this.container.getCurrentActor();
 
-      // [WAIV-UI-G2] Resolve ruleId + file + line from local audit-index.json by fingerprint
+      // [AORCH-E1] [AORCH-P4c] Resolve partial fingerprint via DI-resolved projection
+      let resolvedFingerprint = fingerprint;
       let resolvedRuleId = 'CLI-WAIVER';
       let resolvedFile = 'unknown';
       let resolvedLine = 0;
       try {
-        const projectRoot = findProjectRoot(process.cwd());
-        if (!projectRoot) throw new Error('No project root');
-        const auditProjection = new AuditFsProjection({ basePath: projectRoot });
+        const auditProjection = await this.container.getAuditFsProjection();
         const latest = await auditProjection.readLatest();
         if (latest?.findings) {
-          const match = latest.findings.find((f: any) => f.fingerprint === fingerprint);
+          const match = latest.findings.find((f: any) => f.fingerprint.startsWith(fingerprint));
           if (match) {
+            resolvedFingerprint = match.fingerprint;
             resolvedRuleId = match.ruleId ?? resolvedRuleId;
             resolvedFile = match.file ?? resolvedFile;
             resolvedLine = match.line ?? resolvedLine;
@@ -515,7 +511,7 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
           status: 'resolved',
           content: options.justification,
           metadata: {
-            fingerprint,
+            fingerprint: resolvedFingerprint,
             ruleId: resolvedRuleId,
             file: resolvedFile,
             line: resolvedLine,

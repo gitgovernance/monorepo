@@ -218,7 +218,7 @@ export class SourceAuditorModule {
       total: findings.length,
       bySeverity: { critical: 0, high: 0, medium: 0, low: 0 },
       byCategory: {},
-      byDetector: { regex: 0, heuristic: 0, llm: 0 },
+      byDetector: { regex: 0, heuristic: 0, llm: 0, sast: 0 },
     };
 
     for (const finding of findings) {
@@ -241,7 +241,7 @@ export class SourceAuditorModule {
         total: 0,
         bySeverity: { critical: 0, high: 0, medium: 0, low: 0 },
         byCategory: {},
-        byDetector: { regex: 0, heuristic: 0, llm: 0 },
+        byDetector: { regex: 0, heuristic: 0, llm: 0, sast: 0 },
       },
       scannedFiles: 0,
       scannedLines: 0,

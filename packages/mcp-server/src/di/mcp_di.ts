@@ -217,7 +217,7 @@ export class McpDependencyInjectionService {
       signer,
       lint: pureLintModule,
       indexer: projector,
-    }, { repoRoot: projectRoot });
+    }, { repoRoot: projectRoot, stateBranchName: 'gitgov-state' });
 
     // --- Source Auditor ---
     const findingDetector = new FindingDetector.FindingDetectorModule();

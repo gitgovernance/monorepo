@@ -1,3 +1,4 @@
+import { execSync } from 'node:child_process';
 import type { McpToolDefinition } from '../../server/mcp_server.types.js';
 import type { McpDependencyInjectionService } from '../../di/mcp_di.js';
 import type { StatusResponse } from './read_tools.types.js';
@@ -21,8 +22,8 @@ export const statusTool: McpToolDefinition = {
       const container = await di.getContainer();
       const { projector, configManager } = container;
 
-      // Use computeProjection for fresh data
-      const index = await projector.computeProjection();
+      const lastCommitHash = execSync('git rev-parse HEAD', { encoding: 'utf8' }).trim();
+      const index = await projector.computeProjection({ lastCommitHash });
 
       // Get project name from config
       const config = await configManager.loadConfig();

@@ -97,7 +97,7 @@ export class SecurityAuditAgent {
 function buildScopeConfig(input: SecurityAuditInput): ScopeConfig {
   return {
     include: input.include ?? ['**/*'],
-    exclude: input.exclude ?? ['node_modules/**', '.git/**', 'dist/**', '*.lock'],
+    exclude: input.exclude ?? ['node_modules/**', '.git/**', '.gitgov/**', 'dist/**', '*.lock'],
     ...(input.scope === 'diff' ? { changedSince: 'HEAD' } : {}),
   };
 }
