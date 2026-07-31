@@ -41,18 +41,22 @@ function detectCli(): CliType {
 export class CliLlmProvider implements ILlmProvider {
   readonly providerName = 'cli';
   readonly modelName: string;
-  private readonly cli: CliType;
+  private _cli: CliType | null = null;
   private readonly timeout: number;
   private readonly cwd: string;
   private readonly allowedTools: string[];
 
   constructor(config: CliLlmProviderConfig) {
-    // [LLM-C1] Detect CLI at construction time
-    this.cli = detectCli();
     this.modelName = config.model;
     this.timeout = config.timeout ?? 180_000;
     this.cwd = config.cwd ?? process.cwd();
     this.allowedTools = config.allowedTools ?? [];
+  }
+
+  // [LLM-C1] Lazy CLI detection — deferred to first query() so construction never throws
+  private get cli(): CliType {
+    if (!this._cli) this._cli = detectCli();
+    return this._cli;
   }
 
   // [LLM-C2] Execute CLI with prompt and model (sync — simple query)
