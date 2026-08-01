@@ -31,7 +31,8 @@ describe('Audit Test Builders', () => {
       const waiver = makeTestWaiver();
       expect(waiver.fingerprint).toBe('sha256:test-default-fingerprint');
       expect(waiver.ruleId).toBe('SEC-001');
-      expect(waiver.feedback).toBeDefined();
+      expect(waiver.feedback.header.version).toBe('1.1');
+      expect(waiver.feedback.payload.type).toBe('approval');
 
       const scan = makeTestScan();
       expect(scan.scope).toBe('full');
