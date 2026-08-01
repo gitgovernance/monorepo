@@ -9,13 +9,15 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 // ─── Type + value imports for AUDIT-A/D tests ──────────────────────────────
-import { createFinding } from './types';
+import { createFinding, createFix, createWaiver, createScan } from './types';
 import type {
   Finding,
+  FindingCategory,
   FindingSeverity,
   Waiver,
   PolicyDecision,
   Scan,
+  Fix,
 } from './types';
 
 // ─── Schema Parser ──────────────────────────────────────────────────────────
@@ -56,7 +58,7 @@ function parsePrismaSchema(schemaPath: string): PrismaModel[] {
         const name = fieldMatch[1]!;
         const rawType = fieldMatch[2]!;
         if (rawType.match(/^[A-Z]/) && !['String', 'Int', 'Float', 'Boolean', 'DateTime', 'Json', 'BigInt', 'Decimal', 'Bytes'].includes(rawType.replace('?', '').replace('[]', ''))) {
-          const knownEnums = ['FindingSeverity', 'FindingCategory', 'DetectorName'];
+          const knownEnums = ['FindingSeverity', 'DetectorName'];
           if (!knownEnums.includes(rawType.replace('?', '').replace('[]', ''))) {
             continue;
           }
@@ -344,11 +346,11 @@ describe('Audit Prisma Schema Verification (audit_prisma_record_projection_modul
       expect(fields).toContain('executionId');
     });
 
-    it('[APRJ-A3] should use Prisma enums FindingSeverity FindingCategory DetectorName', () => {
+    it('[APRJ-A3] should use Prisma enums FindingSeverity DetectorName and String for category', () => {
       const finding = auditModels.find(m => m.name === 'Finding');
       const fieldMap = Object.fromEntries(finding!.fields.map(f => [f.name, f.type]));
       expect(fieldMap['severity']).toBe('FindingSeverity');
-      expect(fieldMap['category']).toBe('FindingCategory');
+      expect(fieldMap['category']).toBe('String');
       expect(fieldMap['detector']).toBe('DetectorName');
     });
 
@@ -465,6 +467,158 @@ describe('Audit Prisma Schema Verification (audit_prisma_record_projection_modul
         { encoding: 'utf-8' },
       ).trim();
       expect(inlineFindings).toBe('');
+    });
+  });
+
+  describe('4.5. FindingCategory Extensible (AUDIT-E1 to E4)', () => {
+    const typesPath = path.resolve(__dirname, 'types.ts');
+
+    it('[AUDIT-E1] should export BaseFindingCategory with all built-in categories', () => {
+      const typesSource = fs.readFileSync(typesPath, 'utf-8');
+      expect(typesSource).toContain('export type BaseFindingCategory =');
+      expect(typesSource).toContain('"pii-email"');
+      expect(typesSource).toContain('"hardcoded-secret"');
+      expect(typesSource).toContain('"security-vulnerability"');
+      expect(typesSource).toContain('"code-quality"');
+      expect(typesSource).toContain('"unknown-risk"');
+    });
+
+    it('[AUDIT-E2] should accept custom category strings via FindingCategory type', () => {
+      const typesSource = fs.readFileSync(typesPath, 'utf-8');
+      expect(typesSource).toContain('export type FindingCategory = BaseFindingCategory | (string & {})');
+
+      const customCategory: FindingCategory = 'firewall-disabled';
+      const baseCategory: FindingCategory = 'pii-email';
+      expect(typeof customCategory).toBe('string');
+      expect(typeof baseCategory).toBe('string');
+    });
+
+    it('[AUDIT-E3] should use String type for Finding.category in Prisma schema', () => {
+      const finding = auditModels.find(m => m.name === 'Finding');
+      const fieldMap = Object.fromEntries(finding!.fields.map(f => [f.name, f.type]));
+      expect(fieldMap['category']).toBe('String');
+    });
+
+    it('[AUDIT-E4] should normalize hyphens to underscores without rejecting custom categories', () => {
+      const finding = createFinding({
+        fingerprint: 'test-fp',
+        ruleId: 'DSEC-D3',
+        file: 'device://macbook/firewall',
+        line: 0,
+        message: 'Firewall disabled',
+        snippet: 'Status: inactive',
+        category: 'firewall-disabled',
+        severity: 'high',
+        detector: 'heuristic',
+        confidence: 1.0,
+        executionId: 'test-exec',
+        reportedBy: ['device-security'],
+        isWaived: false,
+      });
+      expect(finding.category).toBe('firewall-disabled');
+      expect(finding.snippetHash).toMatch(/^[a-f0-9]{64}$/);
+    });
+  });
+
+  // ── 4.6. Waiver Factory (AUDIT-F1 to F3) ──
+
+  describe('4.6. Waiver Factory (AUDIT-F1 to F3)', () => {
+    const mockFeedback = {
+      header: { version: '1.1', type: 'feedback', payloadChecksum: 'test', signatures: [] },
+      payload: { id: 'fb-1', entityType: 'execution', entityId: 'exec-1', type: 'approval', status: 'open', content: 'waive' },
+    } as any;
+
+    it('[AUDIT-F1] should create Waiver with required fingerprint ruleId and feedback', () => {
+      const waiver = createWaiver({ fingerprint: 'sha256:abc', ruleId: 'SEC-001', feedback: mockFeedback });
+      expect(waiver.fingerprint).toBe('sha256:abc');
+      expect(waiver.ruleId).toBe('SEC-001');
+      expect(waiver.feedback).toBe(mockFeedback);
+    });
+
+    it('[AUDIT-F2] should include expiresAt when provided and omit when not', () => {
+      const date = new Date('2026-12-31');
+      const withExpiry = createWaiver({ fingerprint: 'fp', ruleId: 'R1', feedback: mockFeedback, expiresAt: date });
+      expect(withExpiry.expiresAt).toEqual(date);
+
+      const permanent = createWaiver({ fingerprint: 'fp', ruleId: 'R1', feedback: mockFeedback });
+      expect(permanent.expiresAt).toBeUndefined();
+    });
+
+    it('[AUDIT-F3] should throw when fingerprint or ruleId or feedback is missing', () => {
+      expect(() => createWaiver({ fingerprint: '', ruleId: 'R1', feedback: mockFeedback })).toThrow('fingerprint');
+      expect(() => createWaiver({ fingerprint: 'fp', ruleId: '', feedback: mockFeedback })).toThrow('ruleId');
+      expect(() => createWaiver({ fingerprint: 'fp', ruleId: 'R1', feedback: null as any })).toThrow('FeedbackRecord');
+    });
+  });
+
+  // ── 4.7. Scan Factory (AUDIT-G1 to G3) ──
+
+  describe('4.7. Scan Factory (AUDIT-G1 to G3)', () => {
+    const makeFinding = (severity: FindingSeverity, isWaived = false): Finding =>
+      createFinding({
+        fingerprint: `fp-${severity}`, ruleId: 'R1', category: 'hardcoded-secret',
+        severity, file: 'a.ts', line: 1, column: 1, message: 'test',
+        snippet: `secret-${severity}`, detector: 'regex', confidence: 1,
+        executionId: 'e1', reportedBy: ['agent:test'], isWaived,
+      });
+
+    const policyDecision: PolicyDecision = { decision: 'pass', reason: 'OK', executionId: 'e-p', blockingFindings: [], waivedFindings: [], summary: { critical: 0, high: 0, medium: 0, low: 0 }, rulesEvaluated: [], evaluatedAt: new Date().toISOString() };
+
+    it('[AUDIT-G1] should create Scan with summary computed from findings array', () => {
+      const findings = [makeFinding('critical'), makeFinding('high'), makeFinding('low')];
+      const scan = createScan({
+        scope: 'full', triggeredBy: 'user',
+        executionRecordIds: ['e1'], findings, policyDecision,
+      });
+      expect(scan.summary.critical).toBe(1);
+      expect(scan.summary.high).toBe(1);
+      expect(scan.summary.low).toBe(1);
+      expect(scan.summary.medium).toBe(0);
+      expect(scan.summary.total).toBe(3);
+    });
+
+    it('[AUDIT-G2] should guarantee summary counts equal non-waived findings count', () => {
+      const findings = [makeFinding('critical'), makeFinding('high', true), makeFinding('medium')];
+      const scan = createScan({
+        scope: 'full', triggeredBy: 'user',
+        executionRecordIds: ['e1'], findings, policyDecision,
+      });
+      const activeCount = scan.summary.critical + scan.summary.high + scan.summary.medium + scan.summary.low;
+      expect(activeCount).toBe(2); // 3 total - 1 waived
+      expect(scan.summary.suppressed).toBe(1);
+      expect(scan.summary.total).toBe(3);
+    });
+
+    it('[AUDIT-G3] should throw when scope or triggeredBy is missing', () => {
+      expect(() => createScan({
+        scope: '' as any, triggeredBy: 'user',
+        executionRecordIds: [], findings: [], policyDecision,
+      })).toThrow('scope');
+      expect(() => createScan({
+        scope: 'full', triggeredBy: '',
+        executionRecordIds: [], findings: [], policyDecision,
+      })).toThrow('triggeredBy');
+    });
+  });
+
+  // ── 4.8. Fix Factory (AUDIT-H1 to H2) ──
+
+  describe('4.8. Fix Factory (AUDIT-H1 to H2)', () => {
+    it('[AUDIT-H1] should create Fix with description and throw when empty', () => {
+      const fix = createFix({ description: 'Move to env vars' });
+      expect(fix.description).toBe('Move to env vars');
+
+      expect(() => createFix({ description: '' })).toThrow('description');
+    });
+
+    it('[AUDIT-H2] should preserve source and regulation fields in Fix', () => {
+      const fix = createFix({
+        description: 'Use vault',
+        source: 'agent:review-advisor',
+        regulation: 'PCI-DSS 3.4',
+      });
+      expect(fix.source).toBe('agent:review-advisor');
+      expect(fix.regulation).toBe('PCI-DSS 3.4');
     });
   });
 });

@@ -27,9 +27,10 @@ import type { SarifLog } from "../sarif/sarif.types";
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
 /**
- * Finding categories detectable by the Audit product.
+ * [AUDIT-E1] Base finding categories built into core. Agents get autocomplete for these
+ * values while remaining free to use any string as a category.
  */
-export type FindingCategory =
+export type BaseFindingCategory =
   // Original 6 sensitive
   | "pii-email"
   | "pii-phone"
@@ -76,6 +77,13 @@ export type FindingCategory =
   // SAST categories (semgrep, CodeQL, etc.)
   | "security-vulnerability"
   | "code-quality";
+
+/**
+ * [AUDIT-E2] Extensible finding category. Accepts any BaseFindingCategory with
+ * autocomplete, plus any custom string from third-party agents
+ * (e.g. "firewall-disabled", "ssh-root-login", "device-identity-mismatch").
+ */
+export type FindingCategory = BaseFindingCategory | (string & {});
 
 /**
  * Severity levels for governance prioritization.
@@ -224,7 +232,7 @@ export interface Finding {
 
   // ── Remediation ──
   /** Proposed fixes — SARIF §3.55.4 standard */
-  fixes?: Array<{ description: string }>;
+  fixes?: Fix[];
   /** Legal reference (e.g., "GDPR Art. 5(1)(f)") */
   legalReference?: string;
 
@@ -482,4 +490,73 @@ export function verifySnippet(snippet: string, snippetHash: string): 'verified' 
   if (snippet.includes('[REDACTED]')) return null;
   const computed = createHash('sha256').update(snippet).digest('hex');
   return computed === snippetHash ? 'verified' : 'unverified';
+}
+
+// ─── Fix Type ─────────────────────────────────────────────────────────────────
+
+/** Proposed remediation for a finding — SARIF §3.55.4 */
+export type Fix = {
+  /** Description of the fix (required) */
+  description: string;
+  /** Source that suggested the fix (e.g. "agent:review-advisor", "human:ciso") */
+  source?: string;
+  /** Regulatory reference (e.g. "PCI-DSS 3.4") */
+  regulation?: string;
+};
+
+// ─── Entity Factories ─────────────────────────────────────────────────────────
+
+/**
+ * [AUDIT-H1] [AUDIT-H2] Factory for creating Fix objects with validation.
+ */
+export function createFix(input: { description: string; source?: string; regulation?: string }): Fix {
+  if (!input.description) throw new Error('Fix requires description');
+  return { ...input };
+}
+
+/**
+ * [AUDIT-F1] [AUDIT-F2] [AUDIT-F3] Factory for creating Waiver objects with validation.
+ * A Waiver without fingerprint, ruleId, or signed FeedbackRecord is invalid.
+ */
+export function createWaiver(input: {
+  fingerprint: string;
+  ruleId: string;
+  expiresAt?: Date;
+  feedback: import('../record_types').GitGovFeedbackRecord;
+}): Waiver {
+  if (!input.fingerprint) throw new Error('Waiver requires fingerprint');
+  if (!input.ruleId) throw new Error('Waiver requires ruleId');
+  if (!input.feedback) throw new Error('Waiver requires signed FeedbackRecord');
+  return { ...input };
+}
+
+/**
+ * [AUDIT-G1] [AUDIT-G2] [AUDIT-G3] Factory for creating Scan objects with computed summary.
+ * Guarantees summary counts match the findings array.
+ */
+export function createScan(input: {
+  scope: ScanScope;
+  triggeredBy: string;
+  executionRecordIds: string[];
+  findings: Finding[];
+  policyDecision: PolicyDecision;
+  policyExecutionId?: string;
+}): Scan {
+  if (!input.scope) throw new Error('Scan requires scope');
+  if (!input.triggeredBy) throw new Error('Scan requires triggeredBy');
+
+  // [AUDIT-G2] Compute summary from findings — guaranteed coherent
+  const active = input.findings.filter(f => !f.isWaived);
+  const summary: AuditSummary = {
+    critical: active.filter(f => f.severity === 'critical').length,
+    high: active.filter(f => f.severity === 'high').length,
+    medium: active.filter(f => f.severity === 'medium').length,
+    low: active.filter(f => f.severity === 'low').length,
+    total: input.findings.length,
+    suppressed: input.findings.filter(f => f.isWaived).length,
+    agentsRun: input.executionRecordIds.length,
+    agentsFailed: 0,
+  };
+
+  return { ...input, summary };
 }
