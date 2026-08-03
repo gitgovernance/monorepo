@@ -50,10 +50,8 @@
   "peerDependencies": {
     "@gitgov/core": ">=3.0.0"
   },
-  "dependencies": {
-    "@gitgov/core": "workspace:*"
-  },
   "devDependencies": {
+    "@gitgov/core": "workspace:*",
     "@semantic-release/git": "^10.0.1",
     "@semantic-release/github": "^9.2.6",
     "@types/jest": "^29.0.0",
