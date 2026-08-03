@@ -27,7 +27,11 @@
     "agent": {
       "purpose": "audit",
       "function": "runAgent",
-      "categories": ["security-vulnerability", "code-quality", "hardcoded-secret"],
+      "categories": [
+        "security-vulnerability",
+        "code-quality",
+        "hardcoded-secret"
+      ],
       "metadata": {
         "target": "code",
         "outputFormat": "sarif",
