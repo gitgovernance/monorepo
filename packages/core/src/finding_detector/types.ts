@@ -10,6 +10,7 @@
 
 export type {
   Finding,
+  BaseFindingCategory,
   FindingCategory,
   FindingSeverity,
   DetectorName,

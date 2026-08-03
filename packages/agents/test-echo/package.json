@@ -44,6 +44,7 @@
     "agent": {
       "purpose": "testing",
       "function": "runAgent",
+      "categories": [],
       "metadata": {
         "description": "Echo agent for testing and demonstration"
       }

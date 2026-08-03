@@ -8,10 +8,11 @@
  * Also:   `import { formatAuditResult, severityBadge } from '@gitgov/core/audit'`
  */
 export { formatAuditResult, severityBadge } from "./formatter";
-export { createFinding, verifySnippet } from "./types";
+export { createFinding, verifySnippet, createFix, createWaiver, createScan } from "./types";
 
 export type {
   // Enums
+  BaseFindingCategory,
   FindingCategory,
   FindingSeverity,
   DetectorName,
@@ -44,4 +45,6 @@ export type {
   ReviewAgentResult,
   // Scan
   Scan,
+  // Fix
+  Fix,
 } from "./types";

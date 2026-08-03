@@ -105,6 +105,7 @@ export type { ILlmProvider, LlmMessage, LlmTool, LlmResponse, LlmProviderConfig 
 // ─── Audit product types (canonical, from @gitgov/core/audit) ────────────────
 export type {
   Finding,
+  BaseFindingCategory,
   FindingCategory,
   FindingSeverity,
   DetectorName,
@@ -127,10 +128,11 @@ export type {
   AgentAuditResult,
   ReviewAgentResult,
   Scan,
+  Fix,
 } from "./audit/index";
 
 // Audit value exports (factories)
-export { createFinding } from "./audit/index";
+export { createFinding, createFix, createWaiver, createScan } from "./audit/index";
 
 // ─── Non-audit type exports (module-specific) ───────────────────────────────
 export type { AuditOrchestrationOptions, AuditOrchestratorDeps } from "./audit_orchestrator/index";

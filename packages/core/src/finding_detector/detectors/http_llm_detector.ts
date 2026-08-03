@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import type {
   CodeSnippet,
+  BaseFindingCategory,
   Finding,
-  FindingCategory,
   LlmDetector,
   LlmRawFinding,
 } from "../types";
@@ -32,25 +32,23 @@ function truncateSnippet(snippet: string): string {
   return snippet.slice(0, MAX_SNIPPET_LENGTH - 3) + "...";
 }
 
-/**
- * Validates if a category string is a valid FindingCategory.
- */
-function isValidCategory(category: string): category is FindingCategory {
-  const validCategories: FindingCategory[] = [
-    "pii-email",
-    "pii-phone",
-    "pii-financial",
-    "pii-health",
-    "pii-generic",
-    "hardcoded-secret",
-    "logging-pii",
-    "tracking-cookie",
-    "tracking-analytics-id",
-    "unencrypted-storage",
-    "third-party-transfer",
-    "unknown-risk",
-  ];
-  return validCategories.includes(category as FindingCategory);
+const LLM_KNOWN_CATEGORIES: BaseFindingCategory[] = [
+  "pii-email",
+  "pii-phone",
+  "pii-financial",
+  "pii-health",
+  "pii-generic",
+  "hardcoded-secret",
+  "logging-pii",
+  "tracking-cookie",
+  "tracking-analytics-id",
+  "unencrypted-storage",
+  "third-party-transfer",
+  "unknown-risk",
+];
+
+function isKnownCategory(category: string): category is BaseFindingCategory {
+  return (LLM_KNOWN_CATEGORIES as string[]).includes(category);
 }
 
 /**
@@ -102,7 +100,7 @@ export class HttpLlmDetector implements LlmDetector {
    */
   private normalizeFindings(rawFindings: LlmRawFinding[]): Finding[] {
     return rawFindings.map((raw) => {
-      const category: FindingCategory = isValidCategory(raw.category)
+      const category = isKnownCategory(raw.category)
         ? raw.category
         : "unknown-risk";
 
