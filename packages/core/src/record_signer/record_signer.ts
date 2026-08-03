@@ -34,6 +34,11 @@ export class RecordSigner {
     role: string,
     notes: string,
   ): Promise<EmbeddedMetadataRecord<T>> {
+    // [RSIG-A5] Validate notes is not empty or whitespace-only
+    if (!notes || !notes.trim()) {
+      throw new Error('notes is required for signature digest and must not be empty or whitespace-only');
+    }
+
     // [RSIG-A2] Calculate payloadChecksum exactly once
     const payloadChecksum = calculatePayloadChecksum(payload as GitGovRecordPayload);
     const timestamp = Math.floor(Date.now() / 1000);
@@ -78,6 +83,11 @@ export class RecordSigner {
     role: string,
     notes: string,
   ): Promise<T> {
+    // [RSIG-A5] Validate notes is not empty or whitespace-only
+    if (!notes || !notes.trim()) {
+      throw new Error('notes is required for signature digest and must not be empty or whitespace-only');
+    }
+
     // [RSIG-B1] Recalculate payloadChecksum and build digest
     const payloadChecksum = calculatePayloadChecksum(record.payload);
     const timestamp = Math.floor(Date.now() / 1000);
