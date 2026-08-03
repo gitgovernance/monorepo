@@ -1,7 +1,7 @@
 {
   "name": "@gitgov/agent-security-audit",
   "version": "1.0.0",
-  "description": "Security audit agent for GitGovernance — scans repos for PII, secrets, and API keys, producing SARIF 2.1.0 output",
+  "description": "Security audit agent for GitGovernance — detects PII, secrets, API keys, and crypto issues in source code. Produces SARIF 2.1.0 with gitgov fingerprints for cross-agent dedup and waiver tracking.",
   "license": "UNLICENSED",
   "type": "module",
   "main": "dist/index.mjs",
