@@ -32,6 +32,11 @@ vi.mock('@gitgov/core/fs', () => ({
     getPublicKey: mockGetPublicKey,
     setPrivateKey: mockSetPrivateKey,
   }; }),
+  // [LOGIN-T1] FsRecordStore para enumerar los ActorRecords del repo
+  FsRecordStore: vi.fn().mockImplementation(function() { return {
+    list: mockActorsList,
+  }; }),
+  DEFAULT_ID_ENCODER: { encode: (id: string) => id.replace(/:/g, '_'), decode: (s: string) => s.replace(/_/g, ':') },
   findProjectRoot: vi.fn(() => '/mock/repo'),
   getWorktreeBasePath: vi.fn(() => '/mock/worktree'),
   getKeysDir: vi.fn(() => '/mock/worktree/.gitgov/keys'),
@@ -99,7 +104,7 @@ const {
   mockSetCloudToken, mockSetLastSession, mockClearCloudToken, mockLoadSession,
   mockDetectActorFromKeyFiles, mockGetPrivateKey, mockSetPrivateKey,
   mockHasPrivateKey, mockGetPublicKey, mockGetConfig, mockGetCurrentActor,
-  mockAddActor,
+  mockAddActor, mockActorsList,
 } = vi.hoisted(() => ({
   mockSetCloudToken: vi.fn(),
   mockSetLastSession: vi.fn(),
@@ -113,6 +118,7 @@ const {
   mockGetConfig: vi.fn(),
   mockGetCurrentActor: vi.fn(),
   mockAddActor: vi.fn().mockResolvedValue({ actorId: 'human:testuser', created: true }),
+  mockActorsList: vi.fn().mockResolvedValue([]),
 }));
 
 vi.mock('../../services/dependency-injection', () => ({
@@ -298,6 +304,112 @@ describe('LoginCommand v2', () => {
 
       const output = mockConsoleLog.mock.calls.map(c => c[0]).join('\n');
       expect(output).toContain('Key synced to SaaS');
+    });
+
+    it('[LOGIN-T1] should include repo agent keys as agentKeys in syncKey upload', async () => {
+      mockHasPrivateKey.mockResolvedValue(true);
+      // [LOGIN-T1] keys por actorId: humana + 2 agentes (default y custom) con keypair local
+      const keysByActor: Record<string, { priv: string; pub: string }> = {
+        'human:camilo': { priv: 'human-priv', pub: 'human-pub' },
+        'agent:gitgov-audit': { priv: 'agent-audit-priv', pub: 'agent-audit-pub' },
+        'agent:custom-scanner': { priv: 'agent-custom-priv', pub: 'agent-custom-pub' },
+      };
+      mockGetPrivateKey.mockImplementation(async (id: string) => keysByActor[id]?.priv ?? null);
+      mockGetPublicKey.mockImplementation(async (id: string) => keysByActor[id]?.pub ?? null);
+      // Enumeracion desde los ActorRecords del REPO (no filenames): humano + 2 agentes
+      mockActorsList.mockResolvedValue(['human:camilo', 'agent:gitgov-audit', 'agent:custom-scanner']);
+
+      const syncResponse: SyncKeyResponse = { success: true, actorId: 'human:camilo', mode: 'full', agentKeysSynced: 2 };
+      const deps = createMockDeps({
+        fetchSaas: vi.fn().mockImplementation(async (url: string) => {
+          if (url.includes('identity.keyStatus')) return { ok: true, json: async () => trpcWrap(noKeyStatus) };
+          if (url.includes('identity.syncKey')) return { ok: true, json: async () => trpcWrap(syncResponse) };
+          return { ok: false, json: async () => ({}) };
+        }),
+      });
+
+      const cmd = new LoginCommand(deps);
+      await cmd.executeLogin(defaultOptions);
+
+      const syncCall = (deps.fetchSaas as vi.Mock).mock.calls.find(
+        (c: unknown[]) => String(c[0]).includes('identity.syncKey'),
+      );
+      expect(syncCall).toBeDefined();
+      const body = JSON.parse((syncCall![1] as { body: string }).body) as {
+        agentKeys?: Array<{ actorId: string; publicKey: string; privateKeyEnvelope: unknown }>;
+      };
+      expect(body.agentKeys).toHaveLength(2);
+      const ids = body.agentKeys!.map((k) => k.actorId).sort();
+      expect(ids).toEqual(['agent:custom-scanner', 'agent:gitgov-audit']);
+      for (const entry of body.agentKeys!) {
+        expect(entry.publicKey).toBe(keysByActor[entry.actorId]!.pub);
+        expect(entry.privateKeyEnvelope).toMatchObject({ ciphertext: expect.any(String) });
+      }
+    });
+
+    it('[LOGIN-T1] should skip agent entries whose key read throws and continue login', async () => {
+      mockHasPrivateKey.mockResolvedValue(true);
+      const keysByActor: Record<string, { priv: string; pub: string }> = {
+        'human:camilo': { priv: 'human-priv', pub: 'human-pub' },
+        'agent:healthy': { priv: 'agent-ok-priv', pub: 'agent-ok-pub' },
+      };
+      // [LOGIN-T1 hardening] un key file roto (permisos, corrupcion) lanza — NO debe
+      // romper el login: esa entrada se salta (warn), las demas y la humana siguen
+      mockGetPrivateKey.mockImplementation(async (id: string) => {
+        if (id === 'agent:broken') throw new Error('EACCES: permission denied');
+        return keysByActor[id]?.priv ?? null;
+      });
+      mockGetPublicKey.mockImplementation(async (id: string) => keysByActor[id]?.pub ?? null);
+      mockActorsList.mockResolvedValue(['human:camilo', 'agent:broken', 'agent:healthy']);
+
+      const syncResponse: SyncKeyResponse = { success: true, actorId: 'human:camilo', mode: 'full', agentKeysSynced: 1 };
+      const deps = createMockDeps({
+        fetchSaas: vi.fn().mockImplementation(async (url: string) => {
+          if (url.includes('identity.keyStatus')) return { ok: true, json: async () => trpcWrap(noKeyStatus) };
+          if (url.includes('identity.syncKey')) return { ok: true, json: async () => trpcWrap(syncResponse) };
+          return { ok: false, json: async () => ({}) };
+        }),
+      });
+
+      const cmd = new LoginCommand(deps);
+      await cmd.executeLogin(defaultOptions);
+
+      const syncCall = (deps.fetchSaas as vi.Mock).mock.calls.find(
+        (c: unknown[]) => String(c[0]).includes('identity.syncKey'),
+      );
+      expect(syncCall).toBeDefined(); // el login COMPLETO no quedo rehen de la entrada rota
+      const body = JSON.parse((syncCall![1] as { body: string }).body) as {
+        agentKeys?: Array<{ actorId: string }>;
+      };
+      expect(body.agentKeys).toHaveLength(1);
+      expect(body.agentKeys![0]!.actorId).toBe('agent:healthy');
+      expect(mockConsoleWarn).toHaveBeenCalled();
+    });
+
+    it('[LOGIN-T1] should omit agentKeys when repo has no local agent keys', async () => {
+      mockHasPrivateKey.mockResolvedValue(true);
+      mockGetPrivateKey.mockResolvedValue('base64-private-key');
+      mockGetPublicKey.mockResolvedValue('base64-public-key');
+      mockActorsList.mockResolvedValue(['human:camilo']); // repo sin agentes
+
+      const syncResponse: SyncKeyResponse = { success: true, actorId: 'human:camilo', mode: 'full' };
+      const deps = createMockDeps({
+        fetchSaas: vi.fn().mockImplementation(async (url: string) => {
+          if (url.includes('identity.keyStatus')) return { ok: true, json: async () => trpcWrap(noKeyStatus) };
+          if (url.includes('identity.syncKey')) return { ok: true, json: async () => trpcWrap(syncResponse) };
+          return { ok: false, json: async () => ({}) };
+        }),
+      });
+
+      const cmd = new LoginCommand(deps);
+      await cmd.executeLogin(defaultOptions);
+
+      const syncCall = (deps.fetchSaas as vi.Mock).mock.calls.find(
+        (c: unknown[]) => String(c[0]).includes('identity.syncKey'),
+      );
+      expect(syncCall).toBeDefined();
+      const body = JSON.parse((syncCall![1] as { body: string }).body) as Record<string, unknown>;
+      expect(body['agentKeys']).toBeUndefined(); // backwards compatible: request identico al actual
     });
 
     it('[LOGIN-B2] should display confirmation after successful sync (keySynced derived, not persisted)', async () => {

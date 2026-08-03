@@ -27,6 +27,7 @@ import type {
   SyncKeyResponse,
   GetKeyResponse,
   TrpcResponse,
+  AgentKeyUpload,
 } from './login-command.types';
 
 const CALLBACK_PORT = 9876;
@@ -581,6 +582,9 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
       serverEcdhPublicKey,
     );
 
+    // [LOGIN-T1] Agent keys del repo (D1): se suben repo-scoped en el mismo request
+    const agentKeys = await this.collectLocalAgentKeys(serverEcdhPublicKey);
+
     const url = `${saasUrl}/trpc/identity.syncKey`;
     const res = await this.deps.fetchSaas(url, {
       method: 'POST',
@@ -588,14 +592,77 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ ...repo, publicKey, privateKeyEnvelope: envelope }),
+      body: JSON.stringify({
+        ...repo,
+        publicKey,
+        privateKeyEnvelope: envelope,
+        // [LOGIN-T1] omitido cuando no hay agent keys locales — request identico al actual
+        ...(agentKeys.length > 0 ? { agentKeys } : {}),
+      }),
     });
     if (!res.ok) {
       const errBody = await res.text().catch(() => '');
       throw new Error(`Failed to sync key to SaaS: ${res.status} ${errBody.slice(0, 300)}`);
     }
     const body = await res.json() as TrpcResponse<SyncKeyResponse>;
-    return body.result.data;
+    const result = body.result.data;
+    // [LOGIN-T1] Reportar cuantas agent keys acepto el server (IDS-N1)
+    if (result.agentKeysSynced && result.agentKeysSynced > 0) {
+      console.log(`   🔑 Synced ${result.agentKeysSynced} agent key(s) for this repo`);
+    }
+    return result;
+  }
+
+  /**
+   * [LOGIN-T1] Collect the repo's local `agent:*` keypairs for repo-scoped upload.
+   *
+   * Fuente de enumeracion: los ActorRecords del REPO (FsRecordStore sobre
+   * `<worktree>/.gitgov/actors` con DEFAULT_ID_ENCODER) — nunca decodeando
+   * filenames del keys dir (el mapping `:`/`/` → `_` es lossy) y nunca un
+   * directorio global: el keys dir es el del worktree del repo actual.
+   * Solo se incluyen agentes con keypair local completo. Cada entrada se
+   * cifra con su propio ephemeral keypair ECDH contra la server key (IKS-G6).
+   */
+  private async collectLocalAgentKeys(serverEcdhPublicKey: string): Promise<AgentKeyUpload[]> {
+    const { FsRecordStore, DEFAULT_ID_ENCODER, findProjectRoot, getWorktreeBasePath } = await import('@gitgov/core/fs');
+    const path = await import('node:path');
+    const projectRoot = findProjectRoot();
+    if (!projectRoot) return [];
+    const worktreePath = getWorktreeBasePath(projectRoot);
+    const actorsStore = new FsRecordStore<GitGovActorRecord>({
+      basePath: path.join(worktreePath, '.gitgov', 'actors'),
+      idEncoder: DEFAULT_ID_ENCODER,
+    });
+
+    let actorIds: string[];
+    try {
+      actorIds = await actorsStore.list();
+    } catch {
+      return []; // repo sin actors dir (pre-init) — nada que subir
+    }
+
+    const keyProvider = await this.getLocalKeyProvider();
+    const agentKeys: AgentKeyUpload[] = [];
+    for (const actorId of actorIds.filter((id) => id.startsWith('agent:'))) {
+      // [LOGIN-T1] log + skip por entrada (simetrico con IDS-N2 del server): una key
+      // problematica (permisos rotos, corrupcion) NO puede dejar rehen al login —
+      // la funcion primaria del comando sobrevive a la secundaria.
+      try {
+        const privateKey = await keyProvider.getPrivateKey(actorId);
+        const publicKey = await keyProvider.getPublicKey(actorId);
+        if (!privateKey || !publicKey) continue; // agente sin keypair local completo
+        const clientKp = Crypto.generateEphemeralKeypair();
+        const privateKeyEnvelope = await Crypto.ecdhEncrypt(
+          Buffer.from(privateKey, 'base64'),
+          clientKp,
+          serverEcdhPublicKey,
+        );
+        agentKeys.push({ actorId, publicKey, privateKeyEnvelope });
+      } catch (err) {
+        console.warn(`⚠️  Skipping agent key ${actorId}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+    return agentKeys;
   }
 
   /**
