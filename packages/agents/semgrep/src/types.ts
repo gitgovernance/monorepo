@@ -66,10 +66,10 @@ export const SEMGREP_SEVERITY_MAP: Record<string, FindingSeverity> = {
 export const SEMGREP_CATEGORY_MAP: Record<string, FindingCategory> = {
   'CWE-798': 'hardcoded-secret',
   'CWE-259': 'hardcoded-secret',
-  'CWE-89': 'unknown-risk',
-  'CWE-79': 'unknown-risk',
-  'CWE-22': 'unknown-risk',
-  'CWE-78': 'unknown-risk',
-  'CWE-94': 'unknown-risk',
-  'CWE-502': 'unknown-risk',
+  'CWE-89': 'security-vulnerability',
+  'CWE-79': 'security-vulnerability',
+  'CWE-22': 'security-vulnerability',
+  'CWE-78': 'security-vulnerability',
+  'CWE-94': 'security-vulnerability',
+  'CWE-502': 'security-vulnerability',
 };

@@ -232,6 +232,16 @@ describe('4.3. SARIF Processing (SGP-C1 to SGP-C6)', () => {
     expect(buildCall.findings[0].category).toBe('hardcoded-secret');
   });
 
+  it('[SGP-C3] should map SAST CWEs to security-vulnerability', async () => {
+    const deps = createMockDeps();
+    const agent = new SemgrepAgent(deps);
+
+    await agent.run({ scope: 'full', taskId: 'task-1' }, SARIF_WITH_FINDINGS);
+
+    const buildCall = (deps.sarifBuilder.build as jest.Mock).mock.calls[0][0];
+    expect(buildCall.findings[0].category).toBe('security-vulnerability');
+  });
+
   it('[SGP-C4] should rebuild SARIF via SarifBuilder with toolName semgrep and getLineContent', async () => {
     const deps = createMockDeps();
     const agent = new SemgrepAgent(deps);

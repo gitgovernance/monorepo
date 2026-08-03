@@ -4,6 +4,7 @@ export type {
   Detector,
   DetectorConfig,
   DetectorName,
+  BaseFindingCategory,
   FindingCategory,
   FindingSeverity,
   Finding,

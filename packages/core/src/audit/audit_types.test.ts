@@ -17,7 +17,6 @@ import type {
   Waiver,
   PolicyDecision,
   Scan,
-  Fix,
 } from './types';
 
 // ─── Schema Parser ──────────────────────────────────────────────────────────

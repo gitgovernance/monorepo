@@ -27,6 +27,17 @@
     "agent": {
       "purpose": "audit",
       "function": "runAgent",
+      "categories": [
+        "pii-email", "pii-phone", "pii-financial", "pii-health", "pii-generic",
+        "hardcoded-secret",
+        "pci-pan", "pci-cvv", "pci-track", "pci-logging", "pci-token-misuse", "pci-last4",
+        "pii-dob", "pii-address", "pii-national-id", "pii-passport", "pii-bank-account", "pii-biometric",
+        "storage-pii", "storage-pci", "crypto-weak", "crypto-key", "crypto-tls",
+        "logging-pii", "tracking-cookie", "tracking-analytics-id",
+        "unencrypted-storage", "third-party-transfer", "unknown-risk",
+        "logging-auth", "logging-error", "logging-debug", "logging-trace",
+        "data-transfer", "privacy-consent", "privacy-retention"
+      ],
       "metadata": {
         "target": "code",
         "outputFormat": "sarif"
@@ -43,10 +54,14 @@
     "@gitgov/core": "workspace:*"
   },
   "devDependencies": {
+    "@semantic-release/git": "^10.0.1",
+    "@semantic-release/github": "^9.2.6",
     "@types/jest": "^29.0.0",
     "@types/node": "^20.0.0",
+    "conventional-changelog-conventionalcommits": "^7.0.2",
     "esbuild": "^0.19.0",
     "jest": "^29.0.0",
+    "semantic-release": "^22.0.12",
     "ts-jest": "^29.0.0",
     "typescript": "^5.0.0"
   }

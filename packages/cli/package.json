@@ -57,6 +57,7 @@
   },
   "dependencies": {
     "@gitgov/core": "workspace:*",
+    "@gitgov/agent-security-audit": "workspace:*",
     "clipboardy": "^5.0.0",
     "commander": "^11.1.0"
   },

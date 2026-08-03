@@ -13,6 +13,7 @@
     "agent": {
       "purpose": "review",
       "function": "runReviewAdvisor",
+      "categories": [],
       "metadata": {
         "sdk": "claude-agent-sdk",
         "model": "claude-sonnet-4"

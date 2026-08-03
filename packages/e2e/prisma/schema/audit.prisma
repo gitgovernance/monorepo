@@ -1,7 +1,7 @@
 // ⚠️ COPIED from core — DO NOT EDIT
 // Source: packages/core/prisma/schema/
 // Re-generate: pnpm prisma:sync (in packages/e2e)
-// Synced at: 2026-06-24T12:24:46.304Z
+// Synced at: 2026-07-31T18:25:10.599Z
 
 // GitGovernance Core — Audit Product Projection Tables
 // Finding, Waiver, Scan — derived from protocol records
@@ -22,25 +22,15 @@ enum FindingSeverity {
   low
 }
 
-enum FindingCategory {
-  pii_email
-  pii_phone
-  pii_financial
-  pii_health
-  pii_generic
-  hardcoded_secret
-  logging_pii
-  tracking_cookie
-  tracking_analytics_id
-  unencrypted_storage
-  third_party_transfer
-  unknown_risk
-}
+// FindingCategory: extensible — stored as String, not enum.
+// Base categories are defined in @gitgov/core/audit types.ts (BaseFindingCategory).
+// Agents can use any string as category (e.g. "firewall-disabled", "ssh-root-login").
 
 enum DetectorName {
   regex
   heuristic
   llm
+  sast
 }
 
 // ──────────────────────────────────────────
@@ -59,7 +49,7 @@ model Finding {
   column          Int?
   message         String
   snippet         String?
-  category        FindingCategory
+  category        String
   severity        FindingSeverity
   detector        DetectorName
   confidence      Float
