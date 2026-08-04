@@ -1,5 +1,5 @@
 import type { ProjectModule } from '@gitgov/core';
-import { SyncState } from '@gitgov/core';
+import { SyncState, discoverInstalledAgents, DEFAULT_AGENTS } from '@gitgov/core';
 import { DependencyInjectionService } from '../../services/dependency-injection';
 
 import * as pathUtils from 'path';
@@ -124,6 +124,11 @@ export class InitCommand {
         }
         // [EARS-G1] Post-init: best-effort push + DX concerns
         await this.postInitConcerns(options);
+
+        // [INIT-M1] [INIT-M2] Agent status display post-init
+        if (!options.quiet) {
+          this.displayAgentStatus();
+        }
       }
 
     } catch (error) {
@@ -226,6 +231,32 @@ export class InitCommand {
       await dxHelper.setupGitIntegration();
     } catch {
       // Non-fatal DX concerns
+    }
+  }
+
+  /**
+   * [INIT-M1] [INIT-M2] Display agent installation status after init.
+   * Uses discoverInstalledAgents to check which agents are available in node_modules.
+   */
+  private displayAgentStatus(): void {
+    try {
+      const discovered = discoverInstalledAgents(process.cwd());
+      const discoveredIds = new Set(discovered.map(a => a.id));
+
+      if (!DEFAULT_AGENTS || !Array.isArray(DEFAULT_AGENTS)) return;
+
+      console.log('\n  Agents registered:');
+      for (const agent of DEFAULT_AGENTS) {
+        const isInstalled = discoveredIds.has(agent.agentId);
+        if (isInstalled) {
+          console.log(`    ✅ ${agent.displayName} (installed, purpose: ${agent.purpose})`);
+        } else {
+          // [INIT-M2] Not-installed default agents show info, not error
+          console.log(`    ⚠  ${agent.displayName} (not installed — optional)`);
+        }
+      }
+    } catch {
+      // Discovery failure is non-fatal — skip agent status display
     }
   }
 

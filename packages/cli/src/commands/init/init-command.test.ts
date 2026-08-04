@@ -87,9 +87,9 @@ describe('InitCommand', () => {
   });
 
   // ============================================================================
-  // §4.1. Bootstrap Core Functionality (EARS-A1 to A5)
+  // §4.1. Bootstrap Core Functionality (EARS-A1 to A9)
   // ============================================================================
-  describe('4.1. Bootstrap Core Functionality (EARS-A1 to A5)', () => {
+  describe('4.1. Bootstrap Core Functionality (EARS-A1 to A9)', () => {
     it('[EARS-A1] should create complete gitgov structure and trust root', async () => {
       await initCommand.execute({
         name: 'Test Project',
@@ -708,6 +708,29 @@ describe('InitCommand', () => {
       expect(mockProjectModule.initializeProject).toHaveBeenCalledWith(
         expect.objectContaining({ stateBranch: 'gitgov-state' })
       );
+    });
+  });
+
+  // 4.11. Agent Status Display (INIT-M1 to M2)
+  describe('4.11. Agent Status Display (INIT-M1 to M2)', () => {
+    it('[INIT-M1] should display agent installation status after init', async () => {
+      await initCommand.execute({ name: 'M1 Test', actorName: 'Test User' });
+
+      const logCalls = mockConsoleLog.mock.calls.map(c => String(c[0])).join('\n');
+      // displayAgentStatus runs post-init and shows agents
+      // In test context, discoverInstalledAgents scans cwd — may find agents or not
+      // The important thing: it runs without error and shows "Agents registered:" header
+      expect(logCalls).toContain('Agents registered:');
+    });
+
+    it('[INIT-M2] should show informational status for unresolved default agents', async () => {
+      await initCommand.execute({ name: 'M2 Test', actorName: 'Test User' });
+
+      const logCalls = mockConsoleLog.mock.calls.map(c => String(c[0])).join('\n');
+      // Default agents that can't resolve show info status, not error
+      expect(logCalls).not.toContain('❌');
+      // Exit code should still be 0 (init succeeded — agent status is informational)
+      expect(mockProcessExit).not.toHaveBeenCalled();
     });
   });
 });

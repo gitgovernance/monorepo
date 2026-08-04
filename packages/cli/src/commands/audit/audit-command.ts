@@ -2,7 +2,7 @@ import { Command, Option } from 'commander';
 import { BaseCommand } from '../../base/base-command';
 import type { BaseCommandOptions } from '../../interfaces/command';
 import { readFile } from 'node:fs/promises';
-import { Sarif as SarifModule, generateExecutionId } from '@gitgov/core';
+import { Sarif as SarifModule, generateExecutionId, discoverInstalledAgents } from '@gitgov/core';
 import { formatAuditResult } from '@gitgov/core/audit';
 import type { Finding, FindingCategory, DetectorName } from '@gitgov/core/audit';
 import type {
@@ -218,7 +218,33 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
 
       // [AORCH-P7] Display orchestrator warnings before output
       if (result.warning) {
-        console.warn(`\n⚠️  ${result.warning}\n`);
+        let warningText = result.warning;
+
+        // [AORCH-P8] Append npm install suggestions for each failed agent
+        const moduleNotFoundPattern = /agent:(\S+)\s.*(?:MODULE_NOT_FOUND|Cannot find module)/g;
+        let match;
+        const suggestions: string[] = [];
+        while ((match = moduleNotFoundPattern.exec(result.warning)) !== null) {
+          suggestions.push(`  npm install @gitgov/agent-${match[1]}`);
+        }
+        if (suggestions.length > 0) {
+          warningText += `\n\n  To fix:\n${suggestions.join('\n')}`;
+        }
+
+        console.warn(`\n⚠️  ${warningText}\n`);
+      }
+
+      // [AORCH-P9] List discovered-but-unregistered agents
+      try {
+        const discovered = discoverInstalledAgents(process.cwd());
+        const registeredIds = result.agentResults.map(r => r.agentId);
+        const unregistered = discovered.filter(d => !registeredIds.includes(d.id));
+        if (unregistered.length > 0) {
+          const names = unregistered.map(a => `  ${a.id} — Run: gitgov agent new @gitgov/agent-${a.id.replace('agent:', '')}`);
+          console.log(`\nAvailable but not registered:\n${names.join('\n')}\n`);
+        }
+      } catch {
+        // Discovery failure is non-fatal
       }
 
       // Format and display output

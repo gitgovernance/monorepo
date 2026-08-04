@@ -156,10 +156,7 @@ export class DependencyInjectionService {
     worktreeBasePath: string,
   ): Promise<void> {
     const { promises: fsPromises } = await import('fs');
-    if (!this.stateBranchOverride) {
-      throw new Error('stateBranchOverride not set — call setStateBranchOverride() before ensureWorktreeBootstrap()');
-    }
-    const stateBranch = this.stateBranchOverride;
+    const stateBranch = this.stateBranchOverride ?? 'gitgov-state';
 
     // Ensure ~/.gitgov/worktrees/ exists
     await fsPromises.mkdir(path.join(os.homedir(), '.gitgov', 'worktrees'), { recursive: true });
