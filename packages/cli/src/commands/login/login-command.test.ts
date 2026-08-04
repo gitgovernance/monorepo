@@ -412,6 +412,118 @@ describe('LoginCommand v2', () => {
       expect(body['agentKeys']).toBeUndefined(); // backwards compatible: request identico al actual
     });
 
+    it('[LOGIN-T2] should upload missing agent keys via verify-only syncKey when human key already synced', async () => {
+      const sharedPub = 'same-public-key-base64';
+      mockHasPrivateKey.mockResolvedValue(true);
+      const keysByActor: Record<string, { priv: string; pub: string }> = {
+        'human:camilo': { priv: 'human-priv', pub: sharedPub },
+        'agent:gitgov-audit-v2': { priv: 'agent-v2-priv', pub: 'agent-v2-pub' },
+      };
+      mockGetPrivateKey.mockImplementation(async (id: string) => keysByActor[id]?.priv ?? null);
+      mockGetPublicKey.mockImplementation(async (id: string) => keysByActor[id]?.pub ?? null);
+      mockActorsList.mockResolvedValue(['human:camilo', 'agent:gitgov-audit-v2']);
+
+      // [LOGIN-T2] humana ya sincronizada; server SIN agent keys del repo → diff = 1
+      const ks = { ...keyStatusWith(sharedPub), agentKeys: [] };
+      const syncResponse: SyncKeyResponse = { success: true, actorId: 'human:camilo', mode: 'verify-only', agentKeysSynced: 1 };
+      const deps = createMockDeps({
+        fetchSaas: vi.fn().mockImplementation(async (url: string) => {
+          if (url.includes('identity.keyStatus')) return { ok: true, json: async () => trpcWrap(ks) };
+          if (url.includes('identity.syncKey')) return { ok: true, json: async () => trpcWrap(syncResponse) };
+          return { ok: false, json: async () => ({}) };
+        }),
+      });
+
+      const cmd = new LoginCommand(deps);
+      await cmd.executeLogin(defaultOptions);
+
+      const syncCall = (deps.fetchSaas as vi.Mock).mock.calls.find(
+        (c: unknown[]) => String(c[0]).includes('identity.syncKey'),
+      );
+      expect(syncCall).toBeDefined();
+      const body = JSON.parse((syncCall![1] as { body: string }).body) as {
+        publicKey?: string;
+        privateKeyEnvelope?: unknown;
+        agentKeys?: Array<{ actorId: string; publicKey: string; privateKeyEnvelope: unknown }>;
+      };
+      // [LOGIN-T2] verify-only: SIN envelope humano (IKS-G3), CON el diff de agentes
+      expect(body.privateKeyEnvelope).toBeUndefined();
+      expect(body.publicKey).toBe(sharedPub);
+      expect(body.agentKeys).toHaveLength(1);
+      expect(body.agentKeys![0]!.actorId).toBe('agent:gitgov-audit-v2');
+      const output = mockConsoleLog.mock.calls.map(c => c[0]).join('\n');
+      expect(output).toContain('Already synced');
+    });
+
+    it('[LOGIN-T2] should not call syncKey when human synced and agent keys up to date', async () => {
+      const sharedPub = 'same-public-key-base64';
+      mockHasPrivateKey.mockResolvedValue(true);
+      const keysByActor: Record<string, { priv: string; pub: string }> = {
+        'human:camilo': { priv: 'human-priv', pub: sharedPub },
+        'agent:gitgov-audit-v2': { priv: 'agent-v2-priv', pub: 'agent-v2-pub' },
+      };
+      mockGetPrivateKey.mockImplementation(async (id: string) => keysByActor[id]?.priv ?? null);
+      mockGetPublicKey.mockImplementation(async (id: string) => keysByActor[id]?.pub ?? null);
+      mockActorsList.mockResolvedValue(['human:camilo', 'agent:gitgov-audit-v2']);
+
+      // [LOGIN-T2] server YA tiene la misma publicKey del agente → diff vacio → cero requests extra
+      const ks = { ...keyStatusWith(sharedPub), agentKeys: [{ actorId: 'agent:gitgov-audit-v2', publicKey: 'agent-v2-pub' }] };
+      const deps = createMockDeps({
+        fetchSaas: vi.fn().mockImplementation(async (url: string) => {
+          if (url.includes('identity.keyStatus')) return { ok: true, json: async () => trpcWrap(ks) };
+          return { ok: false, json: async () => ({}) };
+        }),
+      });
+
+      const cmd = new LoginCommand(deps);
+      await cmd.executeLogin(defaultOptions);
+
+      const syncCall = (deps.fetchSaas as vi.Mock).mock.calls.find(
+        (c: unknown[]) => String(c[0]).includes('identity.syncKey'),
+      );
+      expect(syncCall).toBeUndefined(); // cero re-transmision, cero churn
+      const output = mockConsoleLog.mock.calls.map(c => c[0]).join('\n');
+      expect(output).toContain('Already synced');
+    });
+
+    it('[LOGIN-T2] should upload only diff agent keys in human upload path', async () => {
+      mockHasPrivateKey.mockResolvedValue(true);
+      const keysByActor: Record<string, { priv: string; pub: string }> = {
+        'human:camilo': { priv: 'human-priv', pub: 'human-pub' },
+        'agent:gitgov-audit': { priv: 'agent-audit-priv', pub: 'agent-audit-pub' },
+        'agent:custom-scanner': { priv: 'agent-custom-priv', pub: 'agent-custom-pub' },
+      };
+      mockGetPrivateKey.mockImplementation(async (id: string) => keysByActor[id]?.priv ?? null);
+      mockGetPublicKey.mockImplementation(async (id: string) => keysByActor[id]?.pub ?? null);
+      mockActorsList.mockResolvedValue(['human:camilo', 'agent:gitgov-audit', 'agent:custom-scanner']);
+
+      // [LOGIN-T2] path de upload humano: server ya tiene al dia agent:gitgov-audit → solo viaja el custom
+      const ks = { ...noKeyStatus, agentKeys: [{ actorId: 'agent:gitgov-audit', publicKey: 'agent-audit-pub' }] };
+      const syncResponse: SyncKeyResponse = { success: true, actorId: 'human:camilo', mode: 'full', agentKeysSynced: 1 };
+      const deps = createMockDeps({
+        fetchSaas: vi.fn().mockImplementation(async (url: string) => {
+          if (url.includes('identity.keyStatus')) return { ok: true, json: async () => trpcWrap(ks) };
+          if (url.includes('identity.syncKey')) return { ok: true, json: async () => trpcWrap(syncResponse) };
+          return { ok: false, json: async () => ({}) };
+        }),
+      });
+
+      const cmd = new LoginCommand(deps);
+      await cmd.executeLogin(defaultOptions);
+
+      const syncCall = (deps.fetchSaas as vi.Mock).mock.calls.find(
+        (c: unknown[]) => String(c[0]).includes('identity.syncKey'),
+      );
+      expect(syncCall).toBeDefined();
+      const body = JSON.parse((syncCall![1] as { body: string }).body) as {
+        privateKeyEnvelope?: unknown;
+        agentKeys?: Array<{ actorId: string }>;
+      };
+      expect(body.privateKeyEnvelope).toBeDefined(); // upload humano completo
+      expect(body.agentKeys).toHaveLength(1);
+      expect(body.agentKeys![0]!.actorId).toBe('agent:custom-scanner');
+    });
+
     it('[LOGIN-B2] should display confirmation after successful sync (keySynced derived, not persisted)', async () => {
       mockHasPrivateKey.mockResolvedValue(true);
       mockGetPrivateKey.mockResolvedValue('base64-private-key');
