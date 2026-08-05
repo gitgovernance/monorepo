@@ -17,4 +17,8 @@ bin
 .cursor/
 .kiro/
 
+# Triad framework (installed as plugin, future submodule when published)
+packages/triad/
+packages/triad_pi_agent/
+
 .env
