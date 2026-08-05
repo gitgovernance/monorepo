@@ -1,3 +1,59 @@
+## [3.21.0](https://github.com/gitgovernance/monorepo/compare/core-v3.20.0...core-v3.21.0) (2026-08-05)
+
+
+### ✨ Features
+
+* **cli,core:** agent discovery + error UX + stateBranchOverride fix (s78) ([bfd4092](https://github.com/gitgovernance/monorepo/commit/bfd40922a7950b6b6a6a42645ae860194c392ce8))
+* **cli+core:** AORCH-G1/G2 agent failure warning + AORCH-P6 working-repo guard ([ed01477](https://github.com/gitgovernance/monorepo/commit/ed01477841e6107d2d0b7c151bf5da30afe5d54e))
+* **cli:** AORCH-P4 persist audit-index.json + AORCH-P5 project guard ([14077b2](https://github.com/gitgovernance/monorepo/commit/14077b2c2cda9edc30efabef457fc4a64c324e52))
+* **cli:** EARS-E8 agent update message with engine type transition ([a0fbcad](https://github.com/gitgovernance/monorepo/commit/a0fbcad42d76ddc48e9fc4cd5c2fca560c4e8231))
+* **cli:** graceful bootstrap + bump private (KS11 + specs) ([#160](https://github.com/gitgovernance/monorepo/issues/160)) ([5cc0895](https://github.com/gitgovernance/monorepo/commit/5cc08956aa9134be7b7c11fcc31f28ceb55a95ea)), closes [#6](https://github.com/gitgovernance/monorepo/issues/6) [#46](https://github.com/gitgovernance/monorepo/issues/46)
+* **cli:** lint --strict, pull key detection, agent fail-fast, force-cloud commit ([fa118bd](https://github.com/gitgovernance/monorepo/commit/fa118bd6a4df08adb2b82474226563fded5c171a))
+* **cli:** LOGIN-H4 SSH alias resolution via ssh -G + AORCH-C8 git context ([88aed89](https://github.com/gitgovernance/monorepo/commit/88aed897323d7cc70ea56eefcd03cb4471f61434))
+* **cli:** LOGIN-T1 — upload repo agent keys via syncKey agentKeys[] ([18de76d](https://github.com/gitgovernance/monorepo/commit/18de76daba2154ff0acadee77940af4a0d77d392))
+* **cli:** LOGIN-T2 — diff-based agent key upload, independiente del path humano ([adcad56](https://github.com/gitgovernance/monorepo/commit/adcad56a3c8408287ff4651b8267823e2e91b3df))
+* **cli:** LOGIN-T3 — force-cloud uploads agent key diff with downloaded canonical key ([311d460](https://github.com/gitgovernance/monorepo/commit/311d460f222a4b6ccd9880a35ced475a99e46626))
+* **core,agents:** FindingCategory extensible + agent distribution prep (s78) ([eb1acf8](https://github.com/gitgovernance/monorepo/commit/eb1acf8db81909471a02185a0cc03318f26e128e))
+* **core+cli:** identity key model P0-P2 implementation ([b319a79](https://github.com/gitgovernance/monorepo/commit/b319a7939941e4994191e35fb01be290d40e5643))
+* **core:** audit entity factories + test builders — AUDIT-F1..I3, 37/37 green ([288d843](https://github.com/gitgovernance/monorepo/commit/288d8436ffa45e3c3565df0a26103090a7c49965))
+* **core:** AuditFsProjection — persist audit results to .gitgov/audit-index.json ([b2a1823](https://github.com/gitgovernance/monorepo/commit/b2a18237a636f510fa7c125fc9de6a557dbd6058))
+* **core:** createFinding + EARS-U8 + GPI19 + CLI getHeadSha (s74-s75) ([#164](https://github.com/gitgovernance/monorepo/issues/164)) ([7a10e67](https://github.com/gitgovernance/monorepo/commit/7a10e67e71ad5cf924cea7289210c3ed68738287))
+* **core:** lint --strict Three Gates + agent engine validation + init warnings ([2f24144](https://github.com/gitgovernance/monorepo/commit/2f24144fbb98cfb0706821f6d467fe3ffa3d78aa))
+* **core:** PKP-H1..H4 — repo-scoped agent keys in PrismaKeyProvider ([3f9dc27](https://github.com/gitgovernance/monorepo/commit/3f9dc271251f32fc69b08b85fa16e816c846160d))
+* **core:** PP-C2 post-persist integrity check in PrismaRecordProjection ([0a7b730](https://github.com/gitgovernance/monorepo/commit/0a7b73080d9240078ee4933287e94261de821a6d))
+* **core:** security .gitignore + addAgent homologation + SYNC_ROOT_FILES ([16399fa](https://github.com/gitgovernance/monorepo/commit/16399fa47ada8cac95523f393ce07328cc36771f))
+* flow_verification s77 — PAF 17/17, mcp-server fix, LLM lazy detection ([4d0b281](https://github.com/gitgovernance/monorepo/commit/4d0b281aa776e7116dbeec3254b94df7f963c872))
+* **identity:** E6 — reconcileActorRecord primitive + login force-cloud delegate ([f27ee6c](https://github.com/gitgovernance/monorepo/commit/f27ee6cafb5da3b59780104a49a6ebcd101f58ed))
+* **T14:** FindingRedactor required — core types + CLI DI + audit fixes ([eb3be19](https://github.com/gitgovernance/monorepo/commit/eb3be19e983f7f1b1edfcb1ac3fe838f9d0a24c0)), closes [#53-54](https://github.com/gitgovernance/monorepo/issues/53-54)
+
+
+### 🐛 Bug Fixes
+
+* **agent-security-audit:** update description for npm publish ([6387e17](https://github.com/gitgovernance/monorepo/commit/6387e17268ac3c666d0f4ccef66853de08e7a054))
+* **agent-semgrep:** add release workflow + semantic-release config ([db3d42e](https://github.com/gitgovernance/monorepo/commit/db3d42e600b711289d59a3ad53fa424e462c051a))
+* **agents:** move @gitgov/core from dependencies to devDependencies ([feb84b1](https://github.com/gitgovernance/monorepo/commit/feb84b165993b2017fd8b085855a3a87c042e62a))
+* **cli:** defer projector resolution to command execution — state-branch override precedence ([c294499](https://github.com/gitgovernance/monorepo/commit/c294499de00df341ec1e80a6ac8fb222aae0a03b))
+* **cli:** INIT-J2b skip postInitConcerns when already a member ([26fc4bd](https://github.com/gitgovernance/monorepo/commit/26fc4bde8ef3860bfac379bcbc52e61b63e29d6c))
+* **core+cli:** D1 fix, P1 revert, syncKey refactor — session 65 ([3378d29](https://github.com/gitgovernance/monorepo/commit/3378d29dccf946ed6d69d091aa268653caadf184))
+* **core:** AUDIT-I2 test assertion — verify feedback structure not just toBeDefined ([fc2bc73](https://github.com/gitgovernance/monorepo/commit/fc2bc731f4f9270d73694f04744da91882f65b52))
+* **core:** listRemoteBranches per_page:100 — prevent missing branches in pagination ([67d9b04](https://github.com/gitgovernance/monorepo/commit/67d9b04b0490e9e561fce0ef94f211de80f9538b))
+* **core:** RSIG-A5 — reject empty or whitespace-only notes in RecordSigner ([919cd59](https://github.com/gitgovernance/monorepo/commit/919cd59d6fbb895f40af817c599ddbcf1079f6c5))
+* **e2e:** thread sharedGitModule in shared GitHub backend helper ([067dad5](https://github.com/gitgovernance/monorepo/commit/067dad5e77e8335882f67c50ac0cf72476823992)), closes [#12](https://github.com/gitgovernance/monorepo/issues/12)
+* **e2e:** use local PrismaClient instead of saas-api import ([5e51187](https://github.com/gitgovernance/monorepo/commit/5e5118788b89abd7c11afcfef64368ceeb904783))
+
+
+### ♻️ Refactoring
+
+* **cli:** rename ensureActorInProject → addActor callers + mock variables ([30c1606](https://github.com/gitgovernance/monorepo/commit/30c1606ce7fad1573588f89b7decbaa01ca57704))
+* **core+cli:** FindingRedactor required — eliminate conditional redaction ([5c1db95](https://github.com/gitgovernance/monorepo/commit/5c1db9522d4dd199b19fa578da66f6967acad63f))
+* **core:** E6 follow-up — drop YAGNI reconcileActorKey wrapper (supervisor review) ([3abbb4b](https://github.com/gitgovernance/monorepo/commit/3abbb4bca2dd3b732ff11fe5026be81aaf333fbf))
+* **core:** rename ensureActorInProject → addActor + EnsureActor* → AddActor* ([347454b](https://github.com/gitgovernance/monorepo/commit/347454b40ee597e333eb29ac3b598d160455f023))
+
+
+### 📝 Documentation
+
+* inputs de producto, workflow CI y config del repo (trabajo de otras sesiones) ([6db1ffc](https://github.com/gitgovernance/monorepo/commit/6db1ffc988f74eb9637f2c6e4feb07e99eb8f9ee))
+
 ## [3.20.0](https://github.com/gitgovernance/monorepo/compare/core-v3.19.0...core-v3.20.0) (2026-05-16)
 
 
