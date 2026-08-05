@@ -34,7 +34,7 @@ function makeMockKeyProvider(overrides: Partial<KeyProvider> = {}): KeyProvider 
 }
 
 describe('RecordSigner', () => {
-  describe('4.1. createSignedRecord (RSIG-A1 to A4)', () => {
+  describe('4.1. createSignedRecord (RSIG-A1 to A5)', () => {
     it('[RSIG-A1] should return record with exactly 1 real signature', async () => {
       const mockKp = makeMockKeyProvider();
       const signer = new RecordSigner({ keyProvider: mockKp });
@@ -47,7 +47,7 @@ describe('RecordSigner', () => {
       // Must have header with version, type, payloadChecksum, signatures
       expect(result.header.version).toBe('1.0');
       expect(result.header.type).toBe('task');
-      expect(result.header.payloadChecksum).toBeDefined();
+      expect(result.header.payloadChecksum).toMatch(/^[a-f0-9]{64}$/);
       expect(result.header.signatures).toHaveLength(1);
 
       // The signature must NOT be 'placeholder' or empty
@@ -100,6 +100,27 @@ describe('RecordSigner', () => {
       await expect(
         signer.createSignedRecord(payload, 'task', 'actor:human:unknown', 'author', 'Fail'),
       ).rejects.toMatchObject({ code: 'KEY_NOT_FOUND' });
+    });
+
+    it('[RSIG-A5] should throw when notes is empty string or whitespace', async () => {
+      const mockKp = makeMockKeyProvider();
+      const signer = new RecordSigner({ keyProvider: mockKp });
+      const payload = makeTaskPayload();
+
+      await expect(
+        signer.createSignedRecord(payload, 'task', 'actor:human:alice', 'author', ''),
+      ).rejects.toThrow();
+
+      await expect(
+        signer.createSignedRecord(payload, 'task', 'actor:human:alice', 'author', '   '),
+      ).rejects.toThrow();
+
+      await expect(
+        signer.createSignedRecord(payload, 'task', 'actor:human:alice', 'author', '\t\n'),
+      ).rejects.toThrow();
+
+      // keyProvider.sign must NOT have been called — validation is pre-sign
+      expect(mockKp.sign).not.toHaveBeenCalled();
     });
 
     it('[RSIG-A4] should produce record that passes verifySignatures', async () => {

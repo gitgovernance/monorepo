@@ -44,6 +44,8 @@ export type KeyStatusResponse = {
   publicKey: string | null;
   /** Server's X25519 ECDH public key for upload encryption (ECIES pattern) */
   ecdhPublicKey: string;
+  /** [IDS-O1] Repo-scoped ACTIVE agent public keys — el CLI computa el diff (LOGIN-T2) */
+  agentKeys?: Array<{ actorId: string; publicKey: string }>;
 };
 
 /** Response from identity.syncKey tRPC mutation */
@@ -54,6 +56,15 @@ export type SyncKeyResponse = {
   rotated?: boolean;
   newActorId?: string;
   oldActorId?: string;
+  /** [LOGIN-T1] Agent keys del repo aceptadas por el server (IDS-N1) */
+  agentKeysSynced?: number;
+};
+
+/** [LOGIN-T1] Entrada de agent key para el upload repo-scoped via syncKey agentKeys[] */
+export type AgentKeyUpload = {
+  actorId: string;
+  publicKey: string;
+  privateKeyEnvelope: EcdhEnvelope;
 };
 
 /** Response from identity.getKey tRPC query */

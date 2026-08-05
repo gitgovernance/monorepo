@@ -177,15 +177,20 @@ function createMockActorKeyDelegate(): {
   const rows: ActorKeyRow[] = [];
   let idCounter = 0;
 
+  // v3: `where.repoId === undefined` = sin filtro; null/string = match exacto (mirror de Prisma)
+  const matchesRepo = (rowRepoId: string | null, whereRepoId: string | null | undefined): boolean =>
+    whereRepoId === undefined || rowRepoId === whereRepoId;
+
   const delegate: ActorKeyDelegate = {
     findFirst: jest.fn(
-      async (args: { where: { actorId: string; orgId: string; status: string } }) => {
+      async (args: { where: { actorId: string; orgId: string; status: string; repoId?: string | null } }) => {
         return (
           rows.find(
             (r) =>
               r.actorId === args.where.actorId &&
               r.orgId === args.where.orgId &&
-              r.status === args.where.status,
+              r.status === args.where.status &&
+              matchesRepo(r.repoId, args.where.repoId),
           ) ?? null
         );
       },
@@ -198,12 +203,13 @@ function createMockActorKeyDelegate(): {
       },
     ),
     count: jest.fn(
-      async (args: { where: { actorId: string; orgId: string; status: string } }) => {
+      async (args: { where: { actorId: string; orgId: string; status: string; repoId?: string | null } }) => {
         return rows.filter(
           (r) =>
             r.actorId === args.where.actorId &&
             r.orgId === args.where.orgId &&
-            r.status === args.where.status,
+            r.status === args.where.status &&
+            matchesRepo(r.repoId, args.where.repoId),
         ).length;
       },
     ),
@@ -212,6 +218,7 @@ function createMockActorKeyDelegate(): {
         data: {
           actorId: string;
           orgId: string;
+          repoId?: string | null;
           publicKey: string;
           encryptedPrivateKey: string;
           iv: string;
@@ -220,16 +227,21 @@ function createMockActorKeyDelegate(): {
           lastUsedAt: Date;
         };
       }) => {
-        // [PKP-E1] enforce unique [actorId, orgId, status]
+        // [PKP-E1] enforce unique quadruple [actorId, orgId, repoId, status] (v3).
+        // Mirror de Postgres: NULLs distintos — filas con repoId NULL NO colisionan (KV12).
+        const newRepoId = args.data.repoId ?? null;
         const collision = rows.find(
           (r) =>
             r.actorId === args.data.actorId &&
             r.orgId === args.data.orgId &&
-            r.status === args.data.status,
+            r.status === args.data.status &&
+            r.repoId !== null &&
+            newRepoId !== null &&
+            r.repoId === newRepoId,
         );
         if (collision) {
           const err = new Error(
-            'Unique constraint failed on [actorId, orgId, status]',
+            'Unique constraint failed on [actorId, orgId, repoId, status]',
           ) as Error & { code: string };
           err.code = 'P2002';
           throw err;
@@ -246,6 +258,7 @@ function createMockActorKeyDelegate(): {
           id: `ak-${idCounter}`,
           actorId: args.data.actorId,
           orgId: args.data.orgId,
+          repoId: args.data.repoId ?? null,
           publicKey: args.data.publicKey,
           encryptedPrivateKey: args.data.encryptedPrivateKey,
           iv: args.data.iv,
@@ -261,14 +274,15 @@ function createMockActorKeyDelegate(): {
     ),
     updateMany: jest.fn(
       async (args: {
-        where: { actorId: string; orgId: string; status: string };
+        where: { actorId: string; orgId: string; status: string; repoId?: string | null };
         data: { status?: string; lastUsedAt?: Date };
       }) => {
         const matches = rows.filter(
           (r) =>
             r.actorId === args.where.actorId &&
             r.orgId === args.where.orgId &&
-            r.status === args.where.status,
+            r.status === args.where.status &&
+            matchesRepo(r.repoId, args.where.repoId),
         );
         for (const row of matches) {
           if (args.data.status !== undefined) {
@@ -287,14 +301,15 @@ function createMockActorKeyDelegate(): {
     ),
     deleteMany: jest.fn(
       async (args: {
-        where: { actorId: string; orgId: string; status: string };
+        where: { actorId: string; orgId: string; status: string; repoId?: string | null };
       }) => {
         const before = rows.length;
         const toRemove = rows.filter(
           (r) =>
             r.actorId === args.where.actorId &&
             r.orgId === args.where.orgId &&
-            r.status === args.where.status,
+            r.status === args.where.status &&
+            matchesRepo(r.repoId, args.where.repoId),
         );
         for (const row of toRemove) {
           rows.splice(rows.indexOf(row), 1);
@@ -379,6 +394,7 @@ function createMockPrismaClient(): {
  */
 async function bootstrapProvider(
   orgId: string,
+  repoId?: string,
 ): Promise<{
   provider: PrismaKeyProvider;
   client: PrismaClientLike;
@@ -388,7 +404,7 @@ async function bootstrapProvider(
   const { client, orgKeyRows, actorKeyRows } = createMockPrismaClient();
   process.env['MASTER_KEY'] = TEST_MASTER_KEY;
   await createOrgEncryptionKey(client, orgId);
-  const provider = new PrismaKeyProvider(client, orgId);
+  const provider = new PrismaKeyProvider(client, orgId, repoId);
   return { provider, client, orgKeyRows, actorKeyRows };
 }
 
@@ -1092,6 +1108,108 @@ describe('PrismaKeyProvider v2', () => {
       await expect(provider.sign('human:alice', data)).rejects.toMatchObject({
         code: 'KEY_NOT_FOUND',
       });
+    });
+  });
+
+  // ==========================================================================
+  // 4.8. Repo-Scoped Agent Keys (PKP-H1 to H3) — s78b D1
+  // ==========================================================================
+
+  describe('4.8. Repo-Scoped Agent Keys (PKP-H1 to H3)', () => {
+    it('[PKP-H1] should filter agent lookups by repoId when repo scope is provided', async () => {
+      const { client } = createMockPrismaClient();
+      process.env['MASTER_KEY'] = TEST_MASTER_KEY;
+      await createOrgEncryptionKey(client, 'org-h');
+      const providerA = new PrismaKeyProvider(client, 'org-h', 'repo-a');
+      const providerB = new PrismaKeyProvider(client, 'org-h', 'repo-b');
+      const providerC = new PrismaKeyProvider(client, 'org-h', 'repo-c');
+      const keysA = await generateKeys();
+      const keysB = await generateKeys();
+
+      // Mismo actorId, repos distintos → dos filas activas SIN colision (D1)
+      await providerA.storeKey('agent:security-audit', keysA);
+      await providerB.storeKey('agent:security-audit', keysB);
+
+      // Cada scope resuelve SU key
+      expect(await providerA.getPublicKey('agent:security-audit')).toBe(keysA.publicKey);
+      expect(await providerB.getPublicKey('agent:security-audit')).toBe(keysB.publicKey);
+      expect(await providerA.hasPrivateKey('agent:security-audit')).toBe(true);
+      // Un repo sin key para ese agente NO ve las de otros repos
+      expect(await providerC.hasPrivateKey('agent:security-audit')).toBe(false);
+      expect(await providerC.getPublicKey('agent:security-audit')).toBeNull();
+    });
+
+    it('[PKP-H2] should not filter human lookups by repoId even with repo scope', async () => {
+      const { client, actorKeyRows } = createMockPrismaClient();
+      process.env['MASTER_KEY'] = TEST_MASTER_KEY;
+      await createOrgEncryptionKey(client, 'org-h');
+      const unscoped = new PrismaKeyProvider(client, 'org-h');
+      const scoped = new PrismaKeyProvider(client, 'org-h', 'repo-a');
+      const humanKeys = await generateKeys();
+
+      // La human key se almacena per-org (repoId NULL) via provider sin scope
+      await unscoped.storeKey('human:cagodoy', humanKeys);
+      expect(actorKeyRows.find((r) => r.actorId === 'human:cagodoy')?.repoId).toBeNull();
+
+      // El provider CON scope de repo la resuelve igual — humanos ignoran el scope
+      expect(await scoped.getPublicKey('human:cagodoy')).toBe(humanKeys.publicKey);
+      expect(await scoped.hasPrivateKey('human:cagodoy')).toBe(true);
+      expect(await scoped.getPrivateKey('human:cagodoy')).toBe(humanKeys.privateKey);
+    });
+
+    it('[PKP-H3] should persist repoId on agent storeKey and scope archive to same repo', async () => {
+      const { client, actorKeyRows } = createMockPrismaClient();
+      process.env['MASTER_KEY'] = TEST_MASTER_KEY;
+      await createOrgEncryptionKey(client, 'org-h');
+      const providerA = new PrismaKeyProvider(client, 'org-h', 'repo-a');
+      const providerB = new PrismaKeyProvider(client, 'org-h', 'repo-b');
+      const keysA1 = await generateKeys();
+      const keysA2 = await generateKeys();
+      const keysB1 = await generateKeys();
+      const humanKeys = await generateKeys();
+
+      await providerA.storeKey('agent:gitgov-audit', keysA1);
+      await providerB.storeKey('agent:gitgov-audit', keysB1);
+
+      // La fila del agente persiste el repoId del scope
+      const rowA = actorKeyRows.find((r) => r.repoId === 'repo-a' && r.status === 'active');
+      expect(rowA?.actorId).toBe('agent:gitgov-audit');
+
+      // Rotacion en repo-a: archiva SOLO la de repo-a — la de repo-b queda intacta
+      await providerA.storeKey('agent:gitgov-audit', keysA2);
+      const activeA = actorKeyRows.find((r) => r.repoId === 'repo-a' && r.status === 'active');
+      const activeB = actorKeyRows.find((r) => r.repoId === 'repo-b' && r.status === 'active');
+      expect(activeA?.publicKey).toBe(keysA2.publicKey);
+      expect(activeB?.publicKey).toBe(keysB1.publicKey); // NUNCA sobrescrita ni archivada
+
+      // Human con provider scoped → fila igualmente per-org (repoId NULL)
+      await providerA.storeKey('human:cagodoy', humanKeys);
+      expect(
+        actorKeyRows.find((r) => r.actorId === 'human:cagodoy' && r.status === 'active')?.repoId,
+      ).toBeNull();
+    });
+
+    it('[PKP-H4] should restrict unscoped agent operations to legacy null-repoId rows', async () => {
+      const { client } = createMockPrismaClient();
+      process.env['MASTER_KEY'] = TEST_MASTER_KEY;
+      await createOrgEncryptionKey(client, 'org-h');
+      const scoped = new PrismaKeyProvider(client, 'org-h', 'repo-a');
+      const unscoped = new PrismaKeyProvider(client, 'org-h');
+      const repoKeys = await generateKeys();
+      const legacyKeys = await generateKeys();
+
+      // Solo existe una key repo-scoped → el provider SIN scope NO la alcanza
+      // (sin H4 haria findFirst sin condicion de repo y la resolveria — no-determinista)
+      await scoped.storeKey('agent:gitgov-audit', repoKeys);
+      expect(await unscoped.getPublicKey('agent:gitgov-audit')).toBeNull();
+      expect(await unscoped.hasPrivateKey('agent:gitgov-audit')).toBe(false);
+      expect(await unscoped.getPrivateKey('agent:gitgov-audit')).toBeNull();
+
+      // Con una fila legacy (repoId NULL), el unscoped resuelve ESA — v2 intacto
+      await unscoped.storeKey('agent:gitgov-audit', legacyKeys);
+      expect(await unscoped.getPublicKey('agent:gitgov-audit')).toBe(legacyKeys.publicKey);
+      // Y el scoped sigue resolviendo la suya — sin interferencia
+      expect(await scoped.getPublicKey('agent:gitgov-audit')).toBe(repoKeys.publicKey);
     });
   });
 });

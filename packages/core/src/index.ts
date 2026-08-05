@@ -217,3 +217,6 @@ export { getCurrentActor, ActorSelectionRequiredError } from "./utils/current_ac
 // CiReporter (interface + types — G19)
 export { DEFAULT_GATE_MARKER } from "./ci_reporter";
 export type { ICiReporter, PrContext, RepoContext, CheckInfo } from "./ci_reporter";
+
+// Agent Discovery
+export { discoverInstalledAgents } from "./agent_discovery/index";

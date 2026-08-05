@@ -92,6 +92,8 @@ const STATUS_ARCHIVED = 'archived';
 export class PrismaKeyProvider implements KeyProvider {
   private readonly prisma: PrismaClientLike;
   private readonly orgId: string;
+  /** [PKP-H] v3: scope de repo opcional — solo afecta actores `agent:*`. */
+  private readonly repoId: string | null;
 
   /**
    * Lazy-loaded + cached org key (plaintext, 32 bytes). Populated on first
@@ -110,9 +112,28 @@ export class PrismaKeyProvider implements KeyProvider {
    *                to this org. The `OrgEncryptionKey` row for this orgId
    *                must exist (created via `createOrgEncryptionKey`).
    */
-  constructor(prisma: PrismaClientLike, orgId: string) {
+  constructor(prisma: PrismaClientLike, orgId: string, repoId?: string) {
     this.prisma = prisma;
     this.orgId = orgId;
+    this.repoId = repoId ?? null;
+  }
+
+  /**
+   * [PKP-H1][PKP-H2][PKP-H4] Repo-scope para el `where`:
+   * - `agent:*` con scope → filtra por (orgId, repoId) — su repo, exacto.
+   * - `agent:*` SIN scope → filtra `repoId: null` — solo filas legacy,
+   *   determinista; las keys repo-scoped NUNCA son alcanzables sin scope
+   *   (sin esto, findFirst resolveria la key de un repo arbitrario).
+   * - `human:*` → sin condicion de repo (per-org, D1; sus filas son NULL).
+   */
+  private repoScope(actorId: string): { repoId?: string | null } {
+    if (!actorId.startsWith('agent:')) return {};
+    return { repoId: this.repoId };
+  }
+
+  /** [PKP-H3] repoId a persistir en filas nuevas: solo agentes con scope; resto NULL. */
+  private repoIdFor(actorId: string): string | null {
+    return this.repoId !== null && actorId.startsWith('agent:') ? this.repoId : null;
   }
 
   // ─── IKeyProvider base (6 methods) ─────────────────────────────────────────
@@ -126,8 +147,9 @@ export class PrismaKeyProvider implements KeyProvider {
    * signature bytes.
    */
   async sign(actorId: string, data: Uint8Array): Promise<Uint8Array> {
+    // [PKP-H1] agent:* con repo scope resuelve por (orgId, repoId, actorId)
     const row = await this.prisma.actorKey.findFirst({
-      where: { actorId, orgId: this.orgId, status: STATUS_ACTIVE },
+      where: { actorId, orgId: this.orgId, status: STATUS_ACTIVE, ...this.repoScope(actorId) },
     });
     if (!row) {
       // [PKP-D2]
@@ -168,8 +190,9 @@ export class PrismaKeyProvider implements KeyProvider {
    * [PKP-G10] Archived rows are ignored — only `status='active'` rows are served.
    */
   async getPrivateKey(actorId: string): Promise<string | null> {
+    // [PKP-H1] agent:* con repo scope resuelve por (orgId, repoId, actorId)
     const row = await this.prisma.actorKey.findFirst({
-      where: { actorId, orgId: this.orgId, status: STATUS_ACTIVE },
+      where: { actorId, orgId: this.orgId, status: STATUS_ACTIVE, ...this.repoScope(actorId) },
     });
     if (!row) {
       // [PKP-A2]
@@ -185,8 +208,9 @@ export class PrismaKeyProvider implements KeyProvider {
    * [PKP-G10] Ignores archived rows.
    */
   async getPublicKey(actorId: string): Promise<string | null> {
+    // [PKP-H1] agent:* con repo scope resuelve por (orgId, repoId, actorId)
     const row = await this.prisma.actorKey.findFirst({
-      where: { actorId, orgId: this.orgId, status: STATUS_ACTIVE },
+      where: { actorId, orgId: this.orgId, status: STATUS_ACTIVE, ...this.repoScope(actorId) },
     });
     // [PKP-G5] No decryption — direct field read
     // [PKP-G6] Null when no active row
@@ -230,8 +254,9 @@ export class PrismaKeyProvider implements KeyProvider {
    * [PKP-G10] Archived rows are ignored by count.
    */
   async hasPrivateKey(actorId: string): Promise<boolean> {
+    // [PKP-H1] agent:* con repo scope cuenta por (orgId, repoId, actorId)
     const count = await this.prisma.actorKey.count({
-      where: { actorId, orgId: this.orgId, status: STATUS_ACTIVE },
+      where: { actorId, orgId: this.orgId, status: STATUS_ACTIVE, ...this.repoScope(actorId) },
     });
     return count > 0;
   }
@@ -282,22 +307,26 @@ export class PrismaKeyProvider implements KeyProvider {
     try {
       await this.prisma.$transaction(async (tx) => {
         // [PKP-G2] Remove old archived rows to avoid unique constraint violation
-        // on (actorId, orgId, status) when archiving the current active row
+        // on (actorId, orgId, repoId, status) when archiving the current active row
+        // [PKP-H3] scoped por repo — nunca toca filas de otro repo
         await tx.actorKey.deleteMany({
-          where: { actorId, orgId: this.orgId, status: STATUS_ARCHIVED },
+          where: { actorId, orgId: this.orgId, status: STATUS_ARCHIVED, ...this.repoScope(actorId) },
         });
 
         // [PKP-G2] Archive any existing active row for this actor+org
+        // [PKP-H3] scoped por repo — nunca archiva la agent key de OTRO repo
         await tx.actorKey.updateMany({
-          where: { actorId, orgId: this.orgId, status: STATUS_ACTIVE },
+          where: { actorId, orgId: this.orgId, status: STATUS_ACTIVE, ...this.repoScope(actorId) },
           data: { status: STATUS_ARCHIVED, lastUsedAt: now },
         });
 
         // [PKP-G1][PKP-G3] Create new active row
+        // [PKP-H3] agent:* con scope persiste su repoId; human:* (o sin scope) NULL
         await tx.actorKey.create({
           data: {
             actorId,
             orgId: this.orgId,
+            repoId: this.repoIdFor(actorId),
             publicKey: keypair.publicKey,
             encryptedPrivateKey: encryptedBytes.toString('hex'),
             iv: iv.toString('hex'),
@@ -329,8 +358,9 @@ export class PrismaKeyProvider implements KeyProvider {
   async archiveKey(actorId: string): Promise<void> {
     // [PKP-G7] Set status to archived + record lastUsedAt
     // [PKP-G8] updateMany is idempotent — matches 0 or 1 row
+    // [PKP-H1] agent:* con repo scope archiva solo la key de este repo
     await this.prisma.actorKey.updateMany({
-      where: { actorId, orgId: this.orgId, status: STATUS_ACTIVE },
+      where: { actorId, orgId: this.orgId, status: STATUS_ACTIVE, ...this.repoScope(actorId) },
       data: { status: STATUS_ARCHIVED, lastUsedAt: new Date() },
     });
   }

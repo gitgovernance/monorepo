@@ -30,6 +30,8 @@ export type ActorKeyRow = {
   id: string;
   actorId: string;
   orgId: string;
+  /** v3 (D1, s78b): NULL = human key (per-org). Set = agent key del repo (per-repo). */
+  repoId: string | null;
   publicKey: string;
   /** Hex-encoded AES-256-GCM ciphertext of the private key. Null for verify-only records. */
   encryptedPrivateKey: string | null;
@@ -52,18 +54,19 @@ export type ActorKeyRow = {
  */
 export type ActorKeyDelegate = {
   findFirst(args: {
-    where: { actorId: string; orgId: string; status: string };
+    where: { actorId: string; orgId: string; status: string; repoId?: string | null };
   }): Promise<ActorKeyRow | null>;
   findMany(args: {
     where: { orgId: string; status: string };
   }): Promise<ActorKeyRow[]>;
   count(args: {
-    where: { actorId: string; orgId: string; status: string };
+    where: { actorId: string; orgId: string; status: string; repoId?: string | null };
   }): Promise<number>;
   create(args: {
     data: {
       actorId: string;
       orgId: string;
+      repoId?: string | null; // v3 (PKP-H3): solo agentes con repo scope; omitido/null = human
       publicKey: string;
       encryptedPrivateKey: string;
       iv: string;
@@ -73,11 +76,11 @@ export type ActorKeyDelegate = {
     };
   }): Promise<ActorKeyRow>;
   updateMany(args: {
-    where: { actorId: string; orgId: string; status: string };
+    where: { actorId: string; orgId: string; status: string; repoId?: string | null };
     data: { status?: string; lastUsedAt?: Date };
   }): Promise<{ count: number }>;
   deleteMany(args: {
-    where: { actorId: string; orgId: string; status: string };
+    where: { actorId: string; orgId: string; status: string; repoId?: string | null };
   }): Promise<{ count: number }>;
   update(args: {
     where: { id: string };

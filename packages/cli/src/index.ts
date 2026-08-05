@@ -57,10 +57,18 @@ async function setupCommands() {
 
     // Setup adapters dependency injection
     const diService = DependencyInjectionService.getInstance();
-    const projector = await diService.getRecordProjector();
+
+    // [EARS-C3] [EARS-C15] La fase de registro NO inicializa stores. Construir el
+    // projector aqui disparaba initializeStores() -> bootstrapWorktree() con el
+    // default 'gitgov-state' ANTES de que Commander parseara --state-branch, de modo
+    // que el override de init (INIT-L1/L3) y el de login (LOGIN-P1) llegaban siempre
+    // tarde: el worktree quedaba atado al branch equivocado y se persistia en
+    // config.json. El thunk difiere la resolucion al handler, cuando el override ya
+    // esta puesto — garantia estructural, no dependiente del orden de arranque.
+    const resolveProjector = () => diService.getRecordProjector();
 
     // Register indexer commands with dependencies
-    registerIndexerCommands(program, projector);
+    registerIndexerCommands(program, resolveProjector);
 
     // Register task commands
     registerTaskCommands(program);

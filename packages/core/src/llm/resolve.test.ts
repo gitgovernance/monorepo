@@ -46,10 +46,15 @@ describe('resolveLlmProvider', () => {
     });
 
     it('[LLM-D2] should always return content and model in LlmResponse', async () => {
-      // Verified structurally — actual API calls tested in provider-specific tests
-      const cli = resolveLlmProvider('cli/claude-haiku-4-5');
-      expect(cli.query).toBeDefined();
-      expect(typeof cli.query).toBe('function');
+      // LlmResponse type requires content: string + model: string.
+      // Verify via type-level: the interface signature enforces this at compile time.
+      // Runtime verification happens in provider-specific tests (LLM-B1, LLM-C2).
+      const provider = resolveLlmProvider('cli/claude-haiku-4-5');
+      expect(provider.query).toBeDefined();
+      expect(typeof provider.query).toBe('function');
+      // Verify the interface shape includes providerName + modelName (D1 companion)
+      expect(provider.providerName).toBe('cli');
+      expect(provider.modelName).toBe('claude-haiku-4-5');
     });
   });
 });
