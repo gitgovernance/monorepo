@@ -1,9 +1,0 @@
-.env
-.env.*
-*.key
-secrets/
-config/database.yml
-node_modules/
-.git/
-.gitgov/
-packages/private/
