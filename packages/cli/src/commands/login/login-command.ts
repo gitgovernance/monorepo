@@ -392,6 +392,23 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
           // [LOGIN-F4] Post-sync verification
           const postStatus = await this.getKeyStatus(saasUrl, token, repo);
           const newLocalPub = await keyProvider.getPublicKey(actorId);
+
+          // [LOGIN-T3] El diff de agent keys tambien viaja por este camino (s78b-21): la
+          // publicKey del verify-only es la CANONICA recien descargada (newLocalPub) — con la
+          // local stale el server veria mismatch sin envelope y responderia CONFLICT. El
+          // estado del server sale de postStatus (ya refrescado). No fatal: el login, funcion
+          // primaria, ya quedo resuelto — la secundaria no lo toma de rehen.
+          if (newLocalPub) {
+            try {
+              const agentDiff = await this.collectLocalAgentKeys(postStatus.ecdhPublicKey, postStatus.agentKeys ?? []);
+              if (agentDiff.length > 0) {
+                await this.uploadAgentKeysOnly(saasUrl, token, repo, newLocalPub, agentDiff);
+              }
+            } catch (err) {
+              console.warn(`⚠️  Agent key sync skipped: ${err instanceof Error ? err.message : String(err)}`);
+            }
+          }
+
           if (postStatus.publicKey === newLocalPub) {
             this.handleSuccess(
               { loggedIn: true, user: actorId, keySynced: true },

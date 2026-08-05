@@ -132,12 +132,17 @@ vi.mock('../../services/dependency-injection', () => ({
         setLastSession: mockSetLastSession,
         clearCloudToken: mockClearCloudToken,
       }),
+      // Mock estructural COMPLETO de KeyProvider (6 metodos) — sin cast: el literal
+      // satisface la interfaz, que es la regla del preset para interfaces puras. Antes
+      // faltaban sign() y deletePrivateKey() y el hueco se tapaba con `as unknown as`.
       getKeyProvider: vi.fn().mockReturnValue({
+        sign: vi.fn(),
         getPrivateKey: mockGetPrivateKey,
+        getPublicKey: mockGetPublicKey,
         setPrivateKey: mockSetPrivateKey,
         hasPrivateKey: mockHasPrivateKey,
-        getPublicKey: mockGetPublicKey,
-      } as unknown as IKeyProvider),
+        deletePrivateKey: vi.fn(),
+      } satisfies IKeyProvider),
       getIdentityAdapter: vi.fn().mockResolvedValue({
         getCurrentActor: mockGetCurrentActor,
       }),
@@ -164,7 +169,7 @@ import type { LoginCommandOptions, LoginDeps, TrpcResponse, KeyStatusResponse, S
 const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation();
 const mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation();
 const mockConsoleError = vi.spyOn(console, 'error').mockImplementation();
-const mockProcessExit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+const mockProcessExit = vi.spyOn(process, 'exit').mockImplementation(vi.fn());
 
 // ─── tRPC mock helpers ────────────────────────────────────────────────────
 
@@ -522,6 +527,79 @@ describe('LoginCommand v2', () => {
       expect(body.privateKeyEnvelope).toBeDefined(); // upload humano completo
       expect(body.agentKeys).toHaveLength(1);
       expect(body.agentKeys![0]!.actorId).toBe('agent:custom-scanner');
+    });
+
+    // [LOGIN-T3] Tercer camino del login: conflicto resuelto por --force-cloud. El diff de
+    // agentes debe viajar igual, y con la publicKey CANONICA recien descargada.
+    // Setup comun: local != cloud (conflicto), y getPublicKey devuelve la canonica DESPUES
+    // del setPrivateKey del download — que es el orden real del path productivo.
+    function forceCloudSetup(serverAgentKeys: Array<{ actorId: string; publicKey: string }>) {
+      const localPub = 'stale-local-pub';
+      const cloudPub = 'canonical-cloud-pub';
+      let downloaded = false;
+      mockHasPrivateKey.mockResolvedValue(true);
+      mockSetPrivateKey.mockImplementation(async () => { downloaded = true; });
+      const agentKeys: Record<string, { priv: string; pub: string }> = {
+        'agent:gitgov-audit': { priv: 'agent-audit-priv', pub: 'agent-audit-pub' },
+      };
+      mockGetPrivateKey.mockImplementation(async (id: string) =>
+        id === 'human:camilo' ? 'human-priv' : agentKeys[id]?.priv ?? null);
+      mockGetPublicKey.mockImplementation(async (id: string) => {
+        if (id !== 'human:camilo') return agentKeys[id]?.pub ?? null;
+        return downloaded ? cloudPub : localPub;
+      });
+      mockActorsList.mockResolvedValue(['human:camilo', 'agent:gitgov-audit']);
+      mockFsReadFile.mockRejectedValue(new Error('ENOENT')); // sin ActorRecord local → LOGIN-F5 skip
+
+      const ks = { ...keyStatusWith(cloudPub), agentKeys: serverAgentKeys };
+      const syncResponse: SyncKeyResponse = { success: true, actorId: 'human:camilo', mode: 'verify-only', agentKeysSynced: 1 };
+      const deps = createMockDeps({
+        fetchSaas: vi.fn().mockImplementation(async (url: string) => {
+          if (url.includes('identity.keyStatus')) return { ok: true, json: async () => trpcWrap(ks) };
+          if (url.includes('identity.getKey')) return { ok: true, json: async () => trpcWrap({ publicKey: cloudPub, privateKeyEnvelope: { ephemeralPublicKey: 'ep', ciphertext: 'ct', iv: 'iv', authTag: 'at' } }) };
+          if (url.includes('identity.syncKey')) return { ok: true, json: async () => trpcWrap(syncResponse) };
+          return { ok: false, json: async () => ({}) };
+        }),
+      });
+      return { deps, localPub, cloudPub };
+    }
+
+    it('[LOGIN-T3] should upload agent key diff with the downloaded canonical key after force-cloud', async () => {
+      // server SIN las agent keys del repo → diff = 1
+      const { deps, cloudPub, localPub } = forceCloudSetup([]);
+
+      const cmd = new LoginCommand(deps);
+      await cmd.executeLogin({ ...defaultOptions, forceCloud: true });
+
+      const syncCall = (deps.fetchSaas as vi.Mock).mock.calls.find(
+        (c: unknown[]) => String(c[0]).includes('identity.syncKey'),
+      );
+      expect(syncCall, 'force-cloud debe subir el diff de agent keys').toBeDefined();
+      const body = JSON.parse((syncCall![1] as { body: string }).body) as {
+        publicKey?: string;
+        privateKeyEnvelope?: unknown;
+        agentKeys?: Array<{ actorId: string; publicKey: string }>;
+      };
+      // verify-only: sin envelope humano (IKS-G3) y con la CANONICA, no la stale —
+      // con la vieja el server veria mismatch sin envelope y respondera CONFLICT
+      expect(body.privateKeyEnvelope).toBeUndefined();
+      expect(body.publicKey).toBe(cloudPub);
+      expect(body.publicKey).not.toBe(localPub);
+      expect(body.agentKeys).toHaveLength(1);
+      expect(body.agentKeys![0]!.actorId).toBe('agent:gitgov-audit');
+    });
+
+    it('[LOGIN-T3] should not call syncKey when force-cloud resolves and agent keys are up to date', async () => {
+      // server YA tiene la misma publicKey del agente → diff vacio → cero requests extra
+      const { deps } = forceCloudSetup([{ actorId: 'agent:gitgov-audit', publicKey: 'agent-audit-pub' }]);
+
+      const cmd = new LoginCommand(deps);
+      await cmd.executeLogin({ ...defaultOptions, forceCloud: true });
+
+      const syncCall = (deps.fetchSaas as vi.Mock).mock.calls.find(
+        (c: unknown[]) => String(c[0]).includes('identity.syncKey'),
+      );
+      expect(syncCall).toBeUndefined();
     });
 
     it('[LOGIN-B2] should display confirmation after successful sync (keySynced derived, not persisted)', async () => {
