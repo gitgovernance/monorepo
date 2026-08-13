@@ -9,6 +9,9 @@
  */
 export { formatAuditResult, severityBadge } from "./formatter";
 export { createFinding, verifySnippet, createFix, createWaiver, createScan } from "./types";
+// [AUDIT-J1] Closed-domain enums are exported as a VALUE (the constant), not only as a
+// type: without this the consumer cannot iterate them and re-enumerates them by hand.
+export { FINDING_SEVERITIES, FINDING_STATUSES } from "./types";
 
 export type {
   // Enums

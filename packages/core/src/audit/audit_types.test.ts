@@ -620,4 +620,74 @@ describe('Audit Prisma Schema Verification (audit_prisma_record_projection_modul
       expect(fix.regulation).toBe('PCI-DSS 3.4');
     });
   });
+
+  // ── 4.10. Runtime-Iterable Enums (AUDIT-J1 to J3) ──
+
+  describe('4.10. Runtime-Iterable Enums (AUDIT-J1 to J3)', () => {
+    const typesPath = path.resolve(__dirname, 'types.ts');
+
+    // Pre-existing closed-domain unions that J1 does NOT require converting (the
+    // spec's §4.10.1 time-bound scope). Measured in s78b-37: there are FIVE. None has
+    // an observed failure. When a consumer that needs to iterate one of them appears,
+    // THAT one gets converted and drops off this list — not all of them at once.
+    const GRANDFATHERED_BARE_UNIONS = [
+      'DetectorName',
+      'WaiverStatus',
+      'ScanDisplayStatus',
+      'ScanScope',
+      'PolicyStatus',
+    ];
+
+    // `FindingCategory` is neither listed nor matched by the pattern: it is extensible
+    // BY DESIGN (`BaseFindingCategory | (string & {})`, AUDIT-E1..E4). Closing it would
+    // revert a standing decision, not apply J1.
+    const RE_BARE_STRING_UNION = /^export type (\w+) = "[^"]*"(?:\s*\|\s*"[^"]*")*;$/gm;
+
+    it('[AUDIT-J1] should derive closed-domain audit types from an exported readonly tuple', () => {
+      const src = fs.readFileSync(typesPath, 'utf-8');
+      const bareUnions = [...src.matchAll(RE_BARE_STRING_UNION)].map((m) => m[1] as string);
+
+      // ANTI-VACUITY: if `RE_BARE_STRING_UNION` stops matching — a style refactor, a
+      // formatting change — `bareUnions` comes back empty and this test would pass
+      // WITHOUT VERIFYING ANYTHING: a green that proves nothing, which is worse than a
+      // red. Require seeing the grandfathered ones we KNOW exist before trusting it.
+      expect({
+        detector: 'bare-string-union',
+        seen: GRANDFATHERED_BARE_UNIONS.filter((n) => bareUnions.includes(n)).sort(),
+      }).toEqual({
+        detector: 'bare-string-union',
+        seen: [...GRANDFATHERED_BARE_UNIONS].sort(),
+      });
+
+      // Any closed-domain bare union NOT declared as an exception violates J1.
+      const violations = bareUnions.filter((n) => !GRANDFATHERED_BARE_UNIONS.includes(n));
+      expect(violations).toEqual([]);
+    });
+
+    it('[AUDIT-J2] should export FINDING_STATUSES as a readonly tuple and derive FindingStatus from it', () => {
+      // Imported from the MAIN barrel, not from `./index`: AUDIT-A6 declares "re-export
+      // all TYPES" and these constants are VALUES — a missing value re-export is NOT
+      // caught by A6. Importing from here turns that silent gap into a loud red.
+      const mainBarrel = require('../index');
+      expect(Array.isArray(mainBarrel.FINDING_STATUSES)).toBe(true);
+      expect([...mainBarrel.FINDING_STATUSES]).toEqual(['new', 'in_progress', 'waived', 'resolved']);
+
+      // The type DERIVES from the constant, not the other way around.
+      const src = fs.readFileSync(typesPath, 'utf-8');
+      expect(src).toMatch(/export const FINDING_STATUSES = \[[^\]]*\] as const;/);
+      expect(src).toMatch(/export type FindingStatus = \(typeof FINDING_STATUSES\)\[number\];/);
+    });
+
+    it('[AUDIT-J3] should export FINDING_SEVERITIES as a readonly tuple and derive FindingSeverity from it', () => {
+      const mainBarrel = require('../index');
+      expect(Array.isArray(mainBarrel.FINDING_SEVERITIES)).toBe(true);
+      // AUDIT-A2 still holds for its VALUES: four of them, and "info" is not one.
+      expect([...mainBarrel.FINDING_SEVERITIES]).toEqual(['critical', 'high', 'medium', 'low']);
+      expect(mainBarrel.FINDING_SEVERITIES).not.toContain('info');
+
+      const src = fs.readFileSync(typesPath, 'utf-8');
+      expect(src).toMatch(/export const FINDING_SEVERITIES = \[[^\]]*\] as const;/);
+      expect(src).toMatch(/export type FindingSeverity = \(typeof FINDING_SEVERITIES\)\[number\];/);
+    });
+  });
 });

@@ -88,8 +88,14 @@ export type FindingCategory = BaseFindingCategory | (string & {});
 /**
  * Severity levels for governance prioritization.
  * No "info" — every Finding has a governance action (fix, waive, or block).
+ *
+ * [AUDIT-J1] [AUDIT-J3] Constant first, type derived. A bare union has NO runtime
+ * representation: every consumer that needs the VALUES re-enumerates them by hand, and
+ * no compiler watches those copies. The `as const` is load-bearing — it produces a
+ * non-empty readonly tuple, which is the shape `z.enum()` accepts without a cast.
  */
-export type FindingSeverity = "critical" | "high" | "medium" | "low";
+export const FINDING_SEVERITIES = ["critical", "high", "medium", "low"] as const;
+export type FindingSeverity = (typeof FINDING_SEVERITIES)[number];
 
 /**
  * Identifier of the detector that generated the finding.
@@ -105,8 +111,15 @@ export type WaiverStatus = "pending" | "active" | "expired" | "revoked";
 
 /**
  * Derived finding status (not stored in DB — computed from tracking fields).
+ * This module declares the DOMAIN; the semantics of each value are defined by
+ * `findings_module` (e.g. FIND-E3 for 'in_progress').
+ *
+ * [AUDIT-J1] [AUDIT-J2] Constant first, type derived — same reason as
+ * FINDING_SEVERITIES. Until s78b-37 this type had NO spec vertex, and its enumeration
+ * had been hand-propagated to three code sites plus a comment.
  */
-export type FindingStatus = "new" | "in_progress" | "waived" | "resolved";
+export const FINDING_STATUSES = ["new", "in_progress", "waived", "resolved"] as const;
+export type FindingStatus = (typeof FINDING_STATUSES)[number];
 
 /**
  * Scan display status (derived from PolicyDecision).
