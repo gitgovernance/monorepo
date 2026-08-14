@@ -15,7 +15,7 @@ import picomatch from 'picomatch';
 import type { Octokit } from '@octokit/rest';
 import type { FileLister, FileListOptions, FileListerErrorDetails, FileStats } from '../file_lister';
 import { FileListerError } from '../file_lister';
-import { isOctokitRequestError, getOctokitRateLimitReset } from '../../shared/github/github';
+import { isOctokitRequestError, getOctokitRateLimitReset, getOctokitRequestId } from '../../shared/github/github';
 import type { GitHubFileListerOptions } from './github_file_lister.types';
 
 /** [EARS-D1] Max parallel Blob fetches in readBatch */
@@ -469,8 +469,14 @@ export class GitHubFileLister implements FileLister {
           );
         }
         if (error.status >= 500) {
+          // [EARS-C1] The status alone can neither be diagnosed nor escalated. Carry
+          // GitHub's own message and the x-github-request-id — that id is the only handle
+          // their support accepts, and without it a 5xx is a dead end for whoever reads
+          // the log afterwards.
+          const requestId = getOctokitRequestId(error);
           throw new FileListerError(
-            `GitHub API server error (${error.status}) fetching tree`,
+            `GitHub API server error (${error.status}) fetching tree: ${error.message}` +
+              (requestId ? ` [x-github-request-id: ${requestId}]` : ''),
             'READ_ERROR',
           );
         }

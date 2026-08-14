@@ -741,6 +741,33 @@ describe('ProjectModule', () => {
       expect(result.created).toBe(true);
     });
 
+    it('[PROJ-H3b] should poll getActor before concluding the actor is absent', async () => {
+      const { deps, initializer } = createRealDeps();
+      initializer.finalize = jest.fn()
+        .mockRejectedValue(new Error('Nothing to commit: staging buffer is empty'));
+
+      // The store is backed by an eventually consistent source that does not see its own
+      // write immediately: null, null, then the actor. Measured in production (OB-I2,
+      // 2026-08-14): the commit landed 1.4s BEFORE the guard read null and threw.
+      // A single read concludes GIT_WRITE_FAILED on an actor that IS on the branch.
+      const realGetActor = deps.identity.getActor.bind(deps.identity);
+      let getActorCalls = 0;
+      deps.identity.getActor = jest.fn(async (id: string) => {
+        getActorCalls++;
+        return getActorCalls <= 2 ? null : realGetActor(id);
+      });
+      const pm = new ProjectModule(deps);
+
+      const result = await pm.addActor({
+        login: 'late-visible', type: 'human', repoId: 'repo-1', joinedVia: 'saas-oauth',
+      });
+
+      expect(result.actorId).toBe('human:late-visible');
+      // Anti-vacuity: a green here would be meaningless if the guard had found the actor
+      // on the first read — the polling is only exercised when it had to retry.
+      expect(getActorCalls).toBeGreaterThan(1);
+    });
+
     it('[PROJ-H3] should throw GIT_WRITE_FAILED when finalize fails and actor not in store', async () => {
       const { deps, initializer } = createRealDeps();
       // finalize fails with "Nothing to commit" BUT getActor returns null (store didn't write either)

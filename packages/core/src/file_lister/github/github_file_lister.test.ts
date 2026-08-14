@@ -426,6 +426,27 @@ describe('GitHubFileLister', () => {
       });
     });
 
+    it('[EARS-C1] should include the server message and request id in the 5xx error', async () => {
+      // The status code alone can neither be diagnosed nor escalated: GitHub sends its own
+      // message and an `x-github-request-id`, which is the only handle their support
+      // accepts. Measured 2026-08-14: a `GitHub API server error (500) fetching tree` took
+      // down an E2E and there was nothing else to go on — the cause is discarded at the
+      // same point where it is detected. Same shape as IDS-H1 in identity_service.
+      const err = Object.assign(new Error('Server Error'), {
+        status: 500,
+        response: { headers: { 'x-github-request-id': 'ABCD:1234:5678:9ABC' } },
+      });
+      mockOctokit.rest.git.getTree.mockRejectedValue(err);
+
+      await expect(lister.list(['**/*.json'])).rejects.toMatchObject({
+        code: 'READ_ERROR',
+        message: expect.stringContaining('Server Error'),
+      });
+      await expect(lister.list(['**/*.json'])).rejects.toMatchObject({
+        message: expect.stringContaining('ABCD:1234:5678:9ABC'),
+      });
+    });
+
     it('[EARS-C2] should throw NETWORK_ERROR for network failures', async () => {
       mockOctokit.rest.repos.getContent.mockRejectedValue(new TypeError('fetch failed'));
 

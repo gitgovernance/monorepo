@@ -10,6 +10,20 @@ import { validateAgentEngine } from '../agent_runner/engine_validator';
 // ^\d{10}-cycle-[a-z0-9-]{1,50}$. Per-repo scope means no cross-repo collision.
 const ROOT_CYCLE_ID = '0000000000-cycle-root';
 
+/**
+ * [PROJ-H3b] Bounded wait for the actor to become visible after the store committed it.
+ *
+ * The store can be backed by an eventually consistent source (GitHubRecordStore commits
+ * inside `put()`, then reads go through the GitHub API), so a `null` right after the write
+ * is NOT evidence of absence. Measured in production 2026-08-14: the commit landed 1.4s
+ * before the guard read null and threw GIT_WRITE_FAILED on an actor that was on the branch.
+ *
+ * 5s over a measured 1.4s window is ~3.5x margin. The interval is short because the happy
+ * path exits on the first read and pays nothing.
+ */
+const ACTOR_VERIFY_DEADLINE_MS = 5000;
+const ACTOR_VERIFY_INTERVAL_MS = 250;
+
 export class ProjectModule {
   constructor(private readonly deps: ProjectModuleDeps) {}
 
@@ -252,7 +266,18 @@ export class ProjectModule {
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         if (message.includes('Nothing to commit')) {
-          const verified = await this.deps.identity.getActor(actorId);
+          // [PROJ-H3b] The guard stays: it distinguishes "the store committed directly"
+          // from "nothing was written at all". What changes is that a single null no
+          // longer settles it — the store may be reading an eventually consistent source
+          // that has not caught up with its OWN write yet. Poll with a bounded deadline:
+          // the legitimate case converges and returns success, the case this guard exists
+          // to catch exhausts the deadline and still throws.
+          const verifyDeadline = Date.now() + ACTOR_VERIFY_DEADLINE_MS;
+          let verified = await this.deps.identity.getActor(actorId);
+          while (!verified && Date.now() < verifyDeadline) {
+            await new Promise(resolve => setTimeout(resolve, ACTOR_VERIFY_INTERVAL_MS));
+            verified = await this.deps.identity.getActor(actorId);
+          }
           if (!verified) {
             throw new AddActorError('GIT_WRITE_FAILED', { actorId, cause: message });
           }
