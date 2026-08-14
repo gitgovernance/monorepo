@@ -70,6 +70,25 @@ export class GitHubFileLister implements FileLister {
     this.octokit = octokit;
   }
 
+  /**
+   * [EARS-B9] Discards the cached tree so the next read fetches from the API again.
+   *
+   * Why this exists: [EARS-B6] caches the tree and, without this, an instance observes the
+   * tree of ONE instant — its first read — and never again. That is correct and cheap for
+   * the common case (read a branch once), and a trap for the other one: a caller waiting
+   * for a file to APPEAR would loop over a frozen array forever. Measured 2026-08-14 in the
+   * E2E harness — a 60s poll built on one reused instance could not see a file that landed
+   * after its first read, and read as flakiness for weeks.
+   *
+   * Reconstructing the object also works, but that forces every caller to know that this
+   * module caches in order to write a correct poll — a contract that requires knowing the
+   * implementation to use it well is an incomplete contract. Safe no-op when nothing is
+   * cached: callers invalidate defensively at the top of a loop.
+   */
+  invalidateCache(): void {
+    this.treeCache = null;
+  }
+
   // ═══════════════════════════════════════════════════════════════════════
   // FileLister Interface
   // ═══════════════════════════════════════════════════════════════════════

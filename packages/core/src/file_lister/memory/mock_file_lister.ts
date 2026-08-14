@@ -69,6 +69,13 @@ export class MockFileLister implements FileLister {
   }
 
   /**
+   * [EARS-FL05] No-op: the in-memory map IS the source, so there is no cache to discard.
+   */
+  invalidateCache(): void {
+    // Intentionally empty — see doc comment.
+  }
+
+  /**
    * [EARS-FL01] Lists files matching glob patterns.
    * [EARS-MFL02] Filters files using glob patterns.
    */
