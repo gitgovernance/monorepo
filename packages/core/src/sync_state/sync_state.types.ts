@@ -58,6 +58,20 @@ export type SyncStatePushResult = {
   conflictInfo?: ConflictInfo;
   /** Error message if operation failed */
   error?: string;
+  /**
+   * [WTSYNC-B19] How many rebase→push retries this push consumed (0 = converged on the
+   * first attempt). Exposed so a push that had to reconcile against a concurrent writer
+   * is NOT indistinguishable from one that did not — otherwise the retry would fix the
+   * symptom and erase the evidence that the race exists, leaving its real frequency
+   * unmeasurable.
+   */
+  retryCount?: number;
+  /**
+   * [WTSYNC-B19] Cause of each retry: the remote's rejection message that triggered it.
+   * Lives in the RESULT and not only in a log because core's logger is silent under
+   * NODE_ENV=test — a requirement whose only evidence is a muted log cannot be audited.
+   */
+  retryReasons?: string[];
   /** [EARS-B16] Implicit pull results when push does reconciliation with remote */
   implicitPull?: {
     /** Whether changes were pulled from remote */
