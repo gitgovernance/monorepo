@@ -7,7 +7,7 @@
  * the source on every call, while `GitHubFileLister` caches the tree and never invalidated
  * it, so one instance observed a single instant forever. A poll written against the
  * interface could not know which of the two it had — and the one that had the cache spun
- * for 60s over a frozen array (measured 2026-08-14).
+ * for 60s over a frozen array (measured).
  */
 import * as fs from 'fs';
 import * as path from 'path';

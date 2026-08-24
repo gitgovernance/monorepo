@@ -115,7 +115,7 @@ export type WaiverStatus = "pending" | "active" | "expired" | "revoked";
  * `findings_module` (e.g. FIND-E3 for 'in_progress').
  *
  * [AUDIT-J1] [AUDIT-J2] Constant first, type derived — same reason as
- * FINDING_SEVERITIES. Until s78b-37 this type had NO spec vertex, and its enumeration
+ * FINDING_SEVERITIES. This type went a long time with NO spec vertex, and its enumeration
  * had been hand-propagated to three code sites plus a comment.
  */
 export const FINDING_STATUSES = ["new", "in_progress", "waived", "resolved"] as const;

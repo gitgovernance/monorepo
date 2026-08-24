@@ -393,7 +393,7 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
           const postStatus = await this.getKeyStatus(saasUrl, token, repo);
           const newLocalPub = await keyProvider.getPublicKey(actorId);
 
-          // [LOGIN-T3] El diff de agent keys tambien viaja por este camino (s78b-21): la
+          // [LOGIN-T3] El diff de agent keys tambien viaja por este camino: la
           // publicKey del verify-only es la CANONICA recien descargada (newLocalPub) — con la
           // local stale el server veria mismatch sin envelope y responderia CONFLICT. El
           // estado del server sale de postStatus (ya refrescado). No fatal: el login, funcion

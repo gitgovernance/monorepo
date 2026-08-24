@@ -2,7 +2,7 @@
  * indexer.test.ts — Registro de comandos del indexer (EARS-C3)
  * Spec: cli/specs/index_command.md §3.3
  *
- * Protege la CLASE del bug de s78b-32: registrar comandos NO debe tocar stores.
+ * Protege la CLASE del bug: registrar comandos NO debe tocar stores.
  * El registro ansioso del projector (`cli/src/index.ts:60`) disparaba
  * initializeStores() → bootstrapWorktree() antes de que Commander parseara
  * ninguna opcion, y por eso `--state-branch` (INIT-L1/L3) y el override de

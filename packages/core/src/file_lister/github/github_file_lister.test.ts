@@ -386,7 +386,7 @@ describe('GitHubFileLister', () => {
     it('[EARS-B9] should re-fetch the tree after invalidateCache', async () => {
       // Without invalidation a single instance observes the tree of ONE instant — its
       // first read — and never again. That is what EARS-B6 asks for, and it is why a
-      // poll built on one reused instance spins over a frozen array: measured 2026-08-14,
+      // poll built on one reused instance spins over a frozen array: as measured,
       // a 60s poll in the E2E harness could never see a file that arrived after its first
       // read. This is the explicit way out, so a consumer does not have to know the module
       // caches in order to write a correct poll.
@@ -470,7 +470,7 @@ describe('GitHubFileLister', () => {
     it('[EARS-C1] should include the server message and request id in the 5xx error', async () => {
       // The status code alone can neither be diagnosed nor escalated: GitHub sends its own
       // message and an `x-github-request-id`, which is the only handle their support
-      // accepts. Measured 2026-08-14: a `GitHub API server error (500) fetching tree` took
+      // accepts. Measured: a `GitHub API server error (500) fetching tree` took
       // down an E2E and there was nothing else to go on — the cause is discarded at the
       // same point where it is detected. Same shape as IDS-H1 in identity_service.
       const err = Object.assign(new Error('Server Error'), {

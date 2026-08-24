@@ -1078,7 +1078,7 @@ describe('FsWorktreeSyncStateModule', () => {
 
   describe('4.2c. Non-fast-forward retry (WTSYNC-B18, B19)', () => {
     // Two writers share the state ref: this CLI (local worktree, native git) and the
-    // SaaS (GitHub API, NO local worktree). Measured 2026-08-13: the server commits
+    // SaaS (GitHub API, NO local worktree). Measured: the server commits
     // between the CLI's `pull --rebase` (the check) and its `push` (the use), so the
     // push is rejected non-fast-forward. The server cannot participate in the rebase,
     // so there is no negotiation — only a race.
@@ -1121,11 +1121,16 @@ if [ "$N" -lt "${fireTimes}" ]; then
   # push proceeds unrejected and the test converges for a FALSE reason. That is exactly
   # the mechanism that made this race undiagnosable for months — a command whose result
   # is discarded. Fail loud, and abort our push so the test cannot pass by accident.
-  if ! git -C "${racerClone}" push origin gitgov-state 2>>"/private/tmp/claude-501/-Users-camilo-go-src-github-com-gitgovernance-monorepo/7b12cad3-943f-454a-affc-400d111177fc/scratchpad/racer.err"; then
-    echo "ROUND $N: RACER PUSH FAILED" >> "/private/tmp/claude-501/-Users-camilo-go-src-github-com-gitgovernance-monorepo/7b12cad3-943f-454a-affc-400d111177fc/scratchpad/racer.err"
+  #
+  # The trace goes inside the fixture's own temp dir. It used to point at an absolute path
+  # outside the repo; when that directory stopped existing the redirect itself failed, the
+  # hook aborted on a filesystem error and B19 got that error instead of the push reject —
+  # a green test turned red by an artifact that had nothing to do with the code under test.
+  if ! git -C "${racerClone}" push origin gitgov-state 2>>"${hooksDir}/racer.err"; then
+    echo "ROUND $N: RACER PUSH FAILED" >> "${hooksDir}/racer.err"
     exit 1
   fi
-  echo "round=$N sha=$(git -C "${racerClone}" rev-parse HEAD)" >> "/private/tmp/claude-501/-Users-camilo-go-src-github-com-gitgovernance-monorepo/7b12cad3-943f-454a-affc-400d111177fc/scratchpad/racer.log"
+  echo "round=$N sha=$(git -C "${racerClone}" rev-parse HEAD)" >> "${hooksDir}/racer.log"
 fi
 exit 0
 `;

@@ -58,7 +58,7 @@ export interface FileLister {
    * consumer needs. Safe to call at any time, including before any read. Never throws.
    *
    * Origin: a poll built on one reused `GitHubFileLister` spun 60s over a frozen array and
-   * read as flakiness for weeks (measured 2026-08-14). Putting this only on the concrete
+   * read as flakiness for weeks (measured). Putting this only on the concrete
    * class would have forced consumers into `instanceof` — the coupling this interface
    * exists to prevent — and would let the planned `GitlabFileLister` reintroduce the defect.
    */

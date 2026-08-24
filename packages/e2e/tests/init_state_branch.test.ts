@@ -5,7 +5,7 @@
  * `gitgov init --state-branch <custom>` debe atar TODO a <custom> — incluso
  * cuando el repo ya conoce los refs del default `gitgov-state`.
  *
- * Origen (s78b-28, hallazgo del smoke Tier 3): con `origin/gitgov-state`
+ * Origen (hallazgo del smoke Tier 3): con `origin/gitgov-state`
  * presente, el init ataba el worktree al DEFAULT y lo persistia en config.json,
  * heredando actores y estado de otro proyecto SIN error. Los 3 flows D/E/F de
  * e2e-private llevaban razon desde gitgov_2 y estaban rojos por esta causa.

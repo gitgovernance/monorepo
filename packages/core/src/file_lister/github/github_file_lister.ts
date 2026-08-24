@@ -76,7 +76,7 @@ export class GitHubFileLister implements FileLister {
    * Why this exists: [EARS-B6] caches the tree and, without this, an instance observes the
    * tree of ONE instant — its first read — and never again. That is correct and cheap for
    * the common case (read a branch once), and a trap for the other one: a caller waiting
-   * for a file to APPEAR would loop over a frozen array forever. Measured 2026-08-14 in the
+   * for a file to APPEAR would loop over a frozen array forever. Measured in the
    * E2E harness — a 60s poll built on one reused instance could not see a file that landed
    * after its first read, and read as flakiness for weeks.
    *

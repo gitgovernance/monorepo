@@ -446,7 +446,7 @@ export class FsWorktreeSyncStateModule implements ISyncStateModule {
 
     // [WTSYNC-B14] Push to remote
     // [WTSYNC-B18] The remote can be advanced by ANOTHER writer between the reconcile
-    // above (the check) and this push (the use) — a TOCTOU. Measured 2026-08-13: the
+    // above (the check) and this push (the use) — a TOCTOU. Measured: the
     // SaaS writes to the same ref through the GitHub API, WITHOUT a local worktree, so
     // it cannot take part in our `pull --rebase`; there is no negotiation, only a race.
     // Retrying is safe and convergent here because both writers are legitimate and each
@@ -467,7 +467,7 @@ export class FsWorktreeSyncStateModule implements ISyncStateModule {
         // Git does not always spell out "! [rejected] ... (fetch first)": depending on
         // the transport and on whether a hook aborted the push, stderr can carry only
         // "failed to push some refs". Keying the detection on the narrow phrase alone
-        // makes the retry silently not apply — measured 2026-08-13.
+        // makes the retry silently not apply.
         const isNonFastForward =
           /rejected|fast-forward|fetch first|failed to push some refs/i.test(detail);
 

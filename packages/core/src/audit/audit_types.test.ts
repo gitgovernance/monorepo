@@ -627,7 +627,7 @@ describe('Audit Prisma Schema Verification (audit_prisma_record_projection_modul
     const typesPath = path.resolve(__dirname, 'types.ts');
 
     // Pre-existing closed-domain unions that J1 does NOT require converting (the
-    // spec's §4.10.1 time-bound scope). Measured in s78b-37: there are FIVE. None has
+    // spec's §4.10.1 time-bound scope). Measured: there are FIVE. None has
     // an observed failure. When a consumer that needs to iterate one of them appears,
     // THAT one gets converted and drops off this list — not all of them at once.
     const GRANDFATHERED_BARE_UNIONS = [
