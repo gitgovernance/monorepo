@@ -60,14 +60,12 @@ describe('CI Guardrail: Clean Exports', () => {
   const distPath = path.join(__dirname, '../../../dist/src');
 
   describe('Main Entrypoint (@gitgov/core)', () => {
-    // TODO: Enable this test after cycles 2-5 complete refactoring
-    it.skip('[EARS-CI01] should analyze imports of main entrypoint', () => {
+    it('[EARS-CI01] should analyze imports of main entrypoint', () => {
       const indexPath = path.join(distPath, 'index.js');
       expect(fs.existsSync(indexPath)).toBe(true);
     });
 
-    // TODO: Enable this test after cycles 2-5 complete refactoring
-    it.skip('[EARS-CI02] should NOT import fs, path, child_process, or chokidar', () => {
+    it('[EARS-CI02] should NOT import fs, path, child_process, or chokidar', () => {
       const indexPath = path.join(distPath, 'index.js');
       const findings = findProhibitedImports(indexPath);
 
@@ -76,7 +74,10 @@ describe('CI Guardrail: Clean Exports', () => {
         const report = findings
           .map((f) => `  - ${f.module} (line ${f.line}): ${f.snippet}`)
           .join('\n');
-        fail(
+        // `fail()` is a Jasmine global that Jest no longer exposes: calling it raised
+        // `ReferenceError: fail is not defined` BEFORE the report could print, so
+        // EARS-CI03 was dead code — the guardrail could detect but not say what it found.
+        throw new Error(
           `[EARS-CI03] Prohibited imports found in @gitgov/core:\n${report}\n\n` +
             `These modules must be moved to @gitgov/core/fs subpath.`
         );
@@ -100,7 +101,10 @@ describe('CI Guardrail: Clean Exports', () => {
         const report = findings
           .map((f) => `  - ${f.module} (line ${f.line}): ${f.snippet}`)
           .join('\n');
-        fail(
+        // Same dead `fail()` as above. This branch reports GREEN today only because the
+        // memory subpath is clean — the day it is not, it would have raised a
+        // ReferenceError instead of naming the module. A passing test hid the defect.
+        throw new Error(
           `[EARS-CI03] Prohibited imports found in @gitgov/core/memory:\n${report}\n\n` +
             `Memory implementations must NOT use filesystem modules.`
         );
