@@ -17,8 +17,12 @@
     "resolveJsonModule": true,
     "types": ["node", "jest"],
     "paths": {
-      "@gitgov/core": ["../../core/src/index.ts"],
-      "@gitgov/core/*": ["../../core/src/*"]
+      // No wildcard for subpaths: "@gitgov/core/*" -> "../../core/src/*" pointed at
+      // directories that do not exist (@gitgov/core/fs lives in src/shared/fs/fs.ts,
+      // /audit in src/audit/index.ts) and there is no single glob that maps them all.
+      // Subpaths resolve through the workspace link against core's package.json
+      // "exports" — same as packages/cli and saas-api, which declare no mapping at all.
+      "@gitgov/core": ["../../core/src/index.ts"]
     },
     "baseUrl": "."
   },
