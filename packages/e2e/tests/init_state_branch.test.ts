@@ -2,16 +2,17 @@
  * Block ISB: Init State Branch Precedence — INIT-L3
  * Spec: cli/specs/init_command.md §4.10
  *
- * `gitgov init --state-branch <custom>` debe atar TODO a <custom> — incluso
- * cuando el repo ya conoce los refs del default `gitgov-state`.
+ * `gitgov init --state-branch <custom>` must bind EVERYTHING to <custom> — even
+ * when the repo already knows the refs of the default `gitgov-state`.
  *
- * Origen (hallazgo del smoke Tier 3): con `origin/gitgov-state`
- * presente, el init ataba el worktree al DEFAULT y lo persistia en config.json,
- * heredando actores y estado de otro proyecto SIN error. Los 3 flows D/E/F de
- * e2e-private llevaban razon desde gitgov_2 y estaban rojos por esta causa.
+ * Origin (found by the Tier 3 smoke run): with `origin/gitgov-state` present,
+ * init bound the worktree to the DEFAULT and persisted that in config.json,
+ * inheriting actors and state from another project WITHOUT an error. The three
+ * D/E/F flows in e2e-private had been right since gitgov_2 and were red for
+ * this reason.
  *
- * Determinista y sin GitHub: bare remote local (createBareRemote), que es lo
- * que hace la diferencia entre "repo recien creado" y "repo real con refs".
+ * Deterministic and GitHub-free: a local bare remote (createBareRemote), which
+ * is what separates "freshly created repo" from "real repo with refs".
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs';
@@ -34,7 +35,7 @@ function git(args: string, cwd: string): string {
 
 describe('Block ISB: Init State Branch Precedence (INIT-L3)', () => {
   beforeAll(() => {
-    // 1. Repo local + bare remote (sin GitHub — determinista, CI-friendly)
+    // 1. Local repo + bare remote (no GitHub — deterministic, CI-friendly)
     const repo = createTempGitRepo();
     repoDir = repo.repoDir;
     tmpDir = repo.tmpDir;
@@ -43,8 +44,8 @@ describe('Block ISB: Init State Branch Precedence (INIT-L3)', () => {
     addRemote(repoDir, remotePath);
     git('push -u origin main', repoDir);
 
-    // 2. Sembrar el DEFAULT `gitgov-state` en el remoto — el escenario real:
-    //    un repo que ya conoce los refs del default (otro proyecto, otro dev).
+    // 2. Seed the DEFAULT `gitgov-state` on the remote — the real scenario:
+    //    a repo that already knows the default's refs (another project, another dev).
     const seed = createTempGitRepo();
     execSync(`git remote add origin "${remotePath}"`, { cwd: seed.repoDir, stdio: 'pipe' });
     git('checkout --orphan gitgov-state', seed.repoDir);
@@ -57,7 +58,7 @@ describe('Block ISB: Init State Branch Precedence (INIT-L3)', () => {
     git('push origin gitgov-state', seed.repoDir);
     fs.rmSync(seed.tmpDir, { recursive: true, force: true });
 
-    // 3. El repo del dev conoce los refs del default (lo que hace cualquier repo real)
+    // 3. The dev's repo knows the default's refs (what any real repo does)
     git('fetch origin', repoDir);
 
     cleanupWorktree(repoDir);
@@ -78,24 +79,24 @@ describe('Block ISB: Init State Branch Precedence (INIT-L3)', () => {
     );
     expect(result.success, `${result.output}\n${result.error}`).toBe(true);
 
-    // (a) El worktree queda atado a la branch CUSTOM, no al default
+    // (a) The worktree is bound to the CUSTOM branch, not the default
     const worktrees = git('worktree list', repoDir);
     expect(worktrees, `worktree list:\n${worktrees}`).toContain(`[${CUSTOM_BRANCH}]`);
-    expect(worktrees, 'el worktree NO debe quedar en el default').not.toContain('[gitgov-state]');
+    expect(worktrees, 'the worktree must NOT stay on the default').not.toContain('[gitgov-state]');
 
-    // (b) La branch custom existe localmente (creada como orphan o desde el remoto)
+    // (b) The custom branch exists locally (created as orphan or from the remote)
     const branches = git('branch --list', repoDir);
     expect(branches, `branches:\n${branches}`).toContain(CUSTOM_BRANCH);
 
-    // (c) config.json persiste la custom — si no, TODOS los comandos siguientes
-    //     (sync, login) leen el branch equivocado: la contaminacion es persistente
+    // (c) config.json persists the custom one — otherwise EVERY later command
+    //     (sync, login) reads the wrong branch: the contamination is persistent
     const configRaw = fs.readFileSync(path.join(worktreePath, '.gitgov', 'config.json'), 'utf8');
     const config = JSON.parse(configRaw) as { state?: { branch?: string } };
     expect(config.state?.branch, `config.json: ${configRaw}`).toBe(CUSTOM_BRANCH);
 
-    // (d) Cero herencia del default: el actor sembrado ahi no debe aparecer
+    // (d) Zero inheritance from the default: the actor seeded there must not appear
     const actorsDir = path.join(worktreePath, '.gitgov', 'actors');
     const actors = fs.existsSync(actorsDir) ? fs.readdirSync(actorsDir) : [];
-    expect(actors, `actores heredados del default: ${actors.join(', ')}`).not.toContain('seed.json');
+    expect(actors, `actors inherited from the default: ${actors.join(', ')}`).not.toContain('seed.json');
   }, 180000);
 });
