@@ -8,7 +8,6 @@
  */
 
 import { program } from 'commander';
-import { DependencyInjectionService } from './services/dependency-injection';
 
 // Import commands (shared logic + TUI support)
 import { InitCommand } from './commands/init/init-command';
@@ -94,29 +93,10 @@ cycleCommand.register(program);
 const indexerCommand = new IndexerCommand();
 indexerCommand.register(program);
 
-// TUI-specific commands (only available in full version)
-program
-  .command('diagram')
-  .description('Interactive diagram generator (TUI only)')
-  .option('-w, --watch', 'Watch mode with TUI')
-  .option('-o, --output <file>', 'Output file')
-  .option('--cycle <id>', 'Filter by cycle')
-  .option('--task <id>', 'Filter by task')
-  .option('--package <name>', 'Filter by package')
-  .option('--verbose', 'Verbose output')
-  .option('--quiet', 'Quiet mode')
-  .action(async (options) => {
-    // Dynamic import for diagram command (TUI-specific)
-    try {
-      const { DiagramCommand } = await import('./commands/diagram/index');
-      const command = new DiagramCommand();
-      await command.execute(options);
-    } catch (error) {
-      console.error('❌ Diagram command failed to load');
-      console.error('💡 This command requires TUI dependencies');
-      process.exit(1);
-    }
-  });
+// The TUI-only `diagram` command was removed along with the DiagramGenerator module.
+// Its dynamic import lived inside a try/catch that reported "requires TUI dependencies",
+// so a missing module would have surfaced as a misleading runtime message instead of a
+// build error.
 
 // Global error handling
 process.on('uncaughtException', (error) => {

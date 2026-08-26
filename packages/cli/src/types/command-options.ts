@@ -13,16 +13,8 @@ export interface OutputCommandOptions extends BaseCommandOptions {
   output?: string;
 }
 
-export interface DiagramCommandOptions {
-  output?: string;
-  watch?: boolean;
-  verbose?: boolean;
-  quiet?: boolean;
-  cycle?: string;
-  task?: string;
-  package?: string;
-  showArchived?: boolean;
-}
+// DiagramCommandOptions removed with the `gitgov diagram` command. It had zero
+// references outside this file even before the deletion.
 
 export interface EntityCommandOptions extends BaseCommandOptions {
   id?: string;

@@ -53,7 +53,6 @@ Commands:
   status [options]       Show intelligent project status dashboard
   dashboard [options]    Launch interactive TUI dashboard
   indexer [options]      Control local cache system
-  diagram|d [options]    Generate workflow diagrams
   lint [options] [path]  Validate GitGovernance records
   audit [options]        Audit source code (PII/secrets, GDPR)
   agent                  Manage and run GitGov agents
@@ -147,7 +146,7 @@ gitgov sync resolve --reason "..."      # Resolve conflicts
 ```mermaid
 graph TD
     subgraph "@gitgov/cli"
-        Commands["Commands (17)"]
+        Commands["Commands (18)"]
         Base["BaseCommand / SimpleCommand"]
         DI["DependencyInjectionService"]
         TUI["Ink/React TUI"]
@@ -230,7 +229,7 @@ This package is licensed under the [Apache License 2.0](https://opensource.org/l
 
 > For development rules, conventions, and architecture see the [AGENTS.md](../../packages/blueprints/03_products/cli/AGENTS.md).
 
-**Last updated:** 2026-04-26 — 17 commands, 547 tests. Note: esbuild uses `--external:@gitgov/core` — core is resolved at runtime, not bundled. Rebuild core + re-link CLI after core changes.
+**Last updated:** 2026-08-26 — 18 commands, 635 tests (504 unit + 131 e2e). Note: esbuild uses `--external:@gitgov/core` — core is resolved at runtime, not bundled. Rebuild core + re-link CLI after core changes.
 
 
 ## @gitgov/core — Type System
