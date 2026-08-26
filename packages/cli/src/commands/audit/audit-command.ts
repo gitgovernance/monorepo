@@ -2,7 +2,8 @@ import { Command, Option } from 'commander';
 import { BaseCommand } from '../../base/base-command';
 import type { BaseCommandOptions } from '../../interfaces/command';
 import { readFile } from 'node:fs/promises';
-import { Sarif as SarifModule, generateExecutionId, discoverInstalledAgents } from '@gitgov/core';
+import { Sarif as SarifModule, generateExecutionId } from '@gitgov/core';
+import { discoverInstalledAgents } from '@gitgov/core/fs';
 import { formatAuditResult } from '@gitgov/core/audit';
 import type { Finding, FindingCategory, DetectorName } from '@gitgov/core/audit';
 import type {

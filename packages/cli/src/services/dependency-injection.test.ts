@@ -287,13 +287,6 @@ vi.mock('@gitgov/core', () => {
 
     // 🎭 MOCK KEY PROVIDER: Mock key storage operations
     KeyProvider: {
-      FsKeyProvider: vi.fn().mockImplementation(function() { return {
-        sign: vi.fn().mockResolvedValue(new Uint8Array(64)),
-        getPrivateKey: vi.fn().mockResolvedValue('mock-private-key-base64'),
-        setPrivateKey: vi.fn().mockResolvedValue(undefined),
-        hasPrivateKey: vi.fn().mockResolvedValue(true),
-        deletePrivateKey: vi.fn().mockResolvedValue(true)
-      }; }),
       EnvKeyProvider: vi.fn().mockImplementation(function() { return {
         sign: vi.fn().mockResolvedValue(new Uint8Array(64)),
         getPrivateKey: vi.fn().mockResolvedValue('mock-private-key-base64'),
@@ -571,6 +564,14 @@ vi.mock('@gitgov/core', () => {
 
 // Mock @gitgov/core/fs — standalone functions + filesystem classes
 vi.mock('@gitgov/core/fs', () => ({
+  // FsKeyProvider moved here: it is exported from @gitgov/core/fs, not the main barrel.
+  FsKeyProvider: vi.fn().mockImplementation(function() { return {
+    sign: vi.fn().mockResolvedValue(new Uint8Array(64)),
+    getPrivateKey: vi.fn().mockResolvedValue('mock-private-key-base64'),
+    setPrivateKey: vi.fn().mockResolvedValue(undefined),
+    hasPrivateKey: vi.fn().mockResolvedValue(true),
+    deletePrivateKey: vi.fn().mockResolvedValue(true)
+  }; }),
   AuditFsProjection: vi.fn().mockImplementation(function() { return {
     persist: vi.fn().mockResolvedValue(undefined),
     readLatest: vi.fn().mockResolvedValue(null),
@@ -827,7 +828,7 @@ describe('DependencyInjectionService', () => {
       expect(identityAdapter.getActor).toBeDefined();
 
       // Verify KeyProvider was instantiated
-      expect(KeyProvider.FsKeyProvider).toHaveBeenCalled();
+      expect(corefs.FsKeyProvider).toHaveBeenCalled();
 
       // Verify EventBus was instantiated
       expect(EventBus.EventBus).toHaveBeenCalled();

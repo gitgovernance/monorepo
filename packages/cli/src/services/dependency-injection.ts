@@ -1,7 +1,7 @@
 import * as path from 'path';
 import * as os from 'os';
 import { Adapters, Config, Session, EventBus, Lint, Git, SourceAuditor, FindingDetector, KeyProvider, RecordProjection, RecordMetrics, AuditOrchestrator, PolicyEvaluator, IdentityModule, RecordSigner, getCurrentActor, ActorSelectionRequiredError, ProjectModule, DEFAULT_AGENTS, Redaction } from '@gitgov/core';
-import { FsRecordStore, DEFAULT_ID_ENCODER, FsFileLister, FsProjectInitializer, FsLintModule, FsWorktreeSyncStateModule, GitModule, createAgentRunner, createConfigManager, findProjectRoot, createSessionManager, FsRecordProjection, getWorktreeBasePath, getKeysDir, AuditFsProjection } from '@gitgov/core/fs';
+import { FsRecordStore, DEFAULT_ID_ENCODER, FsFileLister, FsKeyProvider, FsProjectInitializer, FsLintModule, FsWorktreeSyncStateModule, GitModule, createAgentRunner, createConfigManager, findProjectRoot, createSessionManager, FsRecordProjection, getWorktreeBasePath, getKeysDir, AuditFsProjection } from '@gitgov/core/fs';
 import type { IFsLintModule } from '@gitgov/core/fs';
 import type {
   GitGovTaskRecord, GitGovCycleRecord, GitGovFeedbackRecord, GitGovExecutionRecord, GitGovActorRecord, GitGovAgentRecord,
@@ -288,7 +288,7 @@ export class DependencyInjectionService {
       const eventBus = new EventBus.EventBus();
 
       // Create KeyProvider for filesystem-based key storage
-      this.keyProvider = new KeyProvider.FsKeyProvider({
+      this.keyProvider = new FsKeyProvider({
         keysDir: getKeysDir(this.projectRoot!)
       });
 
@@ -375,7 +375,7 @@ export class DependencyInjectionService {
 
       const eventBus = new EventBus.EventBus();
 
-      this.keyProvider = new KeyProvider.FsKeyProvider({
+      this.keyProvider = new FsKeyProvider({
         keysDir: getKeysDir(this.projectRoot!)
       });
 
@@ -479,7 +479,7 @@ export class DependencyInjectionService {
 
       // Create EventBus and KeyProvider
       const eventBus = new EventBus.EventBus();
-      const keyProvider = new KeyProvider.FsKeyProvider({
+      const keyProvider = new FsKeyProvider({
         keysDir: getKeysDir(this.projectRoot!)
       });
 
@@ -671,7 +671,7 @@ export class DependencyInjectionService {
 
       // Create EventBus and KeyProvider
       const eventBus = new EventBus.EventBus();
-      const keyProvider = new KeyProvider.FsKeyProvider({
+      const keyProvider = new FsKeyProvider({
         keysDir: getKeysDir(this.projectRoot!)
       });
 
@@ -705,7 +705,7 @@ export class DependencyInjectionService {
       }
 
       const eventBus = new EventBus.EventBus();
-      const keyProvider = new KeyProvider.FsKeyProvider({
+      const keyProvider = new FsKeyProvider({
         keysDir: getKeysDir(this.projectRoot!)
       });
 
@@ -877,7 +877,7 @@ export class DependencyInjectionService {
       const identityModule = await this.getIdentityModule();
       const lintModule = await this.getLintModule();
 
-      this.keyProvider = this.keyProvider ?? new KeyProvider.FsKeyProvider({
+      this.keyProvider = this.keyProvider ?? new FsKeyProvider({
         keysDir: getKeysDir(this.projectRoot!)
       });
       const signer = new RecordSigner({ keyProvider: this.keyProvider });

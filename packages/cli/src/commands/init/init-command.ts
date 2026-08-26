@@ -1,5 +1,6 @@
 import type { ProjectModule } from '@gitgov/core';
-import { SyncState, discoverInstalledAgents, DEFAULT_AGENTS } from '@gitgov/core';
+import { SyncState, DEFAULT_AGENTS } from '@gitgov/core';
+import { discoverInstalledAgents } from '@gitgov/core/fs';
 import { DependencyInjectionService } from '../../services/dependency-injection';
 
 import * as pathUtils from 'path';
