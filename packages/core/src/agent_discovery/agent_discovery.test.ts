@@ -1,86 +1,17 @@
 /**
  * Agent Discovery Module Tests
  *
- * Spec: agent_discovery_module.md (DISC-A1..C3)
- * Tests written BEFORE code (TDD).
+ * Spec: agent_discovery_module.md (DISC-B1..B2, C1..C3)
+ * All EARS prefixes map to agent_discovery_module.md §4.2 and §4.3.
+ *
+ * This file covers the PURE half of the module. It imports nothing from `node:fs` on
+ * purpose: DISC-A1..A3 (filesystem scanning) live in fs/fs_agent_discovery.test.ts.
  */
 
-import * as fs from 'node:fs';
-import * as path from 'node:path';
-import * as os from 'node:os';
-import { discoverInstalledAgents, mergeAgentSources, packageToAgentRecord } from './agent_discovery';
+import { mergeAgentSources, packageToAgentRecord } from './agent_discovery';
 import type { AgentRecord } from '../record_types/generated/agent_record';
 
-function createTmpDir(): string {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'disc-test-'));
-}
-
-function writePackageJson(dir: string, pkg: Record<string, unknown>): void {
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify(pkg, null, 2));
-}
-
 describe('Agent Discovery (agent_discovery_module.md)', () => {
-
-  describe('4.1. Package Scanning (DISC-A1 to A3)', () => {
-
-    it('[DISC-A1] should discover agents from node_modules/@gitgov/agent-*', () => {
-      const root = createTmpDir();
-      const nmGitgov = path.join(root, 'node_modules', '@gitgov');
-
-      writePackageJson(path.join(nmGitgov, 'agent-security-audit'), {
-        name: '@gitgov/agent-security-audit',
-        gitgov: { agent: { purpose: 'audit', function: 'runAgent', categories: ['pii-email'] } },
-      });
-
-      writePackageJson(path.join(nmGitgov, 'agent-semgrep'), {
-        name: '@gitgov/agent-semgrep',
-        gitgov: { agent: { purpose: 'audit', function: 'runAgent', categories: ['security-vulnerability'] } },
-      });
-
-      const result = discoverInstalledAgents(root);
-
-      expect(result).toHaveLength(2);
-      expect(result.map(r => r.id).sort()).toEqual([
-        'agent:security-audit',
-        'agent:semgrep',
-      ]);
-
-      fs.rmSync(root, { recursive: true });
-    });
-
-    it('[DISC-A2] should return empty array when node_modules does not exist', () => {
-      const root = createTmpDir();
-      const result = discoverInstalledAgents(root);
-      expect(result).toEqual([]);
-      fs.rmSync(root, { recursive: true });
-    });
-
-    it('[DISC-A3] should skip packages without gitgov.agent field', () => {
-      const root = createTmpDir();
-      const nmGitgov = path.join(root, 'node_modules', '@gitgov');
-
-      writePackageJson(path.join(nmGitgov, 'agent-valid'), {
-        name: '@gitgov/agent-valid',
-        gitgov: { agent: { purpose: 'audit', function: 'runAgent' } },
-      });
-
-      writePackageJson(path.join(nmGitgov, 'agent-no-gitgov'), {
-        name: '@gitgov/agent-no-gitgov',
-      });
-
-      writePackageJson(path.join(nmGitgov, 'core'), {
-        name: '@gitgov/core',
-      });
-
-      const result = discoverInstalledAgents(root);
-
-      expect(result).toHaveLength(1);
-      expect(result[0]!.id).toBe('agent:valid');
-
-      fs.rmSync(root, { recursive: true });
-    });
-  });
 
   describe('4.2. Record Mapping (DISC-B1 to B2)', () => {
 

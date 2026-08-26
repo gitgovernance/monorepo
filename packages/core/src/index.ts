@@ -224,4 +224,7 @@ export { DEFAULT_GATE_MARKER } from "./ci_reporter";
 export type { ICiReporter, PrContext, RepoContext, CheckInfo } from "./ci_reporter";
 
 // Agent Discovery
-export { discoverInstalledAgents } from "./agent_discovery/index";
+export { mergeAgentSources, packageToAgentRecord } from "./agent_discovery/index";
+export type { AgentPackageJson } from "./agent_discovery/index";
+// NOTE: `discoverInstalledAgents` moved to @gitgov/core/fs — it reads the filesystem.
+// See agent_discovery/index.ts and [EARS-CI02].

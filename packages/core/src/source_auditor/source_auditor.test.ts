@@ -3,7 +3,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 import { SourceAuditorModule } from "./source_auditor";
-import { FsFileLister } from "../file_lister";
+import { FsFileLister } from "../file_lister/fs";
 import type { FindingDetectorModule } from "../finding_detector";
 import type { Finding } from "../finding_detector/types";
 import { createFinding as coreCreateFinding } from "../audit/types";

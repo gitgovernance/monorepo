@@ -65,6 +65,9 @@ export { FsWorktreeSyncStateModule } from '../../sync_state/fs_worktree';
 // FsWatcherStateModule (filesystem-based .gitgov/ watcher)
 export { FsWatcherStateModule } from '../../watcher_state/fs';
 
+// AgentDiscovery (scans node_modules/@gitgov/agent-* from disk) — DISC-A1..A3
+export { discoverInstalledAgents } from '../../agent_discovery/fs';
+
 // AgentRunner (filesystem-based agent execution)
 export { FsAgentRunner, createAgentRunner } from '../../agent_runner/fs';
 export type { FsAgentRunnerDependencies } from '../../agent_runner/fs';
