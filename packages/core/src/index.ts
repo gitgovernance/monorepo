@@ -99,8 +99,10 @@ export type { FileLister as IFileLister, FileListOptions, FileStats } from "./fi
 export { FileListerError } from "./file_lister/index";
 
 // LLM provider abstraction (G18)
-export { resolveLlmProvider } from "./llm/index";
+export { AnthropicLlmProvider } from "./llm/index";
 export type { ILlmProvider, LlmMessage, LlmTool, LlmResponse, LlmProviderConfig } from "./llm/index";
+// NOTE: `resolveLlmProvider` and `CliLlmProvider` moved to @gitgov/core/fs — the resolver
+// constructs CliLlmProvider, which reads node:child_process. See llm/index.ts.
 
 // ─── Audit product types (canonical, from @gitgov/core/audit) ────────────────
 export type {
@@ -177,7 +179,9 @@ export type {
   Signature,
   EmbeddedMetadataRecord,
 } from "./record_types/index";
-export * as DiagramGenerator from "./diagram_generator/index";
+// DiagramGenerator removed — the module and the `gitgov diagram` command were deleted.
+// It read the filesystem directly (fs/promises + path over .gitgov/cycles and /tasks),
+// which put `fs` and `path` in the root bundle and made EARS-CI02 fail.
 
 // Audit modules
 export * as FindingDetector from "./finding_detector/index";

@@ -1,3 +1,13 @@
+/**
+ * CLI provider tests — [LLM-C1] to [LLM-C4]
+ *
+ * Spec: fs_llm_provider_module.md §4.2
+ *
+ * These EARS moved here from `src/llm/cli/cli_llm_provider.test.ts` when the module was
+ * split. Their ids and their asserts did not change: only the subpath the code ships
+ * from (module_designer §5.5 — normalizing is not consolidating).
+ */
+
 import { execSync, exec } from 'node:child_process';
 import { CliLlmProvider } from './cli_llm_provider';
 
@@ -10,7 +20,7 @@ const mockExecSync = execSync as unknown as jest.Mock;
 const mockExec = exec as unknown as jest.Mock;
 
 describe('CliLlmProvider', () => {
-  describe('4.3. CLI Provider (LLM-C1 to LLM-C4)', () => {
+  describe('4.2. CLI Provider (LLM-C1 to LLM-C4)', () => {
     beforeEach(() => {
       mockExecSync.mockReset();
       mockExec.mockReset();
@@ -125,7 +135,7 @@ describe('CliLlmProvider', () => {
     });
   });
 
-  describe('4.3b. queryAsync (LLM-C2 async)', () => {
+  describe('4.2. CLI Provider — queryAsync (LLM-C2)', () => {
     beforeEach(() => {
       mockExecSync.mockReset();
       mockExec.mockReset();

@@ -82,3 +82,10 @@ export type { FsRecordProjectionOptions } from '../../record_projection/fs';
 // AuditFsProjection (filesystem-based audit result persistence)
 export { AuditFsProjection } from '../../audit/fs';
 export type { IAuditFsProjection, AuditFsProjectionOptions } from '../../audit/fs';
+
+// LLM providers — Node-only half of G18 (spec: fs_llm_provider_module.md)
+// `resolveLlmProvider` is here rather than in the root barrel because it constructs
+// `CliLlmProvider` with a static import, which reaches node:child_process (LLM-C1..C4).
+// The interface, its types and `AnthropicLlmProvider` stay in @gitgov/core.
+export { resolveLlmProvider, CliLlmProvider } from '../../llm/fs';
+export type { CliLlmProviderConfig, AgentJsonResult } from '../../llm/fs';
