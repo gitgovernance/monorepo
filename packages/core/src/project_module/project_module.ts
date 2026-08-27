@@ -1,7 +1,11 @@
 import type { ProjectModuleDeps, ProjectInitOptions, ProjectInitResult, AddActorInput, AddActorResult } from './project_module.types';
 import { AddActorError } from './project_module.types';
-// [PROJ-B6] Creation-time engine validation (agent_runner EARS-M1)
-import { validateAgentEngine } from '../agent_runner/engine_validator';
+// [PROJ-B6] Creation-time engine validation (agent_runner ARUN-M1)
+// NOTE: `validateAgentEngine` is NOT imported here on purpose. It reaches
+// `backends/local_backend.ts`, which imports `node:path` and `node:module`, so importing
+// it dragged both into the @gitgov/core root bundle — the last two violations reported by
+// the EARS-CI02 guardrail. The capability now arrives as `deps.engineValidator`
+// (IEngineValidator), with its Node-only implementation coming from @gitgov/core/fs.
 
 // [PROJ-C2b] Deterministic root cycle ID. The root cycle is unique per project, so its ID
 // must be stable across inits (not Date.now()). Two inits of the same repo then produce a
@@ -115,14 +119,19 @@ export class ProjectModule {
       if (this.deps.agentAdapter && this.deps.defaultAgents?.length) {
         for (const agentConfig of this.deps.defaultAgents) {
           try {
-            // [PROJ-B6] Creation-time engine validation (EARS-M1): the agent is still
+            // [PROJ-B6] Creation-time engine validation (ARUN-M1): the agent is still
             // registered (valid declaration) but the user learns NOW that it won't run —
             // not 3 steps later at audit time. Non-fatal. Resolution anchors at cwd
             // (where init runs) — same anchor the runner uses for npm packages.
             try {
-              const validation = await validateAgentEngine(agentConfig.engine, process.cwd());
-              if (!validation.resolvable) {
-                agentWarnings.push(`${agentConfig.agentId}: registered but not runnable — ${validation.reason}`);
+              // No validator injected → no validation. Deliberate and covered by its own
+              // test: PROJ-B6 degrades silently, so the absence is pinned down rather than
+              // discovered later.
+              if (this.deps.engineValidator) {
+                const validation = await this.deps.engineValidator.validate(agentConfig.engine, process.cwd());
+                if (!validation.resolvable) {
+                  agentWarnings.push(`${agentConfig.agentId}: registered but not runnable — ${validation.reason}`);
+                }
               }
             } catch {
               // Validation itself must never block registration

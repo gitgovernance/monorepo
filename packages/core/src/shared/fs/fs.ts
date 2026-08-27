@@ -71,9 +71,12 @@ export { discoverInstalledAgents } from '../../agent_discovery/fs';
 // AgentRunner (filesystem-based agent execution)
 export { FsAgentRunner, createAgentRunner } from '../../agent_runner/fs';
 export type { FsAgentRunnerDependencies } from '../../agent_runner/fs';
-// [EARS-M1] Creation-time engine validation (agent new fail-fast EARS-E9, init warnings PROJ-B6)
-export { validateAgentEngine } from '../../agent_runner/engine_validator';
-export type { EngineValidationResult } from '../../agent_runner/engine_validator';
+// [ARUN-M2] Creation-time engine resolution (agent new fail-fast EARS-E9, init warnings PROJ-B6).
+// The IEngineValidator contract (ARUN-M1) ships from @gitgov/core — only the resolution,
+// which reaches node:path and node:module, lives here.
+export { FsEngineValidator } from '../../agent_runner/fs/fs_engine_validator';
+// `EngineValidationResult` is NOT re-exported here: it is part of the IEngineValidator
+// contract and ships from @gitgov/core, where consumers get it alongside the interface.
 
 // RecordProjection (filesystem-based index.json persistence)
 export { FsRecordProjection } from '../../record_projection/fs';

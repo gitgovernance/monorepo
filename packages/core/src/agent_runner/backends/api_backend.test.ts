@@ -3,7 +3,7 @@
  *
  * Tests for engine.type: "api" execution via HTTP.
  *
- * Reference: agent_runner_module.md §4.4 (EARS-D1 to EARS-D5)
+ * Reference: agent_runner_module.md §4.4 (ARUN-D1 to ARUN-D5)
  * Reference: agent_protocol.md §5.1.2
  */
 
@@ -55,8 +55,8 @@ describe("ApiBackend", () => {
     delete process.env["TEST_BEARER_TOKEN"];
   });
 
-  describe("4.4. API Backend (EARS-D1 to EARS-D5)", () => {
-    describe("[EARS-D1] should prepare HTTP request for API engine", () => {
+  describe("4.4. API Backend (ARUN-D1 to ARUN-D5)", () => {
+    describe("[ARUN-D1] should prepare HTTP request for API engine", () => {
       it("should use POST method by default", async () => {
         mockFetch.mockResolvedValue(createMockResponse({ data: "ok" }));
 
@@ -142,7 +142,7 @@ describe("ApiBackend", () => {
       });
     });
 
-    describe("[EARS-D2] should read auth token from environment", () => {
+    describe("[ARUN-D2] should read auth token from environment", () => {
       it("should read bearer token from env var via secret_key", async () => {
         process.env["TEST_BEARER_TOKEN"] = "my-secret-bearer-token";
         mockFetch.mockResolvedValue(createMockResponse({ data: "ok" }));
@@ -224,7 +224,7 @@ describe("ApiBackend", () => {
       });
     });
 
-    describe("[EARS-D3] should sign request for actor-signature auth", () => {
+    describe("[ARUN-D3] should sign request for actor-signature auth", () => {
       it("should add X-GitGov-Signature header using KeyProvider", async () => {
         mockFetch.mockResolvedValue(createMockResponse({ data: "ok" }));
 
@@ -274,7 +274,7 @@ describe("ApiBackend", () => {
       });
     });
 
-    describe("[EARS-D4] should capture response body as AgentOutput", () => {
+    describe("[ARUN-D4] should capture response body as AgentOutput", () => {
       it("should parse JSON response and return as AgentOutput", async () => {
         const responseBody = {
           data: { result: "success" },
@@ -349,7 +349,7 @@ describe("ApiBackend", () => {
       });
     });
 
-    describe("[EARS-D5] should throw ApiBackendError on non-2xx response", () => {
+    describe("[ARUN-D5] should throw ApiBackendError on non-2xx response", () => {
       it("should throw error on 400 Bad Request", async () => {
         mockFetch.mockResolvedValue(
           createMockResponse({ error: "Invalid input" }, 400, "Bad Request")

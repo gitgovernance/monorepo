@@ -3,7 +3,7 @@
  *
  * Tests for engine.type: "mcp" execution via Model Context Protocol.
  *
- * Reference: agent_runner_module.md §4.5 (EARS-E1 to EARS-E4)
+ * Reference: agent_runner_module.md §4.5 (ARUN-E1 to ARUN-E4)
  * Reference: agent_protocol.md §5.1.3
  */
 
@@ -60,8 +60,8 @@ describe("McpBackend", () => {
     jest.clearAllMocks();
   });
 
-  describe("4.5. MCP Backend (EARS-E1 to EARS-E4)", () => {
-    describe("[EARS-E1] should connect to MCP server at engine.url", () => {
+  describe("4.5. MCP Backend (ARUN-E1 to ARUN-E4)", () => {
+    describe("[ARUN-E1] should connect to MCP server at engine.url", () => {
       it("should make POST request to MCP server URL", async () => {
         mockFetch.mockResolvedValue(
           createMcpResponse({ data: "success" })
@@ -121,7 +121,7 @@ describe("McpBackend", () => {
       });
     });
 
-    describe("[EARS-E2] should invoke tool and capture result as AgentOutput", () => {
+    describe("[ARUN-E2] should invoke tool and capture result as AgentOutput", () => {
       it("should use toolOverride as highest priority", async () => {
         mockFetch.mockResolvedValue(
           createMcpResponse({ data: "from override" })
@@ -186,7 +186,7 @@ describe("McpBackend", () => {
       });
     });
 
-    describe("[EARS-E3] should map tool result to AgentOutput.data", () => {
+    describe("[ARUN-E3] should map tool result to AgentOutput.data", () => {
       it("should map result with data field", async () => {
         const mcpResult = {
           data: { issues: [1, 2, 3] },
@@ -275,7 +275,7 @@ describe("McpBackend", () => {
       });
     });
 
-    describe("[EARS-E4] should throw McpBackendError on connection/tool failure", () => {
+    describe("[ARUN-E4] should throw McpBackendError on connection/tool failure", () => {
       it("should throw on HTTP connection failure", async () => {
         mockFetch.mockResolvedValue(
           createHttpErrorResponse(503, "Service Unavailable")

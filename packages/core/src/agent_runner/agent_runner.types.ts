@@ -197,3 +197,19 @@ export type AgentRunnerEvent =
         executionRecordId: string;
       };
     };
+
+/**
+ * Result of creation-time engine validation. Structured (never a throw) so the caller
+ * decides between failing and warning: `agent new` fails fast (EARS-E9), `init` warns
+ * non-fatally (PROJ-B6).
+ *
+ * Lives here rather than next to `IEngineValidator` in `agent_runner.ts`: this module
+ * keeps its Options/Dependencies/Result shapes in `.types.ts` and its interfaces in
+ * `agent_runner.ts`, and the module_designer puts `[Module]Result` in §3.3 Tipos.
+ */
+export type EngineValidationResult = {
+  /** Whether the engine can run as declared */
+  resolvable: boolean;
+  /** Concrete cause when `resolvable` is false */
+  reason?: string;
+};

@@ -117,7 +117,7 @@ export class InitCommand {
         }
       } else {
         this.showSuccessOutput(result, options);
-        // [PROJ-B6] Surface non-runnable agent warnings (engine unresolvable, EARS-M1)
+        // [PROJ-B6] Surface non-runnable agent warnings (engine unresolvable, ARUN-M1)
         if (result.agentWarnings?.length && !options.quiet) {
           console.warn('\n⚠️  Some agents were registered but are not runnable:');
           for (const w of result.agentWarnings) console.warn(`   - ${w}`);

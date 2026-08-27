@@ -1,7 +1,7 @@
 import * as path from 'path';
 import * as os from 'os';
 import { Adapters, Config, Session, EventBus, Lint, Git, SourceAuditor, FindingDetector, KeyProvider, RecordProjection, RecordMetrics, AuditOrchestrator, PolicyEvaluator, IdentityModule, RecordSigner, getCurrentActor, ActorSelectionRequiredError, ProjectModule, DEFAULT_AGENTS, Redaction } from '@gitgov/core';
-import { FsRecordStore, DEFAULT_ID_ENCODER, FsFileLister, FsKeyProvider, FsProjectInitializer, FsLintModule, FsWorktreeSyncStateModule, GitModule, createAgentRunner, createConfigManager, findProjectRoot, createSessionManager, FsRecordProjection, getWorktreeBasePath, getKeysDir, AuditFsProjection } from '@gitgov/core/fs';
+import { FsRecordStore, DEFAULT_ID_ENCODER, FsFileLister, FsKeyProvider, FsProjectInitializer, FsLintModule, FsWorktreeSyncStateModule, FsEngineValidator, GitModule, createAgentRunner, createConfigManager, findProjectRoot, createSessionManager, FsRecordProjection, getWorktreeBasePath, getKeysDir, AuditFsProjection } from '@gitgov/core/fs';
 import type { IFsLintModule } from '@gitgov/core/fs';
 import type {
   GitGovTaskRecord, GitGovCycleRecord, GitGovFeedbackRecord, GitGovExecutionRecord, GitGovActorRecord, GitGovAgentRecord,
@@ -462,6 +462,10 @@ export class DependencyInjectionService {
       identity: identityModule,
       backlog: backlogAdapter,
       defaultAgents: DEFAULT_AGENTS,
+      // [PROJ-B6] ProjectModule no longer imports the validator — importing it pulled
+      // node:path and node:module into the @gitgov/core bundle (EARS-CI02). The CLI runs
+      // on Node, so it supplies the filesystem implementation.
+      engineValidator: new FsEngineValidator(),
     };
     if (agentAdapter) deps.agentAdapter = agentAdapter;
     return new ProjectModule(deps);

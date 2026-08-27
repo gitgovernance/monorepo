@@ -215,8 +215,8 @@ export class AgentCommand extends BaseCommand<RunCommandOptions> {
       // A registered agent must be an agent that runs — not a JSON pointing nowhere
       // (the session-63 phantom-agents bug: 0 findings silently). The catch below
       // formats the error (text/json) and exits 1 — the agent is NOT registered.
-      const { validateAgentEngine } = await import('@gitgov/core/fs');
-      const validation = await validateAgentEngine(engine, process.cwd());
+      const { FsEngineValidator } = await import('@gitgov/core/fs');
+      const validation = await new FsEngineValidator().validate(engine, process.cwd());
       if (!validation.resolvable) {
         throw new Error(
           `Agent engine is not runnable: ${validation.reason}. ` +

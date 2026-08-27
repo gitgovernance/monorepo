@@ -2,10 +2,10 @@
  * Backend for executing agents via custom protocol handlers (engine.type: "custom").
  *
  * EARS Coverage:
- * - [EARS-F1] Lookup handler in ProtocolHandlerRegistry
- * - [EARS-F2] Throw CustomEngineConfigError when protocol missing
- * - [EARS-F3] Throw ProtocolHandlerNotFound when handler not registered
- * - [EARS-F4] Invoke handler with engine and context
+ * - [ARUN-F1] Lookup handler in ProtocolHandlerRegistry
+ * - [ARUN-F2] Throw CustomEngineConfigError when protocol missing
+ * - [ARUN-F3] Throw ProtocolHandlerNotFound when handler not registered
+ * - [ARUN-F4] Invoke handler with engine and context
  *
  * Reference: agent_protocol.md §5.1.4
  */
@@ -19,7 +19,7 @@ import type {
 
 /**
  * Error thrown when custom engine configuration is invalid.
- * [EARS-F2]
+ * [ARUN-F2]
  */
 export class CustomEngineConfigError extends Error {
   constructor(message: string) {
@@ -30,7 +30,7 @@ export class CustomEngineConfigError extends Error {
 
 /**
  * Error thrown when protocol handler is not found in registry.
- * [EARS-F3]
+ * [ARUN-F3]
  */
 export class ProtocolHandlerNotFoundError extends Error {
   public readonly protocol: string;
@@ -60,31 +60,31 @@ export class CustomBackend {
    * @param ctx - Execution context
    * @returns AgentOutput from handler
    *
-   * @throws CustomEngineConfigError - When protocol is not defined [EARS-F2]
-   * @throws ProtocolHandlerNotFoundError - When handler not registered [EARS-F3]
+   * @throws CustomEngineConfigError - When protocol is not defined [ARUN-F2]
+   * @throws ProtocolHandlerNotFoundError - When handler not registered [ARUN-F3]
    */
   async execute(
     engine: CustomEngine,
     ctx: AgentExecutionContext
   ): Promise<AgentOutput> {
-    // [EARS-F2] Validate protocol is defined
+    // [ARUN-F2] Validate protocol is defined
     if (!engine.protocol) {
       throw new CustomEngineConfigError("protocol required for execution");
     }
 
-    // [EARS-F1] Lookup handler in registry
+    // [ARUN-F1] Lookup handler in registry
     if (!this.registry) {
       throw new ProtocolHandlerNotFoundError(engine.protocol);
     }
 
     const handler = this.registry.get(engine.protocol);
 
-    // [EARS-F3] Error if handler not registered
+    // [ARUN-F3] Error if handler not registered
     if (!handler) {
       throw new ProtocolHandlerNotFoundError(engine.protocol);
     }
 
-    // [EARS-F4] Invoke handler with engine and context, capture output
+    // [ARUN-F4] Invoke handler with engine and context, capture output
     const output = await handler(engine, ctx);
 
     return output;

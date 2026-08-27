@@ -3,7 +3,7 @@
  *
  * Tests for engine.type: "custom" execution via protocol handlers.
  *
- * Reference: agent_runner_module.md §4.6 (EARS-F1 to EARS-F4)
+ * Reference: agent_runner_module.md §4.6 (ARUN-F1 to ARUN-F4)
  * Reference: agent_protocol.md §5.1.4
  */
 
@@ -34,8 +34,8 @@ describe("CustomBackend", () => {
     };
   }
 
-  describe("4.6. Custom Backend (EARS-F1 to EARS-F4)", () => {
-    describe("[EARS-F1] should lookup handler in ProtocolHandlerRegistry", () => {
+  describe("4.6. Custom Backend (ARUN-F1 to ARUN-F4)", () => {
+    describe("[ARUN-F1] should lookup handler in ProtocolHandlerRegistry", () => {
       it("should lookup handler by protocol name", async () => {
         const registry = new DefaultProtocolHandlerRegistry();
         const mockHandler = jest.fn().mockResolvedValue({ message: "success" });
@@ -55,7 +55,7 @@ describe("CustomBackend", () => {
       });
     });
 
-    describe("[EARS-F2] should throw CustomEngineConfigError when protocol missing", () => {
+    describe("[ARUN-F2] should throw CustomEngineConfigError when protocol missing", () => {
       it("should throw when protocol is undefined", async () => {
         const registry = new DefaultProtocolHandlerRegistry();
         const backend = new CustomBackend(registry);
@@ -88,7 +88,7 @@ describe("CustomBackend", () => {
       });
     });
 
-    describe("[EARS-F3] should throw ProtocolHandlerNotFound when missing", () => {
+    describe("[ARUN-F3] should throw ProtocolHandlerNotFound when missing", () => {
       it("should throw when registry has no handler for protocol", async () => {
         const registry = new DefaultProtocolHandlerRegistry();
         // Don't register any handler
@@ -121,7 +121,7 @@ describe("CustomBackend", () => {
       });
     });
 
-    describe("[EARS-F4] should invoke handler with engine and context", () => {
+    describe("[ARUN-F4] should invoke handler with engine and context", () => {
       it("should pass engine and ctx to handler", async () => {
         const registry = new DefaultProtocolHandlerRegistry();
         const mockHandler = jest.fn().mockResolvedValue({

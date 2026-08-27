@@ -11,6 +11,10 @@
 
 import { ProjectModule } from './project_module';
 import type { ProjectModuleDeps } from './project_module.types';
+// Node-only implementation of IEngineValidator. A test file may import from the fs
+// subpath even though ProjectModule itself must not: EARS-CI02 measures dist/src/index.js,
+// and tests never reach the bundle.
+import { FsEngineValidator } from '../agent_runner/fs/fs_engine_validator';
 import { DEFAULT_STATE_BRANCH } from '../sync_state/fs_worktree/fs_worktree_sync_state.types';
 import type { IProjectInitializer } from '../project_initializer';
 import { IdentityModule } from '../identity/identity_module';
@@ -494,6 +498,9 @@ describe('ProjectModule', () => {
       const { deps } = createRealDeps();
       const mockAgentAdapter = createMockAgentAdapter();
       deps.agentAdapter = mockAgentAdapter;
+      // The validator is INJECTED now — ProjectModule no longer imports it. Importing it
+      // dragged `path` and `node:module` into the @gitgov/core bundle (EARS-CI02).
+      deps.engineValidator = new FsEngineValidator();
       // The session-63 phantom-agent case: npm entrypoint not installed anywhere
       deps.defaultAgents = [{
         packageName: '@gitgov/agent-does-not-exist',
@@ -515,6 +522,37 @@ describe('ProjectModule', () => {
       expect(result.agentWarnings).toHaveLength(1);
       expect(result.agentWarnings![0]).toContain('agent:phantom');
       expect(result.agentWarnings![0]).toContain('not runnable');
+    });
+
+    it('[PROJ-B6] should skip engine validation when no engineValidator is injected', async () => {
+      // `engineValidator` is OPTIONAL, and that has a cost worth pinning down: without it,
+      // PROJ-B6 silently stops validating and nothing turns red. This test makes the
+      // degraded path explicit instead of leaving it to be discovered.
+      //
+      // It is also the negative control for the test above: same unresolvable engine, the
+      // only difference is the injection. If that assertion ever passed for a reason other
+      // than the validator actually running, this one would pass too — and it must not.
+      const { deps } = createRealDeps();
+      const mockAgentAdapter = createMockAgentAdapter();
+      deps.agentAdapter = mockAgentAdapter;
+      delete deps.engineValidator; // `exactOptionalPropertyTypes` — absent, not undefined
+      deps.defaultAgents = [{
+        packageName: '@gitgov/agent-does-not-exist',
+        agentId: 'agent:phantom',
+        displayName: 'Phantom Agent',
+        engine: { type: 'local' as const, entrypoint: '@gitgov/agent-does-not-exist', function: 'runAgent' },
+        purpose: 'audit',
+        triggers: [],
+        metadata: {},
+      }];
+      const pm = new ProjectModule(deps);
+
+      const result = await pm.initializeProject({ name: 'test-project', login: 'camilo', stateBranch: DEFAULT_STATE_BRANCH });
+
+      // The agent is still registered — validation was never the gate.
+      expect(mockAgentAdapter.buildSignedAgentRecord).toHaveBeenCalledTimes(1);
+      // But nobody was warned, because nobody was there to check.
+      expect(result.agentWarnings ?? []).toHaveLength(0);
     });
   });
 

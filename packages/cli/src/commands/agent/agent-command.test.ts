@@ -22,14 +22,20 @@ vi.mock('@gitgov/core', () => ({
   }
 }));
 
-// Mock @gitgov/core/fs — DEFAULT_ID_ENCODER + validateAgentEngine used by executeNew
+// Mock @gitgov/core/fs — DEFAULT_ID_ENCODER + FsEngineValidator used by executeNew.
+// The free function `validateAgentEngine` was replaced by the IEngineValidator contract
+// and its FsEngineValidator implementation. If this mock still exported the old name, the
+// import in agent-command would resolve to undefined, the surrounding try/catch would
+// swallow the TypeError, and [EARS-E9] would stay green while validating nothing.
 const { mockValidateAgentEngine } = vi.hoisted(() => ({
   // [EARS-E9] Default: engines resolve — individual tests override to simulate phantom agents
   mockValidateAgentEngine: vi.fn().mockResolvedValue({ resolvable: true }),
 }));
 vi.mock('@gitgov/core/fs', () => ({
   DEFAULT_ID_ENCODER: { encode: (id: string) => id.replace(/:/g, '_'), decode: (id: string) => id.replace(/_/g, ':') },
-  validateAgentEngine: mockValidateAgentEngine,
+  // A real class, not `vi.fn().mockImplementation(() => ({...}))`: the command calls
+  // `new FsEngineValidator()`, and an arrow function is not a constructor.
+  FsEngineValidator: class { validate = mockValidateAgentEngine; },
 }));
 
 // Mock DependencyInjectionService

@@ -1,6 +1,8 @@
 import type { AgentRecord } from "../record_types";
 import type {
   CustomEngine,
+  Engine,
+  EngineValidationResult,
   LocalEngine,
   AgentExecutionContext,
   RunOptions,
@@ -62,3 +64,24 @@ export type RuntimeHandler = (
   engine: LocalEngine,
   ctx: AgentExecutionContext
 ) => Promise<AgentOutput>;
+
+/**
+ * [ARUN-M1] Contract for validating that an agent engine is EXECUTABLE, not just
+ * well-formed — the creation-time counterpart of the audit-time detection
+ * (AORCH-G1/G2). A registered agent should be an agent that runs, not a JSON
+ * pointing nowhere.
+ *
+ * The CONTRACT lives here, in the pure barrel, because consumers only need the type:
+ * `ProjectModule` (PROJ-B6) and `agent new` (EARS-E9) never touch the filesystem
+ * themselves. The only implementation that exists today does — it resolves entrypoints
+ * with `require.resolve` and imports them — so it ships from `@gitgov/core/fs` as
+ * `FsEngineValidator` (ARUN-M2).
+ *
+ * That split is not stylistic: while `ProjectModule` imported the concrete function, it
+ * dragged `backends/local_backend.ts` — and with it `path` and `node:module` — into the
+ * `@gitgov/core` bundle. Those were the last two violations reported by EARS-CI02.
+ */
+export interface IEngineValidator {
+  /** Validates `engine` from `projectRoot`. NEVER throws. */
+  validate(engine: Engine, projectRoot: string): Promise<EngineValidationResult>;
+}

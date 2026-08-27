@@ -83,29 +83,29 @@ export class FsAgentRunner implements IAgentRunner {
    */
   async runOnce(opts: RunOptions): Promise<AgentResponse> {
     const startedAt = new Date().toISOString();
-    const runId = randomUUID(); // [EARS-C3]
+    const runId = randomUUID(); // [ARUN-C3]
     let output: AgentOutput | undefined;
     let error: string | undefined;
     let status: "success" | "error" = "success";
 
-    // [EARS-A1, A2, A3] Load AgentRecord
+    // [ARUN-A1, A2, A3] Load AgentRecord
     const agent = await this.loadAgent(opts.agentId);
 
-    // [EARS-A3] Extract engine from payload
+    // [ARUN-A3] Extract engine from payload
     const engine = agent.engine;
     const engineType = engine.type as string;
 
-    // [EARS-G1] Validate engine.type
+    // [ARUN-G1] Validate engine.type
     if (!VALID_ENGINE_TYPES.includes(engineType as typeof VALID_ENGINE_TYPES[number])) {
       throw new UnsupportedEngineTypeError(engineType);
     }
 
-    // [EARS-G2] Validate url for api/mcp
+    // [ARUN-G2] Validate url for api/mcp
     if ((engineType === "api" || engineType === "mcp") && !("url" in engine)) {
       throw new EngineConfigError(engineType, "url");
     }
 
-    // [EARS-G3] Validate KeyProvider for actor-signature auth
+    // [ARUN-G3] Validate KeyProvider for actor-signature auth
     if (engineType === "api" || engineType === "mcp") {
       const engineWithAuth = engine as { auth?: { type?: string } };
       if (
@@ -119,17 +119,17 @@ export class FsAgentRunner implements IAgentRunner {
       }
     }
 
-    // [EARS-C1, C2] Build context
+    // [ARUN-C1, C2] Build context
     const ctx: AgentExecutionContext = {
       agentId: opts.agentId,
-      actorId: opts.actorId ?? opts.agentId, // [EARS-C2]
+      actorId: opts.actorId ?? opts.agentId, // [ARUN-C2]
       taskId: opts.taskId,
       runId,
       input: opts.input,
       projectRoot: this.projectRoot,
     };
 
-    // [EARS-I1] Emit agent:started event
+    // [ARUN-I1] Emit agent:started event
     this.emitEvent({
       type: "agent:started",
       payload: { runId, agentId: opts.agentId, taskId: opts.taskId, startedAt },
@@ -168,7 +168,7 @@ export class FsAgentRunner implements IAgentRunner {
     // Generate a placeholder executionRecordId for downstream use (orchestrator, findings).
     const executionRecordId = generateExecutionId(opts.agentId, Math.floor(Date.now() / 1000));
 
-    // [EARS-I2, I3] Emit completion event
+    // [ARUN-I2, I3] Emit completion event
     if (status === "success") {
       this.emitEvent({
         type: "agent:completed",
@@ -196,7 +196,7 @@ export class FsAgentRunner implements IAgentRunner {
       });
     }
 
-    // [EARS-J1, J2, J3] Return AgentResponse
+    // [ARUN-J1, J2, J3] Return AgentResponse
     const response: AgentResponse = {
       runId,
       agentId: opts.agentId,
@@ -207,12 +207,12 @@ export class FsAgentRunner implements IAgentRunner {
       durationMs,
     };
 
-    // [EARS-J2] Include output only on success
+    // [ARUN-J2] Include output only on success
     if (status === "success" && output) {
       response.output = output;
     }
 
-    // [EARS-J3] Include error only on failure
+    // [ARUN-J3] Include error only on failure
     if (status === "error" && error) {
       response.error = error;
     }
@@ -221,7 +221,7 @@ export class FsAgentRunner implements IAgentRunner {
   }
 
   /**
-   * [EARS-A1, A2] Loads AgentRecord from .gitgov/agents/ via FsRecordStore.
+   * [ARUN-A1, A2] Loads AgentRecord from .gitgov/agents/ via FsRecordStore.
    * Uses DEFAULT_ID_ENCODER for consistent naming (colon → underscore).
    */
   private async loadAgent(agentId: string): Promise<AgentRecord> {
@@ -238,7 +238,7 @@ export class FsAgentRunner implements IAgentRunner {
   }
 
   /**
-   * [EARS-I4] Emits event via EventBus if available.
+   * [ARUN-I4] Emits event via EventBus if available.
    * Works silently without EventBus.
    */
   private emitEvent(event: AgentRunnerEvent): void {
@@ -254,7 +254,7 @@ export class FsAgentRunner implements IAgentRunner {
 }
 
 /**
- * [EARS-K1] Factory function for FsAgentRunner.
+ * [ARUN-K1] Factory function for FsAgentRunner.
  *
  * Creates a filesystem-based agent runner with injected dependencies.
  * Recommended for dependency injection scenarios.

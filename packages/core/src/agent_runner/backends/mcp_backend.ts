@@ -2,10 +2,10 @@
  * Backend for executing agents via Model Context Protocol (engine.type: "mcp").
  *
  * EARS Coverage:
- * - [EARS-E1] Connect to MCP server at engine.url
- * - [EARS-E2] Invoke tool and capture result as AgentOutput
- * - [EARS-E3] Map tool result to AgentOutput.data
- * - [EARS-E4] Throw McpBackendError on connection/tool failure
+ * - [ARUN-E1] Connect to MCP server at engine.url
+ * - [ARUN-E2] Invoke tool and capture result as AgentOutput
+ * - [ARUN-E3] Map tool result to AgentOutput.data
+ * - [ARUN-E4] Throw McpBackendError on connection/tool failure
  *
  * Reference: agent_protocol.md §5.1.3
  *
@@ -25,7 +25,7 @@ import { createHash } from "crypto";
 
 /**
  * Error thrown when MCP backend operation fails.
- * [EARS-E4]
+ * [ARUN-E4]
  */
 export class McpBackendError extends Error {
   public readonly code: string | undefined;
@@ -85,17 +85,17 @@ export class McpBackend {
    * @param toolOverride - Optional tool override from RunOptions.tool
    * @returns AgentOutput with tool result
    *
-   * @throws McpBackendError - When connection or tool invocation fails [EARS-E4]
+   * @throws McpBackendError - When connection or tool invocation fails [ARUN-E4]
    */
   async execute(
     engine: McpEngine,
     ctx: AgentExecutionContext,
     toolOverride?: string
   ): Promise<AgentOutput> {
-    // [EARS-E2] Determine tool to invoke (priority order)
+    // [ARUN-E2] Determine tool to invoke (priority order)
     const tool = this.resolveToolName(engine, ctx, toolOverride);
 
-    // [EARS-E1] Prepare MCP connection/request
+    // [ARUN-E1] Prepare MCP connection/request
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
     };
@@ -123,7 +123,7 @@ export class McpBackend {
     };
 
     try {
-      // [EARS-E1] Connect to MCP server via HTTP
+      // [ARUN-E1] Connect to MCP server via HTTP
       const response = await fetch(engine.url, {
         method: "POST",
         headers,
@@ -131,7 +131,7 @@ export class McpBackend {
       });
 
       if (!response.ok) {
-        // [EARS-E4] Connection failure
+        // [ARUN-E4] Connection failure
         throw new McpBackendError(
           `HTTP ${response.status}: ${response.statusText}`,
           "CONNECTION_FAILED"
@@ -140,7 +140,7 @@ export class McpBackend {
 
       const mcpResponse: McpResponse = await response.json();
 
-      // [EARS-E4] Check for MCP error response
+      // [ARUN-E4] Check for MCP error response
       if (mcpResponse.error) {
         throw new McpBackendError(
           mcpResponse.error.message,
@@ -148,7 +148,7 @@ export class McpBackend {
         );
       }
 
-      // [EARS-E3] Map tool result to AgentOutput.data
+      // [ARUN-E3] Map tool result to AgentOutput.data
       return this.mapResultToOutput(mcpResponse.result);
     } catch (error) {
       // Re-throw McpBackendError as-is
@@ -156,7 +156,7 @@ export class McpBackend {
         throw error;
       }
 
-      // [EARS-E4] Wrap other errors
+      // [ARUN-E4] Wrap other errors
       throw new McpBackendError(
         error instanceof Error ? error.message : "Unknown error",
         "EXECUTION_FAILED"
@@ -165,7 +165,7 @@ export class McpBackend {
   }
 
   /**
-   * [EARS-E2] Resolve tool name following priority order:
+   * [ARUN-E2] Resolve tool name following priority order:
    * 1. toolOverride (from RunOptions.tool)
    * 2. engine.tool (from AgentRecord)
    * 3. agentId without "agent:" prefix
@@ -256,7 +256,7 @@ export class McpBackend {
   }
 
   /**
-   * [EARS-E3] Map MCP tool result to AgentOutput.
+   * [ARUN-E3] Map MCP tool result to AgentOutput.
    */
   private mapResultToOutput(result: unknown): AgentOutput {
     if (result === null || result === undefined) {
