@@ -57,7 +57,7 @@ describe("ApiBackend", () => {
 
   describe("4.4. API Backend (ARUN-D1 to ARUN-D5)", () => {
     describe("[ARUN-D1] should prepare HTTP request for API engine", () => {
-      it("should use POST method by default", async () => {
+      it("[ARUN-D1] should use POST method by default",async () => {
         mockFetch.mockResolvedValue(createMockResponse({ data: "ok" }));
 
         const backend = new ApiBackend();
@@ -80,7 +80,7 @@ describe("ApiBackend", () => {
         );
       });
 
-      it("should use specified HTTP method", async () => {
+      it("[ARUN-D1] should use specified HTTP method",async () => {
         mockFetch.mockResolvedValue(createMockResponse({ data: "ok" }));
 
         const backend = new ApiBackend();
@@ -99,7 +99,7 @@ describe("ApiBackend", () => {
         );
       });
 
-      it("should include context in request body", async () => {
+      it("[ARUN-D1] should include context in request body",async () => {
         mockFetch.mockResolvedValue(createMockResponse({ data: "ok" }));
 
         const backend = new ApiBackend();
@@ -123,7 +123,7 @@ describe("ApiBackend", () => {
         });
       });
 
-      it("should not include body for GET requests", async () => {
+      it("[ARUN-D1] should not include body for GET requests",async () => {
         mockFetch.mockResolvedValue(createMockResponse({ data: "ok" }));
 
         const backend = new ApiBackend();
@@ -143,7 +143,7 @@ describe("ApiBackend", () => {
     });
 
     describe("[ARUN-D2] should read auth token from environment", () => {
-      it("should read bearer token from env var via secret_key", async () => {
+      it("[ARUN-D2] should read bearer token from env var via secret_key",async () => {
         process.env["TEST_BEARER_TOKEN"] = "my-secret-bearer-token";
         mockFetch.mockResolvedValue(createMockResponse({ data: "ok" }));
 
@@ -170,7 +170,7 @@ describe("ApiBackend", () => {
         );
       });
 
-      it("should read api-key from env var via secret_key", async () => {
+      it("[ARUN-D2] should read api-key from env var via secret_key",async () => {
         process.env["TEST_API_KEY"] = "my-api-key-12345";
         mockFetch.mockResolvedValue(createMockResponse({ data: "ok" }));
 
@@ -197,7 +197,7 @@ describe("ApiBackend", () => {
         );
       });
 
-      it("should use direct token as fallback", async () => {
+      it("[ARUN-D2] should use direct token as fallback",async () => {
         mockFetch.mockResolvedValue(createMockResponse({ data: "ok" }));
 
         const backend = new ApiBackend();
@@ -225,7 +225,7 @@ describe("ApiBackend", () => {
     });
 
     describe("[ARUN-D3] should sign request for actor-signature auth", () => {
-      it("should add X-GitGov-Signature header using KeyProvider", async () => {
+      it("[ARUN-D3] should add X-GitGov-Signature header using KeyProvider",async () => {
         mockFetch.mockResolvedValue(createMockResponse({ data: "ok" }));
 
         const mockKeyProvider: KeyProvider = {
@@ -257,7 +257,7 @@ describe("ApiBackend", () => {
         expect(callArgs[1].headers["X-GitGov-Actor"]).toBe("agent:test-api");
       });
 
-      it("should throw error when KeyProvider not available for actor-signature", async () => {
+      it("[ARUN-D3] should throw error when KeyProvider not available for actor-signature",async () => {
         const backend = new ApiBackend(undefined); // No keyProvider
         const engine: ApiEngine = {
           type: "api",
@@ -275,7 +275,7 @@ describe("ApiBackend", () => {
     });
 
     describe("[ARUN-D4] should capture response body as AgentOutput", () => {
-      it("should parse JSON response and return as AgentOutput", async () => {
+      it("[ARUN-D4] should parse JSON response and return as AgentOutput",async () => {
         const responseBody = {
           data: { result: "success" },
           message: "Agent completed",
@@ -301,7 +301,7 @@ describe("ApiBackend", () => {
         });
       });
 
-      it("should normalize response without data field", async () => {
+      it("[ARUN-D4] should normalize response without data field",async () => {
         const responseBody = { result: "success", count: 42 };
         mockFetch.mockResolvedValue(createMockResponse(responseBody));
 
@@ -318,7 +318,7 @@ describe("ApiBackend", () => {
         expect(output.data).toEqual({ result: "success", count: 42 });
       });
 
-      it("should handle primitive response", async () => {
+      it("[ARUN-D4] should handle primitive response",async () => {
         mockFetch.mockResolvedValue(createMockResponse("simple string"));
 
         const backend = new ApiBackend();
@@ -333,7 +333,7 @@ describe("ApiBackend", () => {
         expect(output).toEqual({ data: "simple string" });
       });
 
-      it("should handle null response", async () => {
+      it("[ARUN-D4] should handle null response",async () => {
         mockFetch.mockResolvedValue(createMockResponse(null));
 
         const backend = new ApiBackend();
@@ -350,7 +350,7 @@ describe("ApiBackend", () => {
     });
 
     describe("[ARUN-D5] should throw ApiBackendError on non-2xx response", () => {
-      it("should throw error on 400 Bad Request", async () => {
+      it("[ARUN-D5] should throw error on 400 Bad Request",async () => {
         mockFetch.mockResolvedValue(
           createMockResponse({ error: "Invalid input" }, 400, "Bad Request")
         );
@@ -370,7 +370,7 @@ describe("ApiBackend", () => {
         );
       });
 
-      it("should throw error on 500 Internal Server Error", async () => {
+      it("[ARUN-D5] should throw error on 500 Internal Server Error",async () => {
         mockFetch.mockResolvedValue(
           createMockResponse(
             { error: "Server error" },
@@ -391,7 +391,7 @@ describe("ApiBackend", () => {
         );
       });
 
-      it("should include status code in error", async () => {
+      it("[ARUN-D5] should include status code in error",async () => {
         mockFetch.mockResolvedValue(
           createMockResponse({ error: "Not found" }, 404, "Not Found")
         );
@@ -413,7 +413,7 @@ describe("ApiBackend", () => {
         }
       });
 
-      it("should wrap network errors", async () => {
+      it("[ARUN-D5] should wrap network errors",async () => {
         mockFetch.mockRejectedValue(new Error("Network error"));
 
         const backend = new ApiBackend();
