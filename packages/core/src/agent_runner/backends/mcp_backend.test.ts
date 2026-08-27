@@ -3,7 +3,7 @@
  *
  * Tests for engine.type: "mcp" execution via Model Context Protocol.
  *
- * Reference: agent_runner_module.md §4.5 (ARUN-E1 to ARUN-E4)
+ * Reference: agent_runner_module.md §4.2 (ARUN-E1 to ARUN-E4)
  * Reference: agent_protocol.md §5.1.3
  */
 
@@ -60,7 +60,7 @@ describe("McpBackend", () => {
     jest.clearAllMocks();
   });
 
-  describe("4.5. MCP Backend (ARUN-E1 to ARUN-E4)", () => {
+  describe("4.2. MCP Backend (ARUN-E1 to ARUN-E4)", () => {
     describe("[ARUN-E1] should connect to MCP server at engine.url", () => {
       it("[ARUN-E1] should make POST request to MCP server URL", async () => {
         mockFetch.mockResolvedValue(

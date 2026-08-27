@@ -164,8 +164,10 @@ export class FsAgentRunner implements IAgentRunner {
     const durationMs =
       new Date(completedAt).getTime() - new Date(startedAt).getTime();
 
-    // [RLDX-E1] Runner is pure — no record writing. Caller persists post-redaction.
-    // Generate a placeholder executionRecordId for downstream use (orchestrator, findings).
+    // [ARUN-H3] [RLDX-E1] Runner is pure — no record writing. Caller persists
+    // post-redaction. The id is generated here anyway so the caller has a stable identity
+    // to persist under, and so downstream consumers (orchestrator, findings) can correlate
+    // before anything is written.
     const executionRecordId = generateExecutionId(opts.agentId, Math.floor(Date.now() / 1000));
 
     // [ARUN-I2, I3] Emit completion event

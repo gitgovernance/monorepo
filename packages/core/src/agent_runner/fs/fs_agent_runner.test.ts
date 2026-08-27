@@ -3,7 +3,7 @@
  *
  * Tests for filesystem-based agent runner implementation.
  *
- * Reference: agent_runner_module.md §4.1-4.3, §4.7-4.12
+ * Reference: fs_agent_runner_module.md §4.1-4.10
  */
 
 import * as fs from "fs";
@@ -140,7 +140,7 @@ describe("FsAgentRunner", () => {
     });
   });
 
-  describe("4.2. Local Backend (ARUN-B1 to ARUN-B7)", () => {
+  describe("4.2. LocalBackend - engine.type: \"local\" Execution (ARUN-B1 to ARUN-B7)", () => {
     it("[ARUN-B1] should resolve absolute path for entrypoint", async () => {
       const entrypoint = writeAgentEntrypoint(
         "src/agent.js",
@@ -471,7 +471,7 @@ describe("FsAgentRunner", () => {
     });
   });
 
-  describe("4.7. Engine Type Validation (ARUN-G1 to ARUN-G3)", () => {
+  describe("4.4. Engine Type Validation (ARUN-G1 to ARUN-G3)", () => {
     it("[ARUN-G1] should throw UnsupportedEngineType for unknown type", async () => {
       writeAgentFile("unknown-engine", {
         engine: { type: "invalid" as "local" },
@@ -528,7 +528,7 @@ describe("FsAgentRunner", () => {
   });
 
   // [RLDX-E1] Runner is pure — no record writing. Tests verify output capture, not persistence.
-  describe("4.8. Pure Runner Output (ARUN-H1 to ARUN-H4) — RLDX-E1 refactor", () => {
+  describe("4.5. ExecutionRecord Handling — Pure Runner (ARUN-H1 to ARUN-H4)", () => {
     it("[ARUN-H1] should return AgentResponse with output on success (no record creation)", async () => {
       const entrypoint = writeAgentEntrypoint(
         "success.js",
@@ -609,7 +609,7 @@ describe("FsAgentRunner", () => {
     });
   });
 
-  describe("4.9. EventBus Integration (ARUN-I1 to ARUN-I4)", () => {
+  describe("4.6. EventBus Integration (ARUN-I1 to ARUN-I4)", () => {
     it("[ARUN-I1] should emit agent:started event", async () => {
       const entrypoint = writeAgentEntrypoint(
         "event-started.js",
@@ -725,7 +725,7 @@ describe("FsAgentRunner", () => {
     });
   });
 
-  describe("4.10. Response Return (ARUN-J1 to ARUN-J3)", () => {
+  describe("4.7. Response Return (ARUN-J1 to ARUN-J3)", () => {
     it("[ARUN-J1] should always return AgentResponse", async () => {
       const entrypoint = writeAgentEntrypoint(
         "response.js",
@@ -808,7 +808,7 @@ describe("FsAgentRunner", () => {
     });
   });
 
-  describe("4.11. Factory Function (ARUN-K1)", () => {
+  describe("4.8. Factory Function (ARUN-K1)", () => {
     it("[ARUN-K1] should create FsAgentRunner with injected dependencies", () => {
       const runner = createFsAgentRunner({
         executionAdapter: mockExecutionAdapter,
@@ -822,7 +822,7 @@ describe("FsAgentRunner", () => {
 
   // [RLDX-E1] Runner is pure — returns output regardless of agent purpose.
   // Record creation is now the caller's responsibility.
-  describe("4.12. Pure Runner for All Agent Types (ARUN-L1 to ARUN-L4) — RLDX-E1", () => {
+  describe("4.9. Pure Runner for All Agent Types (ARUN-L1 to ARUN-L4)", () => {
     it("[ARUN-L1] should return output for review agents without creating FeedbackRecord", async () => {
       const entrypoint = writeAgentEntrypoint(
         "review-agent.js",

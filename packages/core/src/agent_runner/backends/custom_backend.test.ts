@@ -3,7 +3,7 @@
  *
  * Tests for engine.type: "custom" execution via protocol handlers.
  *
- * Reference: agent_runner_module.md §4.6 (ARUN-F1 to ARUN-F4)
+ * Reference: agent_runner_module.md §4.3 (ARUN-F1 to ARUN-F4)
  * Reference: agent_protocol.md §5.1.4
  */
 
@@ -34,7 +34,7 @@ describe("CustomBackend", () => {
     };
   }
 
-  describe("4.6. Custom Backend (ARUN-F1 to ARUN-F4)", () => {
+  describe("4.3. Custom Backend (ARUN-F1 to ARUN-F4)", () => {
     describe("[ARUN-F1] should lookup handler in ProtocolHandlerRegistry", () => {
       it("[ARUN-F1] should lookup handler by protocol name", async () => {
         const registry = new DefaultProtocolHandlerRegistry();

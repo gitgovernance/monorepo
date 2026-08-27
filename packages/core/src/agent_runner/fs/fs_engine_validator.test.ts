@@ -66,7 +66,9 @@ describe("FsEngineValidator", () => {
     });
   });
 
-  describe("4.12b. Engine Validation contract (ARUN-M1)", () => {
+  // ARUN-M1 is specified in agent_runner_module.md §4.4 — the contract half, which is
+  // runtime-agnostic. It is asserted here because this is the only implementation.
+  describe("4.4. Engine Validation (ARUN-M1)", () => {
     it("[ARUN-M1] should return resolvable true for non-local engines", async () => {
       const apiEngine = { type: "api", url: "https://api.example.com/agent" } as Engine;
       expect((await validator.validate(apiEngine, tempDir)).resolvable).toBe(true);
