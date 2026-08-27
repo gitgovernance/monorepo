@@ -4,7 +4,7 @@ import type { RecordStores } from '../../record_store';
 import type { IIdentityModule } from '../../identity/identity_module.types';
 import { FeedbackAdapter } from '../feedback_adapter';
 import { RecordMetrics, type SystemStatus, type TaskHealthReport } from '../../record_metrics';
-import { SessionManager } from '../../session_manager';
+import type { ISessionManager } from '../../session_manager';
 import type { RecordSigner } from '../../record_signer';
 import type {
   TaskRecord,
@@ -53,7 +53,7 @@ export class BacklogAdapter implements IBacklogAdapter {
   private eventBus: IEventStream;
   // configManager is required in dependencies but not currently used
   // Reserved for future use (project config access)
-  private sessionManager: SessionManager;
+  private sessionManager: ISessionManager;
   private config: BacklogAdapterConfig;
 
 
