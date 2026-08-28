@@ -142,8 +142,18 @@ const TEMP_ROOT = fs.realpathSync(os.tmpdir());
  * `rmSync`; combined with the `TEMP_ROOT` anchor, nothing outside the OS temp directory can match.
  */
 function removeTempRepo(repoPath: string): void {
-  if (repoPath.startsWith(TEMP_ROOT) && repoPath.includes('gitgov-')) {
-    fs.rmSync(repoPath, { recursive: true, force: true });
+  // Resolve before comparing. Callers hand this both forms — the creators return the realpath'd
+  // path, inline sites register the raw one — and on macOS they differ by a `/private` prefix, so a
+  // guard comparing the string as given deletes one and skips the other. Resolving here means no
+  // caller has to know which form it holds.
+  let resolved: string;
+  try {
+    resolved = fs.realpathSync(repoPath);
+  } catch {
+    return; // already gone
+  }
+  if (resolved.startsWith(TEMP_ROOT) && resolved.includes('gitgov-')) {
+    fs.rmSync(resolved, { recursive: true, force: true });
   }
 }
 
