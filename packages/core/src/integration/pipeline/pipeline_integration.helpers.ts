@@ -38,11 +38,16 @@ import pg from 'pg';
 import type { GitHubTestStores } from './pipeline_integration.types';
 
 /**
- * The commit hash every record in this suite is projected under. `computeProjection()` and
- * `persist()` both require it (PP-C3b writes it to `sourceCommitSha` on each row), and the two
- * must agree — so it lives here instead of being repeated as a literal at each call site.
+ * The provenance label every row in this suite is projected under — NOT a commit hash, and not
+ * something anyone maintains. PP-C3b writes `PersistContext.lastCommitHash` verbatim into the
+ * `sourceCommitSha` column of every row; in production the CLI supplies the real HEAD sha via
+ * `getHeadSha()`, but these tests fabricate records, so there is no commit to record.
+ *
+ * It is shared because `computeProjection()` and `persist()` MUST agree WITHIN a run — they take
+ * the value through separate parameters, so a mismatch is silent: the projection would be computed
+ * under one provenance and written under another, and nothing would fail.
  */
-const INTEGRATION_COMMIT_HASH = 'integration-test';
+const INTEGRATION_SOURCE_COMMIT_LABEL = 'integration-test';
 
 /**
  * The one sanctioned `as unknown as` in this suite — [IKS-A15], `schema_layering.md` §6.
@@ -406,7 +411,7 @@ export async function projectAndCompare(
   const projector = new RecordProjector({ recordMetrics, stores: projectorStores });
 
   // 1. Compute once
-  const indexData = await projector.computeProjection({ lastCommitHash: INTEGRATION_COMMIT_HASH });
+  const indexData = await projector.computeProjection({ lastCommitHash: INTEGRATION_SOURCE_COMMIT_LABEL });
   indexData.activityHistory = indexData.activityHistory.filter(
     (ev) => typeof ev.timestamp === 'number' && !isNaN(ev.timestamp) && ev.timestamp > 0,
   );
@@ -414,7 +419,7 @@ export async function projectAndCompare(
 
   // 2. Persist to FS (CLI path)
   const fsSink = new FsRecordProjection({ basePath: path.join(repoDir, '.gitgov') });
-  await fsSink.persist(indexData, { lastCommitHash: INTEGRATION_COMMIT_HASH });
+  await fsSink.persist(indexData, { lastCommitHash: INTEGRATION_SOURCE_COMMIT_LABEL });
 
   // 3. Persist to Prisma. Single-tenant: NO tenant fields (ARUN/FC-A6). `repoId` and
   //    `projectionType` are columns of the SaaS layer, added by `protocol-extensions.prisma`;
@@ -424,7 +429,7 @@ export async function projectAndCompare(
   const prismaSink = new PrismaRecordProjection({
     client: asProjectionClient(prisma),
   });
-  await prismaSink.persist(indexData, { lastCommitHash: INTEGRATION_COMMIT_HASH });
+  await prismaSink.persist(indexData, { lastCommitHash: INTEGRATION_SOURCE_COMMIT_LABEL });
 
   // 4. Read back from both
   const fsIndexData = await fsSink.read({});
@@ -454,7 +459,7 @@ async function runProjection(
 
   try {
     const startTime = performance.now();
-    const indexData = await projector.computeProjection({ lastCommitHash: INTEGRATION_COMMIT_HASH });
+    const indexData = await projector.computeProjection({ lastCommitHash: INTEGRATION_SOURCE_COMMIT_LABEL });
 
     // Filter out activity events with invalid timestamps (NaN from non-numeric ID prefixes)
     indexData.activityHistory = indexData.activityHistory.filter(
@@ -465,7 +470,7 @@ async function runProjection(
     const computeTime = performance.now() - startTime;
     indexData.metadata.generationTime = computeTime;
 
-    await sink.persist(indexData, { lastCommitHash: INTEGRATION_COMMIT_HASH });
+    await sink.persist(indexData, { lastCommitHash: INTEGRATION_SOURCE_COMMIT_LABEL });
 
     const totalTime = performance.now() - startTime;
     const taskCount = indexData.metadata.recordCounts['tasks'] || 0;

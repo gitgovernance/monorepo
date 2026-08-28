@@ -25,6 +25,7 @@ import {
   RecordMetrics,
   createGitHubProjectorStores,
   DEFAULT_ID_ENCODER,
+  E2E_SOURCE_COMMIT_LABEL,
 } from './helpers';
 import type {
   ProtocolClient,
@@ -206,7 +207,7 @@ describe('Block C: GitHub Integration (CC1-CC5)', () => {
     const recordMetrics = new RecordMetrics({ stores });
     const projector = new RecordProjector({ recordMetrics, stores });
 
-    const indexData = await projector.computeProjection();
+    const indexData = await projector.computeProjection({ lastCommitHash: E2E_SOURCE_COMMIT_LABEL });
 
     // Verify IndexData has our records
     expect(indexData.metadata.recordCounts['tasks']).toBeGreaterThanOrEqual(1);
@@ -225,7 +226,7 @@ describe('Block C: GitHub Integration (CC1-CC5)', () => {
     const recordMetrics = new RecordMetrics({ stores });
     const projector = new RecordProjector({ recordMetrics, stores });
 
-    const indexData = await projector.computeProjection();
+    const indexData = await projector.computeProjection({ lastCommitHash: E2E_SOURCE_COMMIT_LABEL });
     indexData.activityHistory = indexData.activityHistory.filter(
       (ev) => typeof ev.timestamp === 'number' && !isNaN(ev.timestamp) && ev.timestamp > 0,
     );
@@ -234,7 +235,7 @@ describe('Block C: GitHub Integration (CC1-CC5)', () => {
     const sink = new PrismaRecordProjection({
       client: prisma as unknown as ProjectionClient,
     });
-    await sink.persist(indexData, {});
+    await sink.persist(indexData, { lastCommitHash: E2E_SOURCE_COMMIT_LABEL });
 
     // Verify DB
     const meta = await prisma.gitgovMeta.findFirst({});

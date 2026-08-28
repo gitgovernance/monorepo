@@ -35,6 +35,7 @@ import {
   GITLAB_TOKEN,
   GITLAB_TEST_PROJECT_ID,
   createGitHubProjectorStores,
+  E2E_SOURCE_COMMIT_LABEL,
 } from './helpers';
 import type { ProtocolClient, RecordProjectorDependencies } from './helpers';
 import type {
@@ -159,7 +160,7 @@ describe('Block E: Projection Parity (CE1-CE3)', () => {
       const fsTypedStores = fsStores as unknown as RecordProjectorDependencies['stores'];
       const fsMetrics = new RecordMetrics({ stores: fsTypedStores });
       const fsProjector = new RecordProjector({ recordMetrics: fsMetrics, stores: fsTypedStores });
-      const fsIndexData = await fsProjector.computeProjection();
+      const fsIndexData = await fsProjector.computeProjection({ lastCommitHash: E2E_SOURCE_COMMIT_LABEL });
 
       fsIndexData.activityHistory = fsIndexData.activityHistory.filter(
         ev => typeof ev.timestamp === 'number' && !isNaN(ev.timestamp) && ev.timestamp > 0,
@@ -170,7 +171,7 @@ describe('Block E: Projection Parity (CE1-CE3)', () => {
       const ghStores = createGitHubProjectorStores(octokit, { owner: GITHUB_TEST_OWNER, repo: GITHUB_TEST_REPO_NAME, ref: 'gitgov-state' });
       const ghMetrics = new RecordMetrics({ stores: ghStores });
       const ghProjector = new RecordProjector({ recordMetrics: ghMetrics, stores: ghStores });
-      const ghIndexData = await ghProjector.computeProjection();
+      const ghIndexData = await ghProjector.computeProjection({ lastCommitHash: E2E_SOURCE_COMMIT_LABEL });
 
       ghIndexData.activityHistory = ghIndexData.activityHistory.filter(
         ev => typeof ev.timestamp === 'number' && !isNaN(ev.timestamp) && ev.timestamp > 0,

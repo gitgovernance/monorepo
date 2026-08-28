@@ -33,6 +33,7 @@ import {
   PrismaRecordProjection,
   GitHubRecordStore,
   createGitHubProjectorStores,
+  E2E_SOURCE_COMMIT_LABEL,
 } from './helpers';
 import type {
   ProtocolClient,
@@ -216,7 +217,7 @@ describe('Block F: Change Detection (CF1-CF7)', () => {
     const recordMetrics = new RecordMetrics({ stores });
     const projector = new RecordProjector({ recordMetrics, stores });
 
-    const indexData = await projector.computeProjection();
+    const indexData = await projector.computeProjection({ lastCommitHash: E2E_SOURCE_COMMIT_LABEL });
     indexData.activityHistory = indexData.activityHistory.filter(
       ev => typeof ev.timestamp === 'number' && !isNaN(ev.timestamp) && ev.timestamp > 0,
     );
@@ -225,7 +226,7 @@ describe('Block F: Change Detection (CF1-CF7)', () => {
     const sink = new PrismaRecordProjection({
       client: prisma as unknown as ProjectionClient,
     });
-    await sink.persist(indexData, {});
+    await sink.persist(indexData, { lastCommitHash: E2E_SOURCE_COMMIT_LABEL });
 
     // Verify DB has the new task with enriched data
     const tasks = await prisma.gitgovTask.findMany({});
