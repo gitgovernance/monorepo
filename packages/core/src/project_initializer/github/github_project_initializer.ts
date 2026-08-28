@@ -24,7 +24,6 @@ const DEFAULT_POLICY_YML = `version: "1.0"\nfailOn: critical\n`;
  * Methods that don't apply to remote state (no local filesystem artifacts) are
  * documented no-ops:
  *   - initializeSession:   sessions live in saas-api JWE tokens, not gitgov-state
- *   - copyAgentPrompt:     no local agent prompts in remote init
  *   - setupGitIntegration: no local .gitignore in remote state
  *
  * Records (ActorRecord, CycleRecord) are NOT written by this initializer — the
@@ -206,11 +205,6 @@ export class GitHubProjectInitializer implements IProjectInitializer {
   // [GPI06] read via gitModule Contents API
   async readFile(filePath: string): Promise<string> {
     return this.gitModule.getFileContent(this.branch, filePath);
-  }
-
-  // [GPI08] no-op in remote (no local agent prompt in remote init)
-  async copyAgentPrompt(): Promise<void> {
-    // intentional no-op
   }
 
   // [GPI09] no-op in remote (no local .gitignore in remote state)

@@ -6,7 +6,7 @@
  * FsProjectInitializer EARS:
  * - EARS-PI01 to PI05: Interface compliance (IProjectInitializer contract)
  * - EARS-FPI01 to FPI06: Filesystem-specific behavior
- * - EARS-FPI09 to FPI12: Filesystem operations (getActorPath, copyAgentPrompt, setupGitIntegration, readFile)
+ * - EARS-FPI09 to FPI12: Filesystem operations (getActorPath, setupGitIntegration, readFile)
  * - EARS-FPI13: VCS status in validateEnvironment (hasRemote, hasCommits, currentBranch)
  *
  * @see fs_project_initializer_module.md for EARS specifications
@@ -352,35 +352,6 @@ describe('FsProjectInitializer', () => {
       expect(result).toBe(
         path.join(testRoot, '.gitgov', 'actors', `${actorId}.json`)
       );
-    });
-
-    it('[EARS-FPI10] should copy agent prompt from accessible source', async () => {
-      // First access call succeeds (source found)
-      mockFs.access.mockResolvedValueOnce(undefined);
-      mockFs.copyFile.mockResolvedValue(undefined);
-
-      await initializer.copyAgentPrompt();
-
-      expect(mockFs.copyFile).toHaveBeenCalledWith(
-        expect.stringContaining('gitgov_agent.md'),
-        path.join(testRoot, 'gitgov')
-      );
-    });
-
-    it('[EARS-FPI10] should warn gracefully when no source is accessible', async () => {
-      // All access calls fail (no source found)
-      mockFs.access.mockRejectedValue(new Error('ENOENT'));
-
-      const warnSpy = jest.spyOn(console, 'warn').mockImplementation();
-
-      await initializer.copyAgentPrompt();
-
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Could not copy @gitgov agent prompt')
-      );
-      expect(mockFs.copyFile).not.toHaveBeenCalled();
-
-      warnSpy.mockRestore();
     });
 
     it('[EARS-FPI11] should create .gitignore with GitGovernance entries', async () => {

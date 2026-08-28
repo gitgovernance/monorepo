@@ -87,7 +87,6 @@ export interface IProjectInitializer {
   /**
    * Copies the agent prompt to the project root for IDE access.
    */
-  copyAgentPrompt(): Promise<void>;
 
   /**
    * Sets up version control integration (e.g., .gitignore for fs).

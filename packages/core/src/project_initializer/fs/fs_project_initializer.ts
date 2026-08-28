@@ -5,12 +5,6 @@ import type { GitGovConfig } from '../../config_manager';
 import type { GitGovAgentRecord } from '../../record_types';
 import { DEFAULT_ID_ENCODER } from '../../record_store';
 import type { IProjectInitializer, EnvironmentValidation } from '../project_initializer';
-import { createRequire } from 'module';
-import { fileURLToPath } from 'url';
-import { getImportMetaUrl } from '../../utils/esm_helper';
-import { createLogger } from '../../logger';
-
-const logger = createLogger('[FsProjectInitializer] ');
 
 /**
  * Canonical directory structure for .gitgov/
@@ -45,7 +39,6 @@ const GITGOV_DIRECTORIES = [
  * await initializer.createProjectStructure();
  * await initializer.writeConfig(config);
  * await initializer.initializeSession(actorId);
- * await initializer.copyAgentPrompt();
  * await initializer.setupGitIntegration();
  * ```
  */
@@ -307,62 +300,6 @@ export class FsProjectInitializer implements IProjectInitializer {
         suggestions,
       };
     }
-  }
-
-  /**
-   * Copies the @gitgov agent prompt to project root for IDE access.
-   */
-  // [EARS-FPI10] Copies agent prompt from multiple sources (graceful degradation)
-  async copyAgentPrompt(): Promise<void> {
-    const targetPrompt = path.join(this.repoRoot, 'gitgov');
-    const potentialSources: string[] = [];
-
-    // 1. Development scenario: search in src/docs/generated/
-    potentialSources.push(
-      path.join(process.cwd(), 'src/docs/generated/gitgov_agent.md')
-    );
-
-    // 2. NPM installation: use require.resolve
-    try {
-      const metaUrl = getImportMetaUrl();
-      if (metaUrl) {
-        const require = createRequire(metaUrl);
-        const pkgJsonPath = require.resolve('@gitgov/core/package.json');
-        const pkgRoot = path.dirname(pkgJsonPath);
-        potentialSources.push(path.join(pkgRoot, 'dist/src/docs/generated/gitgov_agent.md'));
-      }
-    } catch {
-      // require.resolve failed - continue
-    }
-
-    // 3. Build fallback: relative to compiled __dirname
-    try {
-      const metaUrl = getImportMetaUrl();
-      if (metaUrl) {
-        const __filename = fileURLToPath(metaUrl);
-        const __dirname = path.dirname(__filename);
-        potentialSources.push(path.resolve(__dirname, '../../docs/generated/gitgov_agent.md'));
-      }
-    } catch {
-      // import.meta not available - continue
-    }
-
-    // Find and copy the first accessible file
-    for (const source of potentialSources) {
-      try {
-        await fs.access(source);
-        await fs.copyFile(source, targetPrompt);
-        logger.debug(`@gitgov agent prompt copied to project root (./gitgov)\n`);
-        return;
-      } catch {
-        continue;
-      }
-    }
-
-    // Graceful degradation
-    console.warn(
-      'Warning: Could not copy @gitgov agent prompt. Project will work but AI assistant may not have local instructions.'
-    );
   }
 
   // [EARS-FPI16] Canonical workflow template for GitHub Actions
