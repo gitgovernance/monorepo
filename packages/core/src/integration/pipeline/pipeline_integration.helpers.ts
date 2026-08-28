@@ -17,7 +17,6 @@ import type {
   GitGovCycleRecord,
   GitGovFeedbackRecord,
   GitGovExecutionRecord,
-  GitGovChangelogRecord,
   GitGovActorRecord,
   GitGovAgentRecord,
   EmbeddedMetadataHeader,
@@ -30,12 +29,33 @@ import type {
   ExecutionRecord,
   FeedbackRecord,
   CycleRecord,
-  ChangelogRecord,
+  GitGovRecordPayload,
 } from '../../record_types';
+import { TYPE_TO_DIR } from '../../record_types';
 import { PrismaClient } from '../../../generated/prisma/index.js';
 import { PrismaPg } from '@prisma/adapter-pg';
 import pg from 'pg';
 import type { GitHubTestStores } from './pipeline_integration.types';
+
+/**
+ * The commit hash every record in this suite is projected under. `computeProjection()` and
+ * `persist()` both require it (PP-C3b writes it to `sourceCommitSha` on each row), and the two
+ * must agree — so it lives here instead of being repeated as a literal at each call site.
+ */
+const INTEGRATION_COMMIT_HASH = 'integration-test';
+
+/**
+ * The one sanctioned `as unknown as` in this suite — [IKS-A15], `schema_layering.md` §6.
+ *
+ * `ProjectionClient` is a STRUCTURAL type: core defines the minimum contract so it never imports
+ * `@prisma/client` (§2.3 rule 1). A generated `PrismaClient` satisfies it by duck typing, but
+ * TypeScript variance on the delegates' generic methods rejects the direct assignment. The rule
+ * requires the cast to carry its justification inline — it lives here once instead of at each
+ * call site, so there is a single place to revisit if the contract changes.
+ */
+export function asProjectionClient(prisma: PrismaClient): ProjectionClient {
+  return prisma as unknown as ProjectionClient;
+}
 
 // ===== Infrastructure Helpers =====
 
@@ -53,7 +73,10 @@ export function createTempGitRepo(): { tmpDir: string; repoDir: string } {
   fs.writeFileSync(path.join(repoDir, 'README.md'), '# E2E Test\n');
   execSync('git add README.md && git commit -m "Initial commit"', { cwd: repoDir, stdio: 'pipe' });
 
-  const dirs = ['actors', 'agents', 'tasks', 'executions', 'feedbacks', 'cycles', 'changelogs'];
+  // Derived from the protocol's canonical map, never hand-listed: when a record type is added
+  // or removed, this follows. The previous hard-coded array still created a `changelogs/`
+  // directory months after `ChangelogRecord` was removed from `record_types`.
+  const dirs = Object.values(TYPE_TO_DIR);
   for (const dir of dirs) {
     fs.mkdirSync(path.join(repoDir, '.gitgov', dir), { recursive: true });
   }
@@ -74,7 +97,15 @@ export function createBareRemote(): string {
  * Creates a PrismaClient connected to the test database (Docker PostgreSQL).
  */
 export function createTestPrisma(): PrismaClient {
-  const connectionString = process.env['DATABASE_URL'] ?? 'postgresql://gitgov:gitgov@localhost:5432/gitgov_dev';
+  // Layer 1 database — core's own schema, WITHOUT the saas extensions.
+  //
+  // The default used to be `gitgov_dev`, which is where saas-api runs its migrations: there
+  // `GitgovMeta` carries `repoId`/`orgId` NOT NULL, columns `schema_layering.md` §2.3 rule 2 says
+  // core never has. Core writing single-tenant rows into it fails with a null constraint. Same
+  // Copy pattern `packages/e2e` already uses (`DATABASE_URL_PROTOCOL` → `gitgov_e2e_protocol`).
+  //
+  // Create it with: DATABASE_URL=…/gitgov_core_e2e pnpm --filter @gitgov/core exec prisma db push
+  const connectionString = process.env['DATABASE_URL'] ?? 'postgresql://gitgov:gitgov@localhost:5432/gitgov_core_e2e';
   const pool = new pg.Pool({ connectionString });
   const adapter = new PrismaPg(pool);
   return new PrismaClient({ adapter });
@@ -96,6 +127,11 @@ function makeSignature(signerId: string): Signature {
   };
 }
 
+/**
+ * NOT `GitGovRecordType`. The envelope accepts a wider set than `record_types` exports payloads
+ * for: the header allows `workflow` and `custom` (8 values) while `GitGovRecordType` has 6. This
+ * alias intentionally follows the header, which is what `createEmbeddedRecord` writes into it.
+ */
 type RecordTypeName = EmbeddedMetadataHeader['type'];
 
 export function createEmbeddedRecord(type: 'actor', payload: ActorRecord, signerId: string): GitGovActorRecord;
@@ -104,10 +140,9 @@ export function createEmbeddedRecord(type: 'task', payload: TaskRecord, signerId
 export function createEmbeddedRecord(type: 'execution', payload: ExecutionRecord, signerId: string): GitGovExecutionRecord;
 export function createEmbeddedRecord(type: 'feedback', payload: FeedbackRecord, signerId: string): GitGovFeedbackRecord;
 export function createEmbeddedRecord(type: 'cycle', payload: CycleRecord, signerId: string): GitGovCycleRecord;
-export function createEmbeddedRecord(type: 'changelog', payload: ChangelogRecord, signerId: string): GitGovChangelogRecord;
 export function createEmbeddedRecord(
   type: RecordTypeName,
-  payload: ActorRecord | AgentRecord | TaskRecord | ExecutionRecord | FeedbackRecord | CycleRecord | ChangelogRecord,
+  payload: GitGovRecordPayload,
   signerId: string,
 ): { header: EmbeddedMetadataHeader; payload: typeof payload } {
   return {
@@ -314,36 +349,8 @@ export async function seedCycleRecord(
   return record;
 }
 
-export async function seedChangelogRecord(
-  repoDir: string,
-  opts: {
-    id: string;
-    title: string;
-    description?: string;
-    relatedTasks: [string, ...string[]];
-    version?: string;
-    completedAt?: number;
-  },
-  signerId?: string,
-): Promise<GitGovChangelogRecord> {
-  const payload: ChangelogRecord = {
-    id: opts.id,
-    title: opts.title,
-    description: opts.description ?? `E2E changelog: ${opts.title}`,
-    relatedTasks: opts.relatedTasks,
-    completedAt: opts.completedAt ?? Math.floor(Date.now() / 1000),
-    ...(opts.version !== undefined ? { version: opts.version } : {}),
-  };
-
-  const record = createEmbeddedRecord('changelog', payload, signerId ?? 'human:dev');
-
-  const store = new FsRecordStore<GitGovChangelogRecord>({
-    basePath: path.join(repoDir, '.gitgov', 'changelogs'),
-  });
-  await store.put(opts.id, record);
-
-  return record;
-}
+// NOTE: there is no `seedChangelogRecord`. `ChangelogRecord` was removed from the protocol and
+// `record_types` exports six payloads; see `GitGovRecordPayload` in `record_types/common.types.ts`.
 
 // ===== Projection Helpers =====
 
@@ -352,20 +359,26 @@ function buildProjectorStores(stores: {
   cycles: FsRecordStore<GitGovCycleRecord>;
   feedbacks: FsRecordStore<GitGovFeedbackRecord>;
   executions: FsRecordStore<GitGovExecutionRecord>;
-  changelogs: FsRecordStore<GitGovChangelogRecord>;
   actors: FsRecordStore<GitGovActorRecord>;
+  agents: FsRecordStore<GitGovAgentRecord>;
 }): RecordProjectorDependencies['stores'] {
   return stores;
 }
 
+/**
+ * One store per record type in `TYPE_TO_DIR`. `agents` was missing here — the projector requires
+ * it (`RecordStores`) — while `changelogs` was present for a record type the protocol no longer
+ * has. Neither showed up because `src/integration` was outside `tsc`.
+ */
 function createFsStores(repoDir: string) {
+  const dir = (name: string) => path.join(repoDir, '.gitgov', name);
   return {
-    tasks: new FsRecordStore<GitGovTaskRecord>({ basePath: path.join(repoDir, '.gitgov', 'tasks') }),
-    cycles: new FsRecordStore<GitGovCycleRecord>({ basePath: path.join(repoDir, '.gitgov', 'cycles') }),
-    feedbacks: new FsRecordStore<GitGovFeedbackRecord>({ basePath: path.join(repoDir, '.gitgov', 'feedbacks') }),
-    executions: new FsRecordStore<GitGovExecutionRecord>({ basePath: path.join(repoDir, '.gitgov', 'executions') }),
-    changelogs: new FsRecordStore<GitGovChangelogRecord>({ basePath: path.join(repoDir, '.gitgov', 'changelogs') }),
-    actors: new FsRecordStore<GitGovActorRecord>({ basePath: path.join(repoDir, '.gitgov', 'actors'), idEncoder: DEFAULT_ID_ENCODER }),
+    tasks: new FsRecordStore<GitGovTaskRecord>({ basePath: dir(TYPE_TO_DIR.task) }),
+    cycles: new FsRecordStore<GitGovCycleRecord>({ basePath: dir(TYPE_TO_DIR.cycle) }),
+    feedbacks: new FsRecordStore<GitGovFeedbackRecord>({ basePath: dir(TYPE_TO_DIR.feedback) }),
+    executions: new FsRecordStore<GitGovExecutionRecord>({ basePath: dir(TYPE_TO_DIR.execution) }),
+    agents: new FsRecordStore<GitGovAgentRecord>({ basePath: dir(TYPE_TO_DIR.agent), idEncoder: DEFAULT_ID_ENCODER }),
+    actors: new FsRecordStore<GitGovActorRecord>({ basePath: dir(TYPE_TO_DIR.actor), idEncoder: DEFAULT_ID_ENCODER }),
   };
 }
 
@@ -390,7 +403,6 @@ export async function runProjector(
 export async function projectAndCompare(
   prisma: PrismaClient,
   repoDir: string,
-  repoId: string,
 ): Promise<{ fsIndexData: IndexData; prismaIndexData: IndexData }> {
   const stores = createFsStores(repoDir);
   const projectorStores = buildProjectorStores(stores);
@@ -399,7 +411,7 @@ export async function projectAndCompare(
   const projector = new RecordProjector({ recordMetrics, stores: projectorStores });
 
   // 1. Compute once
-  const indexData = await projector.computeProjection();
+  const indexData = await projector.computeProjection({ lastCommitHash: INTEGRATION_COMMIT_HASH });
   indexData.activityHistory = indexData.activityHistory.filter(
     (ev) => typeof ev.timestamp === 'number' && !isNaN(ev.timestamp) && ev.timestamp > 0,
   );
@@ -407,15 +419,17 @@ export async function projectAndCompare(
 
   // 2. Persist to FS (CLI path)
   const fsSink = new FsRecordProjection({ basePath: path.join(repoDir, '.gitgov') });
-  await fsSink.persist(indexData, { lastCommitHash: 'integration-test' });
+  await fsSink.persist(indexData, { lastCommitHash: INTEGRATION_COMMIT_HASH });
 
-  // 3. Persist to Prisma (SaaS path)
+  // 3. Persist to Prisma. Single-tenant: NO tenant fields (ARUN/FC-A6). `repoId` and
+  //    `projectionType` are columns of the SaaS layer, added by `protocol-extensions.prisma`;
+  //    core's own `protocol.prisma` declares in its header that it has neither. Passing them
+  //    here targeted a schema this client does not have. Same shape as the twin helper in
+  //    `packages/e2e/tests/helpers/prisma_protocol.ts`.
   const prismaSink = new PrismaRecordProjection({
-    client: prisma as unknown as ProjectionClient,
-    repoId,
-    projectionType: 'index',
+    client: asProjectionClient(prisma),
   });
-  await prismaSink.persist(indexData, { lastCommitHash: 'integration-test' });
+  await prismaSink.persist(indexData, { lastCommitHash: INTEGRATION_COMMIT_HASH });
 
   // 4. Read back from both
   const fsIndexData = await fsSink.read({});
@@ -435,10 +449,9 @@ async function runProjection(
   projectorStores: RecordProjectorDependencies['stores'],
   repoId: string,
 ): Promise<IndexGenerationReport> {
+  // Single-tenant — see the note in `projectAndCompare`.
   const sink = new PrismaRecordProjection({
-    client: prisma as unknown as ProjectionClient,
-    repoId,
-    projectionType: 'index',
+    client: asProjectionClient(prisma),
   });
 
   const recordMetrics = new RecordMetrics({ stores: projectorStores });
@@ -446,7 +459,7 @@ async function runProjection(
 
   try {
     const startTime = performance.now();
-    const indexData = await projector.computeProjection();
+    const indexData = await projector.computeProjection({ lastCommitHash: INTEGRATION_COMMIT_HASH });
 
     // Filter out activity events with invalid timestamps (NaN from non-numeric ID prefixes)
     indexData.activityHistory = indexData.activityHistory.filter(
@@ -457,7 +470,7 @@ async function runProjection(
     const computeTime = performance.now() - startTime;
     indexData.metadata.generationTime = computeTime;
 
-    await sink.persist(indexData, { lastCommitHash: 'integration-test' });
+    await sink.persist(indexData, { lastCommitHash: INTEGRATION_COMMIT_HASH });
 
     const totalTime = performance.now() - startTime;
     const taskCount = indexData.metadata.recordCounts['tasks'] || 0;
@@ -491,10 +504,13 @@ async function runProjection(
 // ===== DB Helpers =====
 
 /**
- * Deletes all gitgov_* rows for a given repoId (cleanup after tests).
+ * Deletes every gitgov_* row (cleanup after tests).
+ *
+ * Deletes ALL rows, not rows for one repo: core's schema is single-tenant and has no `repoId`
+ * column to filter on. Safe here because each suite runs against its own throwaway database.
  */
-export async function cleanupDb(prisma: PrismaClient, repoId: string): Promise<void> {
-  const where = { repoId };
+export async function cleanupDb(prisma: PrismaClient): Promise<void> {
+  const where = {};
   await prisma.$transaction([
     prisma.gitgovTask.deleteMany({ where }),
     prisma.gitgovCycle.deleteMany({ where }),
@@ -536,8 +552,14 @@ type InMemoryFile = { content: string; sha: string };
  * Files are stored in a Map<path, {content: base64, sha}>.
  * Supports getContent (file + directory), createOrUpdateFileContents, deleteFile.
  *
- * Note: `as unknown as Octokit` is required because Octokit has ~200 methods
- * and we only implement the 3 that GitHubRecordStore uses.
+ * AUDITED CAST — `as unknown as Octokit`. Octokit is a class with ~200 methods and this mock
+ * implements the 3 that `GitHubRecordStore` calls. Unlike the `agents` case, this cast hides
+ * nothing structural: the surface it omits is unreachable from the store.
+ *
+ * What would remove it: `GitHubRecordStore` accepting a narrow structural type
+ * (`{ rest: { repos: Pick<..., 'getContent' | 'createOrUpdateFileContents' | 'deleteFile'> } }`)
+ * instead of the concrete `Octokit`. That is a change to production code and out of scope here;
+ * recorded so the trade-off is a known one rather than an accepted mystery.
  */
 export function createInMemoryOctokit(): { octokit: Octokit; files: Map<string, InMemoryFile> } {
   const files = new Map<string, InMemoryFile>();
@@ -626,9 +648,12 @@ export function createMockGitHubStores(octokit: Octokit): GitHubTestStores {
     cycles: new GitHubRecordStore<GitGovCycleRecord>({ ...opts, basePath: '.gitgov/cycles' }, octokit),
     feedbacks: new GitHubRecordStore<GitGovFeedbackRecord>({ ...opts, basePath: '.gitgov/feedbacks' }, octokit),
     executions: new GitHubRecordStore<GitGovExecutionRecord>({ ...opts, basePath: '.gitgov/executions' }, octokit),
-    changelogs: new GitHubRecordStore<GitGovChangelogRecord>({ ...opts, basePath: '.gitgov/changelogs' }, octokit),
+    agents: new GitHubRecordStore<GitGovAgentRecord>(
+      { ...opts, basePath: `.gitgov/${TYPE_TO_DIR.agent}`, idEncoder: DEFAULT_ID_ENCODER },
+      octokit,
+    ),
     actors: new GitHubRecordStore<GitGovActorRecord>(
-      { ...opts, basePath: '.gitgov/actors', idEncoder: DEFAULT_ID_ENCODER },
+      { ...opts, basePath: `.gitgov/${TYPE_TO_DIR.actor}`, idEncoder: DEFAULT_ID_ENCODER },
       octokit,
     ),
   };
@@ -643,9 +668,11 @@ export async function runMockGitHubProjector(
   repoId: string,
 ): Promise<IndexGenerationReport> {
   const stores = createMockGitHubStores(octokit);
-  // GitHubRecordStore<V> implements RecordStore<V, GitHubWriteResult, GitHubWriteOpts>.
-  // RecordProjector only calls get() and list() — the return type of put() (R parameter)
-  // is irrelevant. We cast through the stores type to satisfy the projector's dependency.
-  const projectorStores = stores as unknown as RecordProjectorDependencies['stores'];
+  // No cast: `GitHubRecordStore<V>` satisfies `RecordStore<V, …>` structurally once the key set
+  // matches. The `as unknown as` that used to be here was hiding a missing `agents` store — the
+  // projector failed at `stores.agents.list()` with an opaque "reading 'list' of undefined".
+  // Declaring all six in `GitHubTestStores` made the cast unnecessary, which is the point: the
+  // cast was never about variance, it was about a gap nobody could see.
+  const projectorStores: RecordProjectorDependencies['stores'] = stores;
   return runProjection(prisma, projectorStores, repoId);
 }
