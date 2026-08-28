@@ -1,3 +1,38 @@
+## [3.22.0](https://github.com/gitgovernance/monorepo/compare/core-v3.21.0...core-v3.22.0) (2026-08-28)
+
+
+### ✨ Features
+
+* **core:** AUDIT-J1..J3 — enums de dominio cerrado con constante primero y tipo derivado ([d054c0e](https://github.com/gitgovernance/monorepo/commit/d054c0e36a244613417d540e1500407031c5fcc6))
+* **core:** FileLister declara su semantica de frescura e invalidateCache en la interfaz ([cf36055](https://github.com/gitgovernance/monorepo/commit/cf360551a1daab5db01cff90188fe4f5f46303cd))
+* **core:** move resolveLlmProvider and CliLlmProvider to @gitgov/core/fs ([c8deb8c](https://github.com/gitgovernance/monorepo/commit/c8deb8cbf5f00fd9ce572b0aa577e3d3efc46c6c))
+* **core:** WTSYNC-B18/B19 — retry acotado del push ante un escritor concurrente ([4ec2a20](https://github.com/gitgovernance/monorepo/commit/4ec2a20848f45a06e62924188ea7041d835407ba))
+
+
+### 🐛 Bug Fixes
+
+* **cli:** import filesystem implementations from @gitgov/core/fs ([9a53b23](https://github.com/gitgovernance/monorepo/commit/9a53b232b14dd0d077836b98b7ce1026dd97109b))
+* **core,cli:** bind the engine validator to a root at construction ([758caea](https://github.com/gitgovernance/monorepo/commit/758caea08793afd6f23dfe3c0c03a803714562d6))
+* **core:** PROJ-H3b espera antes de concluir ausencia + EARS-C1 propaga la causa del 5xx ([2478555](https://github.com/gitgovernance/monorepo/commit/2478555b84c478c412bebe71f2334d2e34cf8ef6))
+* **core:** realign test describes and headers with the renumbered spec sections ([5520f60](https://github.com/gitgovernance/monorepo/commit/5520f60fdd2968342a635eb26f71a8ac4cc93087))
+* **core:** repair the pipeline integration suite and stop excluding it from tsc ([e4ef284](https://github.com/gitgovernance/monorepo/commit/e4ef2841ee8e73182883ca0d7e23080182585d93))
+* **core:** stop the main barrel from re-exporting filesystem implementations ([9800a83](https://github.com/gitgovernance/monorepo/commit/9800a83e908ccca4ab04500de7dbf79eb84a1d5a))
+* **core:** tag every backend test with its EARS id ([1562745](https://github.com/gitgovernance/monorepo/commit/156274574f9a954cec2b82b5cc48b9dc6fc985ff))
+
+
+### ♻️ Refactoring
+
+* **cli,e2e:** translate Spanish comments to English in three files ([bd9e717](https://github.com/gitgovernance/monorepo/commit/bd9e7179c5eac8d2cdcfb9286a2499c67f0bbd93))
+* **core,cli:** drop process-traceability from comments in types, file_lister, sync_state and login ([359008e](https://github.com/gitgovernance/monorepo/commit/359008e4239b0a9d7a00604d4da8648e7807bd3c))
+* **core,cli:** inject IEngineValidator and normalize agent_runner EARS prefix ([e6c6a77](https://github.com/gitgovernance/monorepo/commit/e6c6a772e052ff67ce468cf7bfc6165c8a7fbae0))
+* **core:** invert the clean_exports guardrail to an allowlist ([4a74495](https://github.com/gitgovernance/monorepo/commit/4a744953ded74b90f3c05febb3cd1023d1df3c28))
+* **core:** remove copyAgentPrompt from the project initializer ([2ff0c58](https://github.com/gitgovernance/monorepo/commit/2ff0c58ecbec170e5108a4b2d125b4d9363fd7be))
+
+
+### 📝 Documentation
+
+* **core:** drop the ChangelogRecord commentary from the pipeline helpers ([1ddf2c3](https://github.com/gitgovernance/monorepo/commit/1ddf2c360e0575291eb344df23871d8caf611937))
+
 ## [3.21.0](https://github.com/gitgovernance/monorepo/compare/core-v3.20.0...core-v3.21.0) (2026-08-05)
 
 
