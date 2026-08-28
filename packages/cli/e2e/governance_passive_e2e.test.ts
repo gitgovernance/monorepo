@@ -73,27 +73,21 @@ const HAS_HOOK_COMMAND = (() => {
     throw new Error(`CLI binary not found at ${cliPath}. Run \`pnpm build\` in packages/cli first.`);
   }
 
-  let stderr: string;
-  try {
-    // Commander exits 1 when `hook` is called without a subcommand even though the command exists,
-    // and writes its help to stderr — so the success path here means something unexpected happened.
-    execSync(`node "${cliPath}" hook`, { stdio: 'pipe', encoding: 'utf8', timeout: 30_000 });
-    return true;
-  } catch (err: unknown) {
-    const e = err as { stderr?: string | Buffer; signal?: string };
-    if (e.signal) {
-      throw new Error(`hook probe was killed by ${e.signal} — cannot tell whether the command exists.`);
-    }
-    stderr = typeof e.stderr === 'string' ? e.stderr : e.stderr?.toString() ?? '';
-  }
-
-  if (stderr.includes('command-executed')) return true;      // help listing → command exists
-  if (/unknown command|unknown option/i.test(stderr)) return false; // genuinely absent → skip
-
-  throw new Error(
-    `hook probe produced neither the help listing nor an "unknown command" error, so whether the ` +
-    `command exists is undetermined. Refusing to silently skip ${11} tests. stderr was:\n${stderr}`,
-  );
+  // Read the bundle instead of spawning it. Two reasons, both measured:
+  //
+  // Spawning at module load competed with the rest of the suite for CPU, and the cost landed on
+  // vitest's 10s hook budget: this file failed with `Hook timed out in 10000ms` in the full run
+  // while passing 11/11 on its own.
+  //
+  // And before that, the spawn's result was read through a bare catch, so any failure to answer —
+  // slow spawn, missing binary — became "the command is absent" and silently skipped eleven tests.
+  // One run reported 612 passed / 23 skipped where the runs around it gave 623 / 12, with nothing
+  // failing to say coverage had dropped.
+  //
+  // A string search over the built bundle is instant, cannot be starved, and answers the same
+  // question: esbuild inlines the subcommand names as literals.
+  const bundle = fs.readFileSync(cliPath, 'utf-8');
+  return bundle.includes('command-executed') && bundle.includes('file-changed');
 })();
 
 // ── Stdin payloads ────────────────────────────────────────────────
