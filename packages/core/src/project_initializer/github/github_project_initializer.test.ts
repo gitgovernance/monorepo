@@ -247,19 +247,6 @@ describe('GitHubProjectInitializer', () => {
       expect(configStore.loadConfig).not.toHaveBeenCalled();
     });
 
-    it('[GPI08] should complete copyAgentPrompt without gitModule or configStore calls', async () => {
-      const initializer = createInitializer(gitModule, configStore);
-
-      await initializer.copyAgentPrompt();
-
-      expect(gitModule.add).not.toHaveBeenCalled();
-      expect(gitModule.commit).not.toHaveBeenCalled();
-      expect(gitModule.createBranch).not.toHaveBeenCalled();
-      expect(gitModule.deleteBranch).not.toHaveBeenCalled();
-      expect(configStore.saveConfig).not.toHaveBeenCalled();
-      expect(configStore.loadConfig).not.toHaveBeenCalled();
-    });
-
     it('[GPI09] should complete setupGitIntegration without gitModule or configStore calls', async () => {
       const initializer = createInitializer(gitModule, configStore);
 

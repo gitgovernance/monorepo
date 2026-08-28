@@ -21,6 +21,7 @@
 export type {
   IAgentRunner,
   IAgentLoader,
+  IEngineValidator,
   ProtocolHandlerRegistry,
   ProtocolHandler,
   RuntimeHandlerRegistry,
@@ -29,6 +30,7 @@ export type {
 
 // Pure types (from agent_runner.types.ts)
 export type {
+  EngineValidationResult,
   RunOptions,
   AgentResponse,
   AgentOutput,

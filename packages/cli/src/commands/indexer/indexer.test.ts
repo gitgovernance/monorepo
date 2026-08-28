@@ -1,22 +1,23 @@
 /**
- * indexer.test.ts — Registro de comandos del indexer (EARS-C3)
+ * indexer.test.ts — Indexer command registration (EARS-C3)
  * Spec: cli/specs/index_command.md §3.3
  *
- * Protege la CLASE del bug de s78b-32: registrar comandos NO debe tocar stores.
- * El registro ansioso del projector (`cli/src/index.ts:60`) disparaba
- * initializeStores() → bootstrapWorktree() antes de que Commander parseara
- * ninguna opcion, y por eso `--state-branch` (INIT-L1/L3) y el override de
- * LOGIN-P1 llegaban siempre tarde: el worktree quedaba atado al default.
+ * Protects the CLASS of the bug: registering commands must NOT touch stores.
+ * Eager projector registration (`cli/src/index.ts:60`) fired
+ * initializeStores() → bootstrapWorktree() before Commander had parsed a single
+ * option, so `--state-branch` (INIT-L1/L3) and the LOGIN-P1 override always
+ * arrived too late: the worktree stayed bound to the default.
  *
- * El assert que DISCRIMINA es el segundo: no basta con "no se llamo al
- * registrar" (hoy tampoco se llama, porque el registro recibe un valor ya
- * construido) — hay que probar que la resolucion OCURRE al ejecutar.
+ * The assertion that DISCRIMINATES is the second one. "It was not called during
+ * registration" is not enough — it is not called today either, because
+ * registration receives an already-built value. What has to be proven is that
+ * resolution HAPPENS on execution.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Command } from 'commander';
 
-// El handler construye IndexerCommand: se stubea para que el test verifique
-// el contrato del registro, no la indexacion real.
+// The handler builds IndexerCommand: it is stubbed so the test verifies the
+// registration contract, not real indexing.
 vi.mock('./indexer-command', () => ({
   IndexerCommand: class {
     async execute(): Promise<void> { /* no-op */ }
@@ -37,15 +38,15 @@ describe('registerIndexerCommands (EARS-C3)', () => {
 
     registerIndexerCommands(program, resolveProjector);
 
-    // (a) El comando quedo registrado
+    // (a) The command was registered
     expect(program.commands.map(c => c.name())).toContain('indexer');
 
-    // (b) Registrar NO resuelve nada — ningun store se toca en esta fase
-    expect(resolveProjector, 'el registro NO debe resolver el projector').not.toHaveBeenCalled();
+    // (b) Registering resolves NOTHING — no store is touched in this phase
+    expect(resolveProjector, 'registration must NOT resolve the projector').not.toHaveBeenCalled();
 
-    // (c) Ejecutar SI lo resuelve — la resolucion vive en el handler, que es
-    //     cuando el comando ya fijo su propio override de state-branch
+    // (c) Executing DOES resolve it — resolution lives in the handler, which runs
+    //     after the command has set its own state-branch override
     await program.parseAsync(['node', 'gitgov', 'indexer']);
-    expect(resolveProjector, 'el handler DEBE resolver el projector al ejecutar').toHaveBeenCalledTimes(1);
+    expect(resolveProjector, 'the handler MUST resolve the projector on execution').toHaveBeenCalledTimes(1);
   });
 });

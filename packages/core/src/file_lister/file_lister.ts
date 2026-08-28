@@ -44,6 +44,27 @@ export interface FileLister {
   list(patterns: string[], options?: FileListOptions): Promise<string[]>;
 
   /**
+   * [EARS-FL05] Discards any cached state so the next read observes the source again.
+   *
+   * FRESHNESS SEMANTICS OF THIS INTERFACE, declared here because implementations differ:
+   * an instance is NOT guaranteed to observe changes that happen after its first read.
+   * `FsFileLister` and `MemoryFileLister` re-read every time; `GitHubFileLister` caches the
+   * repository tree ([EARS-B6]) and, without invalidation, observes the tree of a single
+   * instant forever. A consumer waiting for something to APPEAR must call this between
+   * attempts — it must NOT assume `list()` re-reads the source.
+   *
+   * Implementations with no cache implement it as a NO-OP. That is not an empty method: it
+   * is the statement that this backend has nothing to discard, which is information the
+   * consumer needs. Safe to call at any time, including before any read. Never throws.
+   *
+   * Origin: a poll built on one reused `GitHubFileLister` spun 60s over a frozen array and
+   * read as flakiness for weeks (measured). Putting this only on the concrete
+   * class would have forced consumers into `instanceof` — the coupling this interface
+   * exists to prevent — and would let the planned `GitlabFileLister` reintroduce the defect.
+   */
+  invalidateCache(): void;
+
+  /**
    * [EARS-FL02] Checks if a file exists.
    * @param filePath - Path relative to cwd
    * @returns true if file exists, false otherwise

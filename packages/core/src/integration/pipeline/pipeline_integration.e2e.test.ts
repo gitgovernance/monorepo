@@ -3,7 +3,19 @@ import * as path from 'path';
 import { createHash } from 'crypto';
 import type { PrismaClient } from '../../../generated/prisma/index.js';
 import { PrismaRecordProjection } from '../../record_projection/prisma';
-import type { ProjectionClient } from '../../record_projection/prisma';
+import { TYPE_TO_DIR } from '../../record_types';
+
+/**
+ * Every query in this suite is unfiltered, because core's schema is single-tenant.
+ *
+ * `repoId` and `projectionType` are SaaS columns: `protocol.prisma` states in its header that it
+ * has neither, and `saas-api/prisma/extensions/protocol-extensions.prisma` adds them on top (see
+ * `schema_layering.md` §2.3, rule 2). This suite runs against core's own generated client — the
+ * Layer 1 schema — so filtering by them targets columns that do not exist here.
+ *
+ * Filtering was unnecessary anyway: each block cleans the database in its own `afterAll`.
+ */
+const SINGLE_TENANT_WHERE = {};
 import {
   createTempGitRepo,
   createTestPrisma,
@@ -13,7 +25,6 @@ import {
   seedExecutionRecord,
   seedFeedbackRecord,
   seedCycleRecord,
-  seedChangelogRecord,
   runProjector,
   projectAndCompare,
   cleanupDb,
@@ -23,6 +34,7 @@ import {
   computeChecksum,
   createInMemoryOctokit,
   createMockGitHubStores,
+  asProjectionClient,
   runMockGitHubProjector,
 } from './pipeline_integration.helpers';
 import type { GitHubTestStores } from './pipeline_integration.types';
@@ -61,7 +73,6 @@ describe('Core E2E Integration', () => {
     const execId = `${ts}-exec-scan-result`;
     const feedbackId = `${ts}-feedback-waiver`;
     const cycleId = `${ts}-cycle-sprint-q1`;
-    const changelogId = `${ts}-changelog-v1`;
 
     beforeAll(async () => {
       const repo = createTempGitRepo();
@@ -189,23 +200,8 @@ describe('Core E2E Integration', () => {
       expect(cycle.payload.taskIds).toContain(taskId);
     });
 
-    it('[EARS-A8] should create changelog record with related tasks and version', async () => {
-      const changelog = await seedChangelogRecord(repoDir, {
-        id: changelogId,
-        title: 'Release Seguridad v1.0',
-        relatedTasks: [taskId],
-        version: 'v1.0.0',
-      }, humanActorId);
-
-      const files = listRecordFiles(repoDir, 'changelogs');
-      expect(files).toContain(`${changelogId}.json`);
-
-      expect(changelog.payload.relatedTasks).toContain(taskId);
-      expect(changelog.payload.version).toBe('v1.0.0');
-    });
-
-    it('[EARS-A9] should have valid signatures on all 7 record types', () => {
-      const dirs = ['actors', 'agents', 'tasks', 'executions', 'feedbacks', 'cycles', 'changelogs'];
+    it('[EARS-A9] should have valid signatures on all 6 record types', () => {
+      const dirs = Object.values(TYPE_TO_DIR);
 
       for (const dir of dirs) {
         const files = listRecordFiles(repoDir, dir);
@@ -244,14 +240,13 @@ describe('Core E2E Integration', () => {
     const execId = `${ts}-exec-projection-result`;
     const feedbackId = `${ts}-feedback-projection-approval`;
     const cycleId = `${ts}-cycle-projection-sprint`;
-    const changelogId = `${ts}-changelog-projection-v1`;
 
     beforeAll(async () => {
       const repo = createTempGitRepo();
       tmpDir = repo.tmpDir;
       repoDir = repo.repoDir;
 
-      // Seed all 7 record types
+      // Seed all 6 record types
       await seedActorRecord(repoDir, { id: 'human:dev', type: 'human', displayName: 'Dev' });
       await seedActorRecord(repoDir, { id: 'agent:auditor', type: 'agent', displayName: 'Auditor' });
       await seedAgentRecord(repoDir, { id: 'agent:auditor', engineType: 'api' });
@@ -259,24 +254,23 @@ describe('Core E2E Integration', () => {
       await seedExecutionRecord(repoDir, { id: execId, taskId, type: 'analysis', result: '3 findings' });
       await seedFeedbackRecord(repoDir, { id: feedbackId, entityType: 'task', entityId: taskId, type: 'approval', content: 'Approved' });
       await seedCycleRecord(repoDir, { id: cycleId, title: 'Sprint Q1', taskIds: [taskId] });
-      await seedChangelogRecord(repoDir, { id: changelogId, title: 'Release v1', relatedTasks: [taskId], version: 'v1.0.0' });
 
       // Run projector
       report = await runProjector(prisma, repoDir, repoId);
     });
 
     afterAll(async () => {
-      await cleanupDb(prisma, repoId);
+      await cleanupDb(prisma);
       fs.rmSync(tmpDir, { recursive: true, force: true });
     });
 
-    it('[EARS-B1] should read all 7 record types and produce IndexData with correct counts', () => {
+    it('[EARS-B1] should read all 6 record types and produce IndexData with correct counts', () => {
       expect(report.success).toBe(true);
       expect(report.recordsProcessed).toBeGreaterThan(0);
     });
 
     it('[EARS-B2] should populate all 6 gitgov tables after projection', async () => {
-      const where = { repoId, projectionType: 'index' };
+      const where = SINGLE_TENANT_WHERE;
 
       const meta = await prisma.gitgovMeta.findFirst({ where });
       expect(meta).not.toBeNull();
@@ -299,7 +293,7 @@ describe('Core E2E Integration', () => {
 
     it('[EARS-B3] should store correct integrity status and record counts in GitgovMeta', async () => {
       const meta = await prisma.gitgovMeta.findFirst({
-        where: { repoId, projectionType: 'index' },
+        where: SINGLE_TENANT_WHERE,
       });
 
       expect(meta).not.toBeNull();
@@ -316,7 +310,7 @@ describe('Core E2E Integration', () => {
 
     it('[EARS-B4] should store enriched task data with health score and execution count', async () => {
       const tasks = await prisma.gitgovTask.findMany({
-        where: { repoId, projectionType: 'index' },
+        where: SINGLE_TENANT_WHERE,
       });
 
       const projectedTask = tasks.find((t) => t.recordId === taskId);
@@ -332,12 +326,12 @@ describe('Core E2E Integration', () => {
 
     it('[EARS-B5] should store feedback record with approval type and entity reference', async () => {
       const feedbacks = await prisma.gitgovFeedback.findMany({
-        where: { repoId, projectionType: 'index' },
+        where: SINGLE_TENANT_WHERE,
       });
 
       const projectedFb = feedbacks.find((f) => f.recordId === feedbackId);
       expect(projectedFb).toBeDefined();
-      expect(projectedFb!.feedbackType).toBe('approval');
+      expect(projectedFb!.type).toBe('approval');
       expect(projectedFb!.entityType).toBe('task');
       expect(projectedFb!.entityId).toBe(taskId);
       expect(projectedFb!.status).toBe('open');
@@ -345,9 +339,7 @@ describe('Core E2E Integration', () => {
 
     it('[EARS-B6] should reconstruct equivalent IndexData from read after persist', async () => {
       const sink = new PrismaRecordProjection({
-        client: prisma as unknown as ProjectionClient,
-        repoId,
-        projectionType: 'index',
+        client: asProjectionClient(prisma),
       });
 
       const reconstructed = await sink.read({});
@@ -370,18 +362,18 @@ describe('Core E2E Integration', () => {
 
     it('[EARS-B7] should produce identical table contents on repeated projection', async () => {
       // Capture state after first projection
-      const firstMeta = await prisma.gitgovMeta.findFirst({ where: { repoId } });
-      const firstTasks = await prisma.gitgovTask.findMany({ where: { repoId } });
-      const firstActors = await prisma.gitgovActor.findMany({ where: { repoId } });
+      const firstMeta = await prisma.gitgovMeta.findFirst({ where: SINGLE_TENANT_WHERE });
+      const firstTasks = await prisma.gitgovTask.findMany({ where: SINGLE_TENANT_WHERE });
+      const firstActors = await prisma.gitgovActor.findMany({ where: SINGLE_TENANT_WHERE });
 
       // Run projection again on same data
       const report2 = await runProjector(prisma, repoDir, repoId);
       expect(report2.success).toBe(true);
 
       // Compare — delete+re-insert should produce identical data
-      const secondMeta = await prisma.gitgovMeta.findFirst({ where: { repoId } });
-      const secondTasks = await prisma.gitgovTask.findMany({ where: { repoId } });
-      const secondActors = await prisma.gitgovActor.findMany({ where: { repoId } });
+      const secondMeta = await prisma.gitgovMeta.findFirst({ where: SINGLE_TENANT_WHERE });
+      const secondTasks = await prisma.gitgovTask.findMany({ where: SINGLE_TENANT_WHERE });
+      const secondActors = await prisma.gitgovActor.findMany({ where: SINGLE_TENANT_WHERE });
 
       expect(secondTasks).toHaveLength(firstTasks.length);
       expect(secondActors).toHaveLength(firstActors.length);
@@ -395,7 +387,7 @@ describe('Core E2E Integration', () => {
       // Create repo WITHOUT .gitgov/ content (empty directories)
       const emptyRepo = createTempGitRepo();
       // Remove all record files (keep empty dirs)
-      const dirs = ['actors', 'agents', 'tasks', 'executions', 'feedbacks', 'cycles', 'changelogs'];
+      const dirs = Object.values(TYPE_TO_DIR);
       for (const dir of dirs) {
         const dirPath = path.join(emptyRepo.repoDir, '.gitgov', dir);
         const files = fs.readdirSync(dirPath);
@@ -407,14 +399,14 @@ describe('Core E2E Integration', () => {
       expect(emptyReport.recordsProcessed).toBe(0);
 
       // Verify no meaningful rows (only meta with 0 counts)
-      const tasks = await prisma.gitgovTask.findMany({ where: { repoId: emptyRepoId } });
+      const tasks = await prisma.gitgovTask.findMany({ where: SINGLE_TENANT_WHERE });
       expect(tasks).toHaveLength(0);
 
-      const activities = await prisma.gitgovActivity.findMany({ where: { repoId: emptyRepoId } });
+      const activities = await prisma.gitgovActivity.findMany({ where: SINGLE_TENANT_WHERE });
       expect(activities).toHaveLength(0);
 
       // Cleanup
-      await cleanupDb(prisma, emptyRepoId);
+      await cleanupDb(prisma);
       fs.rmSync(emptyRepo.tmpDir, { recursive: true, force: true });
     });
   });
@@ -454,12 +446,12 @@ describe('Core E2E Integration', () => {
       });
 
       afterAll(async () => {
-        await cleanupDb(prisma, repoId);
+        await cleanupDb(prisma);
         fs.rmSync(tmpDir, { recursive: true, force: true });
       });
 
       it('[EARS-D1] should project complete agent auditor workflow into 6 DB tables', async () => {
-        const where = { repoId, projectionType: 'index' };
+        const where = SINGLE_TENANT_WHERE;
 
         const meta = await prisma.gitgovMeta.findFirst({ where });
         expect(meta).not.toBeNull();
@@ -475,12 +467,12 @@ describe('Core E2E Integration', () => {
         const actors = await prisma.gitgovActor.findMany({ where });
         const agent = actors.find((a) => a.recordId === 'agent:auditor');
         expect(agent).toBeDefined();
-        expect(agent!.actorType).toBe('agent');
+        expect(agent!.type).toBe('agent');
 
         const feedbacks = await prisma.gitgovFeedback.findMany({ where });
         const fb = feedbacks.find((f) => f.recordId === feedbackId);
         expect(fb).toBeDefined();
-        expect(fb!.feedbackType).toBe('approval');
+        expect(fb!.type).toBe('approval');
 
         const activities = await prisma.gitgovActivity.findMany({ where });
         expect(activities.length).toBeGreaterThan(0);
@@ -504,7 +496,7 @@ describe('Core E2E Integration', () => {
       const taskId = `${ts}-task-impl-auth`;
       const exec1Id = `${ts}-exec-pr-42`;
       const exec2Id = `${ts}-exec-merged`;
-      const changelogId = `${ts}-changelog-v120`;
+      const releaseExecId = `${ts}-exec-release-v120`;
 
       beforeAll(async () => {
         const repo = createTempGitRepo();
@@ -515,24 +507,27 @@ describe('Core E2E Integration', () => {
         await seedTaskRecord(repoDir, { id: taskId, title: 'Implementar feature auth', status: 'done', priority: 'high' }, 'human:camilo');
         await seedExecutionRecord(repoDir, { id: exec1Id, taskId, type: 'progress', result: 'PR #42 abierto' }, 'human:camilo');
         await seedExecutionRecord(repoDir, { id: exec2Id, taskId, type: 'completion', result: 'Merged y deployed' }, 'human:camilo');
-        await seedChangelogRecord(repoDir, { id: changelogId, title: 'Auth Feature', relatedTasks: [taskId], version: 'v1.2.0' }, 'human:camilo');
+        await seedExecutionRecord(repoDir, {
+          id: releaseExecId, taskId, type: 'custom:release', result: 'Released v1.2.0',
+          metadata: { version: 'v1.2.0' },
+        }, 'human:camilo');
 
         await runProjector(prisma, repoDir, repoId);
       });
 
       afterAll(async () => {
-        await cleanupDb(prisma, repoId);
+        await cleanupDb(prisma);
         fs.rmSync(tmpDir, { recursive: true, force: true });
       });
 
-      it('[EARS-D2] should project human dev workflow with task lifecycle and changelog', async () => {
-        const where = { repoId, projectionType: 'index' };
+      it('[EARS-D2] should project human dev workflow with task lifecycle and release', async () => {
+        const where = SINGLE_TENANT_WHERE;
 
         const tasks = await prisma.gitgovTask.findMany({ where });
         const task = tasks.find((t) => t.recordId === taskId);
         expect(task).toBeDefined();
         expect(task!.status).toBe('done');
-        expect(task!.executionCount).toBe(2);
+        expect(task!.executionCount).toBe(3); // progress + completion + custom:release
         expect(task!.isReleased).toBe(true);
         expect(task!.lastReleaseVersion).toBe('v1.2.0');
         expect(task!.healthScore).toBeGreaterThan(0);
@@ -581,12 +576,12 @@ describe('Core E2E Integration', () => {
       });
 
       afterAll(async () => {
-        await cleanupDb(prisma, repoId);
+        await cleanupDb(prisma);
         fs.rmSync(tmpDir, { recursive: true, force: true });
       });
 
       it('[EARS-D3] should project multi-actor collaboration with assignments and reviews', async () => {
-        const where = { repoId, projectionType: 'index' };
+        const where = SINGLE_TENANT_WHERE;
 
         const tasks = await prisma.gitgovTask.findMany({ where });
         const task = tasks.find((t) => t.recordId === taskId);
@@ -596,7 +591,7 @@ describe('Core E2E Integration', () => {
         const feedbacks = await prisma.gitgovFeedback.findMany({ where });
         expect(feedbacks.length).toBeGreaterThanOrEqual(3);
 
-        const types = feedbacks.map((f) => f.feedbackType).sort();
+        const types = feedbacks.map((f) => f.type).sort();
         expect(types).toContain('assignment');
         expect(types).toContain('suggestion');
         expect(types).toContain('approval');
@@ -631,7 +626,7 @@ describe('Core E2E Integration', () => {
       });
 
       afterAll(async () => {
-        await cleanupDb(prisma, repoId);
+        await cleanupDb(prisma);
         fs.rmSync(tmpDir, { recursive: true, force: true });
       });
 
@@ -646,7 +641,7 @@ describe('Core E2E Integration', () => {
         expect(report1.success).toBe(true);
 
         // Verify no feedback yet
-        let feedbacks = await prisma.gitgovFeedback.findMany({ where: { repoId } });
+        let feedbacks = await prisma.gitgovFeedback.findMany({ where: SINGLE_TENANT_WHERE });
         expect(feedbacks).toHaveLength(0);
 
         // Phase 3: Writer creates new feedback (simulating API write)
@@ -681,11 +676,11 @@ describe('Core E2E Integration', () => {
         expect(report2.success).toBe(true);
 
         // Verify feedback now in DB
-        feedbacks = await prisma.gitgovFeedback.findMany({ where: { repoId } });
+        feedbacks = await prisma.gitgovFeedback.findMany({ where: SINGLE_TENANT_WHERE });
         expect(feedbacks.length).toBeGreaterThanOrEqual(1);
         const writtenFb = feedbacks.find((f) => f.recordId === writtenFbId);
         expect(writtenFb).toBeDefined();
-        expect(writtenFb!.feedbackType).toBe('approval');
+        expect(writtenFb!.type).toBe('approval');
       });
     });
 
@@ -711,7 +706,7 @@ describe('Core E2E Integration', () => {
       });
 
       afterAll(async () => {
-        await cleanupDb(prisma, repoId);
+        await cleanupDb(prisma);
         fs.rmSync(tmpDir, { recursive: true, force: true });
       });
 
@@ -726,9 +721,9 @@ describe('Core E2E Integration', () => {
         const report1 = await runProjector(prisma, repoDir, repoId);
         expect(report1.success).toBe(true);
 
-        let tasks = await prisma.gitgovTask.findMany({ where: { repoId } });
+        let tasks = await prisma.gitgovTask.findMany({ where: SINGLE_TENANT_WHERE });
         expect(tasks).toHaveLength(2);
-        let cycles = await prisma.gitgovCycle.findMany({ where: { repoId } });
+        let cycles = await prisma.gitgovCycle.findMany({ where: SINGLE_TENANT_WHERE });
         expect(cycles).toHaveLength(1);
 
         // Run 2: Add 1 task + 1 execution
@@ -738,10 +733,10 @@ describe('Core E2E Integration', () => {
         const report2 = await runProjector(prisma, repoDir, repoId);
         expect(report2.success).toBe(true);
 
-        tasks = await prisma.gitgovTask.findMany({ where: { repoId } });
+        tasks = await prisma.gitgovTask.findMany({ where: SINGLE_TENANT_WHERE });
         expect(tasks).toHaveLength(3);
 
-        cycles = await prisma.gitgovCycle.findMany({ where: { repoId } });
+        cycles = await prisma.gitgovCycle.findMany({ where: SINGLE_TENANT_WHERE });
         expect(cycles).toHaveLength(1);
 
         const task1 = tasks.find((t) => t.recordId === task1Id);
@@ -758,7 +753,6 @@ describe('Core E2E Integration', () => {
   // 4.5. Projection Parity — FS vs Prisma (EARS-E1)
   // ===========================================================================
   describe('4.5. Projection Parity (EARS-E1)', () => {
-    const repoId = `e2e-parity-${Date.now()}`;
     let tmpDir: string;
     let repoDir: string;
     let fsIdx: Awaited<ReturnType<typeof projectAndCompare>>['fsIndexData'];
@@ -769,7 +763,6 @@ describe('Core E2E Integration', () => {
     const execId = `${ts}-exec-parity`;
     const feedbackId = `${ts}-feedback-parity`;
     const cycleId = `${ts}-cycle-parity`;
-    const changelogId = `${ts}-changelog-parity`;
 
     beforeAll(async () => {
       const repo = createTempGitRepo();
@@ -783,15 +776,14 @@ describe('Core E2E Integration', () => {
       await seedExecutionRecord(repoDir, { id: execId, taskId, type: 'analysis', result: 'Scan complete' });
       await seedFeedbackRecord(repoDir, { id: feedbackId, entityType: 'task', entityId: taskId, type: 'approval', content: 'LGTM' });
       await seedCycleRecord(repoDir, { id: cycleId, title: 'Sprint Parity', taskIds: [taskId] });
-      await seedChangelogRecord(repoDir, { id: changelogId, title: 'Parity Release', relatedTasks: [taskId], version: 'v2.0.0' });
 
-      const result = await projectAndCompare(prisma, repoDir, repoId);
+      const result = await projectAndCompare(prisma, repoDir);
       fsIdx = result.fsIndexData;
       prismaIdx = result.prismaIndexData;
     });
 
     afterAll(async () => {
-      await cleanupDb(prisma, repoId);
+      await cleanupDb(prisma);
       fs.rmSync(tmpDir, { recursive: true, force: true });
     });
 
@@ -861,15 +853,15 @@ describe('Core E2E Integration', () => {
     const ts = Date.now();
     const taskId = `${ts}-task-gh`;
     const execId = `${ts}-exec-gh`;
+    const releaseExecId = `${ts}-exec-gh-release`;
     const feedbackId = `${ts}-feedback-gh`;
     const cycleId = `${ts}-cycle-gh`;
-    const changelogId = `${ts}-changelog-gh`;
 
     beforeAll(async () => {
       mockOctokit = createInMemoryOctokit();
       stores = createMockGitHubStores(mockOctokit.octokit);
 
-      // Seed all 7 record types via GitHubRecordStore.put()
+      // Seed all 6 record types via GitHubRecordStore.put()
       const humanActor = createEmbeddedRecord('actor', {
         id: 'human:dev', type: 'human', displayName: 'Dev Humano',
         publicKey: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=', roles: ['developer'],
@@ -894,6 +886,14 @@ describe('Core E2E Integration', () => {
       }, 'agent:auditor');
       await stores.executions.put(execId, exec);
 
+      // Release: `isReleased` and `lastReleaseVersion` are derived from `custom:release`
+      // executions carrying `metadata.version` (`record_projection.ts:919-925`).
+      const releaseExec = createEmbeddedRecord('execution', {
+        id: releaseExecId, taskId, type: 'custom:release', title: 'Mock Release',
+        result: 'Released v0.0.1-mock', metadata: { version: 'v0.0.1-mock' },
+      }, 'human:dev');
+      await stores.executions.put(releaseExecId, releaseExec);
+
       const feedback = createEmbeddedRecord('feedback', {
         id: feedbackId, entityType: 'task', entityId: taskId,
         type: 'approval', status: 'open', content: 'Approved via mock',
@@ -906,19 +906,13 @@ describe('Core E2E Integration', () => {
       }, 'human:dev');
       await stores.cycles.put(cycleId, cycle);
 
-      const changelog = createEmbeddedRecord('changelog', {
-        id: changelogId, title: 'Mock Release',
-        description: 'Changelog via mock', relatedTasks: [taskId],
-        completedAt: Math.floor(Date.now() / 1000), version: 'v0.0.1-mock',
-      }, 'human:dev');
-      await stores.changelogs.put(changelogId, changelog);
     });
 
     afterAll(async () => {
-      await cleanupDb(prisma, repoId);
+      await cleanupDb(prisma);
     });
 
-    it('[EARS-F1] should persist all 7 record types via GitHubRecordStore and verify via list', async () => {
+    it('[EARS-F1] should persist all 6 record types via GitHubRecordStore and verify via list', async () => {
       const actorIds = await stores.actors.list();
       expect(actorIds).toContain('human:dev');
       expect(actorIds).toContain('agent:auditor');
@@ -935,11 +929,9 @@ describe('Core E2E Integration', () => {
       const cycleIds = await stores.cycles.list();
       expect(cycleIds).toContain(cycleId);
 
-      const changelogIds = await stores.changelogs.list();
-      expect(changelogIds).toContain(changelogId);
     });
 
-    it('[EARS-F2] should read back all 7 record types with matching payload and checksum', async () => {
+    it('[EARS-F2] should read back all 6 record types with matching payload and checksum', async () => {
       // Actor
       const actor = await stores.actors.get('human:dev');
       expect(actor).not.toBeNull();
@@ -973,13 +965,6 @@ describe('Core E2E Integration', () => {
       expect(cycle).not.toBeNull();
       expect(cycle!.payload.taskIds).toContain(taskId);
       expect(cycle!.header.payloadChecksum).toBe(computeChecksum(cycle!.payload));
-
-      // Changelog
-      const changelog = await stores.changelogs.get(changelogId);
-      expect(changelog).not.toBeNull();
-      expect(changelog!.payload.version).toBe('v0.0.1-mock');
-      expect(changelog!.payload.relatedTasks).toContain(taskId);
-      expect(changelog!.header.payloadChecksum).toBe(computeChecksum(changelog!.payload));
 
       // Agent actor
       const agent = await stores.actors.get('agent:auditor');
@@ -1033,7 +1018,7 @@ describe('Core E2E Integration', () => {
       expect(report.success).toBe(true);
       expect(report.recordsProcessed).toBeGreaterThan(0);
 
-      const where = { repoId, projectionType: 'index' };
+      const where = SINGLE_TENANT_WHERE;
 
       // Meta
       const meta = await prisma.gitgovMeta.findFirst({ where });
@@ -1065,7 +1050,7 @@ describe('Core E2E Integration', () => {
       const feedbacks = await prisma.gitgovFeedback.findMany({ where });
       const projectedFb = feedbacks.find((f) => f.recordId === feedbackId);
       expect(projectedFb).toBeDefined();
-      expect(projectedFb!.feedbackType).toBe('approval');
+      expect(projectedFb!.type).toBe('approval');
       expect(projectedFb!.entityId).toBe(taskId);
 
       // Cycles

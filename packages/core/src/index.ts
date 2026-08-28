@@ -99,8 +99,10 @@ export type { FileLister as IFileLister, FileListOptions, FileStats } from "./fi
 export { FileListerError } from "./file_lister/index";
 
 // LLM provider abstraction (G18)
-export { resolveLlmProvider } from "./llm/index";
+export { AnthropicLlmProvider } from "./llm/index";
 export type { ILlmProvider, LlmMessage, LlmTool, LlmResponse, LlmProviderConfig } from "./llm/index";
+// NOTE: `resolveLlmProvider` and `CliLlmProvider` moved to @gitgov/core/fs — the resolver
+// constructs CliLlmProvider, which reads node:child_process. See llm/index.ts.
 
 // ─── Audit product types (canonical, from @gitgov/core/audit) ────────────────
 export type {
@@ -133,6 +135,11 @@ export type {
 
 // Audit value exports (factories)
 export { createFinding, createFix, createWaiver, createScan } from "./audit/index";
+
+// [AUDIT-J1] Closed-domain constants. They belong in the VALUES block, not the types
+// one: AUDIT-A6 declares "re-export all types", so a constant living only in the type
+// barrel would be invisible from `@gitgov/core` without any test noticing.
+export { FINDING_SEVERITIES, FINDING_STATUSES } from "./audit/index";
 
 // ─── Non-audit type exports (module-specific) ───────────────────────────────
 export type { AuditOrchestrationOptions, AuditOrchestratorDeps } from "./audit_orchestrator/index";
@@ -172,7 +179,9 @@ export type {
   Signature,
   EmbeddedMetadataRecord,
 } from "./record_types/index";
-export * as DiagramGenerator from "./diagram_generator/index";
+// DiagramGenerator removed — the module and the `gitgov diagram` command were deleted.
+// It read the filesystem directly (fs/promises + path over .gitgov/cycles and /tasks),
+// which put `fs` and `path` in the root bundle and made EARS-CI02 fail.
 
 // Audit modules
 export * as FindingDetector from "./finding_detector/index";
@@ -219,4 +228,7 @@ export { DEFAULT_GATE_MARKER } from "./ci_reporter";
 export type { ICiReporter, PrContext, RepoContext, CheckInfo } from "./ci_reporter";
 
 // Agent Discovery
-export { discoverInstalledAgents } from "./agent_discovery/index";
+export { mergeAgentSources, packageToAgentRecord } from "./agent_discovery/index";
+export type { AgentPackageJson } from "./agent_discovery/index";
+// NOTE: `discoverInstalledAgents` moved to @gitgov/core/fs — it reads the filesystem.
+// See agent_discovery/index.ts and [EARS-CI02].

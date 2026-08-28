@@ -11,6 +11,10 @@
 
 import { ProjectModule } from './project_module';
 import type { ProjectModuleDeps } from './project_module.types';
+// Node-only implementation of IEngineValidator. A test file may import from the fs
+// subpath even though ProjectModule itself must not: EARS-CI02 measures dist/src/index.js,
+// and tests never reach the bundle.
+import { FsEngineValidator } from '../agent_runner/fs/fs_engine_validator';
 import { DEFAULT_STATE_BRANCH } from '../sync_state/fs_worktree/fs_worktree_sync_state.types';
 import type { IProjectInitializer } from '../project_initializer';
 import { IdentityModule } from '../identity/identity_module';
@@ -32,7 +36,6 @@ function createMockInitializer(): IProjectInitializer {
     writeConfig: jest.fn().mockResolvedValue(undefined),
     initializeSession: jest.fn().mockResolvedValue(undefined),
     setupGitIntegration: jest.fn().mockResolvedValue(undefined),
-    copyAgentPrompt: jest.fn().mockResolvedValue(undefined),
     rollback: jest.fn().mockResolvedValue(undefined),
     validateEnvironment: jest.fn().mockResolvedValue({ isValid: true, isGitRepo: true, hasWritePermissions: true, isAlreadyInitialized: false, warnings: [], suggestions: [] }),
     readFile: jest.fn().mockResolvedValue(''),
@@ -494,6 +497,10 @@ describe('ProjectModule', () => {
       const { deps } = createRealDeps();
       const mockAgentAdapter = createMockAgentAdapter();
       deps.agentAdapter = mockAgentAdapter;
+      // The validator is INJECTED now — ProjectModule no longer imports it. Importing it
+      // dragged `path` and `node:module` into the @gitgov/core bundle (EARS-CI02).
+      // [PROJ-B7] It arrives already bound to its root: ProjectModule passes none.
+      deps.engineValidator = new FsEngineValidator('/tmp/gitgov-repo-root-fixture');
       // The session-63 phantom-agent case: npm entrypoint not installed anywhere
       deps.defaultAgents = [{
         packageName: '@gitgov/agent-does-not-exist',
@@ -515,6 +522,89 @@ describe('ProjectModule', () => {
       expect(result.agentWarnings).toHaveLength(1);
       expect(result.agentWarnings![0]).toContain('agent:phantom');
       expect(result.agentWarnings![0]).toContain('not runnable');
+    });
+
+    it('[PROJ-B7] should call validate with the engine only and never process.cwd', async () => {
+      // Pins WHICH root resolves a default agent's entrypoint. During `gitgov init` the DI
+      // puts ProjectModule in worktree mode — `initializer` writes to
+      // ~/.gitgov/worktrees/<hash> — while this validation ran against process.cwd().
+      // Two anchors, one method, and the call-site comment claimed they were the same.
+      //
+      // The repo root is the correct one: ARUN-M2 resolves npm packages with
+      // require.resolve, and node_modules lives in the repo, not in the worktree. cwd
+      // happens to be the repo today because init runs there — this test makes that a
+      // guarantee instead of a coincidence.
+      //
+      // Precedent that the distinction bites: [AORCH-P4b] "should write audit-index.json
+      // to worktree, not local project dir".
+      //
+      // The fix is not "pass the right root" — it is that ProjectModule passes NONE. While
+      // the signature was validate(engine, projectRoot), the choice between two
+      // indistinguishable strings sat with every caller, and this one knows neither concept.
+      // The root is now bound when the validator is built (ARUN-M1), by the DI, which is the
+      // only component that holds both (EARS-C16).
+      const capturedArgs: unknown[][] = [];
+      const { deps } = createRealDeps();
+      deps.agentAdapter = createMockAgentAdapter();
+      deps.engineValidator = {
+        validate: async (...args: unknown[]) => {
+          capturedArgs.push(args);
+          return { resolvable: true };
+        },
+      } as unknown as NonNullable<typeof deps.engineValidator>;
+      deps.defaultAgents = [{
+        packageName: '@gitgov/agent-does-not-exist',
+        agentId: 'agent:phantom',
+        displayName: 'Phantom Agent',
+        engine: { type: 'local' as const, entrypoint: '@gitgov/agent-does-not-exist', function: 'runAgent' },
+        purpose: 'audit',
+        triggers: [],
+        metadata: {},
+      }];
+
+      await new ProjectModule(deps).initializeProject({ name: 'test-project', login: 'camilo', stateBranch: DEFAULT_STATE_BRANCH });
+
+      // Anti-vacuity: if the validator was never called the assertions below prove nothing.
+      expect(capturedArgs).toHaveLength(1);
+      // The requirement: ONE argument. A second one would be a root, and there is no root
+      // this module could legitimately supply.
+      expect(capturedArgs[0]).toHaveLength(1);
+      expect(capturedArgs[0]![0]).toEqual(
+        expect.objectContaining({ type: 'local', entrypoint: '@gitgov/agent-does-not-exist' })
+      );
+      // Explicit about the value that used to be passed, so a regression names itself.
+      expect(capturedArgs[0]).not.toContain(process.cwd());
+    });
+
+    it('[PROJ-B6] should skip engine validation when no engineValidator is injected', async () => {
+      // `engineValidator` is OPTIONAL, and that has a cost worth pinning down: without it,
+      // PROJ-B6 silently stops validating and nothing turns red. This test makes the
+      // degraded path explicit instead of leaving it to be discovered.
+      //
+      // It is also the negative control for the test above: same unresolvable engine, the
+      // only difference is the injection. If that assertion ever passed for a reason other
+      // than the validator actually running, this one would pass too — and it must not.
+      const { deps } = createRealDeps();
+      const mockAgentAdapter = createMockAgentAdapter();
+      deps.agentAdapter = mockAgentAdapter;
+      delete deps.engineValidator; // `exactOptionalPropertyTypes` — absent, not undefined
+      deps.defaultAgents = [{
+        packageName: '@gitgov/agent-does-not-exist',
+        agentId: 'agent:phantom',
+        displayName: 'Phantom Agent',
+        engine: { type: 'local' as const, entrypoint: '@gitgov/agent-does-not-exist', function: 'runAgent' },
+        purpose: 'audit',
+        triggers: [],
+        metadata: {},
+      }];
+      const pm = new ProjectModule(deps);
+
+      const result = await pm.initializeProject({ name: 'test-project', login: 'camilo', stateBranch: DEFAULT_STATE_BRANCH });
+
+      // The agent is still registered — validation was never the gate.
+      expect(mockAgentAdapter.buildSignedAgentRecord).toHaveBeenCalledTimes(1);
+      // But nobody was warned, because nobody was there to check.
+      expect(result.agentWarnings ?? []).toHaveLength(0);
     });
   });
 
@@ -739,6 +829,33 @@ describe('ProjectModule', () => {
 
       expect(result.actorId).toBe('human:store-committed');
       expect(result.created).toBe(true);
+    });
+
+    it('[PROJ-H3b] should poll getActor before concluding the actor is absent', async () => {
+      const { deps, initializer } = createRealDeps();
+      initializer.finalize = jest.fn()
+        .mockRejectedValue(new Error('Nothing to commit: staging buffer is empty'));
+
+      // The store is backed by an eventually consistent source that does not see its own
+      // write immediately: null, null, then the actor. Measured in production (OB-I2,
+      // 2026-08-14): the commit landed 1.4s BEFORE the guard read null and threw.
+      // A single read concludes GIT_WRITE_FAILED on an actor that IS on the branch.
+      const realGetActor = deps.identity.getActor.bind(deps.identity);
+      let getActorCalls = 0;
+      deps.identity.getActor = jest.fn(async (id: string) => {
+        getActorCalls++;
+        return getActorCalls <= 2 ? null : realGetActor(id);
+      });
+      const pm = new ProjectModule(deps);
+
+      const result = await pm.addActor({
+        login: 'late-visible', type: 'human', repoId: 'repo-1', joinedVia: 'saas-oauth',
+      });
+
+      expect(result.actorId).toBe('human:late-visible');
+      // Anti-vacuity: a green here would be meaningless if the guard had found the actor
+      // on the first read — the polling is only exercised when it had to retry.
+      expect(getActorCalls).toBeGreaterThan(1);
     });
 
     it('[PROJ-H3] should throw GIT_WRITE_FAILED when finalize fails and actor not in store', async () => {

@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 
 import { Command } from 'commander';
-import { DiagramCommand } from './commands/diagram';
 import { registerIndexerCommands } from './commands/indexer/indexer';
 import { registerInitCommands } from './commands/init/init';
 import { registerTaskCommands } from './commands/task/task';
@@ -36,10 +35,6 @@ async function setupCommands() {
 
     // Register context commands (no dependencies required, uses ConfigManager)
     registerContextCommands(program);
-
-    // Register diagram commands (no dependencies required)
-    const diagramCommand = new DiagramCommand();
-    diagramCommand.register(program);
 
     // Register sync commands EARLY (before indexer) so they're available for bootstrap
     // This allows "gitgov sync pull" to work even when .gitgov/ doesn't exist yet

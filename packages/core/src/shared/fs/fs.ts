@@ -65,12 +65,18 @@ export { FsWorktreeSyncStateModule } from '../../sync_state/fs_worktree';
 // FsWatcherStateModule (filesystem-based .gitgov/ watcher)
 export { FsWatcherStateModule } from '../../watcher_state/fs';
 
+// AgentDiscovery (scans node_modules/@gitgov/agent-* from disk) — DISC-A1..A3
+export { discoverInstalledAgents } from '../../agent_discovery/fs';
+
 // AgentRunner (filesystem-based agent execution)
 export { FsAgentRunner, createAgentRunner } from '../../agent_runner/fs';
 export type { FsAgentRunnerDependencies } from '../../agent_runner/fs';
-// [EARS-M1] Creation-time engine validation (agent new fail-fast EARS-E9, init warnings PROJ-B6)
-export { validateAgentEngine } from '../../agent_runner/engine_validator';
-export type { EngineValidationResult } from '../../agent_runner/engine_validator';
+// [ARUN-M2] Creation-time engine resolution (agent new fail-fast EARS-E9, init warnings PROJ-B6).
+// The IEngineValidator contract (ARUN-M1) ships from @gitgov/core — only the resolution,
+// which reaches node:path and node:module, lives here.
+export { FsEngineValidator } from '../../agent_runner/fs/fs_engine_validator';
+// `EngineValidationResult` is NOT re-exported here: it is part of the IEngineValidator
+// contract and ships from @gitgov/core, where consumers get it alongside the interface.
 
 // RecordProjection (filesystem-based index.json persistence)
 export { FsRecordProjection } from '../../record_projection/fs';
@@ -79,3 +85,10 @@ export type { FsRecordProjectionOptions } from '../../record_projection/fs';
 // AuditFsProjection (filesystem-based audit result persistence)
 export { AuditFsProjection } from '../../audit/fs';
 export type { IAuditFsProjection, AuditFsProjectionOptions } from '../../audit/fs';
+
+// LLM providers — Node-only half of G18 (spec: fs_llm_provider_module.md)
+// `resolveLlmProvider` is here rather than in the root barrel because it constructs
+// `CliLlmProvider` with a static import, which reaches node:child_process (LLM-C1..C4).
+// The interface, its types and `AnthropicLlmProvider` stay in @gitgov/core.
+export { resolveLlmProvider, CliLlmProvider } from '../../llm/fs';
+export type { CliLlmProviderConfig, AgentJsonResult } from '../../llm/fs';

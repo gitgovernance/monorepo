@@ -445,8 +445,103 @@ export class FsWorktreeSyncStateModule implements ISyncStateModule {
     }
 
     // [WTSYNC-B14] Push to remote
-    await this.execInWorktree(['push', 'origin', this.stateBranchName]);
-    log('Pushed to remote');
+    // [WTSYNC-B18] The remote can be advanced by ANOTHER writer between the reconcile
+    // above (the check) and this push (the use) — a TOCTOU. Measured: the
+    // SaaS writes to the same ref through the GitHub API, WITHOUT a local worktree, so
+    // it cannot take part in our `pull --rebase`; there is no negotiation, only a race.
+    // Retrying is safe and convergent here because both writers are legitimate and each
+    // iteration incorporates what the other wrote — unlike 1.2e, where a stale result
+    // described a world that no longer existed and retrying would have written garbage.
+    // Rebasing does not break signatures: they are computed over record CONTENT
+    // (payloadChecksum + keyId + role + notes + timestamp), never over the commit SHA.
+    const MAX_PUSH_ATTEMPTS = 3;
+    let retryCount = 0;
+    const retryReasons: string[] = [];
+    for (let attempt = 1; ; attempt++) {
+      try {
+        await this.execInWorktree(['push', 'origin', this.stateBranchName]);
+        log(`Pushed to remote${retryCount > 0 ? ` after ${retryCount} retry(ies)` : ''}`);
+        break;
+      } catch (pushErr) {
+        const detail = pushErr instanceof Error ? pushErr.message : String(pushErr);
+        // Git does not always spell out "! [rejected] ... (fetch first)": depending on
+        // the transport and on whether a hook aborted the push, stderr can carry only
+        // "failed to push some refs". Keying the detection on the narrow phrase alone
+        // makes the retry silently not apply.
+        const isNonFastForward =
+          /rejected|fast-forward|fetch first|failed to push some refs/i.test(detail);
+
+        // Not a race — surface it untouched. Only non-fast-forward is retryable.
+        if (!isNonFastForward || force || attempt >= MAX_PUSH_ATTEMPTS) {
+          if (isNonFastForward && attempt >= MAX_PUSH_ATTEMPTS) {
+            // [WTSYNC-B18] Naming BOTH the rejection and the attempt count is normative:
+            // a generic failure here is what kept this race undiagnosable for months.
+            return {
+              success: false,
+              filesSynced: 0,
+              sourceBranch: options.sourceBranch ?? 'current',
+              commitHash: null,
+              commitMessage: null,
+              conflictDetected: false,
+              retryCount,
+              retryReasons,
+              error: `Push rejected as non-fast-forward after ${MAX_PUSH_ATTEMPTS} attempt(s): another writer keeps advancing '${this.stateBranchName}'. Last git error: ${detail}`,
+            };
+          }
+          throw pushErr;
+        }
+
+        // [WTSYNC-B19] Every retry is logged with its number, trigger and outcome — a
+        // silent retry would fix the symptom and erase the evidence that the race exists.
+        retryCount++;
+        // [WTSYNC-B19] La causa va al RESULTADO, no solo al log: el logger de core es
+        // silencioso bajo NODE_ENV=test, asi que un registro que solo vive ahi no es
+        // auditable. Sin esto, el retry arregla el sintoma y borra la evidencia.
+        retryReasons.push(detail.trim().slice(0, 500));
+        log(`[WTSYNC-B18] Push attempt ${attempt} rejected (non-fast-forward) — another writer advanced '${this.stateBranchName}'. Reconciling and retrying (${attempt}/${MAX_PUSH_ATTEMPTS}).`);
+
+        try {
+          // `--autostash` is required HERE and not in the first reconcile (B6): by this
+          // point the worktree can carry leftovers the commit filtered out (local-only
+          // files), and git refuses to rebase with unstaged changes. The normal path
+          // never rebases twice, so it never hit this. Autostash stashes, rebases and
+          // re-applies — no state is discarded.
+          await this.execInWorktree(['pull', '--rebase', '--autostash', 'origin', this.stateBranchName]);
+        } catch (rebaseErr) {
+          // A conflict is a USER decision, not something to retry (mirrors WTSYNC-B7).
+          // Only a REAL conflict aborts. A rebase can fail for other reasons, and
+          // reporting "conflict" without checking would be asserting a state we never
+          // verified — the very defect this EARS exists to remove.
+          const rebaseDetail = rebaseErr instanceof Error ? rebaseErr.message : String(rebaseErr);
+          const affectedFiles = await this.getConflictedFiles();
+          if (affectedFiles.length === 0) {
+            log(`[WTSYNC-B18] Retry ${attempt}: rebase failed WITHOUT conflicted files — not retryable. ${rebaseDetail}`);
+            throw rebaseErr;
+          }
+          log(`[WTSYNC-B18] Retry ${attempt} hit a rebase conflict (${affectedFiles.length} file(s)) — aborting the retry loop.`);
+          return {
+            success: false,
+            filesSynced: stagedCount,
+            sourceBranch: options.sourceBranch ?? 'current',
+            commitHash,
+            commitMessage,
+            conflictDetected: true,
+            retryCount,
+            retryReasons,
+            conflictInfo: {
+              type: 'rebase_conflict',
+              affectedFiles,
+              message: 'Rebase conflict detected while retrying a rejected push',
+              resolutionSteps: [
+                `Edit conflicted files in ${this.worktreePath}/.gitgov/`,
+                'Run `gitgov sync resolve --reason "..."` to finalize',
+              ],
+            },
+            error: 'Rebase conflict during push retry',
+          };
+        }
+      }
+    }
 
     const finalHash = (await this.execInWorktree(['rev-parse', 'HEAD'])).trim();
 
@@ -457,6 +552,10 @@ export class FsWorktreeSyncStateModule implements ISyncStateModule {
       commitHash: finalHash,
       commitMessage,
       conflictDetected: false,
+      // [WTSYNC-B19] Always reported, including 0: a push that had to reconcile against a
+      // concurrent writer must not be indistinguishable from one that went through clean.
+      retryCount,
+      retryReasons,
     };
     if (implicitPull) {
       result.implicitPull = implicitPull;

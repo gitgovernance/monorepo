@@ -3,7 +3,7 @@
  *
  * Tests for engine.type: "mcp" execution via Model Context Protocol.
  *
- * Reference: agent_runner_module.md §4.5 (EARS-E1 to EARS-E4)
+ * Reference: agent_runner_module.md §4.2 (ARUN-E1 to ARUN-E4)
  * Reference: agent_protocol.md §5.1.3
  */
 
@@ -60,9 +60,9 @@ describe("McpBackend", () => {
     jest.clearAllMocks();
   });
 
-  describe("4.5. MCP Backend (EARS-E1 to EARS-E4)", () => {
-    describe("[EARS-E1] should connect to MCP server at engine.url", () => {
-      it("should make POST request to MCP server URL", async () => {
+  describe("4.2. MCP Backend (ARUN-E1 to ARUN-E4)", () => {
+    describe("[ARUN-E1] should connect to MCP server at engine.url", () => {
+      it("[ARUN-E1] should make POST request to MCP server URL", async () => {
         mockFetch.mockResolvedValue(
           createMcpResponse({ data: "success" })
         );
@@ -87,7 +87,7 @@ describe("McpBackend", () => {
         );
       });
 
-      it("should send JSON-RPC formatted request", async () => {
+      it("[ARUN-E1] should send JSON-RPC formatted request", async () => {
         mockFetch.mockResolvedValue(
           createMcpResponse({ data: "success" })
         );
@@ -121,8 +121,8 @@ describe("McpBackend", () => {
       });
     });
 
-    describe("[EARS-E2] should invoke tool and capture result as AgentOutput", () => {
-      it("should use toolOverride as highest priority", async () => {
+    describe("[ARUN-E2] should invoke tool and capture result as AgentOutput", () => {
+      it("[ARUN-E2] should use toolOverride as highest priority", async () => {
         mockFetch.mockResolvedValue(
           createMcpResponse({ data: "from override" })
         );
@@ -143,7 +143,7 @@ describe("McpBackend", () => {
         expect(body.params.name).toBe("runtime_override");
       });
 
-      it("should use engine.tool when no override", async () => {
+      it("[ARUN-E2] should use engine.tool when no override", async () => {
         mockFetch.mockResolvedValue(
           createMcpResponse({ data: "from engine" })
         );
@@ -164,7 +164,7 @@ describe("McpBackend", () => {
         expect(body.params.name).toBe("configured_tool");
       });
 
-      it("should fallback to agentId without prefix when no tool specified", async () => {
+      it("[ARUN-E2] should fallback to agentId without prefix when no tool specified", async () => {
         mockFetch.mockResolvedValue(
           createMcpResponse({ data: "from fallback" })
         );
@@ -186,8 +186,8 @@ describe("McpBackend", () => {
       });
     });
 
-    describe("[EARS-E3] should map tool result to AgentOutput.data", () => {
-      it("should map result with data field", async () => {
+    describe("[ARUN-E3] should map tool result to AgentOutput.data", () => {
+      it("[ARUN-E3] should map result with data field", async () => {
         const mcpResult = {
           data: { issues: [1, 2, 3] },
           message: "Found 3 issues",
@@ -207,7 +207,7 @@ describe("McpBackend", () => {
         expect(output.message).toBe("Found 3 issues");
       });
 
-      it("should use entire result as data when no data field", async () => {
+      it("[ARUN-E3] should use entire result as data when no data field", async () => {
         const mcpResult = { items: ["a", "b"], count: 2 };
         mockFetch.mockResolvedValue(createMcpResponse(mcpResult));
 
@@ -223,7 +223,7 @@ describe("McpBackend", () => {
         expect(output.data).toEqual({ items: ["a", "b"], count: 2 });
       });
 
-      it("should handle MCP content array format", async () => {
+      it("[ARUN-E3] should handle MCP content array format", async () => {
         const mcpResult = {
           content: [
             { type: "text", text: "Here are your results" },
@@ -244,7 +244,7 @@ describe("McpBackend", () => {
         expect(output.message).toBe("Here are your results");
       });
 
-      it("should handle null result", async () => {
+      it("[ARUN-E3] should handle null result", async () => {
         mockFetch.mockResolvedValue(createMcpResponse(null));
 
         const backend = new McpBackend();
@@ -259,7 +259,7 @@ describe("McpBackend", () => {
         expect(output).toEqual({});
       });
 
-      it("should handle primitive result", async () => {
+      it("[ARUN-E3] should handle primitive result", async () => {
         mockFetch.mockResolvedValue(createMcpResponse("simple text"));
 
         const backend = new McpBackend();
@@ -275,8 +275,8 @@ describe("McpBackend", () => {
       });
     });
 
-    describe("[EARS-E4] should throw McpBackendError on connection/tool failure", () => {
-      it("should throw on HTTP connection failure", async () => {
+    describe("[ARUN-E4] should throw McpBackendError on connection/tool failure", () => {
+      it("[ARUN-E4] should throw on HTTP connection failure", async () => {
         mockFetch.mockResolvedValue(
           createHttpErrorResponse(503, "Service Unavailable")
         );
@@ -296,7 +296,7 @@ describe("McpBackend", () => {
         );
       });
 
-      it("should throw on MCP JSON-RPC error response", async () => {
+      it("[ARUN-E4] should throw on MCP JSON-RPC error response", async () => {
         mockFetch.mockResolvedValue(
           createMcpResponse(null, {
             code: -32601,
@@ -316,7 +316,7 @@ describe("McpBackend", () => {
         );
       });
 
-      it("should include error code in McpBackendError", async () => {
+      it("[ARUN-E4] should include error code in McpBackendError", async () => {
         mockFetch.mockResolvedValue(
           createMcpResponse(null, {
             code: -32600,
@@ -340,7 +340,7 @@ describe("McpBackend", () => {
         }
       });
 
-      it("should wrap network errors", async () => {
+      it("[ARUN-E4] should wrap network errors", async () => {
         mockFetch.mockRejectedValue(new Error("ECONNREFUSED"));
 
         const backend = new McpBackend();
@@ -355,7 +355,7 @@ describe("McpBackend", () => {
         );
       });
 
-      it("should throw when KeyProvider missing for actor-signature", async () => {
+      it("[ARUN-E4] should throw when KeyProvider missing for actor-signature", async () => {
         const backend = new McpBackend(undefined);
         const engine: McpEngine = {
           type: "mcp",

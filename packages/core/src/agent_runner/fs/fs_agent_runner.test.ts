@@ -3,7 +3,7 @@
  *
  * Tests for filesystem-based agent runner implementation.
  *
- * Reference: agent_runner_module.md §4.1-4.3, §4.7-4.12
+ * Reference: fs_agent_runner_module.md §4.1-4.10
  */
 
 import * as fs from "fs";
@@ -80,8 +80,8 @@ describe("FsAgentRunner", () => {
     return relativePath;
   };
 
-  describe("4.1. Loading AgentRecord (EARS-A1 to EARS-A3)", () => {
-    it("[EARS-A1] should load agent from .gitgov/agents/", async () => {
+  describe("4.1. Loading AgentRecord (ARUN-A1 to ARUN-A3)", () => {
+    it("[ARUN-A1] should load agent from .gitgov/agents/", async () => {
       writeAgentFile("test-agent", {
         engine: { type: "local", entrypoint: "agent.js", function: "run" },
       });
@@ -104,7 +104,7 @@ describe("FsAgentRunner", () => {
       expect(response.status).toBe("success");
     });
 
-    it("[EARS-A2] should throw AgentNotFound when file missing", async () => {
+    it("[ARUN-A2] should throw AgentNotFound when file missing", async () => {
       const runner = new FsAgentRunner({
         executionAdapter: mockExecutionAdapter,
         gitgovPath,
@@ -116,7 +116,7 @@ describe("FsAgentRunner", () => {
       ).rejects.toThrow("AgentNotFound: agent:nonexistent");
     });
 
-    it("[EARS-A3] should extract engine from payload", async () => {
+    it("[ARUN-A3] should extract engine from payload", async () => {
       const entrypoint = writeAgentEntrypoint(
         "agents/my-agent.js",
         "module.exports.execute = async (ctx) => ({ data: ctx.agentId })"
@@ -140,8 +140,8 @@ describe("FsAgentRunner", () => {
     });
   });
 
-  describe("4.2. Local Backend (EARS-B1 to EARS-B7)", () => {
-    it("[EARS-B1] should resolve absolute path for entrypoint", async () => {
+  describe("4.2. LocalBackend - engine.type: \"local\" Execution (ARUN-B1 to ARUN-B7)", () => {
+    it("[ARUN-B1] should resolve absolute path for entrypoint", async () => {
       const entrypoint = writeAgentEntrypoint(
         "src/agent.js",
         "module.exports.runAgent = async () => ({ message: 'from src' })"
@@ -164,7 +164,7 @@ describe("FsAgentRunner", () => {
       expect(response.output?.message).toBe("from src");
     });
 
-    it("[EARS-B1b] should resolve absolute path for entrypoint", async () => {
+    it("[ARUN-B1] should resolve absolute path for entrypoint", async () => {
       const absoluteEntrypoint = writeAgentEntrypoint(
         "abs-agent.js",
         "module.exports.runAgent = async () => ({ message: 'from absolute' })"
@@ -188,7 +188,7 @@ describe("FsAgentRunner", () => {
       expect(response.output?.message).toBe("from absolute");
     });
 
-    it("[EARS-B1c] should resolve NPM package name via createRequire", async () => {
+    it("[ARUN-B1] should resolve NPM package name via createRequire", async () => {
       // createRequire is non-configurable on node:module — can't spy it.
       // Instead: create a fake node_modules structure so createRequire actually resolves.
       const fakeModuleDir = path.join(tempDir, "node_modules", "@fake", "agent-echo");
@@ -221,7 +221,7 @@ describe("FsAgentRunner", () => {
       expect(response.output?.message).toBe("from npm resolve");
     });
 
-    it("[EARS-B2] should lookup runtime handler", async () => {
+    it("[ARUN-B2] should lookup runtime handler", async () => {
       writeAgentFile("runtime-test", {
         engine: { type: "local", runtime: "test-runtime" },
       });
@@ -249,7 +249,7 @@ describe("FsAgentRunner", () => {
       expect(response.output?.data).toBe("runtime executed");
     });
 
-    it("[EARS-B3] should throw LocalEngineConfigError when neither defined", async () => {
+    it("[ARUN-B3] should throw LocalEngineConfigError when neither defined", async () => {
       writeAgentFile("no-config", {
         engine: { type: "local" },
       });
@@ -269,7 +269,7 @@ describe("FsAgentRunner", () => {
       expect(response.error).toContain("LocalEngineConfigError");
     });
 
-    it("[EARS-B4] should dynamic import the entrypoint module", async () => {
+    it("[ARUN-B4] should dynamic import the entrypoint module", async () => {
       const entrypoint = writeAgentEntrypoint(
         "dynamic.js",
         "module.exports.runAgent = async () => ({ data: 'imported' })"
@@ -292,7 +292,7 @@ describe("FsAgentRunner", () => {
       expect(response.output?.data).toBe("imported");
     });
 
-    it("[EARS-B5] should use engine.function or default to runAgent", async () => {
+    it("[ARUN-B5] should use engine.function or default to runAgent", async () => {
       const entrypoint1 = writeAgentEntrypoint(
         "default-fn.js",
         "module.exports.runAgent = async () => ({ data: 'default' })"
@@ -328,7 +328,7 @@ describe("FsAgentRunner", () => {
       expect(res2.output?.data).toBe("custom");
     });
 
-    it("[EARS-B6] should throw FunctionNotExported when missing", async () => {
+    it("[ARUN-B6] should throw FunctionNotExported when missing", async () => {
       const entrypoint = writeAgentEntrypoint(
         "no-fn.js",
         "module.exports.otherFn = async () => ({})"
@@ -352,7 +352,7 @@ describe("FsAgentRunner", () => {
       expect(response.error).toContain("FunctionNotExported");
     });
 
-    it("[EARS-B7] should invoke function with AgentExecutionContext", async () => {
+    it("[ARUN-B7] should invoke function with AgentExecutionContext", async () => {
       const entrypoint = writeAgentEntrypoint(
         "ctx-test.js",
         `module.exports.runAgent = async (ctx) => ({
@@ -387,8 +387,8 @@ describe("FsAgentRunner", () => {
     });
   });
 
-  describe("4.3. Context Building (EARS-C1 to EARS-C3)", () => {
-    it("[EARS-C1] should include agentId in context", async () => {
+  describe("4.3. Context Building (ARUN-C1 to ARUN-C3)", () => {
+    it("[ARUN-C1] should include agentId in context", async () => {
       const entrypoint = writeAgentEntrypoint(
         "agent-id.js",
         "module.exports.runAgent = async (ctx) => ({ data: ctx.agentId })"
@@ -411,7 +411,7 @@ describe("FsAgentRunner", () => {
       expect(response.output?.data).toBe("agent:agent-id-test");
     });
 
-    it("[EARS-C2] should use actorId or fallback to agentId", async () => {
+    it("[ARUN-C2] should use actorId or fallback to agentId", async () => {
       const entrypoint = writeAgentEntrypoint(
         "actor-id.js",
         "module.exports.runAgent = async (ctx) => ({ data: ctx.actorId })"
@@ -440,7 +440,7 @@ describe("FsAgentRunner", () => {
       expect(res2.output?.data).toBe("actor:custom");
     });
 
-    it("[EARS-C3] should generate unique UUID for runId", async () => {
+    it("[ARUN-C3] should generate unique UUID for runId", async () => {
       const entrypoint = writeAgentEntrypoint(
         "run-id.js",
         "module.exports.runAgent = async (ctx) => ({ data: ctx.runId })"
@@ -471,8 +471,8 @@ describe("FsAgentRunner", () => {
     });
   });
 
-  describe("4.7. Engine Type Validation (EARS-G1 to EARS-G3)", () => {
-    it("[EARS-G1] should throw UnsupportedEngineType for unknown type", async () => {
+  describe("4.4. Engine Type Validation (ARUN-G1 to ARUN-G3)", () => {
+    it("[ARUN-G1] should throw UnsupportedEngineType for unknown type", async () => {
       writeAgentFile("unknown-engine", {
         engine: { type: "invalid" as "local" },
       });
@@ -488,7 +488,7 @@ describe("FsAgentRunner", () => {
       ).rejects.toThrow("UnsupportedEngineType: invalid");
     });
 
-    it("[EARS-G2] should throw EngineConfigError when url missing", async () => {
+    it("[ARUN-G2] should throw EngineConfigError when url missing", async () => {
       writeAgentFile("no-url", {
         engine: { type: "api" } as AgentRecord["engine"],
       });
@@ -504,7 +504,7 @@ describe("FsAgentRunner", () => {
       ).rejects.toThrow("EngineConfigError: url required for api");
     });
 
-    it("[EARS-G3] should throw MissingDependency for actor-signature without adapter", async () => {
+    it("[ARUN-G3] should throw MissingDependency for actor-signature without adapter", async () => {
       writeAgentFile("actor-sig", {
         engine: {
           type: "api",
@@ -528,8 +528,8 @@ describe("FsAgentRunner", () => {
   });
 
   // [RLDX-E1] Runner is pure — no record writing. Tests verify output capture, not persistence.
-  describe("4.8. Pure Runner Output (EARS-H1 to EARS-H4) — RLDX-E1 refactor", () => {
-    it("[EARS-H1] should return AgentResponse with output on success (no record creation)", async () => {
+  describe("4.5. ExecutionRecord Handling — Pure Runner (ARUN-H1 to ARUN-H4)", () => {
+    it("[ARUN-H1] should return AgentResponse with output on success (no record creation)", async () => {
       const entrypoint = writeAgentEntrypoint(
         "success.js",
         "module.exports.runAgent = async () => ({ data: 'ok' })"
@@ -552,7 +552,7 @@ describe("FsAgentRunner", () => {
       expect(response.output).toEqual(expect.objectContaining({ data: "ok" }));
     });
 
-    it("[EARS-H2] should return AgentResponse with error on failure (no record creation)", async () => {
+    it("[ARUN-H2] should return AgentResponse with error on failure (no record creation)", async () => {
       const entrypoint = writeAgentEntrypoint(
         "error.js",
         "module.exports.runAgent = async () => { throw new Error('fail'); }"
@@ -575,7 +575,7 @@ describe("FsAgentRunner", () => {
       expect(response.error).toBe("fail");
     });
 
-    it("[EARS-H3] should include generated executionRecordId in AgentResponse", async () => {
+    it("[ARUN-H3] should include generated executionRecordId in AgentResponse", async () => {
       const entrypoint = writeAgentEntrypoint(
         "exec-id.js",
         "module.exports.runAgent = async () => ({})"
@@ -599,7 +599,7 @@ describe("FsAgentRunner", () => {
       expect(response.executionRecordId).toMatch(/^\d{10}-exec-/);
     });
 
-    it("[EARS-H4] should NOT throw when executionAdapter is missing (optional now)", () => {
+    it("[ARUN-H4] should NOT throw when executionAdapter is missing (optional now)", () => {
       expect(() => {
         new FsAgentRunner({
           gitgovPath,
@@ -609,8 +609,8 @@ describe("FsAgentRunner", () => {
     });
   });
 
-  describe("4.9. EventBus Integration (EARS-I1 to EARS-I4)", () => {
-    it("[EARS-I1] should emit agent:started event", async () => {
+  describe("4.6. EventBus Integration (ARUN-I1 to ARUN-I4)", () => {
+    it("[ARUN-I1] should emit agent:started event", async () => {
       const entrypoint = writeAgentEntrypoint(
         "event-started.js",
         "module.exports.runAgent = async () => ({})"
@@ -639,7 +639,7 @@ describe("FsAgentRunner", () => {
       });
     });
 
-    it("[EARS-I2] should emit agent:completed event on success", async () => {
+    it("[ARUN-I2] should emit agent:completed event on success", async () => {
       const entrypoint = writeAgentEntrypoint(
         "event-completed.js",
         "module.exports.runAgent = async () => ({ data: 'done' })"
@@ -670,7 +670,7 @@ describe("FsAgentRunner", () => {
       });
     });
 
-    it("[EARS-I3] should emit agent:error event on failure", async () => {
+    it("[ARUN-I3] should emit agent:error event on failure", async () => {
       const entrypoint = writeAgentEntrypoint(
         "event-error.js",
         "module.exports.runAgent = async () => { throw new Error('boom'); }"
@@ -700,7 +700,7 @@ describe("FsAgentRunner", () => {
       });
     });
 
-    it("[EARS-I4] should work silently without EventBus", async () => {
+    it("[ARUN-I4] should work silently without EventBus", async () => {
       const entrypoint = writeAgentEntrypoint(
         "no-eventbus.js",
         "module.exports.runAgent = async () => ({ data: 'silent' })"
@@ -725,8 +725,8 @@ describe("FsAgentRunner", () => {
     });
   });
 
-  describe("4.10. Response Return (EARS-J1 to EARS-J3)", () => {
-    it("[EARS-J1] should always return AgentResponse", async () => {
+  describe("4.7. Response Return (ARUN-J1 to ARUN-J3)", () => {
+    it("[ARUN-J1] should always return AgentResponse", async () => {
       const entrypoint = writeAgentEntrypoint(
         "response.js",
         "module.exports.runAgent = async () => ({})"
@@ -755,7 +755,7 @@ describe("FsAgentRunner", () => {
       expect(response).toHaveProperty("durationMs");
     });
 
-    it("[EARS-J2] should include output in AgentResponse on success", async () => {
+    it("[ARUN-J2] should include output in AgentResponse on success", async () => {
       const entrypoint = writeAgentEntrypoint(
         "output.js",
         "module.exports.runAgent = async () => ({ data: 'result', message: 'done' })"
@@ -782,7 +782,7 @@ describe("FsAgentRunner", () => {
       expect(response.error).toBeUndefined();
     });
 
-    it("[EARS-J3] should include error in AgentResponse on failure", async () => {
+    it("[ARUN-J3] should include error in AgentResponse on failure", async () => {
       const entrypoint = writeAgentEntrypoint(
         "fail.js",
         "module.exports.runAgent = async () => { throw new Error('agent failed'); }"
@@ -808,8 +808,8 @@ describe("FsAgentRunner", () => {
     });
   });
 
-  describe("4.11. Factory Function (EARS-K1)", () => {
-    it("[EARS-K1] should create FsAgentRunner with injected dependencies", () => {
+  describe("4.8. Factory Function (ARUN-K1)", () => {
+    it("[ARUN-K1] should create FsAgentRunner with injected dependencies", () => {
       const runner = createFsAgentRunner({
         executionAdapter: mockExecutionAdapter,
         gitgovPath,
@@ -822,8 +822,8 @@ describe("FsAgentRunner", () => {
 
   // [RLDX-E1] Runner is pure — returns output regardless of agent purpose.
   // Record creation is now the caller's responsibility.
-  describe("4.12. Pure Runner for All Agent Types (EARS-L1 to EARS-L4) — RLDX-E1", () => {
-    it("[EARS-L1] should return output for review agents without creating FeedbackRecord", async () => {
+  describe("4.9. Pure Runner for All Agent Types (ARUN-L1 to ARUN-L4)", () => {
+    it("[ARUN-L1] should return output for review agents without creating FeedbackRecord", async () => {
       const entrypoint = writeAgentEntrypoint(
         "review-agent.js",
         "module.exports.runReviewAdvisor = async () => ({ data: 'review-ok' })"
@@ -848,7 +848,7 @@ describe("FsAgentRunner", () => {
       expect(response.executionRecordId).toMatch(/^\d{10}-exec-/);
     });
 
-    it("[EARS-L2] should work without feedbackAdapter (no longer needed)", async () => {
+    it("[ARUN-L2] should work without feedbackAdapter (no longer needed)", async () => {
       const entrypoint = writeAgentEntrypoint(
         "review-no-feedback.js",
         "module.exports.runReviewAdvisor = async () => ({ data: 'review-fallback' })"
@@ -872,7 +872,7 @@ describe("FsAgentRunner", () => {
       expect(response.output).toEqual(expect.objectContaining({ data: "review-fallback" }));
     });
 
-    it("[EARS-L3] should return output for audit agents without creating ExecutionRecord", async () => {
+    it("[ARUN-L3] should return output for audit agents without creating ExecutionRecord", async () => {
       const entrypoint = writeAgentEntrypoint(
         "audit-agent.js",
         "module.exports.runAgent = async () => ({ data: 'audit-ok' })"
@@ -896,7 +896,7 @@ describe("FsAgentRunner", () => {
       expect(response.output).toEqual(expect.objectContaining({ data: "audit-ok" }));
     });
 
-    it("[EARS-L4] should include generated executionRecordId for all agent types", async () => {
+    it("[ARUN-L4] should include generated executionRecordId for all agent types", async () => {
       const entrypoint = writeAgentEntrypoint(
         "review-id.js",
         "module.exports.runReviewAdvisor = async () => ({ data: 'review-id-test' })"

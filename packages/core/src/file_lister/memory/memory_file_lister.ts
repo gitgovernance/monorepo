@@ -69,6 +69,16 @@ export class MemoryFileLister implements FileLister {
   }
 
   /**
+   * [EARS-FL05] No-op: the in-memory map IS the source, so there is no cache to discard.
+   *
+   * Mutating `files` is already visible to the next read. The method exists so a consumer
+   * can invalidate without branching on which backend it holds.
+   */
+  invalidateCache(): void {
+    // Intentionally empty — see doc comment.
+  }
+
+  /**
    * [EARS-FL01] Lists files matching glob patterns.
    * [EARS-MFL02] Filters files using glob patterns.
    */

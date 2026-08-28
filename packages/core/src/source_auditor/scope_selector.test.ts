@@ -3,7 +3,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 import { ScopeSelector } from "./scope_selector";
-import { FsFileLister } from "../file_lister";
+import { FsFileLister } from "../file_lister/fs";
 
 describe("ScopeSelector", () => {
   let tempDir: string;

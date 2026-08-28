@@ -1,6 +1,6 @@
-import type { ILlmProvider } from './llm_provider';
-import { AnthropicLlmProvider } from './anthropic/anthropic_llm_provider';
-import { CliLlmProvider } from './cli/cli_llm_provider';
+import type { ILlmProvider } from '../llm_provider';
+import { AnthropicLlmProvider } from '../anthropic/anthropic_llm_provider';
+import { CliLlmProvider } from './cli_llm_provider';
 
 const SUPPORTED_PROVIDERS = ['anthropic', 'cli'] as const;
 

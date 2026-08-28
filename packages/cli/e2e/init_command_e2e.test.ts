@@ -248,7 +248,7 @@ describe('Init CLI Command - Edge Cases E2E Tests', () => {
       cleanupWorktree(testProjectRoot, worktreeBasePath);
     });
 
-    it('WHEN remote exists but gitgov-state does not THE SYSTEM SHALL init and push gitgov-state to remote', () => {
+    it('[EARS-E16] WHEN remote exists but gitgov-state does not THE SYSTEM SHALL init and push gitgov-state to remote', () => {
       const result = runCliCommand(['init', '--name', 'New Remote Project', '--actor-name', 'Test User', '--quiet'], { cwd: testProjectRoot });
 
       expect(result.success).toBe(true);
@@ -259,7 +259,7 @@ describe('Init CLI Command - Edge Cases E2E Tests', () => {
       expect(remoteBranches.trim()).toContain('gitgov-state');
     });
 
-    it('WHEN init completes THE SYSTEM SHALL allow sync push to create remote gitgov-state', () => {
+    it('[EARS-E17] WHEN init completes THE SYSTEM SHALL allow sync push to create remote gitgov-state', () => {
       runCliCommand(['init', '--name', 'New Remote Project', '--actor-name', 'Test User', '--quiet'], { cwd: testProjectRoot });
 
       const pushResult = runCliCommand(['sync', 'push'], { cwd: testProjectRoot });
@@ -270,7 +270,7 @@ describe('Init CLI Command - Edge Cases E2E Tests', () => {
       expect(remoteBranches.trim()).toContain('gitgov-state');
     });
 
-    it('WHEN sync push completes THE gitgov-state branch SHALL contain .gitgov files', () => {
+    it('[EARS-E18] WHEN sync push completes THE gitgov-state branch SHALL contain .gitgov files', () => {
       // This is Case 2A complete verification: remote exists from start
       runCliCommand(['init', '--name', 'Case2A Files', '--actor-name', 'Test User', '--quiet'], { cwd: testProjectRoot });
 
@@ -759,6 +759,77 @@ describe('Init CLI Command - Edge Cases E2E Tests', () => {
       expect(result.output).not.toContain('🎯');
       expect(result.output).not.toContain('Cryptographic Trust Established');
       expect(result.output).not.toContain('agent new @gitgov/agent-security-audit');
+
+      cleanupWorktree(projRoot, getWorktreeBasePath(projRoot));
+    });
+  });
+
+  describe('Default agent engine resolution anchor (PROJ-B7)', () => {
+    // The unit test in core pins that ProjectModule passes NO root. This one pins the other
+    // half — that the DI binds the CORRECT one (EARS-C16) — and only a real `gitgov init`
+    // can: it is the flow that puts the container in worktree mode, where `repoRoot` (the
+    // user's repo) and `projectRoot` (~/.gitgov/worktrees/<hash>) are different trees.
+    //
+    // How the two anchors are told apart: `node_modules` exists ONLY in the repo. A default
+    // agent whose entrypoint is an npm package therefore resolves if and only if the
+    // validator is anchored at the repo. Measured: the 26 worktrees on this machine have
+    // zero `node_modules`.
+    it('[PROJ-B7] should resolve default agents against the repo root during gitgov init', () => {
+      const projRoot = path.join(tempDir, 'engine-anchor-repo');
+      createGitRepo(projRoot);
+
+      // `require.resolve` is anchored at `<root>/package.json`, so the repo needs one.
+      fs.writeFileSync(
+        path.join(projRoot, 'package.json'),
+        JSON.stringify({ name: 'engine-anchor-fixture', version: '1.0.0', type: 'module' }, null, 2)
+      );
+
+      // Plant one of the real DEFAULT_AGENTS packages in the REPO's node_modules — never in
+      // the worktree. If the validator resolved against the worktree it would not find it.
+      const pkgDir = path.join(projRoot, 'node_modules', '@gitgov', 'agent-security-audit');
+      fs.mkdirSync(pkgDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(pkgDir, 'package.json'),
+        JSON.stringify({ name: '@gitgov/agent-security-audit', version: '1.0.0', type: 'module', main: 'index.mjs' }, null, 2)
+      );
+      fs.writeFileSync(path.join(pkgDir, 'index.mjs'), 'export async function runAgent() { return {}; }\n');
+
+      execSync('git add -A', { cwd: projRoot, stdio: 'pipe' });
+      execSync('git commit -m "fixture"', { cwd: projRoot, stdio: 'pipe' });
+
+      // Run the CLI directly instead of via `runCliCommand`: the agentWarnings go through
+      // `console.warn` → stderr, and that helper returns stdout only. No --quiet either —
+      // that flag suppresses exactly the warnings this test reads (init-command.ts:121).
+      const cliPath = path.join(__dirname, '../build/dist/gitgov.mjs');
+      const output = execSync(
+        `node "${cliPath}" init --name "Engine Anchor Project" --actor-name "Test User" 2>&1`,
+        { cwd: projRoot, encoding: 'utf8', stdio: 'pipe' }
+      );
+
+      const result = { success: true, output };
+      expect(result.success).toBe(true);
+
+      // Anti-vacuity, level 1: PROJ-B6 ran at all. `agent:gitgov-audit` declares
+      // `packages/core/dist/index.mjs`, a path this fixture does not contain, so it is
+      // unresolvable from EITHER anchor — its warning proves the validator executed.
+      expect(result.output).toContain('agent:gitgov-audit');
+      expect(result.output).toContain('not runnable');
+
+      // THE ANCHOR, observed directly. `resolveLocalEntrypoint` has two branches (ARUN-B1):
+      // an npm package goes through `require.resolve`, a PATH through `path.join(root, ...)`.
+      // `gitgov-audit` is a path, so its failure message prints the joined absolute path —
+      // which literally spells out the root that was used. Anchored at the worktree it would
+      // read ~/.gitgov/worktrees/<hash>/packages/core/... instead.
+      //
+      // realpath because macOS resolves /var/folders through /private.
+      const realRepo = fs.realpathSync(projRoot);
+      expect(result.output).toContain(path.join(realRepo, 'packages/core/dist/index.mjs'));
+      expect(result.output).not.toContain(getWorktreeBasePath(projRoot));
+
+      // And the package branch agrees: the agent installed in the REPO's node_modules
+      // resolves, so it is not warned about. Anchored at the worktree — which has no
+      // node_modules at all — it would appear here.
+      expect(result.output).not.toContain('agent:security-audit');
 
       cleanupWorktree(projRoot, getWorktreeBasePath(projRoot));
     });

@@ -15,7 +15,7 @@ import picomatch from 'picomatch';
 import type { Octokit } from '@octokit/rest';
 import type { FileLister, FileListOptions, FileListerErrorDetails, FileStats } from '../file_lister';
 import { FileListerError } from '../file_lister';
-import { isOctokitRequestError, getOctokitRateLimitReset } from '../../shared/github/github';
+import { isOctokitRequestError, getOctokitRateLimitReset, getOctokitRequestId } from '../../shared/github/github';
 import type { GitHubFileListerOptions } from './github_file_lister.types';
 
 /** [EARS-D1] Max parallel Blob fetches in readBatch */
@@ -68,6 +68,25 @@ export class GitHubFileLister implements FileLister {
     this.ref = options.ref;
     this.basePath = options.basePath ?? '';
     this.octokit = octokit;
+  }
+
+  /**
+   * [EARS-B9] Discards the cached tree so the next read fetches from the API again.
+   *
+   * Why this exists: [EARS-B6] caches the tree and, without this, an instance observes the
+   * tree of ONE instant — its first read — and never again. That is correct and cheap for
+   * the common case (read a branch once), and a trap for the other one: a caller waiting
+   * for a file to APPEAR would loop over a frozen array forever. Measured in the
+   * E2E harness — a 60s poll built on one reused instance could not see a file that landed
+   * after its first read, and read as flakiness for weeks.
+   *
+   * Reconstructing the object also works, but that forces every caller to know that this
+   * module caches in order to write a correct poll — a contract that requires knowing the
+   * implementation to use it well is an incomplete contract. Safe no-op when nothing is
+   * cached: callers invalidate defensively at the top of a loop.
+   */
+  invalidateCache(): void {
+    this.treeCache = null;
   }
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -469,8 +488,14 @@ export class GitHubFileLister implements FileLister {
           );
         }
         if (error.status >= 500) {
+          // [EARS-C1] The status alone can neither be diagnosed nor escalated. Carry
+          // GitHub's own message and the x-github-request-id — that id is the only handle
+          // their support accepts, and without it a 5xx is a dead end for whoever reads
+          // the log afterwards.
+          const requestId = getOctokitRequestId(error);
           throw new FileListerError(
-            `GitHub API server error (${error.status}) fetching tree`,
+            `GitHub API server error (${error.status}) fetching tree: ${error.message}` +
+              (requestId ? ` [x-github-request-id: ${requestId}]` : ''),
             'READ_ERROR',
           );
         }

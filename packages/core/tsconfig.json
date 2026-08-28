@@ -39,8 +39,5 @@
   "include": [
     "src",
     "scripts"
-  ],
-  "exclude": [
-    "src/integration"
   ]
 }

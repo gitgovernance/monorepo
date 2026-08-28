@@ -4,10 +4,10 @@
   "type": "module",
   "main": "dist/index.mjs",
   "scripts": {
-    "build": "esbuild src/index.ts --bundle --platform=node --format=esm --target=node20 --outfile=dist/index.mjs --external:@gitgov/core --external:@anthropic-ai/claude-agent-sdk",
+    "build": "esbuild src/index.ts --bundle --platform=node --format=esm --target=node20 --outfile=dist/index.mjs --external:@gitgov/core",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
-    "test": "jest"
+    "test": "pnpm build && jest"
   },
   "gitgov": {
     "agent": {
@@ -15,15 +15,13 @@
       "function": "runReviewAdvisor",
       "categories": [],
       "metadata": {
-        "sdk": "claude-agent-sdk",
-        "model": "claude-sonnet-4"
+        "defaultModel": "anthropic/claude-sonnet-4-6"
       },
-      "env": ["ANTHROPIC_API_KEY"]
+      "env": ["LLM_MODEL", "LLM_API_KEY"]
     }
   },
   "dependencies": {
-    "@gitgov/core": "workspace:*",
-    "@anthropic-ai/claude-agent-sdk": "^0.2.81"
+    "@gitgov/core": "workspace:*"
   },
   "devDependencies": {
     "@types/jest": "^29.0.0",

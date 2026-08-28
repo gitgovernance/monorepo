@@ -2,11 +2,11 @@
  * Backend for executing agents via HTTP API (engine.type: "api").
  *
  * EARS Coverage:
- * - [EARS-D1] Prepare HTTP request for API engine
- * - [EARS-D2] Read auth token from environment
- * - [EARS-D3] Sign request for actor-signature auth
- * - [EARS-D4] Capture response body as AgentOutput
- * - [EARS-D5] Throw ApiBackendError on non-2xx response
+ * - [ARUN-D1] Prepare HTTP request for API engine
+ * - [ARUN-D2] Read auth token from environment
+ * - [ARUN-D3] Sign request for actor-signature auth
+ * - [ARUN-D4] Capture response body as AgentOutput
+ * - [ARUN-D5] Throw ApiBackendError on non-2xx response
  *
  * Reference: agent_protocol.md §5.1.2
  */
@@ -23,7 +23,7 @@ import { createHash } from "crypto";
 
 /**
  * Error thrown when API backend request fails.
- * [EARS-D5]
+ * [ARUN-D5]
  */
 export class ApiBackendError extends Error {
   public readonly statusCode: number | undefined;
@@ -57,19 +57,19 @@ export class ApiBackend {
    * @param ctx - Execution context
    * @returns AgentOutput with parsed response body
    *
-   * @throws ApiBackendError - When request fails or non-2xx response [EARS-D5]
+   * @throws ApiBackendError - When request fails or non-2xx response [ARUN-D5]
    */
   async execute(
     engine: ApiEngine,
     ctx: AgentExecutionContext
   ): Promise<AgentOutput> {
-    // [EARS-D1] Prepare HTTP request
+    // [ARUN-D1] Prepare HTTP request
     const method = engine.method ?? "POST";
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
     };
 
-    // [EARS-D2, D3] Apply authentication
+    // [ARUN-D2, D3] Apply authentication
     if (engine.auth) {
       await this.applyAuth(headers, engine.auth, ctx);
     }
@@ -91,7 +91,7 @@ export class ApiBackend {
         ...(method !== "GET" ? { body } : {}),
       });
 
-      // [EARS-D5] Error on non-2xx response
+      // [ARUN-D5] Error on non-2xx response
       if (!response.ok) {
         throw new ApiBackendError(
           response.statusText || `HTTP ${response.status}`,
@@ -100,7 +100,7 @@ export class ApiBackend {
         );
       }
 
-      // [EARS-D4] Parse response body as JSON and return as AgentOutput
+      // [ARUN-D4] Parse response body as JSON and return as AgentOutput
       const responseBody = await response.json();
 
       return this.normalizeOutput(responseBody);
@@ -119,8 +119,8 @@ export class ApiBackend {
 
   /**
    * Apply authentication headers based on auth config.
-   * [EARS-D2] Read token from environment
-   * [EARS-D3] Sign request for actor-signature
+   * [ARUN-D2] Read token from environment
+   * [ARUN-D3] Sign request for actor-signature
    */
   private async applyAuth(
     headers: Record<string, string>,
@@ -129,7 +129,7 @@ export class ApiBackend {
   ): Promise<void> {
     switch (auth.type) {
       case "bearer": {
-        // [EARS-D2] Read token from env var or use direct token
+        // [ARUN-D2] Read token from env var or use direct token
         const token = auth.secret_key
           ? process.env[auth.secret_key]
           : auth.token;
@@ -140,7 +140,7 @@ export class ApiBackend {
       }
 
       case "api-key": {
-        // [EARS-D2] Read API key from env var or use direct token
+        // [ARUN-D2] Read API key from env var or use direct token
         const apiKey = auth.secret_key
           ? process.env[auth.secret_key]
           : auth.token;
@@ -151,7 +151,7 @@ export class ApiBackend {
       }
 
       case "actor-signature": {
-        // [EARS-D3] Sign context using KeyProvider
+        // [ARUN-D3] Sign context using KeyProvider
         if (!this.keyProvider) {
           throw new ApiBackendError(
             "KeyProvider required for actor-signature auth"

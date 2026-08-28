@@ -1,7 +1,11 @@
 import type { ProjectModuleDeps, ProjectInitOptions, ProjectInitResult, AddActorInput, AddActorResult } from './project_module.types';
 import { AddActorError } from './project_module.types';
-// [PROJ-B6] Creation-time engine validation (agent_runner EARS-M1)
-import { validateAgentEngine } from '../agent_runner/engine_validator';
+// [PROJ-B6] Creation-time engine validation (agent_runner ARUN-M1)
+// NOTE: `validateAgentEngine` is NOT imported here on purpose. It reaches
+// `backends/local_backend.ts`, which imports `node:path` and `node:module`, so importing
+// it dragged both into the @gitgov/core root bundle — the last two violations reported by
+// the EARS-CI02 guardrail. The capability now arrives as `deps.engineValidator`
+// (IEngineValidator), with its Node-only implementation coming from @gitgov/core/fs.
 
 // [PROJ-C2b] Deterministic root cycle ID. The root cycle is unique per project, so its ID
 // must be stable across inits (not Date.now()). Two inits of the same repo then produce a
@@ -9,6 +13,20 @@ import { validateAgentEngine } from '../agent_runner/engine_validator';
 // The 10-zero prefix is a sentinel ("not a real timestamp") satisfying the cycle ID schema
 // ^\d{10}-cycle-[a-z0-9-]{1,50}$. Per-repo scope means no cross-repo collision.
 const ROOT_CYCLE_ID = '0000000000-cycle-root';
+
+/**
+ * [PROJ-H3b] Bounded wait for the actor to become visible after the store committed it.
+ *
+ * The store can be backed by an eventually consistent source (GitHubRecordStore commits
+ * inside `put()`, then reads go through the GitHub API), so a `null` right after the write
+ * is NOT evidence of absence. Measured in production 2026-08-14: the commit landed 1.4s
+ * before the guard read null and threw GIT_WRITE_FAILED on an actor that was on the branch.
+ *
+ * 5s over a measured 1.4s window is ~3.5x margin. The interval is short because the happy
+ * path exits on the first read and pays nothing.
+ */
+const ACTOR_VERIFY_DEADLINE_MS = 5000;
+const ACTOR_VERIFY_INTERVAL_MS = 250;
 
 export class ProjectModule {
   constructor(private readonly deps: ProjectModuleDeps) {}
@@ -101,14 +119,26 @@ export class ProjectModule {
       if (this.deps.agentAdapter && this.deps.defaultAgents?.length) {
         for (const agentConfig of this.deps.defaultAgents) {
           try {
-            // [PROJ-B6] Creation-time engine validation (EARS-M1): the agent is still
+            // [PROJ-B6] Creation-time engine validation (ARUN-M1): the agent is still
             // registered (valid declaration) but the user learns NOW that it won't run —
-            // not 3 steps later at audit time. Non-fatal. Resolution anchors at cwd
-            // (where init runs) — same anchor the runner uses for npm packages.
+            // not 3 steps later at audit time. Non-fatal.
+            //
+            // [PROJ-B7] No root is passed, and this module knows none. Until 2026-08-27 the
+            // call read `validate(engine, process.cwd())` under a comment claiming cwd was
+            // "the same anchor the runner uses" — a guarantee the DI did not keep: during
+            // `gitgov init` the initializer it hands us writes to ~/.gitgov/worktrees/<hash>
+            // while this resolved in the repo. Different trees. cwd happened to be right
+            // because init runs from the repo. The validator now arrives already bound to
+            // its root (EARS-C16), so there is nothing here left to get wrong.
             try {
-              const validation = await validateAgentEngine(agentConfig.engine, process.cwd());
-              if (!validation.resolvable) {
-                agentWarnings.push(`${agentConfig.agentId}: registered but not runnable — ${validation.reason}`);
+              // No validator injected → no validation. Deliberate and covered by its own
+              // test: PROJ-B6 degrades silently, so the absence is pinned down rather than
+              // discovered later.
+              if (this.deps.engineValidator) {
+                const validation = await this.deps.engineValidator.validate(agentConfig.engine);
+                if (!validation.resolvable) {
+                  agentWarnings.push(`${agentConfig.agentId}: registered but not runnable — ${validation.reason}`);
+                }
               }
             } catch {
               // Validation itself must never block registration
@@ -252,7 +282,18 @@ export class ProjectModule {
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         if (message.includes('Nothing to commit')) {
-          const verified = await this.deps.identity.getActor(actorId);
+          // [PROJ-H3b] The guard stays: it distinguishes "the store committed directly"
+          // from "nothing was written at all". What changes is that a single null no
+          // longer settles it — the store may be reading an eventually consistent source
+          // that has not caught up with its OWN write yet. Poll with a bounded deadline:
+          // the legitimate case converges and returns success, the case this guard exists
+          // to catch exhausts the deadline and still throws.
+          const verifyDeadline = Date.now() + ACTOR_VERIFY_DEADLINE_MS;
+          let verified = await this.deps.identity.getActor(actorId);
+          while (!verified && Date.now() < verifyDeadline) {
+            await new Promise(resolve => setTimeout(resolve, ACTOR_VERIFY_INTERVAL_MS));
+            verified = await this.deps.identity.getActor(actorId);
+          }
           if (!verified) {
             throw new AddActorError('GIT_WRITE_FAILED', { actorId, cause: message });
           }

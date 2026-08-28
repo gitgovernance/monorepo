@@ -1,5 +1,3 @@
-import * as fs from 'node:fs';
-import * as path from 'node:path';
 import type { AgentRecord } from '../record_types/generated/agent_record';
 
 type PackageGitgovAgent = {
@@ -9,13 +7,17 @@ type PackageGitgovAgent = {
   metadata?: Record<string, unknown>;
 };
 
-type PackageJson = {
+/**
+ * Minimal shape of the package.json the scanner reads.
+ * A missing `gitgov.agent` is what makes a package skippable (DISC-A3).
+ */
+export type AgentPackageJson = {
   name: string;
   gitgov?: { agent?: PackageGitgovAgent };
 };
 
 // [DISC-B1] [DISC-B2]
-export function packageToAgentRecord(pkg: PackageJson): AgentRecord {
+export function packageToAgentRecord(pkg: AgentPackageJson): AgentRecord {
   const agent = pkg.gitgov!.agent!;
   const agentName = pkg.name.replace('@gitgov/agent-', '');
 
@@ -35,42 +37,6 @@ export function packageToAgentRecord(pkg: PackageJson): AgentRecord {
   };
 }
 
-// [DISC-A1] [DISC-A2] [DISC-A3]
-export function discoverInstalledAgents(projectRoot: string): AgentRecord[] {
-  const gitgovDir = path.join(projectRoot, 'node_modules', '@gitgov');
-
-  if (!fs.existsSync(gitgovDir)) return [];
-
-  let entries: string[];
-  try {
-    entries = fs.readdirSync(gitgovDir);
-  } catch {
-    return [];
-  }
-
-  const discovered: AgentRecord[] = [];
-
-  for (const entry of entries) {
-    if (!entry.startsWith('agent-')) continue;
-
-    const pkgPath = path.join(gitgovDir, entry, 'package.json');
-    if (!fs.existsSync(pkgPath)) continue;
-
-    try {
-      const raw = fs.readFileSync(pkgPath, 'utf-8');
-      const pkg: PackageJson = JSON.parse(raw);
-
-      if (!pkg.gitgov?.agent) continue;
-
-      discovered.push(packageToAgentRecord(pkg));
-    } catch {
-      continue;
-    }
-  }
-
-  return discovered;
-}
-
 // [DISC-C1] [DISC-C2] [DISC-C3]
 export function mergeAgentSources(
   registered: AgentRecord[],
@@ -80,3 +46,9 @@ export function mergeAgentSources(
   const newAgents = discovered.filter(d => !registeredIds.has(d.id));
   return [...registered, ...newAgents];
 }
+
+// NOTE: `discoverInstalledAgents` (DISC-A1..A3) is NOT here on purpose. It reads the
+// filesystem, so it lives in ./fs/fs_agent_discovery.ts and is exported from
+// `@gitgov/core/fs`. Importing it from this file would pull `node:fs` and `node:path` into
+// the main entrypoint and break every consumer that is not Node.
+// Guarded by [EARS-CI02] in integration/guardrails/clean_exports.test.ts.

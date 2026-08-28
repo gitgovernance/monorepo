@@ -1,7 +1,7 @@
 import * as path from 'path';
 import * as os from 'os';
 import { Adapters, Config, Session, EventBus, Lint, Git, SourceAuditor, FindingDetector, KeyProvider, RecordProjection, RecordMetrics, AuditOrchestrator, PolicyEvaluator, IdentityModule, RecordSigner, getCurrentActor, ActorSelectionRequiredError, ProjectModule, DEFAULT_AGENTS, Redaction } from '@gitgov/core';
-import { FsRecordStore, DEFAULT_ID_ENCODER, FsFileLister, FsProjectInitializer, FsLintModule, FsWorktreeSyncStateModule, GitModule, createAgentRunner, createConfigManager, findProjectRoot, createSessionManager, FsRecordProjection, getWorktreeBasePath, getKeysDir, AuditFsProjection } from '@gitgov/core/fs';
+import { FsRecordStore, DEFAULT_ID_ENCODER, FsFileLister, FsKeyProvider, FsProjectInitializer, FsLintModule, FsWorktreeSyncStateModule, FsEngineValidator, GitModule, createAgentRunner, createConfigManager, findProjectRoot, createSessionManager, FsRecordProjection, getWorktreeBasePath, getKeysDir, AuditFsProjection } from '@gitgov/core/fs';
 import type { IFsLintModule } from '@gitgov/core/fs';
 import type {
   GitGovTaskRecord, GitGovCycleRecord, GitGovFeedbackRecord, GitGovExecutionRecord, GitGovActorRecord, GitGovAgentRecord,
@@ -288,7 +288,7 @@ export class DependencyInjectionService {
       const eventBus = new EventBus.EventBus();
 
       // Create KeyProvider for filesystem-based key storage
-      this.keyProvider = new KeyProvider.FsKeyProvider({
+      this.keyProvider = new FsKeyProvider({
         keysDir: getKeysDir(this.projectRoot!)
       });
 
@@ -375,7 +375,7 @@ export class DependencyInjectionService {
 
       const eventBus = new EventBus.EventBus();
 
-      this.keyProvider = new KeyProvider.FsKeyProvider({
+      this.keyProvider = new FsKeyProvider({
         keysDir: getKeysDir(this.projectRoot!)
       });
 
@@ -462,6 +462,16 @@ export class DependencyInjectionService {
       identity: identityModule,
       backlog: backlogAdapter,
       defaultAgents: DEFAULT_AGENTS,
+      // [PROJ-B6] ProjectModule no longer imports the validator — importing it pulled
+      // node:path and node:module into the @gitgov/core bundle (EARS-CI02). The CLI runs
+      // on Node, so it supplies the filesystem implementation.
+      //
+      // [EARS-C16] Bound to `repoRoot`, NEVER `this.projectRoot`. In init mode the latter is
+      // `~/.gitgov/worktrees/<hash>` — a separate tree with no node_modules, so
+      // `require.resolve` would find nothing there. This service is the only component that
+      // holds both roots, which is why the binding happens here and not in ProjectModule
+      // (PROJ-B7). Same rule as EARS-C12 for the AgentRunner.
+      engineValidator: new FsEngineValidator(this.repoRoot ?? this.projectRoot),
     };
     if (agentAdapter) deps.agentAdapter = agentAdapter;
     return new ProjectModule(deps);
@@ -479,7 +489,7 @@ export class DependencyInjectionService {
 
       // Create EventBus and KeyProvider
       const eventBus = new EventBus.EventBus();
-      const keyProvider = new KeyProvider.FsKeyProvider({
+      const keyProvider = new FsKeyProvider({
         keysDir: getKeysDir(this.projectRoot!)
       });
 
@@ -671,7 +681,7 @@ export class DependencyInjectionService {
 
       // Create EventBus and KeyProvider
       const eventBus = new EventBus.EventBus();
-      const keyProvider = new KeyProvider.FsKeyProvider({
+      const keyProvider = new FsKeyProvider({
         keysDir: getKeysDir(this.projectRoot!)
       });
 
@@ -705,7 +715,7 @@ export class DependencyInjectionService {
       }
 
       const eventBus = new EventBus.EventBus();
-      const keyProvider = new KeyProvider.FsKeyProvider({
+      const keyProvider = new FsKeyProvider({
         keysDir: getKeysDir(this.projectRoot!)
       });
 
@@ -877,7 +887,7 @@ export class DependencyInjectionService {
       const identityModule = await this.getIdentityModule();
       const lintModule = await this.getLintModule();
 
-      this.keyProvider = this.keyProvider ?? new KeyProvider.FsKeyProvider({
+      this.keyProvider = this.keyProvider ?? new FsKeyProvider({
         keysDir: getKeysDir(this.projectRoot!)
       });
       const signer = new RecordSigner({ keyProvider: this.keyProvider });

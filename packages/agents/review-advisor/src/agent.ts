@@ -57,7 +57,10 @@ export class ReviewAdvisorAgent {
     try {
       const prompt = this.buildPrompt(input.findings, input.policyDecision);
 
-      // [RAV-B2] [RAV-B2b] Query LLM (provider-agnostic)
+      // [RAV-B2] Query the injected provider — the agent names no SDK.
+      // NOT [RAV-B2b]: that requirement is about the `cli/*` branch actually shelling out,
+      // which happens inside CliLlmProvider (LLM-C1..C4), never here. The marker claimed
+      // coverage this file does not provide.
       const response = await this.llm.query([
         { role: 'system', content: 'You are a security compliance reviewer. Analyze each finding and respond with a JSON array of ReviewOpinion objects. Each opinion must have: findingFingerprint, riskExplanation, regulations (array of strings like "GDPR Art. 44"), remediationAdvice, confidence ("high"|"medium"|"low"), isFalsePositive (boolean), and optionally falsePositiveReason.' },
         { role: 'user', content: prompt },

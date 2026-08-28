@@ -32,6 +32,17 @@ export class FsFileLister implements FileLister {
   }
 
   /**
+   * [EARS-FL05] No-op: this backend holds no cache — every read hits the filesystem.
+   *
+   * Not an empty method for interface compliance: it is the statement that there is
+   * nothing to discard here, which is what lets a consumer invalidate defensively without
+   * knowing which backend it was given.
+   */
+  invalidateCache(): void {
+    // Intentionally empty — see doc comment.
+  }
+
+  /**
    * [EARS-FL01] Lists files matching glob patterns.
    * [EARS-FFL01] Excludes files matching ignore patterns.
    */

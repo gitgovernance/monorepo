@@ -2,6 +2,8 @@ import type { IProjectInitializer } from '../project_initializer';
 import type { IdentityModule } from '../identity/identity_module';
 import type { IBacklogAdapter } from '../adapters/backlog_adapter/backlog_adapter.types';
 import type { AgentPayload, AgentRecord, GitGovAgentRecord } from '../record_types';
+// Interface only — the Node-only implementation lives behind @gitgov/core/fs.
+import type { IEngineValidator } from '../agent_runner/agent_runner';
 
 // [PROJ-F1] Trigger type derived from AgentRecord — single source of truth
 export type DefaultAgentConfig = {
@@ -29,6 +31,19 @@ export type ProjectModuleDeps = {
   agentAdapter?: IProjectAgentOps;
   defaultAgents?: DefaultAgentConfig[];
   eventBus?: { emit?: (event: string, payload: Record<string, unknown>) => void };
+  /**
+   * [PROJ-B6] Verifies that each default agent's engine is actually executable.
+   *
+   * Injected rather than imported: the only implementation reaches
+   * `agent_runner/backends/local_backend.ts`, which imports `node:path` and `node:module`.
+   * Importing it here put both in the @gitgov/core root bundle — the last two violations
+   * reported by EARS-CI02. Node consumers pass `FsEngineValidator` from `@gitgov/core/fs`.
+   *
+   * Optional, and that has a cost: with no validator, PROJ-B6 stops validating silently.
+   * Its own test pins that path down so the degradation is documented, not discovered.
+   * It cannot be required — that would break every test constructing a ProjectModule.
+   */
+  engineValidator?: IEngineValidator;
 };
 
 export type ProjectInitOptions = {
@@ -49,7 +64,7 @@ export type ProjectInitResult = {
   commitSha?: string;
   alreadyInitialized?: boolean;
   created?: boolean;
-  // [PROJ-B6] Agents registered but not runnable (engine unresolvable, EARS-M1).
+  // [PROJ-B6] Agents registered but not runnable (engine unresolvable, ARUN-M1).
   // Non-fatal — the CLI surfaces these so the user learns at creation time.
   agentWarnings?: string[];
 };

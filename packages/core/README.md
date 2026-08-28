@@ -309,7 +309,6 @@ Adapters are orchestrators that compose modules. All receive dependencies via co
 | `project_initializer/` | GitGovernance project setup |
 | `logger/` | Logging centralizado |
 | `utils/` | ID generation/parsing, array utils, signature utils |
-| `diagram_generator/` | Mermaid diagram generation |
 
 ## Development
 

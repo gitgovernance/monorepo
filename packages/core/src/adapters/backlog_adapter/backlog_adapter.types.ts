@@ -1,8 +1,8 @@
 import type { RecordStores } from '../../record_store';
 import type { IIdentityModule } from '../../identity/identity_module.types';
 import type { FeedbackAdapter } from '../feedback_adapter';
-import type { ConfigManager } from '../../config_manager/config_manager';
-import type { SessionManager } from '../../session_manager/session_manager';
+import type { IConfigManager } from '../../config_manager/config_manager.types';
+import type { ISessionManager } from '../../session_manager/session_manager.types';
 import type {
   TaskRecord,
   CycleRecord,
@@ -39,8 +39,12 @@ export type BacklogAdapterDependencies = {
   identity: IIdentityModule;
   signer: RecordSigner;
   eventBus: IEventStream; // For listening to events (consumer pattern)
-  configManager: ConfigManager; // For accessing project config
-  sessionManager: SessionManager; // For updating session state (activeTaskId, activeCycleId)
+  // Typed by interface, not by class: the adapter only ever calls the contract, and depending
+  // on the concrete class forced every caller to cast a mock (`as unknown as SessionManager`),
+  // which the project preset prohibits. Same convention already used above for `workflowAdapter`
+  // (IWorkflow), `identity` (IIdentityModule) and `eventBus` (IEventStream).
+  configManager: IConfigManager; // For accessing project config
+  sessionManager: ISessionManager; // For updating session state (activeTaskId, activeCycleId)
 
   // Configuration Layer (Optional)
   config?: BacklogAdapterConfig; // Optional configuration, defaults to DEFAULT_CONFIG

@@ -109,6 +109,26 @@ export function isOctokitRateLimitError(error: unknown): boolean {
  * Used by GitHubFileLister.readBatch to populate FileListerError.details.resetTime
  * when a 403 rate limit is hit mid-batch (see github_file_lister §4.4 EARS-D3).
  */
+/**
+ * Extracts GitHub's `x-github-request-id` from an Octokit error response.
+ *
+ * It is the only identifier GitHub support accepts to investigate a 5xx, and without it a
+ * server error is unactionable — the status code says something failed, not what. Same
+ * narrowing style as `getOctokitRateLimitReset`: fully defensive, never throws.
+ */
+export function getOctokitRequestId(error: unknown): string | undefined {
+  if (!(error instanceof Error)) return undefined;
+  if (!('response' in error)) return undefined;
+  const response = error.response;
+  if (typeof response !== 'object' || response === null) return undefined;
+  if (!('headers' in response)) return undefined;
+  const headers = response.headers;
+  if (typeof headers !== 'object' || headers === null) return undefined;
+  if (!('x-github-request-id' in headers)) return undefined;
+  const requestId = (headers as Record<string, unknown>)['x-github-request-id'];
+  return typeof requestId === 'string' && requestId.length > 0 ? requestId : undefined;
+}
+
 export function getOctokitRateLimitReset(error: unknown): number | undefined {
   if (!(error instanceof Error)) return undefined;
   if (!('response' in error)) return undefined;

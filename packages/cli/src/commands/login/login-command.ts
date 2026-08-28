@@ -355,9 +355,9 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
       const saasPublicKey = keyStatus.publicKey;
 
       if (localPublicKey && saasPublicKey && localPublicKey === saasPublicKey) {
-        // [LOGIN-T2] La decision de subir agent keys es INDEPENDIENTE del path humano:
-        // diff local-vs-server (keyStatus.agentKeys, IDS-O1). Diff vacio → cero requests
-        // extra. Diff no-vacio → syncKey en verify-only (sin envelope humano, IKS-G3).
+        // [LOGIN-T2] The decision to upload agent keys is INDEPENDENT of the human path:
+        // local-vs-server diff (keyStatus.agentKeys, IDS-O1). Empty diff → zero extra
+        // requests. Non-empty diff → syncKey in verify-only (no human envelope, IKS-G3).
         const agentDiff = await this.collectLocalAgentKeys(keyStatus.ecdhPublicKey, keyStatus.agentKeys ?? []);
         if (agentDiff.length > 0) {
           await this.uploadAgentKeysOnly(saasUrl, token, repo, localPublicKey, agentDiff);
@@ -393,11 +393,12 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
           const postStatus = await this.getKeyStatus(saasUrl, token, repo);
           const newLocalPub = await keyProvider.getPublicKey(actorId);
 
-          // [LOGIN-T3] El diff de agent keys tambien viaja por este camino (s78b-21): la
-          // publicKey del verify-only es la CANONICA recien descargada (newLocalPub) — con la
-          // local stale el server veria mismatch sin envelope y responderia CONFLICT. El
-          // estado del server sale de postStatus (ya refrescado). No fatal: el login, funcion
-          // primaria, ya quedo resuelto — la secundaria no lo toma de rehen.
+          // [LOGIN-T3] The agent key diff travels this path too: the publicKey used for
+          // verify-only is the CANONICAL one just downloaded (newLocalPub) — with a stale
+          // local key the server would see a mismatch without an envelope and answer
+          // CONFLICT. Server state comes from postStatus (already refreshed). Not fatal:
+          // login, the primary function, is already resolved — the secondary one does not
+          // hold it hostage.
           if (newLocalPub) {
             try {
               const agentDiff = await this.collectLocalAgentKeys(postStatus.ecdhPublicKey, postStatus.agentKeys ?? []);
@@ -607,8 +608,8 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
       serverEcdhPublicKey,
     );
 
-    // [LOGIN-T1] Agent keys del repo (D1): se suben repo-scoped en el mismo request
-    // [LOGIN-T2] Solo el DIFF contra el estado del server (keyStatus.agentKeys, IDS-O1)
+    // [LOGIN-T1] Repo agent keys (D1): uploaded repo-scoped in the same request
+    // [LOGIN-T2] Only the DIFF against server state (keyStatus.agentKeys, IDS-O1)
     const agentKeys = await this.collectLocalAgentKeys(serverEcdhPublicKey, serverAgentKeys);
 
     const url = `${saasUrl}/trpc/identity.syncKey`;
@@ -632,7 +633,7 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
     }
     const body = await res.json() as TrpcResponse<SyncKeyResponse>;
     const result = body.result.data;
-    // [LOGIN-T1] Reportar cuantas agent keys acepto el server (IDS-N1)
+    // [LOGIN-T1] Report how many agent keys the server accepted (IDS-N1)
     if (result.agentKeysSynced && result.agentKeysSynced > 0) {
       console.log(`   🔑 Synced ${result.agentKeysSynced} agent key(s) for this repo`);
     }
@@ -642,12 +643,12 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
   /**
    * [LOGIN-T1] Collect the repo's local `agent:*` keypairs for repo-scoped upload.
    *
-   * Fuente de enumeracion: los ActorRecords del REPO (FsRecordStore sobre
-   * `<worktree>/.gitgov/actors` con DEFAULT_ID_ENCODER) — nunca decodeando
-   * filenames del keys dir (el mapping `:`/`/` → `_` es lossy) y nunca un
-   * directorio global: el keys dir es el del worktree del repo actual.
-   * Solo se incluyen agentes con keypair local completo. Cada entrada se
-   * cifra con su propio ephemeral keypair ECDH contra la server key (IKS-G6).
+   * Enumeration source: the REPO's ActorRecords (FsRecordStore over
+   * `<worktree>/.gitgov/actors` with DEFAULT_ID_ENCODER) — never by decoding
+   * filenames from the keys dir (the `:`/`/` → `_` mapping is lossy) and never a
+   * global directory: the keys dir is the current repo's worktree one.
+   * Only agents with a complete local keypair are included. Each entry is
+   * encrypted with its own ephemeral ECDH keypair against the server key (IKS-G6).
    */
   private async collectLocalAgentKeys(
     serverEcdhPublicKey: string,
@@ -671,18 +672,18 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
     }
 
     const keyProvider = await this.getLocalKeyProvider();
-    // [LOGIN-T2] Estado del server para el diff: actorId → publicKey activa repo-scoped
+    // [LOGIN-T2] Server state for the diff: actorId → active repo-scoped publicKey
     const serverMap = new Map(serverAgentKeys.map((k) => [k.actorId, k.publicKey]));
     const agentKeys: AgentKeyUpload[] = [];
     for (const actorId of actorIds.filter((id) => id.startsWith('agent:'))) {
-      // [LOGIN-T1] log + skip por entrada (simetrico con IDS-N2 del server): una key
-      // problematica (permisos rotos, corrupcion) NO puede dejar rehen al login —
-      // la funcion primaria del comando sobrevive a la secundaria.
+      // [LOGIN-T1] per-entry log + skip (symmetric with the server's IDS-N2): one bad
+      // key (broken permissions, corruption) must NOT hold login hostage —
+      // the command's primary function survives the secondary one.
       try {
         const privateKey = await keyProvider.getPrivateKey(actorId);
         const publicKey = await keyProvider.getPublicKey(actorId);
         if (!privateKey || !publicKey) continue; // agente sin keypair local completo
-        // [LOGIN-T2] Al dia en el server → no re-transmitir material de claves
+        // [LOGIN-T2] Up to date on the server → do not re-transmit key material
         if (serverMap.get(actorId) === publicKey) continue;
         const clientKp = Crypto.generateEphemeralKeypair();
         const privateKeyEnvelope = await Crypto.ecdhEncrypt(
@@ -700,8 +701,8 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
 
   /**
    * [LOGIN-T2] Upload SOLO agent keys via syncKey en verify-only mode (IKS-G3):
-   * publicKey humana actual SIN privateKeyEnvelope + agentKeys[] (el diff).
-   * Usado por el path already-synced — la key humana no viaja, solo el diff de agentes.
+   * Current human publicKey WITHOUT privateKeyEnvelope + agentKeys[] (the diff).
+   * Used by the already-synced path — the human key does not travel, only the agent diff.
    */
   private async uploadAgentKeysOnly(
     saasUrl: string,
@@ -720,7 +721,7 @@ export class LoginCommand extends BaseCommand<LoginCommandOptions> {
       body: JSON.stringify({ ...repo, publicKey: humanPublicKey, agentKeys }),
     });
     if (!res.ok) {
-      // [LOGIN-T2] No fatal: el login (funcion primaria) ya esta resuelto — se reporta y sigue
+      // [LOGIN-T2] Not fatal: login (the primary function) is already resolved — report and continue
       console.warn(`⚠️  Agent key sync failed: ${res.status}`);
       return;
     }

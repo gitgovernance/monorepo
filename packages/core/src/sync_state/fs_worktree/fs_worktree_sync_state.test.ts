@@ -1076,6 +1076,230 @@ describe('FsWorktreeSyncStateModule', () => {
   // 4.2b. Root File Sync Exemption (WTSYNC-B17)
   // ═══════════════════════════════════════════════
 
+  describe('4.2c. Non-fast-forward retry (WTSYNC-B18, B19)', () => {
+    // Two writers share the state ref: this CLI (local worktree, native git) and the
+    // SaaS (GitHub API, NO local worktree). Measured: the server commits
+    // between the CLI's `pull --rebase` (the check) and its `push` (the use), so the
+    // push is rejected non-fast-forward. The server cannot participate in the rebase,
+    // so there is no negotiation — only a race.
+    //
+    // Reproduced here WITHOUT touching internals: a `pre-push` hook fires exactly in
+    // that window and advances the remote from a separate clone, which is precisely
+    // what the server does in production.
+    async function installRacingPrePushHook(
+      worktreePath: string, remotePath: string, fileName: string, fireTimes: number,
+    ): Promise<void> {
+      const hooksDir = path.join(os.tmpdir(), `gitgov-hooks-${Date.now()}-${fileName}`);
+      const racerClone = path.join(os.tmpdir(), `gitgov-racer-${Date.now()}-${fileName}`);
+      cleanupPaths.push(hooksDir, racerClone);
+      fs.mkdirSync(hooksDir, { recursive: true });
+
+      await execAsync(`git clone ${remotePath} ${racerClone}`);
+      await execAsync('git config user.name "gitgov-app[bot]"', { cwd: racerClone });
+      await execAsync('git config user.email "bot@gitgov.dev"', { cwd: racerClone });
+      await execAsync('git checkout gitgov-state', { cwd: racerClone });
+
+      const counter = path.join(hooksDir, 'fired');
+      const hook = `#!/bin/bash
+N=$(cat "${counter}" 2>/dev/null || echo 0)
+if [ "$N" -lt "${fireTimes}" ]; then
+  echo $((N+1)) > "${counter}"
+  # The racer must ALWAYS start from the current remote, so its push is fast-forward by
+  # construction and the contention is sustained. With \`pull --rebase\` it drifts out of
+  # sync once our push converges and its later pushes fail silently — turning it into a
+  # one-shot writer and never exercising the exhausted-retries path.
+  # Reset to FETCH_HEAD, not to origin/gitgov-state: \`git fetch origin <branch>\` updates
+  # FETCH_HEAD and does NOT necessarily move the remote-tracking ref, so resetting to the
+  # tracking ref would leave the racer on stale state and its push would stop advancing.
+  git -C "${racerClone}" fetch origin gitgov-state >/dev/null 2>&1
+  git -C "${racerClone}" reset --hard FETCH_HEAD >/dev/null 2>&1
+  mkdir -p "${racerClone}/.gitgov/tasks"
+  echo "{\\"id\\":\\"racer-$N\\"}" > "${racerClone}/.gitgov/tasks/${fileName}-$N.json"
+  git -C "${racerClone}" add -A >/dev/null 2>&1
+  git -C "${racerClone}" commit -m "put human:collab-i (racer $N)" >/dev/null 2>&1
+  # The racer's push MUST NOT be silenced: if it fails, the remote never advances, our
+  # push proceeds unrejected and the test converges for a FALSE reason. That is exactly
+  # the mechanism that made this race undiagnosable for months — a command whose result
+  # is discarded. Fail loud, and abort our push so the test cannot pass by accident.
+  #
+  # The trace goes inside the fixture's own temp dir. It used to point at an absolute path
+  # outside the repo; when that directory stopped existing the redirect itself failed, the
+  # hook aborted on a filesystem error and B19 got that error instead of the push reject —
+  # a green test turned red by an artifact that had nothing to do with the code under test.
+  if ! git -C "${racerClone}" push origin gitgov-state 2>>"${hooksDir}/racer.err"; then
+    echo "ROUND $N: RACER PUSH FAILED" >> "${hooksDir}/racer.err"
+    exit 1
+  fi
+  echo "round=$N sha=$(git -C "${racerClone}" rev-parse HEAD)" >> "${hooksDir}/racer.log"
+fi
+exit 0
+`;
+      fs.writeFileSync(path.join(hooksDir, 'pre-push'), hook, { mode: 0o755 });
+      await execAsync(`git config core.hooksPath "${hooksDir}"`, { cwd: worktreePath });
+    }
+
+    it('[WTSYNC-B18] should retry rebase and push when the remote rejects with non-fast-forward', async () => {
+      const { repoPath, remotePath } = await setupRepoWithRemote();
+      cleanupPaths.push(repoPath, remotePath);
+      await setupStateBranch(repoPath);
+      const { module } = createModule(repoPath);
+      await module.ensureWorktree();
+      const worktreePath = module.getWorktreePath();
+
+      // Baseline so the remote branch exists.
+      fs.writeFileSync(
+        path.join(worktreePath, '.gitgov', 'tasks', 'baseline.json'),
+        JSON.stringify({ id: 'baseline' }),
+      );
+      await module.pushState({ actorId: 'test-actor' });
+
+      // The other writer fires ONCE, inside the rebase→push window.
+      await installRacingPrePushHook(worktreePath, remotePath, 'once', 1);
+
+      fs.writeFileSync(
+        path.join(worktreePath, '.gitgov', 'tasks', 'local-task.json'),
+        JSON.stringify({ id: 'local-task' }),
+      );
+      const result = await module.pushState({ actorId: 'test-actor' });
+
+      // The retry incorporates what the other writer pushed and converges.
+      expect(result.success).toBe(true);
+      expect(result.conflictDetected).toBeFalsy();
+    }, 60000);
+
+    it('[WTSYNC-B18] should fail naming the rejection and the attempt count after exhausting retries', async () => {
+      const { repoPath, remotePath } = await setupRepoWithRemote();
+      cleanupPaths.push(repoPath, remotePath);
+      await setupStateBranch(repoPath);
+      const { module } = createModule(repoPath);
+      await module.ensureWorktree();
+      const worktreePath = module.getWorktreePath();
+
+      fs.writeFileSync(
+        path.join(worktreePath, '.gitgov', 'tasks', 'baseline.json'),
+        JSON.stringify({ id: 'baseline' }),
+      );
+      await module.pushState({ actorId: 'test-actor' });
+
+      // Sustained rejection from the other side. Simulated by a hook that always aborts
+      // the push: reproducing a *racer* that keeps winning is unreliable (measured — its
+      // own pushes start failing and the contention stops), and what this EARS describes
+      // is the remote refusing every attempt, not a particular writer.
+      const alwaysRejectDir = path.join(os.tmpdir(), `gitgov-hooks-reject-${Date.now()}`);
+      cleanupPaths.push(alwaysRejectDir);
+      fs.mkdirSync(alwaysRejectDir, { recursive: true });
+      fs.writeFileSync(path.join(alwaysRejectDir, 'pre-push'), '#!/bin/bash\nexit 1\n', { mode: 0o755 });
+      await execAsync(`git config core.hooksPath "${alwaysRejectDir}"`, { cwd: worktreePath });
+
+      fs.writeFileSync(
+        path.join(worktreePath, '.gitgov', 'tasks', 'doomed.json'),
+        JSON.stringify({ id: 'doomed' }),
+      );
+      const result = await module.pushState({ actorId: 'test-actor' });
+
+      expect(result.success).toBe(false);
+      // The error must name WHAT happened and HOW MANY times it was tried — a generic
+      // failure here is what made this race undiagnosable for months.
+      const msg = `${result.error ?? ''}`;
+      expect(msg).toMatch(/reject|fast-forward/i);
+      expect(msg).toMatch(/3|attempt|intento/i);
+    }, 90000);
+
+    it('[WTSYNC-B19] should expose the retry count in the push result', async () => {
+      const { repoPath, remotePath } = await setupRepoWithRemote();
+      cleanupPaths.push(repoPath, remotePath);
+      await setupStateBranch(repoPath);
+      const { module } = createModule(repoPath);
+      await module.ensureWorktree();
+      const worktreePath = module.getWorktreePath();
+
+      fs.writeFileSync(
+        path.join(worktreePath, '.gitgov', 'tasks', 'baseline.json'),
+        JSON.stringify({ id: 'baseline' }),
+      );
+      const clean = await module.pushState({ actorId: 'test-actor' });
+      // A push that never had to reconcile reports zero retries — otherwise a push that
+      // raced would be indistinguishable from one that did not, and the frequency of
+      // the race in production would stay unmeasurable.
+      expect(clean.retryCount ?? 0).toBe(0);
+
+      await installRacingPrePushHook(worktreePath, remotePath, 'counted', 1);
+      fs.writeFileSync(
+        path.join(worktreePath, '.gitgov', 'tasks', 'raced.json'),
+        JSON.stringify({ id: 'raced' }),
+      );
+      const raced = await module.pushState({ actorId: 'test-actor' });
+
+      expect(raced.success).toBe(true);
+      expect(raced.retryCount).toBeGreaterThanOrEqual(1);
+    }, 60000);
+
+    it('[WTSYNC-B19] should expose the reason of every retry in the push result', async () => {
+      const { repoPath, remotePath } = await setupRepoWithRemote();
+      cleanupPaths.push(repoPath, remotePath);
+      await setupStateBranch(repoPath);
+      const { module } = createModule(repoPath);
+      await module.ensureWorktree();
+      const worktreePath = module.getWorktreePath();
+
+      fs.writeFileSync(
+        path.join(worktreePath, '.gitgov', 'tasks', 'baseline.json'),
+        JSON.stringify({ id: 'baseline' }),
+      );
+      await module.pushState({ actorId: 'test-actor' });
+
+      await installRacingPrePushHook(worktreePath, remotePath, 'reasons', 1);
+      fs.writeFileSync(
+        path.join(worktreePath, '.gitgov', 'tasks', 'with-reason.json'),
+        JSON.stringify({ id: 'with-reason' }),
+      );
+      const raced = await module.pushState({ actorId: 'test-actor' });
+
+      expect(raced.success).toBe(true);
+      // The COUNT alone says the race happened; the REASON says what the remote answered.
+      // Without it the retry fixes the symptom and erases the evidence — which is exactly
+      // how this race stayed undiagnosable for months.
+      expect(raced.retryReasons).toBeDefined();
+      expect(raced.retryReasons?.length).toBe(raced.retryCount);
+      expect(raced.retryReasons?.length ?? 0).toBeGreaterThanOrEqual(1);
+      expect(raced.retryReasons?.[0]).toMatch(/reject|fast-forward|failed to push/i);
+    }, 60000);
+
+    it('[WTSYNC-B18] should abort the retry loop and return conflictDetected when the rebase conflicts', async () => {
+      const { repoPath, remotePath } = await setupRepoWithRemote();
+      cleanupPaths.push(repoPath, remotePath);
+      await setupStateBranch(repoPath);
+      const { module } = createModule(repoPath);
+      await module.ensureWorktree();
+      const worktreePath = module.getWorktreePath();
+
+      const contested = path.join('.gitgov', 'tasks', 'contested.json');
+      fs.writeFileSync(path.join(worktreePath, contested), JSON.stringify({ id: 'base', v: 0 }));
+      await module.pushState({ actorId: 'test-actor' });
+
+      // The other writer changes the SAME file to a different value. When our push is
+      // rejected and the retry rebases, git cannot merge the two versions → conflict.
+      const conflictClone = path.join(os.tmpdir(), `gitgov-conflict-${Date.now()}`);
+      cleanupPaths.push(conflictClone);
+      await execAsync(`git clone --branch gitgov-state "${remotePath}" "${conflictClone}"`);
+      await execAsync('git config user.email "racer@test" && git config user.name "Racer"', { cwd: conflictClone });
+      fs.writeFileSync(path.join(conflictClone, contested), JSON.stringify({ id: 'theirs', v: 1 }));
+      await execAsync(`git add -A && git commit -m "racer edits contested" && git push origin gitgov-state`, { cwd: conflictClone });
+
+      // Our conflicting edit to the same file.
+      fs.writeFileSync(path.join(worktreePath, contested), JSON.stringify({ id: 'ours', v: 2 }));
+      const result = await module.pushState({ actorId: 'test-actor' });
+
+      // A conflict is a USER decision, not something to retry: the loop must abort and
+      // surface it, exactly like WTSYNC-B7 does on the first attempt.
+      expect(result.success).toBe(false);
+      expect(result.conflictDetected).toBe(true);
+      expect(result.conflictInfo?.type).toBe('rebase_conflict');
+      // And it must NOT have burned the remaining attempts before giving up.
+      expect(result.retryCount ?? 0).toBeLessThan(3);
+    }, 90000);
+  });
+
   describe('4.2b. Root File Sync Exemption (WTSYNC-B17)', () => {
     it('[WTSYNC-B17] should sync policy.yml and .gitignore as root files despite non-json extension', () => {
       // Root files under .gitgov/ sync by exact name, exempt from the .json filter

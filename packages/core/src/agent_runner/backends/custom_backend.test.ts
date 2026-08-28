@@ -3,7 +3,7 @@
  *
  * Tests for engine.type: "custom" execution via protocol handlers.
  *
- * Reference: agent_runner_module.md §4.6 (EARS-F1 to EARS-F4)
+ * Reference: agent_runner_module.md §4.3 (ARUN-F1 to ARUN-F4)
  * Reference: agent_protocol.md §5.1.4
  */
 
@@ -34,9 +34,9 @@ describe("CustomBackend", () => {
     };
   }
 
-  describe("4.6. Custom Backend (EARS-F1 to EARS-F4)", () => {
-    describe("[EARS-F1] should lookup handler in ProtocolHandlerRegistry", () => {
-      it("should lookup handler by protocol name", async () => {
+  describe("4.3. Custom Backend (ARUN-F1 to ARUN-F4)", () => {
+    describe("[ARUN-F1] should lookup handler in ProtocolHandlerRegistry", () => {
+      it("[ARUN-F1] should lookup handler by protocol name", async () => {
         const registry = new DefaultProtocolHandlerRegistry();
         const mockHandler = jest.fn().mockResolvedValue({ message: "success" });
         registry.register("a2a", mockHandler);
@@ -55,8 +55,8 @@ describe("CustomBackend", () => {
       });
     });
 
-    describe("[EARS-F2] should throw CustomEngineConfigError when protocol missing", () => {
-      it("should throw when protocol is undefined", async () => {
+    describe("[ARUN-F2] should throw CustomEngineConfigError when protocol missing", () => {
+      it("[ARUN-F2] should throw when protocol is undefined", async () => {
         const registry = new DefaultProtocolHandlerRegistry();
         const backend = new CustomBackend(registry);
         const engine: CustomEngine = {
@@ -73,7 +73,7 @@ describe("CustomBackend", () => {
         );
       });
 
-      it("should throw when protocol is empty string", async () => {
+      it("[ARUN-F2] should throw when protocol is empty string", async () => {
         const registry = new DefaultProtocolHandlerRegistry();
         const backend = new CustomBackend(registry);
         const engine: CustomEngine = {
@@ -88,8 +88,8 @@ describe("CustomBackend", () => {
       });
     });
 
-    describe("[EARS-F3] should throw ProtocolHandlerNotFound when missing", () => {
-      it("should throw when registry has no handler for protocol", async () => {
+    describe("[ARUN-F3] should throw ProtocolHandlerNotFound when missing", () => {
+      it("[ARUN-F3] should throw when registry has no handler for protocol", async () => {
         const registry = new DefaultProtocolHandlerRegistry();
         // Don't register any handler
         const backend = new CustomBackend(registry);
@@ -107,7 +107,7 @@ describe("CustomBackend", () => {
         );
       });
 
-      it("should throw when registry is not provided", async () => {
+      it("[ARUN-F3] should throw when registry is not provided", async () => {
         const backend = new CustomBackend(undefined);
         const engine: CustomEngine = {
           type: "custom",
@@ -121,8 +121,8 @@ describe("CustomBackend", () => {
       });
     });
 
-    describe("[EARS-F4] should invoke handler with engine and context", () => {
-      it("should pass engine and ctx to handler", async () => {
+    describe("[ARUN-F4] should invoke handler with engine and context", () => {
+      it("[ARUN-F4] should pass engine and ctx to handler", async () => {
         const registry = new DefaultProtocolHandlerRegistry();
         const mockHandler = jest.fn().mockResolvedValue({
           data: { result: "processed" },
@@ -151,7 +151,7 @@ describe("CustomBackend", () => {
         });
       });
 
-      it("should capture AgentOutput from handler return value", async () => {
+      it("[ARUN-F4] should capture AgentOutput from handler return value", async () => {
         const registry = new DefaultProtocolHandlerRegistry();
         const expectedOutput: AgentOutput = {
           data: { items: [1, 2, 3] },
@@ -170,7 +170,7 @@ describe("CustomBackend", () => {
         expect(output).toEqual(expectedOutput);
       });
 
-      it("should propagate errors from handler", async () => {
+      it("[ARUN-F4] should propagate errors from handler", async () => {
         const registry = new DefaultProtocolHandlerRegistry();
         registry.register("failing", async () => {
           throw new Error("Handler failed");

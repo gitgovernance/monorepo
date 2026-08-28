@@ -25,6 +25,11 @@ vi.mock('@gitgov/core/audit', () => ({
 vi.mock('@gitgov/core/fs', () => ({
   findProjectRoot: vi.fn().mockReturnValue('/mock/project/root'),
   getWorktreeBasePath: vi.fn().mockReturnValue('/mock/worktree'),
+  // [AORCH-P9] discoverInstalledAgents moved from '@gitgov/core' to this subpath — it reads
+  // node_modules/ from disk (DISC-A1..A3). Without it here the import resolves to undefined,
+  // the try/catch in audit-command swallows the TypeError, and AORCH-P9 stays green while
+  // never exercising discovery at all.
+  discoverInstalledAgents: vi.fn().mockReturnValue([]),
 }));
 
 // Mock child_process for AORCH-C8 (branch + commit resolution)

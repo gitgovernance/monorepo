@@ -41,7 +41,7 @@ export async function runReviewAdvisor(ctx: AgentExecutionContext) {
 
   let llm: import('./types').LlmProvider | undefined;
   try {
-    const { resolveLlmProvider } = await import('@gitgov/core');
+    const { resolveLlmProvider } = await import('@gitgov/core/fs');
     llm = resolveLlmProvider(modelString, apiKey);
   } catch {
     // Core not available or provider resolution failed — agent degrades gracefully
