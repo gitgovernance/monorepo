@@ -29,6 +29,7 @@ import type { IAgentRunner, RunOptions, AgentResponse, GitGovAgentRecord } from 
 import {
   AuditOrchestrator as AuditOrchestratorNS,
   PolicyEvaluator as PolicyEvaluatorNS,
+  Redaction,
   Factories,
   calculatePayloadChecksum,
   generateExecutionId,
@@ -37,6 +38,16 @@ import type { AuditOrchestrationResult, IWaiverReader, Waiver, Finding } from '@
 
 const createAuditOrchestrator = AuditOrchestratorNS.createAuditOrchestrator;
 const createPolicyEvaluator = PolicyEvaluatorNS.createPolicyEvaluator;
+
+/**
+ * `redactor` is a REQUIRED dependency of the orchestrator — AORCH-E1: the orchestrator always
+ * applies `redactSarif(sarif, 'l1')` and enriches L2 with `gitgov/snippetHash` (AORCH-E2), so there
+ * is no code path where it can be absent. Built with the protocol default config so this suite
+ * exercises the same category policy production does, rather than a hand-made one.
+ */
+function createRedactor(): Redaction.FindingRedactor {
+  return new Redaction.FindingRedactor(Redaction.DEFAULT_REDACTION_CONFIG);
+}
 
 function makeTestWaiver(finding: Finding): Waiver {
   const feedbackPayload = Factories.createFeedbackRecord({
@@ -495,6 +506,7 @@ describe('Block G: Audit Orchestration Pipeline (CG1 to CG16)', () => {
       agentRunner,
       waiverReader,
       policyEvaluator,
+      redactor: createRedactor(),
     });
   }
 
@@ -775,6 +787,7 @@ describe('Block G: Audit Orchestration Pipeline (CG1 to CG16)', () => {
           agentRunner: fpAgentRunner,
           waiverReader: createNoOpWaiverReader(),
           policyEvaluator: fpPolicyEvaluator,
+          redactor: createRedactor(),
         });
 
         const fpResult = await fpOrchestrator.run({
@@ -864,6 +877,7 @@ describe('Block G: Audit Orchestration Pipeline (CG1 to CG16)', () => {
         agentRunner,
         waiverReader: createNoOpWaiverReader(),
         policyEvaluator,
+        redactor: createRedactor(),
       });
 
       const result = await orchestrator.run({
@@ -909,6 +923,7 @@ describe('Block G: Audit Orchestration Pipeline (CG1 to CG16)', () => {
         agentRunner: failingRunner,
         waiverReader: createNoOpWaiverReader(),
         policyEvaluator,
+        redactor: createRedactor(),
       });
 
       const result = await orchestrator.run({
@@ -963,6 +978,7 @@ describe('Block G: Audit Orchestration Pipeline (CG1 to CG16)', () => {
         agentRunner,
         waiverReader: createNoOpWaiverReader(),
         policyEvaluator,
+        redactor: createRedactor(),
       });
 
       const result = await orchestrator.run({
@@ -1012,6 +1028,7 @@ describe('Block G: Audit Orchestration Pipeline (CG1 to CG16)', () => {
           agentRunner: cleanAgentRunner,
           waiverReader: createNoOpWaiverReader(),
           policyEvaluator: cleanPolicyEvaluator,
+          redactor: createRedactor(),
         });
 
         const result = await orchestrator.run({

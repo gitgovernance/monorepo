@@ -279,9 +279,19 @@ describe('Block I: Redaction Pipeline (CI1 to CI4)', () => {
         }
       }
 
-      // L2 must NOT have snippetHash (not redacted)
+      // L2 MUST carry snippetHash. RLDX-F2 computes it for ANY level — for L2 the snippet is
+      // preserved unchanged and the hash is still added — so that every consumer receives it
+      // regardless of the redaction path, and L1 can be checked against L2 (RLDX-G1/G5).
+      //
+      // This assertion read `expect(snippetHash).toBeUndefined()` until 2026-08-28, which CI2 never
+      // asked for and RLDX-B10/F2 and AORCH-E2 forbid. L2 differs from L1 in that the snippet
+      // survives, not in that the hash is missing.
       const snippetHash = result.properties?.['gitgov/snippetHash'] as string | undefined;
-      expect(snippetHash).toBeUndefined();
+      const snippetText = result.locations?.[0]?.physicalLocation?.region?.snippet?.text;
+      if (snippetText !== undefined && snippetText !== '') {
+        expect(snippetHash).toBeDefined();
+        expect(snippetHash).toMatch(/^[0-9a-f]{64}$/);
+      }
     }
 
     // L2 should be identical to the original SARIF (deep copy)

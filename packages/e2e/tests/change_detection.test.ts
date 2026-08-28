@@ -60,13 +60,31 @@ function createGitgovStateProjector(octokit: Octokit): IRecordProjector {
   return new RecordProjector({ recordMetrics, stores });
 }
 
+/**
+ * Config stub that answers the one method GithubSyncStateModule actually calls.
+ *
+ * Measured: `github_sync_state.ts` reaches `this.deps.config.getStateBranch()` and nothing else on
+ * `config`. It used to be wired as `{} as unknown as ...`, and the cast is what let an empty object
+ * satisfy the type: every branch resolution then failed at runtime with
+ * `this.deps.config.getStateBranch is not a function` — 7 of this block's tests. The cast is the
+ * defect, not the missing method: it turned a compile-time error into a runtime one.
+ *
+ * `gitgov-state` is the branch the whole block operates on (see change_detection.md §2 diagrams).
+ */
+function createConfigStub(): GithubSyncStateDependencies['config'] {
+  return { getStateBranch: async () => 'gitgov-state' } as GithubSyncStateDependencies['config'];
+}
+
 /** GithubSyncStateModule with real Octokit and stub config/identity/lint. */
 function createSyncModule(octokit: Octokit, indexer: IRecordProjector): GithubSyncStateModule {
   return new GithubSyncStateModule({
     octokit,
     owner: GITHUB_TEST_OWNER,
     repo: GITHUB_TEST_REPO_NAME,
-    config: {} as unknown as GithubSyncStateDependencies['config'],
+    config: createConfigStub(),
+    // `identity` is never dereferenced by this module — measured: zero `this.deps.identity.*` call
+    // sites. It stays a cast on purpose; giving it a fake shape would claim coverage of a
+    // collaborator this block does not exercise.
     identity: {} as unknown as GithubSyncStateDependencies['identity'],
     lint: createLintStub(),
     indexer,
