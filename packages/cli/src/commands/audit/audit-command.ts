@@ -237,7 +237,11 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
 
       // [AORCH-P9] List discovered-but-unregistered agents
       try {
-        const discovered = discoverInstalledAgents(process.cwd());
+        // [INIT-M3] The root is ASKED FOR, never derived — `discoverInstalledAgents` resolves
+        // `<root>/node_modules`, which lives in the user's repo and never in the worktree, and only
+        // the container holds both (EARS-C16). Same defect and same fix as init-command.ts:244.
+        const repoRoot = await this.container.getRepoRoot();
+        const discovered = discoverInstalledAgents(repoRoot);
         const registeredIds = result.agentResults.map(r => r.agentId);
         const unregistered = discovered.filter(d => !registeredIds.includes(d.id));
         if (unregistered.length > 0) {

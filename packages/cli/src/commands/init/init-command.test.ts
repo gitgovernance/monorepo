@@ -8,15 +8,23 @@
  * - §4.4 Error Handling & UX Excellence (EARS-D1 to D3)
  */
 
+// [INIT-M3] A root distinguishable from process.cwd(). If the two were equal the test could not
+// tell a container-supplied root from an environment-derived one — the defect would pass.
+const MOCK_REPO_ROOT = '/tmp/gitgov-init-m3-repo-root';
+
+const mockContainer = {
+  setInitMode: vi.fn(),
+  getProjectModule: vi.fn(),
+  // [INIT-L1] init-command.ts:49 sets the state branch override before initializing
+  setStateBranchOverride: vi.fn(),
+  // [INIT-M3] [EARS-C16] The container is the only component holding both roots.
+  getRepoRoot: vi.fn().mockResolvedValue(MOCK_REPO_ROOT),
+};
+
 // Mock DependencyInjectionService (InitCommand now uses DI)
 vi.mock('../../services/dependency-injection', () => ({
   DependencyInjectionService: {
-    getInstance: vi.fn().mockReturnValue({
-      setInitMode: vi.fn(),
-      getProjectModule: vi.fn(),
-      // [INIT-L1] init-command.ts:49 sets the state branch override before initializing
-      setStateBranchOverride: vi.fn(),
-    }),
+    getInstance: vi.fn(() => mockContainer),
   },
 }));
 
@@ -25,8 +33,18 @@ vi.mock('child_process', () => ({
   execSync: vi.fn()
 }));
 
+// [INIT-M3] Observe the root agent discovery is anchored at. Real `discoverInstalledAgents`
+// scans `<root>/node_modules`, so without this mock the assertion could only see whether agents
+// happened to exist under the test's cwd — which is exactly what INIT-M1/M2 do today, and why
+// nothing caught that the root was being re-derived from the environment.
+vi.mock('@gitgov/core/fs', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  discoverInstalledAgents: vi.fn().mockReturnValue([]),
+}));
+
 import { InitCommand } from './init-command';
 import { execSync } from 'child_process';
+import { discoverInstalledAgents } from '@gitgov/core/fs';
 import type { ProjectModuleInitResult } from '@gitgov/core';
 
 // Mock console methods to capture output
@@ -731,6 +749,31 @@ describe('InitCommand', () => {
       expect(logCalls).not.toContain('❌');
       // Exit code should still be 0 (init succeeded — agent status is informational)
       expect(mockProcessExit).not.toHaveBeenCalled();
+    });
+
+    it('[INIT-M3] should anchor agent discovery at the repo root it already resolved', async () => {
+      await initCommand.execute({ name: 'M3 Test', actorName: 'Test User' });
+
+      const discover = vi.mocked(discoverInstalledAgents);
+
+      // Anti-vacuity: if discovery never ran, every assertion below would pass on an empty list.
+      expect(discover).toHaveBeenCalled();
+
+      // The root must come from the container — the only component that holds both repoRoot and
+      // projectRoot (EARS-C16) — not from the environment. init_command.md §4 line 300 names this
+      // exact defect: "displayAgentStatus() deriva la raíz de process.cwd() teniendo
+      // container.getRepoRoot()".
+      //
+      // Asserting the value came from getRepoRoot() rather than comparing it against process.cwd()
+      // is what makes this test able to fail: under vitest cwd IS the repo, so an equality check
+      // against cwd would pass with the defect still present.
+      expect(mockContainer.getRepoRoot).toHaveBeenCalled();
+      expect(discover).toHaveBeenCalledWith(MOCK_REPO_ROOT);
+
+      // [PROJ-B7] The failure this guards against: `discoverInstalledAgents` resolves
+      // `<root>/node_modules`, which exists in the user's repo and never in the worktree. A root
+      // taken from the environment happens to be right only because `init` is invoked from the repo.
+      expect(discover).not.toHaveBeenCalledWith(process.cwd());
     });
   });
 });
