@@ -558,6 +558,8 @@ vi.mock('@gitgov/core', () => {
     ProjectModule: vi.fn().mockImplementation(function() { return {
       initializeProject: vi.fn().mockResolvedValue({ actorId: 'human:test-user', productAgentId: 'agent:gitgov-audit', cycleId: 'cycle-root', commitSha: 'abc123' }),
     }; }),
+    // [PROJ-F3] getProjectModule() passes this straight through to ProjectModuleDeps.
+    DEFAULT_AGENTS: [],
     getCurrentActor: vi.fn().mockResolvedValue({ id: 'human:current-user', type: 'human', displayName: 'Current User', publicKey: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=', roles: ['author'] }),
   };
 });
@@ -598,6 +600,10 @@ vi.mock('@gitgov/core/fs', () => ({
     stat: vi.fn().mockResolvedValue({ isFile: true, isDirectory: false, size: 0, mtime: new Date() })
   }; }),
   FsProjectInitializer: vi.fn().mockImplementation(function() { return {}; }),
+  // [EARS-C16] Constructor spy: the root is bound HERE, so the argument is the assertion.
+  FsEngineValidator: vi.fn().mockImplementation(function() { return {
+    validate: vi.fn().mockResolvedValue({ resolvable: true })
+  }; }),
   FsLintModule: vi.fn().mockImplementation(function() { return {
     lint: vi.fn().mockResolvedValue({
       summary: { filesChecked: 0, errors: 0, warnings: 0, fixable: 0, executionTime: 0 },
@@ -947,6 +953,27 @@ describe('DependencyInjectionService', () => {
     });
 
     it.todo('[EARS-C14] should prompt actor selection and save to session when multiple keys exist');
+
+    it('[EARS-C16] should build the engine validator with repoRoot not the worktree path', async () => {
+      // Pins WHICH root the engine validator resolves against. During `gitgov init` this
+      // service holds BOTH: `repoRoot` (the user's repo, where node_modules lives) and
+      // `projectRoot` (~/.gitgov/worktrees/<hash>, where .gitgov lives). They are different
+      // trees, and ARUN-M2 resolves npm packages with require.resolve — which only finds
+      // node_modules in the repo.
+      //
+      // The validator binds its root at CONSTRUCTION (ARUN-M1), so the constructor argument
+      // IS the guarantee. PROJ-B7 fixes the other half: ProjectModule passes no root at all.
+      const { FsEngineValidator } = corefs;
+      FsEngineValidator.mockClear();
+
+      await diService.getProjectModule();
+
+      // Anti-vacuity: if the validator was never constructed, the assertions below would
+      // pass over an empty call list and prove nothing.
+      expect(FsEngineValidator).toHaveBeenCalledTimes(1);
+      expect(FsEngineValidator.mock.calls[0][0]).toBe(mockRepoRoot);
+      expect(FsEngineValidator.mock.calls[0][0]).not.toBe(mockWorktreeBasePath);
+    });
   });
 
   // ============================================================================

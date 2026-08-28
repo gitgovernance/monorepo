@@ -80,8 +80,15 @@ export type RuntimeHandler = (
  * That split is not stylistic: while `ProjectModule` imported the concrete function, it
  * dragged `backends/local_backend.ts` — and with it `path` and `node:module` — into the
  * `@gitgov/core` bundle. Those were the last two violations reported by EARS-CI02.
+ *
+ * `validate()` takes NO root. The root an implementation resolves against is bound when
+ * that implementation is BUILT, by whoever composes the dependencies. While the signature
+ * was `validate(engine, projectRoot)`, every caller had to choose between two strings the
+ * compiler cannot tell apart — the user's repo and `~/.gitgov/worktrees/<hash>` — and
+ * `ProjectModule`, which knows neither concept, chose with `process.cwd()`. It happened to
+ * be right because `init` runs from the repo. See PROJ-B7 and dependency_injection C16.
  */
 export interface IEngineValidator {
-  /** Validates `engine` from `projectRoot`. NEVER throws. */
-  validate(engine: Engine, projectRoot: string): Promise<EngineValidationResult>;
+  /** Validates `engine` against the root bound at construction. NEVER throws. */
+  validate(engine: Engine): Promise<EngineValidationResult>;
 }

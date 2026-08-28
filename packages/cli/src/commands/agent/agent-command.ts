@@ -215,8 +215,12 @@ export class AgentCommand extends BaseCommand<RunCommandOptions> {
       // A registered agent must be an agent that runs — not a JSON pointing nowhere
       // (the session-63 phantom-agents bug: 0 findings silently). The catch below
       // formats the error (text/json) and exits 1 — the agent is NOT registered.
+      // [ARUN-M1] The root is bound at construction, not passed per call. It is the REPO
+      // root — where node_modules lives — not the worktree, and not process.cwd(): the
+      // container already resolved it, so the anchor is explicit instead of ambient.
       const { FsEngineValidator } = await import('@gitgov/core/fs');
-      const validation = await new FsEngineValidator().validate(engine, process.cwd());
+      const repoRoot = await this.container.getRepoRoot();
+      const validation = await new FsEngineValidator(repoRoot).validate(engine);
       if (!validation.resolvable) {
         throw new Error(
           `Agent engine is not runnable: ${validation.reason}. ` +

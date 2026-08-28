@@ -465,7 +465,13 @@ export class DependencyInjectionService {
       // [PROJ-B6] ProjectModule no longer imports the validator — importing it pulled
       // node:path and node:module into the @gitgov/core bundle (EARS-CI02). The CLI runs
       // on Node, so it supplies the filesystem implementation.
-      engineValidator: new FsEngineValidator(),
+      //
+      // [EARS-C16] Bound to `repoRoot`, NEVER `this.projectRoot`. In init mode the latter is
+      // `~/.gitgov/worktrees/<hash>` — a separate tree with no node_modules, so
+      // `require.resolve` would find nothing there. This service is the only component that
+      // holds both roots, which is why the binding happens here and not in ProjectModule
+      // (PROJ-B7). Same rule as EARS-C12 for the AgentRunner.
+      engineValidator: new FsEngineValidator(this.repoRoot ?? this.projectRoot),
     };
     if (agentAdapter) deps.agentAdapter = agentAdapter;
     return new ProjectModule(deps);

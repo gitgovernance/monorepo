@@ -121,14 +121,21 @@ export class ProjectModule {
           try {
             // [PROJ-B6] Creation-time engine validation (ARUN-M1): the agent is still
             // registered (valid declaration) but the user learns NOW that it won't run —
-            // not 3 steps later at audit time. Non-fatal. Resolution anchors at cwd
-            // (where init runs) — same anchor the runner uses for npm packages.
+            // not 3 steps later at audit time. Non-fatal.
+            //
+            // [PROJ-B7] No root is passed, and this module knows none. Until 2026-08-27 the
+            // call read `validate(engine, process.cwd())` under a comment claiming cwd was
+            // "the same anchor the runner uses" — a guarantee the DI did not keep: during
+            // `gitgov init` the initializer it hands us writes to ~/.gitgov/worktrees/<hash>
+            // while this resolved in the repo. Different trees. cwd happened to be right
+            // because init runs from the repo. The validator now arrives already bound to
+            // its root (EARS-C16), so there is nothing here left to get wrong.
             try {
               // No validator injected → no validation. Deliberate and covered by its own
               // test: PROJ-B6 degrades silently, so the absence is pinned down rather than
               // discovered later.
               if (this.deps.engineValidator) {
-                const validation = await this.deps.engineValidator.validate(agentConfig.engine, process.cwd());
+                const validation = await this.deps.engineValidator.validate(agentConfig.engine);
                 if (!validation.resolvable) {
                   agentWarnings.push(`${agentConfig.agentId}: registered but not runnable — ${validation.reason}`);
                 }

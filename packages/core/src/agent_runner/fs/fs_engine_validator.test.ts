@@ -26,7 +26,8 @@ describe("FsEngineValidator", () => {
 
   beforeEach(() => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "engine-validator-test-"));
-    validator = new FsEngineValidator();
+    // [ARUN-M1] La raíz se ata al construir, no en cada llamada.
+    validator = new FsEngineValidator(tempDir);
   });
 
   afterEach(() => {
@@ -39,7 +40,7 @@ describe("FsEngineValidator", () => {
       fs.writeFileSync(entrypointPath, "module.exports.runAgent = async () => ({ data: 'ok' });");
 
       const engine: Engine = { type: "local", entrypoint: "agent.js", function: "runAgent" };
-      const result = await validator.validate(engine, tempDir);
+      const result = await validator.validate(engine);
 
       expect(result.resolvable).toBe(true);
       expect(result.reason).toBeUndefined();
@@ -48,7 +49,7 @@ describe("FsEngineValidator", () => {
     it("[ARUN-M2] should return resolvable false with reason when entrypoint does not resolve", async () => {
       // The session-63 phantom-agent case: npm package not installed anywhere
       const engine: Engine = { type: "local", entrypoint: "@gitgov/agent-does-not-exist", function: "runAgent" };
-      const result = await validator.validate(engine, tempDir);
+      const result = await validator.validate(engine);
 
       expect(result.resolvable).toBe(false);
       expect(result.reason).toContain("@gitgov/agent-does-not-exist");
@@ -59,7 +60,7 @@ describe("FsEngineValidator", () => {
       fs.writeFileSync(entrypointPath, "module.exports.someOtherFn = async () => ({});");
 
       const engine: Engine = { type: "local", entrypoint: "agent.js", function: "runAgent" };
-      const result = await validator.validate(engine, tempDir);
+      const result = await validator.validate(engine);
 
       expect(result.resolvable).toBe(false);
       expect(result.reason).toContain("does not export function 'runAgent'");
@@ -71,11 +72,11 @@ describe("FsEngineValidator", () => {
   describe("4.4. Engine Validation (ARUN-M1)", () => {
     it("[ARUN-M1] should return resolvable true for non-local engines", async () => {
       const apiEngine = { type: "api", url: "https://api.example.com/agent" } as Engine;
-      expect((await validator.validate(apiEngine, tempDir)).resolvable).toBe(true);
+      expect((await validator.validate(apiEngine)).resolvable).toBe(true);
 
       // Runtime-based local engines also resolve at execution time, via the registry
       const runtimeEngine: Engine = { type: "local", runtime: "typescript" };
-      expect((await validator.validate(runtimeEngine, tempDir)).resolvable).toBe(true);
+      expect((await validator.validate(runtimeEngine)).resolvable).toBe(true);
     });
 
     it("[ARUN-M1] should never throw and report the cause in reason", async () => {
@@ -94,12 +95,41 @@ describe("FsEngineValidator", () => {
       expect(hostile.length).toBeGreaterThan(3);
 
       for (const engine of hostile) {
-        const result = await validator.validate(engine, tempDir);
+        const result = await validator.validate(engine);
         expect(typeof result.resolvable).toBe("boolean");
         if (!result.resolvable) {
           expect(typeof result.reason).toBe("string");
           expect(result.reason!.length).toBeGreaterThan(0);
         }
+      }
+    });
+
+    it("[ARUN-M1] should resolve against the root bound at construction", async () => {
+      // `validate()` takes no root: the root is bound when the implementation is built.
+      // Two validators over the SAME engine must disagree purely because their constructor
+      // arguments differ — that is the whole point of removing the parameter.
+      //
+      // Until 2026-08-27 the signature was `validate(engine, projectRoot)`, so every caller
+      // chose between two indistinguishable strings — the user's repo and
+      // ~/.gitgov/worktrees/<hash> — and ProjectModule, which knows neither concept, chose
+      // with process.cwd(). It happened to be right because `init` runs from the repo.
+      const otherDir = fs.mkdtempSync(path.join(os.tmpdir(), "engine-validator-other-"));
+      try {
+        fs.writeFileSync(path.join(tempDir, "agent.js"), "module.exports.runAgent = async () => ({});");
+        // otherDir deliberately does NOT contain agent.js
+
+        const engine: Engine = { type: "local", entrypoint: "agent.js", function: "runAgent" };
+
+        const boundToTemp = await new FsEngineValidator(tempDir).validate(engine);
+        const boundToOther = await new FsEngineValidator(otherDir).validate(engine);
+
+        expect(boundToTemp.resolvable).toBe(true);
+        expect(boundToOther.resolvable).toBe(false);
+        // Anti-vacuity: a false that came from something other than the anchor would not
+        // name the entrypoint we asked for.
+        expect(boundToOther.reason).toContain("agent.js");
+      } finally {
+        fs.rmSync(otherDir, { recursive: true, force: true });
       }
     });
   });

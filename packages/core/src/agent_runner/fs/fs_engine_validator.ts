@@ -18,9 +18,16 @@ import type { Engine, EngineValidationResult } from "../agent_runner.types";
  * `validateAgentEngine` directly, that is exactly what happened: `path` and `module` ended
  * up in `dist/src/index.js` and EARS-CI02 reported them. `ProjectModule` now receives an
  * `IEngineValidator` instead, and the chain is cut.
+ *
+ * The root is bound HERE, at construction (ARUN-M1), not passed per call. `require.resolve`
+ * needs `node_modules`, which lives in the user's repo — never in `~/.gitgov/worktrees/<hash>`.
+ * The only component that holds both roots is the CLI's DI service, so it is the only one
+ * that can choose correctly: `dependency_injection_module` EARS-C16.
  */
 export class FsEngineValidator implements IEngineValidator {
-  async validate(engine: Engine, projectRoot: string): Promise<EngineValidationResult> {
+  constructor(private readonly projectRoot: string) {}
+
+  async validate(engine: Engine): Promise<EngineValidationResult> {
     // [ARUN-M1] Non-local engines are not locally verifiable
     if (engine.type !== "local") {
       return { resolvable: true };
@@ -34,7 +41,7 @@ export class FsEngineValidator implements IEngineValidator {
     // [ARUN-M2] Entrypoint-based: resolve → import → verify function
     let absolutePath: string;
     try {
-      absolutePath = resolveLocalEntrypoint(engine.entrypoint, projectRoot);
+      absolutePath = resolveLocalEntrypoint(engine.entrypoint, this.projectRoot);
     } catch (error) {
       return {
         resolvable: false,

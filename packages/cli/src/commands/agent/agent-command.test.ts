@@ -217,6 +217,9 @@ describe('AgentCommand', () => {
       getIdentityAdapter: vi.fn().mockResolvedValue(mockIdentityAdapter),
       getAgentStore: vi.fn().mockResolvedValue(mockAgentStore),
       getAgentAdapter: vi.fn().mockResolvedValue(mockAgentAdapter),
+      // [ARUN-M1] `executeNew` binds the validator to the REPO root, which the container
+      // resolves — not to process.cwd(), and never to the worktree.
+      getRepoRoot: vi.fn().mockResolvedValue('/tmp/test-repo-root'),
       getCurrentActor: vi.fn().mockResolvedValue({ id: 'human:test-dev', type: 'human', displayName: 'Test Dev', publicKey: 'test-key', roles: ['developer'] }),
     } as unknown as DependencyInjectionService);
 

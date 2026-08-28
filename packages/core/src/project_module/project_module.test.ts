@@ -36,7 +36,6 @@ function createMockInitializer(): IProjectInitializer {
     writeConfig: jest.fn().mockResolvedValue(undefined),
     initializeSession: jest.fn().mockResolvedValue(undefined),
     setupGitIntegration: jest.fn().mockResolvedValue(undefined),
-    copyAgentPrompt: jest.fn().mockResolvedValue(undefined),
     rollback: jest.fn().mockResolvedValue(undefined),
     validateEnvironment: jest.fn().mockResolvedValue({ isValid: true, isGitRepo: true, hasWritePermissions: true, isAlreadyInitialized: false, warnings: [], suggestions: [] }),
     readFile: jest.fn().mockResolvedValue(''),
@@ -500,7 +499,8 @@ describe('ProjectModule', () => {
       deps.agentAdapter = mockAgentAdapter;
       // The validator is INJECTED now — ProjectModule no longer imports it. Importing it
       // dragged `path` and `node:module` into the @gitgov/core bundle (EARS-CI02).
-      deps.engineValidator = new FsEngineValidator();
+      // [PROJ-B7] It arrives already bound to its root: ProjectModule passes none.
+      deps.engineValidator = new FsEngineValidator('/tmp/gitgov-repo-root-fixture');
       // The session-63 phantom-agent case: npm entrypoint not installed anywhere
       deps.defaultAgents = [{
         packageName: '@gitgov/agent-does-not-exist',
@@ -522,6 +522,58 @@ describe('ProjectModule', () => {
       expect(result.agentWarnings).toHaveLength(1);
       expect(result.agentWarnings![0]).toContain('agent:phantom');
       expect(result.agentWarnings![0]).toContain('not runnable');
+    });
+
+    it('[PROJ-B7] should call validate with the engine only and never process.cwd', async () => {
+      // Pins WHICH root resolves a default agent's entrypoint. During `gitgov init` the DI
+      // puts ProjectModule in worktree mode — `initializer` writes to
+      // ~/.gitgov/worktrees/<hash> — while this validation ran against process.cwd().
+      // Two anchors, one method, and the call-site comment claimed they were the same.
+      //
+      // The repo root is the correct one: ARUN-M2 resolves npm packages with
+      // require.resolve, and node_modules lives in the repo, not in the worktree. cwd
+      // happens to be the repo today because init runs there — this test makes that a
+      // guarantee instead of a coincidence.
+      //
+      // Precedent that the distinction bites: [AORCH-P4b] "should write audit-index.json
+      // to worktree, not local project dir".
+      //
+      // The fix is not "pass the right root" — it is that ProjectModule passes NONE. While
+      // the signature was validate(engine, projectRoot), the choice between two
+      // indistinguishable strings sat with every caller, and this one knows neither concept.
+      // The root is now bound when the validator is built (ARUN-M1), by the DI, which is the
+      // only component that holds both (EARS-C16).
+      const capturedArgs: unknown[][] = [];
+      const { deps } = createRealDeps();
+      deps.agentAdapter = createMockAgentAdapter();
+      deps.engineValidator = {
+        validate: async (...args: unknown[]) => {
+          capturedArgs.push(args);
+          return { resolvable: true };
+        },
+      } as unknown as NonNullable<typeof deps.engineValidator>;
+      deps.defaultAgents = [{
+        packageName: '@gitgov/agent-does-not-exist',
+        agentId: 'agent:phantom',
+        displayName: 'Phantom Agent',
+        engine: { type: 'local' as const, entrypoint: '@gitgov/agent-does-not-exist', function: 'runAgent' },
+        purpose: 'audit',
+        triggers: [],
+        metadata: {},
+      }];
+
+      await new ProjectModule(deps).initializeProject({ name: 'test-project', login: 'camilo', stateBranch: DEFAULT_STATE_BRANCH });
+
+      // Anti-vacuity: if the validator was never called the assertions below prove nothing.
+      expect(capturedArgs).toHaveLength(1);
+      // The requirement: ONE argument. A second one would be a root, and there is no root
+      // this module could legitimately supply.
+      expect(capturedArgs[0]).toHaveLength(1);
+      expect(capturedArgs[0]![0]).toEqual(
+        expect.objectContaining({ type: 'local', entrypoint: '@gitgov/agent-does-not-exist' })
+      );
+      // Explicit about the value that used to be passed, so a regression names itself.
+      expect(capturedArgs[0]).not.toContain(process.cwd());
     });
 
     it('[PROJ-B6] should skip engine validation when no engineValidator is injected', async () => {
