@@ -709,7 +709,11 @@ import { DependencyInjectionService } from './dependency-injection';
 import * as mockFsModule from 'fs';
 import * as corefs from '@gitgov/core/fs';
 import { Git, Adapters, KeyProvider, EventBus, RecordProjection, RecordMetrics, AuditOrchestrator as AuditOrchestratorMock, PolicyEvaluator as PolicyEvaluatorMock, SyncState, Redaction as RedactionMock } from '@gitgov/core';
-const mockFs = vi.mocked(mockFsModule);
+// `deep: true` — without it `vi.mocked` only retypes the module's own properties, so nested ones
+// like `promises.access` stay typed as the real function and every `.mockResolvedValue()` on them
+// is a type error. The calls worked at runtime because `vi.mock` did replace them; only the types
+// disagreed, which is invisible while the file is not typechecked.
+const mockFs = vi.mocked(mockFsModule, { deep: true });
 
 describe('DependencyInjectionService', () => {
   let diService: DependencyInjectionService;
@@ -724,7 +728,7 @@ describe('DependencyInjectionService', () => {
     DependencyInjectionService.reset();
 
     // Reset @gitgov/core/fs function mocks to default
-    corefs.findProjectRoot.mockReturnValue(mockRepoRoot);
+    vi.mocked(corefs.findProjectRoot).mockReturnValue(mockRepoRoot);
 
     // Reset fs.access mock to success by default (worktree .gitgov exists)
     mockFs.promises.access.mockResolvedValue(undefined);
@@ -788,13 +792,13 @@ describe('DependencyInjectionService', () => {
       await diService.getRecordProjector();
 
       // Clear mock call counts
-      const callCountAfterFirst = corefs.FsRecordStore.mock.calls.length;
+      const callCountAfterFirst = vi.mocked(corefs.FsRecordStore).mock.calls.length;
 
       // Second call - should use cached stores
       await diService.getBacklogAdapter();
 
       // FsRecordStore should not be called again (stores already initialized)
-      expect(corefs.FsRecordStore.mock.calls.length).toBe(callCountAfterFirst);
+      expect(vi.mocked(corefs.FsRecordStore).mock.calls.length).toBe(callCountAfterFirst);
     });
   });
 
@@ -961,15 +965,15 @@ describe('DependencyInjectionService', () => {
       // The validator binds its root at CONSTRUCTION (ARUN-M1), so the constructor argument
       // IS the guarantee. PROJ-B7 fixes the other half: ProjectModule passes no root at all.
       const { FsEngineValidator } = corefs;
-      FsEngineValidator.mockClear();
+      vi.mocked(FsEngineValidator).mockClear();
 
       await diService.getProjectModule();
 
       // Anti-vacuity: if the validator was never constructed, the assertions below would
       // pass over an empty call list and prove nothing.
       expect(FsEngineValidator).toHaveBeenCalledTimes(1);
-      expect(FsEngineValidator.mock.calls[0][0]).toBe(mockRepoRoot);
-      expect(FsEngineValidator.mock.calls[0][0]).not.toBe(mockWorktreeBasePath);
+      expect(vi.mocked(FsEngineValidator).mock.calls[0][0]).toBe(mockRepoRoot);
+      expect(vi.mocked(FsEngineValidator).mock.calls[0][0]).not.toBe(mockWorktreeBasePath);
     });
   });
 
@@ -1084,7 +1088,7 @@ describe('DependencyInjectionService', () => {
       mockFs.promises.access.mockResolvedValue(undefined);
 
       // Mock RecordProjector constructor to throw
-      RecordProjection.RecordProjector.mockImplementationOnce(function() {
+      vi.mocked(RecordProjection.RecordProjector).mockImplementationOnce(function() {
         throw new Error('Connection failed');
       });
 
@@ -1096,7 +1100,7 @@ describe('DependencyInjectionService', () => {
       mockFs.promises.access.mockResolvedValue(undefined);
 
       // Mock BacklogAdapter constructor to throw
-      Adapters.BacklogAdapter.mockImplementationOnce(function() {
+      vi.mocked(Adapters.BacklogAdapter).mockImplementationOnce(function() {
         throw new Error('Database connection failed');
       });
 
@@ -1108,7 +1112,7 @@ describe('DependencyInjectionService', () => {
       mockFs.promises.access.mockResolvedValue(undefined);
 
       // Mock RecordProjector to throw a string instead of Error
-      RecordProjection.RecordProjector.mockImplementationOnce(function() {
+      vi.mocked(RecordProjection.RecordProjector).mockImplementationOnce(function() {
         throw 'String error instead of Error object';
       });
 
@@ -1132,7 +1136,7 @@ describe('DependencyInjectionService', () => {
 
     it('[EARS-F2] should return false when project root not found', async () => {
       // Mock findProjectRoot to return null
-      corefs.findProjectRoot.mockReturnValue(null);
+      vi.mocked(corefs.findProjectRoot).mockReturnValue(null);
 
       // Reset projectRoot by creating a fresh instance
       DependencyInjectionService.reset();

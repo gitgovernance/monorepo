@@ -45,7 +45,7 @@ vi.mock('../../services/dependency-injection', () => ({
   }
 }));
 
-import type { Mock } from 'vitest';
+import type { Mock, MockInstance } from 'vitest';
 import { AgentCommand, type RunCommandOptions, type ListCommandOptions, type ShowCommandOptions, type AgentNewOptions } from './agent-command';
 import { DependencyInjectionService } from '../../services/dependency-injection';
 import type { RunOptions, AgentResponse, TaskRecord, ActorRecord, AgentRecord } from '@gitgov/core';
@@ -458,8 +458,8 @@ describe('AgentCommand', () => {
     const nodeOs = require('node:os') as typeof import('os');
 
     let tmpAgentDir: string;
-    let mockExit: vi.SpyInstance;
-    let mockConsoleErrorLocal: vi.SpyInstance;
+    let mockExit: MockInstance;
+    let mockConsoleErrorLocal: MockInstance;
 
     function createFakeAgent(pkgJson: Record<string, unknown>): string {
       const dir = nodeFs.mkdtempSync(nodePath.join(nodeOs.tmpdir(), 'agent-test-'));

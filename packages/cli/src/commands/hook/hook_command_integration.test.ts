@@ -53,6 +53,7 @@ vi.mock('../../services/dependency-injection', () => ({
   },
 }));
 
+import type { MockInstance } from 'vitest';
 import { HookCommand } from './hook_command';
 
 // ─── Helpers ────────────────────────────────────────────────
@@ -75,7 +76,7 @@ function mockStdin(data: string): void {
 describe('HookCommand Integration', () => {
   let command: HookCommand;
   let stdoutOutput: string;
-  let stdoutSpy: vi.SpyInstance;
+  let stdoutSpy: MockInstance;
 
   beforeEach(() => {
     vi.clearAllMocks();

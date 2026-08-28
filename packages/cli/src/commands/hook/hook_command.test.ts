@@ -36,6 +36,7 @@ vi.mock('../../services/dependency-injection', () => ({
   },
 }));
 
+import type { MockInstance } from 'vitest';
 import { HookCommand } from './hook_command';
 
 // ─── Helpers ────────────────────────────────────────────────
@@ -70,8 +71,8 @@ function setupValidProject(): void {
 // Capture stderr and stdout
 let stderrOutput: string;
 let stdoutOutput: string;
-let stderrSpy: vi.SpyInstance;
-let stdoutSpy: vi.SpyInstance;
+let stderrSpy: MockInstance;
+let stdoutSpy: MockInstance;
 
 // ─── Tests ──────────────────────────────────────────────────
 
