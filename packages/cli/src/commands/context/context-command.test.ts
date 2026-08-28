@@ -15,14 +15,17 @@ vi.mock('../../services/dependency-injection', () => ({
   }
 }));
 
+import type { Mock } from 'vitest';
 import { ContextCommand } from './context-command';
 import { DependencyInjectionService } from '../../services/dependency-injection';
 import type { ActorRecord } from '@gitgov/core';
 
 // Mock console methods to capture output
-const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation();
-const mockConsoleError = vi.spyOn(console, 'error').mockImplementation();
-const mockProcessExit = vi.spyOn(process, 'exit').mockImplementation();
+const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation(() => { });
+const mockConsoleError = vi.spyOn(console, 'error').mockImplementation(() => { });
+// `process.exit` is typed `(code?) => never`; the stub returns, so the cast states that gap
+// explicitly rather than throwing and changing control flow the tests do not expect.
+const mockProcessExit = vi.spyOn(process, 'exit').mockImplementation((() => { }) as unknown as never);
 
 describe('ContextCommand', () => {
   let contextCommand: ContextCommand;
@@ -85,7 +88,7 @@ describe('ContextCommand', () => {
       getCurrentActor: vi.fn().mockResolvedValue(sampleActor),
     };
 
-    (DependencyInjectionService.getInstance as vi.Mock).mockReturnValue(mockDependencyService);
+    (DependencyInjectionService.getInstance as Mock).mockReturnValue(mockDependencyService);
 
     contextCommand = new ContextCommand();
 

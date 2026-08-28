@@ -64,6 +64,7 @@ vi.mock('@gitgov/core', () => ({
   Modules: {}
 }));
 
+import type { Mock } from 'vitest';
 import { DashboardCommand } from './dashboard-command';
 import { DependencyInjectionService } from '../../services/dependency-injection';
 import { Factories } from '@gitgov/core';
@@ -74,9 +75,11 @@ import type {
 } from '@gitgov/core';
 
 // Mock console methods to capture output
-const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation();
-const mockConsoleError = vi.spyOn(console, 'error').mockImplementation();
-const mockProcessExit = vi.spyOn(process, 'exit').mockImplementation();
+const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation(() => { });
+const mockConsoleError = vi.spyOn(console, 'error').mockImplementation(() => { });
+// `process.exit` is typed `(code?) => never`; the stub returns, so the cast states that gap
+// explicitly rather than throwing and changing control flow the tests do not expect.
+const mockProcessExit = vi.spyOn(process, 'exit').mockImplementation((() => { }) as unknown as never);
 
 /**
  * Helper to convert TaskRecord payload to GitGovTaskRecord with mock header.
@@ -250,7 +253,7 @@ describe('DashboardCommand - EARS Compliance Tests', () => {
     };
 
     // Mock DependencyInjectionService.getInstance()
-    (DependencyInjectionService.getInstance as vi.Mock).mockReturnValue(mockDependencyService);
+    (DependencyInjectionService.getInstance as Mock).mockReturnValue(mockDependencyService);
 
     // Create DashboardCommand
     dashboardCommand = new DashboardCommand();
@@ -378,7 +381,7 @@ describe('DashboardCommand - EARS Compliance Tests', () => {
       mockProjector.generateIndex.mockResolvedValue(mockGenerationReport);
 
       // Capture JSON output
-      const consoleSpy = vi.spyOn(console, 'log').mockImplementation();
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => { });
 
       // Act
       await dashboardCommand.execute({ json: true });
@@ -533,7 +536,7 @@ describe('DashboardCommand - EARS Compliance Tests', () => {
 
       mockProjector.generateIndex.mockResolvedValue(mockGenerationReport);
 
-      const consoleSpy = vi.spyOn(console, 'log').mockImplementation();
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => { });
 
       // Act: Execute complete demo flow
       await dashboardCommand.execute({ json: true });

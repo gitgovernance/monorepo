@@ -23,15 +23,18 @@ vi.mock('../../services/dependency-injection', () => ({
   }
 }));
 
+import type { Mock } from 'vitest';
 import { StatusCommand } from './status-command';
 import { DependencyInjectionService } from '../../services/dependency-injection';
 import { Factories } from "@gitgov/core";
 import type { TaskRecord, CycleRecord, FeedbackRecord, GitGovFeedbackRecord, ActorRecord, SystemStatus, ProductivityMetrics, CollaborationMetrics, TaskHealthReport } from "@gitgov/core";
 
 // Mock console methods to capture output
-const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation();
-const mockConsoleError = vi.spyOn(console, 'error').mockImplementation();
-const mockProcessExit = vi.spyOn(process, 'exit').mockImplementation();
+const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation(() => { });
+const mockConsoleError = vi.spyOn(console, 'error').mockImplementation(() => { });
+// `process.exit` is typed `(code?) => never`; the stub returns, so the cast states that gap
+// explicitly rather than throwing and changing control flow the tests do not expect.
+const mockProcessExit = vi.spyOn(process, 'exit').mockImplementation((() => { }) as unknown as never);
 
 describe('StatusCommand - Complete Unit Tests', () => {
   let statusCommand: StatusCommand;
@@ -53,7 +56,7 @@ describe('StatusCommand - Complete Unit Tests', () => {
     isIndexUpToDate: Mock<() => Promise<boolean>>;
     generateIndex: Mock<() => Promise<void>>;
   };
-  let mockIdentityAdapter: Record<string, vi.Mock>;
+  let mockIdentityAdapter: Record<string, Mock>;
   let mockSyncStateModule: {
     getPendingChanges: Mock<() => Promise<Array<{ status: 'A' | 'M' | 'D'; file: string }>>>;
     isRebaseInProgress: Mock<() => Promise<boolean>>;
@@ -193,7 +196,7 @@ describe('StatusCommand - Complete Unit Tests', () => {
     };
 
     // Mock DependencyInjectionService.getInstance()
-    (DependencyInjectionService.getInstance as vi.Mock).mockReturnValue(mockDependencyService);
+    (DependencyInjectionService.getInstance as Mock).mockReturnValue(mockDependencyService);
 
     // Create StatusCommand
     statusCommand = new StatusCommand();

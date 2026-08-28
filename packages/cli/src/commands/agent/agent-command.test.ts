@@ -45,6 +45,7 @@ vi.mock('../../services/dependency-injection', () => ({
   }
 }));
 
+import type { Mock } from 'vitest';
 import { AgentCommand, type RunCommandOptions, type ListCommandOptions, type ShowCommandOptions, type AgentNewOptions } from './agent-command';
 import { DependencyInjectionService } from '../../services/dependency-injection';
 import type { RunOptions, AgentResponse, TaskRecord, ActorRecord, AgentRecord } from '@gitgov/core';
@@ -58,8 +59,8 @@ type TestAgentMetadata = {
 };
 
 // Mock console methods
-const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation();
-const mockConsoleError = vi.spyOn(console, 'error').mockImplementation();
+const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation(() => { });
+const mockConsoleError = vi.spyOn(console, 'error').mockImplementation(() => { });
 const mockProcessExit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
 
 // Get mocked DI
@@ -470,7 +471,7 @@ describe('AgentCommand', () => {
 
     beforeEach(() => {
       mockExit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
-      mockConsoleErrorLocal = vi.spyOn(console, 'error').mockImplementation();
+      mockConsoleErrorLocal = vi.spyOn(console, 'error').mockImplementation(() => { });
       mockAgentStore.list.mockResolvedValue([]);
     });
 

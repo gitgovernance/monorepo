@@ -13,6 +13,7 @@
  * - I: getSaasUrl (EARS-I1 to I2) — tested in config_manager.test.ts
  */
 
+import type { Mock } from 'vitest';
 import type { IKeyProvider, GitGovActorRecord } from '@gitgov/core';
 
 // Mock child_process for resolveOrgId
@@ -166,9 +167,9 @@ import { LoginCommand } from './login-command';
 import type { LoginCommandOptions, LoginDeps, TrpcResponse, KeyStatusResponse, SyncKeyResponse } from './login-command.types';
 
 // Mock console and process.exit
-const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation();
-const mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation();
-const mockConsoleError = vi.spyOn(console, 'error').mockImplementation();
+const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation(() => { });
+const mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => { });
+const mockConsoleError = vi.spyOn(console, 'error').mockImplementation(() => { });
 const mockProcessExit = vi.spyOn(process, 'exit').mockImplementation(vi.fn());
 
 // ─── tRPC mock helpers ────────────────────────────────────────────────────
@@ -237,7 +238,7 @@ describe('LoginCommand v2', () => {
       await cmd.executeLogin(defaultOptions);
 
       expect(deps.openBrowser).toHaveBeenCalledTimes(1);
-      const openUrl = (deps.openBrowser as vi.Mock).mock.calls[0][0] as string;
+      const openUrl = (deps.openBrowser as Mock).mock.calls[0][0] as string;
       expect(openUrl).toContain('/auth/cli?callback=');
 
       expect(deps.startCallbackServer).toHaveBeenCalledTimes(1);
@@ -336,7 +337,7 @@ describe('LoginCommand v2', () => {
       const cmd = new LoginCommand(deps);
       await cmd.executeLogin(defaultOptions);
 
-      const syncCall = (deps.fetchSaas as vi.Mock).mock.calls.find(
+      const syncCall = (deps.fetchSaas as Mock).mock.calls.find(
         (c: unknown[]) => String(c[0]).includes('identity.syncKey'),
       );
       expect(syncCall).toBeDefined();
@@ -379,7 +380,7 @@ describe('LoginCommand v2', () => {
       const cmd = new LoginCommand(deps);
       await cmd.executeLogin(defaultOptions);
 
-      const syncCall = (deps.fetchSaas as vi.Mock).mock.calls.find(
+      const syncCall = (deps.fetchSaas as Mock).mock.calls.find(
         (c: unknown[]) => String(c[0]).includes('identity.syncKey'),
       );
       expect(syncCall).toBeDefined(); // el login COMPLETO no quedo rehen de la entrada rota
@@ -409,7 +410,7 @@ describe('LoginCommand v2', () => {
       const cmd = new LoginCommand(deps);
       await cmd.executeLogin(defaultOptions);
 
-      const syncCall = (deps.fetchSaas as vi.Mock).mock.calls.find(
+      const syncCall = (deps.fetchSaas as Mock).mock.calls.find(
         (c: unknown[]) => String(c[0]).includes('identity.syncKey'),
       );
       expect(syncCall).toBeDefined();
@@ -442,7 +443,7 @@ describe('LoginCommand v2', () => {
       const cmd = new LoginCommand(deps);
       await cmd.executeLogin(defaultOptions);
 
-      const syncCall = (deps.fetchSaas as vi.Mock).mock.calls.find(
+      const syncCall = (deps.fetchSaas as Mock).mock.calls.find(
         (c: unknown[]) => String(c[0]).includes('identity.syncKey'),
       );
       expect(syncCall).toBeDefined();
@@ -483,7 +484,7 @@ describe('LoginCommand v2', () => {
       const cmd = new LoginCommand(deps);
       await cmd.executeLogin(defaultOptions);
 
-      const syncCall = (deps.fetchSaas as vi.Mock).mock.calls.find(
+      const syncCall = (deps.fetchSaas as Mock).mock.calls.find(
         (c: unknown[]) => String(c[0]).includes('identity.syncKey'),
       );
       expect(syncCall).toBeUndefined(); // cero re-transmision, cero churn
@@ -516,7 +517,7 @@ describe('LoginCommand v2', () => {
       const cmd = new LoginCommand(deps);
       await cmd.executeLogin(defaultOptions);
 
-      const syncCall = (deps.fetchSaas as vi.Mock).mock.calls.find(
+      const syncCall = (deps.fetchSaas as Mock).mock.calls.find(
         (c: unknown[]) => String(c[0]).includes('identity.syncKey'),
       );
       expect(syncCall).toBeDefined();
@@ -571,7 +572,7 @@ describe('LoginCommand v2', () => {
       const cmd = new LoginCommand(deps);
       await cmd.executeLogin({ ...defaultOptions, forceCloud: true });
 
-      const syncCall = (deps.fetchSaas as vi.Mock).mock.calls.find(
+      const syncCall = (deps.fetchSaas as Mock).mock.calls.find(
         (c: unknown[]) => String(c[0]).includes('identity.syncKey'),
       );
       expect(syncCall, 'force-cloud debe subir el diff de agent keys').toBeDefined();
@@ -596,7 +597,7 @@ describe('LoginCommand v2', () => {
       const cmd = new LoginCommand(deps);
       await cmd.executeLogin({ ...defaultOptions, forceCloud: true });
 
-      const syncCall = (deps.fetchSaas as vi.Mock).mock.calls.find(
+      const syncCall = (deps.fetchSaas as Mock).mock.calls.find(
         (c: unknown[]) => String(c[0]).includes('identity.syncKey'),
       );
       expect(syncCall).toBeUndefined();
@@ -837,7 +838,7 @@ describe('LoginCommand v2', () => {
       await cmd.executeLogin({ ...defaultOptions, forceLocal: true });
 
       // syncKey response is trusted — no second keyStatus call needed
-      const keyStatusCalls = (deps.fetchSaas as vi.Mock).mock.calls.filter(
+      const keyStatusCalls = (deps.fetchSaas as Mock).mock.calls.filter(
         (c: [string]) => c[0].includes('identity.keyStatus')
       );
       expect(keyStatusCalls).toHaveLength(1);

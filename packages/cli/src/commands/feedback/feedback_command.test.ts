@@ -23,6 +23,7 @@ vi.mock('../../services/dependency-injection', () => ({
   }
 }));
 
+import type { Mock } from 'vitest';
 import { FeedbackCommand } from './feedback_command';
 import { DependencyInjectionService } from '../../services/dependency-injection';
 
@@ -36,9 +37,11 @@ const mockFeedback = {
 };
 
 // Mock console and process.exit at module level (task-command pattern)
-const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation();
-const mockConsoleError = vi.spyOn(console, 'error').mockImplementation();
-const mockProcessExit = vi.spyOn(process, 'exit').mockImplementation();
+const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation(() => { });
+const mockConsoleError = vi.spyOn(console, 'error').mockImplementation(() => { });
+// `process.exit` is typed `(code?) => never`; the stub returns, so the cast states that gap
+// explicitly rather than throwing and changing control flow the tests do not expect.
+const mockProcessExit = vi.spyOn(process, 'exit').mockImplementation((() => { }) as unknown as never);
 
 describe('FeedbackCommand', () => {
   let feedbackCommand: FeedbackCommand;

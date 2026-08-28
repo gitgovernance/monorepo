@@ -42,6 +42,7 @@ vi.mock('child_process', () => ({
 }));
 
 // GitHubCiReporter mock: spy on fromToken after import (vi.mock doesn't intercept this subpath export)
+import type { Mock } from 'vitest';
 import { GitHubCiReporter } from '@gitgov/core/github';
 
 // Mock @gitgov/core
@@ -93,9 +94,11 @@ import type {
 } from '@gitgov/core';
 
 // Mock console methods
-const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation();
-const mockConsoleError = vi.spyOn(console, 'error').mockImplementation();
-const mockProcessExit = vi.spyOn(process, 'exit').mockImplementation();
+const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation(() => { });
+const mockConsoleError = vi.spyOn(console, 'error').mockImplementation(() => { });
+// `process.exit` is typed `(code?) => never`; the stub returns, so the cast states that gap
+// explicitly rather than throwing and changing control flow the tests do not expect.
+const mockProcessExit = vi.spyOn(process, 'exit').mockImplementation((() => { }) as unknown as never);
 
 // Get mocked DI
 const mockDI = vi.mocked(DependencyInjectionService);
@@ -118,15 +121,15 @@ let mockIdentityAdapter: {
 };
 
 let mockDIInstance: {
-  getAuditOrchestrator: vi.Mock;
-  getBacklogAdapter: vi.Mock;
-  getWaiverReader: vi.Mock;
-  getFeedbackAdapter: vi.Mock;
-  getExecutionAdapter: vi.Mock;
-  getIdentityAdapter: vi.Mock;
-  getCurrentActor: vi.Mock;
-  getProjectRoot: vi.Mock;
-  getSessionManager: vi.Mock;
+  getAuditOrchestrator: Mock;
+  getBacklogAdapter: Mock;
+  getWaiverReader: Mock;
+  getFeedbackAdapter: Mock;
+  getExecutionAdapter: Mock;
+  getIdentityAdapter: Mock;
+  getCurrentActor: Mock;
+  getProjectRoot: Mock;
+  getSessionManager: Mock;
 };
 
 describe('AuditCommand', () => {
@@ -462,7 +465,7 @@ describe('AuditCommand', () => {
       const diInstance = mockDI.getInstance();
       const backlogAdapter = await diInstance.getBacklogAdapter();
       expect(backlogAdapter.createTask).toHaveBeenCalledTimes(1);
-      const createTaskArgs = (backlogAdapter.createTask as vi.Mock).mock.calls[0];
+      const createTaskArgs = (backlogAdapter.createTask as Mock).mock.calls[0];
       expect(createTaskArgs[0]).toMatchObject({
         title: expect.stringContaining('Audit:'),
         status: 'active',
@@ -480,7 +483,7 @@ describe('AuditCommand', () => {
 
       const diInstance = mockDI.getInstance();
       const backlogAdapter = await diInstance.getBacklogAdapter();
-      const createTaskArgs = (backlogAdapter.createTask as vi.Mock).mock.calls[0];
+      const createTaskArgs = (backlogAdapter.createTask as Mock).mock.calls[0];
       expect(createTaskArgs[0].references).toEqual(
         expect.arrayContaining([
           expect.stringMatching(/^branch:/),
@@ -600,7 +603,7 @@ describe('AuditCommand', () => {
   // ==========================================================================
 
   describe('4.8. CI Mode + LLM Config (AORCH-D1 to D7)', () => {
-    const mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation();
+    const mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => { });
     const eventFixture = JSON.stringify({ pull_request: { number: 42 } });
 
     beforeEach(() => {
@@ -846,7 +849,7 @@ describe('AuditCommand', () => {
         warning: 'All audit agents failed to load:\n  agent:security-audit: entrypoint not found',
       };
       mockOrchestrator.run.mockResolvedValueOnce(resultWithWarning);
-      const mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation();
+      const mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => { });
 
       await auditCommand.execute(createDefaultOptions());
 
@@ -885,7 +888,7 @@ describe('AuditCommand', () => {
         warning: 'All audit agents failed to load:\n  agent:security-audit — @gitgov/agent-security-audit not found (MODULE_NOT_FOUND)\n  agent:semgrep — @gitgov/agent-semgrep not found (Cannot find module)',
       };
       mockOrchestrator.run.mockResolvedValueOnce(resultWithMultipleFailures);
-      const mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation();
+      const mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => { });
 
       await auditCommand.execute(createDefaultOptions());
 

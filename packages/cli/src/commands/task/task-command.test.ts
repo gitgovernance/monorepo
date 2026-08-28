@@ -36,6 +36,7 @@ vi.mock('../../services/dependency-injection', () => ({
   }
 }));
 
+import type { Mock } from 'vitest';
 import { TaskCommand } from './task-command';
 import { DependencyInjectionService } from '../../services/dependency-injection';
 import type { TaskRecord, ActorRecord, EnrichedTaskRecord, IndexData, GitGovTaskRecord } from '@gitgov/core';
@@ -184,10 +185,12 @@ function createMockIndexData(
 }
 
 // Mock console methods to capture output
-const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation();
-const mockConsoleError = vi.spyOn(console, 'error').mockImplementation();
-const mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation();
-const mockProcessExit = vi.spyOn(process, 'exit').mockImplementation();
+const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation(() => { });
+const mockConsoleError = vi.spyOn(console, 'error').mockImplementation(() => { });
+const mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => { });
+// `process.exit` is typed `(code?) => never`; the stub returns, so the cast states that gap
+// explicitly rather than throwing and changing control flow the tests do not expect.
+const mockProcessExit = vi.spyOn(process, 'exit').mockImplementation((() => { }) as unknown as never);
 
 describe('TaskCommand - Complete Unit Tests', () => {
   let taskCommand: TaskCommand;

@@ -42,16 +42,19 @@ vi.mock('@gitgov/core/fs', async (importOriginal) => ({
   discoverInstalledAgents: vi.fn().mockReturnValue([]),
 }));
 
+import type { Mock } from 'vitest';
 import { InitCommand } from './init-command';
 import { execSync } from 'child_process';
 import { discoverInstalledAgents } from '@gitgov/core/fs';
 import type { ProjectModuleInitResult } from '@gitgov/core';
 
 // Mock console methods to capture output
-const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation();
-const mockConsoleError = vi.spyOn(console, 'error').mockImplementation();
-const mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation();
-const mockProcessExit = vi.spyOn(process, 'exit').mockImplementation();
+const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation(() => { });
+const mockConsoleError = vi.spyOn(console, 'error').mockImplementation(() => { });
+const mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => { });
+// `process.exit` is typed `(code?) => never`; the stub returns, so the cast states that gap
+// explicitly rather than throwing and changing control flow the tests do not expect.
+const mockProcessExit = vi.spyOn(process, 'exit').mockImplementation((() => { }) as unknown as never);
 
 describe('InitCommand', () => {
   let initCommand: InitCommand;
