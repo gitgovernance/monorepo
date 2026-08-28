@@ -200,9 +200,6 @@ describe('Core E2E Integration', () => {
       expect(cycle.payload.taskIds).toContain(taskId);
     });
 
-    // EARS-A8 (changelog) was removed with `ChangelogRecord`: the protocol no longer has that
-    // record type — `record_types` exports six payloads. See `GitGovRecordPayload`.
-
     it('[EARS-A9] should have valid signatures on all 6 record types', () => {
       const dirs = Object.values(TYPE_TO_DIR);
 
@@ -510,9 +507,6 @@ describe('Core E2E Integration', () => {
         await seedTaskRecord(repoDir, { id: taskId, title: 'Implementar feature auth', status: 'done', priority: 'high' }, 'human:camilo');
         await seedExecutionRecord(repoDir, { id: exec1Id, taskId, type: 'progress', result: 'PR #42 abierto' }, 'human:camilo');
         await seedExecutionRecord(repoDir, { id: exec2Id, taskId, type: 'completion', result: 'Merged y deployed' }, 'human:camilo');
-        // Release. This step used to seed a ChangelogRecord, but `isReleased`/`lastReleaseVersion`
-        // never came from it: `record_projection.ts:919-925` derives them from executions of type
-        // `custom:release` with `metadata.version`. The scenario is unchanged.
         await seedExecutionRecord(repoDir, {
           id: releaseExecId, taskId, type: 'custom:release', result: 'Released v1.2.0',
           metadata: { version: 'v1.2.0' },
@@ -892,9 +886,8 @@ describe('Core E2E Integration', () => {
       }, 'agent:auditor');
       await stores.executions.put(execId, exec);
 
-      // Release. Replaces the ChangelogRecord this block used to seed: `isReleased` and
-      // `lastReleaseVersion` come from `custom:release` executions, not from changelogs
-      // (`record_projection.ts:919-925`). EARS-F4 still asserts both.
+      // Release: `isReleased` and `lastReleaseVersion` are derived from `custom:release`
+      // executions carrying `metadata.version` (`record_projection.ts:919-925`).
       const releaseExec = createEmbeddedRecord('execution', {
         id: releaseExecId, taskId, type: 'custom:release', title: 'Mock Release',
         result: 'Released v0.0.1-mock', metadata: { version: 'v0.0.1-mock' },

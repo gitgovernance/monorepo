@@ -10,11 +10,6 @@ import type {
 
 /**
  * Stores backed by `GitHubRecordStore` for the Block F tests.
- *
- * There is no `changelogs` store: `ChangelogRecord` was removed from the protocol and
- * `record_types` exports six record types (actor, agent, cycle, execution, feedback, task).
- * This file kept importing `GitGovChangelogRecord` for months because `src/integration` was
- * excluded from `tsc` in the same commit that created it (fd1a2bea), so nothing ever checked it.
  */
 export type GitHubTestStores = {
   tasks: GitHubRecordStore<GitGovTaskRecord>;

@@ -74,8 +74,7 @@ export function createTempGitRepo(): { tmpDir: string; repoDir: string } {
   execSync('git add README.md && git commit -m "Initial commit"', { cwd: repoDir, stdio: 'pipe' });
 
   // Derived from the protocol's canonical map, never hand-listed: when a record type is added
-  // or removed, this follows. The previous hard-coded array still created a `changelogs/`
-  // directory months after `ChangelogRecord` was removed from `record_types`.
+  // or removed, this follows instead of drifting.
   const dirs = Object.values(TYPE_TO_DIR);
   for (const dir of dirs) {
     fs.mkdirSync(path.join(repoDir, '.gitgov', dir), { recursive: true });
@@ -349,9 +348,6 @@ export async function seedCycleRecord(
   return record;
 }
 
-// NOTE: there is no `seedChangelogRecord`. `ChangelogRecord` was removed from the protocol and
-// `record_types` exports six payloads; see `GitGovRecordPayload` in `record_types/common.types.ts`.
-
 // ===== Projection Helpers =====
 
 function buildProjectorStores(stores: {
@@ -366,9 +362,8 @@ function buildProjectorStores(stores: {
 }
 
 /**
- * One store per record type in `TYPE_TO_DIR`. `agents` was missing here — the projector requires
- * it (`RecordStores`) — while `changelogs` was present for a record type the protocol no longer
- * has. Neither showed up because `src/integration` was outside `tsc`.
+ * One store per record type in `TYPE_TO_DIR`. BasePaths derive from that map so the set follows
+ * the protocol instead of being hand-listed.
  */
 function createFsStores(repoDir: string) {
   const dir = (name: string) => path.join(repoDir, '.gitgov', name);
