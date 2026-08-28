@@ -230,7 +230,7 @@ describe('Core E2E Integration', () => {
   // 4.2. Projection Pipeline — Records to DB (EARS-B1 to B8)
   // ===========================================================================
   describe('4.2. Projection Pipeline (EARS-B1 to B8)', () => {
-    const repoId = `e2e-block-b-${Date.now()}`;
+    const scenarioLabel = `e2e-block-b-${Date.now()}`;
     let tmpDir: string;
     let repoDir: string;
     let report: Awaited<ReturnType<typeof runProjector>>;
@@ -256,7 +256,7 @@ describe('Core E2E Integration', () => {
       await seedCycleRecord(repoDir, { id: cycleId, title: 'Sprint Q1', taskIds: [taskId] });
 
       // Run projector
-      report = await runProjector(prisma, repoDir, repoId);
+      report = await runProjector(prisma, repoDir, scenarioLabel);
     });
 
     afterAll(async () => {
@@ -367,7 +367,7 @@ describe('Core E2E Integration', () => {
       const firstActors = await prisma.gitgovActor.findMany({ where: SINGLE_TENANT_WHERE });
 
       // Run projection again on same data
-      const report2 = await runProjector(prisma, repoDir, repoId);
+      const report2 = await runProjector(prisma, repoDir, scenarioLabel);
       expect(report2.success).toBe(true);
 
       // Compare — delete+re-insert should produce identical data
@@ -420,7 +420,7 @@ describe('Core E2E Integration', () => {
     // D1: Agente Auditor — complete agent workflow
     // -------------------------------------------------------------------------
     describe('D1: Agente Auditor', () => {
-      const repoId = `e2e-d1-${Date.now()}`;
+      const scenarioLabel = `e2e-d1-${Date.now()}`;
       let tmpDir: string;
       let repoDir: string;
 
@@ -442,7 +442,7 @@ describe('Core E2E Integration', () => {
         await seedFeedbackRecord(repoDir, { id: feedbackId, entityType: 'execution', entityId: execId, type: 'approval', content: 'Waiver' }, 'agent:auditor');
         await seedCycleRecord(repoDir, { id: cycleId, title: 'Sprint Seguridad Q1', taskIds: [taskId] }, 'agent:auditor');
 
-        await runProjector(prisma, repoDir, repoId);
+        await runProjector(prisma, repoDir, scenarioLabel);
       });
 
       afterAll(async () => {
@@ -488,7 +488,7 @@ describe('Core E2E Integration', () => {
     // D2: Desarrollador Humano — task lifecycle complete
     // -------------------------------------------------------------------------
     describe('D2: Desarrollador Humano', () => {
-      const repoId = `e2e-d2-${Date.now()}`;
+      const scenarioLabel = `e2e-d2-${Date.now()}`;
       let tmpDir: string;
       let repoDir: string;
 
@@ -512,7 +512,7 @@ describe('Core E2E Integration', () => {
           metadata: { version: 'v1.2.0' },
         }, 'human:camilo');
 
-        await runProjector(prisma, repoDir, repoId);
+        await runProjector(prisma, repoDir, scenarioLabel);
       });
 
       afterAll(async () => {
@@ -538,7 +538,7 @@ describe('Core E2E Integration', () => {
     // D3: Multi-Actor Collaboration
     // -------------------------------------------------------------------------
     describe('D3: Multi-Actor', () => {
-      const repoId = `e2e-d3-${Date.now()}`;
+      const scenarioLabel = `e2e-d3-${Date.now()}`;
       let tmpDir: string;
       let repoDir: string;
 
@@ -572,7 +572,7 @@ describe('Core E2E Integration', () => {
           id: fb3Id, entityType: 'task', entityId: taskId, type: 'approval', content: 'Approved',
         }, 'human:dev');
 
-        await runProjector(prisma, repoDir, repoId);
+        await runProjector(prisma, repoDir, scenarioLabel);
       });
 
       afterAll(async () => {
@@ -610,7 +610,7 @@ describe('Core E2E Integration', () => {
     // D4: Bidirectional Sync
     // -------------------------------------------------------------------------
     describe('D4: Bidirectional Sync', () => {
-      const repoId = `e2e-d4-${Date.now()}`;
+      const scenarioLabel = `e2e-d4-${Date.now()}`;
       let tmpDir: string;
       let repoDir: string;
 
@@ -637,7 +637,7 @@ describe('Core E2E Integration', () => {
         await seedExecutionRecord(repoDir, { id: execId, taskId, type: 'progress', result: 'In progress' });
 
         // Phase 2: First projection
-        const report1 = await runProjector(prisma, repoDir, repoId);
+        const report1 = await runProjector(prisma, repoDir, scenarioLabel);
         expect(report1.success).toBe(true);
 
         // Verify no feedback yet
@@ -672,7 +672,7 @@ describe('Core E2E Integration', () => {
         expect(fs.existsSync(path.join(repoDir, '.gitgov', 'feedbacks', `${writtenFbId}.json`))).toBe(true);
 
         // Phase 5: Re-projection
-        const report2 = await runProjector(prisma, repoDir, repoId);
+        const report2 = await runProjector(prisma, repoDir, scenarioLabel);
         expect(report2.success).toBe(true);
 
         // Verify feedback now in DB
@@ -688,7 +688,7 @@ describe('Core E2E Integration', () => {
     // D5: Incremental Projection
     // -------------------------------------------------------------------------
     describe('D5: Incremental Projection', () => {
-      const repoId = `e2e-d5-${Date.now()}`;
+      const scenarioLabel = `e2e-d5-${Date.now()}`;
       let tmpDir: string;
       let repoDir: string;
 
@@ -718,7 +718,7 @@ describe('Core E2E Integration', () => {
         await seedTaskRecord(repoDir, { id: task2Id, title: 'Task 2', cycleIds: [cycleId] });
         await seedCycleRecord(repoDir, { id: cycleId, title: 'Sprint', taskIds: [task1Id, task2Id] });
 
-        const report1 = await runProjector(prisma, repoDir, repoId);
+        const report1 = await runProjector(prisma, repoDir, scenarioLabel);
         expect(report1.success).toBe(true);
 
         let tasks = await prisma.gitgovTask.findMany({ where: SINGLE_TENANT_WHERE });
@@ -730,7 +730,7 @@ describe('Core E2E Integration', () => {
         await seedTaskRecord(repoDir, { id: task3Id, title: 'Task 3' });
         await seedExecutionRecord(repoDir, { id: execId, taskId: task1Id, type: 'progress', result: 'Done' });
 
-        const report2 = await runProjector(prisma, repoDir, repoId);
+        const report2 = await runProjector(prisma, repoDir, scenarioLabel);
         expect(report2.success).toBe(true);
 
         tasks = await prisma.gitgovTask.findMany({ where: SINGLE_TENANT_WHERE });
@@ -845,7 +845,7 @@ describe('Core E2E Integration', () => {
   // 4.7. GitHub Store Integration — Mock Octokit (EARS-F1 to F5)
   // ===========================================================================
   describe('4.7. GitHub Store Integration (EARS-F1 to F5)', () => {
-    const repoId = `e2e-github-mock-${Date.now()}`;
+    const scenarioLabel = `e2e-github-mock-${Date.now()}`;
 
     let stores: GitHubTestStores;
     let mockOctokit: ReturnType<typeof createInMemoryOctokit>;
@@ -1014,7 +1014,7 @@ describe('Core E2E Integration', () => {
     });
 
     it('[EARS-F4] should project mock GitHub-sourced records into all 6 DB tables', async () => {
-      const report = await runMockGitHubProjector(prisma, mockOctokit.octokit, repoId);
+      const report = await runMockGitHubProjector(prisma, mockOctokit.octokit, scenarioLabel);
       expect(report.success).toBe(true);
       expect(report.recordsProcessed).toBeGreaterThan(0);
 

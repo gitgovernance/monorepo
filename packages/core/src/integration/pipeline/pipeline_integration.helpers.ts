@@ -385,15 +385,20 @@ function createFsStores(repoDir: string) {
 /**
  * Wires up FsRecordStore → RecordProjector → PrismaRecordProjection.
  * Uses computeProjection() + manual persist() to filter invalid activity events.
+ *
+ * `scenarioLabel` identifies WHICH test failed in the diagnostic line — the 27 tests share one
+ * database, so a bare error message cannot be traced back to a scenario. It never reaches the sink
+ * or a query. It was called `repoId` until 2026-08-28, which read as multi-tenancy in a suite that
+ * is explicitly single-tenant and was reported as a spec contradiction because of it.
  */
 export async function runProjector(
   prisma: PrismaClient,
   repoDir: string,
-  repoId: string,
+  scenarioLabel: string,
 ): Promise<IndexGenerationReport> {
   const stores = createFsStores(repoDir);
   const projectorStores = buildProjectorStores(stores);
-  return runProjection(prisma, projectorStores, repoId);
+  return runProjection(prisma, projectorStores, scenarioLabel);
 }
 
 /**
@@ -447,7 +452,7 @@ export async function projectAndCompare(
 async function runProjection(
   prisma: PrismaClient,
   projectorStores: RecordProjectorDependencies['stores'],
-  repoId: string,
+  scenarioLabel: string,
 ): Promise<IndexGenerationReport> {
   // Single-tenant — see the note in `projectAndCompare`.
   const sink = new PrismaRecordProjection({
@@ -488,7 +493,7 @@ async function runProjection(
     };
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
-    console.error(`[runProjection] FAILED repoId=${repoId} error=${msg}`);
+    console.error(`[runProjection] FAILED scenario=${scenarioLabel} error=${msg}`);
     return {
       success: false,
       recordsProcessed: 0,
@@ -665,7 +670,7 @@ export function createMockGitHubStores(octokit: Octokit): GitHubTestStores {
 export async function runMockGitHubProjector(
   prisma: PrismaClient,
   octokit: Octokit,
-  repoId: string,
+  scenarioLabel: string,
 ): Promise<IndexGenerationReport> {
   const stores = createMockGitHubStores(octokit);
   // No cast: `GitHubRecordStore<V>` satisfies `RecordStore<V, …>` structurally once the key set
@@ -674,5 +679,5 @@ export async function runMockGitHubProjector(
   // Declaring all six in `GitHubTestStores` made the cast unnecessary, which is the point: the
   // cast was never about variance, it was about a gap nobody could see.
   const projectorStores: RecordProjectorDependencies['stores'] = stores;
-  return runProjection(prisma, projectorStores, repoId);
+  return runProjection(prisma, projectorStores, scenarioLabel);
 }
