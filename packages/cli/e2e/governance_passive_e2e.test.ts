@@ -50,18 +50,50 @@ const findNewFile = (before: string[], after: string[]): string | undefined => {
 
 // ── Hook command availability guard ───────────────────────────────
 
+/**
+ * Whether the built CLI exposes `gitgov hook`.
+ *
+ * WHY THIS IS NOT A PLAIN try/catch
+ *
+ * The previous version returned `false` from the catch for ANY failure, so a missing binary, a slow
+ * spawn under parallel load or a saturated machine all silently downgraded the eleven EARS-GP tests
+ * to skipped — and a skipped test reports as one that exists. It was observed: one run of the suite
+ * gave 612 passed / 23 skipped where two consecutive runs before and after gave 623 / 12, with no
+ * failure anywhere to say eleven checks had stopped running.
+ *
+ * So the three outcomes are separated. Only "the command genuinely is not there" skips; anything
+ * that means the probe itself could not answer THROWS, because silently disabling coverage is the
+ * failure mode this repo has been paying for (see guardrails_module.md §4.3, EARS-CI06).
+ */
 const HAS_HOOK_COMMAND = (() => {
+  const cliPath = path.join(__dirname, '../build/dist/gitgov.mjs');
+
+  // A missing binary is a setup error, not "no hook command". Fail loudly.
+  if (!fs.existsSync(cliPath)) {
+    throw new Error(`CLI binary not found at ${cliPath}. Run \`pnpm build\` in packages/cli first.`);
+  }
+
+  let stderr: string;
   try {
-    const cliPath = path.join(__dirname, '../build/dist/gitgov.mjs');
-    // Commander exits 1 when `hook` is called without a subcommand, even
-    // though the command exists. The help text goes to stderr.
-    execSync(`node "${cliPath}" hook`, { stdio: 'pipe', encoding: 'utf8' });
+    // Commander exits 1 when `hook` is called without a subcommand even though the command exists,
+    // and writes its help to stderr — so the success path here means something unexpected happened.
+    execSync(`node "${cliPath}" hook`, { stdio: 'pipe', encoding: 'utf8', timeout: 30_000 });
     return true;
   } catch (err: unknown) {
-    const e = err as { stderr?: string | Buffer };
-    const stderr = typeof e.stderr === 'string' ? e.stderr : e.stderr?.toString() ?? '';
-    return stderr.includes('command-executed');
+    const e = err as { stderr?: string | Buffer; signal?: string };
+    if (e.signal) {
+      throw new Error(`hook probe was killed by ${e.signal} — cannot tell whether the command exists.`);
+    }
+    stderr = typeof e.stderr === 'string' ? e.stderr : e.stderr?.toString() ?? '';
   }
+
+  if (stderr.includes('command-executed')) return true;      // help listing → command exists
+  if (/unknown command|unknown option/i.test(stderr)) return false; // genuinely absent → skip
+
+  throw new Error(
+    `hook probe produced neither the help listing nor an "unknown command" error, so whether the ` +
+    `command exists is undetermined. Refusing to silently skip ${11} tests. stderr was:\n${stderr}`,
+  );
 })();
 
 // ── Stdin payloads ────────────────────────────────────────────────
