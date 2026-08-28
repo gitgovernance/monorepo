@@ -1,7 +1,7 @@
 // ⚠️ COPIED from core — DO NOT EDIT
 // Source: packages/core/prisma/schema/
 // Re-generate: pnpm prisma:sync (in packages/e2e)
-// Synced at: 2026-07-31T18:25:10.599Z
+// Synced at: 2026-08-28T12:02:49.211Z
 
 // GitGovernance Core — Audit Product Projection Tables
 // Finding, Waiver, Scan — derived from protocol records
@@ -22,7 +22,7 @@ enum FindingSeverity {
   low
 }
 
-// FindingCategory: extensible — stored as String, not enum.
+// [AUDIT-E3] FindingCategory: extensible — stored as String, not enum.
 // Base categories are defined in @gitgov/core/audit types.ts (BaseFindingCategory).
 // Agents can use any string as category (e.g. "firewall-disabled", "ssh-root-login").
 
