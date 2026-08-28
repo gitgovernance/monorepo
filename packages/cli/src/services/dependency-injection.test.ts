@@ -71,7 +71,6 @@ vi.mock('@gitgov/core', () => {
     {
       // Static methods (legacy — code uses standalone functions from @gitgov/core/fs)
       findProjectRoot: vi.fn().mockReturnValue('/mock/project/root'),
-      findGitgovRoot: vi.fn().mockReturnValue('/mock/project/root'),
       getGitgovPath: vi.fn().mockReturnValue('/mock/project/root/.gitgov'),
       isGitgovProject: vi.fn().mockReturnValue(true)
     }
@@ -692,7 +691,6 @@ vi.mock('@gitgov/core/fs', () => ({
   }; }),
   DEFAULT_ID_ENCODER: { encode: (id: string) => id, decode: (encoded: string) => encoded },
   findProjectRoot: vi.fn().mockReturnValue('/tmp/test-gitgov'),
-  findGitgovRoot: vi.fn().mockReturnValue('/tmp/test-gitgov'),
   getWorktreeBasePath: vi.fn((repoRoot: string) => {
     const { createHash } = require('crypto');
     const hash = createHash('sha256').update(repoRoot).digest('hex').slice(0, 12);
@@ -727,7 +725,6 @@ describe('DependencyInjectionService', () => {
 
     // Reset @gitgov/core/fs function mocks to default
     corefs.findProjectRoot.mockReturnValue(mockRepoRoot);
-    corefs.findGitgovRoot.mockReturnValue(mockRepoRoot);
 
     // Reset fs.access mock to success by default (worktree .gitgov exists)
     mockFs.promises.access.mockResolvedValue(undefined);
@@ -985,7 +982,13 @@ describe('DependencyInjectionService', () => {
       mockFs.promises.access.mockRejectedValue(new Error('.gitgov directory not found'));
 
       // Mock GitModule to simulate worktree bootstrap
-      const mockGitModule = new Git.GitModule({
+      // `GitModule` ships from `@gitgov/core/fs`, not from the root barrel — it reaches the
+      // filesystem, which is the whole reason the subpath exists (EARS-CI02). The root `Git`
+      // namespace only carries the error types and `parseRemoteUrl`. Constructing it from `Git`
+      // here worked only because this file's mock of `@gitgov/core` invented the property, so the
+      // test was building against a shape the real module does not have — while production wires
+      // the one from `/fs` (dependency-injection.ts:4).
+      const mockGitModule = new corefs.GitModule({
         repoRoot: mockRepoRoot,
         execCommand: vi.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' })
       });
@@ -1031,7 +1034,13 @@ describe('DependencyInjectionService', () => {
       mockFs.promises.access.mockRejectedValue(new Error('Directory not found'));
 
       // Mock GitModule — branch doesn't exist locally or remotely
-      const mockGitModule = new Git.GitModule({
+      // `GitModule` ships from `@gitgov/core/fs`, not from the root barrel — it reaches the
+      // filesystem, which is the whole reason the subpath exists (EARS-CI02). The root `Git`
+      // namespace only carries the error types and `parseRemoteUrl`. Constructing it from `Git`
+      // here worked only because this file's mock of `@gitgov/core` invented the property, so the
+      // test was building against a shape the real module does not have — while production wires
+      // the one from `/fs` (dependency-injection.ts:4).
+      const mockGitModule = new corefs.GitModule({
         repoRoot: mockRepoRoot,
         execCommand: vi.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' })
       });
@@ -1050,7 +1059,13 @@ describe('DependencyInjectionService', () => {
       mockFs.promises.access.mockRejectedValue(new Error('Directory not found'));
 
       // Mock GitModule — branch doesn't exist locally or remotely
-      const mockGitModule = new Git.GitModule({
+      // `GitModule` ships from `@gitgov/core/fs`, not from the root barrel — it reaches the
+      // filesystem, which is the whole reason the subpath exists (EARS-CI02). The root `Git`
+      // namespace only carries the error types and `parseRemoteUrl`. Constructing it from `Git`
+      // here worked only because this file's mock of `@gitgov/core` invented the property, so the
+      // test was building against a shape the real module does not have — while production wires
+      // the one from `/fs` (dependency-injection.ts:4).
+      const mockGitModule = new corefs.GitModule({
         repoRoot: mockRepoRoot,
         execCommand: vi.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' })
       });
