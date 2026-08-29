@@ -6,8 +6,6 @@
 
 `@gitgov/cli` is the canonical command-line interface for the GitGovernance ecosystem. Designed for collaboration between humans and AI agents directly from the terminal.
 
-<img width="876" height="604" alt="GitGovernance TUI Dashboard" src="https://github.com/user-attachments/assets/016a4bef-d374-4963-aef3-19303650fb3a" />
-
 **You don't need to memorize commands.** Talk to your repository through the agent. Ask for project status, what to work on, or request new tasks in natural language. The agent translates your intent into precise commands.
 
 ```
@@ -51,7 +49,6 @@ Commands:
   exec|x                Record proof-of-work via ExecutionRecords
   feedback|fb            Create structured, immutable FeedbackRecords
   status [options]       Show intelligent project status dashboard
-  dashboard [options]    Launch interactive TUI dashboard
   indexer [options]      Control local cache system
   lint [options] [path]  Validate GitGovernance records
   audit [options]        Audit source code (PII/secrets, GDPR)
@@ -129,7 +126,6 @@ Strategic planning with cycles:
 gitgov status                          # Personal dashboard
 gitgov status --all --health --team    # Full project view
 gitgov status --alerts --json          # For automation
-gitgov dashboard                       # Interactive TUI (Ink/React)
 ```
 
 ### Sync
@@ -146,14 +142,12 @@ gitgov sync resolve --reason "..."      # Resolve conflicts
 ```mermaid
 graph TD
     subgraph "@gitgov/cli"
-        Commands["Commands (18)"]
+        Commands["Commands (17)"]
         Base["BaseCommand / SimpleCommand"]
         DI["DependencyInjectionService"]
-        TUI["Ink/React TUI"]
 
         Commands --> Base
         Commands --> DI
-        TUI --> DI
     end
 
     subgraph "@gitgov/core"
@@ -173,7 +167,6 @@ The CLI is a thin UI layer. All business logic lives in `@gitgov/core`. Commands
 | Technology   | Role                                           |
 | ------------ | ---------------------------------------------- |
 | Commander.js | Command framework (flags, subcommands, help)   |
-| Ink + React  | Interactive TUI (`gitgov dashboard`)           |
 | @gitgov/core | Business logic (adapters, stores, validators)  |
 | esbuild      | Bundle to single `gitgov.mjs` for distribution |
 
@@ -188,7 +181,6 @@ cd monorepo && pnpm install
 cd packages/cli
 pnpm dev status          # Run commands directly via tsx
 pnpm dev task list       # Hot-reload development
-pnpm dev dashboard       # TUI development
 
 # Verify (build + test + pack)
 pnpm verify
@@ -229,7 +221,7 @@ This package is licensed under the [Apache License 2.0](https://opensource.org/l
 
 > For development rules, conventions, and architecture see the [AGENTS.md](../../packages/blueprints/03_products/cli/AGENTS.md).
 
-**Last updated:** 2026-08-26 — 18 commands, 635 tests (504 unit + 131 e2e). Note: esbuild uses `--external:@gitgov/core` — core is resolved at runtime, not bundled. Rebuild core + re-link CLI after core changes.
+**Last updated:** 2026-08-29 — dashboard command retired (TUI replaced by the SaaS webapp): 17 commands in `--help` (15 + 2 sync aliases), 503 unit tests measured; its e2e suite (8 skipped tests) and the ink/react/clipboardy dependencies were removed. Note: esbuild uses `--external:@gitgov/core` — core is resolved at runtime, not bundled. Rebuild core + re-link CLI after core changes.
 
 
 ## @gitgov/core — Type System
