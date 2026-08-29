@@ -26,6 +26,8 @@ export type {
   ProtocolHandler,
   RuntimeHandlerRegistry,
   RuntimeHandler,
+  IEngineBackend,
+  EngineBackendMap,
 } from "./agent_runner";
 
 // Pure types (from agent_runner.types.ts)
@@ -47,6 +49,10 @@ export type {
   AuthType,
   AuthConfig,
 } from "./agent_runner.types";
+
+// [ARUN-N1..N3] Pure resolution from the root — consumers resolve engine.type against
+// their own IEngineBackend implementations without touching /fs.
+export { resolveRunner } from "./resolve_runner";
 
 // Errors are part of the public contract
 export {
