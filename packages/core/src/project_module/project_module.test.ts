@@ -318,7 +318,7 @@ describe('ProjectModule', () => {
         packageName: '@gitgov/core',
         agentId: 'agent:gitgov-audit',
         displayName: 'GitGov Audit',
-        engine: { type: 'local' as const, entrypoint: 'packages/core/dist/index.mjs', function: 'orchestrateAudit' },
+        engine: { type: 'local' as const, runtime: 'typescript' },
         purpose: 'orchestration',
         triggers: [{ type: 'webhook' as const, event: 'pull_request.opened' }],
         metadata: { description: 'Product agent' },
@@ -450,7 +450,7 @@ describe('ProjectModule', () => {
         packageName: '@gitgov/core',
         agentId: 'agent:gitgov-audit',
         displayName: 'GitGov Audit',
-        engine: { type: 'local' as const, entrypoint: 'packages/core/dist/index.mjs', function: 'orchestrateAudit' },
+        engine: { type: 'local' as const, runtime: 'typescript' },
         purpose: 'orchestration',
         triggers: [{ type: 'webhook' as const, event: 'pull_request.opened' }],
         metadata: { description: 'Product agent' },
@@ -464,7 +464,8 @@ describe('ProjectModule', () => {
         expect.objectContaining({
           id: 'agent:gitgov-audit',
           status: 'active',
-          engine: expect.objectContaining({ entrypoint: 'packages/core/dist/index.mjs' }),
+          // Runtime-only: the product agent declares no entrypoint (nothing dispatches it).
+          engine: expect.objectContaining({ runtime: 'typescript' }),
         }),
       );
       // Signed record persisted via the initializer (homologated FS/GitHub), not the store
