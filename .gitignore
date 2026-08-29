@@ -23,3 +23,4 @@ packages/triad/
 packages/triad_pi_agent/
 
 .env
+assets/

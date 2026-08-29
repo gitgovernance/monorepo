@@ -1,9 +1,0 @@
-{
-  // CI-only typecheck config. The ONLY difference from tsconfig.json: it excludes the one
-  // file whose types come from @gitgov/core-gitlab — a GitLab submodule that GitHub Actions
-  // cannot clone (the install step strips it from the workspace for the same reason).
-  // This is a declared, single-file, reasoned exclusion — locally `pnpm typecheck` uses the
-  // base config and covers gitlab.test.ts too.
-  "extends": "./tsconfig.json",
-  "exclude": ["tests/gitlab.test.ts"]
-}

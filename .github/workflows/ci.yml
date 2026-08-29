@@ -22,18 +22,8 @@ jobs:
           node-version: 24
           cache: pnpm
 
-      # core-gitlab is a GitLab submodule — can't be cloned by GitHub Actions.
-      # Remove from workspace + deps so pnpm install succeeds.
-      # E2E tests (which need it) only run locally, never in CI.
-      - name: Exclude GitLab submodule from workspace
-        run: |
-          if [ ! -f packages/core-gitlab/package.json ]; then
-            sed -i '/core-gitlab/d' pnpm-workspace.yaml
-            sed -i '/@gitgov\/core-gitlab/d' packages/e2e/package.json
-            pnpm install --no-frozen-lockfile
-          else
-            pnpm install --frozen-lockfile
-          fi
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
       - name: Build core (required for mcp-server type resolution)
         run: pnpm --filter @gitgov/core run build
@@ -54,20 +44,13 @@ jobs:
       - name: Typecheck cli
         run: pnpm --filter @gitgov/cli run typecheck
 
-      # e2e typechecks everywhere. `prisma generate` needs only the schema, no database.
-      # The conditional mirrors the install step: gitlab.test.ts gets its types from the
-      # GitLab submodule GitHub Actions cannot clone, so when it is absent the typecheck
-      # uses tsconfig.ci.json — identical to the base config except it excludes that ONE
-      # file, with the reason written in the config itself. Locally (submodule present)
-      # the base config covers 100% of the files.
+      # e2e typechecks everywhere with its single base config. `prisma generate` needs
+      # only the schema, no database. (The core-gitlab conditional died when the GitLab
+      # submodule left the repo entirely — its test moved out with it.)
       - name: Typecheck e2e
         run: |
           pnpm --filter @gitgov/e2e run prisma:generate
-          if [ -f packages/core-gitlab/package.json ]; then
-            pnpm --filter @gitgov/e2e run typecheck
-          else
-            pnpm --filter @gitgov/e2e exec -- tsc --noEmit -p tsconfig.ci.json
-          fi
+          pnpm --filter @gitgov/e2e run typecheck
 
   test:
     name: Test
@@ -84,15 +67,8 @@ jobs:
           node-version: 24
           cache: pnpm
 
-      - name: Exclude GitLab submodule from workspace
-        run: |
-          if [ ! -f packages/core-gitlab/package.json ]; then
-            sed -i '/core-gitlab/d' pnpm-workspace.yaml
-            sed -i '/@gitgov\/core-gitlab/d' packages/e2e/package.json
-            pnpm install --no-frozen-lockfile
-          else
-            pnpm install --frozen-lockfile
-          fi
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
       - name: Configure git for tests
         run: |
@@ -133,15 +109,8 @@ jobs:
           node-version: 24
           cache: pnpm
 
-      - name: Exclude GitLab submodule from workspace
-        run: |
-          if [ ! -f packages/core-gitlab/package.json ]; then
-            sed -i '/core-gitlab/d' pnpm-workspace.yaml
-            sed -i '/@gitgov\/core-gitlab/d' packages/e2e/package.json
-            pnpm install --no-frozen-lockfile
-          else
-            pnpm install --frozen-lockfile
-          fi
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
       - name: Build core
         run: pnpm --filter @gitgov/core run build
