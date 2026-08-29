@@ -215,8 +215,9 @@ describe('AgentCommand', () => {
       }),
     };
 
-    // Configure DI mock
-    mockDI.getInstance.mockReturnValue({
+    // Configure DI mock — untyped Mock so the literal does not have to masquerade as the
+    // concrete DependencyInjectionService class (the `as unknown as` the preset prohibits).
+    (DependencyInjectionService.getInstance as Mock).mockReturnValue({
       getAgentRunnerModule: vi.fn().mockResolvedValue(mockAgentRunnerModule),
       getBacklogAdapter: vi.fn().mockResolvedValue(mockBacklogAdapter),
       getIdentityAdapter: vi.fn().mockResolvedValue(mockIdentityAdapter),
@@ -226,7 +227,7 @@ describe('AgentCommand', () => {
       // resolves — not to process.cwd(), and never to the worktree.
       getRepoRoot: vi.fn().mockResolvedValue('/tmp/test-repo-root'),
       getCurrentActor: vi.fn().mockResolvedValue({ id: 'human:test-dev', type: 'human', displayName: 'Test Dev', publicKey: 'test-key', roles: ['developer'] }),
-    } as unknown as DependencyInjectionService);
+    });
 
     agentCommand = new AgentCommand();
   });
@@ -570,7 +571,7 @@ describe('AgentCommand', () => {
       // First call fails (no ActorRecord), triggers auto-create, then retries
       mockAgentAdapter.createAgentRecord
         .mockRejectedValueOnce(new Error('ActorRecord not found'))
-        .mockResolvedValueOnce({ id: 'agent:security-audit', engine: { type: 'local' } } as any);
+        .mockResolvedValueOnce({ id: 'agent:security-audit', engine: { type: 'local' } });
 
       await agentCommand.executeNew(tmpAgentDir, {});
 

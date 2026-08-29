@@ -46,7 +46,7 @@ import type { Mock } from 'vitest';
 import { InitCommand } from './init-command';
 import { execSync } from 'child_process';
 import { discoverInstalledAgents } from '@gitgov/core/fs';
-import type { ProjectModuleInitResult } from '@gitgov/core';
+import type { ProjectModuleInitResult, ProjectModuleInitOptions } from '@gitgov/core';
 
 // Mock console methods to capture output
 const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation(() => { });
@@ -59,7 +59,7 @@ const mockProcessExit = vi.spyOn(process, 'exit').mockImplementation((() => { })
 describe('InitCommand', () => {
   let initCommand: InitCommand;
   let mockProjectModule: {
-    initializeProject: Mock<(options: any) => Promise<ProjectModuleInitResult>>;
+    initializeProject: Mock<(options: ProjectModuleInitOptions) => Promise<ProjectModuleInitResult>>;
   };
 
   const sampleInitResult: ProjectModuleInitResult = {
@@ -90,7 +90,11 @@ describe('InitCommand', () => {
     // Create InitCommand (DI is mocked at module level)
     initCommand = new InitCommand();
 
-    // Spy on getProjectModule to return our mock (bypasses DI entirely)
+    // Spy on getProjectModule to return our mock (bypasses DI entirely).
+    // SANCTIONED CAST: `getProjectModule` is private, so no subclass override or typed spy
+    // can reach it — this is the one seam the test needs, stated with the narrowest shape
+    // instead of `any`. Removing it requires injecting ProjectModule into InitCommand,
+    // which is a production refactor, not a test fix.
     vi.spyOn(
       initCommand as unknown as { getProjectModule: () => Promise<typeof mockProjectModule> },
       'getProjectModule'
@@ -353,7 +357,14 @@ describe('InitCommand', () => {
     });
 
     it('[EARS-C5] should allow join path when already initialized without --force', async () => {
-      mockProjectModule.initializeProject.mockResolvedValue({ alreadyInitialized: true } as any);
+      // This state is REAL: project_module.ts:54 returns `{ alreadyInitialized: true }`
+      // without actorId (through its own `as ProjectInitResult`), and the command's
+      // "Project already initialized." branch exists precisely for it. The widening `as`
+      // mirrors core's — the honest fix is a union type on ProjectInitResult in core,
+      // recorded as pending; `as any` hid all of this.
+      mockProjectModule.initializeProject.mockResolvedValue({
+        alreadyInitialized: true,
+      } as ProjectModuleInitResult);
 
       await initCommand.execute({ name: 'Test Project' });
 
@@ -362,11 +373,15 @@ describe('InitCommand', () => {
     });
 
     it('[INIT-J1] should call addActor when alreadyInitialized and actor missing', async () => {
+      // Complete ProjectInitResult — the `as any` hid that the fixture omitted the
+      // required actorId/productAgentId/cycleId trio.
       mockProjectModule.initializeProject.mockResolvedValue({
-        alreadyInitialized: true,
         actorId: 'human:test-user',
+        productAgentId: 'agent:product',
+        cycleId: '1757789000-cycle-root',
+        alreadyInitialized: true,
         created: true,
-      } as any);
+      });
 
       await initCommand.execute({ name: 'Test Project' });
 
@@ -375,10 +390,12 @@ describe('InitCommand', () => {
 
     it('[INIT-J2] should report already a member when actor exists', async () => {
       mockProjectModule.initializeProject.mockResolvedValue({
-        alreadyInitialized: true,
         actorId: 'human:test-user',
+        productAgentId: 'agent:product',
+        cycleId: '1757789000-cycle-root',
+        alreadyInitialized: true,
         created: false,
-      } as any);
+      });
 
       await initCommand.execute({ name: 'Test Project' });
 
@@ -387,10 +404,12 @@ describe('InitCommand', () => {
 
     it('[INIT-J2b] should not run postInitConcerns when already a member', async () => {
       mockProjectModule.initializeProject.mockResolvedValue({
-        alreadyInitialized: true,
         actorId: 'human:test-user',
+        productAgentId: 'agent:product',
+        cycleId: '1757789000-cycle-root',
+        alreadyInitialized: true,
         created: false,
-      } as any);
+      });
       (execSync as Mock<typeof execSync>).mockClear();
 
       await initCommand.execute({ name: 'Test Project' });
@@ -660,10 +679,12 @@ describe('InitCommand', () => {
       });
 
       mockProjectModule.initializeProject.mockResolvedValue({
-        alreadyInitialized: true,
         actorId: 'human:cloud-project',
+        productAgentId: 'agent:product',
+        cycleId: '1757789000-cycle-root',
+        alreadyInitialized: true,
         created: true,
-      } as any);
+      });
 
       await initCommand.execute({ name: 'Cloud Project' });
 

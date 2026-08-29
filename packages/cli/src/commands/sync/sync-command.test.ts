@@ -809,7 +809,7 @@ describe('SyncCommand - Unit Tests', () => {
       });
 
       // Execute with force flag
-      await syncCommand.executePull({ force: true } as any);
+      await syncCommand.executePull({ force: true });
 
       // Verify force was passed to pullState
       expect(mockSyncModule.pullState).toHaveBeenCalledWith(

@@ -177,8 +177,8 @@ describe('LintCommand', () => {
     };
 
     // Mock singleton getInstance
-    (DependencyInjectionService.getInstance as Mock<typeof DependencyInjectionService.getInstance>)
-      .mockReturnValue(mockDependencyService as never);
+    (DependencyInjectionService.getInstance as Mock)
+      .mockReturnValue(mockDependencyService);
 
     // Create fresh LintCommand instance
     lintCommand = new LintCommand();
@@ -249,8 +249,8 @@ describe('LintCommand', () => {
         getLintModule: vi.fn().mockRejectedValue(error),
         getIdentityAdapter: vi.fn().mockResolvedValue(mockIdentityAdapter)
       };
-      (DependencyInjectionService.getInstance as Mock<typeof DependencyInjectionService.getInstance>)
-        .mockReturnValue(mockDependencyService as never);
+      (DependencyInjectionService.getInstance as Mock)
+        .mockReturnValue(mockDependencyService);
 
       // Create new command instance to use the new mock
       const errorCommand = new LintCommand();

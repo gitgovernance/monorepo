@@ -323,7 +323,7 @@ describe('AuditCommand', () => {
         getState: vi.fn().mockReturnValue({ actorId: 'human:developer' }),
       }),
     };
-    mockDI.getInstance.mockReturnValue(mockDIInstance as unknown as DependencyInjectionService);
+    (DependencyInjectionService.getInstance as Mock).mockReturnValue(mockDIInstance);
 
     auditCommand = new AuditCommand();
   });
@@ -524,9 +524,9 @@ describe('AuditCommand', () => {
     });
 
     it('should handle initialization errors gracefully', async () => {
-      mockDI.getInstance.mockReturnValue({
+      (DependencyInjectionService.getInstance as Mock).mockReturnValue({
         getAuditOrchestrator: vi.fn().mockRejectedValue(new Error('Init failed')),
-      } as unknown as DependencyInjectionService);
+      });
 
       auditCommand = new AuditCommand();
 
@@ -862,13 +862,18 @@ describe('AuditCommand', () => {
   // 4.12. Working Repo Guard (AORCH-P6)
   describe('4.12. Working Repo Guard (AORCH-P6)', () => {
     it('[AORCH-P6] should exit with error when repo has no commits', async () => {
-      // Bypass requireProject so we reach requireWorkingRepo
-      vi.spyOn(auditCommand as any, 'requireProject').mockResolvedValue(undefined);
+      // Bypass requireProject so we reach requireWorkingRepo. A subclass override is the
+      // cast-free way to reach the protected method: `vi.spyOn(cmd as any, ...)` silenced the
+      // visibility instead of respecting it, and `as any` is prohibited by the preset.
+      class AuditCommandWithProjectBypass extends AuditCommand {
+        protected override async requireProject(): Promise<void> { /* project exists */ }
+      }
+      const bypassedCommand = new AuditCommandWithProjectBypass();
       mockDIInstance.getGitModule = vi.fn().mockResolvedValue({
         getCommitHash: vi.fn().mockRejectedValue(new Error('fatal: ambiguous argument HEAD')),
       });
 
-      await auditCommand.execute(createDefaultOptions());
+      await bypassedCommand.execute(createDefaultOptions());
 
       expect(mockConsoleError).toHaveBeenCalledWith(
         expect.stringContaining('No commits found'),

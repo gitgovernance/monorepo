@@ -57,8 +57,8 @@ describe('ActorCommand', () => {
       }),
     };
 
-    (DependencyInjectionService.getInstance as Mock<typeof DependencyInjectionService.getInstance>)
-      .mockReturnValue(mockDependencyService as never);
+    (DependencyInjectionService.getInstance as Mock)
+      .mockReturnValue(mockDependencyService);
 
     actorCommand = new ActorCommand();
   });
