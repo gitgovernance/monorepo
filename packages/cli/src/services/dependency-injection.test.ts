@@ -981,6 +981,55 @@ describe('DependencyInjectionService', () => {
   // §4.4. Bootstrap Reindex (EARS-D1 to D2)
   // ============================================================================
   describe('4.4. Bootstrap Reindex (EARS-D1 to D2)', () => {
+    it('[EARS-B2b] should fetch with refspec to update the local branch before creating the worktree', async () => {
+      // A locally-cached state branch can be stale: without the refspec fetch, the worktree
+      // is created from old refs and inherits state the remote already moved past.
+      mockFs.promises.access.mockRejectedValue(new Error('.gitgov directory not found'));
+
+      const mockGitModule = new corefs.GitModule({
+        repoRoot: mockRepoRoot,
+        execCommand: vi.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' })
+      });
+      mockGitModule.getRepoRoot = vi.fn().mockResolvedValue(mockRepoRoot);
+      mockGitModule.branchExists = vi.fn().mockResolvedValue(true);
+      mockGitModule.exec = vi.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+      diService.getGitModule = vi.fn().mockResolvedValue(mockGitModule);
+      diService.getHeadSha = vi.fn().mockResolvedValue('mock-head-sha');
+
+      await diService.getRecordProjector();
+
+      const calls = vi.mocked(mockGitModule.exec).mock.calls;
+      const fetchIdx = calls.findIndex((c) => c[1]?.includes('fetch') && c[1]?.includes('gitgov-state:gitgov-state'));
+      const worktreeIdx = calls.findIndex((c) => c[1]?.includes('worktree'));
+      // Anti-vacuity: both operations must have happened, and in this order.
+      expect(fetchIdx).toBeGreaterThanOrEqual(0);
+      expect(worktreeIdx).toBeGreaterThanOrEqual(0);
+      expect(fetchIdx).toBeLessThan(worktreeIdx);
+    });
+
+    it('[EARS-B2b] should proceed with the local branch when the refspec fetch fails', async () => {
+      // Offline, no remote, or a diverged ref must not block the bootstrap: the local
+      // branch is a legitimate fallback, per the EARS.
+      mockFs.promises.access.mockRejectedValue(new Error('.gitgov directory not found'));
+
+      const mockGitModule = new corefs.GitModule({
+        repoRoot: mockRepoRoot,
+        execCommand: vi.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' })
+      });
+      mockGitModule.getRepoRoot = vi.fn().mockResolvedValue(mockRepoRoot);
+      mockGitModule.branchExists = vi.fn().mockResolvedValue(true);
+      mockGitModule.exec = vi.fn().mockImplementation(async (_cmd: string, args: string[]) => {
+        if (args.includes('fetch')) throw new Error('fatal: unable to access remote');
+        return { exitCode: 0, stdout: '', stderr: '' };
+      });
+      diService.getGitModule = vi.fn().mockResolvedValue(mockGitModule);
+      diService.getHeadSha = vi.fn().mockResolvedValue('mock-head-sha');
+
+      await diService.getRecordProjector();
+
+      expect(mockGitModule.exec).toHaveBeenCalledWith('git', expect.arrayContaining(['worktree', 'add']));
+    });
+
     it('[EARS-D1] should call generateIndex() after successful bootstrap from gitgov-state', async () => {
       // Mock fs.access to reject (no worktree .gitgov directory exists)
       mockFs.promises.access.mockRejectedValue(new Error('.gitgov directory not found'));

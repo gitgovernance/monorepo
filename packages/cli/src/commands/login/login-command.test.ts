@@ -1126,6 +1126,25 @@ describe('LoginCommand v2', () => {
       );
     });
 
+    it('[LOGIN-H3] should exit with error when the git remote cannot be resolved', async () => {
+      // Error path declared by LOGIN-H3 and pending since the spec's own note ("Failed
+      // parseRemoteUrl has no unit test yet"): no remote, or git unavailable, must produce
+      // the actionable message — not a crash further down the flow.
+      // Precise scenario: a valid git repo (LOGIN-Q1's rev-parse guard passes) with NO
+      // remote — throwing on everything trips Q1 first and never reaches this path.
+      const { execSync } = await import('child_process');
+      vi.mocked(execSync).mockImplementation(((cmd: string) => {
+        if (String(cmd).startsWith('git rev-parse')) return '.git\n';
+        throw new Error("fatal: No such remote 'origin'");
+      }) as typeof execSync);
+
+      const cmd = new LoginCommand(createMockDeps());
+      await cmd.executeLogin(defaultOptions);
+
+      const errorOutput = mockConsoleError.mock.calls.map(c => c[0]).join('\n');
+      expect(errorOutput).toContain('Could not determine repository');
+    });
+
     it('[LOGIN-H4] should resolve SSH alias to real hostname via ssh -G', async () => {
       const { execSync } = await import('child_process');
       const mockExecSync = execSync as Mock<typeof execSync>;

@@ -173,6 +173,15 @@ export class DependencyInjectionService {
         // Neither exists — not initialized
         throw new Error("❌ GitGovernance not initialized. Run 'gitgov init' first.");
       }
+    } else {
+      // [EARS-B2b] The local branch can be stale: without this refspec fetch the worktree
+      // is created from old refs and inherits state the remote already moved past.
+      // Best-effort — offline, no remote or a diverged ref falls back to the local branch.
+      try {
+        await gitModule.exec('git', ['fetch', 'origin', `${stateBranch}:${stateBranch}`]);
+      } catch {
+        // [EARS-B2b] Fetch failure tolerated — proceed with the local branch as-is.
+      }
     }
 
     // Create worktree
