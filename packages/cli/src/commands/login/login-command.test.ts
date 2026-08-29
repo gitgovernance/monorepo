@@ -16,6 +16,18 @@
 import type { Mock } from 'vitest';
 import type { IKeyProvider, GitGovActorRecord } from '@gitgov/core';
 
+// [LOGIN-H2] Fake http server so the DEFAULT startCallbackServer schedules its 5-minute
+// timeout without opening a real socket. Only the H2 test reaches this: every other test
+// injects its own startCallbackServer mock and never imports http.
+const { fakeHttpServer } = vi.hoisted(() => ({
+  fakeHttpServer: {
+    listen: (_port: number, cb?: () => void) => { cb?.(); },
+    on: () => { },
+    close: () => { },
+  },
+}));
+vi.mock('http', () => ({ createServer: () => fakeHttpServer }));
+
 // Mock child_process for resolveOrgId
 vi.mock('child_process', () => ({
   exec: vi.fn(),
@@ -163,7 +175,7 @@ vi.mock('../../services/dependency-injection', () => ({
   },
 }));
 
-import { LoginCommand } from './login-command';
+import { LoginCommand, createCallbackServer, CALLBACK_TIMEOUT_MS } from './login-command';
 import type { LoginCommandOptions, LoginDeps, TrpcResponse, KeyStatusResponse, SyncKeyResponse } from './login-command.types';
 
 // Mock console and process.exit
@@ -1174,7 +1186,17 @@ describe('LoginCommand v2', () => {
       );
     });
 
-    it.todo('[LOGIN-H2] should timeout after 5 minutes with error message (requires timer mock — deferred to E2E)');
+    it('[LOGIN-H2] should timeout after 5 minutes with error message', async () => {
+      // The timeout lives in createCallbackServer, which every login test replaces with a
+      // mock — nothing exercised the real timer until it was extracted. The MECHANISM is
+      // verified with a short injected timeout (real timers, fake http server — no socket,
+      // no browser); the 5-minute VALUE is pinned separately on the exported constant.
+      // Driving the full login flow under fake timers proved flakier than what it verified.
+      await expect(createCallbackServer(9876, 50)).rejects.toThrow(
+        'Login timeout — no callback received within 5 minutes',
+      );
+      expect(CALLBACK_TIMEOUT_MS).toBe(5 * 60 * 1000);
+    });
   });
 
   // ============================================================================

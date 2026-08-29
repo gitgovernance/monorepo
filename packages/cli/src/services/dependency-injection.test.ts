@@ -560,6 +560,15 @@ vi.mock('@gitgov/core', () => {
     // [PROJ-F3] getProjectModule() passes this straight through to ProjectModuleDeps.
     DEFAULT_AGENTS: [],
     getCurrentActor: vi.fn().mockResolvedValue({ id: 'human:current-user', type: 'human', displayName: 'Current User', publicKey: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=', roles: ['author'] }),
+    // [EARS-C14] The mock did NOT export this class, so the code's `err instanceof
+    // ActorSelectionRequiredError` compared against `undefined` — a TypeError waiting on
+    // the first real multi-key machine, invisible while no test reached the catch.
+    ActorSelectionRequiredError: class ActorSelectionRequiredError extends Error {
+      constructor(public readonly actorIds: string[]) {
+        super(`Multiple active actors found (${actorIds.join(', ')})`);
+        this.name = 'ActorSelectionRequiredError';
+      }
+    },
   };
 });
 
@@ -701,6 +710,15 @@ vi.mock('@gitgov/core/fs', () => ({
     saveSession: vi.fn().mockResolvedValue(undefined),
   }),
   getKeysDir: vi.fn().mockImplementation((worktreePath: string) => require('path').join(worktreePath, '.gitgov', 'keys')),
+}));
+
+// [EARS-C14] readline mock — the prompt answers with whatever the test sets here.
+const { readlineAnswer } = vi.hoisted(() => ({ readlineAnswer: { value: '1' } }));
+vi.mock('readline', () => ({
+  createInterface: vi.fn(() => ({
+    question: (_q: string, cb: (answer: string) => void) => cb(readlineAnswer.value),
+    close: vi.fn(),
+  })),
 }));
 
 import { DependencyInjectionService } from './dependency-injection';
@@ -953,7 +971,24 @@ describe('DependencyInjectionService', () => {
       expect(keyProvider.sign).toBeDefined();
     });
 
-    it.todo('[EARS-C14] should prompt actor selection and save to session when multiple keys exist');
+    it('[EARS-C14] should prompt actor selection and save to session when multiple keys exist', async () => {
+      const { getCurrentActor, ActorSelectionRequiredError } = await import('@gitgov/core');
+      const selectedActor = { id: 'agent:second', type: 'agent', displayName: 'Second', publicKey: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=', roles: ['author'] };
+      vi.mocked(getCurrentActor)
+        .mockRejectedValueOnce(new ActorSelectionRequiredError(['human:first', 'agent:second']))
+        .mockResolvedValueOnce(selectedActor as Awaited<ReturnType<typeof getCurrentActor>>);
+      const setLastSession = vi.fn().mockResolvedValue(undefined);
+      diService.getSessionManager = vi.fn().mockResolvedValue({ setLastSession });
+      readlineAnswer.value = '2';
+
+      const actor = await diService.getCurrentActor();
+
+      // The choice is SAVED (that is what makes the retry resolve on real machines) and the
+      // retry result is returned — the command does not fail; the prompt is part of the flow.
+      expect(setLastSession).toHaveBeenCalledWith('agent:second', expect.any(String));
+      expect(actor).toBe(selectedActor);
+      expect(vi.mocked(getCurrentActor)).toHaveBeenCalledTimes(2);
+    });
 
     it('[EARS-C16] should build the engine validator with repoRoot not the worktree path', async () => {
       // Pins WHICH root the engine validator resolves against. During `gitgov init` this
