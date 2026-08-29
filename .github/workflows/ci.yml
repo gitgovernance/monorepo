@@ -54,6 +54,21 @@ jobs:
       - name: Typecheck cli
         run: pnpm --filter @gitgov/cli run typecheck
 
+      # e2e typechecks everywhere. `prisma generate` needs only the schema, no database.
+      # The conditional mirrors the install step: gitlab.test.ts gets its types from the
+      # GitLab submodule GitHub Actions cannot clone, so when it is absent the typecheck
+      # uses tsconfig.ci.json — identical to the base config except it excludes that ONE
+      # file, with the reason written in the config itself. Locally (submodule present)
+      # the base config covers 100% of the files.
+      - name: Typecheck e2e
+        run: |
+          pnpm --filter @gitgov/e2e run prisma:generate
+          if [ -f packages/core-gitlab/package.json ]; then
+            pnpm --filter @gitgov/e2e run typecheck
+          else
+            pnpm --filter @gitgov/e2e exec -- tsc --noEmit -p tsconfig.ci.json
+          fi
+
   test:
     name: Test
     runs-on: ubuntu-latest

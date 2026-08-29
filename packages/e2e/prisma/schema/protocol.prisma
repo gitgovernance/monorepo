@@ -1,7 +1,6 @@
 // ⚠️ COPIED from core — DO NOT EDIT
 // Source: packages/core/prisma/schema/
 // Re-generate: pnpm prisma:sync (in packages/e2e)
-// Synced at: 2026-08-28T12:02:49.211Z
 
 // GitGovernance Core — Protocol Record Projection Tables
 // Fields match record types from core/src/record_types/generated/
