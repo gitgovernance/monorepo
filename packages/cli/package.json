@@ -18,6 +18,7 @@
     "dev": "tsx src/index.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
+    "test:unit": "vitest run src",
     "test:all": "pnpm build && pnpm test && pnpm pack:build",
     "prepublishOnly": "pnpm build",
     "pack:build": "mkdir -p build && pnpm pack && mv *.tgz build/",

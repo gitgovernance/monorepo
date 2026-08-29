@@ -109,6 +109,14 @@ jobs:
       - name: Test mcp-server
         run: pnpm --filter @gitgov/mcp-server run test
 
+      # cli UNIT tests only (src/**). Measured before wiring: 509 passed in <3s under a
+      # minimal environment (fake HOME, no .env) — they mock all I/O. The e2e suites
+      # (e2e/**) stay local-only: they need PostgreSQL, real git remotes and the built
+      # binary. That split lives in the command, not in a config exclude, so `pnpm test`
+      # locally still runs everything.
+      - name: Test cli (unit)
+        run: pnpm --filter @gitgov/cli run test:unit
+
   build:
     name: Build
     runs-on: ubuntu-latest
