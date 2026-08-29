@@ -806,7 +806,7 @@ describe('DependencyInjectionService', () => {
   // §4.3. Adapter Factories (EARS-C1 to C15)
   // ============================================================================
   describe('4.3. Adapter Factories (EARS-C1 to C15)', () => {
-    it('[EARS-C1] should create IndexerAdapter with all dependencies', async () => {
+    it('[EARS-C1] should create RecordProjector with all dependencies', async () => {
       const projector = await diService.getRecordProjector();
       expect(projector).toBeDefined();
       expect(projector.generateIndex).toBeDefined();
@@ -820,7 +820,7 @@ describe('DependencyInjectionService', () => {
       expect(Adapters.BacklogAdapter).toHaveBeenCalled();
     });
 
-    it('[EARS-C3] should create MetricsAdapter with stores', async () => {
+    it('[EARS-C3] should create RecordMetrics with stores', async () => {
       const recordMetrics = await diService.getRecordMetrics();
 
       expect(recordMetrics).toBeDefined();
@@ -1082,7 +1082,7 @@ describe('DependencyInjectionService', () => {
   // §4.5. Error Handling (EARS-E1 to E4)
   // ============================================================================
   describe('4.5. Error Handling (EARS-E1 to E4)', () => {
-    it('[EARS-E1] should throw error when project root not found (IndexerAdapter)', async () => {
+    it('[EARS-E1] should throw error when project root not found (RecordProjector)', async () => {
       // Mock fs.access to reject (no worktree .gitgov directory)
       mockFs.promises.access.mockRejectedValue(new Error('Directory not found'));
 
