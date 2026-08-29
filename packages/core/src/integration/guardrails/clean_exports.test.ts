@@ -77,6 +77,37 @@ const ALLOWED_BUILTINS: Record<string, { allow: string[]; why: Record<string, st
       util: 'promisify. Plain JavaScript.',
     },
   },
+
+  // The three entrypoints below were unchecked until 2026-08-29. /prisma and /audit
+  // entered at zero cost (their measured builtins were already the valid serverless set);
+  // /github entered by DECLARING path — it arrives transitively, no source file asks for
+  // it, and writing it down with its reason is the whole design of this guardrail.
+  // "Extending would put someone else's code in red" was only true of a prohibition.
+  'shared/prisma/prisma.js': {
+    allow: ['crypto', 'util'],
+    why: {
+      crypto: 'Hashing for record checksums. Available on every serverless runtime.',
+      util: 'promisify. Plain JavaScript.',
+    },
+  },
+  'audit/index.js': {
+    allow: ['crypto'],
+    why: {
+      crypto: 'Finding fingerprints and snippet hashes (sha256). Serverless-safe.',
+    },
+  },
+  'shared/github/github.js': {
+    allow: ['crypto', 'events', 'util', 'path'],
+    why: {
+      crypto: 'Record signing reached through the shared record stack.',
+      events: 'EventEmitter. Plain JavaScript.',
+      util: 'promisify. Plain JavaScript.',
+      path:
+        'Transitive: no source file under shared/github asks for it, it rides in through ' +
+        'shared record helpers. Declared rather than fought — this subpath targets Node ' +
+        'and serverless runtimes that all provide path.',
+    },
+  },
 };
 
 /**
@@ -179,14 +210,22 @@ describe('CI Guardrail: Clean Exports', () => {
     });
 
     it('[EARS-CI02] should import no Node builtin outside its declared allowlist', () => {
-      const entry = ALLOWED_BUILTINS['index.js']!;
-      const findings = findUndeclaredBuiltins(readEntrypoint('index.js'), entry.allow);
-
-      if (findings.length > 0) {
-        throw new Error(buildReport('@gitgov/core', findings));
+      // Walks EVERY declared entrypoint, not a hardcoded one. When /prisma, /audit and
+      // /github entered the allowlist (2026-08-29), a version of this test that only read
+      // 'index.js' would have made their entries decoration: declared, never checked —
+      // the vacuity this file exists to kill.
+      const inspected: string[] = [];
+      for (const [entrypoint, entry] of Object.entries(ALLOWED_BUILTINS)) {
+        const findings = findUndeclaredBuiltins(readEntrypoint(entrypoint), entry.allow);
+        if (findings.length > 0) {
+          throw new Error(buildReport(`@gitgov/core :: ${entrypoint}`, findings));
+        }
+        inspected.push(entrypoint);
       }
 
-      expect(findings).toHaveLength(0);
+      // Anti-vacuity: the loop must have visited every declared entrypoint.
+      expect(inspected).toEqual(Object.keys(ALLOWED_BUILTINS));
+      expect(inspected.length).toBeGreaterThanOrEqual(5);
     });
 
     it('[EARS-CI03] should name module, line and snippet in the failure report', () => {
