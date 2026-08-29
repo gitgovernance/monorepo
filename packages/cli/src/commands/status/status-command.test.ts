@@ -69,6 +69,9 @@ describe('StatusCommand - Complete Unit Tests', () => {
     getIdentityAdapter: Mock<() => Promise<typeof mockIdentityAdapter>>;
     getCurrentActor: Mock<() => Promise<ActorRecord>>;
     getSyncStateModule: Mock<() => Promise<typeof mockSyncStateModule>>;
+    // Exists in the real container and the command calls it — only this annotation omitted
+    // it, invisible while the file was excluded from typechecking.
+    getHeadSha: Mock<() => Promise<string>>;
   };
 
   // Sample data using factories

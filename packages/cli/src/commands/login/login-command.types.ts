@@ -53,9 +53,9 @@ export type SyncKeyResponse = {
   success: boolean;
   actorId: string;
   mode: 'full' | 'verify-only';
-  rotated?: boolean;
-  newActorId?: string;
-  oldActorId?: string;
+  // `rotated`/`newActorId`/`oldActorId` were removed: the server stopped doing succession in
+  // syncKey (LOGIN-N1 removed in session 65, FV49 — overwrite under the SAME actorId) and
+  // nothing in login-command.ts ever read them here.
   /** [LOGIN-T1] Agent keys del repo aceptadas por el server (IDS-N1) */
   agentKeysSynced?: number;
 };

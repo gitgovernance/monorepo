@@ -29,7 +29,9 @@ import { registerIndexerCommands } from './indexer';
 describe('registerIndexerCommands (EARS-C3)', () => {
   beforeEach(() => {
     vi.spyOn(console, 'error').mockImplementation(vi.fn());
-    vi.spyOn(process, 'exit').mockImplementation(vi.fn());
+    // `process.exit` is typed `(code?) => never`; the stub returns, so the cast states
+    // that gap explicitly rather than throwing mid-test.
+    vi.spyOn(process, 'exit').mockImplementation((() => { }) as unknown as never);
   });
 
   it('[EARS-C3] should receive a lazy resolver and not invoke it during registration', async () => {

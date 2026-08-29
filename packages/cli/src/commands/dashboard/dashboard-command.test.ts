@@ -133,6 +133,10 @@ describe('DashboardCommand - EARS Compliance Tests', () => {
     getRecordProjector: Mock<() => Promise<typeof mockProjector>>;
     getIdentityAdapter: Mock<() => Promise<typeof mockIdentityAdapter>>;
     getCurrentActor: Mock<() => Promise<ActorRecord>>;
+    // Exists in the real container and the command calls it (dashboard-command.ts:111/131,
+    // dependency-injection.ts:848). The mock always provided it — only this annotation
+    // omitted it, invisible while the file was excluded from typechecking.
+    getHeadSha: Mock<() => Promise<string>>;
   };
 
   // Sample data using factories
@@ -404,7 +408,16 @@ describe('DashboardCommand - EARS Compliance Tests', () => {
       // Mock Ink render to capture props
       const ink = await import('ink');
       const mockRender = vi.mocked(ink.render);
-      mockRender.mockReturnValue({ waitUntilExit: vi.fn() });
+      // Full ink Instance shape — `render()` returns { rerender, unmount, waitUntilExit,
+      // cleanup, clear }, and a partial literal is a type error even though the command only
+      // awaits waitUntilExit.
+      mockRender.mockReturnValue({
+        rerender: vi.fn(),
+        unmount: vi.fn(),
+        waitUntilExit: vi.fn().mockResolvedValue(undefined),
+        cleanup: vi.fn(),
+        clear: vi.fn(),
+      });
 
       // Act: Execute dashboard without explicit refresh interval
       await dashboardCommand.execute({});
@@ -412,7 +425,9 @@ describe('DashboardCommand - EARS Compliance Tests', () => {
       // Assert: Should use 1 second refresh (demo optimization)
       expect(mockRender).toHaveBeenCalled();
       // Verify that render was called with React element containing refreshInterval: 1
-      const renderArgs = mockRender.mock.calls[0];
+      // Non-null: `toHaveBeenCalled()` above guarantees the call exists; under
+      // noUncheckedIndexedAccess the index alone cannot prove it.
+      const renderArgs = mockRender.mock.calls[0]!;
       expect(renderArgs).toBeDefined();
       expect(renderArgs.length).toBeGreaterThan(0);
     });
@@ -423,7 +438,16 @@ describe('DashboardCommand - EARS Compliance Tests', () => {
 
       const ink = await import('ink');
       const mockRender = vi.mocked(ink.render);
-      mockRender.mockReturnValue({ waitUntilExit: vi.fn() });
+      // Full ink Instance shape — `render()` returns { rerender, unmount, waitUntilExit,
+      // cleanup, clear }, and a partial literal is a type error even though the command only
+      // awaits waitUntilExit.
+      mockRender.mockReturnValue({
+        rerender: vi.fn(),
+        unmount: vi.fn(),
+        waitUntilExit: vi.fn().mockResolvedValue(undefined),
+        cleanup: vi.fn(),
+        clear: vi.fn(),
+      });
 
       // Act: Execute with custom refresh interval
       await dashboardCommand.execute({ refreshInterval: 10 });
@@ -431,7 +455,9 @@ describe('DashboardCommand - EARS Compliance Tests', () => {
       // Assert: Should use custom refresh interval
       expect(mockRender).toHaveBeenCalled();
       // Verify that render was called with custom refresh interval
-      const renderArgs = mockRender.mock.calls[0];
+      // Non-null: `toHaveBeenCalled()` above guarantees the call exists; under
+      // noUncheckedIndexedAccess the index alone cannot prove it.
+      const renderArgs = mockRender.mock.calls[0]!;
       expect(renderArgs).toBeDefined();
       expect(renderArgs.length).toBeGreaterThan(0);
     });

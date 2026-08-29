@@ -1002,7 +1002,8 @@ describe('SyncCommand - Unit Tests', () => {
       );
 
       // Verify lastSyncPush and lastSyncPull are NOT set
-      const callArgs = mockSessionManager.updateActorState.mock.calls[0][1];
+      // Non-null: the assertion above already proved updateActorState was called.
+      const callArgs = mockSessionManager.updateActorState.mock.calls[0]![1];
       expect(callArgs.syncStatus).not.toHaveProperty('lastSyncPush');
       expect(callArgs.syncStatus).not.toHaveProperty('lastSyncPull');
     });

@@ -83,7 +83,11 @@ let mockIdentityAdapter: {
 
 let mockAgentStore: {
   list: Mock<() => Promise<string[]>>;
-  get: Mock<(id: string) => Promise<AgentRecord<TestAgentMetadata> | null>>;
+  // The store returns ENVELOPED records: production reads `prev.payload.engine.type`
+  // (agent-command.ts:251,482), never a bare payload. This annotation said
+  // `AgentRecord<TestAgentMetadata>` (payload-only), so the fixture that correctly nested
+  // `{ payload: { engine } }` was a type error — the annotation lied, not the fixture.
+  get: Mock<(id: string) => Promise<{ payload: { engine?: { type?: string } } } | null>>;
 };
 
 let mockAgentAdapter: {

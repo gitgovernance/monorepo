@@ -170,7 +170,9 @@ import type { LoginCommandOptions, LoginDeps, TrpcResponse, KeyStatusResponse, S
 const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation(() => { });
 const mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => { });
 const mockConsoleError = vi.spyOn(console, 'error').mockImplementation(() => { });
-const mockProcessExit = vi.spyOn(process, 'exit').mockImplementation(vi.fn());
+// `process.exit` is typed `(code?) => never`; the stub returns, so the cast states that gap
+// explicitly rather than throwing and changing control flow the tests do not expect.
+const mockProcessExit = vi.spyOn(process, 'exit').mockImplementation((() => { }) as unknown as never);
 
 // ─── tRPC mock helpers ────────────────────────────────────────────────────
 
@@ -238,7 +240,8 @@ describe('LoginCommand v2', () => {
       await cmd.executeLogin(defaultOptions);
 
       expect(deps.openBrowser).toHaveBeenCalledTimes(1);
-      const openUrl = (deps.openBrowser as Mock).mock.calls[0][0] as string;
+      // Non-null: `toHaveBeenCalledTimes(1)` above guarantees the call exists.
+      const openUrl = (deps.openBrowser as Mock).mock.calls[0]![0] as string;
       expect(openUrl).toContain('/auth/cli?callback=');
 
       expect(deps.startCallbackServer).toHaveBeenCalledTimes(1);
@@ -839,7 +842,7 @@ describe('LoginCommand v2', () => {
 
       // syncKey response is trusted — no second keyStatus call needed
       const keyStatusCalls = (deps.fetchSaas as Mock).mock.calls.filter(
-        (c: [string]) => c[0].includes('identity.keyStatus')
+        (c: unknown[]) => String(c[0]).includes('identity.keyStatus')
       );
       expect(keyStatusCalls).toHaveLength(1);
     });
@@ -984,12 +987,13 @@ describe('LoginCommand v2', () => {
       mockGetPrivateKey.mockResolvedValue('local-private-key');
       mockGetPublicKey.mockResolvedValue('local-public-key');
 
+      // `verified` and `projectInitialized` were removed here: neither exists on
+      // `SyncKeyResponse` nor is read anywhere in login-command.ts — ghost fields the
+      // fixture carried, invisible while this file was excluded from typechecking.
       const overwriteResponse: SyncKeyResponse = {
         success: true,
         actorId: 'human:camilo',
         mode: 'full',
-        verified: false,
-        projectInitialized: true,
       };
 
       const deps = createMockDeps({
@@ -1360,7 +1364,7 @@ describe('LoginCommand v2', () => {
 
       const deps = createMockDeps({
         fetchSaas: createTrpcFetch({
-          'keyStatus': keyStatusWith(null),
+          'keyStatus': noKeyStatus,
           'syncKey': { success: true, actorId: 'human:camilo', mode: 'full' },
         }),
       });
@@ -1385,7 +1389,7 @@ describe('LoginCommand v2', () => {
 
       const deps = createMockDeps({
         fetchSaas: createTrpcFetch({
-          'keyStatus': keyStatusWith(null),
+          'keyStatus': noKeyStatus,
         }),
       });
 
@@ -1533,7 +1537,7 @@ describe('LoginCommand v2', () => {
 
       const deps = createMockDeps({
         fetchSaas: createTrpcFetch({
-          'keyStatus': keyStatusWith(null),
+          'keyStatus': noKeyStatus,
           'syncKey': { success: true, actorId: 'human:camilo', mode: 'full' },
         }),
       });
@@ -1558,7 +1562,7 @@ describe('LoginCommand v2', () => {
 
       const deps = createMockDeps({
         fetchSaas: createTrpcFetch({
-          'keyStatus': keyStatusWith(null),
+          'keyStatus': noKeyStatus,
           'syncKey': { success: true, actorId: 'human:testuser', mode: 'full' },
         }),
       });

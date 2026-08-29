@@ -195,7 +195,9 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
           // L1 persistence errors are non-fatal
         }
       }
-      // [AORCH-P3] If l1AgentResults absent → skip, scan still completes
+      // [AORCH-P3] Empty l1AgentResults → the loop writes nothing; scan still completes.
+      // (The `if` above also tolerates absence, but the current orchestrator always returns
+      // the field — the redactor is a required dependency. See audit_command.md §4.9.)
 
       // [AORCH-P2] Write FeedbackRecords for review agent opinions
       if (result.reviewResults) {

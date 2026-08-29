@@ -17,6 +17,7 @@
     "start": "./build/dist/gitgov.mjs",
     "dev": "tsx src/index.ts",
     "test": "vitest run",
+    "typecheck": "tsc --noEmit",
     "test:all": "pnpm build && pnpm test && pnpm pack:build",
     "prepublishOnly": "pnpm build",
     "pack:build": "mkdir -p build && pnpm pack && mv *.tgz build/",

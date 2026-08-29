@@ -939,7 +939,7 @@ describe('DependencyInjectionService', () => {
       // Verify createAgentRunner was called with repoRoot (not worktree path)
       const { createAgentRunner } = corefs;
       expect(createAgentRunner).toHaveBeenCalled();
-      const callArgs = createAgentRunner.mock.calls[0][0];
+      const callArgs = vi.mocked(createAgentRunner).mock.calls[0]![0];
       expect(callArgs.projectRoot).toBe(mockRepoRoot);
       expect(callArgs.gitgovPath).toContain('.gitgov');
     });
@@ -972,8 +972,8 @@ describe('DependencyInjectionService', () => {
       // Anti-vacuity: if the validator was never constructed, the assertions below would
       // pass over an empty call list and prove nothing.
       expect(FsEngineValidator).toHaveBeenCalledTimes(1);
-      expect(vi.mocked(FsEngineValidator).mock.calls[0][0]).toBe(mockRepoRoot);
-      expect(vi.mocked(FsEngineValidator).mock.calls[0][0]).not.toBe(mockWorktreeBasePath);
+      expect(vi.mocked(FsEngineValidator).mock.calls[0]![0]).toBe(mockRepoRoot);
+      expect(vi.mocked(FsEngineValidator).mock.calls[0]![0]).not.toBe(mockWorktreeBasePath);
     });
   });
 

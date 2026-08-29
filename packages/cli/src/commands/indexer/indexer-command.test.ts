@@ -86,7 +86,7 @@ const mockProcessExit = vi.spyOn(process, 'exit').mockImplementation((() => { })
 
 // Get access to the mocked DependencyInjectionService
 const mockDI = vi.mocked(DependencyInjectionService);
-let mockGetRecordProjector: Mock<any>;
+let mockGetRecordProjector: Mock;
 
 // Global reference to the mock adapter for easy access in tests
 let mockProjector: any;
@@ -103,7 +103,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
 
     // Get the mocked adapter from DI
     const diInstance = mockDI.getInstance();
-    mockGetRecordProjector = diInstance.getRecordProjector as Mock<any>;
+    mockGetRecordProjector = diInstance.getRecordProjector as Mock;
 
     // Set up default successful responses
     mockProjector = await mockGetRecordProjector();

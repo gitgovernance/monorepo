@@ -47,7 +47,10 @@ import { GitHubCiReporter } from '@gitgov/core/github';
 
 // Mock @gitgov/core
 vi.mock('@gitgov/core', async () => {
-  const actual = await vi.importActual('@gitgov/core');
+  // Typed importActual: without the generic, `actual` is an index signature and every property
+  // read is an error under noPropertyAccessFromIndexSignature — and worse, a typo in a property
+  // name would silently produce `undefined` instead of failing to compile.
+  const actual = await vi.importActual<typeof import('@gitgov/core')>('@gitgov/core');
   return {
     Config: {
       ConfigManager: {
@@ -128,6 +131,11 @@ let mockDIInstance: {
   getExecutionAdapter: Mock;
   getIdentityAdapter: Mock;
   getCurrentActor: Mock;
+  // Both exist in the real container and the command calls them (audit-command.ts:175/524,
+  // dependency-injection.ts:262/958). The mock always provided them — only this annotation
+  // omitted them, so the tests that reassigned or asserted on them did not typecheck.
+  getAuditFsProjection: Mock;
+  getGitModule: Mock;
   getProjectRoot: Mock;
   getSessionManager: Mock;
 };
@@ -154,6 +162,11 @@ describe('AuditCommand', () => {
         fingerprint: 'sha256:abc123def456',
         ruleId: 'SEC-001',
         message: 'API key hardcoded',
+        // Real digest of the snippet — `snippet`/`snippetHash` are REQUIRED on Finding
+        // ("every detector MUST produce snippet", core/src/audit/types.ts). These fixtures
+        // predate that contract and only compiled because this file was never typechecked.
+        snippet: 'const apiKey = "sk-live-abc123";',
+        snippetHash: '4ac0433fdbdfed730501371e316d25c95097711e327967272990f695b8c0f8dc',
         severity: 'critical',
         category: 'hardcoded-secret',
         file: 'src/config/database.ts',
@@ -174,11 +187,20 @@ describe('AuditCommand', () => {
   };
 
   const mockResultWithFindings: AuditOrchestrationResult = {
+    // Required since the redactor became a mandatory orchestrator dependency — both return
+    // paths of `run()` include it (audit_orchestrator.ts:345/456). This fixture omitted it and
+    // only compiled because the file was excluded from every typecheck.
+    l1AgentResults: [],
     findings: [
       {
         fingerprint: 'sha256:abc123def456',
         ruleId: 'SEC-001',
         message: 'API key hardcoded',
+        // Real digest of the snippet — `snippet`/`snippetHash` are REQUIRED on Finding
+        // ("every detector MUST produce snippet", core/src/audit/types.ts). These fixtures
+        // predate that contract and only compiled because this file was never typechecked.
+        snippet: 'const apiKey = "sk-live-abc123";',
+        snippetHash: '4ac0433fdbdfed730501371e316d25c95097711e327967272990f695b8c0f8dc',
         severity: 'critical',
         category: 'hardcoded-secret',
         file: 'src/config/database.ts',
@@ -194,6 +216,8 @@ describe('AuditCommand', () => {
         fingerprint: 'sha256:def456ghi789',
         ruleId: 'PII-002',
         message: 'Email pattern detected',
+        snippet: 'const email = "user@example.com";',
+        snippetHash: '8c705a96737ed163312bb0b5109bdc5335749e06f9a315b34fde3076b30847c7',
         severity: 'high',
         category: 'pii-email',
         file: 'src/utils/email.ts',
@@ -235,6 +259,7 @@ describe('AuditCommand', () => {
   const mockEmptyResult: AuditOrchestrationResult = {
     findings: [],
     agentResults: [],
+    l1AgentResults: [],
     policyDecision: mockPolicyDecisionPass,
     summary: {
       total: 0,
@@ -447,10 +472,12 @@ describe('AuditCommand', () => {
       const program = new Command();
       auditCommand.register(program);
 
-      const auditCmd = program.commands.find((c: { name: () => string }) => c.name() === 'audit');
-      expect(auditCmd).toBeDefined();
+      // Throw, not just expect: `expect(...).toBeDefined()` does not narrow the type, and a
+      // missing command should fail loudly here rather than as a property read on undefined.
+      const auditCmd = program.commands.find((c) => c.name() === 'audit');
+      if (!auditCmd) throw new Error('audit command was not registered on the program');
 
-      const optionNames = auditCmd.options.map((o: { long: string }) => o.long);
+      const optionNames = auditCmd.options.map((o) => o.long);
       expect(optionNames).not.toContain('--detector');
       expect(optionNames).not.toContain('--target');
       expect(optionNames).not.toContain('--max-findings');
@@ -465,7 +492,9 @@ describe('AuditCommand', () => {
       const diInstance = mockDI.getInstance();
       const backlogAdapter = await diInstance.getBacklogAdapter();
       expect(backlogAdapter.createTask).toHaveBeenCalledTimes(1);
-      const createTaskArgs = (backlogAdapter.createTask as Mock).mock.calls[0];
+      // Non-null: `toHaveBeenCalledTimes(1)` above (or the execute in this test) guarantees
+      // the call exists; under noUncheckedIndexedAccess the index alone cannot prove it.
+      const createTaskArgs = (backlogAdapter.createTask as Mock).mock.calls[0]!;
       expect(createTaskArgs[0]).toMatchObject({
         title: expect.stringContaining('Audit:'),
         status: 'active',
@@ -483,7 +512,9 @@ describe('AuditCommand', () => {
 
       const diInstance = mockDI.getInstance();
       const backlogAdapter = await diInstance.getBacklogAdapter();
-      const createTaskArgs = (backlogAdapter.createTask as Mock).mock.calls[0];
+      // Non-null: `toHaveBeenCalledTimes(1)` above (or the execute in this test) guarantees
+      // the call exists; under noUncheckedIndexedAccess the index alone cannot prove it.
+      const createTaskArgs = (backlogAdapter.createTask as Mock).mock.calls[0]!;
       expect(createTaskArgs[0].references).toEqual(
         expect.arrayContaining([
           expect.stringMatching(/^branch:/),
@@ -797,8 +828,13 @@ describe('AuditCommand', () => {
       );
     });
 
-    it('[AORCH-P3] should skip L1 persistence when l1AgentResults is undefined', async () => {
-      mockOrchestrator.run.mockResolvedValueOnce(mockResultWithFindings);
+    it('[AORCH-P3] should write no L1 ExecutionRecords when l1AgentResults is empty', async () => {
+      // This test was named "when l1AgentResults is undefined" and relied on the fixture
+      // silently omitting the field — a state the current orchestrator cannot produce: the
+      // redactor is a required dependency and both return paths of `run()` include
+      // `l1AgentResults` (audit_orchestrator.ts:345/456). Absence is unrepresentable in the
+      // type, so what AORCH-P3 now guards is the empty case: no L1 results → no records.
+      mockOrchestrator.run.mockResolvedValueOnce({ ...mockResultWithFindings, l1AgentResults: [] });
 
       const mockExecCreate = vi.fn();
       mockDIInstance.getExecutionAdapter = vi.fn().mockResolvedValue({ create: mockExecCreate });
@@ -910,7 +946,7 @@ describe('AuditCommand', () => {
       // has node_modules/@gitgov/agent-security-audit (real package).
       // We verify the output behavior: if unregistered agents exist, they're listed.
       // Since security-audit IS in agentResults, it won't be listed as unregistered.
-      const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation();
+      const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation(() => { });
 
       await auditCommand.execute(createDefaultOptions());
 
