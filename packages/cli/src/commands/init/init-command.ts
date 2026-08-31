@@ -395,7 +395,10 @@ export class InitCommand {
    * [EARS-C2] Handles --json output for automation
    * [EARS-B4] Shows result with actorId and commitSha
    */
-  private showSuccessOutput(result: import('@gitgov/core').ProjectModuleInitResult, options: InitCommandOptions): void {
+  // Takes the fresh-init variant, not the union: `productAgentId` and `cycleId` exist only
+  // there. The call site already reaches this in the `else` of `if (result.alreadyInitialized)`,
+  // so the narrowing was real and only the signature was lying about it.
+  private showSuccessOutput(result: import('@gitgov/core').ProjectModuleInitialized, options: InitCommandOptions): void {
     if (options.json) {
       console.log(JSON.stringify({
         success: true,

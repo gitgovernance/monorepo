@@ -373,12 +373,11 @@ describe('InitCommand', () => {
     });
 
     it('[INIT-J1] should call addActor when alreadyInitialized and actor missing', async () => {
-      // Complete ProjectInitResult — the `as any` hid that the fixture omitted the
-      // required actorId/productAgentId/cycleId trio.
+      // Mirrors what PROJ-A2 actually returns. The fixture used to also carry
+      // `productAgentId` and `cycleId`: a shape production never produces, added back when
+      // the flat type still declared them required. The discriminated union rejects it now.
       mockProjectModule.initializeProject.mockResolvedValue({
         actorId: 'human:test-user',
-        productAgentId: 'agent:product',
-        cycleId: '1757789000-cycle-root',
         alreadyInitialized: true,
         created: true,
       });
@@ -391,8 +390,6 @@ describe('InitCommand', () => {
     it('[INIT-J2] should report already a member when actor exists', async () => {
       mockProjectModule.initializeProject.mockResolvedValue({
         actorId: 'human:test-user',
-        productAgentId: 'agent:product',
-        cycleId: '1757789000-cycle-root',
         alreadyInitialized: true,
         created: false,
       });
@@ -405,8 +402,6 @@ describe('InitCommand', () => {
     it('[INIT-J2b] should not run postInitConcerns when already a member', async () => {
       mockProjectModule.initializeProject.mockResolvedValue({
         actorId: 'human:test-user',
-        productAgentId: 'agent:product',
-        cycleId: '1757789000-cycle-root',
         alreadyInitialized: true,
         created: false,
       });
@@ -680,8 +675,6 @@ describe('InitCommand', () => {
 
       mockProjectModule.initializeProject.mockResolvedValue({
         actorId: 'human:cloud-project',
-        productAgentId: 'agent:product',
-        cycleId: '1757789000-cycle-root',
         alreadyInitialized: true,
         created: true,
       });

@@ -10,7 +10,7 @@
  */
 
 import { ProjectModule } from './project_module';
-import type { ProjectModuleDeps } from './project_module.types';
+import type { ProjectModuleDeps, ProjectInitResult, ProjectInitialized } from './project_module.types';
 // Node-only implementation of IEngineValidator. A test file may import from the fs
 // subpath even though ProjectModule itself must not: EARS-CI02 measures dist/src/index.js,
 // and tests never reach the bundle.
@@ -21,6 +21,21 @@ import { IdentityModule } from '../identity/identity_module';
 import { MemoryRecordStore } from '../record_store/memory/memory_record_store';
 import { MockKeyProvider } from '../key_provider/memory/mock_key_provider';
 import type { GitGovActorRecord } from '../record_types';
+
+/**
+ * Narrows a `ProjectInitResult` to the fresh-init variant, and fails loudly when the run
+ * took the idempotent path instead.
+ *
+ * The narrowing is the point: `productAgentId`, `cycleId` and `agentWarnings` exist only on
+ * `ProjectInitialized`, so reading them off the union would be reading fields the re-init
+ * path never produces. It doubles as an anti-vacuity control — a test that silently landed
+ * on `alreadyInitialized` used to read `undefined` and assert against it.
+ */
+function assertFreshInit(result: ProjectInitResult): asserts result is ProjectInitialized {
+  if (result.alreadyInitialized) {
+    throw new Error(`expected a fresh init, got alreadyInitialized: ${JSON.stringify(result)}`);
+  }
+}
 
 const mockCycle = {
   id: '1234567890-cycle-root',
@@ -84,6 +99,7 @@ describe('ProjectModule', () => {
       expect(initializer.writeConfig).toHaveBeenCalled();
       expect(initializer.setupGitIntegration).toHaveBeenCalled();
       expect(initializer.finalize).toHaveBeenCalled();
+      assertFreshInit(result);
       expect(result.actorId).toBe('human:camilo');
       expect(result.productAgentId).toBe('agent:gitgov-audit');
       expect(result.cycleId).toBe('1234567890-cycle-root');
@@ -107,6 +123,24 @@ describe('ProjectModule', () => {
       expect(initializer.getHeadSha).toHaveBeenCalled();
       expect(initializer.createProjectStructure).not.toHaveBeenCalled();
       expect(initializer.finalize).not.toHaveBeenCalled();
+    });
+
+    it('[PROJ-A2] should not carry productAgentId or cycleId when already initialized', async () => {
+      // [PROJ-A2] This path creates neither, so the result must not claim them. Runtime
+      // already behaved this way; what was missing is the contract saying so — the flat type
+      // declared both as required and two `as ProjectInitResult` casts kept the compiler quiet.
+      const { deps, initializer } = createRealDeps();
+      (initializer.isInitialized as jest.Mock).mockResolvedValue(true);
+      (initializer.getHeadSha as jest.Mock).mockResolvedValue('sha-from-gitgov-state');
+      const pm = new ProjectModule(deps);
+
+      const result = await pm.initializeProject({ name: 'test-project', login: 'dev', stateBranch: DEFAULT_STATE_BRANCH });
+
+      // Anti-vacuity: assert the path was actually taken. Without this, a fresh init would
+      // also satisfy the two `not.toHaveProperty` below by never reaching this branch.
+      expect(result.alreadyInitialized).toBe(true);
+      expect(result).not.toHaveProperty('productAgentId');
+      expect(result).not.toHaveProperty('cycleId');
     });
 
     it('[PROJ-A3] should use human as default actor type', async () => {
@@ -144,6 +178,7 @@ describe('ProjectModule', () => {
 
       const result = await pm.initializeProject({ name: 'test-project', login: 'camilo', stateBranch: DEFAULT_STATE_BRANCH });
 
+      assertFreshInit(result);
       expect(result.productAgentId).toBe('agent:gitgov-audit');
       const stored = await actorStore.get('agent:gitgov-audit');
       expect(stored).not.toBeNull();
@@ -519,6 +554,7 @@ describe('ProjectModule', () => {
       // Non-fatal: the agent IS registered (valid declaration)...
       expect(mockAgentAdapter.buildSignedAgentRecord).toHaveBeenCalledTimes(1);
       // ...but the caller is warned that it won't run (EARS-M1 validation)
+      assertFreshInit(result);
       expect(result.agentWarnings).toBeDefined();
       expect(result.agentWarnings).toHaveLength(1);
       expect(result.agentWarnings![0]).toContain('agent:phantom');
@@ -605,6 +641,7 @@ describe('ProjectModule', () => {
       // The agent is still registered — validation was never the gate.
       expect(mockAgentAdapter.buildSignedAgentRecord).toHaveBeenCalledTimes(1);
       // But nobody was warned, because nobody was there to check.
+      assertFreshInit(result);
       expect(result.agentWarnings ?? []).toHaveLength(0);
     });
   });

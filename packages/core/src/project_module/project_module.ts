@@ -1,4 +1,4 @@
-import type { ProjectModuleDeps, ProjectInitOptions, ProjectInitResult, AddActorInput, AddActorResult } from './project_module.types';
+import type { ProjectModuleDeps, ProjectInitOptions, ProjectInitResult, ProjectAlreadyInitialized, AddActorInput, AddActorResult } from './project_module.types';
 import { AddActorError } from './project_module.types';
 // [PROJ-B6] Creation-time engine validation (agent_runner ARUN-M1)
 // NOTE: `validateAgentEngine` is NOT imported here on purpose. It reaches
@@ -49,9 +49,18 @@ export class ProjectModule {
         };
         if (options.actorName) ensureInput.displayName = options.actorName;
         const actorResult = await this.addActor(ensureInput);
-        return { alreadyInitialized: true, actorId: actorResult.actorId, created: actorResult.created, commitSha: actorResult.commitSha ?? commitSha } as ProjectInitResult;
+        // Assigned conditionally rather than spread in: under exactOptionalPropertyTypes an
+        // explicit `undefined` is not the same as an absent key, and `commitSha` is genuinely
+        // absent when neither the actor commit nor the head read produced one. Same shape as
+        // the fresh-init return below.
+        const joined: ProjectAlreadyInitialized = { alreadyInitialized: true, actorId: actorResult.actorId, created: actorResult.created };
+        const sha = actorResult.commitSha ?? commitSha;
+        if (sha) joined.commitSha = sha;
+        return joined;
       }
-      return { alreadyInitialized: true, commitSha } as ProjectInitResult;
+      const idempotent: ProjectAlreadyInitialized = { alreadyInitialized: true };
+      if (commitSha) idempotent.commitSha = commitSha;
+      return idempotent;
     }
 
     try {

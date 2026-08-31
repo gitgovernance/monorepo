@@ -57,17 +57,44 @@ export type ProjectInitOptions = {
   joinedVia?: AddActorInput['joinedVia'];
 };
 
-export type ProjectInitResult = {
+/**
+ * [PROJ-A1] A fresh init: the project was created now, so all three identifiers exist.
+ * This is the only variant that carries them.
+ */
+export type ProjectInitialized = {
+  alreadyInitialized?: false;
   actorId: string;
   productAgentId: string;
   cycleId: string;
   commitSha?: string;
-  alreadyInitialized?: boolean;
-  created?: boolean;
   // [PROJ-B6] Agents registered but not runnable (engine unresolvable, ARUN-M1).
   // Non-fatal — the CLI surfaces these so the user learns at creation time.
   agentWarnings?: string[];
 };
+
+/**
+ * [PROJ-A2] An idempotent re-init: the project was already there. Only the caller's actor
+ * was resolved, and only when a `login` was supplied — hence `actorId` optional here and
+ * required in the other variant. Neither `productAgentId` nor `cycleId` appears, because
+ * this path creates neither.
+ */
+export type ProjectAlreadyInitialized = {
+  alreadyInitialized: true;
+  actorId?: string;
+  created?: boolean;
+  commitSha?: string;
+};
+
+/**
+ * Discriminated on `alreadyInitialized`, so a consumer must narrow before reading the
+ * identifiers only a fresh init produces.
+ *
+ * It used to be one flat record declaring all three as required, which contradicted
+ * `PROJ-A2` — its own spec text and pseudocode always described the two shapes. Two
+ * `as ProjectInitResult` casts in `initializeProject` kept the compiler quiet, and the
+ * type then let any consumer read `cycleId` off a re-init, where it is `undefined`.
+ */
+export type ProjectInitResult = ProjectInitialized | ProjectAlreadyInitialized;
 
 // --- addActor primitive (PROJ-H1..H6) ---
 

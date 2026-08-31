@@ -86,7 +86,7 @@ export type { EnvironmentValidation } from "./project_initializer/index";
 
 // ProjectModule (Cycle 4 — unified init orchestrator)
 export { ProjectModule, DEFAULT_AGENTS } from "./project_module/index";
-export type { ProjectModuleDeps, DefaultAgentConfig, ProjectInitOptions as ProjectModuleInitOptions, ProjectInitResult as ProjectModuleInitResult } from "./project_module/index";
+export type { ProjectModuleDeps, DefaultAgentConfig, ProjectInitOptions as ProjectModuleInitOptions, ProjectInitResult as ProjectModuleInitResult, ProjectInitialized as ProjectModuleInitialized, ProjectAlreadyInitialized as ProjectModuleAlreadyInitialized } from "./project_module/index";
 
 // Store type exports
 export type { RecordStore, IdEncoder } from "./record_store/index";
