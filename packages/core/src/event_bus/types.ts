@@ -127,6 +127,24 @@ export type ActorCreatedEvent = BaseEvent & {
   };
 };
 
+/**
+ * [PROJ-H4] An actor was added to a repo via `ProjectModule.addActor()`.
+ *
+ * Distinct from `identity.actor.created`: that one fires when the ActorRecord itself is
+ * minted, this one when a repo gains an actor — which may be an actor that already
+ * existed. `wasCreated` is the discriminator, and it is why the event exists.
+ */
+export type ActorJoinedEvent = BaseEvent & {
+  type: 'project.actor.joined';
+  payload: {
+    actorId: string;
+    repoId: string;
+    joinedVia: string;
+    /** false when the actor was already in the store and only joined this repo. */
+    wasCreated: boolean;
+  };
+};
+
 export type ActorRevokedEvent = BaseEvent & {
   type: 'identity.actor.revoked';
   payload: Pick<ActorRecord, 'supersededBy'> & {
@@ -165,6 +183,7 @@ export type GitGovEvent =
   | ExecutionCreatedEvent
   | FeedbackCreatedEvent
   | ActorCreatedEvent
+  | ActorJoinedEvent
   | ActorRevokedEvent
   | AgentRegisteredEvent
   | SystemDailyTickEvent;

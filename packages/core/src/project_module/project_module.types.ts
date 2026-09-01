@@ -4,6 +4,7 @@ import type { IBacklogAdapter } from '../adapters/backlog_adapter/backlog_adapte
 import type { AgentPayload, AgentRecord, GitGovAgentRecord } from '../record_types';
 // Interface only — the Node-only implementation lives behind @gitgov/core/fs.
 import type { IEngineValidator } from '../agent_runner/agent_runner';
+import type { IEventStream } from '../event_bus/event_bus';
 
 // [PROJ-F1] Trigger type derived from AgentRecord — single source of truth
 export type DefaultAgentConfig = {
@@ -30,7 +31,14 @@ export type ProjectModuleDeps = {
   backlog: Pick<IBacklogAdapter, 'createCycle'>;
   agentAdapter?: IProjectAgentOps;
   defaultAgents?: DefaultAgentConfig[];
-  eventBus?: { emit?: (event: string, payload: Record<string, unknown>) => void };
+  /**
+   * [PROJ-H4] Optional because not every host runs a bus — but when one is supplied it
+   * must be a real `IEventStream`. The previous shape, `{ emit?: (...) => void }`, matched
+   * no implementation in the codebase: `IEventStream` exposes `publish`, and `emit` lives
+   * only on the private EventEmitter inside `EventBus`. Passing the real bus left `emit`
+   * undefined and the double optional-chain swallowed every emission in silence.
+   */
+  eventBus?: IEventStream;
   /**
    * [PROJ-B6] Verifies that each default agent's engine is actually executable.
    *

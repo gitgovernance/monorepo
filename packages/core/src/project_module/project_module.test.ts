@@ -13,6 +13,8 @@
 
 import { ProjectModule } from './project_module';
 import type { ProjectModuleDeps, ProjectInitResult, ProjectInitialized } from './project_module.types';
+import { EventBus } from '../event_bus/event_bus';
+import type { ActorJoinedEvent } from '../event_bus/types';
 // Node-only implementation of IEngineValidator. A test file may import from the fs
 // subpath even though ProjectModule itself must not: EARS-CI02 measures dist/src/index.js,
 // and tests never reach the bundle.
@@ -914,22 +916,53 @@ describe('ProjectModule', () => {
       })).rejects.toMatchObject({ code: 'GIT_WRITE_FAILED' });
     });
 
-    it('[PROJ-H4] should emit ACTOR_JOINED event with wasCreated field', async () => {
-      const emitSpy = jest.fn();
+    // Uses the REAL EventBus and a real subscriber, not a hand-shaped stub. The previous
+    // version asserted against `{ emit: jest.fn() }` — a shape no implementation in the
+    // codebase has — so it stayed green while production emitted nothing at all.
+    it('[PROJ-H4] should publish project.actor.joined with wasCreated true when the actor is minted', async () => {
+      const received: ActorJoinedEvent[] = [];
+      const bus = new EventBus();
+      bus.subscribe<ActorJoinedEvent>('project.actor.joined', (e) => { received.push(e); });
+
       const { deps, initializer } = createRealDeps();
       initializer.finalize = jest.fn().mockResolvedValue('sha-event');
-      deps.eventBus = { emit: emitSpy };
+      deps.eventBus = bus;
       const pm = new ProjectModule(deps);
 
       await pm.addActor({
         login: 'event-user', type: 'human', repoId: 'repo-42', joinedVia: 'mcp',
       });
 
-      expect(emitSpy).toHaveBeenCalledWith('ACTOR_JOINED', expect.objectContaining({
+      expect(received).toHaveLength(1);
+      expect(received[0]!.source).toBe('project_module');
+      expect(received[0]!.payload).toEqual({
         actorId: 'human:event-user',
         repoId: 'repo-42',
         joinedVia: 'mcp',
         wasCreated: true,
+      });
+    });
+
+    // The `wasCreated: false` branch is the reason the field exists, and nothing covered it.
+    it('[PROJ-H4] should publish project.actor.joined with wasCreated false when the actor already exists', async () => {
+      const received: ActorJoinedEvent[] = [];
+      const bus = new EventBus();
+      bus.subscribe<ActorJoinedEvent>('project.actor.joined', (e) => { received.push(e); });
+
+      const { deps, initializer } = createRealDeps();
+      initializer.finalize = jest.fn().mockResolvedValue('sha-event');
+      deps.eventBus = bus;
+      const pm = new ProjectModule(deps);
+
+      await pm.addActor({ login: 'twice', type: 'human', repoId: 'repo-42', joinedVia: 'mcp' });
+      received.length = 0; // drop the creation event; this test is about the second join
+
+      await pm.addActor({ login: 'twice', type: 'human', repoId: 'repo-42', joinedVia: 'mcp' });
+
+      expect(received).toHaveLength(1);
+      expect(received[0]!.payload).toEqual(expect.objectContaining({
+        actorId: 'human:twice',
+        wasCreated: false,
       }));
     });
 
