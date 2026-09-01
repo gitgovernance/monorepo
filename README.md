@@ -27,7 +27,6 @@ cd your-project
 git init
 gitgov init --name "My Project"
 gitgov status
-gitgov dashboard
 ```
 
 ## Converse with Your Project
