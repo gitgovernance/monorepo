@@ -1,7 +1,9 @@
 /**
  * ProjectModule Tests
  *
- * All EARS prefixes map to project_module.md
+ * PROJ-* prefixes map to project_module.md.
+ * GAUD-E1..E3 map to gitgov_audit.md §4.5 — the requirement is the agent's, the code it
+ * covers is this module's. Declared in project_module.md §4 so the marker is not an orphan.
  *
  * Uses real instances with mock I/O:
  * - IdentityModule: real instance with MemoryRecordStore + MockKeyProvider
@@ -476,7 +478,7 @@ describe('ProjectModule', () => {
   });
 
   // 4.6. Default Agent Registration (PROJ-B4 to B5)
-  describe('4.6. Default Agent Registration (PROJ-B4 to B5)', () => {
+  describe('4.6. Default Agent Registration (PROJ-B4 to B7)', () => {
     it('[PROJ-B4] should build+sign each defaultAgent and persist via initializer.addAgent', async () => {
       const { deps } = createRealDeps();
       const mockAgentAdapter = createMockAgentAdapter();
@@ -704,7 +706,9 @@ describe('ProjectModule', () => {
   });
 
   // 4.8. Agent Config Update (GAUD-E1 to E3)
-  describe('4.8. Agent Config Update (GAUD-E1 to E3)', () => {
+  // Section number belongs to gitgov_audit.md, not project_module.md: these EARS are the
+  // agent's, and §4.8 of this module's spec is Branch Check Caching (PROJ-G1).
+  describe('gitgov_audit.md 4.5. Agent Config Update (GAUD-E1 to E3)', () => {
     const singleAgent = [{
       packageName: '@gitgov/core',
       agentId: 'agent:gitgov-audit',
@@ -799,7 +803,7 @@ describe('ProjectModule', () => {
     });
   });
 
-  describe('4.9. addActor (PROJ-H1 to H6)', () => {
+  describe('4.9. addActor (PROJ-H1 to H6, incl. H3b)', () => {
     it('[PROJ-H1] should create actor and commit when actor not in store', async () => {
       const { deps, initializer } = createRealDeps();
       initializer.finalize = jest.fn().mockResolvedValue('sha-join-commit');
@@ -855,7 +859,7 @@ describe('ProjectModule', () => {
       expect(result.commitSha).toBe('sha-retry-commit');
     });
 
-    it('[PROJ-H3] should succeed when store already committed and finalize has nothing to commit', async () => {
+    it('[PROJ-H3b] should succeed when store already committed and finalize has nothing to commit', async () => {
       const { deps, initializer } = createRealDeps();
       initializer.finalize = jest.fn()
         .mockRejectedValue(new Error('Nothing to commit: staging buffer is empty'));
@@ -896,7 +900,7 @@ describe('ProjectModule', () => {
       expect(getActorCalls).toBeGreaterThan(1);
     });
 
-    it('[PROJ-H3] should throw GIT_WRITE_FAILED when finalize fails and actor not in store', async () => {
+    it('[PROJ-H3b] should throw GIT_WRITE_FAILED when finalize fails and actor not in store', async () => {
       const { deps, initializer } = createRealDeps();
       // finalize fails with "Nothing to commit" BUT getActor returns null (store didn't write either)
       initializer.finalize = jest.fn()

@@ -82,6 +82,8 @@ export class ProjectModule {
       });
 
       // [PROJ-B2] Product agent (G21 Two-Tier Actor Model) — via addActor
+      // [GAUD-A1] [GAUD-A2] Both entry points land here: what differs between CLI init and
+      // SaaS remote init is the injected IProjectInitializer, not this step.
       let productAgentResult: AddActorResult;
       try {
         productAgentResult = await this.addActor({
