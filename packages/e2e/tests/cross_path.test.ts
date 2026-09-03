@@ -38,6 +38,7 @@ import {
   RecordProjector,
   RecordMetrics,
   createGitHubProjectorStores,
+  E2E_SOURCE_COMMIT_LABEL,
 } from './helpers';
 import type {
   ProtocolClient,
@@ -126,7 +127,7 @@ describe('Block D: Cross-Path Workflows (CD1-CD5)', () => {
     const recordMetrics = new RecordMetrics({ stores });
     const projector = new RecordProjector({ recordMetrics, stores });
 
-    const indexData = await projector.computeProjection();
+    const indexData = await projector.computeProjection({ lastCommitHash: E2E_SOURCE_COMMIT_LABEL });
     indexData.activityHistory = indexData.activityHistory.filter(
       (ev) => typeof ev.timestamp === 'number' && !isNaN(ev.timestamp) && ev.timestamp > 0,
     );
@@ -135,7 +136,7 @@ describe('Block D: Cross-Path Workflows (CD1-CD5)', () => {
     const sink = new PrismaRecordProjection({
       client: prisma as unknown as ProjectionClient,
     });
-    await sink.persist(indexData, {});
+    await sink.persist(indexData, { lastCommitHash: E2E_SOURCE_COMMIT_LABEL });
 
     // 4. Verify DB
     const dbTasks = await prisma.gitgovTask.findMany({});
@@ -212,7 +213,7 @@ describe('Block D: Cross-Path Workflows (CD1-CD5)', () => {
       const recordMetrics = new RecordMetrics({ stores });
       const projector = new RecordProjector({ recordMetrics, stores });
 
-      const indexData = await projector.computeProjection();
+      const indexData = await projector.computeProjection({ lastCommitHash: E2E_SOURCE_COMMIT_LABEL });
       indexData.activityHistory = indexData.activityHistory.filter(
         (ev) => typeof ev.timestamp === 'number' && !isNaN(ev.timestamp) && ev.timestamp > 0,
       );
@@ -222,7 +223,7 @@ describe('Block D: Cross-Path Workflows (CD1-CD5)', () => {
       const sink = new PrismaRecordProjection({
         client: prisma as unknown as ProjectionClient,
       });
-      await sink.persist(indexData, {});
+      await sink.persist(indexData, { lastCommitHash: E2E_SOURCE_COMMIT_LABEL });
 
       // Verify: both CLI-created task AND API-created feedback are in projection
       const dbTasks = await prisma.gitgovTask.findMany({});
@@ -309,7 +310,7 @@ describe('Block D: Cross-Path Workflows (CD1-CD5)', () => {
       const recordMetrics = new RecordMetrics({ stores });
       const projector = new RecordProjector({ recordMetrics, stores });
 
-      const indexData = await projector.computeProjection();
+      const indexData = await projector.computeProjection({ lastCommitHash: E2E_SOURCE_COMMIT_LABEL });
       indexData.activityHistory = indexData.activityHistory.filter(
         (ev) => typeof ev.timestamp === 'number' && !isNaN(ev.timestamp) && ev.timestamp > 0,
       );
@@ -318,7 +319,7 @@ describe('Block D: Cross-Path Workflows (CD1-CD5)', () => {
       const sink = new PrismaRecordProjection({
         client: prisma as unknown as ProjectionClient,
       });
-      await sink.persist(indexData, {});
+      await sink.persist(indexData, { lastCommitHash: E2E_SOURCE_COMMIT_LABEL });
 
       // Verify multiple tasks from different users
       const dbTasks = await prisma.gitgovTask.findMany({});

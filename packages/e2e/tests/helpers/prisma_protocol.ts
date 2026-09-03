@@ -54,6 +54,23 @@ export type ProtocolClient = Pick<PrismaClient,
 const PROTOCOL_DB_URL = process.env['DATABASE_URL_PROTOCOL']
   ?? 'postgresql://gitgov:gitgov@localhost:5432/gitgov_e2e_protocol';
 
+/**
+ * The provenance label every row in this suite is projected under — NOT a commit hash, and not
+ * something anyone maintains. `PP-C3b` writes `PersistContext.lastCommitHash` verbatim into the
+ * `sourceCommitSha` column of every row; in production the CLI supplies the real HEAD sha via
+ * `getHeadSha()`, but these tests fabricate records, so there is no commit to record. A fixed
+ * label is the honest value: `'e2e-test'` cannot be mistaken for a sha, and a real one would make
+ * rows non-deterministic between runs without any assertion gaining from it.
+ *
+ * WHY IT IS SHARED INSTEAD OF INLINE
+ *
+ * The invariant is not "the suites agree with each other" — it is that `computeProjection()` and
+ * `persist()` MUST agree WITHIN a run. They take the value through separate parameters, so a
+ * mismatch is silent: the projection is computed under one provenance and written under another,
+ * and nothing fails. One constant makes that mismatch unrepresentable.
+ */
+export const E2E_SOURCE_COMMIT_LABEL = 'e2e-test';
+
 /** Create PrismaClient connected to the protocol-dedicated DB */
 export function createProtocolPrisma(): ProtocolClient {
   return createTestPrisma(PROTOCOL_DB_URL);
@@ -98,13 +115,13 @@ export async function runProjector(
 
   try {
     const startTime = performance.now();
-    const indexData = await projector.computeProjection();
+    const indexData = await projector.computeProjection({ lastCommitHash: E2E_SOURCE_COMMIT_LABEL });
 
     indexData.activityHistory = indexData.activityHistory.filter(
       (ev) => typeof ev.timestamp === 'number' && !isNaN(ev.timestamp) && ev.timestamp > 0,
     );
     indexData.metadata.generationTime = performance.now() - startTime;
-    await sink.persist(indexData, {});
+    await sink.persist(indexData, { lastCommitHash: E2E_SOURCE_COMMIT_LABEL });
 
     const totalTime = performance.now() - startTime;
     const taskCount = indexData.metadata.recordCounts['tasks'] || 0;
@@ -143,17 +160,17 @@ export async function projectAndCompare(
   const recordMetrics = new RecordMetrics({ stores });
   const projector = new RecordProjector({ recordMetrics, stores });
 
-  const indexData = await projector.computeProjection();
+  const indexData = await projector.computeProjection({ lastCommitHash: E2E_SOURCE_COMMIT_LABEL });
   indexData.activityHistory = indexData.activityHistory.filter(
     (ev) => typeof ev.timestamp === 'number' && !isNaN(ev.timestamp) && ev.timestamp > 0,
   );
   indexData.metadata.generationTime = 1;
 
   const fsSink = new FsRecordProjection({ basePath: getGitgovDir(repoDir) });
-  await fsSink.persist(indexData, {});
+  await fsSink.persist(indexData, { lastCommitHash: E2E_SOURCE_COMMIT_LABEL });
 
   const prismaSink = new PrismaRecordProjection({ client: prisma as unknown as ProjectionClient });
-  await prismaSink.persist(indexData, {});
+  await prismaSink.persist(indexData, { lastCommitHash: E2E_SOURCE_COMMIT_LABEL });
 
   const fsIndexData = await fsSink.read({});
   const prismaIndexData = await prismaSink.read({});

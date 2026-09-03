@@ -31,21 +31,21 @@ import type {
 } from './login-command.types';
 
 const CALLBACK_PORT = 9876;
-const CALLBACK_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes (IKS-A28, LOGIN-H2)
+// Exported so LOGIN-H2 can pin the VALUE while the timeout MECHANISM is tested with a
+// short injected timeout — driving five real minutes (or a fake-timer replica of the
+// whole login flow) proved flakier than the thing it verified.
+export const CALLBACK_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes (IKS-A28, LOGIN-H2)
 
 /**
- * Default deps use real implementations (overridable for tests).
+ * [LOGIN-H2] The default OAuth callback server, extracted so the timeout path is testable
+ * in isolation: every test overrides `startCallbackServer` with a mock, so nothing ever
+ * exercised the real timer until this function existed.
  */
-function createDefaultDeps(): LoginDeps {
-  return {
-    openBrowser: async (url: string) => {
-      const { exec } = await import('child_process');
-      const platform = process.platform;
-      const cmd = platform === 'darwin' ? 'open' : platform === 'win32' ? 'start' : 'xdg-open';
-      exec(`${cmd} "${url}"`);
-    },
-    startCallbackServer: (port: number) => {
-      return new Promise((resolve, reject) => {
+export function createCallbackServer(
+  port: number,
+  timeoutMs: number = CALLBACK_TIMEOUT_MS,
+): ReturnType<LoginDeps['startCallbackServer']> {
+  return new Promise((resolve, reject) => {
         import('http').then(({ createServer }) => {
           let timeoutHandle: ReturnType<typeof setTimeout>;
           const server = createServer((req, res) => {
@@ -68,14 +68,27 @@ function createDefaultDeps(): LoginDeps {
           });
           server.listen(port, () => {});
           server.on('error', reject);
-          // [LOGIN-H2] Timeout after 5 minutes
+          // [LOGIN-H2] Timeout after 5 minutes (injectable for the unit test)
           timeoutHandle = setTimeout(() => {
             server.close();
             reject(new Error('Login timeout — no callback received within 5 minutes'));
-          }, CALLBACK_TIMEOUT_MS);
+          }, timeoutMs);
         });
-      });
+  });
+}
+
+/**
+ * Default deps use real implementations (overridable for tests).
+ */
+function createDefaultDeps(): LoginDeps {
+  return {
+    openBrowser: async (url: string) => {
+      const { exec } = await import('child_process');
+      const platform = process.platform;
+      const cmd = platform === 'darwin' ? 'open' : platform === 'win32' ? 'start' : 'xdg-open';
+      exec(`${cmd} "${url}"`);
     },
+    startCallbackServer: (port: number) => createCallbackServer(port),
     fetchSaas: async (url: string, init?: RequestInit) => {
       return fetch(url, init);
     },

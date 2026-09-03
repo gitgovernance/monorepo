@@ -23,7 +23,9 @@ vi.mock('../../services/dependency-injection', () => ({
   }
 }));
 
+import type { Mock } from 'vitest';
 import { FeedbackCommand } from './feedback_command';
+import type { FeedbackCreateOptions } from './feedback_command.types';
 import { DependencyInjectionService } from '../../services/dependency-injection';
 
 const mockFeedback = {
@@ -36,9 +38,11 @@ const mockFeedback = {
 };
 
 // Mock console and process.exit at module level (task-command pattern)
-const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation();
-const mockConsoleError = vi.spyOn(console, 'error').mockImplementation();
-const mockProcessExit = vi.spyOn(process, 'exit').mockImplementation();
+const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation(() => { });
+const mockConsoleError = vi.spyOn(console, 'error').mockImplementation(() => { });
+// `process.exit` is typed `(code?) => never`; the stub returns, so the cast states that gap
+// explicitly rather than throwing and changing control flow the tests do not expect.
+const mockProcessExit = vi.spyOn(process, 'exit').mockImplementation((() => { }) as unknown as never);
 
 describe('FeedbackCommand', () => {
   let feedbackCommand: FeedbackCommand;
@@ -76,8 +80,8 @@ describe('FeedbackCommand', () => {
     };
 
     // Set up mock BEFORE constructing command (critical — BaseCommand reads DI in constructor)
-    (DependencyInjectionService.getInstance as Mock<typeof DependencyInjectionService.getInstance>)
-      .mockReturnValue(mockDependencyService as never);
+    (DependencyInjectionService.getInstance as Mock)
+      .mockReturnValue(mockDependencyService);
 
     feedbackCommand = new FeedbackCommand();
   });
@@ -92,9 +96,12 @@ describe('FeedbackCommand', () => {
 
     it('[ICOMP-F1] should abort when required fields are missing', async () => {
       // Missing entityType, type, and content
+      // Deliberately invalid: a JS caller can omit required fields, and this EARS verifies
+      // the runtime boundary rejects that. The widening `as` states the intent; `as any`
+      // (prohibited) hid it.
       await feedbackCommand.executeCreate({
         entityId: 'task-1',
-      } as any);
+      } as FeedbackCreateOptions);
 
       expect(mockProcessExit).toHaveBeenCalledWith(1);
       expect(mockConsoleError).toHaveBeenCalledWith(
@@ -108,7 +115,7 @@ describe('FeedbackCommand', () => {
         entityId: '1752274500-task-auth',
         type: 'suggestion',
         content: 'Consider refactoring the auth module',
-      } as any);
+      });
 
       expect(mockFeedbackAdapter.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -132,7 +139,7 @@ describe('FeedbackCommand', () => {
         type: 'suggestion',
         content: 'Consider refactoring',
         json: true,
-      } as any);
+      });
 
       const output = JSON.parse(mockConsoleLog.mock.calls[0]![0]);
       expect(output.success).toBe(true);

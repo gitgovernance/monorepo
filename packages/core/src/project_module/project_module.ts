@@ -1,5 +1,6 @@
-import type { ProjectModuleDeps, ProjectInitOptions, ProjectInitResult, AddActorInput, AddActorResult } from './project_module.types';
+import type { ProjectModuleDeps, ProjectInitOptions, ProjectInitResult, ProjectAlreadyInitialized, AddActorInput, AddActorResult } from './project_module.types';
 import { AddActorError } from './project_module.types';
+import type { ActorJoinedEvent } from '../event_bus/types';
 // [PROJ-B6] Creation-time engine validation (agent_runner ARUN-M1)
 // NOTE: `validateAgentEngine` is NOT imported here on purpose. It reaches
 // `backends/local_backend.ts`, which imports `node:path` and `node:module`, so importing
@@ -49,9 +50,18 @@ export class ProjectModule {
         };
         if (options.actorName) ensureInput.displayName = options.actorName;
         const actorResult = await this.addActor(ensureInput);
-        return { alreadyInitialized: true, actorId: actorResult.actorId, created: actorResult.created, commitSha: actorResult.commitSha ?? commitSha } as ProjectInitResult;
+        // Assigned conditionally rather than spread in: under exactOptionalPropertyTypes an
+        // explicit `undefined` is not the same as an absent key, and `commitSha` is genuinely
+        // absent when neither the actor commit nor the head read produced one. Same shape as
+        // the fresh-init return below.
+        const joined: ProjectAlreadyInitialized = { alreadyInitialized: true, actorId: actorResult.actorId, created: actorResult.created };
+        const sha = actorResult.commitSha ?? commitSha;
+        if (sha) joined.commitSha = sha;
+        return joined;
       }
-      return { alreadyInitialized: true, commitSha } as ProjectInitResult;
+      const idempotent: ProjectAlreadyInitialized = { alreadyInitialized: true };
+      if (commitSha) idempotent.commitSha = commitSha;
+      return idempotent;
     }
 
     try {
@@ -73,6 +83,8 @@ export class ProjectModule {
       });
 
       // [PROJ-B2] Product agent (G21 Two-Tier Actor Model) — via addActor
+      // [GAUD-A1] [GAUD-A2] Both entry points land here: what differs between CLI init and
+      // SaaS remote init is the injected IProjectInitializer, not this step.
       let productAgentResult: AddActorResult;
       try {
         productAgentResult = await this.addActor({
@@ -244,12 +256,8 @@ export class ProjectModule {
         }
       }
 
-      // [PROJ-H4] Emit ACTOR_JOINED with wasCreated: false
-      this.deps.eventBus?.emit?.('ACTOR_JOINED', {
-        actorId, repoId: input.repoId, type: input.type,
-        joinedVia: input.joinedVia, wasCreated: false,
-        timestamp: new Date().toISOString(),
-      });
+      // [PROJ-H4] The actor already existed; it joined this repo.
+      this.publishActorJoined(actorId, input, false);
 
       const result: AddActorResult = { actorId, created: false };
       if (commitSha) result.commitSha = commitSha;
@@ -303,16 +311,34 @@ export class ProjectModule {
       }
     }
 
-    // [PROJ-H4] Emit ACTOR_JOINED with wasCreated: true
-    this.deps.eventBus?.emit?.('ACTOR_JOINED', {
-      actorId, repoId: input.repoId, type: input.type,
-      joinedVia: input.joinedVia, wasCreated: true,
-      timestamp: new Date().toISOString(),
-    });
+    // [PROJ-H4] The actor was minted here.
+    this.publishActorJoined(actorId, input, true);
 
     const result: AddActorResult = { actorId, created: true };
     if (commitSha) result.commitSha = commitSha;
     return result;
+  }
+
+  /**
+   * [PROJ-H4] Publishes `project.actor.joined` when a bus is configured.
+   *
+   * Both call sites in `addActor` differ only in `wasCreated`, so the event is built once
+   * here. `type` and `timestamp` come from the `BaseEvent` contract, not from the actor.
+   */
+  private publishActorJoined(actorId: string, input: AddActorInput, wasCreated: boolean): void {
+    if (!this.deps.eventBus) return;
+    const event: ActorJoinedEvent = {
+      type: 'project.actor.joined',
+      timestamp: Date.now(),
+      source: 'project_module',
+      payload: {
+        actorId,
+        repoId: input.repoId,
+        joinedVia: input.joinedVia,
+        wasCreated,
+      },
+    };
+    this.deps.eventBus.publish(event);
   }
 
   private generateProjectId(name: string): string {

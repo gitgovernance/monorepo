@@ -50,18 +50,44 @@ const findNewFile = (before: string[], after: string[]): string | undefined => {
 
 // ── Hook command availability guard ───────────────────────────────
 
+/**
+ * Whether the built CLI exposes `gitgov hook`.
+ *
+ * WHY THIS IS NOT A PLAIN try/catch
+ *
+ * The previous version returned `false` from the catch for ANY failure, so a missing binary, a slow
+ * spawn under parallel load or a saturated machine all silently downgraded the eleven EARS-GP tests
+ * to skipped — and a skipped test reports as one that exists. It was observed: one run of the suite
+ * gave 612 passed / 23 skipped where two consecutive runs before and after gave 623 / 12, with no
+ * failure anywhere to say eleven checks had stopped running.
+ *
+ * So the three outcomes are separated. Only "the command genuinely is not there" skips; anything
+ * that means the probe itself could not answer THROWS, because silently disabling coverage is the
+ * failure mode this repo has been paying for (see guardrails_module.md §4.3, EARS-CI06).
+ */
 const HAS_HOOK_COMMAND = (() => {
-  try {
-    const cliPath = path.join(__dirname, '../build/dist/gitgov.mjs');
-    // Commander exits 1 when `hook` is called without a subcommand, even
-    // though the command exists. The help text goes to stderr.
-    execSync(`node "${cliPath}" hook`, { stdio: 'pipe', encoding: 'utf8' });
-    return true;
-  } catch (err: unknown) {
-    const e = err as { stderr?: string | Buffer };
-    const stderr = typeof e.stderr === 'string' ? e.stderr : e.stderr?.toString() ?? '';
-    return stderr.includes('command-executed');
+  const cliPath = path.join(__dirname, '../build/dist/gitgov.mjs');
+
+  // A missing binary is a setup error, not "no hook command". Fail loudly.
+  if (!fs.existsSync(cliPath)) {
+    throw new Error(`CLI binary not found at ${cliPath}. Run \`pnpm build\` in packages/cli first.`);
   }
+
+  // Read the bundle instead of spawning it. Two reasons, both measured:
+  //
+  // Spawning at module load competed with the rest of the suite for CPU, and the cost landed on
+  // vitest's 10s hook budget: this file failed with `Hook timed out in 10000ms` in the full run
+  // while passing 11/11 on its own.
+  //
+  // And before that, the spawn's result was read through a bare catch, so any failure to answer —
+  // slow spawn, missing binary — became "the command is absent" and silently skipped eleven tests.
+  // One run reported 612 passed / 23 skipped where the runs around it gave 623 / 12, with nothing
+  // failing to say coverage had dropped.
+  //
+  // A string search over the built bundle is instant, cannot be starved, and answers the same
+  // question: esbuild inlines the subcommand names as literals.
+  const bundle = fs.readFileSync(cliPath, 'utf-8');
+  return bundle.includes('command-executed') && bundle.includes('file-changed');
 })();
 
 // ── Stdin payloads ────────────────────────────────────────────────

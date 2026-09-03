@@ -92,3 +92,33 @@ export interface IEngineValidator {
   /** Validates `engine` against the root bound at construction. NEVER throws. */
   validate(engine: Engine): Promise<EngineValidationResult>;
 }
+
+/**
+ * [ARUN-N1] A backend that can execute one engine family.
+ *
+ * Published from the module ROOT on purpose: the barrel exports contracts, the concrete
+ * backends (LocalBackend, ApiBackend, McpBackend, CustomBackend) stay in `/fs`. That is
+ * what lets a consumer (AgentScheduler, SaaS RegistryRunner) type its own backends and
+ * resolve `engine.type` via `resolveRunner()` without instantiating `FsAgentRunner` —
+ * the declared purpose ARUN-N existed for, unreachable while nothing backend-shaped
+ * left the root.
+ *
+ * The signature is WIDE (`engine: Engine`, optional `tool`): TS methods are bivariant,
+ * so each concrete backend with its narrow engine type satisfies this without casts,
+ * and McpBackend's third parameter fits without widening anyone else's.
+ */
+export interface IEngineBackend {
+  execute(
+    engine: Engine,
+    ctx: AgentExecutionContext,
+    tool?: string,
+  ): Promise<AgentOutput>;
+}
+
+/** [ARUN-N1] One backend per engine family — the argument `resolveRunner()` selects from. */
+export type EngineBackendMap = {
+  local: IEngineBackend;
+  api: IEngineBackend;
+  mcp: IEngineBackend;
+  custom: IEngineBackend;
+};

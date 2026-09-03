@@ -801,29 +801,38 @@ describe('Init CLI Command - Edge Cases E2E Tests', () => {
       // `console.warn` → stderr, and that helper returns stdout only. No --quiet either —
       // that flag suppresses exactly the warnings this test reads (init-command.ts:121).
       const cliPath = path.join(__dirname, '../build/dist/gitgov.mjs');
+      // NODE_PATH stripped, measured 2026-08-29: vitest injects the monorepo's
+      // .pnpm/node_modules into child processes, so an npm-package entrypoint that is NOT
+      // installed in the fixture still resolves — from the WORKSPACE, an anchor no user
+      // machine has. The old phantom used a path entrypoint, immune to NODE_PATH, which is
+      // why this env leak stayed invisible. An e2e simulating a user repo must establish
+      // its environment, not inherit the runner's.
       const output = execSync(
         `node "${cliPath}" init --name "Engine Anchor Project" --actor-name "Test User" 2>&1`,
-        { cwd: projRoot, encoding: 'utf8', stdio: 'pipe' }
+        { cwd: projRoot, encoding: 'utf8', stdio: 'pipe', env: { ...process.env, NODE_PATH: '' } }
       );
 
       const result = { success: true, output };
       expect(result.success).toBe(true);
 
-      // Anti-vacuity, level 1: PROJ-B6 ran at all. `agent:gitgov-audit` declares
-      // `packages/core/dist/index.mjs`, a path this fixture does not contain, so it is
-      // unresolvable from EITHER anchor — its warning proves the validator executed.
-      expect(result.output).toContain('agent:gitgov-audit');
+      // Anti-vacuity, level 1: PROJ-B6 ran at all. `agent:review-advisor` declares the npm
+      // package `@gitgov/agent-review-advisor`, which this fixture does NOT install, so it
+      // is unresolvable from EITHER anchor — its warning proves the validator executed.
+      // (This role belonged to `agent:gitgov-audit` while its engine declared a phantom
+      // entrypoint; that fiction was removed — the product agent is a signing identity,
+      // never dispatched — so the fixture's uninstalled specialist inherits the part.)
+      expect(result.output).toContain('agent:review-advisor');
       expect(result.output).toContain('not runnable');
 
-      // THE ANCHOR, observed directly. `resolveLocalEntrypoint` has two branches (ARUN-B1):
-      // an npm package goes through `require.resolve`, a PATH through `path.join(root, ...)`.
-      // `gitgov-audit` is a path, so its failure message prints the joined absolute path —
-      // which literally spells out the root that was used. Anchored at the worktree it would
-      // read ~/.gitgov/worktrees/<hash>/packages/core/... instead.
+      // THE ANCHOR, observed directly. The npm branch of `resolveLocalEntrypoint` (ARUN-B1)
+      // resolves via `createRequire` anchored at the root, and Node's failure message
+      // carries that anchor verbatim in its Require stack — so the warning literally spells
+      // out the root that was used. Anchored at the worktree it would spell
+      // ~/.gitgov/worktrees/<hash>/... instead.
       //
       // realpath because macOS resolves /var/folders through /private.
       const realRepo = fs.realpathSync(projRoot);
-      expect(result.output).toContain(path.join(realRepo, 'packages/core/dist/index.mjs'));
+      expect(result.output).toContain(realRepo);
       expect(result.output).not.toContain(getWorktreeBasePath(projRoot));
 
       // And the package branch agrees: the agent installed in the REPO's node_modules

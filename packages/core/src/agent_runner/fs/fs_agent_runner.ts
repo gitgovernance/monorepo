@@ -2,6 +2,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { FsRecordStore, DEFAULT_ID_ENCODER } from "../../record_store/fs/fs_record_store";
 import { generateExecutionId } from "../../utils/id_generator";
+import { resolveRunner } from "../resolve_runner";
 import {
   LocalBackend,
   ApiBackend,
@@ -23,10 +24,6 @@ import type {
   RuntimeHandlerRegistry,
 } from "../agent_runner";
 import type {
-  LocalEngine,
-  ApiEngine,
-  McpEngine,
-  CustomEngine,
   AgentRunnerDependencies,
   AgentExecutionContext,
   AgentOutput,
@@ -136,25 +133,17 @@ export class FsAgentRunner implements IAgentRunner {
     });
 
     try {
-      // Execute via appropriate backend and CAPTURE output
-      switch (engineType) {
-        case "local":
-          output = await this.localBackend.execute(engine as LocalEngine, ctx);
-          break;
-        case "api":
-          output = await this.apiBackend.execute(engine as ApiEngine, ctx);
-          break;
-        case "mcp":
-          output = await this.mcpBackend.execute(
-            engine as McpEngine,
-            ctx,
-            opts.tool // Pass tool override from RunOptions
-          );
-          break;
-        case "custom":
-          output = await this.customBackend.execute(engine as CustomEngine, ctx);
-          break;
-      }
+      // [ARUN-N4] Delegate engine→backend resolution to resolveRunner — one source of
+      // truth instead of an inline switch. The wide IEngineBackend signature makes the
+      // per-case engine casts unnecessary; `opts.tool` rides along and only McpBackend
+      // reads it (the others declare two parameters and ignore the third).
+      const backend = resolveRunner(engine, {
+        local: this.localBackend,
+        api: this.apiBackend,
+        mcp: this.mcpBackend,
+        custom: this.customBackend,
+      });
+      output = await backend.execute(engine, ctx, opts.tool);
     } catch (err) {
       status = "error";
       error = (err as Error).message;

@@ -4,6 +4,7 @@ import type { IBacklogAdapter } from '../adapters/backlog_adapter/backlog_adapte
 import type { AgentPayload, AgentRecord, GitGovAgentRecord } from '../record_types';
 // Interface only — the Node-only implementation lives behind @gitgov/core/fs.
 import type { IEngineValidator } from '../agent_runner/agent_runner';
+import type { IEventStream } from '../event_bus/event_bus';
 
 // [PROJ-F1] Trigger type derived from AgentRecord — single source of truth
 export type DefaultAgentConfig = {
@@ -30,7 +31,14 @@ export type ProjectModuleDeps = {
   backlog: Pick<IBacklogAdapter, 'createCycle'>;
   agentAdapter?: IProjectAgentOps;
   defaultAgents?: DefaultAgentConfig[];
-  eventBus?: { emit?: (event: string, payload: Record<string, unknown>) => void };
+  /**
+   * [PROJ-H4] Optional because not every host runs a bus — but when one is supplied it
+   * must be a real `IEventStream`. The previous shape, `{ emit?: (...) => void }`, matched
+   * no implementation in the codebase: `IEventStream` exposes `publish`, and `emit` lives
+   * only on the private EventEmitter inside `EventBus`. Passing the real bus left `emit`
+   * undefined and the double optional-chain swallowed every emission in silence.
+   */
+  eventBus?: IEventStream;
   /**
    * [PROJ-B6] Verifies that each default agent's engine is actually executable.
    *
@@ -57,17 +65,44 @@ export type ProjectInitOptions = {
   joinedVia?: AddActorInput['joinedVia'];
 };
 
-export type ProjectInitResult = {
+/**
+ * [PROJ-A1] A fresh init: the project was created now, so all three identifiers exist.
+ * This is the only variant that carries them.
+ */
+export type ProjectInitialized = {
+  alreadyInitialized?: false;
   actorId: string;
   productAgentId: string;
   cycleId: string;
   commitSha?: string;
-  alreadyInitialized?: boolean;
-  created?: boolean;
   // [PROJ-B6] Agents registered but not runnable (engine unresolvable, ARUN-M1).
   // Non-fatal — the CLI surfaces these so the user learns at creation time.
   agentWarnings?: string[];
 };
+
+/**
+ * [PROJ-A2] An idempotent re-init: the project was already there. Only the caller's actor
+ * was resolved, and only when a `login` was supplied — hence `actorId` optional here and
+ * required in the other variant. Neither `productAgentId` nor `cycleId` appears, because
+ * this path creates neither.
+ */
+export type ProjectAlreadyInitialized = {
+  alreadyInitialized: true;
+  actorId?: string;
+  created?: boolean;
+  commitSha?: string;
+};
+
+/**
+ * Discriminated on `alreadyInitialized`, so a consumer must narrow before reading the
+ * identifiers only a fresh init produces.
+ *
+ * It used to be one flat record declaring all three as required, which contradicted
+ * `PROJ-A2` — its own spec text and pseudocode always described the two shapes. Two
+ * `as ProjectInitResult` casts in `initializeProject` kept the compiler quiet, and the
+ * type then let any consumer read `cycleId` off a re-init, where it is `undefined`.
+ */
+export type ProjectInitResult = ProjectInitialized | ProjectAlreadyInitialized;
 
 // --- addActor primitive (PROJ-H1..H6) ---
 

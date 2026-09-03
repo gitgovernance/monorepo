@@ -3,7 +3,7 @@
  *
  * Common helpers used across all CLI E2E test files.
  * Each helper is the superset of all implementations found in
- * init, actor, sync, task, and dashboard E2E tests.
+ * init, actor, sync, and task E2E tests.
  */
 
 import { execSync } from 'child_process';

@@ -22,18 +22,8 @@ jobs:
           node-version: 24
           cache: pnpm
 
-      # core-gitlab is a GitLab submodule — can't be cloned by GitHub Actions.
-      # Remove from workspace + deps so pnpm install succeeds.
-      # E2E tests (which need it) only run locally, never in CI.
-      - name: Exclude GitLab submodule from workspace
-        run: |
-          if [ ! -f packages/core-gitlab/package.json ]; then
-            sed -i '/core-gitlab/d' pnpm-workspace.yaml
-            sed -i '/@gitgov\/core-gitlab/d' packages/e2e/package.json
-            pnpm install --no-frozen-lockfile
-          else
-            pnpm install --frozen-lockfile
-          fi
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
       - name: Build core (required for mcp-server type resolution)
         run: pnpm --filter @gitgov/core run build
@@ -43,6 +33,24 @@ jobs:
 
       - name: Typecheck mcp-server
         run: pnpm --filter @gitgov/mcp-server run typecheck
+
+      # cli runs TYPECHECK ONLY in CI, deliberately:
+      # - tsc is static — no Postgres, no git remotes, no network — so 0 locally is 0 here.
+      #   Its tsconfig no longer excludes test files: 285 errors (two of them real bugs)
+      #   accumulated while nothing compiled them.
+      # - The cli TESTS stay local-only for now: the e2e suites need Postgres and real git,
+      #   and the unit suites have not been measured in a CI container yet. Running them
+      #   here unmeasured risks a day-one red that gets the job switched off.
+      - name: Typecheck cli
+        run: pnpm --filter @gitgov/cli run typecheck
+
+      # e2e typechecks everywhere with its single base config. `prisma generate` needs
+      # only the schema, no database. (The core-gitlab conditional died when the GitLab
+      # submodule left the repo entirely — its test moved out with it.)
+      - name: Typecheck e2e
+        run: |
+          pnpm --filter @gitgov/e2e run prisma:generate
+          pnpm --filter @gitgov/e2e run typecheck
 
   test:
     name: Test
@@ -59,15 +67,8 @@ jobs:
           node-version: 24
           cache: pnpm
 
-      - name: Exclude GitLab submodule from workspace
-        run: |
-          if [ ! -f packages/core-gitlab/package.json ]; then
-            sed -i '/core-gitlab/d' pnpm-workspace.yaml
-            sed -i '/@gitgov\/core-gitlab/d' packages/e2e/package.json
-            pnpm install --no-frozen-lockfile
-          else
-            pnpm install --frozen-lockfile
-          fi
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
       - name: Configure git for tests
         run: |
@@ -83,6 +84,14 @@ jobs:
 
       - name: Test mcp-server
         run: pnpm --filter @gitgov/mcp-server run test
+
+      # cli UNIT tests only (src/**). Measured before wiring: 509 passed in <3s under a
+      # minimal environment (fake HOME, no .env) — they mock all I/O. The e2e suites
+      # (e2e/**) stay local-only: they need PostgreSQL, real git remotes and the built
+      # binary. That split lives in the command, not in a config exclude, so `pnpm test`
+      # locally still runs everything.
+      - name: Test cli (unit)
+        run: pnpm --filter @gitgov/cli run test:unit
 
   build:
     name: Build
@@ -100,15 +109,8 @@ jobs:
           node-version: 24
           cache: pnpm
 
-      - name: Exclude GitLab submodule from workspace
-        run: |
-          if [ ! -f packages/core-gitlab/package.json ]; then
-            sed -i '/core-gitlab/d' pnpm-workspace.yaml
-            sed -i '/@gitgov\/core-gitlab/d' packages/e2e/package.json
-            pnpm install --no-frozen-lockfile
-          else
-            pnpm install --frozen-lockfile
-          fi
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
       - name: Build core
         run: pnpm --filter @gitgov/core run build

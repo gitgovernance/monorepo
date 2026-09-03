@@ -25,19 +25,20 @@
     "resolveJsonModule": true,
     "baseUrl": ".",
     // "paths": { "@/*": ["src/*"] },
-    "jsx": "react-jsx",
-    "jsxImportSource": "react",
     "types": [
-      "node"
+      "node",
+      "vitest/globals"
     ]
   },
   "include": [
     "src",
     "scripts",
     "e2e"
-  ],
-  "exclude": [
-    "src/**/*.test.ts",
-    "e2e/**/*.test.ts"
   ]
+  /* No "exclude": this was the only tsconfig in the repo excluding its test files, and 285
+   * type errors accumulated invisibly behind it — including mocks of functions that do not
+   * exist anywhere (findGitgovRoot) and imports from the wrong layer (Git.GitModule from the
+   * root barrel). Typechecking is static: it needs no Postgres and no network, so "the e2e
+   * suites only run locally" is a runner decision (vitest config / CI jobs), never a reason
+   * to exclude files from tsc. */
 }

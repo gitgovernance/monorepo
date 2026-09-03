@@ -71,7 +71,6 @@ vi.mock('@gitgov/core', () => {
     {
       // Static methods (legacy — code uses standalone functions from @gitgov/core/fs)
       findProjectRoot: vi.fn().mockReturnValue('/mock/project/root'),
-      findGitgovRoot: vi.fn().mockReturnValue('/mock/project/root'),
       getGitgovPath: vi.fn().mockReturnValue('/mock/project/root/.gitgov'),
       isGitgovProject: vi.fn().mockReturnValue(true)
     }
@@ -561,6 +560,15 @@ vi.mock('@gitgov/core', () => {
     // [PROJ-F3] getProjectModule() passes this straight through to ProjectModuleDeps.
     DEFAULT_AGENTS: [],
     getCurrentActor: vi.fn().mockResolvedValue({ id: 'human:current-user', type: 'human', displayName: 'Current User', publicKey: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=', roles: ['author'] }),
+    // [EARS-C14] The mock did NOT export this class, so the code's `err instanceof
+    // ActorSelectionRequiredError` compared against `undefined` — a TypeError waiting on
+    // the first real multi-key machine, invisible while no test reached the catch.
+    ActorSelectionRequiredError: class ActorSelectionRequiredError extends Error {
+      constructor(public readonly actorIds: string[]) {
+        super(`Multiple active actors found (${actorIds.join(', ')})`);
+        this.name = 'ActorSelectionRequiredError';
+      }
+    },
   };
 });
 
@@ -692,7 +700,6 @@ vi.mock('@gitgov/core/fs', () => ({
   }; }),
   DEFAULT_ID_ENCODER: { encode: (id: string) => id, decode: (encoded: string) => encoded },
   findProjectRoot: vi.fn().mockReturnValue('/tmp/test-gitgov'),
-  findGitgovRoot: vi.fn().mockReturnValue('/tmp/test-gitgov'),
   getWorktreeBasePath: vi.fn((repoRoot: string) => {
     const { createHash } = require('crypto');
     const hash = createHash('sha256').update(repoRoot).digest('hex').slice(0, 12);
@@ -705,13 +712,26 @@ vi.mock('@gitgov/core/fs', () => ({
   getKeysDir: vi.fn().mockImplementation((worktreePath: string) => require('path').join(worktreePath, '.gitgov', 'keys')),
 }));
 
+// [EARS-C14] readline mock — the prompt answers with whatever the test sets here.
+const { readlineAnswer } = vi.hoisted(() => ({ readlineAnswer: { value: '1' } }));
+vi.mock('readline', () => ({
+  createInterface: vi.fn(() => ({
+    question: (_q: string, cb: (answer: string) => void) => cb(readlineAnswer.value),
+    close: vi.fn(),
+  })),
+}));
+
 import { DependencyInjectionService } from './dependency-injection';
 
 // Mocked module references — vitest hoists vi.mock, so imports resolve to mocks
 import * as mockFsModule from 'fs';
 import * as corefs from '@gitgov/core/fs';
 import { Git, Adapters, KeyProvider, EventBus, RecordProjection, RecordMetrics, AuditOrchestrator as AuditOrchestratorMock, PolicyEvaluator as PolicyEvaluatorMock, SyncState, Redaction as RedactionMock } from '@gitgov/core';
-const mockFs = vi.mocked(mockFsModule);
+// `deep: true` — without it `vi.mocked` only retypes the module's own properties, so nested ones
+// like `promises.access` stay typed as the real function and every `.mockResolvedValue()` on them
+// is a type error. The calls worked at runtime because `vi.mock` did replace them; only the types
+// disagreed, which is invisible while the file is not typechecked.
+const mockFs = vi.mocked(mockFsModule, { deep: true });
 
 describe('DependencyInjectionService', () => {
   let diService: DependencyInjectionService;
@@ -726,8 +746,7 @@ describe('DependencyInjectionService', () => {
     DependencyInjectionService.reset();
 
     // Reset @gitgov/core/fs function mocks to default
-    corefs.findProjectRoot.mockReturnValue(mockRepoRoot);
-    corefs.findGitgovRoot.mockReturnValue(mockRepoRoot);
+    vi.mocked(corefs.findProjectRoot).mockReturnValue(mockRepoRoot);
 
     // Reset fs.access mock to success by default (worktree .gitgov exists)
     mockFs.promises.access.mockResolvedValue(undefined);
@@ -791,13 +810,13 @@ describe('DependencyInjectionService', () => {
       await diService.getRecordProjector();
 
       // Clear mock call counts
-      const callCountAfterFirst = corefs.FsRecordStore.mock.calls.length;
+      const callCountAfterFirst = vi.mocked(corefs.FsRecordStore).mock.calls.length;
 
       // Second call - should use cached stores
       await diService.getBacklogAdapter();
 
       // FsRecordStore should not be called again (stores already initialized)
-      expect(corefs.FsRecordStore.mock.calls.length).toBe(callCountAfterFirst);
+      expect(vi.mocked(corefs.FsRecordStore).mock.calls.length).toBe(callCountAfterFirst);
     });
   });
 
@@ -805,7 +824,7 @@ describe('DependencyInjectionService', () => {
   // §4.3. Adapter Factories (EARS-C1 to C15)
   // ============================================================================
   describe('4.3. Adapter Factories (EARS-C1 to C15)', () => {
-    it('[EARS-C1] should create IndexerAdapter with all dependencies', async () => {
+    it('[EARS-C1] should create RecordProjector with all dependencies', async () => {
       const projector = await diService.getRecordProjector();
       expect(projector).toBeDefined();
       expect(projector.generateIndex).toBeDefined();
@@ -819,7 +838,7 @@ describe('DependencyInjectionService', () => {
       expect(Adapters.BacklogAdapter).toHaveBeenCalled();
     });
 
-    it('[EARS-C3] should create MetricsAdapter with stores', async () => {
+    it('[EARS-C3] should create RecordMetrics with stores', async () => {
       const recordMetrics = await diService.getRecordMetrics();
 
       expect(recordMetrics).toBeDefined();
@@ -938,7 +957,7 @@ describe('DependencyInjectionService', () => {
       // Verify createAgentRunner was called with repoRoot (not worktree path)
       const { createAgentRunner } = corefs;
       expect(createAgentRunner).toHaveBeenCalled();
-      const callArgs = createAgentRunner.mock.calls[0][0];
+      const callArgs = vi.mocked(createAgentRunner).mock.calls[0]![0];
       expect(callArgs.projectRoot).toBe(mockRepoRoot);
       expect(callArgs.gitgovPath).toContain('.gitgov');
     });
@@ -952,7 +971,24 @@ describe('DependencyInjectionService', () => {
       expect(keyProvider.sign).toBeDefined();
     });
 
-    it.todo('[EARS-C14] should prompt actor selection and save to session when multiple keys exist');
+    it('[EARS-C14] should prompt actor selection and save to session when multiple keys exist', async () => {
+      const { getCurrentActor, ActorSelectionRequiredError } = await import('@gitgov/core');
+      const selectedActor = { id: 'agent:second', type: 'agent', displayName: 'Second', publicKey: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=', roles: ['author'] };
+      vi.mocked(getCurrentActor)
+        .mockRejectedValueOnce(new ActorSelectionRequiredError(['human:first', 'agent:second']))
+        .mockResolvedValueOnce(selectedActor as Awaited<ReturnType<typeof getCurrentActor>>);
+      const setLastSession = vi.fn().mockResolvedValue(undefined);
+      diService.getSessionManager = vi.fn().mockResolvedValue({ setLastSession });
+      readlineAnswer.value = '2';
+
+      const actor = await diService.getCurrentActor();
+
+      // The choice is SAVED (that is what makes the retry resolve on real machines) and the
+      // retry result is returned — the command does not fail; the prompt is part of the flow.
+      expect(setLastSession).toHaveBeenCalledWith('agent:second', expect.any(String));
+      expect(actor).toBe(selectedActor);
+      expect(vi.mocked(getCurrentActor)).toHaveBeenCalledTimes(2);
+    });
 
     it('[EARS-C16] should build the engine validator with repoRoot not the worktree path', async () => {
       // Pins WHICH root the engine validator resolves against. During `gitgov init` this
@@ -964,15 +1000,15 @@ describe('DependencyInjectionService', () => {
       // The validator binds its root at CONSTRUCTION (ARUN-M1), so the constructor argument
       // IS the guarantee. PROJ-B7 fixes the other half: ProjectModule passes no root at all.
       const { FsEngineValidator } = corefs;
-      FsEngineValidator.mockClear();
+      vi.mocked(FsEngineValidator).mockClear();
 
       await diService.getProjectModule();
 
       // Anti-vacuity: if the validator was never constructed, the assertions below would
       // pass over an empty call list and prove nothing.
       expect(FsEngineValidator).toHaveBeenCalledTimes(1);
-      expect(FsEngineValidator.mock.calls[0][0]).toBe(mockRepoRoot);
-      expect(FsEngineValidator.mock.calls[0][0]).not.toBe(mockWorktreeBasePath);
+      expect(vi.mocked(FsEngineValidator).mock.calls[0]![0]).toBe(mockRepoRoot);
+      expect(vi.mocked(FsEngineValidator).mock.calls[0]![0]).not.toBe(mockWorktreeBasePath);
     });
   });
 
@@ -980,12 +1016,67 @@ describe('DependencyInjectionService', () => {
   // §4.4. Bootstrap Reindex (EARS-D1 to D2)
   // ============================================================================
   describe('4.4. Bootstrap Reindex (EARS-D1 to D2)', () => {
+    it('[EARS-B2b] should fetch with refspec to update the local branch before creating the worktree', async () => {
+      // A locally-cached state branch can be stale: without the refspec fetch, the worktree
+      // is created from old refs and inherits state the remote already moved past.
+      mockFs.promises.access.mockRejectedValue(new Error('.gitgov directory not found'));
+
+      const mockGitModule = new corefs.GitModule({
+        repoRoot: mockRepoRoot,
+        execCommand: vi.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' })
+      });
+      mockGitModule.getRepoRoot = vi.fn().mockResolvedValue(mockRepoRoot);
+      mockGitModule.branchExists = vi.fn().mockResolvedValue(true);
+      mockGitModule.exec = vi.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+      diService.getGitModule = vi.fn().mockResolvedValue(mockGitModule);
+      diService.getHeadSha = vi.fn().mockResolvedValue('mock-head-sha');
+
+      await diService.getRecordProjector();
+
+      const calls = vi.mocked(mockGitModule.exec).mock.calls;
+      const fetchIdx = calls.findIndex((c) => c[1]?.includes('fetch') && c[1]?.includes('gitgov-state:gitgov-state'));
+      const worktreeIdx = calls.findIndex((c) => c[1]?.includes('worktree'));
+      // Anti-vacuity: both operations must have happened, and in this order.
+      expect(fetchIdx).toBeGreaterThanOrEqual(0);
+      expect(worktreeIdx).toBeGreaterThanOrEqual(0);
+      expect(fetchIdx).toBeLessThan(worktreeIdx);
+    });
+
+    it('[EARS-B2b] should proceed with the local branch when the refspec fetch fails', async () => {
+      // Offline, no remote, or a diverged ref must not block the bootstrap: the local
+      // branch is a legitimate fallback, per the EARS.
+      mockFs.promises.access.mockRejectedValue(new Error('.gitgov directory not found'));
+
+      const mockGitModule = new corefs.GitModule({
+        repoRoot: mockRepoRoot,
+        execCommand: vi.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' })
+      });
+      mockGitModule.getRepoRoot = vi.fn().mockResolvedValue(mockRepoRoot);
+      mockGitModule.branchExists = vi.fn().mockResolvedValue(true);
+      mockGitModule.exec = vi.fn().mockImplementation(async (_cmd: string, args: string[]) => {
+        if (args.includes('fetch')) throw new Error('fatal: unable to access remote');
+        return { exitCode: 0, stdout: '', stderr: '' };
+      });
+      diService.getGitModule = vi.fn().mockResolvedValue(mockGitModule);
+      diService.getHeadSha = vi.fn().mockResolvedValue('mock-head-sha');
+
+      await diService.getRecordProjector();
+
+      expect(mockGitModule.exec).toHaveBeenCalledWith('git', expect.arrayContaining(['worktree', 'add']));
+    });
+
     it('[EARS-D1] should call generateIndex() after successful bootstrap from gitgov-state', async () => {
       // Mock fs.access to reject (no worktree .gitgov directory exists)
       mockFs.promises.access.mockRejectedValue(new Error('.gitgov directory not found'));
 
       // Mock GitModule to simulate worktree bootstrap
-      const mockGitModule = new Git.GitModule({
+      // `GitModule` ships from `@gitgov/core/fs`, not from the root barrel — it reaches the
+      // filesystem, which is the whole reason the subpath exists (EARS-CI02). The root `Git`
+      // namespace only carries the error types and `parseRemoteUrl`. Constructing it from `Git`
+      // here worked only because this file's mock of `@gitgov/core` invented the property, so the
+      // test was building against a shape the real module does not have — while production wires
+      // the one from `/fs` (dependency-injection.ts:4).
+      const mockGitModule = new corefs.GitModule({
         repoRoot: mockRepoRoot,
         execCommand: vi.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' })
       });
@@ -1026,12 +1117,18 @@ describe('DependencyInjectionService', () => {
   // §4.5. Error Handling (EARS-E1 to E4)
   // ============================================================================
   describe('4.5. Error Handling (EARS-E1 to E4)', () => {
-    it('[EARS-E1] should throw error when project root not found (IndexerAdapter)', async () => {
+    it('[EARS-E1] should throw error when project root not found (RecordProjector)', async () => {
       // Mock fs.access to reject (no worktree .gitgov directory)
       mockFs.promises.access.mockRejectedValue(new Error('Directory not found'));
 
       // Mock GitModule — branch doesn't exist locally or remotely
-      const mockGitModule = new Git.GitModule({
+      // `GitModule` ships from `@gitgov/core/fs`, not from the root barrel — it reaches the
+      // filesystem, which is the whole reason the subpath exists (EARS-CI02). The root `Git`
+      // namespace only carries the error types and `parseRemoteUrl`. Constructing it from `Git`
+      // here worked only because this file's mock of `@gitgov/core` invented the property, so the
+      // test was building against a shape the real module does not have — while production wires
+      // the one from `/fs` (dependency-injection.ts:4).
+      const mockGitModule = new corefs.GitModule({
         repoRoot: mockRepoRoot,
         execCommand: vi.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' })
       });
@@ -1050,7 +1147,13 @@ describe('DependencyInjectionService', () => {
       mockFs.promises.access.mockRejectedValue(new Error('Directory not found'));
 
       // Mock GitModule — branch doesn't exist locally or remotely
-      const mockGitModule = new Git.GitModule({
+      // `GitModule` ships from `@gitgov/core/fs`, not from the root barrel — it reaches the
+      // filesystem, which is the whole reason the subpath exists (EARS-CI02). The root `Git`
+      // namespace only carries the error types and `parseRemoteUrl`. Constructing it from `Git`
+      // here worked only because this file's mock of `@gitgov/core` invented the property, so the
+      // test was building against a shape the real module does not have — while production wires
+      // the one from `/fs` (dependency-injection.ts:4).
+      const mockGitModule = new corefs.GitModule({
         repoRoot: mockRepoRoot,
         execCommand: vi.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' })
       });
@@ -1069,7 +1172,7 @@ describe('DependencyInjectionService', () => {
       mockFs.promises.access.mockResolvedValue(undefined);
 
       // Mock RecordProjector constructor to throw
-      RecordProjection.RecordProjector.mockImplementationOnce(function() {
+      vi.mocked(RecordProjection.RecordProjector).mockImplementationOnce(function() {
         throw new Error('Connection failed');
       });
 
@@ -1081,7 +1184,7 @@ describe('DependencyInjectionService', () => {
       mockFs.promises.access.mockResolvedValue(undefined);
 
       // Mock BacklogAdapter constructor to throw
-      Adapters.BacklogAdapter.mockImplementationOnce(function() {
+      vi.mocked(Adapters.BacklogAdapter).mockImplementationOnce(function() {
         throw new Error('Database connection failed');
       });
 
@@ -1093,7 +1196,7 @@ describe('DependencyInjectionService', () => {
       mockFs.promises.access.mockResolvedValue(undefined);
 
       // Mock RecordProjector to throw a string instead of Error
-      RecordProjection.RecordProjector.mockImplementationOnce(function() {
+      vi.mocked(RecordProjection.RecordProjector).mockImplementationOnce(function() {
         throw 'String error instead of Error object';
       });
 
@@ -1117,7 +1220,7 @@ describe('DependencyInjectionService', () => {
 
     it('[EARS-F2] should return false when project root not found', async () => {
       // Mock findProjectRoot to return null
-      corefs.findProjectRoot.mockReturnValue(null);
+      vi.mocked(corefs.findProjectRoot).mockReturnValue(null);
 
       // Reset projectRoot by creating a fresh instance
       DependencyInjectionService.reset();

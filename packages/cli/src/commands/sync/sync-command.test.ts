@@ -73,10 +73,12 @@ vi.mock('../../services/dependency-injection', () => ({
 import { SyncCommand } from './sync-command';
 
 // Mock console methods (igual que task-command.test.ts)
-const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation();
-const mockConsoleError = vi.spyOn(console, 'error').mockImplementation();
-const mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation();
-const mockProcessExit = vi.spyOn(process, 'exit').mockImplementation();
+const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation(() => { });
+const mockConsoleError = vi.spyOn(console, 'error').mockImplementation(() => { });
+const mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => { });
+// `process.exit` is typed `(code?) => never`; the stub returns, so the cast states that gap
+// explicitly rather than throwing and changing control flow the tests do not expect.
+const mockProcessExit = vi.spyOn(process, 'exit').mockImplementation((() => { }) as unknown as never);
 
 describe('SyncCommand - Unit Tests', () => {
   let syncCommand: SyncCommand;
@@ -807,7 +809,7 @@ describe('SyncCommand - Unit Tests', () => {
       });
 
       // Execute with force flag
-      await syncCommand.executePull({ force: true } as any);
+      await syncCommand.executePull({ force: true });
 
       // Verify force was passed to pullState
       expect(mockSyncModule.pullState).toHaveBeenCalledWith(
@@ -1000,7 +1002,8 @@ describe('SyncCommand - Unit Tests', () => {
       );
 
       // Verify lastSyncPush and lastSyncPull are NOT set
-      const callArgs = mockSessionManager.updateActorState.mock.calls[0][1];
+      // Non-null: the assertion above already proved updateActorState was called.
+      const callArgs = mockSessionManager.updateActorState.mock.calls[0]![1];
       expect(callArgs.syncStatus).not.toHaveProperty('lastSyncPush');
       expect(callArgs.syncStatus).not.toHaveProperty('lastSyncPull');
     });

@@ -45,6 +45,7 @@ vi.mock('../../services/dependency-injection', () => ({
   }
 }));
 
+import type { Mock, MockInstance } from 'vitest';
 import { AgentCommand, type RunCommandOptions, type ListCommandOptions, type ShowCommandOptions, type AgentNewOptions } from './agent-command';
 import { DependencyInjectionService } from '../../services/dependency-injection';
 import type { RunOptions, AgentResponse, TaskRecord, ActorRecord, AgentRecord } from '@gitgov/core';
@@ -58,8 +59,8 @@ type TestAgentMetadata = {
 };
 
 // Mock console methods
-const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation();
-const mockConsoleError = vi.spyOn(console, 'error').mockImplementation();
+const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation(() => { });
+const mockConsoleError = vi.spyOn(console, 'error').mockImplementation(() => { });
 const mockProcessExit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
 
 // Get mocked DI
@@ -82,7 +83,11 @@ let mockIdentityAdapter: {
 
 let mockAgentStore: {
   list: Mock<() => Promise<string[]>>;
-  get: Mock<(id: string) => Promise<AgentRecord<TestAgentMetadata> | null>>;
+  // The store returns ENVELOPED records: production reads `prev.payload.engine.type`
+  // (agent-command.ts:251,482), never a bare payload. This annotation said
+  // `AgentRecord<TestAgentMetadata>` (payload-only), so the fixture that correctly nested
+  // `{ payload: { engine } }` was a type error — the annotation lied, not the fixture.
+  get: Mock<(id: string) => Promise<{ payload: { engine?: { type?: string } } } | null>>;
 };
 
 let mockAgentAdapter: {
@@ -210,8 +215,9 @@ describe('AgentCommand', () => {
       }),
     };
 
-    // Configure DI mock
-    mockDI.getInstance.mockReturnValue({
+    // Configure DI mock — untyped Mock so the literal does not have to masquerade as the
+    // concrete DependencyInjectionService class (the `as unknown as` the preset prohibits).
+    (DependencyInjectionService.getInstance as Mock).mockReturnValue({
       getAgentRunnerModule: vi.fn().mockResolvedValue(mockAgentRunnerModule),
       getBacklogAdapter: vi.fn().mockResolvedValue(mockBacklogAdapter),
       getIdentityAdapter: vi.fn().mockResolvedValue(mockIdentityAdapter),
@@ -221,7 +227,7 @@ describe('AgentCommand', () => {
       // resolves — not to process.cwd(), and never to the worktree.
       getRepoRoot: vi.fn().mockResolvedValue('/tmp/test-repo-root'),
       getCurrentActor: vi.fn().mockResolvedValue({ id: 'human:test-dev', type: 'human', displayName: 'Test Dev', publicKey: 'test-key', roles: ['developer'] }),
-    } as unknown as DependencyInjectionService);
+    });
 
     agentCommand = new AgentCommand();
   });
@@ -457,8 +463,8 @@ describe('AgentCommand', () => {
     const nodeOs = require('node:os') as typeof import('os');
 
     let tmpAgentDir: string;
-    let mockExit: vi.SpyInstance;
-    let mockConsoleErrorLocal: vi.SpyInstance;
+    let mockExit: MockInstance;
+    let mockConsoleErrorLocal: MockInstance;
 
     function createFakeAgent(pkgJson: Record<string, unknown>): string {
       const dir = nodeFs.mkdtempSync(nodePath.join(nodeOs.tmpdir(), 'agent-test-'));
@@ -470,7 +476,7 @@ describe('AgentCommand', () => {
 
     beforeEach(() => {
       mockExit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
-      mockConsoleErrorLocal = vi.spyOn(console, 'error').mockImplementation();
+      mockConsoleErrorLocal = vi.spyOn(console, 'error').mockImplementation(() => { });
       mockAgentStore.list.mockResolvedValue([]);
     });
 
@@ -565,7 +571,7 @@ describe('AgentCommand', () => {
       // First call fails (no ActorRecord), triggers auto-create, then retries
       mockAgentAdapter.createAgentRecord
         .mockRejectedValueOnce(new Error('ActorRecord not found'))
-        .mockResolvedValueOnce({ id: 'agent:security-audit', engine: { type: 'local' } } as any);
+        .mockResolvedValueOnce({ id: 'agent:security-audit', engine: { type: 'local' } });
 
       await agentCommand.executeNew(tmpAgentDir, {});
 

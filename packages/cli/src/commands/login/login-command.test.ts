@@ -13,7 +13,20 @@
  * - I: getSaasUrl (EARS-I1 to I2) — tested in config_manager.test.ts
  */
 
+import type { Mock } from 'vitest';
 import type { IKeyProvider, GitGovActorRecord } from '@gitgov/core';
+
+// [LOGIN-H2] Fake http server so the DEFAULT startCallbackServer schedules its 5-minute
+// timeout without opening a real socket. Only the H2 test reaches this: every other test
+// injects its own startCallbackServer mock and never imports http.
+const { fakeHttpServer } = vi.hoisted(() => ({
+  fakeHttpServer: {
+    listen: (_port: number, cb?: () => void) => { cb?.(); },
+    on: () => { },
+    close: () => { },
+  },
+}));
+vi.mock('http', () => ({ createServer: () => fakeHttpServer }));
 
 // Mock child_process for resolveOrgId
 vi.mock('child_process', () => ({
@@ -162,14 +175,16 @@ vi.mock('../../services/dependency-injection', () => ({
   },
 }));
 
-import { LoginCommand } from './login-command';
+import { LoginCommand, createCallbackServer, CALLBACK_TIMEOUT_MS } from './login-command';
 import type { LoginCommandOptions, LoginDeps, TrpcResponse, KeyStatusResponse, SyncKeyResponse } from './login-command.types';
 
 // Mock console and process.exit
-const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation();
-const mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation();
-const mockConsoleError = vi.spyOn(console, 'error').mockImplementation();
-const mockProcessExit = vi.spyOn(process, 'exit').mockImplementation(vi.fn());
+const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation(() => { });
+const mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => { });
+const mockConsoleError = vi.spyOn(console, 'error').mockImplementation(() => { });
+// `process.exit` is typed `(code?) => never`; the stub returns, so the cast states that gap
+// explicitly rather than throwing and changing control flow the tests do not expect.
+const mockProcessExit = vi.spyOn(process, 'exit').mockImplementation((() => { }) as unknown as never);
 
 // ─── tRPC mock helpers ────────────────────────────────────────────────────
 
@@ -237,7 +252,8 @@ describe('LoginCommand v2', () => {
       await cmd.executeLogin(defaultOptions);
 
       expect(deps.openBrowser).toHaveBeenCalledTimes(1);
-      const openUrl = (deps.openBrowser as vi.Mock).mock.calls[0][0] as string;
+      // Non-null: `toHaveBeenCalledTimes(1)` above guarantees the call exists.
+      const openUrl = (deps.openBrowser as Mock).mock.calls[0]![0] as string;
       expect(openUrl).toContain('/auth/cli?callback=');
 
       expect(deps.startCallbackServer).toHaveBeenCalledTimes(1);
@@ -336,7 +352,7 @@ describe('LoginCommand v2', () => {
       const cmd = new LoginCommand(deps);
       await cmd.executeLogin(defaultOptions);
 
-      const syncCall = (deps.fetchSaas as vi.Mock).mock.calls.find(
+      const syncCall = (deps.fetchSaas as Mock).mock.calls.find(
         (c: unknown[]) => String(c[0]).includes('identity.syncKey'),
       );
       expect(syncCall).toBeDefined();
@@ -379,7 +395,7 @@ describe('LoginCommand v2', () => {
       const cmd = new LoginCommand(deps);
       await cmd.executeLogin(defaultOptions);
 
-      const syncCall = (deps.fetchSaas as vi.Mock).mock.calls.find(
+      const syncCall = (deps.fetchSaas as Mock).mock.calls.find(
         (c: unknown[]) => String(c[0]).includes('identity.syncKey'),
       );
       expect(syncCall).toBeDefined(); // el login COMPLETO no quedo rehen de la entrada rota
@@ -409,7 +425,7 @@ describe('LoginCommand v2', () => {
       const cmd = new LoginCommand(deps);
       await cmd.executeLogin(defaultOptions);
 
-      const syncCall = (deps.fetchSaas as vi.Mock).mock.calls.find(
+      const syncCall = (deps.fetchSaas as Mock).mock.calls.find(
         (c: unknown[]) => String(c[0]).includes('identity.syncKey'),
       );
       expect(syncCall).toBeDefined();
@@ -442,7 +458,7 @@ describe('LoginCommand v2', () => {
       const cmd = new LoginCommand(deps);
       await cmd.executeLogin(defaultOptions);
 
-      const syncCall = (deps.fetchSaas as vi.Mock).mock.calls.find(
+      const syncCall = (deps.fetchSaas as Mock).mock.calls.find(
         (c: unknown[]) => String(c[0]).includes('identity.syncKey'),
       );
       expect(syncCall).toBeDefined();
@@ -483,7 +499,7 @@ describe('LoginCommand v2', () => {
       const cmd = new LoginCommand(deps);
       await cmd.executeLogin(defaultOptions);
 
-      const syncCall = (deps.fetchSaas as vi.Mock).mock.calls.find(
+      const syncCall = (deps.fetchSaas as Mock).mock.calls.find(
         (c: unknown[]) => String(c[0]).includes('identity.syncKey'),
       );
       expect(syncCall).toBeUndefined(); // cero re-transmision, cero churn
@@ -516,7 +532,7 @@ describe('LoginCommand v2', () => {
       const cmd = new LoginCommand(deps);
       await cmd.executeLogin(defaultOptions);
 
-      const syncCall = (deps.fetchSaas as vi.Mock).mock.calls.find(
+      const syncCall = (deps.fetchSaas as Mock).mock.calls.find(
         (c: unknown[]) => String(c[0]).includes('identity.syncKey'),
       );
       expect(syncCall).toBeDefined();
@@ -571,7 +587,7 @@ describe('LoginCommand v2', () => {
       const cmd = new LoginCommand(deps);
       await cmd.executeLogin({ ...defaultOptions, forceCloud: true });
 
-      const syncCall = (deps.fetchSaas as vi.Mock).mock.calls.find(
+      const syncCall = (deps.fetchSaas as Mock).mock.calls.find(
         (c: unknown[]) => String(c[0]).includes('identity.syncKey'),
       );
       expect(syncCall, 'force-cloud debe subir el diff de agent keys').toBeDefined();
@@ -596,7 +612,7 @@ describe('LoginCommand v2', () => {
       const cmd = new LoginCommand(deps);
       await cmd.executeLogin({ ...defaultOptions, forceCloud: true });
 
-      const syncCall = (deps.fetchSaas as vi.Mock).mock.calls.find(
+      const syncCall = (deps.fetchSaas as Mock).mock.calls.find(
         (c: unknown[]) => String(c[0]).includes('identity.syncKey'),
       );
       expect(syncCall).toBeUndefined();
@@ -837,8 +853,8 @@ describe('LoginCommand v2', () => {
       await cmd.executeLogin({ ...defaultOptions, forceLocal: true });
 
       // syncKey response is trusted — no second keyStatus call needed
-      const keyStatusCalls = (deps.fetchSaas as vi.Mock).mock.calls.filter(
-        (c: [string]) => c[0].includes('identity.keyStatus')
+      const keyStatusCalls = (deps.fetchSaas as Mock).mock.calls.filter(
+        (c: unknown[]) => String(c[0]).includes('identity.keyStatus')
       );
       expect(keyStatusCalls).toHaveLength(1);
     });
@@ -983,12 +999,13 @@ describe('LoginCommand v2', () => {
       mockGetPrivateKey.mockResolvedValue('local-private-key');
       mockGetPublicKey.mockResolvedValue('local-public-key');
 
+      // `verified` and `projectInitialized` were removed here: neither exists on
+      // `SyncKeyResponse` nor is read anywhere in login-command.ts — ghost fields the
+      // fixture carried, invisible while this file was excluded from typechecking.
       const overwriteResponse: SyncKeyResponse = {
         success: true,
         actorId: 'human:camilo',
         mode: 'full',
-        verified: false,
-        projectInitialized: true,
       };
 
       const deps = createMockDeps({
@@ -1121,6 +1138,25 @@ describe('LoginCommand v2', () => {
       );
     });
 
+    it('[LOGIN-H3] should exit with error when the git remote cannot be resolved', async () => {
+      // Error path declared by LOGIN-H3 and pending since the spec's own note ("Failed
+      // parseRemoteUrl has no unit test yet"): no remote, or git unavailable, must produce
+      // the actionable message — not a crash further down the flow.
+      // Precise scenario: a valid git repo (LOGIN-Q1's rev-parse guard passes) with NO
+      // remote — throwing on everything trips Q1 first and never reaches this path.
+      const { execSync } = await import('child_process');
+      vi.mocked(execSync).mockImplementation(((cmd: string) => {
+        if (String(cmd).startsWith('git rev-parse')) return '.git\n';
+        throw new Error("fatal: No such remote 'origin'");
+      }) as typeof execSync);
+
+      const cmd = new LoginCommand(createMockDeps());
+      await cmd.executeLogin(defaultOptions);
+
+      const errorOutput = mockConsoleError.mock.calls.map(c => c[0]).join('\n');
+      expect(errorOutput).toContain('Could not determine repository');
+    });
+
     it('[LOGIN-H4] should resolve SSH alias to real hostname via ssh -G', async () => {
       const { execSync } = await import('child_process');
       const mockExecSync = execSync as Mock<typeof execSync>;
@@ -1150,7 +1186,17 @@ describe('LoginCommand v2', () => {
       );
     });
 
-    it.todo('[LOGIN-H2] should timeout after 5 minutes with error message (requires timer mock — deferred to E2E)');
+    it('[LOGIN-H2] should timeout after 5 minutes with error message', async () => {
+      // The timeout lives in createCallbackServer, which every login test replaces with a
+      // mock — nothing exercised the real timer until it was extracted. The MECHANISM is
+      // verified with a short injected timeout (real timers, fake http server — no socket,
+      // no browser); the 5-minute VALUE is pinned separately on the exported constant.
+      // Driving the full login flow under fake timers proved flakier than what it verified.
+      await expect(createCallbackServer(9876, 50)).rejects.toThrow(
+        'Login timeout — no callback received within 5 minutes',
+      );
+      expect(CALLBACK_TIMEOUT_MS).toBe(5 * 60 * 1000);
+    });
   });
 
   // ============================================================================
@@ -1359,7 +1405,7 @@ describe('LoginCommand v2', () => {
 
       const deps = createMockDeps({
         fetchSaas: createTrpcFetch({
-          'keyStatus': keyStatusWith(null),
+          'keyStatus': noKeyStatus,
           'syncKey': { success: true, actorId: 'human:camilo', mode: 'full' },
         }),
       });
@@ -1384,7 +1430,7 @@ describe('LoginCommand v2', () => {
 
       const deps = createMockDeps({
         fetchSaas: createTrpcFetch({
-          'keyStatus': keyStatusWith(null),
+          'keyStatus': noKeyStatus,
         }),
       });
 
@@ -1532,7 +1578,7 @@ describe('LoginCommand v2', () => {
 
       const deps = createMockDeps({
         fetchSaas: createTrpcFetch({
-          'keyStatus': keyStatusWith(null),
+          'keyStatus': noKeyStatus,
           'syncKey': { success: true, actorId: 'human:camilo', mode: 'full' },
         }),
       });
@@ -1557,7 +1603,7 @@ describe('LoginCommand v2', () => {
 
       const deps = createMockDeps({
         fetchSaas: createTrpcFetch({
-          'keyStatus': keyStatusWith(null),
+          'keyStatus': noKeyStatus,
           'syncKey': { success: true, actorId: 'human:testuser', mode: 'full' },
         }),
       });

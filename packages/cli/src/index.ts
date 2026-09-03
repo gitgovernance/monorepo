@@ -6,7 +6,6 @@ import { registerInitCommands } from './commands/init/init';
 import { registerTaskCommands } from './commands/task/task';
 import { registerCycleCommands } from './commands/cycle/cycle';
 import { registerStatusCommands } from './commands/status/status';
-import { registerDashboardCommands } from './commands/dashboard/dashboard';
 import { registerContextCommands } from './commands/context/context';
 import { registerLintCommand } from './commands/lint/lint';
 import { registerAuditCommand } from './commands/audit/audit';
@@ -73,9 +72,6 @@ async function setupCommands() {
 
     // Register status commands
     registerStatusCommands(program);
-
-    // Register dashboard commands
-    registerDashboardCommands(program);
 
     // Register lint commands
     registerLintCommand(program);

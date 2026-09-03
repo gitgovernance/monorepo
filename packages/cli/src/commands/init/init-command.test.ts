@@ -8,15 +8,23 @@
  * - §4.4 Error Handling & UX Excellence (EARS-D1 to D3)
  */
 
+// [INIT-M3] A root distinguishable from process.cwd(). If the two were equal the test could not
+// tell a container-supplied root from an environment-derived one — the defect would pass.
+const MOCK_REPO_ROOT = '/tmp/gitgov-init-m3-repo-root';
+
+const mockContainer = {
+  setInitMode: vi.fn(),
+  getProjectModule: vi.fn(),
+  // [INIT-L1] init-command.ts:49 sets the state branch override before initializing
+  setStateBranchOverride: vi.fn(),
+  // [INIT-M3] [EARS-C16] The container is the only component holding both roots.
+  getRepoRoot: vi.fn().mockResolvedValue(MOCK_REPO_ROOT),
+};
+
 // Mock DependencyInjectionService (InitCommand now uses DI)
 vi.mock('../../services/dependency-injection', () => ({
   DependencyInjectionService: {
-    getInstance: vi.fn().mockReturnValue({
-      setInitMode: vi.fn(),
-      getProjectModule: vi.fn(),
-      // [INIT-L1] init-command.ts:49 sets the state branch override before initializing
-      setStateBranchOverride: vi.fn(),
-    }),
+    getInstance: vi.fn(() => mockContainer),
   },
 }));
 
@@ -25,20 +33,33 @@ vi.mock('child_process', () => ({
   execSync: vi.fn()
 }));
 
+// [INIT-M3] Observe the root agent discovery is anchored at. Real `discoverInstalledAgents`
+// scans `<root>/node_modules`, so without this mock the assertion could only see whether agents
+// happened to exist under the test's cwd — which is exactly what INIT-M1/M2 do today, and why
+// nothing caught that the root was being re-derived from the environment.
+vi.mock('@gitgov/core/fs', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  discoverInstalledAgents: vi.fn().mockReturnValue([]),
+}));
+
+import type { Mock } from 'vitest';
 import { InitCommand } from './init-command';
 import { execSync } from 'child_process';
-import type { ProjectModuleInitResult } from '@gitgov/core';
+import { discoverInstalledAgents } from '@gitgov/core/fs';
+import type { ProjectModuleInitResult, ProjectModuleInitOptions } from '@gitgov/core';
 
 // Mock console methods to capture output
-const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation();
-const mockConsoleError = vi.spyOn(console, 'error').mockImplementation();
-const mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation();
-const mockProcessExit = vi.spyOn(process, 'exit').mockImplementation();
+const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation(() => { });
+const mockConsoleError = vi.spyOn(console, 'error').mockImplementation(() => { });
+const mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => { });
+// `process.exit` is typed `(code?) => never`; the stub returns, so the cast states that gap
+// explicitly rather than throwing and changing control flow the tests do not expect.
+const mockProcessExit = vi.spyOn(process, 'exit').mockImplementation((() => { }) as unknown as never);
 
 describe('InitCommand', () => {
   let initCommand: InitCommand;
   let mockProjectModule: {
-    initializeProject: Mock<(options: any) => Promise<ProjectModuleInitResult>>;
+    initializeProject: Mock<(options: ProjectModuleInitOptions) => Promise<ProjectModuleInitResult>>;
   };
 
   const sampleInitResult: ProjectModuleInitResult = {
@@ -69,7 +90,11 @@ describe('InitCommand', () => {
     // Create InitCommand (DI is mocked at module level)
     initCommand = new InitCommand();
 
-    // Spy on getProjectModule to return our mock (bypasses DI entirely)
+    // Spy on getProjectModule to return our mock (bypasses DI entirely).
+    // SANCTIONED CAST: `getProjectModule` is private, so no subclass override or typed spy
+    // can reach it — this is the one seam the test needs, stated with the narrowest shape
+    // instead of `any`. Removing it requires injecting ProjectModule into InitCommand,
+    // which is a production refactor, not a test fix.
     vi.spyOn(
       initCommand as unknown as { getProjectModule: () => Promise<typeof mockProjectModule> },
       'getProjectModule'
@@ -332,7 +357,14 @@ describe('InitCommand', () => {
     });
 
     it('[EARS-C5] should allow join path when already initialized without --force', async () => {
-      mockProjectModule.initializeProject.mockResolvedValue({ alreadyInitialized: true } as any);
+      // This state is REAL: project_module.ts:54 returns `{ alreadyInitialized: true }`
+      // without actorId (through its own `as ProjectInitResult`), and the command's
+      // "Project already initialized." branch exists precisely for it. The widening `as`
+      // mirrors core's — the honest fix is a union type on ProjectInitResult in core,
+      // recorded as pending; `as any` hid all of this.
+      mockProjectModule.initializeProject.mockResolvedValue({
+        alreadyInitialized: true,
+      } as ProjectModuleInitResult);
 
       await initCommand.execute({ name: 'Test Project' });
 
@@ -341,11 +373,14 @@ describe('InitCommand', () => {
     });
 
     it('[INIT-J1] should call addActor when alreadyInitialized and actor missing', async () => {
+      // Mirrors what PROJ-A2 actually returns. The fixture used to also carry
+      // `productAgentId` and `cycleId`: a shape production never produces, added back when
+      // the flat type still declared them required. The discriminated union rejects it now.
       mockProjectModule.initializeProject.mockResolvedValue({
-        alreadyInitialized: true,
         actorId: 'human:test-user',
+        alreadyInitialized: true,
         created: true,
-      } as any);
+      });
 
       await initCommand.execute({ name: 'Test Project' });
 
@@ -354,10 +389,10 @@ describe('InitCommand', () => {
 
     it('[INIT-J2] should report already a member when actor exists', async () => {
       mockProjectModule.initializeProject.mockResolvedValue({
-        alreadyInitialized: true,
         actorId: 'human:test-user',
+        alreadyInitialized: true,
         created: false,
-      } as any);
+      });
 
       await initCommand.execute({ name: 'Test Project' });
 
@@ -366,10 +401,10 @@ describe('InitCommand', () => {
 
     it('[INIT-J2b] should not run postInitConcerns when already a member', async () => {
       mockProjectModule.initializeProject.mockResolvedValue({
-        alreadyInitialized: true,
         actorId: 'human:test-user',
+        alreadyInitialized: true,
         created: false,
-      } as any);
+      });
       (execSync as Mock<typeof execSync>).mockClear();
 
       await initCommand.execute({ name: 'Test Project' });
@@ -639,10 +674,10 @@ describe('InitCommand', () => {
       });
 
       mockProjectModule.initializeProject.mockResolvedValue({
-        alreadyInitialized: true,
         actorId: 'human:cloud-project',
+        alreadyInitialized: true,
         created: true,
-      } as any);
+      });
 
       await initCommand.execute({ name: 'Cloud Project' });
 
@@ -731,6 +766,31 @@ describe('InitCommand', () => {
       expect(logCalls).not.toContain('❌');
       // Exit code should still be 0 (init succeeded — agent status is informational)
       expect(mockProcessExit).not.toHaveBeenCalled();
+    });
+
+    it('[INIT-M3] should anchor agent discovery at the repo root it already resolved', async () => {
+      await initCommand.execute({ name: 'M3 Test', actorName: 'Test User' });
+
+      const discover = vi.mocked(discoverInstalledAgents);
+
+      // Anti-vacuity: if discovery never ran, every assertion below would pass on an empty list.
+      expect(discover).toHaveBeenCalled();
+
+      // The root must come from the container — the only component that holds both repoRoot and
+      // projectRoot (EARS-C16) — not from the environment. init_command.md §4 line 300 names this
+      // exact defect: "displayAgentStatus() deriva la raíz de process.cwd() teniendo
+      // container.getRepoRoot()".
+      //
+      // Asserting the value came from getRepoRoot() rather than comparing it against process.cwd()
+      // is what makes this test able to fail: under vitest cwd IS the repo, so an equality check
+      // against cwd would pass with the defect still present.
+      expect(mockContainer.getRepoRoot).toHaveBeenCalled();
+      expect(discover).toHaveBeenCalledWith(MOCK_REPO_ROOT);
+
+      // [PROJ-B7] The failure this guards against: `discoverInstalledAgents` resolves
+      // `<root>/node_modules`, which exists in the user's repo and never in the worktree. A root
+      // taken from the environment happens to be right only because `init` is invoked from the repo.
+      expect(discover).not.toHaveBeenCalledWith(process.cwd());
     });
   });
 });

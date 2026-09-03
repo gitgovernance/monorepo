@@ -10,7 +10,7 @@
     "test": "vitest run",
     "test:local": "vitest run tests/cli_records.test.ts tests/projection.test.ts tests/parity.test.ts",
     "test:github": "GITHUB_TEST_REPO=git@github.com:gitgovernance/e2e-test-repo.git vitest run",
-    "test:gitlab": "vitest run tests/gitlab.test.ts"
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@gitgov/core": "workspace:*",

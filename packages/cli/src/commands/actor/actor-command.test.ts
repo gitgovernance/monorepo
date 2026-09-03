@@ -11,14 +11,18 @@ vi.mock('../../services/dependency-injection', () => ({
   }
 }));
 
+import type { Mock } from 'vitest';
 import { ActorCommand } from './actor-command';
 import { DependencyInjectionService } from '../../services/dependency-injection';
 import type { ActorRecord } from '@gitgov/core';
 
 // Mock console methods to capture output
-const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation();
-const mockConsoleError = vi.spyOn(console, 'error').mockImplementation();
-const mockProcessExit = vi.spyOn(process, 'exit').mockImplementation();
+const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation(() => { });
+const mockConsoleError = vi.spyOn(console, 'error').mockImplementation(() => { });
+// `process.exit` is typed `(code?) => never`, so the stub has to satisfy `never` — it cannot just
+// return. Throwing would change control flow the tests do not expect, so the cast is the honest
+// option: the stub really does return, and the type says otherwise.
+const mockProcessExit = vi.spyOn(process, 'exit').mockImplementation((() => { }) as unknown as never);
 
 describe('ActorCommand', () => {
   let actorCommand: ActorCommand;
@@ -53,8 +57,8 @@ describe('ActorCommand', () => {
       }),
     };
 
-    (DependencyInjectionService.getInstance as Mock<typeof DependencyInjectionService.getInstance>)
-      .mockReturnValue(mockDependencyService as never);
+    (DependencyInjectionService.getInstance as Mock)
+      .mockReturnValue(mockDependencyService);
 
     actorCommand = new ActorCommand();
   });

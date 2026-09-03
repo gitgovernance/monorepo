@@ -12,7 +12,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 
 // === @gitgov/core public API ===
-import { PolicyEvaluator as PolicyEvaluatorNS, Factories, calculatePayloadChecksum, generateExecutionId } from '@gitgov/core';
+import { PolicyEvaluator as PolicyEvaluatorNS, Crypto, Factories, calculatePayloadChecksum, generateExecutionId } from '@gitgov/core';
 import type {
   Finding,
   Waiver,
@@ -31,6 +31,12 @@ type PolicyEvaluator = ReturnType<typeof createPolicyEvaluator>;
 
 /**
  * Creates a Finding with given severity and optional waiver state.
+ *
+ * `snippet` and `snippetHash` are REQUIRED on `Finding` since eb3be19e — see redaction_module.md
+ * RLDX-A5 and RLDX-F2: the hash is computed at every redaction level so L1 and L2 can be checked
+ * against each other. The hash here is the real sha256 of the snippet rather than a literal, so the
+ * fixture satisfies the same invariant RLDX-F4 verifies in production (`sha256(snippet) === snippetHash`)
+ * instead of being merely type-shaped.
  */
 function makeFinding(overrides: {
   fingerprint: string;
@@ -39,6 +45,7 @@ function makeFinding(overrides: {
   isWaived?: boolean;
   waiver?: Waiver;
 }): Finding {
+  const snippet = `const email = "user-${overrides.fingerprint.slice(0, 6)}@example.com";`;
   return {
     fingerprint: overrides.fingerprint,
     ruleId: overrides.ruleId ?? 'TEST-001',
@@ -49,6 +56,8 @@ function makeFinding(overrides: {
     category: 'pii-generic',
     detector: 'regex',
     confidence: 1.0,
+    snippet,
+    snippetHash: Crypto.sha256(snippet),
     executionId: '1700000000-exec-e2e-policy',
     reportedBy: ['agent:security-audit'],
     isWaived: overrides.isWaived ?? false,

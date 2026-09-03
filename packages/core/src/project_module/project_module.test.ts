@@ -1,7 +1,9 @@
 /**
  * ProjectModule Tests
  *
- * All EARS prefixes map to project_module.md
+ * PROJ-* prefixes map to project_module.md.
+ * GAUD-E1..E3 map to gitgov_audit.md §4.5 — the requirement is the agent's, the code it
+ * covers is this module's. Declared in project_module.md §4 so the marker is not an orphan.
  *
  * Uses real instances with mock I/O:
  * - IdentityModule: real instance with MemoryRecordStore + MockKeyProvider
@@ -10,7 +12,10 @@
  */
 
 import { ProjectModule } from './project_module';
-import type { ProjectModuleDeps } from './project_module.types';
+import type { ProjectModuleDeps, ProjectInitResult, ProjectInitialized } from './project_module.types';
+import { AddActorError } from './project_module.types';
+import { EventBus } from '../event_bus/event_bus';
+import type { ActorJoinedEvent } from '../event_bus/types';
 // Node-only implementation of IEngineValidator. A test file may import from the fs
 // subpath even though ProjectModule itself must not: EARS-CI02 measures dist/src/index.js,
 // and tests never reach the bundle.
@@ -21,6 +26,21 @@ import { IdentityModule } from '../identity/identity_module';
 import { MemoryRecordStore } from '../record_store/memory/memory_record_store';
 import { MockKeyProvider } from '../key_provider/memory/mock_key_provider';
 import type { GitGovActorRecord } from '../record_types';
+
+/**
+ * Narrows a `ProjectInitResult` to the fresh-init variant, and fails loudly when the run
+ * took the idempotent path instead.
+ *
+ * The narrowing is the point: `productAgentId`, `cycleId` and `agentWarnings` exist only on
+ * `ProjectInitialized`, so reading them off the union would be reading fields the re-init
+ * path never produces. It doubles as an anti-vacuity control — a test that silently landed
+ * on `alreadyInitialized` used to read `undefined` and assert against it.
+ */
+function assertFreshInit(result: ProjectInitResult): asserts result is ProjectInitialized {
+  if (result.alreadyInitialized) {
+    throw new Error(`expected a fresh init, got alreadyInitialized: ${JSON.stringify(result)}`);
+  }
+}
 
 const mockCycle = {
   id: '1234567890-cycle-root',
@@ -84,6 +104,7 @@ describe('ProjectModule', () => {
       expect(initializer.writeConfig).toHaveBeenCalled();
       expect(initializer.setupGitIntegration).toHaveBeenCalled();
       expect(initializer.finalize).toHaveBeenCalled();
+      assertFreshInit(result);
       expect(result.actorId).toBe('human:camilo');
       expect(result.productAgentId).toBe('agent:gitgov-audit');
       expect(result.cycleId).toBe('1234567890-cycle-root');
@@ -107,6 +128,49 @@ describe('ProjectModule', () => {
       expect(initializer.getHeadSha).toHaveBeenCalled();
       expect(initializer.createProjectStructure).not.toHaveBeenCalled();
       expect(initializer.finalize).not.toHaveBeenCalled();
+    });
+
+    it('[PROJ-A2] should not carry productAgentId or cycleId when already initialized', async () => {
+      // [PROJ-A2] This path creates neither, so the result must not claim them. Runtime
+      // already behaved this way; what was missing is the contract saying so — the flat type
+      // declared both as required and two `as ProjectInitResult` casts kept the compiler quiet.
+      const { deps, initializer } = createRealDeps();
+      (initializer.isInitialized as jest.Mock).mockResolvedValue(true);
+      (initializer.getHeadSha as jest.Mock).mockResolvedValue('sha-from-gitgov-state');
+      const pm = new ProjectModule(deps);
+
+      const result = await pm.initializeProject({ name: 'test-project', login: 'dev', stateBranch: DEFAULT_STATE_BRANCH });
+
+      // Anti-vacuity: assert the path was actually taken. Without this, a fresh init would
+      // also satisfy the two `not.toHaveProperty` below by never reaching this branch.
+      expect(result.alreadyInitialized).toBe(true);
+      expect(result).not.toHaveProperty('productAgentId');
+      expect(result).not.toHaveProperty('cycleId');
+    });
+
+    // The main SHALL of A2 — "ensure the caller's actor exists and return its actorId" — had
+    // no assertion in either A2 test: one passed no login, the other checked only the
+    // absent fields. This is the exact bug the spec's own 4.9 origin note describes.
+    it('[PROJ-A2] should ensure the caller actor exists and return its actorId on re-init', async () => {
+      const { deps, initializer, actorStore } = createRealDeps();
+      (initializer.isInitialized as jest.Mock).mockResolvedValue(true);
+      (initializer.getHeadSha as jest.Mock).mockResolvedValue('sha-head');
+      initializer.finalize = jest.fn().mockResolvedValue('sha-actor');
+      const pm = new ProjectModule(deps);
+
+      // Anti-vacuity: the actor is absent before, so `created: true` below proves the
+      // re-init path materialised it rather than found it.
+      expect(await actorStore.get('human:late-joiner')).toBeNull();
+
+      const result = await pm.initializeProject({ name: 'test-project', login: 'late-joiner', stateBranch: DEFAULT_STATE_BRANCH });
+
+      // Narrow on the discriminant: `created` lives only on the re-init variant.
+      if (!result.alreadyInitialized) throw new Error(`expected re-init, got fresh: ${JSON.stringify(result)}`);
+      expect(result.actorId).toBe('human:late-joiner');
+      expect(result.created).toBe(true);
+      expect(await actorStore.get('human:late-joiner')).not.toBeNull();
+      // createProjectStructure must not run: this is re-init, not init.
+      expect(initializer.createProjectStructure).not.toHaveBeenCalled();
     });
 
     it('[PROJ-A3] should use human as default actor type', async () => {
@@ -144,6 +208,7 @@ describe('ProjectModule', () => {
 
       const result = await pm.initializeProject({ name: 'test-project', login: 'camilo', stateBranch: DEFAULT_STATE_BRANCH });
 
+      assertFreshInit(result);
       expect(result.productAgentId).toBe('agent:gitgov-audit');
       const stored = await actorStore.get('agent:gitgov-audit');
       expect(stored).not.toBeNull();
@@ -248,10 +313,11 @@ describe('ProjectModule', () => {
 
       await pm.initializeProject({ name: 'test-project', login: 'dev', stateBranch: DEFAULT_STATE_BRANCH });
 
-      const gitIdx = callOrder.indexOf('gitIntegration');
-      const lastFinIdx = callOrder.lastIndexOf('finalize');
-      expect(gitIdx).toBeLessThan(lastFinIdx);
-      expect(callOrder.filter(c => c === 'finalize').length).toBeGreaterThanOrEqual(1);
+      // The whole sequence, not two indices. `indexOf` returns -1 for a call that never
+      // happened, and -1 < 0 passed — so the old assertions stayed green with
+      // setupGitIntegration removed entirely. Exactly one finalize: the init is a single
+      // Unit of Work (IDM-G1), and `>= 1` was written around that ambiguity.
+      expect(callOrder).toEqual(['gitIntegration', 'finalize']);
     });
   });
 
@@ -287,14 +353,28 @@ describe('ProjectModule', () => {
       expect(initializer.rollback).toHaveBeenCalled();
     });
 
-    it('[PROJ-D4] should rollback when finalize fails', async () => {
+    // D4 is about the finalize INSIDE addActor, and its error envelope. The old test drove
+    // initializeProject, whose addActor calls all pass skipFinalize — so the failure it
+    // tripped was the closing finalize at :210, which is D1's scenario, already covered at
+    // line ~325. Nothing asserted the AddActorError shape D4 exists to specify.
+    it('[PROJ-D4] should wrap a failed finalize in AddActorError GIT_WRITE_FAILED with actorId and cause', async () => {
       const { deps, initializer } = createRealDeps();
-      (initializer.finalize as jest.Mock).mockRejectedValue(new Error('Commit failed'));
+      (initializer.finalize as jest.Mock).mockRejectedValue(new Error('remote rejected push'));
       const pm = new ProjectModule(deps);
 
-      const err = await pm.initializeProject({ name: 'test-project', login: 'dev', stateBranch: DEFAULT_STATE_BRANCH }).catch(e => e);
-      expect(err.message).toBe('Commit failed');
-      expect(initializer.rollback).toHaveBeenCalled();
+      const err: unknown = await pm.addActor({
+        login: 'unlucky', type: 'human', repoId: 'repo-1', joinedVia: 'mcp',
+      }).catch(e => e);
+
+      expect(err).toBeInstanceOf(AddActorError);
+      if (!(err instanceof AddActorError)) throw new Error('unreachable');
+      expect(err.code).toBe('GIT_WRITE_FAILED');
+      expect(err.context).toEqual(expect.objectContaining({
+        actorId: 'human:unlucky',
+        cause: 'remote rejected push',
+      }));
+      // Anti-vacuity: finalize was the thing that failed — it must have been reached.
+      expect(initializer.finalize).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -318,7 +398,7 @@ describe('ProjectModule', () => {
         packageName: '@gitgov/core',
         agentId: 'agent:gitgov-audit',
         displayName: 'GitGov Audit',
-        engine: { type: 'local' as const, entrypoint: 'packages/core/dist/index.mjs', function: 'orchestrateAudit' },
+        engine: { type: 'local' as const, runtime: 'typescript' },
         purpose: 'orchestration',
         triggers: [{ type: 'webhook' as const, event: 'pull_request.opened' }],
         metadata: { description: 'Product agent' },
@@ -369,6 +449,33 @@ describe('ProjectModule', () => {
       // AgentRecords built+persisted for all 3 (product + 2 specialists) via the homologated path
       expect(mockAgentAdapter.buildSignedAgentRecord).toHaveBeenCalledTimes(3);
       expect(deps.initializer.addAgent as jest.Mock).toHaveBeenCalledTimes(3);
+    });
+
+    // The "before" clause is the whole point of E1: the AgentRecord is SIGNED with the
+    // agent's own key, so the ActorRecord (and its key) must already exist when it is built.
+    // The test above proves both ended up present, never the order — a mock adapter needs no
+    // key, so building first and creating the actor after would have passed just the same.
+    it('[PROJ-E1] should have the specialist ActorRecord in the store when its AgentRecord is built', async () => {
+      const { deps, actorStore } = createRealDeps();
+      const mockAgentAdapter = createMockAgentAdapter();
+      const actorPresentAtBuild: Record<string, boolean> = {};
+      mockAgentAdapter.buildSignedAgentRecord.mockImplementation(async (payload: { id?: string }) => {
+        const id = payload.id ?? 'unknown';
+        actorPresentAtBuild[id] = (await actorStore.get(id)) !== null;
+        return { header: { version: '1.0', type: 'agent', payloadChecksum: 'x', signatures: [] }, payload: { ...payload, id } };
+      });
+      deps.agentAdapter = mockAgentAdapter;
+      deps.defaultAgents = defaultAgents;
+
+      await new ProjectModule(deps).initializeProject({ name: 'test-project', login: 'camilo', stateBranch: DEFAULT_STATE_BRANCH });
+
+      // Anti-vacuity: the probe ran for both specialists — a missing key here means it never
+      // observed anything.
+      expect(Object.keys(actorPresentAtBuild).sort()).toEqual(
+        expect.arrayContaining(['agent:review-advisor', 'agent:security-audit']),
+      );
+      expect(actorPresentAtBuild['agent:security-audit']).toBe(true);
+      expect(actorPresentAtBuild['agent:review-advisor']).toBe(true);
     });
 
     it('[PROJ-E2] should skip failed specialist and continue with remaining agents', async () => {
@@ -441,7 +548,7 @@ describe('ProjectModule', () => {
   });
 
   // 4.6. Default Agent Registration (PROJ-B4 to B5)
-  describe('4.6. Default Agent Registration (PROJ-B4 to B5)', () => {
+  describe('4.6. Default Agent Registration (PROJ-B4 to B7)', () => {
     it('[PROJ-B4] should build+sign each defaultAgent and persist via initializer.addAgent', async () => {
       const { deps } = createRealDeps();
       const mockAgentAdapter = createMockAgentAdapter();
@@ -450,7 +557,7 @@ describe('ProjectModule', () => {
         packageName: '@gitgov/core',
         agentId: 'agent:gitgov-audit',
         displayName: 'GitGov Audit',
-        engine: { type: 'local' as const, entrypoint: 'packages/core/dist/index.mjs', function: 'orchestrateAudit' },
+        engine: { type: 'local' as const, runtime: 'typescript' },
         purpose: 'orchestration',
         triggers: [{ type: 'webhook' as const, event: 'pull_request.opened' }],
         metadata: { description: 'Product agent' },
@@ -464,7 +571,8 @@ describe('ProjectModule', () => {
         expect.objectContaining({
           id: 'agent:gitgov-audit',
           status: 'active',
-          engine: expect.objectContaining({ entrypoint: 'packages/core/dist/index.mjs' }),
+          // Runtime-only: the product agent declares no entrypoint (nothing dispatches it).
+          engine: expect.objectContaining({ runtime: 'typescript' }),
         }),
       );
       // Signed record persisted via the initializer (homologated FS/GitHub), not the store
@@ -518,6 +626,7 @@ describe('ProjectModule', () => {
       // Non-fatal: the agent IS registered (valid declaration)...
       expect(mockAgentAdapter.buildSignedAgentRecord).toHaveBeenCalledTimes(1);
       // ...but the caller is warned that it won't run (EARS-M1 validation)
+      assertFreshInit(result);
       expect(result.agentWarnings).toBeDefined();
       expect(result.agentWarnings).toHaveLength(1);
       expect(result.agentWarnings![0]).toContain('agent:phantom');
@@ -604,6 +713,7 @@ describe('ProjectModule', () => {
       // The agent is still registered — validation was never the gate.
       expect(mockAgentAdapter.buildSignedAgentRecord).toHaveBeenCalledTimes(1);
       // But nobody was warned, because nobody was there to check.
+      assertFreshInit(result);
       expect(result.agentWarnings ?? []).toHaveLength(0);
     });
   });
@@ -649,9 +759,11 @@ describe('ProjectModule', () => {
       expect(review.metadata.outputFormat).toBe('feedback-review');
     });
 
-    it('[PROJ-F3] github_backends should use DEFAULT_AGENTS from core', () => {
-      // Structural test: DEFAULT_AGENTS has the same shape as what github_backends needs.
-      // The real assertion is in github_backends.ts where `defaultAgents: DEFAULT_AGENTS` compiles.
+    // Formerly tagged [PROJ-F3]. That EARS is about saas-api's github_backends.ts, which
+    // this package cannot load — so this test could only ever check the registry's shape,
+    // and did, while its name claimed something about another package. PROJ-F3 now lives
+    // in saas-api/project_service.test.ts, where the factory can actually be invoked.
+    it('[PROJ-F2] DEFAULT_AGENTS entries should carry every field DefaultAgentConfig requires', () => {
       const { DEFAULT_AGENTS } = require('./default_agents');
       for (const agent of DEFAULT_AGENTS) {
         expect(agent).toHaveProperty('packageName');
@@ -666,7 +778,9 @@ describe('ProjectModule', () => {
   });
 
   // 4.8. Agent Config Update (GAUD-E1 to E3)
-  describe('4.8. Agent Config Update (GAUD-E1 to E3)', () => {
+  // Section number belongs to gitgov_audit.md, not project_module.md: these EARS are the
+  // agent's, and §4.8 of this module's spec is Branch Check Caching (PROJ-G1).
+  describe('gitgov_audit.md 4.5. Agent Config Update (GAUD-E1 to E3)', () => {
     const singleAgent = [{
       packageName: '@gitgov/core',
       agentId: 'agent:gitgov-audit',
@@ -761,7 +875,7 @@ describe('ProjectModule', () => {
     });
   });
 
-  describe('4.9. addActor (PROJ-H1 to H6)', () => {
+  describe('4.9. addActor (PROJ-H1 to H6, incl. H3b)', () => {
     it('[PROJ-H1] should create actor and commit when actor not in store', async () => {
       const { deps, initializer } = createRealDeps();
       initializer.finalize = jest.fn().mockResolvedValue('sha-join-commit');
@@ -817,7 +931,7 @@ describe('ProjectModule', () => {
       expect(result.commitSha).toBe('sha-retry-commit');
     });
 
-    it('[PROJ-H3] should succeed when store already committed and finalize has nothing to commit', async () => {
+    it('[PROJ-H3b] should succeed when store already committed and finalize has nothing to commit', async () => {
       const { deps, initializer } = createRealDeps();
       initializer.finalize = jest.fn()
         .mockRejectedValue(new Error('Nothing to commit: staging buffer is empty'));
@@ -858,7 +972,7 @@ describe('ProjectModule', () => {
       expect(getActorCalls).toBeGreaterThan(1);
     });
 
-    it('[PROJ-H3] should throw GIT_WRITE_FAILED when finalize fails and actor not in store', async () => {
+    it('[PROJ-H3b] should throw GIT_WRITE_FAILED when finalize fails and actor not in store', async () => {
       const { deps, initializer } = createRealDeps();
       // finalize fails with "Nothing to commit" BUT getActor returns null (store didn't write either)
       initializer.finalize = jest.fn()
@@ -872,36 +986,76 @@ describe('ProjectModule', () => {
       })).rejects.toMatchObject({ code: 'GIT_WRITE_FAILED' });
     });
 
-    it('[PROJ-H4] should emit ACTOR_JOINED event with wasCreated field', async () => {
-      const emitSpy = jest.fn();
+    // Uses the REAL EventBus and a real subscriber, not a hand-shaped stub. The previous
+    // version asserted against `{ emit: jest.fn() }` — a shape no implementation in the
+    // codebase has — so it stayed green while production emitted nothing at all.
+    it('[PROJ-H4] should publish project.actor.joined with wasCreated true when the actor is minted', async () => {
+      const received: ActorJoinedEvent[] = [];
+      const bus = new EventBus();
+      bus.subscribe<ActorJoinedEvent>('project.actor.joined', (e) => { received.push(e); });
+
       const { deps, initializer } = createRealDeps();
       initializer.finalize = jest.fn().mockResolvedValue('sha-event');
-      deps.eventBus = { emit: emitSpy };
+      deps.eventBus = bus;
       const pm = new ProjectModule(deps);
 
       await pm.addActor({
         login: 'event-user', type: 'human', repoId: 'repo-42', joinedVia: 'mcp',
       });
 
-      expect(emitSpy).toHaveBeenCalledWith('ACTOR_JOINED', expect.objectContaining({
+      expect(received).toHaveLength(1);
+      expect(received[0]!.source).toBe('project_module');
+      expect(received[0]!.payload).toEqual({
         actorId: 'human:event-user',
         repoId: 'repo-42',
         joinedVia: 'mcp',
         wasCreated: true,
+      });
+    });
+
+    // The `wasCreated: false` branch is the reason the field exists, and nothing covered it.
+    it('[PROJ-H4] should publish project.actor.joined with wasCreated false when the actor already exists', async () => {
+      const received: ActorJoinedEvent[] = [];
+      const bus = new EventBus();
+      bus.subscribe<ActorJoinedEvent>('project.actor.joined', (e) => { received.push(e); });
+
+      const { deps, initializer } = createRealDeps();
+      initializer.finalize = jest.fn().mockResolvedValue('sha-event');
+      deps.eventBus = bus;
+      const pm = new ProjectModule(deps);
+
+      await pm.addActor({ login: 'twice', type: 'human', repoId: 'repo-42', joinedVia: 'mcp' });
+      received.length = 0; // drop the creation event; this test is about the second join
+
+      await pm.addActor({ login: 'twice', type: 'human', repoId: 'repo-42', joinedVia: 'mcp' });
+
+      expect(received).toHaveLength(1);
+      expect(received[0]!.payload).toEqual(expect.objectContaining({
+        actorId: 'human:twice',
+        wasCreated: false,
       }));
     });
 
+    // Isolation is structural — one ProjectModule is bound to one repo's initializer and
+    // store — so it can only be observed with two of them. The old test had one instance,
+    // never looked at the repoId it passed, and asserted the same thing as PROJ-H1.
     it('[PROJ-H5] should write only to the repo where called', async () => {
-      const { deps, initializer } = createRealDeps();
-      initializer.finalize = jest.fn().mockResolvedValue('sha-lazy');
-      const pm = new ProjectModule(deps);
+      const repoA = createRealDeps();
+      const repoB = createRealDeps();
+      repoA.initializer.finalize = jest.fn().mockResolvedValue('sha-a');
+      repoB.initializer.finalize = jest.fn().mockResolvedValue('sha-b');
 
-      const result = await pm.addActor({
-        login: 'lazy-user', type: 'human', repoId: 'repo-specific', joinedVia: 'saas-webhook',
+      await new ProjectModule(repoA.deps).addActor({
+        login: 'lazy-user', type: 'human', repoId: 'repo-a', joinedVia: 'saas-webhook',
       });
 
-      expect(result.created).toBe(true);
-      expect(initializer.finalize).toHaveBeenCalled();
+      // Written where called…
+      expect(await repoA.actorStore.get('human:lazy-user')).not.toBeNull();
+      expect(repoA.initializer.finalize).toHaveBeenCalledTimes(1);
+      // …and nowhere else. Anti-vacuity: repoB's store is a real MemoryRecordStore that
+      // would have the row if anything had crossed over.
+      expect(await repoB.actorStore.get('human:lazy-user')).toBeNull();
+      expect(repoB.initializer.finalize).not.toHaveBeenCalled();
     });
 
     it('[PROJ-H6] should throw UNAUTHORIZED when authzCheck returns false', async () => {

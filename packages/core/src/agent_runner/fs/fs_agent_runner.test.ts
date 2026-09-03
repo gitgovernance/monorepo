@@ -15,6 +15,7 @@ import type { IExecutionAdapter } from "../../adapters/execution_adapter";
 import type { IEventStream, BaseEvent } from "../../event_bus";
 import type { AgentRecord } from "../../record_types";
 import type { RuntimeHandlerRegistry } from "../agent_runner";
+import * as ResolveRunnerModule from "../resolve_runner";
 
 describe("FsAgentRunner", () => {
   let tempDir: string;
@@ -921,4 +922,36 @@ describe("FsAgentRunner", () => {
       expect(response.executionRecordId).toMatch(/^\d{10}-exec-/);
     });
   });
+  // ═══════════════════════════════════════════════════════════════════════
+  // 4.10. Standalone Runner Resolution — delegation (ARUN-N4)
+  // ═══════════════════════════════════════════════════════════════════════
+  describe("4.10. Standalone Runner Resolution (ARUN-N4)", () => {
+    it("[ARUN-N4] should use resolveRunner instead of inline switch", async () => {
+      // The spy proves DELEGATION, not just outcome: a reintroduced inline switch would
+      // keep every behavioral test green while resolveRunner stops being the single
+      // source of truth — which is the exact regression this EARS exists to block.
+      const spy = jest.spyOn(ResolveRunnerModule, "resolveRunner");
+
+      const entrypoint = writeAgentEntrypoint(
+        "n4-delegate.js",
+        `module.exports.runAgent = async () => ({ message: "resolved-through-resolveRunner" })`
+      );
+      writeAgentFile("n4-delegate", { engine: { type: "local", entrypoint } });
+
+      const runner = new FsAgentRunner({ gitgovPath, projectRoot: tempDir });
+      const response = await runner.runOnce({ agentId: "agent:n4-delegate", taskId: "task:n4" });
+
+      expect(spy).toHaveBeenCalledTimes(1);
+      const [engineArg, backendsArg] = spy.mock.calls[0]!;
+      expect(engineArg.type).toBe("local");
+      // The full map travels — all four families resolvable from one call site.
+      expect(Object.keys(backendsArg).sort()).toEqual(["api", "custom", "local", "mcp"]);
+      // And the run result actually flowed through the delegated backend.
+      expect(response.status).toBe("success");
+      expect(response.output?.message).toBe("resolved-through-resolveRunner");
+
+      spy.mockRestore();
+    });
+  });
+
 });

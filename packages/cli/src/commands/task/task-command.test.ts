@@ -36,9 +36,10 @@ vi.mock('../../services/dependency-injection', () => ({
   }
 }));
 
+import type { Mock } from 'vitest';
 import { TaskCommand } from './task-command';
 import { DependencyInjectionService } from '../../services/dependency-injection';
-import type { TaskRecord, ActorRecord, EnrichedTaskRecord, IndexData, GitGovTaskRecord } from '@gitgov/core';
+import type { TaskRecord, ActorRecord, EnrichedTaskRecord, IndexData, GitGovTaskRecord, FeedbackRecord, IndexGenerationReport } from '@gitgov/core';
 import { Factories } from '@gitgov/core';
 
 // Test helper: Simple conversion to EnrichedTaskRecord for mocking
@@ -184,10 +185,12 @@ function createMockIndexData(
 }
 
 // Mock console methods to capture output
-const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation();
-const mockConsoleError = vi.spyOn(console, 'error').mockImplementation();
-const mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation();
-const mockProcessExit = vi.spyOn(process, 'exit').mockImplementation();
+const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation(() => { });
+const mockConsoleError = vi.spyOn(console, 'error').mockImplementation(() => { });
+const mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => { });
+// `process.exit` is typed `(code?) => never`; the stub returns, so the cast states that gap
+// explicitly rather than throwing and changing control flow the tests do not expect.
+const mockProcessExit = vi.spyOn(process, 'exit').mockImplementation((() => { }) as unknown as never);
 
 describe('TaskCommand - Complete Unit Tests', () => {
   let taskCommand: TaskCommand;
@@ -208,7 +211,9 @@ describe('TaskCommand - Complete Unit Tests', () => {
   let mockProjector: {
     isIndexUpToDate: Mock<() => Promise<boolean>>;
     getIndexData: Mock<() => Promise<IndexData | null>>;
-    generateIndex: Mock<() => Promise<void>>;
+    // The real IRecordProjector.generateIndex returns a report, not void — the `void`
+    // annotation was why the fixtures needed `as any` to compile.
+    generateIndex: Mock<() => Promise<IndexGenerationReport>>;
     invalidateCache: Mock<() => Promise<void>>;
   };
   let mockIdentityAdapter: {
@@ -286,8 +291,8 @@ describe('TaskCommand - Complete Unit Tests', () => {
     };
 
     // Mock singleton getInstance
-    (DependencyInjectionService.getInstance as Mock<typeof DependencyInjectionService.getInstance>)
-      .mockReturnValue(mockDependencyService as never);
+    (DependencyInjectionService.getInstance as Mock)
+      .mockReturnValue(mockDependencyService);
 
     taskCommand = new TaskCommand();
   });
@@ -356,8 +361,8 @@ The solution involves multiple steps...`;
       const fs = require('fs/promises');
       const path = require('path');
 
-      const mockError = new Error('ENOENT: no such file or directory');
-      (mockError as any).code = 'ENOENT';
+      // Object.assign types the extra property; `(err as any).code = ...` hid the shape.
+      const mockError = Object.assign(new Error('ENOENT: no such file or directory'), { code: 'ENOENT' });
 
       vi.spyOn(fs, 'readFile').mockRejectedValue(mockError);
       vi.spyOn(path, 'isAbsolute').mockReturnValue(false);
@@ -391,8 +396,7 @@ The solution involves multiple steps...`;
       const fs = require('fs/promises');
       const path = require('path');
 
-      const mockError = new Error('EACCES: permission denied');
-      (mockError as any).code = 'EACCES';
+      const mockError = Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' });
 
       vi.spyOn(fs, 'readFile').mockRejectedValue(mockError);
       vi.spyOn(path, 'isAbsolute').mockReturnValue(false);
@@ -651,12 +655,22 @@ const test = "value";
   describe('Multi-Adapter Integration (EARS 6-10)', () => {
     it('[EARS-6] should create assignment FeedbackRecord using FeedbackAdapter', async () => {
       const assigneeActor = { ...sampleActor, id: 'human:assignee' };
-      const feedbackRecord = { id: 'feedback-123', type: 'assignment' };
+      // Complete FeedbackRecord — the old two-field literal was cast `as any`, so nothing
+      // checked it against the type the adapter actually returns.
+      const feedbackRecord: FeedbackRecord = {
+        id: 'feedback-123',
+        entityType: 'task',
+        entityId: '1757789000-task-test-task',
+        type: 'assignment',
+        status: 'open',
+        content: 'Task assigned to human:assignee',
+        assignee: 'human:assignee',
+      };
 
       mockBacklogAdapter.getTask.mockResolvedValue(sampleTask);
       mockIdentityAdapter.getActor.mockResolvedValue(assigneeActor);
       mockIdentityAdapter.getCurrentActor.mockResolvedValue(sampleActor);
-      mockFeedbackAdapter.create.mockResolvedValue(feedbackRecord as any);
+      mockFeedbackAdapter.create.mockResolvedValue(feedbackRecord);
       mockProjector.invalidateCache.mockResolvedValue();
 
       await taskCommand.executeAssign('1757789000-task-test-task', { to: 'human:assignee' });
@@ -721,7 +735,11 @@ const test = "value";
 
     it('[EARS-9] should auto-regenerate cache when obsolete in read commands', async () => {
       mockProjector.isIndexUpToDate.mockResolvedValue(false);
-      mockProjector.generateIndex.mockResolvedValue({} as any);
+      mockProjector.generateIndex.mockResolvedValue({
+        success: true, recordsProcessed: 1, metricsCalculated: 1, derivedStatesApplied: 0,
+        generationTime: 5, errors: [],
+        performance: { readTime: 1, calculationTime: 2, writeTime: 2 },
+      });
       mockProjector.getIndexData.mockResolvedValue(
         createMockIndexData([sampleTask])
       );
@@ -776,7 +794,11 @@ const test = "value";
 
     it('[EARS-13] should suppress output with quiet flag for scripting', async () => {
       mockProjector.isIndexUpToDate.mockResolvedValue(false);
-      mockProjector.generateIndex.mockResolvedValue({} as any);
+      mockProjector.generateIndex.mockResolvedValue({
+        success: true, recordsProcessed: 1, metricsCalculated: 1, derivedStatesApplied: 0,
+        generationTime: 5, errors: [],
+        performance: { readTime: 1, calculationTime: 2, writeTime: 2 },
+      });
       mockProjector.getIndexData.mockResolvedValue(
         createMockIndexData([sampleTask])
       );

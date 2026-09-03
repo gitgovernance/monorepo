@@ -22,11 +22,13 @@ const E2E_SCHEMA_DIR = resolve(E2E_ROOT, 'prisma/schema');
 
 const SCHEMAS_TO_COPY = ['protocol.prisma', 'audit.prisma'];
 
+// No timestamp in the header: it made every sync dirty the tree with a two-line,
+// content-free diff, so `prisma:generate` in CI or locally could never be a no-op.
+// Whether the copy is current is answered by diffing against core, not by a date.
 const HEADER = [
   '// ⚠️ COPIED from core — DO NOT EDIT',
   '// Source: packages/core/prisma/schema/',
   '// Re-generate: pnpm prisma:sync (in packages/e2e)',
-  `// Synced at: ${new Date().toISOString()}`,
   '',
 ].join('\n');
 

@@ -21,6 +21,7 @@ vi.mock('../../services/dependency-injection', () => ({
   }
 }));
 
+import type { Mock } from 'vitest';
 import { ExecCommand } from './exec_command';
 import { DependencyInjectionService } from '../../services/dependency-injection';
 
@@ -45,9 +46,11 @@ const mockExecution2 = {
 };
 
 // Mock console and process.exit at module level (task-command pattern)
-const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation();
-const mockConsoleError = vi.spyOn(console, 'error').mockImplementation();
-const mockProcessExit = vi.spyOn(process, 'exit').mockImplementation();
+const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation(() => { });
+const mockConsoleError = vi.spyOn(console, 'error').mockImplementation(() => { });
+// `process.exit` is typed `(code?) => never`; the stub returns, so the cast states that gap
+// explicitly rather than throwing and changing control flow the tests do not expect.
+const mockProcessExit = vi.spyOn(process, 'exit').mockImplementation((() => { }) as unknown as never);
 
 describe('ExecCommand', () => {
   let execCommand: ExecCommand;
@@ -91,8 +94,8 @@ describe('ExecCommand', () => {
     };
 
     // Set up mock BEFORE constructing command (critical — BaseCommand reads DI in constructor)
-    (DependencyInjectionService.getInstance as Mock<typeof DependencyInjectionService.getInstance>)
-      .mockReturnValue(mockDependencyService as never);
+    (DependencyInjectionService.getInstance as Mock)
+      .mockReturnValue(mockDependencyService);
 
     execCommand = new ExecCommand();
   });
@@ -106,7 +109,7 @@ describe('ExecCommand', () => {
   describe('4.1. Subcommand new — Creation (ICOMP-A1 to ICOMP-A5)', () => {
 
     it('[ICOMP-A1] should abort when --result is not provided', async () => {
-      await execCommand.executeNew('task-1', { result: '' } as any);
+      await execCommand.executeNew('task-1', { result: '' });
 
       expect(mockProcessExit).toHaveBeenCalledWith(1);
       expect(mockConsoleError).toHaveBeenCalledWith(
@@ -117,7 +120,7 @@ describe('ExecCommand', () => {
     it('[ICOMP-A2] should abort when taskId does not exist', async () => {
       mockExecutionAdapter.create.mockRejectedValue(new Error('Task not found: task-nonexistent'));
 
-      await execCommand.executeNew('task-nonexistent', { result: 'Some result' } as any);
+      await execCommand.executeNew('task-nonexistent', { result: 'Some result' });
 
       expect(mockProcessExit).toHaveBeenCalledWith(1);
       expect(mockConsoleError).toHaveBeenCalledWith(
@@ -130,7 +133,7 @@ describe('ExecCommand', () => {
         result: 'OAuth2 callback handler completed with token validation.',
         type: 'progress',
         title: 'Implement OAuth callback',
-      } as any);
+      });
 
       expect(mockExecutionAdapter.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -151,7 +154,7 @@ describe('ExecCommand', () => {
       await execCommand.executeNew('1752274500-task-oauth', {
         result: 'Done',
         reference: ['commit:abc123', 'pr:456', 'file:src/auth.ts'],
-      } as any);
+      });
 
       expect(mockExecutionAdapter.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -164,7 +167,7 @@ describe('ExecCommand', () => {
     it('[ICOMP-A5] should default to type progress when not specified', async () => {
       await execCommand.executeNew('1752274500-task-oauth', {
         result: 'Some work done',
-      } as any);
+      });
 
       expect(mockExecutionAdapter.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -180,7 +183,7 @@ describe('ExecCommand', () => {
     it('[ICOMP-A6] should list executions for a specific task', async () => {
       mockExecutionAdapter.getExecutionsByTask.mockResolvedValue([mockExecution, mockExecution2]);
 
-      await execCommand.executeList('1752274500-task-oauth', { json: true } as any);
+      await execCommand.executeList('1752274500-task-oauth', { json: true });
 
       expect(mockExecutionAdapter.getExecutionsByTask).toHaveBeenCalledWith('1752274500-task-oauth');
       const output = JSON.parse(mockConsoleLog.mock.calls[0]![0]);
@@ -191,7 +194,7 @@ describe('ExecCommand', () => {
     it('[ICOMP-A7] should list all executions when no taskId given', async () => {
       mockExecutionAdapter.getAllExecutions.mockResolvedValue([mockExecution]);
 
-      await execCommand.executeList(undefined, { json: true } as any);
+      await execCommand.executeList(undefined, { json: true });
 
       expect(mockExecutionAdapter.getAllExecutions).toHaveBeenCalled();
       const output = JSON.parse(mockConsoleLog.mock.calls[0]![0]);
@@ -204,7 +207,7 @@ describe('ExecCommand', () => {
     it('[ICOMP-A8] should display full execution details', async () => {
       mockExecutionAdapter.getExecution.mockResolvedValue(mockExecution);
 
-      await execCommand.executeShow('1752361200-exec-oauth-callback', { json: true } as any);
+      await execCommand.executeShow('1752361200-exec-oauth-callback', { json: true });
 
       expect(mockExecutionAdapter.getExecution).toHaveBeenCalledWith('1752361200-exec-oauth-callback');
       const output = JSON.parse(mockConsoleLog.mock.calls[0]![0]);
@@ -217,7 +220,7 @@ describe('ExecCommand', () => {
     it('[ICOMP-A9] should abort when executionId does not exist', async () => {
       mockExecutionAdapter.getExecution.mockResolvedValue(null);
 
-      await execCommand.executeShow('exec-nonexistent', {} as any);
+      await execCommand.executeShow('exec-nonexistent', {});
 
       expect(mockProcessExit).toHaveBeenCalledWith(1);
       expect(mockConsoleError).toHaveBeenCalledWith(

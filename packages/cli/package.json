@@ -1,7 +1,7 @@
 {
   "name": "@gitgov/cli",
   "version": "3.0.0",
-  "description": "🚀 AI-first governance CLI for intelligent work. Install with `npm install -g @gitgov/cli` and start governing your projects with interactive dashboards, task management, and workflow automation.",
+  "description": "🚀 AI-first governance CLI for intelligent work. Install with `npm install -g @gitgov/cli` and start governing your projects with task management and workflow automation.",
   "type": "module",
   "main": "build/dist/gitgov.mjs",
   "bin": {
@@ -12,11 +12,13 @@
   ],
   "scripts": {
     "clean": "rm -rf build",
-    "build": "pnpm clean && mkdir -p build/dist && esbuild src/index.ts --bundle --platform=node --format=esm --target=node20 --outfile=build/dist/gitgov.mjs --jsx=automatic --jsx-import-source=react --external:react-devtools-core --external:commander --external:ink --external:react --external:assert --external:events --external:util --external:path --external:fs --external:crypto --external:child_process --external:clipboardy --external:@gitgov/core --external:@gitgov/core/github --external:@gitgov/core/audit --external:@gitgov/core/fs --external:@gitgov/core/memory --external:@gitgov/core/sarif --external:@gitgov/core/prisma && chmod +x build/dist/gitgov.mjs",
+    "build": "pnpm clean && mkdir -p build/dist && esbuild src/index.ts --bundle --platform=node --format=esm --target=node20 --outfile=build/dist/gitgov.mjs --external:commander --external:assert --external:events --external:util --external:path --external:fs --external:crypto --external:child_process --external:@gitgov/core --external:@gitgov/core/github --external:@gitgov/core/audit --external:@gitgov/core/fs --external:@gitgov/core/memory --external:@gitgov/core/prisma && chmod +x build/dist/gitgov.mjs",
     "build:npm": "./scripts/build-npm.sh",
     "start": "./build/dist/gitgov.mjs",
     "dev": "tsx src/index.ts",
     "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "test:unit": "vitest run src",
     "test:all": "pnpm build && pnpm test && pnpm pack:build",
     "prepublishOnly": "pnpm build",
     "pack:build": "mkdir -p build && pnpm pack && mv *.tgz build/",
@@ -31,12 +33,9 @@
     "workflow",
     "governance",
     "cli",
-    "tui",
     "npm",
     "project-management",
     "task-management",
-    "dashboard",
-    "interactive",
     "productivity",
     "automation",
     "collaboration"
@@ -58,12 +57,7 @@
   "dependencies": {
     "@gitgov/core": "workspace:*",
     "@gitgov/agent-security-audit": "workspace:*",
-    "clipboardy": "^5.0.0",
     "commander": "^11.1.0"
-  },
-  "optionalDependencies": {
-    "ink": "^4.4.1",
-    "react": "^18.3.1"
   },
   "devDependencies": {
     "@semantic-release/changelog": "^6.0.3",
@@ -71,10 +65,8 @@
     "@semantic-release/github": "^9.2.6",
     "vitest": "^4.0.0",
     "@types/node": "^20.0.0",
-    "@types/react": "^18.3.24",
     "conventional-changelog-conventionalcommits": "^7.0.2",
     "esbuild": "^0.19.0",
-    "ink-testing-library": "^4.0.0",
     "semantic-release": "^22.0.12",
     "tsx": "^4.0.0",
     "typescript": "^5.0.0"

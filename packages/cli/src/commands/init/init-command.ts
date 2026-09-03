@@ -126,9 +126,10 @@ export class InitCommand {
         // [EARS-G1] Post-init: best-effort push + DX concerns
         await this.postInitConcerns(options);
 
-        // [INIT-M1] [INIT-M2] Agent status display post-init
+        // [INIT-M1] [INIT-M2] [INIT-M3] Agent status display post-init. The root comes from the
+        // container, the only component that holds both repoRoot and projectRoot (EARS-C16).
         if (!options.quiet) {
-          this.displayAgentStatus();
+          await this.displayAgentStatus();
         }
       }
 
@@ -239,9 +240,15 @@ export class InitCommand {
    * [INIT-M1] [INIT-M2] Display agent installation status after init.
    * Uses discoverInstalledAgents to check which agents are available in node_modules.
    */
-  private displayAgentStatus(): void {
+  private async displayAgentStatus(): Promise<void> {
     try {
-      const discovered = discoverInstalledAgents(process.cwd());
+      // [INIT-M3] The root is ASKED FOR, never derived. `discoverInstalledAgents` resolves
+      // `<root>/node_modules`, which lives in the user's repo and never in
+      // `~/.gitgov/worktrees/<hash>`; only the container knows both (EARS-C16). This read
+      // `process.cwd()` until 2026-08-28 and was right only because `init` is invoked from the
+      // repo — the same accident PROJ-B7 closed in ProjectModule.
+      const repoRoot = await this.container.getRepoRoot();
+      const discovered = discoverInstalledAgents(repoRoot);
       const discoveredIds = new Set(discovered.map(a => a.id));
 
       if (!DEFAULT_AGENTS || !Array.isArray(DEFAULT_AGENTS)) return;
@@ -388,7 +395,10 @@ export class InitCommand {
    * [EARS-C2] Handles --json output for automation
    * [EARS-B4] Shows result with actorId and commitSha
    */
-  private showSuccessOutput(result: import('@gitgov/core').ProjectModuleInitResult, options: InitCommandOptions): void {
+  // Takes the fresh-init variant, not the union: `productAgentId` and `cycleId` exist only
+  // there. The call site already reaches this in the `else` of `if (result.alreadyInitialized)`,
+  // so the narrowing was real and only the signature was lying about it.
+  private showSuccessOutput(result: import('@gitgov/core').ProjectModuleInitialized, options: InitCommandOptions): void {
     if (options.json) {
       console.log(JSON.stringify({
         success: true,

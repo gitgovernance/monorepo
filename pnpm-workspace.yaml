@@ -1,6 +1,5 @@
 packages:
   - packages/core
-  - packages/core-gitlab
   - packages/cli
   - packages/mcp-server
   - packages/e2e

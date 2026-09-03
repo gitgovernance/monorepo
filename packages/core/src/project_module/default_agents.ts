@@ -9,7 +9,15 @@ export const DEFAULT_AGENTS: DefaultAgentConfig[] = [
     packageName: '@gitgov/core',
     agentId: 'agent:gitgov-audit',
     displayName: 'GitGov Audit',
-    engine: { type: 'local', runtime: 'typescript', entrypoint: 'packages/core/dist/index.mjs', function: 'orchestrateAudit' },
+    // Runtime-only engine, ON PURPOSE (schema: only `type` is required; ARUN-M1: local
+    // without entrypoint is valid-not-locally-verifiable). This agent is never dispatched:
+    // AuditOrchestrator discovers purpose 'audit' only, and the orchestration this record
+    // names is implemented by scan_orchestrator (SaaS) and audit-command (CLI). The record
+    // is the signing IDENTITY for automated scans (SCAN-J1, G21). It used to declare
+    // entrypoint 'packages/core/dist/index.mjs' + function 'orchestrateAudit' — a file and
+    // a function that never existed — which made every `gitgov init` warn that the
+    // product's own agent was not runnable (PROJ-B6).
+    engine: { type: 'local', runtime: 'typescript' },
     purpose: 'orchestration',
     triggers: [
       { type: 'manual', command: 'gitgov audit' },

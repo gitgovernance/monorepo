@@ -40,6 +40,7 @@ vi.mock('fs', () => ({
   }
 }));
 
+import type { Mock } from 'vitest';
 import { LintCommand } from './lint-command';
 import { DependencyInjectionService } from '../../services/dependency-injection';
 import { promises as fs } from 'fs';
@@ -47,9 +48,11 @@ import type { ActorRecord, FixReport, LintOptions, LintReport, LintResult } from
 import type { FsLintOptions, FsFixOptions } from '@gitgov/core/fs';
 
 // Mock console methods to capture output
-const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation();
-const mockConsoleError = vi.spyOn(console, 'error').mockImplementation();
-const mockProcessExit = vi.spyOn(process, 'exit').mockImplementation();
+const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation(() => { });
+const mockConsoleError = vi.spyOn(console, 'error').mockImplementation(() => { });
+// `process.exit` is typed `(code?) => never`; the stub returns, so the cast states that gap
+// explicitly rather than throwing and changing control flow the tests do not expect.
+const mockProcessExit = vi.spyOn(process, 'exit').mockImplementation((() => { }) as unknown as never);
 
 // Global references to the mock adapters for easy access in tests
 let mockLintModule: {
@@ -174,8 +177,8 @@ describe('LintCommand', () => {
     };
 
     // Mock singleton getInstance
-    (DependencyInjectionService.getInstance as Mock<typeof DependencyInjectionService.getInstance>)
-      .mockReturnValue(mockDependencyService as never);
+    (DependencyInjectionService.getInstance as Mock)
+      .mockReturnValue(mockDependencyService);
 
     // Create fresh LintCommand instance
     lintCommand = new LintCommand();
@@ -187,7 +190,7 @@ describe('LintCommand', () => {
     mockIdentityAdapter.getCurrentActor.mockResolvedValue(mockActor);
 
     // Mock fs.stat for file detection
-    (fs.stat as vi.Mock).mockRejectedValue(new Error('Not a file'));
+    (fs.stat as Mock).mockRejectedValue(new Error('Not a file'));
   });
 
   afterEach(() => {
@@ -246,8 +249,8 @@ describe('LintCommand', () => {
         getLintModule: vi.fn().mockRejectedValue(error),
         getIdentityAdapter: vi.fn().mockResolvedValue(mockIdentityAdapter)
       };
-      (DependencyInjectionService.getInstance as Mock<typeof DependencyInjectionService.getInstance>)
-        .mockReturnValue(mockDependencyService as never);
+      (DependencyInjectionService.getInstance as Mock)
+        .mockReturnValue(mockDependencyService);
 
       // Create new command instance to use the new mock
       const errorCommand = new LintCommand();
@@ -272,7 +275,7 @@ describe('LintCommand', () => {
     });
 
     it('[EARS-A4] should detect file by checking filesystem when extension is not .json', async () => {
-      (fs.stat as vi.Mock).mockResolvedValueOnce({ isFile: () => true });
+      (fs.stat as Mock).mockResolvedValueOnce({ isFile: () => true });
 
       await lintCommand.execute({
         path: '.gitgov/tasks/task1'
@@ -802,7 +805,7 @@ describe('LintCommand', () => {
     });
 
     it('should handle file path detection errors gracefully', async () => {
-      (fs.stat as vi.Mock).mockRejectedValueOnce(new Error('Permission denied'));
+      (fs.stat as Mock).mockRejectedValueOnce(new Error('Permission denied'));
 
       await lintCommand.execute({
         path: '.gitgov/tasks/unknown'

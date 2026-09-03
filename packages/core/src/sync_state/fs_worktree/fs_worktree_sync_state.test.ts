@@ -108,9 +108,52 @@ async function createRemoteRepo(): Promise<string> {
   return normalizedPath;
 }
 
+/**
+ * The temp root, resolved through symlinks once.
+ *
+ * `os.tmpdir()` returns `/var/folders/<...>/T` on macOS while `fs.realpathSync` of that same
+ * directory returns `/private/var/folders/<...>/T`. The creators below return the realpath'd form,
+ * so a guard comparing against the un-resolved `os.tmpdir()` never matches.
+ */
+const TEMP_ROOT = fs.realpathSync(os.tmpdir());
+
+/**
+ * Deletes a temp repo created by this suite.
+ *
+ * TWO PLATFORM ASSUMPTIONS BROKE THIS GUARD, ONE AFTER THE OTHER
+ *
+ * It first read `repoPath.includes('/tmp/')`, false on macOS because `os.tmpdir()` is
+ * `/var/folders/<...>/T`. The condition never held, nothing was ever deleted, and 3525 orphaned
+ * `gitgov-wt-*` directories had accumulated by 2026-08-28 — one set per run, invisible because a
+ * cleanup that does nothing looks exactly like a cleanup that worked.
+ *
+ * The obvious repair — `startsWith(os.tmpdir())` — was still wrong, and measurably so: the run
+ * after it created 122 more directories and deleted none. The creators return
+ * `fs.realpathSync(dir)`, which on macOS prefixes `/private`, so the stored paths do not start with
+ * `os.tmpdir()` either.
+ *
+ * Anchoring on the realpath'd root removes the assumption entirely: both sides of the comparison
+ * now come from the same resolution.
+ *
+ * The name check is `gitgov-`, not `gitgov-wt-`: this suite also creates `gitgov-hooks-*`,
+ * `gitgov-racer-*` and `gitgov-conflict-*`, and the narrower prefix silently skipped all of them —
+ * 18 directories per run survived the first repair for exactly that reason. It stays as a name
+ * check rather than being dropped because it is what keeps an unrelated path from reaching
+ * `rmSync`; combined with the `TEMP_ROOT` anchor, nothing outside the OS temp directory can match.
+ */
 function removeTempRepo(repoPath: string): void {
-  if (repoPath.includes('/tmp/') && repoPath.includes('gitgov-wt-')) {
-    fs.rmSync(repoPath, { recursive: true, force: true });
+  // Resolve before comparing. Callers hand this both forms — the creators return the realpath'd
+  // path, inline sites register the raw one — and on macOS they differ by a `/private` prefix, so a
+  // guard comparing the string as given deletes one and skips the other. Resolving here means no
+  // caller has to know which form it holds.
+  let resolved: string;
+  try {
+    resolved = fs.realpathSync(repoPath);
+  } catch {
+    return; // already gone
+  }
+  if (resolved.startsWith(TEMP_ROOT) && resolved.includes('gitgov-')) {
+    fs.rmSync(resolved, { recursive: true, force: true });
   }
 }
 

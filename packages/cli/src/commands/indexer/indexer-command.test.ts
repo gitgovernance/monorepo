@@ -73,17 +73,20 @@ vi.mock('../../services/dependency-injection', () => {
   };
 });
 
+import type { Mock } from 'vitest';
 import { IndexerCommand } from './indexer-command';
 import { DependencyInjectionService } from '../../services/dependency-injection';
 
 // Mock console methods to capture output
-const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation();
-const mockConsoleError = vi.spyOn(console, 'error').mockImplementation();
-const mockProcessExit = vi.spyOn(process, 'exit').mockImplementation();
+const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation(() => { });
+const mockConsoleError = vi.spyOn(console, 'error').mockImplementation(() => { });
+// `process.exit` is typed `(code?) => never`; the stub returns, so the cast states that gap
+// explicitly rather than throwing and changing control flow the tests do not expect.
+const mockProcessExit = vi.spyOn(process, 'exit').mockImplementation((() => { }) as unknown as never);
 
 // Get access to the mocked DependencyInjectionService
 const mockDI = vi.mocked(DependencyInjectionService);
-let mockGetRecordProjector: Mock<any>;
+let mockGetRecordProjector: Mock;
 
 // Global reference to the mock adapter for easy access in tests
 let mockProjector: any;
@@ -100,7 +103,7 @@ describe('IndexerCommand - Complete Unit Tests', () => {
 
     // Get the mocked adapter from DI
     const diInstance = mockDI.getInstance();
-    mockGetRecordProjector = diInstance.getRecordProjector as Mock<any>;
+    mockGetRecordProjector = diInstance.getRecordProjector as Mock;
 
     // Set up default successful responses
     mockProjector = await mockGetRecordProjector();

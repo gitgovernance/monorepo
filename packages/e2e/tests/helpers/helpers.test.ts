@@ -23,6 +23,7 @@ import {
   SKIP_CLEANUP,
   FsRecordStore,
   DEFAULT_ID_ENCODER,
+  E2E_SOURCE_COMMIT_LABEL,
 } from './index';
 import { Factories, generateTaskId } from '@gitgov/core';
 import type { GitGovTaskRecord } from '@gitgov/core';
@@ -137,6 +138,45 @@ describe('E2E Helpers', () => {
 
         const tasks = await prisma.gitgovTask.findMany({});
         expect(tasks.length).toBeGreaterThanOrEqual(1);
+      } finally {
+        cleanupWorktree(repoDir);
+        await cleanupProtocol(prisma);
+        await prisma.$disconnect();
+      }
+    });
+
+    // Additional e2e coverage for PP-C3b, whose unit vertex lives in
+    // core/src/record_projection/prisma/prisma_record_projection.test.ts.
+    //
+    // The unit test proves persist() writes the value it is handed. This one proves the value
+    // SURVIVES the real pipeline, and that is a different claim: `computeProjection()` and
+    // `persist()` receive the provenance through separate parameters, so a helper that passed one
+    // and forgot the other would still project successfully and write the wrong sourceCommitSha.
+    // Nothing else in this package reads the column back, so without this assertion
+    // E2E_SOURCE_COMMIT_LABEL is decorative and that drift lands green.
+    it('[PP-C3b] should stamp every projected row with the provenance label the helper used', async () => {
+      const { tmpDir, repoDir } = createTempGitRepo();
+      tempDirs.push(tmpDir);
+
+      runGitgovCli('init --name ProvenanceTest --actor-name Dev -q', { cwd: repoDir });
+      runGitgovCli('task new "Provenance task" -p high -q', { cwd: repoDir });
+
+      const prisma = createProtocolPrisma();
+      try {
+        await cleanupProtocol(prisma);
+        const report = await runProjector(prisma, repoDir);
+        expect(report.success).toBe(true);
+
+        const tasks = await prisma.gitgovTask.findMany({});
+        const actors = await prisma.gitgovActor.findMany({});
+
+        // Anti-vacuity: with zero rows every `every()` below is trivially true.
+        expect(tasks.length).toBeGreaterThanOrEqual(1);
+        expect(actors.length).toBeGreaterThanOrEqual(1);
+
+        for (const row of [...tasks, ...actors]) {
+          expect(row.sourceCommitSha).toBe(E2E_SOURCE_COMMIT_LABEL);
+        }
       } finally {
         cleanupWorktree(repoDir);
         await cleanupProtocol(prisma);

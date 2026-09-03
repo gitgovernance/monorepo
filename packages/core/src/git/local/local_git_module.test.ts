@@ -32,7 +32,7 @@ const execAsync = promisify(exec);
  * @returns Path to temporary repository (normalized for macOS /private prefix)
  */
 async function createTempRepo(): Promise<string> {
-  const tempDir = path.join(os.tmpdir(), `gitgov-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  const tempDir = track(path.join(os.tmpdir(), `gitgov-test-${Date.now()}-${Math.random().toString(36).slice(2)}`));
   fs.mkdirSync(tempDir, { recursive: true });
 
   // Normalize path to resolve macOS /private prefix
@@ -59,13 +59,63 @@ async function createTempRepo(): Promise<string> {
 }
 
 /**
+ * The temp root, resolved through symlinks once.
+ *
+ * `os.tmpdir()` returns `/var/folders/<...>/T` on macOS while its realpath is
+ * `/private/var/folders/<...>/T`. Resolving both sides of the comparison the same way is what makes
+ * the guard below hold on every platform instead of on an assumption about where temp lives.
+ */
+const TEMP_ROOT = fs.realpathSync(os.tmpdir());
+
+/**
+ * Every temp directory this file creates, swept in `afterAll`.
+ *
+ * Registration happens INSIDE the creator helpers rather than at each call site. Relying on the
+ * caller to remember is what leaked here: `createTempRepo()` was cleaned because `afterEach` knew
+ * about the one variable it assigned to, while `createRemoteRepo()` and the work dirs were not
+ * cleaned by anyone. Registering at creation makes forgetting impossible instead of merely
+ * discouraged.
+ */
+const createdTempDirs: string[] = [];
+
+/** Records a temp dir for cleanup and returns it, so creators can `return track(dir)`. */
+function track(dir: string): string {
+  createdTempDirs.push(dir);
+  return dir;
+}
+
+/**
  * Test Helper: Removes a temporary repository
- * 
+ *
+ * TWO REASONS THIS DELETED NOTHING
+ *
+ * The guard read `repoPath.includes('/tmp/')`, which is false on macOS — `os.tmpdir()` is
+ * `/var/folders/<...>/T`. Measured 2026-08-28: this file leaked **95 directories per run**, the
+ * largest single source in the package, and a cleanup that does nothing looks exactly like one that
+ * worked. The identical bug lived in `fs_worktree_sync_state.test.ts`; it was copied, not invented
+ * twice, which is why the gate for this class of defect matters more than either fix.
+ *
+ * The prefix list also omitted `gitgov-fresh-`, created at line ~218 — so even where the path check
+ * had held, those directories would have survived. Matching on `gitgov-` covers every prefix this
+ * file creates now and any it adds later; combined with the `TEMP_ROOT` anchor nothing outside the
+ * OS temp directory can match.
+ *
  * @param repoPath - Path to repository to remove
  */
 function removeTempRepo(repoPath: string): void {
-  if (repoPath.includes('/tmp/') && (repoPath.includes('gitgov-test-') || repoPath.includes('gitgov-remote-') || repoPath.includes('gitgov-work-'))) {
-    fs.rmSync(repoPath, { recursive: true, force: true });
+  // Resolve before comparing. Callers hand this both forms — `createTempRepo()` returns the
+  // realpath'd path while the tracker records the raw one — and on macOS they differ by a
+  // `/private` prefix, so a guard that compared the string as given deleted one and skipped the
+  // other. That prefix has now broken this cleanup three times; resolving here means no caller has
+  // to know which form it holds.
+  let resolved: string;
+  try {
+    resolved = fs.realpathSync(repoPath);
+  } catch {
+    return; // already gone
+  }
+  if (resolved.startsWith(TEMP_ROOT) && resolved.includes('gitgov-')) {
+    fs.rmSync(resolved, { recursive: true, force: true });
   }
 }
 
@@ -76,7 +126,7 @@ function removeTempRepo(repoPath: string): void {
  * @returns Path to bare repository
  */
 async function createRemoteRepo(): Promise<string> {
-  const remoteDir = path.join(os.tmpdir(), `gitgov-remote-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  const remoteDir = track(path.join(os.tmpdir(), `gitgov-remote-${Date.now()}-${Math.random().toString(36).slice(2)}`));
   fs.mkdirSync(remoteDir, { recursive: true });
   const normalizedPath = fs.realpathSync(remoteDir);
 
@@ -106,7 +156,7 @@ async function simulateRemoteCommit(
   content: string
 ): Promise<void> {
   // Create temporary working directory
-  const workDir = path.join(os.tmpdir(), `gitgov-work-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  const workDir = track(path.join(os.tmpdir(), `gitgov-work-${Date.now()}-${Math.random().toString(36).slice(2)}`));
   fs.mkdirSync(workDir, { recursive: true });
   const normalizedWorkPath = fs.realpathSync(workDir);
 
@@ -206,6 +256,14 @@ describe('LocalGitModule', () => {
   afterEach(() => {
     // Clean up temp repository
     removeTempRepo(tempRepo);
+  });
+
+  // Backstop: sweeps every directory the creator helpers registered, including the ones no
+  // individual test cleans up (remote and work dirs). Measured before this existed: 95 directories
+  // leaked per run, the largest single source in the package.
+  afterAll(() => {
+    for (const dir of createdTempDirs) removeTempRepo(dir);
+    createdTempDirs.length = 0;
   });
 
   // ═══════════════════════════════════════════════════════════════════════
