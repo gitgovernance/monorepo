@@ -1,3 +1,60 @@
+## [4.0.0](https://github.com/gitgovernance/monorepo/compare/core-v3.22.0...core-v4.0.0) (2026-09-03)
+
+
+### ⚠ BREAKING CHANGES
+
+* **core:** the actor-joined event is typed against the real bus interface
+* **core,cli:** `ProjectInitResult` is now `ProjectInitialized | ProjectAlreadyInitialized`,
+discriminated on `alreadyInitialized`. Consumers reading `actorId`, `productAgentId` or
+`cycleId` must narrow first. Both variants are exported from the barrel as
+`ProjectModuleInitialized` and `ProjectModuleAlreadyInitialized`.
+* **cli:** the `gitgov dashboard` command no longer exists. Use
+`gitgov status` in the terminal or the SaaS webapp for the visual board.
+* **core,cli:** the ./sarif and ./redaction subpath exports of @gitgov/core
+are removed. They never resolved at runtime (not built), but any consumer
+type-importing from them must switch to the root barrel, which already
+exports Sarif and Redaction.
+
+### ✨ Features
+
+* **cli:** close EARS-B2b and the LOGIN-H3 error path, spec-first ([058e8c8](https://github.com/gitgovernance/monorepo/commit/058e8c81d6b421c14dd3c7304cf8423c21d29352))
+* **cli:** close the two deferred it.todos — LOGIN-H2 and EARS-C14 ([32b15fa](https://github.com/gitgovernance/monorepo/commit/32b15fa00fc6726c979f3811aed44bbb5bf06f62))
+* **cli:** retire the dashboard command - the TUI's job moved to the webapp ([a73f415](https://github.com/gitgovernance/monorepo/commit/a73f41500f74e594664e6769472b1bf2eadf3d95))
+* **cli:** run the unit tests in CI, measured first ([c646101](https://github.com/gitgovernance/monorepo/commit/c646101008412ccaa97151bf8fc47b57b3b07780))
+* **cli:** typecheck the test files — remove the exclude and wire tsc into CI ([ed891b9](https://github.com/gitgovernance/monorepo/commit/ed891b9b91ef77f0b0236e6586f81cb658dbb5fc))
+* **core,cli:** drop the ./sarif and ./redaction subpath exports ([ccf358f](https://github.com/gitgovernance/monorepo/commit/ccf358f572e843925102ea23ccc96e2878c97c62))
+* **core,cli:** gate root derivations and close the fourth occurrence ([70303f4](https://github.com/gitgovernance/monorepo/commit/70303f4aa5d793f56b0a18ceadf5edc07bda94c4))
+* **core:** extend the builtins guardrail to all six entrypoints and gate env reads ([3474d2e](https://github.com/gitgovernance/monorepo/commit/3474d2e4381aab0e106f83baceafe8e0fe0cf3f8))
+* **core:** resolveRunner closes ARUN-N1..N4 - contracts from the root, backends stay in /fs ([77a3e7b](https://github.com/gitgovernance/monorepo/commit/77a3e7bf987f284e57ce25f7b3b6ee4576bb8216))
+* **e2e:** typecheck the package everywhere and wire it into CI ([24cfb73](https://github.com/gitgovernance/monorepo/commit/24cfb7362af30530b8507fd25ace5b6b13a3d882))
+
+
+### 🐛 Bug Fixes
+
+* **cli,core:** stop the suites hiding failures and leaking temp repos ([e197be4](https://github.com/gitgovernance/monorepo/commit/e197be4023546083727e3ca9e50579d784b2015a))
+* **cli:** realign three DI test names with the renamed classes ([5e7a18f](https://github.com/gitgovernance/monorepo/commit/5e7a18fadf21c12a1098f97a8c996bfbff195dd4))
+* **cli:** two mocks that lied about the shape of @gitgov/core ([ec63c42](https://github.com/gitgovernance/monorepo/commit/ec63c423ecbcf10152150e430a4a4a1195266b5a))
+* **core,cli:** ProjectInitResult becomes the discriminated union its own EARS described ([c00eabf](https://github.com/gitgovernance/monorepo/commit/c00eabff7b8e93bba91c718f65fbc9b27d97fb31))
+* **core,cli:** the product agent's engine drops its phantom entrypoint ([e71a147](https://github.com/gitgovernance/monorepo/commit/e71a1478cde1470deb4192e7826d310f938fe593))
+* **core:** project_module's EARS markers say what the code actually does ([f21c443](https://github.com/gitgovernance/monorepo/commit/f21c443b4e528dff45f850339e4a7426e1ad9e1f))
+* **core:** stop the test suites leaking temp repositories ([f0e11b4](https://github.com/gitgovernance/monorepo/commit/f0e11b47bddfb8a49bca4a7217262ba8768b3da6))
+* **core:** the actor-joined event is typed against the real bus interface ([a86f65b](https://github.com/gitgovernance/monorepo/commit/a86f65b3f3b9a87f0e7d803f93fd82c5128f62d0))
+* **e2e:** pass projection provenance and name the label for what it is ([b9fa96b](https://github.com/gitgovernance/monorepo/commit/b9fa96b39106a3f2b49ea1790c3f50393997710b)), closes [#164](https://github.com/gitgovernance/monorepo/issues/164)
+* **e2e:** wire the redactor, the config stub and the required Finding fields ([e86a323](https://github.com/gitgovernance/monorepo/commit/e86a323a4deef2d11b2a1b94aed840dc158e2e76))
+
+
+### ♻️ Refactoring
+
+* **cli:** eliminate the prohibited casts from the test files ([81f74b9](https://github.com/gitgovernance/monorepo/commit/81f74b9bce128cfccf20202338148f275bf875ab))
+* **cli:** make the test files typecheck — Jest idioms and stub signatures ([734c3db](https://github.com/gitgovernance/monorepo/commit/734c3db4e98681f357d805404a2701f7111a2490))
+* **cli:** retype the remaining Jest idioms and the deep fs mock ([a514beb](https://github.com/gitgovernance/monorepo/commit/a514bebfd99057d087d25ec5676702be31801f89))
+* **core:** rename repoId to scenarioLabel in the integration helpers ([8b84b37](https://github.com/gitgovernance/monorepo/commit/8b84b37c4b785b7960352ee8f625d7d32e8d4bff))
+
+
+### 📝 Documentation
+
+* the README stops telling new users to run a retired command ([174efa2](https://github.com/gitgovernance/monorepo/commit/174efa296fe63b5877a12890e5deb61a0638a9fb))
+
 ## [3.22.0](https://github.com/gitgovernance/monorepo/compare/core-v3.21.0...core-v3.22.0) (2026-08-28)
 
 
