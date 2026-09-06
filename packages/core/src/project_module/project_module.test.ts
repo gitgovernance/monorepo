@@ -969,7 +969,10 @@ describe('ProjectModule', () => {
       expect(result.actorId).toBe('human:late-visible');
       // Anti-vacuity: a green here would be meaningless if the guard had found the actor
       // on the first read — the polling is only exercised when it had to retry.
-      expect(getActorCalls).toBeGreaterThan(1);
+      // Calibration: addActor reads getActor once unconditionally (the existence check at
+      // the top) and the guard reads once more before it ever polls, so a guard WITHOUT a
+      // poll loop already produces 2 calls. Only a third call proves the retry happened.
+      expect(getActorCalls).toBeGreaterThan(2);
     });
 
     it('[PROJ-H3b] should throw GIT_WRITE_FAILED when finalize fails and actor not in store', async () => {
