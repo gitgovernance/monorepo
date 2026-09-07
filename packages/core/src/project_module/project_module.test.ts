@@ -1073,5 +1073,24 @@ describe('ProjectModule', () => {
         context: expect.objectContaining({ login: 'blocked-user' }),
       });
     });
+
+    // PROJ-D1, PROJ-D4 and PROJ-H6 all require callers to catch AddActorError. Every other
+    // test in this file imports it from './project_module.types', the internal path, so a
+    // consumer's view was never exercised — and the root barrel did not re-export the class
+    // at all. `toMatchObject` above passes on a plain object, so it would not have caught it.
+    // This asserts the reachable-from-the-package view: instanceof, not a message match.
+    it('[PROJ-H6] should expose AddActorError from the package root so callers can use instanceof', async () => {
+      const { AddActorError: ExportedError } = await import('../index');
+      const { deps } = createRealDeps();
+      const pm = new ProjectModule(deps);
+
+      const thrown = await pm.addActor({
+        login: 'blocked-user', type: 'agent', repoId: 'repo-1', joinedVia: 'mcp',
+        authzCheck: async () => false,
+      }).catch((err: unknown) => err);
+
+      expect(ExportedError).toBeDefined();
+      expect(thrown).toBeInstanceOf(ExportedError);
+    });
   });
 });
