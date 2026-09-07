@@ -153,24 +153,19 @@ class SarifBuilderImpl implements SarifBuilder {
         }
         const context = fileContexts.get(finding.file)!;
 
-        // [SARIF-C7b] Use Finding.fingerprint as the canonical partialFingerprint.
-        // If getLineContent is available, recompute (first-time scan). If not (export from DB),
-        // fall back to Finding.fingerprint which was computed at scan time. This ensures the
-        // SARIF output is IDENTICAL regardless of whether it's produced during scan or export.
-        let partial = await buildPartialFingerprints(
+        // [SARIF-N2] partialFingerprints["primaryLocationLineHash/v1"] exists only for GitHub
+        // code scanning interop and only when the source line is available. Without
+        // getLineContent it is omitted entirely — Finding.fingerprint never travels under
+        // this key (SARIF-C5 superseded).
+        const partial = await buildPartialFingerprints(
           finding.file,
           finding.line,
           options.getLineContent,
           context
         );
-        if (!partial['primaryLocationLineHash/v1'] && finding.fingerprint) {
-          partial = { 'primaryLocationLineHash/v1': finding.fingerprint };
-        }
 
-        const waiver = findMatchingWaiver(
-          partial['primaryLocationLineHash/v1'],
-          options.waivers
-        );
+        // [SARIF-F1] Waivers are keyed by the finding identity, never by the GitHub line hash.
+        const waiver = findMatchingWaiver(finding.fingerprint, options.waivers);
 
         // result.properties — only defined keys (no undefined values)
         const props: SarifResultProperties = {
@@ -208,6 +203,10 @@ class SarifBuilderImpl implements SarifBuilder {
             },
           }],
           properties: props,
+          // [SARIF-N1] The finding identity is transported unchanged, with or without source
+          // access (SARIF §3.27.16 fingerprints = stable identity). Computed by createFinding
+          // (AUDIT-K1); the builder never recalculates it.
+          fingerprints: { 'gitgov/v2': finding.fingerprint },
         };
 
         if (Object.keys(partial).length > 0) {
