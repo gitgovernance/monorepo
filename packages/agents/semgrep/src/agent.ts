@@ -1,10 +1,15 @@
 import { createFinding } from '@gitgov/core';
-import type { Sarif, Finding, FindingSeverity, FindingCategory, Runner } from '@gitgov/core';
-import type { SemgrepAgentDeps, SemgrepInput, SemgrepMetadata, SemgrepSummary } from './types';
+import type { Finding, FindingSeverity, FindingCategory, Runner } from '@gitgov/core';
+import type {
+  SemgrepAgentDeps,
+  SemgrepInput,
+  SemgrepMetadata,
+  SemgrepSummary,
+  SemgrepRawSarif,
+  SemgrepRawResult,
+} from './types';
 import { SEMGREP_SEVERITY_MAP, SEMGREP_CATEGORY_MAP } from './types';
 
-type SarifLog = Sarif.SarifLog;
-type SarifResult = Sarif.SarifResult;
 type AgentOutput = Runner.AgentOutput;
 
 /**
@@ -16,7 +21,7 @@ export class SemgrepAgent {
 
   // [SGP-A3] [SGP-E1] Returns AgentOutput with metadata.kind='sarif' and version='2.1.0'
   // [SGP-B1] [SGP-B2] [SGP-B4] [SGP-B5] [SGP-E2] Errors propagate to AgentRunner
-  async run(input: SemgrepInput, semgrepSarif: SarifLog | null, error?: string): Promise<AgentOutput> {
+  async run(input: SemgrepInput, semgrepSarif: SemgrepRawSarif | null, error?: string): Promise<AgentOutput> {
     // [SGP-B2] Prerequisite check
     if (error && /command not found|not found/i.test(error)) {
       throw new Error(
@@ -68,7 +73,7 @@ export class SemgrepAgent {
   }
 
   // [SGP-C1] [SGP-C2] [SGP-C3] [SGP-C6]
-  private mapResultsToFindings(results: SarifResult[]): Finding[] {
+  private mapResultsToFindings(results: SemgrepRawResult[]): Finding[] {
     return results.map((result, index) => {
       const location = result.locations?.[0]?.physicalLocation;
       const file = location?.artifactLocation?.uri ?? 'unknown';
@@ -113,7 +118,7 @@ export class SemgrepAgent {
   }
 
   // [SGP-C3]
-  private mapCategory(result: SarifResult): FindingCategory {
+  private mapCategory(result: SemgrepRawResult): FindingCategory {
     const props = result.properties as Record<string, unknown> | undefined;
     const metadata = props?.['metadata'] as Record<string, unknown> | undefined;
     const cwes = metadata?.['cwe'] as string[] | undefined;
@@ -128,7 +133,7 @@ export class SemgrepAgent {
     return 'unknown-risk' as FindingCategory;
   }
 
-  private buildSummary(findings: Finding[], results: SarifResult[]): SemgrepSummary {
+  private buildSummary(findings: Finding[], results: SemgrepRawResult[]): SemgrepSummary {
     const bySeverity: Record<string, number> = {};
     for (const f of findings) {
       bySeverity[f.severity] = (bySeverity[f.severity] ?? 0) + 1;

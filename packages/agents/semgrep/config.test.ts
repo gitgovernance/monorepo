@@ -36,7 +36,7 @@ describe('4.4. Config Resolution (SGP-D1 to SGP-D3)', () => {
 
   it('[SGP-D3] should pass exclude patterns as --exclude flags', () => {
     const excludes = ['node_modules', 'dist', '*.test.ts'];
-    const args = buildSemgrepArgs({ configPath: null, timeout: 120 }, '/project', { exclude: excludes });
+    const args = buildSemgrepArgs({ configPath: null, timeout: 120 }, '/project', { scope: 'full', exclude: excludes });
     for (const pattern of excludes) {
       expect(args).toContain('--exclude');
       expect(args).toContain(pattern);
