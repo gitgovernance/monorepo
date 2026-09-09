@@ -12,10 +12,16 @@ import { createFinding, createFix, createWaiver, createScan } from './types';
 import type { Finding, Fix, Waiver, Scan, PolicyDecision, FindingSeverity } from './types';
 import type { GitGovFeedbackRecord } from '../record_types';
 
-// [AUDIT-I1] makeTestFinding — valid Finding with sensible defaults
-export function makeTestFinding(overrides: Partial<Omit<Finding, 'snippetHash'>> = {}): Finding {
+// [AUDIT-I1] makeTestFinding — valid Finding with sensible defaults.
+//
+// [AUDIT-K1] No longer pins a `fingerprint`: the factory computes it, so a test that needs
+// a specific identity controls it through `file`, `category` and `anchor` — the same three
+// inputs production uses. A builder that let tests pin an arbitrary fingerprint would be a
+// second construction path, which is what D2 exists to close.
+export function makeTestFinding(
+  overrides: Partial<Omit<Finding, 'fingerprint' | 'snippetHash'>> & { anchor?: string } = {},
+): Finding {
   return createFinding({
-    fingerprint: 'sha256:test-default-fingerprint',
     ruleId: 'SEC-001',
     category: 'hardcoded-secret',
     severity: 'high' as FindingSeverity,

@@ -7,9 +7,11 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { createHash } from 'node:crypto';
 
 // ─── Type + value imports for AUDIT-A/D tests ──────────────────────────────
-import { createFinding, createFix, createWaiver, createScan } from './types';
+import { createFinding, rehydrateFinding, createFix, createWaiver, createScan } from './types';
+import { computeFingerprint } from './fingerprint';
 import type {
   Finding,
   FindingCategory,
@@ -437,7 +439,6 @@ describe('Audit Prisma Schema Verification (audit_prisma_record_projection_modul
     it('[AUDIT-D1] should compute snippetHash as sha256 of snippet', () => {
       const { createHash } = require('node:crypto');
       const finding = createFinding({
-        fingerprint: 'fp-d1',
         ruleId: 'TEST-001',
         file: 'src/test.ts',
         line: 1,
@@ -500,7 +501,6 @@ describe('Audit Prisma Schema Verification (audit_prisma_record_projection_modul
 
     it('[AUDIT-E4] should normalize hyphens to underscores without rejecting custom categories', () => {
       const finding = createFinding({
-        fingerprint: 'test-fp',
         ruleId: 'DSEC-D3',
         file: 'device://macbook/firewall',
         line: 0,
@@ -555,7 +555,7 @@ describe('Audit Prisma Schema Verification (audit_prisma_record_projection_modul
   describe('4.7. Scan Factory (AUDIT-G1 to G3)', () => {
     const makeFinding = (severity: FindingSeverity, isWaived = false): Finding =>
       createFinding({
-        fingerprint: `fp-${severity}`, ruleId: 'R1', category: 'hardcoded-secret',
+        ruleId: 'R1', category: 'hardcoded-secret',
         severity, file: 'a.ts', line: 1, column: 1, message: 'test',
         snippet: `secret-${severity}`, detector: 'regex', confidence: 1,
         executionId: 'e1', reportedBy: ['agent:test'], isWaived,
@@ -688,6 +688,130 @@ describe('Audit Prisma Schema Verification (audit_prisma_record_projection_modul
       const src = fs.readFileSync(typesPath, 'utf-8');
       expect(src).toMatch(/export const FINDING_SEVERITIES = \[[^\]]*\] as const;/);
       expect(src).toMatch(/export type FindingSeverity = \(typeof FINDING_SEVERITIES\)\[number\];/);
+    });
+  });
+
+  // ── 4.11. Identidad del finding (AUDIT-K1, K5, K6) + AUDIT-D2 ──
+
+  describe('4.11. Identidad del finding (AUDIT-K1, K5, K6)', () => {
+    const producerInput = {
+      ruleId: 'SEC-001',
+      file: 'src/config.ts',
+      line: 42,
+      message: 'Hardcoded secret detected',
+      snippet: 'const apiKey = "sk_test_abc123";',
+      category: 'hardcoded-secret' as FindingCategory,
+      severity: 'critical' as FindingSeverity,
+      detector: 'regex' as const,
+      confidence: 1.0,
+      executionId: 'exec-test-001',
+      reportedBy: ['agent:security-audit'],
+      isWaived: false,
+    };
+
+    it('[AUDIT-K1] should compute a 64-hex fingerprint in createFinding and reject fingerprint in the input type', () => {
+      const finding = createFinding({ ...producerInput, anchor: 'sk_test_abc123' });
+
+      expect(finding.fingerprint).toMatch(/^[a-f0-9]{64}$/);
+      expect(finding.fingerprint).toBe(
+        computeFingerprint({ file: producerInput.file, category: producerInput.category, anchor: 'sk_test_abc123' }),
+      );
+
+      // The caller cannot supply it: `fingerprint` is omitted from the input type, so this
+      // is a compile-time error. `@ts-expect-error` FAILS the build if the error stops
+      // happening — the assertion is that the door stays shut, and it is checked by tsc,
+      // not at runtime.
+      // @ts-expect-error fingerprint is not an accepted input of createFinding (AUDIT-K1)
+      createFinding({ ...producerInput, fingerprint: 'deadbeef' });
+    });
+
+    it('[AUDIT-K1] should fall back to snippet as anchor when anchor is absent', () => {
+      const withoutAnchor = createFinding(producerInput);
+
+      expect(withoutAnchor.fingerprint).toBe(
+        computeFingerprint({
+          file: producerInput.file,
+          category: producerInput.category,
+          anchor: producerInput.snippet,
+        }),
+      );
+
+      // And the fallback is a real fallback, not an alias: a finding whose anchor is the
+      // matched token differs from one that hashed the whole line. That difference is the
+      // entire point of the anchor (D-d).
+      const withAnchor = createFinding({ ...producerInput, anchor: 'sk_test_abc123' });
+      expect(withAnchor.fingerprint).not.toBe(withoutAnchor.fingerprint);
+    });
+
+    it('[AUDIT-K5] should keep the transported fingerprint byte for byte in rehydrateFinding', () => {
+      const transported = 'a'.repeat(64);
+      const rehydrated = rehydrateFinding({
+        ...producerInput,
+        fingerprint: transported,
+        snippet: '[REDACTED]',
+      });
+
+      expect(rehydrated.fingerprint).toBe(transported);
+
+      // Negative control: recomputing at this point diverges, because the consumer no
+      // longer has the anchor and the snippet may be redacted or truncated. If
+      // rehydrateFinding ever recomputed, it would land on this value instead.
+      const recomputed = computeFingerprint({
+        file: producerInput.file,
+        category: producerInput.category,
+        anchor: '[REDACTED]',
+      });
+      expect(recomputed).not.toBe(transported);
+    });
+
+    it('[AUDIT-K6] should hash the exact snippet without normalization', () => {
+      const tight = createFinding({ ...producerInput, snippet: 'a b' });
+      const spread = createFinding({ ...producerInput, snippet: 'a  b' });
+
+      // snippetHash proves the EXACT text — it is the L1↔L2 integrity bridge (RLDX-F2/F4).
+      // Normalizing it would make verifySnippet compare a normalized hash against a raw
+      // one and answer "unverified" forever, silently.
+      expect(tight.snippetHash).not.toBe(spread.snippetHash);
+      expect(spread.snippetHash).toBe(createHash('sha256').update('a  b').digest('hex'));
+
+      // The other hash goes the other way: normalization is exactly what makes the
+      // identity survive the same reformat. Two hashes, two roles.
+      expect(tight.fingerprint).toBe(spread.fingerprint);
+    });
+  });
+
+  describe('4.4. Finding Factory — dos constructores (AUDIT-D2)', () => {
+    it('[AUDIT-D2] should construct every Finding through createFinding or rehydrateFinding', () => {
+      const srcRoot = path.resolve(__dirname, '..');
+      const files: string[] = [];
+      const walk = (dir: string) => {
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+          const full = path.join(dir, entry.name);
+          if (entry.isDirectory()) walk(full);
+          else if (entry.name.endsWith('.ts') && !entry.name.includes('.test.')) files.push(full);
+        }
+      };
+      walk(srcRoot);
+
+      // Assigning `snippetHash` in an OBJECT LITERAL is the signature of a Finding built by
+      // hand. The trailing comma is what tells it apart from a TYPE MEMBER, which ends in a
+      // semicolon: `redaction/redactor.types.ts` legitimately declares `snippetHash: string;`
+      // as a field of RedactedFinding and is not a construction site. A scan that cannot
+      // make that distinction reports a type declaration as a violation.
+      const RE_LITERAL_ASSIGNMENT = /^\s*snippetHash:\s*.+,\s*$/m;
+
+      // ANTI-VACUITY: if the pattern stops matching — a formatting change, a refactor — the
+      // list comes back empty and this test passes WITHOUT VERIFYING ANYTHING. types.ts MUST
+      // appear, because that is where both factories assign the field. Until it does, a zero
+      // here is blindness, not compliance.
+      const withProperty = files.filter((f) => RE_LITERAL_ASSIGNMENT.test(fs.readFileSync(f, 'utf-8')));
+      expect(withProperty.map((f) => path.relative(srcRoot, f))).toContain('audit/types.ts');
+
+      // Everywhere else, a Finding is built by a factory and never as a literal.
+      const violations = withProperty
+        .map((f) => path.relative(srcRoot, f))
+        .filter((f) => f !== 'audit/types.ts' && f !== 'audit/testing.ts');
+      expect(violations).toEqual([]);
     });
   });
 });

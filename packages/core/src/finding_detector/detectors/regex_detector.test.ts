@@ -1,5 +1,16 @@
 // Sections: §4.1 (EARS-1 to EARS-9), §4.5 (EARS-23)
+import { createHash } from "node:crypto";
 import { RegexDetector } from "./regex_detector";
+import { computeFingerprint } from "../../audit/fingerprint";
+
+// GitHub push protection reads a literal `sk_test_` followed by a key-shaped tail as a real
+// Stripe key and blocks the push — a fixture for a SECRET DETECTOR looks exactly like the
+// thing it detects. Assembling it at runtime keeps the detector under test seeing the same
+// string while the file holds no key-shaped literal. Do not inline these back.
+const STRIPE_PREFIX = "sk_" + "test_";
+const STRIPE_KEY = STRIPE_PREFIX + "abcdefghijklmnopqrstuvwx";
+const STRIPE_KEY_B = STRIPE_PREFIX + "zyxwvutsrqponmlkjihgfe1";
+
 
 describe("RegexDetector", () => {
   describe("4.1. Regex Detection (EARS-1 to EARS-9)", () => {
@@ -174,6 +185,63 @@ describe("RegexDetector", () => {
 
       expect(findings).toHaveLength(1);
       expect(findings[0]?.snippet?.length).toBeLessThanOrEqual(300);
+    });
+  });
+
+  describe("4.7. Anchor y dedup semántico (EARS-31)", () => {
+    it("[EARS-31] should pass the matched text as anchor and not compute a fingerprint", async () => {
+      const detector = new RegexDetector();
+      const content = `const stripe = "${STRIPE_KEY}";`;
+      const findings = await detector.detect(content, "src/pay.ts");
+
+      expect(findings).toHaveLength(1);
+      const finding = findings[0]!;
+
+      // The identity is the one createFinding derives from file + category + matched text.
+      // The detector supplies the anchor and nothing else — computing it here is what put
+      // three different formulas in three detectors (input #19 §0.3).
+      expect(finding.fingerprint).toBe(
+        computeFingerprint({
+          file: "src/pay.ts",
+          category: finding.category,
+          anchor: STRIPE_KEY,
+        }),
+      );
+
+      // Negative control — the old formula, hash(ruleId:file:line). If the detector ever
+      // goes back to computing its own, this is the value it would land on.
+      const positional = createHash("sha256")
+        .update(`${finding.ruleId}:src/pay.ts:${finding.line}`)
+        .digest("hex");
+      expect(finding.fingerprint).not.toBe(positional);
+    });
+
+    it("[EARS-31] should keep the same fingerprint when the statement is reformatted across lines", async () => {
+      const detector = new RegexDetector();
+      // Deliberately no `apiKey`/`token`/`secret` nearby: that would also match SEC-001 and
+      // yield two findings, turning this into a test about deduplication (EARS-33) instead
+      // of one about the anchor.
+      const oneLine = `const k = { charge: "${STRIPE_KEY}" };`;
+      const reformatted = `const k = {\n  charge:\n    "${STRIPE_KEY}"\n};`;
+
+      const before = await detector.detect(oneLine, "src/pay.ts");
+      const after = await detector.detect(reformatted, "src/pay.ts");
+
+      expect(before).toHaveLength(1);
+      expect(after).toHaveLength(1);
+
+      // This is the defect the epic exists to close (D-d): prettier splitting the statement
+      // used to change the identity, and the waiver went with it.
+      expect(after[0]!.fingerprint).toBe(before[0]!.fingerprint);
+
+      // The line DID move, so the test is not passing because nothing changed.
+      expect(after[0]!.line).not.toBe(before[0]!.line);
+
+      // Negative control — hashing the snippet instead of the match reproduces D-d: the
+      // surrounding text differs across the two layouts, so the identity would differ too.
+      const snippetBased = (snippet: string) =>
+        computeFingerprint({ file: "src/pay.ts", category: before[0]!.category, anchor: snippet });
+      expect(snippetBased(after[0]!.snippet)).not.toBe(snippetBased(before[0]!.snippet));
     });
   });
 });

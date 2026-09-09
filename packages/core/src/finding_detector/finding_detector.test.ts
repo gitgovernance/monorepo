@@ -4,9 +4,51 @@ import { RegexDetector } from "./detectors/regex_detector";
 import { HeuristicDetector } from "./detectors/heuristic_detector";
 import type { FindingDetectorConfig } from "./types";
 
+// GitHub push protection reads a literal `sk_test_` followed by a key-shaped tail as a real
+// Stripe key and blocks the push — a fixture for a SECRET DETECTOR looks exactly like the
+// thing it detects. Assembling it at runtime keeps the detector under test seeing the same
+// string while the file holds no key-shaped literal. Do not inline these back.
+const STRIPE_PREFIX = "sk_" + "test_";
+const STRIPE_KEY = STRIPE_PREFIX + "abcdefghijklmnopqrstuvwx";
+const STRIPE_KEY_B = STRIPE_PREFIX + "zyxwvutsrqponmlkjihgfe1";
+
+
 describe("FindingDetectorModule", () => {
   beforeEach(() => {
     jest.restoreAllMocks();
+  });
+
+  describe("4.7. Anchor y dedup semántico (EARS-33)", () => {
+    it("[EARS-33] should emit one finding when the same anchor and category repeat in a file", async () => {
+      const detector = new FindingDetectorModule({
+        regex: { enabled: true },
+        heuristic: { enabled: false },
+      });
+
+      // The same secret twice in one file: two matches, one problem (input #19 §0.4 S6).
+      const content = [
+        `const a = { charge: "${STRIPE_KEY}" };`,
+        `const b = { refund: "${STRIPE_KEY}" };`,
+      ].join("\n");
+
+      const findings = await detector.detect(content, "src/pay.ts");
+
+      expect(findings).toHaveLength(1);
+
+      // ANTI-VACUITY: the fixture must actually produce two matches, otherwise this test
+      // passes because the detector found one — not because dedup collapsed two.
+      const raw = await new RegexDetector().detect(content, "src/pay.ts");
+      expect(raw.length).toBeGreaterThan(1);
+      expect(raw[0]!.fingerprint).toBe(raw[1]!.fingerprint);
+
+      // And two DIFFERENT secrets in the same file stay two findings — the collapse is by
+      // anchor, not by file.
+      const twoSecrets = [
+        `const a = { charge: "${STRIPE_KEY}" };`,
+        `const b = { refund: "${STRIPE_KEY_B}" };`,
+      ].join("\n");
+      expect(await detector.detect(twoSecrets, "src/pay.ts")).toHaveLength(2);
+    });
   });
 
   describe("4.2. Heuristic Detection (EARS-13)", () => {
@@ -65,17 +107,27 @@ describe("FindingDetectorModule", () => {
       expect(lowConfFindings.length).toBeGreaterThan(0);
     });
 
-    it("[EARS-16] should deduplicate findings by SHA256 fingerprint", async () => {
+    it("[EARS-16] should deduplicate findings by fingerprint equality", async () => {
+      // Renamed with the spec amendment: the module compares by EQUALITY and no longer
+      // owns a formula. The previous version ran RegexDetector directly — which does not
+      // deduplicate at all — so it asserted identity collision, not deduplication.
+      const module = new FindingDetectorModule({ regex: { enabled: true }, heuristic: { enabled: false } });
       const detector = new RegexDetector();
       const content = 'const email = "test@test.com"; // test@test.com';
-      const findings = await detector.detect(content, "test.ts");
 
-      const fingerprints = findings.map((f) => f.fingerprint);
-      const uniqueFingerprints = [...new Set(fingerprints)];
+      // ANTI-VACUITY: the detector must really emit more than one, otherwise the module
+      // returning one proves nothing about deduplication.
+      const raw = await detector.detect(content, "test.ts");
+      expect(raw.length).toBeGreaterThan(1);
+      expect(new Set(raw.map((f) => f.fingerprint)).size).toBe(1);
 
-      // Same line should have same fingerprint
-      expect(findings.length).toBe(2);
-      expect(uniqueFingerprints.length).toBe(1);
+      const deduplicated = await module.detect(content, "test.ts");
+      expect(deduplicated).toHaveLength(1);
+
+      // And equality is the whole criterion: two findings whose fingerprints differ both
+      // survive. Different files → different identities (AUDIT-K2).
+      const other = await module.detect(content, "src/other.ts");
+      expect(other[0]!.fingerprint).not.toBe(deduplicated[0]!.fingerprint);
     });
 
     it("[EARS-17] should work with local-only detection when no LLM", async () => {

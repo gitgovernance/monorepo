@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import type { Detector, Finding, FindingCategory, FindingSeverity } from "../types";
 import { createFinding } from "../../audit/types";
 
@@ -25,6 +24,21 @@ interface HeuristicRule {
   message: string;
   fixes?: Array<{ description: string }>;
 }
+
+/**
+ * Heuristic patterns indexed by ruleId.
+ *
+ * Exported because the fingerprint backfill (audit_projection AP-K2) has to re-derive the
+ * anchor of a stored finding by re-running THE DETECTOR'S OWN RULE over the L2 snippet.
+ * These three live nowhere else, so without this export the backfill would fall back to the
+ * snippet while the detector uses `match[0]` — two identities for one finding, which is the
+ * exact defect the backfill exists to remove.
+ */
+export const HEURISTIC_PATTERNS: Readonly<Record<string, RegExp>> = {
+  "HEUR-001": SENSITIVE_VAR_PATTERN,
+  "HEUR-002": LOGGING_PATTERN,
+  "HEUR-003": SERIALIZE_PATTERN,
+};
 
 const HEURISTIC_RULES: HeuristicRule[] = [
   {
@@ -55,17 +69,6 @@ const HEURISTIC_RULES: HeuristicRule[] = [
     fixes: [{ description: "Ensure sensitive fields are excluded before serialization" }],
   },
 ];
-
-/**
- * Generates SHA256 fingerprint for deduplication.
- */
-function generateFingerprint(
-  ruleId: string,
-  file: string,
-  line: number
-): string {
-  return createHash("sha256").update(`${ruleId}:${file}:${line}`).digest("hex");
-}
 
 /**
  * Truncates snippet to maximum 300 characters.
@@ -115,7 +118,9 @@ export class HeuristicDetector implements Detector {
         const snippet = extractSnippet(content, match.index);
 
         const finding = createFinding({
-          fingerprint: generateFingerprint(rule.id, filePath, line),
+          // [EARS-31] Same contract as the regex detector: hand over the match, never the
+          // identity.
+          anchor: match[0],
           ruleId: rule.id,
           file: filePath,
           line,

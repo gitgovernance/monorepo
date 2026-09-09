@@ -1,4 +1,4 @@
-import { createFinding } from "../audit/types";
+import { rehydrateFinding } from "../audit/types";
 /**
  * PolicyEvaluator -- Epic 5: policy_evaluation.
  *
@@ -321,7 +321,11 @@ function extractFindingsFromSarif(sarif: SarifLog): Finding[] {
         const confidence = (props?.["gitgov/confidence"] as number | undefined) ?? 1.0;
         const snippet = location?.region?.snippet?.text;
 
-        const finding = createFinding({
+        // [AUDIT-K5] Second rehydrator, unlisted until the handoff measured it (PEVAL-F6).
+        // Same contract as the orchestrator: transport the identity, never recompute it.
+        // PEVAL-F6 itself — keying on fingerprints["gitgov/v2"] and deleting the local copy
+        // of buildFallbackFingerprint — belongs to this module's own pass.
+        const finding = rehydrateFinding({
           fingerprint,
           ruleId: sarifResult.ruleId,
           file: location?.artifactLocation?.uri ?? "",

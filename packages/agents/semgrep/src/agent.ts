@@ -103,7 +103,11 @@ export class SemgrepAgent {
         message: result.message?.text ?? '',
         fixes: fixes?.length ? fixes : undefined,
         detector: 'regex' as Finding['detector'],
-        fingerprint: '',
+        // [EARS-31] The agent hands over the matched text and the factory derives the
+        // identity (AUDIT-K1). It used to pass an EMPTY fingerprint and let the SARIF
+        // builder fill something in downstream — which is how a semgrep finding and a regex
+        // finding over the same token ended up with two different identities.
+        anchor: snippet,
         confidence: 1.0,
         executionId: '',
         reportedBy: ['semgrep'],

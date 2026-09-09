@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import type {
   CodeSnippet,
   BaseFindingCategory,
@@ -9,18 +8,6 @@ import type {
 import { createFinding } from "../../audit/types";
 
 const MAX_SNIPPET_LENGTH = 300;
-
-/**
- * Generates SHA256 fingerprint for deduplication.
- * Format: hash(ruleId:file:line)
- */
-function generateFingerprint(
-  ruleId: string,
-  file: string,
-  line: number
-): string {
-  return createHash("sha256").update(`${ruleId}:${file}:${line}`).digest("hex");
-}
 
 /**
  * Truncates snippet to maximum 300 characters.
@@ -106,7 +93,10 @@ export class HttpLlmDetector implements LlmDetector {
 
       const snippet = truncateSnippet(raw.snippet);
       const finding = createFinding({
-        fingerprint: generateFingerprint(raw.ruleId, raw.file, raw.line),
+        // [EARS-32] The LLM does not return a delimited match, so the snippet IS the anchor.
+        // Passing it explicitly rather than relying on the fallback keeps the contract
+        // readable: this detector has decided what its anchor is.
+        anchor: snippet,
         ruleId: raw.ruleId,
         file: raw.file,
         line: raw.line,
