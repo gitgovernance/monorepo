@@ -158,7 +158,15 @@ export class FindingDetectorModule {
   }
 
   /**
-   * Deduplicates findings by SHA256 fingerprint.
+   * [EARS-16] Deduplicates by `fingerprint`, compared by EQUALITY.
+   *
+   * This module does not define the formula and does not compute it — that belongs to
+   * `createFinding` (AUDIT-K1/K2). It used to carry its own `hash(ruleId:file:line)`, which
+   * was dedup within one scan and never the identity that reached the database.
+   *
+   * [EARS-33] Two findings with the same anchor and category in the same file collapse here:
+   * they receive the same fingerprint from the factory, so the second one is dropped. The
+   * same secret twice in a file is one problem (input #19 §0.4 S6).
    */
   private deduplicateByFingerprint(findings: Finding[]): Finding[] {
     const seen = new Set<string>();

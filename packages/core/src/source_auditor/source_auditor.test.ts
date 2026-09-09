@@ -51,7 +51,13 @@ describe("SourceAuditorModule", () => {
     fileLister: new FsFileLister({ cwd: tempDir }),
   });
 
-  const createFinding = (overrides: Partial<Omit<Finding, 'snippetHash'>> = {}): Finding => coreCreateFinding({
+  // [AUDIT-K1] The identity is computed from file + category + anchor, so a test that needs
+  // two DISTINCT findings varies one of those three — `anchor` is the cheapest. Pinning a
+  // `fingerprint` here used to work; now the factory ignores it, and two findings that
+  // differ only in a pinned fingerprint would come out identical.
+  const createFinding = (
+    overrides: Partial<Omit<Finding, 'fingerprint' | 'snippetHash'>> & { anchor?: string } = {},
+  ): Finding => coreCreateFinding({
     ruleId: "PII-001",
     category: "pii-email",
     severity: "high",
@@ -60,7 +66,6 @@ describe("SourceAuditorModule", () => {
     snippet: 'const email = "test@test.com"',
     message: "Email detected",
     detector: "regex",
-    fingerprint: "abc123",
     confidence: 1.0,
     executionId: "",
     reportedBy: [],
@@ -170,7 +175,7 @@ describe("SourceAuditorModule", () => {
     it("[EARS-B4] should track detectors used in result.detectors", async () => {
       mockFindingDetector.detect.mockResolvedValue([
         createFinding({ detector: "regex" }),
-        createFinding({ detector: "heuristic", fingerprint: "def456" }),
+        createFinding({ detector: "heuristic", anchor: "def456" }),
       ]);
 
       const auditor = new SourceAuditorModule(createDeps());
@@ -198,11 +203,14 @@ describe("SourceAuditorModule", () => {
     });
 
     it("[EARS-C2] should exclude findings matching active waiver fingerprint", async () => {
-      const finding = createFinding({ fingerprint: "waived-fingerprint" });
+      const finding = createFinding({ anchor: "waived-fingerprint" });
       mockFindingDetector.detect.mockResolvedValue([finding]);
 
+      // The waiver keys on the finding's REAL identity. Pairing them through a shared
+      // literal used to work because the fingerprint was whatever the test typed; now it is
+      // derived, and a literal here would silently stop matching.
       const waiver: Waiver = {
-        fingerprint: "waived-fingerprint",
+        fingerprint: finding.fingerprint,
         ruleId: "PII-001",
         feedback: {} as Waiver["feedback"],
       };
@@ -237,11 +245,11 @@ describe("SourceAuditorModule", () => {
     });
 
     it("[EARS-C4] should treat waivers without expiresAt as permanent", async () => {
-      const finding = createFinding({ fingerprint: "permanent-waiver" });
+      const finding = createFinding({ anchor: "permanent-waiver" });
       mockFindingDetector.detect.mockResolvedValue([finding]);
 
       const permanentWaiver: Waiver = {
-        fingerprint: "permanent-waiver",
+        fingerprint: finding.fingerprint,
         ruleId: "PII-001",
         // No expiresAt
         feedback: {} as Waiver["feedback"],
@@ -260,14 +268,17 @@ describe("SourceAuditorModule", () => {
     });
 
     it("[EARS-C5] should report waivers.new count correctly", async () => {
+      // Three distinct anchors → three distinct identities, which is what makes the count
+      // meaningful. Same anchor three times would be ONE finding (EARS-33).
+      const waivedFinding = createFinding({ anchor: "waived-1" });
       mockFindingDetector.detect.mockResolvedValue([
-        createFinding({ fingerprint: "new-1" }),
-        createFinding({ fingerprint: "new-2" }),
-        createFinding({ fingerprint: "waived-1" }),
+        createFinding({ anchor: "new-1" }),
+        createFinding({ anchor: "new-2" }),
+        waivedFinding,
       ]);
 
       const waiver: Waiver = {
-        fingerprint: "waived-1",
+        fingerprint: waivedFinding.fingerprint,
         ruleId: "PII-001",
         feedback: {} as Waiver["feedback"],
       };
@@ -288,8 +299,8 @@ describe("SourceAuditorModule", () => {
   describe("4.4. Summary Calculation (EARS-D1 to EARS-D4)", () => {
     it("[EARS-D1] should calculate summary.total correctly", async () => {
       mockFindingDetector.detect.mockResolvedValue([
-        createFinding({ fingerprint: "1" }),
-        createFinding({ fingerprint: "2" }),
+        createFinding({ anchor: "1" }),
+        createFinding({ anchor: "2" }),
       ]);
 
       const auditor = new SourceAuditorModule(createDeps());
@@ -304,10 +315,10 @@ describe("SourceAuditorModule", () => {
 
     it("[EARS-D2] should calculate summary.bySeverity correctly", async () => {
       mockFindingDetector.detect.mockResolvedValue([
-        createFinding({ severity: "critical", fingerprint: "1" }),
-        createFinding({ severity: "high", fingerprint: "2" }),
-        createFinding({ severity: "high", fingerprint: "3" }),
-        createFinding({ severity: "medium", fingerprint: "4" }),
+        createFinding({ severity: "critical", anchor: "1" }),
+        createFinding({ severity: "high", anchor: "2" }),
+        createFinding({ severity: "high", anchor: "3" }),
+        createFinding({ severity: "medium", anchor: "4" }),
       ]);
 
       const auditor = new SourceAuditorModule(createDeps());
@@ -325,9 +336,9 @@ describe("SourceAuditorModule", () => {
 
     it("[EARS-D3] should calculate summary.byCategory correctly", async () => {
       mockFindingDetector.detect.mockResolvedValue([
-        createFinding({ category: "pii-email", fingerprint: "1" }),
-        createFinding({ category: "pii-email", fingerprint: "2" }),
-        createFinding({ category: "hardcoded-secret", fingerprint: "3" }),
+        createFinding({ category: "pii-email", anchor: "1" }),
+        createFinding({ category: "pii-email", anchor: "2" }),
+        createFinding({ category: "hardcoded-secret", anchor: "3" }),
       ]);
 
       const auditor = new SourceAuditorModule(createDeps());
@@ -343,9 +354,9 @@ describe("SourceAuditorModule", () => {
 
     it("[EARS-D4] should calculate summary.byDetector correctly", async () => {
       mockFindingDetector.detect.mockResolvedValue([
-        createFinding({ detector: "regex", fingerprint: "1" }),
-        createFinding({ detector: "regex", fingerprint: "2" }),
-        createFinding({ detector: "heuristic", fingerprint: "3" }),
+        createFinding({ detector: "regex", anchor: "1" }),
+        createFinding({ detector: "regex", anchor: "2" }),
+        createFinding({ detector: "heuristic", anchor: "3" }),
       ]);
 
       const auditor = new SourceAuditorModule(createDeps());
@@ -434,7 +445,7 @@ describe("SourceAuditorModule", () => {
     });
 
     it("[EARS-H2] should filter findings by waiver fingerprint in auditContents()", async () => {
-      const finding = createFinding({ fingerprint: "waived-fp" });
+      const finding = createFinding({ anchor: "waived-fp" });
       mockFindingDetector.detect.mockResolvedValue([finding]);
 
       const auditor = new SourceAuditorModule({ findingDetector: mockFindingDetector });
@@ -443,7 +454,7 @@ describe("SourceAuditorModule", () => {
         files: [{ path: "src/app.ts", content: 'const email = "test@test.com";' }],
         waivers: [
           {
-            fingerprint: "waived-fp",
+            fingerprint: finding.fingerprint,
             ruleId: "PII-001",
             feedback: {} as Waiver["feedback"],
           },

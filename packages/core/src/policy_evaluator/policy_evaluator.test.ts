@@ -47,18 +47,22 @@ import type { WaiverMetadata } from "../source_auditor/types";
 import type { RecordStore } from "../record_store/record_store";
 import type { SarifLog, SarifResult } from "../sarif/sarif.types";
 import { createFinding } from "../audit/types";
+import { computeFingerprint } from "../audit/fingerprint";
+
+/** The two inputs of the identity that these tests never vary — shared with makeWaiver so
+ *  a finding and the waiver that covers it land on the same fingerprint. */
+const FINDING_DEFAULTS = { file: "src/foo.ts", category: "unknown-risk" } as const;
 
 function makeFinding(
-  overrides: Partial<Omit<Finding, 'snippetHash'>> = {},
+  overrides: Partial<Omit<Finding, "fingerprint" | "snippetHash">> & { anchor?: string } = {},
 ): Finding {
   return createFinding({
-    fingerprint: "fp-test-001",
     ruleId: "TEST-001",
     message: "test finding",
     snippet: "const x = 'secret'",
     severity: "high",
-    category: "unknown-risk",
-    file: "src/foo.ts",
+    category: FINDING_DEFAULTS.category,
+    file: FINDING_DEFAULTS.file,
     line: 10,
     detector: "regex",
     confidence: 1.0,
@@ -98,7 +102,37 @@ function makeFeedbackRecord(
   };
 }
 
+/**
+ * [AUDIT-K1] Takes the ANCHOR of the finding it waives, not a raw fingerprint.
+ *
+ * A waiver pairs with a finding by identity, and the identity is now derived. Passing a
+ * literal on both sides used to pair them because the literal WAS the identity; deriving it
+ * here from the same three inputs `makeFinding` uses keeps the pairing true no matter what
+ * the formula does next.
+ */
 function makeWaiver(
+  anchor: string,
+  feedbackId: string,
+): Waiver {
+  return makeWaiverForFingerprint(
+    computeFingerprint({
+      file: FINDING_DEFAULTS.file,
+      category: FINDING_DEFAULTS.category,
+      anchor,
+    }),
+    feedbackId,
+  );
+}
+
+/**
+ * [AUDIT-K5] The raw form, for findings that arrive REHYDRATED from a SARIF fixture.
+ *
+ * Those carry their identity in the transport and `extractFindingsFromSarif` keeps it byte
+ * for byte, so the waiver must key on that transported value and not derive one. The two
+ * helpers exist because the two provenances are genuinely different: a producer computes the
+ * identity, a consumer receives it.
+ */
+function makeWaiverForFingerprint(
   fingerprint: string,
   feedbackId: string,
 ): Waiver {
@@ -154,7 +188,10 @@ describe("PolicyEvaluator", () => {
     it("[PEVAL-A2] should include required fields and optional ruleId in Finding", () => {
       // With ruleId
       const withRuleId = makeFinding({ ruleId: "SEC-001" });
-      expect(withRuleId.fingerprint).toBe("fp-test-001");
+      // [AUDIT-K4] `ruleId` is detection metadata and stays out of the identity: overriding
+      // it must NOT move the fingerprint. That is the assertion worth making here.
+      expect(withRuleId.fingerprint).toMatch(/^[a-f0-9]{64}$/);
+      expect(withRuleId.fingerprint).toBe(makeFinding({ ruleId: "OTHER-999" }).fingerprint);
       expect(withRuleId.severity).toBe("high");
       expect(withRuleId.category).toBe("unknown-risk");
       expect(withRuleId.file).toBe("src/foo.ts");
@@ -191,7 +228,7 @@ describe("PolicyEvaluator", () => {
 
       const result = await evaluator.evaluate(
         makeInput({
-          findings: [makeFinding({ fingerprint: "fp-1", severity: "low" })],
+          findings: [makeFinding({ anchor: "fp-1", severity: "low" })],
           policy: makeConfig({ failOn: "critical" }),
         }),
       );
@@ -213,7 +250,7 @@ describe("PolicyEvaluator", () => {
 
       const result = await evaluator.evaluate(
         makeInput({
-          findings: [makeFinding({ fingerprint: "fp-1", severity: "low" })],
+          findings: [makeFinding({ anchor: "fp-1", severity: "low" })],
           policy: makeConfig({ failOn: "critical" }),
         }),
       );
@@ -237,7 +274,7 @@ describe("PolicyEvaluator", () => {
         makeInput({
           findings: [
             makeFinding({
-              fingerprint: "fp-critical-001",
+              anchor: "fp-critical-001",
               severity: "critical",
               isWaived: false,
             }),
@@ -261,7 +298,7 @@ describe("PolicyEvaluator", () => {
       const result = await evaluator.evaluate(
         makeInput({
           findings: [
-            makeFinding({ fingerprint: "fp-match-001", severity: "critical" }),
+            makeFinding({ anchor: "fp-match-001", severity: "critical" }),
           ],
           activeWaivers: [waiver],
           policy: makeConfig({ failOn: "critical" }),
@@ -281,7 +318,7 @@ describe("PolicyEvaluator", () => {
       const result = await evaluator.evaluate(
         makeInput({
           findings: [
-            makeFinding({ fingerprint: "fp-1", severity: "critical" }),
+            makeFinding({ anchor: "fp-1", severity: "critical" }),
           ],
           policy: makeConfig({ failOn: "critical" }),
         }),
@@ -296,7 +333,7 @@ describe("PolicyEvaluator", () => {
 
       const result = await evaluator.evaluate(
         makeInput({
-          findings: [makeFinding({ fingerprint: "fp-1", severity: "low" })],
+          findings: [makeFinding({ anchor: "fp-1", severity: "low" })],
           policy: makeConfig({ failOn: "critical" }),
         }),
       );
@@ -312,8 +349,8 @@ describe("PolicyEvaluator", () => {
       const result = await evaluator.evaluate(
         makeInput({
           findings: [
-            makeFinding({ fingerprint: "fp-crit", severity: "critical" }),
-            makeFinding({ fingerprint: "fp-low", severity: "low" }),
+            makeFinding({ anchor: "fp-crit", severity: "critical" }),
+            makeFinding({ anchor: "fp-low", severity: "low" }),
           ],
           policy: makeConfig({ failOn: "critical" }),
         }),
@@ -321,7 +358,9 @@ describe("PolicyEvaluator", () => {
 
       expect(result.decision.decision).toBe("block");
       expect(result.decision.blockingFindings).toHaveLength(1);
-      expect(result.decision.blockingFindings[0]!.fingerprint).toBe("fp-crit");
+      expect(result.decision.blockingFindings[0]!.fingerprint).toBe(
+        makeFinding({ anchor: "fp-crit", severity: "critical" }).fingerprint,
+      );
     });
 
     it("[PEVAL-D6] should populate waivedFindings with all findings where isWaived is true", async () => {
@@ -334,9 +373,9 @@ describe("PolicyEvaluator", () => {
       const result = await evaluator.evaluate(
         makeInput({
           findings: [
-            makeFinding({ fingerprint: "fp-waived-1", severity: "critical" }),
-            makeFinding({ fingerprint: "fp-waived-2", severity: "high" }),
-            makeFinding({ fingerprint: "fp-not-waived", severity: "low" }),
+            makeFinding({ anchor: "fp-waived-1", severity: "critical" }),
+            makeFinding({ anchor: "fp-waived-2", severity: "high" }),
+            makeFinding({ anchor: "fp-not-waived", severity: "low" }),
           ],
           activeWaivers: [waiver1, waiver2],
           policy: makeConfig({ failOn: "critical" }),
@@ -347,8 +386,8 @@ describe("PolicyEvaluator", () => {
       const waivedFingerprints = result.decision.waivedFindings.map(
         (f) => f.fingerprint,
       );
-      expect(waivedFingerprints).toContain("fp-waived-1");
-      expect(waivedFingerprints).toContain("fp-waived-2");
+      expect(waivedFingerprints).toContain(makeFinding({ anchor: "fp-waived-1" }).fingerprint);
+      expect(waivedFingerprints).toContain(makeFinding({ anchor: "fp-waived-2" }).fingerprint);
     });
 
     it("[PEVAL-D7] should set evaluatedAt to a valid ISO 8601 timestamp", async () => {
@@ -357,7 +396,7 @@ describe("PolicyEvaluator", () => {
 
       const result = await evaluator.evaluate(
         makeInput({
-          findings: [makeFinding({ fingerprint: "fp-1", severity: "low" })],
+          findings: [makeFinding({ anchor: "fp-1", severity: "low" })],
         }),
       );
 
@@ -386,7 +425,7 @@ describe("PolicyEvaluator", () => {
 
       const result = await evaluator.evaluate(
         makeInput({
-          findings: [makeFinding({ fingerprint: "fp-1", severity: "low" })],
+          findings: [makeFinding({ anchor: "fp-1", severity: "low" })],
           policy: makeConfig({ failOn: "critical", rules: [customRule] }),
         }),
       );
@@ -428,7 +467,7 @@ describe("PolicyEvaluator", () => {
 
       const result = await evaluator.evaluate(
         makeInput({
-          findings: [makeFinding({ fingerprint: "fp-1", severity: "low" })],
+          findings: [makeFinding({ anchor: "fp-1", severity: "low" })],
         }),
       );
 
@@ -442,7 +481,7 @@ describe("PolicyEvaluator", () => {
       // Pass case
       const passResult = await evaluator.evaluate(
         makeInput({
-          findings: [makeFinding({ fingerprint: "fp-1", severity: "low" })],
+          findings: [makeFinding({ anchor: "fp-1", severity: "low" })],
           policy: makeConfig({ failOn: "critical" }),
         }),
       );
@@ -452,7 +491,7 @@ describe("PolicyEvaluator", () => {
       const blockResult = await evaluator.evaluate(
         makeInput({
           findings: [
-            makeFinding({ fingerprint: "fp-1", severity: "critical" }),
+            makeFinding({ anchor: "fp-1", severity: "critical" }),
           ],
           policy: makeConfig({ failOn: "critical" }),
         }),
@@ -470,7 +509,7 @@ describe("PolicyEvaluator", () => {
       const result = await evaluator.evaluate(
         makeInput({
           findings: [
-            makeFinding({ fingerprint: "fp-waived", severity: "critical" }),
+            makeFinding({ anchor: "fp-waived", severity: "critical" }),
           ],
           activeWaivers: [waiver],
           scanExecutionIds: ["exec-scan-001", "exec-scan-002"],
@@ -491,7 +530,7 @@ describe("PolicyEvaluator", () => {
 
       const result = await evaluator.evaluate(
         makeInput({
-          findings: [makeFinding({ fingerprint: "fp-1", severity: "low" })],
+          findings: [makeFinding({ anchor: "fp-1", severity: "low" })],
           taskId: "task-id-test",
         }),
       );
@@ -510,7 +549,7 @@ describe("PolicyEvaluator", () => {
 
       const result = await evaluator.evaluate(
         makeInput({
-          findings: [makeFinding({ fingerprint: "fp-1", severity: "low" })],
+          findings: [makeFinding({ anchor: "fp-1", severity: "low" })],
           taskId: "task-test-e5",
         }),
       );
@@ -529,7 +568,7 @@ describe("PolicyEvaluator", () => {
 
       const result = await evaluator.evaluate(
         makeInput({
-          findings: [makeFinding({ fingerprint: "fp-1", severity: "low" })],
+          findings: [makeFinding({ anchor: "fp-1", severity: "low" })],
           policy: makeConfig({ failOn: "critical" }),
         }),
       );
@@ -776,7 +815,7 @@ describe("PolicyEvaluator", () => {
       records.set("exec-scan-002", makeExecRecordWithSarif("exec-scan-002", sarif));
 
       // Current waivers (not the ones from scan time)
-      const currentWaiver = makeWaiver("fp-sec-reeval-001", "feedback-current-waiver");
+      const currentWaiver = makeWaiverForFingerprint("fp-sec-reeval-001", "feedback-current-waiver");
 
       const deps = makeReevalDeps({
         executionRecords: records,
@@ -899,7 +938,7 @@ describe("PolicyEvaluator", () => {
       records.set("exec-scan-block", makeExecRecordWithSarif("exec-scan-block", sarif));
 
       // New waiver that turns the previous block into a pass
-      const waiver = makeWaiver("fp-sec-block-001", "feedback-waiver-unblock");
+      const waiver = makeWaiverForFingerprint("fp-sec-block-001", "feedback-waiver-unblock");
 
       const deps = makeReevalDeps({
         executionRecords: records,

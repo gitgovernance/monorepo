@@ -1,5 +1,5 @@
 import type { SarifLog, SarifPhysicalLocation } from "../sarif/sarif.types";
-import { createFinding } from "../audit/types";
+import { rehydrateFinding } from "../audit/types";
 import type { IAgentRunner } from "../agent_runner/agent_runner";
 import type { Waiver } from "../source_auditor/types";
 import type { RunOptions } from "../agent_runner/agent_runner.types";
@@ -242,7 +242,13 @@ function consolidateFindings(
           const detector = (props?.["gitgov/detector"] as string | undefined) ?? "regex";
           const confidence = (props?.["gitgov/confidence"] as number | undefined) ?? 1.0;
 
-          const finding = createFinding({
+          // [AUDIT-K5] Rehydration, not production: the identity arrives with the SARIF
+          // result and is kept byte for byte. The consumer has no anchor here and the
+          // snippet may be truncated or redacted, so recomputing would diverge from the
+          // producer — which is how two identities entered the system to begin with.
+          // AORCH-B6/B12/B14 still pending: reading the key from fingerprints["gitgov/v2"]
+          // and dropping buildFallbackFingerprint belong to this module's own pass.
+          const finding = rehydrateFinding({
             fingerprint,
             ruleId: sarifResult.ruleId,
             file: location?.artifactLocation?.uri ?? "",

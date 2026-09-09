@@ -22,7 +22,6 @@ describe("ScoringEngine", () => {
           snippet: "test",
           message: "Email detected",
           detector: "regex",
-          fingerprint: "abc123",
           confidence: 1.0,
           executionId: "",
           reportedBy: [],

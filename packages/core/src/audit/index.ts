@@ -8,7 +8,14 @@
  * Also:   `import { formatAuditResult, severityBadge } from '@gitgov/core/audit'`
  */
 export { formatAuditResult, severityBadge } from "./formatter";
-export { createFinding, verifySnippet, createFix, createWaiver, createScan } from "./types";
+export { createFinding, rehydrateFinding, verifySnippet, createFix, createWaiver, createScan } from "./types";
+// [AUDIT-K1] [AUDIT-K2] [AUDIT-K3] The identity, exported as VALUES and not only as types:
+// audit_orchestrator and policy_evaluator CALL computeFingerprint for their fallback, and
+// the saas-api backfill imports it across the package boundary. FINGERPRINT_SCHEME goes with
+// them for the same reason as the enums of AUDIT-J1 — a bare literal type has no runtime
+// representation, so every consumer would retype "gitgov-fp/2" by hand with no compiler
+// watching the copies, and the scheme tag is precisely the thing that must never drift.
+export { FINGERPRINT_SCHEME, normalizeAnchor, computeFingerprint } from "./fingerprint";
 // [AUDIT-J1] Closed-domain enums are exported as a VALUE (the constant), not only as a
 // type: without this the consumer cannot iterate them and re-enumerates them by hand.
 export { FINDING_SEVERITIES, FINDING_STATUSES } from "./types";

@@ -480,16 +480,65 @@ export type Scan = {
 // ─── Finding Factory ─────────────────────────────────────────────────────────
 
 import { createHash } from 'node:crypto';
+// The identity lives in its own module and is computed in exactly one place (AUDIT-K1).
+// fingerprint.ts imports only the FindingCategory TYPE from here, which is erased at
+// compile time — the cycle is structural, not a runtime one.
+import { computeFingerprint } from './fingerprint';
 
 /**
- * [AUDIT-D1] Factory for creating Finding objects with guaranteed snippet↔snippetHash integrity.
- * snippetHash is ALWAYS computed from snippet — callers MUST NOT provide it.
- * [AUDIT-D2] This is the ONLY way to construct a Finding.
+ * [AUDIT-D1] [AUDIT-K1] [AUDIT-K6] Producer constructor — for detectors and agents that SEE
+ * the source and can hand over the text they matched.
+ *
+ * Computes BOTH hashes, and the caller provides neither. `snippetHash` is sha256 of the
+ * exact snippet (AUDIT-K6, no normalization — it is the L1↔L2 integrity bridge), and
+ * `fingerprint` is the identity (AUDIT-K1, delegated to computeFingerprint).
+ *
+ * `anchor` is the text the detector matched (`match[0]`); absent it, the snippet stands in.
+ * It is an INPUT and never a field of Finding (AUDIT-A1): for a credential finding the
+ * anchor IS the secret, and as a field it would travel unredacted into the signed L1
+ * record. It is consumed here and dies here.
+ *
+ * [AUDIT-D2] One of the two ways to construct a Finding. Consumers rebuilding a transported
+ * one use rehydrateFinding instead; neither accepts an arbitrary fingerprint from a caller.
  */
-export function createFinding(input: Omit<Finding, 'snippetHash'>): Finding {
+export function createFinding(
+  input: Omit<Finding, 'fingerprint' | 'snippetHash'> & { anchor?: string },
+): Finding {
+  const { anchor, ...finding } = input;
+
+  return {
+    ...finding,
+    // [AUDIT-K1] The producer never supplies the identity — it is derived here, once.
+    fingerprint: computeFingerprint({
+      file: finding.file,
+      category: finding.category,
+      anchor: anchor ?? finding.snippet,
+    }),
+    // [AUDIT-K6] The exact snippet, unnormalized.
+    snippetHash: createHash('sha256').update(finding.snippet).digest('hex'),
+  };
+}
+
+/**
+ * [AUDIT-K5] [AUDIT-D2] Transport constructor — for consumers rebuilding a Finding from a
+ * representation that already carries its identity: a SARIF result with
+ * `fingerprints["gitgov/v2"]`, or a database row.
+ *
+ * Keeps the transported `fingerprint` byte for byte and NEVER recomputes it. By this point
+ * the consumer no longer has the anchor, and the snippet may be truncated (EARS-23) or
+ * redacted (RLDX-B8), so a recomputation would silently diverge from the producer's value —
+ * which is exactly how two identities entered the system in the first place.
+ *
+ * `snippetHash` is kept when transported and computed from the snippet when it is not,
+ * preserving the AUDIT-D1 invariant either way.
+ */
+export function rehydrateFinding(
+  input: Omit<Finding, 'snippetHash'> & { snippetHash?: string },
+): Finding {
   return {
     ...input,
-    snippetHash: createHash('sha256').update(input.snippet).digest('hex'),
+    snippetHash:
+      input.snippetHash ?? createHash('sha256').update(input.snippet).digest('hex'),
   };
 }
 

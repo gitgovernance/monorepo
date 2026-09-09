@@ -30,7 +30,6 @@ describe("WaiverWriter", () => {
     snippet: 'const email = "test@test.com"',
     message: "Email detected",
     detector: "regex",
-    fingerprint: "abc123def456",
     confidence: 1.0,
     executionId: "",
     reportedBy: [],
@@ -56,7 +55,10 @@ describe("WaiverWriter", () => {
           status: "resolved",
           content: "False positive - test data",
           metadata: {
-            fingerprint: "abc123def456",
+            // The waiver must carry the finding's OWN identity. Asserting against a
+            // hardcoded literal proved only that the literal travelled; asserting against
+            // the computed value proves the writer read it off the finding.
+            fingerprint: mockFinding.fingerprint,
             ruleId: "PII-001",
             file: "src/app.ts",
             line: 42,
