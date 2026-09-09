@@ -9,7 +9,6 @@ import { computeFingerprint } from "../../audit/fingerprint";
 // string while the file holds no key-shaped literal. Do not inline these back.
 const STRIPE_PREFIX = "sk_" + "test_";
 const STRIPE_KEY = STRIPE_PREFIX + "abcdefghijklmnopqrstuvwx";
-const STRIPE_KEY_B = STRIPE_PREFIX + "zyxwvutsrqponmlkjihgfe1";
 
 
 describe("RegexDetector", () => {
