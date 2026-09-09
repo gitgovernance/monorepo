@@ -1,5 +1,6 @@
-import type { SarifLog, SarifPhysicalLocation } from "../sarif/sarif.types";
+import type { SarifLog } from "../sarif/sarif.types";
 import { rehydrateFinding } from "../audit/types";
+import { computeFingerprint } from "../audit/fingerprint";
 import type { IAgentRunner } from "../agent_runner/agent_runner";
 import type { Waiver } from "../source_auditor/types";
 import type { RunOptions } from "../agent_runner/agent_runner.types";
@@ -187,22 +188,11 @@ async function executeAgent(
 }
 
 /**
- * Fallback fingerprint for SARIF results without primaryLocationLineHash/v1.
- * Format: "fallback:{ruleId}:{file}:{startLine}"
- */
-function buildFallbackFingerprint(
-  ruleId: string | undefined,
-  location: SarifPhysicalLocation | undefined,
-): string | undefined {
-  const file = location?.artifactLocation?.uri;
-  const line = location?.region?.startLine;
-  if (!ruleId || !file) return undefined;
-  return `fallback:${ruleId}:${file}:${line ?? 0}`;
-}
-
-/**
- * Consolidates findings from multiple SarifLogs with dedup by fingerprint.
- * If two agents report the same fingerprint, both agentIds are included in reportedBy.
+ * Consolidates findings from multiple SarifLogs by identity, compared by equality.
+ *
+ * This module does not own the formula and never recomputes a transported value: it reads
+ * `fingerprints["gitgov/v2"]` (SARIF-N1) and, when a result arrives without it, derives one
+ * with the same `computeFingerprint` the detectors use (AORCH-B12).
  */
 function consolidateFindings(
   agentResults: AgentAuditResult[],
@@ -214,40 +204,61 @@ function consolidateFindings(
 
     for (const run of result.sarif.runs) {
       for (const sarifResult of run.results) {
-        // Primary: use standardized primaryLocationLineHash/v1 from SarifBuilder
-        // Fallback: ruleId + file + startLine (for external tools without GitGov fingerprinting)
         const location = sarifResult.locations?.[0]?.physicalLocation;
+        const props = sarifResult.properties as
+          | Record<string, unknown>
+          | undefined;
+        const rawCategory =
+          (props?.["gitgov/category"] as string | undefined) ?? "unknown-risk";
+        const category = rawCategory as import("../audit/types").FindingCategory;
+        const snippet = location?.region?.snippet?.text;
+
+        // [AORCH-B6] The identity travels in fingerprints["gitgov/v2"] and is compared by
+        // equality. Reading partialFingerprints here was the bug: that key is GitHub's line
+        // hash, it carried neither file nor category, and it silently replaced whatever the
+        // detector had computed.
+        const transported = sarifResult.fingerprints?.["gitgov/v2"];
+
+        // [AORCH-B12] No key — an external tool, or a SARIF written before the cut. Derive
+        // it with the SAME function the detectors use, never from ruleId/file/startLine: a
+        // positional identity changes the moment someone inserts a line above the finding,
+        // so "the same finding" became a new one between runs. Without a snippet there is
+        // nothing to anchor on and the result is skipped.
+        const file = location?.artifactLocation?.uri;
         const fingerprint =
-          sarifResult.partialFingerprints?.["primaryLocationLineHash/v1"] ??
-          buildFallbackFingerprint(sarifResult.ruleId, location);
+          transported ??
+          (file && snippet
+            ? computeFingerprint({ file, category, anchor: snippet })
+            : undefined);
         if (!fingerprint) continue;
 
         const existing = byFingerprint.get(fingerprint);
 
         if (existing) {
+          // [AORCH-B14] Same key, different category: with AUDIT-K2 the category is inside
+          // the preimage, so this can only come from a malformed SARIF. Merging would leave
+          // the consolidated finding wearing whichever category arrived first — the D-c
+          // defect, silently. Keep the first, reject the second, and say so.
+          if (existing.category !== category) {
+            console.warn(
+              `[AORCH-B14] Rejected SARIF result from ${result.agentId}: fingerprint ${fingerprint} ` +
+                `is already consolidated as "${existing.category}" and this result declares "${category}". ` +
+                `Two categories cannot share an identity; the second was not merged.`,
+            );
+            continue;
+          }
           // Dedup: add agent to reportedBy
           if (!existing.reportedBy.includes(result.agentId)) {
             existing.reportedBy.push(result.agentId);
           }
         } else {
-          // Read severity from properties['gitgov/category'] or infer from level
-          const props = sarifResult.properties as
-            | Record<string, unknown>
-            | undefined;
-          const rawCategory =
-            (props?.["gitgov/category"] as string | undefined) ?? "unknown-risk";
-          const category = rawCategory as import("../audit/types").FindingCategory;
-
-          const snippet = location?.region?.snippet?.text;
           const detector = (props?.["gitgov/detector"] as string | undefined) ?? "regex";
           const confidence = (props?.["gitgov/confidence"] as number | undefined) ?? 1.0;
 
-          // [AUDIT-K5] Rehydration, not production: the identity arrives with the SARIF
-          // result and is kept byte for byte. The consumer has no anchor here and the
-          // snippet may be truncated or redacted, so recomputing would diverge from the
+          // [AUDIT-K5] [AORCH-B6] Rehydration, not production: the identity arrives with
+          // the SARIF result and is kept byte for byte. The consumer has no anchor here and
+          // the snippet may be truncated or redacted, so recomputing would diverge from the
           // producer — which is how two identities entered the system to begin with.
-          // AORCH-B6/B12/B14 still pending: reading the key from fingerprints["gitgov/v2"]
-          // and dropping buildFallbackFingerprint belong to this module's own pass.
           const finding = rehydrateFinding({
             fingerprint,
             ruleId: sarifResult.ruleId,
@@ -287,8 +298,10 @@ function consolidateFindings(
 function buildSummary(
   findings: Finding[],
   agentResults: AgentAuditResult[],
+  activeWaivers: Waiver[] = [],
 ): AuditSummary {
   const active = findings.filter((f) => !f.isWaived);
+  const present = new Set(findings.map((f) => f.fingerprint));
   return {
     total: findings.length,
     critical: active.filter((f) => f.severity === "critical").length,
@@ -296,6 +309,10 @@ function buildSummary(
     medium: active.filter((f) => f.severity === "medium").length,
     low: active.filter((f) => f.severity === "low").length,
     suppressed: findings.filter((f) => f.isWaived).length,
+    // [AORCH-B15] Active waivers pointing at an identity nothing produced. After the cut
+    // (AUDIT-K1..K6) every waiver written with the old value lands here, and without the
+    // count "0 waived" reads exactly like "there were no waivers".
+    unmatchedWaivers: activeWaivers.filter((w) => !present.has(w.fingerprint)).length,
     agentsRun: agentResults.filter((r) => r.status === "success").length,
     agentsFailed: agentResults.filter((r) => r.status === "error").length,
   };
@@ -357,6 +374,9 @@ export function createAuditOrchestrator(deps: AuditOrchestratorDeps) {
             medium: 0,
             low: 0,
             suppressed: 0,
+            // [AORCH-B15] Waivers loaded, no agents to match them against: every active
+            // waiver is unmatched, and saying 0 here would hide exactly that.
+            unmatchedWaivers: waivers.length,
             agentsRun: 0,
             agentsFailed: 0,
           },
@@ -461,7 +481,7 @@ export function createAuditOrchestrator(deps: AuditOrchestratorDeps) {
         agentResults,
         l1AgentResults,
         policyDecision: policyResult.decision,
-        summary: buildSummary(findingsWithWaivers, agentResults),
+        summary: buildSummary(findingsWithWaivers, agentResults, waivers),
         executionIds: {
           scans: scanExecutionIds,
           policy: policyResult.executionRecord.id,

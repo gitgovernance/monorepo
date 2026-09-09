@@ -247,6 +247,7 @@ describe('AuditCommand', () => {
       medium: 0,
       low: 0,
       suppressed: 0,
+      unmatchedWaivers: 0,
       agentsRun: 1,
       agentsFailed: 0,
     },
@@ -268,6 +269,7 @@ describe('AuditCommand', () => {
       medium: 0,
       low: 0,
       suppressed: 0,
+      unmatchedWaivers: 0,
       agentsRun: 0,
       agentsFailed: 0,
     },
@@ -340,6 +342,42 @@ describe('AuditCommand', () => {
     output: 'text',
     failOn: 'critical',
     ...overrides,
+  });
+
+  describe('4.4. Waiver Application — unmatched waivers (AORCH-B15)', () => {
+    it('[AORCH-B15] should print the unmatched waivers line only when summary.unmatchedWaivers is greater than zero', async () => {
+      const withUnmatched = {
+        ...mockResultWithFindings,
+        summary: { ...mockResultWithFindings.summary, unmatchedWaivers: 2 },
+      };
+      mockOrchestrator.run.mockResolvedValue(withUnmatched);
+      mockConsoleLog.mockClear();
+
+      await auditCommand.execute(createDefaultOptions({ scope: 'full' }));
+
+      const printed = mockConsoleLog.mock.calls.map((c) => String(c[0])).join('\n');
+      expect(printed).toContain('2 waiver(s) matched no finding');
+      // The message has to tell the user what to DO — a bare count is not actionable when
+      // every pre-cut waiver has just stopped matching at once.
+      expect(printed).toContain('gitgov audit waive');
+
+      // Negative control: with nothing unmatched the line is absent. Without this half the
+      // test would pass on an implementation that printed it unconditionally, which is the
+      // noise the "only when N > 0" clause of the EARS exists to prevent.
+      mockOrchestrator.run.mockResolvedValue({
+        ...mockResultWithFindings,
+        summary: { ...mockResultWithFindings.summary, unmatchedWaivers: 0 },
+      });
+      mockConsoleLog.mockClear();
+
+      await auditCommand.execute(createDefaultOptions({ scope: 'full' }));
+
+      const quiet = mockConsoleLog.mock.calls.map((c) => String(c[0])).join('\n');
+      expect(quiet).not.toContain('matched no finding');
+      // ANTI-VACUITY: the run really produced output, so the absence above is a decision
+      // and not an empty console.
+      expect(quiet.length).toBeGreaterThan(0);
+    });
   });
 
   describe('4.1. CLI -> Orchestrator Integration (AORCH-C1 to C8)', () => {

@@ -380,6 +380,15 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
     console.log('└──────────┴───────┴────────────────────────────────────────┘');
     console.log(`\nTotal: ${summary.total} findings (${summary.suppressed} waived), ${summary.agentsRun} agent(s) run\n`);
 
+    // [AORCH-B15] Only when there is something to say. After the identity cut every waiver
+    // written with the old fingerprint stops matching, and the user's only other signal is
+    // "0 waived" — which reads identically to having had no waivers at all.
+    if (summary.unmatchedWaivers > 0) {
+      console.log(
+        `${summary.unmatchedWaivers} waiver(s) matched no finding — re-create them with gitgov audit waive <fingerprint>\n`,
+      );
+    }
+
     // POLICY DECISION section
     console.log('─'.repeat(60));
     console.log('POLICY DECISION');
