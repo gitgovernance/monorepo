@@ -700,13 +700,11 @@ describe("PolicyEvaluator", () => {
                   },
                 },
               ],
-              ...(r.fingerprint
-                ? {
-                    partialFingerprints: {
-                      "primaryLocationLineHash/v1": r.fingerprint,
-                    },
-                  }
-                : {}),
+              // [PEVAL-F6] The identity travels under `fingerprints["gitgov/v2"]` (SARIF-N1).
+              // These fixtures used `partialFingerprints["primaryLocationLineHash/v1"]`,
+              // which is GitHub's line hash — with the fixture on the old key the F6 test
+              // passed against the OLD code too, so it discriminated nothing.
+              ...(r.fingerprint ? { fingerprints: { "gitgov/v2": r.fingerprint } } : {}),
               properties: {
                 "gitgov/category": r.category ?? "unknown",
                 "gitgov/detector": "regex",
@@ -796,6 +794,46 @@ describe("PolicyEvaluator", () => {
       expect(result.decision.decision).toBe("block"); // critical finding => block
       expect(result.decision.blockingFindings).toHaveLength(1);
       expect(result.decision.blockingFindings[0]!.fingerprint).toBe("fp-sec-001");
+    });
+
+    it("[PEVAL-F6] should rehydrate findings with the transported fingerprints gitgov/v2 and never a positional fallback", async () => {
+      const transported = "d".repeat(64);
+      const sarif = makeSarifLogForReeval([
+        {
+          ruleId: "SEC-001",
+          level: "error",
+          message: "Hardcoded secret found",
+          file: "src/config.ts",
+          startLine: 10,
+          fingerprint: transported,
+          category: "hardcoded-secret",
+        },
+      ]);
+
+      const records = new Map<string, GitGovExecutionRecord>();
+      records.set("exec-scan-f6", makeExecRecordWithSarif("exec-scan-f6", sarif));
+      const deps = makeReevalDeps({ executionRecords: records });
+
+      const result = await reevaluatePolicy(
+        ["exec-scan-f6"],
+        "task-f6",
+        makeConfig({ failOn: "critical" }),
+        deps,
+      );
+
+      const rebuilt = [...result.decision.blockingFindings, ...result.decision.waivedFindings];
+      expect(rebuilt).toHaveLength(1);
+
+      // [AUDIT-K5] The identity arrives with the record and survives byte for byte. This
+      // path reads L1, where the snippet may already be [REDACTED] — recomputing there
+      // would diverge from what the producer wrote.
+      expect(rebuilt[0]!.fingerprint).toBe(transported);
+
+      // Negative control: the positional fallback this replaces. `fallback:SEC-001:...:10`
+      // changed whenever a line was inserted above the finding, so a re-evaluation of the
+      // very same scan could produce a different identity than the scan itself.
+      expect(rebuilt[0]!.fingerprint).not.toBe("fallback:SEC-001:src/config.ts:10");
+      expect(rebuilt[0]!.fingerprint).not.toMatch(/^fallback:/);
     });
 
     it("[PEVAL-F2] should use current active waivers not historical ones", async () => {

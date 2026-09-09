@@ -1,4 +1,5 @@
 import { rehydrateFinding } from "../audit/types";
+import { computeFingerprint } from "../audit/fingerprint";
 /**
  * PolicyEvaluator -- Epic 5: policy_evaluation.
  *
@@ -29,7 +30,7 @@ import { severityThreshold } from "./severity_threshold";
 import { categoryBlock } from "./category_block";
 import type { RecordStore } from "../record_store/record_store";
 import type { GitGovExecutionRecord } from "../record_types";
-import type { SarifLog, SarifLevel, SarifPhysicalLocation } from "../sarif/sarif.types";
+import type { SarifLog, SarifLevel } from "../sarif/sarif.types";
 
 // ============================================================================
 // Helper functions
@@ -276,21 +277,12 @@ function levelToSeverity(level: SarifLevel | string | undefined): FindingSeverit
 }
 
 /**
- * Builds a fallback fingerprint for SARIF results missing primaryLocationLineHash/v1.
- */
-function buildFallbackFingerprint(
-  ruleId: string | undefined,
-  location: SarifPhysicalLocation | undefined,
-): string | undefined {
-  const file = location?.artifactLocation?.uri;
-  const line = location?.region?.startLine;
-  if (!ruleId || !file) return undefined;
-  return `fallback:${ruleId}:${file}:${String(line ?? 0)}`;
-}
-
-/**
- * Extracts Finding[] from a SarifLog.
- * Re-consolidates findings from SARIF results with dedup by fingerprint.
+ * [PEVAL-F6] Extracts Finding[] from a SarifLog, keyed by the transported identity.
+ *
+ * This is a REHYDRATOR (AUDIT-D2), and it behaves like the orchestrator: it reads
+ * `fingerprints["gitgov/v2"]`, never recomputes a value that arrived, and never derives a
+ * positional one. It also reads L1, where the snippet may already be `[REDACTED]` — one
+ * more reason a recomputation here would diverge from what the producer wrote.
  */
 function extractFindingsFromSarif(sarif: SarifLog): Finding[] {
   const byFingerprint = new Map<string, Finding>();
@@ -300,9 +292,27 @@ function extractFindingsFromSarif(sarif: SarifLog): Finding[] {
 
     for (const sarifResult of run.results) {
       const location = sarifResult.locations?.[0]?.physicalLocation;
+      const props = sarifResult.properties as
+        | Record<string, unknown>
+        | undefined;
+      const rawCategory =
+        (props?.["gitgov/category"] as string | undefined) ?? "unknown-risk";
+      const snippetText = location?.region?.snippet?.text;
+      const uri = location?.artifactLocation?.uri;
+
+      // [PEVAL-F6] Transported first. Absent — an external tool or a pre-cut SARIF — derive
+      // it with the same function the detectors use (AORCH-B12), never from ruleId, file and
+      // startLine: that value moved whenever a line was inserted above the finding, so
+      // re-evaluating the very same scan could yield a different identity than the scan.
       const fingerprint =
-        sarifResult.partialFingerprints?.["primaryLocationLineHash/v1"] ??
-        buildFallbackFingerprint(sarifResult.ruleId, location);
+        sarifResult.fingerprints?.["gitgov/v2"] ??
+        (uri && snippetText
+          ? computeFingerprint({
+              file: uri,
+              category: rawCategory as import("../audit/types").FindingCategory,
+              anchor: snippetText,
+            })
+          : undefined);
       if (!fingerprint) continue;
 
       const existing = byFingerprint.get(fingerprint);
@@ -312,19 +322,12 @@ function extractFindingsFromSarif(sarif: SarifLog): Finding[] {
           existing.reportedBy.push(agentId);
         }
       } else {
-        const props = sarifResult.properties as
-          | Record<string, unknown>
-          | undefined;
-        const rawCategory =
-          (props?.["gitgov/category"] as string | undefined) ?? "unknown-risk";
         const detector = (props?.["gitgov/detector"] as string | undefined) ?? "regex";
         const confidence = (props?.["gitgov/confidence"] as number | undefined) ?? 1.0;
         const snippet = location?.region?.snippet?.text;
 
-        // [AUDIT-K5] Second rehydrator, unlisted until the handoff measured it (PEVAL-F6).
+        // [AUDIT-K5] [PEVAL-F6] Second rehydrator, unlisted until the handoff measured it.
         // Same contract as the orchestrator: transport the identity, never recompute it.
-        // PEVAL-F6 itself — keying on fingerprints["gitgov/v2"] and deleting the local copy
-        // of buildFallbackFingerprint — belongs to this module's own pass.
         const finding = rehydrateFinding({
           fingerprint,
           ruleId: sarifResult.ruleId,
