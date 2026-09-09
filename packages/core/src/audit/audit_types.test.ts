@@ -225,7 +225,7 @@ describe('Audit Record Types (audit_record_types_module.md)', () => {
           rulesEvaluated: [],
           evaluatedAt: new Date().toISOString(),
         },
-        summary: { total: 0, critical: 0, high: 0, medium: 0, low: 0, suppressed: 0, agentsRun: 1, agentsFailed: 0 },
+        summary: { total: 0, critical: 0, high: 0, medium: 0, low: 0, suppressed: 0, unmatchedWaivers: 0, agentsRun: 1, agentsFailed: 0 },
       };
       expect(scan.scope).toBe('full');
       expect(scan.triggeredBy).toBeDefined();

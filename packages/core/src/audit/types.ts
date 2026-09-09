@@ -352,6 +352,15 @@ export type AuditSummary = {
   low: number;
   /** Count of waived/suppressed findings */
   suppressed: number;
+  /**
+   * [AORCH-B15] Active waivers whose fingerprint matched no consolidated finding.
+   *
+   * Required, not optional: after the identity cut (AUDIT-K1..K6) every waiver written with
+   * the old value stops matching, and without this counter "0 waived" is indistinguishable
+   * from "there were no waivers". Only three sites build an AuditSummary, so making it
+   * required costs three lines and buys a number that cannot be silently omitted.
+   */
+  unmatchedWaivers: number;
   /** Number of agents executed */
   agentsRun: number;
   /** Number of agents that failed */
@@ -616,6 +625,9 @@ export function createScan(input: {
     low: active.filter(f => f.severity === 'low').length,
     total: input.findings.length,
     suppressed: input.findings.filter(f => f.isWaived).length,
+    // [AORCH-B15] A Scan is built from findings already consolidated, with no waiver list
+    // in hand: the orchestrator is the only place that can count unmatched ones.
+    unmatchedWaivers: 0,
     agentsRun: input.executionRecordIds.length,
     agentsFailed: 0,
   };

@@ -1,4 +1,5 @@
 import { createAuditOrchestrator } from "./audit_orchestrator";
+import { computeFingerprint } from "../audit/fingerprint";
 import type {
   AuditOrchestratorDeps,
   AuditOrchestrationOptions,
@@ -176,6 +177,42 @@ const defaultOptions: AuditOrchestrationOptions = {
   taskId: "1234567890-task-test",
 };
 
+/** An active waiver keyed on `fingerprint`, with the FeedbackRecord shape the reader returns. */
+function makeWaiver(fingerprint: string): Waiver {
+  const waiver: Waiver = {
+    fingerprint,
+    ruleId: "SEC-001",
+    feedback: {
+      header: {
+        version: "1.0",
+        type: "feedback",
+        payloadChecksum: "test",
+        // Same shape the agent record helper uses above: the type requires at least one
+        // signature, and nothing in this module verifies it — the waiver reader is mocked.
+        signatures: [
+          {
+            keyId: "human:test",
+            role: "author",
+            notes: "test waiver",
+            signature: "dGVzdA==".padEnd(88, "="),
+            timestamp: Date.now(),
+          },
+        ],
+      },
+      payload: {
+        id: `1234567890-feedback-waiver-${fingerprint}`,
+        entityType: "execution",
+        entityId: "exec-previous",
+        type: "approval",
+        status: "acknowledged",
+        content: "Risk accepted per security review",
+        metadata: { fingerprint, ruleId: "SEC-001", file: "src/config.ts", line: 10 },
+      },
+    },
+  };
+  return waiver;
+}
+
 function makeSarifResult(overrides: {
   ruleId: string;
   level: "error" | "warning" | "note" | "none";
@@ -184,6 +221,8 @@ function makeSarifResult(overrides: {
   startLine: number;
   fingerprint?: string;
   category?: string;
+  snippet?: string;
+  legacyKeyOnly?: boolean;
 }): Record<string, unknown> {
   const result: Record<string, unknown> = {
     ruleId: overrides.ruleId,
@@ -204,10 +243,22 @@ function makeSarifResult(overrides: {
     },
   };
 
+  if (overrides.snippet !== undefined) {
+    const loc = (result["locations"] as Array<Record<string, any>>)[0]!;
+    loc["physicalLocation"].region.snippet = { text: overrides.snippet };
+  }
+
+  // [AORCH-B6] The identity travels under `fingerprints["gitgov/v2"]` (SARIF-N1). The old
+  // `partialFingerprints["primaryLocationLineHash/v1"]` is GitHub's line hash and is no
+  // longer read as identity; `legacyKeyOnly` emits it alone, to exercise B12's fallback.
   if (overrides.fingerprint) {
-    result["partialFingerprints"] = {
-      "primaryLocationLineHash/v1": overrides.fingerprint,
-    };
+    if (overrides.legacyKeyOnly) {
+      result["partialFingerprints"] = {
+        "primaryLocationLineHash/v1": overrides.fingerprint,
+      };
+    } else {
+      result["fingerprints"] = { "gitgov/v2": overrides.fingerprint };
+    }
   }
 
   return result;
@@ -480,7 +531,7 @@ describe("AuditOrchestrator", () => {
   });
 
   describe("4.3. Consolidation and Dedup (AORCH-B6, B12)", () => {
-    it("[AORCH-B6] should deduplicate findings that share the same fingerprint across agents", async () => {
+    it("[AORCH-B6] should merge results sharing fingerprints gitgov/v2 across agents into one finding with both reportedBy", async () => {
       const agent1 = makeAgentRecord("agent:security-audit", "audit");
       const agent2 = makeAgentRecord("agent:pii-scan", "audit");
 
@@ -529,11 +580,11 @@ describe("AuditOrchestrator", () => {
       ]);
     });
 
-    it("[AORCH-B12] should deduplicate using ruleId + file + startLine when primaryLocationLineHash is missing", async () => {
+    it("[AORCH-B12] should compute the identity with computeFingerprint when fingerprints gitgov/v2 is missing", async () => {
       const agent1 = makeAgentRecord("agent:security-audit", "audit");
       const agent2 = makeAgentRecord("agent:external-tool", "audit");
 
-      // No fingerprint -- fallback dedup
+      // An external tool: no gitgov/v2 key, but a snippet to anchor on.
       const resultWithoutFingerprint = makeSarifResult({
         ruleId: "EXT-001",
         level: "warning",
@@ -541,6 +592,7 @@ describe("AuditOrchestrator", () => {
         file: "src/app.ts",
         startLine: 42,
         category: "unknown-risk",
+        snippet: 'const token = "ext-abc123"',
       });
 
       const sarif1 = makeSarifLog([resultWithoutFingerprint]);
@@ -567,15 +619,128 @@ describe("AuditOrchestrator", () => {
       const orchestrator = createAuditOrchestrator(deps);
       const result = await orchestrator.run(defaultOptions);
 
-      // Deduplicated by fallback: ruleId + file + startLine
       expect(result.findings).toHaveLength(1);
       const finding = result.findings[0]!;
-      expect(finding).toBeDefined();
-      expect(finding.fingerprint).toBe("fallback:EXT-001:src/app.ts:42");
+
+      // The SAME function the detectors use — not a formula this module owns.
+      expect(finding.fingerprint).toBe(
+        computeFingerprint({
+          file: "src/app.ts",
+          category: "unknown-risk",
+          anchor: 'const token = "ext-abc123"',
+        }),
+      );
       expect(finding.reportedBy).toEqual([
         "agent:security-audit",
         "agent:external-tool",
       ]);
+
+      // Negative control — the positional fallback it replaces. That value moved whenever
+      // someone inserted a line above the finding, so "the same finding" became a new one
+      // between runs. It must not be what we land on.
+      expect(finding.fingerprint).not.toBe("fallback:EXT-001:src/app.ts:42");
+      expect(finding.fingerprint).toMatch(/^[a-f0-9]{64}$/);
+    });
+
+    it("[AORCH-B6] should keep two findings when the same line carries two categories", async () => {
+      const agent1 = makeAgentRecord("agent:security-audit", "audit");
+      const agent2 = makeAgentRecord("agent:pii-scan", "audit");
+
+      // Same file and line, two categories: a secret and a PII hit. Under the old line hash
+      // these collapsed into one finding wearing whichever category arrived first (D-c).
+      const base = { level: "error" as const, message: "m", file: "src/config.ts", startLine: 10, snippet: 'const x = "a@b.com"' };
+      const secret = makeSarifResult({ ...base, ruleId: "SEC-001", category: "hardcoded-secret", fingerprint: "fp-secret" });
+      const pii = makeSarifResult({ ...base, ruleId: "PII-001", category: "pii-email", fingerprint: "fp-pii-email" });
+
+      const deps = createMockDeps();
+      (deps.recordStore.list as jest.Mock).mockResolvedValue(["agent:security-audit", "agent:pii-scan"]);
+      (deps.recordStore.get as jest.Mock).mockImplementation(async (id: string) =>
+        id === "agent:security-audit" ? agent1 : id === "agent:pii-scan" ? agent2 : null,
+      );
+      (deps.agentRunner.runOnce as jest.Mock)
+        .mockResolvedValueOnce(makeAgentResponse("agent:security-audit", makeSarifLog([secret]), "exec-001"))
+        .mockResolvedValueOnce(makeAgentResponse("agent:pii-scan", makeSarifLog([pii]), "exec-002"));
+
+      const result = await createAuditOrchestrator(deps).run(defaultOptions);
+
+      expect(result.findings).toHaveLength(2);
+      expect(result.findings.map((f) => f.category).sort()).toEqual(["hardcoded-secret", "pii-email"]);
+      // Each keeps its own reporter — neither absorbed the other.
+      expect(result.findings.every((f) => f.reportedBy.length === 1)).toBe(true);
+    });
+
+    it("[AORCH-B6] should keep the transported fingerprint unchanged when rehydrating", async () => {
+      const agent1 = makeAgentRecord("agent:security-audit", "audit");
+      const transported = "b".repeat(64);
+
+      const sarifResult = makeSarifResult({
+        ruleId: "SEC-001",
+        level: "error",
+        message: "Hardcoded secret",
+        file: "src/config.ts",
+        startLine: 10,
+        category: "hardcoded-secret",
+        snippet: 'const k = "sk_test_x"',
+        fingerprint: transported,
+      });
+
+      const deps = createMockDeps();
+      (deps.recordStore.list as jest.Mock).mockResolvedValue(["agent:security-audit"]);
+      (deps.recordStore.get as jest.Mock).mockResolvedValue(agent1);
+      (deps.agentRunner.runOnce as jest.Mock).mockResolvedValue(
+        makeAgentResponse("agent:security-audit", makeSarifLog([sarifResult]), "exec-001"),
+      );
+
+      const result = await createAuditOrchestrator(deps).run(defaultOptions);
+
+      expect(result.findings).toHaveLength(1);
+      expect(result.findings[0]!.fingerprint).toBe(transported);
+
+      // Negative control: recomputing here lands somewhere else, because the consumer has
+      // no anchor and the snippet may be truncated or redacted by the time it arrives.
+      expect(
+        computeFingerprint({ file: "src/config.ts", category: "hardcoded-secret", anchor: 'const k = "sk_test_x"' }),
+      ).not.toBe(transported);
+    });
+
+    it("[AORCH-B14] should not merge results sharing the key but differing in gitgov/category", async () => {
+      const agent1 = makeAgentRecord("agent:security-audit", "audit");
+      const agent2 = makeAgentRecord("agent:pii-scan", "audit");
+      const collided = "c".repeat(64);
+
+      // Only reachable with a malformed SARIF — AUDIT-K2 puts category in the preimage, so
+      // two categories cannot legitimately share a key. The point is that the consolidated
+      // result must not go quiet wearing the first agent's category.
+      const base = { level: "error" as const, message: "m", file: "src/config.ts", startLine: 10, fingerprint: collided };
+      const asSecret = makeSarifResult({ ...base, ruleId: "SEC-001", category: "hardcoded-secret" });
+      const asPii = makeSarifResult({ ...base, ruleId: "PII-001", category: "pii-email" });
+
+      const warn = jest.spyOn(console, "warn").mockImplementation(() => undefined);
+      try {
+        const deps = createMockDeps();
+        (deps.recordStore.list as jest.Mock).mockResolvedValue(["agent:security-audit", "agent:pii-scan"]);
+        (deps.recordStore.get as jest.Mock).mockImplementation(async (id: string) =>
+          id === "agent:security-audit" ? agent1 : id === "agent:pii-scan" ? agent2 : null,
+        );
+        (deps.agentRunner.runOnce as jest.Mock)
+          .mockResolvedValueOnce(makeAgentResponse("agent:security-audit", makeSarifLog([asSecret]), "exec-001"))
+          .mockResolvedValueOnce(makeAgentResponse("agent:pii-scan", makeSarifLog([asPii]), "exec-002"));
+
+        const result = await createAuditOrchestrator(deps).run(defaultOptions);
+
+        // The first wins, the second is rejected — and NOT absorbed into reportedBy.
+        expect(result.findings).toHaveLength(1);
+        expect(result.findings[0]!.category).toBe("hardcoded-secret");
+        expect(result.findings[0]!.reportedBy).toEqual(["agent:security-audit"]);
+
+        // The rejection is audible, and names both categories and the key.
+        const message = warn.mock.calls.map((c) => String(c[0])).join("\n");
+        expect(message).toContain("hardcoded-secret");
+        expect(message).toContain("pii-email");
+        expect(message).toContain(collided);
+      } finally {
+        warn.mockRestore();
+      }
     });
   });
 
@@ -597,8 +762,8 @@ describe("AuditOrchestrator", () => {
             },
           },
         ],
-        partialFingerprints: {
-          "primaryLocationLineHash/v1": "hash-snippet-001",
+        fingerprints: {
+          "gitgov/v2": "hash-snippet-001",
         },
         properties: {
           "gitgov/category": "hardcoded-secret",
@@ -807,6 +972,46 @@ describe("AuditOrchestrator", () => {
       // Summary should count suppressed
       expect(result.summary.suppressed).toBe(1);
     });
+
+    it("[AORCH-B15] should report active waivers that matched no consolidated finding in summary.unmatchedWaivers", async () => {
+      const agentRecord = makeAgentRecord("agent:security-audit", "audit");
+      const sarif = makeSarifLog([
+        makeSarifResult({
+          ruleId: "SEC-001",
+          level: "error",
+          message: "Hardcoded secret",
+          file: "src/config.ts",
+          startLine: 10,
+          fingerprint: "fp-present",
+          category: "hardcoded-secret",
+        }),
+      ]);
+
+      // Two active waivers: one covers the finding that exists, the other points at an
+      // identity nothing produces any more — which is what every pre-cut waiver becomes.
+      const matching = makeWaiver("fp-present");
+      const orphaned = makeWaiver("fp-from-before-the-cut");
+
+      const deps = createMockDeps();
+      (deps.recordStore.list as jest.Mock).mockResolvedValue(["agent:security-audit"]);
+      (deps.recordStore.get as jest.Mock).mockResolvedValue(agentRecord);
+      (deps.agentRunner.runOnce as jest.Mock).mockResolvedValue(
+        makeAgentResponse("agent:security-audit", sarif, "exec-001"),
+      );
+      (deps.waiverReader.loadWaivers as jest.Mock).mockResolvedValue([matching, orphaned]);
+
+      const result = await createAuditOrchestrator(deps).run(defaultOptions);
+
+      expect(result.summary.unmatchedWaivers).toBe(1);
+
+      // ANTI-VACUITY / negative control: with every waiver matching, the count is 0 — so a
+      // 1 above means "one did not match", not "the field is always 1". Without this pair a
+      // hardcoded 0 would pass the first assertion's opposite and nobody would notice: a
+      // silent 0 is exactly the failure this EARS exists to prevent.
+      (deps.waiverReader.loadWaivers as jest.Mock).mockResolvedValue([matching]);
+      const allMatched = await createAuditOrchestrator(deps).run(defaultOptions);
+      expect(allMatched.summary.unmatchedWaivers).toBe(0);
+    });
   });
 
   describe("4.5. Error Handling (AORCH-C1)", () => {
@@ -1009,8 +1214,8 @@ describe("AuditOrchestrator", () => {
                     },
                   },
                 ],
-                partialFingerprints: {
-                  "primaryLocationLineHash/v1": "hash-pii-e1",
+                fingerprints: {
+                  "gitgov/v2": "hash-pii-e1",
                 },
                 properties: {
                   "gitgov/category": "pii-email",
@@ -1085,8 +1290,8 @@ describe("AuditOrchestrator", () => {
                     },
                   },
                 ],
-                partialFingerprints: {
-                  "primaryLocationLineHash/v1": "hash-sec-e2",
+                fingerprints: {
+                  "gitgov/v2": "hash-sec-e2",
                 },
                 properties: {
                   "gitgov/category": "hardcoded-secret",
@@ -1183,7 +1388,7 @@ describe("AuditOrchestrator", () => {
               },
             },
           ],
-          partialFingerprints: { "primaryLocationLineHash/v1": "fp-001" },
+          fingerprints: { "gitgov/v2": "fp-001" },
         },
       ]);
 
@@ -1250,7 +1455,7 @@ describe("AuditOrchestrator", () => {
               },
             },
           ],
-          partialFingerprints: { "primaryLocationLineHash/v1": "fp-pii" },
+          fingerprints: { "gitgov/v2": "fp-pii" },
         },
       ]);
 
