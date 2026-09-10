@@ -69,7 +69,7 @@ export class SourceAuditorModule {
 
     // Step 2: Filter by Waivers (if provided)
     const waivers = input.waivers ?? [];
-    const { newFindings, acknowledgedCount } = this.filterByWaivers(findings, waivers);
+    const { newFindings, acknowledgedCount, unmatchedCount } = this.filterByWaivers(findings, waivers);
 
     // Step 3: Scoring
     const scoredFindings = this.scoringEngine.score(newFindings);
@@ -87,6 +87,8 @@ export class SourceAuditorModule {
       waivers: {
         acknowledged: acknowledgedCount,
         new: scoredFindings.length,
+        // [EARS-C6]
+        unmatched: unmatchedCount,
       },
     };
   }
@@ -196,18 +198,26 @@ export class SourceAuditorModule {
 
   /**
    * Filters findings that already have active waivers.
-   * @returns new findings and count of acknowledged
+   * @returns new findings, count of acknowledged, and count of waivers that matched nothing
    */
   private filterByWaivers(
     findings: Finding[],
     waivers: Waiver[]
-  ): { newFindings: Finding[]; acknowledgedCount: number } {
+  ): { newFindings: Finding[]; acknowledgedCount: number; unmatchedCount: number } {
     const waiverFingerprints = new Set(waivers.map((w) => w.fingerprint));
+    const findingFingerprints = new Set(findings.map((f) => f.fingerprint));
     const newFindings = findings.filter(
       (f) => !waiverFingerprints.has(f.fingerprint)
     );
     const acknowledgedCount = findings.length - newFindings.length;
-    return { newFindings, acknowledgedCount };
+    // [EARS-C6] Waivers pointing at an identity nothing produced. After the cut
+    // (AUDIT-K1..K6) every waiver written with the old value lands here, and these are the
+    // ones the user has to re-create. It is not derivable from the other two counts: a run
+    // with a stale waiver and a run with no waivers at all agree on both of them.
+    const unmatchedCount = waivers.filter(
+      (w) => !findingFingerprints.has(w.fingerprint)
+    ).length;
+    return { newFindings, acknowledgedCount, unmatchedCount };
   }
 
   /**
@@ -247,7 +257,15 @@ export class SourceAuditorModule {
       scannedLines: 0,
       duration: Date.now() - startTime,
       detectors: [],
-      waivers: { acknowledged: 0, new: 0 },
+      // [EARS-C6] Zero on purpose, and the asymmetry with AORCH-B15 is deliberate. Nothing
+      // was scanned here, so no waiver was tested against anything — that is a different
+      // fact from "the scan ran and no waiver matched", which is what this counter reports.
+      // AORCH-B15's early return does count them because there the trigger is a
+      // misconfiguration (no audit agents registered); a scope that selects no files is
+      // ordinary in incremental mode. Counting them here would also give two answers for
+      // one situation: auditContents() receives waivers in its input, while audit() reaches
+      // this path before loading them at all.
+      waivers: { acknowledged: 0, new: 0, unmatched: 0 },
     };
   }
 }
