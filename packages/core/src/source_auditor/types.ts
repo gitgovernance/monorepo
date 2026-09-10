@@ -156,6 +156,14 @@ export type WaiverApplicationCounts = {
   acknowledged: number;
   /** New findings without waiver */
   new: number;
+  /**
+   * [EARS-C6] Active waivers whose fingerprint matched no finding of this run.
+   *
+   * After the identity cut (AUDIT-K1..K6) every waiver written with the old value lands
+   * here, and these are the ones the user has to re-create. Without the count, "0
+   * acknowledged" reads exactly like "there were no waivers".
+   */
+  unmatched: number;
 }
 
 /**

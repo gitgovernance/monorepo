@@ -1,4 +1,4 @@
-// Sections: §4.1 (EARS-A1 to EARS-A3), §4.2 (EARS-B1 to EARS-B4), §4.3 (EARS-C1 to EARS-C5), §4.4 (EARS-D1 to EARS-D4), §4.5 (EARS-E1 to EARS-E4), §4.8 (EARS-H1 to EARS-H3)
+// Sections: §4.1 (EARS-A1 to EARS-A3), §4.2 (EARS-B1 to EARS-B4), §4.3 (EARS-C1 to EARS-C6), §4.4 (EARS-D1 to EARS-D4), §4.5 (EARS-E1 to EARS-E4), §4.8 (EARS-H1 to EARS-H3)
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
@@ -190,7 +190,7 @@ describe("SourceAuditorModule", () => {
     });
   });
 
-  describe("4.3. Waiver Filtering (EARS-C1 to EARS-C5)", () => {
+  describe("4.3. Waiver Filtering (EARS-C1 to EARS-C6)", () => {
     it("[EARS-C1] should load active waivers before filtering", async () => {
       const auditor = new SourceAuditorModule(createDeps());
 
@@ -293,6 +293,80 @@ describe("SourceAuditorModule", () => {
 
       expect(result.waivers.new).toBe(2);
       expect(result.waivers.acknowledged).toBe(1);
+    });
+
+    it("[EARS-C6] should report the count of active waivers that matched no finding", async () => {
+      const detected = createFinding({ anchor: "still-here" });
+      mockFindingDetector.detect.mockResolvedValue([detected]);
+
+      // Shaped like the identity this epic replaced (`sha256(line)[0:16]:occurrence`) — this
+      // is literally what a waiver written before the cut still carries in .gitgov/feedbacks/.
+      const staleWaiver = (hash: string): Waiver => ({
+        fingerprint: hash,
+        ruleId: "PII-001",
+        feedback: {} as Waiver["feedback"],
+      });
+
+      const matched: Waiver = {
+        fingerprint: detected.fingerprint,
+        ruleId: "PII-001",
+        feedback: {} as Waiver["feedback"],
+      };
+
+      // ONE matched and TWO stale, deliberately asymmetric. With one of each, "count the
+      // waivers that matched nothing" and "count the waivers that matched" both return 1,
+      // so the test would pass against an inverted predicate. Verified by mutation.
+      mockWaiverReader.loadWaivers.mockResolvedValue([
+        matched,
+        staleWaiver("a1b2c3d4e5f60718:1"),
+        staleWaiver("f0e1d2c3b4a59687:1"),
+      ]);
+
+      const auditor = new SourceAuditorModule(createDeps());
+      const result = await auditor.audit({
+        scope: { include: ["src/app.ts"], exclude: [] },
+        baseDir: tempDir,
+      });
+
+      expect(result.waivers.unmatched).toBe(2);
+
+      // ANTI-VACUITY: the other waiver really did match. Without this, `unmatched: 2` could
+      // just as well mean all three failed and the count happens to be right by accident.
+      expect(result.waivers.acknowledged).toBe(1);
+    });
+
+    it("[EARS-C6] should distinguish a stale waiver from having had no waivers at all", async () => {
+      // The negative control for the counter. `acknowledged` and `new` CANNOT tell these two
+      // runs apart — that indistinguishability is the whole reason EARS-C6 exists. The
+      // control collapses exactly where the counter separates.
+      const detected = createFinding({ anchor: "still-here" });
+      mockFindingDetector.detect.mockResolvedValue([detected]);
+
+      const stale: Waiver = {
+        fingerprint: "a1b2c3d4e5f60718:1",
+        ruleId: "PII-001",
+        feedback: {} as Waiver["feedback"],
+      };
+
+      const runWith = async (waivers: Waiver[]) => {
+        mockWaiverReader.loadWaivers.mockResolvedValue(waivers);
+        const auditor = new SourceAuditorModule(createDeps());
+        return auditor.audit({
+          scope: { include: ["src/app.ts"], exclude: [] },
+          baseDir: tempDir,
+        });
+      };
+
+      const withNoWaivers = await runWith([]);
+      const withStaleWaiver = await runWith([stale]);
+
+      // The two fields that existed before C6 are identical across both runs.
+      expect(withStaleWaiver.waivers.acknowledged).toBe(withNoWaivers.waivers.acknowledged);
+      expect(withStaleWaiver.waivers.new).toBe(withNoWaivers.waivers.new);
+
+      // The new one separates them.
+      expect(withNoWaivers.waivers.unmatched).toBe(0);
+      expect(withStaleWaiver.waivers.unmatched).toBe(1);
     });
   });
 
