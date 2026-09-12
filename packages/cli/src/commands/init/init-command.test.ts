@@ -62,10 +62,10 @@ describe('InitCommand', () => {
     initializeProject: Mock<(options: ProjectModuleInitOptions) => Promise<ProjectModuleInitResult>>;
   };
 
+  // [PROJ-C5] No `cycleId`: the fresh-init variant stopped carrying it with the root cycle.
   const sampleInitResult: ProjectModuleInitResult = {
     actorId: 'human:test-user',
     productAgentId: 'agent:gitgov-audit',
-    cycleId: '1757789000-cycle-test-project',
     commitSha: 'abc123def456abc123def456abc123def456abc1',
   };
 
@@ -132,24 +132,9 @@ describe('InitCommand', () => {
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('Initialized GitGovernance in'));
     });
 
-    it('[EARS-A2] should create root cycle and configure in config.json', async () => {
-      const customResult = {
-        ...sampleInitResult,
-        cycleId: '1757789000-cycle-my-project'
-      };
-      mockProjectModule.initializeProject.mockResolvedValue(customResult);
-
-      await initCommand.execute({
-        name: 'My Project',
-      });
-
-      expect(mockProjectModule.initializeProject).toHaveBeenCalledWith(
-        expect.objectContaining({
-          name: 'My Project',
-        })
-      );
-      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('Cycle:'));
-    });
+    // [EARS-A2] was retired with the root cycle (D29): the init no longer creates one and no
+    // longer writes `rootCycle` into config.json, so there was nothing left to assert. Its test
+    // is deleted rather than skipped — a test that cannot run does not report success.
 
     it('[EARS-A3] should pass name to ProjectModule when template specified', async () => {
       // Template processing is a CLI concern — ProjectModule only receives name
@@ -352,8 +337,12 @@ describe('InitCommand', () => {
 
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('Initialized GitGovernance in'));
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('Actor:'));
-      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('Cycle:'));
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('Agent:'));
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('Next: gitgov audit'));
+      // [PROJ-C5] The `Cycle:` line is gone: the init creates no root cycle (D29). Asserting
+      // its absence, not just dropping the assertion, so a regression that brings the line back
+      // turns this red instead of passing silently.
+      expect(mockConsoleLog).not.toHaveBeenCalledWith(expect.stringContaining('Cycle:'));
     });
 
     it('[EARS-C5] should allow join path when already initialized without --force', async () => {

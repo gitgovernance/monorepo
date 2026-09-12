@@ -395,16 +395,18 @@ export class InitCommand {
    * [EARS-C2] Handles --json output for automation
    * [EARS-B4] Shows result with actorId and commitSha
    */
-  // Takes the fresh-init variant, not the union: `productAgentId` and `cycleId` exist only
-  // there. The call site already reaches this in the `else` of `if (result.alreadyInitialized)`,
-  // so the narrowing was real and only the signature was lying about it.
+  // Takes the fresh-init variant, not the union: `productAgentId` exists only there. The call
+  // site already reaches this in the `else` of `if (result.alreadyInitialized)`, so the
+  // narrowing was real and only the signature was lying about it.
+  //
+  // [PROJ-C5] Neither the JSON nor the human output carries a cycle any more: the init stopped
+  // creating a root cycle (D29), so there is no id to print.
   private showSuccessOutput(result: import('@gitgov/core').ProjectModuleInitialized, options: InitCommandOptions): void {
     if (options.json) {
       console.log(JSON.stringify({
         success: true,
         actorId: result.actorId,
         productAgentId: result.productAgentId,
-        cycleId: result.cycleId,
         commitSha: result.commitSha,
       }, null, 2));
     } else {
@@ -412,7 +414,6 @@ export class InitCommand {
 
       console.log(`  Actor:   ${result.actorId}`);
       console.log(`  Agent:   ${result.productAgentId}`);
-      console.log(`  Cycle:   ${result.cycleId} (planning)`);
       console.log(`  Keys:    Ed25519 keypair created`);
 
       if (result.commitSha) {

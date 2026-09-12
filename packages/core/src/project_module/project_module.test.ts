@@ -42,13 +42,6 @@ function assertFreshInit(result: ProjectInitResult): asserts result is ProjectIn
   }
 }
 
-const mockCycle = {
-  id: '1234567890-cycle-root',
-  title: 'root',
-  status: 'planning' as const,
-  taskIds: [],
-};
-
 function createMockInitializer(): IProjectInitializer {
   return {
     isInitialized: jest.fn().mockResolvedValue(false),
@@ -66,12 +59,6 @@ function createMockInitializer(): IProjectInitializer {
   };
 }
 
-function createMockBacklog() {
-  return {
-    createCycle: jest.fn().mockResolvedValue(mockCycle),
-  };
-}
-
 function createRealDeps() {
   const actorStore = new MemoryRecordStore<GitGovActorRecord>();
   const keyProvider = new MockKeyProvider();
@@ -80,15 +67,14 @@ function createRealDeps() {
     keyProvider,
   });
   const initializer = createMockInitializer();
-  const backlog = createMockBacklog();
 
+  // [PROJ-C5] No `backlog` mock: the dependency left ProjectModuleDeps with the root cycle.
   const deps: ProjectModuleDeps = {
     initializer,
     identity,
-    backlog,
   };
 
-  return { deps, actorStore, keyProvider, initializer, backlog };
+  return { deps, actorStore, keyProvider, initializer };
 }
 
 describe('ProjectModule', () => {
@@ -107,7 +93,6 @@ describe('ProjectModule', () => {
       assertFreshInit(result);
       expect(result.actorId).toBe('human:camilo');
       expect(result.productAgentId).toBe('agent:gitgov-audit');
-      expect(result.cycleId).toBe('1234567890-cycle-root');
 
       const humanActor = await actorStore.get('human:camilo');
       expect(humanActor).not.toBeNull();
@@ -252,7 +237,7 @@ describe('ProjectModule', () => {
       expect(callOrder[1]).toBe('actor');
     });
 
-    it('[PROJ-C2] should call writeConfig with protocolVersion, projectId, rootCycle', async () => {
+    it('[PROJ-C2] should call writeConfig with protocolVersion, projectId and state.branch', async () => {
       const { deps, initializer } = createRealDeps();
       const pm = new ProjectModule(deps);
 
@@ -263,35 +248,68 @@ describe('ProjectModule', () => {
           protocolVersion: '1.0.0',
           projectId: 'test-project',
           projectName: 'Test Project',
-          rootCycle: '1234567890-cycle-root',
           saasUrl: 'https://app.gitgov.com',
+          // state.branch is the third clause of INIT-L1's SHALL: the branch name is persisted
+          // so every later command reads it from here. It was written since that EARS existed
+          // and no vertex asserted it until 2026-09.
+          state: { branch: DEFAULT_STATE_BRANCH },
         }),
       );
     });
 
-    it('[PROJ-C2b] should create root cycle with a deterministic id (not Date.now-based)', async () => {
-      const { deps, backlog } = createRealDeps();
+    it('[PROJ-C5] should not write rootCycle into the config', async () => {
+      const { deps, initializer } = createRealDeps();
       const pm = new ProjectModule(deps);
 
       await pm.initializeProject({ name: 'Test Project', login: 'dev', stateBranch: DEFAULT_STATE_BRANCH });
 
-      // The root cycle ID must be the deterministic sentinel so two inits of the same repo
-      // produce a byte-identical config.json (no gitgov-state divergence).
-      expect(backlog.createCycle).toHaveBeenCalledWith(
-        expect.objectContaining({ id: '0000000000-cycle-root', title: 'root' }),
-        expect.any(String),
-      );
+      const written = (initializer.writeConfig as jest.Mock).mock.calls[0]?.[0] as Record<string, unknown>;
+      expect(written).toBeDefined();
+      expect(written).not.toHaveProperty('rootCycle');
     });
 
-    it('[PROJ-C2b] two inits request the same deterministic root cycle id', async () => {
-      const a = createRealDeps();
-      const b = createRealDeps();
-      await new ProjectModule(a.deps).initializeProject({ name: 'Same Repo', login: 'dev', stateBranch: DEFAULT_STATE_BRANCH });
-      await new ProjectModule(b.deps).initializeProject({ name: 'Same Repo', login: 'dev', stateBranch: DEFAULT_STATE_BRANCH });
+    it('[PROJ-C5] should not create a root cycle nor require a backlog dependency', async () => {
+      const { deps, initializer } = createRealDeps();
+      const pm = new ProjectModule(deps);
 
-      const idA = (a.backlog.createCycle.mock.calls[0][0] as { id: string }).id;
-      const idB = (b.backlog.createCycle.mock.calls[0][0] as { id: string }).id;
-      expect(idA).toBe(idB); // deterministic — no timestamp drift between inits
+      await pm.initializeProject({ name: 'Test Project', login: 'dev', stateBranch: DEFAULT_STATE_BRANCH });
+
+      // `deps` is annotated ProjectModuleDeps. Once `backlog` leaves that type, re-adding the
+      // key is an excess-property error — that is the negative control, and it is also what
+      // makes a runtime spy impossible: there is no collaborator left to assert against.
+      expect(deps).not.toHaveProperty('backlog');
+      // Anti-vacuity: the init must have reached the end, otherwise the absence above would be
+      // explained by an init that threw before the step this EARS is about.
+      expect(initializer.finalize).toHaveBeenCalled();
+    });
+
+    it('[PROJ-C6] should initialize the session with the human actor, not the product agent', async () => {
+      const { deps, initializer } = createRealDeps();
+      const pm = new ProjectModule(deps);
+
+      const result = await pm.initializeProject({ name: 'Test Project', login: 'dev', stateBranch: DEFAULT_STATE_BRANCH });
+      const fresh = result as Extract<typeof result, { actorId: string }>;
+
+      expect(initializer.initializeSession).toHaveBeenCalledWith(fresh.actorId);
+      expect(fresh.actorId).toBe('human:dev');
+      // The distinction is the point: if this regressed to the product agent, every later
+      // command would attribute actions to agent:gitgov-audit.
+      expect(initializer.initializeSession).not.toHaveBeenCalledWith(fresh.productAgentId);
+    });
+
+    it('[PROJ-C6] should rollback and rethrow when initializeSession fails', async () => {
+      const { deps, initializer } = createRealDeps();
+      (initializer.initializeSession as jest.Mock).mockRejectedValueOnce(new Error('session write failed'));
+      const pm = new ProjectModule(deps);
+
+      await expect(
+        pm.initializeProject({ name: 'Test Project', login: 'dev', stateBranch: DEFAULT_STATE_BRANCH }),
+      ).rejects.toThrow('session write failed');
+
+      expect(initializer.rollback).toHaveBeenCalled();
+      // Anti-vacuity: finalize must NOT have run, otherwise the failure happened somewhere
+      // after the step under test and this would pass for the wrong reason.
+      expect(initializer.finalize).not.toHaveBeenCalled();
     });
 
     it('[PROJ-C3] should call finalize and return commitSha', async () => {

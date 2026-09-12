@@ -499,4 +499,51 @@ describe('ConfigManager', () => {
       expect(result).toBeNull();
     });
   });
+
+  // ==================== §4.10 rootCycle optional (EARS-J) ====================
+
+  describe('rootCycle optional (EARS-J)', () => {
+    // The assertion that matters here is the type check, not the expect(): this object is
+    // annotated as GitGovConfig with NO cast, so it only compiles once rootCycle is optional.
+    // That is the negative control the spec declares — make the field required again and this
+    // file stops compiling, which is how we know the test is measuring the contract and not
+    // just the runtime behaviour, which was already correct before.
+    it('[EARS-J1] should accept a config without rootCycle without warning', async () => {
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => { });
+      try {
+        const configWithoutRootCycle: GitGovConfig = {
+          protocolVersion: '1.0',
+          projectId: 'test-project',
+          projectName: 'Test',
+          state: { branch: 'gitgov-state' },
+        };
+        store.setConfig(configWithoutRootCycle);
+
+        await expect(configManager.getRootCycle()).resolves.toBeNull();
+        await expect(configManager.loadConfig()).resolves.toEqual(configWithoutRootCycle);
+        expect(warn).not.toHaveBeenCalled();
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
+    it('[EARS-J1] should keep accepting a config that still carries rootCycle', async () => {
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => { });
+      try {
+        const legacyConfig: GitGovConfig = {
+          protocolVersion: '1.0',
+          projectId: 'test-project',
+          projectName: 'Test',
+          rootCycle: '0000000000-cycle-root',
+          state: { branch: 'gitgov-state' },
+        };
+        store.setConfig(legacyConfig);
+
+        await expect(configManager.getRootCycle()).resolves.toBe('0000000000-cycle-root');
+        expect(warn).not.toHaveBeenCalled();
+      } finally {
+        warn.mockRestore();
+      }
+    });
+  });
 });

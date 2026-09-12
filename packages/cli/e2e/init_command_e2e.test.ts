@@ -217,7 +217,11 @@ describe('Init CLI Command - Edge Cases E2E Tests', () => {
       // Verify .gitgov/ exists with expected structure in gitgov-state branch
       expect(stateFiles).toContain('.gitgov/config.json');
       expect(stateFiles).toMatch(/\.gitgov\/actors\/.*\.json/);
-      expect(stateFiles).toMatch(/\.gitgov\/cycles\/.*\.json/);
+      expect(stateFiles).toMatch(/\.gitgov\/agents\/.*\.json/);
+      // [PROJ-C5] No `.gitgov/cycles/`: the init creates no root cycle (D29). Asserting the
+      // absence keeps this test measuring the shape of the branch rather than just dropping a
+      // line — a regression that stages a cycle again turns it red.
+      expect(stateFiles).not.toMatch(/\.gitgov\/cycles\/.*\.json/);
     });
   });
 
@@ -285,7 +289,11 @@ describe('Init CLI Command - Edge Cases E2E Tests', () => {
       // Verify .gitgov/ exists with expected structure in gitgov-state branch
       expect(stateFiles).toContain('.gitgov/config.json');
       expect(stateFiles).toMatch(/\.gitgov\/actors\/.*\.json/);
-      expect(stateFiles).toMatch(/\.gitgov\/cycles\/.*\.json/);
+      expect(stateFiles).toMatch(/\.gitgov\/agents\/.*\.json/);
+      // [PROJ-C5] No `.gitgov/cycles/`: the init creates no root cycle (D29). Asserting the
+      // absence keeps this test measuring the shape of the branch rather than just dropping a
+      // line — a regression that stages a cycle again turns it red.
+      expect(stateFiles).not.toMatch(/\.gitgov\/cycles\/.*\.json/);
     });
   });
 
@@ -752,8 +760,10 @@ describe('Init CLI Command - Edge Cases E2E Tests', () => {
 
       expect(result.output).toContain('Initialized GitGovernance in');
       expect(result.output).toContain('Actor:');
-      expect(result.output).toContain('Cycle:');
+      expect(result.output).toContain('Agent:');
       expect(result.output).toContain('Next: gitgov audit');
+      // [PROJ-C5] No `Cycle:` line: the init creates no root cycle (D29).
+      expect(result.output).not.toContain('Cycle:');
       expect(result.output).not.toContain('🚀');
       expect(result.output).not.toContain('🔐');
       expect(result.output).not.toContain('🎯');

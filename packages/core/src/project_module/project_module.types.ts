@@ -1,6 +1,5 @@
 import type { IProjectInitializer } from '../project_initializer';
 import type { IdentityModule } from '../identity/identity_module';
-import type { IBacklogAdapter } from '../adapters/backlog_adapter/backlog_adapter.types';
 import type { AgentPayload, AgentRecord, GitGovAgentRecord } from '../record_types';
 // Interface only — the Node-only implementation lives behind @gitgov/core/fs.
 import type { IEngineValidator } from '../agent_runner/agent_runner';
@@ -28,7 +27,10 @@ export interface IProjectAgentOps {
 export type ProjectModuleDeps = {
   initializer: IProjectInitializer;
   identity: IdentityModule;
-  backlog: Pick<IBacklogAdapter, 'createCycle'>;
+  // [PROJ-C5] `backlog: Pick<IBacklogAdapter, 'createCycle'>` was here for the root cycle only
+  // and left with it (D29). Re-adding it is an excess property at every composer, which is the
+  // negative control. backlog_adapter itself is untouched: createCycle stays for
+  // `gitgov cycle new` and the MCP cycle_new tool.
   agentAdapter?: IProjectAgentOps;
   defaultAgents?: DefaultAgentConfig[];
   /**
@@ -66,14 +68,17 @@ export type ProjectInitOptions = {
 };
 
 /**
- * [PROJ-A1] A fresh init: the project was created now, so all three identifiers exist.
- * This is the only variant that carries them.
+ * [PROJ-A1] A fresh init: the project was created now, so both identifiers exist. This is the
+ * only variant that carries them.
+ *
+ * [PROJ-C5] `cycleId: string` was here too, and left with the root cycle (D29). Removing it
+ * from a discriminated union is type-safe by construction: the compiler finds every reader.
+ * There were two, both in init-command.ts.
  */
 export type ProjectInitialized = {
   alreadyInitialized?: false;
   actorId: string;
   productAgentId: string;
-  cycleId: string;
   commitSha?: string;
   // [PROJ-B6] Agents registered but not runnable (engine unresolvable, ARUN-M1).
   // Non-fatal — the CLI surfaces these so the user learns at creation time.

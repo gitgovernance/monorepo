@@ -8,12 +8,6 @@ import type { ActorJoinedEvent } from '../event_bus/types';
 // the EARS-CI02 guardrail. The capability now arrives as `deps.engineValidator`
 // (IEngineValidator), with its Node-only implementation coming from @gitgov/core/fs.
 
-// [PROJ-C2b] Deterministic root cycle ID. The root cycle is unique per project, so its ID
-// must be stable across inits (not Date.now()). Two inits of the same repo then produce a
-// byte-identical config.json (rootCycle field), so gitgov-state cannot diverge → no conflict.
-// The 10-zero prefix is a sentinel ("not a real timestamp") satisfying the cycle ID schema
-// ^\d{10}-cycle-[a-z0-9-]{1,50}$. Per-repo scope means no cross-repo collision.
-const ROOT_CYCLE_ID = '0000000000-cycle-root';
 
 /**
  * [PROJ-H3b] Bounded wait for the actor to become visible after the store committed it.
@@ -103,27 +97,24 @@ export class ProjectModule {
         throw new Error(`Init failed at step createProductAgent: ${message}`);
       }
 
-      // Root cycle — [PROJ-C2b] deterministic ID so two inits converge on identical config.json
-      const rootCycle = await this.deps.backlog.createCycle({
-        id: ROOT_CYCLE_ID,
-        title: 'root',
-        status: 'planning' as const,
-        taskIds: [],
-      }, humanResult.actorId);
-
       // [PROJ-C2] Config
+      // [PROJ-C5] No root cycle is created and `rootCycle` is not written. It had no
+      // consumers — `gitgov context` prints the id it reads from config.json, not the record —
+      // and the reuse that PROJ-C2c promised was never implemented: createCycle rebuilt and
+      // re-signed the record, so a second pass overwrote it with an empty taskIds (D29).
       const config = {
         protocolVersion: '1.0.0',
         projectId: this.generateProjectId(options.name),
         projectName: options.name,
-        rootCycle: rootCycle.id,
         ...(options.saasUrl && { saasUrl: options.saasUrl }),
         // [INIT-L1] State branch written to config for all commands to read
         state: { branch: options.stateBranch },
       };
       await this.deps.initializer.writeConfig(config);
 
-      // Initialize session with human actor (so getCurrentActor resolves to human, not product agent)
+      // [PROJ-C6] Open the session with the HUMAN actor, so getCurrentActor resolves to the
+      // owner and not to the product agent in every later command. Inside the try on purpose:
+      // a failure here aborts the init with rollback, like any structural step (PROJ-D1).
       await this.deps.initializer.initializeSession(humanResult.actorId);
 
       // [PROJ-B4] Register default agents via AgentAdapter
@@ -210,10 +201,10 @@ export class ProjectModule {
       // [PROJ-C3] Finalize (commit in GitHub, no-op in Fs)
       const finalized = await this.deps.initializer.finalize();
 
+      // [PROJ-C5] No `cycleId`: the fresh variant stopped carrying it with the root cycle.
       const result: ProjectInitResult = {
         actorId: humanResult.actorId,
         productAgentId: productAgentResult.actorId,
-        cycleId: rootCycle.id,
       };
       if (finalized) result.commitSha = finalized;
       // [PROJ-B6] Surface non-runnable agent warnings to the caller (CLI prints them)

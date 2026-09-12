@@ -47,14 +47,19 @@ export class ConfigManager implements IConfigManager {
   }
 
   /**
-   * Load GitGovernance configuration
+   * [EARS-A1] [EARS-A2] Load GitGovernance configuration. Delegates to the store, which
+   * returns null when there is no config rather than throwing.
    */
   async loadConfig(): Promise<GitGovConfig | null> {
     return this.configStore.loadConfig();
   }
 
   /**
-   * Get root cycle from configuration
+   * [EARS-B1] [EARS-B2] Get root cycle from configuration.
+   *
+   * [EARS-J1] Returning null is the ORDINARY path since gitgov init stopped creating a root
+   * cycle (project_module PROJ-C5). A config without rootCycle is valid, not incomplete, so
+   * this must not warn or throw — the field is optional in GitGovConfig.
    */
   async getRootCycle(): Promise<string | null> {
     const config = await this.loadConfig();
@@ -62,7 +67,7 @@ export class ConfigManager implements IConfigManager {
   }
 
   /**
-   * Get project information from configuration
+   * [EARS-C1] [EARS-C2] Get project information from configuration
    */
   async getProjectInfo(): Promise<{ id: string; name: string } | null> {
     const config = await this.loadConfig();
@@ -75,7 +80,7 @@ export class ConfigManager implements IConfigManager {
   }
 
   /**
-   * Get sync configuration from config.json
+   * [EARS-D1] [EARS-D2] Get sync configuration from config.json
    * Returns sync strategy and related settings with defaults
    */
   async getSyncConfig(): Promise<SyncConfig | null> {
@@ -91,7 +96,7 @@ export class ConfigManager implements IConfigManager {
   }
 
   /**
-   * Get sync defaults from config.json
+   * [EARS-E1] [EARS-E2] Get sync defaults from config.json
    * Returns recommended defaults for pullScheduler and fileWatcher
    */
   async getSyncDefaults(): Promise<SyncDefaults> {
@@ -112,7 +117,7 @@ export class ConfigManager implements IConfigManager {
   }
 
   /**
-   * Get audit state from config.json
+   * [EARS-F1] [EARS-F2] Get audit state from config.json
    * Returns last full audit commit and timestamp for incremental mode
    */
   async getAuditState(): Promise<AuditState> {
@@ -125,7 +130,7 @@ export class ConfigManager implements IConfigManager {
   }
 
   /**
-   * Update audit state in config.json after a full audit
+   * [EARS-G1] [EARS-G2] [EARS-G3] Update audit state in config.json after a full audit
    * This is used to enable incremental audits
    */
   async updateAuditState(auditState: AuditStateUpdate): Promise<void> {
@@ -148,7 +153,11 @@ export class ConfigManager implements IConfigManager {
   }
 
   /**
-   * Get state branch name from configuration
+   * [EARS-H1] [EARS-H2] Get state branch name from configuration.
+   *
+   * Contrast with getRootCycle above: a missing state.branch DOES throw, because the init
+   * always writes it (project_module PROJ-C2), so its absence means a broken project. A
+   * missing rootCycle does not, because the init stopped writing it on purpose (EARS-J1).
    */
   async getStateBranch(): Promise<string> {
     const config = await this.loadConfig();
@@ -159,7 +168,7 @@ export class ConfigManager implements IConfigManager {
   }
 
   /**
-   * [EARS-I1, EARS-I2] Get SaaS URL from configuration.
+   * [EARS-I1] [EARS-I2] Get SaaS URL from configuration.
    * Returns null if not configured — no default (IKS-A28).
    */
   async getSaasUrl(): Promise<string | null> {

@@ -10,7 +10,15 @@ export type GitGovConfig = {
   protocolVersion: string;
   projectId: string;
   projectName: string;
-  rootCycle: string;
+  /**
+   * [EARS-J1] Root cycle ID. Format: {timestamp}-cycle-{slug}.
+   *
+   * OPTIONAL: gitgov init stopped creating a root cycle (project_module PROJ-C5, D29), so
+   * projects initialised from 2026-09 on do not carry it. Earlier ones keep it and stay
+   * valid — both absence and presence are legitimate. Making it required again breaks the
+   * init at compile time, which is this EARS's negative control.
+   */
+  rootCycle?: string;
   /** SaaS URL for cloud features (gitgov login, sync, dashboard). No default — must be set explicitly by gitgov init or manually (IKS-A28). */
   saasUrl?: string;
   state?: {

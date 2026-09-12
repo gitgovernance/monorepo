@@ -460,16 +460,17 @@ export class DependencyInjectionService {
     }
 
     const identityModule = await this.getIdentityModule();
-    const backlogAdapter = await this.getBacklogAdapter();
     const initializer = new FsProjectInitializer(this.projectRoot);
 
     // [PROJ-B4] [PROJ-F3] AgentAdapter + DEFAULT_AGENTS from core registry
     const agentAdapter = await this.getAgentAdapter().catch(() => undefined);
 
+    // [PROJ-C5] No `backlog` here: ProjectModule stopped consuming it when the root cycle was
+    // retired (D29). `getBacklogAdapter()` itself is untouched — around thirty consumers across
+    // the cycle, task, status, agent and audit commands still use it.
     const deps: ProjectModuleDeps = {
       initializer,
       identity: identityModule,
-      backlog: backlogAdapter,
       defaultAgents: DEFAULT_AGENTS,
       // [PROJ-B6] ProjectModule no longer imports the validator — importing it pulled
       // node:path and node:module into the @gitgov/core bundle (EARS-CI02). The CLI runs
