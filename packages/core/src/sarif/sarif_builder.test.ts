@@ -417,9 +417,12 @@ describe('SarifBuilder', () => {
     });
   });
 
-  describe('4.13. Redaction Integration in Builder (SARIF-M1 to M4)', () => {
+  // These four used to carry SARIF-M1..M4, which collide with the real SARIF-M1/M2 (fixes,
+  // §4.13) and had no EARS of their own — the spec's status line called them "4 tests
+  // adicionales sin EARS". They are the test vertex of SARIF-O1..O4 (§4.15).
+  describe('4.15. Redaction on request (SARIF-O1 to O4)', () => {
 
-    it('[SARIF-M1] should apply redaction when redactionLevel is l1', async () => {
+    it('[SARIF-O1] build: should redact sensitive snippets when redactionLevel is l1', async () => {
       // pii-email is a sensitive category — snippet should be [REDACTED]
       const sarif = await builder.build({ ...baseOptions, redactionLevel: 'l1' });
       const snippet = firstResult(sarif).locations[0]!.physicalLocation.region.snippet;
@@ -430,21 +433,21 @@ describe('SarifBuilder', () => {
       expect(typeof firstResult(sarif).properties?.['gitgov/snippetHash']).toBe('string');
     });
 
-    it('[SARIF-M2] should output complete data for l2', async () => {
+    it('[SARIF-O2] build: should preserve snippets when redactionLevel is l2', async () => {
       const sarif = await builder.build({ ...baseOptions, redactionLevel: 'l2' });
       const snippet = firstResult(sarif).locations[0]!.physicalLocation.region.snippet;
       expect(snippet).toBeDefined();
       expect(snippet!.text).toBe('const email = user.email;');
     });
 
-    it('[SARIF-M3] should be backward-compatible without redactionLevel', async () => {
+    it('[SARIF-O3] build: should not redact when redactionLevel is absent', async () => {
       const sarif = await builder.build(baseOptions);
       const snippet = firstResult(sarif).locations[0]!.physicalLocation.region.snippet;
       expect(snippet).toBeDefined();
       expect(snippet!.text).toBe('const email = user.email;');
     });
 
-    it('[SARIF-M4] should use custom redactionConfig', async () => {
+    it('[SARIF-O4] build: should use the provided redactionConfig instead of the default', async () => {
       // Create a custom config that treats 'logging-pii' (normally safe) as sensitive
       const customConfig = {
         sensitiveCategories: ['logging-pii'],
