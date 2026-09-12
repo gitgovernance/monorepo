@@ -1,7 +1,7 @@
 // Sections: §4.7 (EARS-G1 to EARS-G5)
 import { WaiverWriter } from "./waiver_writer";
 import type { IFeedbackAdapter } from "../adapters/feedback_adapter";
-import type { Finding } from "../finding_detector/types";
+import type { Finding } from "../audit/types";
 import { createFinding } from "../audit/types";
 import type { FeedbackRecord } from "../record_types";
 

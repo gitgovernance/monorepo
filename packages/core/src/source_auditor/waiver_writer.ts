@@ -1,5 +1,5 @@
 import type { IFeedbackAdapter } from "../adapters/feedback_adapter";
-import type { Finding } from "../finding_detector/types";
+import type { Finding } from "../audit/types";
 import type { WaiverMetadata, CreateWaiverOptions } from "./types";
 
 /**

@@ -1,7 +1,7 @@
 // Sections: §2.3 (Internal Component - ScoringEngine)
 import { ScoringEngine } from "./scoring_engine";
 import { createFinding } from "../audit/types";
-import type { Finding } from "../finding_detector/types";
+import type { Finding } from "../audit/types";
 
 describe("ScoringEngine", () => {
   let engine: ScoringEngine;
