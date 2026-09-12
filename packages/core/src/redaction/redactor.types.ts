@@ -31,14 +31,18 @@ type RedactionConfig = {
 };
 
 /**
- * Union of types that FindingRedactor can accept.
- * Finding comes from detectors; Finding from AuditOrchestrator.
+ * Type that FindingRedactor accepts.
+ *
+ * `Finding` is the single canonical finding type (audit/types.ts, AUDIT-B1). This used to
+ * read `Finding | Finding` — a leftover from when detectors and the orchestrator had two
+ * separate types. The union of a type with itself is that same type, so the declaration
+ * described a distinction that no longer exists.
  */
-type RedactableInput = Finding | Finding;
+type RedactableInput = Finding;
 
 /**
  * Finding con metadatos de redaccion aplicados.
- * Generic over input type so it works with both Finding and Finding.
+ * Generic over the input type, which preserves the concrete subtype through the return.
  * Extiende T — no lo modifica. El original siempre se conserva.
  * Un RedactedFinding es una "vista" del Finding para un destino especifico.
  */

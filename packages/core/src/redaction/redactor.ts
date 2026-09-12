@@ -3,7 +3,7 @@ import type { SarifLog, SarifResultProperties } from '../sarif/sarif.types';
 import type { RedactionLevel, RedactionConfig, RedactableInput, RedactedFinding } from './redactor.types';
 
 /**
- * Aplica politica de redaccion a un Finding o Finding segun el nivel de destino.
+ * Aplica politica de redaccion a un Finding segun el nivel de destino.
  *
  * Dos metodos publicos:
  * - `redact(finding, level)` — redaccion a nivel de Finding individual
@@ -12,7 +12,6 @@ import type { RedactionLevel, RedactionConfig, RedactableInput, RedactedFinding 
  * Uso:
  *   const redactor = new FindingRedactor(DEFAULT_REDACTION_CONFIG);
  *   const l1Finding = redactor.redact(finding, 'l1');
- *   const l1Consolidated = redactor.redact(consolidated, 'l1');
  *   const l2Finding = redactor.redact(finding, 'l2');
  *   const l1Sarif = redactor.redactSarif(agentResult.sarif, 'l1');
  */
@@ -27,14 +26,17 @@ class FindingRedactor {
 
   /**
    * Redacta un finding para el nivel indicado.
-   * Generic over T so it accepts both Finding and Finding.
+   * Generic over T so the concrete subtype of the input survives into the return.
    *
    * L2: retorna copia completa sin modificaciones (solo agrega metadatos).
    * L1 + categoria no sensible: retorna copia sin modificaciones.
    * L1 + categoria sensible: redacta snippet, genericiza message, elimina fixes.
    *
-   * Note: Finding does not have fixes field.
-   * Only fields that exist on the input are redacted.
+   * The `in` guards below only redact fields the object actually carries. They date from
+   * when two finding types coexisted and one of them lacked these fields; today `snippet`
+   * is required on Finding and `fixes` is optional, so the guard on `fixes` still reads a
+   * real absence. Left as they are: RLDX-B2/B4 pin this behaviour and no EARS asks to
+   * change it.
    */
   redact<T extends RedactableInput>(finding: T, level: RedactionLevel): RedactedFinding<T> {
     // Helper to build result — generic intersection types with exactOptionalPropertyTypes
@@ -62,9 +64,14 @@ class FindingRedactor {
       redactionLevel: 'l1',
       hasFullSnippet: false,
     };
-    if ('snippet' in finding) {
-      overrides['snippet'] = '[REDACTED]';
-    }
+    // `snippet` is REQUIRED on Finding (audit/types.ts), so it is always assigned. The
+    // `'snippet' in finding` guard that used to wrap this was dead: it could never be false
+    // for a valid Finding.
+    overrides['snippet'] = '[REDACTED]';
+    // [RLDX-B4] `fixes` is OPTIONAL, and this guard is not decoration. Under
+    // `exactOptionalPropertyTypes`, assigning `undefined` to a key that was absent ADDS the
+    // key, so a Finding that carried no `fixes` would come back carrying `fixes: undefined`.
+    // Pinned by the second B4 test.
     if ('fixes' in finding) {
       overrides['fixes'] = undefined;
     }
