@@ -86,6 +86,54 @@ const consolidatedFinding: Finding = {
   isWaived: false,
 };
 
+/**
+ * Several results in ONE SarifLog. `buildSarifLog` below always yields a single result, and
+ * every `redactSarif` test used it with a sensitive category — so "for each sensitive result"
+ * (B8) and "for every result" (B9) were never exercised against a second result or a safe one.
+ * Measured: dropping the category decision, or replacing the loop with `results?.[0]`, kept
+ * the whole suite green.
+ */
+function buildMultiResultSarifLog(
+  results: Array<{ category: FindingCategory; snippetText: string }>,
+): SarifLog {
+  return {
+    $schema: 'https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json',
+    version: '2.1.0',
+    runs: [
+      {
+        tool: {
+          driver: {
+            name: 'gitgov-audit',
+            version: '2.15.0',
+            informationUri: 'https://gitgovernance.com',
+          },
+        },
+        results: results.map((r, i) => ({
+          ruleId: `SEC-00${i + 1}`,
+          level: 'error' as const,
+          message: { text: 'Sensitive data found' },
+          locations: [
+            {
+              physicalLocation: {
+                artifactLocation: { uri: `src/file${i}.ts` },
+                region: {
+                  startLine: 12,
+                  snippet: { text: r.snippetText },
+                },
+              },
+            },
+          ],
+          properties: {
+            'gitgov/category': r.category,
+            'gitgov/detector': 'regex' as const,
+            'gitgov/confidence': 0.95,
+          },
+        })),
+      },
+    ],
+  };
+}
+
 function buildSarifLog(category: FindingCategory, snippetText: string): SarifLog {
   return {
     $schema: 'https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json',
@@ -281,21 +329,43 @@ describe('FindingRedactor', () => {
     });
 
     it('[RLDX-B8] should redact snippet.text in SARIF for sensitive categories at l1', () => {
-      const sarif = buildSarifLog('hardcoded-secret', "const secret = 'my-secret-key'");
-      const result = redactor.redactSarif(sarif, 'l1');
+      // One sensitive and one safe result in the SAME SarifLog. The word "sensitive" in the
+      // requirement is only exercised when a non-sensitive result sits next to it: with a
+      // single sensitive result, redacting every L1 snippet unconditionally passed.
+      const secret = "const secret = 'my-secret-key'";
+      const cookie = "document.cookie = 'session=abc'";
+      const sarif = buildMultiResultSarifLog([
+        { category: 'hardcoded-secret', snippetText: secret },
+        { category: 'tracking-cookie', snippetText: cookie },
+      ]);
 
-      const sarifResult = result.runs[0]!.results[0]!;
-      const snippetText = sarifResult.locations[0]!.physicalLocation.region.snippet?.text;
-      expect(snippetText).toBe('[REDACTED]');
+      const result = redactor.redactSarif(sarif, 'l1');
+      const [sensitive, safe] = result.runs[0]!.results;
+
+      expect(sensitive!.locations[0]!.physicalLocation.region.snippet?.text).toBe('[REDACTED]');
+      // The other half of the L1 contract: a safe category keeps its snippet in Git.
+      expect(safe!.locations[0]!.physicalLocation.region.snippet?.text).toBe(cookie);
     });
 
     it('[RLDX-B9] should store snippetHash in SARIF properties for all results with snippets', () => {
-      const originalSnippet = "const secret = 'my-secret-key'";
-      const sarif = buildSarifLog('hardcoded-secret', originalSnippet);
-      const result = redactor.redactSarif(sarif, 'l1');
+      // "For every result" and "for any level". The previous fixture had one result and ran
+      // l1 only, so replacing the loop with `results?.[0]` left every SARIF test green — and a
+      // multi-result SARIF is the normal production shape. Two results, both levels, and the
+      // VALUE of each hash asserted against its own snippet.
+      const secret = "const secret = 'my-secret-key'";
+      const cookie = "document.cookie = 'session=abc'";
 
-      const props = result.runs[0]!.results[0]!.properties;
-      expect(props?.['gitgov/snippetHash']).toBe(sha256(originalSnippet));
+      for (const level of ['l1', 'l2'] as const) {
+        const sarif = buildMultiResultSarifLog([
+          { category: 'hardcoded-secret', snippetText: secret },
+          { category: 'tracking-cookie', snippetText: cookie },
+        ]);
+        const result = redactor.redactSarif(sarif, level);
+        const [first, second] = result.runs[0]!.results;
+
+        expect(first!.properties?.['gitgov/snippetHash']).toBe(sha256(secret));
+        expect(second!.properties?.['gitgov/snippetHash']).toBe(sha256(cookie));
+      }
     });
 
     it('[RLDX-B10] should preserve snippet and add snippetHash for l2', () => {
@@ -305,11 +375,14 @@ describe('FindingRedactor', () => {
 
       const sarifResult = result.runs[0]!.results[0]!;
       const snippetText = sarifResult.locations[0]!.physicalLocation.region.snippet?.text;
-      // [RLDX-F2] Snippet preserved (NOT redacted) for L2
+      // Snippet preserved (NOT redacted) for L2
       expect(snippetText).toBe(originalSnippet);
-      // [RLDX-F2] snippetHash added even for L2 (enables integrity verification)
-      expect(sarifResult.properties?.['gitgov/snippetHash']).toBeDefined();
-      expect(sarifResult.properties?.['gitgov/snippetHash']).toMatch(/^[a-f0-9]{64}$/);
+      // The VALUE of the hash, not its shape. `toMatch(/^[a-f0-9]{64}$/)` accepted
+      // sha256('[REDACTED]') — also 64 hex chars — so an L2 path hashing the wrong input stayed
+      // green. Downstream that is not cosmetic: audit_projection reads this hash into
+      // GitgovFinding.snippetHash, and a wrong one flips every RLDX-F4 verification to
+      // `unverified` with no test failing anywhere.
+      expect(sarifResult.properties?.['gitgov/snippetHash']).toBe(sha256(originalSnippet));
     });
 
     it('[RLDX-B11] should not mutate the original SarifLog', () => {
