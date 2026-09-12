@@ -1,4 +1,4 @@
-import type { Finding, DetectorName } from "../finding_detector/types";
+import type { Finding, DetectorName } from "../audit/types";
 import type {
   SourceAuditorDependencies,
   ScopeSelectorDependencies,

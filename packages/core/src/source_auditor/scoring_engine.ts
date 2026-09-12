@@ -1,4 +1,4 @@
-import type { Finding } from "../finding_detector/types";
+import type { Finding } from "../audit/types";
 
 /**
  * Internal component for applying scoring rules to findings.
