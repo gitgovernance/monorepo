@@ -22,7 +22,7 @@ const mockAuditFn = jest.fn().mockResolvedValue({
   scannedLines: 200,
   duration: 42,
   detectors: ['regex'],
-  waivers: { acknowledged: 0, new: 0 },
+  waivers: { acknowledged: 0, new: 0, unmatched: 0 },
 });
 
 jest.mock('@gitgov/core', () => ({

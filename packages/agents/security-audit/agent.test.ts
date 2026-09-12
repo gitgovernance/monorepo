@@ -13,20 +13,31 @@
  * | AAV2-A5  | Stage condicional se salta si anterior = 0 findings (package) | [AAV2-A5] should skip conditional stage when previous stage produced zero findings | Implementado |
  */
 
+import type { SourceAuditor, Finding } from '@gitgov/core';
 import { SecurityAuditAgent } from './src/agent';
 import type { SecurityAuditAgentDeps } from './src/agent';
 import type { SecurityAuditInput, AgentDetectorConfig } from './src/types';
 import { DEFAULT_CONFIG } from './src/config';
 
-function makeAuditResult(overrides: Record<string, unknown> = {}) {
+// Annotated on purpose: without the return type these three stubs drifted silently when
+// `WaiverApplicationCounts` gained a required `unmatched`, and `tsc` stayed at 0 because an
+// unannotated literal with `Record<string, unknown>` overrides is checked against nothing.
+function makeAuditResult(
+  overrides: Partial<SourceAuditor.AuditResult> = {},
+): SourceAuditor.AuditResult {
   return {
     findings: [],
-    summary: { total: 0, bySeverity: {}, byCategory: {}, byDetector: {} },
+    summary: {
+      total: 0,
+      bySeverity: { critical: 0, high: 0, medium: 0, low: 0 },
+      byCategory: {},
+      byDetector: { regex: 0, heuristic: 0, llm: 0, sast: 0 },
+    },
     scannedFiles: 10,
     scannedLines: 500,
     duration: 42,
     detectors: ['regex' as const],
-    waivers: { acknowledged: 0, new: 0 },
+    waivers: { acknowledged: 0, new: 0, unmatched: 0 },
     ...overrides,
   };
 }
@@ -156,9 +167,28 @@ describe('SecurityAuditAgent', () => {
     });
 
     it('[AAV2-C5] should include ALL findings in SARIF without waiver filtering', async () => {
-      const findings = [
-        { id: 'f1', ruleId: 'PII-001', severity: 'high', category: 'pii-email', file: 'a.ts', line: 1, snippet: '', message: '', detector: 'regex', fingerprint: 'abc', confidence: 0.9 },
-        { id: 'f2', ruleId: 'SEC-001', severity: 'low', category: 'hardcoded-secret', file: 'b.ts', line: 2, snippet: '', message: '', detector: 'regex', fingerprint: 'def', confidence: 0.8 },
+      // Typed as `Finding[]`, so the compiler enforces every required field. The previous
+      // literals were untyped and missing `snippetHash`, `executionId`, `reportedBy` and
+      // `isWaived`; nothing caught it because the surrounding stub had no return type.
+      //
+      // These are OPAQUE PASS-THROUGH fixtures, not identities: this test asserts that the
+      // agent hands every finding to `sarifBuilder.build` without filtering, and never reads
+      // `fingerprint`. They are NOT built with `createFinding` (AUDIT-K1) for an
+      // infrastructure reason, not by choice — this package's jest cannot load core's ESM at
+      // runtime, so no test here can call a core factory. See the audit note on that gap.
+      const findings: Finding[] = [
+        {
+          ruleId: 'PII-001', severity: 'high', category: 'pii-email',
+          file: 'a.ts', line: 1, snippet: 'const e = "a@b.com"', message: '',
+          detector: 'regex', confidence: 0.9, executionId: '', reportedBy: [], isWaived: false,
+          fingerprint: 'f'.repeat(64), snippetHash: 'a'.repeat(64),
+        },
+        {
+          ruleId: 'SEC-001', severity: 'low', category: 'hardcoded-secret',
+          file: 'b.ts', line: 2, snippet: 'const k = "sk"', message: '',
+          detector: 'regex', confidence: 0.8, executionId: '', reportedBy: [], isWaived: false,
+          fingerprint: 'e'.repeat(64), snippetHash: 'b'.repeat(64),
+        },
       ];
       const deps = makeDeps({
         sourceAuditor: {
