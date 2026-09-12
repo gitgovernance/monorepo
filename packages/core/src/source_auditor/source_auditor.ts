@@ -4,7 +4,7 @@ import type {
   ScopeSelectorDependencies,
   AuditOptions,
   AuditResult,
-  AuditSummary,
+  SourceAuditSummary,
   AuditContentsInput,
   FileContent,
   Waiver,
@@ -64,26 +64,49 @@ export class SourceAuditorModule {
       return this.createEmptyResult(startTime);
     }
 
-    // Step 1: Detection on pre-loaded content
+    // Content is already resident here — the caller chose to load it — so there is nothing
+    // for batching to bound. `audit()` is the path that controls reading, and it batches.
     const { findings, scannedLines, detectors } = await this.runDetectionOnContents(input.files);
 
-    // Step 2: Filter by Waivers (if provided)
-    const waivers = input.waivers ?? [];
-    const { newFindings, acknowledgedCount, unmatchedCount } = this.filterByWaivers(findings, waivers);
+    return this.finishAudit({
+      findings,
+      scannedLines,
+      detectors,
+      scannedFiles: input.files.length,
+      waivers: input.waivers ?? [],
+      startTime,
+    });
+  }
 
-    // Step 3: Scoring
+  /**
+   * Waiver filtering, scoring and summary — the tail both entry points share.
+   *
+   * Extracted when `audit()` stopped delegating to `auditContents()` for EARS-E4. Copying
+   * these four steps into the batched path would have put the waiver counters and the summary
+   * in two places, which is the duplication this module already carries elsewhere.
+   */
+  private finishAudit(input: {
+    findings: Finding[];
+    scannedLines: number;
+    detectors: DetectorName[];
+    scannedFiles: number;
+    waivers: Waiver[];
+    startTime: number;
+  }): AuditResult {
+    const { newFindings, acknowledgedCount, unmatchedCount } = this.filterByWaivers(
+      input.findings,
+      input.waivers,
+    );
+
     const scoredFindings = this.scoringEngine.score(newFindings);
-
-    // Step 4: Generate Result
-    const duration = Date.now() - startTime;
 
     return {
       findings: scoredFindings,
       summary: this.calculateSummary(scoredFindings),
-      scannedFiles: input.files.length,
-      scannedLines,
-      duration,
-      detectors: [...new Set(detectors)],
+      scannedFiles: input.scannedFiles,
+      scannedLines: input.scannedLines,
+      duration: Date.now() - input.startTime,
+      detectors: [...new Set(input.detectors)],
       waivers: {
         acknowledged: acknowledgedCount,
         new: scoredFindings.length,
@@ -114,16 +137,43 @@ export class SourceAuditorModule {
       return this.createEmptyResult(startTime);
     }
 
-    // Step 2: Read file contents via FileLister
-    const files: FileContent[] = [];
-    for (const filePath of filePaths) {
-      try {
-        const content = await this.deps.fileLister.read(filePath);
-        files.push({ path: filePath, content });
-      } catch {
-        // Graceful degradation: skip unreadable files
-        continue;
+    // [EARS-E4] Step 2: read and detect in batches, never the whole repository at once.
+    //
+    // This used to read EVERY file into one array and then hand it to `auditContents()`. The
+    // batching that lived downstream could not help: by the time it ran, all content was
+    // already resident, and its slices were walked by a sequential `await` loop that behaves
+    // exactly like iterating the flat list. Bounding memory has to happen HERE, where reading
+    // is controlled — hence the batch loop and `finishAudit()` for the shared tail.
+    const allFindings: Finding[] = [];
+    const allDetectors: DetectorName[] = [];
+    let scannedFiles = 0;
+    let scannedLines = 0;
+
+    for (const pathBatch of this.createBatches(filePaths, BATCH_SIZE)) {
+      const batch: FileContent[] = [];
+      for (const filePath of pathBatch) {
+        try {
+          const content = await this.deps.fileLister.read(filePath);
+          batch.push({ path: filePath, content });
+        } catch (error) {
+          // [EARS-B3] Graceful degradation: skip the file and SAY SO. The catch used to be
+          // silent, which turns a skipped file into a hole in the scan that nothing records —
+          // `scannedFiles` counts what was read, so a permission error and an absent file are
+          // indistinguishable from a smaller repository.
+          const reason = error instanceof Error ? error.message : String(error);
+          console.warn(`[EARS-B3] Skipped unreadable file "${filePath}": ${reason}`);
+          continue;
+        }
       }
+
+      const batchResult = await this.runDetectionOnContents(batch);
+      allFindings.push(...batchResult.findings);
+      for (const detector of batchResult.detectors) {
+        if (!allDetectors.includes(detector)) allDetectors.push(detector);
+      }
+      scannedLines += batchResult.scannedLines;
+      scannedFiles += batch.length;
+      // `batch` goes out of scope here, so the content of the previous batch is collectable.
     }
 
     // Step 3: Load Waivers
@@ -131,19 +181,25 @@ export class SourceAuditorModule {
     if (this.deps.waiverReader) {
       try {
         waivers = await this.deps.waiverReader.loadWaivers();
-      } catch {
-        // Graceful degradation: continue without waivers
+      } catch (error) {
+        // Same silence as the read loop, and worse in consequence: continuing without
+        // waivers means every waived finding reappears as new. §5.3 of the spec already
+        // said "reporta warning"; it did not.
+        const reason = error instanceof Error ? error.message : String(error);
+        console.warn(`Could not load waivers, continuing without waiver filtering: ${reason}`);
       }
     }
 
-    // Step 4: Delegate to pure pipeline
-    const result = await this.auditContents({ files, waivers });
-
-    // Adjust duration to include scope selection + file reading
-    return {
-      ...result,
-      duration: Date.now() - startTime,
-    };
+    // Step 4: shared tail. `startTime` is the one taken before scope selection, so `duration`
+    // covers selection and reading without the post-hoc override this used to need.
+    return this.finishAudit({
+      findings: allFindings,
+      scannedLines,
+      detectors: allDetectors,
+      scannedFiles,
+      waivers,
+      startTime,
+    });
   }
 
   /**
@@ -160,25 +216,27 @@ export class SourceAuditorModule {
     const detectors: DetectorName[] = [];
     let scannedLines = 0;
 
-    const batches = this.createBatches(files, files.length > 1000 ? BATCH_SIZE : files.length);
+    // Flat loop on purpose. This used to wrap the same sequential `await` in
+    // `createBatches(files, files.length > 1000 ? BATCH_SIZE : files.length)`, which bounded
+    // nothing: iterating [[a,b],[c,d]] and iterating [a,b,c,d] with an awaited call inside are
+    // the same execution. The batching that matters is in `audit()`, where reading happens
+    // (EARS-E4); by the time content reaches here it is already resident, whether because
+    // `audit()` read one bounded batch or because the caller of `auditContents()` loaded it.
+    for (const file of files) {
+      try {
+        scannedLines += file.content.split("\n").length;
 
-    for (const batch of batches) {
-      for (const file of batch) {
-        try {
-          scannedLines += file.content.split("\n").length;
+        const fileFindings = await this.deps.findingDetector.detect(file.content, file.path);
 
-          const fileFindings = await this.deps.findingDetector.detect(file.content, file.path);
-
-          for (const finding of fileFindings) {
-            allFindings.push(finding);
-            if (!detectors.includes(finding.detector)) {
-              detectors.push(finding.detector);
-            }
+        for (const finding of fileFindings) {
+          allFindings.push(finding);
+          if (!detectors.includes(finding.detector)) {
+            detectors.push(finding.detector);
           }
-        } catch {
-          // Graceful degradation: skip files that fail detection
-          continue;
         }
+      } catch {
+        // Graceful degradation: skip files that fail detection
+        continue;
       }
     }
 
@@ -223,8 +281,8 @@ export class SourceAuditorModule {
   /**
    * Calculates summary of findings by severity, category, and detector.
    */
-  private calculateSummary(findings: Finding[]): AuditSummary {
-    const summary: AuditSummary = {
+  private calculateSummary(findings: Finding[]): SourceAuditSummary {
+    const summary: SourceAuditSummary = {
       total: findings.length,
       bySeverity: { critical: 0, high: 0, medium: 0, low: 0 },
       byCategory: {},

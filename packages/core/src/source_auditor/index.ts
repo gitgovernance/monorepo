@@ -27,7 +27,7 @@ export type {
   ScopeConfig,
   AuditOptions,
   AuditResult,
-  AuditSummary,
+  SourceAuditSummary,
   WaiverApplicationCounts,
   WaiverMetadata,
   Waiver,
