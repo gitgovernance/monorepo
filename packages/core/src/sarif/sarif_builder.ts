@@ -64,6 +64,8 @@ function extractRules(findings: Finding[]): SarifReportingDescriptor[] {
 
 /**
  * Finds a waiver matching the given fingerprint.
+ * [SARIF-F5] An empty waiver list matches nothing. [SARIF-F4] A non-empty list with no
+ * fingerprint equal to the finding's matches nothing either — equality, never a line hash.
  */
 function findMatchingWaiver(
   fingerprint: string | undefined,
@@ -77,7 +79,7 @@ function findMatchingWaiver(
 
 /**
  * Converts a Waiver to a SARIF suppression (§3.35).
- * FeedbackRecord type: "approval" → kind: "inSource", status: "accepted"
+ * FeedbackRecord type: "approval" → [SARIF-F1] kind: "inSource", [SARIF-F2] status: "accepted"
  */
 function buildSuppression(waiver: Waiver): SarifSuppression {
   const payload = waiver.feedback?.payload;
@@ -90,6 +92,7 @@ function buildSuppression(waiver: Waiver): SarifSuppression {
     status: 'accepted',
     ...(content && { justification: content }),
     properties: {
+      // [SARIF-F3] The feedback record id travels with the suppression.
       'gitgov/feedbackId': feedbackId ?? '',
       ...(expiresAt && { 'gitgov/expiresAt': expiresAt }),
       ...(approvedBy && { 'gitgov/approvedBy': approvedBy }),
@@ -269,13 +272,18 @@ class SarifBuilderImpl implements SarifBuilder {
       runs: [run],
     };
 
-    // Apply redaction when redactionLevel is set (SARIF-M1..M4)
+    // [SARIF-O1] [SARIF-O2] Redaction on request: when the caller passes a level, the
+    // assembled log goes through FindingRedactor before it leaves the builder. The DECISION to
+    // redact belongs to the caller — the orchestrator (AORCH-E1) or the SaaS export path —
+    // and the builder only executes it. Two entry points to one redactor, not two policies.
     if (options.redactionLevel) {
+      // [SARIF-O4] A caller-supplied config wins over the default.
       const config = options.redactionConfig ?? DEFAULT_REDACTION_CONFIG;
       const redactor = new FindingRedactor(config);
       return redactor.redactSarif(sarifLog, options.redactionLevel);
     }
 
+    // [SARIF-O3] No level, no redactor: the log is returned as assembled.
     return sarifLog;
   }
 
