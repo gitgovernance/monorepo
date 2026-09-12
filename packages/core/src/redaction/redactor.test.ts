@@ -225,6 +225,25 @@ describe('FindingRedactor', () => {
       expect(result.fixes).toBeUndefined();
     });
 
+    it('[RLDX-B4] should not introduce a fixes key on a finding that never had one', () => {
+      // The `'fixes' in finding` guard in redactor.ts exists for this, and nothing pinned it:
+      // dropping it left all 3128 tests of core green (measured 2026-09-11, audit finding).
+      // Under `exactOptionalPropertyTypes`, assigning `undefined` to an absent optional key
+      // ADDS the key, so a finding with no `fixes` came back carrying `fixes: undefined`.
+      const withoutFixes: Finding = { ...sensitiveFinding };
+      delete withoutFixes.fixes;
+      expect('fixes' in withoutFixes).toBe(false);
+
+      const result = redactor.redact(withoutFixes, 'l1');
+
+      // `toBeUndefined()` is NOT the discriminating assertion here — it passes whether the key
+      // is absent or present-with-undefined. Only the `in` check separates the two.
+      expect('fixes' in result).toBe(false);
+
+      // ANTI-VACUITY: the redaction really ran, so this is not passing because nothing happened.
+      expect(result.snippet).toBe('[REDACTED]');
+    });
+
     it('[RLDX-B5] should return all original fields with hasFullSnippet true for safe category at l1', () => {
       const result = redactor.redact(safeFinding, 'l1');
 
