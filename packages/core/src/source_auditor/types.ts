@@ -137,7 +137,18 @@ export type AuditOptions = {
 /**
  * Aggregated summary of findings.
  */
-export type AuditSummary = {
+/**
+ * Aggregated per-scan counts for THIS module.
+ *
+ * Renamed from `AuditSummary` on 2026-09-11 (`finding_governance` audit, finding C2).
+ * `audit/types.ts` already owns a different exported type called `AuditSummary` — the
+ * orchestrator-level one, with `suppressed`, `unmatchedWaivers` and `agentsRun`, whose
+ * `total` counts findings INCLUDING the waived ones. This one counts post-waiver, so two
+ * sibling modules of the same package exported the same name with opposite semantics on a
+ * shared field. `audit_record_types_module.md` designates `audit/types.ts` as canonical, so
+ * this is the side that renames.
+ */
+export type SourceAuditSummary = {
   /** Total findings (post-waiver) */
   total: number;
   /** Count by severity */
@@ -173,7 +184,7 @@ export type AuditResult = {
   /** Detected findings (post-waiver) */
   findings: Finding[];
   /** Aggregated summary */
-  summary: AuditSummary;
+  summary: SourceAuditSummary;
   /** Number of files scanned */
   scannedFiles: number;
   /** Number of lines scanned */

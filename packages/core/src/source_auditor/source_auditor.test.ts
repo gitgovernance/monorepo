@@ -157,19 +157,69 @@ describe("SourceAuditorModule", () => {
     });
 
     it("[EARS-B3] should continue when file cannot be read", async () => {
-      // Create unreadable file scenario by removing file after glob
-      const auditor = new SourceAuditorModule(createDeps());
+      // The read must fail AFTER scope selection. The previous version deleted the file
+      // BEFORE audit(), so the glob never listed it, read() was never asked for a missing
+      // file, and the catch was never entered — the test passed because only one file
+      // existed, not because one failed. Verified by mutation: removing the try/catch
+      // entirely left it green.
+      const fileLister = new FsFileLister({ cwd: tempDir });
+      const realRead = fileLister.read.bind(fileLister);
+      jest.spyOn(fileLister, "read").mockImplementation(async (p: string) => {
+        if (p.endsWith("utils.ts")) throw new Error("EACCES: permission denied");
+        return realRead(p);
+      });
 
-      // Delete one file to simulate read error
-      fs.unlinkSync(path.join(tempDir, "src", "utils.ts"));
+      const auditor = new SourceAuditorModule({
+        findingDetector: mockFindingDetector,
+        waiverReader: mockWaiverReader,
+        fileLister,
+      });
 
-      await auditor.audit({
+      const result = await auditor.audit({
         scope: { include: ["**/*.ts"], exclude: [] },
         baseDir: tempDir,
       });
 
-      // Should still process the remaining file
+      // ANTI-VACUITY: both files were in scope, so the single detect call below is the
+      // consequence of one read failing, not of one file existing.
+      expect(fileLister.read).toHaveBeenCalledTimes(2);
+
+      // The readable one was still processed, and the audit completed.
       expect(mockFindingDetector.detect).toHaveBeenCalledTimes(1);
+      expect(result.scannedFiles).toBe(1);
+    });
+
+    it("[EARS-B3] should warn naming the file it could not read", async () => {
+      // The EARS says "emitir warning y continuar". The catch was silent, and the test above
+      // cannot see that: it asserts continuation, which happens either way. A skipped file
+      // that reports nothing is a scan with a hole and no record of it.
+      const warn = jest.spyOn(console, "warn").mockImplementation(() => { /* captured */ });
+      try {
+        const fileLister = new FsFileLister({ cwd: tempDir });
+        const realRead = fileLister.read.bind(fileLister);
+        jest.spyOn(fileLister, "read").mockImplementation(async (p: string) => {
+          if (p.endsWith("utils.ts")) throw new Error("EACCES: permission denied");
+          return realRead(p);
+        });
+
+        const auditor = new SourceAuditorModule({
+          findingDetector: mockFindingDetector,
+          waiverReader: mockWaiverReader,
+          fileLister,
+        });
+
+        await auditor.audit({
+          scope: { include: ["**/*.ts"], exclude: [] },
+          baseDir: tempDir,
+        });
+
+        expect(warn).toHaveBeenCalledTimes(1);
+        const message = String(warn.mock.calls[0]?.[0] ?? "");
+        expect(message).toContain("utils.ts");
+        expect(message).toContain("EARS-B3");
+      } finally {
+        warn.mockRestore();
+      }
     });
 
     it("[EARS-B4] should track detectors used in result.detectors", async () => {
@@ -482,8 +532,63 @@ describe("SourceAuditorModule", () => {
       expect(typeof result.duration).toBe("number");
     });
 
-    it("[EARS-E4] should process in batches for large file counts", async () => {
-      // Create many files
+    it("[EARS-E4] should detect the first batch before reading the last file", async () => {
+      // THE discriminating assertion. The old test asserted `scannedFiles === 152` with 152
+      // files against a 1000-file threshold, so one batch was produced and `scannedFiles`
+      // comes from `input.files.length` anyway — unrelated to batching. Deleting
+      // `createBatches` or setting BATCH_SIZE = 1 both left it green.
+      //
+      // What bounds memory is interleaving: if detection waits for every read to finish,
+      // every file's content is resident at once and there is no batch. So the observable
+      // property is ORDER — at least one detect call must happen while reads are still
+      // pending.
+      const TOTAL = 250; // > BATCH_SIZE (100), so at least three batches
+      for (let i = 0; i < TOTAL; i++) {
+        fs.writeFileSync(path.join(tempDir, "src", `batch${i}.ts`), `// file ${i}`);
+      }
+
+      const fileLister = new FsFileLister({ cwd: tempDir });
+      const order: string[] = [];
+      const realRead = fileLister.read.bind(fileLister);
+      jest.spyOn(fileLister, "read").mockImplementation(async (p: string) => {
+        order.push("read");
+        return realRead(p);
+      });
+      mockFindingDetector.detect.mockImplementation(async () => {
+        order.push("detect");
+        return [];
+      });
+
+      const auditor = new SourceAuditorModule({
+        findingDetector: mockFindingDetector,
+        waiverReader: mockWaiverReader,
+        fileLister,
+      });
+
+      const result = await auditor.audit({
+        scope: { include: ["**/*.ts"], exclude: [] },
+        baseDir: tempDir,
+      });
+
+      // ANTI-VACUITY: every file was really read and detected, so the order below describes a
+      // full scan and not a truncated one.
+      const reads = order.filter((o) => o === "read").length;
+      const detects = order.filter((o) => o === "detect").length;
+      expect(reads).toBe(TOTAL + 2); // +2 = app.ts and utils.ts from beforeEach
+      expect(detects).toBe(TOTAL + 2);
+      expect(result.scannedFiles).toBe(TOTAL + 2);
+
+      // The requirement: detection starts before the last read. With a read-everything-first
+      // pipeline this index equals `reads`, and the assertion fails.
+      const firstDetect = order.indexOf("detect");
+      expect(firstDetect).toBeLessThan(reads);
+
+      // And the bound is the batch size, not the repository size: the first detect must come
+      // within the first batch, not after 252 reads.
+      expect(firstDetect).toBeLessThanOrEqual(100);
+    });
+
+    it("should scan every file when the count is large", async () => {
       for (let i = 0; i < 150; i++) {
         fs.writeFileSync(path.join(tempDir, "src", `file${i}.ts`), `// file ${i}`);
       }
@@ -495,7 +600,7 @@ describe("SourceAuditorModule", () => {
         baseDir: tempDir,
       });
 
-      // Should process all files (152 = 2 original + 150 new)
+      // What this really asserts: nothing is dropped at scale. 152 = 2 original + 150 new.
       expect(result.scannedFiles).toBe(152);
     });
   });
