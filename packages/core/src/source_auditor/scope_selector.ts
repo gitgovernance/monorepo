@@ -28,22 +28,23 @@ export class ScopeSelector {
    * @returns Array of file paths relative to FileLister's cwd
    */
   async selectFiles(scope: ScopeConfig, _baseDir: string): Promise<string[]> {
+    // [EARS-A3] Empty include selects nothing.
     if (scope.include.length === 0) {
       return [];
     }
 
-    // Load .gitignore patterns from project root
+    // [EARS-A5] Load .gitignore patterns from project root
     const gitignorePatterns = await this.loadGitignorePatterns();
 
-    // Merge: gitignore patterns + user-provided excludes
+    // [EARS-A2] Merge: gitignore patterns + user-provided excludes — exclude wins over include.
     const allExcludes = [...gitignorePatterns, ...scope.exclude];
 
-    // If changedSince is set and gitModule is available, use incremental mode
+    // [EARS-A4] If changedSince is set and gitModule is available, use incremental mode
     if (scope.changedSince && this.gitModule) {
       return this.selectChangedFiles(scope.changedSince, scope.include, allExcludes);
     }
 
-    // Full mode: use glob patterns via FileLister
+    // [EARS-A1] Full mode: use glob patterns via FileLister
     const files = await this.fileLister.list(scope.include, {
       ignore: allExcludes,
       onlyFiles: true,

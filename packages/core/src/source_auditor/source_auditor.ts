@@ -1,5 +1,5 @@
 import type { Finding, DetectorName } from "../audit/types";
-import { countUnmatchedWaivers } from "../audit/types";
+import { countUnmatchedWaivers, countBySeverity } from "../audit/types";
 import type {
   SourceAuditorDependencies,
   ScopeSelectorDependencies,
@@ -11,8 +11,8 @@ import type {
   Waiver,
 } from "./types";
 import { ScopeSelector } from "./scope_selector";
-import { ScoringEngine } from "./scoring_engine";
 
+// [EARS-E4] Files per read+detect batch in audit().
 const BATCH_SIZE = 100;
 
 /**
@@ -22,14 +22,13 @@ const BATCH_SIZE = 100;
  * - auditContents(): Pure mode - receives FileContent[] directly (no I/O)
  * - audit(): FileLister mode - discovers and reads files, then delegates to auditContents()
  *
- * Pipeline: Detect -> Filter -> Score -> Output
+ * Pipeline: Detect -> Filter -> Output
  *
  * Store Backends Epic: FileLister abstracts file access for serverless compatibility.
  * auditContents() enables direct mode without any FileLister (API, pre-loaded, etc.)
  */
 export class SourceAuditorModule {
   private scopeSelector?: ScopeSelector;
-  private scoringEngine: ScoringEngine;
 
   /**
    * Creates module instance with injected dependencies.
@@ -46,7 +45,6 @@ export class SourceAuditorModule {
       }
       this.scopeSelector = new ScopeSelector(scopeDeps);
     }
-    this.scoringEngine = new ScoringEngine();
   }
 
   /**
@@ -65,8 +63,8 @@ export class SourceAuditorModule {
       return this.createEmptyResult(startTime);
     }
 
-    // Content is already resident here — the caller chose to load it — so there is nothing
-    // for batching to bound. `audit()` is the path that controls reading, and it batches.
+    // [EARS-H1] Content is already resident here — the caller chose to load it — so there is
+    // nothing for batching to bound. `audit()` is the path that controls reading, and it batches.
     const { findings, scannedLines, detectors } = await this.runDetectionOnContents(input.files);
 
     return this.finishAudit({
@@ -74,6 +72,7 @@ export class SourceAuditorModule {
       scannedLines,
       detectors,
       scannedFiles: input.files.length,
+      // [EARS-H2] The waivers received, as they are: expiry is the loader's responsibility.
       waivers: input.waivers ?? [],
       startTime,
     });
@@ -99,18 +98,22 @@ export class SourceAuditorModule {
       input.waivers,
     );
 
-    const scoredFindings = this.scoringEngine.score(newFindings);
-
     return {
-      findings: scoredFindings,
-      summary: this.calculateSummary(scoredFindings),
+      findings: newFindings,
+      summary: this.calculateSummary(newFindings),
+      // [EARS-E1]
       scannedFiles: input.scannedFiles,
+      // [EARS-E2]
       scannedLines: input.scannedLines,
+      // [EARS-E3]
       duration: Date.now() - input.startTime,
+      // [EARS-B4]
       detectors: [...new Set(input.detectors)],
       waivers: {
+        // [EARS-C2]
         acknowledged: acknowledgedCount,
-        new: scoredFindings.length,
+        // [EARS-C5]
+        new: newFindings.length,
         // [EARS-C6]
         unmatched: unmatchedCount,
       },
@@ -124,6 +127,7 @@ export class SourceAuditorModule {
    * Requires fileLister in dependencies. Use auditContents() for direct mode.
    */
   async audit(options: AuditOptions): Promise<AuditResult> {
+    // [EARS-H3]
     if (!this.deps.fileLister || !this.scopeSelector) {
       throw new Error('FileLister required for audit(). Use auditContents() for direct mode.');
     }
@@ -131,9 +135,10 @@ export class SourceAuditorModule {
     const startTime = Date.now();
     const baseDir = options.baseDir || process.cwd();
 
-    // Step 1: Scope Selection
+    // [EARS-A1] [EARS-A2] [EARS-A4] [EARS-A5] Step 1: Scope Selection (rules live in ScopeSelector)
     const filePaths = await this.scopeSelector.selectFiles(options.scope, baseDir);
 
+    // [EARS-A3]
     if (filePaths.length === 0) {
       return this.createEmptyResult(startTime);
     }
@@ -177,7 +182,7 @@ export class SourceAuditorModule {
       // `batch` goes out of scope here, so the content of the previous batch is collectable.
     }
 
-    // Step 3: Load Waivers
+    // [EARS-C1] Step 3: Load Waivers
     let waivers: Waiver[] = [];
     if (this.deps.waiverReader) {
       try {
@@ -225,10 +230,13 @@ export class SourceAuditorModule {
     // `audit()` read one bounded batch or because the caller of `auditContents()` loaded it.
     for (const file of files) {
       try {
+        // [EARS-E2]
         scannedLines += file.content.split("\n").length;
 
+        // [EARS-B1]
         const fileFindings = await this.deps.findingDetector.detect(file.content, file.path);
 
+        // [EARS-B2] [EARS-B4]
         for (const finding of fileFindings) {
           allFindings.push(finding);
           if (!detectors.includes(finding.detector)) {
@@ -282,14 +290,16 @@ export class SourceAuditorModule {
    */
   private calculateSummary(findings: Finding[]): SourceAuditSummary {
     const summary: SourceAuditSummary = {
+      // [EARS-D1]
       total: findings.length,
-      bySeverity: { critical: 0, high: 0, medium: 0, low: 0 },
+      // [EARS-D2] [AUDIT-M1] One counter for the severity map, shared with the orchestrator and createScan.
+      bySeverity: countBySeverity(findings),
       byCategory: {},
       byDetector: { regex: 0, heuristic: 0, llm: 0, sast: 0 },
     };
 
+    // [EARS-D3] [EARS-D4]
     for (const finding of findings) {
-      summary.bySeverity[finding.severity]++;
       summary.byCategory[finding.category] =
         (summary.byCategory[finding.category] || 0) + 1;
       summary.byDetector[finding.detector]++;
