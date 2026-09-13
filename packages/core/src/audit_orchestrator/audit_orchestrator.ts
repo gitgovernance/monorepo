@@ -465,14 +465,25 @@ export function createAuditOrchestrator(deps: AuditOrchestratorDeps) {
         return f;
       });
 
-      // [AORCH-G1] [AORCH-G2] Detect agents that failed due to unresolvable entrypoint
+      // [AORCH-G1] [AORCH-G2] Detect agents that could not be LOADED: an unresolvable
+      // entrypoint, or (Decision 13) a `runtime` with no registered handler —
+      // RuntimeNotFoundError, which is what a specialist registered with
+      // `runtime: 'typescript'` throws in production, where LocalBackend tries the runtime
+      // before the entrypoint and no handler exists.
+      const isEntrypointError = (m: string) =>
+        m.includes('MODULE_NOT_FOUND') || m.includes('ERR_MODULE_NOT_FOUND') || m.includes('Cannot find module');
+      const runtimeNotFound = (m: string) => m.match(/^RuntimeNotFound: (.+)$/)?.[1];
       const failedAgents = agentResults.filter(
         r => r.status === 'error' && r.errorMessage &&
-          (r.errorMessage.includes('MODULE_NOT_FOUND') || r.errorMessage.includes('ERR_MODULE_NOT_FOUND') || r.errorMessage.includes('Cannot find module')),
+          (isEntrypointError(r.errorMessage) || runtimeNotFound(r.errorMessage) !== undefined),
       );
       let entrypointWarning: string | undefined;
       if (failedAgents.length > 0) {
         const details = failedAgents.map(a => {
+          const runtime = runtimeNotFound(a.errorMessage ?? '');
+          if (runtime !== undefined) {
+            return `  ${a.agentId} — runtime '${runtime}' has no registered handler`;
+          }
           const m = a.errorMessage?.match(/['"]([^'"]+)['"]/);
           const pkg = m?.[1] ?? 'unknown';
           return `  ${a.agentId} — ${pkg} not found`;
