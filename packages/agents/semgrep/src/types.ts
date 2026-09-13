@@ -1,5 +1,5 @@
 // [SGP-A2] Types must compile cleanly with tsc --noEmit
-import type { Sarif, Finding, FindingSeverity, FindingCategory } from '@gitgov/core';
+import type { Sarif, Finding, FindingSeverity, FindingCategory, SeverityCounts } from '@gitgov/core';
 type SarifLog = Sarif.SarifLog;
 
 /**
@@ -56,7 +56,8 @@ export type SemgrepMetadata = {
  */
 export type SemgrepSummary = {
   totalFindings: number;
-  bySeverity: Record<string, number>;
+  /** [AUDIT-M1] core's one severity aggregate — was Record<string, number> */
+  bySeverity: SeverityCounts;
   rulesMatched: number;
   filesScanned: number;
 };

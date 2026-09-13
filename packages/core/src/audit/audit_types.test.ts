@@ -10,7 +10,7 @@ import * as path from 'path';
 import { createHash } from 'node:crypto';
 
 // ─── Type + value imports for AUDIT-A/D tests ──────────────────────────────
-import { createFinding, rehydrateFinding, createFix, createWaiver, createScan, countUnmatchedWaivers } from './types';
+import { createFinding, rehydrateFinding, createFix, createWaiver, createScan, countUnmatchedWaivers, countBySeverity } from './types';
 import { makeTestFinding, makeTestWaiver } from './testing';
 import { computeFingerprint } from './fingerprint';
 import type {
@@ -269,6 +269,23 @@ describe('Audit Record Types (audit_record_types_module.md)', () => {
       const content = fs.readFileSync(path.resolve(__dirname, '../policy_evaluator/policy_evaluator.types.ts'), 'utf-8');
       expect(content).toContain('from "../audit/types"');
       expect(content).not.toMatch(/export type PolicyDecision\s*=/);
+    });
+
+    it('[AUDIT-B4] should verify source_auditor and redaction import Finding from audit/types', () => {
+      // These two cited AUDIT-B1 as their licence, but B1's WHEN names finding_detector and
+      // its test reads finding_detector only: a local `Finding` here went unnoticed (audit
+      // cross-spec F-11). One row per module, so the failure names the offender.
+      const modules = [
+        { file: '../source_auditor/types.ts', quote: '"' },
+        { file: '../redaction/redactor.types.ts', quote: "'" },
+      ];
+      const offenders = modules.filter(({ file, quote }) => {
+        const content = fs.readFileSync(path.resolve(__dirname, file), 'utf-8');
+        const importsCanonical = content.includes(`from ${quote}../audit/types${quote}`);
+        const redefines = /export (type|interface) Finding\b/.test(content);
+        return !importsCanonical || redefines;
+      }).map((m) => m.file);
+      expect(offenders).toEqual([]);
     });
   });
 
@@ -631,11 +648,12 @@ describe('Audit Prisma Schema Verification (audit_prisma_record_projection_modul
     // spec's §4.10.1 time-bound scope). Measured: there are FIVE. None has
     // an observed failure. When a consumer that needs to iterate one of them appears,
     // THAT one gets converted and drops off this list — not all of them at once.
+    // `ScanScope` left this list on 2026-09-13 (AUDIT-J4): it was amended (widened to three
+    // values, audit cross-spec F-6) and J1's time-bound rule covers amended types.
     const GRANDFATHERED_BARE_UNIONS = [
       'DetectorName',
       'WaiverStatus',
       'ScanDisplayStatus',
-      'ScanScope',
       'PolicyStatus',
     ];
 
@@ -689,6 +707,50 @@ describe('Audit Prisma Schema Verification (audit_prisma_record_projection_modul
       const src = fs.readFileSync(typesPath, 'utf-8');
       expect(src).toMatch(/export const FINDING_SEVERITIES = \[[^\]]*\] as const;/);
       expect(src).toMatch(/export type FindingSeverity = \(typeof FINDING_SEVERITIES\)\[number\];/);
+    });
+
+    it('[AUDIT-J4] should export SCAN_SCOPES as a readonly tuple and let createScan record a baseline run', () => {
+      const mainBarrel = require('../index');
+      expect(Array.isArray(mainBarrel.SCAN_SCOPES)).toBe(true);
+      expect([...mainBarrel.SCAN_SCOPES]).toEqual(['diff', 'full', 'baseline']);
+
+      const src = fs.readFileSync(typesPath, 'utf-8');
+      expect(src).toMatch(/export const SCAN_SCOPES = \[[^\]]*\] as const;/);
+      expect(src).toMatch(/export type ScanScope = \(typeof SCAN_SCOPES\)\[number\];/);
+
+      // The run whose grouping matters most — the one that writes the new baseline — is
+      // representable in the type that groups it. With the old two-value union this line did
+      // not compile, which is the negative control for the widening.
+      const scan = createScan({
+        scope: 'baseline',
+        triggeredBy: 'ci',
+        executionRecordIds: [],
+        findings: [],
+        policyDecision: {
+          decision: 'pass', reason: 'OK', executionId: 'e-p', blockingFindings: [], waivedFindings: [],
+          summary: { critical: 0, high: 0, medium: 0, low: 0 }, rulesEvaluated: [], evaluatedAt: new Date().toISOString(),
+        },
+      });
+      expect(scan.scope).toBe('baseline');
+    });
+
+    it('[AUDIT-J5] should export BASE_FINDING_CATEGORIES as a readonly tuple and keep FindingCategory open', () => {
+      const mainBarrel = require('../index');
+      expect(Array.isArray(mainBarrel.BASE_FINDING_CATEGORIES)).toBe(true);
+      // 38 built-ins, no duplicates, and the two SAST ones that went unclassified are there.
+      expect(mainBarrel.BASE_FINDING_CATEGORIES).toHaveLength(38);
+      expect(new Set(mainBarrel.BASE_FINDING_CATEGORIES).size).toBe(38);
+      expect(mainBarrel.BASE_FINDING_CATEGORIES).toEqual(
+        expect.arrayContaining(['pii-email', 'security-vulnerability', 'code-quality']),
+      );
+
+      const src = fs.readFileSync(typesPath, 'utf-8');
+      expect(src).toMatch(/export const BASE_FINDING_CATEGORIES = \[[^\]]*\] as const;/);
+      expect(src).toMatch(/export type BaseFindingCategory = \(typeof BASE_FINDING_CATEGORIES\)\[number\];/);
+      // The OPEN half survives exactly as AUDIT-E2 declares it — J1 applies to the tuple, not here.
+      expect(src).toMatch(/export type FindingCategory = BaseFindingCategory \| \(string & \{\}\);/);
+      const custom: FindingCategory = 'firewall-disabled';
+      expect(typeof custom).toBe('string');
     });
   });
 
@@ -805,6 +867,34 @@ describe('Audit Prisma Schema Verification (audit_prisma_record_projection_modul
       ];
       expect(countUnmatchedWaivers(waivers, [])).toBe(2);
       expect(countUnmatchedWaivers([], [])).toBe(0);
+    });
+  });
+
+  describe('4.13. Conteo por severidad (AUDIT-M1)', () => {
+    it('[AUDIT-M1] should count findings per severity with every key present', () => {
+      // Two critical and one low, asymmetric on purpose: with one finding per severity a
+      // counter that ignores the severity and returns findings.length / 4 would also pass.
+      const findings = [
+        makeTestFinding({ anchor: 'c1', severity: 'critical' }),
+        makeTestFinding({ anchor: 'c2', severity: 'critical' }),
+        makeTestFinding({ anchor: 'l1', severity: 'low' }),
+      ];
+      expect(countBySeverity(findings)).toEqual({ critical: 2, high: 0, medium: 0, low: 1 });
+      // Every key present even with nothing to count — consumers index without a guard.
+      expect(countBySeverity([])).toEqual({ critical: 0, high: 0, medium: 0, low: 0 });
+    });
+
+    it('[AUDIT-M1] should type every severity aggregate in core as SeverityCounts', () => {
+      // The map was written five ways (audit M3b); the three core sites now name the one type.
+      const sites = [
+        { file: 'types.ts', pattern: /export type AuditSummary = SeverityCounts & \{/ },
+        { file: '../source_auditor/types.ts', pattern: /bySeverity: SeverityCounts;/ },
+        { file: '../sarif/sarif.types.ts', pattern: /bySeverity: SeverityCounts;/ },
+      ];
+      const missing = sites
+        .filter(({ file, pattern }) => !pattern.test(fs.readFileSync(path.resolve(__dirname, file), 'utf-8')))
+        .map((s) => s.file);
+      expect(missing).toEqual([]);
     });
   });
 

@@ -1,74 +1,19 @@
+// [AUDIT-B4] Canonical source for Finding and its domain types — never redefined here.
 import type {
   Finding,
   FindingCategory,
-  FindingSeverity,
   DetectorName,
+  SeverityCounts,
   Waiver,
 } from "../audit/types";
 import type { FindingDetectorModule } from "../finding_detector";
 import type { FileLister } from "../file_lister";
 import type { IGitModule } from '../git';
 
-// ============================================================================
-// AUDIT TARGET TYPES
-// ============================================================================
-
-/**
- * What to audit.
- * - code: Source code in the repository (MVP)
- * - jira: Jira issues (future)
- * - gitgov: GitGovernance records (future)
- */
-export type AuditTarget = "code" | "jira" | "gitgov";
-
-/**
- * Scope for code auditing.
- * - diff: Only files modified since last baseline (default)
- * - full: All files in repo (without saving baseline)
- * - baseline: All files + save commit as new baseline
- */
-export type CodeScope = "diff" | "full" | "baseline";
-
-/**
- * Scope for Jira auditing (future).
- * - all: All issues
- * - sprint: Only current sprint issues
- * - stale: Issues without activity > 30 days
- * - backlog: Unassigned backlog issues
- */
-export type JiraScope = "all" | "sprint" | "stale" | "backlog";
-
-/**
- * Scope for GitGov records auditing (future).
- * - all: All records
- * - tasks: Only TaskRecords
- * - cycles: Only CycleRecords
- */
-export type GitgovScope = "all" | "tasks" | "cycles";
-
-/**
- * Union of all possible scopes depending on target.
- */
-export type AuditScope = CodeScope | JiraScope | GitgovScope;
-
-// ============================================================================
-// OUTPUT/DISPLAY OPTIONS
-// ============================================================================
-
-/**
- * How to group findings in output.
- */
-export type GroupByOption = "file" | "severity" | "category";
-
-/**
- * Output format for the report.
- */
-export type OutputFormat = "text" | "json" | "sarif";
-
-/**
- * Minimum severity level to fail the audit.
- */
-export type FailOnSeverity = "critical" | "high" | "medium" | "low" | "none";
+// The 2025 multi-target block (AuditTarget, CodeScope, JiraScope, GitgovScope, AuditScope) and
+// the display options (GroupByOption, OutputFormat, FailOnSeverity) were removed on 2026-09-13:
+// zero consumers outside this module, CodeScope was an inline copy of ScanScope (AUDIT-J4), and
+// FailOnSeverity carried a 'none' no caller accepted. See source_auditor_module.md §3.3.
 
 // ============================================================================
 // FILE CONTENT TYPES
@@ -151,8 +96,8 @@ export type AuditOptions = {
 export type SourceAuditSummary = {
   /** Total findings (post-waiver) */
   total: number;
-  /** Count by severity */
-  bySeverity: Record<FindingSeverity, number>;
+  /** Count by severity — [AUDIT-M1] the one shape, computed by countBySeverity */
+  bySeverity: SeverityCounts;
   /** Count by category */
   byCategory: Partial<Record<FindingCategory, number>>;
   /** Count by detector */

@@ -30,53 +30,59 @@ import type { SarifLog } from "../sarif/sarif.types";
  * [AUDIT-E1] Base finding categories built into core. Agents get autocomplete for these
  * values while remaining free to use any string as a category.
  */
-export type BaseFindingCategory =
+// [AUDIT-J1] [AUDIT-J5] Constant first, type derived. The BUILT-IN set is a closed domain
+// and needs a runtime value: redaction proves every built-in category is classified
+// (RLDX-A6), and nothing can enumerate a bare union. `FindingCategory` below stays open
+// (AUDIT-E2) — only this tuple is closed.
+export const BASE_FINDING_CATEGORIES = [
   // Original 6 sensitive
-  | "pii-email"
-  | "pii-phone"
-  | "pii-financial"
-  | "pii-health"
-  | "pii-generic"
-  | "hardcoded-secret"
+  "pii-email",
+  "pii-phone",
+  "pii-financial",
+  "pii-health",
+  "pii-generic",
+  "hardcoded-secret",
   // PCI (Group A) sensitive
-  | "pci-pan"
-  | "pci-cvv"
-  | "pci-track"
-  | "pci-logging"
-  | "pci-token-misuse"
-  | "pci-last4"
+  "pci-pan",
+  "pci-cvv",
+  "pci-track",
+  "pci-logging",
+  "pci-token-misuse",
+  "pci-last4",
   // PII extended (Group B) sensitive
-  | "pii-dob"
-  | "pii-address"
-  | "pii-national-id"
-  | "pii-passport"
-  | "pii-bank-account"
-  | "pii-biometric"
+  "pii-dob",
+  "pii-address",
+  "pii-national-id",
+  "pii-passport",
+  "pii-bank-account",
+  "pii-biometric",
   // Storage/Crypto (Group E) sensitive
-  | "storage-pii"
-  | "storage-pci"
-  | "crypto-weak"
-  | "crypto-key"
-  | "crypto-tls"
+  "storage-pii",
+  "storage-pci",
+  "crypto-weak",
+  "crypto-key",
+  "crypto-tls",
   // Original 6 safe
-  | "logging-pii"
-  | "tracking-cookie"
-  | "tracking-analytics-id"
-  | "unencrypted-storage"
-  | "third-party-transfer"
-  | "unknown-risk"
+  "logging-pii",
+  "tracking-cookie",
+  "tracking-analytics-id",
+  "unencrypted-storage",
+  "third-party-transfer",
+  "unknown-risk",
   // Logging extended (Group C) safe
-  | "logging-auth"
-  | "logging-error"
-  | "logging-debug"
-  | "logging-trace"
+  "logging-auth",
+  "logging-error",
+  "logging-debug",
+  "logging-trace",
   // Transfer/Consent (Group D) safe
-  | "data-transfer"
-  | "privacy-consent"
-  | "privacy-retention"
-  // SAST categories (semgrep, CodeQL, etc.)
-  | "security-vulnerability"
-  | "code-quality";
+  "data-transfer",
+  "privacy-consent",
+  "privacy-retention",
+  // SAST categories (semgrep, CodeQL, etc.) — sensitive / safe (RLDX-A2/A3)
+  "security-vulnerability",
+  "code-quality",
+] as const;
+export type BaseFindingCategory = (typeof BASE_FINDING_CATEGORIES)[number];
 
 /**
  * [AUDIT-E2] Extensible finding category. Accepts any BaseFindingCategory with
@@ -96,6 +102,13 @@ export type FindingCategory = BaseFindingCategory | (string & {});
  */
 export const FINDING_SEVERITIES = ["critical", "high", "medium", "low"] as const;
 export type FindingSeverity = (typeof FINDING_SEVERITIES)[number];
+
+/**
+ * [AUDIT-M1] Count of findings per severity. ONE shape for every module that aggregates by
+ * severity (source_auditor, audit_orchestrator, sarif metadata, agents); computed by
+ * `countBySeverity` below. It was written five ways and computed three times.
+ */
+export type SeverityCounts = Record<FindingSeverity, number>;
 
 /**
  * Identifier of the detector that generated the finding.
@@ -127,9 +140,18 @@ export type FindingStatus = (typeof FINDING_STATUSES)[number];
 export type ScanDisplayStatus = "success" | "partial" | "blocked";
 
 /**
- * Scan scope — what files to audit.
+ * Scan scope — what files a scan covers. ONE domain for the whole flow: CLI `--scope`,
+ * AuditOrchestrationOptions.scope, AgentAuditInput.scope, SARIF gitgov/scanScope, Scan.scope.
+ * - diff: only files changed since the last baseline
+ * - full: every file, without saving a baseline
+ * - baseline: every file, AND the commit is saved as the new baseline (a CLI-side effect;
+ *   the SaaS router creates scans as "full" or "diff" — that is the API contract, not this type)
+ *
+ * [AUDIT-J1] [AUDIT-J4] Constant first, type derived. Was `"full" | "diff"` while four
+ * inline copies carried three values and saas-api bridged the gap with a cast.
  */
-export type ScanScope = "full" | "diff";
+export const SCAN_SCOPES = ["diff", "full", "baseline"] as const;
+export type ScanScope = (typeof SCAN_SCOPES)[number];
 
 // ─── Lifecycle events ─────────────────────────────────────────────────────────
 
@@ -342,14 +364,10 @@ export type PolicyRuleResult = {
 /**
  * Aggregated summary of an audit run.
  */
-export type AuditSummary = {
-  /** Total findings (including waived) */
+export type AuditSummary = SeverityCounts & {
+  /** Total findings (including waived). The four severity keys (SeverityCounts, AUDIT-M1)
+   *  count ACTIVE (non-waived) findings only — structurally the same flat shape as before. */
   total: number;
-  /** Active (non-waived) findings by severity */
-  critical: number;
-  high: number;
-  medium: number;
-  low: number;
   /** Count of waived/suppressed findings */
   suppressed: number;
   /**
@@ -440,8 +458,8 @@ export type AuditOrchestrationResult = {
  * Counterpart of AuditOrchestrationResult (output).
  */
 export type AuditOrchestrationOptions = {
-  /** Scan scope: diff (changed files), full (all files), baseline (full + save baseline) */
-  scope: "diff" | "full" | "baseline";
+  /** Scan scope — the one domain (AUDIT-J4) */
+  scope: ScanScope;
   /** Optional: run only this specific agent */
   agentId?: string;
   /** Glob patterns to include in scan */
@@ -470,8 +488,8 @@ export type AuditOrchestrationOptions = {
  *   FS: Scan & { indexedAt, recordPaths, ... }
  */
 export type Scan = {
-  /** Scan scope */
-  scope: "full" | "diff";
+  /** Scan scope — the one domain (AUDIT-J4). Was `"full" | "diff"`, which could not record a baseline run. */
+  scope: ScanScope;
   /** Who/what triggered the scan (actor ID or "ci") */
   triggeredBy: string;
   /** ExecutionRecord IDs from agent runs (1 per agent) */
@@ -488,7 +506,12 @@ export type Scan = {
 
 // ─── Finding Factory ─────────────────────────────────────────────────────────
 
-import { createHash } from 'node:crypto';
+// One sha256 for the whole integrity bridge (audit dep-red F4): the redactor, the verifier
+// and the producer must agree byte for byte, so they call the same function. Imported from
+// the file, not the `crypto` barrel: the barrel pulls `util` in, and `@gitgov/core/audit`
+// must stay clean of Node builtins beyond its allowlist (EARS-CI02). `checksum` imports
+// nothing from here — no cycle.
+import { sha256 } from '../crypto/checksum';
 // The identity lives in its own module and is computed in exactly one place (AUDIT-K1).
 // fingerprint.ts imports only the FindingCategory TYPE from here, which is erased at
 // compile time — the cycle is structural, not a runtime one.
@@ -524,7 +547,7 @@ export function createFinding(
       anchor: anchor ?? finding.snippet,
     }),
     // [AUDIT-K6] The exact snippet, unnormalized.
-    snippetHash: createHash('sha256').update(finding.snippet).digest('hex'),
+    snippetHash: sha256(finding.snippet),
   };
 }
 
@@ -546,8 +569,7 @@ export function rehydrateFinding(
 ): Finding {
   return {
     ...input,
-    snippetHash:
-      input.snippetHash ?? createHash('sha256').update(input.snippet).digest('hex'),
+    snippetHash: input.snippetHash ?? sha256(input.snippet),
   };
 }
 
@@ -579,8 +601,21 @@ export function countUnmatchedWaivers(
 export function verifySnippet(snippet: string, snippetHash: string): 'verified' | 'unverified' | null {
   if (!snippet || !snippetHash) return null;
   if (snippet.includes('[REDACTED]')) return null;
-  const computed = createHash('sha256').update(snippet).digest('hex');
-  return computed === snippetHash ? 'verified' : 'unverified';
+  return sha256(snippet) === snippetHash ? 'verified' : 'unverified';
+}
+
+/**
+ * [AUDIT-M1] Findings per severity, every key present. Counts exactly what it receives —
+ * filtering waived findings is the caller's decision, and the three callers make it
+ * differently on purpose (source_auditor: post-waiver list; orchestrator and createScan:
+ * active only).
+ */
+export function countBySeverity(findings: ReadonlyArray<Pick<Finding, 'severity'>>): SeverityCounts {
+  const counts: SeverityCounts = { critical: 0, high: 0, medium: 0, low: 0 };
+  for (const finding of findings) {
+    counts[finding.severity]++;
+  }
+  return counts;
 }
 
 // ─── Fix Type ─────────────────────────────────────────────────────────────────
@@ -639,10 +674,8 @@ export function createScan(input: {
   // [AUDIT-G2] Compute summary from findings — guaranteed coherent
   const active = input.findings.filter(f => !f.isWaived);
   const summary: AuditSummary = {
-    critical: active.filter(f => f.severity === 'critical').length,
-    high: active.filter(f => f.severity === 'high').length,
-    medium: active.filter(f => f.severity === 'medium').length,
-    low: active.filter(f => f.severity === 'low').length,
+    // [AUDIT-M1] One counter for the severity map, shared with the orchestrator and source_auditor.
+    ...countBySeverity(active),
     total: input.findings.length,
     suppressed: input.findings.filter(f => f.isWaived).length,
     // [AORCH-B15] A Scan is built from findings already consolidated, with no waiver list

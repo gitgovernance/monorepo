@@ -1,4 +1,5 @@
 import type { SourceAuditor, Sarif, Runner } from '@gitgov/core';
+import { countBySeverity } from '@gitgov/core';
 
 type SarifBuilder = Sarif.SarifBuilder;
 type SarifLog = Sarif.SarifLog;
@@ -106,17 +107,16 @@ function buildSummary(
   result: AuditResult,
   scope: SecurityAuditInput['scope'],
 ): ScanSummary {
-  const bySeverity: Record<string, number> = {};
   const byCategory: Record<string, number> = {};
 
   for (const finding of result.findings) {
-    bySeverity[finding.severity] = (bySeverity[finding.severity] ?? 0) + 1;
     byCategory[finding.category] = (byCategory[finding.category] ?? 0) + 1;
   }
 
   return {
     totalFindings: result.findings.length,
-    bySeverity,
+    // [AUDIT-M1] core's one severity counter, instead of a fourth hand-rolled loop
+    bySeverity: countBySeverity(result.findings),
     byCategory,
     scopeType: scope,
     filesScanned: result.scannedFiles ?? 0,

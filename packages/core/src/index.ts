@@ -110,6 +110,7 @@ export type {
   BaseFindingCategory,
   FindingCategory,
   FindingSeverity,
+  SeverityCounts,
   DetectorName,
   WaiverStatus,
   FindingStatus,
@@ -133,13 +134,13 @@ export type {
   Fix,
 } from "./audit/index";
 
-// Audit value exports (factories)
-export { createFinding, createFix, createWaiver, createScan } from "./audit/index";
+// Audit value exports (factories and the one severity counter, AUDIT-M1)
+export { createFinding, createFix, createWaiver, createScan, countBySeverity } from "./audit/index";
 
 // [AUDIT-J1] Closed-domain constants. They belong in the VALUES block, not the types
 // one: AUDIT-A6 declares "re-export all types", so a constant living only in the type
 // barrel would be invisible from `@gitgov/core` without any test noticing.
-export { FINDING_SEVERITIES, FINDING_STATUSES } from "./audit/index";
+export { FINDING_SEVERITIES, FINDING_STATUSES, SCAN_SCOPES, BASE_FINDING_CATEGORIES } from "./audit/index";
 
 // ─── Non-audit type exports (module-specific) ───────────────────────────────
 export type { AuditOrchestrationOptions, AuditOrchestratorDeps } from "./audit_orchestrator/index";

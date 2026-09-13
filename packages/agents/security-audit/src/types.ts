@@ -1,4 +1,4 @@
-import type { Sarif } from '@gitgov/core';
+import type { Sarif, SeverityCounts } from '@gitgov/core';
 
 type SarifLog = Sarif.SarifLog;
 
@@ -37,7 +37,8 @@ export type SecurityAuditMetadata = {
  */
 export type ScanSummary = {
   totalFindings: number;
-  bySeverity: Record<string, number>;
+  /** [AUDIT-M1] core's one severity aggregate — was Record<string, number> */
+  bySeverity: SeverityCounts;
   byCategory: Record<string, number>;
   scopeType: SecurityAuditInput['scope'];
   filesScanned: number;

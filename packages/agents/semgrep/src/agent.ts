@@ -1,4 +1,4 @@
-import { createFinding } from '@gitgov/core';
+import { createFinding, countBySeverity } from '@gitgov/core';
 import type { Finding, FindingSeverity, FindingCategory, Runner } from '@gitgov/core';
 import type {
   SemgrepAgentDeps,
@@ -138,14 +138,10 @@ export class SemgrepAgent {
   }
 
   private buildSummary(findings: Finding[], results: SemgrepRawResult[]): SemgrepSummary {
-    const bySeverity: Record<string, number> = {};
-    for (const f of findings) {
-      bySeverity[f.severity] = (bySeverity[f.severity] ?? 0) + 1;
-    }
-
     return {
       totalFindings: findings.length,
-      bySeverity,
+      // [AUDIT-M1] core's one severity counter, instead of a fifth hand-rolled loop
+      bySeverity: countBySeverity(findings),
       rulesMatched: new Set(results.map(r => r.ruleId).filter(Boolean)).size,
       filesScanned: new Set(findings.map(f => f.file)).size,
     };

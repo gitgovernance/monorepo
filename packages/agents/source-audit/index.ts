@@ -9,6 +9,8 @@ import {
   SourceAuditor,
   FindingDetector,
 } from '@gitgov/core';
+// Root import for the type this agent IMPLEMENTS (source_auditor_module.md §3.3 root-export rule).
+import type { IWaiverReader } from '@gitgov/core';
 import {
   findProjectRoot,
   FsFileLister,
@@ -72,7 +74,7 @@ export async function runAgent(ctx: AgentExecutionContext): Promise<AgentOutput>
     const fileLister = new FsFileLister({ cwd: baseDir });
 
     // Create a no-op waiver reader (waivers handled externally)
-    const waiverReader: SourceAuditor.IWaiverReader = {
+    const waiverReader: IWaiverReader = {
       loadWaivers: async () => [],
       hasWaiver: async () => false,
     };
