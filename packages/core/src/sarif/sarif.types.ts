@@ -1,6 +1,6 @@
 // AUDIT-B4: canonical source. Was `../finding_detector/types`, which only re-exports these.
 import type { Finding, FindingCategory, DetectorName, ScanScope, SeverityCounts } from '../audit/types';
-import type { RedactionLevel, RedactionConfig } from '../redaction/redactor.types';
+import type { RedactionLevel } from '../redaction/redactor.types';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SARIF 2.1.0 structural types
@@ -327,9 +327,10 @@ export type GetLineContentFn = (file: string, line: number) => Promise<string | 
  */
 export type OccurrenceContext = Map<string, number>;
 
-// RedactionLevel is imported from '../redaction/redactor.types' — single source of truth.
-// Re-exported here for backward compatibility with consumers that import from sarif.types.
-export type { RedactionLevel } from '../redaction/redactor.types';
+// RedactionLevel is imported from '../redaction/redactor.types' — single source of truth. The
+// "backward compatibility" re-export that lived here (and as `Sarif.RedactionLevel` on the
+// package) was removed on 2026-09-13 with zero consumers measured in cli, agents, mcp-server,
+// saas-api and saas-worker (audit dep-red F9): one public path, `Redaction.RedactionLevel`.
 
 /**
  * All inputs to SarifBuilder.build().
@@ -398,10 +399,14 @@ export type SarifBuilderOptions = {
   getLineContent?: GetLineContentFn;
 
   // ── Output control ─────────────────────────────────────────
-  /** Controls snippet redaction in SARIF output */
+  /**
+   * Redaction on request (SARIF-O1..O3). The builder is the redactor of the export-from-DB
+   * path, which reconstructs SARIF from rows and never passes the orchestrator; the scan
+   * path redacts in the orchestrator (AORCH-E1). Always with DEFAULT_REDACTION_CONFIG: the
+   * policy enters through FindingRedactor's constructor only — `redactionConfig`, a third
+   * entry point for the policy, was removed on 2026-09-13 (SARIF-O4 retired, audit dep-red F17).
+   */
   redactionLevel?: RedactionLevel;
-  /** Custom redaction config override (uses DEFAULT_REDACTION_CONFIG when omitted) */
-  redactionConfig?: RedactionConfig;
 
   // ── Version control provenance §3.14.16 ───────────────────
   /** Git commit hash for versionControlProvenance */

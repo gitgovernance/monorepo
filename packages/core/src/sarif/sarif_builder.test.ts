@@ -447,32 +447,9 @@ describe('SarifBuilder', () => {
       expect(snippet!.text).toBe('const email = user.email;');
     });
 
-    it('[SARIF-O4] build: should use the provided redactionConfig instead of the default', async () => {
-      // Create a custom config that treats 'logging-pii' (normally safe) as sensitive
-      const customConfig = {
-        sensitiveCategories: ['logging-pii'],
-        safeCategories: [],
-        defaultBehavior: 'keep' as const,
-      };
-
-      const loggingFinding: Finding = {
-        ...baseFindings[0]!,
-        fingerprint: 'finding-custom-cfg',
-        category: 'logging-pii',
-        snippet: 'console.log(user.email);',
-      snippetHash: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
-      };
-
-      const sarif = await builder.build({
-        ...baseOptions,
-        findings: [loggingFinding],
-        redactionLevel: 'l1',
-        redactionConfig: customConfig,
-      });
-
-      const snippet = firstResult(sarif).locations[0]!.physicalLocation.region.snippet;
-      expect(snippet).toBeDefined();
-      expect(snippet!.text).toBe('[REDACTED]');
-    });
+    // SARIF-O4 (a caller-supplied redactionConfig) was retired on 2026-09-13: the option was
+    // a third entry point for the redaction POLICY. The builder always redacts with
+    // DEFAULT_REDACTION_CONFIG; a non-default policy enters through FindingRedactor's
+    // constructor only. Its test went with it.
   });
 });

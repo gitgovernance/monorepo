@@ -9,6 +9,13 @@ import type { RedactionLevel, RedactionConfig, RedactableInput, RedactedFinding 
  * needed on the result (audit dep-red F7). `snippetHash` is deliberately absent — transported,
  * never rewritten (RLDX-B3).
  */
+/**
+ * [RLDX-B2] [RLDX-B8] The sentinel a redacted snippet becomes. ONE declaration: the SaaS
+ * projection derives `hasFullSnippet` by comparing against it (RLDX-F3), and until
+ * 2026-09-13 both modules carried the literal (audit dep-red F5).
+ */
+export const REDACTED_SNIPPET = '[REDACTED]' as const;
+
 type RedactionOverrides = {
   redactionLevel: RedactionLevel;
   hasFullSnippet: boolean;
@@ -67,7 +74,7 @@ class FindingRedactor {
 
     // [RLDX-B2] [RLDX-B4] L1 + categoria sensible: redactar
     const redacted = build({
-      snippet: '[REDACTED]',
+      snippet: REDACTED_SNIPPET,
       message: `Sensitive finding (${finding.category})`,
       redactionLevel: 'l1',
       hasFullSnippet: false,
@@ -115,7 +122,7 @@ class FindingRedactor {
             if (level === 'l1') {
               const category = result.properties['gitgov/category'] as string | undefined;
               if (category && this.isSensitiveCategory(category)) {
-                snippet.text = '[REDACTED]';
+                snippet.text = REDACTED_SNIPPET;
               }
             }
           }

@@ -10,7 +10,7 @@ import * as path from 'path';
 import { createHash } from 'node:crypto';
 
 // ─── Type + value imports for AUDIT-A/D tests ──────────────────────────────
-import { createFinding, rehydrateFinding, createFix, createWaiver, createScan, countUnmatchedWaivers, countBySeverity } from './types';
+import { createFinding, rehydrateFinding, createFix, createWaiver, createScan, countUnmatchedWaivers, countBySeverity, isScanScope } from './types';
 import { makeTestFinding, makeTestWaiver } from './testing';
 import { computeFingerprint } from './fingerprint';
 import type {
@@ -732,6 +732,11 @@ describe('Audit Prisma Schema Verification (audit_prisma_record_projection_modul
         },
       });
       expect(scan.scope).toBe('baseline');
+
+      // The runtime guard a persisted `string` goes through instead of a cast (saas-api).
+      expect(isScanScope('baseline')).toBe(true);
+      expect(isScanScope('diff')).toBe(true);
+      expect(isScanScope('everything')).toBe(false);
     });
 
     it('[AUDIT-J5] should export BASE_FINDING_CATEGORIES as a readonly tuple and keep FindingCategory open', () => {
