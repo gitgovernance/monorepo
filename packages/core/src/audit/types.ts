@@ -556,6 +556,26 @@ export function rehydrateFinding(
  * Compares sha256(snippet) against snippetHash.
  * Returns 'verified' if match, 'unverified' if mismatch, null if unverifiable.
  */
+/**
+ * [AUDIT-L1] Active waivers whose fingerprint matches no finding of a run.
+ *
+ * One definition for a number that was computed in three places: source_auditor's
+ * filterByWaivers, the orchestrator's buildSummary, and the orchestrator's no-agents branch,
+ * which hard-coded it as `waivers.length` with the reasoning in a comment. With no findings
+ * every waiver is unmatched, and the empty-set comparison yields exactly that — the edge case
+ * is a property of the function, not a special case at a call site.
+ *
+ * Takes only the fingerprints it needs, so a caller can pass either full records or the
+ * lightweight shapes tests build.
+ */
+export function countUnmatchedWaivers(
+  waivers: ReadonlyArray<Pick<Waiver, 'fingerprint'>>,
+  findings: ReadonlyArray<Pick<Finding, 'fingerprint'>>,
+): number {
+  const present = new Set(findings.map((f) => f.fingerprint));
+  return waivers.filter((w) => !present.has(w.fingerprint)).length;
+}
+
 export function verifySnippet(snippet: string, snippetHash: string): 'verified' | 'unverified' | null {
   if (!snippet || !snippetHash) return null;
   if (snippet.includes('[REDACTED]')) return null;

@@ -10,7 +10,8 @@ import * as path from 'path';
 import { createHash } from 'node:crypto';
 
 // ─── Type + value imports for AUDIT-A/D tests ──────────────────────────────
-import { createFinding, rehydrateFinding, createFix, createWaiver, createScan } from './types';
+import { createFinding, rehydrateFinding, createFix, createWaiver, createScan, countUnmatchedWaivers } from './types';
+import { makeTestFinding, makeTestWaiver } from './testing';
 import { computeFingerprint } from './fingerprint';
 import type {
   Finding,
@@ -777,6 +778,33 @@ describe('Audit Prisma Schema Verification (audit_prisma_record_projection_modul
       // The other hash goes the other way: normalization is exactly what makes the
       // identity survive the same reformat. Two hashes, two roles.
       expect(tight.fingerprint).toBe(spread.fingerprint);
+    });
+  });
+
+  describe('4.12. Waivers sin match (AUDIT-L1)', () => {
+    it('[AUDIT-L1] should count the waivers whose fingerprint matches no finding', () => {
+      const a = makeTestFinding({ anchor: 'still-here-a' });
+      const b = makeTestFinding({ anchor: 'still-here-b' });
+      const matched = makeTestWaiver({ fingerprint: a.fingerprint });
+      const stale1 = makeTestWaiver({ fingerprint: 'f'.repeat(64) });
+      const stale2 = makeTestWaiver({ fingerprint: 'e'.repeat(64) });
+
+      // ONE matched and TWO stale, asymmetric on purpose: with one of each, "count the ones
+      // that matched" and "count the ones that did not" both return 1, and an inverted
+      // predicate passes. Found by mutation in source_auditor's EARS-C6 on 2026-09-10.
+      expect(countUnmatchedWaivers([matched, stale1, stale2], [a, b])).toBe(2);
+    });
+
+    it('[AUDIT-L1] should count every waiver as unmatched when there are no findings', () => {
+      // The edge case the orchestrator's no-agents branch used to hard-code as
+      // `waivers.length` with the reasoning in a comment. A property of the function,
+      // tested once, instead of a special case at a call site.
+      const waivers = [
+        makeTestWaiver({ fingerprint: 'a'.repeat(64) }),
+        makeTestWaiver({ fingerprint: 'b'.repeat(64) }),
+      ];
+      expect(countUnmatchedWaivers(waivers, [])).toBe(2);
+      expect(countUnmatchedWaivers([], [])).toBe(0);
     });
   });
 
