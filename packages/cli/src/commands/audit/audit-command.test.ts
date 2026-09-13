@@ -422,6 +422,36 @@ describe('AuditCommand', () => {
       expect(mockProcessExit).toHaveBeenCalledWith(0);
     });
 
+    it('[AORCH-C9] should exit 1 when no agent completed even if the policy decision is pass', async () => {
+      // Decision 12: every agent failed to load, the evaluator saw an empty list and said
+      // "pass" (PEVAL-D9 is right about that), and the CLI used to exit 0 over a real secret.
+      // "Nothing was scanned" is the CLI's distinction to make: agentsRun counts SUCCESSES.
+      mockOrchestrator.run.mockResolvedValue({
+        ...mockEmptyResult,
+        summary: { ...mockEmptyResult.summary, agentsRun: 0, agentsFailed: 1 },
+        warning: 'All audit agents failed to load:\n  agent:security-audit — runtime \'typescript\' has no registered handler',
+      });
+
+      await auditCommand.execute(createDefaultOptions({ scope: 'full' }));
+
+      expect(mockProcessExit).toHaveBeenCalledWith(1);
+      expect(mockProcessExit).not.toHaveBeenCalledWith(0);
+    });
+
+    it('[AORCH-C9] should keep the policy exit code when at least one agent completed', async () => {
+      // NEGATIVE CONTROL for the condition: a mixed run scanned something, so the policy
+      // decision rules. `agentsRun === agentsFailed` (the first wording of Decision 12) would
+      // have flagged this 1/1 run as "nothing scanned" — and missed the all-failed 0/N one.
+      mockOrchestrator.run.mockResolvedValue({
+        ...mockEmptyResult,
+        summary: { ...mockEmptyResult.summary, agentsRun: 1, agentsFailed: 1 },
+      });
+
+      await auditCommand.execute(createDefaultOptions({ scope: 'full' }));
+
+      expect(mockProcessExit).toHaveBeenCalledWith(0);
+    });
+
     it('[AORCH-C2] should pass failOn to orchestrator for threshold evaluation', async () => {
       await auditCommand.execute(createDefaultOptions({ scope: 'full', failOn: 'high' }));
 

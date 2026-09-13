@@ -17,6 +17,7 @@ import type {
   Finding,
 } from "../policy_evaluator/policy_evaluator.types";
 import { FindingRedactor, DEFAULT_REDACTION_CONFIG } from "../redaction";
+import { RuntimeNotFoundError } from "../agent_runner/agent_runner.errors";
 
 // ============================================================================
 // Test helpers
@@ -1681,6 +1682,51 @@ describe("AuditOrchestrator", () => {
       expect(result.warning).toContain("gitgov agent new");
       expect(result.warning).toContain("npm install");
       expect(result.findings.length).toBeGreaterThan(0);
+    });
+
+    it("[AORCH-G1] should add warning with the runtime name when the agent's runtime has no registered handler", async () => {
+      // Decision 13: a specialist registered with `runtime: 'typescript'` fails in production
+      // with RuntimeNotFoundError (LocalBackend runs `runtime` before `entrypoint`, and no
+      // handler is registered). Until 2026-09-13 only MODULE_NOT_FOUND-style messages produced
+      // the re-registration guidance; this agent ended in status: error with no hint.
+      const failingAgent = makeAgentRecord("agent:security-audit", "audit");
+      const workingAgent = makeAgentRecord("agent:pii-scan", "audit");
+      const workingSarif = makeSarifLog([
+        makeSarifResult({ ruleId: "PII-001", level: "warning", message: "PII detected", file: "src/user.ts", startLine: 5, fingerprint: "hash-pii-g1-rt", category: "pii-email" }),
+      ]);
+
+      const deps = createMockDeps();
+      (deps.recordStore.list as jest.Mock).mockResolvedValue(["agent:security-audit", "agent:pii-scan"]);
+      (deps.recordStore.get as jest.Mock).mockImplementation(async (id: string) => {
+        if (id === "agent:security-audit") return failingAgent;
+        if (id === "agent:pii-scan") return workingAgent;
+        return null;
+      });
+      (deps.agentRunner.runOnce as jest.Mock).mockImplementation(async (opts: RunOptions) => {
+        if (opts.agentId === "agent:security-audit") {
+          throw new RuntimeNotFoundError("typescript");
+        }
+        return makeAgentResponse("agent:pii-scan", workingSarif, "exec-g1-rt");
+      });
+
+      const result = await createAuditOrchestrator(deps).run(defaultOptions);
+
+      expect(result.agentResults.find((r) => r.agentId === "agent:security-audit")?.status).toBe("error");
+      expect(result.warning).toContain("Some audit agents failed");
+      expect(result.warning).toContain("agent:security-audit — runtime 'typescript' has no registered handler");
+      expect(result.warning).toContain("gitgov agent new");
+
+      // NEGATIVE CONTROL: a failure that is not a load error carries no re-registration
+      // guidance — the warning is about agents that could not be loaded, not any failure.
+      (deps.agentRunner.runOnce as jest.Mock).mockImplementation(async (opts: RunOptions) => {
+        if (opts.agentId === "agent:security-audit") {
+          throw new Error("agent crashed while scanning");
+        }
+        return makeAgentResponse("agent:pii-scan", workingSarif, "exec-g1-rt2");
+      });
+      const crashed = await createAuditOrchestrator(deps).run(defaultOptions);
+      expect(crashed.agentResults.find((r) => r.agentId === "agent:security-audit")?.status).toBe("error");
+      expect(crashed.warning).toBeUndefined();
     });
 
     it("[AORCH-G2] should warn with entrypoint details and npm install when all agents failed", async () => {

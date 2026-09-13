@@ -59,6 +59,15 @@ export interface WaiveCommandOptions extends BaseCommandOptions {
  *
  * All audit logic lives in AuditOrchestrator (core).
  */
+/**
+ * [AORCH-C9] "No agent completed": nothing was scanned, whatever the policy says about the
+ * empty list it received. `agentsRun` counts agents that completed successfully (AuditSummary),
+ * so the all-failed run is 0 / N — `agentsRun === agentsFailed` would never see it.
+ */
+function nothingWasScanned(summary: AuditOrchestrationResult['summary']): boolean {
+  return summary.agentsRun === 0 && summary.agentsFailed > 0;
+}
+
 export class AuditCommand extends BaseCommand<AuditCommandOptions> {
   protected commandName = 'audit';
   protected description = 'Audit source code for PII/secrets (GDPR compliance)';
@@ -262,8 +271,12 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
         await this.postPrComment(result);
       }
 
-      // Exit code based on policy decision
-      if (result.policyDecision.decision === 'block') {
+      // [AORCH-C2] Exit code based on policy decision — except when nothing was scanned.
+      // [AORCH-C9] (Decision 12) Every agent failed to load: the evaluator saw an empty list
+      // and said "pass", which is right for an empty list and wrong as a verdict on a
+      // repository nobody scanned. `agentsRun` counts SUCCESSES, so "no agent completed" is
+      // `agentsRun === 0 && agentsFailed > 0` — never `agentsRun === agentsFailed`.
+      if (result.policyDecision.decision === 'block' || nothingWasScanned(result.summary)) {
         process.exit(1);
       } else {
         process.exit(0);
@@ -400,6 +413,10 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
 
     if (policyDecision.decision === 'block') {
       console.log(`Exit code:  \x1b[31m1 (${options.failOn} findings detected)\x1b[0m`);
+    } else if (nothingWasScanned(summary)) {
+      // [AORCH-C9] The decision line above still says PASS — that is the evaluator's verdict
+      // on an empty list — and this line says why the exit code disagrees with it.
+      console.log(`Exit code:  \x1b[31m1 (no agent completed — nothing was scanned)\x1b[0m`);
     } else {
       console.log(`Exit code:  \x1b[32m0 (no ${options.failOn} findings)\x1b[0m`);
     }
