@@ -138,7 +138,10 @@ export type {
 } from "./audit/index";
 
 // Audit value exports (factories and the one severity counter, AUDIT-M1)
-export { createFinding, createFix, createWaiver, createScan, countBySeverity, isScanScope } from "./audit/index";
+export { createFinding, rehydrateFinding, createFix, createWaiver, createScan, countBySeverity, isScanScope } from "./audit/index";
+// [AUDIT-K1] [AUDIT-K2] The identity function, as a VALUE: saas-api's projection (AP-K1) and
+// its backfill (AP-K2) call it across the package boundary.
+export { computeFingerprint, normalizeAnchor, FINGERPRINT_SCHEME } from "./audit/index";
 
 // [AUDIT-J1] Closed-domain constants. They belong in the VALUES block, not the types
 // one: AUDIT-A6 declares "re-export all types", so a constant living only in the type
