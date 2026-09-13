@@ -153,6 +153,15 @@ export type ScanDisplayStatus = "success" | "partial" | "blocked";
 export const SCAN_SCOPES = ["diff", "full", "baseline"] as const;
 export type ScanScope = (typeof SCAN_SCOPES)[number];
 
+/**
+ * [AUDIT-J4] The tuple's reason to exist at runtime: a `string` from persistence (Prisma
+ * `Scan.scope String`) becomes a ScanScope by CHECKING, not by casting. saas-api used to write
+ * `scan.scope as 'full' | 'diff' | 'baseline'` to bridge the two.
+ */
+export function isScanScope(value: string): value is ScanScope {
+  return (SCAN_SCOPES as readonly string[]).includes(value);
+}
+
 // ─── Lifecycle events ─────────────────────────────────────────────────────────
 
 /**

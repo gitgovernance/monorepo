@@ -26,7 +26,6 @@ export type {
   SarifBuilderOptions,
   SarifBuilder,
   ValidationResult,
-  RedactionLevel,
   GetLineContentFn,
   SarifVersionStrategy,
   SarifExecutionMetadata,

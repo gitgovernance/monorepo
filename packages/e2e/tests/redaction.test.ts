@@ -196,7 +196,10 @@ async function runScanWithRedactionLevel(
 // Tests
 // ============================================================================
 
-describe('Block I: Redaction Pipeline (CI1 to CI4)', () => {
+// Second implementation of RLDX-B8/B10, RLDX-G1, SARIF-N2 and SARIF-J1 against SARIF built by
+// the real detectors. Tagged with the EARS each `it()` asserts (2026-09-13, audit dep-red F12):
+// the previous `[CI1]`..`[CI4]` IDs existed in no spec, so no audit could cross them.
+describe('Block I: Redaction Pipeline (RLDX-B8, B10, G1; SARIF-N2, J1)', () => {
   let fixtureDir: string;
   let originalSarif: SarifLog;
   let l1Sarif: SarifLog;
@@ -229,7 +232,7 @@ describe('Block I: Redaction Pipeline (CI1 to CI4)', () => {
   // CI1: L1 redacts sensitive snippets
   // ==========================================
 
-  it('[CI1] should redact sensitive snippets in L1 SARIF output', () => {
+  it('[RLDX-B8] should redact sensitive snippets in L1 SARIF output', () => {
     const l1Results = l1Sarif.runs[0]?.results ?? [];
     expect(l1Results.length).toBeGreaterThan(0);
 
@@ -271,7 +274,7 @@ describe('Block I: Redaction Pipeline (CI1 to CI4)', () => {
   // CI2: L2 includes full content
   // ==========================================
 
-  it('[CI2] should include full unredacted snippets in L2 SARIF output', () => {
+  it('[RLDX-B10] should include full unredacted snippets in L2 SARIF output', () => {
     const l2Results = l2Sarif.runs[0]?.results ?? [];
     expect(l2Results.length).toBeGreaterThan(0);
 
@@ -317,7 +320,7 @@ describe('Block I: Redaction Pipeline (CI1 to CI4)', () => {
   // CI3: fingerprint unchanged after redaction
   // ==========================================
 
-  it('[CI3] should preserve partialFingerprints unchanged in both L1 and L2', () => {
+  it('[SARIF-N2] [RLDX-G1] should preserve partialFingerprints unchanged in both L1 and L2', () => {
     const originalResults = originalSarif.runs[0]?.results ?? [];
     const l1Results = l1Sarif.runs[0]?.results ?? [];
     const l2Results = l2Sarif.runs[0]?.results ?? [];
@@ -351,7 +354,7 @@ describe('Block I: Redaction Pipeline (CI1 to CI4)', () => {
   // CI4: redactionLevel preserved in run.properties
   // ==========================================
 
-  it('[CI4] should preserve redactionLevel in SARIF run.properties when built with redactionLevel option', async () => {
+  it('[SARIF-J1] should preserve redactionLevel in SARIF run.properties when built with redactionLevel option', async () => {
     // Build SARIF with redactionLevel: 'l1' — SarifBuilder sets run.properties['gitgov/redactionLevel']
     const sarifWithLevel = await runScanWithRedactionLevel(fixtureDir, 'l1');
 
