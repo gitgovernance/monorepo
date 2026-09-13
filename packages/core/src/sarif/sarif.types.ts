@@ -1,4 +1,5 @@
-import type { Finding, FindingCategory, DetectorName } from '../finding_detector/types';
+// AUDIT-B4: canonical source. Was `../finding_detector/types`, which only re-exports these.
+import type { Finding, FindingCategory, DetectorName, ScanScope, SeverityCounts } from '../audit/types';
 import type { RedactionLevel, RedactionConfig } from '../redaction/redactor.types';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -298,8 +299,8 @@ export type SarifRunProperties = {
   'gitgov/signatureCount'?: number;
   /** Agent that executed the scan */
   'gitgov/agentId'?: string;
-  /** Scope of the scan */
-  'gitgov/scanScope'?: 'diff' | 'full' | 'baseline';
+  /** Scope of the scan — the one domain (AUDIT-J4) */
+  'gitgov/scanScope'?: ScanScope;
   /** Number of files scanned */
   'gitgov/scannedFiles'?: number;
   /** Number of lines scanned */
@@ -366,8 +367,8 @@ export type SarifBuilderOptions = {
   signatureCount?: number;
   /** Agent that executed */
   agentId?: string;
-  /** Scan scope */
-  scanScope?: 'diff' | 'full' | 'baseline';
+  /** Scan scope — the one domain (AUDIT-J4) */
+  scanScope?: ScanScope;
   /** Files scanned */
   scannedFiles?: number;
   /** Lines scanned */
@@ -499,7 +500,8 @@ export type SarifExecutionMetadata = {
   /** Summary for quick queries without deserializing the full SarifLog */
   summary?: {
     total: number;
-    bySeverity: Record<string, number>;
+    /** [AUDIT-M1] The severity aggregate is SeverityCounts, not a Record<string, number> */
+    bySeverity: SeverityCounts;
     byCategory: Record<string, number>;
   };
 };

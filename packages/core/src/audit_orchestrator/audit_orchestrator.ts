@@ -1,5 +1,5 @@
 import type { SarifLog } from "../sarif/sarif.types";
-import { rehydrateFinding, countUnmatchedWaivers } from "../audit/types";
+import { rehydrateFinding, countUnmatchedWaivers, countBySeverity } from "../audit/types";
 import { computeFingerprint } from "../audit/fingerprint";
 import type { IAgentRunner } from "../agent_runner/agent_runner";
 import type { Waiver } from "../source_auditor/types";
@@ -311,10 +311,8 @@ function buildSummary(
   const active = findings.filter((f) => !f.isWaived);
   return {
     total: findings.length,
-    critical: active.filter((f) => f.severity === "critical").length,
-    high: active.filter((f) => f.severity === "high").length,
-    medium: active.filter((f) => f.severity === "medium").length,
-    low: active.filter((f) => f.severity === "low").length,
+    // [AUDIT-M1] One counter for the severity map, shared with createScan and source_auditor.
+    ...countBySeverity(active),
     suppressed: findings.filter((f) => f.isWaived).length,
     // [AORCH-B15] Active waivers pointing at an identity nothing produced. After the cut
     // (AUDIT-K1..K6) every waiver written with the old value lands here, and without the

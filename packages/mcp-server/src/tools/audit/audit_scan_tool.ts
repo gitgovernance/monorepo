@@ -23,7 +23,10 @@ export const auditScanTool: McpToolDefinition<AuditScanInput> = {
         scope: {
           include: input.include ?? ['**/*'],
           exclude: input.exclude ?? [],
-          changedSince: input.changedSince,
+          // Spread conditionally: `ScopeConfig.changedSince?: string` was authored under
+          // core's exactOptionalPropertyTypes, and `string | undefined` only compiled here
+          // because this package's tsconfig omits that flag (audit dependency #18).
+          ...(input.changedSince ? { changedSince: input.changedSince } : {}),
         },
       });
       return successResult(result);

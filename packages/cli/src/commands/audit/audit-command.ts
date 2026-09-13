@@ -5,7 +5,7 @@ import { readFile } from 'node:fs/promises';
 import { Sarif as SarifModule, generateExecutionId } from '@gitgov/core';
 import { discoverInstalledAgents } from '@gitgov/core/fs';
 import { formatAuditResult } from '@gitgov/core/audit';
-import type { Finding, FindingCategory, DetectorName } from '@gitgov/core/audit';
+import type { Finding, FindingCategory, FindingSeverity, DetectorName, ScanScope } from '@gitgov/core/audit';
 import type {
   AuditOrchestrationOptions,
   AuditOrchestrationResult,
@@ -17,12 +17,12 @@ import type {
  * Maps to AuditOrchestrationOptions in core module
  */
 export interface AuditCommandOptions extends BaseCommandOptions {
-  /** Scope of audit (default: 'diff') */
-  scope: 'diff' | 'full' | 'baseline';
+  /** Scope of audit (default: 'diff') — core's one domain (AUDIT-J4), no local copy */
+  scope: ScanScope;
   /** Output format (default: 'text') */
   output: 'text' | 'json' | 'sarif';
-  /** Minimum severity for exit 1 (default: 'critical') */
-  failOn: 'critical' | 'high' | 'medium' | 'low';
+  /** Minimum severity for exit 1 (default: 'critical') — core's domain (AUDIT-J3); there is no 'none' */
+  failOn: FindingSeverity;
   /** Specific agent to run */
   agent?: string;
   /** Additional globs to include (CSV) */

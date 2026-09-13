@@ -8,7 +8,7 @@
  * Also:   `import { formatAuditResult, severityBadge } from '@gitgov/core/audit'`
  */
 export { formatAuditResult, severityBadge } from "./formatter";
-export { createFinding, rehydrateFinding, verifySnippet, countUnmatchedWaivers, createFix, createWaiver, createScan } from "./types";
+export { createFinding, rehydrateFinding, verifySnippet, countUnmatchedWaivers, countBySeverity, createFix, createWaiver, createScan } from "./types";
 // [AUDIT-K1] [AUDIT-K2] [AUDIT-K3] The identity, exported as VALUES and not only as types:
 // audit_orchestrator and policy_evaluator CALL computeFingerprint for their fallback, and
 // the saas-api backfill imports it across the package boundary. FINGERPRINT_SCHEME goes with
@@ -18,13 +18,14 @@ export { createFinding, rehydrateFinding, verifySnippet, countUnmatchedWaivers, 
 export { FINGERPRINT_SCHEME, normalizeAnchor, computeFingerprint } from "./fingerprint";
 // [AUDIT-J1] Closed-domain enums are exported as a VALUE (the constant), not only as a
 // type: without this the consumer cannot iterate them and re-enumerates them by hand.
-export { FINDING_SEVERITIES, FINDING_STATUSES } from "./types";
+export { FINDING_SEVERITIES, FINDING_STATUSES, SCAN_SCOPES, BASE_FINDING_CATEGORIES } from "./types";
 
 export type {
   // Enums
   BaseFindingCategory,
   FindingCategory,
   FindingSeverity,
+  SeverityCounts,
   DetectorName,
   // Status enums
   WaiverStatus,
