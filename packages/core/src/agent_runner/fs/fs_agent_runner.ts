@@ -59,7 +59,7 @@ export class FsAgentRunner implements IAgentRunner {
   private customBackend: CustomBackend;
 
   constructor(deps: AgentRunnerDependencies) {
-    // [RLDX-E1] Runner is pure — no longer requires executionAdapter/feedbackAdapter
+    // [ARUN-H3] Runner is pure — no longer requires executionAdapter/feedbackAdapter
     this.projectRoot = deps.projectRoot;
     this.gitgovPath = deps.gitgovPath ?? path.join(this.projectRoot, ".gitgov");
     this.keyProvider = deps.keyProvider ?? undefined;
@@ -153,7 +153,7 @@ export class FsAgentRunner implements IAgentRunner {
     const durationMs =
       new Date(completedAt).getTime() - new Date(startedAt).getTime();
 
-    // [ARUN-H3] [RLDX-E1] Runner is pure — no record writing. Caller persists
+    // [ARUN-H3] Runner is pure — no record writing (the caller's side is RLDX-E1). Caller persists
     // post-redaction. The id is generated here anyway so the caller has a stable identity
     // to persist under, and so downstream consumers (orchestrator, findings) can correlate
     // before anything is written.

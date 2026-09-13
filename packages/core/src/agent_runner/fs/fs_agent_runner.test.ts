@@ -528,7 +528,7 @@ describe("FsAgentRunner", () => {
     });
   });
 
-  // [RLDX-E1] Runner is pure — no record writing. Tests verify output capture, not persistence.
+  // [ARUN-H3] Runner is pure — no record writing. Tests verify output capture, not persistence.
   describe("4.5. ExecutionRecord Handling — Pure Runner (ARUN-H1 to ARUN-H4)", () => {
     it("[ARUN-H1] should return AgentResponse with output on success (no record creation)", async () => {
       const entrypoint = writeAgentEntrypoint(
@@ -821,7 +821,7 @@ describe("FsAgentRunner", () => {
     });
   });
 
-  // [RLDX-E1] Runner is pure — returns output regardless of agent purpose.
+  // [ARUN-H3] Runner is pure — returns output regardless of agent purpose.
   // Record creation is now the caller's responsibility.
   describe("4.9. Pure Runner for All Agent Types (ARUN-L1 to ARUN-L4)", () => {
     it("[ARUN-L1] should return output for review agents without creating FeedbackRecord", async () => {
