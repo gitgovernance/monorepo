@@ -1413,7 +1413,9 @@ describe("AuditOrchestrator", () => {
       expect(l1Result.properties?.['gitgov/snippetHash']).toBeDefined();
     });
 
-    it("[AORCH-E3] should not require agent knowledge of RedactionLevel", async () => {
+    // [RLDX-E3] The redaction spec delegates its E3 to this test (redaction_module §4.5.2);
+    // the tag makes the delegation greppable from both sides (audit dep-red F11).
+    it("[AORCH-E3] [RLDX-E3] should not require agent knowledge of RedactionLevel", async () => {
       // Verify that AgentAuditInput does not include RedactionLevel
       // (structural test — agents receive scope, include, exclude, taskId only)
       const agentRecord = makeAgentRecord("agent:security-audit", "audit");

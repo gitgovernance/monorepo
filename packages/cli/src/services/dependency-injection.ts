@@ -768,7 +768,7 @@ export class DependencyInjectionService {
 
       const eventBus = new EventBus.EventBus();
 
-      // [RLDX-E1] Runner is pure — no executionAdapter/feedbackAdapter needed.
+      // [ARUN-H3] Runner is pure — no executionAdapter/feedbackAdapter needed.
       // Record writing is handled by the caller (audit-command) post-redaction.
       this.agentRunnerModule = createAgentRunner({
         gitgovPath: path.join(this.projectRoot, '.gitgov'),
