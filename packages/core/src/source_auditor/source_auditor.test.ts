@@ -277,45 +277,11 @@ describe("SourceAuditorModule", () => {
       expect(result.waivers.acknowledged).toBe(1);
     });
 
-    it("[EARS-C3] should ignore expired waivers", async () => {
-      // Expired waivers are filtered by WaiverReader, not SourceAuditor
-      // This test verifies integration behavior
-      const finding = createFinding();
-      mockFindingDetector.detect.mockResolvedValue([finding]);
-      mockWaiverReader.loadWaivers.mockResolvedValue([]);
-
-      const auditor = new SourceAuditorModule(createDeps());
-
-      const result = await auditor.audit({
-        scope: { include: ["src/app.ts"], exclude: [] },
-        baseDir: tempDir,
-      });
-
-      expect(result.findings).toHaveLength(1);
-    });
-
-    it("[EARS-C4] should treat waivers without expiresAt as permanent", async () => {
-      const finding = createFinding({ anchor: "permanent-waiver" });
-      mockFindingDetector.detect.mockResolvedValue([finding]);
-
-      const permanentWaiver: Waiver = {
-        fingerprint: finding.fingerprint,
-        ruleId: "PII-001",
-        // No expiresAt
-        feedback: {} as Waiver["feedback"],
-      };
-      mockWaiverReader.loadWaivers.mockResolvedValue([permanentWaiver]);
-
-      const auditor = new SourceAuditorModule(createDeps());
-
-      const result = await auditor.audit({
-        scope: { include: ["src/app.ts"], exclude: [] },
-        baseDir: tempDir,
-      });
-
-      expect(result.findings).toHaveLength(0);
-      expect(result.waivers.acknowledged).toBe(1);
-    });
+    // EARS-C3 and EARS-C4 retired from this block on 2026-09-13 (audit H3/H4). Expiry is
+    // resolved by WaiverReader.loadWaivers() and is specified and tested there as EARS-F3/F4;
+    // filterByWaivers never reads expiresAt. The C3 test here had no expired waiver in its
+    // fixture, and the C4 test was byte-equivalent to C2. See EARS-H2 for what this means
+    // for callers of auditContents({ waivers }).
 
     it("[EARS-C5] should report waivers.new count correctly", async () => {
       // Three distinct anchors → three distinct identities, which is what makes the count

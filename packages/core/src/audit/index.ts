@@ -8,7 +8,7 @@
  * Also:   `import { formatAuditResult, severityBadge } from '@gitgov/core/audit'`
  */
 export { formatAuditResult, severityBadge } from "./formatter";
-export { createFinding, rehydrateFinding, verifySnippet, createFix, createWaiver, createScan } from "./types";
+export { createFinding, rehydrateFinding, verifySnippet, countUnmatchedWaivers, createFix, createWaiver, createScan } from "./types";
 // [AUDIT-K1] [AUDIT-K2] [AUDIT-K3] The identity, exported as VALUES and not only as types:
 // audit_orchestrator and policy_evaluator CALL computeFingerprint for their fallback, and
 // the saas-api backfill imports it across the package boundary. FINGERPRINT_SCHEME goes with

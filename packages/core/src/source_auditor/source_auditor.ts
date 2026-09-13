@@ -1,4 +1,5 @@
 import type { Finding, DetectorName } from "../audit/types";
+import { countUnmatchedWaivers } from "../audit/types";
 import type {
   SourceAuditorDependencies,
   ScopeSelectorDependencies,
@@ -263,7 +264,6 @@ export class SourceAuditorModule {
     waivers: Waiver[]
   ): { newFindings: Finding[]; acknowledgedCount: number; unmatchedCount: number } {
     const waiverFingerprints = new Set(waivers.map((w) => w.fingerprint));
-    const findingFingerprints = new Set(findings.map((f) => f.fingerprint));
     const newFindings = findings.filter(
       (f) => !waiverFingerprints.has(f.fingerprint)
     );
@@ -272,9 +272,8 @@ export class SourceAuditorModule {
     // (AUDIT-K1..K6) every waiver written with the old value lands here, and these are the
     // ones the user has to re-create. It is not derivable from the other two counts: a run
     // with a stale waiver and a run with no waivers at all agree on both of them.
-    const unmatchedCount = waivers.filter(
-      (w) => !findingFingerprints.has(w.fingerprint)
-    ).length;
+    // [AUDIT-L1] The count is defined once, in audit/, and shared with the orchestrator.
+    const unmatchedCount = countUnmatchedWaivers(waivers, findings);
     return { newFindings, acknowledgedCount, unmatchedCount };
   }
 

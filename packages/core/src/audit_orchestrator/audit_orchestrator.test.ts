@@ -580,6 +580,44 @@ describe("AuditOrchestrator", () => {
       ]);
     });
 
+    it("[AORCH-B12] should warn when discarding a result that has neither the identity key nor a snippet", async () => {
+      // B12 says such a result is skipped. The skip used to be a bare `continue`, so a
+      // malformed SARIF produced a shorter findings list and nothing recorded why — while B14
+      // warns in the analogous case. Same format as B14 so both filter together in a log.
+      const agent = makeAgentRecord("agent:external-tool", "audit");
+      const bare = makeSarifResult({
+        ruleId: "EXT-002",
+        level: "warning",
+        message: "Bare result",
+        file: "src/x.ts",
+        startLine: 3,
+        category: "unknown-risk",
+        // no fingerprint, no snippet: nothing to transport and nothing to anchor on
+      });
+
+      const warn = jest.spyOn(console, "warn").mockImplementation(() => { /* captured */ });
+      try {
+        const deps = createMockDeps();
+        (deps.recordStore.list as jest.Mock).mockResolvedValue(["agent:external-tool"]);
+        (deps.recordStore.get as jest.Mock).mockResolvedValue(agent);
+        (deps.agentRunner.runOnce as jest.Mock).mockResolvedValueOnce(
+          makeAgentResponse("agent:external-tool", makeSarifLog([bare]), "exec-001"),
+        );
+
+        const out = await createAuditOrchestrator(deps).run(defaultOptions);
+
+        // Discarded, as B12 requires.
+        expect(out.findings).toHaveLength(0);
+
+        // And said so. Filtered by tag so an unrelated warn cannot satisfy this.
+        const b12 = warn.mock.calls.map((c) => String(c[0])).filter((m) => m.includes("[AORCH-B12]"));
+        expect(b12).toHaveLength(1);
+        expect(b12[0]).toContain("agent:external-tool");
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
     it("[AORCH-B12] should compute the identity with computeFingerprint when fingerprints gitgov/v2 is missing", async () => {
       const agent1 = makeAgentRecord("agent:security-audit", "audit");
       const agent2 = makeAgentRecord("agent:external-tool", "audit");
@@ -640,6 +678,52 @@ describe("AuditOrchestrator", () => {
       // between runs. It must not be what we land on.
       expect(finding.fingerprint).not.toBe("fallback:EXT-001:src/app.ts:42");
       expect(finding.fingerprint).toMatch(/^[a-f0-9]{64}$/);
+    });
+
+    it("[AORCH-B6] should not read partialFingerprints primaryLocationLineHash/v1 as the identity", async () => {
+      // THE negative control for B6's own bug. Before the cut, the orchestrator keyed
+      // consolidation on partialFingerprints["primaryLocationLineHash/v1"] — GitHub's line
+      // hash, carrying neither file nor category. `legacyKeyOnly` emits that key ALONE, with
+      // no gitgov/v2, which is exactly what a pre-cut SARIF looks like. The flag existed since
+      // the B6 pass and no test used it (audit 2026-09-11).
+      const agent = makeAgentRecord("agent:security-audit", "audit");
+      const legacyValue = "a1b2c3d4e5f60718:1";
+      const snippet = 'const token = "sk-legacy"';
+      const result = makeSarifResult({
+        ruleId: "SEC-001",
+        level: "error",
+        message: "Legacy-keyed result",
+        file: "src/legacy.ts",
+        startLine: 7,
+        fingerprint: legacyValue,
+        legacyKeyOnly: true,
+        category: "hardcoded-secret",
+        snippet,
+      });
+
+      const deps = createMockDeps();
+      (deps.recordStore.list as jest.Mock).mockResolvedValue(["agent:security-audit"]);
+      (deps.recordStore.get as jest.Mock).mockResolvedValue(agent);
+      (deps.agentRunner.runOnce as jest.Mock).mockResolvedValueOnce(
+        makeAgentResponse("agent:security-audit", makeSarifLog([result]), "exec-001"),
+      );
+
+      const orchestrator = createAuditOrchestrator(deps);
+      const out = await orchestrator.run(defaultOptions);
+
+      // ANTI-VACUITY: the result was NOT discarded — B12 derived an identity from the snippet,
+      // so the assertions below are about which identity, not about presence.
+      expect(out.findings).toHaveLength(1);
+      const finding = out.findings[0]!;
+
+      // The legacy line hash is not the identity. This is the line that turns red if the
+      // orchestrator ever reads primaryLocationLineHash/v1 as a fallback again.
+      expect(finding.fingerprint).not.toBe(legacyValue);
+
+      // And what it IS: the same derivation the detectors use, from file + category + snippet.
+      expect(finding.fingerprint).toBe(
+        computeFingerprint({ file: "src/legacy.ts", category: "hardcoded-secret", anchor: snippet }),
+      );
     });
 
     it("[AORCH-B6] should keep two findings when the same line carries two categories", async () => {

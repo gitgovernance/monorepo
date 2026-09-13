@@ -1,5 +1,5 @@
 import type { SarifLog } from "../sarif/sarif.types";
-import { rehydrateFinding } from "../audit/types";
+import { rehydrateFinding, countUnmatchedWaivers } from "../audit/types";
 import { computeFingerprint } from "../audit/fingerprint";
 import type { IAgentRunner } from "../agent_runner/agent_runner";
 import type { Waiver } from "../source_auditor/types";
@@ -230,7 +230,15 @@ function consolidateFindings(
           (file && snippet
             ? computeFingerprint({ file, category, anchor: snippet })
             : undefined);
-        if (!fingerprint) continue;
+        if (!fingerprint) {
+          // [AORCH-B12] Skipped, and SAID so. A bare `continue` here made a malformed SARIF
+          // indistinguishable from a shorter one; B14 warns in the analogous case, and the
+          // format matches it so both filter together in a log.
+          console.warn(
+            `[AORCH-B12] Discarded SARIF result from ${result.agentId}: no fingerprint key and no snippet`,
+          );
+          continue;
+        }
 
         const existing = byFingerprint.get(fingerprint);
 
@@ -301,7 +309,6 @@ function buildSummary(
   activeWaivers: Waiver[] = [],
 ): AuditSummary {
   const active = findings.filter((f) => !f.isWaived);
-  const present = new Set(findings.map((f) => f.fingerprint));
   return {
     total: findings.length,
     critical: active.filter((f) => f.severity === "critical").length,
@@ -312,7 +319,8 @@ function buildSummary(
     // [AORCH-B15] Active waivers pointing at an identity nothing produced. After the cut
     // (AUDIT-K1..K6) every waiver written with the old value lands here, and without the
     // count "0 waived" reads exactly like "there were no waivers".
-    unmatchedWaivers: activeWaivers.filter((w) => !present.has(w.fingerprint)).length,
+    // [AUDIT-L1] One definition of this count, shared with source_auditor.
+    unmatchedWaivers: countUnmatchedWaivers(activeWaivers, findings),
     agentsRun: agentResults.filter((r) => r.status === "success").length,
     agentsFailed: agentResults.filter((r) => r.status === "error").length,
   };
@@ -375,8 +383,10 @@ export function createAuditOrchestrator(deps: AuditOrchestratorDeps) {
             low: 0,
             suppressed: 0,
             // [AORCH-B15] Waivers loaded, no agents to match them against: every active
-            // waiver is unmatched, and saying 0 here would hide exactly that.
-            unmatchedWaivers: waivers.length,
+            // waiver is unmatched, and saying 0 here would hide exactly that. This used to be
+            // hard-coded as `waivers.length`; [AUDIT-L1] yields it from an empty findings
+            // list, so the edge case is the function's property and not a special case here.
+            unmatchedWaivers: countUnmatchedWaivers(waivers, []),
             agentsRun: 0,
             agentsFailed: 0,
           },

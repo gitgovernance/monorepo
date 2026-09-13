@@ -4,7 +4,6 @@
  * Trazabilidad EARS:
  * | EARS ID  | Test Case                                                                                      |
  * |----------|-----------------------------------------------------------------------------------------------|
- * | RLDX-A1  | should expose all three fields when RedactionConfig is instantiated                             |
  * | RLDX-A2  | should include 23 sensitive categories in DEFAULT_REDACTION_CONFIG                              |
  * | RLDX-A3  | should include 13 safe categories in DEFAULT_REDACTION_CONFIG                                  |
  * | RLDX-A4  | should have defaultBehavior equal to redact in DEFAULT_REDACTION_CONFIG                         |
@@ -187,17 +186,10 @@ describe('FindingRedactor', () => {
   // ────────────────────────────────────────────────────────────────────────
 
   describe('4.1. Types y Configuracion (RLDX-A1 a A5)', () => {
-    it('[RLDX-A1] should expose all three fields when RedactionConfig is instantiated', () => {
-      const config: RedactionConfig = {
-        sensitiveCategories: ['pii-email'],
-        safeCategories: ['logging-pii'],
-        defaultBehavior: 'redact',
-      };
-
-      expect(config.sensitiveCategories).toEqual(['pii-email']);
-      expect(config.safeCategories).toEqual(['logging-pii']);
-      expect(config.defaultBehavior).toBe('redact');
-    });
+    // RLDX-A1 retired 2026-09-13. Its test built a typed literal and asserted it against
+    // itself; RedactionConfig arrives via `import type` and is erased, so at runtime it was
+    // expect(['pii-email']).toEqual(['pii-email']) — nothing under src/redaction/ could turn it
+    // red. The shape of a type is tsc's job; the real config's three fields are A2/A3/A4.
 
     it('[RLDX-A2] should include 23 sensitive categories in DEFAULT_REDACTION_CONFIG', () => {
       expect(DEFAULT_REDACTION_CONFIG.sensitiveCategories).toHaveLength(23);
