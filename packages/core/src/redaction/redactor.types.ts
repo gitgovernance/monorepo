@@ -1,4 +1,5 @@
-import type { Finding } from '../audit/types';
+// [AUDIT-B4] Canonical source — Finding is never redefined here.
+import type { Finding, FindingCategory } from '../audit/types';
 
 /**
  * Nivel de detalle para persistencia de findings.
@@ -16,12 +17,14 @@ type RedactionConfig = {
    * Categorias donde el snippet SE REDACTA en L1.
    * PII directo, secrets, credenciales, PCI, storage/crypto.
    */
-  sensitiveCategories: string[];
+  sensitiveCategories: FindingCategory[];
   /**
    * Categorias donde el snippet es SAFE en L1.
    * El snippet en si no es el dato sensible (ej: llamada a logger, nombre de cookie).
+   * `FindingCategory[]`, not `string[]`: built-ins get autocomplete and typo detection, and
+   * the `(string & {})` arm still admits any third-party category (AUDIT-E2).
    */
-  safeCategories: string[];
+  safeCategories: FindingCategory[];
   /**
    * Comportamiento para categorias no registradas.
    * 'redact' = safe-by-default (principio de precaucion).

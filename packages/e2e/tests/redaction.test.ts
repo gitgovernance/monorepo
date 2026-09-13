@@ -23,7 +23,9 @@ import {
   Sarif,
   Redaction,
 } from '@gitgov/core';
-import type { SarifLog } from '@gitgov/core';
+// `IWaiverReader` is root-exported because consumers IMPLEMENT it (source_auditor_module.md §3.3);
+// the namespace form `SourceAuditor.IWaiverReader` is for types one only reads.
+import type { SarifLog, IWaiverReader } from '@gitgov/core';
 import { FsFileLister } from '@gitgov/core/fs';
 
 // ============================================================================
@@ -81,7 +83,7 @@ async function runScan(fixtureDir: string): Promise<SarifLog> {
     regex: { enabled: true },
   });
 
-  const noOpWaiverReader: SourceAuditor.IWaiverReader = {
+  const noOpWaiverReader: IWaiverReader = {
     loadWaivers: async () => [],
     hasWaiver: async () => false,
   };
@@ -141,7 +143,7 @@ async function runScanWithRedactionLevel(
     regex: { enabled: true },
   });
 
-  const noOpWaiverReader: SourceAuditor.IWaiverReader = {
+  const noOpWaiverReader: IWaiverReader = {
     loadWaivers: async () => [],
     hasWaiver: async () => false,
   };
@@ -231,10 +233,13 @@ describe('Block I: Redaction Pipeline (CI1 to CI4)', () => {
     const l1Results = l1Sarif.runs[0]?.results ?? [];
     expect(l1Results.length).toBeGreaterThan(0);
 
-    // Find results with sensitive categories
+    // Find results with sensitive categories — asking the module, not re-deriving its rule.
+    // The previous filter checked `sensitiveCategories.includes(cat)` only (step 1 of 3), so
+    // a category that reaches defaultBehavior was redacted by the module and excluded from
+    // this assertion at the same time (audit dep-red F13).
     const sensitiveResults = l1Results.filter((r: { properties?: Record<string, unknown> }) => {
       const cat = r.properties?.['gitgov/category'] as string | undefined;
-      return cat && Redaction.DEFAULT_REDACTION_CONFIG.sensitiveCategories.includes(cat);
+      return cat !== undefined && redactor.isSensitiveCategory(cat);
     });
 
     expect(sensitiveResults.length).toBeGreaterThan(0);

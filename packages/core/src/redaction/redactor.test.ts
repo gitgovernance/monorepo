@@ -4,19 +4,22 @@
  * Trazabilidad EARS:
  * | EARS ID  | Test Case                                                                                      |
  * |----------|-----------------------------------------------------------------------------------------------|
- * | RLDX-A2  | should include 23 sensitive categories in DEFAULT_REDACTION_CONFIG                              |
- * | RLDX-A3  | should include 13 safe categories in DEFAULT_REDACTION_CONFIG                                  |
+ * | RLDX-A2  | should include exactly the 24 sensitive categories in DEFAULT_REDACTION_CONFIG                  |
+ * | RLDX-A3  | should include exactly the 14 safe categories in DEFAULT_REDACTION_CONFIG                       |
  * | RLDX-A4  | should have defaultBehavior equal to redact in DEFAULT_REDACTION_CONFIG                         |
  * | RLDX-A5  | should carry all finding fields plus redactionLevel hasFullSnippet and snippetHash              |
+ * | RLDX-A6  | should classify every built-in finding category in exactly one list                             |
  * | RLDX-B1  | should return all original fields with redactionLevel l2 when level is l2                      |
  * | RLDX-B2  | should replace snippet with [REDACTED] and set hasFullSnippet false for sensitive category at l1|
- * | RLDX-B3  | should set snippetHash to sha256 of original snippet for sensitive finding with non-empty snippet|
- * | RLDX-B4  | should genericize message and set fixes to undefined for sensitive category                |
+ * | RLDX-B3  | should carry the incoming snippetHash unchanged at every level and never recompute it           |
+ * | RLDX-B4  | should genericize message and omit the fixes key for sensitive category                         |
+ * | RLDX-B4  | should not introduce a fixes key on a finding that never had one                                |
  * | RLDX-B5  | should return all original fields with hasFullSnippet true for safe category at l1              |
  * | RLDX-B6  | should apply full redaction for unregistered category when defaultBehavior is redact            |
  * | RLDX-B7  | should return original fields intact for unregistered category when defaultBehavior is keep     |
  * | RLDX-B8  | should redact snippet.text in SARIF for sensitive categories at l1                              |
- * | RLDX-B9  | should store snippetHash in SARIF properties for all results with snippets                               |
+ * | RLDX-B9  | should store snippetHash in SARIF properties for all results with snippets                     |
+ * | RLDX-B9  | should keep a transported snippetHash instead of recomputing it                                |
  * | RLDX-B10 | should preserve snippet and add snippetHash for l2                                              |
  * | RLDX-B11 | should not mutate the original SarifLog                                                        |
  */
@@ -24,6 +27,7 @@
 import { FindingRedactor } from './redactor';
 import { DEFAULT_REDACTION_CONFIG } from './category_config';
 import { sha256 } from '../crypto';
+import { BASE_FINDING_CATEGORIES } from '../audit/types';
 import type { Finding, FindingCategory } from '../audit/types';
 import type { RedactionConfig } from './redactor.types';
 import type { SarifLog } from '../sarif/sarif.types';
@@ -31,6 +35,14 @@ import type { SarifLog } from '../sarif/sarif.types';
 // ─────────────────────────────────────────────────────────────────────────────
 // Test fixtures
 // ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Every fixture carries a snippetHash that is deliberately NOT sha256(snippet). RLDX-B3 says
+ * the redactor TRANSPORTS the hash createFinding computed (AUDIT-K6) and never recomputes it;
+ * with a fixture whose hash equalled sha256(snippet), "carried" and "recomputed" would be
+ * indistinguishable and the test could not fail.
+ */
+const SENTINEL_HASH = 'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2';
 
 const sensitiveFinding: Finding = {
   fingerprint: 'abc123fingerprint',
@@ -40,7 +52,7 @@ const sensitiveFinding: Finding = {
   category: 'hardcoded-secret',
   severity: 'critical',
   snippet: "const apiKey = 'sk-1234567890abcdef'",
-  snippetHash: 'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2',
+  snippetHash: SENTINEL_HASH,
   message: 'Hardcoded API key detected at line 12',
   fixes: [{ description: 'Move to environment variable API_KEY' }],
   detector: 'regex',
@@ -58,7 +70,7 @@ const safeFinding: Finding = {
   category: 'tracking-cookie',
   severity: 'low',
   snippet: "document.cookie = '_ga=' + gaId",
-  snippetHash: 'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2',
+  snippetHash: SENTINEL_HASH,
   message: 'Analytics tracking cookie set',
   fixes: [{ description: 'Ensure cookie consent is obtained' }],
   detector: 'regex',
@@ -81,9 +93,22 @@ const consolidatedFinding: Finding = {
   executionId: '',
   reportedBy: ['agent-a', 'agent-b'],
   snippet: "const email = user.email; // john@example.com",
-  snippetHash: 'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2',
+  snippetHash: SENTINEL_HASH,
   isWaived: false,
 };
+
+/** Sensitive fixture with the two optional fields present, so "all fields" includes them. */
+const sensitiveFindingFull: Finding = {
+  ...sensitiveFinding,
+  column: 7,
+  legalReference: 'PCI-DSS 3.4',
+};
+
+/** A copy of `source` without the keys the redactor OWNS — what "all original fields" means. */
+function withoutRedactionKeys(source: object): Record<string, unknown> {
+  const { redactionLevel: _l, hasFullSnippet: _h, ...rest } = source as Record<string, unknown>;
+  return rest;
+}
 
 /**
  * Several results in ONE SarifLog. `buildSarifLog` below always yields a single result, and
@@ -191,12 +216,31 @@ describe('FindingRedactor', () => {
     // expect(['pii-email']).toEqual(['pii-email']) — nothing under src/redaction/ could turn it
     // red. The shape of a type is tsc's job; the real config's three fields are A2/A3/A4.
 
-    it('[RLDX-A2] should include 23 sensitive categories in DEFAULT_REDACTION_CONFIG', () => {
-      expect(DEFAULT_REDACTION_CONFIG.sensitiveCategories).toHaveLength(23);
+    // A2/A3 compare by VALUE, not by length. Measured (audit M2): swapping 'pci-cvv' for a
+    // second 'pci-pan' kept the length at 23 and every test green while pci-cvv silently fell
+    // to defaultBehavior.
+    it('[RLDX-A2] should include exactly the 24 sensitive categories in DEFAULT_REDACTION_CONFIG', () => {
+      expect([...DEFAULT_REDACTION_CONFIG.sensitiveCategories].sort()).toEqual(
+        [
+          'pii-email', 'pii-phone', 'pii-financial', 'pii-health', 'pii-generic', 'hardcoded-secret',
+          'pci-pan', 'pci-cvv', 'pci-track', 'pci-logging', 'pci-token-misuse', 'pci-last4',
+          'pii-dob', 'pii-address', 'pii-national-id', 'pii-passport', 'pii-bank-account', 'pii-biometric',
+          'storage-pii', 'storage-pci', 'crypto-weak', 'crypto-key', 'crypto-tls',
+          'security-vulnerability',
+        ].sort(),
+      );
     });
 
-    it('[RLDX-A3] should include 13 safe categories in DEFAULT_REDACTION_CONFIG', () => {
-      expect(DEFAULT_REDACTION_CONFIG.safeCategories).toHaveLength(13);
+    it('[RLDX-A3] should include exactly the 14 safe categories in DEFAULT_REDACTION_CONFIG', () => {
+      expect([...DEFAULT_REDACTION_CONFIG.safeCategories].sort()).toEqual(
+        [
+          'logging-pii', 'tracking-cookie', 'tracking-analytics-id',
+          'unencrypted-storage', 'third-party-transfer', 'unknown-risk',
+          'logging-auth', 'logging-error', 'logging-debug', 'logging-trace',
+          'data-transfer', 'privacy-consent', 'privacy-retention',
+          'code-quality',
+        ].sort(),
+      );
     });
 
     it('[RLDX-A4] should have defaultBehavior equal to redact in DEFAULT_REDACTION_CONFIG', () => {
@@ -204,24 +248,45 @@ describe('FindingRedactor', () => {
     });
 
     it('[RLDX-A5] should carry all finding fields plus redactionLevel hasFullSnippet and snippetHash', () => {
-      // Test with Finding (has snippet, fixes)
-      const redactedFinding = redactor.redact(sensitiveFinding, 'l1');
-      expect(redactedFinding.file).toBe(sensitiveFinding.file);
-      expect(redactedFinding.line).toBe(sensitiveFinding.line);
-      expect(redactedFinding.ruleId).toBe(sensitiveFinding.ruleId);
-      expect(redactedFinding.category).toBe(sensitiveFinding.category);
-      expect(redactedFinding.severity).toBe(sensitiveFinding.severity);
-      expect(redactedFinding.fingerprint).toBe(sensitiveFinding.fingerprint);
-      expect(redactedFinding.redactionLevel).toBeDefined();
-      expect(redactedFinding.hasFullSnippet).toBeDefined();
-      expect(redactedFinding.snippetHash).toBeDefined();
+      // "All fields" is checked structurally: the result minus the two keys the redactor owns
+      // must equal the source with the fields L1 redaction rewrites. Field-by-field, the
+      // previous test pinned 6 of 14 required fields and none of the optional ones — a build()
+      // that dropped detector, confidence, executionId or flipped isWaived stayed green
+      // (audit test-red F3, mutation M3).
+      const redactedFinding = redactor.redact(sensitiveFindingFull, 'l1');
+      const { fixes: _fixes, ...sourceWithoutFixes } = sensitiveFindingFull;
+      expect(withoutRedactionKeys(redactedFinding)).toEqual({
+        ...sourceWithoutFixes,
+        snippet: '[REDACTED]',
+        message: 'Sensitive finding (hardcoded-secret)',
+      });
+      // The three redaction-owned values, by VALUE — `toBeDefined()` passed for
+      // hasFullSnippet: true on a redacted finding, the exact inversion this module prevents.
+      expect(redactedFinding.redactionLevel).toBe('l1');
+      expect(redactedFinding.hasFullSnippet).toBe(false);
+      expect(redactedFinding.snippetHash).toBe(SENTINEL_HASH);
 
-      // Test with Finding (has snippet, no fixes)
+      // A finding with no `fixes` (and a multi-agent reportedBy) comes back whole as well.
       const redactedConsolidated = redactor.redact(consolidatedFinding, 'l1');
-      expect(redactedConsolidated.fingerprint).toBe(consolidatedFinding.fingerprint);
-      expect(redactedConsolidated.reportedBy).toEqual(consolidatedFinding.reportedBy);
-      expect(redactedConsolidated.redactionLevel).toBeDefined();
-      expect(redactedConsolidated.hasFullSnippet).toBeDefined();
+      expect(withoutRedactionKeys(redactedConsolidated)).toEqual({
+        ...consolidatedFinding,
+        snippet: '[REDACTED]',
+        message: 'Sensitive finding (pii-email)',
+      });
+    });
+
+    it('[RLDX-A6] should classify every built-in finding category in exactly one list', () => {
+      const sensitive = new Set(DEFAULT_REDACTION_CONFIG.sensitiveCategories);
+      const safe = new Set(DEFAULT_REDACTION_CONFIG.safeCategories);
+
+      const unclassified = BASE_FINDING_CATEGORIES.filter((c) => !sensitive.has(c) && !safe.has(c));
+      const inBoth = BASE_FINDING_CATEGORIES.filter((c) => sensitive.has(c) && safe.has(c));
+
+      // Named, so the failure says WHICH category was added to core without a policy.
+      expect(unclassified).toEqual([]);
+      expect(inBoth).toEqual([]);
+      // ANTI-VACUITY: the domain really was iterated (38 built-ins, two lists that partition it).
+      expect(sensitive.size + safe.size).toBe(BASE_FINDING_CATEGORIES.length);
     });
   });
 
@@ -231,11 +296,13 @@ describe('FindingRedactor', () => {
 
   describe('4.2. FindingRedactor Logic (RLDX-B1 a B11)', () => {
     it('[RLDX-B1] should return all original fields with redactionLevel l2 when level is l2', () => {
-      const result = redactor.redact(sensitiveFinding, 'l2');
+      const result = redactor.redact(sensitiveFindingFull, 'l2');
 
-      expect(result.snippet).toBe(sensitiveFinding.snippet);
-      expect(result.message).toBe(sensitiveFinding.message);
-      expect(result.fixes).toBe(sensitiveFinding.fixes);
+      // "All original fields intact", structurally — including snippetHash, the field this
+      // module exists to carry (an L2 path that destroyed it broke RLDX-F4/G1 with the L2 unit
+      // test green: audit test-red F6, mutation M4), and reportedBy.
+      expect(withoutRedactionKeys(result)).toEqual(sensitiveFindingFull);
+      expect(result.fixes).toBe(sensitiveFindingFull.fixes);
       expect(result.redactionLevel).toBe('l2');
       expect(result.hasFullSnippet).toBe(true);
     });
@@ -248,28 +315,34 @@ describe('FindingRedactor', () => {
       expect(result.redactionLevel).toBe('l1');
     });
 
-    it('[RLDX-B3] should set snippetHash to sha256 of original snippet for sensitive finding with non-empty snippet', () => {
-      const result = redactor.redact(sensitiveFinding, 'l1');
+    it('[RLDX-B3] should carry the incoming snippetHash unchanged at every level and never recompute it', () => {
+      // The identity rule (AUDIT-K5/K6): createFinding computes snippetHash once, everyone
+      // else transports it. The fixture's hash is a sentinel, so a redactor that recomputed
+      // sha256(snippet) — what this module did until 2026-09-13 — turns this red.
+      expect(sha256(sensitiveFinding.snippet)).not.toBe(SENTINEL_HASH);
 
-      expect(result.snippetHash).toBeDefined();
-      expect(typeof result.snippetHash).toBe('string');
-      expect(result.snippetHash).toHaveLength(64); // SHA256 hex = 64 chars
-      expect(result.snippetHash).toBe(sha256(sensitiveFinding.snippet!));
+      expect(redactor.redact(sensitiveFinding, 'l1').snippetHash).toBe(SENTINEL_HASH); // sensitive, redacted
+      expect(redactor.redact(safeFinding, 'l1').snippetHash).toBe(SENTINEL_HASH); // safe, kept
+      expect(redactor.redact(sensitiveFinding, 'l2').snippetHash).toBe(SENTINEL_HASH); // l2, kept
     });
 
-    it('[RLDX-B4] should genericize message and set fixes to undefined for sensitive category', () => {
+    it('[RLDX-B4] should genericize message and omit the fixes key for sensitive category', () => {
+      expect('fixes' in sensitiveFinding).toBe(true);
+
       const result = redactor.redact(sensitiveFinding, 'l1');
 
       expect(result.message).toContain('hardcoded-secret');
       expect(result.message).not.toBe(sensitiveFinding.message);
-      expect(result.fixes).toBeUndefined();
+      // Omitted, not `undefined`: `Finding.fixes?: Fix[]` does not admit an explicit undefined
+      // under exactOptionalPropertyTypes, and only the `in` check can tell the two apart.
+      expect('fixes' in result).toBe(false);
     });
 
     it('[RLDX-B4] should not introduce a fixes key on a finding that never had one', () => {
-      // The `'fixes' in finding` guard in redactor.ts exists for this, and nothing pinned it:
-      // dropping it left all 3128 tests of core green (measured 2026-09-11, audit finding).
       // Under `exactOptionalPropertyTypes`, assigning `undefined` to an absent optional key
-      // ADDS the key, so a finding with no `fixes` came back carrying `fixes: undefined`.
+      // ADDS the key, so a finding with no `fixes` used to come back carrying
+      // `fixes: undefined` (measured 2026-09-11, audit finding). Since 2026-09-13 the key
+      // is deleted from the copy instead, which is a no-op when it was never there.
       const withoutFixes: Finding = { ...sensitiveFinding };
       delete withoutFixes.fixes;
       expect('fixes' in withoutFixes).toBe(false);
@@ -287,8 +360,7 @@ describe('FindingRedactor', () => {
     it('[RLDX-B5] should return all original fields with hasFullSnippet true for safe category at l1', () => {
       const result = redactor.redact(safeFinding, 'l1');
 
-      expect(result.snippet).toBe(safeFinding.snippet);
-      expect(result.message).toBe(safeFinding.message);
+      expect(withoutRedactionKeys(result)).toEqual(safeFinding);
       expect(result.fixes).toBe(safeFinding.fixes);
       expect(result.hasFullSnippet).toBe(true);
       expect(result.redactionLevel).toBe('l1');
@@ -297,13 +369,21 @@ describe('FindingRedactor', () => {
     it('[RLDX-B6] should apply full redaction for unregistered category when defaultBehavior is redact', () => {
       const unregisteredFinding: Finding = {
         ...sensitiveFinding,
-        category: 'custom-unknown-category' as Finding['category'],
+        category: 'custom-unknown-category',
       };
 
       const result = redactor.redact(unregisteredFinding, 'l1');
 
+      // "Full redaction" is B2 + B3 + B4 together. Asserting only the snippet let a mutation
+      // that genericized the message and dropped fixes ONLY for explicitly-listed categories
+      // ship the original message and fixes of an unregistered one to Git with 21/21 green
+      // (audit test-red F8, mutation M7). This is the path a brand-new category takes on its
+      // first scan — the highest-risk path in the module.
       expect(result.snippet).toBe('[REDACTED]');
       expect(result.hasFullSnippet).toBe(false);
+      expect(result.message).toBe('Sensitive finding (custom-unknown-category)');
+      expect('fixes' in result).toBe(false);
+      expect(result.snippetHash).toBe(SENTINEL_HASH);
     });
 
     it('[RLDX-B7] should return original fields intact for unregistered category when defaultBehavior is keep', () => {
@@ -311,12 +391,12 @@ describe('FindingRedactor', () => {
       const keepRedactor = new FindingRedactor(keepConfig);
       const unregisteredFinding: Finding = {
         ...safeFinding,
-        category: 'new-unknown-category' as Finding['category'],
+        category: 'new-unknown-category',
       };
 
       const result = keepRedactor.redact(unregisteredFinding, 'l1');
 
-      expect(result.snippet).toBe(unregisteredFinding.snippet);
+      expect(withoutRedactionKeys(result)).toEqual(unregisteredFinding);
       expect(result.hasFullSnippet).toBe(true);
     });
 
@@ -360,6 +440,24 @@ describe('FindingRedactor', () => {
       }
     });
 
+    it('[RLDX-B9] should keep a transported snippetHash instead of recomputing it', () => {
+      // SarifBuilder already writes finding.snippetHash (computed once by createFinding) into
+      // gitgov/snippetHash. Until 2026-09-13 redactSarif overwrote it with sha256(text) — a
+      // second computation of a transported value, the class AUDIT-K5 closed for fingerprint.
+      // Sentinel ≠ sha256(text), so a recompute turns this red. Both levels.
+      const secret = "const secret = 'my-secret-key'";
+      expect(sha256(secret)).not.toBe(SENTINEL_HASH);
+
+      for (const level of ['l1', 'l2'] as const) {
+        const sarif = buildMultiResultSarifLog([{ category: 'hardcoded-secret', snippetText: secret }]);
+        sarif.runs[0]!.results[0]!.properties!['gitgov/snippetHash'] = SENTINEL_HASH;
+
+        const result = redactor.redactSarif(sarif, level);
+
+        expect(result.runs[0]!.results[0]!.properties?.['gitgov/snippetHash']).toBe(SENTINEL_HASH);
+      }
+    });
+
     it('[RLDX-B10] should preserve snippet and add snippetHash for l2', () => {
       const originalSnippet = "const secret = 'my-secret-key'";
       const sarif = buildSarifLog('hardcoded-secret', originalSnippet);
@@ -378,19 +476,21 @@ describe('FindingRedactor', () => {
     });
 
     it('[RLDX-B11] should not mutate the original SarifLog', () => {
+      // redactSarif writes two things: snippet.text (l1 only) and properties['gitgov/snippetHash']
+      // (both levels). Reading back only the snippet after an l1 call let a deep copy that ALSO
+      // stamped the hash on the original pass (audit M3). Whole-object snapshot, both levels.
       const originalSnippet = "const secret = 'my-secret-key'";
       const sarif = buildSarifLog('hardcoded-secret', originalSnippet);
+      const snapshot = JSON.parse(JSON.stringify(sarif));
 
-      // Capture original state
-      const originalSnippetBefore = sarif.runs[0]!.results[0]!.locations[0]!.physicalLocation.region.snippet?.text;
+      for (const level of ['l1', 'l2'] as const) {
+        const result = redactor.redactSarif(sarif, level);
 
-      // Redact — should NOT mutate sarif
-      redactor.redactSarif(sarif, 'l1');
-
-      // Verify original is unchanged
-      const originalSnippetAfter = sarif.runs[0]!.results[0]!.locations[0]!.physicalLocation.region.snippet?.text;
-      expect(originalSnippetAfter).toBe(originalSnippetBefore);
-      expect(originalSnippetAfter).toBe(originalSnippet);
+        expect(sarif).toEqual(snapshot);
+        // ANTI-VACUITY: the copy really was written, so equality above is not "nothing ran".
+        expect(result.runs[0]!.results[0]!.properties?.['gitgov/snippetHash']).toBe(sha256(originalSnippet));
+        expect(result).not.toBe(sarif);
+      }
     });
   });
 });
