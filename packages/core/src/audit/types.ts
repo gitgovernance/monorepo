@@ -379,9 +379,16 @@ export type AuditSummary = SeverityCounts & {
    * required costs three lines and buys a number that cannot be silently omitted.
    */
   unmatchedWaivers: number;
-  /** Number of agents executed */
+  /**
+   * Agents that completed SUCCESSFULLY — not agents executed. Computed as
+   * `agentResults.filter(r => r.status === "success").length`, so with every agent failing
+   * this is 0, not N. "Number of agents executed" was the previous docstring and it was
+   * false; it got copied into a decision (README §6, Decision 12) as `agentsRun ===
+   * agentsFailed`, which is never true when all fail. "All agents failed" is
+   * `agentsRun === 0 && agentsFailed > 0`.
+   */
   agentsRun: number;
-  /** Number of agents that failed */
+  /** Agents whose status was "error" */
   agentsFailed: number;
 };
 
