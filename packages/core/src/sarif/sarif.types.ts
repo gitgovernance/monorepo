@@ -105,15 +105,14 @@ export type SarifResult = {
   /** Locations where the result was detected */
   locations: SarifLocation[];
   /**
-   * Stable partial fingerprints for deduplication.
+   * GitHub's line hash for alert tracking, NOT the finding identity.
    * §3.27.17 partialFingerprints
    * Key: "primaryLocationLineHash/v1", Value: "hexHash:occurrence"
    */
   partialFingerprints?: Record<string, string>;
   /**
-   * Fingerprints for result identity.
-   * §3.27.16 fingerprints
-   * Note: GitGov uses partialFingerprints (primaryLocationLineHash/v1) as primary identity.
+   * [SARIF-N1] Result identity. §3.27.16 fingerprints
+   * The finding identity travels under "gitgov/v2" (SARIF_FINGERPRINT_KEY).
    */
   fingerprints?: Record<string, string>;
   /**

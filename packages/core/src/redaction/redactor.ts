@@ -1,21 +1,22 @@
 import { sha256 } from '../crypto';
 import type { SarifLog, SarifResultProperties } from '../sarif/sarif.types';
 import type { FindingCategory } from '../audit/types';
+import { REDACTED_SNIPPET } from '../audit/types';
 import type { RedactionLevel, RedactionConfig, RedactableInput, RedactedFinding } from './redactor.types';
+
+/**
+ * [RLDX-B2] [RLDX-B8] The sentinel a redacted snippet becomes, declared once in audit/ and
+ * re-exported here: the SaaS projection derives `hasFullSnippet` by comparing against it
+ * (RLDX-F3), and the SARIF rehydrator refuses to derive an identity from it (AUDIT-N1).
+ */
+export { REDACTED_SNIPPET };
 
 /**
  * What `redact()` may write on top of the source finding: the two keys it owns plus the two
  * fields L1 redaction rewrites. Typed, so a typo in a key is a compile error and no cast is
- * needed on the result (audit dep-red F7). `snippetHash` is deliberately absent — transported,
- * never rewritten (RLDX-B3).
+ * needed on the result. `snippetHash` is deliberately absent — transported, never rewritten
+ * (RLDX-B3).
  */
-/**
- * [RLDX-B2] [RLDX-B8] The sentinel a redacted snippet becomes. ONE declaration: the SaaS
- * projection derives `hasFullSnippet` by comparing against it (RLDX-F3), and until
- * 2026-09-13 both modules carried the literal (audit dep-red F5).
- */
-export const REDACTED_SNIPPET = '[REDACTED]' as const;
-
 type RedactionOverrides = {
   redactionLevel: RedactionLevel;
   hasFullSnippet: boolean;

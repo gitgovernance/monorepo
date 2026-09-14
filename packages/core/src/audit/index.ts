@@ -8,17 +8,50 @@
  * Also:   `import { formatAuditResult, severityBadge } from '@gitgov/core/audit'`
  */
 export { formatAuditResult, severityBadge } from "./formatter";
-export { createFinding, rehydrateFinding, verifySnippet, countUnmatchedWaivers, countBySeverity, isScanScope, createFix, createWaiver, createScan } from "./types";
-// [AUDIT-K1] [AUDIT-K2] [AUDIT-K3] The identity, exported as VALUES and not only as types:
-// audit_orchestrator and policy_evaluator CALL computeFingerprint for their fallback, and
-// the saas-api backfill imports it across the package boundary. FINGERPRINT_SCHEME goes with
-// them for the same reason as the enums of AUDIT-J1 — a bare literal type has no runtime
-// representation, so every consumer would retype "gitgov-fp/2" by hand with no compiler
-// watching the copies, and the scheme tag is precisely the thing that must never drift.
-export { FINGERPRINT_SCHEME, normalizeAnchor, computeFingerprint } from "./fingerprint";
+export {
+  createFinding,
+  rehydrateFinding,
+  verifySnippet,
+  countUnmatchedWaivers,
+  waiversForFiles,
+  countBySeverity,
+  isScanScope,
+  isDetectorName,
+  isAnchorText,
+  createFix,
+  createWaiver,
+  createScan,
+  REDACTED_SNIPPET,
+} from "./types";
+// [AUDIT-K1] [AUDIT-K2] [AUDIT-K3] [AUDIT-K7] The identity, exported as VALUES and not only as
+// types. The scheme tags go with them for the same reason as the enums of AUDIT-J1 — a bare
+// literal type has no runtime representation, so every consumer would retype "gitgov-fp/2" by
+// hand with no compiler watching the copies, and a scheme tag must never drift.
+export {
+  FINGERPRINT_SCHEME,
+  REGION_FINGERPRINT_SCHEME,
+  SARIF_FINGERPRINT_KEY,
+  normalizeAnchor,
+  computeFingerprint,
+  computeRegionFingerprint,
+} from "./fingerprint";
+// [AUDIT-N1] [AUDIT-N2] [AUDIT-N3] One way back from a SARIF result, for core and for the SaaS
+// projection alike.
+export {
+  identifySarifResult,
+  transportedSnippetHash,
+  rehydrateSarifResult,
+  describeSarifDiscard,
+} from "./sarif_rehydration";
+export type {
+  TransportedSarifResult,
+  SarifIdentity,
+  SarifRehydration,
+  SarifDiscardReason,
+} from "./sarif_rehydration";
 // [AUDIT-J1] Closed-domain enums are exported as a VALUE (the constant), not only as a
 // type: without this the consumer cannot iterate them and re-enumerates them by hand.
-export { FINDING_SEVERITIES, FINDING_STATUSES, SCAN_SCOPES, BASE_FINDING_CATEGORIES } from "./types";
+export { FINDING_SEVERITIES, FINDING_STATUSES, SCAN_SCOPES, BASE_FINDING_CATEGORIES, DETECTOR_NAMES } from "./types";
 
 export type {
   // Enums

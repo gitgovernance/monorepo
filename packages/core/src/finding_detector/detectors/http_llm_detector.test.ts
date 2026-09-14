@@ -3,7 +3,7 @@ import { HttpLlmDetector } from "./http_llm_detector";
 import { computeFingerprint } from "../../audit/fingerprint";
 
 describe("HttpLlmDetector", () => {
-  describe("4.7. Anchor y dedup semántico (EARS-32)", () => {
+  describe("4.7. Anchor and semantic dedup (EARS-32)", () => {
     it("[EARS-32] should pass the snippet as anchor for LLM findings", async () => {
       const snippet = "const email = user.email";
       global.fetch = jest.fn().mockResolvedValue({

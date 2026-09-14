@@ -43,7 +43,7 @@
     "access": "public"
   },
   "peerDependencies": {
-    "@gitgov/core": ">=3.0.0"
+    "@gitgov/core": ">=5.0.0"
   },
   "devDependencies": {
     "@gitgov/core": "workspace:*",

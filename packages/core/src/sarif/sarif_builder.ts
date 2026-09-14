@@ -14,6 +14,7 @@ import type {
   ValidationResult,
 } from './sarif.types';
 import type { Finding, Waiver } from '../audit/types';
+import { SARIF_FINGERPRINT_KEY } from '../audit/fingerprint';
 import {
   buildPartialFingerprints,
   createOccurrenceContext,
@@ -209,7 +210,7 @@ class SarifBuilderImpl implements SarifBuilder {
           // [SARIF-N1] The finding identity is transported unchanged, with or without source
           // access (SARIF §3.27.16 fingerprints = stable identity). Computed by createFinding
           // (AUDIT-K1); the builder never recalculates it.
-          fingerprints: { 'gitgov/v2': finding.fingerprint },
+          fingerprints: { [SARIF_FINGERPRINT_KEY]: finding.fingerprint },
         };
 
         if (Object.keys(partial).length > 0) {

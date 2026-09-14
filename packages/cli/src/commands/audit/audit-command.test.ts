@@ -378,6 +378,27 @@ describe('AuditCommand', () => {
       // and not an empty console.
       expect(quiet.length).toBeGreaterThan(0);
     });
+
+    it('[AORCH-B15] should print no unmatched waivers line and keep null in the JSON when the count was not measured', async () => {
+      mockOrchestrator.run.mockResolvedValue({
+        ...mockResultWithFindings,
+        summary: { ...mockResultWithFindings.summary, unmatchedWaivers: null },
+      });
+      mockConsoleLog.mockClear();
+
+      await auditCommand.execute(createDefaultOptions({ scope: 'diff' }));
+
+      const printed = mockConsoleLog.mock.calls.map((c) => String(c[0])).join('\n');
+      expect(printed).not.toContain('matched no finding');
+      expect(printed).not.toContain('null waiver');
+      expect(printed).toContain('POLICY DECISION');
+
+      // In JSON, null stays null: a consumer must not read "not measured" as zero.
+      mockConsoleLog.mockClear();
+      await auditCommand.execute(createDefaultOptions({ scope: 'diff', output: 'json' }));
+      const json = JSON.parse(mockConsoleLog.mock.calls.map((c) => String(c[0])).join('\n'));
+      expect(json.summary.unmatchedWaivers).toBeNull();
+    });
   });
 
   describe('4.1. CLI -> Orchestrator Integration (AORCH-C1 to C8)', () => {

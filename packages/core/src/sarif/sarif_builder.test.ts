@@ -156,7 +156,7 @@ describe('SarifBuilder', () => {
     });
   });
 
-  describe('4.14. Identidad transportada (SARIF-N1 to N2)', () => {
+  describe('4.14. Transported identity (SARIF-N1 to N2)', () => {
 
     it('[SARIF-N1] build: should emit fingerprints gitgov/v2 equal to finding.fingerprint with and without getLineContent', async () => {
       const withoutSource = await builder.build(baseOptions);

@@ -187,7 +187,7 @@ describe("RegexDetector", () => {
     });
   });
 
-  describe("4.7. Anchor y dedup semántico (EARS-31)", () => {
+  describe("4.7. Anchor and semantic dedup (EARS-31)", () => {
     it("[EARS-31] should pass the matched text as anchor and not compute a fingerprint", async () => {
       const detector = new RegexDetector();
       const content = `const stripe = "${STRIPE_KEY}";`;

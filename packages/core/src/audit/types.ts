@@ -112,8 +112,17 @@ export type SeverityCounts = Record<FindingSeverity, number>;
 
 /**
  * Identifier of the detector that generated the finding.
+ *
+ * [AUDIT-J1] [AUDIT-J6] Constant first, type derived: a SARIF result carries the detector as a
+ * `string` property, and the rehydrator (AUDIT-N3) turns it into a DetectorName by checking.
  */
-export type DetectorName = "regex" | "heuristic" | "llm" | "sast";
+export const DETECTOR_NAMES = ["regex", "heuristic", "llm", "sast"] as const;
+export type DetectorName = (typeof DETECTOR_NAMES)[number];
+
+/** [AUDIT-J6] A string becomes a DetectorName by checking, not by casting. */
+export function isDetectorName(value: string): value is DetectorName {
+  return (DETECTOR_NAMES as readonly string[]).includes(value);
+}
 
 // ─── Status enums (product-level) ────────────────────────────────────────────
 
@@ -351,8 +360,8 @@ export type PolicyDecision = {
   blockingFindings: Finding[];
   /** Findings suppressed by waivers */
   waivedFindings: Finding[];
-  /** Count by severity (active findings only) */
-  summary: Record<FindingSeverity, number>;
+  /** [AUDIT-M1] Count by severity (active findings only) */
+  summary: SeverityCounts;
   /** Per-rule evaluation results */
   rulesEvaluated: PolicyRuleResult[];
   /** ISO 8601 timestamp */
@@ -380,14 +389,15 @@ export type AuditSummary = SeverityCounts & {
   /** Count of waived/suppressed findings */
   suppressed: number;
   /**
-   * [AORCH-B15] Active waivers whose fingerprint matched no consolidated finding.
+   * [AORCH-B15] Active waivers whose fingerprint matched no consolidated finding, or `null`
+   * when the run did not look everywhere a waiver can point: scope `diff`, an `include`,
+   * `exclude` or `agentId` narrowing it, an agent that failed, or no agents at all.
    *
-   * Required, not optional: after the identity cut (AUDIT-K1..K6) every waiver written with
-   * the old value stops matching, and without this counter "0 waived" is indistinguishable
-   * from "there were no waivers". Only three sites build an AuditSummary, so making it
-   * required costs three lines and buys a number that cannot be silently omitted.
+   * `null` is "not measured", never zero. Required, not optional: after the identity cut
+   * (AUDIT-K1..K6) every waiver written with the old value stops matching, and without this
+   * field "0 waived" is indistinguishable from "there were no waivers".
    */
-  unmatchedWaivers: number;
+  unmatchedWaivers: number | null;
   /**
    * Agents that completed SUCCESSFULLY — not agents executed. Computed as
    * `agentResults.filter(r => r.status === "success").length`, so with every agent failing
@@ -531,19 +541,50 @@ import { sha256 } from '../crypto/checksum';
 // The identity lives in its own module and is computed in exactly one place (AUDIT-K1).
 // fingerprint.ts imports only the FindingCategory TYPE from here, which is erased at
 // compile time — the cycle is structural, not a runtime one.
-import { computeFingerprint } from './fingerprint';
+import { computeFingerprint, computeRegionFingerprint, normalizeAnchor } from './fingerprint';
 
 /**
- * [AUDIT-D1] [AUDIT-K1] [AUDIT-K6] Producer constructor — for detectors and agents that SEE
- * the source and can hand over the text they matched.
+ * [RLDX-B8] [RLDX-F3] The text a redacted snippet becomes. Declared here, in the module every
+ * other one imports, because three of them need to recognize it: the redactor writes it, the
+ * SaaS projection compares against it, and nothing may derive an identity or verify a hash
+ * from it (AUDIT-K7, RLDX-F4).
+ */
+export const REDACTED_SNIPPET = '[REDACTED]' as const;
+
+/**
+ * [AUDIT-K7] Texts a tool writes where the matched lines should be. Semgrep without a login
+ * emits `requires login` as every result's snippet: anchoring on it gives every such result
+ * of a file and category one identity.
+ */
+export const SNIPPET_PLACEHOLDERS: readonly string[] = ['requires login'];
+
+/**
+ * [AUDIT-K7] Whether a text can anchor an identity: it has content once normalized, and it is
+ * neither the redaction sentinel nor a known tool placeholder.
+ */
+export function isAnchorText(text: string | undefined): text is string {
+  if (text === undefined || isRedactedSnippet(text)) return false;
+  const normalized = normalizeAnchor(text);
+  return normalized !== '' && !SNIPPET_PLACEHOLDERS.includes(normalized);
+}
+
+/** [AUDIT-K7] Whether a snippet is the redaction sentinel. */
+export function isRedactedSnippet(text: string): boolean {
+  return normalizeAnchor(text) === REDACTED_SNIPPET;
+}
+
+/**
+ * [AUDIT-D1] [AUDIT-K1] [AUDIT-K6] [AUDIT-K7] Producer constructor — for detectors and agents
+ * that SEE the source and can hand over the text they matched.
  *
  * Computes BOTH hashes, and the caller provides neither. `snippetHash` is sha256 of the
  * exact snippet (AUDIT-K6, no normalization — it is the L1↔L2 integrity bridge), and
  * `fingerprint` is the identity (AUDIT-K1, delegated to computeFingerprint).
  *
- * `anchor` is the text the detector matched (`match[0]`); absent it, the snippet stands in.
- * It is an INPUT and never a field of Finding (AUDIT-A1): for a credential finding the
- * anchor IS the secret, and as a field it would travel unredacted into the signed L1
+ * `anchor` is the text the detector matched (`match[0]`); when it carries no text, the snippet
+ * stands in, and when neither does, the identity degrades to the region (AUDIT-K7) with a
+ * warning. It is an INPUT and never a field of Finding (AUDIT-A1): for a credential finding
+ * the anchor IS the secret, and as a field it would travel unredacted into the signed L1
  * record. It is consumed here and dies here.
  *
  * [AUDIT-D2] One of the two ways to construct a Finding. Consumers rebuilding a transported
@@ -557,14 +598,34 @@ export function createFinding(
   return {
     ...finding,
     // [AUDIT-K1] The producer never supplies the identity — it is derived here, once.
-    fingerprint: computeFingerprint({
-      file: finding.file,
-      category: finding.category,
-      anchor: anchor ?? finding.snippet,
-    }),
+    fingerprint: fingerprintOfProducedFinding(finding, anchor),
     // [AUDIT-K6] The exact snippet, unnormalized.
     snippetHash: sha256(finding.snippet),
   };
+}
+
+function fingerprintOfProducedFinding(
+  finding: Omit<Finding, 'fingerprint' | 'snippetHash'>,
+  anchor: string | undefined,
+): string {
+  const text = [anchor, finding.snippet].find(isAnchorText);
+  if (text !== undefined) {
+    return computeFingerprint({ file: finding.file, category: finding.category, anchor: text });
+  }
+
+  // [AUDIT-K7] No text: an empty anchor would give every such finding of this file and category
+  // one identity, and consolidation would keep only the first.
+  console.warn(
+    `[AUDIT-K7] ${finding.ruleId} at ${finding.file}:${finding.line} has no text to anchor its identity; ` +
+      `it falls back to the rule and position, and changes when lines above it move.`,
+  );
+  return computeRegionFingerprint({
+    file: finding.file,
+    category: finding.category,
+    ruleId: finding.ruleId,
+    line: finding.line,
+    ...(finding.column !== undefined ? { column: finding.column } : {}),
+  });
 }
 
 /**
@@ -590,11 +651,6 @@ export function rehydrateFinding(
 }
 
 /**
- * [RLDX-F4] Verify snippet integrity — pure function.
- * Compares sha256(snippet) against snippetHash.
- * Returns 'verified' if match, 'unverified' if mismatch, null if unverifiable.
- */
-/**
  * [AUDIT-L1] Active waivers whose fingerprint matches no finding of a run.
  *
  * One definition for a number that was computed in three places: source_auditor's
@@ -614,9 +670,33 @@ export function countUnmatchedWaivers(
   return waivers.filter((w) => !present.has(w.fingerprint)).length;
 }
 
+/**
+ * [AUDIT-L2] The waivers whose finding lies in one of `files`, read from the `file` their
+ * FeedbackRecord was written with (WaiverMetadata).
+ *
+ * A run that read part of the repository cannot say anything about a waiver on a file it did
+ * not read: counted as unmatched, that waiver tells the user to re-create a waiver that is
+ * fine. A waiver whose record carries no file cannot be placed and is left out.
+ */
+export function waiversForFiles<W extends Pick<Waiver, 'feedback'>>(
+  waivers: ReadonlyArray<W>,
+  files: Iterable<string>,
+): W[] {
+  const read = new Set(files);
+  return waivers.filter((w) => {
+    const metadata = w.feedback.payload.metadata as Partial<WaiverMetadata> | undefined;
+    return typeof metadata?.file === 'string' && read.has(metadata.file);
+  });
+}
+
+/**
+ * [RLDX-F4] Verify snippet integrity — pure function.
+ * Compares sha256(snippet) against snippetHash.
+ * Returns 'verified' if match, 'unverified' if mismatch, null if unverifiable.
+ */
 export function verifySnippet(snippet: string, snippetHash: string): 'verified' | 'unverified' | null {
   if (!snippet || !snippetHash) return null;
-  if (snippet.includes('[REDACTED]')) return null;
+  if (snippet.includes(REDACTED_SNIPPET)) return null;
   return sha256(snippet) === snippetHash ? 'verified' : 'unverified';
 }
 
@@ -694,9 +774,9 @@ export function createScan(input: {
     ...countBySeverity(active),
     total: input.findings.length,
     suppressed: input.findings.filter(f => f.isWaived).length,
-    // [AORCH-B15] A Scan is built from findings already consolidated, with no waiver list
-    // in hand: the orchestrator is the only place that can count unmatched ones.
-    unmatchedWaivers: 0,
+    // [AORCH-B15] A Scan is built from findings already consolidated, with no waiver list in
+    // hand: not measured here, and a 0 would read as "every waiver matched".
+    unmatchedWaivers: null,
     agentsRun: input.executionRecordIds.length,
     agentsFailed: 0,
   };

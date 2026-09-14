@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { createAuditOrchestrator } from "./audit_orchestrator";
 import { computeFingerprint } from "../audit/fingerprint";
 import type {
@@ -96,6 +97,23 @@ function makeAgentResponse(
     startedAt: new Date().toISOString(),
     completedAt: new Date().toISOString(),
     durationMs: 100,
+  };
+}
+
+/**
+ * The response FsAgentRunner resolves when the backend fails: it catches the error and returns
+ * status "error" with the message, instead of throwing (ARUN-J3).
+ */
+function makeErrorResponse(agentId: string, error: string): AgentResponse {
+  return {
+    runId: "run-" + agentId,
+    agentId,
+    status: "error",
+    error,
+    executionRecordId: "exec-err-" + agentId,
+    startedAt: new Date().toISOString(),
+    completedAt: new Date().toISOString(),
+    durationMs: 1,
   };
 }
 
@@ -223,6 +241,7 @@ function makeSarifResult(overrides: {
   fingerprint?: string;
   category?: string;
   snippet?: string;
+  snippetHash?: string;
   legacyKeyOnly?: boolean;
 }): Record<string, unknown> {
   const result: Record<string, unknown> = {
@@ -241,6 +260,7 @@ function makeSarifResult(overrides: {
       "gitgov/category": overrides.category ?? "unknown-risk",
       "gitgov/detector": "regex",
       "gitgov/confidence": 0.9,
+      ...(overrides.snippetHash !== undefined ? { "gitgov/snippetHash": overrides.snippetHash } : {}),
     },
   };
 
@@ -423,6 +443,42 @@ describe("AuditOrchestrator", () => {
       expect(firstRun).toBeDefined();
       expect(firstRun.results).toHaveLength(1);
       expect(firstResult.executionId).toBe("exec-scan-001");
+    });
+
+    it("[AORCH-B5] should report status error when the runner resolves a response with status error", async () => {
+      const deps = createMockDeps();
+      (deps.recordStore.list as jest.Mock).mockResolvedValue(["agent:security-audit"]);
+      (deps.recordStore.get as jest.Mock).mockResolvedValue(makeAgentRecord("agent:security-audit", "audit"));
+      (deps.agentRunner.runOnce as jest.Mock).mockResolvedValue(
+        makeErrorResponse("agent:security-audit", "RuntimeNotFound: typescript"),
+      );
+
+      const result = await createAuditOrchestrator(deps).run(defaultOptions);
+
+      // Anti-vacuity: the agent was discovered and dispatched.
+      expect(deps.agentRunner.runOnce).toHaveBeenCalledTimes(1);
+      expect(result.agentResults).toHaveLength(1);
+      const agent = result.agentResults[0]!;
+      expect(agent.status).toBe("error");
+      expect(agent.errorMessage).toBe("RuntimeNotFound: typescript");
+      expect(result.findings).toHaveLength(0);
+      // "Nothing was scanned" is readable from the summary, not from an empty findings list.
+      expect(result.summary.agentsRun).toBe(0);
+      expect(result.summary.agentsFailed).toBe(1);
+    });
+
+    it("[AORCH-B5] should let the G1 warning see an unresolvable entrypoint returned as a response", async () => {
+      const deps = createMockDeps();
+      (deps.recordStore.list as jest.Mock).mockResolvedValue(["agent:security-audit"]);
+      (deps.recordStore.get as jest.Mock).mockResolvedValue(makeAgentRecord("agent:security-audit", "audit"));
+      (deps.agentRunner.runOnce as jest.Mock).mockResolvedValue(
+        makeErrorResponse("agent:security-audit", "Cannot find module '@gitgov/agent-security-audit'"),
+      );
+
+      const result = await createAuditOrchestrator(deps).run(defaultOptions);
+
+      expect(result.warning).toContain("agent:security-audit — @gitgov/agent-security-audit not found");
+      expect(result.warning).toContain("All audit agents failed to load");
     });
 
     it("[AORCH-B5] should include result with status error and continue with remaining agents when agent fails", async () => {
@@ -619,6 +675,41 @@ describe("AuditOrchestrator", () => {
       }
     });
 
+    it("[AORCH-B12] should discard with a warning a result without the key whose snippet is redacted or a placeholder", async () => {
+      const agent = makeAgentRecord("agent:external-tool", "audit");
+      // Two different results of one file and category that carry no usable text. Anchored
+      // on that text, they would share one identity and consolidation would keep only one.
+      const redacted = makeSarifResult({
+        ruleId: "EXT-003", level: "error", message: "Redacted", file: "src/x.ts", startLine: 3,
+        category: "hardcoded-secret", snippet: "[REDACTED]",
+      });
+      const placeholder = makeSarifResult({
+        ruleId: "EXT-004", level: "error", message: "Login placeholder", file: "src/x.ts", startLine: 9,
+        category: "hardcoded-secret", snippet: "requires login",
+      });
+
+      const warn = jest.spyOn(console, "warn").mockImplementation(() => { /* captured */ });
+      try {
+        const deps = createMockDeps();
+        (deps.recordStore.list as jest.Mock).mockResolvedValue(["agent:external-tool"]);
+        (deps.recordStore.get as jest.Mock).mockResolvedValue(agent);
+        (deps.agentRunner.runOnce as jest.Mock).mockResolvedValueOnce(
+          makeAgentResponse("agent:external-tool", makeSarifLog([redacted, placeholder]), "exec-001"),
+        );
+
+        const out = await createAuditOrchestrator(deps).run(defaultOptions);
+
+        expect(out.findings).toHaveLength(0);
+        const b12 = warn.mock.calls.map((c) => String(c[0])).filter((m) => m.includes("[AORCH-B12]"));
+        expect(b12).toEqual([
+          "[AORCH-B12] Discarded SARIF result from agent:external-tool: no fingerprint key and a redacted snippet",
+          "[AORCH-B12] Discarded SARIF result from agent:external-tool: no fingerprint key and no snippet text to anchor on",
+        ]);
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
     it("[AORCH-B12] should compute the identity with computeFingerprint when fingerprints gitgov/v2 is missing", async () => {
       const agent1 = makeAgentRecord("agent:security-audit", "audit");
       const agent2 = makeAgentRecord("agent:external-tool", "audit");
@@ -786,6 +877,31 @@ describe("AuditOrchestrator", () => {
       expect(
         computeFingerprint({ file: "src/config.ts", category: "hardcoded-secret", anchor: 'const k = "sk_test_x"' }),
       ).not.toBe(transported);
+    });
+
+    it("[AORCH-B6] should keep a transported snippetHash when rehydrating", async () => {
+      // A result whose snippet is not the text its hash was taken over — what an L1 result is,
+      // with the redaction sentinel in place of the snippet. The finding keeps the transported
+      // hash, which is the L1↔L2 bridge (RLDX-F2).
+      const transportedHash = "d".repeat(64);
+      const sarifResult = makeSarifResult({
+        ruleId: "SEC-001", level: "error", message: "Hardcoded secret", file: "src/config.ts", startLine: 10,
+        category: "hardcoded-secret", snippet: "[REDACTED]", fingerprint: "b".repeat(64), snippetHash: transportedHash,
+      });
+
+      const deps = createMockDeps();
+      (deps.recordStore.list as jest.Mock).mockResolvedValue(["agent:security-audit"]);
+      (deps.recordStore.get as jest.Mock).mockResolvedValue(makeAgentRecord("agent:security-audit", "audit"));
+      (deps.agentRunner.runOnce as jest.Mock).mockResolvedValue(
+        makeAgentResponse("agent:security-audit", makeSarifLog([sarifResult]), "exec-001"),
+      );
+
+      const result = await createAuditOrchestrator(deps).run(defaultOptions);
+
+      expect(result.findings).toHaveLength(1);
+      expect(result.findings[0]!.snippetHash).toBe(transportedHash);
+      // Negative control: the hash a recomputation lands on is the sentinel's.
+      expect(createHash("sha256").update("[REDACTED]").digest("hex")).not.toBe(transportedHash);
     });
 
     it("[AORCH-B14] should not merge results sharing the key but differing in gitgov/category", async () => {
@@ -1096,6 +1212,42 @@ describe("AuditOrchestrator", () => {
       (deps.waiverReader.loadWaivers as jest.Mock).mockResolvedValue([matching]);
       const allMatched = await createAuditOrchestrator(deps).run(defaultOptions);
       expect(allMatched.summary.unmatchedWaivers).toBe(0);
+    });
+
+    it("[AORCH-B15] should report unmatchedWaivers as null when the run did not cover every file a waiver can point at", async () => {
+      const sarif = makeSarifLog([
+        makeSarifResult({ ruleId: "SEC-001", level: "error", message: "s", file: "src/config.ts", startLine: 10, fingerprint: "fp-present", category: "hardcoded-secret" }),
+      ]);
+      const deps = createMockDeps();
+      (deps.recordStore.list as jest.Mock).mockResolvedValue(["agent:security-audit"]);
+      (deps.recordStore.get as jest.Mock).mockResolvedValue(makeAgentRecord("agent:security-audit", "audit"));
+      (deps.agentRunner.runOnce as jest.Mock).mockResolvedValue(makeAgentResponse("agent:security-audit", sarif, "exec-001"));
+      // A waiver on a file this narrower run may not have read.
+      (deps.waiverReader.loadWaivers as jest.Mock).mockResolvedValue([makeWaiver("fp-on-an-untouched-file")]);
+      const orchestrator = createAuditOrchestrator(deps);
+
+      const narrower: AuditOrchestrationOptions[] = [
+        { ...defaultOptions, scope: "diff" },
+        { ...defaultOptions, include: ["src/**"] },
+        { ...defaultOptions, exclude: ["test/**"] },
+        { ...defaultOptions, agentId: "agent:security-audit" },
+      ];
+      for (const options of narrower) {
+        expect((await orchestrator.run(options)).summary.unmatchedWaivers).toBeNull();
+      }
+
+      // An agent that failed did not read its files either.
+      (deps.agentRunner.runOnce as jest.Mock).mockResolvedValueOnce(makeErrorResponse("agent:security-audit", "boom"));
+      expect((await orchestrator.run(defaultOptions)).summary.unmatchedWaivers).toBeNull();
+
+      // Nothing ran at all.
+      (deps.recordStore.list as jest.Mock).mockResolvedValueOnce([]);
+      expect((await orchestrator.run(defaultOptions)).summary.unmatchedWaivers).toBeNull();
+
+      // Negative control — the full run over the same waiver measures it: the null above comes
+      // from the narrowing, not from a field that is always null.
+      expect((await orchestrator.run(defaultOptions)).summary.unmatchedWaivers).toBe(1);
+      expect((await orchestrator.run({ ...defaultOptions, scope: "baseline" })).summary.unmatchedWaivers).toBe(1);
     });
   });
 
@@ -1624,30 +1776,27 @@ describe("AuditOrchestrator", () => {
       );
 
       const sarif = makeSarifLog();
-      let f4CallCount = 0;
-      (deps.agentRunner.runOnce as jest.Mock).mockImplementation(
-        async () => {
-          f4CallCount++;
-          if (f4CallCount === 1) {
-            return makeAgentResponse("agent:scanner", sarif);
-          }
-          // Review agent throws
-          throw new Error("Claude API unavailable");
-        },
-      );
+      // Both failure shapes: the runner resolving status "error" — what FsAgentRunner does with a
+      // backend failure — and a runner that throws.
+      const failures: Array<() => Promise<AgentResponse>> = [
+        async () => makeErrorResponse("agent:bad-reviewer", "Claude API unavailable"),
+        async () => { throw new Error("Claude API unavailable"); },
+      ];
+      for (const fail of failures) {
+        (deps.agentRunner.runOnce as jest.Mock).mockImplementation(async (opts: RunOptions) =>
+          opts.agentId === "agent:scanner" ? makeAgentResponse("agent:scanner", sarif) : fail(),
+        );
 
-      // Should NOT throw — review failure is non-fatal
-      const result = await orchestrator.run(defaultOptions);
+        // Should NOT throw — review failure is non-fatal
+        const result = await orchestrator.run(defaultOptions);
 
-      // Pipeline completed successfully
-      expect(result.findings).toBeDefined();
-      expect(result.policyDecision).toBeDefined();
-
-      // Review error captured in results
-      expect(result.reviewResults).toBeDefined();
-      expect(result.reviewResults).toHaveLength(1);
-      expect(result.reviewResults![0]!.status).toBe("error");
-      expect(result.reviewResults![0]!.errorMessage).toBe("Claude API unavailable");
+        expect(result.findings).toBeDefined();
+        expect(result.policyDecision).toBeDefined();
+        expect(result.reviewResults).toHaveLength(1);
+        expect(result.reviewResults![0]!.status).toBe("error");
+        expect(result.reviewResults![0]!.errorMessage).toBe("Claude API unavailable");
+        expect(result.reviewResults![0]!.feedbackRecordId).toBeUndefined();
+      }
     });
   });
 
@@ -1666,9 +1815,10 @@ describe("AuditOrchestrator", () => {
         if (id === "agent:pii-scan") return workingAgent;
         return null;
       });
+      // The form the real runner produces: the backend's MODULE_NOT_FOUND resolved as a response.
       (deps.agentRunner.runOnce as jest.Mock).mockImplementation(async (opts: RunOptions) => {
         if (opts.agentId === "agent:security-audit") {
-          throw new Error("Cannot find module '@gitgov/agent-security-audit'");
+          return makeErrorResponse("agent:security-audit", "Cannot find module '@gitgov/agent-security-audit'");
         }
         return makeAgentResponse("agent:pii-scan", workingSarif, "exec-g1");
       });
@@ -1685,10 +1835,9 @@ describe("AuditOrchestrator", () => {
     });
 
     it("[AORCH-G1] should add warning with the runtime name when the agent's runtime has no registered handler", async () => {
-      // Decision 13: a specialist registered with `runtime: 'typescript'` fails in production
-      // with RuntimeNotFoundError (LocalBackend runs `runtime` before `entrypoint`, and no
-      // handler is registered). Until 2026-09-13 only MODULE_NOT_FOUND-style messages produced
-      // the re-registration guidance; this agent ended in status: error with no hint.
+      // A specialist registered with `runtime: 'typescript'` fails in production with
+      // RuntimeNotFoundError: LocalBackend runs `runtime` before `entrypoint`, and no handler is
+      // registered.
       const failingAgent = makeAgentRecord("agent:security-audit", "audit");
       const workingAgent = makeAgentRecord("agent:pii-scan", "audit");
       const workingSarif = makeSarifLog([
@@ -1702,25 +1851,31 @@ describe("AuditOrchestrator", () => {
         if (id === "agent:pii-scan") return workingAgent;
         return null;
       });
-      (deps.agentRunner.runOnce as jest.Mock).mockImplementation(async (opts: RunOptions) => {
-        if (opts.agentId === "agent:security-audit") {
-          throw new RuntimeNotFoundError("typescript");
-        }
-        return makeAgentResponse("agent:pii-scan", workingSarif, "exec-g1-rt");
-      });
 
-      const result = await createAuditOrchestrator(deps).run(defaultOptions);
+      // First the form the real runner produces — the error resolved as a response — then a
+      // runner that throws it.
+      const failures: Array<() => Promise<AgentResponse>> = [
+        async () => makeErrorResponse("agent:security-audit", new RuntimeNotFoundError("typescript").message),
+        async () => { throw new RuntimeNotFoundError("typescript"); },
+      ];
+      for (const fail of failures) {
+        (deps.agentRunner.runOnce as jest.Mock).mockImplementation(async (opts: RunOptions) =>
+          opts.agentId === "agent:security-audit" ? fail() : makeAgentResponse("agent:pii-scan", workingSarif, "exec-g1-rt"),
+        );
 
-      expect(result.agentResults.find((r) => r.agentId === "agent:security-audit")?.status).toBe("error");
-      expect(result.warning).toContain("Some audit agents failed");
-      expect(result.warning).toContain("agent:security-audit — runtime 'typescript' has no registered handler");
-      expect(result.warning).toContain("gitgov agent new");
+        const result = await createAuditOrchestrator(deps).run(defaultOptions);
+
+        expect(result.agentResults.find((r) => r.agentId === "agent:security-audit")?.status).toBe("error");
+        expect(result.warning).toContain("Some audit agents failed");
+        expect(result.warning).toContain("agent:security-audit — runtime 'typescript' has no registered handler");
+        expect(result.warning).toContain("gitgov agent new");
+      }
 
       // NEGATIVE CONTROL: a failure that is not a load error carries no re-registration
       // guidance — the warning is about agents that could not be loaded, not any failure.
       (deps.agentRunner.runOnce as jest.Mock).mockImplementation(async (opts: RunOptions) => {
         if (opts.agentId === "agent:security-audit") {
-          throw new Error("agent crashed while scanning");
+          return makeErrorResponse("agent:security-audit", "agent crashed while scanning");
         }
         return makeAgentResponse("agent:pii-scan", workingSarif, "exec-g1-rt2");
       });
@@ -1734,8 +1889,8 @@ describe("AuditOrchestrator", () => {
       const deps = createMockDeps();
       (deps.recordStore.list as jest.Mock).mockResolvedValue(["agent:security-audit"]);
       (deps.recordStore.get as jest.Mock).mockResolvedValue(agentRecord);
-      (deps.agentRunner.runOnce as jest.Mock).mockRejectedValue(
-        new Error("Cannot find module '@gitgov/agent-security-audit'"),
+      (deps.agentRunner.runOnce as jest.Mock).mockResolvedValue(
+        makeErrorResponse("agent:security-audit", "Cannot find module '@gitgov/agent-security-audit'"),
       );
 
       const orchestrator = createAuditOrchestrator(deps);
