@@ -19,7 +19,10 @@ const mockContainer = {
   setStateBranchOverride: vi.fn(),
   // [INIT-M3] [EARS-C16] The container is the only component holding both roots.
   getRepoRoot: vi.fn().mockResolvedValue(MOCK_REPO_ROOT),
+  // [EARS-G1] [EARS-C17] The one initializer, built with both roots; the join path asks for it.
+  getProjectInitializer: vi.fn(),
 };
+const mockContainerInitializer = { setupGitIntegration: vi.fn().mockResolvedValue(undefined) };
 
 // Mock DependencyInjectionService (InitCommand now uses DI)
 vi.mock('../../services/dependency-injection', () => ({
@@ -40,12 +43,14 @@ vi.mock('child_process', () => ({
 vi.mock('@gitgov/core/fs', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   discoverInstalledAgents: vi.fn().mockReturnValue([]),
+  // [EARS-G1] A constructor spy: the command SHALL NOT build an initializer of its own.
+  FsProjectInitializer: vi.fn().mockImplementation(function () { return { setupGitIntegration: vi.fn() }; }),
 }));
 
 import type { Mock } from 'vitest';
 import { InitCommand } from './init-command';
 import { execSync } from 'child_process';
-import { discoverInstalledAgents } from '@gitgov/core/fs';
+import { discoverInstalledAgents, FsProjectInitializer } from '@gitgov/core/fs';
 import type { ProjectModuleInitResult, ProjectModuleInitOptions } from '@gitgov/core';
 
 // Mock console methods to capture output
@@ -102,6 +107,7 @@ describe('InitCommand', () => {
 
     // Setup default mock return
     mockProjectModule.initializeProject.mockResolvedValue(sampleInitResult);
+    mockContainer.getProjectInitializer.mockResolvedValue(mockContainerInitializer);
   });
 
   afterEach(() => {
@@ -275,7 +281,7 @@ describe('InitCommand', () => {
       expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('agent:gitgov-audit'));
     });
 
-    it('[EARS-B5] should rollback automatically when adapter fails during init', async () => {
+    it('[EARS-B5] should show error when ProjectModule fails (rollback internal)', async () => {
       const initError = new Error('IdentityAdapter creation failed');
       mockProjectModule.initializeProject.mockRejectedValue(initError);
 
@@ -285,6 +291,24 @@ describe('InitCommand', () => {
 
       expect(mockConsoleError).toHaveBeenCalledWith('Error: Initialization failed: IdentityAdapter creation failed');
       expect(mockProcessExit).toHaveBeenCalledWith(1);
+    });
+
+    // [EARS-B5] The FS rollback used to swallow its own failures (EARS-FPI06), so there was never a
+    // rollbackError to show. Read by shape, not instanceof: the error crosses bundles (IKS-A23).
+    it('[EARS-B5] should show the rollback failure when the error carries rollbackError', async () => {
+      const initError = Object.assign(new Error('Key generation failed'), { rollbackError: 'EACCES: permission denied, rm .gitgov' });
+      mockProjectModule.initializeProject.mockRejectedValue(initError);
+
+      await initCommand.execute({ name: 'Test Project' });
+
+      expect(mockConsoleError).toHaveBeenCalledWith('Error: Initialization failed: Key generation failed');
+      expect(mockConsoleError).toHaveBeenCalledWith(expect.stringContaining('EACCES: permission denied, rm .gitgov'));
+      expect(mockProcessExit).toHaveBeenCalledWith(1);
+
+      mockConsoleLog.mockClear();
+      await initCommand.execute({ name: 'Test Project', json: true });
+      const printed = JSON.parse(String(mockConsoleLog.mock.calls.at(-1)![0])) as Record<string, unknown>;
+      expect(printed['rollbackError']).toBe('EACCES: permission denied, rm .gitgov');
     });
   });
 
@@ -361,7 +385,7 @@ describe('InitCommand', () => {
       expect(mockProcessExit).not.toHaveBeenCalled();
     });
 
-    it('[INIT-J1] should call addActor when alreadyInitialized and actor missing', async () => {
+    it('[INIT-J1] should report the join and run postInitConcerns when initializeProject created the caller actor', async () => {
       // Mirrors what PROJ-A2 actually returns. The fixture used to also carry
       // `productAgentId` and `cycleId`: a shape production never produces, added back when
       // the flat type still declared them required. The discriminated union rejects it now.
@@ -370,10 +394,16 @@ describe('InitCommand', () => {
         alreadyInitialized: true,
         created: true,
       });
+      (execSync as Mock<typeof execSync>).mockClear();
 
       await initCommand.execute({ name: 'Test Project' });
 
       expect(mockConsoleLog).toHaveBeenCalledWith('Joined existing project as human:test-user');
+      // "…and run postInitConcerns": the name used to say "should call addActor" and asserted only the
+      // message (Task 1.3)
+      const pushCalls = (execSync as Mock<typeof execSync>).mock.calls
+        .filter(([cmd]) => typeof cmd === 'string' && cmd.includes('git push'));
+      expect(pushCalls).toHaveLength(1);
     });
 
     it('[INIT-J2] should report already a member when actor exists', async () => {
@@ -706,11 +736,38 @@ describe('InitCommand', () => {
   // §4.7. Post-Init State Commit (EARS-G1)
   // ============================================================================
   describe('4.7. Post-Init (EARS-G1)', () => {
-    it('[EARS-G1] should attempt best-effort push after ProjectModule init', async () => {
+    // The previous test only asserted that initializeProject ran. The push, and the DX block that built
+    // a second FsProjectInitializer with a hand-computed worktree path, were never observed (Task 1.3).
+    it('[EARS-G1] should push best-effort and not rerun git integration after a fresh init', async () => {
+      (execSync as Mock<typeof execSync>).mockClear();
+
       await initCommand.execute({ name: 'G1 Test', actorName: 'Test User' });
 
-      // ProjectModule already committed internally — CLI does best-effort push
-      expect(mockProjectModule.initializeProject).toHaveBeenCalled();
+      const pushCalls = (execSync as Mock<typeof execSync>).mock.calls
+        .filter(([cmd]) => typeof cmd === 'string' && cmd.includes('git push origin gitgov-state'));
+      expect(pushCalls).toHaveLength(1);
+      // ProjectModule already ran setupGitIntegration with the container's initializer (PROJ-C4)
+      expect(mockContainer.getProjectInitializer).not.toHaveBeenCalled();
+      expect(mockContainerInitializer.setupGitIntegration).not.toHaveBeenCalled();
+      expect(FsProjectInitializer).not.toHaveBeenCalled();
+      // Anti-vacuity: the fresh path was taken
+      expect(mockConsoleError).not.toHaveBeenCalled();
+    });
+
+    it('[EARS-G1] should run git integration through the container initializer when joining', async () => {
+      mockProjectModule.initializeProject.mockResolvedValue({
+        actorId: 'human:test-user',
+        alreadyInitialized: true,
+        created: true,
+      });
+
+      await initCommand.execute({ name: 'G1 Join', actorName: 'Test User' });
+
+      // ProjectModule does not run git integration on re-init (PROJ-A2), so the command asks the
+      // container for the one initializer that holds both roots — and builds none of its own
+      expect(mockContainer.getProjectInitializer).toHaveBeenCalledTimes(1);
+      expect(mockContainerInitializer.setupGitIntegration).toHaveBeenCalledTimes(1);
+      expect(FsProjectInitializer).not.toHaveBeenCalled();
     });
   });
 

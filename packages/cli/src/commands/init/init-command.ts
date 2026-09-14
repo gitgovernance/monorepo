@@ -1,12 +1,10 @@
-import type { ProjectModule } from '@gitgov/core';
+import type { ProjectModule, ProjectModuleInitOptions, ProjectModuleInitialized } from '@gitgov/core';
 import { SyncState, DEFAULT_AGENTS } from '@gitgov/core';
-import { discoverInstalledAgents } from '@gitgov/core/fs';
+import { discoverInstalledAgents, getWorktreeBasePath } from '@gitgov/core/fs';
 import { DependencyInjectionService } from '../../services/dependency-injection';
 
 import * as pathUtils from 'path';
-import * as os from 'os';
-import { createHash } from 'crypto';
-import { existsSync, realpathSync, promises as fsPromises } from 'fs';
+import { existsSync, promises as fsPromises } from 'fs';
 
 /**
  * Init Command Options interface
@@ -89,7 +87,7 @@ export class InitCommand {
 
       // [EARS-D1] Build ProjectInitOptions — filter undefined for exactOptionalPropertyTypes
       const saasUrl = completeOptions.saasUrl || process.env['GITGOV_SAAS_URL'] || 'https://app.gitgov.dev';
-      const initOptions: import('@gitgov/core').ProjectModuleInitOptions = { name: completeOptions.name!, saasUrl, stateBranch };
+      const initOptions: ProjectModuleInitOptions = { name: completeOptions.name!, saasUrl, stateBranch };
       initOptions.login = completeOptions.login;
       if (completeOptions.actorName) initOptions.actorName = completeOptions.actorName;
       if (completeOptions.type) initOptions.type = completeOptions.type;
@@ -104,9 +102,9 @@ export class InitCommand {
       // [EARS-B4] Format success output
       if (result.alreadyInitialized) {
         if (result.actorId && result.created) {
-          // [INIT-J1] Joined as new member — run postInitConcerns for push + DX
+          // [INIT-J1] Joined as new member — run postInitConcerns for push + git integration
           console.log(`Joined existing project as ${result.actorId}`);
-          await this.postInitConcerns(options);
+          await this.postInitConcerns(options, { joined: true });
         } else if (result.actorId) {
           // [INIT-J2] [INIT-J2b] Already a member — skip postInitConcerns
           console.log(`Already a member of this project as ${result.actorId}`);
@@ -117,14 +115,17 @@ export class InitCommand {
         }
       } else {
         this.showSuccessOutput(result, options);
-        // [PROJ-B6] Surface non-runnable agent warnings (engine unresolvable, ARUN-M1)
+        // [PROJ-B6] Surface agent warnings: engine unresolvable (ARUN-M1), and since 2026-09-13 also
+        // registration failures (PROJ-B5). The header is neutral because each line names its own
+        // cause — "registered but not runnable" or "registration failed" — and the old header
+        // ("registered but are not runnable") would be false for the second kind.
         if (result.agentWarnings?.length && !options.quiet) {
-          console.warn('\n⚠️  Some agents were registered but are not runnable:');
+          console.warn('\n⚠️  Some default agents need attention:');
           for (const w of result.agentWarnings) console.warn(`   - ${w}`);
           console.warn('   Install the package or re-register with: gitgov agent new <path-to-agent>');
         }
-        // [EARS-G1] Post-init: best-effort push + DX concerns
-        await this.postInitConcerns(options);
+        // [EARS-G1] Post-init: best-effort push (git integration already ran inside ProjectModule, PROJ-C4)
+        await this.postInitConcerns(options, { joined: false });
 
         // [INIT-M1] [INIT-M2] [INIT-M3] Agent status display post-init. The root comes from the
         // container, the only component that holds both repoRoot and projectRoot (EARS-C16).
@@ -200,10 +201,13 @@ export class InitCommand {
   }
 
   /**
-   * [EARS-G1] Post-init: best-effort push + DX concerns.
-   * ProjectModule already committed internally — no commitStateToWorktree needed.
+   * [EARS-G1] Post-init: best-effort push, plus git integration on a join.
+   * No commitStateToWorktree here, but NOT because ProjectModule committed: with the FS backend
+   * finalize() is a no-op, so the records it wrote sit uncommitted in the worktree. This push
+   * publishes the branch with its initial empty commit; `gitgov sync push` commits the records
+   * (onboarding_cli_only_flow OB-E2). Corrected 2026-09-13, audit 1c19 M13.
    */
-  private async postInitConcerns(options: InitCommandOptions): Promise<void> {
+  private async postInitConcerns(options: InitCommandOptions, { joined }: { joined: boolean }): Promise<void> {
     const repoRoot = process.cwd();
     const stateBranch = options.stateBranch || SyncState.DEFAULT_STATE_BRANCH;
 
@@ -223,16 +227,17 @@ export class InitCommand {
       }
     }
 
-    // DX concerns: .gitignore + gitgov.yml (in repoRoot)
-    try {
-      const { FsProjectInitializer } = await import('@gitgov/core/fs');
-      const resolvedRoot = realpathSync(repoRoot);
-      const hash = createHash('sha256').update(resolvedRoot).digest('hex').slice(0, 12);
-      const worktreePath = pathUtils.join(os.homedir(), '.gitgov', 'worktrees', hash);
-      const dxHelper = new FsProjectInitializer(worktreePath, repoRoot);
-      await dxHelper.setupGitIntegration();
-    } catch {
-      // Non-fatal DX concerns
+    // [EARS-G1] [EARS-C17] Git integration (.gitignore + gitgov.yml in the repo) only on a join:
+    // ProjectModule does not run it on re-init (PROJ-A2), and on a fresh init it already did (PROJ-C4).
+    // The initializer comes from the container, which holds both roots — this command used to build
+    // a second one with a hand-computed worktree path to repair a DI that passed only one.
+    if (joined) {
+      try {
+        const initializer = await this.container.getProjectInitializer();
+        await initializer.setupGitIntegration();
+      } catch {
+        // Non-fatal DX concern
+      }
     }
   }
 
@@ -273,14 +278,15 @@ export class InitCommand {
    * Creates state branch (configurable name) if needed, then creates worktree.
    */
   private async ensureWorktreeForInit(repoRoot: string, stateBranch: string): Promise<void> {
-    const hash = createHash('sha256').update(realpathSync(repoRoot)).digest('hex').slice(0, 12);
-    const worktreePath = pathUtils.join(os.homedir(), '.gitgov', 'worktrees', hash);
+    // The same function the DI uses (E2E-INIT-W1): this used to recompute the hash by hand, a copy
+    // that had to stay identical to getWorktreeBasePath by coincidence (Task 1.3)
+    const worktreePath = getWorktreeBasePath(repoRoot);
 
     // Idempotent: skip if worktree already exists
     if (existsSync(worktreePath)) return;
 
     // Ensure ~/.gitgov/worktrees/ exists
-    await fsPromises.mkdir(pathUtils.join(os.homedir(), '.gitgov', 'worktrees'), { recursive: true });
+    await fsPromises.mkdir(pathUtils.dirname(worktreePath), { recursive: true });
 
     // Create or fetch state branch
     const { execSync } = await import('child_process');
@@ -401,7 +407,7 @@ export class InitCommand {
   //
   // [PROJ-C5] Neither the JSON nor the human output carries a cycle any more: the init stopped
   // creating a root cycle (D29), so there is no id to print.
-  private showSuccessOutput(result: import('@gitgov/core').ProjectModuleInitialized, options: InitCommandOptions): void {
+  private showSuccessOutput(result: ProjectModuleInitialized, options: InitCommandOptions): void {
     if (options.json) {
       console.log(JSON.stringify({
         success: true,
@@ -455,14 +461,24 @@ export class InitCommand {
       message = "Error: Unknown error occurred during initialization.";
     }
 
+    // [EARS-B5] A failed rollback travels in `rollbackError` (PROJ-D2). Read by shape, not instanceof:
+    // the error crosses bundles (IKS-A23).
+    const rollbackError = error instanceof Error && 'rollbackError' in error && typeof error.rollbackError === 'string'
+      ? error.rollbackError
+      : undefined;
+
     if (options.json) {
       console.log(JSON.stringify({
         success: false,
         error: message,
+        ...(rollbackError !== undefined && { rollbackError }),
         exitCode
       }, null, 2));
     } else {
       console.error(message);
+      if (rollbackError !== undefined) {
+        console.error(`Error: Rollback also failed, the state may be half-written: ${rollbackError}`);
+      }
       if (options.verbose && error instanceof Error) {
         console.error(`🔍 Technical details: ${error.stack}`);
       }
