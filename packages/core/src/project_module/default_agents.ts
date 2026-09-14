@@ -1,5 +1,6 @@
 // [PROJ-F2] Default agent registry — single source of truth for agent configs.
-// Config values come from each agent's package.json `gitgov.agent` field.
+// purpose, function and metadata come from each agent's package.json `gitgov.agent` field (the
+// PROJ-F2 test compares them); displayName and triggers are this registry's own — no package declares them.
 // The SaaS imports this instead of hardcoding agent configs.
 
 import type { DefaultAgentConfig } from './project_module.types';
@@ -31,7 +32,9 @@ export const DEFAULT_AGENTS: DefaultAgentConfig[] = [
     packageName: '@gitgov/agent-security-audit',
     agentId: 'agent:security-audit',
     displayName: 'Security Audit',
-    engine: { type: 'local', runtime: 'typescript', entrypoint: '@gitgov/agent-security-audit', function: 'runAgent' },
+    // [PROJ-F2] No `runtime`: LocalBackend runs it before the entrypoint, and no RuntimeHandler is
+    // registered in production, so the agent never ran (0 findings on init → audit, 2026-09-13).
+    engine: { type: 'local', entrypoint: '@gitgov/agent-security-audit', function: 'runAgent' },
     purpose: 'audit',
     triggers: [],
     metadata: { target: 'code', outputFormat: 'sarif' },
@@ -41,9 +44,12 @@ export const DEFAULT_AGENTS: DefaultAgentConfig[] = [
     packageName: '@gitgov/agent-review-advisor',
     agentId: 'agent:review-advisor',
     displayName: 'Review Advisor',
-    engine: { type: 'local', runtime: 'typescript', entrypoint: '@gitgov/agent-review-advisor', function: 'runReviewAdvisor' },
+    // [PROJ-F2] No `runtime`, same reason as security-audit above.
+    engine: { type: 'local', entrypoint: '@gitgov/agent-review-advisor', function: 'runReviewAdvisor' },
     purpose: 'review',
     triggers: [],
-    metadata: { target: 'findings', outputFormat: 'feedback-review' },
+    // [PROJ-F2] Mirrors the package.json. `{ target: 'findings', outputFormat: 'feedback-review' }`
+    // lived here from 2026-05-04 and was never in the package; nothing read either field.
+    metadata: { defaultModel: 'anthropic/claude-sonnet-4-6' },
   },
 ];

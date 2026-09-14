@@ -332,7 +332,8 @@ describe('GitHubProjectInitializer', () => {
     });
   });
 
-  describe('Branch Check Caching (PROJ-G1)', () => {
+  // Foreign vertex: PROJ-G1 belongs to project_module.md §4.8, not to the GPI spec.
+  describe('project_module.md 4.8. Branch Check Caching (PROJ-G1)', () => {
     it('[PROJ-G1] should not call branchExists twice when isInitialized precedes createProjectStructure', async () => {
       gitModule.branchExists.mockResolvedValue(false);
       const initializer = createInitializer(gitModule, configStore);
