@@ -1,4 +1,4 @@
-import type { Detector, Finding, FindingCategory, FindingSeverity } from "../types";
+import type { AnchorSource, Detector, Finding, FindingCategory, FindingSeverity } from "../types";
 import { createFinding } from "../../audit/types";
 
 const MAX_SNIPPET_LENGTH = 300;
@@ -7,15 +7,16 @@ const MAX_SNIPPET_LENGTH = 300;
 const SENSITIVE_VAR_PATTERN =
   /\b(user|customer|client|employee|patient)(_)?(email|phone|ssn|address|creditcard|password)\b/gi;
 
-// Pattern for HEUR-002: Logging of user/customer objects
+// Pattern for HEUR-002: Logging of user/customer objects.
+// [EARS-35] Through the end of the line with the keyword: the arguments after it tell calls apart.
 const LOGGING_PATTERN =
-  /console\.(log|info|debug|warn)\s*\([^)]*\b(user|customer|request\.body|formData)\b/gi;
+  /console\.(log|info|debug|warn)\s*\([^)]*\b(user|customer|request\.body|formData)\b[^\n]*/gi;
 
-// Pattern for HEUR-003: Serialization of sensitive objects
+// Pattern for HEUR-003: Serialization of sensitive objects. [EARS-35] Same as HEUR-002.
 const SERIALIZE_PATTERN =
-  /JSON\.stringify\s*\([^)]*\b(user|customer|profile|account)\b/gi;
+  /JSON\.stringify\s*\([^)]*\b(user|customer|profile|account)\b[^\n]*/gi;
 
-interface HeuristicRule {
+export interface HeuristicRule {
   id: string;
   pattern: RegExp;
   category: FindingCategory;
@@ -23,23 +24,12 @@ interface HeuristicRule {
   confidence: number;
   message: string;
   fixes?: Array<{ description: string }>;
+  /** [EARS-35] What the identity anchors on; see RegexRule.anchor. */
+  anchor?: AnchorSource;
 }
 
-/**
- * [EARS-34] Heuristic patterns indexed by ruleId, as source and flags.
- *
- * Exported so a consumer can re-derive the anchor of a stored finding with THE DETECTOR'S OWN
- * RULE; these three live nowhere else. Not as RegExp instances: they carry the /g flag, and a
- * shared global RegExp keeps `lastIndex` between calls, so a second row would start matching
- * where the first one stopped. Each consumer builds its own RegExp per use.
- */
-export const HEURISTIC_PATTERNS: Readonly<Record<string, Readonly<{ source: string; flags: string }>>> = {
-  "HEUR-001": Object.freeze({ source: SENSITIVE_VAR_PATTERN.source, flags: SENSITIVE_VAR_PATTERN.flags }),
-  "HEUR-002": Object.freeze({ source: LOGGING_PATTERN.source, flags: LOGGING_PATTERN.flags }),
-  "HEUR-003": Object.freeze({ source: SERIALIZE_PATTERN.source, flags: SERIALIZE_PATTERN.flags }),
-};
-
-const HEURISTIC_RULES: HeuristicRule[] = [
+/** The heuristic rules, in evaluation order. */
+export const HEURISTIC_RULES: readonly HeuristicRule[] = [
   {
     id: "HEUR-001",
     pattern: SENSITIVE_VAR_PATTERN,
@@ -48,6 +38,8 @@ const HEURISTIC_RULES: HeuristicRule[] = [
     confidence: 0.7,
     message: "Sensitive variable name detected",
     fixes: [{ description: "Consider if this variable contains actual PII" }],
+    // [EARS-35] The match is the variable name, the same for every use in the file.
+    anchor: "line",
   },
   {
     id: "HEUR-002",
@@ -87,13 +79,17 @@ function getLineNumber(content: string, index: number): number {
 }
 
 /**
+ * The full, untruncated line where a match starts.
+ */
+function lineAt(content: string, matchIndex: number): string {
+  return content.split("\n")[getLineNumber(content, matchIndex) - 1] || "";
+}
+
+/**
  * Extracts snippet from line where match occurs.
  */
 function extractSnippet(content: string, matchIndex: number): string {
-  const lines = content.split("\n");
-  const lineNumber = getLineNumber(content, matchIndex);
-  const line = lines[lineNumber - 1] || "";
-  return truncateSnippet(line.trim());
+  return truncateSnippet(lineAt(content, matchIndex).trim());
 }
 
 /**
@@ -117,9 +113,9 @@ export class HeuristicDetector implements Detector {
         const snippet = extractSnippet(content, match.index);
 
         const finding = createFinding({
-          // [EARS-31] Same contract as the regex detector: hand over the match, never the
-          // identity.
-          anchor: match[0],
+          // [EARS-31] [EARS-35] Same contract as the regex detector: hand over the text that
+          // distinguishes this occurrence, never the identity.
+          anchor: rule.anchor === "line" ? lineAt(content, match.index) : match[0],
           ruleId: rule.id,
           file: filePath,
           line,

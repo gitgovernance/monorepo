@@ -1,5 +1,5 @@
 import type { Finding, DetectorName } from "../audit/types";
-import { countUnmatchedWaivers, waiversForFiles, countBySeverity } from "../audit/types";
+import { countUnmatchedWaivers, countOutdatedWaivers, waiversForFiles, countBySeverity } from "../audit/types";
 import type {
   SourceAuditorDependencies,
   ScopeSelectorDependencies,
@@ -117,6 +117,9 @@ export class SourceAuditorModule {
         new: newFindings.length,
         // [EARS-C6]
         unmatched: unmatchedCount,
+        // [EARS-C7] [AUDIT-L3] Every waiver received, not only those on files read: a waiver under
+        // an earlier scheme matches nothing anywhere.
+        outdated: countOutdatedWaivers(input.waivers),
       },
     };
   }
@@ -336,7 +339,7 @@ export class SourceAuditorModule {
       // ordinary in incremental mode. Counting them here would also give two answers for
       // one situation: auditContents() receives waivers in its input, while audit() reaches
       // this path before loading them at all.
-      waivers: { acknowledged: 0, new: 0, unmatched: 0 },
+      waivers: { acknowledged: 0, new: 0, unmatched: 0, outdated: 0 },
     };
   }
 }

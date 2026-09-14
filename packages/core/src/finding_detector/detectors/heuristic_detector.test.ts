@@ -1,5 +1,5 @@
-// Sections: §4.2 (EARS-10 to EARS-12), §4.7 (EARS-34)
-import { HeuristicDetector, HEURISTIC_PATTERNS } from "./heuristic_detector";
+// Sections: §4.2 (EARS-10 to EARS-12)
+import { HeuristicDetector } from "./heuristic_detector";
 
 describe("HeuristicDetector", () => {
   describe("4.2. Heuristic Detection (EARS-10 to EARS-12)", () => {
@@ -34,29 +34,6 @@ describe("HeuristicDetector", () => {
       expect(findings[0]?.category).toBe("third-party-transfer");
       expect(findings[0]?.confidence).toBe(0.5);
       expect(findings[0]?.ruleId).toBe("HEUR-003");
-    });
-  });
-
-  describe("4.7. Anchor and semantic dedup (EARS-34)", () => {
-    it("[EARS-34] should export the heuristic patterns as source and flags, never as stateful RegExp instances", () => {
-      const entries = Object.entries(HEURISTIC_PATTERNS);
-      expect(entries.map(([id]) => id)).toEqual(["HEUR-001", "HEUR-002", "HEUR-003"]);
-      for (const [, pattern] of entries) {
-        expect(pattern).not.toBeInstanceOf(RegExp);
-        expect(Object.isFrozen(pattern)).toBe(true);
-        expect(pattern.flags).toContain("g");
-      }
-
-      // A consumer builds its own RegExp per use and matches two rows in a row.
-      const { source, flags } = HEURISTIC_PATTERNS["HEUR-001"]!;
-      expect(new RegExp(source, flags).exec("const userEmail = a;")?.[0]).toBe("userEmail");
-      expect(new RegExp(source, flags).exec("const customerPhone = b;")?.[0]).toBe("customerPhone");
-
-      // Negative control — one shared global RegExp, as the export was: the first match leaves
-      // lastIndex past the start of the second row, and the second row does not match.
-      const shared = new RegExp(source, flags);
-      expect(shared.exec("const a = 1; const userEmail = a;")?.[0]).toBe("userEmail");
-      expect(shared.exec("const customerPhone = b;")).toBeNull();
     });
   });
 });

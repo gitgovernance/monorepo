@@ -13,6 +13,7 @@ export {
   rehydrateFinding,
   verifySnippet,
   countUnmatchedWaivers,
+  countOutdatedWaivers,
   waiversForFiles,
   countBySeverity,
   isScanScope,
@@ -30,11 +31,17 @@ export {
 export {
   FINGERPRINT_SCHEME,
   REGION_FINGERPRINT_SCHEME,
+  CURRENT_FINGERPRINT_SCHEMES,
   SARIF_FINGERPRINT_KEY,
   normalizeAnchor,
   computeFingerprint,
   computeRegionFingerprint,
+  formatFingerprint,
+  parseFingerprint,
+  isCurrentFingerprint,
+  fingerprintDigest,
 } from "./fingerprint";
+export type { FingerprintScheme } from "./fingerprint";
 // [AUDIT-N1] [AUDIT-N2] [AUDIT-N3] One way back from a SARIF result, for core and for the SaaS
 // projection alike.
 export {

@@ -1,5 +1,5 @@
 import type { SarifLog } from "../sarif/sarif.types";
-import { countUnmatchedWaivers, countBySeverity } from "../audit/types";
+import { countUnmatchedWaivers, countOutdatedWaivers, countBySeverity } from "../audit/types";
 import { rehydrateSarifResult, describeSarifDiscard } from "../audit/sarif_rehydration";
 import type { IAgentRunner } from "../agent_runner/agent_runner";
 import type { Waiver } from "../source_auditor/types";
@@ -303,6 +303,8 @@ function buildSummary(
     unmatchedWaivers: coversEveryWaiver(options, agentResults)
       ? countUnmatchedWaivers(activeWaivers, findings)
       : null,
+    // [AORCH-B16] [AUDIT-L3] Waivers under an earlier fingerprint scheme, whatever the scope.
+    outdatedWaivers: countOutdatedWaivers(activeWaivers),
     agentsRun: agentResults.filter((r) => r.status === "success").length,
     agentsFailed: agentResults.filter((r) => r.status === "error").length,
   };
@@ -368,6 +370,8 @@ export function createAuditOrchestrator(deps: AuditOrchestratorDeps) {
             // measured. Counting every waiver as unmatched told the user to re-create all of
             // them after a run that scanned nothing.
             unmatchedWaivers: null,
+            // [AORCH-B16] A property of the waivers themselves, known without running anything.
+            outdatedWaivers: countOutdatedWaivers(waivers),
             agentsRun: 0,
             agentsFailed: 0,
           },

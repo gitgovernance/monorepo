@@ -1,7 +1,7 @@
 /**
  * Finding identity tests — the preimage, the normalization, and what stays out of it.
  *
- * Spec: audit_record_types_module.md §4.11 (AUDIT-K2, K3, K4, K7)
+ * Spec: audit_record_types_module.md §4.11 (AUDIT-K2, K3, K4, K7, K8)
  *
  * The negative controls are the point of this file. Each one reproduces a defect the
  * identity has had: dropping `file` merges the same line across two files (D-a), dropping
@@ -13,24 +13,28 @@ import { createHash } from 'node:crypto';
 import {
   FINGERPRINT_SCHEME,
   REGION_FINGERPRINT_SCHEME,
+  CURRENT_FINGERPRINT_SCHEMES,
   normalizeAnchor,
   computeFingerprint,
   computeRegionFingerprint,
+  parseFingerprint,
+  isCurrentFingerprint,
+  fingerprintDigest,
 } from './fingerprint';
 
-describe('4.11. Finding identity (AUDIT-K2 to K4, K7)', () => {
+describe('4.11. Finding identity (AUDIT-K2 to K4, K7, K8)', () => {
   const base = { file: 'src/config.ts', category: 'hardcoded-secret', anchor: 'sk_test_abc123' };
 
   describe('AUDIT-K2 — the preimage', () => {
     it('[AUDIT-K2] should hash the versioned preimage with sha256 to 64 hex chars', () => {
-      const expected = createHash('sha256')
+      const digest = createHash('sha256')
         .update(JSON.stringify([FINGERPRINT_SCHEME, base.file, base.category, base.anchor]))
         .digest('hex');
 
       const actual = computeFingerprint(base);
 
-      expect(actual).toBe(expected);
-      expect(actual).toMatch(/^[a-f0-9]{64}$/);
+      expect(actual).toBe(`${FINGERPRINT_SCHEME}:${digest}`);
+      expect(parseFingerprint(actual)?.digest).toMatch(/^[a-f0-9]{64}$/);
       expect(FINGERPRINT_SCHEME).toBe('gitgov-fp/2');
     });
 
@@ -144,9 +148,10 @@ describe('4.11. Finding identity (AUDIT-K2 to K4, K7)', () => {
 
       const same = computeRegionFingerprint({ ...region });
       expect(same).toBe(
-        createHash('sha256')
-          .update(JSON.stringify([REGION_FINGERPRINT_SCHEME, region.file, region.category, region.ruleId, 10, 5]))
-          .digest('hex'),
+        `${REGION_FINGERPRINT_SCHEME}:` +
+          createHash('sha256')
+            .update(JSON.stringify([REGION_FINGERPRINT_SCHEME, region.file, region.category, region.ruleId, 10, 5]))
+            .digest('hex'),
       );
       // The tag says which kind of identity a stored value is.
       expect(REGION_FINGERPRINT_SCHEME).toBe('gitgov-fp/2+pos');
@@ -163,6 +168,39 @@ describe('4.11. Finding identity (AUDIT-K2 to K4, K7)', () => {
       // A missing column is its own value, not column 0.
       const { column: _column, ...withoutColumn } = region;
       expect(computeRegionFingerprint(withoutColumn)).not.toBe(computeRegionFingerprint({ ...region, column: 0 }));
+    });
+  });
+
+  describe('AUDIT-K8 — the scheme travels with the value', () => {
+    it('[AUDIT-K8] should write every fingerprint as scheme and digest and read both back', () => {
+      const content = computeFingerprint(base);
+      const region = computeRegionFingerprint({ file: base.file, category: base.category, ruleId: 'R', line: 1 });
+
+      expect(parseFingerprint(content)).toEqual({ scheme: FINGERPRINT_SCHEME, digest: content.split(':')[1] });
+      expect(parseFingerprint(region)?.scheme).toBe(REGION_FINGERPRINT_SCHEME);
+      expect(CURRENT_FINGERPRINT_SCHEMES).toEqual([FINGERPRINT_SCHEME, REGION_FINGERPRINT_SCHEME]);
+      expect([content, region].map(isCurrentFingerprint)).toEqual([true, true]);
+
+      // What a person reads and types is the digest; short forms are prefixes of it.
+      expect(fingerprintDigest(content)).toMatch(/^[a-f0-9]{64}$/);
+      expect(fingerprintDigest(content)).toBe(parseFingerprint(content)?.digest);
+    });
+
+    it('[AUDIT-K8] should recognize a fingerprint from another scheme as not current', () => {
+      const digest = 'a'.repeat(64);
+
+      // An earlier formula's value: a bare digest with no scheme, or another scheme tag.
+      expect(isCurrentFingerprint(digest)).toBe(false);
+      expect(isCurrentFingerprint(`gitgov-fp/1:${digest}`)).toBe(false);
+      expect(parseFingerprint(`gitgov-fp/1:${digest}`)).toEqual({ scheme: 'gitgov-fp/1', digest });
+      // Not a fingerprint at all: no digest after the scheme.
+      expect(parseFingerprint('gitgov-fp/2:not-hex')).toBeUndefined();
+      expect(fingerprintDigest('legacy-value')).toBe('legacy-value');
+
+      // Negative control — the same digest under two schemes is two values: a bare digest
+      // compared by equality could not tell which formula produced it.
+      expect(`gitgov-fp/1:${digest}`).not.toBe(`${FINGERPRINT_SCHEME}:${digest}`);
+      expect(isCurrentFingerprint(`${FINGERPRINT_SCHEME}:${digest}`)).toBe(true);
     });
   });
 });

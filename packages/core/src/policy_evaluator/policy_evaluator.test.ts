@@ -191,7 +191,7 @@ describe("PolicyEvaluator", () => {
       const withRuleId = makeFinding({ ruleId: "SEC-001" });
       // [AUDIT-K4] `ruleId` is detection metadata and stays out of the identity: overriding
       // it must NOT move the fingerprint. That is the assertion worth making here.
-      expect(withRuleId.fingerprint).toMatch(/^[a-f0-9]{64}$/);
+      expect(withRuleId.fingerprint).toMatch(/^gitgov-fp\/2:[a-f0-9]{64}$/);
       expect(withRuleId.fingerprint).toBe(makeFinding({ ruleId: "OTHER-999" }).fingerprint);
       expect(withRuleId.severity).toBe("high");
       expect(withRuleId.category).toBe("unknown-risk");

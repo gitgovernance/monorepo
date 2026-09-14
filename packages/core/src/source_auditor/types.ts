@@ -102,13 +102,16 @@ export type WaiverApplicationCounts = {
   /** New findings without waiver */
   new: number;
   /**
-   * [EARS-C6] Active waivers whose fingerprint matched no finding of this run.
-   *
-   * A waiver written with an earlier identity (AUDIT-K1..K6) lands here, and these are the
-   * ones the user has to re-create. Without the count, "0
-   * acknowledged" reads exactly like "there were no waivers".
+   * [EARS-C6] Active waivers under a current fingerprint scheme whose fingerprint matched no
+   * finding of this run. Without the count, "0 acknowledged" reads exactly like "there were no
+   * waivers".
    */
   unmatched: number;
+  /**
+   * [EARS-C7] Active waivers written under a fingerprint scheme the current code no longer
+   * produces (AUDIT-L3): each one has to be re-created. Disjoint from `unmatched`.
+   */
+  outdated: number;
 }
 
 /**

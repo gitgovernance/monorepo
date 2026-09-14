@@ -132,7 +132,17 @@ export interface RegexRule {
   fixes?: Array<{ description: string }>;
   /** Applicable legal reference */
   legalReference?: string;
+  /**
+   * [EARS-35] What the finding's identity anchors on. `match` (default): the matched text, for a
+   * rule whose match IS the distinguishing value — the token, the address, the whole key block.
+   * `line`: the full line the match starts on, for a rule whose match is a bare name (`ssn`,
+   * `userEmail`) that every occurrence in the file shares.
+   */
+  anchor?: AnchorSource;
 }
+
+/** [EARS-35] Where a local rule takes its identity anchor from. */
+export type AnchorSource = "match" | "line";
 
 /**
  * Finding structure returned by LLM API.

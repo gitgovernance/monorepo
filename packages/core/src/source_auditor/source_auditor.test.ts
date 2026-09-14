@@ -320,9 +320,8 @@ describe("SourceAuditorModule", () => {
       const detected = createFinding({ anchor: "still-here" });
       mockFindingDetector.detect.mockResolvedValue([detected]);
 
-      // Shaped like the earlier line-hash identity (`sha256(line)[0:16]:occurrence`) — what a
-      // waiver written with that identity still carries in .gitgov/feedbacks/.
-      const staleWaiver = (hash: string): Waiver => waiverOn(hash, "src/app.ts");
+      // Current-scheme fingerprints whose finding is no longer in the code.
+      const staleWaiver = (hex: string): Waiver => waiverOn(`gitgov-fp/2:${hex.repeat(64)}`, "src/app.ts");
       const matched = waiverOn(detected.fingerprint, "src/app.ts");
 
       // ONE matched and TWO stale, deliberately asymmetric. With one of each, "count the
@@ -330,8 +329,8 @@ describe("SourceAuditorModule", () => {
       // so the test would pass against an inverted predicate. Verified by mutation.
       mockWaiverReader.loadWaivers.mockResolvedValue([
         matched,
-        staleWaiver("a1b2c3d4e5f60718:1"),
-        staleWaiver("f0e1d2c3b4a59687:1"),
+        staleWaiver("a"),
+        staleWaiver("b"),
       ]);
 
       const auditor = new SourceAuditorModule(createDeps());
@@ -354,7 +353,7 @@ describe("SourceAuditorModule", () => {
       const detected = createFinding({ anchor: "still-here" });
       mockFindingDetector.detect.mockResolvedValue([detected]);
 
-      const stale = waiverOn("a1b2c3d4e5f60718:1", "src/app.ts");
+      const stale = waiverOn(`gitgov-fp/2:${"a".repeat(64)}`, "src/app.ts");
 
       const runWith = async (waivers: Waiver[]) => {
         mockWaiverReader.loadWaivers.mockResolvedValue(waivers);
@@ -383,7 +382,7 @@ describe("SourceAuditorModule", () => {
       // A waiver on a file the scope leaves out: fine, and not this run's business.
       mockWaiverReader.loadWaivers.mockResolvedValue([
         waiverOn(detected.fingerprint, "src/app.ts"),
-        waiverOn("f".repeat(64), "src/utils.ts"),
+        waiverOn(`gitgov-fp/2:${"f".repeat(64)}`, "src/utils.ts"),
       ]);
       const auditor = new SourceAuditorModule(createDeps());
 
@@ -399,9 +398,28 @@ describe("SourceAuditorModule", () => {
       // auditContents reads exactly the files it is handed.
       const direct = await auditor.auditContents({
         files: [{ path: "src/app.ts", content: "const x = 1;" }],
-        waivers: [waiverOn("f".repeat(64), "src/utils.ts")],
+        waivers: [waiverOn(`gitgov-fp/2:${"f".repeat(64)}`, "src/utils.ts")],
       });
       expect(direct.waivers.unmatched).toBe(0);
+    });
+
+    it("[EARS-C7] should count waivers under an earlier fingerprint scheme as outdated, apart from unmatched", async () => {
+      const detected = createFinding({ anchor: "still-here" });
+      mockFindingDetector.detect.mockResolvedValue([detected]);
+      mockWaiverReader.loadWaivers.mockResolvedValue([
+        waiverOn(detected.fingerprint, "src/app.ts"),
+        waiverOn(`gitgov-fp/2:${"a".repeat(64)}`, "src/app.ts"),
+        // Written under the earlier line-hash identity, and on a file this run does not read:
+        // outdated either way, because it can match nothing the current code produces.
+        waiverOn("a1b2c3d4e5f60718:1", "src/utils.ts"),
+      ]);
+
+      const result = await new SourceAuditorModule(createDeps()).audit({
+        scope: { include: ["src/app.ts"], exclude: [] },
+        baseDir: tempDir,
+      });
+
+      expect(result.waivers).toMatchObject({ acknowledged: 1, unmatched: 1, outdated: 1 });
     });
   });
 

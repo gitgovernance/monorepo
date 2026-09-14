@@ -1,7 +1,7 @@
 /**
  * Finding identity — the one place it is computed.
  *
- * Spec: audit_record_types_module.md §4.11 (AUDIT-K2, K3, K4, K7)
+ * Spec: audit_record_types_module.md §4.11 (AUDIT-K2, K3, K4, K7, K8)
  *
  * `fingerprint` answers "which finding is this", and nothing else does. `ruleId`,
  * `detector`, `line` and `column` describe the DETECTION and stay out of the preimage:
@@ -11,39 +11,40 @@
  * Producers reach here through `createFinding` (AUDIT-K1). Consumers transport the value
  * with `rehydrateFinding` and compare by equality; only a SARIF result that arrives without
  * the key is derived again, through `identifySarifResult` (AUDIT-N1).
+ *
+ * [AUDIT-K8] Every value is written `<scheme>:<digest>` (fingerprint_format.ts). The scheme tag
+ * opens the preimage too, so two schemes can never produce the same digest, and it prefixes the
+ * value, so any stored copy says which formula produced it. Changing the formula means a new
+ * scheme tag: values under the old one stop matching and are recognizable as older, never
+ * silently confused with a finding that disappeared.
  */
 
 import { createHash } from 'node:crypto';
 import type { FindingCategory } from './types';
+import { FINGERPRINT_SCHEME, REGION_FINGERPRINT_SCHEME, formatFingerprint } from './fingerprint_format';
+import type { FingerprintScheme } from './fingerprint_format';
+
+export {
+  FINGERPRINT_SCHEME,
+  REGION_FINGERPRINT_SCHEME,
+  CURRENT_FINGERPRINT_SCHEMES,
+  SARIF_FINGERPRINT_KEY,
+  formatFingerprint,
+  parseFingerprint,
+  isCurrentFingerprint,
+  fingerprintDigest,
+} from './fingerprint_format';
+export type { FingerprintScheme } from './fingerprint_format';
 
 /**
- * [AUDIT-K2] Version tag hashed INSIDE the preimage, deliberately not a column.
- *
- * Identities of different natures coexist under one formula — code, devices, tokens whose
- * anchor arrives pre-hashed — with no runtime branching. If the formula ever changes, the
- * tag changes with it and every stored value is recomputed: there is no dual-lookup and no
- * `fingerprintVersion` to carry forever.
+ * [AUDIT-K2] [AUDIT-K8] The preimage is the JSON encoding of its parts, not a join, opened by the
+ * scheme tag. `file` is a URI and `category` is open (AUDIT-E2), so either can contain any
+ * separator a join would use, and moving it between two parts would give two findings one
+ * identity. A JSON array decodes to exactly one list of parts.
  */
-export const FINGERPRINT_SCHEME = 'gitgov-fp/2';
-
-/**
- * [AUDIT-K7] Tag of the degraded, position-based identity. Distinct from FINGERPRINT_SCHEME so
- * the preimage says which kind of identity a stored value is: one anchored on content, or one
- * that moves when a line is inserted above the finding.
- */
-export const REGION_FINGERPRINT_SCHEME = 'gitgov-fp/2+pos';
-
-/** [SARIF-N1] The SARIF `fingerprints` key the identity travels under. */
-export const SARIF_FINGERPRINT_KEY = 'gitgov/v2';
-
-/**
- * [AUDIT-K2] The preimage is the JSON encoding of its parts, not a join. `file` is a URI and
- * `category` is open (AUDIT-E2), so either can contain any separator a join would use, and
- * moving it between two parts would give two findings one identity. A JSON array decodes to
- * exactly one list of parts.
- */
-function hashPreimage(parts: ReadonlyArray<string | number | null>): string {
-  return createHash('sha256').update(JSON.stringify(parts)).digest('hex');
+function hashPreimage(scheme: FingerprintScheme, parts: ReadonlyArray<string | number | null>): string {
+  const digest = createHash('sha256').update(JSON.stringify([scheme, ...parts])).digest('hex');
+  return formatFingerprint(scheme, digest);
 }
 
 /**
@@ -78,7 +79,7 @@ export function computeFingerprint(input: {
   category: FindingCategory;
   anchor: string;
 }): string {
-  return hashPreimage([FINGERPRINT_SCHEME, input.file, input.category, normalizeAnchor(input.anchor)]);
+  return hashPreimage(FINGERPRINT_SCHEME, [input.file, input.category, normalizeAnchor(input.anchor)]);
 }
 
 /**
@@ -99,8 +100,7 @@ export function computeRegionFingerprint(input: {
   line: number;
   column?: number;
 }): string {
-  return hashPreimage([
-    REGION_FINGERPRINT_SCHEME,
+  return hashPreimage(REGION_FINGERPRINT_SCHEME, [
     input.file,
     input.category,
     input.ruleId,

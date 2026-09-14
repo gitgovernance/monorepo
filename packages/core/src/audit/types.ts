@@ -399,6 +399,13 @@ export type AuditSummary = SeverityCounts & {
    */
   unmatchedWaivers: number | null;
   /**
+   * [AORCH-B16] [AUDIT-L3] Active waivers written under a fingerprint scheme the current code no
+   * longer produces. Measured whatever the scope — it is a property of the waiver, not of the run
+   * — and `null` only where no waiver list is at hand (createScan). Disjoint from
+   * `unmatchedWaivers`.
+   */
+  outdatedWaivers: number | null;
+  /**
    * Agents that completed SUCCESSFULLY — not agents executed. Computed as
    * `agentResults.filter(r => r.status === "success").length`, so with every agent failing
    * this is 0, not N, and `agentsRun === agentsFailed` is never true when all fail. "All
@@ -540,6 +547,7 @@ import { sha256 } from '../crypto/checksum';
 // fingerprint.ts imports only the FindingCategory TYPE from here, which is erased at
 // compile time — the cycle is structural, not a runtime one.
 import { computeFingerprint, computeRegionFingerprint, normalizeAnchor } from './fingerprint';
+import { isCurrentFingerprint } from './fingerprint_format';
 
 /**
  * [RLDX-B8] [RLDX-F3] The text a redacted snippet becomes. Declared here, in the module every
@@ -649,13 +657,18 @@ export function rehydrateFinding(
 }
 
 /**
- * [AUDIT-L1] Active waivers whose fingerprint matches no finding of a run.
+ * [AUDIT-L1] Active waivers under a current fingerprint scheme whose fingerprint matches no
+ * finding of a run.
  *
  * One definition for a number that was computed in three places: source_auditor's
  * filterByWaivers, the orchestrator's buildSummary, and the orchestrator's no-agents branch,
  * which hard-coded it as `waivers.length` with the reasoning in a comment. With no findings
- * every waiver is unmatched, and the empty-set comparison yields exactly that — the edge case
- * is a property of the function, not a special case at a call site.
+ * every such waiver is unmatched, and the empty-set comparison yields exactly that — the edge
+ * case is a property of the function, not a special case at a call site.
+ *
+ * A waiver under an earlier scheme is left out: it cannot match anything the current code
+ * produces, and it is counted apart, as outdated (AUDIT-L3), so the two causes never add up
+ * into one number.
  *
  * Takes only the fingerprints it needs, so a caller can pass either full records or the
  * lightweight shapes tests build.
@@ -665,7 +678,16 @@ export function countUnmatchedWaivers(
   findings: ReadonlyArray<Pick<Finding, 'fingerprint'>>,
 ): number {
   const present = new Set(findings.map((f) => f.fingerprint));
-  return waivers.filter((w) => !present.has(w.fingerprint)).length;
+  return waivers.filter((w) => isCurrentFingerprint(w.fingerprint) && !present.has(w.fingerprint)).length;
+}
+
+/**
+ * [AUDIT-L3] Active waivers written for a fingerprint under a scheme the current code no longer
+ * produces (AUDIT-K8). They are not stale because the code changed: the formula did, and each one
+ * has to be re-created for the finding's current fingerprint.
+ */
+export function countOutdatedWaivers(waivers: ReadonlyArray<Pick<Waiver, 'fingerprint'>>): number {
+  return waivers.filter((w) => !isCurrentFingerprint(w.fingerprint)).length;
 }
 
 /**
@@ -775,6 +797,7 @@ export function createScan(input: {
     // [AORCH-B15] A Scan is built from findings already consolidated, with no waiver list in
     // hand: not measured here, and a 0 would read as "every waiver matched".
     unmatchedWaivers: null,
+    outdatedWaivers: null,
     agentsRun: input.executionRecordIds.length,
     agentsFailed: 0,
   };

@@ -43,6 +43,8 @@ export const REGEX_RULES: RegexRule[] = [
     severity: "medium",
     message: "Sensitive field name detected",
     fixes: [{ description: "Review if real data or structure requiring encryption" }],
+    // [EARS-35] The match is the field name, the same for every use in the file.
+    anchor: "line",
   },
 
   // === SECRETS ===
@@ -65,7 +67,10 @@ export const REGEX_RULES: RegexRule[] = [
   },
   {
     id: "SEC-003",
-    pattern: /-----BEGIN (?:RSA |EC )?PRIVATE KEY-----/g,
+    // [EARS-35] The whole key block, not only the header: every key starts with the same line.
+    // A key cut before its END marker keeps what follows the header up to 512 base64 chars.
+    pattern:
+      /-----BEGIN (?:RSA |EC )?PRIVATE KEY-----(?:[\s\S]*?-----END (?:RSA |EC )?PRIVATE KEY-----|[A-Za-z0-9+/=\s]{0,512})/g,
     category: "hardcoded-secret",
     severity: "critical",
     message: "Private key detected in source code",
@@ -109,7 +114,9 @@ export const REGEX_RULES: RegexRule[] = [
   // === DATA TRANSFER ===
   {
     id: "XFER-001",
-    pattern: /analytics\.(?:track|identify|page)\s*\([^)]*(?:email|phone|name|address|ssn)/gi,
+    // [EARS-35] Through the end of the line with the keyword: the arguments after it are what
+    // tell two calls apart.
+    pattern: /analytics\.(?:track|identify|page)\s*\([^)]*(?:email|phone|name|address|ssn)[^\n]*/gi,
     category: "third-party-transfer",
     severity: "high",
     message: "PII sent to third-party analytics",
@@ -120,8 +127,9 @@ export const REGEX_RULES: RegexRule[] = [
   // === LOGGING PII ===
   {
     id: "LOG-001",
+    // [EARS-35] Through the end of the line with the keyword, same reason as XFER-001.
     pattern:
-      /console\.(log|info|warn|error)\s*\([^)]*(?:email|password|ssn|phone|credit)/gi,
+      /console\.(log|info|warn|error)\s*\([^)]*(?:email|password|ssn|phone|credit)[^\n]*/gi,
     category: "logging-pii",
     severity: "high",
     message: "Potential PII being logged",
