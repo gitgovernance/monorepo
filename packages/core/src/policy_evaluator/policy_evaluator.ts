@@ -1,5 +1,5 @@
-import { rehydrateFinding } from "../audit/types";
-import { computeFingerprint } from "../audit/fingerprint";
+import { countBySeverity } from "../audit/types";
+import { rehydrateSarifResult, describeSarifDiscard } from "../audit/sarif_rehydration";
 /**
  * PolicyEvaluator -- Epic 5: policy_evaluation.
  *
@@ -20,7 +20,6 @@ import type {
   PolicyRule,
   PolicyRuleResult,
   Finding,
-  FindingSeverity,
   Waiver,
   IWaiverReader,
 } from "./policy_evaluator.types";
@@ -30,7 +29,7 @@ import { severityThreshold } from "./severity_threshold";
 import { categoryBlock } from "./category_block";
 import type { RecordStore } from "../record_store/record_store";
 import type { GitGovExecutionRecord } from "../record_types";
-import type { SarifLog, SarifLevel } from "../sarif/sarif.types";
+import type { SarifLog } from "../sarif/sarif.types";
 
 // ============================================================================
 // Helper functions
@@ -77,24 +76,6 @@ function computeBlockingFindings(
       !f.isWaived &&
       (SEVERITY_ORDER[f.severity] >= threshold || blockedSet.has(f.category)),
   );
-}
-
-/**
- * Counts findings by severity.
- */
-function buildSummary(
-  findings: Finding[],
-): Record<FindingSeverity, number> {
-  const s: Record<FindingSeverity, number> = {
-    critical: 0,
-    high: 0,
-    medium: 0,
-    low: 0,
-  };
-  for (const f of findings) {
-    s[f.severity] = s[f.severity] + 1;
-  }
-  return s;
 }
 
 /**
@@ -242,7 +223,8 @@ export function createPolicyEvaluator(
           ? computeBlockingFindings(withWaivers, policy)
           : [],
         waivedFindings: withWaivers.filter((f) => f.isWaived),
-        summary: buildSummary(withWaivers),
+        // [AUDIT-M1] The one severity counter; this copy was a fourth loop.
+        summary: countBySeverity(withWaivers),
         rulesEvaluated,
         evaluatedAt: new Date().toISOString(),
       };
@@ -260,94 +242,53 @@ export function createPolicyEvaluator(
 // ============================================================================
 
 /**
- * Maps SARIF level to FindingSeverity.
- * Same logic as levelToSeverity in audit_orchestrator.
- */
-function levelToSeverity(level: SarifLevel | string | undefined): FindingSeverity {
-  switch (level) {
-    case "error":
-      return "critical";
-    case "warning":
-      return "high";
-    case "note":
-      return "medium";
-    default:
-      return "low";
-  }
-}
-
-/**
- * [PEVAL-F6] Extracts Finding[] from a SarifLog, keyed by the transported identity.
+ * [PEVAL-F6] [PEVAL-F7] [PEVAL-F8] Consolidates the findings of every loaded SarifLog, keyed
+ * by identity.
  *
- * This is a REHYDRATOR (AUDIT-D2), and it behaves like the orchestrator: it reads
- * `fingerprints["gitgov/v2"]`, never recomputes a value that arrived, and never derives a
- * positional one. It also reads L1, where the snippet may already be `[REDACTED]` — one
- * more reason a recomputation here would diverge from what the producer wrote.
+ * A REHYDRATOR (AUDIT-D2) through the same function as the orchestrator (AUDIT-N3): a
+ * transported identity and snippetHash are kept, a missing identity is derived only from
+ * snippet text, and never from a position. It reads L1, where the snippet of a sensitive
+ * finding is the redaction sentinel — which is why a result without the key and with that
+ * snippet is discarded instead of given an identity no waiver can match.
  */
-function extractFindingsFromSarif(sarif: SarifLog): Finding[] {
+function consolidateSarifFindings(sarifLogs: SarifLog[]): Finding[] {
   const byFingerprint = new Map<string, Finding>();
 
-  for (const run of sarif.runs) {
-    const agentId = run.tool?.driver?.name ?? "unknown";
+  for (const sarif of sarifLogs) {
+    for (const run of sarif.runs) {
+      const agentId = run.tool?.driver?.name ?? "unknown";
 
-    for (const sarifResult of run.results) {
-      const location = sarifResult.locations?.[0]?.physicalLocation;
-      const props = sarifResult.properties as
-        | Record<string, unknown>
-        | undefined;
-      const rawCategory =
-        (props?.["gitgov/category"] as string | undefined) ?? "unknown-risk";
-      const snippetText = location?.region?.snippet?.text;
-      const uri = location?.artifactLocation?.uri;
+      for (const sarifResult of run.results) {
+        const rehydrated = rehydrateSarifResult(sarifResult, { executionId: "", reportedBy: [agentId] });
 
-      // [PEVAL-F6] Transported first. Absent — an external tool or a pre-cut SARIF — derive
-      // it with the same function the detectors use (AORCH-B12), never from ruleId, file and
-      // startLine: that value moved whenever a line was inserted above the finding, so
-      // re-evaluating the very same scan could yield a different identity than the scan.
-      const fingerprint =
-        sarifResult.fingerprints?.["gitgov/v2"] ??
-        (uri && snippetText
-          ? computeFingerprint({
-              file: uri,
-              category: rawCategory as import("../audit/types").FindingCategory,
-              anchor: snippetText,
-            })
-          : undefined);
-      if (!fingerprint) continue;
+        // [PEVAL-F7] Discarded, and said, in the orchestrator's words (AORCH-B12).
+        if ("discarded" in rehydrated) {
+          console.warn(
+            `[PEVAL-F7] Discarded SARIF result from ${agentId}: ${describeSarifDiscard(rehydrated.discarded)}`,
+          );
+          continue;
+        }
 
-      const existing = byFingerprint.get(fingerprint);
+        const { finding } = rehydrated;
+        const existing = byFingerprint.get(finding.fingerprint);
+        if (!existing) {
+          byFingerprint.set(finding.fingerprint, finding);
+          continue;
+        }
 
-      if (existing) {
+        // [PEVAL-F8] Two categories cannot share an identity; the second is not merged
+        // (same rule as AORCH-B14).
+        if (existing.category !== finding.category) {
+          console.warn(
+            `[PEVAL-F8] Rejected SARIF result from ${agentId}: fingerprint ${finding.fingerprint} ` +
+              `is already consolidated as "${existing.category}" and this result declares "${finding.category}".`,
+          );
+          continue;
+        }
+
         if (!existing.reportedBy.includes(agentId)) {
           existing.reportedBy.push(agentId);
         }
-      } else {
-        const detector = (props?.["gitgov/detector"] as string | undefined) ?? "regex";
-        const confidence = (props?.["gitgov/confidence"] as number | undefined) ?? 1.0;
-        const snippet = location?.region?.snippet?.text;
-
-        // [AUDIT-K5] [PEVAL-F6] Second rehydrator, unlisted until the handoff measured it.
-        // Same contract as the orchestrator: transport the identity, never recompute it.
-        const finding = rehydrateFinding({
-          fingerprint,
-          ruleId: sarifResult.ruleId,
-          file: location?.artifactLocation?.uri ?? "",
-          line: location?.region?.startLine ?? 0,
-          message: sarifResult.message.text,
-          snippet: snippet ?? '',
-          category: rawCategory as import("../audit/types").FindingCategory,
-          severity: levelToSeverity(sarifResult.level),
-          detector: detector as import("../audit/types").DetectorName,
-          confidence,
-          executionId: "",
-          reportedBy: [agentId],
-          isWaived: false,
-        });
-        const col = location?.region?.startColumn;
-        if (col !== undefined) {
-          finding.column = col;
-        }
-        byFingerprint.set(fingerprint, finding);
       }
     }
   }
@@ -394,7 +335,7 @@ export async function reevaluatePolicy(
   },
 ): Promise<PolicyEvaluationResult> {
   // PEVAL-F1: Load findings from each scan ExecutionRecord
-  const allFindings: Finding[] = [];
+  const sarifLogs: SarifLog[] = [];
 
   for (const execId of scanExecutionIds) {
     const record = await deps.executionStore.get(execId);
@@ -416,25 +357,11 @@ export async function reevaluatePolicy(
       continue;
     }
 
-    const findings = extractFindingsFromSarif(metadata.data);
-    allFindings.push(...findings);
+    sarifLogs.push(metadata.data);
   }
 
-  // Dedup across multiple SarifLogs (same fingerprint from different scans)
-  const dedupMap = new Map<string, Finding>();
-  for (const f of allFindings) {
-    const existing = dedupMap.get(f.fingerprint);
-    if (existing) {
-      for (const agent of f.reportedBy) {
-        if (!existing.reportedBy.includes(agent)) {
-          existing.reportedBy.push(agent);
-        }
-      }
-    } else {
-      dedupMap.set(f.fingerprint, { ...f });
-    }
-  }
-  const consolidatedFindings = Array.from(dedupMap.values());
+  // One consolidation across every SarifLog: the same finding from two scans is one finding.
+  const consolidatedFindings = consolidateSarifFindings(sarifLogs);
 
   // PEVAL-F2: Load CURRENT active waivers (not historical)
   const activeWaivers = await deps.waiverReader.loadWaivers();

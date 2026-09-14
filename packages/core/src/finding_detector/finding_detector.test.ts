@@ -18,7 +18,7 @@ describe("FindingDetectorModule", () => {
     jest.restoreAllMocks();
   });
 
-  describe("4.7. Anchor y dedup semántico (EARS-33)", () => {
+  describe("4.7. Anchor and semantic dedup (EARS-33)", () => {
     it("[EARS-33] should emit one finding when the same anchor and category repeat in a file", async () => {
       const detector = new FindingDetectorModule({
         regex: { enabled: true },

@@ -31,6 +31,7 @@
  * | PEVAL-F5  | should include waiver feedbackRecordId in references when pass after prior block | 4.7   |
  */
 
+import { createHash } from "node:crypto";
 import { createPolicyEvaluator, reevaluatePolicy } from "./policy_evaluator";
 import type {
   PolicyEvaluationInput,
@@ -673,7 +674,10 @@ describe("PolicyEvaluator", () => {
         startLine: number;
         fingerprint?: string;
         category?: string;
+        snippet?: string;
+        snippetHash?: string;
       }>,
+      agentName = "test-agent",
     ): SarifLog {
       return {
         $schema:
@@ -683,7 +687,7 @@ describe("PolicyEvaluator", () => {
           {
             tool: {
               driver: {
-                name: "test-agent",
+                name: agentName,
                 version: "1.0.0",
                 informationUri: "https://example.com",
               },
@@ -696,7 +700,10 @@ describe("PolicyEvaluator", () => {
                 {
                   physicalLocation: {
                     artifactLocation: { uri: r.file },
-                    region: { startLine: r.startLine },
+                    region: {
+                      startLine: r.startLine,
+                      ...(r.snippet !== undefined ? { snippet: { text: r.snippet } } : {}),
+                    },
                   },
                 },
               ],
@@ -709,6 +716,7 @@ describe("PolicyEvaluator", () => {
                 "gitgov/category": r.category ?? "unknown",
                 "gitgov/detector": "regex",
                 "gitgov/confidence": 0.9,
+                ...(r.snippetHash !== undefined ? { "gitgov/snippetHash": r.snippetHash } : {}),
               },
             })) as SarifResult[],
           },
@@ -834,6 +842,83 @@ describe("PolicyEvaluator", () => {
       // very same scan could produce a different identity than the scan itself.
       expect(rebuilt[0]!.fingerprint).not.toBe("fallback:SEC-001:src/config.ts:10");
       expect(rebuilt[0]!.fingerprint).not.toMatch(/^fallback:/);
+    });
+
+    it("[PEVAL-F6] should keep the transported snippetHash of an L1 result whose snippet is redacted", async () => {
+      const l2Hash = "e".repeat(64);
+      const sarif = makeSarifLogForReeval([
+        {
+          ruleId: "SEC-001", level: "error", message: "Hardcoded secret found", file: "src/config.ts", startLine: 10,
+          fingerprint: "d".repeat(64), category: "hardcoded-secret", snippet: "[REDACTED]", snippetHash: l2Hash,
+        },
+      ]);
+      const records = new Map<string, GitGovExecutionRecord>();
+      records.set("exec-scan-f6h", makeExecRecordWithSarif("exec-scan-f6h", sarif));
+
+      const result = await reevaluatePolicy(["exec-scan-f6h"], "task-f6h", makeConfig({ failOn: "critical" }), makeReevalDeps({ executionRecords: records }));
+
+      const rebuilt = [...result.decision.blockingFindings, ...result.decision.waivedFindings];
+      expect(rebuilt).toHaveLength(1);
+      expect(rebuilt[0]!.snippetHash).toBe(l2Hash);
+      // Negative control: the value a recomputation lands on is the sentinel's hash.
+      expect(createHash("sha256").update("[REDACTED]").digest("hex")).not.toBe(l2Hash);
+    });
+
+    it("[PEVAL-F7] should discard with a warning an L1 result without the key whose snippet is redacted", async () => {
+      // Two different secrets of one file and category, both redacted in L1 and neither with
+      // the identity key: the case of a record written by a producer that did not transport it.
+      const sarif = makeSarifLogForReeval([
+        { ruleId: "SEC-001", level: "error", message: "first", file: "src/config.ts", startLine: 10, category: "hardcoded-secret", snippet: "[REDACTED]" },
+        { ruleId: "SEC-001", level: "error", message: "second", file: "src/config.ts", startLine: 20, category: "hardcoded-secret", snippet: "[REDACTED]" },
+      ]);
+      const records = new Map<string, GitGovExecutionRecord>();
+      records.set("exec-scan-f7", makeExecRecordWithSarif("exec-scan-f7", sarif));
+
+      const warn = jest.spyOn(console, "warn").mockImplementation(() => undefined);
+      try {
+        const result = await reevaluatePolicy(["exec-scan-f7"], "task-f7", makeConfig({ failOn: "critical" }), makeReevalDeps({ executionRecords: records }));
+
+        expect([...result.decision.blockingFindings, ...result.decision.waivedFindings]).toHaveLength(0);
+        const f7 = warn.mock.calls.map((c) => String(c[0])).filter((m) => m.includes("[PEVAL-F7]"));
+        expect(f7).toEqual([
+          "[PEVAL-F7] Discarded SARIF result from test-agent: no fingerprint key and a redacted snippet",
+          "[PEVAL-F7] Discarded SARIF result from test-agent: no fingerprint key and a redacted snippet",
+        ]);
+
+        // Negative control — the derivation this replaces: both secrets land on one identity.
+        const onSentinel = computeFingerprint({ file: "src/config.ts", category: "hardcoded-secret", anchor: "[REDACTED]" });
+        expect(computeFingerprint({ file: "src/config.ts", category: "hardcoded-secret", anchor: "[REDACTED]" })).toBe(onSentinel);
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
+    it("[PEVAL-F8] should not merge results from two scans that share the key but differ in category", async () => {
+      const collided = "c".repeat(64);
+      const records = new Map<string, GitGovExecutionRecord>();
+      records.set("exec-scan-f8a", makeExecRecordWithSarif("exec-scan-f8a", makeSarifLogForReeval([
+        { ruleId: "SEC-001", level: "error", message: "secret", file: "src/a.ts", startLine: 1, fingerprint: collided, category: "hardcoded-secret" },
+      ], "agent-a")));
+      records.set("exec-scan-f8b", makeExecRecordWithSarif("exec-scan-f8b", makeSarifLogForReeval([
+        { ruleId: "PII-001", level: "warning", message: "email", file: "src/a.ts", startLine: 1, fingerprint: collided, category: "pii-email" },
+      ], "agent-b")));
+
+      const warn = jest.spyOn(console, "warn").mockImplementation(() => undefined);
+      try {
+        const result = await reevaluatePolicy(["exec-scan-f8a", "exec-scan-f8b"], "task-f8", makeConfig({ failOn: "high" }), makeReevalDeps({ executionRecords: records }));
+
+        const rebuilt = [...result.decision.blockingFindings, ...result.decision.waivedFindings];
+        expect(rebuilt).toHaveLength(1);
+        expect(rebuilt[0]!.category).toBe("hardcoded-secret");
+        // The rejected result is not folded in as a second reporter of the first.
+        expect(rebuilt[0]!.reportedBy).toEqual(["agent-a"]);
+        const f8 = warn.mock.calls.map((c) => String(c[0])).filter((m) => m.includes("[PEVAL-F8]"));
+        expect(f8).toHaveLength(1);
+        expect(f8[0]).toContain('"hardcoded-secret"');
+        expect(f8[0]).toContain('"pii-email"');
+      } finally {
+        warn.mockRestore();
+      }
     });
 
     it("[PEVAL-F2] should use current active waivers not historical ones", async () => {

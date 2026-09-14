@@ -10,15 +10,21 @@
  */
 
 import { createHash } from 'node:crypto';
-import { FINGERPRINT_SCHEME, normalizeAnchor, computeFingerprint } from './fingerprint';
+import {
+  FINGERPRINT_SCHEME,
+  REGION_FINGERPRINT_SCHEME,
+  normalizeAnchor,
+  computeFingerprint,
+  computeRegionFingerprint,
+} from './fingerprint';
 
-describe('4.11. Identidad del finding (AUDIT-K2 a K4)', () => {
+describe('4.11. Finding identity (AUDIT-K2 to K4, K7)', () => {
   const base = { file: 'src/config.ts', category: 'hardcoded-secret', anchor: 'sk_test_abc123' };
 
-  describe('AUDIT-K2 — el preimage', () => {
+  describe('AUDIT-K2 — the preimage', () => {
     it('[AUDIT-K2] should hash the versioned preimage with sha256 to 64 hex chars', () => {
       const expected = createHash('sha256')
-        .update(`${FINGERPRINT_SCHEME}|${base.file}|${base.category}|${base.anchor}`)
+        .update(JSON.stringify([FINGERPRINT_SCHEME, base.file, base.category, base.anchor]))
         .digest('hex');
 
       const actual = computeFingerprint(base);
@@ -26,6 +32,22 @@ describe('4.11. Identidad del finding (AUDIT-K2 a K4)', () => {
       expect(actual).toBe(expected);
       expect(actual).toMatch(/^[a-f0-9]{64}$/);
       expect(FINGERPRINT_SCHEME).toBe('gitgov-fp/2');
+    });
+
+    it('[AUDIT-K2] should keep the preimage injective when a part contains the old separator', () => {
+      // `file` is a URI and `category` is open (AUDIT-E2): either can contain "|". Moving the
+      // separator between two parts must not produce the same identity.
+      const a = computeFingerprint({ file: 'src/a|hardcoded-secret', category: 'x', anchor: 'k' });
+      const b = computeFingerprint({ file: 'src/a', category: 'hardcoded-secret|x', anchor: 'k' });
+
+      expect(a).not.toBe(b);
+
+      // Negative control — the preimage as it was written until 2026-09-14: the parts joined
+      // with "|" and no escaping. The same two inputs collapse into one identity, so a waiver
+      // on one would silence the other.
+      const joined = (file: string, category: string, anchor: string) =>
+        createHash('sha256').update([FINGERPRINT_SCHEME, file, category, anchor].join('|')).digest('hex');
+      expect(joined('src/a|hardcoded-secret', 'x', 'k')).toBe(joined('src/a', 'hardcoded-secret|x', 'k'));
     });
 
     it('[AUDIT-K2] should produce the same fingerprint when only line differs', () => {
@@ -46,7 +68,7 @@ describe('4.11. Identidad del finding (AUDIT-K2 a K4)', () => {
       // silence the same secret everywhere. The control must COLLAPSE where the real
       // formula SEPARATES; asserting it equals itself would prove nothing.
       const withoutFile = (_file: string, category: string, anchor: string) =>
-        createHash('sha256').update(`${FINGERPRINT_SCHEME}|${category}|${anchor}`).digest('hex');
+        createHash('sha256').update(JSON.stringify([FINGERPRINT_SCHEME, category, anchor])).digest('hex');
       expect(withoutFile('src/a.ts', base.category, base.anchor))
         .toBe(withoutFile('src/b.ts', base.category, base.anchor));
     });
@@ -61,7 +83,7 @@ describe('4.11. Identidad del finding (AUDIT-K2 a K4)', () => {
       // secret and a PII hit on the same text collapse into one identity, and the only
       // thing telling them apart in production was which rule happened to run first.
       const withoutCategory = (file: string, _category: string, anchor: string) =>
-        createHash('sha256').update(`${FINGERPRINT_SCHEME}|${file}|${anchor}`).digest('hex');
+        createHash('sha256').update(JSON.stringify([FINGERPRINT_SCHEME, file, anchor])).digest('hex');
       expect(withoutCategory(base.file, 'hardcoded-secret', base.anchor))
         .toBe(withoutCategory(base.file, 'pii-email', base.anchor));
     });
@@ -94,7 +116,7 @@ describe('4.11. Identidad del finding (AUDIT-K2 a K4)', () => {
     });
   });
 
-  describe('AUDIT-K4 — lo que NO entra al preimage', () => {
+  describe('AUDIT-K4 — what stays out of the preimage', () => {
     it('[AUDIT-K4] should ignore ruleId detector line column and occurrence in the fingerprint', () => {
       // The formula's input type admits only file, category and anchor. Passing detection
       // metadata alongside cannot change the result, because it never reaches the preimage.
@@ -114,6 +136,34 @@ describe('4.11. Identidad del finding (AUDIT-K2 a K4)', () => {
       const semgrep = computeFingerprint({ file: 'src/a.ts', category: 'hardcoded-secret', anchor: 'sk_test_x' });
 
       expect(regex).toBe(semgrep);
+    });
+  });
+
+  describe('AUDIT-K7 — the region identity, when there is no text to anchor on', () => {
+    it('[AUDIT-K7] should separate findings by rule line and column and never collide with a text anchor', () => {
+      const region = { file: 'src/app.ts', category: 'security-vulnerability', ruleId: 'semgrep.rule', line: 10, column: 5 };
+
+      const same = computeRegionFingerprint({ ...region });
+      expect(same).toBe(
+        createHash('sha256')
+          .update(JSON.stringify([REGION_FINGERPRINT_SCHEME, region.file, region.category, region.ruleId, 10, 5]))
+          .digest('hex'),
+      );
+      // The tag says which kind of identity a stored value is.
+      expect(REGION_FINGERPRINT_SCHEME).toBe('gitgov-fp/2+pos');
+      expect(REGION_FINGERPRINT_SCHEME).not.toBe(FINGERPRINT_SCHEME);
+
+      // Three positions that the text path would merge (no text → one anchor) stay three.
+      const others = [
+        computeRegionFingerprint({ ...region, line: 11 }),
+        computeRegionFingerprint({ ...region, column: 6 }),
+        computeRegionFingerprint({ ...region, ruleId: 'semgrep.other' }),
+      ];
+      expect(new Set([same, ...others]).size).toBe(4);
+
+      // A missing column is its own value, not column 0.
+      const { column: _column, ...withoutColumn } = region;
+      expect(computeRegionFingerprint(withoutColumn)).not.toBe(computeRegionFingerprint({ ...region, column: 0 }));
     });
   });
 });

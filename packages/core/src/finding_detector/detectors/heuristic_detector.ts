@@ -26,18 +26,17 @@ interface HeuristicRule {
 }
 
 /**
- * Heuristic patterns indexed by ruleId.
+ * [EARS-34] Heuristic patterns indexed by ruleId, as source and flags.
  *
- * Exported because the fingerprint backfill (audit_projection AP-K2) has to re-derive the
- * anchor of a stored finding by re-running THE DETECTOR'S OWN RULE over the L2 snippet.
- * These three live nowhere else, so without this export the backfill would fall back to the
- * snippet while the detector uses `match[0]` — two identities for one finding, which is the
- * exact defect the backfill exists to remove.
+ * Exported so a consumer can re-derive the anchor of a stored finding with THE DETECTOR'S OWN
+ * RULE; these three live nowhere else. Not as RegExp instances: they carry the /g flag, and a
+ * shared global RegExp keeps `lastIndex` between calls, so a second row would start matching
+ * where the first one stopped. Each consumer builds its own RegExp per use.
  */
-export const HEURISTIC_PATTERNS: Readonly<Record<string, RegExp>> = {
-  "HEUR-001": SENSITIVE_VAR_PATTERN,
-  "HEUR-002": LOGGING_PATTERN,
-  "HEUR-003": SERIALIZE_PATTERN,
+export const HEURISTIC_PATTERNS: Readonly<Record<string, Readonly<{ source: string; flags: string }>>> = {
+  "HEUR-001": Object.freeze({ source: SENSITIVE_VAR_PATTERN.source, flags: SENSITIVE_VAR_PATTERN.flags }),
+  "HEUR-002": Object.freeze({ source: LOGGING_PATTERN.source, flags: LOGGING_PATTERN.flags }),
+  "HEUR-003": Object.freeze({ source: SERIALIZE_PATTERN.source, flags: SERIALIZE_PATTERN.flags }),
 };
 
 const HEURISTIC_RULES: HeuristicRule[] = [

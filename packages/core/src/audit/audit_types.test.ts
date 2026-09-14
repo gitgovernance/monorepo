@@ -10,9 +10,22 @@ import * as path from 'path';
 import { createHash } from 'node:crypto';
 
 // ─── Type + value imports for AUDIT-A/D tests ──────────────────────────────
-import { createFinding, rehydrateFinding, createFix, createWaiver, createScan, countUnmatchedWaivers, countBySeverity, isScanScope } from './types';
+import {
+  createFinding,
+  rehydrateFinding,
+  createFix,
+  createWaiver,
+  createScan,
+  countUnmatchedWaivers,
+  waiversForFiles,
+  countBySeverity,
+  isScanScope,
+  isDetectorName,
+  isAnchorText,
+  REDACTED_SNIPPET,
+} from './types';
 import { makeTestFinding, makeTestWaiver } from './testing';
-import { computeFingerprint } from './fingerprint';
+import { computeFingerprint, computeRegionFingerprint } from './fingerprint';
 import type {
   Finding,
   FindingCategory,
@@ -648,10 +661,9 @@ describe('Audit Prisma Schema Verification (audit_prisma_record_projection_modul
     // spec's §4.10.1 time-bound scope). Measured: there are FIVE. None has
     // an observed failure. When a consumer that needs to iterate one of them appears,
     // THAT one gets converted and drops off this list — not all of them at once.
-    // `ScanScope` left this list on 2026-09-13 (AUDIT-J4): it was amended (widened to three
-    // values, audit cross-spec F-6) and J1's time-bound rule covers amended types.
+    // `ScanScope` left this list with AUDIT-J4, when it was widened to three values, and
+    // `DetectorName` with AUDIT-J6, when the SARIF rehydrator needed to narrow a string to it.
     const GRANDFATHERED_BARE_UNIONS = [
-      'DetectorName',
       'WaiverStatus',
       'ScanDisplayStatus',
       'PolicyStatus',
@@ -759,9 +771,9 @@ describe('Audit Prisma Schema Verification (audit_prisma_record_projection_modul
     });
   });
 
-  // ── 4.11. Identidad del finding (AUDIT-K1, K5, K6) + AUDIT-D2 ──
+  // ── 4.11. Finding identity (AUDIT-K1, K5, K6, K7) + AUDIT-D2 ──
 
-  describe('4.11. Identidad del finding (AUDIT-K1, K5, K6)', () => {
+  describe('4.11. Finding identity (AUDIT-K1, K5, K6, K7)', () => {
     const producerInput = {
       ruleId: 'SEC-001',
       file: 'src/config.ts',
@@ -846,9 +858,95 @@ describe('Audit Prisma Schema Verification (audit_prisma_record_projection_modul
       // identity survive the same reformat. Two hashes, two roles.
       expect(tight.fingerprint).toBe(spread.fingerprint);
     });
+
+    it('[AUDIT-K7] should fall back to the snippet when the anchor carries no text', () => {
+      const fromSnippet = computeFingerprint({
+        file: producerInput.file,
+        category: producerInput.category,
+        anchor: producerInput.snippet,
+      });
+
+      for (const empty of ['', '   ', 'requires login', REDACTED_SNIPPET]) {
+        expect(createFinding({ ...producerInput, anchor: empty }).fingerprint).toBe(fromSnippet);
+      }
+      expect([undefined, '', ' \t', 'requires login', REDACTED_SNIPPET].map(isAnchorText)).toEqual([
+        false, false, false, false, false,
+      ]);
+      expect(isAnchorText('sk_test_abc123')).toBe(true);
+    });
+
+    it('[AUDIT-K7] should degrade to the region with a warning and never collapse findings without text', () => {
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+      try {
+        // Three semgrep results in one file and category, no snippet text: an empty snippet,
+        // the login placeholder, and a second rule on the first result's line.
+        const noText = { ...producerInput, ruleId: 'semgrep.sqli', category: 'security-vulnerability', snippet: '' };
+        const findings = [
+          createFinding({ ...noText, line: 10, anchor: '' }),
+          createFinding({ ...noText, line: 20, snippet: 'requires login', anchor: 'requires login' }),
+          createFinding({ ...noText, line: 10, ruleId: 'semgrep.xss', anchor: '' }),
+        ];
+
+        expect(new Set(findings.map((f) => f.fingerprint)).size).toBe(3);
+        expect(findings[0]!.fingerprint).toBe(
+          computeRegionFingerprint({ file: noText.file, category: noText.category, ruleId: 'semgrep.sqli', line: 10 }),
+        );
+        const k7 = warn.mock.calls.map((c) => String(c[0])).filter((m) => m.includes('[AUDIT-K7]'));
+        expect(k7).toHaveLength(3);
+        expect(k7[0]).toContain('semgrep.sqli at src/config.ts:10');
+
+        // Negative control — the identity as it was computed before: the empty anchor hashed
+        // as text. The three findings become one, and consolidation drops two of them.
+        const asText = findings.map((f) =>
+          computeFingerprint({ file: f.file, category: f.category, anchor: '' }),
+        );
+        expect(new Set(asText).size).toBe(1);
+      } finally {
+        warn.mockRestore();
+      }
+    });
   });
 
-  describe('4.12. Waivers sin match (AUDIT-L1)', () => {
+  describe('4.10. Runtime-Iterable Enums — DetectorName (AUDIT-J6)', () => {
+    it('[AUDIT-J6] should export DETECTOR_NAMES as a readonly tuple and narrow a string with isDetectorName', () => {
+      const mainBarrel = require('../index');
+      expect(mainBarrel.DETECTOR_NAMES).toEqual(['regex', 'heuristic', 'llm', 'sast']);
+      expect(isDetectorName('sast')).toBe(true);
+      expect(isDetectorName('semgrep')).toBe(false);
+
+      const src = fs.readFileSync(path.resolve(__dirname, 'types.ts'), 'utf-8');
+      expect(src).toMatch(/export type DetectorName = \(typeof DETECTOR_NAMES\)\[number\];/);
+    });
+  });
+
+  describe('4.12. Unmatched waivers (AUDIT-L1, L2)', () => {
+    it('[AUDIT-L2] should keep only the waivers whose finding file was read', () => {
+      const withFile = (fingerprint: string, file?: string): Waiver => {
+        const base = makeTestWaiver({ fingerprint });
+        return {
+          ...base,
+          feedback: {
+            ...base.feedback,
+            payload: {
+              ...base.feedback.payload,
+              ...(file !== undefined ? { metadata: { fingerprint, ruleId: 'SEC-001', file, line: 1 } } : {}),
+            },
+          },
+        };
+      };
+      const inRead = withFile('a'.repeat(64), 'src/read.ts');
+      const notRead = withFile('b'.repeat(64), 'src/untouched.ts');
+      const noFile = withFile('c'.repeat(64));
+
+      expect(waiversForFiles([inRead, notRead, noFile], ['src/read.ts', 'src/other.ts'])).toEqual([inRead]);
+
+      // Negative control — without the filter, a diff run that read one file reports the
+      // waiver of a file it never opened as unmatched, and tells the user to re-create it.
+      const finding = makeTestFinding({ file: 'src/read.ts', anchor: 'still-here' });
+      const matchedInRead = withFile(finding.fingerprint, 'src/read.ts');
+      expect(countUnmatchedWaivers([matchedInRead, notRead], [finding])).toBe(1);
+      expect(countUnmatchedWaivers(waiversForFiles([matchedInRead, notRead], ['src/read.ts']), [finding])).toBe(0);
+    });
     it('[AUDIT-L1] should count the waivers whose fingerprint matches no finding', () => {
       const a = makeTestFinding({ anchor: 'still-here-a' });
       const b = makeTestFinding({ anchor: 'still-here-b' });
@@ -875,7 +973,7 @@ describe('Audit Prisma Schema Verification (audit_prisma_record_projection_modul
     });
   });
 
-  describe('4.13. Conteo por severidad (AUDIT-M1)', () => {
+  describe('4.13. Severity counts (AUDIT-M1)', () => {
     it('[AUDIT-M1] should count findings per severity with every key present', () => {
       // Two critical and one low, asymmetric on purpose: with one finding per severity a
       // counter that ignores the severity and returns findings.length / 4 would also pass.
@@ -903,7 +1001,7 @@ describe('Audit Prisma Schema Verification (audit_prisma_record_projection_modul
     });
   });
 
-  describe('4.4. Finding Factory — dos constructores (AUDIT-D2)', () => {
+  describe('4.4. Finding Factory — two constructors (AUDIT-D2)', () => {
     it('[AUDIT-D2] should construct every Finding through createFinding or rehydrateFinding', () => {
       const srcRoot = path.resolve(__dirname, '..');
       const files: string[] = [];

@@ -1,5 +1,5 @@
 import type { Finding, DetectorName } from "../audit/types";
-import { countUnmatchedWaivers, countBySeverity } from "../audit/types";
+import { countUnmatchedWaivers, waiversForFiles, countBySeverity } from "../audit/types";
 import type {
   SourceAuditorDependencies,
   ScopeSelectorDependencies,
@@ -71,7 +71,7 @@ export class SourceAuditorModule {
       findings,
       scannedLines,
       detectors,
-      scannedFiles: input.files.length,
+      readFiles: input.files.map((f) => f.path),
       // [EARS-H2] The waivers received, as they are: expiry is the loader's responsibility.
       waivers: input.waivers ?? [],
       startTime,
@@ -89,20 +89,21 @@ export class SourceAuditorModule {
     findings: Finding[];
     scannedLines: number;
     detectors: DetectorName[];
-    scannedFiles: number;
+    readFiles: string[];
     waivers: Waiver[];
     startTime: number;
   }): AuditResult {
     const { newFindings, acknowledgedCount, unmatchedCount } = this.filterByWaivers(
       input.findings,
       input.waivers,
+      input.readFiles,
     );
 
     return {
       findings: newFindings,
       summary: this.calculateSummary(newFindings),
       // [EARS-E1]
-      scannedFiles: input.scannedFiles,
+      scannedFiles: input.readFiles.length,
       // [EARS-E2]
       scannedLines: input.scannedLines,
       // [EARS-E3]
@@ -152,7 +153,7 @@ export class SourceAuditorModule {
     // is controlled — hence the batch loop and `finishAudit()` for the shared tail.
     const allFindings: Finding[] = [];
     const allDetectors: DetectorName[] = [];
-    let scannedFiles = 0;
+    const readFiles: string[] = [];
     let scannedLines = 0;
 
     for (const pathBatch of this.createBatches(filePaths, BATCH_SIZE)) {
@@ -178,7 +179,7 @@ export class SourceAuditorModule {
         if (!allDetectors.includes(detector)) allDetectors.push(detector);
       }
       scannedLines += batchResult.scannedLines;
-      scannedFiles += batch.length;
+      readFiles.push(...batch.map((f) => f.path));
       // `batch` goes out of scope here, so the content of the previous batch is collectable.
     }
 
@@ -202,7 +203,7 @@ export class SourceAuditorModule {
       findings: allFindings,
       scannedLines,
       detectors: allDetectors,
-      scannedFiles,
+      readFiles,
       waivers,
       startTime,
     });
@@ -269,7 +270,8 @@ export class SourceAuditorModule {
    */
   private filterByWaivers(
     findings: Finding[],
-    waivers: Waiver[]
+    waivers: Waiver[],
+    readFiles: string[],
   ): { newFindings: Finding[]; acknowledgedCount: number; unmatchedCount: number } {
     const waiverFingerprints = new Set(waivers.map((w) => w.fingerprint));
     const newFindings = findings.filter(
@@ -280,8 +282,10 @@ export class SourceAuditorModule {
     // (AUDIT-K1..K6) every waiver written with the old value lands here, and these are the
     // ones the user has to re-create. It is not derivable from the other two counts: a run
     // with a stale waiver and a run with no waivers at all agree on both of them.
+    // [AUDIT-L2] Only waivers on a file this run read: one on a file outside the scope or the
+    // change set is not stale, and counting it tells the user to re-create a waiver that is fine.
     // [AUDIT-L1] The count is defined once, in audit/, and shared with the orchestrator.
-    const unmatchedCount = countUnmatchedWaivers(waivers, findings);
+    const unmatchedCount = countUnmatchedWaivers(waiversForFiles(waivers, readFiles), findings);
     return { newFindings, acknowledgedCount, unmatchedCount };
   }
 
