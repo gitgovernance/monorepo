@@ -65,6 +65,8 @@ export class ContextCommand {
 
       // 3. Output based on format
       // [EARS-A2] [EARS-A4] JSON output when --json flag is provided
+      // [EARS-B4] The payload carries no degradation marker when `rootCycle` is null: after D29
+      // that is the ordinary state of a fresh project, so `null` travels as data, not as a fault.
       if (options.json) {
         console.log(JSON.stringify(context, null, 2));
       } else {
@@ -76,6 +78,8 @@ export class ContextCommand {
           console.log(`📁 Project: ${context.projectInfo.name} (${context.projectInfo.id})`);
         }
         // [EARS-B1] [EARS-B3] Show "none" for null values
+        // [EARS-B4] `none` is printed bare, with no warning beside it: since D29 a fresh project
+        // has no root cycle, so this is the expected reading and not a symptom of a partial init.
         console.log(`🔗 Root Cycle: ${context.rootCycle || 'none'}`);
         console.log(`⚡ Active Cycle: ${context.activeCycleId || 'none'}`);
         console.log(`📋 Active Task: ${context.activeTaskId || 'none'}`);
