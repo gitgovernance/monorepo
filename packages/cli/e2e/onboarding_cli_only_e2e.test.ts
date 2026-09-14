@@ -204,7 +204,7 @@ describe('Phase E — CLI-only Owner + Collaborator (OB-E1 to OB-E6)', () => {
     expect(pushResult.success).toBe(false);
   });
 
-  // [OB-E7] init followed by audit. No e2e ran this pair before 2026-09-13: audit_command_e2e
+  // [OB-E7] [OB-E8] init followed by audit. No e2e ran this pair before 2026-09-13: audit_command_e2e
   // registers the agent with `gitgov agent new`, which rewrites the engine init left behind. Through
   // that gap the first audit reported 0 findings over a live secret (first_experience audit 1c19).
   const initRepoWithSecret = (name: string) => {
@@ -249,5 +249,20 @@ describe('Phase E — CLI-only Owner + Collaborator (OB-E1 to OB-E6)', () => {
     const securityAudit = audit.agentResults.find((r: { agentId: string }) => r.agentId === 'agent:security-audit');
     expect(securityAudit?.status).toBe('success');
     expect(audit.findings.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('[OB-E8] owner init then audit reports the agent error instead of a clean success when it does not resolve', () => {
+    const repo = initRepoWithSecret('secret-repo-not-installed');
+
+    // No exit-code assertion on purpose: with every agent in error the CLI still prints
+    // "Decision: PASS" and exits 0. That policy decision is escalated to finding_governance.
+    const result = runCliCommand(['audit', '--scope', 'full', '--output', 'json'], { cwd: repo, expectError: true, env: repoOnlyEnv() });
+    const audit = parseAudit(result.output);
+    const securityAudit = audit.agentResults.find((r: { agentId: string }) => r.agentId === 'agent:security-audit');
+    // Anti-vacuity: the agent was dispatched, so its status is a result and not an absence
+    expect(securityAudit).toBeDefined();
+    expect(securityAudit.status).toBe('error');
+    expect(securityAudit.errorMessage).toContain('@gitgov/agent-security-audit');
+    expect(audit.warning).toContain('failed to load');
   });
 });
