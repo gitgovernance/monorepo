@@ -1245,6 +1245,36 @@ describe('ProjectModule', () => {
     });
   });
 
+  // gitgov_audit.md 4.1. Creation durante Init (GAUD-A3). The requirement is the agent's; the behavior
+  // is this module's init, so the test lives here (declared in project_module.md §4).
+  describe('gitgov_audit.md 4.1. Creation durante Init (GAUD-A3)', () => {
+    // A3 was 🔴 "covered by structure": its old delegation to PROJ-E3 tested the fresh-init loop, never
+    // a re-init. "Exactly one agent:gitgov-audit in the store" is not enough either — the store is keyed
+    // by id, so a re-creation OVERWRITES the record with a fresh key and the count stays at one. What a
+    // re-creation changes is the key and the signature, so that is what this reads.
+    it('[GAUD-A3] should not re-create or re-sign agent:gitgov-audit when init runs again on an initialized project', async () => {
+      const { deps, actorStore, initializer } = createRealDeps();
+      const createActor = jest.spyOn(deps.identity, 'createActor');
+      const pm = new ProjectModule(deps);
+
+      await pm.initializeProject({ name: 'test-project', login: 'owner', stateBranch: DEFAULT_STATE_BRANCH });
+      const before = await actorStore.get('agent:gitgov-audit');
+      expect(before).not.toBeNull(); // anti-vacuity: the fresh init created it
+
+      // Re-run init on the initialized project: the owner again, then a collaborator joining
+      (initializer.isInitialized as jest.Mock).mockResolvedValue(true);
+      await pm.initializeProject({ name: 'test-project', login: 'owner', stateBranch: DEFAULT_STATE_BRANCH });
+      await pm.initializeProject({ name: 'test-project', login: 'collaborator', stateBranch: DEFAULT_STATE_BRANCH });
+
+      const after = await actorStore.get('agent:gitgov-audit');
+      expect(after!.payload.publicKey).toBe(before!.payload.publicKey);
+      expect(after!.header.signatures).toEqual(before!.header.signatures);
+      expect(createActor.mock.calls.filter(([payload]) => payload.id === 'agent:gitgov-audit')).toHaveLength(1);
+      // Anti-vacuity for the re-inits: the collaborator was really added, so the re-init path ran
+      expect(await actorStore.get('human:collaborator')).not.toBeNull();
+    });
+  });
+
   // gitgov_audit.md 4.5. Agent Config Update (GAUD-E1 to E3)
   // Section number belongs to gitgov_audit.md, not project_module.md: these EARS are the
   // agent's, and §4.8 of this module's spec is Branch Check Caching (PROJ-G1).
