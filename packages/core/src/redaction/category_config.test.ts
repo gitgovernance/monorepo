@@ -18,7 +18,7 @@ import type { Finding } from '../audit/types';
 // A finding whose category is the only thing each C test changes. "Classify" is verified
 // as BEHAVIOUR — the category goes through redact() — and not as list membership alone:
 // the membership assertions were the only link between these four categories and what the
-// module does with them (audit test-red F13), so a config that listed pii-email under safe
+// module does with them, so a config that listed pii-email under safe
 // AND under sensitive, or a redactor that ignored the list, was invisible to them.
 function findingWith(category: Finding['category']): Finding {
   return {
@@ -74,12 +74,12 @@ describe('CategoryConfig', () => {
     });
 
     it('[RLDX-C5] should return new config with merged categories without mutating base', () => {
-      // Snapshot by VALUE, not by length: an in-place rewrite of equal length passed the
-      // length check (audit test-red F9).
+      // Snapshot by VALUE, not by length: an in-place rewrite of equal length passes a
+      // length check.
       const baseSnapshot = JSON.parse(JSON.stringify(DEFAULT_REDACTION_CONFIG));
 
-      // All three fields overridden. The previous test passed sensitiveCategories only, so a
-      // merge that discarded safeCategories and defaultBehavior stayed green (mutation M5) —
+      // All three fields overridden. Passing sensitiveCategories only lets a merge that
+      // discarded safeCategories and defaultBehavior stay green —
       // and defaultBehavior: 'keep' is the only way to turn safe-by-default off.
       const merged = mergeRedactionConfig(DEFAULT_REDACTION_CONFIG, {
         sensitiveCategories: ['custom-sensitive'],

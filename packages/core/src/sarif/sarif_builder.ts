@@ -277,9 +277,9 @@ class SarifBuilderImpl implements SarifBuilder {
     // assembled log goes through FindingRedactor before it leaves the builder. The scan path
     // redacts in the orchestrator (AORCH-E1); the export-from-DB path (saas-api scans.export)
     // reconstructs SARIF from rows, never passes the orchestrator, and redacts HERE. Two entry
-    // points to one redactor, ONE policy: always DEFAULT_REDACTION_CONFIG — the caller-supplied
-    // `redactionConfig` (SARIF-O4) was a third entry point for the policy and was removed on
-    // 2026-09-13; a non-default policy enters through FindingRedactor's constructor only.
+    // points to one redactor, ONE policy: always DEFAULT_REDACTION_CONFIG — a caller-supplied
+    // `redactionConfig` (SARIF-O4, retired) would be a third entry point for the policy; a
+    // non-default policy enters through FindingRedactor's constructor only.
     if (options.redactionLevel) {
       return new FindingRedactor(DEFAULT_REDACTION_CONFIG).redactSarif(sarifLog, options.redactionLevel);
     }

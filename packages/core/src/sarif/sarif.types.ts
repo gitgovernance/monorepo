@@ -326,10 +326,8 @@ export type GetLineContentFn = (file: string, line: number) => Promise<string | 
  */
 export type OccurrenceContext = Map<string, number>;
 
-// RedactionLevel is imported from '../redaction/redactor.types' — single source of truth. The
-// "backward compatibility" re-export that lived here (and as `Sarif.RedactionLevel` on the
-// package) was removed on 2026-09-13 with zero consumers measured in cli, agents, mcp-server,
-// saas-api and saas-worker (audit dep-red F9): one public path, `Redaction.RedactionLevel`.
+// RedactionLevel is imported from '../redaction/redactor.types' — single source of truth, and
+// one public path, `Redaction.RedactionLevel`. No alias is re-exported from here.
 
 /**
  * All inputs to SarifBuilder.build().
@@ -402,8 +400,8 @@ export type SarifBuilderOptions = {
    * Redaction on request (SARIF-O1..O3). The builder is the redactor of the export-from-DB
    * path, which reconstructs SARIF from rows and never passes the orchestrator; the scan
    * path redacts in the orchestrator (AORCH-E1). Always with DEFAULT_REDACTION_CONFIG: the
-   * policy enters through FindingRedactor's constructor only — `redactionConfig`, a third
-   * entry point for the policy, was removed on 2026-09-13 (SARIF-O4 retired, audit dep-red F17).
+   * policy enters through FindingRedactor's constructor only. There is no `redactionConfig`
+   * option: it would be a third entry point for the policy (SARIF-O4 retired).
    */
   redactionLevel?: RedactionLevel;
 

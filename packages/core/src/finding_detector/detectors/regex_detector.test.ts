@@ -198,7 +198,7 @@ describe("RegexDetector", () => {
 
       // The identity is the one createFinding derives from file + category + matched text.
       // The detector supplies the anchor and nothing else — computing it here is what put
-      // three different formulas in three detectors (input #19 §0.3).
+      // three different formulas in three detectors.
       expect(finding.fingerprint).toBe(
         computeFingerprint({
           file: "src/pay.ts",

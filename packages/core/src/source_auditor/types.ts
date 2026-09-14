@@ -10,11 +10,6 @@ import type { FindingDetectorModule } from "../finding_detector";
 import type { FileLister } from "../file_lister";
 import type { IGitModule } from '../git';
 
-// The 2025 multi-target block (AuditTarget, CodeScope, JiraScope, GitgovScope, AuditScope) and
-// the display options (GroupByOption, OutputFormat, FailOnSeverity) were removed on 2026-09-13:
-// zero consumers outside this module, CodeScope was an inline copy of ScanScope (AUDIT-J4), and
-// FailOnSeverity carried a 'none' no caller accepted. See source_auditor_module.md §3.3.
-
 // ============================================================================
 // FILE CONTENT TYPES
 // ============================================================================
@@ -109,8 +104,8 @@ export type WaiverApplicationCounts = {
   /**
    * [EARS-C6] Active waivers whose fingerprint matched no finding of this run.
    *
-   * After the identity cut (AUDIT-K1..K6) every waiver written with the old value lands
-   * here, and these are the ones the user has to re-create. Without the count, "0
+   * A waiver written with an earlier identity (AUDIT-K1..K6) lands here, and these are the
+   * ones the user has to re-create. Without the count, "0
    * acknowledged" reads exactly like "there were no waivers".
    */
   unmatched: number;

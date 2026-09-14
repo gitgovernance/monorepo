@@ -166,7 +166,7 @@ export class FindingDetectorModule {
    *
    * [EARS-33] Two findings with the same anchor and category in the same file collapse here:
    * they receive the same fingerprint from the factory, so the second one is dropped. The
-   * same secret twice in a file is one problem (input #19 §0.4 S6).
+   * same secret twice in a file is one problem.
    */
   private deduplicateByFingerprint(findings: Finding[]): Finding[] {
     const seen = new Set<string>();

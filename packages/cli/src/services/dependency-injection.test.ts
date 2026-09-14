@@ -24,7 +24,7 @@ vi.mock('fs', () => ({
 vi.mock('@gitgov/core', async () => {
   // The real redaction module: a pure class with no I/O, so there is nothing to isolate from,
   // and a no-op stand-in misrepresented every axis the contract pins — same object reference
-  // back, no snippetHash, empty category lists (audit dep-red F6). Wiring is what this file
+  // back, no snippetHash, empty category lists. Wiring is what this file
   // tests; what the redactor does is core's, and now it is the same code here.
   const actual = await vi.importActual<typeof import('@gitgov/core')>('@gitgov/core');
 

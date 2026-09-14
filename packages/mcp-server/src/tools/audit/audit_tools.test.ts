@@ -19,10 +19,9 @@ function parseResult(result: { content: Array<{ text: string }>; isError?: boole
 }
 
 /**
- * Typed against the real `SourceAuditor.AuditResult`. The previous stub was a shape this
- * module cannot produce — flat severity keys, nine required Finding fields missing — and
- * `vi.fn().mockResolvedValue` is untyped, so the four MSRV-L* tests asserted against an
- * invented contract (audit dependency #7).
+ * Typed against the real `SourceAuditor.AuditResult`. `vi.fn().mockResolvedValue` is untyped,
+ * so an untyped stub — flat severity keys, required Finding fields missing — lets the MSRV-L*
+ * tests assert against a shape this module cannot produce.
  */
 function makeAuditResult(): SourceAuditor.AuditResult {
   const finding = createFinding({

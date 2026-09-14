@@ -278,9 +278,9 @@ export class SourceAuditorModule {
       (f) => !waiverFingerprints.has(f.fingerprint)
     );
     const acknowledgedCount = findings.length - newFindings.length;
-    // [EARS-C6] Waivers pointing at an identity nothing produced. After the cut
-    // (AUDIT-K1..K6) every waiver written with the old value lands here, and these are the
-    // ones the user has to re-create. It is not derivable from the other two counts: a run
+    // [EARS-C6] Waivers pointing at an identity nothing produced. A waiver written with an
+    // earlier identity (AUDIT-K1..K6) lands here, and these are the ones the user has to
+    // re-create. It is not derivable from the other two counts: a run
     // with a stale waiver and a run with no waivers at all agree on both of them.
     // [AUDIT-L2] Only waivers on a file this run read: one on a file outside the scope or the
     // change set is not stale, and counting it tells the user to re-create a waiver that is fine.

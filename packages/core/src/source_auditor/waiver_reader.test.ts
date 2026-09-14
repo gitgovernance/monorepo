@@ -188,9 +188,9 @@ describe("WaiverReader", () => {
 
     it("[EARS-F6] hasWaiver should return false if fingerprint has no waiver", async () => {
       // An ACTIVE waiver for a DIFFERENT fingerprint is loaded. With an empty feedback list
-      // (audit H5) this control shared the instrument's defect: a hasWaiver that ignored the
+      // this control would share the instrument's defect: a hasWaiver that ignored the
       // fingerprint and returned `waivers.length > 0`, or a loadWaivers that returned nothing,
-      // both passed F6 — the negative control could not tell "no match" from "nothing loaded".
+      // would both pass F6 — the negative control could not tell "no match" from "nothing loaded".
       const otherWaiver: FeedbackRecord<WaiverMetadata> = {
         id: "feedback-other",
         entityType: "execution",

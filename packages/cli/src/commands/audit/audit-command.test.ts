@@ -358,7 +358,7 @@ describe('AuditCommand', () => {
       const printed = mockConsoleLog.mock.calls.map((c) => String(c[0])).join('\n');
       expect(printed).toContain('2 waiver(s) matched no finding');
       // The message has to tell the user what to DO — a bare count is not actionable when
-      // every pre-cut waiver has just stopped matching at once.
+      // every waiver written with an earlier identity stops matching at once.
       expect(printed).toContain('gitgov audit waive');
 
       // Negative control: with nothing unmatched the line is absent. Without this half the
@@ -444,8 +444,8 @@ describe('AuditCommand', () => {
     });
 
     it('[AORCH-C9] should exit 1 when no agent completed even if the policy decision is pass', async () => {
-      // Decision 12: every agent failed to load, the evaluator saw an empty list and said
-      // "pass" (PEVAL-D9 is right about that), and the CLI used to exit 0 over a real secret.
+      // Every agent failed to load, the evaluator saw an empty list and said "pass" (PEVAL-D9
+      // is right about that), and exiting 0 would pass a repository nobody scanned.
       // "Nothing was scanned" is the CLI's distinction to make: agentsRun counts SUCCESSES.
       mockOrchestrator.run.mockResolvedValue({
         ...mockEmptyResult,
@@ -461,8 +461,8 @@ describe('AuditCommand', () => {
 
     it('[AORCH-C9] should keep the policy exit code when at least one agent completed', async () => {
       // NEGATIVE CONTROL for the condition: a mixed run scanned something, so the policy
-      // decision rules. `agentsRun === agentsFailed` (the first wording of Decision 12) would
-      // have flagged this 1/1 run as "nothing scanned" — and missed the all-failed 0/N one.
+      // decision rules. A condition written as `agentsRun === agentsFailed` would flag this
+      // 1/1 run as "nothing scanned" — and miss the all-failed 0/N one.
       mockOrchestrator.run.mockResolvedValue({
         ...mockEmptyResult,
         summary: { ...mockEmptyResult.summary, agentsRun: 1, agentsFailed: 1 },

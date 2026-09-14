@@ -773,11 +773,10 @@ describe("AuditOrchestrator", () => {
     });
 
     it("[AORCH-B6] should not read partialFingerprints primaryLocationLineHash/v1 as the identity", async () => {
-      // THE negative control for B6's own bug. Before the cut, the orchestrator keyed
-      // consolidation on partialFingerprints["primaryLocationLineHash/v1"] — GitHub's line
-      // hash, carrying neither file nor category. `legacyKeyOnly` emits that key ALONE, with
-      // no gitgov/v2, which is exactly what a pre-cut SARIF looks like. The flag existed since
-      // the B6 pass and no test used it (audit 2026-09-11).
+      // THE negative control for B6's own bug. The orchestrator used to key consolidation on
+      // partialFingerprints["primaryLocationLineHash/v1"] — GitHub's line hash, carrying
+      // neither file nor category. `legacyKeyOnly` emits that key ALONE, with no gitgov/v2,
+      // which is exactly what a SARIF written with that key looks like.
       const agent = makeAgentRecord("agent:security-audit", "audit");
       const legacyValue = "a1b2c3d4e5f60718:1";
       const snippet = 'const token = "sk-legacy"';
@@ -1189,7 +1188,7 @@ describe("AuditOrchestrator", () => {
       ]);
 
       // Two active waivers: one covers the finding that exists, the other points at an
-      // identity nothing produces any more — which is what every pre-cut waiver becomes.
+      // identity nothing produces any more — what a waiver written with an earlier identity becomes.
       const matching = makeWaiver("fp-present");
       const orphaned = makeWaiver("fp-from-before-the-cut");
 
@@ -1567,7 +1566,7 @@ describe("AuditOrchestrator", () => {
     });
 
     // [RLDX-E3] The redaction spec delegates its E3 to this test (redaction_module §4.5.2);
-    // the tag makes the delegation greppable from both sides (audit dep-red F11).
+    // the tag makes the delegation greppable from both sides.
     it("[AORCH-E3] [RLDX-E3] should not require agent knowledge of RedactionLevel", async () => {
       // Verify that AgentAuditInput does not include RedactionLevel
       // (structural test — agents receive scope, include, exclude, taskId only)

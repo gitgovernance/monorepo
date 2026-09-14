@@ -286,7 +286,7 @@ describe("SourceAuditorModule", () => {
       expect(result.waivers.acknowledged).toBe(1);
     });
 
-    // EARS-C3 and EARS-C4 retired from this block on 2026-09-13 (audit H3/H4). Expiry is
+    // EARS-C3 and EARS-C4 are retired from this block. Expiry is
     // resolved by WaiverReader.loadWaivers() and is specified and tested there as EARS-F3/F4;
     // filterByWaivers never reads expiresAt. The C3 test here had no expired waiver in its
     // fixture, and the C4 test was byte-equivalent to C2. See EARS-H2 for what this means
@@ -320,8 +320,8 @@ describe("SourceAuditorModule", () => {
       const detected = createFinding({ anchor: "still-here" });
       mockFindingDetector.detect.mockResolvedValue([detected]);
 
-      // Shaped like the identity this epic replaced (`sha256(line)[0:16]:occurrence`) — this
-      // is literally what a waiver written before the cut still carries in .gitgov/feedbacks/.
+      // Shaped like the earlier line-hash identity (`sha256(line)[0:16]:occurrence`) — what a
+      // waiver written with that identity still carries in .gitgov/feedbacks/.
       const staleWaiver = (hash: string): Waiver => waiverOn(hash, "src/app.ts");
       const matched = waiverOn(detected.fingerprint, "src/app.ts");
 

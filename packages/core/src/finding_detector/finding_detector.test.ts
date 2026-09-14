@@ -25,7 +25,7 @@ describe("FindingDetectorModule", () => {
         heuristic: { enabled: false },
       });
 
-      // The same secret twice in one file: two matches, one problem (input #19 §0.4 S6).
+      // The same secret twice in one file: two matches, one problem.
       const content = [
         `const a = { charge: "${STRIPE_KEY}" };`,
         `const b = { refund: "${STRIPE_KEY}" };`,
