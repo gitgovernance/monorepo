@@ -73,7 +73,7 @@ const DEFAULT_REDACTION_CONFIG: RedactionConfig = {
   defaultBehavior: 'redact',
 };
 // [RLDX-A6] Every BASE_FINDING_CATEGORIES element is in exactly one of the two lists above.
-// The two SAST entries went unclassified until 2026-09-13; defaultBehavior hid it.
+// An unclassified built-in is hidden by defaultBehavior, which is why RLDX-A6 checks the tuple.
 
 /**
  * Crea una nueva configuracion de redaccion combinando base y override.

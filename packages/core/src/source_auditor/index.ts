@@ -2,7 +2,7 @@
 export { SourceAuditorModule } from "./source_auditor";
 
 // Internal component by convention (constructed here, not injected) — exported for
-// testing/extension. ScoringEngine, a pass-through with no EARS, was removed on 2026-09-13.
+// testing/extension.
 export { ScopeSelector } from "./scope_selector";
 export { WaiverReader } from "./waiver_reader";
 export { WaiverWriter } from "./waiver_writer";

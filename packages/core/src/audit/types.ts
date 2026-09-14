@@ -393,18 +393,16 @@ export type AuditSummary = SeverityCounts & {
    * when the run did not look everywhere a waiver can point: scope `diff`, an `include`,
    * `exclude` or `agentId` narrowing it, an agent that failed, or no agents at all.
    *
-   * `null` is "not measured", never zero. Required, not optional: after the identity cut
-   * (AUDIT-K1..K6) every waiver written with the old value stops matching, and without this
-   * field "0 waived" is indistinguishable from "there were no waivers".
+   * `null` is "not measured", never zero. Required, not optional: a waiver written with an
+   * earlier identity (AUDIT-K1..K6) stops matching, and without this field "0 waived" is
+   * indistinguishable from "there were no waivers".
    */
   unmatchedWaivers: number | null;
   /**
    * Agents that completed SUCCESSFULLY — not agents executed. Computed as
    * `agentResults.filter(r => r.status === "success").length`, so with every agent failing
-   * this is 0, not N. "Number of agents executed" was the previous docstring and it was
-   * false; it got copied into a decision (README §6, Decision 12) as `agentsRun ===
-   * agentsFailed`, which is never true when all fail. "All agents failed" is
-   * `agentsRun === 0 && agentsFailed > 0`.
+   * this is 0, not N, and `agentsRun === agentsFailed` is never true when all fail. "All
+   * agents failed" is `agentsRun === 0 && agentsFailed > 0`.
    */
   agentsRun: number;
   /** Agents whose status was "error" */
@@ -532,7 +530,7 @@ export type Scan = {
 
 // ─── Finding Factory ─────────────────────────────────────────────────────────
 
-// One sha256 for the whole integrity bridge (audit dep-red F4): the redactor, the verifier
+// One sha256 for the whole integrity bridge: the redactor, the verifier
 // and the producer must agree byte for byte, so they call the same function. Imported from
 // the file, not the `crypto` barrel: the barrel pulls `util` in, and `@gitgov/core/audit`
 // must stay clean of Node builtins beyond its allowlist (EARS-CI02). `checksum` imports

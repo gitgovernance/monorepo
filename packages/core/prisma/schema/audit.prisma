@@ -57,8 +57,8 @@ model Finding {
   // ── Projection-specific fields (tracking across scans) ──
   findingId          String
   // Required, like Finding.snippetHash in core (AUDIT-K6): always written by the projection
-  // (RLDX-F2 transports it at both levels). Was String? until 2026-09-13 (audit cross-spec F-3,
-  // dep-red F15); the migration sets '' on legacy NULL rows, which RLDX-F4 treats as unverifiable.
+  // (RLDX-F2 transports it at both levels). The migration that made it NOT NULL sets '' on
+  // legacy NULL rows, which RLDX-F4 treats as unverifiable.
   snippetHash        String
   hasFullSnippet     Boolean          @default(true)
   detectionCount     Int              @default(1)

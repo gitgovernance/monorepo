@@ -120,7 +120,7 @@ describe('SarifBuilder', () => {
       expect(result.partialFingerprints!['primaryLocationLineHash/v1']).toMatch(/^[0-9a-f]{16}:1$/);
     });
 
-    // SARIF-C5 superseded by SARIF-N1/N2 (finding_governance Cycle 1): Finding.fingerprint never
+    // SARIF-C5 superseded by SARIF-N1/N2: Finding.fingerprint never
     // travels under primaryLocationLineHash/v1 again. See 4.14 below.
 
     it('[SARIF-C6] build: $schema should point to OASIS Errata 01 official URL', async () => {
@@ -447,7 +447,7 @@ describe('SarifBuilder', () => {
       expect(snippet!.text).toBe('const email = user.email;');
     });
 
-    // SARIF-O4 (a caller-supplied redactionConfig) was retired on 2026-09-13: the option was
+    // SARIF-O4 (a caller-supplied redactionConfig) is retired: the option was
     // a third entry point for the redaction POLICY. The builder always redacts with
     // DEFAULT_REDACTION_CONFIG; a non-default policy enters through FindingRedactor's
     // constructor only. Its test went with it.

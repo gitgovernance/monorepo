@@ -142,7 +142,7 @@ class FindingRedactor {
    * 2. En safeCategories -> false (no redactar)
    * 3. No registrada -> segun defaultBehavior ('redact' = true, 'keep' = false)
    */
-  // [RLDX-C1] [RLDX-C2] [RLDX-C3] [RLDX-C4] Public since 2026-09-13: external verifiers (the
+  // [RLDX-C1] [RLDX-C2] [RLDX-C3] [RLDX-C4] Public: external verifiers (the
   // E2E in packages/e2e) call this instead of re-deriving the three-step rule with step 1 only.
   isSensitiveCategory(category: FindingCategory): boolean {
     if (this.sensitiveSet.has(category)) return true;

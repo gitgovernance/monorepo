@@ -272,7 +272,7 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
       }
 
       // [AORCH-C2] Exit code based on policy decision — except when nothing was scanned.
-      // [AORCH-C9] (Decision 12) Every agent failed to load: the evaluator saw an empty list
+      // [AORCH-C9] Every agent failed to load: the evaluator saw an empty list
       // and said "pass", which is right for an empty list and wrong as a verdict on a
       // repository nobody scanned. `agentsRun` counts SUCCESSES, so "no agent completed" is
       // `agentsRun === 0 && agentsFailed > 0` — never `agentsRun === agentsFailed`.
@@ -393,9 +393,9 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
     console.log('└──────────┴───────┴────────────────────────────────────────┘');
     console.log(`\nTotal: ${summary.total} findings (${summary.suppressed} waived), ${summary.agentsRun} agent(s) run\n`);
 
-    // [AORCH-B15] Only when there is something to say. After the identity cut every waiver
-    // written with the old fingerprint stops matching, and the user's only other signal is
-    // "0 waived" — which reads identically to having had no waivers at all.
+    // [AORCH-B15] Only when there is something to say. A waiver written with an earlier
+    // fingerprint stops matching, and the user's only other signal is "0 waived" — which
+    // reads identically to having had no waivers at all.
     // `null` is "not measured" — a diff run, a narrowed run, or a failed agent — and has
     // nothing to say about the waivers.
     if (summary.unmatchedWaivers !== null && summary.unmatchedWaivers > 0) {

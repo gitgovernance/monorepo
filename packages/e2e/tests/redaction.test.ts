@@ -197,8 +197,8 @@ async function runScanWithRedactionLevel(
 // ============================================================================
 
 // Second implementation of RLDX-B8/B10, RLDX-G1, SARIF-N2 and SARIF-J1 against SARIF built by
-// the real detectors. Tagged with the EARS each `it()` asserts (2026-09-13, audit dep-red F12):
-// the previous `[CI1]`..`[CI4]` IDs existed in no spec, so no audit could cross them.
+// the real detectors. Tagged with the EARS each `it()` asserts, so an audit can cross them
+// with the spec.
 describe('Block I: Redaction Pipeline (RLDX-B8, B10, G1; SARIF-N2, J1)', () => {
   let fixtureDir: string;
   let originalSarif: SarifLog;
@@ -237,9 +237,9 @@ describe('Block I: Redaction Pipeline (RLDX-B8, B10, G1; SARIF-N2, J1)', () => {
     expect(l1Results.length).toBeGreaterThan(0);
 
     // Find results with sensitive categories — asking the module, not re-deriving its rule.
-    // The previous filter checked `sensitiveCategories.includes(cat)` only (step 1 of 3), so
-    // a category that reaches defaultBehavior was redacted by the module and excluded from
-    // this assertion at the same time (audit dep-red F13).
+    // Checking `sensitiveCategories.includes(cat)` only (step 1 of 3) would leave a category
+    // that reaches defaultBehavior redacted by the module and excluded from this assertion
+    // at the same time.
     const sensitiveResults = l1Results.filter((r: { properties?: Record<string, unknown> }) => {
       const cat = r.properties?.['gitgov/category'] as string | undefined;
       return cat !== undefined && redactor.isSensitiveCategory(cat);

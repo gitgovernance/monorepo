@@ -62,11 +62,10 @@ export const runCliCommand = (args: string[], options: RunCliOptions): RunCliRes
       ...(options.input && { input: options.input }),
       // NODE_PATH is always dropped: pnpm exports the workspace's .pnpm/node_modules through
       // it, so an npm-package agent that is NOT installed in the fixture still resolved from
-      // the WORKSPACE — an anchor no user machine has. `init_command_e2e` measured it on
-      // 2026-08-29 and cleaned it for one test; the audit e2e inherited it and its green
-      // measured pnpm's node_modules, not the user's repo (the false `success` of
-      // executeAgent lived behind it). An e2e simulating a user repo establishes its
-      // environment, it does not inherit the runner's.
+      // the WORKSPACE — an anchor no user machine has. Inherited, an e2e green measures
+      // pnpm's node_modules instead of the user's repo, and hides an agent that would not
+      // load there. An e2e simulating a user repo establishes its environment, it does not
+      // inherit the runner's.
       env: { ...process.env, NODE_PATH: '', ...(options.env ?? {}) },
     });
 

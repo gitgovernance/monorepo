@@ -297,8 +297,8 @@ function buildSummary(
     ...countBySeverity(active),
     suppressed: findings.filter((f) => f.isWaived).length,
     // [AORCH-B15] Active waivers pointing at an identity nothing produced — or null when the
-    // run was too narrow to know. After the cut (AUDIT-K1..K6) every waiver written with the
-    // old value lands here, and without the count "0 waived" reads like "no waivers".
+    // run was too narrow to know. A waiver written with an earlier identity (AUDIT-K1..K6)
+    // lands here, and without the count "0 waived" reads like "no waivers".
     // [AUDIT-L1] One definition of this count, shared with source_auditor.
     unmatchedWaivers: coversEveryWaiver(options, agentResults)
       ? countUnmatchedWaivers(activeWaivers, findings)
@@ -449,7 +449,7 @@ export function createAuditOrchestrator(deps: AuditOrchestratorDeps) {
       });
 
       // [AORCH-G1] [AORCH-G2] Detect agents that could not be LOADED: an unresolvable
-      // entrypoint, or (Decision 13) a `runtime` with no registered handler —
+      // entrypoint, or a `runtime` with no registered handler —
       // RuntimeNotFoundError, which is what a specialist registered with
       // `runtime: 'typescript'` throws in production, where LocalBackend tries the runtime
       // before the entrypoint and no handler exists.

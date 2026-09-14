@@ -144,8 +144,8 @@ describe('Block BA: Audit Record Projection (CBA1-CBA6)', () => {
         where: { fingerprint: finding.fingerprint },
         create: {
           fingerprint: finding.fingerprint,
-          // Required since Finding.snippetHash went NOT NULL (finding_governance 1.3b): the
-          // orchestrator's findings carry it, computed once by createFinding (AUDIT-K6).
+          // Required: Finding.snippetHash is NOT NULL, and the orchestrator's findings carry
+          // it, computed once by createFinding (AUDIT-K6).
           snippetHash: finding.snippetHash,
           ruleId: finding.ruleId,
           file: finding.file,
@@ -246,8 +246,8 @@ describe('Block BA: Audit Record Projection (CBA1-CBA6)', () => {
         where: { fingerprint: finding.fingerprint },
         create: {
           fingerprint: finding.fingerprint,
-          // Required since Finding.snippetHash went NOT NULL (finding_governance 1.3b): the
-          // orchestrator's findings carry it, computed once by createFinding (AUDIT-K6).
+          // Required: Finding.snippetHash is NOT NULL, and the orchestrator's findings carry
+          // it, computed once by createFinding (AUDIT-K6).
           snippetHash: finding.snippetHash,
           ruleId: finding.ruleId,
           file: finding.file,

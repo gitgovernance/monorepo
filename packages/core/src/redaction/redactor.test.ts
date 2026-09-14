@@ -211,12 +211,12 @@ describe('FindingRedactor', () => {
   // ────────────────────────────────────────────────────────────────────────
 
   describe('4.1. Types y Configuracion (RLDX-A1 a A5)', () => {
-    // RLDX-A1 retired 2026-09-13. Its test built a typed literal and asserted it against
+    // RLDX-A1 is retired. Its test built a typed literal and asserted it against
     // itself; RedactionConfig arrives via `import type` and is erased, so at runtime it was
     // expect(['pii-email']).toEqual(['pii-email']) — nothing under src/redaction/ could turn it
     // red. The shape of a type is tsc's job; the real config's three fields are A2/A3/A4.
 
-    // A2/A3 compare by VALUE, not by length. Measured (audit M2): swapping 'pci-cvv' for a
+    // A2/A3 compare by VALUE, not by length. Measured by mutation: swapping 'pci-cvv' for a
     // second 'pci-pan' kept the length at 23 and every test green while pci-cvv silently fell
     // to defaultBehavior.
     it('[RLDX-A2] should include exactly the 24 sensitive categories in DEFAULT_REDACTION_CONFIG', () => {
@@ -251,8 +251,7 @@ describe('FindingRedactor', () => {
       // "All fields" is checked structurally: the result minus the two keys the redactor owns
       // must equal the source with the fields L1 redaction rewrites. Field-by-field, the
       // previous test pinned 6 of 14 required fields and none of the optional ones — a build()
-      // that dropped detector, confidence, executionId or flipped isWaived stayed green
-      // (audit test-red F3, mutation M3).
+      // that dropped detector, confidence, executionId or flipped isWaived stayed green.
       const redactedFinding = redactor.redact(sensitiveFindingFull, 'l1');
       const { fixes: _fixes, ...sourceWithoutFixes } = sensitiveFindingFull;
       expect(withoutRedactionKeys(redactedFinding)).toEqual({
@@ -300,7 +299,7 @@ describe('FindingRedactor', () => {
 
       // "All original fields intact", structurally — including snippetHash, the field this
       // module exists to carry (an L2 path that destroyed it broke RLDX-F4/G1 with the L2 unit
-      // test green: audit test-red F6, mutation M4), and reportedBy.
+      // test green), and reportedBy.
       expect(withoutRedactionKeys(result)).toEqual(sensitiveFindingFull);
       expect(result.fixes).toBe(sensitiveFindingFull.fixes);
       expect(result.redactionLevel).toBe('l2');
@@ -318,7 +317,7 @@ describe('FindingRedactor', () => {
     it('[RLDX-B3] should carry the incoming snippetHash unchanged at every level and never recompute it', () => {
       // The identity rule (AUDIT-K5/K6): createFinding computes snippetHash once, everyone
       // else transports it. The fixture's hash is a sentinel, so a redactor that recomputed
-      // sha256(snippet) — what this module did until 2026-09-13 — turns this red.
+      // sha256(snippet) turns this red.
       expect(sha256(sensitiveFinding.snippet)).not.toBe(SENTINEL_HASH);
 
       expect(redactor.redact(sensitiveFinding, 'l1').snippetHash).toBe(SENTINEL_HASH); // sensitive, redacted
@@ -340,9 +339,9 @@ describe('FindingRedactor', () => {
 
     it('[RLDX-B4] should not introduce a fixes key on a finding that never had one', () => {
       // Under `exactOptionalPropertyTypes`, assigning `undefined` to an absent optional key
-      // ADDS the key, so a finding with no `fixes` used to come back carrying
-      // `fixes: undefined` (measured 2026-09-11, audit finding). Since 2026-09-13 the key
-      // is deleted from the copy instead, which is a no-op when it was never there.
+      // ADDS the key, so a finding with no `fixes` would come back carrying
+      // `fixes: undefined`. The key is deleted from the copy instead, which is a no-op when
+      // it was never there.
       const withoutFixes: Finding = { ...sensitiveFinding };
       delete withoutFixes.fixes;
       expect('fixes' in withoutFixes).toBe(false);
@@ -376,8 +375,8 @@ describe('FindingRedactor', () => {
 
       // "Full redaction" is B2 + B3 + B4 together. Asserting only the snippet let a mutation
       // that genericized the message and dropped fixes ONLY for explicitly-listed categories
-      // ship the original message and fixes of an unregistered one to Git with 21/21 green
-      // (audit test-red F8, mutation M7). This is the path a brand-new category takes on its
+      // ship the original message and fixes of an unregistered one to Git with every test
+      // green. This is the path a brand-new category takes on its
       // first scan — the highest-risk path in the module.
       expect(result.snippet).toBe('[REDACTED]');
       expect(result.hasFullSnippet).toBe(false);
@@ -442,8 +441,8 @@ describe('FindingRedactor', () => {
 
     it('[RLDX-B9] should keep a transported snippetHash instead of recomputing it', () => {
       // SarifBuilder already writes finding.snippetHash (computed once by createFinding) into
-      // gitgov/snippetHash. Until 2026-09-13 redactSarif overwrote it with sha256(text) — a
-      // second computation of a transported value, the class AUDIT-K5 closed for fingerprint.
+      // gitgov/snippetHash. Overwriting it with sha256(text) would be a second computation of
+      // a transported value, the class AUDIT-K5 closed for fingerprint.
       // Sentinel ≠ sha256(text), so a recompute turns this red. Both levels.
       const secret = "const secret = 'my-secret-key'";
       expect(sha256(secret)).not.toBe(SENTINEL_HASH);
@@ -478,7 +477,7 @@ describe('FindingRedactor', () => {
     it('[RLDX-B11] should not mutate the original SarifLog', () => {
       // redactSarif writes two things: snippet.text (l1 only) and properties['gitgov/snippetHash']
       // (both levels). Reading back only the snippet after an l1 call let a deep copy that ALSO
-      // stamped the hash on the original pass (audit M3). Whole-object snapshot, both levels.
+      // stamped the hash on the original pass. Whole-object snapshot, both levels.
       const originalSnippet = "const secret = 'my-secret-key'";
       const sarif = buildSarifLog('hardcoded-secret', originalSnippet);
       const snapshot = JSON.parse(JSON.stringify(sarif));

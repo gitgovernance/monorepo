@@ -1,11 +1,11 @@
 /**
  * Finding identity tests — the preimage, the normalization, and what stays out of it.
  *
- * Spec: audit_record_types_module.md §4.11 (AUDIT-K2, K3, K4)
+ * Spec: audit_record_types_module.md §4.11 (AUDIT-K2, K3, K4, K7)
  *
- * The negative controls are the point of this file. Each one reproduces a defect that
- * production had on 2026-09-05 (input #19 §0.2): dropping `file` merges the same line
- * across two files (D-a), dropping `category` merges two findings on one line (D-b).
+ * The negative controls are the point of this file. Each one reproduces a defect the
+ * identity has had: dropping `file` merges the same line across two files (D-a), dropping
+ * `category` merges two findings on one line (D-b).
  * A test that only asserts the happy path cannot tell those apart from correct behaviour.
  */
 
@@ -42,8 +42,7 @@ describe('4.11. Finding identity (AUDIT-K2 to K4, K7)', () => {
 
       expect(a).not.toBe(b);
 
-      // Negative control — the preimage as it was written until 2026-09-14: the parts joined
-      // with "|" and no escaping. The same two inputs collapse into one identity, so a waiver
+      // Negative control — a preimage that joins the parts with "|" and no escaping. The same two inputs collapse into one identity, so a waiver
       // on one would silence the other.
       const joined = (file: string, category: string, anchor: string) =>
         createHash('sha256').update([FINGERPRINT_SCHEME, file, category, anchor].join('|')).digest('hex');
@@ -131,7 +130,7 @@ describe('4.11. Finding identity (AUDIT-K2 to K4, K7)', () => {
     it('[AUDIT-K4] should yield one identity for two agents matching the same anchor', () => {
       // Cross-agent dedup falls out of the formula: `ruleId` is private to each agent,
       // `category` is the shared vocabulary. Same file, same category, same anchor → one
-      // finding, with no rule mapping between agents (agent_platform Task 2.2).
+      // finding, with no rule mapping between agents.
       const regex = computeFingerprint({ file: 'src/a.ts', category: 'hardcoded-secret', anchor: 'sk_test_x' });
       const semgrep = computeFingerprint({ file: 'src/a.ts', category: 'hardcoded-secret', anchor: 'sk_test_x' });
 

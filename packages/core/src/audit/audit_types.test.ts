@@ -286,8 +286,8 @@ describe('Audit Record Types (audit_record_types_module.md)', () => {
 
     it('[AUDIT-B4] should verify source_auditor and redaction import Finding from audit/types', () => {
       // These two cited AUDIT-B1 as their licence, but B1's WHEN names finding_detector and
-      // its test reads finding_detector only: a local `Finding` here went unnoticed (audit
-      // cross-spec F-11). One row per module, so the failure names the offender.
+      // its test reads finding_detector only: a local `Finding` here would go unnoticed. One
+      // row per module, so the failure names the offender.
       const modules = [
         { file: '../source_auditor/types.ts', quote: '"' },
         { file: '../redaction/redactor.types.ts', quote: "'" },
@@ -956,7 +956,7 @@ describe('Audit Prisma Schema Verification (audit_prisma_record_projection_modul
 
       // ONE matched and TWO stale, asymmetric on purpose: with one of each, "count the ones
       // that matched" and "count the ones that did not" both return 1, and an inverted
-      // predicate passes. Found by mutation in source_auditor's EARS-C6 on 2026-09-10.
+      // predicate passes.
       expect(countUnmatchedWaivers([matched, stale1, stale2], [a, b])).toBe(2);
     });
 
@@ -988,7 +988,7 @@ describe('Audit Prisma Schema Verification (audit_prisma_record_projection_modul
     });
 
     it('[AUDIT-M1] should type every severity aggregate in core as SeverityCounts', () => {
-      // The map was written five ways (audit M3b); the three core sites now name the one type.
+      // The map used to be written several ways; the three core sites now name the one type.
       const sites = [
         { file: 'types.ts', pattern: /export type AuditSummary = SeverityCounts & \{/ },
         { file: '../source_auditor/types.ts', pattern: /bySeverity: SeverityCounts;/ },
