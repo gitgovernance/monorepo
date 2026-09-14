@@ -141,10 +141,18 @@ describe('Audit CLI Command E2E', () => {
         );
         const output = `${audit.output} ${audit.error ?? ''}`;
 
-        // The policy saw an empty list and says PASS; the exit code says nothing was scanned.
+        // The policy saw an empty list and says PASS; the exit code says the scan is incomplete.
         expect(audit.success).toBe(false);
-        expect(output).toContain('no agent completed');
+        expect(output).toContain('1 audit agent(s) failed — the scan is incomplete');
         expect(output).toContain('0 agent(s) run');
+
+        // A mistyped --agent finds no audit agent at all: nothing was scanned, exit 1 as well.
+        const missing = runCliCommand(
+          ['audit', '--scope', 'full', '--agent', 'agent:no-such-audit-agent'],
+          { cwd: testProjectRoot, expectError: true },
+        );
+        expect(missing.success).toBe(false);
+        expect(`${missing.output} ${missing.error ?? ''}`).toContain('no audit agent found — nothing was scanned');
       } finally {
         cleanup();
         fs.rmSync(tempDir, { recursive: true, force: true });
@@ -179,10 +187,12 @@ describe('Audit CLI Command E2E', () => {
         const result1 = JSON.parse(audit1.output);
         expect(result1.findings.length).toBeGreaterThanOrEqual(1);
 
-        const fullFingerprint = result1.findings[0].fingerprint;
-        const partialFingerprint = fullFingerprint.slice(0, 12);
-        expect(partialFingerprint.length).toBe(12);
-        expect(fullFingerprint.length).toBeGreaterThan(12);
+        // [AUDIT-K8] The full value is `<scheme>:<digest>`; the short form the text output prints
+        // is a prefix of the digest, and that is what a user types.
+        const fullFingerprint: string = result1.findings[0].fingerprint;
+        expect(fullFingerprint).toMatch(/^gitgov-fp\/2(\+pos)?:[a-f0-9]{64}$/);
+        const partialFingerprint = fullFingerprint.split(':')[1]!.slice(0, 12);
+        expect(partialFingerprint).toMatch(/^[a-f0-9]{12}$/);
 
         // Waive with partial fingerprint (12 chars, as shown in terminal output)
         const waiveResult = runCliCommand(

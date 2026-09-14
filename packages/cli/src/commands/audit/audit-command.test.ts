@@ -74,6 +74,7 @@ vi.mock('@gitgov/core', async () => {
     },
     Sarif: actual.Sarif,
     generateExecutionId: actual.generateExecutionId ?? ((title: string, ts: number) => `${ts}-exec-${title}`),
+    fingerprintDigest: actual.fingerprintDigest,
   };
 });
 
@@ -248,6 +249,7 @@ describe('AuditCommand', () => {
       low: 0,
       suppressed: 0,
       unmatchedWaivers: 0,
+      outdatedWaivers: 0,
       agentsRun: 1,
       agentsFailed: 0,
     },
@@ -270,6 +272,7 @@ describe('AuditCommand', () => {
       low: 0,
       suppressed: 0,
       unmatchedWaivers: 0,
+      outdatedWaivers: 0,
       agentsRun: 0,
       agentsFailed: 0,
     },
@@ -279,6 +282,9 @@ describe('AuditCommand', () => {
     },
     warning: 'No audit agents found',
   };
+
+  /** The same empty result without the no-agents warning, for runs where an audit agent ran. */
+  const { warning: _noAgentsWarning, ...mockCompletedEmptyResult } = mockEmptyResult;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -399,6 +405,31 @@ describe('AuditCommand', () => {
       const json = JSON.parse(mockConsoleLog.mock.calls.map((c) => String(c[0])).join('\n'));
       expect(json.summary.unmatchedWaivers).toBeNull();
     });
+
+    it('[AORCH-B16] should print the outdated waivers line apart from the unmatched one only when there are some', async () => {
+      mockOrchestrator.run.mockResolvedValue({
+        ...mockResultWithFindings,
+        summary: { ...mockResultWithFindings.summary, unmatchedWaivers: 1, outdatedWaivers: 2 },
+      });
+      mockConsoleLog.mockClear();
+
+      await auditCommand.execute(createDefaultOptions({ scope: 'full' }));
+
+      const printed = mockConsoleLog.mock.calls.map((c) => String(c[0])).join('\n');
+      expect(printed).toContain('1 waiver(s) matched no finding');
+      expect(printed).toContain('2 waiver(s) were created with an earlier fingerprint scheme');
+
+      // Negative control: with none outdated, only the unmatched line is printed.
+      mockOrchestrator.run.mockResolvedValue({
+        ...mockResultWithFindings,
+        summary: { ...mockResultWithFindings.summary, unmatchedWaivers: 1, outdatedWaivers: 0 },
+      });
+      mockConsoleLog.mockClear();
+      await auditCommand.execute(createDefaultOptions({ scope: 'full' }));
+      const quiet = mockConsoleLog.mock.calls.map((c) => String(c[0])).join('\n');
+      expect(quiet).toContain('1 waiver(s) matched no finding');
+      expect(quiet).not.toContain('earlier fingerprint scheme');
+    });
   });
 
   describe('4.1. CLI -> Orchestrator Integration (AORCH-C1 to C8)', () => {
@@ -435,7 +466,11 @@ describe('AuditCommand', () => {
     });
 
     it('[AORCH-C2] should exit 0 when policy decision is pass', async () => {
-      mockOrchestrator.run.mockResolvedValue(mockEmptyResult);
+      // An audit agent ran and found nothing to block on.
+      mockOrchestrator.run.mockResolvedValue({
+        ...mockCompletedEmptyResult,
+        summary: { ...mockEmptyResult.summary, agentsRun: 1, agentsFailed: 0 },
+      });
 
       await auditCommand.execute(createDefaultOptions({ scope: 'full' }));
 
@@ -443,14 +478,30 @@ describe('AuditCommand', () => {
       expect(mockProcessExit).toHaveBeenCalledWith(0);
     });
 
-    it('[AORCH-C9] should exit 1 when no agent completed even if the policy decision is pass', async () => {
-      // Every agent failed to load, the evaluator saw an empty list and said "pass" (PEVAL-D9
-      // is right about that), and exiting 0 would pass a repository nobody scanned.
-      // "Nothing was scanned" is the CLI's distinction to make: agentsRun counts SUCCESSES.
+    it('[AORCH-C9] should exit 1 when every audit agent failed even if the policy decision is pass', async () => {
+      // The evaluator saw an empty list and said "pass" (PEVAL-D9 is right about that), and
+      // exiting 0 would pass a repository nobody scanned.
       mockOrchestrator.run.mockResolvedValue({
         ...mockEmptyResult,
         summary: { ...mockEmptyResult.summary, agentsRun: 0, agentsFailed: 1 },
         warning: 'All audit agents failed to load:\n  agent:security-audit — runtime \'typescript\' has no registered handler',
+      });
+      mockConsoleLog.mockClear();
+
+      await auditCommand.execute(createDefaultOptions({ scope: 'full' }));
+
+      expect(mockProcessExit).toHaveBeenCalledWith(1);
+      expect(mockProcessExit).not.toHaveBeenCalledWith(0);
+      const printed = mockConsoleLog.mock.calls.map((c) => String(c[0])).join('\n');
+      expect(printed).toContain('1 audit agent(s) failed — the scan is incomplete');
+    });
+
+    it('[AORCH-C9] should exit 1 when any audit agent failed even if another one completed', async () => {
+      // A CI/CD step cannot pass on a partial scan: the files the failed agent covers were not
+      // looked at, whatever the others found.
+      mockOrchestrator.run.mockResolvedValue({
+        ...mockCompletedEmptyResult,
+        summary: { ...mockEmptyResult.summary, agentsRun: 1, agentsFailed: 1 },
       });
 
       await auditCommand.execute(createDefaultOptions({ scope: 'full' }));
@@ -459,17 +510,26 @@ describe('AuditCommand', () => {
       expect(mockProcessExit).not.toHaveBeenCalledWith(0);
     });
 
-    it('[AORCH-C9] should keep the policy exit code when at least one agent completed', async () => {
-      // NEGATIVE CONTROL for the condition: a mixed run scanned something, so the policy
-      // decision rules. A condition written as `agentsRun === agentsFailed` would flag this
-      // 1/1 run as "nothing scanned" — and miss the all-failed 0/N one.
+    it('[AORCH-C9] should exit 1 when no audit agent was found', async () => {
+      // A mistyped --agent, or a repository with no audit agent registered: nothing was scanned.
+      mockOrchestrator.run.mockResolvedValue(mockEmptyResult);
+      mockConsoleLog.mockClear();
+
+      await auditCommand.execute(createDefaultOptions({ scope: 'full', agent: 'agent:securty-audit' }));
+
+      expect(mockProcessExit).toHaveBeenCalledWith(1);
+      expect(mockProcessExit).not.toHaveBeenCalledWith(0);
+      const printed = mockConsoleLog.mock.calls.map((c) => String(c[0])).join('\n');
+      expect(printed).toContain('no audit agent found — nothing was scanned');
+
+      // NEGATIVE CONTROL — the same empty result with one audit agent completed exits 0: the 1
+      // above comes from the missing agent, not from the empty findings list.
+      vi.clearAllMocks();
       mockOrchestrator.run.mockResolvedValue({
-        ...mockEmptyResult,
-        summary: { ...mockEmptyResult.summary, agentsRun: 1, agentsFailed: 1 },
+        ...mockCompletedEmptyResult,
+        summary: { ...mockEmptyResult.summary, agentsRun: 1, agentsFailed: 0 },
       });
-
       await auditCommand.execute(createDefaultOptions({ scope: 'full' }));
-
       expect(mockProcessExit).toHaveBeenCalledWith(0);
     });
 

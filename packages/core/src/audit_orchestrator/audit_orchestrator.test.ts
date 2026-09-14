@@ -191,6 +191,10 @@ function createMockDeps(overrides?: Partial<AuditOrchestratorDeps>): AuditOrches
   };
 }
 
+/** Fingerprints in the current scheme (AUDIT-K8): one a finding carries, one no finding carries. */
+const FP_PRESENT = `gitgov-fp/2:${"1".repeat(64)}`;
+const FP_GONE = `gitgov-fp/2:${"2".repeat(64)}`;
+
 const defaultOptions: AuditOrchestrationOptions = {
   scope: "full",
   taskId: "1234567890-task-test",
@@ -769,7 +773,7 @@ describe("AuditOrchestrator", () => {
       // someone inserted a line above the finding, so "the same finding" became a new one
       // between runs. It must not be what we land on.
       expect(finding.fingerprint).not.toBe("fallback:EXT-001:src/app.ts:42");
-      expect(finding.fingerprint).toMatch(/^[a-f0-9]{64}$/);
+      expect(finding.fingerprint).toMatch(/^gitgov-fp\/2:[a-f0-9]{64}$/);
     });
 
     it("[AORCH-B6] should not read partialFingerprints primaryLocationLineHash/v1 as the identity", async () => {
@@ -1182,15 +1186,15 @@ describe("AuditOrchestrator", () => {
           message: "Hardcoded secret",
           file: "src/config.ts",
           startLine: 10,
-          fingerprint: "fp-present",
+          fingerprint: FP_PRESENT,
           category: "hardcoded-secret",
         }),
       ]);
 
-      // Two active waivers: one covers the finding that exists, the other points at an
-      // identity nothing produces any more — what a waiver written with an earlier identity becomes.
-      const matching = makeWaiver("fp-present");
-      const orphaned = makeWaiver("fp-from-before-the-cut");
+      // Two active waivers in the current scheme: one covers the finding that exists, the other
+      // points at an identity nothing produces any more — a finding removed from the code.
+      const matching = makeWaiver(FP_PRESENT);
+      const orphaned = makeWaiver(FP_GONE);
 
       const deps = createMockDeps();
       (deps.recordStore.list as jest.Mock).mockResolvedValue(["agent:security-audit"]);
@@ -1215,14 +1219,14 @@ describe("AuditOrchestrator", () => {
 
     it("[AORCH-B15] should report unmatchedWaivers as null when the run did not cover every file a waiver can point at", async () => {
       const sarif = makeSarifLog([
-        makeSarifResult({ ruleId: "SEC-001", level: "error", message: "s", file: "src/config.ts", startLine: 10, fingerprint: "fp-present", category: "hardcoded-secret" }),
+        makeSarifResult({ ruleId: "SEC-001", level: "error", message: "s", file: "src/config.ts", startLine: 10, fingerprint: FP_PRESENT, category: "hardcoded-secret" }),
       ]);
       const deps = createMockDeps();
       (deps.recordStore.list as jest.Mock).mockResolvedValue(["agent:security-audit"]);
       (deps.recordStore.get as jest.Mock).mockResolvedValue(makeAgentRecord("agent:security-audit", "audit"));
       (deps.agentRunner.runOnce as jest.Mock).mockResolvedValue(makeAgentResponse("agent:security-audit", sarif, "exec-001"));
       // A waiver on a file this narrower run may not have read.
-      (deps.waiverReader.loadWaivers as jest.Mock).mockResolvedValue([makeWaiver("fp-on-an-untouched-file")]);
+      (deps.waiverReader.loadWaivers as jest.Mock).mockResolvedValue([makeWaiver(FP_GONE)]);
       const orchestrator = createAuditOrchestrator(deps);
 
       const narrower: AuditOrchestrationOptions[] = [
@@ -1247,6 +1251,32 @@ describe("AuditOrchestrator", () => {
       // from the narrowing, not from a field that is always null.
       expect((await orchestrator.run(defaultOptions)).summary.unmatchedWaivers).toBe(1);
       expect((await orchestrator.run({ ...defaultOptions, scope: "baseline" })).summary.unmatchedWaivers).toBe(1);
+    });
+
+    it("[AORCH-B16] should report waivers under an earlier fingerprint scheme in summary.outdatedWaivers whatever the scope", async () => {
+      const sarif = makeSarifLog([
+        makeSarifResult({ ruleId: "SEC-001", level: "error", message: "s", file: "src/config.ts", startLine: 10, fingerprint: FP_PRESENT, category: "hardcoded-secret" }),
+      ]);
+      const deps = createMockDeps();
+      (deps.recordStore.list as jest.Mock).mockResolvedValue(["agent:security-audit"]);
+      (deps.recordStore.get as jest.Mock).mockResolvedValue(makeAgentRecord("agent:security-audit", "audit"));
+      (deps.agentRunner.runOnce as jest.Mock).mockResolvedValue(makeAgentResponse("agent:security-audit", sarif, "exec-001"));
+      // One waiver per case: matched, finding removed, and two written under earlier formulas.
+      (deps.waiverReader.loadWaivers as jest.Mock).mockResolvedValue([
+        makeWaiver(FP_PRESENT),
+        makeWaiver(FP_GONE),
+        makeWaiver("a1b2c3d4e5f60718:1"),
+        makeWaiver(`gitgov-fp/1:${"d".repeat(64)}`),
+      ]);
+      const orchestrator = createAuditOrchestrator(deps);
+
+      const full = (await orchestrator.run(defaultOptions)).summary;
+      expect({ unmatched: full.unmatchedWaivers, outdated: full.outdatedWaivers }).toEqual({ unmatched: 1, outdated: 2 });
+
+      // Unlike unmatched, it is known in a narrower run and in one where nothing ran.
+      expect((await orchestrator.run({ ...defaultOptions, scope: "diff" })).summary.outdatedWaivers).toBe(2);
+      (deps.recordStore.list as jest.Mock).mockResolvedValueOnce([]);
+      expect((await orchestrator.run(defaultOptions)).summary.outdatedWaivers).toBe(2);
     });
   });
 

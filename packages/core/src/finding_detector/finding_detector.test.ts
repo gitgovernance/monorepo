@@ -1,7 +1,8 @@
-// Sections: §4.2 (EARS-13), §4.3 (EARS-14 to EARS-17), §4.4 (EARS-18, EARS-20 to EARS-22), §4.5 (EARS-24)
+// Sections: §4.2 (EARS-13), §4.3 (EARS-14 to EARS-17), §4.4 (EARS-18, EARS-20 to EARS-22), §4.5 (EARS-24), §4.7 (EARS-33, EARS-35)
 import { FindingDetectorModule } from "./finding_detector";
 import { RegexDetector } from "./detectors/regex_detector";
-import { HeuristicDetector } from "./detectors/heuristic_detector";
+import { HeuristicDetector, HEURISTIC_RULES } from "./detectors/heuristic_detector";
+import { REGEX_RULES } from "./rules/regex_rules";
 import type { FindingDetectorConfig } from "./types";
 
 // GitHub push protection reads a literal `sk_test_` followed by a key-shaped tail as a real
@@ -48,6 +49,66 @@ describe("FindingDetectorModule", () => {
         `const b = { refund: "${STRIPE_KEY_B}" };`,
       ].join("\n");
       expect(await detector.detect(twoSecrets, "src/pay.ts")).toHaveLength(2);
+    });
+
+    // [EARS-35] One sample per rule: two DIFFERENT occurrences in one file, and the text that
+    // repeats one of them. Secret-shaped values are assembled at runtime for the same reason as
+    // STRIPE_KEY above. Where a rule's match ends at a keyword, the second occurrence differs
+    // only AFTER the keyword — that is where a match that stops early loses the difference.
+    const pem = (body: string) => ["-----BEGIN RSA PRIVATE KEY-----", body, "-----END RSA PRIVATE KEY-----"].join("\n");
+    const jwt = (sig: string) => "eyJ" + "hbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9" + ".eyJ" + "zdWIiOiIxMjM0NTY3ODkwIn0." + sig;
+    const RULE_SAMPLES: Record<string, { first: string; second: string }> = {
+      "PII-001": { first: 'const a = "ana@example.com";', second: 'const b = "luis@example.com";' },
+      "PII-002": { first: 'const a = "+1 (555) 123-4567";', second: 'const b = "+1 (555) 987-6543";' },
+      "PII-003": { first: 'const a = "4111-1111-1111-1111";', second: 'const b = "5500-0000-0000-0004";' },
+      "PII-004": { first: 'const a = "123-45-6789";', second: 'const b = "987-65-4321";' },
+      "PII-005": { first: "const ssn = form.ssn;", second: "const spouse = { ssn: other.value };" },
+      "SEC-001": { first: 'api_key = "abcdefghijklmnopqrstuv01"', second: 'api_key = "zyxwvutsrqponmlkjihg02"' },
+      "SEC-002": { first: 'const a = "' + "AKIA" + 'ABCDEFGHIJKLMNOP";', second: 'const b = "' + "AKIA" + 'QRSTUVWXYZ234567";' },
+      "SEC-003": { first: pem("MIIEaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"), second: pem("MIIEbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb") },
+      "SEC-004": { first: 'const a = "' + "sk_" + 'live_aaaaaaaaaaaaaaaaaaaaaaaa";', second: 'const b = "' + "sk_" + 'live_bbbbbbbbbbbbbbbbbbbbbbbb";' },
+      "SEC-005": { first: 'const a = "' + "ghp" + '_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";', second: 'const b = "' + "ghp" + '_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";' },
+      "SEC-006": { first: 'password = "hunter2hunter2"', second: 'password = "correcthorse01"' },
+      "SEC-007": { first: `const a = "${jwt("aaaaaaaaaaaaaaaaaaaaaaaa")}";`, second: `const b = "${jwt("bbbbbbbbbbbbbbbbbbbbbbbb")}";` },
+      "XFER-001": {
+        first: 'analytics.track("signup", { email: user.email, plan: "pro" });',
+        second: 'analytics.track("signup", { email: user.email, plan: "free" });',
+      },
+      "LOG-001": {
+        first: 'console.log("user email", user.email, "at signup");',
+        second: 'console.log("user email", user.email, "at checkout");',
+      },
+      "HEUR-001": { first: "const userEmail = form.value;", second: "sendReceipt(userEmail);" },
+      "HEUR-002": { first: 'console.log("signup", user, "step 1");', second: 'console.log("signup", user, "step 2");' },
+      "HEUR-003": { first: "JSON.stringify({ who: user, step: 1 });", second: "JSON.stringify({ who: user, step: 2 });" },
+    };
+
+    it("[EARS-35] should keep a sample for every regex and heuristic rule", () => {
+      // ANTI-VACUITY: a rule without a sample is a rule this property never checks. A new rule
+      // fails here until it gets one.
+      const ruleIds = [...REGEX_RULES.map((r) => r.id), ...HEURISTIC_RULES.map((r) => r.id)].sort();
+      expect(Object.keys(RULE_SAMPLES).sort()).toEqual(ruleIds);
+    });
+
+    it("[EARS-35] should emit two findings for two different occurrences of every rule and one for a repeated one", async () => {
+      const detectorFor = (ruleId: string) =>
+        ruleId.startsWith("HEUR-")
+          ? new FindingDetectorModule({ regex: { enabled: false }, heuristic: { enabled: true } })
+          : new FindingDetectorModule({ regex: { enabled: true, rules: [ruleId] }, heuristic: { enabled: false } });
+      const countOf = async (ruleId: string, content: string) =>
+        (await detectorFor(ruleId).detect(content, "src/sample.ts")).filter((f) => f.ruleId === ruleId).length;
+
+      const collapsed: string[] = [];
+      const split: string[] = [];
+      for (const [ruleId, { first, second }] of Object.entries(RULE_SAMPLES)) {
+        // ANTI-VACUITY: each sample must be detected on its own, or the counts below say nothing.
+        expect({ ruleId, detected: await countOf(ruleId, first) }).toEqual({ ruleId, detected: 1 });
+
+        if ((await countOf(ruleId, [first, "", second].join("\n"))) !== 2) collapsed.push(ruleId);
+        if ((await countOf(ruleId, [first, "", first].join("\n"))) !== 1) split.push(ruleId);
+      }
+
+      expect({ collapsed, split }).toEqual({ collapsed: [], split: [] });
     });
   });
 

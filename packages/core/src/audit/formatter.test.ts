@@ -55,6 +55,7 @@ function makeResult(overrides: {
       low: 0,
       suppressed: 0,
       unmatchedWaivers: 0,
+      outdatedWaivers: 0,
       agentsRun: 1,
       agentsFailed: 0,
       ...overrides.summary,

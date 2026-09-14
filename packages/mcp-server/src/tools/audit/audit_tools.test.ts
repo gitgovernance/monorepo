@@ -42,7 +42,7 @@ function makeAuditResult(): SourceAuditor.AuditResult {
     scannedLines: 10,
     duration: 5,
     detectors: ['regex'],
-    waivers: { acknowledged: 0, new: 1, unmatched: 0 },
+    waivers: { acknowledged: 0, new: 1, unmatched: 0, outdated: 0 },
   };
 }
 
@@ -152,7 +152,7 @@ describe('Audit + Agent + Actor Tools', () => {
       // The identity is the one createFinding computed (AUDIT-K1) and the tool passes it
       // through untouched; a hand-typed 'abc123' would only prove the stub round-trips.
       expect(finding).toHaveProperty('fingerprint', makeAuditResult().findings[0]!.fingerprint);
-      expect(finding.fingerprint).toMatch(/^[a-f0-9]{64}$/);
+      expect(finding.fingerprint).toMatch(/^gitgov-fp\/2:[a-f0-9]{64}$/);
       expect(finding).toHaveProperty('severity', 'high');
       expect(finding).toHaveProperty('file', 'src/foo.ts');
       expect(finding).toHaveProperty('line', 42);

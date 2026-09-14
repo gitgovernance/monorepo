@@ -17,6 +17,7 @@ import {
   createWaiver,
   createScan,
   countUnmatchedWaivers,
+  countOutdatedWaivers,
   waiversForFiles,
   countBySeverity,
   isScanScope,
@@ -25,7 +26,7 @@ import {
   REDACTED_SNIPPET,
 } from './types';
 import { makeTestFinding, makeTestWaiver } from './testing';
-import { computeFingerprint, computeRegionFingerprint } from './fingerprint';
+import { computeFingerprint, computeRegionFingerprint, FINGERPRINT_SCHEME } from './fingerprint';
 import type {
   Finding,
   FindingCategory,
@@ -239,7 +240,7 @@ describe('Audit Record Types (audit_record_types_module.md)', () => {
           rulesEvaluated: [],
           evaluatedAt: new Date().toISOString(),
         },
-        summary: { total: 0, critical: 0, high: 0, medium: 0, low: 0, suppressed: 0, unmatchedWaivers: 0, agentsRun: 1, agentsFailed: 0 },
+        summary: { total: 0, critical: 0, high: 0, medium: 0, low: 0, suppressed: 0, unmatchedWaivers: 0, outdatedWaivers: 0, agentsRun: 1, agentsFailed: 0 },
       };
       expect(scan.scope).toBe('full');
       expect(scan.triggeredBy).toBeDefined();
@@ -789,10 +790,10 @@ describe('Audit Prisma Schema Verification (audit_prisma_record_projection_modul
       isWaived: false,
     };
 
-    it('[AUDIT-K1] should compute a 64-hex fingerprint in createFinding and reject fingerprint in the input type', () => {
+    it('[AUDIT-K1] should compute a versioned fingerprint in createFinding and reject fingerprint in the input type', () => {
       const finding = createFinding({ ...producerInput, anchor: 'sk_test_abc123' });
 
-      expect(finding.fingerprint).toMatch(/^[a-f0-9]{64}$/);
+      expect(finding.fingerprint).toMatch(/^gitgov-fp\/2:[a-f0-9]{64}$/);
       expect(finding.fingerprint).toBe(
         computeFingerprint({ file: producerInput.file, category: producerInput.category, anchor: 'sk_test_abc123' }),
       );
@@ -919,7 +920,10 @@ describe('Audit Prisma Schema Verification (audit_prisma_record_projection_modul
     });
   });
 
-  describe('4.12. Unmatched waivers (AUDIT-L1, L2)', () => {
+  describe('4.12. Unmatched and outdated waivers (AUDIT-L1 to L3)', () => {
+    /** A fingerprint in the current scheme whose finding no longer exists. */
+    const currentFp = (hex: string) => `${FINGERPRINT_SCHEME}:${hex.repeat(64)}`;
+
     it('[AUDIT-L2] should keep only the waivers whose finding file was read', () => {
       const withFile = (fingerprint: string, file?: string): Waiver => {
         const base = makeTestWaiver({ fingerprint });
@@ -934,9 +938,9 @@ describe('Audit Prisma Schema Verification (audit_prisma_record_projection_modul
           },
         };
       };
-      const inRead = withFile('a'.repeat(64), 'src/read.ts');
-      const notRead = withFile('b'.repeat(64), 'src/untouched.ts');
-      const noFile = withFile('c'.repeat(64));
+      const inRead = withFile(currentFp('a'), 'src/read.ts');
+      const notRead = withFile(currentFp('b'), 'src/untouched.ts');
+      const noFile = withFile(currentFp('c'));
 
       expect(waiversForFiles([inRead, notRead, noFile], ['src/read.ts', 'src/other.ts'])).toEqual([inRead]);
 
@@ -951,8 +955,8 @@ describe('Audit Prisma Schema Verification (audit_prisma_record_projection_modul
       const a = makeTestFinding({ anchor: 'still-here-a' });
       const b = makeTestFinding({ anchor: 'still-here-b' });
       const matched = makeTestWaiver({ fingerprint: a.fingerprint });
-      const stale1 = makeTestWaiver({ fingerprint: 'f'.repeat(64) });
-      const stale2 = makeTestWaiver({ fingerprint: 'e'.repeat(64) });
+      const stale1 = makeTestWaiver({ fingerprint: currentFp('f') });
+      const stale2 = makeTestWaiver({ fingerprint: currentFp('e') });
 
       // ONE matched and TWO stale, asymmetric on purpose: with one of each, "count the ones
       // that matched" and "count the ones that did not" both return 1, and an inverted
@@ -965,11 +969,30 @@ describe('Audit Prisma Schema Verification (audit_prisma_record_projection_modul
       // `waivers.length` with the reasoning in a comment. A property of the function,
       // tested once, instead of a special case at a call site.
       const waivers = [
-        makeTestWaiver({ fingerprint: 'a'.repeat(64) }),
-        makeTestWaiver({ fingerprint: 'b'.repeat(64) }),
+        makeTestWaiver({ fingerprint: currentFp('a') }),
+        makeTestWaiver({ fingerprint: currentFp('b') }),
       ];
       expect(countUnmatchedWaivers(waivers, [])).toBe(2);
       expect(countUnmatchedWaivers([], [])).toBe(0);
+    });
+
+    it('[AUDIT-L3] should count waivers under an earlier fingerprint scheme as outdated and never as unmatched', () => {
+      const finding = makeTestFinding({ anchor: 'still-here' });
+      const current = makeTestWaiver({ fingerprint: finding.fingerprint });
+      const stale = makeTestWaiver({ fingerprint: currentFp('f') });
+      // An earlier formula's values: a bare digest, and a value under another scheme tag.
+      const bare = makeTestWaiver({ fingerprint: 'a1b2c3d4e5f60718:1' });
+      const olderScheme = makeTestWaiver({ fingerprint: `gitgov-fp/1:${'d'.repeat(64)}` });
+      const waivers = [current, stale, bare, olderScheme];
+
+      expect(countOutdatedWaivers(waivers)).toBe(2);
+      // Disjoint: the stale one is unmatched, the two older ones are outdated, none is both.
+      expect(countUnmatchedWaivers(waivers, [finding])).toBe(1);
+
+      // Negative control — without the scheme check, the older two land in "unmatched" and
+      // the user is told their findings disappeared, when what changed was the formula.
+      const withoutSchemeCheck = waivers.filter((w) => w.fingerprint !== finding.fingerprint).length;
+      expect(withoutSchemeCheck).toBe(3);
     });
   });
 

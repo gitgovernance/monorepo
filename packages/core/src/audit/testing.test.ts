@@ -13,7 +13,7 @@ describe('Audit Test Builders', () => {
       // [AUDIT-K1] The builder no longer pins a fingerprint — the factory derives it, and
       // the assertion moves from "it equals the literal I typed" to "it is a real identity,
       // reproducible from the builder's own defaults".
-      expect(finding.fingerprint).toMatch(/^[a-f0-9]{64}$/);
+      expect(finding.fingerprint).toMatch(/^gitgov-fp\/2:[a-f0-9]{64}$/);
       expect(finding.fingerprint).toBe(makeTestFinding().fingerprint);
       expect(finding.ruleId).toBe('SEC-001');
       expect(finding.snippetHash).toMatch(/^[a-f0-9]{64}$/);
