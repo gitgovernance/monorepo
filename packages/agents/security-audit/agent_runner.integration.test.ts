@@ -43,6 +43,8 @@ jest.mock('@gitgov/core', () => ({
   Sarif: {
     createSarifBuilder: jest.fn(() => ({ build: mockSarifBuild })),
   },
+  // [AUDIT-M1] The real counter, not a fifth reimplementation: this mock isolates I/O, not arithmetic.
+  countBySeverity: jest.requireActual('@gitgov/core/audit').countBySeverity,
 }));
 
 jest.mock('@gitgov/core/fs', () => ({
@@ -176,7 +178,7 @@ describe('security-audit integration', () => {
         scannedLines: 10,
         duration: 5,
         detectors: ['regex'],
-        waivers: { acknowledged: 0, new: 1 },
+        waivers: { acknowledged: 0, new: 1, unmatched: 0 },
       });
 
       mockSarifBuild.mockResolvedValue({

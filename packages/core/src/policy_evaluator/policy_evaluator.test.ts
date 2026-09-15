@@ -31,6 +31,7 @@
  * | PEVAL-F5  | should include waiver feedbackRecordId in references when pass after prior block | 4.7   |
  */
 
+import { createHash } from "node:crypto";
 import { createPolicyEvaluator, reevaluatePolicy } from "./policy_evaluator";
 import type {
   PolicyEvaluationInput,
@@ -47,18 +48,22 @@ import type { WaiverMetadata } from "../source_auditor/types";
 import type { RecordStore } from "../record_store/record_store";
 import type { SarifLog, SarifResult } from "../sarif/sarif.types";
 import { createFinding } from "../audit/types";
+import { computeFingerprint } from "../audit/fingerprint";
+
+/** The two inputs of the identity that these tests never vary — shared with makeWaiver so
+ *  a finding and the waiver that covers it land on the same fingerprint. */
+const FINDING_DEFAULTS = { file: "src/foo.ts", category: "unknown-risk" } as const;
 
 function makeFinding(
-  overrides: Partial<Omit<Finding, 'snippetHash'>> = {},
+  overrides: Partial<Omit<Finding, "fingerprint" | "snippetHash">> & { anchor?: string } = {},
 ): Finding {
   return createFinding({
-    fingerprint: "fp-test-001",
     ruleId: "TEST-001",
     message: "test finding",
     snippet: "const x = 'secret'",
     severity: "high",
-    category: "unknown-risk",
-    file: "src/foo.ts",
+    category: FINDING_DEFAULTS.category,
+    file: FINDING_DEFAULTS.file,
     line: 10,
     detector: "regex",
     confidence: 1.0,
@@ -98,7 +103,37 @@ function makeFeedbackRecord(
   };
 }
 
+/**
+ * [AUDIT-K1] Takes the ANCHOR of the finding it waives, not a raw fingerprint.
+ *
+ * A waiver pairs with a finding by identity, and the identity is now derived. Passing a
+ * literal on both sides used to pair them because the literal WAS the identity; deriving it
+ * here from the same three inputs `makeFinding` uses keeps the pairing true no matter what
+ * the formula does next.
+ */
 function makeWaiver(
+  anchor: string,
+  feedbackId: string,
+): Waiver {
+  return makeWaiverForFingerprint(
+    computeFingerprint({
+      file: FINDING_DEFAULTS.file,
+      category: FINDING_DEFAULTS.category,
+      anchor,
+    }),
+    feedbackId,
+  );
+}
+
+/**
+ * [AUDIT-K5] The raw form, for findings that arrive REHYDRATED from a SARIF fixture.
+ *
+ * Those carry their identity in the transport and `extractFindingsFromSarif` keeps it byte
+ * for byte, so the waiver must key on that transported value and not derive one. The two
+ * helpers exist because the two provenances are genuinely different: a producer computes the
+ * identity, a consumer receives it.
+ */
+function makeWaiverForFingerprint(
   fingerprint: string,
   feedbackId: string,
 ): Waiver {
@@ -154,7 +189,10 @@ describe("PolicyEvaluator", () => {
     it("[PEVAL-A2] should include required fields and optional ruleId in Finding", () => {
       // With ruleId
       const withRuleId = makeFinding({ ruleId: "SEC-001" });
-      expect(withRuleId.fingerprint).toBe("fp-test-001");
+      // [AUDIT-K4] `ruleId` is detection metadata and stays out of the identity: overriding
+      // it must NOT move the fingerprint. That is the assertion worth making here.
+      expect(withRuleId.fingerprint).toMatch(/^gitgov-fp\/2:[a-f0-9]{64}$/);
+      expect(withRuleId.fingerprint).toBe(makeFinding({ ruleId: "OTHER-999" }).fingerprint);
       expect(withRuleId.severity).toBe("high");
       expect(withRuleId.category).toBe("unknown-risk");
       expect(withRuleId.file).toBe("src/foo.ts");
@@ -191,7 +229,7 @@ describe("PolicyEvaluator", () => {
 
       const result = await evaluator.evaluate(
         makeInput({
-          findings: [makeFinding({ fingerprint: "fp-1", severity: "low" })],
+          findings: [makeFinding({ anchor: "fp-1", severity: "low" })],
           policy: makeConfig({ failOn: "critical" }),
         }),
       );
@@ -213,7 +251,7 @@ describe("PolicyEvaluator", () => {
 
       const result = await evaluator.evaluate(
         makeInput({
-          findings: [makeFinding({ fingerprint: "fp-1", severity: "low" })],
+          findings: [makeFinding({ anchor: "fp-1", severity: "low" })],
           policy: makeConfig({ failOn: "critical" }),
         }),
       );
@@ -237,7 +275,7 @@ describe("PolicyEvaluator", () => {
         makeInput({
           findings: [
             makeFinding({
-              fingerprint: "fp-critical-001",
+              anchor: "fp-critical-001",
               severity: "critical",
               isWaived: false,
             }),
@@ -261,7 +299,7 @@ describe("PolicyEvaluator", () => {
       const result = await evaluator.evaluate(
         makeInput({
           findings: [
-            makeFinding({ fingerprint: "fp-match-001", severity: "critical" }),
+            makeFinding({ anchor: "fp-match-001", severity: "critical" }),
           ],
           activeWaivers: [waiver],
           policy: makeConfig({ failOn: "critical" }),
@@ -281,7 +319,7 @@ describe("PolicyEvaluator", () => {
       const result = await evaluator.evaluate(
         makeInput({
           findings: [
-            makeFinding({ fingerprint: "fp-1", severity: "critical" }),
+            makeFinding({ anchor: "fp-1", severity: "critical" }),
           ],
           policy: makeConfig({ failOn: "critical" }),
         }),
@@ -296,7 +334,7 @@ describe("PolicyEvaluator", () => {
 
       const result = await evaluator.evaluate(
         makeInput({
-          findings: [makeFinding({ fingerprint: "fp-1", severity: "low" })],
+          findings: [makeFinding({ anchor: "fp-1", severity: "low" })],
           policy: makeConfig({ failOn: "critical" }),
         }),
       );
@@ -312,8 +350,8 @@ describe("PolicyEvaluator", () => {
       const result = await evaluator.evaluate(
         makeInput({
           findings: [
-            makeFinding({ fingerprint: "fp-crit", severity: "critical" }),
-            makeFinding({ fingerprint: "fp-low", severity: "low" }),
+            makeFinding({ anchor: "fp-crit", severity: "critical" }),
+            makeFinding({ anchor: "fp-low", severity: "low" }),
           ],
           policy: makeConfig({ failOn: "critical" }),
         }),
@@ -321,7 +359,9 @@ describe("PolicyEvaluator", () => {
 
       expect(result.decision.decision).toBe("block");
       expect(result.decision.blockingFindings).toHaveLength(1);
-      expect(result.decision.blockingFindings[0]!.fingerprint).toBe("fp-crit");
+      expect(result.decision.blockingFindings[0]!.fingerprint).toBe(
+        makeFinding({ anchor: "fp-crit", severity: "critical" }).fingerprint,
+      );
     });
 
     it("[PEVAL-D6] should populate waivedFindings with all findings where isWaived is true", async () => {
@@ -334,9 +374,9 @@ describe("PolicyEvaluator", () => {
       const result = await evaluator.evaluate(
         makeInput({
           findings: [
-            makeFinding({ fingerprint: "fp-waived-1", severity: "critical" }),
-            makeFinding({ fingerprint: "fp-waived-2", severity: "high" }),
-            makeFinding({ fingerprint: "fp-not-waived", severity: "low" }),
+            makeFinding({ anchor: "fp-waived-1", severity: "critical" }),
+            makeFinding({ anchor: "fp-waived-2", severity: "high" }),
+            makeFinding({ anchor: "fp-not-waived", severity: "low" }),
           ],
           activeWaivers: [waiver1, waiver2],
           policy: makeConfig({ failOn: "critical" }),
@@ -347,8 +387,8 @@ describe("PolicyEvaluator", () => {
       const waivedFingerprints = result.decision.waivedFindings.map(
         (f) => f.fingerprint,
       );
-      expect(waivedFingerprints).toContain("fp-waived-1");
-      expect(waivedFingerprints).toContain("fp-waived-2");
+      expect(waivedFingerprints).toContain(makeFinding({ anchor: "fp-waived-1" }).fingerprint);
+      expect(waivedFingerprints).toContain(makeFinding({ anchor: "fp-waived-2" }).fingerprint);
     });
 
     it("[PEVAL-D7] should set evaluatedAt to a valid ISO 8601 timestamp", async () => {
@@ -357,7 +397,7 @@ describe("PolicyEvaluator", () => {
 
       const result = await evaluator.evaluate(
         makeInput({
-          findings: [makeFinding({ fingerprint: "fp-1", severity: "low" })],
+          findings: [makeFinding({ anchor: "fp-1", severity: "low" })],
         }),
       );
 
@@ -386,7 +426,7 @@ describe("PolicyEvaluator", () => {
 
       const result = await evaluator.evaluate(
         makeInput({
-          findings: [makeFinding({ fingerprint: "fp-1", severity: "low" })],
+          findings: [makeFinding({ anchor: "fp-1", severity: "low" })],
           policy: makeConfig({ failOn: "critical", rules: [customRule] }),
         }),
       );
@@ -428,7 +468,7 @@ describe("PolicyEvaluator", () => {
 
       const result = await evaluator.evaluate(
         makeInput({
-          findings: [makeFinding({ fingerprint: "fp-1", severity: "low" })],
+          findings: [makeFinding({ anchor: "fp-1", severity: "low" })],
         }),
       );
 
@@ -442,7 +482,7 @@ describe("PolicyEvaluator", () => {
       // Pass case
       const passResult = await evaluator.evaluate(
         makeInput({
-          findings: [makeFinding({ fingerprint: "fp-1", severity: "low" })],
+          findings: [makeFinding({ anchor: "fp-1", severity: "low" })],
           policy: makeConfig({ failOn: "critical" }),
         }),
       );
@@ -452,7 +492,7 @@ describe("PolicyEvaluator", () => {
       const blockResult = await evaluator.evaluate(
         makeInput({
           findings: [
-            makeFinding({ fingerprint: "fp-1", severity: "critical" }),
+            makeFinding({ anchor: "fp-1", severity: "critical" }),
           ],
           policy: makeConfig({ failOn: "critical" }),
         }),
@@ -470,7 +510,7 @@ describe("PolicyEvaluator", () => {
       const result = await evaluator.evaluate(
         makeInput({
           findings: [
-            makeFinding({ fingerprint: "fp-waived", severity: "critical" }),
+            makeFinding({ anchor: "fp-waived", severity: "critical" }),
           ],
           activeWaivers: [waiver],
           scanExecutionIds: ["exec-scan-001", "exec-scan-002"],
@@ -491,7 +531,7 @@ describe("PolicyEvaluator", () => {
 
       const result = await evaluator.evaluate(
         makeInput({
-          findings: [makeFinding({ fingerprint: "fp-1", severity: "low" })],
+          findings: [makeFinding({ anchor: "fp-1", severity: "low" })],
           taskId: "task-id-test",
         }),
       );
@@ -510,7 +550,7 @@ describe("PolicyEvaluator", () => {
 
       const result = await evaluator.evaluate(
         makeInput({
-          findings: [makeFinding({ fingerprint: "fp-1", severity: "low" })],
+          findings: [makeFinding({ anchor: "fp-1", severity: "low" })],
           taskId: "task-test-e5",
         }),
       );
@@ -529,7 +569,7 @@ describe("PolicyEvaluator", () => {
 
       const result = await evaluator.evaluate(
         makeInput({
-          findings: [makeFinding({ fingerprint: "fp-1", severity: "low" })],
+          findings: [makeFinding({ anchor: "fp-1", severity: "low" })],
           policy: makeConfig({ failOn: "critical" }),
         }),
       );
@@ -634,7 +674,10 @@ describe("PolicyEvaluator", () => {
         startLine: number;
         fingerprint?: string;
         category?: string;
+        snippet?: string;
+        snippetHash?: string;
       }>,
+      agentName = "test-agent",
     ): SarifLog {
       return {
         $schema:
@@ -644,7 +687,7 @@ describe("PolicyEvaluator", () => {
           {
             tool: {
               driver: {
-                name: "test-agent",
+                name: agentName,
                 version: "1.0.0",
                 informationUri: "https://example.com",
               },
@@ -657,21 +700,23 @@ describe("PolicyEvaluator", () => {
                 {
                   physicalLocation: {
                     artifactLocation: { uri: r.file },
-                    region: { startLine: r.startLine },
+                    region: {
+                      startLine: r.startLine,
+                      ...(r.snippet !== undefined ? { snippet: { text: r.snippet } } : {}),
+                    },
                   },
                 },
               ],
-              ...(r.fingerprint
-                ? {
-                    partialFingerprints: {
-                      "primaryLocationLineHash/v1": r.fingerprint,
-                    },
-                  }
-                : {}),
+              // [PEVAL-F6] The identity travels under `fingerprints["gitgov/v2"]` (SARIF-N1).
+              // These fixtures used `partialFingerprints["primaryLocationLineHash/v1"]`,
+              // which is GitHub's line hash — with the fixture on the old key the F6 test
+              // passed against the OLD code too, so it discriminated nothing.
+              ...(r.fingerprint ? { fingerprints: { "gitgov/v2": r.fingerprint } } : {}),
               properties: {
                 "gitgov/category": r.category ?? "unknown",
                 "gitgov/detector": "regex",
                 "gitgov/confidence": 0.9,
+                ...(r.snippetHash !== undefined ? { "gitgov/snippetHash": r.snippetHash } : {}),
               },
             })) as SarifResult[],
           },
@@ -759,6 +804,123 @@ describe("PolicyEvaluator", () => {
       expect(result.decision.blockingFindings[0]!.fingerprint).toBe("fp-sec-001");
     });
 
+    it("[PEVAL-F6] should rehydrate findings with the transported fingerprints gitgov/v2 and never a positional fallback", async () => {
+      const transported = "d".repeat(64);
+      const sarif = makeSarifLogForReeval([
+        {
+          ruleId: "SEC-001",
+          level: "error",
+          message: "Hardcoded secret found",
+          file: "src/config.ts",
+          startLine: 10,
+          fingerprint: transported,
+          category: "hardcoded-secret",
+        },
+      ]);
+
+      const records = new Map<string, GitGovExecutionRecord>();
+      records.set("exec-scan-f6", makeExecRecordWithSarif("exec-scan-f6", sarif));
+      const deps = makeReevalDeps({ executionRecords: records });
+
+      const result = await reevaluatePolicy(
+        ["exec-scan-f6"],
+        "task-f6",
+        makeConfig({ failOn: "critical" }),
+        deps,
+      );
+
+      const rebuilt = [...result.decision.blockingFindings, ...result.decision.waivedFindings];
+      expect(rebuilt).toHaveLength(1);
+
+      // [AUDIT-K5] The identity arrives with the record and survives byte for byte. This
+      // path reads L1, where the snippet may already be [REDACTED] — recomputing there
+      // would diverge from what the producer wrote.
+      expect(rebuilt[0]!.fingerprint).toBe(transported);
+
+      // Negative control: the positional fallback this replaces. `fallback:SEC-001:...:10`
+      // changed whenever a line was inserted above the finding, so a re-evaluation of the
+      // very same scan could produce a different identity than the scan itself.
+      expect(rebuilt[0]!.fingerprint).not.toBe("fallback:SEC-001:src/config.ts:10");
+      expect(rebuilt[0]!.fingerprint).not.toMatch(/^fallback:/);
+    });
+
+    it("[PEVAL-F6] should keep the transported snippetHash of an L1 result whose snippet is redacted", async () => {
+      const l2Hash = "e".repeat(64);
+      const sarif = makeSarifLogForReeval([
+        {
+          ruleId: "SEC-001", level: "error", message: "Hardcoded secret found", file: "src/config.ts", startLine: 10,
+          fingerprint: "d".repeat(64), category: "hardcoded-secret", snippet: "[REDACTED]", snippetHash: l2Hash,
+        },
+      ]);
+      const records = new Map<string, GitGovExecutionRecord>();
+      records.set("exec-scan-f6h", makeExecRecordWithSarif("exec-scan-f6h", sarif));
+
+      const result = await reevaluatePolicy(["exec-scan-f6h"], "task-f6h", makeConfig({ failOn: "critical" }), makeReevalDeps({ executionRecords: records }));
+
+      const rebuilt = [...result.decision.blockingFindings, ...result.decision.waivedFindings];
+      expect(rebuilt).toHaveLength(1);
+      expect(rebuilt[0]!.snippetHash).toBe(l2Hash);
+      // Negative control: the value a recomputation lands on is the sentinel's hash.
+      expect(createHash("sha256").update("[REDACTED]").digest("hex")).not.toBe(l2Hash);
+    });
+
+    it("[PEVAL-F7] should discard with a warning an L1 result without the key whose snippet is redacted", async () => {
+      // Two different secrets of one file and category, both redacted in L1 and neither with
+      // the identity key: the case of a record written by a producer that did not transport it.
+      const sarif = makeSarifLogForReeval([
+        { ruleId: "SEC-001", level: "error", message: "first", file: "src/config.ts", startLine: 10, category: "hardcoded-secret", snippet: "[REDACTED]" },
+        { ruleId: "SEC-001", level: "error", message: "second", file: "src/config.ts", startLine: 20, category: "hardcoded-secret", snippet: "[REDACTED]" },
+      ]);
+      const records = new Map<string, GitGovExecutionRecord>();
+      records.set("exec-scan-f7", makeExecRecordWithSarif("exec-scan-f7", sarif));
+
+      const warn = jest.spyOn(console, "warn").mockImplementation(() => undefined);
+      try {
+        const result = await reevaluatePolicy(["exec-scan-f7"], "task-f7", makeConfig({ failOn: "critical" }), makeReevalDeps({ executionRecords: records }));
+
+        expect([...result.decision.blockingFindings, ...result.decision.waivedFindings]).toHaveLength(0);
+        const f7 = warn.mock.calls.map((c) => String(c[0])).filter((m) => m.includes("[PEVAL-F7]"));
+        expect(f7).toEqual([
+          "[PEVAL-F7] Discarded SARIF result from test-agent: no fingerprint key and a redacted snippet",
+          "[PEVAL-F7] Discarded SARIF result from test-agent: no fingerprint key and a redacted snippet",
+        ]);
+
+        // Negative control — the derivation this replaces: both secrets land on one identity.
+        const onSentinel = computeFingerprint({ file: "src/config.ts", category: "hardcoded-secret", anchor: "[REDACTED]" });
+        expect(computeFingerprint({ file: "src/config.ts", category: "hardcoded-secret", anchor: "[REDACTED]" })).toBe(onSentinel);
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
+    it("[PEVAL-F8] should not merge results from two scans that share the key but differ in category", async () => {
+      const collided = "c".repeat(64);
+      const records = new Map<string, GitGovExecutionRecord>();
+      records.set("exec-scan-f8a", makeExecRecordWithSarif("exec-scan-f8a", makeSarifLogForReeval([
+        { ruleId: "SEC-001", level: "error", message: "secret", file: "src/a.ts", startLine: 1, fingerprint: collided, category: "hardcoded-secret" },
+      ], "agent-a")));
+      records.set("exec-scan-f8b", makeExecRecordWithSarif("exec-scan-f8b", makeSarifLogForReeval([
+        { ruleId: "PII-001", level: "warning", message: "email", file: "src/a.ts", startLine: 1, fingerprint: collided, category: "pii-email" },
+      ], "agent-b")));
+
+      const warn = jest.spyOn(console, "warn").mockImplementation(() => undefined);
+      try {
+        const result = await reevaluatePolicy(["exec-scan-f8a", "exec-scan-f8b"], "task-f8", makeConfig({ failOn: "high" }), makeReevalDeps({ executionRecords: records }));
+
+        const rebuilt = [...result.decision.blockingFindings, ...result.decision.waivedFindings];
+        expect(rebuilt).toHaveLength(1);
+        expect(rebuilt[0]!.category).toBe("hardcoded-secret");
+        // The rejected result is not folded in as a second reporter of the first.
+        expect(rebuilt[0]!.reportedBy).toEqual(["agent-a"]);
+        const f8 = warn.mock.calls.map((c) => String(c[0])).filter((m) => m.includes("[PEVAL-F8]"));
+        expect(f8).toHaveLength(1);
+        expect(f8[0]).toContain('"hardcoded-secret"');
+        expect(f8[0]).toContain('"pii-email"');
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
     it("[PEVAL-F2] should use current active waivers not historical ones", async () => {
       const sarif = makeSarifLogForReeval([
         {
@@ -776,7 +938,7 @@ describe("PolicyEvaluator", () => {
       records.set("exec-scan-002", makeExecRecordWithSarif("exec-scan-002", sarif));
 
       // Current waivers (not the ones from scan time)
-      const currentWaiver = makeWaiver("fp-sec-reeval-001", "feedback-current-waiver");
+      const currentWaiver = makeWaiverForFingerprint("fp-sec-reeval-001", "feedback-current-waiver");
 
       const deps = makeReevalDeps({
         executionRecords: records,
@@ -899,7 +1061,7 @@ describe("PolicyEvaluator", () => {
       records.set("exec-scan-block", makeExecRecordWithSarif("exec-scan-block", sarif));
 
       // New waiver that turns the previous block into a pass
-      const waiver = makeWaiver("fp-sec-block-001", "feedback-waiver-unblock");
+      const waiver = makeWaiverForFingerprint("fp-sec-block-001", "feedback-waiver-unblock");
 
       const deps = makeReevalDeps({
         executionRecords: records,

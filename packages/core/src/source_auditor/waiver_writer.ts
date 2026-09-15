@@ -1,5 +1,5 @@
 import type { IFeedbackAdapter } from "../adapters/feedback_adapter";
-import type { Finding } from "../finding_detector/types";
+import type { Finding } from "../audit/types";
 import type { WaiverMetadata, CreateWaiverOptions } from "./types";
 
 /**
@@ -20,6 +20,7 @@ export class WaiverWriter {
     const { finding, executionId, justification, expiresAt, relatedTaskId } =
       options;
 
+    // [EARS-G1] Metadata carries fingerprint, ruleId, file and line.
     const metadata: WaiverMetadata = {
       fingerprint: finding.fingerprint,
       ruleId: finding.ruleId,
@@ -27,14 +28,17 @@ export class WaiverWriter {
       line: finding.line,
     };
 
+    // [EARS-G2]
     if (expiresAt) {
       metadata.expiresAt = expiresAt;
     }
 
+    // [EARS-G3]
     if (relatedTaskId) {
       metadata.relatedTaskId = relatedTaskId;
     }
 
+    // [EARS-G1] A FeedbackRecord of type approval, resolved.
     await this.feedbackAdapter.create(
       {
         entityType: "execution",
@@ -57,6 +61,7 @@ export class WaiverWriter {
     justification: string,
     actorId: string
   ): Promise<void> {
+    // [EARS-G4] [EARS-G5] One waiver per finding; an empty array creates nothing.
     for (const finding of findings) {
       await this.createWaiver(
         {

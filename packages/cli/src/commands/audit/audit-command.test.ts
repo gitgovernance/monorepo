@@ -74,6 +74,7 @@ vi.mock('@gitgov/core', async () => {
     },
     Sarif: actual.Sarif,
     generateExecutionId: actual.generateExecutionId ?? ((title: string, ts: number) => `${ts}-exec-${title}`),
+    fingerprintDigest: actual.fingerprintDigest,
   };
 });
 
@@ -102,6 +103,16 @@ const mockConsoleError = vi.spyOn(console, 'error').mockImplementation(() => { }
 // `process.exit` is typed `(code?) => never`; the stub returns, so the cast states that gap
 // explicitly rather than throwing and changing control flow the tests do not expect.
 const mockProcessExit = vi.spyOn(process, 'exit').mockImplementation((() => { }) as unknown as never);
+
+/**
+ * The command inside an initialized project. The `process.exit` stub returns, so a guard that
+ * rejects the mock project would call exit(1) and let the test run on past it — a path production
+ * never takes, where any exit assertion on 1 holds whatever the command decides. The project guard
+ * has its own tests (AORCH-P5, AORCH-P6), which build the missing project explicitly.
+ */
+class AuditCommandInProject extends AuditCommand {
+  protected override async requireProject(): Promise<void> { /* .gitgov/ exists */ }
+}
 
 // Get mocked DI
 const mockDI = vi.mocked(DependencyInjectionService);
@@ -247,6 +258,8 @@ describe('AuditCommand', () => {
       medium: 0,
       low: 0,
       suppressed: 0,
+      unmatchedWaivers: 0,
+      outdatedWaivers: 0,
       agentsRun: 1,
       agentsFailed: 0,
     },
@@ -268,6 +281,8 @@ describe('AuditCommand', () => {
       medium: 0,
       low: 0,
       suppressed: 0,
+      unmatchedWaivers: 0,
+      outdatedWaivers: 0,
       agentsRun: 0,
       agentsFailed: 0,
     },
@@ -277,6 +292,9 @@ describe('AuditCommand', () => {
     },
     warning: 'No audit agents found',
   };
+
+  /** The same empty result without the no-agents warning, for runs where an audit agent ran. */
+  const { warning: _noAgentsWarning, ...mockCompletedEmptyResult } = mockEmptyResult;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -325,7 +343,7 @@ describe('AuditCommand', () => {
     };
     (DependencyInjectionService.getInstance as Mock).mockReturnValue(mockDIInstance);
 
-    auditCommand = new AuditCommand();
+    auditCommand = new AuditCommandInProject();
   });
 
   afterEach(() => {
@@ -340,6 +358,88 @@ describe('AuditCommand', () => {
     output: 'text',
     failOn: 'critical',
     ...overrides,
+  });
+
+  describe('4.4. Waiver Application — unmatched waivers (AORCH-B15)', () => {
+    it('[AORCH-B15] should print the unmatched waivers line only when summary.unmatchedWaivers is greater than zero', async () => {
+      const withUnmatched = {
+        ...mockResultWithFindings,
+        summary: { ...mockResultWithFindings.summary, unmatchedWaivers: 2 },
+      };
+      mockOrchestrator.run.mockResolvedValue(withUnmatched);
+      mockConsoleLog.mockClear();
+
+      await auditCommand.execute(createDefaultOptions({ scope: 'full' }));
+
+      const printed = mockConsoleLog.mock.calls.map((c) => String(c[0])).join('\n');
+      expect(printed).toContain('2 waiver(s) matched no finding');
+      // The message has to tell the user what to DO — a bare count is not actionable when
+      // every waiver written with an earlier identity stops matching at once.
+      expect(printed).toContain('gitgov audit waive');
+
+      // Negative control: with nothing unmatched the line is absent. Without this half the
+      // test would pass on an implementation that printed it unconditionally, which is the
+      // noise the "only when N > 0" clause of the EARS exists to prevent.
+      mockOrchestrator.run.mockResolvedValue({
+        ...mockResultWithFindings,
+        summary: { ...mockResultWithFindings.summary, unmatchedWaivers: 0 },
+      });
+      mockConsoleLog.mockClear();
+
+      await auditCommand.execute(createDefaultOptions({ scope: 'full' }));
+
+      const quiet = mockConsoleLog.mock.calls.map((c) => String(c[0])).join('\n');
+      expect(quiet).not.toContain('matched no finding');
+      // ANTI-VACUITY: the run really produced output, so the absence above is a decision
+      // and not an empty console.
+      expect(quiet.length).toBeGreaterThan(0);
+    });
+
+    it('[AORCH-B15] should print no unmatched waivers line and keep null in the JSON when the count was not measured', async () => {
+      mockOrchestrator.run.mockResolvedValue({
+        ...mockResultWithFindings,
+        summary: { ...mockResultWithFindings.summary, unmatchedWaivers: null },
+      });
+      mockConsoleLog.mockClear();
+
+      await auditCommand.execute(createDefaultOptions({ scope: 'diff' }));
+
+      const printed = mockConsoleLog.mock.calls.map((c) => String(c[0])).join('\n');
+      expect(printed).not.toContain('matched no finding');
+      expect(printed).not.toContain('null waiver');
+      expect(printed).toContain('POLICY DECISION');
+
+      // In JSON, null stays null: a consumer must not read "not measured" as zero.
+      mockConsoleLog.mockClear();
+      await auditCommand.execute(createDefaultOptions({ scope: 'diff', output: 'json' }));
+      const json = JSON.parse(mockConsoleLog.mock.calls.map((c) => String(c[0])).join('\n'));
+      expect(json.summary.unmatchedWaivers).toBeNull();
+    });
+
+    it('[AORCH-B16] should print the outdated waivers line apart from the unmatched one only when there are some', async () => {
+      mockOrchestrator.run.mockResolvedValue({
+        ...mockResultWithFindings,
+        summary: { ...mockResultWithFindings.summary, unmatchedWaivers: 1, outdatedWaivers: 2 },
+      });
+      mockConsoleLog.mockClear();
+
+      await auditCommand.execute(createDefaultOptions({ scope: 'full' }));
+
+      const printed = mockConsoleLog.mock.calls.map((c) => String(c[0])).join('\n');
+      expect(printed).toContain('1 waiver(s) matched no finding');
+      expect(printed).toContain('2 waiver(s) were created with an earlier fingerprint scheme');
+
+      // Negative control: with none outdated, only the unmatched line is printed.
+      mockOrchestrator.run.mockResolvedValue({
+        ...mockResultWithFindings,
+        summary: { ...mockResultWithFindings.summary, unmatchedWaivers: 1, outdatedWaivers: 0 },
+      });
+      mockConsoleLog.mockClear();
+      await auditCommand.execute(createDefaultOptions({ scope: 'full' }));
+      const quiet = mockConsoleLog.mock.calls.map((c) => String(c[0])).join('\n');
+      expect(quiet).toContain('1 waiver(s) matched no finding');
+      expect(quiet).not.toContain('earlier fingerprint scheme');
+    });
   });
 
   describe('4.1. CLI -> Orchestrator Integration (AORCH-C1 to C8)', () => {
@@ -368,20 +468,112 @@ describe('AuditCommand', () => {
       );
     });
 
+    // Exit assertions check a single process.exit call: the stub returns instead of exiting, so a
+    // second call would mean the command ran past an exit it had already decided.
     it('[AORCH-C2] should exit 1 when policy decision is block', async () => {
       await auditCommand.execute(createDefaultOptions({ scope: 'full' }));
 
       expect(mockOrchestrator.run).toHaveBeenCalled();
-      expect(mockProcessExit).toHaveBeenCalledWith(1);
+      expect(mockProcessExit).toHaveBeenCalledExactlyOnceWith(1);
     });
 
     it('[AORCH-C2] should exit 0 when policy decision is pass', async () => {
-      mockOrchestrator.run.mockResolvedValue(mockEmptyResult);
+      // An audit agent ran and found nothing to block on.
+      mockOrchestrator.run.mockResolvedValue({
+        ...mockCompletedEmptyResult,
+        summary: { ...mockEmptyResult.summary, agentsRun: 1, agentsFailed: 0 },
+      });
 
       await auditCommand.execute(createDefaultOptions({ scope: 'full' }));
 
       expect(mockOrchestrator.run).toHaveBeenCalled();
-      expect(mockProcessExit).toHaveBeenCalledWith(0);
+      expect(mockProcessExit).toHaveBeenCalledExactlyOnceWith(0);
+    });
+
+    it('[AORCH-C9] should exit 1 when every audit agent failed even if the policy decision is pass', async () => {
+      // The evaluator saw an empty list and said "pass" (PEVAL-D9 is right about that), and
+      // exiting 0 would pass a repository nobody scanned.
+      mockOrchestrator.run.mockResolvedValue({
+        ...mockEmptyResult,
+        summary: { ...mockEmptyResult.summary, agentsRun: 0, agentsFailed: 1 },
+        warning: 'All audit agents failed to load:\n  agent:security-audit — runtime \'typescript\' has no registered handler',
+      });
+      mockConsoleLog.mockClear();
+
+      await auditCommand.execute(createDefaultOptions({ scope: 'full' }));
+
+      expect(mockProcessExit).toHaveBeenCalledExactlyOnceWith(1);
+      expect(mockProcessExit).not.toHaveBeenCalledWith(0);
+      const printed = mockConsoleLog.mock.calls.map((c) => String(c[0])).join('\n');
+      expect(printed).toContain('1 audit agent(s) failed — the scan is incomplete');
+    });
+
+    it('[AORCH-C9] should exit 1 when any audit agent failed even if another one completed', async () => {
+      // A CI/CD step cannot pass on a partial scan: the files the failed agent covers were not
+      // looked at, whatever the others found.
+      mockOrchestrator.run.mockResolvedValue({
+        ...mockCompletedEmptyResult,
+        summary: { ...mockEmptyResult.summary, agentsRun: 1, agentsFailed: 1 },
+      });
+
+      await auditCommand.execute(createDefaultOptions({ scope: 'full' }));
+
+      expect(mockProcessExit).toHaveBeenCalledExactlyOnceWith(1);
+      expect(mockProcessExit).not.toHaveBeenCalledWith(0);
+    });
+
+    it('[AORCH-C9] should exit 1 when no audit agent was found', async () => {
+      // A mistyped --agent, or a repository with no audit agent registered: nothing was scanned.
+      mockOrchestrator.run.mockResolvedValue(mockEmptyResult);
+      mockConsoleLog.mockClear();
+
+      await auditCommand.execute(createDefaultOptions({ scope: 'full', agent: 'agent:securty-audit' }));
+
+      expect(mockProcessExit).toHaveBeenCalledExactlyOnceWith(1);
+      expect(mockProcessExit).not.toHaveBeenCalledWith(0);
+      const printed = mockConsoleLog.mock.calls.map((c) => String(c[0])).join('\n');
+      expect(printed).toContain('no audit agent found — nothing was scanned');
+
+      // NEGATIVE CONTROL — the same empty result with one audit agent completed exits 0: the 1
+      // above comes from the missing agent, not from the empty findings list.
+      vi.clearAllMocks();
+      mockOrchestrator.run.mockResolvedValue({
+        ...mockCompletedEmptyResult,
+        summary: { ...mockEmptyResult.summary, agentsRun: 1, agentsFailed: 0 },
+      });
+      await auditCommand.execute(createDefaultOptions({ scope: 'full' }));
+      expect(mockProcessExit).toHaveBeenCalledExactlyOnceWith(0);
+    });
+
+    it('[AORCH-C9] should exit 0 when only a review agent failed and every audit agent completed', async () => {
+      // Review runs after the policy and has no say on the CI/CD step: the scan was complete and
+      // the policy passed, so an unreachable review provider does not fail the build.
+      const auditCompleted = { ...mockEmptyResult.summary, agentsRun: 1, agentsFailed: 0 };
+      const reviewFailed: AuditOrchestrationResult['reviewResults'] = [{
+        agentId: 'agent:review-advisor',
+        status: 'error',
+        durationMs: 12,
+        errorMessage: 'review provider unreachable',
+      }];
+      mockOrchestrator.run.mockResolvedValue({ ...mockCompletedEmptyResult, summary: auditCompleted, reviewResults: reviewFailed });
+      mockConsoleLog.mockClear();
+
+      await auditCommand.execute(createDefaultOptions({ scope: 'full' }));
+
+      expect(mockProcessExit).toHaveBeenCalledExactlyOnceWith(0);
+      const printed = mockConsoleLog.mock.calls.map((c) => String(c[0])).join('\n');
+      expect(printed).toContain('0 (no critical findings)');
+
+      // ANTI-VACUITY: the same run with the failure on an audit agent instead exits 1, so the 0
+      // above is the rule telling the two kinds of agent apart, not an exit path that never fails.
+      vi.clearAllMocks();
+      mockOrchestrator.run.mockResolvedValue({
+        ...mockCompletedEmptyResult,
+        summary: { ...auditCompleted, agentsFailed: 1 },
+        reviewResults: reviewFailed,
+      });
+      await auditCommand.execute(createDefaultOptions({ scope: 'full' }));
+      expect(mockProcessExit).toHaveBeenCalledExactlyOnceWith(1);
     });
 
     it('[AORCH-C2] should pass failOn to orchestrator for threshold evaluation', async () => {
@@ -524,16 +716,16 @@ describe('AuditCommand', () => {
     });
 
     it('should handle initialization errors gracefully', async () => {
-      (DependencyInjectionService.getInstance as Mock).mockReturnValue({
-        getAuditOrchestrator: vi.fn().mockRejectedValue(new Error('Init failed')),
-      });
+      // Only the orchestrator fails to initialize; the rest of the container is the suite's, so
+      // the working repo guard passes and the one exit comes from the initialization error.
+      mockDIInstance.getAuditOrchestrator = vi.fn().mockRejectedValue(new Error('Init failed'));
 
-      auditCommand = new AuditCommand();
+      auditCommand = new AuditCommandInProject();
 
       await auditCommand.execute(createDefaultOptions({ scope: 'full' }));
 
       expect(mockConsoleError).toHaveBeenCalledWith(expect.stringContaining('Init failed'));
-      expect(mockProcessExit).toHaveBeenCalledWith(1);
+      expect(mockProcessExit).toHaveBeenCalledExactlyOnceWith(1);
     });
 
     it('should format text output with correct structure', async () => {
@@ -576,7 +768,7 @@ describe('AuditCommand', () => {
       await auditCommand.executeWaive('sha256:abc123', {});
 
       expect(mockConsoleError).toHaveBeenCalledWith(expect.stringContaining('Justification required'));
-      expect(mockProcessExit).toHaveBeenCalledWith(1);
+      expect(mockProcessExit).toHaveBeenCalledExactlyOnceWith(1);
     });
 
     it('[AORCH-E3] should list active waivers with --list', async () => {
@@ -736,20 +928,20 @@ describe('AuditCommand', () => {
       process.env['GITHUB_EVENT_PATH'] = tmpEvent;
       process.env['GITHUB_REPOSITORY'] = 'myorg/myrepo';
 
-      // Make dynamic require fail to simulate import error
-      vi.mock('@gitgov/core/github', () => { throw new Error('module load failed'); });
+      // A run whose policy passes, so a comment failure that leaked into the exit code would turn
+      // the 0 into a 1. With a blocking run both would exit 1 and the test could not tell.
+      mockOrchestrator.run.mockResolvedValue({
+        ...mockCompletedEmptyResult,
+        summary: { ...mockEmptyResult.summary, agentsRun: 1, agentsFailed: 0 },
+      });
+      mockFormatAuditResult.mockReturnValue('## GitGov Audit');
+      GitHubCiReporter.fromToken = vi.fn().mockRejectedValue(new Error('GitHub API unavailable'));
 
       await auditCommand.execute(createDefaultOptions({ ci: true }));
 
-      // Exit code should still be based on policy (block → 1), not on comment failure
-      expect(mockProcessExit).toHaveBeenCalledWith(1);
+      expect(mockConsoleWarn).toHaveBeenCalledWith(expect.stringContaining('Failed to post PR comment: GitHub API unavailable'));
+      expect(mockProcessExit).toHaveBeenCalledExactlyOnceWith(0);
 
-      // Restore mock
-      vi.mock('@gitgov/core/github', () => ({
-        GitHubCiReporter: vi.fn().mockImplementation(function() { return {
-          postOrUpdateComment: mockPostOrUpdateComment,
-        }; }),
-      }));
       await fs.unlink(tmpEvent).catch(() => {});
     });
 
@@ -848,9 +1040,9 @@ describe('AuditCommand', () => {
   // 4.11. Project Guard (AORCH-P5)
   describe('4.11. Project Guard (AORCH-P5)', () => {
     it('[AORCH-P5] should exit with error when project not initialized', async () => {
-      // getWorktreeBasePath returns /mock/worktree, existsSync('/mock/worktree/.gitgov') = false
-      // → requireProject detects no .gitgov/ and exits
-      await auditCommand.execute(createDefaultOptions());
+      // The real guard: getWorktreeBasePath returns /mock/worktree, and
+      // existsSync('/mock/worktree/.gitgov') is false → requireProject detects no .gitgov/ and exits
+      await new AuditCommand().execute(createDefaultOptions());
 
       expect(mockConsoleError).toHaveBeenCalledWith(
         expect.stringContaining('Project not initialized'),
@@ -862,13 +1054,8 @@ describe('AuditCommand', () => {
   // 4.12. Working Repo Guard (AORCH-P6)
   describe('4.12. Working Repo Guard (AORCH-P6)', () => {
     it('[AORCH-P6] should exit with error when repo has no commits', async () => {
-      // Bypass requireProject so we reach requireWorkingRepo. A subclass override is the
-      // cast-free way to reach the protected method: `vi.spyOn(cmd as any, ...)` silenced the
-      // visibility instead of respecting it, and `as any` is prohibited by the preset.
-      class AuditCommandWithProjectBypass extends AuditCommand {
-        protected override async requireProject(): Promise<void> { /* project exists */ }
-      }
-      const bypassedCommand = new AuditCommandWithProjectBypass();
+      // The project exists (AuditCommandInProject), so the run reaches requireWorkingRepo.
+      const bypassedCommand = new AuditCommandInProject();
       mockDIInstance.getGitModule = vi.fn().mockResolvedValue({
         getCommitHash: vi.fn().mockRejectedValue(new Error('fatal: ambiguous argument HEAD')),
       });

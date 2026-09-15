@@ -9,6 +9,7 @@
 import type { GitGovAgentRecord } from "../record_types";
 import type { IAgentRunner } from "../agent_runner/agent_runner";
 import type { IWaiverReader } from "../source_auditor/types";
+import type { ScanScope } from "../audit/types";
 import type { PolicyEvaluator } from "../policy_evaluator/policy_evaluator.types";
 import type { FindingRedactor } from "../redaction";
 
@@ -37,8 +38,8 @@ export type { PolicyEvaluationResult } from "../policy_evaluator/policy_evaluato
  * Input passed to each audit agent via AgentRunner ctx.input.
  */
 export type AgentAuditInput = {
-  /** Scan scope */
-  scope: "diff" | "full" | "baseline";
+  /** Scan scope — the one domain (AUDIT-J4) */
+  scope: ScanScope;
   /** Glob patterns to include */
   include?: string[];
   /** Glob patterns to exclude */

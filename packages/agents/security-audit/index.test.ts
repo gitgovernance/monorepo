@@ -22,7 +22,7 @@ const mockAuditFn = jest.fn().mockResolvedValue({
   scannedLines: 200,
   duration: 42,
   detectors: ['regex'],
-  waivers: { acknowledged: 0, new: 0 },
+  waivers: { acknowledged: 0, new: 0, unmatched: 0 },
 });
 
 jest.mock('@gitgov/core', () => ({
@@ -53,6 +53,8 @@ jest.mock('@gitgov/core', () => ({
       }),
     })),
   },
+  // [AUDIT-M1] The real counter, not a fifth reimplementation: this mock isolates I/O, not arithmetic.
+  countBySeverity: jest.requireActual('@gitgov/core/audit').countBySeverity,
 }));
 
 jest.mock('@gitgov/core/fs', () => ({

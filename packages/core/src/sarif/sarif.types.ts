@@ -1,5 +1,6 @@
-import type { Finding, FindingCategory, DetectorName } from '../finding_detector/types';
-import type { RedactionLevel, RedactionConfig } from '../redaction/redactor.types';
+// AUDIT-B4: canonical source. Was `../finding_detector/types`, which only re-exports these.
+import type { Finding, FindingCategory, DetectorName, ScanScope, SeverityCounts } from '../audit/types';
+import type { RedactionLevel } from '../redaction/redactor.types';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SARIF 2.1.0 structural types
@@ -104,15 +105,14 @@ export type SarifResult = {
   /** Locations where the result was detected */
   locations: SarifLocation[];
   /**
-   * Stable partial fingerprints for deduplication.
+   * GitHub's line hash for alert tracking, NOT the finding identity.
    * §3.27.17 partialFingerprints
    * Key: "primaryLocationLineHash/v1", Value: "hexHash:occurrence"
    */
   partialFingerprints?: Record<string, string>;
   /**
-   * Fingerprints for result identity.
-   * §3.27.16 fingerprints
-   * Note: GitGov uses partialFingerprints (primaryLocationLineHash/v1) as primary identity.
+   * [SARIF-N1] Result identity. §3.27.16 fingerprints
+   * The finding identity travels under "gitgov/v2" (SARIF_FINGERPRINT_KEY).
    */
   fingerprints?: Record<string, string>;
   /**
@@ -298,8 +298,8 @@ export type SarifRunProperties = {
   'gitgov/signatureCount'?: number;
   /** Agent that executed the scan */
   'gitgov/agentId'?: string;
-  /** Scope of the scan */
-  'gitgov/scanScope'?: 'diff' | 'full' | 'baseline';
+  /** Scope of the scan — the one domain (AUDIT-J4) */
+  'gitgov/scanScope'?: ScanScope;
   /** Number of files scanned */
   'gitgov/scannedFiles'?: number;
   /** Number of lines scanned */
@@ -326,9 +326,8 @@ export type GetLineContentFn = (file: string, line: number) => Promise<string | 
  */
 export type OccurrenceContext = Map<string, number>;
 
-// RedactionLevel is imported from '../redaction/redactor.types' — single source of truth.
-// Re-exported here for backward compatibility with consumers that import from sarif.types.
-export type { RedactionLevel } from '../redaction/redactor.types';
+// RedactionLevel is imported from '../redaction/redactor.types' — single source of truth, and
+// one public path, `Redaction.RedactionLevel`. No alias is re-exported from here.
 
 /**
  * All inputs to SarifBuilder.build().
@@ -366,8 +365,8 @@ export type SarifBuilderOptions = {
   signatureCount?: number;
   /** Agent that executed */
   agentId?: string;
-  /** Scan scope */
-  scanScope?: 'diff' | 'full' | 'baseline';
+  /** Scan scope — the one domain (AUDIT-J4) */
+  scanScope?: ScanScope;
   /** Files scanned */
   scannedFiles?: number;
   /** Lines scanned */
@@ -397,10 +396,14 @@ export type SarifBuilderOptions = {
   getLineContent?: GetLineContentFn;
 
   // ── Output control ─────────────────────────────────────────
-  /** Controls snippet redaction in SARIF output */
+  /**
+   * Redaction on request (SARIF-O1..O3). The builder is the redactor of the export-from-DB
+   * path, which reconstructs SARIF from rows and never passes the orchestrator; the scan
+   * path redacts in the orchestrator (AORCH-E1). Always with DEFAULT_REDACTION_CONFIG: the
+   * policy enters through FindingRedactor's constructor only. There is no `redactionConfig`
+   * option: it would be a third entry point for the policy (SARIF-O4 retired).
+   */
   redactionLevel?: RedactionLevel;
-  /** Custom redaction config override (uses DEFAULT_REDACTION_CONFIG when omitted) */
-  redactionConfig?: RedactionConfig;
 
   // ── Version control provenance §3.14.16 ───────────────────
   /** Git commit hash for versionControlProvenance */
@@ -499,7 +502,8 @@ export type SarifExecutionMetadata = {
   /** Summary for quick queries without deserializing the full SarifLog */
   summary?: {
     total: number;
-    bySeverity: Record<string, number>;
+    /** [AUDIT-M1] The severity aggregate is SeverityCounts, not a Record<string, number> */
+    bySeverity: SeverityCounts;
     byCategory: Record<string, number>;
   };
 };

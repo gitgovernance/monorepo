@@ -14,6 +14,7 @@ import type {
   ValidationResult,
 } from './sarif.types';
 import type { Finding, Waiver } from '../audit/types';
+import { SARIF_FINGERPRINT_KEY } from '../audit/fingerprint';
 import {
   buildPartialFingerprints,
   createOccurrenceContext,
@@ -64,6 +65,8 @@ function extractRules(findings: Finding[]): SarifReportingDescriptor[] {
 
 /**
  * Finds a waiver matching the given fingerprint.
+ * [SARIF-F5] An empty waiver list matches nothing. [SARIF-F4] A non-empty list with no
+ * fingerprint equal to the finding's matches nothing either — equality, never a line hash.
  */
 function findMatchingWaiver(
   fingerprint: string | undefined,
@@ -77,7 +80,7 @@ function findMatchingWaiver(
 
 /**
  * Converts a Waiver to a SARIF suppression (§3.35).
- * FeedbackRecord type: "approval" → kind: "inSource", status: "accepted"
+ * FeedbackRecord type: "approval" → [SARIF-F1] kind: "inSource", [SARIF-F2] status: "accepted"
  */
 function buildSuppression(waiver: Waiver): SarifSuppression {
   const payload = waiver.feedback?.payload;
@@ -90,6 +93,7 @@ function buildSuppression(waiver: Waiver): SarifSuppression {
     status: 'accepted',
     ...(content && { justification: content }),
     properties: {
+      // [SARIF-F3] The feedback record id travels with the suppression.
       'gitgov/feedbackId': feedbackId ?? '',
       ...(expiresAt && { 'gitgov/expiresAt': expiresAt }),
       ...(approvedBy && { 'gitgov/approvedBy': approvedBy }),
@@ -153,24 +157,19 @@ class SarifBuilderImpl implements SarifBuilder {
         }
         const context = fileContexts.get(finding.file)!;
 
-        // [SARIF-C7b] Use Finding.fingerprint as the canonical partialFingerprint.
-        // If getLineContent is available, recompute (first-time scan). If not (export from DB),
-        // fall back to Finding.fingerprint which was computed at scan time. This ensures the
-        // SARIF output is IDENTICAL regardless of whether it's produced during scan or export.
-        let partial = await buildPartialFingerprints(
+        // [SARIF-N2] partialFingerprints["primaryLocationLineHash/v1"] exists only for GitHub
+        // code scanning interop and only when the source line is available. Without
+        // getLineContent it is omitted entirely — Finding.fingerprint never travels under
+        // this key (SARIF-C5 superseded).
+        const partial = await buildPartialFingerprints(
           finding.file,
           finding.line,
           options.getLineContent,
           context
         );
-        if (!partial['primaryLocationLineHash/v1'] && finding.fingerprint) {
-          partial = { 'primaryLocationLineHash/v1': finding.fingerprint };
-        }
 
-        const waiver = findMatchingWaiver(
-          partial['primaryLocationLineHash/v1'],
-          options.waivers
-        );
+        // [SARIF-F1] Waivers are keyed by the finding identity, never by the GitHub line hash.
+        const waiver = findMatchingWaiver(finding.fingerprint, options.waivers);
 
         // result.properties — only defined keys (no undefined values)
         const props: SarifResultProperties = {
@@ -208,6 +207,10 @@ class SarifBuilderImpl implements SarifBuilder {
             },
           }],
           properties: props,
+          // [SARIF-N1] The finding identity is transported unchanged, with or without source
+          // access (SARIF §3.27.16 fingerprints = stable identity). Computed by createFinding
+          // (AUDIT-K1); the builder never recalculates it.
+          fingerprints: { [SARIF_FINGERPRINT_KEY]: finding.fingerprint },
         };
 
         if (Object.keys(partial).length > 0) {
@@ -270,13 +273,18 @@ class SarifBuilderImpl implements SarifBuilder {
       runs: [run],
     };
 
-    // Apply redaction when redactionLevel is set (SARIF-M1..M4)
+    // [SARIF-O1] [SARIF-O2] Redaction on request: when the caller passes a level, the
+    // assembled log goes through FindingRedactor before it leaves the builder. The scan path
+    // redacts in the orchestrator (AORCH-E1); the export-from-DB path (saas-api scans.export)
+    // reconstructs SARIF from rows, never passes the orchestrator, and redacts HERE. Two entry
+    // points to one redactor, ONE policy: always DEFAULT_REDACTION_CONFIG — a caller-supplied
+    // `redactionConfig` (SARIF-O4, retired) would be a third entry point for the policy; a
+    // non-default policy enters through FindingRedactor's constructor only.
     if (options.redactionLevel) {
-      const config = options.redactionConfig ?? DEFAULT_REDACTION_CONFIG;
-      const redactor = new FindingRedactor(config);
-      return redactor.redactSarif(sarifLog, options.redactionLevel);
+      return new FindingRedactor(DEFAULT_REDACTION_CONFIG).redactSarif(sarifLog, options.redactionLevel);
     }
 
+    // [SARIF-O3] No level, no redactor: the log is returned as assembled.
     return sarifLog;
   }
 

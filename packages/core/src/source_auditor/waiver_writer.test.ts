@@ -1,7 +1,7 @@
 // Sections: §4.7 (EARS-G1 to EARS-G5)
 import { WaiverWriter } from "./waiver_writer";
 import type { IFeedbackAdapter } from "../adapters/feedback_adapter";
-import type { Finding } from "../finding_detector/types";
+import type { Finding } from "../audit/types";
 import { createFinding } from "../audit/types";
 import type { FeedbackRecord } from "../record_types";
 
@@ -30,7 +30,6 @@ describe("WaiverWriter", () => {
     snippet: 'const email = "test@test.com"',
     message: "Email detected",
     detector: "regex",
-    fingerprint: "abc123def456",
     confidence: 1.0,
     executionId: "",
     reportedBy: [],
@@ -56,7 +55,10 @@ describe("WaiverWriter", () => {
           status: "resolved",
           content: "False positive - test data",
           metadata: {
-            fingerprint: "abc123def456",
+            // The waiver must carry the finding's OWN identity. Asserting against a
+            // hardcoded literal proved only that the literal travelled; asserting against
+            // the computed value proves the writer read it off the finding.
+            fingerprint: mockFinding.fingerprint,
             ruleId: "PII-001",
             file: "src/app.ts",
             line: 42,

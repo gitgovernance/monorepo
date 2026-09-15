@@ -7,9 +7,26 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { createHash } from 'node:crypto';
 
 // ─── Type + value imports for AUDIT-A/D tests ──────────────────────────────
-import { createFinding, createFix, createWaiver, createScan } from './types';
+import {
+  createFinding,
+  rehydrateFinding,
+  createFix,
+  createWaiver,
+  createScan,
+  countUnmatchedWaivers,
+  countOutdatedWaivers,
+  waiversForFiles,
+  countBySeverity,
+  isScanScope,
+  isDetectorName,
+  isAnchorText,
+  REDACTED_SNIPPET,
+} from './types';
+import { makeTestFinding, makeTestWaiver } from './testing';
+import { computeFingerprint, computeRegionFingerprint, FINGERPRINT_SCHEME } from './fingerprint';
 import type {
   Finding,
   FindingCategory,
@@ -223,7 +240,7 @@ describe('Audit Record Types (audit_record_types_module.md)', () => {
           rulesEvaluated: [],
           evaluatedAt: new Date().toISOString(),
         },
-        summary: { total: 0, critical: 0, high: 0, medium: 0, low: 0, suppressed: 0, agentsRun: 1, agentsFailed: 0 },
+        summary: { total: 0, critical: 0, high: 0, medium: 0, low: 0, suppressed: 0, unmatchedWaivers: 0, outdatedWaivers: 0, agentsRun: 1, agentsFailed: 0 },
       };
       expect(scan.scope).toBe('full');
       expect(scan.triggeredBy).toBeDefined();
@@ -266,6 +283,23 @@ describe('Audit Record Types (audit_record_types_module.md)', () => {
       const content = fs.readFileSync(path.resolve(__dirname, '../policy_evaluator/policy_evaluator.types.ts'), 'utf-8');
       expect(content).toContain('from "../audit/types"');
       expect(content).not.toMatch(/export type PolicyDecision\s*=/);
+    });
+
+    it('[AUDIT-B4] should verify source_auditor and redaction import Finding from audit/types', () => {
+      // These two cited AUDIT-B1 as their licence, but B1's WHEN names finding_detector and
+      // its test reads finding_detector only: a local `Finding` here would go unnoticed. One
+      // row per module, so the failure names the offender.
+      const modules = [
+        { file: '../source_auditor/types.ts', quote: '"' },
+        { file: '../redaction/redactor.types.ts', quote: "'" },
+      ];
+      const offenders = modules.filter(({ file, quote }) => {
+        const content = fs.readFileSync(path.resolve(__dirname, file), 'utf-8');
+        const importsCanonical = content.includes(`from ${quote}../audit/types${quote}`);
+        const redefines = /export (type|interface) Finding\b/.test(content);
+        return !importsCanonical || redefines;
+      }).map((m) => m.file);
+      expect(offenders).toEqual([]);
     });
   });
 
@@ -437,7 +471,6 @@ describe('Audit Prisma Schema Verification (audit_prisma_record_projection_modul
     it('[AUDIT-D1] should compute snippetHash as sha256 of snippet', () => {
       const { createHash } = require('node:crypto');
       const finding = createFinding({
-        fingerprint: 'fp-d1',
         ruleId: 'TEST-001',
         file: 'src/test.ts',
         line: 1,
@@ -500,7 +533,6 @@ describe('Audit Prisma Schema Verification (audit_prisma_record_projection_modul
 
     it('[AUDIT-E4] should normalize hyphens to underscores without rejecting custom categories', () => {
       const finding = createFinding({
-        fingerprint: 'test-fp',
         ruleId: 'DSEC-D3',
         file: 'device://macbook/firewall',
         line: 0,
@@ -555,7 +587,7 @@ describe('Audit Prisma Schema Verification (audit_prisma_record_projection_modul
   describe('4.7. Scan Factory (AUDIT-G1 to G3)', () => {
     const makeFinding = (severity: FindingSeverity, isWaived = false): Finding =>
       createFinding({
-        fingerprint: `fp-${severity}`, ruleId: 'R1', category: 'hardcoded-secret',
+        ruleId: 'R1', category: 'hardcoded-secret',
         severity, file: 'a.ts', line: 1, column: 1, message: 'test',
         snippet: `secret-${severity}`, detector: 'regex', confidence: 1,
         executionId: 'e1', reportedBy: ['agent:test'], isWaived,
@@ -630,11 +662,11 @@ describe('Audit Prisma Schema Verification (audit_prisma_record_projection_modul
     // spec's §4.10.1 time-bound scope). Measured: there are FIVE. None has
     // an observed failure. When a consumer that needs to iterate one of them appears,
     // THAT one gets converted and drops off this list — not all of them at once.
+    // `ScanScope` left this list with AUDIT-J4, when it was widened to three values, and
+    // `DetectorName` with AUDIT-J6, when the SARIF rehydrator needed to narrow a string to it.
     const GRANDFATHERED_BARE_UNIONS = [
-      'DetectorName',
       'WaiverStatus',
       'ScanDisplayStatus',
-      'ScanScope',
       'PolicyStatus',
     ];
 
@@ -688,6 +720,342 @@ describe('Audit Prisma Schema Verification (audit_prisma_record_projection_modul
       const src = fs.readFileSync(typesPath, 'utf-8');
       expect(src).toMatch(/export const FINDING_SEVERITIES = \[[^\]]*\] as const;/);
       expect(src).toMatch(/export type FindingSeverity = \(typeof FINDING_SEVERITIES\)\[number\];/);
+    });
+
+    it('[AUDIT-J4] should export SCAN_SCOPES as a readonly tuple and let createScan record a baseline run', () => {
+      const mainBarrel = require('../index');
+      expect(Array.isArray(mainBarrel.SCAN_SCOPES)).toBe(true);
+      expect([...mainBarrel.SCAN_SCOPES]).toEqual(['diff', 'full', 'baseline']);
+
+      const src = fs.readFileSync(typesPath, 'utf-8');
+      expect(src).toMatch(/export const SCAN_SCOPES = \[[^\]]*\] as const;/);
+      expect(src).toMatch(/export type ScanScope = \(typeof SCAN_SCOPES\)\[number\];/);
+
+      // The run whose grouping matters most — the one that writes the new baseline — is
+      // representable in the type that groups it. With the old two-value union this line did
+      // not compile, which is the negative control for the widening.
+      const scan = createScan({
+        scope: 'baseline',
+        triggeredBy: 'ci',
+        executionRecordIds: [],
+        findings: [],
+        policyDecision: {
+          decision: 'pass', reason: 'OK', executionId: 'e-p', blockingFindings: [], waivedFindings: [],
+          summary: { critical: 0, high: 0, medium: 0, low: 0 }, rulesEvaluated: [], evaluatedAt: new Date().toISOString(),
+        },
+      });
+      expect(scan.scope).toBe('baseline');
+
+      // The runtime guard a persisted `string` goes through instead of a cast (saas-api).
+      expect(isScanScope('baseline')).toBe(true);
+      expect(isScanScope('diff')).toBe(true);
+      expect(isScanScope('everything')).toBe(false);
+    });
+
+    it('[AUDIT-J5] should export BASE_FINDING_CATEGORIES as a readonly tuple and keep FindingCategory open', () => {
+      const mainBarrel = require('../index');
+      expect(Array.isArray(mainBarrel.BASE_FINDING_CATEGORIES)).toBe(true);
+      // 38 built-ins, no duplicates, and the two SAST ones that went unclassified are there.
+      expect(mainBarrel.BASE_FINDING_CATEGORIES).toHaveLength(38);
+      expect(new Set(mainBarrel.BASE_FINDING_CATEGORIES).size).toBe(38);
+      expect(mainBarrel.BASE_FINDING_CATEGORIES).toEqual(
+        expect.arrayContaining(['pii-email', 'security-vulnerability', 'code-quality']),
+      );
+
+      const src = fs.readFileSync(typesPath, 'utf-8');
+      expect(src).toMatch(/export const BASE_FINDING_CATEGORIES = \[[^\]]*\] as const;/);
+      expect(src).toMatch(/export type BaseFindingCategory = \(typeof BASE_FINDING_CATEGORIES\)\[number\];/);
+      // The OPEN half survives exactly as AUDIT-E2 declares it — J1 applies to the tuple, not here.
+      expect(src).toMatch(/export type FindingCategory = BaseFindingCategory \| \(string & \{\}\);/);
+      const custom: FindingCategory = 'firewall-disabled';
+      expect(typeof custom).toBe('string');
+    });
+  });
+
+  // ── 4.11. Finding identity (AUDIT-K1, K5, K6, K7) + AUDIT-D2 ──
+
+  describe('4.11. Finding identity (AUDIT-K1, K5, K6, K7)', () => {
+    const producerInput = {
+      ruleId: 'SEC-001',
+      file: 'src/config.ts',
+      line: 42,
+      message: 'Hardcoded secret detected',
+      snippet: 'const apiKey = "sk_test_abc123";',
+      category: 'hardcoded-secret' as FindingCategory,
+      severity: 'critical' as FindingSeverity,
+      detector: 'regex' as const,
+      confidence: 1.0,
+      executionId: 'exec-test-001',
+      reportedBy: ['agent:security-audit'],
+      isWaived: false,
+    };
+
+    it('[AUDIT-K1] should compute a versioned fingerprint in createFinding and reject fingerprint in the input type', () => {
+      const finding = createFinding({ ...producerInput, anchor: 'sk_test_abc123' });
+
+      expect(finding.fingerprint).toMatch(/^gitgov-fp\/2:[a-f0-9]{64}$/);
+      expect(finding.fingerprint).toBe(
+        computeFingerprint({ file: producerInput.file, category: producerInput.category, anchor: 'sk_test_abc123' }),
+      );
+
+      // The caller cannot supply it: `fingerprint` is omitted from the input type, so this
+      // is a compile-time error. `@ts-expect-error` FAILS the build if the error stops
+      // happening — the assertion is that the door stays shut, and it is checked by tsc,
+      // not at runtime.
+      // @ts-expect-error fingerprint is not an accepted input of createFinding (AUDIT-K1)
+      createFinding({ ...producerInput, fingerprint: 'deadbeef' });
+    });
+
+    it('[AUDIT-K1] should fall back to snippet as anchor when anchor is absent', () => {
+      const withoutAnchor = createFinding(producerInput);
+
+      expect(withoutAnchor.fingerprint).toBe(
+        computeFingerprint({
+          file: producerInput.file,
+          category: producerInput.category,
+          anchor: producerInput.snippet,
+        }),
+      );
+
+      // And the fallback is a real fallback, not an alias: a finding whose anchor is the
+      // matched token differs from one that hashed the whole line. That difference is the
+      // entire point of the anchor (D-d).
+      const withAnchor = createFinding({ ...producerInput, anchor: 'sk_test_abc123' });
+      expect(withAnchor.fingerprint).not.toBe(withoutAnchor.fingerprint);
+    });
+
+    it('[AUDIT-K5] should keep the transported fingerprint byte for byte in rehydrateFinding', () => {
+      const transported = 'a'.repeat(64);
+      const rehydrated = rehydrateFinding({
+        ...producerInput,
+        fingerprint: transported,
+        snippet: '[REDACTED]',
+      });
+
+      expect(rehydrated.fingerprint).toBe(transported);
+
+      // Negative control: recomputing at this point diverges, because the consumer no
+      // longer has the anchor and the snippet may be redacted or truncated. If
+      // rehydrateFinding ever recomputed, it would land on this value instead.
+      const recomputed = computeFingerprint({
+        file: producerInput.file,
+        category: producerInput.category,
+        anchor: '[REDACTED]',
+      });
+      expect(recomputed).not.toBe(transported);
+    });
+
+    it('[AUDIT-K6] should hash the exact snippet without normalization', () => {
+      const tight = createFinding({ ...producerInput, snippet: 'a b' });
+      const spread = createFinding({ ...producerInput, snippet: 'a  b' });
+
+      // snippetHash proves the EXACT text — it is the L1↔L2 integrity bridge (RLDX-F2/F4).
+      // Normalizing it would make verifySnippet compare a normalized hash against a raw
+      // one and answer "unverified" forever, silently.
+      expect(tight.snippetHash).not.toBe(spread.snippetHash);
+      expect(spread.snippetHash).toBe(createHash('sha256').update('a  b').digest('hex'));
+
+      // The other hash goes the other way: normalization is exactly what makes the
+      // identity survive the same reformat. Two hashes, two roles.
+      expect(tight.fingerprint).toBe(spread.fingerprint);
+    });
+
+    it('[AUDIT-K7] should fall back to the snippet when the anchor carries no text', () => {
+      const fromSnippet = computeFingerprint({
+        file: producerInput.file,
+        category: producerInput.category,
+        anchor: producerInput.snippet,
+      });
+
+      for (const empty of ['', '   ', 'requires login', REDACTED_SNIPPET]) {
+        expect(createFinding({ ...producerInput, anchor: empty }).fingerprint).toBe(fromSnippet);
+      }
+      expect([undefined, '', ' \t', 'requires login', REDACTED_SNIPPET].map(isAnchorText)).toEqual([
+        false, false, false, false, false,
+      ]);
+      expect(isAnchorText('sk_test_abc123')).toBe(true);
+    });
+
+    it('[AUDIT-K7] should degrade to the region with a warning and never collapse findings without text', () => {
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+      try {
+        // Three semgrep results in one file and category, no snippet text: an empty snippet,
+        // the login placeholder, and a second rule on the first result's line.
+        const noText = { ...producerInput, ruleId: 'semgrep.sqli', category: 'security-vulnerability', snippet: '' };
+        const findings = [
+          createFinding({ ...noText, line: 10, anchor: '' }),
+          createFinding({ ...noText, line: 20, snippet: 'requires login', anchor: 'requires login' }),
+          createFinding({ ...noText, line: 10, ruleId: 'semgrep.xss', anchor: '' }),
+        ];
+
+        expect(new Set(findings.map((f) => f.fingerprint)).size).toBe(3);
+        expect(findings[0]!.fingerprint).toBe(
+          computeRegionFingerprint({ file: noText.file, category: noText.category, ruleId: 'semgrep.sqli', line: 10 }),
+        );
+        const k7 = warn.mock.calls.map((c) => String(c[0])).filter((m) => m.includes('[AUDIT-K7]'));
+        expect(k7).toHaveLength(3);
+        expect(k7[0]).toContain('semgrep.sqli at src/config.ts:10');
+
+        // Negative control — the identity as it was computed before: the empty anchor hashed
+        // as text. The three findings become one, and consolidation drops two of them.
+        const asText = findings.map((f) =>
+          computeFingerprint({ file: f.file, category: f.category, anchor: '' }),
+        );
+        expect(new Set(asText).size).toBe(1);
+      } finally {
+        warn.mockRestore();
+      }
+    });
+  });
+
+  describe('4.10. Runtime-Iterable Enums — DetectorName (AUDIT-J6)', () => {
+    it('[AUDIT-J6] should export DETECTOR_NAMES as a readonly tuple and narrow a string with isDetectorName', () => {
+      const mainBarrel = require('../index');
+      expect(mainBarrel.DETECTOR_NAMES).toEqual(['regex', 'heuristic', 'llm', 'sast']);
+      expect(isDetectorName('sast')).toBe(true);
+      expect(isDetectorName('semgrep')).toBe(false);
+
+      const src = fs.readFileSync(path.resolve(__dirname, 'types.ts'), 'utf-8');
+      expect(src).toMatch(/export type DetectorName = \(typeof DETECTOR_NAMES\)\[number\];/);
+    });
+  });
+
+  describe('4.12. Unmatched and outdated waivers (AUDIT-L1 to L3)', () => {
+    /** A fingerprint in the current scheme whose finding no longer exists. */
+    const currentFp = (hex: string) => `${FINGERPRINT_SCHEME}:${hex.repeat(64)}`;
+
+    it('[AUDIT-L2] should keep only the waivers whose finding file was read', () => {
+      const withFile = (fingerprint: string, file?: string): Waiver => {
+        const base = makeTestWaiver({ fingerprint });
+        return {
+          ...base,
+          feedback: {
+            ...base.feedback,
+            payload: {
+              ...base.feedback.payload,
+              ...(file !== undefined ? { metadata: { fingerprint, ruleId: 'SEC-001', file, line: 1 } } : {}),
+            },
+          },
+        };
+      };
+      const inRead = withFile(currentFp('a'), 'src/read.ts');
+      const notRead = withFile(currentFp('b'), 'src/untouched.ts');
+      const noFile = withFile(currentFp('c'));
+
+      expect(waiversForFiles([inRead, notRead, noFile], ['src/read.ts', 'src/other.ts'])).toEqual([inRead]);
+
+      // Negative control — without the filter, a diff run that read one file reports the
+      // waiver of a file it never opened as unmatched, and tells the user to re-create it.
+      const finding = makeTestFinding({ file: 'src/read.ts', anchor: 'still-here' });
+      const matchedInRead = withFile(finding.fingerprint, 'src/read.ts');
+      expect(countUnmatchedWaivers([matchedInRead, notRead], [finding])).toBe(1);
+      expect(countUnmatchedWaivers(waiversForFiles([matchedInRead, notRead], ['src/read.ts']), [finding])).toBe(0);
+    });
+    it('[AUDIT-L1] should count the waivers whose fingerprint matches no finding', () => {
+      const a = makeTestFinding({ anchor: 'still-here-a' });
+      const b = makeTestFinding({ anchor: 'still-here-b' });
+      const matched = makeTestWaiver({ fingerprint: a.fingerprint });
+      const stale1 = makeTestWaiver({ fingerprint: currentFp('f') });
+      const stale2 = makeTestWaiver({ fingerprint: currentFp('e') });
+
+      // ONE matched and TWO stale, asymmetric on purpose: with one of each, "count the ones
+      // that matched" and "count the ones that did not" both return 1, and an inverted
+      // predicate passes.
+      expect(countUnmatchedWaivers([matched, stale1, stale2], [a, b])).toBe(2);
+    });
+
+    it('[AUDIT-L1] should count every waiver as unmatched when there are no findings', () => {
+      // The edge case the orchestrator's no-agents branch used to hard-code as
+      // `waivers.length` with the reasoning in a comment. A property of the function,
+      // tested once, instead of a special case at a call site.
+      const waivers = [
+        makeTestWaiver({ fingerprint: currentFp('a') }),
+        makeTestWaiver({ fingerprint: currentFp('b') }),
+      ];
+      expect(countUnmatchedWaivers(waivers, [])).toBe(2);
+      expect(countUnmatchedWaivers([], [])).toBe(0);
+    });
+
+    it('[AUDIT-L3] should count waivers under an earlier fingerprint scheme as outdated and never as unmatched', () => {
+      const finding = makeTestFinding({ anchor: 'still-here' });
+      const current = makeTestWaiver({ fingerprint: finding.fingerprint });
+      const stale = makeTestWaiver({ fingerprint: currentFp('f') });
+      // An earlier formula's values: a bare digest, and a value under another scheme tag.
+      const bare = makeTestWaiver({ fingerprint: 'a1b2c3d4e5f60718:1' });
+      const olderScheme = makeTestWaiver({ fingerprint: `gitgov-fp/1:${'d'.repeat(64)}` });
+      const waivers = [current, stale, bare, olderScheme];
+
+      expect(countOutdatedWaivers(waivers)).toBe(2);
+      // Disjoint: the stale one is unmatched, the two older ones are outdated, none is both.
+      expect(countUnmatchedWaivers(waivers, [finding])).toBe(1);
+
+      // Negative control — without the scheme check, the older two land in "unmatched" and
+      // the user is told their findings disappeared, when what changed was the formula.
+      const withoutSchemeCheck = waivers.filter((w) => w.fingerprint !== finding.fingerprint).length;
+      expect(withoutSchemeCheck).toBe(3);
+    });
+  });
+
+  describe('4.13. Severity counts (AUDIT-M1)', () => {
+    it('[AUDIT-M1] should count findings per severity with every key present', () => {
+      // Two critical and one low, asymmetric on purpose: with one finding per severity a
+      // counter that ignores the severity and returns findings.length / 4 would also pass.
+      const findings = [
+        makeTestFinding({ anchor: 'c1', severity: 'critical' }),
+        makeTestFinding({ anchor: 'c2', severity: 'critical' }),
+        makeTestFinding({ anchor: 'l1', severity: 'low' }),
+      ];
+      expect(countBySeverity(findings)).toEqual({ critical: 2, high: 0, medium: 0, low: 1 });
+      // Every key present even with nothing to count — consumers index without a guard.
+      expect(countBySeverity([])).toEqual({ critical: 0, high: 0, medium: 0, low: 0 });
+    });
+
+    it('[AUDIT-M1] should type every severity aggregate in core as SeverityCounts', () => {
+      // The map used to be written several ways; the three core sites now name the one type.
+      const sites = [
+        { file: 'types.ts', pattern: /export type AuditSummary = SeverityCounts & \{/ },
+        { file: '../source_auditor/types.ts', pattern: /bySeverity: SeverityCounts;/ },
+        { file: '../sarif/sarif.types.ts', pattern: /bySeverity: SeverityCounts;/ },
+      ];
+      const missing = sites
+        .filter(({ file, pattern }) => !pattern.test(fs.readFileSync(path.resolve(__dirname, file), 'utf-8')))
+        .map((s) => s.file);
+      expect(missing).toEqual([]);
+    });
+  });
+
+  describe('4.4. Finding Factory — two constructors (AUDIT-D2)', () => {
+    it('[AUDIT-D2] should construct every Finding through createFinding or rehydrateFinding', () => {
+      const srcRoot = path.resolve(__dirname, '..');
+      const files: string[] = [];
+      const walk = (dir: string) => {
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+          const full = path.join(dir, entry.name);
+          if (entry.isDirectory()) walk(full);
+          else if (entry.name.endsWith('.ts') && !entry.name.includes('.test.')) files.push(full);
+        }
+      };
+      walk(srcRoot);
+
+      // Assigning `snippetHash` in an OBJECT LITERAL is the signature of a Finding built by
+      // hand. The trailing comma is what tells it apart from a TYPE MEMBER, which ends in a
+      // semicolon: `redaction/redactor.types.ts` legitimately declares `snippetHash: string;`
+      // as a field of RedactedFinding and is not a construction site. A scan that cannot
+      // make that distinction reports a type declaration as a violation.
+      const RE_LITERAL_ASSIGNMENT = /^\s*snippetHash:\s*.+,\s*$/m;
+
+      // ANTI-VACUITY: if the pattern stops matching — a formatting change, a refactor — the
+      // list comes back empty and this test passes WITHOUT VERIFYING ANYTHING. types.ts MUST
+      // appear, because that is where both factories assign the field. Until it does, a zero
+      // here is blindness, not compliance.
+      const withProperty = files.filter((f) => RE_LITERAL_ASSIGNMENT.test(fs.readFileSync(f, 'utf-8')));
+      expect(withProperty.map((f) => path.relative(srcRoot, f))).toContain('audit/types.ts');
+
+      // Everywhere else, a Finding is built by a factory and never as a literal.
+      const violations = withProperty
+        .map((f) => path.relative(srcRoot, f))
+        .filter((f) => f !== 'audit/types.ts' && f !== 'audit/testing.ts');
+      expect(violations).toEqual([]);
     });
   });
 });

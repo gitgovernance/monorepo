@@ -1,21 +1,8 @@
-import { createHash } from "node:crypto";
 import type { Detector, Finding, RegexRule } from "../types";
 import { createFinding } from "../../audit/types";
 import { REGEX_RULES } from "../rules/regex_rules";
 
 const MAX_SNIPPET_LENGTH = 300;
-
-/**
- * Generates SHA256 fingerprint for deduplication.
- * Format: hash(ruleId:file:line)
- */
-function generateFingerprint(
-  ruleId: string,
-  file: string,
-  line: number
-): string {
-  return createHash("sha256").update(`${ruleId}:${file}:${line}`).digest("hex");
-}
 
 /**
  * Truncates snippet to maximum 300 characters.
@@ -35,13 +22,17 @@ function getLineNumber(content: string, index: number): number {
 }
 
 /**
+ * The full, untruncated line where a match starts.
+ */
+function lineAt(content: string, matchIndex: number): string {
+  return content.split("\n")[getLineNumber(content, matchIndex) - 1] || "";
+}
+
+/**
  * Extracts snippet from line where match occurs.
  */
 function extractSnippet(content: string, matchIndex: number): string {
-  const lines = content.split("\n");
-  const lineNumber = getLineNumber(content, matchIndex);
-  const line = lines[lineNumber - 1] || "";
-  return truncateSnippet(line.trim());
+  return truncateSnippet(lineAt(content, matchIndex).trim());
 }
 
 /**
@@ -74,7 +65,12 @@ export class RegexDetector implements Detector {
         const snippet = extractSnippet(content, match.index);
 
         const finding = createFinding({
-          fingerprint: generateFingerprint(rule.id, filePath, line),
+          // [EARS-31] The detector hands over the text that distinguishes this occurrence and
+          // nothing else; the identity is derived once, by createFinding (AUDIT-K1). `match[0]`
+          // survives a reformat that splits the statement; the line it sat on does not.
+          // [EARS-35] Except for a rule whose match is a bare name every occurrence shares: its
+          // line is what tells two occurrences apart.
+          anchor: rule.anchor === "line" ? lineAt(content, match.index) : match[0],
           ruleId: rule.id,
           file: filePath,
           line,

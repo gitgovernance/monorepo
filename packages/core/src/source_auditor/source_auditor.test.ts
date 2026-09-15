@@ -1,12 +1,13 @@
-// Sections: §4.1 (EARS-A1 to EARS-A3), §4.2 (EARS-B1 to EARS-B4), §4.3 (EARS-C1 to EARS-C5), §4.4 (EARS-D1 to EARS-D4), §4.5 (EARS-E1 to EARS-E4), §4.8 (EARS-H1 to EARS-H3)
+// Sections: §4.1 (EARS-A1 to EARS-A3), §4.2 (EARS-B1 to EARS-B4), §4.3 (EARS-C1 to EARS-C6), §4.4 (EARS-D1 to EARS-D4), §4.5 (EARS-E1 to EARS-E4), §4.8 (EARS-H1 to EARS-H3)
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 import { SourceAuditorModule } from "./source_auditor";
 import { FsFileLister } from "../file_lister/fs";
 import type { FindingDetectorModule } from "../finding_detector";
-import type { Finding } from "../finding_detector/types";
+import type { Finding } from "../audit/types";
 import { createFinding as coreCreateFinding } from "../audit/types";
+import { makeTestWaiver } from "../audit/testing";
 import type { IWaiverReader, Waiver, SourceAuditorDependencies } from "./types";
 
 describe("SourceAuditorModule", () => {
@@ -45,13 +46,31 @@ describe("SourceAuditorModule", () => {
   /**
    * Creates SourceAuditorDependencies with FsFileLister for tempDir
    */
+  /** An active waiver whose FeedbackRecord was written for a finding in `file`. */
+  const waiverOn = (fingerprint: string, file: string): Waiver => {
+    const base = makeTestWaiver({ fingerprint, ruleId: "PII-001" });
+    return {
+      ...base,
+      feedback: {
+        ...base.feedback,
+        payload: { ...base.feedback.payload, metadata: { fingerprint, ruleId: "PII-001", file, line: 1 } },
+      },
+    };
+  };
+
   const createDeps = (): SourceAuditorDependencies => ({
     findingDetector: mockFindingDetector,
     waiverReader: mockWaiverReader,
     fileLister: new FsFileLister({ cwd: tempDir }),
   });
 
-  const createFinding = (overrides: Partial<Omit<Finding, 'snippetHash'>> = {}): Finding => coreCreateFinding({
+  // [AUDIT-K1] The identity is computed from file + category + anchor, so a test that needs
+  // two DISTINCT findings varies one of those three — `anchor` is the cheapest. Pinning a
+  // `fingerprint` here used to work; now the factory ignores it, and two findings that
+  // differ only in a pinned fingerprint would come out identical.
+  const createFinding = (
+    overrides: Partial<Omit<Finding, 'fingerprint' | 'snippetHash'>> & { anchor?: string } = {},
+  ): Finding => coreCreateFinding({
     ruleId: "PII-001",
     category: "pii-email",
     severity: "high",
@@ -60,7 +79,6 @@ describe("SourceAuditorModule", () => {
     snippet: 'const email = "test@test.com"',
     message: "Email detected",
     detector: "regex",
-    fingerprint: "abc123",
     confidence: 1.0,
     executionId: "",
     reportedBy: [],
@@ -152,25 +170,75 @@ describe("SourceAuditorModule", () => {
     });
 
     it("[EARS-B3] should continue when file cannot be read", async () => {
-      // Create unreadable file scenario by removing file after glob
-      const auditor = new SourceAuditorModule(createDeps());
+      // The read must fail AFTER scope selection. The previous version deleted the file
+      // BEFORE audit(), so the glob never listed it, read() was never asked for a missing
+      // file, and the catch was never entered — the test passed because only one file
+      // existed, not because one failed. Verified by mutation: removing the try/catch
+      // entirely left it green.
+      const fileLister = new FsFileLister({ cwd: tempDir });
+      const realRead = fileLister.read.bind(fileLister);
+      jest.spyOn(fileLister, "read").mockImplementation(async (p: string) => {
+        if (p.endsWith("utils.ts")) throw new Error("EACCES: permission denied");
+        return realRead(p);
+      });
 
-      // Delete one file to simulate read error
-      fs.unlinkSync(path.join(tempDir, "src", "utils.ts"));
+      const auditor = new SourceAuditorModule({
+        findingDetector: mockFindingDetector,
+        waiverReader: mockWaiverReader,
+        fileLister,
+      });
 
-      await auditor.audit({
+      const result = await auditor.audit({
         scope: { include: ["**/*.ts"], exclude: [] },
         baseDir: tempDir,
       });
 
-      // Should still process the remaining file
+      // ANTI-VACUITY: both files were in scope, so the single detect call below is the
+      // consequence of one read failing, not of one file existing.
+      expect(fileLister.read).toHaveBeenCalledTimes(2);
+
+      // The readable one was still processed, and the audit completed.
       expect(mockFindingDetector.detect).toHaveBeenCalledTimes(1);
+      expect(result.scannedFiles).toBe(1);
+    });
+
+    it("[EARS-B3] should warn naming the file it could not read", async () => {
+      // The EARS says "emitir warning y continuar". The catch was silent, and the test above
+      // cannot see that: it asserts continuation, which happens either way. A skipped file
+      // that reports nothing is a scan with a hole and no record of it.
+      const warn = jest.spyOn(console, "warn").mockImplementation(() => { /* captured */ });
+      try {
+        const fileLister = new FsFileLister({ cwd: tempDir });
+        const realRead = fileLister.read.bind(fileLister);
+        jest.spyOn(fileLister, "read").mockImplementation(async (p: string) => {
+          if (p.endsWith("utils.ts")) throw new Error("EACCES: permission denied");
+          return realRead(p);
+        });
+
+        const auditor = new SourceAuditorModule({
+          findingDetector: mockFindingDetector,
+          waiverReader: mockWaiverReader,
+          fileLister,
+        });
+
+        await auditor.audit({
+          scope: { include: ["**/*.ts"], exclude: [] },
+          baseDir: tempDir,
+        });
+
+        expect(warn).toHaveBeenCalledTimes(1);
+        const message = String(warn.mock.calls[0]?.[0] ?? "");
+        expect(message).toContain("utils.ts");
+        expect(message).toContain("EARS-B3");
+      } finally {
+        warn.mockRestore();
+      }
     });
 
     it("[EARS-B4] should track detectors used in result.detectors", async () => {
       mockFindingDetector.detect.mockResolvedValue([
         createFinding({ detector: "regex" }),
-        createFinding({ detector: "heuristic", fingerprint: "def456" }),
+        createFinding({ detector: "heuristic", anchor: "def456" }),
       ]);
 
       const auditor = new SourceAuditorModule(createDeps());
@@ -185,7 +253,7 @@ describe("SourceAuditorModule", () => {
     });
   });
 
-  describe("4.3. Waiver Filtering (EARS-C1 to EARS-C5)", () => {
+  describe("4.3. Waiver Filtering (EARS-C1 to EARS-C6)", () => {
     it("[EARS-C1] should load active waivers before filtering", async () => {
       const auditor = new SourceAuditorModule(createDeps());
 
@@ -198,14 +266,13 @@ describe("SourceAuditorModule", () => {
     });
 
     it("[EARS-C2] should exclude findings matching active waiver fingerprint", async () => {
-      const finding = createFinding({ fingerprint: "waived-fingerprint" });
+      const finding = createFinding({ anchor: "waived-fingerprint" });
       mockFindingDetector.detect.mockResolvedValue([finding]);
 
-      const waiver: Waiver = {
-        fingerprint: "waived-fingerprint",
-        ruleId: "PII-001",
-        feedback: {} as Waiver["feedback"],
-      };
+      // The waiver keys on the finding's REAL identity. Pairing them through a shared
+      // literal used to work because the fingerprint was whatever the test typed; now it is
+      // derived, and a literal here would silently stop matching.
+      const waiver = waiverOn(finding.fingerprint, "src/app.ts");
       mockWaiverReader.loadWaivers.mockResolvedValue([waiver]);
 
       const auditor = new SourceAuditorModule(createDeps());
@@ -219,58 +286,23 @@ describe("SourceAuditorModule", () => {
       expect(result.waivers.acknowledged).toBe(1);
     });
 
-    it("[EARS-C3] should ignore expired waivers", async () => {
-      // Expired waivers are filtered by WaiverReader, not SourceAuditor
-      // This test verifies integration behavior
-      const finding = createFinding();
-      mockFindingDetector.detect.mockResolvedValue([finding]);
-      mockWaiverReader.loadWaivers.mockResolvedValue([]);
-
-      const auditor = new SourceAuditorModule(createDeps());
-
-      const result = await auditor.audit({
-        scope: { include: ["src/app.ts"], exclude: [] },
-        baseDir: tempDir,
-      });
-
-      expect(result.findings).toHaveLength(1);
-    });
-
-    it("[EARS-C4] should treat waivers without expiresAt as permanent", async () => {
-      const finding = createFinding({ fingerprint: "permanent-waiver" });
-      mockFindingDetector.detect.mockResolvedValue([finding]);
-
-      const permanentWaiver: Waiver = {
-        fingerprint: "permanent-waiver",
-        ruleId: "PII-001",
-        // No expiresAt
-        feedback: {} as Waiver["feedback"],
-      };
-      mockWaiverReader.loadWaivers.mockResolvedValue([permanentWaiver]);
-
-      const auditor = new SourceAuditorModule(createDeps());
-
-      const result = await auditor.audit({
-        scope: { include: ["src/app.ts"], exclude: [] },
-        baseDir: tempDir,
-      });
-
-      expect(result.findings).toHaveLength(0);
-      expect(result.waivers.acknowledged).toBe(1);
-    });
+    // EARS-C3 and EARS-C4 are retired from this block. Expiry is
+    // resolved by WaiverReader.loadWaivers() and is specified and tested there as EARS-F3/F4;
+    // filterByWaivers never reads expiresAt. The C3 test here had no expired waiver in its
+    // fixture, and the C4 test was byte-equivalent to C2. See EARS-H2 for what this means
+    // for callers of auditContents({ waivers }).
 
     it("[EARS-C5] should report waivers.new count correctly", async () => {
+      // Three distinct anchors → three distinct identities, which is what makes the count
+      // meaningful. Same anchor three times would be ONE finding (EARS-33).
+      const waivedFinding = createFinding({ anchor: "waived-1" });
       mockFindingDetector.detect.mockResolvedValue([
-        createFinding({ fingerprint: "new-1" }),
-        createFinding({ fingerprint: "new-2" }),
-        createFinding({ fingerprint: "waived-1" }),
+        createFinding({ anchor: "new-1" }),
+        createFinding({ anchor: "new-2" }),
+        waivedFinding,
       ]);
 
-      const waiver: Waiver = {
-        fingerprint: "waived-1",
-        ruleId: "PII-001",
-        feedback: {} as Waiver["feedback"],
-      };
+      const waiver = waiverOn(waivedFinding.fingerprint, "src/app.ts");
       mockWaiverReader.loadWaivers.mockResolvedValue([waiver]);
 
       const auditor = new SourceAuditorModule(createDeps());
@@ -283,13 +315,119 @@ describe("SourceAuditorModule", () => {
       expect(result.waivers.new).toBe(2);
       expect(result.waivers.acknowledged).toBe(1);
     });
+
+    it("[EARS-C6] should report the count of active waivers that matched no finding", async () => {
+      const detected = createFinding({ anchor: "still-here" });
+      mockFindingDetector.detect.mockResolvedValue([detected]);
+
+      // Current-scheme fingerprints whose finding is no longer in the code.
+      const staleWaiver = (hex: string): Waiver => waiverOn(`gitgov-fp/2:${hex.repeat(64)}`, "src/app.ts");
+      const matched = waiverOn(detected.fingerprint, "src/app.ts");
+
+      // ONE matched and TWO stale, deliberately asymmetric. With one of each, "count the
+      // waivers that matched nothing" and "count the waivers that matched" both return 1,
+      // so the test would pass against an inverted predicate. Verified by mutation.
+      mockWaiverReader.loadWaivers.mockResolvedValue([
+        matched,
+        staleWaiver("a"),
+        staleWaiver("b"),
+      ]);
+
+      const auditor = new SourceAuditorModule(createDeps());
+      const result = await auditor.audit({
+        scope: { include: ["src/app.ts"], exclude: [] },
+        baseDir: tempDir,
+      });
+
+      expect(result.waivers.unmatched).toBe(2);
+
+      // ANTI-VACUITY: the other waiver really did match. Without this, `unmatched: 2` could
+      // just as well mean all three failed and the count happens to be right by accident.
+      expect(result.waivers.acknowledged).toBe(1);
+    });
+
+    it("[EARS-C6] should distinguish a stale waiver from having had no waivers at all", async () => {
+      // The negative control for the counter. `acknowledged` and `new` CANNOT tell these two
+      // runs apart — that indistinguishability is the whole reason EARS-C6 exists. The
+      // control collapses exactly where the counter separates.
+      const detected = createFinding({ anchor: "still-here" });
+      mockFindingDetector.detect.mockResolvedValue([detected]);
+
+      const stale = waiverOn(`gitgov-fp/2:${"a".repeat(64)}`, "src/app.ts");
+
+      const runWith = async (waivers: Waiver[]) => {
+        mockWaiverReader.loadWaivers.mockResolvedValue(waivers);
+        const auditor = new SourceAuditorModule(createDeps());
+        return auditor.audit({
+          scope: { include: ["src/app.ts"], exclude: [] },
+          baseDir: tempDir,
+        });
+      };
+
+      const withNoWaivers = await runWith([]);
+      const withStaleWaiver = await runWith([stale]);
+
+      // The two fields that existed before C6 are identical across both runs.
+      expect(withStaleWaiver.waivers.acknowledged).toBe(withNoWaivers.waivers.acknowledged);
+      expect(withStaleWaiver.waivers.new).toBe(withNoWaivers.waivers.new);
+
+      // The new one separates them.
+      expect(withNoWaivers.waivers.unmatched).toBe(0);
+      expect(withStaleWaiver.waivers.unmatched).toBe(1);
+    });
+
+    it("[EARS-C6] should count only waivers on a file this run read", async () => {
+      const detected = createFinding({ anchor: "still-here" });
+      mockFindingDetector.detect.mockResolvedValue([detected]);
+      // A waiver on a file the scope leaves out: fine, and not this run's business.
+      mockWaiverReader.loadWaivers.mockResolvedValue([
+        waiverOn(detected.fingerprint, "src/app.ts"),
+        waiverOn(`gitgov-fp/2:${"f".repeat(64)}`, "src/utils.ts"),
+      ]);
+      const auditor = new SourceAuditorModule(createDeps());
+
+      const narrow = await auditor.audit({ scope: { include: ["src/app.ts"], exclude: [] }, baseDir: tempDir });
+      expect(narrow.scannedFiles).toBe(1);
+      expect(narrow.waivers.unmatched).toBe(0);
+
+      // Negative control — the run that reads src/utils.ts measures that waiver, and reports it.
+      const wide = await auditor.audit({ scope: { include: ["src/**"], exclude: [] }, baseDir: tempDir });
+      expect(wide.scannedFiles).toBe(2);
+      expect(wide.waivers.unmatched).toBe(1);
+
+      // auditContents reads exactly the files it is handed.
+      const direct = await auditor.auditContents({
+        files: [{ path: "src/app.ts", content: "const x = 1;" }],
+        waivers: [waiverOn(`gitgov-fp/2:${"f".repeat(64)}`, "src/utils.ts")],
+      });
+      expect(direct.waivers.unmatched).toBe(0);
+    });
+
+    it("[EARS-C7] should count waivers under an earlier fingerprint scheme as outdated, apart from unmatched", async () => {
+      const detected = createFinding({ anchor: "still-here" });
+      mockFindingDetector.detect.mockResolvedValue([detected]);
+      mockWaiverReader.loadWaivers.mockResolvedValue([
+        waiverOn(detected.fingerprint, "src/app.ts"),
+        waiverOn(`gitgov-fp/2:${"a".repeat(64)}`, "src/app.ts"),
+        // Written under the earlier line-hash identity, and on a file this run does not read:
+        // outdated either way, because it can match nothing the current code produces.
+        waiverOn("a1b2c3d4e5f60718:1", "src/utils.ts"),
+      ]);
+
+      const result = await new SourceAuditorModule(createDeps()).audit({
+        scope: { include: ["src/app.ts"], exclude: [] },
+        baseDir: tempDir,
+      });
+
+      expect(result.waivers).toMatchObject({ acknowledged: 1, unmatched: 1, outdated: 1 });
+    });
   });
 
   describe("4.4. Summary Calculation (EARS-D1 to EARS-D4)", () => {
     it("[EARS-D1] should calculate summary.total correctly", async () => {
       mockFindingDetector.detect.mockResolvedValue([
-        createFinding({ fingerprint: "1" }),
-        createFinding({ fingerprint: "2" }),
+        createFinding({ anchor: "1" }),
+        createFinding({ anchor: "2" }),
       ]);
 
       const auditor = new SourceAuditorModule(createDeps());
@@ -304,10 +442,10 @@ describe("SourceAuditorModule", () => {
 
     it("[EARS-D2] should calculate summary.bySeverity correctly", async () => {
       mockFindingDetector.detect.mockResolvedValue([
-        createFinding({ severity: "critical", fingerprint: "1" }),
-        createFinding({ severity: "high", fingerprint: "2" }),
-        createFinding({ severity: "high", fingerprint: "3" }),
-        createFinding({ severity: "medium", fingerprint: "4" }),
+        createFinding({ severity: "critical", anchor: "1" }),
+        createFinding({ severity: "high", anchor: "2" }),
+        createFinding({ severity: "high", anchor: "3" }),
+        createFinding({ severity: "medium", anchor: "4" }),
       ]);
 
       const auditor = new SourceAuditorModule(createDeps());
@@ -325,9 +463,9 @@ describe("SourceAuditorModule", () => {
 
     it("[EARS-D3] should calculate summary.byCategory correctly", async () => {
       mockFindingDetector.detect.mockResolvedValue([
-        createFinding({ category: "pii-email", fingerprint: "1" }),
-        createFinding({ category: "pii-email", fingerprint: "2" }),
-        createFinding({ category: "hardcoded-secret", fingerprint: "3" }),
+        createFinding({ category: "pii-email", anchor: "1" }),
+        createFinding({ category: "pii-email", anchor: "2" }),
+        createFinding({ category: "hardcoded-secret", anchor: "3" }),
       ]);
 
       const auditor = new SourceAuditorModule(createDeps());
@@ -343,9 +481,9 @@ describe("SourceAuditorModule", () => {
 
     it("[EARS-D4] should calculate summary.byDetector correctly", async () => {
       mockFindingDetector.detect.mockResolvedValue([
-        createFinding({ detector: "regex", fingerprint: "1" }),
-        createFinding({ detector: "regex", fingerprint: "2" }),
-        createFinding({ detector: "heuristic", fingerprint: "3" }),
+        createFinding({ detector: "regex", anchor: "1" }),
+        createFinding({ detector: "regex", anchor: "2" }),
+        createFinding({ detector: "heuristic", anchor: "3" }),
       ]);
 
       const auditor = new SourceAuditorModule(createDeps());
@@ -397,8 +535,63 @@ describe("SourceAuditorModule", () => {
       expect(typeof result.duration).toBe("number");
     });
 
-    it("[EARS-E4] should process in batches for large file counts", async () => {
-      // Create many files
+    it("[EARS-E4] should detect the first batch before reading the last file", async () => {
+      // THE discriminating assertion. The old test asserted `scannedFiles === 152` with 152
+      // files against a 1000-file threshold, so one batch was produced and `scannedFiles`
+      // comes from `input.files.length` anyway — unrelated to batching. Deleting
+      // `createBatches` or setting BATCH_SIZE = 1 both left it green.
+      //
+      // What bounds memory is interleaving: if detection waits for every read to finish,
+      // every file's content is resident at once and there is no batch. So the observable
+      // property is ORDER — at least one detect call must happen while reads are still
+      // pending.
+      const TOTAL = 250; // > BATCH_SIZE (100), so at least three batches
+      for (let i = 0; i < TOTAL; i++) {
+        fs.writeFileSync(path.join(tempDir, "src", `batch${i}.ts`), `// file ${i}`);
+      }
+
+      const fileLister = new FsFileLister({ cwd: tempDir });
+      const order: string[] = [];
+      const realRead = fileLister.read.bind(fileLister);
+      jest.spyOn(fileLister, "read").mockImplementation(async (p: string) => {
+        order.push("read");
+        return realRead(p);
+      });
+      mockFindingDetector.detect.mockImplementation(async () => {
+        order.push("detect");
+        return [];
+      });
+
+      const auditor = new SourceAuditorModule({
+        findingDetector: mockFindingDetector,
+        waiverReader: mockWaiverReader,
+        fileLister,
+      });
+
+      const result = await auditor.audit({
+        scope: { include: ["**/*.ts"], exclude: [] },
+        baseDir: tempDir,
+      });
+
+      // ANTI-VACUITY: every file was really read and detected, so the order below describes a
+      // full scan and not a truncated one.
+      const reads = order.filter((o) => o === "read").length;
+      const detects = order.filter((o) => o === "detect").length;
+      expect(reads).toBe(TOTAL + 2); // +2 = app.ts and utils.ts from beforeEach
+      expect(detects).toBe(TOTAL + 2);
+      expect(result.scannedFiles).toBe(TOTAL + 2);
+
+      // The requirement: detection starts before the last read. With a read-everything-first
+      // pipeline this index equals `reads`, and the assertion fails.
+      const firstDetect = order.indexOf("detect");
+      expect(firstDetect).toBeLessThan(reads);
+
+      // And the bound is the batch size, not the repository size: the first detect must come
+      // within the first batch, not after 252 reads.
+      expect(firstDetect).toBeLessThanOrEqual(100);
+    });
+
+    it("should scan every file when the count is large", async () => {
       for (let i = 0; i < 150; i++) {
         fs.writeFileSync(path.join(tempDir, "src", `file${i}.ts`), `// file ${i}`);
       }
@@ -410,7 +603,7 @@ describe("SourceAuditorModule", () => {
         baseDir: tempDir,
       });
 
-      // Should process all files (152 = 2 original + 150 new)
+      // What this really asserts: nothing is dropped at scale. 152 = 2 original + 150 new.
       expect(result.scannedFiles).toBe(152);
     });
   });
@@ -434,20 +627,14 @@ describe("SourceAuditorModule", () => {
     });
 
     it("[EARS-H2] should filter findings by waiver fingerprint in auditContents()", async () => {
-      const finding = createFinding({ fingerprint: "waived-fp" });
+      const finding = createFinding({ anchor: "waived-fp" });
       mockFindingDetector.detect.mockResolvedValue([finding]);
 
       const auditor = new SourceAuditorModule({ findingDetector: mockFindingDetector });
 
       const result = await auditor.auditContents({
         files: [{ path: "src/app.ts", content: 'const email = "test@test.com";' }],
-        waivers: [
-          {
-            fingerprint: "waived-fp",
-            ruleId: "PII-001",
-            feedback: {} as Waiver["feedback"],
-          },
-        ],
+        waivers: [waiverOn(finding.fingerprint, "src/app.ts")],
       });
 
       expect(result.findings).toHaveLength(0);

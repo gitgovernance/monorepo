@@ -1,5 +1,4 @@
-import { createHash } from "node:crypto";
-import type { Detector, Finding, FindingCategory, FindingSeverity } from "../types";
+import type { AnchorSource, Detector, Finding, FindingCategory, FindingSeverity } from "../types";
 import { createFinding } from "../../audit/types";
 
 const MAX_SNIPPET_LENGTH = 300;
@@ -8,15 +7,16 @@ const MAX_SNIPPET_LENGTH = 300;
 const SENSITIVE_VAR_PATTERN =
   /\b(user|customer|client|employee|patient)(_)?(email|phone|ssn|address|creditcard|password)\b/gi;
 
-// Pattern for HEUR-002: Logging of user/customer objects
+// Pattern for HEUR-002: Logging of user/customer objects.
+// [EARS-35] Through the end of the line with the keyword: the arguments after it tell calls apart.
 const LOGGING_PATTERN =
-  /console\.(log|info|debug|warn)\s*\([^)]*\b(user|customer|request\.body|formData)\b/gi;
+  /console\.(log|info|debug|warn)\s*\([^)]*\b(user|customer|request\.body|formData)\b[^\n]*/gi;
 
-// Pattern for HEUR-003: Serialization of sensitive objects
+// Pattern for HEUR-003: Serialization of sensitive objects. [EARS-35] Same as HEUR-002.
 const SERIALIZE_PATTERN =
-  /JSON\.stringify\s*\([^)]*\b(user|customer|profile|account)\b/gi;
+  /JSON\.stringify\s*\([^)]*\b(user|customer|profile|account)\b[^\n]*/gi;
 
-interface HeuristicRule {
+export interface HeuristicRule {
   id: string;
   pattern: RegExp;
   category: FindingCategory;
@@ -24,9 +24,12 @@ interface HeuristicRule {
   confidence: number;
   message: string;
   fixes?: Array<{ description: string }>;
+  /** [EARS-35] What the identity anchors on; see RegexRule.anchor. */
+  anchor?: AnchorSource;
 }
 
-const HEURISTIC_RULES: HeuristicRule[] = [
+/** The heuristic rules, in evaluation order. */
+export const HEURISTIC_RULES: readonly HeuristicRule[] = [
   {
     id: "HEUR-001",
     pattern: SENSITIVE_VAR_PATTERN,
@@ -35,6 +38,8 @@ const HEURISTIC_RULES: HeuristicRule[] = [
     confidence: 0.7,
     message: "Sensitive variable name detected",
     fixes: [{ description: "Consider if this variable contains actual PII" }],
+    // [EARS-35] The match is the variable name, the same for every use in the file.
+    anchor: "line",
   },
   {
     id: "HEUR-002",
@@ -57,17 +62,6 @@ const HEURISTIC_RULES: HeuristicRule[] = [
 ];
 
 /**
- * Generates SHA256 fingerprint for deduplication.
- */
-function generateFingerprint(
-  ruleId: string,
-  file: string,
-  line: number
-): string {
-  return createHash("sha256").update(`${ruleId}:${file}:${line}`).digest("hex");
-}
-
-/**
  * Truncates snippet to maximum 300 characters.
  */
 function truncateSnippet(snippet: string): string {
@@ -85,13 +79,17 @@ function getLineNumber(content: string, index: number): number {
 }
 
 /**
+ * The full, untruncated line where a match starts.
+ */
+function lineAt(content: string, matchIndex: number): string {
+  return content.split("\n")[getLineNumber(content, matchIndex) - 1] || "";
+}
+
+/**
  * Extracts snippet from line where match occurs.
  */
 function extractSnippet(content: string, matchIndex: number): string {
-  const lines = content.split("\n");
-  const lineNumber = getLineNumber(content, matchIndex);
-  const line = lines[lineNumber - 1] || "";
-  return truncateSnippet(line.trim());
+  return truncateSnippet(lineAt(content, matchIndex).trim());
 }
 
 /**
@@ -115,7 +113,9 @@ export class HeuristicDetector implements Detector {
         const snippet = extractSnippet(content, match.index);
 
         const finding = createFinding({
-          fingerprint: generateFingerprint(rule.id, filePath, line),
+          // [EARS-31] [EARS-35] Same contract as the regex detector: hand over the text that
+          // distinguishes this occurrence, never the identity.
+          anchor: rule.anchor === "line" ? lineAt(content, match.index) : match[0],
           ruleId: rule.id,
           file: filePath,
           line,

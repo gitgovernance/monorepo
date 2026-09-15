@@ -1,6 +1,7 @@
 // All EARS prefixes map to sarif_module.md
 import { createSarifBuilder, toSarifSuppression } from './sarif_builder';
 import type { Finding, Waiver } from '../audit/types';
+import { makeTestWaiver } from '../audit/testing';
 import type { SarifBuilderOptions, SarifLog } from './sarif.types';
 
 // ─── Fixtures ───────────────────────────────────────────────────────────────
@@ -119,11 +120,8 @@ describe('SarifBuilder', () => {
       expect(result.partialFingerprints!['primaryLocationLineHash/v1']).toMatch(/^[0-9a-f]{16}:1$/);
     });
 
-    it('[SARIF-C5] build: should use Finding.fingerprint as partialFingerprints when getLineContent not provided', async () => {
-      const sarif = await builder.build(baseOptions);
-      expect(firstResult(sarif).partialFingerprints).toBeDefined();
-      expect(firstResult(sarif).partialFingerprints!['primaryLocationLineHash/v1']).toBe(baseFindings[0]!.fingerprint);
-    });
+    // SARIF-C5 superseded by SARIF-N1/N2: Finding.fingerprint never
+    // travels under primaryLocationLineHash/v1 again. See 4.14 below.
 
     it('[SARIF-C6] build: $schema should point to OASIS Errata 01 official URL', async () => {
       const sarif = await builder.build(baseOptions);
@@ -155,6 +153,39 @@ describe('SarifBuilder', () => {
       expect(rule).toBeDefined();
       expect(rule!.fullDescription).toBeDefined();
       expect(rule!.fullDescription!.text).toBe('Remove email from source');
+    });
+  });
+
+  describe('4.14. Transported identity (SARIF-N1 to N2)', () => {
+
+    it('[SARIF-N1] build: should emit fingerprints gitgov/v2 equal to finding.fingerprint with and without getLineContent', async () => {
+      const withoutSource = await builder.build(baseOptions);
+      expect(firstResult(withoutSource).fingerprints?.['gitgov/v2']).toBe(baseFindings[0]!.fingerprint);
+
+      const withSource = await builder.build({
+        ...baseOptions,
+        getLineContent: async () => 'const email = user.email;',
+      });
+      expect(firstResult(withSource).fingerprints?.['gitgov/v2']).toBe(baseFindings[0]!.fingerprint);
+    });
+
+    it('[SARIF-N2] build: should omit partialFingerprints when getLineContent is absent', async () => {
+      const sarif = await builder.build(baseOptions);
+      const result = firstResult(sarif);
+      expect(result.partialFingerprints).toBeUndefined();
+      // Negative control: the identity must not leak under the GitHub key either
+      expect(JSON.stringify(result)).not.toContain('primaryLocationLineHash/v1');
+    });
+
+    it('[SARIF-N2] build: should keep primaryLocationLineHash/v1 for GitHub interop when getLineContent is provided', async () => {
+      const sarif = await builder.build({
+        ...baseOptions,
+        getLineContent: async () => 'const email = user.email;',
+      });
+      const result = firstResult(sarif);
+      expect(result.partialFingerprints?.['primaryLocationLineHash/v1']).toMatch(/^[0-9a-f]{16}:1$/);
+      // The GitHub key is a line hash, never the finding identity
+      expect(result.partialFingerprints?.['primaryLocationLineHash/v1']).not.toBe(baseFindings[0]!.fingerprint);
     });
   });
 
@@ -215,32 +246,21 @@ describe('SarifBuilder', () => {
 
   describe('4.6. Suppressions (SARIF-F1 to F5)', () => {
 
-    it('[SARIF-F1] build: matching waiver should produce suppression with kind inSource', async () => {
+    it('[SARIF-F1] build: waiver matching the finding fingerprint should produce suppression with kind inSource', async () => {
       const opts: SarifBuilderOptions = {
         ...baseOptions,
         getLineContent: async () => 'const email = user.email;',
         waivers: [],
       };
-      // Compute fingerprint first to build the waiver
-      const sarifNoWaiver = await builder.build({ ...opts, waivers: [] });
-      const fp = firstResult(sarifNoWaiver).partialFingerprints?.['primaryLocationLineHash/v1'] ?? '';
+      // Waivers are keyed by Finding.fingerprint (the value emitted as fingerprints["gitgov/v2"]),
+      // never by the GitHub line hash (SARIF-N1).
+      const fp = baseFindings[0]!.fingerprint;
 
-      const waiver: Waiver = {
+      const waiver = makeTestWaiver({
         fingerprint: fp,
         ruleId: 'PII-001',
         expiresAt: new Date('2026-12-31T00:00:00Z'),
-        feedback: {
-          header: { version: '1.0', type: 'feedback', payloadChecksum: 'test', signatures: [] },
-          payload: {
-            id: 'feedback-2026-001',
-            entityType: 'execution',
-            entityId: 'exec-001',
-            type: 'approval',
-            status: 'resolved',
-            content: 'Approved for test environment only',
-          },
-        } as any,
-      };
+      });
 
       const sarif = await builder.build({ ...opts, waivers: [waiver] });
       const sup = firstResult(sarif).suppressions;
@@ -254,9 +274,8 @@ describe('SarifBuilder', () => {
         getLineContent: async () => 'const email = user.email;',
         waivers: [],
       };
-      const sarifNoWaiver = await builder.build(opts);
-      const fp = firstResult(sarifNoWaiver).partialFingerprints?.['primaryLocationLineHash/v1'] ?? '';
-      const waiver: Waiver = { fingerprint: fp, ruleId: 'PII-001', feedback: { header: { version: '1.0', type: 'feedback', payloadChecksum: 'test', signatures: [] }, payload: { id: 'fb-1', entityType: 'execution', entityId: 'exec-001', type: 'approval', status: 'resolved', content: 'ok' } } as any };
+      const fp = baseFindings[0]!.fingerprint;
+      const waiver = makeTestWaiver({ fingerprint: fp, ruleId: 'PII-001' });
       const sarif = await builder.build({ ...opts, waivers: [waiver] });
       const sup = firstResult(sarif).suppressions;
       expect(sup![0]!.status).toBe('accepted');
@@ -268,9 +287,12 @@ describe('SarifBuilder', () => {
         getLineContent: async () => 'const email = user.email;',
         waivers: [],
       };
-      const sarifNoWaiver = await builder.build(opts);
-      const fp = firstResult(sarifNoWaiver).partialFingerprints?.['primaryLocationLineHash/v1'] ?? '';
-      const waiver: Waiver = { fingerprint: fp, ruleId: 'PII-001', feedback: { header: { version: '1.0', type: 'feedback', payloadChecksum: 'test', signatures: [] }, payload: { id: 'feedback-xyz', entityType: 'execution', entityId: 'exec-001', type: 'approval', status: 'resolved', content: 'ok' } } as any };
+      const fp = baseFindings[0]!.fingerprint;
+      const base = makeTestWaiver({ fingerprint: fp, ruleId: 'PII-001' });
+      const waiver: Waiver = {
+        ...base,
+        feedback: { ...base.feedback, payload: { ...base.feedback.payload, id: 'feedback-xyz' } },
+      };
       const sarif = await builder.build({ ...opts, waivers: [waiver] });
       const sup = firstResult(sarif).suppressions;
       expect(sup![0]!.properties?.['gitgov/feedbackId']).toBe('feedback-xyz');
@@ -280,7 +302,7 @@ describe('SarifBuilder', () => {
       const opts: SarifBuilderOptions = {
         ...baseOptions,
         getLineContent: async () => 'const email = user.email;',
-        waivers: [{ fingerprint: 'no-match', ruleId: 'PII-001', feedback: { header: { version: '1.0', type: 'feedback', payloadChecksum: 'test', signatures: [] }, payload: { id: 'fb', entityType: 'execution', entityId: 'exec-001', type: 'approval', status: 'resolved', content: 'ok' } } as any }],
+        waivers: [makeTestWaiver({ fingerprint: 'no-match', ruleId: 'PII-001' })],
       };
       const sarif = await builder.build(opts);
       expect(firstResult(sarif).suppressions).toBeUndefined();
@@ -395,9 +417,12 @@ describe('SarifBuilder', () => {
     });
   });
 
-  describe('4.13. Redaction Integration in Builder (SARIF-M1 to M4)', () => {
+  // These four used to carry SARIF-M1..M4, which collide with the real SARIF-M1/M2 (fixes,
+  // §4.13) and had no EARS of their own — the spec's status line called them "4 tests
+  // adicionales sin EARS". They are the test vertex of SARIF-O1..O4 (§4.15).
+  describe('4.15. Redaction on request (SARIF-O1 to O4)', () => {
 
-    it('[SARIF-M1] should apply redaction when redactionLevel is l1', async () => {
+    it('[SARIF-O1] build: should redact sensitive snippets when redactionLevel is l1', async () => {
       // pii-email is a sensitive category — snippet should be [REDACTED]
       const sarif = await builder.build({ ...baseOptions, redactionLevel: 'l1' });
       const snippet = firstResult(sarif).locations[0]!.physicalLocation.region.snippet;
@@ -408,46 +433,23 @@ describe('SarifBuilder', () => {
       expect(typeof firstResult(sarif).properties?.['gitgov/snippetHash']).toBe('string');
     });
 
-    it('[SARIF-M2] should output complete data for l2', async () => {
+    it('[SARIF-O2] build: should preserve snippets when redactionLevel is l2', async () => {
       const sarif = await builder.build({ ...baseOptions, redactionLevel: 'l2' });
       const snippet = firstResult(sarif).locations[0]!.physicalLocation.region.snippet;
       expect(snippet).toBeDefined();
       expect(snippet!.text).toBe('const email = user.email;');
     });
 
-    it('[SARIF-M3] should be backward-compatible without redactionLevel', async () => {
+    it('[SARIF-O3] build: should not redact when redactionLevel is absent', async () => {
       const sarif = await builder.build(baseOptions);
       const snippet = firstResult(sarif).locations[0]!.physicalLocation.region.snippet;
       expect(snippet).toBeDefined();
       expect(snippet!.text).toBe('const email = user.email;');
     });
 
-    it('[SARIF-M4] should use custom redactionConfig', async () => {
-      // Create a custom config that treats 'logging-pii' (normally safe) as sensitive
-      const customConfig = {
-        sensitiveCategories: ['logging-pii'],
-        safeCategories: [],
-        defaultBehavior: 'keep' as const,
-      };
-
-      const loggingFinding: Finding = {
-        ...baseFindings[0]!,
-        fingerprint: 'finding-custom-cfg',
-        category: 'logging-pii',
-        snippet: 'console.log(user.email);',
-      snippetHash: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
-      };
-
-      const sarif = await builder.build({
-        ...baseOptions,
-        findings: [loggingFinding],
-        redactionLevel: 'l1',
-        redactionConfig: customConfig,
-      });
-
-      const snippet = firstResult(sarif).locations[0]!.physicalLocation.region.snippet;
-      expect(snippet).toBeDefined();
-      expect(snippet!.text).toBe('[REDACTED]');
-    });
+    // SARIF-O4 (a caller-supplied redactionConfig) is retired: the option was
+    // a third entry point for the redaction POLICY. The builder always redacts with
+    // DEFAULT_REDACTION_CONFIG; a non-default policy enters through FindingRedactor's
+    // constructor only. Its test went with it.
   });
 });
