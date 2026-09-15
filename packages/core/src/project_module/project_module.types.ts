@@ -1,10 +1,11 @@
 import type { IProjectInitializer } from '../project_initializer';
 import type { IdentityModule } from '../identity/identity_module';
-import type { IBacklogAdapter } from '../adapters/backlog_adapter/backlog_adapter.types';
-import type { AgentPayload, AgentRecord, GitGovAgentRecord } from '../record_types';
+import type { AgentPayload, AgentRecord } from '../record_types';
+import type { IAgentAdapter } from '../adapters/agent_adapter/agent_adapter.types';
 // Interface only — the Node-only implementation lives behind @gitgov/core/fs.
 import type { IEngineValidator } from '../agent_runner/agent_runner';
 import type { IEventStream } from '../event_bus/event_bus';
+import type { ActorJoinVia } from '../event_bus/types';
 
 // [PROJ-F1] Trigger type derived from AgentRecord — single source of truth
 export type DefaultAgentConfig = {
@@ -17,18 +18,21 @@ export type DefaultAgentConfig = {
   metadata: Record<string, unknown>;
 };
 
-export interface IProjectAgentOps {
-  getAgentRecord(agentId: string): Promise<AgentRecord | null>;
-  createAgentRecord(payload: Partial<AgentPayload>, options?: { defer?: boolean }): Promise<AgentRecord>;
-  updateAgentRecord(agentId: string, updates: Partial<AgentPayload>): Promise<AgentRecord>;
-  // [EARS-G1] Build+sign without committed-read — caller persists via initializer.addAgent (PROJ-B4)
-  buildSignedAgentRecord(payload: Partial<AgentPayload>): Promise<GitGovAgentRecord>;
-}
+// What the default-agents loop uses from AgentAdapter (PROJ-B4, GAUD-E1/E2). A Pick, not a
+// restatement: until 2026-09-13 this interface redeclared the four signatures by hand, so the
+// contract could only stay in sync by coincidence (audit 527f).
+// [EARS-G1] buildSignedAgentRecord builds+signs without committed-read — the caller persists via
+// initializer.addAgent (PROJ-B4)
+export type IProjectAgentOps = Pick<IAgentAdapter, 'getAgentRecord' | 'createAgentRecord' | 'updateAgentRecord' | 'buildSignedAgentRecord'>;
 
 export type ProjectModuleDeps = {
   initializer: IProjectInitializer;
   identity: IdentityModule;
-  backlog: Pick<IBacklogAdapter, 'createCycle'>;
+  // [PROJ-C5] `backlog: Pick<IBacklogAdapter, 'createCycle'>` was here for the root cycle only
+  // and left with it (D29). Re-adding it — optional included, which would NOT be an excess
+  // property anywhere — fails `tsc` at the keyof probe in the PROJ-C5 test. backlog_adapter
+  // itself is untouched: createCycle stays for
+  // `gitgov cycle new` and the MCP cycle_new tool.
   agentAdapter?: IProjectAgentOps;
   defaultAgents?: DefaultAgentConfig[];
   /**
@@ -61,30 +65,39 @@ export type ProjectInitOptions = {
   type?: 'human' | 'agent';
   saasUrl?: string;
   stateBranch: string;
+  /** Default '' — only the project.actor.joined payload reads it (PROJ-H4) */
   repoId?: string;
+  /**
+   * Default 'cli': it describes the CLI, the one caller that does not pass it. Every other host
+   * passes its own (saas-api: PSVC-A8, 'saas-oauth'); otherwise its actors are recorded as CLI joins.
+   */
   joinedVia?: AddActorInput['joinedVia'];
 };
 
 /**
- * [PROJ-A1] A fresh init: the project was created now, so all three identifiers exist.
- * This is the only variant that carries them.
+ * [PROJ-A1] A fresh init: the project was created now, so both identifiers exist. This is the
+ * only variant that carries them.
+ *
+ * [PROJ-C5] `cycleId: string` was here too, and left with the root cycle (D29). Removing it
+ * from a discriminated union is type-safe by construction: the compiler finds every reader.
+ * There were two, both in init-command.ts.
  */
 export type ProjectInitialized = {
   alreadyInitialized?: false;
   actorId: string;
   productAgentId: string;
-  cycleId: string;
   commitSha?: string;
-  // [PROJ-B6] Agents registered but not runnable (engine unresolvable, ARUN-M1).
-  // Non-fatal — the CLI surfaces these so the user learns at creation time.
+  // [PROJ-B6] [PROJ-B5] Agents registered but not runnable (engine unresolvable, ARUN-M1), and
+  // agents that could not be registered at all. Non-fatal — the CLI surfaces these so the user
+  // learns at creation time.
   agentWarnings?: string[];
 };
 
 /**
  * [PROJ-A2] An idempotent re-init: the project was already there. Only the caller's actor
  * was resolved, and only when a `login` was supplied — hence `actorId` optional here and
- * required in the other variant. Neither `productAgentId` nor `cycleId` appears, because
- * this path creates neither.
+ * required in the other variant. No `productAgentId`, because this path does not create the
+ * product agent. (`cycleId` left both variants with the root cycle, PROJ-C5.)
  */
 export type ProjectAlreadyInitialized = {
   alreadyInitialized: true;
@@ -112,8 +125,13 @@ export type AddActorInput = {
   repoId: string;
   displayName?: string;
   roles?: string[];
-  joinedVia: 'cli' | 'saas-oauth' | 'saas-webhook' | 'mcp';
+  // [PROJ-H4] Same union as the event's payload, declared once in event_bus/types
+  joinedVia: ActorJoinVia;
   authzCheck?: (input: AddActorInput) => Promise<boolean>;
+  /**
+   * The caller finalizes later and announces the actor (PROJ-H4): addActor neither commits nor
+   * publishes, and returns no commitSha (PROJ-H1). Used by initializeProject.
+   */
   skipFinalize?: boolean;
   defer?: boolean;
 };
@@ -132,5 +150,28 @@ export class AddActorError extends Error {
     this.name = 'AddActorError';
     this.code = code;
     this.context = context;
+  }
+}
+
+/** [PROJ-B3] The init steps an error can name. */
+export type ProjectInitStep = 'createProductAgent';
+
+/**
+ * [PROJ-B3] [PROJ-D2] What initializeProject throws when it has something to ADD to the
+ * original error: the step that broke, or that the rollback failed too. With nothing to add
+ * the original is rethrown unwrapped (PROJ-D1). The original travels intact in the native
+ * `cause`, so its class — and an AddActorError's `code` and `context` — survive.
+ *
+ * A consumer in another bundle must still read `step` and `rollbackError` by shape, not by
+ * `instanceof` (IKS-A23).
+ */
+export class ProjectInitError extends Error {
+  public readonly step?: ProjectInitStep;
+  public readonly rollbackError?: string;
+  constructor(message: string, options: { cause: unknown; step?: ProjectInitStep; rollbackError?: string }) {
+    super(message, { cause: options.cause });
+    this.name = 'ProjectInitError';
+    if (options.step !== undefined) this.step = options.step;
+    if (options.rollbackError !== undefined) this.rollbackError = options.rollbackError;
   }
 }

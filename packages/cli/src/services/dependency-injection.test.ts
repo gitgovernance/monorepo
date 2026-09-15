@@ -555,9 +555,10 @@ vi.mock('@gitgov/core', () => {
       createSignedRecord: vi.fn().mockResolvedValue({ header: { version: '1.0', type: 'task', payloadChecksum: 'abc', signatures: [] }, payload: {} }),
     }; }),
     ProjectModule: vi.fn().mockImplementation(function() { return {
-      initializeProject: vi.fn().mockResolvedValue({ actorId: 'human:test-user', productAgentId: 'agent:gitgov-audit', cycleId: 'cycle-root', commitSha: 'abc123' }),
+      initializeProject: vi.fn().mockResolvedValue({ actorId: 'human:test-user', productAgentId: 'agent:gitgov-audit', commitSha: 'abc123' }),
     }; }),
-    // [PROJ-F3] getProjectModule() passes this straight through to ProjectModuleDeps.
+    // getProjectModule() passes this straight through to ProjectModuleDeps (same rule as PROJ-F3
+    // for the SaaS composer).
     DEFAULT_AGENTS: [],
     getCurrentActor: vi.fn().mockResolvedValue({ id: 'human:current-user', type: 'human', displayName: 'Current User', publicKey: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=', roles: ['author'] }),
     // [EARS-C14] The mock did NOT export this class, so the code's `err instanceof
@@ -726,7 +727,7 @@ import { DependencyInjectionService } from './dependency-injection';
 // Mocked module references — vitest hoists vi.mock, so imports resolve to mocks
 import * as mockFsModule from 'fs';
 import * as corefs from '@gitgov/core/fs';
-import { Git, Adapters, KeyProvider, EventBus, RecordProjection, RecordMetrics, AuditOrchestrator as AuditOrchestratorMock, PolicyEvaluator as PolicyEvaluatorMock, SyncState, Redaction as RedactionMock } from '@gitgov/core';
+import { Adapters, EventBus, RecordProjection, RecordMetrics, AuditOrchestrator as AuditOrchestratorMock, PolicyEvaluator as PolicyEvaluatorMock, SyncState, Redaction as RedactionMock } from '@gitgov/core';
 // `deep: true` — without it `vi.mocked` only retypes the module's own properties, so nested ones
 // like `promises.access` stay typed as the real function and every `.mockResolvedValue()` on them
 // is a type error. The calls worked at runtime because `vi.mock` did replace them; only the types
@@ -823,7 +824,7 @@ describe('DependencyInjectionService', () => {
   // ============================================================================
   // §4.3. Adapter Factories (EARS-C1 to C15)
   // ============================================================================
-  describe('4.3. Adapter Factories (EARS-C1 to C15)', () => {
+  describe('4.3. Adapter Factories (EARS-C1 to C17)', () => {
     it('[EARS-C1] should create RecordProjector with all dependencies', async () => {
       const projector = await diService.getRecordProjector();
       expect(projector).toBeDefined();
@@ -1009,6 +1010,29 @@ describe('DependencyInjectionService', () => {
       expect(FsEngineValidator).toHaveBeenCalledTimes(1);
       expect(vi.mocked(FsEngineValidator).mock.calls[0]![0]).toBe(mockRepoRoot);
       expect(vi.mocked(FsEngineValidator).mock.calls[0]![0]).not.toBe(mockWorktreeBasePath);
+    });
+
+    it('[EARS-C17] should build the project initializer with the worktree and the repo root, and give it to ProjectModule', async () => {
+      // The initializer writes .gitgov/ under its first root and .gitignore + gitgov.yml under the
+      // second. With one argument the second defaulted to the first — the worktree — and init wrote a
+      // .gitignore there that ignores `.gitgov/`, the state itself (Task 1.3, #28 §1g).
+      const { FsProjectInitializer } = corefs;
+      const { ProjectModule } = await import('@gitgov/core');
+      vi.mocked(FsProjectInitializer).mockClear();
+      vi.mocked(ProjectModule).mockClear();
+
+      const initializer = await diService.getProjectInitializer();
+      expect(vi.mocked(FsProjectInitializer).mock.calls[0]).toEqual([mockWorktreeBasePath, mockRepoRoot]);
+      expect(initializer).toBe(vi.mocked(FsProjectInitializer).mock.results[0]!.value);
+
+      vi.mocked(FsProjectInitializer).mockClear();
+      await diService.getProjectModule();
+
+      // ProjectModule gets an initializer built the same way, not a one-root one of its own
+      expect(FsProjectInitializer).toHaveBeenCalledTimes(1); // anti-vacuity
+      expect(vi.mocked(FsProjectInitializer).mock.calls[0]).toEqual([mockWorktreeBasePath, mockRepoRoot]);
+      const deps = vi.mocked(ProjectModule).mock.calls[0]![0];
+      expect(deps.initializer).toBe(vi.mocked(FsProjectInitializer).mock.results[0]!.value);
     });
   });
 

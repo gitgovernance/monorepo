@@ -1,5 +1,5 @@
-import type { ProjectModuleDeps, ProjectInitOptions, ProjectInitResult, ProjectAlreadyInitialized, AddActorInput, AddActorResult } from './project_module.types';
-import { AddActorError } from './project_module.types';
+import type { ProjectModuleDeps, ProjectInitOptions, ProjectInitResult, ProjectInitialized, ProjectAlreadyInitialized, AddActorInput, AddActorResult } from './project_module.types';
+import { AddActorError, ProjectInitError } from './project_module.types';
 import type { ActorJoinedEvent } from '../event_bus/types';
 // [PROJ-B6] Creation-time engine validation (agent_runner ARUN-M1)
 // NOTE: `validateAgentEngine` is NOT imported here on purpose. It reaches
@@ -8,12 +8,6 @@ import type { ActorJoinedEvent } from '../event_bus/types';
 // the EARS-CI02 guardrail. The capability now arrives as `deps.engineValidator`
 // (IEngineValidator), with its Node-only implementation coming from @gitgov/core/fs.
 
-// [PROJ-C2b] Deterministic root cycle ID. The root cycle is unique per project, so its ID
-// must be stable across inits (not Date.now()). Two inits of the same repo then produce a
-// byte-identical config.json (rootCycle field), so gitgov-state cannot diverge → no conflict.
-// The 10-zero prefix is a sentinel ("not a real timestamp") satisfying the cycle ID schema
-// ^\d{10}-cycle-[a-z0-9-]{1,50}$. Per-repo scope means no cross-repo collision.
-const ROOT_CYCLE_ID = '0000000000-cycle-root';
 
 /**
  * [PROJ-H3b] Bounded wait for the actor to become visible after the store committed it.
@@ -28,6 +22,16 @@ const ROOT_CYCLE_ID = '0000000000-cycle-root';
  */
 const ACTOR_VERIFY_DEADLINE_MS = 5000;
 const ACTOR_VERIFY_INTERVAL_MS = 250;
+
+/**
+ * [PROJ-B3] The human-readable reason behind an error. An AddActorError's own message is only
+ * `AddActorError(<code>)` — the reason is in `context.cause` (PROJ-D4) — so reading `.message`
+ * alone would put the code where the cause should be.
+ */
+function readableCause(err: unknown): string {
+  if (err instanceof AddActorError && typeof err.context['cause'] === 'string') return err.context['cause'];
+  return err instanceof Error ? err.message : String(err);
+}
 
 export class ProjectModule {
   constructor(private readonly deps: ProjectModuleDeps) {}
@@ -64,16 +68,27 @@ export class ProjectModule {
       return idempotent;
     }
 
+    // [PROJ-A1] [PROJ-H4] Every actor this init joins. addActor with skipFinalize does not publish:
+    // the actors are announced once the closing finalize has written them.
+    const joined: Array<{ input: AddActorInput; result: AddActorResult }> = [];
+    const join = async (input: AddActorInput): Promise<AddActorResult> => {
+      const result = await this.addActor(input);
+      joined.push({ input, result });
+      return result;
+    };
+
+    let result: ProjectInitialized;
     try {
       // [PROJ-C1] Structure (dirs + policy.yml) — before actors
       await this.deps.initializer.createProjectStructure();
 
-      // [PROJ-A1] [PROJ-B1] Human actor — via addActor for consistent metadata + events
+      // [PROJ-A1] [PROJ-B1] Human actor — via addActor for consistent metadata (events: after finalize, below)
       // skipFinalize: true — initializeProject calls finalize() once at the end
+      // [PROJ-A3] Already 'human' | 'agent': ProjectInitOptions.type is that union
       const actorType = options.type ?? 'human';
-      const humanResult = await this.addActor({
+      const humanResult = await join({
         login: options.login || 'owner',
-        type: actorType as 'human' | 'agent',
+        type: actorType,
         repoId,
         displayName: options.actorName || options.login || 'Project Owner',
         roles: ['admin', 'author', 'approver:product', 'approver:quality', 'developer'],
@@ -87,7 +102,7 @@ export class ProjectModule {
       // SaaS remote init is the injected IProjectInitializer, not this step.
       let productAgentResult: AddActorResult;
       try {
-        productAgentResult = await this.addActor({
+        productAgentResult = await join({
           login: 'gitgov-audit',
           type: 'agent',
           skipFinalize: true,
@@ -98,32 +113,33 @@ export class ProjectModule {
           joinedVia,
         });
       } catch (err) {
-        // [PROJ-B3] Include step context
-        const message = err instanceof Error ? err.message : String(err);
-        throw new Error(`Init failed at step createProductAgent: ${message}`);
+        // [PROJ-B3] The step travels as a property and the original intact in `cause`. This
+        // used to interpolate the step into a plain Error, which destroyed the original and left
+        // repo_state_machine's `step` channel with nothing to read.
+        throw new ProjectInitError(`Init failed at step createProductAgent: ${readableCause(err)}`, {
+          cause: err,
+          step: 'createProductAgent',
+        });
       }
 
-      // Root cycle — [PROJ-C2b] deterministic ID so two inits converge on identical config.json
-      const rootCycle = await this.deps.backlog.createCycle({
-        id: ROOT_CYCLE_ID,
-        title: 'root',
-        status: 'planning' as const,
-        taskIds: [],
-      }, humanResult.actorId);
-
       // [PROJ-C2] Config
+      // [PROJ-C5] No root cycle is created and `rootCycle` is not written. It had no
+      // consumers — `gitgov context` prints the id it reads from config.json, not the record —
+      // and the reuse that PROJ-C2c promised was never implemented: createCycle rebuilt and
+      // re-signed the record, so a second pass overwrote it with an empty taskIds (D29).
       const config = {
         protocolVersion: '1.0.0',
         projectId: this.generateProjectId(options.name),
         projectName: options.name,
-        rootCycle: rootCycle.id,
         ...(options.saasUrl && { saasUrl: options.saasUrl }),
         // [INIT-L1] State branch written to config for all commands to read
         state: { branch: options.stateBranch },
       };
       await this.deps.initializer.writeConfig(config);
 
-      // Initialize session with human actor (so getCurrentActor resolves to human, not product agent)
+      // [PROJ-C6] Open the session with the HUMAN actor, so getCurrentActor resolves to the
+      // owner and not to the product agent in every later command. Inside the try on purpose:
+      // a failure here aborts the init with rollback, like any structural step (PROJ-D1).
       await this.deps.initializer.initializeSession(humanResult.actorId);
 
       // [PROJ-B4] Register default agents via AgentAdapter
@@ -142,6 +158,9 @@ export class ProjectModule {
             // while this resolved in the repo. Different trees. cwd happened to be right
             // because init runs from the repo. The validator now arrives already bound to
             // its root (EARS-C16), so there is nothing here left to get wrong.
+            // Held until the agent IS registered: pushed before, an agent whose registration then
+            // failed carried "registered but not runnable" next to "registration failed".
+            let notRunnable: string | undefined;
             try {
               // No validator injected → no validation. Deliberate and covered by its own
               // test: PROJ-B6 degrades silently, so the absence is pinned down rather than
@@ -149,16 +168,18 @@ export class ProjectModule {
               if (this.deps.engineValidator) {
                 const validation = await this.deps.engineValidator.validate(agentConfig.engine);
                 if (!validation.resolvable) {
-                  agentWarnings.push(`${agentConfig.agentId}: registered but not runnable — ${validation.reason}`);
+                  notRunnable = `${agentConfig.agentId}: registered but not runnable — ${validation.reason}`;
                 }
               }
-            } catch {
-              // Validation itself must never block registration
+            } catch (err) {
+              // Validation itself must never block registration. ARUN-M1 forbids validate() from
+              // throwing; if an implementation does anyway, the error is surfaced, not swallowed.
+              agentWarnings.push(`${agentConfig.agentId}: engine validation failed — ${readableCause(err)}`);
             }
             // [PROJ-E3] Product agent already has ActorRecord — skip
             // [PROJ-E1] Specialist agents need their own ActorRecord before AgentRecord
             if (agentConfig.agentId !== productAgentResult.actorId) {
-              await this.addActor({
+              await join({
                 login: agentConfig.agentId.replace('agent:', ''),
                 type: 'agent',
                 repoId,
@@ -198,8 +219,13 @@ export class ProjectModule {
               });
               await this.deps.initializer.addAgent(signed);
             }
-          } catch {
-            // [PROJ-B5] [PROJ-E2] [GAUD-E3] Non-fatal — agent create/update failure doesn't block init
+            // [PROJ-B6] Registered: now the warning is true
+            if (notRunnable !== undefined) agentWarnings.push(notRunnable);
+          } catch (err) {
+            // [PROJ-B5] [PROJ-E2] [GAUD-E3] Non-fatal — agent create/update failure doesn't block
+            // init, but it is not silent either: the catch was empty until 2026-09-13, so a default
+            // agent that never got registered left no trace. Same channel as PROJ-B6.
+            agentWarnings.push(`${agentConfig.agentId}: registration failed — ${readableCause(err)}`);
           }
         }
       }
@@ -210,24 +236,42 @@ export class ProjectModule {
       // [PROJ-C3] Finalize (commit in GitHub, no-op in Fs)
       const finalized = await this.deps.initializer.finalize();
 
-      const result: ProjectInitResult = {
+      // [PROJ-C5] No `cycleId`: the fresh variant stopped carrying it with the root cycle.
+      result = {
         actorId: humanResult.actorId,
         productAgentId: productAgentResult.actorId,
-        cycleId: rootCycle.id,
       };
       if (finalized) result.commitSha = finalized;
       // [PROJ-B6] Surface non-runnable agent warnings to the caller (CLI prints them)
       if (agentWarnings.length > 0) result.agentWarnings = agentWarnings;
-      return result;
     } catch (err) {
-      // [PROJ-D1] [PROJ-D3] [PROJ-D4] Rollback via initializer
+      // [PROJ-D1] [PROJ-D3] Rollback via initializer
       try {
         await this.deps.initializer.rollback();
-      } catch {
-        // [PROJ-D2] Best-effort rollback — throw original error
+      } catch (rollbackErr) {
+        // [PROJ-D2] The rollback failure is NOT discarded: it is what separates an init that left
+        // the state clean from one that left a half-written branch (ROLLBACK_FAILED, PSVC-B6).
+        // The original's message stays on top; an existing ProjectInitError keeps its step/cause.
+        const rollbackError = rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr);
+        if (err instanceof ProjectInitError) {
+          throw new ProjectInitError(err.message, {
+            cause: err.cause,
+            ...(err.step !== undefined && { step: err.step }),
+            rollbackError,
+          });
+        }
+        throw new ProjectInitError(err instanceof Error ? err.message : String(err), { cause: err, rollbackError });
       }
+      // [PROJ-D1] Nothing to add: rethrow unwrapped
       throw err;
     }
+
+    // [PROJ-A1] [PROJ-H4] Outside the try: the init is written, so an event stream that throws
+    // must not be able to roll it back. A rollback above leaves this loop unreached.
+    for (const { input, result: joinResult } of joined) {
+      this.publishActorJoined(joinResult.actorId, input, joinResult.created);
+    }
+    return result;
   }
 
   // [PROJ-H1] [PROJ-H2] [PROJ-H3] [PROJ-H4] [PROJ-H5] [PROJ-H6]
@@ -252,12 +296,14 @@ export class ProjectModule {
           const finalized = await this.deps.initializer.finalize();
           if (finalized) commitSha = finalized;
         } catch {
-          // finalize failed — caller can retry later.
+          // [PROJ-H3] finalize failed on the resume path — not thrown: the missing commitSha is the
+          // caller's signal that the commit is still pending and can be retried.
         }
       }
 
-      // [PROJ-H4] The actor already existed; it joined this repo.
-      this.publishActorJoined(actorId, input, false);
+      // [PROJ-H4] The actor already existed; it joined this repo. With skipFinalize the caller
+      // closes the unit of work and announces it.
+      if (!input.skipFinalize) this.publishActorJoined(actorId, input, false);
 
       const result: AddActorResult = { actorId, created: false };
       if (commitSha) result.commitSha = commitSha;
@@ -266,13 +312,16 @@ export class ProjectModule {
 
     // [PROJ-H1] Create actor — with joinedVia + joinedAt metadata
     // [PROJ-H5] Writes only to the repo where called (lazy per-repo)
+    // The non-empty tuple is built, not asserted: a cast here claimed input.roles was non-empty.
+    const [firstRole, ...otherRoles] = input.roles ?? [];
+    const roles: [string, ...string[]] = firstRole !== undefined
+      ? [firstRole, ...otherRoles]
+      : input.type === 'human' ? ['author', 'developer'] : ['specialist'];
     await this.deps.identity.createActor({
       id: actorId,
       type: input.type,
       displayName: input.displayName || input.login,
-      roles: (input.roles && input.roles.length > 0 ? input.roles : (input.type === 'human'
-        ? ['author', 'developer']
-        : ['specialist'])) as [string, ...string[]],
+      roles,
       metadata: {
         joinedVia: input.joinedVia,
         joinedAt: new Date().toISOString(),
@@ -303,16 +352,20 @@ export class ProjectModule {
             verified = await this.deps.identity.getActor(actorId);
           }
           if (!verified) {
+            // [PROJ-D4] No rollback: addActor joins an EXISTING project
             throw new AddActorError('GIT_WRITE_FAILED', { actorId, cause: message });
           }
         } else {
+          // [PROJ-D4] No rollback: addActor joins an EXISTING project, and the initializer's
+          // rollback undoes the init's structure, not this actor.
           throw new AddActorError('GIT_WRITE_FAILED', { actorId, cause: message });
         }
       }
     }
 
-    // [PROJ-H4] The actor was minted here.
-    this.publishActorJoined(actorId, input, true);
+    // [PROJ-H4] The actor was minted here. With skipFinalize it is not written yet: the caller
+    // announces it after its own finalize (PROJ-A1).
+    if (!input.skipFinalize) this.publishActorJoined(actorId, input, true);
 
     const result: AddActorResult = { actorId, created: true };
     if (commitSha) result.commitSha = commitSha;
@@ -322,7 +375,8 @@ export class ProjectModule {
   /**
    * [PROJ-H4] Publishes `project.actor.joined` when a bus is configured.
    *
-   * Both call sites in `addActor` differ only in `wasCreated`, so the event is built once
+   * Three call sites — the two branches of `addActor`, and `initializeProject` announcing the
+   * actors of its unit of work after the closing finalize (PROJ-A1) — so the event is built once
    * here. `type` and `timestamp` come from the `BaseEvent` contract, not from the actor.
    */
   private publishActorJoined(actorId: string, input: AddActorInput, wasCreated: boolean): void {

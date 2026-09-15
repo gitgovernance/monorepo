@@ -128,6 +128,13 @@ export type ActorCreatedEvent = BaseEvent & {
 };
 
 /**
+ * [PROJ-H4] The channels an actor can join a repo through. Declared here, in the lower layer, so
+ * the event and `AddActorInput.joinedVia` share one union instead of the event widening it to
+ * `string` (it did until 2026-09-13).
+ */
+export type ActorJoinVia = 'cli' | 'saas-oauth' | 'saas-webhook' | 'mcp';
+
+/**
  * [PROJ-H4] An actor was added to a repo via `ProjectModule.addActor()`.
  *
  * Distinct from `identity.actor.created`: that one fires when the ActorRecord itself is
@@ -139,7 +146,7 @@ export type ActorJoinedEvent = BaseEvent & {
   payload: {
     actorId: string;
     repoId: string;
-    joinedVia: string;
+    joinedVia: ActorJoinVia;
     /** false when the actor was already in the store and only joined this repo. */
     wasCreated: boolean;
   };

@@ -24,11 +24,15 @@ const GITGOV_DIRECTORIES = [
  * Initializes GitGovernance projects on the local filesystem,
  * creating the .gitgov/ directory structure and configuration files.
  *
- * The projectRoot is injected at construction time (DI from CLI/bootstrap).
+ * Both roots are injected at construction time (DI from CLI/bootstrap): `projectRoot` holds
+ * `.gitgov/`, `repoRoot` receives `.gitignore` and the workflow (EARS-FPI11). They default to the
+ * same directory, which is only right when `.gitgov/` lives inside the repo. In worktree mode they
+ * differ, and passing one root writes a `.gitignore` into the worktree that ignores the state
+ * (dependency_injection_module EARS-C17).
  *
  * @example
  * ```typescript
- * const initializer = new FsProjectInitializer('/path/to/project');
+ * const initializer = new FsProjectInitializer('/home/me/.gitgov/worktrees/abc123', '/path/to/repo');
  *
  * const validation = await initializer.validateEnvironment();
  * if (!validation.isValid) {
@@ -382,9 +386,12 @@ gitgov
     const gitgovPath = path.join(this.projectRoot, '.gitgov');
     try {
       await fs.access(gitgovPath);
-      await fs.rm(gitgovPath, { recursive: true, force: true });
     } catch {
       // Directory doesn't exist, nothing to clean up
+      return;
     }
+    // [EARS-FPI06] Outside the catch: a failure to remove is not "nothing to clean up", and PROJ-D2
+    // reports it as rollbackError. One try used to wrap both calls and read every rm error as absence.
+    await fs.rm(gitgovPath, { recursive: true, force: true });
   }
 }

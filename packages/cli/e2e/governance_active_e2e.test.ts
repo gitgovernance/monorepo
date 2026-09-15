@@ -167,9 +167,12 @@ describe('Governance Active E2E (GA1-GA10)', () => {
     );
     expect(result.success).toBe(true);
 
-    // Find our Sprint 1 cycle (not the root cycle created by init)
+    // [PROJ-C5] Find our Sprint 1 cycle. The comment here used to say "not the root cycle
+    // created by init" and the count expected 2 — the init no longer creates one (D29), so
+    // Sprint 1 is the only cycle. `gitgov cycle new` is untouched: createCycle stays in
+    // backlog_adapter, only the init's call to it left.
     const cycleFiles = listRecords(worktreeBasePath, 'cycles');
-    expect(cycleFiles.length).toBeGreaterThanOrEqual(2); // root + Sprint 1
+    expect(cycleFiles.length).toBeGreaterThanOrEqual(1); // Sprint 1
 
     let sprint1: ParsedRecord | undefined;
     for (const file of cycleFiles) {
@@ -304,7 +307,10 @@ describe('Governance Active E2E (GA1-GA10)', () => {
     expect(tasks.length).toBeGreaterThanOrEqual(1);
     expect(executions.length).toBeGreaterThanOrEqual(2); // analysis + completion
     expect(feedbacks.length).toBeGreaterThanOrEqual(2); // assignment + approval
-    expect(cycles.length).toBeGreaterThanOrEqual(2); // root + Sprint 1
+    // [PROJ-C5] Was 2 (root + Sprint 1). The init no longer creates a root cycle (D29), so the
+    // only cycle here is the one this flow creates with `gitgov cycle new` — which still works:
+    // createCycle stays in backlog_adapter, only the init's call to it left.
+    expect(cycles.length).toBeGreaterThanOrEqual(1); // Sprint 1
   });
 
   // ── GA10: Integrity verification ──────────────────────────────

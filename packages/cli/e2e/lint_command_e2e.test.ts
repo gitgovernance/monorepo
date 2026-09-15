@@ -725,8 +725,16 @@ describe('Lint CLI Command - E2E Tests', () => {
     });
 
     it('[EARS-F2] should pass when task and cycle are mutually referenced', () => {
+      // [PROJ-C5] This test used to take whatever cycle the init left behind (the root cycle).
+      // The init creates none now (D29), so it creates its own — which is better anyway: the
+      // subject here is lint's bidirectional task↔cycle check, not an incidental init artifact.
+      const created = runCliCommand(['cycle', 'new', 'Bidirectional Fixture', '-q'], { cwd: testProjectRoot });
+      expect(created.success).toBe(true);
+
       const taskFile = findFirstRecord(worktreeBasePath, 'tasks');
       const cycleFile = findFirstRecord(worktreeBasePath, 'cycles');
+      expect(taskFile).not.toBeNull();
+      expect(cycleFile).not.toBeNull();
       const taskRecord = readRecord(worktreeBasePath, 'tasks', taskFile!);
       const cycleRecord = readRecord(worktreeBasePath, 'cycles', cycleFile!);
 

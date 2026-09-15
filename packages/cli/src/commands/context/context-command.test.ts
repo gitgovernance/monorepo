@@ -3,7 +3,7 @@
  *
  * EARS Coverage:
  * - §4.1 Consulta de Contexto Básica (EARS-A1 to A4)
- * - §4.2 Manejo de Valores Nulos y Edge Cases (EARS-B1 to B3)
+ * - §4.2 Manejo de Valores Nulos y Edge Cases (EARS-B1 to B4)
  * - §4.3 Manejo de Errores (EARS-C1 to C5)
  * - §4.4 Edge Cases Adicionales (EARS-D1)
  */
@@ -180,9 +180,9 @@ describe('ContextCommand', () => {
   });
 
   // ============================================================================
-  // §4.2. Manejo de Valores Nulos y Edge Cases (EARS-B1 to B3)
+  // §4.2. Manejo de Valores Nulos y Edge Cases (EARS-B1 to B4)
   // ============================================================================
-  describe('4.2. Manejo de Valores Nulos y Edge Cases (EARS-B1 to B3)', () => {
+  describe('4.2. Manejo de Valores Nulos y Edge Cases (EARS-B1 to B4)', () => {
     it('[EARS-B1] should display "none" for null values in human-readable output', async () => {
       mockSessionManager.getActorState.mockResolvedValue(null);
 
@@ -255,6 +255,47 @@ describe('ContextCommand', () => {
       expect(parsed.rootCycle).toBe('1757789000-cycle-root');
       expect(parsed.activeCycleId).toBeNull();
       expect(parsed.activeTaskId).toBeNull();
+    });
+
+    // [EARS-B4] A project initialised after D29 has no root cycle. What separates these two
+    // tests from the EARS-B1/B2 pair above is the rest of the context: there the whole context
+    // is null, so `none` could be read as "nothing is set up yet". Here the project is fully
+    // initialised — projectInfo, active cycle and active task all present — and only the root
+    // cycle is absent. That is the state `gitgov init` now produces, and the assertions say it
+    // must read as ordinary: no error, no warning, no "incomplete".
+    it('[EARS-B4] should print Root Cycle none as an expected state for a project initialised without one', async () => {
+      mockConfigManager.getRootCycle.mockResolvedValue(null);
+
+      await contextCommand.execute({});
+
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('🔗 Root Cycle: none'));
+      // The rest of the project is present, which is what makes the absence ordinary
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('📁 Project: Test Project'));
+      expect(mockConsoleLog).toHaveBeenCalledWith(expect.stringContaining('⚡ Active Cycle: 1757789000-cycle-test-cycle'));
+
+      // SHALL NOT treat it as error, warning or incomplete project
+      expect(mockConsoleError).not.toHaveBeenCalled();
+      expect(mockProcessExit).not.toHaveBeenCalled();
+      const printed = mockConsoleLog.mock.calls.map(call => String(call[0])).join('\n');
+      expect(printed).not.toMatch(/⚠|warning|incomplete|not initiali[sz]ed|missing root/i);
+    });
+
+    it('[EARS-B4] should return rootCycle null in JSON without any error or warning field', async () => {
+      mockConfigManager.getRootCycle.mockResolvedValue(null);
+
+      await contextCommand.execute({ json: true });
+
+      expect(mockConsoleLog.mock.calls[0]).toBeDefined();
+      const output = mockConsoleLog.mock.calls[0]![0];
+      const parsed = JSON.parse(output as string);
+
+      expect(parsed.rootCycle).toBeNull();
+      expect(parsed.rootCycle).not.toBe('none');
+      // The payload carries no degradation marker: a consumer cannot tell this apart from any
+      // other healthy project except by the field being null
+      expect(parsed).not.toHaveProperty('error');
+      expect(parsed).not.toHaveProperty('warning');
+      expect(parsed.projectInfo).toEqual(sampleProjectInfo);
     });
   });
 

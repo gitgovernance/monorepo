@@ -23,7 +23,7 @@ const getWorktreeBasePath = (repoPath: string): string => {
 
 const getKeysDir = (worktreePath: string): string => path.join(worktreePath, '.gitgov', 'keys');
 
-const runCliCommand = (args: string[], options: { cwd: string; expectError?: boolean }) => {
+const runCliCommand = (args: string[], options: { cwd: string; expectError?: boolean; env?: NodeJS.ProcessEnv }) => {
   const cliPath = path.resolve(__dirname, '../build/dist/gitgov.mjs');
   const escapedArgs = args.map(a => a.includes(' ') ? `"${a}"` : a);
   try {
@@ -32,6 +32,7 @@ const runCliCommand = (args: string[], options: { cwd: string; expectError?: boo
       encoding: 'utf8',
       stdio: 'pipe',
       timeout: 30000,
+      ...(options.env && { env: options.env }),
     });
     return { success: true, output: result, error: '' };
   } catch (error: any) {
@@ -192,7 +193,61 @@ describe('Phase E — CLI-only Owner + Collaborator (OB-E1 to OB-E6)', () => {
     // Simulate read-only by removing push URL
     execSync('git remote set-url --push origin /nonexistent/path', { cwd: roRepoPath, stdio: 'pipe' });
 
+    // [OB-E6] The audit half. Until 2026-09-13 this test never ran `gitgov audit`, although its
+    // name and its EARS both say the read-only collaborator audits locally.
+    const auditResult = runCliCommand(['audit', '--scope', 'full', '--output', 'json'], { cwd: roRepoPath });
+    const audit = JSON.parse(auditResult.output.slice(auditResult.output.indexOf('{')));
+    expect(audit.summary).toBeDefined();
+    expect(Array.isArray(audit.agentResults)).toBe(true);
+
     const pushResult = runCliCommand(['sync', 'push'], { cwd: roRepoPath, expectError: true });
     expect(pushResult.success).toBe(false);
+  });
+
+  // [OB-E7] init followed by audit. No e2e ran this pair before 2026-09-13: audit_command_e2e
+  // registers the agent with `gitgov agent new`, which rewrites the engine init left behind. Through
+  // that gap the first audit reported 0 findings over a live secret (first_experience audit 1c19).
+  const initRepoWithSecret = (name: string) => {
+    const repo = path.join(tempDir, name);
+    fs.mkdirSync(path.join(repo, 'src'), { recursive: true });
+    execSync('git init --initial-branch=main', { cwd: repo, stdio: 'pipe' });
+    execSync('git config user.name "Owner"', { cwd: repo, stdio: 'pipe' });
+    execSync('git config user.email "owner@test.com"', { cwd: repo, stdio: 'pipe' });
+    fs.writeFileSync(path.join(repo, '.gitignore'), 'node_modules\n');
+    fs.writeFileSync(path.join(repo, 'src', 'config.ts'), 'export const STRIPE_KEY = "sk_live_4eC39HqLyjWDarjtT1zdp7dc";\n');
+    execSync('git add -A && git commit -m "add secret"', { cwd: repo, stdio: 'pipe' });
+    worktreesToClean.push({ repo, wt: getWorktreeBasePath(repo) });
+    runCliCommand(['init', '--name', `E2E ${name}`, '--login', 'owner', '--quiet'], { cwd: repo, env: repoOnlyEnv() });
+    return repo;
+  };
+
+  const parseAudit = (output: string) => JSON.parse(output.slice(output.indexOf('{')));
+
+  // Resolution must depend on the repo alone. Run under pnpm, vitest inherits a NODE_PATH that
+  // includes the workspace's hoisted node_modules/.pnpm/node_modules, where every @gitgov agent
+  // lives — so an agent "not installed" in a temp repo resolves anyway, and an installed one
+  // passes without its install being what made it resolve. Measured 2026-09-13: with NODE_PATH
+  // inherited, OB-E8 saw security-audit run and find the secret.
+  const repoOnlyEnv = (): NodeJS.ProcessEnv => {
+    const env = { ...process.env };
+    delete env['NODE_PATH'];
+    return env;
+  };
+
+  it('[OB-E7] owner init then audit finds a hardcoded secret when the audit agent resolves', () => {
+    const repo = initRepoWithSecret('secret-repo-installed');
+    // The default specialists do not ship with the CLI yet (agent_platform Task 1.2), so the agent
+    // is installed into the repo the way a user would today: resolvable from its node_modules.
+    const agentDir = path.resolve(__dirname, '..', '..', 'agents', 'security-audit');
+    fs.mkdirSync(path.join(repo, 'node_modules', '@gitgov'), { recursive: true });
+    fs.symlinkSync(agentDir, path.join(repo, 'node_modules', '@gitgov', 'agent-security-audit'), 'dir');
+
+    // Policy fails the audit when it finds the secret, so the command exits non-zero
+    const result = runCliCommand(['audit', '--scope', 'full', '--output', 'json'], { cwd: repo, expectError: true, env: repoOnlyEnv() });
+    expect(result.success).toBe(false);
+    const audit = parseAudit(result.output);
+    const securityAudit = audit.agentResults.find((r: { agentId: string }) => r.agentId === 'agent:security-audit');
+    expect(securityAudit?.status).toBe('success');
+    expect(audit.findings.length).toBeGreaterThanOrEqual(1);
   });
 });

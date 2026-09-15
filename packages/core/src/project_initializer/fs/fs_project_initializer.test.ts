@@ -331,6 +331,24 @@ describe('FsProjectInitializer', () => {
         { recursive: true, force: true }
       );
     });
+
+    // One try wrapped access AND rm, with a catch that read every failure as "the directory does
+    // not exist": a permission error left .gitgov/ half-written and PROJ-D2 with no rollbackError
+    // to carry (Task 1.3; audit 1c19, M18).
+    it('[EARS-FPI06] should propagate a failure to remove .gitgov instead of swallowing it', async () => {
+      mockFs.access.mockResolvedValue(undefined);
+      mockFs.rm.mockRejectedValue(new Error('EACCES: permission denied'));
+
+      await expect(initializer.rollback()).rejects.toThrow('EACCES: permission denied');
+      expect(mockFs.rm).toHaveBeenCalledTimes(1); // anti-vacuity: it got as far as removing
+    });
+
+    it('[EARS-FPI06] should do nothing when .gitgov does not exist', async () => {
+      mockFs.access.mockRejectedValue(Object.assign(new Error('ENOENT: no such file or directory'), { code: 'ENOENT' }));
+
+      await expect(initializer.rollback()).resolves.toBeUndefined();
+      expect(mockFs.rm).not.toHaveBeenCalled();
+    });
   });
 
   // ==========================================================================
@@ -392,6 +410,31 @@ describe('FsProjectInitializer', () => {
 
       expect(mockFs.writeFile).not.toHaveBeenCalled();
       expect(mockFs.appendFile).not.toHaveBeenCalled();
+    });
+
+    // The three tests above build the initializer with ONE root, so projectRoot === repoRoot and none
+    // can tell where it writes. In the CLI the difference is the whole defect: projectRoot is the state
+    // worktree, and a .gitignore there ignores `.gitgov/` (Task 1.3, dependency_injection EARS-C17).
+    it('[EARS-FPI11] should write git integration under repoRoot and the gitgov structure under projectRoot', async () => {
+      const worktreeRoot = '/tmp/gitgov-worktrees/abc123';
+      const userRepoRoot = '/tmp/user-repo';
+      const twoRoots = new FsProjectInitializer(worktreeRoot, userRepoRoot);
+      mockFs.mkdir.mockResolvedValue(undefined);
+      mockFs.writeFile.mockResolvedValue(undefined);
+      mockFs.access.mockRejectedValue(new Error('ENOENT'));
+      mockFs.readFile.mockRejectedValue(new Error('ENOENT'));
+      const { execSync } = jest.requireMock('node:child_process') as { execSync: jest.Mock };
+      execSync.mockReturnValue('https://github.com/acme/repo.git\n');
+
+      await twoRoots.createProjectStructure();
+      await twoRoots.setupGitIntegration();
+
+      const written = mockFs.writeFile.mock.calls.map(([file]) => String(file));
+      expect(written).toContain(path.join(userRepoRoot, '.gitignore'));
+      expect(written).toContain(path.join(userRepoRoot, '.github', 'workflows', 'gitgov.yml'));
+      expect(written).toContain(path.join(worktreeRoot, '.gitgov', '.gitignore'));
+      expect(written).not.toContain(path.join(worktreeRoot, '.gitignore'));
+      expect(written.filter((file) => file.startsWith(userRepoRoot))).not.toContainEqual(expect.stringContaining('.gitgov' + path.sep));
     });
 
     it('[EARS-FPI12] should read file with utf-8 encoding', async () => {

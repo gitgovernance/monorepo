@@ -1,10 +1,11 @@
 import * as path from 'path';
 import * as os from 'os';
-import { Adapters, Config, Session, EventBus, Lint, Git, SourceAuditor, FindingDetector, KeyProvider, RecordProjection, RecordMetrics, AuditOrchestrator, PolicyEvaluator, IdentityModule, RecordSigner, getCurrentActor, ActorSelectionRequiredError, ProjectModule, DEFAULT_AGENTS, Redaction } from '@gitgov/core';
+import { Adapters, Config, Session, EventBus, Lint, Git, SourceAuditor, FindingDetector, RecordProjection, RecordMetrics, AuditOrchestrator, PolicyEvaluator, IdentityModule, RecordSigner, getCurrentActor, ActorSelectionRequiredError, ProjectModule, DEFAULT_AGENTS, Redaction } from '@gitgov/core';
 import { FsRecordStore, DEFAULT_ID_ENCODER, FsFileLister, FsKeyProvider, FsProjectInitializer, FsLintModule, FsWorktreeSyncStateModule, FsEngineValidator, GitModule, createAgentRunner, createConfigManager, findProjectRoot, createSessionManager, FsRecordProjection, getWorktreeBasePath, getKeysDir, AuditFsProjection } from '@gitgov/core/fs';
-import type { IFsLintModule } from '@gitgov/core/fs';
+import type { IFsLintModule, IAuditFsProjection } from '@gitgov/core/fs';
 import type {
   GitGovTaskRecord, GitGovCycleRecord, GitGovFeedbackRecord, GitGovExecutionRecord, GitGovActorRecord, GitGovAgentRecord,
+  ActorRecord,
   // Module types
   IRecordProjector, IRecordMetrics, IAgentRunner, IKeyProvider,
   ISyncStateModule,
@@ -268,7 +269,7 @@ export class DependencyInjectionService {
   /**
    * [EARS-G1] Returns AuditFsProjection with worktree basePath resolved from DI
    */
-  async getAuditFsProjection(): Promise<import('@gitgov/core/fs').IAuditFsProjection> {
+  async getAuditFsProjection(): Promise<IAuditFsProjection> {
     await this.initializeStores();
     if (!this.projectRoot) {
       throw new Error('Project root not initialized');
@@ -413,7 +414,7 @@ export class DependencyInjectionService {
     return this.getIdentityModule();
   }
 
-  async getCurrentActor(): Promise<import('@gitgov/core').ActorRecord> {
+  async getCurrentActor(): Promise<ActorRecord> {
     const identity = await this.getIdentityModule();
     const sessionManager = await this.getSessionManager();
 
@@ -453,6 +454,21 @@ export class DependencyInjectionService {
     return new RecordSigner({ keyProvider: this.keyProvider });
   }
 
+  /**
+   * [EARS-C17] The project initializer, built with BOTH roots: `.gitgov/` goes to the state worktree,
+   * `.gitignore` and `.github/workflows/gitgov.yml` go to the user's repo. With the worktree as its
+   * only root, init wrote a `.gitignore` there that ignores `.gitgov/`, the state itself, and
+   * init-command repaired the repo with a second initializer of its own.
+   */
+  async getProjectInitializer(): Promise<FsProjectInitializer> {
+    await this.initializeStores();
+    if (!this.projectRoot) {
+      throw new Error("Project root not initialized");
+    }
+    // getRepoRoot(), never `this.repoRoot ?? this.projectRoot`: that fallback IS the defect
+    return new FsProjectInitializer(this.projectRoot, await this.getRepoRoot());
+  }
+
   async getProjectModule(): Promise<ProjectModule> {
     await this.initializeStores();
     if (!this.projectRoot) {
@@ -460,16 +476,19 @@ export class DependencyInjectionService {
     }
 
     const identityModule = await this.getIdentityModule();
-    const backlogAdapter = await this.getBacklogAdapter();
-    const initializer = new FsProjectInitializer(this.projectRoot);
+    // [EARS-C17] The same two-root initializer the join path asks for
+    const initializer = await this.getProjectInitializer();
 
-    // [PROJ-B4] [PROJ-F3] AgentAdapter + DEFAULT_AGENTS from core registry
+    // [PROJ-B4] AgentAdapter + DEFAULT_AGENTS from core registry — the same rule PROJ-F3 states for
+    // the SaaS composer (F3's vertex lives in saas-api's github_backends, not here)
     const agentAdapter = await this.getAgentAdapter().catch(() => undefined);
 
+    // [PROJ-C5] No `backlog` here: ProjectModule stopped consuming it when the root cycle was
+    // retired (D29). `getBacklogAdapter()` itself is untouched — around thirty consumers across
+    // the cycle, task, status, agent and audit commands still use it.
     const deps: ProjectModuleDeps = {
       initializer,
       identity: identityModule,
-      backlog: backlogAdapter,
       defaultAgents: DEFAULT_AGENTS,
       // [PROJ-B6] ProjectModule no longer imports the validator — importing it pulled
       // node:path and node:module into the @gitgov/core bundle (EARS-CI02). The CLI runs

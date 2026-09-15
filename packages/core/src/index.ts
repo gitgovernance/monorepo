@@ -85,8 +85,11 @@ export type { EnvironmentValidation } from "./project_initializer/index";
 // ProjectInitResult removed — use ProjectModuleInitResult from project_module
 
 // ProjectModule (Cycle 4 — unified init orchestrator)
-export { ProjectModule, DEFAULT_AGENTS } from "./project_module/index";
-export type { ProjectModuleDeps, DefaultAgentConfig, ProjectInitOptions as ProjectModuleInitOptions, ProjectInitResult as ProjectModuleInitResult, ProjectInitialized as ProjectModuleInitialized, ProjectAlreadyInitialized as ProjectModuleAlreadyInitialized } from "./project_module/index";
+// AddActorError travels as a value, not a type: PROJ-D4/H6 and the re-init path of PROJ-A2 require callers to catch it,
+// and `instanceof` needs the class at the root. Without it a consumer can only match on the
+// message string. ProjectInitError follows the same rule for initializeProject (PROJ-B3).
+export { ProjectModule, DEFAULT_AGENTS, AddActorError, ProjectInitError } from "./project_module/index";
+export type { ProjectModuleDeps, DefaultAgentConfig, AddActorInput, AddActorResult, ProjectInitStep, ProjectInitOptions as ProjectModuleInitOptions, ProjectInitResult as ProjectModuleInitResult, ProjectInitialized as ProjectModuleInitialized, ProjectAlreadyInitialized as ProjectModuleAlreadyInitialized } from "./project_module/index";
 
 // Store type exports
 export type { RecordStore, IdEncoder } from "./record_store/index";

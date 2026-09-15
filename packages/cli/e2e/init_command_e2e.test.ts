@@ -1,4 +1,4 @@
-import { execSync } from 'child_process';
+import { execSync, spawnSync } from 'child_process';
 import { createHash } from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -217,7 +217,11 @@ describe('Init CLI Command - Edge Cases E2E Tests', () => {
       // Verify .gitgov/ exists with expected structure in gitgov-state branch
       expect(stateFiles).toContain('.gitgov/config.json');
       expect(stateFiles).toMatch(/\.gitgov\/actors\/.*\.json/);
-      expect(stateFiles).toMatch(/\.gitgov\/cycles\/.*\.json/);
+      expect(stateFiles).toMatch(/\.gitgov\/agents\/.*\.json/);
+      // [PROJ-C5] No `.gitgov/cycles/`: the init creates no root cycle (D29). Asserting the
+      // absence keeps this test measuring the shape of the branch rather than just dropping a
+      // line — a regression that stages a cycle again turns it red.
+      expect(stateFiles).not.toMatch(/\.gitgov\/cycles\/.*\.json/);
     });
   });
 
@@ -285,7 +289,11 @@ describe('Init CLI Command - Edge Cases E2E Tests', () => {
       // Verify .gitgov/ exists with expected structure in gitgov-state branch
       expect(stateFiles).toContain('.gitgov/config.json');
       expect(stateFiles).toMatch(/\.gitgov\/actors\/.*\.json/);
-      expect(stateFiles).toMatch(/\.gitgov\/cycles\/.*\.json/);
+      expect(stateFiles).toMatch(/\.gitgov\/agents\/.*\.json/);
+      // [PROJ-C5] No `.gitgov/cycles/`: the init creates no root cycle (D29). Asserting the
+      // absence keeps this test measuring the shape of the branch rather than just dropping a
+      // line — a regression that stages a cycle again turns it red.
+      expect(stateFiles).not.toMatch(/\.gitgov\/cycles\/.*\.json/);
     });
   });
 
@@ -543,6 +551,42 @@ describe('Init CLI Command - Edge Cases E2E Tests', () => {
     });
   });
 
+  // Foreign vertex: EARS-C17 belongs to dependency_injection_module.md §4.3 (its end-to-end test).
+  describe('dependency_injection_module.md 4.3. Project initializer roots (EARS-C17)', () => {
+    // #28 §1g of mvp_blockers, measured by execution on 2026-09-04: the DI built the initializer with
+    // the worktree as its only root, so init wrote into ~/.gitgov/worktrees/<hash>/.gitignore a
+    // `.gitgov/` rule that makes the state itself ignored there; init-command repaired the user repo
+    // with a second initializer. HOME is isolated so the worktree this test inspects is its own.
+    it('[EARS-C17] should write the repo .gitignore and leave the state worktree unignored during gitgov init', () => {
+      const caseRoot = fs.mkdtempSync(path.join(tempDir, 'c17-'));
+      const fakeHome = path.join(caseRoot, 'home');
+      const repo = path.join(caseRoot, 'repo');
+      fs.mkdirSync(fakeHome, { recursive: true });
+      createGitRepo(repo, true);
+      const cliPath = path.join(__dirname, '../build/dist/gitgov.mjs');
+      const env = { ...process.env, HOME: fakeHome, NODE_PATH: '' };
+
+      execSync(`node "${cliPath}" init --name "C17 Roots" --actor-name "Test User" --quiet`, { cwd: repo, stdio: 'pipe', env });
+
+      const hash = createHash('sha256').update(fs.realpathSync(repo)).digest('hex').slice(0, 12);
+      const worktree = path.join(fakeHome, '.gitgov', 'worktrees', hash);
+      // Anti-vacuity: the init ran and its state is in THIS worktree
+      expect(fs.existsSync(path.join(worktree, '.gitgov', 'config.json'))).toBe(true);
+
+      // The user's repo gets the rule…
+      expect(fs.readFileSync(path.join(repo, '.gitignore'), 'utf8')).toContain('.gitgov/');
+      // …the state worktree gets no .gitignore of its own (the security one lives inside .gitgov/, EARS-FPI20)…
+      expect(fs.existsSync(path.join(worktree, '.gitignore'))).toBe(false);
+      expect(fs.existsSync(path.join(worktree, '.gitgov', '.gitignore'))).toBe(true);
+      // …so git does not see the state as ignored: `check-ignore` exits 1 for "not ignored"
+      const checkIgnore = spawnSync('git', ['check-ignore', '-v', '.gitgov/config.json'], { cwd: worktree, encoding: 'utf8', env });
+      expect(checkIgnore.status).toBe(1);
+      expect(checkIgnore.stdout).toBe('');
+
+      try { execSync(`git worktree remove "${worktree}" --force`, { cwd: repo, stdio: 'pipe' }); } catch { /* temp dir is removed in afterAll */ }
+    });
+  });
+
   // ============================================================================
   // CASE 5: Smart Init — Remote has gitgov-state (cloud-first detection, Task 5.4)
   // ============================================================================
@@ -752,8 +796,10 @@ describe('Init CLI Command - Edge Cases E2E Tests', () => {
 
       expect(result.output).toContain('Initialized GitGovernance in');
       expect(result.output).toContain('Actor:');
-      expect(result.output).toContain('Cycle:');
+      expect(result.output).toContain('Agent:');
       expect(result.output).toContain('Next: gitgov audit');
+      // [PROJ-C5] No `Cycle:` line: the init creates no root cycle (D29).
+      expect(result.output).not.toContain('Cycle:');
       expect(result.output).not.toContain('🚀');
       expect(result.output).not.toContain('🔐');
       expect(result.output).not.toContain('🎯');
@@ -764,7 +810,8 @@ describe('Init CLI Command - Edge Cases E2E Tests', () => {
     });
   });
 
-  describe('Default agent engine resolution anchor (PROJ-B7)', () => {
+  // Foreign vertex: PROJ-B7 belongs to project_module.md §4.6 (its second, end-to-end test).
+  describe('project_module.md 4.6. Default agent engine resolution anchor (PROJ-B7)', () => {
     // The unit test in core pins that ProjectModule passes NO root. This one pins the other
     // half — that the DI binds the CORRECT one (EARS-C16) — and only a real `gitgov init`
     // can: it is the flow that puts the container in worktree mode, where `repoRoot` (the
@@ -812,8 +859,8 @@ describe('Init CLI Command - Edge Cases E2E Tests', () => {
         { cwd: projRoot, encoding: 'utf8', stdio: 'pipe', env: { ...process.env, NODE_PATH: '' } }
       );
 
-      const result = { success: true, output };
-      expect(result.success).toBe(true);
+      // Reaching this line is the exit-code check: execSync throws on a non-zero exit. A
+      // `{ success: true }` literal asserted here used to stand in for it (audit 33ea, L-21).
 
       // Anti-vacuity, level 1: PROJ-B6 ran at all. `agent:review-advisor` declares the npm
       // package `@gitgov/agent-review-advisor`, which this fixture does NOT install, so it
@@ -821,8 +868,8 @@ describe('Init CLI Command - Edge Cases E2E Tests', () => {
       // (This role belonged to `agent:gitgov-audit` while its engine declared a phantom
       // entrypoint; that fiction was removed — the product agent is a signing identity,
       // never dispatched — so the fixture's uninstalled specialist inherits the part.)
-      expect(result.output).toContain('agent:review-advisor');
-      expect(result.output).toContain('not runnable');
+      expect(output).toContain('agent:review-advisor');
+      expect(output).toContain('not runnable');
 
       // THE ANCHOR, observed directly. The npm branch of `resolveLocalEntrypoint` (ARUN-B1)
       // resolves via `createRequire` anchored at the root, and Node's failure message
@@ -832,13 +879,13 @@ describe('Init CLI Command - Edge Cases E2E Tests', () => {
       //
       // realpath because macOS resolves /var/folders through /private.
       const realRepo = fs.realpathSync(projRoot);
-      expect(result.output).toContain(realRepo);
-      expect(result.output).not.toContain(getWorktreeBasePath(projRoot));
+      expect(output).toContain(realRepo);
+      expect(output).not.toContain(getWorktreeBasePath(projRoot));
 
       // And the package branch agrees: the agent installed in the REPO's node_modules
       // resolves, so it is not warned about. Anchored at the worktree — which has no
       // node_modules at all — it would appear here.
-      expect(result.output).not.toContain('agent:security-audit');
+      expect(output).not.toContain('agent:security-audit');
 
       cleanupWorktree(projRoot, getWorktreeBasePath(projRoot));
     });
