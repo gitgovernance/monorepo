@@ -104,6 +104,16 @@ const mockConsoleError = vi.spyOn(console, 'error').mockImplementation(() => { }
 // explicitly rather than throwing and changing control flow the tests do not expect.
 const mockProcessExit = vi.spyOn(process, 'exit').mockImplementation((() => { }) as unknown as never);
 
+/**
+ * The command inside an initialized project. The `process.exit` stub returns, so a guard that
+ * rejects the mock project would call exit(1) and let the test run on past it — a path production
+ * never takes, where any exit assertion on 1 holds whatever the command decides. The project guard
+ * has its own tests (AORCH-P5, AORCH-P6), which build the missing project explicitly.
+ */
+class AuditCommandInProject extends AuditCommand {
+  protected override async requireProject(): Promise<void> { /* .gitgov/ exists */ }
+}
+
 // Get mocked DI
 const mockDI = vi.mocked(DependencyInjectionService);
 
@@ -333,7 +343,7 @@ describe('AuditCommand', () => {
     };
     (DependencyInjectionService.getInstance as Mock).mockReturnValue(mockDIInstance);
 
-    auditCommand = new AuditCommand();
+    auditCommand = new AuditCommandInProject();
   });
 
   afterEach(() => {
@@ -458,14 +468,13 @@ describe('AuditCommand', () => {
       );
     });
 
-    // The exit code is the LAST process.exit call. The stub returns instead of exiting, and in this
-    // suite the project guard finds no `.gitgov/` and calls process.exit(1) before the audit runs,
-    // so `toHaveBeenCalledWith(1)` holds whatever the command decides at the end.
+    // Exit assertions check a single process.exit call: the stub returns instead of exiting, so a
+    // second call would mean the command ran past an exit it had already decided.
     it('[AORCH-C2] should exit 1 when policy decision is block', async () => {
       await auditCommand.execute(createDefaultOptions({ scope: 'full' }));
 
       expect(mockOrchestrator.run).toHaveBeenCalled();
-      expect(mockProcessExit).toHaveBeenLastCalledWith(1);
+      expect(mockProcessExit).toHaveBeenCalledExactlyOnceWith(1);
     });
 
     it('[AORCH-C2] should exit 0 when policy decision is pass', async () => {
@@ -478,7 +487,7 @@ describe('AuditCommand', () => {
       await auditCommand.execute(createDefaultOptions({ scope: 'full' }));
 
       expect(mockOrchestrator.run).toHaveBeenCalled();
-      expect(mockProcessExit).toHaveBeenLastCalledWith(0);
+      expect(mockProcessExit).toHaveBeenCalledExactlyOnceWith(0);
     });
 
     it('[AORCH-C9] should exit 1 when every audit agent failed even if the policy decision is pass', async () => {
@@ -493,7 +502,7 @@ describe('AuditCommand', () => {
 
       await auditCommand.execute(createDefaultOptions({ scope: 'full' }));
 
-      expect(mockProcessExit).toHaveBeenLastCalledWith(1);
+      expect(mockProcessExit).toHaveBeenCalledExactlyOnceWith(1);
       expect(mockProcessExit).not.toHaveBeenCalledWith(0);
       const printed = mockConsoleLog.mock.calls.map((c) => String(c[0])).join('\n');
       expect(printed).toContain('1 audit agent(s) failed — the scan is incomplete');
@@ -509,7 +518,7 @@ describe('AuditCommand', () => {
 
       await auditCommand.execute(createDefaultOptions({ scope: 'full' }));
 
-      expect(mockProcessExit).toHaveBeenLastCalledWith(1);
+      expect(mockProcessExit).toHaveBeenCalledExactlyOnceWith(1);
       expect(mockProcessExit).not.toHaveBeenCalledWith(0);
     });
 
@@ -520,7 +529,7 @@ describe('AuditCommand', () => {
 
       await auditCommand.execute(createDefaultOptions({ scope: 'full', agent: 'agent:securty-audit' }));
 
-      expect(mockProcessExit).toHaveBeenLastCalledWith(1);
+      expect(mockProcessExit).toHaveBeenCalledExactlyOnceWith(1);
       expect(mockProcessExit).not.toHaveBeenCalledWith(0);
       const printed = mockConsoleLog.mock.calls.map((c) => String(c[0])).join('\n');
       expect(printed).toContain('no audit agent found — nothing was scanned');
@@ -533,7 +542,7 @@ describe('AuditCommand', () => {
         summary: { ...mockEmptyResult.summary, agentsRun: 1, agentsFailed: 0 },
       });
       await auditCommand.execute(createDefaultOptions({ scope: 'full' }));
-      expect(mockProcessExit).toHaveBeenLastCalledWith(0);
+      expect(mockProcessExit).toHaveBeenCalledExactlyOnceWith(0);
     });
 
     it('[AORCH-C9] should exit 0 when only a review agent failed and every audit agent completed', async () => {
@@ -551,7 +560,7 @@ describe('AuditCommand', () => {
 
       await auditCommand.execute(createDefaultOptions({ scope: 'full' }));
 
-      expect(mockProcessExit).toHaveBeenLastCalledWith(0);
+      expect(mockProcessExit).toHaveBeenCalledExactlyOnceWith(0);
       const printed = mockConsoleLog.mock.calls.map((c) => String(c[0])).join('\n');
       expect(printed).toContain('0 (no critical findings)');
 
@@ -564,7 +573,7 @@ describe('AuditCommand', () => {
         reviewResults: reviewFailed,
       });
       await auditCommand.execute(createDefaultOptions({ scope: 'full' }));
-      expect(mockProcessExit).toHaveBeenLastCalledWith(1);
+      expect(mockProcessExit).toHaveBeenCalledExactlyOnceWith(1);
     });
 
     it('[AORCH-C2] should pass failOn to orchestrator for threshold evaluation', async () => {
@@ -707,16 +716,16 @@ describe('AuditCommand', () => {
     });
 
     it('should handle initialization errors gracefully', async () => {
-      (DependencyInjectionService.getInstance as Mock).mockReturnValue({
-        getAuditOrchestrator: vi.fn().mockRejectedValue(new Error('Init failed')),
-      });
+      // Only the orchestrator fails to initialize; the rest of the container is the suite's, so
+      // the working repo guard passes and the one exit comes from the initialization error.
+      mockDIInstance.getAuditOrchestrator = vi.fn().mockRejectedValue(new Error('Init failed'));
 
-      auditCommand = new AuditCommand();
+      auditCommand = new AuditCommandInProject();
 
       await auditCommand.execute(createDefaultOptions({ scope: 'full' }));
 
       expect(mockConsoleError).toHaveBeenCalledWith(expect.stringContaining('Init failed'));
-      expect(mockProcessExit).toHaveBeenCalledWith(1);
+      expect(mockProcessExit).toHaveBeenCalledExactlyOnceWith(1);
     });
 
     it('should format text output with correct structure', async () => {
@@ -759,7 +768,7 @@ describe('AuditCommand', () => {
       await auditCommand.executeWaive('sha256:abc123', {});
 
       expect(mockConsoleError).toHaveBeenCalledWith(expect.stringContaining('Justification required'));
-      expect(mockProcessExit).toHaveBeenCalledWith(1);
+      expect(mockProcessExit).toHaveBeenCalledExactlyOnceWith(1);
     });
 
     it('[AORCH-E3] should list active waivers with --list', async () => {
@@ -919,20 +928,20 @@ describe('AuditCommand', () => {
       process.env['GITHUB_EVENT_PATH'] = tmpEvent;
       process.env['GITHUB_REPOSITORY'] = 'myorg/myrepo';
 
-      // Make dynamic require fail to simulate import error
-      vi.mock('@gitgov/core/github', () => { throw new Error('module load failed'); });
+      // A run whose policy passes, so a comment failure that leaked into the exit code would turn
+      // the 0 into a 1. With a blocking run both would exit 1 and the test could not tell.
+      mockOrchestrator.run.mockResolvedValue({
+        ...mockCompletedEmptyResult,
+        summary: { ...mockEmptyResult.summary, agentsRun: 1, agentsFailed: 0 },
+      });
+      mockFormatAuditResult.mockReturnValue('## GitGov Audit');
+      GitHubCiReporter.fromToken = vi.fn().mockRejectedValue(new Error('GitHub API unavailable'));
 
       await auditCommand.execute(createDefaultOptions({ ci: true }));
 
-      // Exit code should still be based on policy (block → 1), not on comment failure
-      expect(mockProcessExit).toHaveBeenCalledWith(1);
+      expect(mockConsoleWarn).toHaveBeenCalledWith(expect.stringContaining('Failed to post PR comment: GitHub API unavailable'));
+      expect(mockProcessExit).toHaveBeenCalledExactlyOnceWith(0);
 
-      // Restore mock
-      vi.mock('@gitgov/core/github', () => ({
-        GitHubCiReporter: vi.fn().mockImplementation(function() { return {
-          postOrUpdateComment: mockPostOrUpdateComment,
-        }; }),
-      }));
       await fs.unlink(tmpEvent).catch(() => {});
     });
 
@@ -1031,9 +1040,9 @@ describe('AuditCommand', () => {
   // 4.11. Project Guard (AORCH-P5)
   describe('4.11. Project Guard (AORCH-P5)', () => {
     it('[AORCH-P5] should exit with error when project not initialized', async () => {
-      // getWorktreeBasePath returns /mock/worktree, existsSync('/mock/worktree/.gitgov') = false
-      // → requireProject detects no .gitgov/ and exits
-      await auditCommand.execute(createDefaultOptions());
+      // The real guard: getWorktreeBasePath returns /mock/worktree, and
+      // existsSync('/mock/worktree/.gitgov') is false → requireProject detects no .gitgov/ and exits
+      await new AuditCommand().execute(createDefaultOptions());
 
       expect(mockConsoleError).toHaveBeenCalledWith(
         expect.stringContaining('Project not initialized'),
@@ -1045,13 +1054,8 @@ describe('AuditCommand', () => {
   // 4.12. Working Repo Guard (AORCH-P6)
   describe('4.12. Working Repo Guard (AORCH-P6)', () => {
     it('[AORCH-P6] should exit with error when repo has no commits', async () => {
-      // Bypass requireProject so we reach requireWorkingRepo. A subclass override is the
-      // cast-free way to reach the protected method: `vi.spyOn(cmd as any, ...)` silenced the
-      // visibility instead of respecting it, and `as any` is prohibited by the preset.
-      class AuditCommandWithProjectBypass extends AuditCommand {
-        protected override async requireProject(): Promise<void> { /* project exists */ }
-      }
-      const bypassedCommand = new AuditCommandWithProjectBypass();
+      // The project exists (AuditCommandInProject), so the run reaches requireWorkingRepo.
+      const bypassedCommand = new AuditCommandInProject();
       mockDIInstance.getGitModule = vi.fn().mockResolvedValue({
         getCommitHash: vi.fn().mockRejectedValue(new Error('fatal: ambiguous argument HEAD')),
       });
