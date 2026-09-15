@@ -458,11 +458,14 @@ describe('AuditCommand', () => {
       );
     });
 
+    // The exit code is the LAST process.exit call. The stub returns instead of exiting, and in this
+    // suite the project guard finds no `.gitgov/` and calls process.exit(1) before the audit runs,
+    // so `toHaveBeenCalledWith(1)` holds whatever the command decides at the end.
     it('[AORCH-C2] should exit 1 when policy decision is block', async () => {
       await auditCommand.execute(createDefaultOptions({ scope: 'full' }));
 
       expect(mockOrchestrator.run).toHaveBeenCalled();
-      expect(mockProcessExit).toHaveBeenCalledWith(1);
+      expect(mockProcessExit).toHaveBeenLastCalledWith(1);
     });
 
     it('[AORCH-C2] should exit 0 when policy decision is pass', async () => {
@@ -475,7 +478,7 @@ describe('AuditCommand', () => {
       await auditCommand.execute(createDefaultOptions({ scope: 'full' }));
 
       expect(mockOrchestrator.run).toHaveBeenCalled();
-      expect(mockProcessExit).toHaveBeenCalledWith(0);
+      expect(mockProcessExit).toHaveBeenLastCalledWith(0);
     });
 
     it('[AORCH-C9] should exit 1 when every audit agent failed even if the policy decision is pass', async () => {
@@ -490,7 +493,7 @@ describe('AuditCommand', () => {
 
       await auditCommand.execute(createDefaultOptions({ scope: 'full' }));
 
-      expect(mockProcessExit).toHaveBeenCalledWith(1);
+      expect(mockProcessExit).toHaveBeenLastCalledWith(1);
       expect(mockProcessExit).not.toHaveBeenCalledWith(0);
       const printed = mockConsoleLog.mock.calls.map((c) => String(c[0])).join('\n');
       expect(printed).toContain('1 audit agent(s) failed — the scan is incomplete');
@@ -506,7 +509,7 @@ describe('AuditCommand', () => {
 
       await auditCommand.execute(createDefaultOptions({ scope: 'full' }));
 
-      expect(mockProcessExit).toHaveBeenCalledWith(1);
+      expect(mockProcessExit).toHaveBeenLastCalledWith(1);
       expect(mockProcessExit).not.toHaveBeenCalledWith(0);
     });
 
@@ -517,7 +520,7 @@ describe('AuditCommand', () => {
 
       await auditCommand.execute(createDefaultOptions({ scope: 'full', agent: 'agent:securty-audit' }));
 
-      expect(mockProcessExit).toHaveBeenCalledWith(1);
+      expect(mockProcessExit).toHaveBeenLastCalledWith(1);
       expect(mockProcessExit).not.toHaveBeenCalledWith(0);
       const printed = mockConsoleLog.mock.calls.map((c) => String(c[0])).join('\n');
       expect(printed).toContain('no audit agent found — nothing was scanned');
@@ -530,7 +533,38 @@ describe('AuditCommand', () => {
         summary: { ...mockEmptyResult.summary, agentsRun: 1, agentsFailed: 0 },
       });
       await auditCommand.execute(createDefaultOptions({ scope: 'full' }));
-      expect(mockProcessExit).toHaveBeenCalledWith(0);
+      expect(mockProcessExit).toHaveBeenLastCalledWith(0);
+    });
+
+    it('[AORCH-C9] should exit 0 when only a review agent failed and every audit agent completed', async () => {
+      // Review runs after the policy and has no say on the CI/CD step: the scan was complete and
+      // the policy passed, so an unreachable review provider does not fail the build.
+      const auditCompleted = { ...mockEmptyResult.summary, agentsRun: 1, agentsFailed: 0 };
+      const reviewFailed: AuditOrchestrationResult['reviewResults'] = [{
+        agentId: 'agent:review-advisor',
+        status: 'error',
+        durationMs: 12,
+        errorMessage: 'review provider unreachable',
+      }];
+      mockOrchestrator.run.mockResolvedValue({ ...mockCompletedEmptyResult, summary: auditCompleted, reviewResults: reviewFailed });
+      mockConsoleLog.mockClear();
+
+      await auditCommand.execute(createDefaultOptions({ scope: 'full' }));
+
+      expect(mockProcessExit).toHaveBeenLastCalledWith(0);
+      const printed = mockConsoleLog.mock.calls.map((c) => String(c[0])).join('\n');
+      expect(printed).toContain('0 (no critical findings)');
+
+      // ANTI-VACUITY: the same run with the failure on an audit agent instead exits 1, so the 0
+      // above is the rule telling the two kinds of agent apart, not an exit path that never fails.
+      vi.clearAllMocks();
+      mockOrchestrator.run.mockResolvedValue({
+        ...mockCompletedEmptyResult,
+        summary: { ...auditCompleted, agentsFailed: 1 },
+        reviewResults: reviewFailed,
+      });
+      await auditCommand.execute(createDefaultOptions({ scope: 'full' }));
+      expect(mockProcessExit).toHaveBeenLastCalledWith(1);
     });
 
     it('[AORCH-C2] should pass failOn to orchestrator for threshold evaluation', async () => {
