@@ -1,3 +1,75 @@
+## [5.0.0](https://github.com/gitgovernance/monorepo/compare/core-v4.0.0...core-v5.0.0) (2026-09-15)
+
+
+### ⚠ BREAKING CHANGES
+
+* **core:** ProjectModuleDeps no longer declares `backlog`, the fresh
+variant of ProjectModuleInitResult no longer carries `cycleId`, and
+GitGovConfig.rootCycle is optional. Composers that passed a backlog and
+consumers that read cycleId need updating; the compiler finds all of them.
+
+The init created a record nobody consumed. `gitgov context` prints the id it
+reads from config.json, not the record, and the backlog that owned it
+followed the dashboard out. PROJ-C2c promised createCycle was idempotent for
+it; the code did the opposite, rebuilding and re-signing so a second pass
+overwrote the cycle with an empty taskIds. That path is reachable, which is
+why the promise was worth retiring rather than implementing: isInitialized
+anchors on config.json, written after the call, so a race between two inits
+or a partial init with a failed rollback both land there — producing exactly
+the divergence PROJ-C2b existed to prevent.
+
+Order imposed by the compiler, not by preference:
+
+config_manager first. EARS-J1 makes rootCycle optional and states that a
+config without it is valid rather than incomplete. No migration: all three
+readers already tolerated absence, measured before deciding. The test builds
+a GitGovConfig with no cast, so it failed to compile until the field changed
+— TS2741 before, zero after. Worth noting: jest passed that file either way,
+because ts-jest here runs without diagnostics, so tsc is the instrument for
+compile-time contracts in this repo, not the suite.
+
+Then project_module. The call, the ROOT_CYCLE_ID constant, the config field,
+the result field and the backlog dependency all leave. PROJ-C6 formalises
+initializeSession, which has been able to abort the init since Cycle 4 with
+no EARS and no test covering it; there was no red to observe there because
+the behaviour was already right — what was missing was the requirement.
+
+Then the two composers. The CLI's is the one the earlier impact analysis
+missed: it annotates ProjectModuleDeps at dependency-injection.ts, so
+dropping the field made the literal an excess-property error.
+getBacklogAdapter itself is untouched — around thirty consumers across the
+cycle, task, status, agent and audit commands still use it.
+
+Test fallout, all of it the suite asserting the retired behaviour:
+
+- init_command EARS-A2 said "create the root cycle and configure rootCycle
+  in config.json". It is retired too. Found by running, not by measuring:
+  the census covered code references to rootCycle and createCycle, not EARS
+  in other specs describing the behaviour being removed.
+- Output assertions for the `Cycle:` line and for `.gitgov/cycles/` in the
+  state branch now assert absence instead of being deleted, so a regression
+  that brings either back turns red rather than passing quietly.
+- Two record counts dropped by one, and the lint bidirectional test was
+  borrowing the init's cycle. It creates its own with `gitgov cycle new` now,
+  which is a better fixture anyway: the subject is lint's task↔cycle check,
+  not an incidental init artifact.
+
+backlog_adapter is deliberately untouched. createCycle stays for
+`gitgov cycle new` and the MCP cycle_new tool; only the init's call left.
+
+tsc 0 in core, cli and saas-api. core 3107, cli 620, saas-api 840.
+
+### ✨ Features
+
+* **core:** retire the root cycle from gitgov init ([9135f97](https://github.com/gitgovernance/monorepo/commit/9135f97fa55c232ea78688f69824ef88473c94ef))
+
+
+### 🐛 Bug Fixes
+
+* **cli:** gitgov init writes .gitignore through one two-root initializer ([63d2840](https://github.com/gitgovernance/monorepo/commit/63d2840b5a32689881c32e2f347e94935a52be66))
+* **core:** close the project_module audits ([b6e835a](https://github.com/gitgovernance/monorepo/commit/b6e835aeaf2291cac93d3adb45ee93ecd2ed98a6))
+* **core:** export AddActorError from the package root ([3d89c17](https://github.com/gitgovernance/monorepo/commit/3d89c1741f8bd6f950e1b6e30bb591cd82bfd902))
+
 ## [4.0.0](https://github.com/gitgovernance/monorepo/compare/core-v3.22.0...core-v4.0.0) (2026-09-03)
 
 
