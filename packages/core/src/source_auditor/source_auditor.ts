@@ -331,14 +331,13 @@ export class SourceAuditorModule {
       scannedLines: 0,
       duration: Date.now() - startTime,
       detectors: [],
-      // [EARS-C6] Zero on purpose, and the asymmetry with AORCH-B15 is deliberate. Nothing
-      // was scanned here, so no waiver was tested against anything — that is a different
-      // fact from "the scan ran and no waiver matched", which is what this counter reports.
-      // AORCH-B15's early return does count them because there the trigger is a
-      // misconfiguration (no audit agents registered); a scope that selects no files is
-      // ordinary in incremental mode. Counting them here would also give two answers for
-      // one situation: auditContents() receives waivers in its input, while audit() reaches
-      // this path before loading them at all.
+      // [EARS-C6] Zero on purpose. Nothing was scanned here, so no waiver was tested against
+      // anything — a different fact from "the scan ran and no waiver matched", which is what
+      // this counter reports. AORCH-B15's early return reports the same fact as `null`; this
+      // counter is a required number, and a scope that selects no files is ordinary in
+      // incremental mode. Counting them here would also give two answers for one situation:
+      // auditContents() receives waivers in its input, while audit() reaches this path before
+      // loading them at all.
       waivers: { acknowledged: 0, new: 0, unmatched: 0, outdated: 0 },
     };
   }

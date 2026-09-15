@@ -19,7 +19,7 @@ describe("FindingDetectorModule", () => {
     jest.restoreAllMocks();
   });
 
-  describe("4.7. Anchor and semantic dedup (EARS-33)", () => {
+  describe("4.7. Anchor and semantic dedup (EARS-33, EARS-35)", () => {
     it("[EARS-33] should emit one finding when the same anchor and category repeat in a file", async () => {
       const detector = new FindingDetectorModule({
         regex: { enabled: true },
@@ -55,7 +55,9 @@ describe("FindingDetectorModule", () => {
     // repeats one of them. Secret-shaped values are assembled at runtime for the same reason as
     // STRIPE_KEY above. Where a rule's match ends at a keyword, the second occurrence differs
     // only AFTER the keyword — that is where a match that stops early loses the difference.
-    const pem = (body: string) => ["-----BEGIN RSA PRIVATE KEY-----", body, "-----END RSA PRIVATE KEY-----"].join("\n");
+    const PEM_BEGIN = "-----BEGIN RSA " + "PRIVATE KEY-----";
+    const PEM_END = "-----END RSA " + "PRIVATE KEY-----";
+    const pem = (body: string) => [PEM_BEGIN, body, PEM_END].join("\n");
     const jwt = (sig: string) => "eyJ" + "hbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9" + ".eyJ" + "zdWIiOiIxMjM0NTY3ODkwIn0." + sig;
     const RULE_SAMPLES: Record<string, { first: string; second: string }> = {
       "PII-001": { first: 'const a = "ana@example.com";', second: 'const b = "luis@example.com";' },
@@ -109,6 +111,28 @@ describe("FindingDetectorModule", () => {
       }
 
       expect({ collapsed, split }).toEqual({ collapsed: [], split: [] });
+    });
+
+    it("[EARS-35] should emit two findings for a truncated private key followed by a complete one", async () => {
+      const detector = new FindingDetectorModule({ regex: { enabled: true, rules: ["SEC-003"] }, heuristic: { enabled: false } });
+      const secretsIn = async (content: string) =>
+        (await detector.detect(content, "src/keys.ts")).filter((f) => f.ruleId === "SEC-003");
+
+      // A key cut before its END marker, then a complete key further down the same file.
+      const truncated = [PEM_BEGIN, "MIIEtruncatedtruncatedtruncated"].join("\n");
+      const complete = pem("MIIEcompletecompletecompletecomplete");
+
+      // ANTI-VACUITY: each key on its own is one finding, so the pair below can only be two if
+      // each match stays inside its own key.
+      const [truncatedAlone] = await secretsIn(truncated);
+      const [completeAlone] = await secretsIn(complete);
+      expect([truncatedAlone, completeAlone].map((f) => f === undefined)).toEqual([false, false]);
+
+      const findings = await secretsIn([truncated, "", complete].join("\n"));
+
+      expect(findings.map((f) => f.line)).toEqual([1, 4]);
+      // Each finding carries the identity of its own key, not of a block spanning both.
+      expect(findings.map((f) => f.fingerprint)).toEqual([truncatedAlone!.fingerprint, completeAlone!.fingerprint]);
     });
   });
 

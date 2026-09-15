@@ -68,9 +68,10 @@ export const REGEX_RULES: RegexRule[] = [
   {
     id: "SEC-003",
     // [EARS-35] The whole key block, not only the header: every key starts with the same line.
-    // A key cut before its END marker keeps what follows the header up to 512 base64 chars.
+    // The block never runs past another BEGIN, or a key cut before its END marker would swallow
+    // the next key up to that key's END. A cut key keeps up to 512 base64 chars after the header.
     pattern:
-      /-----BEGIN (?:RSA |EC )?PRIVATE KEY-----(?:[\s\S]*?-----END (?:RSA |EC )?PRIVATE KEY-----|[A-Za-z0-9+/=\s]{0,512})/g,
+      /-----BEGIN (?:RSA |EC )?PRIVATE KEY-----(?:(?:(?!-----BEGIN )[\s\S])*?-----END (?:RSA |EC )?PRIVATE KEY-----|[A-Za-z0-9+/=\s]{0,512})/g,
     category: "hardcoded-secret",
     severity: "critical",
     message: "Private key detected in source code",
