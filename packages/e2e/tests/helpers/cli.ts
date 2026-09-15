@@ -1,6 +1,7 @@
 /**
- * CLI Helpers — Execute the globally installed gitgov CLI for E2E tests.
- * [HLP-A1] Real binary execution (sync), [HLP-A4] Async spawn for interactive commands.
+ * CLI Helpers — Execute the CLI built in the checkout under test for E2E tests.
+ * [HLP-A1] Real binary execution (sync), [HLP-A4] Async spawn for interactive commands,
+ * [HLP-A5] Resolution of the binary both of them run.
  * [HLP-A2] Git repo creation, [HLP-A3] Worktree cleanup.
  */
 import { execSync, spawn } from 'child_process';
@@ -8,7 +9,61 @@ import type { ChildProcess } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { fileURLToPath } from 'url';
 import { getWorktreeBasePath } from '@gitgov/core/fs';
+
+/** [HLP-A5] Environment variable that points the helpers at another CLI binary. */
+export const GITGOV_CLI_BIN_ENV = 'GITGOV_CLI_BIN';
+
+/**
+ * [HLP-A5] Monorepo root of the checkout these helpers belong to. Resolved through symlinks:
+ * e2e-private reaches this file through a per-file symlink, and each checkout's symlink points
+ * at its own monorepo, so the root is the checkout under test in the main clone and in any
+ * worktree alike.
+ */
+export const CHECKOUT_ROOT = fs.realpathSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..'));
+
+/** [HLP-A5] The CLI build of the checkout under test. */
+export const CHECKOUT_CLI_BIN = path.join(CHECKOUT_ROOT, 'packages', 'cli', 'build', 'dist', 'gitgov.mjs');
+
+export type GitgovCliBinary = {
+  /** Path as configured: the checkout build or the override. */
+  bin: string;
+  /** What actually runs; equals `bin` when the file does not exist. */
+  realpath: string;
+  source: 'checkout' | 'GITGOV_CLI_BIN';
+  /** Whether `realpath` lies inside `CHECKOUT_ROOT`. */
+  insideCheckout: boolean;
+};
+
+/**
+ * [HLP-A5] The binary the CLI helpers execute. Never a `gitgov` found on PATH: on a machine
+ * with a globally linked CLI that is whatever checkout was linked last, and tests run from a
+ * worktree would exercise another branch's code with every preflight green.
+ */
+export function resolveGitgovCli(env: NodeJS.ProcessEnv = process.env): GitgovCliBinary {
+  const override = env[GITGOV_CLI_BIN_ENV];
+  const bin = override ? path.resolve(override) : CHECKOUT_CLI_BIN;
+  const realpath = fs.existsSync(bin) ? fs.realpathSync(bin) : bin;
+  return {
+    bin,
+    realpath,
+    source: override ? 'GITGOV_CLI_BIN' : 'checkout',
+    insideCheckout: realpath.startsWith(CHECKOUT_ROOT + path.sep),
+  };
+}
+
+let loggedCli = false;
+
+/** [HLP-A1] Logged once per process, so every run's output says which binary it tested. */
+function cliUnderTest(): GitgovCliBinary {
+  const cli = resolveGitgovCli();
+  if (!loggedCli) {
+    loggedCli = true;
+    console.log(`[HLP-A1] gitgov CLI under test: ${cli.realpath} (source: ${cli.source})`);
+  }
+  return cli;
+}
 
 export type CliResult = {
   success: boolean;
@@ -25,9 +80,9 @@ export type SpawnedCli = {
   kill: () => void;
 };
 
-// [HLP-A1] Execute the globally installed gitgov CLI
+// [HLP-A1] Execute the CLI of the checkout under test (resolveGitgovCli), with the node running the tests
 export function runGitgovCli(args: string, options: { cwd: string; expectError?: boolean; timeout?: number; env?: Record<string, string> }): CliResult {
-  const command = `gitgov ${args}`;
+  const command = `"${process.execPath}" "${cliUnderTest().bin}" ${args}`;
   try {
     const result = execSync(command, {
       cwd: options.cwd,
@@ -81,9 +136,9 @@ export function addRemote(repoPath: string, remotePath: string): void {
   execSync(`git remote add origin "${remotePath}"`, { cwd: repoPath, stdio: 'pipe' });
 }
 
-// [HLP-A4] Spawn gitgov CLI as async child process (for interactive/long-running commands)
+// [HLP-A4] Spawn the same CLI as HLP-A1 as an async child process (for interactive/long-running commands)
 export function spawnGitgovCli(args: string, options: { cwd: string; timeout?: number; env?: Record<string, string> }): SpawnedCli {
-  const child = spawn('gitgov', args.split(/\s+/), {
+  const child = spawn(process.execPath, [cliUnderTest().bin, ...args.split(/\s+/)], {
     cwd: options.cwd,
     stdio: ['pipe', 'pipe', 'pipe'],
     env: { ...process.env, ...options.env },

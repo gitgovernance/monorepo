@@ -238,7 +238,7 @@ function createIntegrationAgentRunner(fixtureDir: string): IAgentRunner {
 
       const fileLister = new FsFileLister({ cwd: fixtureDir });
 
-      const noOpWaiverReader: SourceAuditor.IWaiverReader = {
+      const noOpWaiverReader: IWaiverReader = {
         loadWaivers: async () => [],
         hasWaiver: async () => false,
       };
@@ -366,7 +366,7 @@ function createLabeledAgentRunner(fixtureDir: string): IAgentRunner {
 
       const fileLister = new FsFileLister({ cwd: fixtureDir });
 
-      const noOpWaiverReader: SourceAuditor.IWaiverReader = {
+      const noOpWaiverReader: IWaiverReader = {
         loadWaivers: async () => [],
         hasWaiver: async () => false,
       };

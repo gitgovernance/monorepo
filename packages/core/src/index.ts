@@ -113,6 +113,7 @@ export type {
   BaseFindingCategory,
   FindingCategory,
   FindingSeverity,
+  SeverityCounts,
   DetectorName,
   WaiverStatus,
   FindingStatus,
@@ -134,15 +135,34 @@ export type {
   ReviewAgentResult,
   Scan,
   Fix,
+  TransportedSarifResult,
+  SarifIdentity,
+  SarifRehydration,
+  SarifDiscardReason,
 } from "./audit/index";
 
-// Audit value exports (factories)
-export { createFinding, createFix, createWaiver, createScan } from "./audit/index";
+// Audit value exports (factories and the one severity counter, AUDIT-M1)
+export { createFinding, rehydrateFinding, createFix, createWaiver, createScan, countBySeverity, isScanScope, isDetectorName } from "./audit/index";
+// [AUDIT-K1] [AUDIT-K2] [AUDIT-N1] [AUDIT-N2] The identity, as VALUES: saas-api's projection
+// (AP-K1) identifies SARIF results across the package boundary with the same functions core uses.
+export {
+  computeFingerprint,
+  normalizeAnchor,
+  FINGERPRINT_SCHEME,
+  CURRENT_FINGERPRINT_SCHEMES,
+  parseFingerprint,
+  isCurrentFingerprint,
+  fingerprintDigest,
+  SARIF_FINGERPRINT_KEY,
+  identifySarifResult,
+  transportedSnippetHash,
+  describeSarifDiscard,
+} from "./audit/index";
 
 // [AUDIT-J1] Closed-domain constants. They belong in the VALUES block, not the types
 // one: AUDIT-A6 declares "re-export all types", so a constant living only in the type
 // barrel would be invisible from `@gitgov/core` without any test noticing.
-export { FINDING_SEVERITIES, FINDING_STATUSES } from "./audit/index";
+export { FINDING_SEVERITIES, FINDING_STATUSES, SCAN_SCOPES, BASE_FINDING_CATEGORIES, DETECTOR_NAMES } from "./audit/index";
 
 // ─── Non-audit type exports (module-specific) ───────────────────────────────
 export type { AuditOrchestrationOptions, AuditOrchestratorDeps } from "./audit_orchestrator/index";
@@ -203,6 +223,10 @@ export type { PolicyEvaluationInput, PolicyConfig, PolicyEvaluationResult, Polic
 
 // Redaction module (Epic 6 — L1/L2 finding redaction)
 export * as Redaction from "./redaction/index";
+// Root-exported because consumers EXTEND them (saas-api's ExtractedFinding picks from
+// RedactedFinding) — the same rule that lifts IWaiverReader: a type one implements or
+// extends is imported directly; a type one only reads stays under the namespace.
+export type { RedactionLevel, RedactedFinding } from "./redaction/index";
 
 // Renamed modules (promoted from adapters/)
 export * as RecordProjection from "./record_projection/index";

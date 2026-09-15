@@ -2,10 +2,10 @@ import { Command, Option } from 'commander';
 import { BaseCommand } from '../../base/base-command';
 import type { BaseCommandOptions } from '../../interfaces/command';
 import { readFile } from 'node:fs/promises';
-import { Sarif as SarifModule, generateExecutionId } from '@gitgov/core';
+import { Sarif as SarifModule, generateExecutionId, fingerprintDigest } from '@gitgov/core';
 import { discoverInstalledAgents } from '@gitgov/core/fs';
 import { formatAuditResult } from '@gitgov/core/audit';
-import type { Finding, FindingCategory, DetectorName } from '@gitgov/core/audit';
+import type { Finding, FindingCategory, FindingSeverity, DetectorName, ScanScope } from '@gitgov/core/audit';
 import type {
   AuditOrchestrationOptions,
   AuditOrchestrationResult,
@@ -17,12 +17,12 @@ import type {
  * Maps to AuditOrchestrationOptions in core module
  */
 export interface AuditCommandOptions extends BaseCommandOptions {
-  /** Scope of audit (default: 'diff') */
-  scope: 'diff' | 'full' | 'baseline';
+  /** Scope of audit (default: 'diff') — core's one domain (AUDIT-J4), no local copy */
+  scope: ScanScope;
   /** Output format (default: 'text') */
   output: 'text' | 'json' | 'sarif';
-  /** Minimum severity for exit 1 (default: 'critical') */
-  failOn: 'critical' | 'high' | 'medium' | 'low';
+  /** Minimum severity for exit 1 (default: 'critical') — core's domain (AUDIT-J3); there is no 'none' */
+  failOn: FindingSeverity;
   /** Specific agent to run */
   agent?: string;
   /** Additional globs to include (CSV) */
@@ -59,6 +59,22 @@ export interface WaiveCommandOptions extends BaseCommandOptions {
  *
  * All audit logic lives in AuditOrchestrator (core).
  */
+/**
+ * [AORCH-C9] Why the audit step cannot pass whatever the policy decided, or `undefined` when every
+ * audit agent completed. This is a CI/CD gate: with no audit agent found nothing was scanned, and
+ * with any audit agent failed the scan is incomplete — a policy PASS over either is not a verdict
+ * on the repository. The summary counts audit agents only; review agents never reach it.
+ */
+function incompleteAuditReason(summary: AuditOrchestrationResult['summary']): string | undefined {
+  if (summary.agentsFailed > 0) {
+    return `${summary.agentsFailed} audit agent(s) failed — the scan is incomplete`;
+  }
+  if (summary.agentsRun === 0) {
+    return 'no audit agent found — nothing was scanned';
+  }
+  return undefined;
+}
+
 export class AuditCommand extends BaseCommand<AuditCommandOptions> {
   protected commandName = 'audit';
   protected description = 'Audit source code for PII/secrets (GDPR compliance)';
@@ -262,8 +278,10 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
         await this.postPrComment(result);
       }
 
-      // Exit code based on policy decision
-      if (result.policyDecision.decision === 'block') {
+      // [AORCH-C2] Exit code based on the policy decision — and [AORCH-C9] never 0 when the scan
+      // is incomplete: no audit agent found, or any audit agent failed. A PASS over a scan that
+      // did not happen, or happened in part, is not a verdict on the repository.
+      if (result.policyDecision.decision === 'block' || incompleteAuditReason(result.summary) !== undefined) {
         process.exit(1);
       } else {
         process.exit(0);
@@ -380,6 +398,24 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
     console.log('└──────────┴───────┴────────────────────────────────────────┘');
     console.log(`\nTotal: ${summary.total} findings (${summary.suppressed} waived), ${summary.agentsRun} agent(s) run\n`);
 
+    // [AORCH-B15] Only when there is something to say. A waiver written with an earlier
+    // fingerprint stops matching, and the user's only other signal is "0 waived" — which
+    // reads identically to having had no waivers at all.
+    // `null` is "not measured" — a diff run, a narrowed run, or a failed agent — and has
+    // nothing to say about the waivers.
+    if (summary.unmatchedWaivers !== null && summary.unmatchedWaivers > 0) {
+      console.log(
+        `${summary.unmatchedWaivers} waiver(s) matched no finding — re-create them with gitgov audit waive <fingerprint>\n`,
+      );
+    }
+
+    // [AORCH-B16] A different cause, said apart: the fingerprint formula changed, not the code.
+    if (summary.outdatedWaivers !== null && summary.outdatedWaivers > 0) {
+      console.log(
+        `${summary.outdatedWaivers} waiver(s) were created with an earlier fingerprint scheme — re-create them with gitgov audit waive <fingerprint>\n`,
+      );
+    }
+
     // POLICY DECISION section
     console.log('─'.repeat(60));
     console.log('POLICY DECISION');
@@ -389,8 +425,13 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
     console.log(`Decision:   ${policyDecision.decision.toUpperCase()}`);
     console.log(`Reason:     ${policyDecision.reason}`);
 
+    const incomplete = incompleteAuditReason(summary);
     if (policyDecision.decision === 'block') {
       console.log(`Exit code:  \x1b[31m1 (${options.failOn} findings detected)\x1b[0m`);
+    } else if (incomplete !== undefined) {
+      // [AORCH-C9] The decision line above may still say PASS — the evaluator's verdict on what
+      // it received — and this line says why the exit code disagrees with it.
+      console.log(`Exit code:  \x1b[31m1 (${incomplete})\x1b[0m`);
     } else {
       console.log(`Exit code:  \x1b[32m0 (no ${options.failOn} findings)\x1b[0m`);
     }
@@ -423,7 +464,8 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
         const line = f.line.toString();
         const col = f.column?.toString() ?? '?';
         console.log(`  ${icon} ${line.padStart(4)}:${col.padEnd(3)} ${color}${f.severity.toUpperCase().padEnd(8)}\x1b[0m ${f.message}`);
-        console.log(`            └── Fingerprint: ${f.fingerprint.slice(0, 12)}...`);
+        // [AUDIT-K8] The short form is a prefix of the digest; the scheme is the same for all.
+        console.log(`            └── Fingerprint: ${fingerprintDigest(f.fingerprint).slice(0, 12)}...`);
       }
       console.log('');
     }
@@ -526,7 +568,11 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
         const auditProjection = await this.container.getAuditFsProjection();
         const latest = await auditProjection.readLatest();
         if (latest?.findings) {
-          const match = latest.findings.find((f: any) => f.fingerprint.startsWith(fingerprint));
+          // [AORCH-E1] [AUDIT-K8] A short form typed from the output is a prefix of the digest;
+          // the full written value, scheme included, also resolves.
+          const match = latest.findings.find(
+            (f: Finding) => fingerprintDigest(f.fingerprint).startsWith(fingerprint) || f.fingerprint.startsWith(fingerprint),
+          );
           if (match) {
             resolvedFingerprint = match.fingerprint;
             resolvedRuleId = match.ruleId ?? resolvedRuleId;
@@ -555,7 +601,7 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
 
       // [AORCH-E4] Show confirmation
       console.log('\n✅ Waiver created successfully');
-      console.log(`   Fingerprint: ${fingerprint}`);
+      console.log(`   Fingerprint: ${resolvedFingerprint}`);
       console.log(`   Justification: ${options.justification}`);
       console.log(`   Created by: ${currentActor.id}\n`);
 

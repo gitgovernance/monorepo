@@ -17,6 +17,7 @@ import type { RedactionConfig } from './redactor.types';
  *
  * Categorias no registradas: tratadas como sensibles (safe-by-default).
  */
+// [RLDX-A2] [RLDX-A3] [RLDX-A4] 24 sensitive, 14 safe, redact by default.
 const DEFAULT_REDACTION_CONFIG: RedactionConfig = {
   sensitiveCategories: [
     // Original 6
@@ -46,6 +47,8 @@ const DEFAULT_REDACTION_CONFIG: RedactionConfig = {
     'crypto-weak',
     'crypto-key',
     'crypto-tls',
+    // SAST — the snippet IS the exploitable line, and L1 lives in shared git
+    'security-vulnerability',
   ],
   safeCategories: [
     // Original 6
@@ -64,9 +67,13 @@ const DEFAULT_REDACTION_CONFIG: RedactionConfig = {
     'data-transfer',
     'privacy-consent',
     'privacy-retention',
+    // SAST — the snippet carries no secret nor PII
+    'code-quality',
   ],
   defaultBehavior: 'redact',
 };
+// [RLDX-A6] Every BASE_FINDING_CATEGORIES element is in exactly one of the two lists above.
+// An unclassified built-in is hidden by defaultBehavior, which is why RLDX-A6 checks the tuple.
 
 /**
  * Crea una nueva configuracion de redaccion combinando base y override.
@@ -77,6 +84,7 @@ const DEFAULT_REDACTION_CONFIG: RedactionConfig = {
  *     sensitiveCategories: ['pii-biometric', 'pii-genetic'],
  *   });
  */
+// [RLDX-C5] New config; the base is never mutated.
 function mergeRedactionConfig(
   base: RedactionConfig,
   override: Partial<RedactionConfig>,

@@ -1,5 +1,6 @@
-import type { SarifLog, SarifPhysicalLocation } from "../sarif/sarif.types";
-import { createFinding } from "../audit/types";
+import type { SarifLog } from "../sarif/sarif.types";
+import { countUnmatchedWaivers, countOutdatedWaivers, countBySeverity } from "../audit/types";
+import { rehydrateSarifResult, describeSarifDiscard } from "../audit/sarif_rehydration";
 import type { IAgentRunner } from "../agent_runner/agent_runner";
 import type { Waiver } from "../source_auditor/types";
 import type { RunOptions } from "../agent_runner/agent_runner.types";
@@ -12,7 +13,6 @@ import type {
   AgentAuditInput,
   Finding,
   AuditSummary,
-  FindingSeverity,
   ReviewAgentResult,
 } from "./audit_orchestrator.types";
 import type { PolicyEvaluationInput } from "../policy_evaluator/policy_evaluator.types";
@@ -27,22 +27,6 @@ function emptySarif(): SarifLog {
     version: "2.1.0",
     runs: [],
   };
-}
-
-/**
- * Maps SARIF level to GitGov severity.
- */
-function levelToSeverity(level: string | undefined): FindingSeverity {
-  switch (level) {
-    case "error":
-      return "critical";
-    case "warning":
-      return "high";
-    case "note":
-      return "medium";
-    default:
-      return "low";
-  }
 }
 
 /**
@@ -127,6 +111,17 @@ async function executeReviewAgent(
 
     const response = await agentRunner.runOnce(runOpts);
 
+    // [AORCH-F4] Same two failure shapes as an audit agent (AORCH-B5): the runner resolves a
+    // backend failure with status "error" instead of throwing.
+    if (response.status === "error") {
+      return {
+        agentId,
+        status: "error",
+        durationMs: Date.now() - startMs,
+        errorMessage: response.error ?? "Review agent execution failed without an error message",
+      };
+    }
+
     return {
       agentId,
       status: "success",
@@ -171,6 +166,21 @@ async function executeAgent(
 
   const response = await agentRunner.runOnce(runOpts);
 
+  // [AORCH-B5] The runner does not throw on a backend failure: it resolves status "error".
+  // Reading the SARIF without checking turned an agent that never ran into "success" with an
+  // empty SARIF, so a run where nothing scanned reported 0 findings. Propagated here, the
+  // message also reaches the load-error warning of AORCH-G1/G2.
+  if (response.status === "error") {
+    return {
+      agentId,
+      sarif: emptySarif(),
+      executionId: response.executionRecordId,
+      status: "error",
+      durationMs: Date.now() - startMs,
+      errorMessage: response.error ?? "Agent execution failed without an error message",
+    };
+  }
+
   // Agent output contains SARIF in metadata.data
   const metadata = response.output?.metadata as
     | Record<string, unknown>
@@ -187,22 +197,11 @@ async function executeAgent(
 }
 
 /**
- * Fallback fingerprint for SARIF results without primaryLocationLineHash/v1.
- * Format: "fallback:{ruleId}:{file}:{startLine}"
- */
-function buildFallbackFingerprint(
-  ruleId: string | undefined,
-  location: SarifPhysicalLocation | undefined,
-): string | undefined {
-  const file = location?.artifactLocation?.uri;
-  const line = location?.region?.startLine;
-  if (!ruleId || !file) return undefined;
-  return `fallback:${ruleId}:${file}:${line ?? 0}`;
-}
-
-/**
- * Consolidates findings from multiple SarifLogs with dedup by fingerprint.
- * If two agents report the same fingerprint, both agentIds are included in reportedBy.
+ * Consolidates findings from multiple SarifLogs by identity, compared by equality.
+ *
+ * This module does not own the formula and never recomputes a transported value: each result
+ * goes through the one SARIF rehydrator (AUDIT-N3), which reads `fingerprints["gitgov/v2"]`
+ * and derives a missing one only from snippet text (AORCH-B12).
  */
 function consolidateFindings(
   agentResults: AgentAuditResult[],
@@ -214,60 +213,67 @@ function consolidateFindings(
 
     for (const run of result.sarif.runs) {
       for (const sarifResult of run.results) {
-        // Primary: use standardized primaryLocationLineHash/v1 from SarifBuilder
-        // Fallback: ruleId + file + startLine (for external tools without GitGov fingerprinting)
-        const location = sarifResult.locations?.[0]?.physicalLocation;
-        const fingerprint =
-          sarifResult.partialFingerprints?.["primaryLocationLineHash/v1"] ??
-          buildFallbackFingerprint(sarifResult.ruleId, location);
-        if (!fingerprint) continue;
+        // [AORCH-B6] [AUDIT-K5] Rehydration, not production: a transported identity is kept
+        // byte for byte, and so is a transported snippetHash (AUDIT-N2).
+        // [AORCH-B12] A result without the key and without snippet text to anchor on — empty,
+        // a tool placeholder, or redacted — gets no fabricated identity: skipped, and said.
+        const rehydrated = rehydrateSarifResult(sarifResult, {
+          executionId: result.executionId,
+          reportedBy: [result.agentId],
+        });
+        if ("discarded" in rehydrated) {
+          console.warn(
+            `[AORCH-B12] Discarded SARIF result from ${result.agentId}: ${describeSarifDiscard(rehydrated.discarded)}`,
+          );
+          continue;
+        }
 
-        const existing = byFingerprint.get(fingerprint);
+        const { finding } = rehydrated;
+        const existing = byFingerprint.get(finding.fingerprint);
 
-        if (existing) {
-          // Dedup: add agent to reportedBy
-          if (!existing.reportedBy.includes(result.agentId)) {
-            existing.reportedBy.push(result.agentId);
-          }
-        } else {
-          // Read severity from properties['gitgov/category'] or infer from level
-          const props = sarifResult.properties as
-            | Record<string, unknown>
-            | undefined;
-          const rawCategory =
-            (props?.["gitgov/category"] as string | undefined) ?? "unknown-risk";
-          const category = rawCategory as import("../audit/types").FindingCategory;
+        if (!existing) {
+          byFingerprint.set(finding.fingerprint, finding);
+          continue;
+        }
 
-          const snippet = location?.region?.snippet?.text;
-          const detector = (props?.["gitgov/detector"] as string | undefined) ?? "regex";
-          const confidence = (props?.["gitgov/confidence"] as number | undefined) ?? 1.0;
+        // [AORCH-B14] Same key, different category: with AUDIT-K2 the category is inside the
+        // preimage, so this can only come from a malformed SARIF. Merging would leave the
+        // consolidated finding wearing whichever category arrived first. Keep the first,
+        // reject the second, and say so.
+        if (existing.category !== finding.category) {
+          console.warn(
+            `[AORCH-B14] Rejected SARIF result from ${result.agentId}: fingerprint ${finding.fingerprint} ` +
+              `is already consolidated as "${existing.category}" and this result declares "${finding.category}". ` +
+              `Two categories cannot share an identity; the second was not merged.`,
+          );
+          continue;
+        }
 
-          const finding = createFinding({
-            fingerprint,
-            ruleId: sarifResult.ruleId,
-            file: location?.artifactLocation?.uri ?? "",
-            line: location?.region?.startLine ?? 0,
-            message: sarifResult.message.text,
-            snippet: snippet ?? '',
-            category,
-            severity: levelToSeverity(sarifResult.level),
-            detector: detector as import("../audit/types").DetectorName,
-            confidence,
-            executionId: result.executionId,
-            reportedBy: [result.agentId],
-            isWaived: false,
-          });
-          const col = location?.region?.startColumn;
-          if (col !== undefined) {
-            finding.column = col;
-          }
-          byFingerprint.set(fingerprint, finding);
+        if (!existing.reportedBy.includes(result.agentId)) {
+          existing.reportedBy.push(result.agentId);
         }
       }
     }
   }
 
   return Array.from(byFingerprint.values());
+}
+
+/**
+ * [AORCH-B15] Whether this run looked everywhere a waiver can point, which is the only case in
+ * which "matched no finding" says something about the waiver. A narrower run cannot tell a
+ * stale waiver from one on a file it did not read, and printing it as unmatched tells the user
+ * to re-create a waiver that is fine.
+ */
+function coversEveryWaiver(options: AuditOrchestrationOptions, agentResults: AgentAuditResult[]): boolean {
+  return (
+    options.scope !== "diff" &&
+    options.include === undefined &&
+    options.exclude === undefined &&
+    options.agentId === undefined &&
+    agentResults.length > 0 &&
+    agentResults.every((r) => r.status === "success")
+  );
 }
 
 /**
@@ -281,15 +287,24 @@ function consolidateFindings(
 function buildSummary(
   findings: Finding[],
   agentResults: AgentAuditResult[],
+  activeWaivers: Waiver[],
+  options: AuditOrchestrationOptions,
 ): AuditSummary {
   const active = findings.filter((f) => !f.isWaived);
   return {
     total: findings.length,
-    critical: active.filter((f) => f.severity === "critical").length,
-    high: active.filter((f) => f.severity === "high").length,
-    medium: active.filter((f) => f.severity === "medium").length,
-    low: active.filter((f) => f.severity === "low").length,
+    // [AUDIT-M1] One counter for the severity map, shared with createScan and source_auditor.
+    ...countBySeverity(active),
     suppressed: findings.filter((f) => f.isWaived).length,
+    // [AORCH-B15] Active waivers pointing at an identity nothing produced — or null when the
+    // run was too narrow to know. A waiver written with an earlier identity (AUDIT-K1..K6)
+    // lands here, and without the count "0 waived" reads like "no waivers".
+    // [AUDIT-L1] One definition of this count, shared with source_auditor.
+    unmatchedWaivers: coversEveryWaiver(options, agentResults)
+      ? countUnmatchedWaivers(activeWaivers, findings)
+      : null,
+    // [AORCH-B16] [AUDIT-L3] Waivers under an earlier fingerprint scheme, whatever the scope.
+    outdatedWaivers: countOutdatedWaivers(activeWaivers),
     agentsRun: agentResults.filter((r) => r.status === "success").length,
     agentsFailed: agentResults.filter((r) => r.status === "error").length,
   };
@@ -351,6 +366,12 @@ export function createAuditOrchestrator(deps: AuditOrchestratorDeps) {
             medium: 0,
             low: 0,
             suppressed: 0,
+            // [AORCH-B15] Nothing ran, so nothing was matched against the waivers: not
+            // measured. Counting every waiver as unmatched told the user to re-create all of
+            // them after a run that scanned nothing.
+            unmatchedWaivers: null,
+            // [AORCH-B16] A property of the waivers themselves, known without running anything.
+            outdatedWaivers: countOutdatedWaivers(waivers),
             agentsRun: 0,
             agentsFailed: 0,
           },
@@ -431,14 +452,25 @@ export function createAuditOrchestrator(deps: AuditOrchestratorDeps) {
         return f;
       });
 
-      // [AORCH-G1] [AORCH-G2] Detect agents that failed due to unresolvable entrypoint
+      // [AORCH-G1] [AORCH-G2] Detect agents that could not be LOADED: an unresolvable
+      // entrypoint, or a `runtime` with no registered handler —
+      // RuntimeNotFoundError, which is what a specialist registered with
+      // `runtime: 'typescript'` throws in production, where LocalBackend tries the runtime
+      // before the entrypoint and no handler exists.
+      const isEntrypointError = (m: string) =>
+        m.includes('MODULE_NOT_FOUND') || m.includes('ERR_MODULE_NOT_FOUND') || m.includes('Cannot find module');
+      const runtimeNotFound = (m: string) => m.match(/^RuntimeNotFound: (.+)$/)?.[1];
       const failedAgents = agentResults.filter(
         r => r.status === 'error' && r.errorMessage &&
-          (r.errorMessage.includes('MODULE_NOT_FOUND') || r.errorMessage.includes('ERR_MODULE_NOT_FOUND') || r.errorMessage.includes('Cannot find module')),
+          (isEntrypointError(r.errorMessage) || runtimeNotFound(r.errorMessage) !== undefined),
       );
       let entrypointWarning: string | undefined;
       if (failedAgents.length > 0) {
         const details = failedAgents.map(a => {
+          const runtime = runtimeNotFound(a.errorMessage ?? '');
+          if (runtime !== undefined) {
+            return `  ${a.agentId} — runtime '${runtime}' has no registered handler`;
+          }
           const m = a.errorMessage?.match(/['"]([^'"]+)['"]/);
           const pkg = m?.[1] ?? 'unknown';
           return `  ${a.agentId} — ${pkg} not found`;
@@ -455,7 +487,7 @@ export function createAuditOrchestrator(deps: AuditOrchestratorDeps) {
         agentResults,
         l1AgentResults,
         policyDecision: policyResult.decision,
-        summary: buildSummary(findingsWithWaivers, agentResults),
+        summary: buildSummary(findingsWithWaivers, agentResults, waivers, options),
         executionIds: {
           scans: scanExecutionIds,
           policy: policyResult.executionRecord.id,

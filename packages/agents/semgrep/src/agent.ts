@@ -1,10 +1,15 @@
-import { createFinding } from '@gitgov/core';
-import type { Sarif, Finding, FindingSeverity, FindingCategory, Runner } from '@gitgov/core';
-import type { SemgrepAgentDeps, SemgrepInput, SemgrepMetadata, SemgrepSummary } from './types';
+import { createFinding, countBySeverity } from '@gitgov/core';
+import type { Finding, FindingSeverity, FindingCategory, Runner } from '@gitgov/core';
+import type {
+  SemgrepAgentDeps,
+  SemgrepInput,
+  SemgrepMetadata,
+  SemgrepSummary,
+  SemgrepRawSarif,
+  SemgrepRawResult,
+} from './types';
 import { SEMGREP_SEVERITY_MAP, SEMGREP_CATEGORY_MAP } from './types';
 
-type SarifLog = Sarif.SarifLog;
-type SarifResult = Sarif.SarifResult;
 type AgentOutput = Runner.AgentOutput;
 
 /**
@@ -16,7 +21,7 @@ export class SemgrepAgent {
 
   // [SGP-A3] [SGP-E1] Returns AgentOutput with metadata.kind='sarif' and version='2.1.0'
   // [SGP-B1] [SGP-B2] [SGP-B4] [SGP-B5] [SGP-E2] Errors propagate to AgentRunner
-  async run(input: SemgrepInput, semgrepSarif: SarifLog | null, error?: string): Promise<AgentOutput> {
+  async run(input: SemgrepInput, semgrepSarif: SemgrepRawSarif | null, error?: string): Promise<AgentOutput> {
     // [SGP-B2] Prerequisite check
     if (error && /command not found|not found/i.test(error)) {
       throw new Error(
@@ -68,7 +73,7 @@ export class SemgrepAgent {
   }
 
   // [SGP-C1] [SGP-C2] [SGP-C3] [SGP-C6]
-  private mapResultsToFindings(results: SarifResult[]): Finding[] {
+  private mapResultsToFindings(results: SemgrepRawResult[]): Finding[] {
     return results.map((result, index) => {
       const location = result.locations?.[0]?.physicalLocation;
       const file = location?.artifactLocation?.uri ?? 'unknown';
@@ -98,7 +103,11 @@ export class SemgrepAgent {
         message: result.message?.text ?? '',
         fixes: fixes?.length ? fixes : undefined,
         detector: 'regex' as Finding['detector'],
-        fingerprint: '',
+        // [EARS-31] The agent hands over the matched text and the factory derives the
+        // identity (AUDIT-K1). It used to pass an EMPTY fingerprint and let the SARIF
+        // builder fill something in downstream — which is how a semgrep finding and a regex
+        // finding over the same token ended up with two different identities.
+        anchor: snippet,
         confidence: 1.0,
         executionId: '',
         reportedBy: ['semgrep'],
@@ -113,7 +122,7 @@ export class SemgrepAgent {
   }
 
   // [SGP-C3]
-  private mapCategory(result: SarifResult): FindingCategory {
+  private mapCategory(result: SemgrepRawResult): FindingCategory {
     const props = result.properties as Record<string, unknown> | undefined;
     const metadata = props?.['metadata'] as Record<string, unknown> | undefined;
     const cwes = metadata?.['cwe'] as string[] | undefined;
@@ -128,15 +137,11 @@ export class SemgrepAgent {
     return 'unknown-risk' as FindingCategory;
   }
 
-  private buildSummary(findings: Finding[], results: SarifResult[]): SemgrepSummary {
-    const bySeverity: Record<string, number> = {};
-    for (const f of findings) {
-      bySeverity[f.severity] = (bySeverity[f.severity] ?? 0) + 1;
-    }
-
+  private buildSummary(findings: Finding[], results: SemgrepRawResult[]): SemgrepSummary {
     return {
       totalFindings: findings.length,
-      bySeverity,
+      // [AUDIT-M1] core's one severity counter, instead of a fifth hand-rolled loop
+      bySeverity: countBySeverity(findings),
       rulesMatched: new Set(results.map(r => r.ruleId).filter(Boolean)).size,
       filesScanned: new Set(findings.map(f => f.file)).size,
     };

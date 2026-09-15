@@ -4,9 +4,10 @@ import { tmpdir } from 'node:os';
 import { AuditFsProjection } from './audit_fs_projection';
 import { createFinding, type AuditOrchestrationResult, type Finding, type AuditSummary } from '../types';
 
-function makeFinding(overrides: Partial<Omit<Finding, 'snippetHash'>> = {}): Finding {
+function makeFinding(
+  overrides: Partial<Omit<Finding, 'fingerprint' | 'snippetHash'>> & { anchor?: string } = {},
+): Finding {
   return createFinding({
-    fingerprint: 'sha256:abc123',
     ruleId: 'SEC-001',
     file: 'src/config.ts',
     line: 3,
@@ -51,6 +52,8 @@ function makeResult(overrides: {
       medium: 0,
       low: 0,
       suppressed: 0,
+      unmatchedWaivers: 0,
+      outdatedWaivers: 0,
       agentsRun: 1,
       agentsFailed: 0,
       ...overrides.summary,
@@ -80,14 +83,21 @@ describe('AuditFsProjection', () => {
       const raw = await fs.readFile(path.join(testDir, 'audit-index.json'), 'utf-8');
       const parsed = JSON.parse(raw);
       expect(parsed.findings).toHaveLength(1);
-      expect(parsed.findings[0].fingerprint).toBe('sha256:abc123');
+      // What this EARS is about is that persistence preserves the identity — not that the
+      // identity equals a literal the test typed. Comparing against the finding's own value
+      // survives the formula changing again, and asserts the same thing more directly.
+      expect(parsed.findings[0].fingerprint).toBe(result.findings[0]!.fingerprint);
       expect(parsed.policyDecision.decision).toBe('block');
       expect(parsed.summary.total).toBe(1);
     });
 
     it('[AFRP-A2] should read and return AuditOrchestrationResult from audit-index.json', async () => {
       const projection = new AuditFsProjection({ basePath: testDir });
-      const original = makeResult({ findings: [makeFinding(), makeFinding({ fingerprint: 'sha256:def456', ruleId: 'SEC-002' })] });
+      // Two findings with DIFFERENT identities: the anchor is what separates them now, so
+      // varying only `ruleId` would produce two rows with the same fingerprint (AUDIT-K4).
+      const original = makeResult({
+        findings: [makeFinding(), makeFinding({ anchor: 'second-secret', ruleId: 'SEC-002' })],
+      });
 
       await projection.persist(original);
       const loaded = await projection.readLatest();
@@ -95,8 +105,10 @@ describe('AuditFsProjection', () => {
       expect(loaded).not.toBeNull();
       const loadedResult = loaded!;
       expect(loadedResult.findings).toHaveLength(2);
-      expect(loadedResult.findings[0]!.fingerprint).toBe('sha256:abc123');
-      expect(loadedResult.findings[1]!.fingerprint).toBe('sha256:def456');
+      expect(loadedResult.findings[0]!.fingerprint).toBe(original.findings[0]!.fingerprint);
+      expect(loadedResult.findings[1]!.fingerprint).toBe(original.findings[1]!.fingerprint);
+      // And the round trip did not flatten them into one value.
+      expect(loadedResult.findings[0]!.fingerprint).not.toBe(loadedResult.findings[1]!.fingerprint);
       expect(loadedResult.policyDecision.decision).toBe('block');
     });
 

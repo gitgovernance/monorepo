@@ -14,6 +14,7 @@ import * as path from 'path';
 
 import {
   runGitgovCli,
+  resolveGitgovCli,
   createTempGitRepo,
   createAuditPrisma,
   cleanupAudit,
@@ -108,7 +109,8 @@ describe('Block BA: Audit Record Projection (CBA1-CBA6)', () => {
       console.log('CLI success:', cliResult.success);
       // Run again with spawnSync to capture stderr (agent debug log)
       const { spawnSync } = require('child_process');
-      const debugRun = spawnSync('gitgov', ['audit', '--scope', 'full', '--output', 'json'], { cwd: repoDir, encoding: 'utf8', timeout: 60000 });
+      // The same binary runGitgovCli runs (HLP-A5), never a `gitgov` from PATH.
+      const debugRun = spawnSync(process.execPath, [resolveGitgovCli().bin, 'audit', '--scope', 'full', '--output', 'json'], { cwd: repoDir, encoding: 'utf8', timeout: 60000 });
       console.log('debug stderr:', debugRun.stderr?.substring(0, 500));
       console.log('Output length:', auditOutput.length);
       console.log('repoDir:', repoDir);
@@ -144,6 +146,9 @@ describe('Block BA: Audit Record Projection (CBA1-CBA6)', () => {
         where: { fingerprint: finding.fingerprint },
         create: {
           fingerprint: finding.fingerprint,
+          // Required: Finding.snippetHash is NOT NULL, and the orchestrator's findings carry
+          // it, computed once by createFinding (AUDIT-K6).
+          snippetHash: finding.snippetHash,
           ruleId: finding.ruleId,
           file: finding.file,
           line: finding.line,
@@ -243,6 +248,9 @@ describe('Block BA: Audit Record Projection (CBA1-CBA6)', () => {
         where: { fingerprint: finding.fingerprint },
         create: {
           fingerprint: finding.fingerprint,
+          // Required: Finding.snippetHash is NOT NULL, and the orchestrator's findings carry
+          // it, computed once by createFinding (AUDIT-K6).
+          snippetHash: finding.snippetHash,
           ruleId: finding.ruleId,
           file: finding.file,
           line: finding.line,

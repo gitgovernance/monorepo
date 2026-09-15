@@ -1,16 +1,16 @@
 import { createHash } from 'node:crypto';
 import type { GetLineContentFn, OccurrenceContext } from './sarif.types';
+import { normalizeAnchor } from '../audit/fingerprint';
 
 /**
- * Normalizes line content for stable hashing.
- * - Trims leading/trailing whitespace
- * - Collapses consecutive whitespace to a single space
- * @param line - Raw line content
- * @returns Normalized line (deterministic)
+ * [SARIF-B1] [SARIF-B2] Normalizes line content for the GitHub interop hash.
+ *
+ * Re-export of `normalizeAnchor` (audit/fingerprint, AUDIT-K3): one implementation of
+ * "trim and collapse whitespace" in core. This used to be a second copy of the same two
+ * operations; the identity formula and the GitHub line hash normalize the same way and
+ * must keep doing so, so the second copy is gone.
  */
-export function normalizeLineContent(line: string): string {
-  return line.trim().replace(/\s+/g, ' ');
-}
+export const normalizeLineContent: (line: string) => string = normalizeAnchor;
 
 /**
  * Computes the primaryLocationLineHash for a normalized line.

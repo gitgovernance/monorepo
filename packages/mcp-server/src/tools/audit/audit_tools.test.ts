@@ -1,5 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { McpDependencyInjectionService } from '../../di/mcp_di.js';
+import type { SourceAuditor } from '@gitgov/core';
+import { createFinding, countBySeverity } from '@gitgov/core';
 import { auditScanTool } from './audit_scan_tool.js';
 import { auditWaiveTool } from './audit_waive_tool.js';
 import { auditWaiveListTool } from './audit_waive_list_tool.js';
@@ -16,15 +18,38 @@ function parseResult(result: { content: Array<{ text: string }>; isError?: boole
   return JSON.parse(result.content[0].text);
 }
 
+/**
+ * Typed against the real `SourceAuditor.AuditResult`. `vi.fn().mockResolvedValue` is untyped,
+ * so an untyped stub — flat severity keys, required Finding fields missing — lets the MSRV-L*
+ * tests assert against a shape this module cannot produce.
+ */
+function makeAuditResult(): SourceAuditor.AuditResult {
+  const finding = createFinding({
+    ruleId: 'SEC-001', category: 'hardcoded-secret', severity: 'high',
+    file: 'src/foo.ts', line: 42, message: 'Hardcoded secret',
+    snippet: "const apiKey = 'sk-test'", detector: 'regex', confidence: 0.95,
+    executionId: 'exec-1', reportedBy: ['agent:security-audit'], isWaived: false,
+  });
+  return {
+    findings: [finding],
+    summary: {
+      total: 1,
+      bySeverity: countBySeverity([finding]),
+      byCategory: { 'hardcoded-secret': 1 },
+      byDetector: { regex: 1, heuristic: 0, llm: 0, sast: 0 },
+    },
+    scannedFiles: 1,
+    scannedLines: 10,
+    duration: 5,
+    detectors: ['regex'],
+    waivers: { acknowledged: 0, new: 1, unmatched: 0, outdated: 0 },
+  };
+}
+
 function createMockDi() {
   const mockContainer = {
     sourceAuditorModule: {
-      audit: vi.fn().mockResolvedValue({
-        findings: [
-          { fingerprint: 'abc123', severity: 'high', file: 'src/foo.ts', line: 42, message: 'Hardcoded secret' },
-        ],
-        summary: { total: 1, critical: 0, high: 1, medium: 0, low: 0 },
-      }),
+      audit: vi.fn<(options: SourceAuditor.AuditOptions) => Promise<SourceAuditor.AuditResult>>().mockResolvedValue(makeAuditResult()),
     },
     feedbackAdapter: {
       create: vi.fn().mockResolvedValue({ id: 'waiver-1', type: 'approval', entityType: 'execution', status: 'resolved' }),
@@ -66,8 +91,13 @@ describe('Audit + Agent + Actor Tools', () => {
       expect(result.isError).toBeUndefined();
       expect(data.findings).toHaveLength(1);
       expect(di._container.sourceAuditorModule.audit).toHaveBeenCalledWith(
-        expect.objectContaining({ scope: { include: ['**/*'], exclude: [], changedSince: undefined } }),
+        expect.objectContaining({ scope: { include: ['**/*'], exclude: [] } }),
       );
+      // Absent, not `undefined`: `ScopeConfig.changedSince?: string` admits no explicit
+      // undefined under core's exactOptionalPropertyTypes. `toHaveBeenCalledWith` treats the
+      // two as equal, so only the key check separates them.
+      const scope = di._container.sourceAuditorModule.audit.mock.calls[0]![0].scope;
+      expect('changedSince' in scope).toBe(false);
     });
 
     it('[MSRV-L2] should pass changedSince to core for incremental scanning', async () => {
@@ -119,7 +149,10 @@ describe('Audit + Agent + Actor Tools', () => {
       const data = parseResult(result);
 
       const finding = data.findings[0];
-      expect(finding).toHaveProperty('fingerprint', 'abc123');
+      // The identity is the one createFinding computed (AUDIT-K1) and the tool passes it
+      // through untouched; a hand-typed 'abc123' would only prove the stub round-trips.
+      expect(finding).toHaveProperty('fingerprint', makeAuditResult().findings[0]!.fingerprint);
+      expect(finding.fingerprint).toMatch(/^gitgov-fp\/2:[a-f0-9]{64}$/);
       expect(finding).toHaveProperty('severity', 'high');
       expect(finding).toHaveProperty('file', 'src/foo.ts');
       expect(finding).toHaveProperty('line', 42);

@@ -6,12 +6,18 @@
  * These tests require: CLI binary built, PostgreSQL running, git available.
  */
 import { describe, it, expect, afterAll } from 'vitest';
+import { execSync } from 'child_process';
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 
 import {
   runGitgovCli,
   spawnGitgovCli,
+  resolveGitgovCli,
+  CHECKOUT_ROOT,
+  CHECKOUT_CLI_BIN,
+  GITGOV_CLI_BIN_ENV,
   createTempGitRepo,
   cleanupWorktree,
   createProtocolPrisma,
@@ -41,7 +47,7 @@ afterAll(() => {
 
 describe('E2E Helpers', () => {
 
-  describe('4.1. CLI Helpers (HLP-A1 to HLP-A4)', () => {
+  describe('4.1. CLI Helpers (HLP-A1 to HLP-A5)', () => {
 
     it('[HLP-A1] should execute gitgov --version and return success', () => {
       const { tmpDir, repoDir } = createTempGitRepo();
@@ -87,6 +93,67 @@ describe('E2E Helpers', () => {
 
       const result = await cli.waitForExit(5000);
       expect(result.exitCode).toBe(0);
+    });
+
+    /**
+     * A `gitgov` placed first on PATH that answers a version no real CLI prints. A helper that
+     * runs whatever `gitgov` the shell finds gets this answer; one that runs the checkout build
+     * does not.
+     */
+    const IMPOSTOR_VERSION = '0.0.0-path-impostor';
+    const pathWithImpostor = (): string => {
+      const binDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gitgov-impostor-'));
+      tempDirs.push(binDir);
+      const impostor = path.join(binDir, 'gitgov');
+      fs.writeFileSync(impostor, `#!/bin/sh\necho "${IMPOSTOR_VERSION}"\n`);
+      fs.chmodSync(impostor, 0o755);
+      return `${binDir}${path.delimiter}${process.env['PATH'] ?? ''}`;
+    };
+
+    it('[HLP-A1] should run the checkout CLI even when another gitgov comes first on PATH', () => {
+      const { tmpDir, repoDir } = createTempGitRepo();
+      tempDirs.push(tmpDir);
+      const env = { PATH: pathWithImpostor() };
+
+      // ANTI-VACUITY: with this PATH the shell really resolves `gitgov` to the impostor, so a
+      // version that is not the impostor's can only come from a binary chosen another way.
+      const viaPath = execSync('gitgov --version', { cwd: repoDir, encoding: 'utf8', env: { ...process.env, ...env } });
+      expect(viaPath.trim()).toBe(IMPOSTOR_VERSION);
+
+      const result = runGitgovCli('--version', { cwd: repoDir, env });
+      expect(result.output, `runGitgovCli ran the PATH impostor instead of ${CHECKOUT_CLI_BIN}`).not.toContain(IMPOSTOR_VERSION);
+      expect(result.output).toMatch(/\d+\.\d+\.\d+/);
+    });
+
+    it('[HLP-A4] should spawn the checkout CLI even when another gitgov comes first on PATH', async () => {
+      const { tmpDir, repoDir } = createTempGitRepo();
+      tempDirs.push(tmpDir);
+
+      const cli = spawnGitgovCli('--version', { cwd: repoDir, env: { PATH: pathWithImpostor() } });
+      const result = await cli.waitForExit(10000);
+
+      expect(result.stdout, `spawnGitgovCli ran the PATH impostor instead of ${CHECKOUT_CLI_BIN}`).not.toContain(IMPOSTOR_VERSION);
+      expect(result.stdout).toMatch(/\d+\.\d+\.\d+/);
+      expect(result.exitCode).toBe(0);
+    });
+
+    it('[HLP-A5] should resolve the checkout build by default and honor GITGOV_CLI_BIN with its realpath', () => {
+      const checkout = resolveGitgovCli({});
+      expect(checkout.source).toBe('checkout');
+      expect(checkout.bin).toBe(path.join(CHECKOUT_ROOT, 'packages', 'cli', 'build', 'dist', 'gitgov.mjs'));
+      expect(checkout.insideCheckout).toBe(true);
+
+      // An override outside the checkout, reached through a symlink: the realpath is the file the
+      // symlink points at, and it does not lie inside the checkout.
+      const elsewhere = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'gitgov-other-checkout-')));
+      tempDirs.push(elsewhere);
+      const target = path.join(elsewhere, 'gitgov.mjs');
+      fs.writeFileSync(target, '');
+      const link = path.join(elsewhere, 'gitgov-link.mjs');
+      fs.symlinkSync(target, link);
+
+      const override = resolveGitgovCli({ [GITGOV_CLI_BIN_ENV]: link });
+      expect(override).toEqual({ bin: link, realpath: target, source: 'GITGOV_CLI_BIN', insideCheckout: false });
     });
   });
 

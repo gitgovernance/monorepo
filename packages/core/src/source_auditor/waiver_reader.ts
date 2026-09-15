@@ -19,9 +19,11 @@ export class WaiverReader implements IWaiverReader {
 
     for (const f of allFeedback) {
       const payload = f.payload;
+      // [EARS-F1] [EARS-F2] Only approvals with a fingerprint are waivers; other types are not.
       if (payload.type !== "approval" || !payload.metadata) continue;
       const meta = payload.metadata as WaiverMetadata;
       if (typeof meta.fingerprint !== "string") continue;
+      // [EARS-F3] [EARS-F4] Expired waivers are dropped; no expiresAt means permanent.
       if (meta.expiresAt && new Date(meta.expiresAt) <= now) continue;
 
       const waiver: Waiver = {
@@ -43,11 +45,13 @@ export class WaiverReader implements IWaiverReader {
    */
   async hasWaiver(fingerprint: string): Promise<boolean> {
     const waivers = await this.loadWaivers();
+    // [EARS-F5] [EARS-F6] By fingerprint, not by "any waiver exists".
     return waivers.some((w) => w.fingerprint === fingerprint);
   }
 
   /**
-   * Gets waivers for a specific ExecutionRecord.
+   * [EARS-F7] Gets waivers for a specific ExecutionRecord. A method of this class, not of
+   * the injected IWaiverReader contract (source_auditor_module.md §3.3).
    */
   async getWaiversForExecution(executionId: string): Promise<Waiver[]> {
     const feedback = await this.feedbackAdapter.getFeedbackByEntity(executionId);

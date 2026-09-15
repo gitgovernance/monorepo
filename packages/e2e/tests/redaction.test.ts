@@ -23,7 +23,9 @@ import {
   Sarif,
   Redaction,
 } from '@gitgov/core';
-import type { SarifLog } from '@gitgov/core';
+// `IWaiverReader` is root-exported because consumers IMPLEMENT it (source_auditor_module.md §3.3);
+// the namespace form `SourceAuditor.IWaiverReader` is for types one only reads.
+import type { SarifLog, IWaiverReader } from '@gitgov/core';
 import { FsFileLister } from '@gitgov/core/fs';
 
 // ============================================================================
@@ -81,7 +83,7 @@ async function runScan(fixtureDir: string): Promise<SarifLog> {
     regex: { enabled: true },
   });
 
-  const noOpWaiverReader: SourceAuditor.IWaiverReader = {
+  const noOpWaiverReader: IWaiverReader = {
     loadWaivers: async () => [],
     hasWaiver: async () => false,
   };
@@ -141,7 +143,7 @@ async function runScanWithRedactionLevel(
     regex: { enabled: true },
   });
 
-  const noOpWaiverReader: SourceAuditor.IWaiverReader = {
+  const noOpWaiverReader: IWaiverReader = {
     loadWaivers: async () => [],
     hasWaiver: async () => false,
   };
@@ -194,7 +196,10 @@ async function runScanWithRedactionLevel(
 // Tests
 // ============================================================================
 
-describe('Block I: Redaction Pipeline (CI1 to CI4)', () => {
+// Second implementation of RLDX-B8/B10, RLDX-G1, SARIF-N2 and SARIF-J1 against SARIF built by
+// the real detectors. Tagged with the EARS each `it()` asserts, so an audit can cross them
+// with the spec.
+describe('Block I: Redaction Pipeline (RLDX-B8, B10, G1; SARIF-N2, J1)', () => {
   let fixtureDir: string;
   let originalSarif: SarifLog;
   let l1Sarif: SarifLog;
@@ -227,14 +232,17 @@ describe('Block I: Redaction Pipeline (CI1 to CI4)', () => {
   // CI1: L1 redacts sensitive snippets
   // ==========================================
 
-  it('[CI1] should redact sensitive snippets in L1 SARIF output', () => {
+  it('[RLDX-B8] should redact sensitive snippets in L1 SARIF output', () => {
     const l1Results = l1Sarif.runs[0]?.results ?? [];
     expect(l1Results.length).toBeGreaterThan(0);
 
-    // Find results with sensitive categories
+    // Find results with sensitive categories — asking the module, not re-deriving its rule.
+    // Checking `sensitiveCategories.includes(cat)` only (step 1 of 3) would leave a category
+    // that reaches defaultBehavior redacted by the module and excluded from this assertion
+    // at the same time.
     const sensitiveResults = l1Results.filter((r: { properties?: Record<string, unknown> }) => {
       const cat = r.properties?.['gitgov/category'] as string | undefined;
-      return cat && Redaction.DEFAULT_REDACTION_CONFIG.sensitiveCategories.includes(cat);
+      return cat !== undefined && redactor.isSensitiveCategory(cat);
     });
 
     expect(sensitiveResults.length).toBeGreaterThan(0);
@@ -266,7 +274,7 @@ describe('Block I: Redaction Pipeline (CI1 to CI4)', () => {
   // CI2: L2 includes full content
   // ==========================================
 
-  it('[CI2] should include full unredacted snippets in L2 SARIF output', () => {
+  it('[RLDX-B10] should include full unredacted snippets in L2 SARIF output', () => {
     const l2Results = l2Sarif.runs[0]?.results ?? [];
     expect(l2Results.length).toBeGreaterThan(0);
 
@@ -312,7 +320,7 @@ describe('Block I: Redaction Pipeline (CI1 to CI4)', () => {
   // CI3: fingerprint unchanged after redaction
   // ==========================================
 
-  it('[CI3] should preserve partialFingerprints unchanged in both L1 and L2', () => {
+  it('[SARIF-N2] [RLDX-G1] should preserve partialFingerprints unchanged in both L1 and L2', () => {
     const originalResults = originalSarif.runs[0]?.results ?? [];
     const l1Results = l1Sarif.runs[0]?.results ?? [];
     const l2Results = l2Sarif.runs[0]?.results ?? [];
@@ -346,7 +354,7 @@ describe('Block I: Redaction Pipeline (CI1 to CI4)', () => {
   // CI4: redactionLevel preserved in run.properties
   // ==========================================
 
-  it('[CI4] should preserve redactionLevel in SARIF run.properties when built with redactionLevel option', async () => {
+  it('[SARIF-J1] should preserve redactionLevel in SARIF run.properties when built with redactionLevel option', async () => {
     // Build SARIF with redactionLevel: 'l1' — SarifBuilder sets run.properties['gitgov/redactionLevel']
     const sarifWithLevel = await runScanWithRedactionLevel(fixtureDir, 'l1');
 

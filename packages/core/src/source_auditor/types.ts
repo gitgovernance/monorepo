@@ -1,74 +1,14 @@
+// [AUDIT-B4] Canonical source for Finding and its domain types — never redefined here.
 import type {
   Finding,
   FindingCategory,
-  FindingSeverity,
   DetectorName,
+  SeverityCounts,
   Waiver,
 } from "../audit/types";
 import type { FindingDetectorModule } from "../finding_detector";
 import type { FileLister } from "../file_lister";
 import type { IGitModule } from '../git';
-
-// ============================================================================
-// AUDIT TARGET TYPES
-// ============================================================================
-
-/**
- * What to audit.
- * - code: Source code in the repository (MVP)
- * - jira: Jira issues (future)
- * - gitgov: GitGovernance records (future)
- */
-export type AuditTarget = "code" | "jira" | "gitgov";
-
-/**
- * Scope for code auditing.
- * - diff: Only files modified since last baseline (default)
- * - full: All files in repo (without saving baseline)
- * - baseline: All files + save commit as new baseline
- */
-export type CodeScope = "diff" | "full" | "baseline";
-
-/**
- * Scope for Jira auditing (future).
- * - all: All issues
- * - sprint: Only current sprint issues
- * - stale: Issues without activity > 30 days
- * - backlog: Unassigned backlog issues
- */
-export type JiraScope = "all" | "sprint" | "stale" | "backlog";
-
-/**
- * Scope for GitGov records auditing (future).
- * - all: All records
- * - tasks: Only TaskRecords
- * - cycles: Only CycleRecords
- */
-export type GitgovScope = "all" | "tasks" | "cycles";
-
-/**
- * Union of all possible scopes depending on target.
- */
-export type AuditScope = CodeScope | JiraScope | GitgovScope;
-
-// ============================================================================
-// OUTPUT/DISPLAY OPTIONS
-// ============================================================================
-
-/**
- * How to group findings in output.
- */
-export type GroupByOption = "file" | "severity" | "category";
-
-/**
- * Output format for the report.
- */
-export type OutputFormat = "text" | "json" | "sarif";
-
-/**
- * Minimum severity level to fail the audit.
- */
-export type FailOnSeverity = "critical" | "high" | "medium" | "low" | "none";
 
 // ============================================================================
 // FILE CONTENT TYPES
@@ -135,13 +75,18 @@ export type AuditOptions = {
 }
 
 /**
- * Aggregated summary of findings.
+ * Aggregated per-scan counts for THIS module.
+ *
+ * Not called `AuditSummary`: `audit/types.ts` owns the orchestrator-level type of that name,
+ * with `suppressed`, `unmatchedWaivers` and `agentsRun`, whose `total` counts findings
+ * INCLUDING the waived ones. This one counts post-waiver, and two sibling modules exporting
+ * one name with opposite semantics on a shared field is what the rename removed.
  */
-export type AuditSummary = {
+export type SourceAuditSummary = {
   /** Total findings (post-waiver) */
   total: number;
-  /** Count by severity */
-  bySeverity: Record<FindingSeverity, number>;
+  /** Count by severity — [AUDIT-M1] the one shape, computed by countBySeverity */
+  bySeverity: SeverityCounts;
   /** Count by category */
   byCategory: Partial<Record<FindingCategory, number>>;
   /** Count by detector */
@@ -156,6 +101,17 @@ export type WaiverApplicationCounts = {
   acknowledged: number;
   /** New findings without waiver */
   new: number;
+  /**
+   * [EARS-C6] Active waivers under a current fingerprint scheme whose fingerprint matched no
+   * finding of this run. Without the count, "0 acknowledged" reads exactly like "there were no
+   * waivers".
+   */
+  unmatched: number;
+  /**
+   * [EARS-C7] Active waivers written under a fingerprint scheme the current code no longer
+   * produces (AUDIT-L3): each one has to be re-created. Disjoint from `unmatched`.
+   */
+  outdated: number;
 }
 
 /**
@@ -165,7 +121,7 @@ export type AuditResult = {
   /** Detected findings (post-waiver) */
   findings: Finding[];
   /** Aggregated summary */
-  summary: AuditSummary;
+  summary: SourceAuditSummary;
   /** Number of files scanned */
   scannedFiles: number;
   /** Number of lines scanned */

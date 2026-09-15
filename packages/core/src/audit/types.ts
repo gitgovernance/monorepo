@@ -30,53 +30,59 @@ import type { SarifLog } from "../sarif/sarif.types";
  * [AUDIT-E1] Base finding categories built into core. Agents get autocomplete for these
  * values while remaining free to use any string as a category.
  */
-export type BaseFindingCategory =
+// [AUDIT-J1] [AUDIT-J5] Constant first, type derived. The BUILT-IN set is a closed domain
+// and needs a runtime value: redaction proves every built-in category is classified
+// (RLDX-A6), and nothing can enumerate a bare union. `FindingCategory` below stays open
+// (AUDIT-E2) — only this tuple is closed.
+export const BASE_FINDING_CATEGORIES = [
   // Original 6 sensitive
-  | "pii-email"
-  | "pii-phone"
-  | "pii-financial"
-  | "pii-health"
-  | "pii-generic"
-  | "hardcoded-secret"
+  "pii-email",
+  "pii-phone",
+  "pii-financial",
+  "pii-health",
+  "pii-generic",
+  "hardcoded-secret",
   // PCI (Group A) sensitive
-  | "pci-pan"
-  | "pci-cvv"
-  | "pci-track"
-  | "pci-logging"
-  | "pci-token-misuse"
-  | "pci-last4"
+  "pci-pan",
+  "pci-cvv",
+  "pci-track",
+  "pci-logging",
+  "pci-token-misuse",
+  "pci-last4",
   // PII extended (Group B) sensitive
-  | "pii-dob"
-  | "pii-address"
-  | "pii-national-id"
-  | "pii-passport"
-  | "pii-bank-account"
-  | "pii-biometric"
+  "pii-dob",
+  "pii-address",
+  "pii-national-id",
+  "pii-passport",
+  "pii-bank-account",
+  "pii-biometric",
   // Storage/Crypto (Group E) sensitive
-  | "storage-pii"
-  | "storage-pci"
-  | "crypto-weak"
-  | "crypto-key"
-  | "crypto-tls"
+  "storage-pii",
+  "storage-pci",
+  "crypto-weak",
+  "crypto-key",
+  "crypto-tls",
   // Original 6 safe
-  | "logging-pii"
-  | "tracking-cookie"
-  | "tracking-analytics-id"
-  | "unencrypted-storage"
-  | "third-party-transfer"
-  | "unknown-risk"
+  "logging-pii",
+  "tracking-cookie",
+  "tracking-analytics-id",
+  "unencrypted-storage",
+  "third-party-transfer",
+  "unknown-risk",
   // Logging extended (Group C) safe
-  | "logging-auth"
-  | "logging-error"
-  | "logging-debug"
-  | "logging-trace"
+  "logging-auth",
+  "logging-error",
+  "logging-debug",
+  "logging-trace",
   // Transfer/Consent (Group D) safe
-  | "data-transfer"
-  | "privacy-consent"
-  | "privacy-retention"
-  // SAST categories (semgrep, CodeQL, etc.)
-  | "security-vulnerability"
-  | "code-quality";
+  "data-transfer",
+  "privacy-consent",
+  "privacy-retention",
+  // SAST categories (semgrep, CodeQL, etc.) — sensitive / safe (RLDX-A2/A3)
+  "security-vulnerability",
+  "code-quality",
+] as const;
+export type BaseFindingCategory = (typeof BASE_FINDING_CATEGORIES)[number];
 
 /**
  * [AUDIT-E2] Extensible finding category. Accepts any BaseFindingCategory with
@@ -98,9 +104,25 @@ export const FINDING_SEVERITIES = ["critical", "high", "medium", "low"] as const
 export type FindingSeverity = (typeof FINDING_SEVERITIES)[number];
 
 /**
- * Identifier of the detector that generated the finding.
+ * [AUDIT-M1] Count of findings per severity. ONE shape for every module that aggregates by
+ * severity (source_auditor, audit_orchestrator, sarif metadata, agents); computed by
+ * `countBySeverity` below. It was written five ways and computed three times.
  */
-export type DetectorName = "regex" | "heuristic" | "llm" | "sast";
+export type SeverityCounts = Record<FindingSeverity, number>;
+
+/**
+ * Identifier of the detector that generated the finding.
+ *
+ * [AUDIT-J1] [AUDIT-J6] Constant first, type derived: a SARIF result carries the detector as a
+ * `string` property, and the rehydrator (AUDIT-N3) turns it into a DetectorName by checking.
+ */
+export const DETECTOR_NAMES = ["regex", "heuristic", "llm", "sast"] as const;
+export type DetectorName = (typeof DETECTOR_NAMES)[number];
+
+/** [AUDIT-J6] A string becomes a DetectorName by checking, not by casting. */
+export function isDetectorName(value: string): value is DetectorName {
+  return (DETECTOR_NAMES as readonly string[]).includes(value);
+}
 
 // ─── Status enums (product-level) ────────────────────────────────────────────
 
@@ -127,9 +149,27 @@ export type FindingStatus = (typeof FINDING_STATUSES)[number];
 export type ScanDisplayStatus = "success" | "partial" | "blocked";
 
 /**
- * Scan scope — what files to audit.
+ * Scan scope — what files a scan covers. ONE domain for the whole flow: CLI `--scope`,
+ * AuditOrchestrationOptions.scope, AgentAuditInput.scope, SARIF gitgov/scanScope, Scan.scope.
+ * - diff: only files changed since the last baseline
+ * - full: every file, without saving a baseline
+ * - baseline: every file, AND the commit is saved as the new baseline (a CLI-side effect;
+ *   the SaaS router creates scans as "full" or "diff" — that is the API contract, not this type)
+ *
+ * [AUDIT-J1] [AUDIT-J4] Constant first, type derived. Was `"full" | "diff"` while four
+ * inline copies carried three values and saas-api bridged the gap with a cast.
  */
-export type ScanScope = "full" | "diff";
+export const SCAN_SCOPES = ["diff", "full", "baseline"] as const;
+export type ScanScope = (typeof SCAN_SCOPES)[number];
+
+/**
+ * [AUDIT-J4] The tuple's reason to exist at runtime: a `string` from persistence (Prisma
+ * `Scan.scope String`) becomes a ScanScope by CHECKING, not by casting. saas-api used to write
+ * `scan.scope as 'full' | 'diff' | 'baseline'` to bridge the two.
+ */
+export function isScanScope(value: string): value is ScanScope {
+  return (SCAN_SCOPES as readonly string[]).includes(value);
+}
 
 // ─── Lifecycle events ─────────────────────────────────────────────────────────
 
@@ -320,8 +360,8 @@ export type PolicyDecision = {
   blockingFindings: Finding[];
   /** Findings suppressed by waivers */
   waivedFindings: Finding[];
-  /** Count by severity (active findings only) */
-  summary: Record<FindingSeverity, number>;
+  /** [AUDIT-M1] Count by severity (active findings only) */
+  summary: SeverityCounts;
   /** Per-rule evaluation results */
   rulesEvaluated: PolicyRuleResult[];
   /** ISO 8601 timestamp */
@@ -342,19 +382,37 @@ export type PolicyRuleResult = {
 /**
  * Aggregated summary of an audit run.
  */
-export type AuditSummary = {
-  /** Total findings (including waived) */
+export type AuditSummary = SeverityCounts & {
+  /** Total findings (including waived). The four severity keys (SeverityCounts, AUDIT-M1)
+   *  count ACTIVE (non-waived) findings only — structurally the same flat shape as before. */
   total: number;
-  /** Active (non-waived) findings by severity */
-  critical: number;
-  high: number;
-  medium: number;
-  low: number;
   /** Count of waived/suppressed findings */
   suppressed: number;
-  /** Number of agents executed */
+  /**
+   * [AORCH-B15] Active waivers whose fingerprint matched no consolidated finding, or `null`
+   * when the run did not look everywhere a waiver can point: scope `diff`, an `include`,
+   * `exclude` or `agentId` narrowing it, an agent that failed, or no agents at all.
+   *
+   * `null` is "not measured", never zero. Required, not optional: a waiver written with an
+   * earlier identity (AUDIT-K1..K6) stops matching, and without this field "0 waived" is
+   * indistinguishable from "there were no waivers".
+   */
+  unmatchedWaivers: number | null;
+  /**
+   * [AORCH-B16] [AUDIT-L3] Active waivers written under a fingerprint scheme the current code no
+   * longer produces. Measured whatever the scope — it is a property of the waiver, not of the run
+   * — and `null` only where no waiver list is at hand (createScan). Disjoint from
+   * `unmatchedWaivers`.
+   */
+  outdatedWaivers: number | null;
+  /**
+   * Agents that completed SUCCESSFULLY — not agents executed. Computed as
+   * `agentResults.filter(r => r.status === "success").length`, so with every agent failing
+   * this is 0, not N, and `agentsRun === agentsFailed` is never true when all fail. "All
+   * agents failed" is `agentsRun === 0 && agentsFailed > 0`.
+   */
   agentsRun: number;
-  /** Number of agents that failed */
+  /** Agents whose status was "error" */
   agentsFailed: number;
 };
 
@@ -431,8 +489,8 @@ export type AuditOrchestrationResult = {
  * Counterpart of AuditOrchestrationResult (output).
  */
 export type AuditOrchestrationOptions = {
-  /** Scan scope: diff (changed files), full (all files), baseline (full + save baseline) */
-  scope: "diff" | "full" | "baseline";
+  /** Scan scope — the one domain (AUDIT-J4) */
+  scope: ScanScope;
   /** Optional: run only this specific agent */
   agentId?: string;
   /** Glob patterns to include in scan */
@@ -461,8 +519,8 @@ export type AuditOrchestrationOptions = {
  *   FS: Scan & { indexedAt, recordPaths, ... }
  */
 export type Scan = {
-  /** Scan scope */
-  scope: "full" | "diff";
+  /** Scan scope — the one domain (AUDIT-J4). Was `"full" | "diff"`, which could not record a baseline run. */
+  scope: ScanScope;
   /** Who/what triggered the scan (actor ID or "ci") */
   triggeredBy: string;
   /** ExecutionRecord IDs from agent runs (1 per agent) */
@@ -479,18 +537,176 @@ export type Scan = {
 
 // ─── Finding Factory ─────────────────────────────────────────────────────────
 
-import { createHash } from 'node:crypto';
+// One sha256 for the whole integrity bridge: the redactor, the verifier
+// and the producer must agree byte for byte, so they call the same function. Imported from
+// the file, not the `crypto` barrel: the barrel pulls `util` in, and `@gitgov/core/audit`
+// must stay clean of Node builtins beyond its allowlist (EARS-CI02). `checksum` imports
+// nothing from here — no cycle.
+import { sha256 } from '../crypto/checksum';
+// The identity lives in its own module and is computed in exactly one place (AUDIT-K1).
+// fingerprint.ts imports only the FindingCategory TYPE from here, which is erased at
+// compile time — the cycle is structural, not a runtime one.
+import { computeFingerprint, computeRegionFingerprint, normalizeAnchor } from './fingerprint';
+import { isCurrentFingerprint } from './fingerprint_format';
 
 /**
- * [AUDIT-D1] Factory for creating Finding objects with guaranteed snippet↔snippetHash integrity.
- * snippetHash is ALWAYS computed from snippet — callers MUST NOT provide it.
- * [AUDIT-D2] This is the ONLY way to construct a Finding.
+ * [RLDX-B8] [RLDX-F3] The text a redacted snippet becomes. Declared here, in the module every
+ * other one imports, because three of them need to recognize it: the redactor writes it, the
+ * SaaS projection compares against it, and nothing may derive an identity or verify a hash
+ * from it (AUDIT-K7, RLDX-F4).
  */
-export function createFinding(input: Omit<Finding, 'snippetHash'>): Finding {
+export const REDACTED_SNIPPET = '[REDACTED]' as const;
+
+/**
+ * [AUDIT-K7] Texts a tool writes where the matched lines should be. Semgrep without a login
+ * emits `requires login` as every result's snippet: anchoring on it gives every such result
+ * of a file and category one identity.
+ */
+export const SNIPPET_PLACEHOLDERS: readonly string[] = ['requires login'];
+
+/**
+ * [AUDIT-K7] Whether a text can anchor an identity: it has content once normalized, and it is
+ * neither the redaction sentinel nor a known tool placeholder.
+ */
+export function isAnchorText(text: string | undefined): text is string {
+  if (text === undefined || isRedactedSnippet(text)) return false;
+  const normalized = normalizeAnchor(text);
+  return normalized !== '' && !SNIPPET_PLACEHOLDERS.includes(normalized);
+}
+
+/** [AUDIT-K7] Whether a snippet is the redaction sentinel. */
+export function isRedactedSnippet(text: string): boolean {
+  return normalizeAnchor(text) === REDACTED_SNIPPET;
+}
+
+/**
+ * [AUDIT-D1] [AUDIT-K1] [AUDIT-K6] [AUDIT-K7] Producer constructor — for detectors and agents
+ * that SEE the source and can hand over the text they matched.
+ *
+ * Computes BOTH hashes, and the caller provides neither. `snippetHash` is sha256 of the
+ * exact snippet (AUDIT-K6, no normalization — it is the L1↔L2 integrity bridge), and
+ * `fingerprint` is the identity (AUDIT-K1, delegated to computeFingerprint).
+ *
+ * `anchor` is the text the detector matched (`match[0]`); when it carries no text, the snippet
+ * stands in, and when neither does, the identity degrades to the region (AUDIT-K7) with a
+ * warning. It is an INPUT and never a field of Finding (AUDIT-A1): for a credential finding
+ * the anchor IS the secret, and as a field it would travel unredacted into the signed L1
+ * record. It is consumed here and dies here.
+ *
+ * [AUDIT-D2] One of the two ways to construct a Finding. Consumers rebuilding a transported
+ * one use rehydrateFinding instead; neither accepts an arbitrary fingerprint from a caller.
+ */
+export function createFinding(
+  input: Omit<Finding, 'fingerprint' | 'snippetHash'> & { anchor?: string },
+): Finding {
+  const { anchor, ...finding } = input;
+
+  return {
+    ...finding,
+    // [AUDIT-K1] The producer never supplies the identity — it is derived here, once.
+    fingerprint: fingerprintOfProducedFinding(finding, anchor),
+    // [AUDIT-K6] The exact snippet, unnormalized.
+    snippetHash: sha256(finding.snippet),
+  };
+}
+
+function fingerprintOfProducedFinding(
+  finding: Omit<Finding, 'fingerprint' | 'snippetHash'>,
+  anchor: string | undefined,
+): string {
+  const text = [anchor, finding.snippet].find(isAnchorText);
+  if (text !== undefined) {
+    return computeFingerprint({ file: finding.file, category: finding.category, anchor: text });
+  }
+
+  // [AUDIT-K7] No text: an empty anchor would give every such finding of this file and category
+  // one identity, and consolidation would keep only the first.
+  console.warn(
+    `[AUDIT-K7] ${finding.ruleId} at ${finding.file}:${finding.line} has no text to anchor its identity; ` +
+      `it falls back to the rule and position, and changes when lines above it move.`,
+  );
+  return computeRegionFingerprint({
+    file: finding.file,
+    category: finding.category,
+    ruleId: finding.ruleId,
+    line: finding.line,
+    ...(finding.column !== undefined ? { column: finding.column } : {}),
+  });
+}
+
+/**
+ * [AUDIT-K5] [AUDIT-D2] Transport constructor — for consumers rebuilding a Finding from a
+ * representation that already carries its identity: a SARIF result with
+ * `fingerprints["gitgov/v2"]`, or a database row.
+ *
+ * Keeps the transported `fingerprint` byte for byte and NEVER recomputes it. By this point
+ * the consumer no longer has the anchor, and the snippet may be truncated (EARS-23) or
+ * redacted (RLDX-B8), so a recomputation would silently diverge from the producer's value —
+ * which is exactly how two identities entered the system in the first place.
+ *
+ * `snippetHash` is kept when transported and computed from the snippet when it is not,
+ * preserving the AUDIT-D1 invariant either way.
+ */
+export function rehydrateFinding(
+  input: Omit<Finding, 'snippetHash'> & { snippetHash?: string },
+): Finding {
   return {
     ...input,
-    snippetHash: createHash('sha256').update(input.snippet).digest('hex'),
+    snippetHash: input.snippetHash ?? sha256(input.snippet),
   };
+}
+
+/**
+ * [AUDIT-L1] Active waivers under a current fingerprint scheme whose fingerprint matches no
+ * finding of a run.
+ *
+ * One definition for a number that was computed in three places: source_auditor's
+ * filterByWaivers, the orchestrator's buildSummary, and the orchestrator's no-agents branch,
+ * which hard-coded it as `waivers.length` with the reasoning in a comment. With no findings
+ * every such waiver is unmatched, and the empty-set comparison yields exactly that — the edge
+ * case is a property of the function, not a special case at a call site.
+ *
+ * A waiver under an earlier scheme is left out: it cannot match anything the current code
+ * produces, and it is counted apart, as outdated (AUDIT-L3), so the two causes never add up
+ * into one number.
+ *
+ * Takes only the fingerprints it needs, so a caller can pass either full records or the
+ * lightweight shapes tests build.
+ */
+export function countUnmatchedWaivers(
+  waivers: ReadonlyArray<Pick<Waiver, 'fingerprint'>>,
+  findings: ReadonlyArray<Pick<Finding, 'fingerprint'>>,
+): number {
+  const present = new Set(findings.map((f) => f.fingerprint));
+  return waivers.filter((w) => isCurrentFingerprint(w.fingerprint) && !present.has(w.fingerprint)).length;
+}
+
+/**
+ * [AUDIT-L3] Active waivers written for a fingerprint under a scheme the current code no longer
+ * produces (AUDIT-K8). They are not stale because the code changed: the formula did, and each one
+ * has to be re-created for the finding's current fingerprint.
+ */
+export function countOutdatedWaivers(waivers: ReadonlyArray<Pick<Waiver, 'fingerprint'>>): number {
+  return waivers.filter((w) => !isCurrentFingerprint(w.fingerprint)).length;
+}
+
+/**
+ * [AUDIT-L2] The waivers whose finding lies in one of `files`, read from the `file` their
+ * FeedbackRecord was written with (WaiverMetadata).
+ *
+ * A run that read part of the repository cannot say anything about a waiver on a file it did
+ * not read: counted as unmatched, that waiver tells the user to re-create a waiver that is
+ * fine. A waiver whose record carries no file cannot be placed and is left out.
+ */
+export function waiversForFiles<W extends Pick<Waiver, 'feedback'>>(
+  waivers: ReadonlyArray<W>,
+  files: Iterable<string>,
+): W[] {
+  const read = new Set(files);
+  return waivers.filter((w) => {
+    const metadata = w.feedback.payload.metadata as Partial<WaiverMetadata> | undefined;
+    return typeof metadata?.file === 'string' && read.has(metadata.file);
+  });
 }
 
 /**
@@ -500,9 +716,22 @@ export function createFinding(input: Omit<Finding, 'snippetHash'>): Finding {
  */
 export function verifySnippet(snippet: string, snippetHash: string): 'verified' | 'unverified' | null {
   if (!snippet || !snippetHash) return null;
-  if (snippet.includes('[REDACTED]')) return null;
-  const computed = createHash('sha256').update(snippet).digest('hex');
-  return computed === snippetHash ? 'verified' : 'unverified';
+  if (snippet.includes(REDACTED_SNIPPET)) return null;
+  return sha256(snippet) === snippetHash ? 'verified' : 'unverified';
+}
+
+/**
+ * [AUDIT-M1] Findings per severity, every key present. Counts exactly what it receives —
+ * filtering waived findings is the caller's decision, and the three callers make it
+ * differently on purpose (source_auditor: post-waiver list; orchestrator and createScan:
+ * active only).
+ */
+export function countBySeverity(findings: ReadonlyArray<Pick<Finding, 'severity'>>): SeverityCounts {
+  const counts: SeverityCounts = { critical: 0, high: 0, medium: 0, low: 0 };
+  for (const finding of findings) {
+    counts[finding.severity]++;
+  }
+  return counts;
 }
 
 // ─── Fix Type ─────────────────────────────────────────────────────────────────
@@ -561,12 +790,14 @@ export function createScan(input: {
   // [AUDIT-G2] Compute summary from findings — guaranteed coherent
   const active = input.findings.filter(f => !f.isWaived);
   const summary: AuditSummary = {
-    critical: active.filter(f => f.severity === 'critical').length,
-    high: active.filter(f => f.severity === 'high').length,
-    medium: active.filter(f => f.severity === 'medium').length,
-    low: active.filter(f => f.severity === 'low').length,
+    // [AUDIT-M1] One counter for the severity map, shared with the orchestrator and source_auditor.
+    ...countBySeverity(active),
     total: input.findings.length,
     suppressed: input.findings.filter(f => f.isWaived).length,
+    // [AORCH-B15] A Scan is built from findings already consolidated, with no waiver list in
+    // hand: not measured here, and a 0 would read as "every waiver matched".
+    unmatchedWaivers: null,
+    outdatedWaivers: null,
     agentsRun: input.executionRecordIds.length,
     agentsFailed: 0,
   };

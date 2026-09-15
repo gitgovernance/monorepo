@@ -21,7 +21,13 @@ vi.mock('fs', () => ({
 }));
 
 // Mock @gitgov/core with all required modules
-vi.mock('@gitgov/core', () => {
+vi.mock('@gitgov/core', async () => {
+  // The real redaction module: a pure class with no I/O, so there is nothing to isolate from,
+  // and a no-op stand-in misrepresented every axis the contract pins — same object reference
+  // back, no snippetHash, empty category lists. Wiring is what this file
+  // tests; what the redactor does is core's, and now it is the same code here.
+  const actual = await vi.importActual<typeof import('@gitgov/core')>('@gitgov/core');
+
   // 🎯 HYBRID STRATEGY: Mock Adapters + Valid Data Helpers
   // Create valid data using GitGovernance patterns without importing real factories
 
@@ -517,14 +523,8 @@ vi.mock('@gitgov/core', () => {
       }; }),
     },
 
-    // 🎭 MOCK REDACTION: FindingRedactor for L1/L2 separation
-    Redaction: {
-      FindingRedactor: vi.fn().mockImplementation(function() { return {
-        redact: vi.fn().mockImplementation((f: unknown) => f),
-        redactSarif: vi.fn().mockImplementation((s: unknown) => s),
-      }; }),
-      DEFAULT_REDACTION_CONFIG: { sensitiveCategories: [], safeCategories: [], defaultBehavior: 'redact' },
-    },
+    // REAL REDACTION: FindingRedactor + DEFAULT_REDACTION_CONFIG from core (see importActual above).
+    Redaction: actual.Redaction,
 
     // 🎭 MOCK SOURCE AUDITOR: Mock source auditor (for WaiverReader/WaiverWriter)
     SourceAuditor: {
@@ -727,7 +727,7 @@ import { DependencyInjectionService } from './dependency-injection';
 // Mocked module references — vitest hoists vi.mock, so imports resolve to mocks
 import * as mockFsModule from 'fs';
 import * as corefs from '@gitgov/core/fs';
-import { Adapters, EventBus, RecordProjection, RecordMetrics, AuditOrchestrator as AuditOrchestratorMock, PolicyEvaluator as PolicyEvaluatorMock, SyncState, Redaction as RedactionMock } from '@gitgov/core';
+import { Adapters, EventBus, RecordProjection, RecordMetrics, AuditOrchestrator as AuditOrchestratorMock, PolicyEvaluator as PolicyEvaluatorMock, SyncState, Redaction } from '@gitgov/core';
 // `deep: true` — without it `vi.mocked` only retypes the module's own properties, so nested ones
 // like `promises.access` stay typed as the real function and every `.mockResolvedValue()` on them
 // is a type error. The calls worked at runtime because `vi.mock` did replace them; only the types
@@ -946,8 +946,26 @@ describe('DependencyInjectionService', () => {
       expect(depsArg.recordStore).toBeDefined();
       expect(depsArg.policyEvaluator).toBeDefined();
 
-      // Verify FindingRedactor constructor was called
-      expect(RedactionMock.FindingRedactor).toHaveBeenCalled();
+      // The wired redactor is core's real FindingRedactor with the real default policy, and it
+      // behaves as one: a sensitive snippet comes back redacted and hashed, from a NEW object.
+      // This is the assertion a CLI-level regression (a no-op redactor wired by mistake) fails.
+      expect(depsArg.redactor).toBeInstanceOf(Redaction.FindingRedactor);
+      const secret = "const apiKey = 'sk-test-123'";
+      const sarif = {
+        $schema: 'https://json.schemastore.org/sarif-2.1.0.json', version: '2.1.0' as const,
+        runs: [{
+          tool: { driver: { name: 'gitgov-audit', version: '1.0.0', informationUri: 'https://gitgovernance.com' } },
+          results: [{
+            ruleId: 'SEC-001', level: 'error' as const, message: { text: 'secret' },
+            locations: [{ physicalLocation: { artifactLocation: { uri: 'a.ts' }, region: { startLine: 1, snippet: { text: secret } } } }],
+            properties: { 'gitgov/category': 'hardcoded-secret' as const, 'gitgov/detector': 'regex' as const, 'gitgov/confidence': 1 },
+          }],
+        }],
+      };
+      const redacted = depsArg.redactor.redactSarif(sarif, 'l1');
+      expect(redacted).not.toBe(sarif);
+      expect(redacted.runs[0].results[0].locations[0].physicalLocation.region.snippet.text).toBe('[REDACTED]');
+      expect(redacted.runs[0].results[0].properties['gitgov/snippetHash']).toMatch(/^[a-f0-9]{64}$/);
       expect(PolicyEvaluatorMock.createPolicyEvaluator).toHaveBeenCalled();
     });
 

@@ -187,11 +187,31 @@ describe("WaiverReader", () => {
     });
 
     it("[EARS-F6] hasWaiver should return false if fingerprint has no waiver", async () => {
-      mockFeedbackAdapter.getAllFeedback.mockResolvedValue([]);
+      // An ACTIVE waiver for a DIFFERENT fingerprint is loaded. With an empty feedback list
+      // this control would share the instrument's defect: a hasWaiver that ignored the
+      // fingerprint and returned `waivers.length > 0`, or a loadWaivers that returned nothing,
+      // would both pass F6 — the negative control could not tell "no match" from "nothing loaded".
+      const otherWaiver: FeedbackRecord<WaiverMetadata> = {
+        id: "feedback-other",
+        entityType: "execution",
+        entityId: "exec-1",
+        type: "approval",
+        status: "resolved",
+        content: "Waived",
+        metadata: {
+          fingerprint: "abc123",
+          ruleId: "PII-001",
+          file: "test.ts",
+          line: 10,
+        },
+      };
+      mockFeedbackAdapter.getAllFeedback.mockResolvedValue([wrapFeedback(otherWaiver)]);
 
       const hasWaiver = await reader.hasWaiver("nonexistent");
 
       expect(hasWaiver).toBe(false);
+      // ANTI-VACUITY: the same reader, same data, sees the waiver that IS there.
+      expect(await reader.hasWaiver("abc123")).toBe(true);
     });
 
     it("[EARS-F7] getWaiversForExecution should return waivers for specific execution", async () => {
