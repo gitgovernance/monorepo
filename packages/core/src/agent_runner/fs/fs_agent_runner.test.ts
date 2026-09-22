@@ -14,7 +14,9 @@ import { DEFAULT_ID_ENCODER } from "../../record_store/fs/fs_record_store";
 import type { IExecutionAdapter } from "../../adapters/execution_adapter";
 import type { IEventStream, BaseEvent } from "../../event_bus";
 import type { AgentRecord } from "../../record_types";
-import type { RuntimeHandlerRegistry } from "../agent_runner";
+import type { RuntimeHandlerRegistry, AgentExecutor } from "../agent_runner";
+import type { AgentExecutionContext } from "../agent_runner.types";
+import { resolveLocalEntrypoint } from "../backends/local_backend";
 import * as ResolveRunnerModule from "../resolve_runner";
 
 describe("FsAgentRunner", () => {
@@ -79,6 +81,15 @@ describe("FsAgentRunner", () => {
     fs.mkdirSync(path.dirname(fullPath), { recursive: true });
     fs.writeFileSync(fullPath, code);
     return relativePath;
+  };
+
+  /** Installs a minimal npm package inside the repo so `require.resolve` finds it there. */
+  const installPackageInRepo = (name: string, code: string) => {
+    const pkgDir = path.join(tempDir, "node_modules", name);
+    fs.mkdirSync(pkgDir, { recursive: true });
+    fs.writeFileSync(path.join(tempDir, "package.json"), JSON.stringify({ name: "host", version: "1.0.0" }));
+    fs.writeFileSync(path.join(pkgDir, "package.json"), JSON.stringify({ name, version: "1.0.0", main: "index.js" }));
+    fs.writeFileSync(path.join(pkgDir, "index.js"), code);
   };
 
   describe("4.1. Loading AgentRecord (ARUN-A1 to ARUN-A3)", () => {
@@ -385,6 +396,142 @@ describe("FsAgentRunner", () => {
         taskId: "task:123",
         input: { key: "value" },
       });
+    });
+  });
+
+  describe("4.12. Built-in Agent Resolution (ARUN-O1 to ARUN-O4)", () => {
+    it("[ARUN-O1] should accept an optional BuiltinAgentRegistry at construction", async () => {
+      // Optional like every other registry: without it, ONLY a `builtin:` entrypoint fails,
+      // and everything else keeps working. That degradation is the requirement, so it is
+      // asserted rather than assumed.
+      const entrypoint = writeAgentEntrypoint(
+        "plain.js",
+        "module.exports.runAgent = async () => ({ message: 'no registry needed' })"
+      );
+      writeAgentFile("plain", { engine: { type: "local", entrypoint } });
+
+      const runner = new FsAgentRunner({ gitgovPath, projectRoot: tempDir });
+      const response = await runner.runOnce({ agentId: "agent:plain", taskId: "task:1" });
+
+      expect(response.status).toBe("success");
+      expect(response.output?.message).toBe("no registry needed");
+    });
+
+    it("[ARUN-O2] should invoke the registered builtin with the execution context and no dynamic import", async () => {
+      let receivedCtx: AgentExecutionContext | undefined;
+      const registry = new Map<string, AgentExecutor>([
+        ["demo", async (ctx) => {
+          receivedCtx = ctx;
+          return { message: "from builtin" };
+        }],
+      ]);
+      writeAgentFile("demo", { engine: { type: "local", entrypoint: "builtin:demo" } });
+
+      const runner = new FsAgentRunner({ gitgovPath, projectRoot: tempDir, builtinAgents: registry });
+      const response = await runner.runOnce({ agentId: "agent:demo", taskId: "task:7" });
+
+      expect(response.status).toBe("success");
+      expect(response.output?.message).toBe("from builtin");
+      // Same invocation contract as an imported entrypoint (ARUN-B7): the context, and only
+      // the context. Nothing was written to disk for this agent, so no import could have
+      // produced the output.
+      expect(receivedCtx?.agentId).toBe("agent:demo");
+      expect(receivedCtx?.taskId).toBe("task:7");
+      expect(receivedCtx?.projectRoot).toBe(tempDir);
+    });
+
+    it("[ARUN-O2] should ignore engine.function for a builtin entrypoint", async () => {
+      // The registry maps a name to a function, so there is no module from which to select
+      // an export. A `function` that named something absent would fail if it were honoured.
+      const registry = new Map<string, AgentExecutor>([
+        ["demo", async () => ({ message: "invoked anyway" })],
+      ]);
+      writeAgentFile("demo-fn", {
+        engine: { type: "local", entrypoint: "builtin:demo", function: "thisExportDoesNotExist" },
+      });
+
+      const runner = new FsAgentRunner({ gitgovPath, projectRoot: tempDir, builtinAgents: registry });
+      const response = await runner.runOnce({ agentId: "agent:demo-fn", taskId: "task:1" });
+
+      expect(response.status).toBe("success");
+      expect(response.output?.message).toBe("invoked anyway");
+    });
+
+    it("[ARUN-O3] should throw BuiltinAgentNotRegistered when the name is absent from the registry", async () => {
+      // Surfaces the way every other resolution failure does — captured by runOnce as
+      // status "error" (ARUN-H2) — but with its own named cause, so the message tells the
+      // user the host did not ship the agent rather than that a module was not found.
+      writeAgentFile("missing", { engine: { type: "local", entrypoint: "builtin:missing" } });
+
+      const withEmptyRegistry = new FsAgentRunner({
+        gitgovPath,
+        projectRoot: tempDir,
+        builtinAgents: new Map<string, AgentExecutor>(),
+      });
+      const withNoRegistry = new FsAgentRunner({ gitgovPath, projectRoot: tempDir });
+
+      for (const runner of [withEmptyRegistry, withNoRegistry]) {
+        const response = await runner.runOnce({ agentId: "agent:missing", taskId: "task:1" });
+        expect(response.status).toBe("error");
+        expect(response.error).toContain("BuiltinAgentNotRegistered");
+        expect(response.error).toContain("missing");
+      }
+    });
+
+    it("[ARUN-O4] should derive its anchors inside the resolver without a caller-supplied root", async () => {
+      // The backend used to pick the root at the call site: ctx.projectRoot for packages,
+      // this.projectRoot for paths. Both held the same value, so the choice never changed an
+      // outcome — but while it lived there, two callers could choose differently and ARUN-M2
+      // would stop predicting execution with every test still green.
+      //
+      // Asserted behaviourally: the root that resolution uses is the one the backend was
+      // built with, for BOTH shapes, and a different root reaching it by any other path
+      // would make one of these fail.
+      const entrypoint = writeAgentEntrypoint(
+        "anchored.js",
+        "module.exports.runAgent = async () => ({ message: 'anchored at construction' })"
+      );
+      writeAgentFile("anchored", { engine: { type: "local", entrypoint } });
+
+      const runner = new FsAgentRunner({ gitgovPath, projectRoot: tempDir });
+      const response = await runner.runOnce({ agentId: "agent:anchored", taskId: "task:1" });
+
+      expect(response.output?.message).toBe("anchored at construction");
+      // Anti-vacuity: the resolver takes exactly two arguments now — the entrypoint and one
+      // anchors object. A third parameter would mean a caller can still hand it a root.
+      expect(resolveLocalEntrypoint).toHaveLength(2);
+    });
+
+    it("[ARUN-B1] should prefer the builtin registry over an installed package of the same name", async () => {
+      // Precedence is EXCLUSIVE, not a fallback chain. A `builtin:` never reaches the
+      // filesystem, so a package of the same name installed in the repository cannot shadow
+      // the agent the host shipped — and a `builtin:` that is NOT registered fails instead
+      // of silently running that package, which would execute different code than the record
+      // declares without anybody noticing.
+      installPackageInRepo("shadow", "module.exports.runAgent = async () => ({ message: 'from package' })");
+
+      const registry = new Map<string, AgentExecutor>([
+        ["shadow", async () => ({ message: "from builtin" })],
+      ]);
+      writeAgentFile("shadow", { engine: { type: "local", entrypoint: "builtin:shadow" } });
+      writeAgentFile("shadow-absent", { engine: { type: "local", entrypoint: "builtin:absent" } });
+
+      const runner = new FsAgentRunner({ gitgovPath, projectRoot: tempDir, builtinAgents: registry });
+
+      const preferred = await runner.runOnce({ agentId: "agent:shadow", taskId: "task:1" });
+      expect(preferred.output?.message).toBe("from builtin");
+
+      // Control: the package IS resolvable, so "from builtin" above was a choice, not the
+      // only option available.
+      writeAgentFile("shadow-pkg", { engine: { type: "local", entrypoint: "shadow" } });
+      const viaPackage = await runner.runOnce({ agentId: "agent:shadow-pkg", taskId: "task:1" });
+      expect(viaPackage.output?.message).toBe("from package");
+
+      // And no fallback: an unregistered builtin fails rather than retrying as a package.
+      installPackageInRepo("absent", "module.exports.runAgent = async () => ({ message: 'fallback' })");
+      const noFallback = await runner.runOnce({ agentId: "agent:shadow-absent", taskId: "task:1" });
+      expect(noFallback.status).toBe("error");
+      expect(noFallback.error).toContain("BuiltinAgentNotRegistered");
     });
   });
 

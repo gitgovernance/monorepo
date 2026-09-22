@@ -68,7 +68,8 @@ export class FsAgentRunner implements IAgentRunner {
     this.runtimeHandlers = deps.runtimeHandlers ?? undefined;
 
     // Initialize all engine backends
-    this.localBackend = new LocalBackend(this.projectRoot, this.runtimeHandlers);
+    // [ARUN-O1] The registry travels to the backend that resolves entrypoints.
+    this.localBackend = new LocalBackend(this.projectRoot, this.runtimeHandlers, deps.builtinAgents);
     this.apiBackend = new ApiBackend(this.keyProvider);
     this.mcpBackend = new McpBackend(this.keyProvider);
     this.customBackend = new CustomBackend(this.protocolHandlers);
