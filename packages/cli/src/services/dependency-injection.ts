@@ -7,7 +7,7 @@ import type {
   GitGovTaskRecord, GitGovCycleRecord, GitGovFeedbackRecord, GitGovExecutionRecord, GitGovActorRecord, GitGovAgentRecord,
   ActorRecord,
   // Module types
-  IRecordProjector, IRecordMetrics, IAgentRunner, IKeyProvider,
+  IRecordProjector, IRecordMetrics, IAgentRunner, IKeyProvider, BuiltinAgentRegistry,
   ISyncStateModule,
   ProjectModuleDeps,
   // Lint types
@@ -15,6 +15,7 @@ import type {
   RecordStore,
 } from '@gitgov/core';
 import { spawn } from 'child_process';
+import { createBuiltinAgentRegistry } from './builtin-agents';
 
 /**
  * Dependency Injection Service for GitGovernance CLI
@@ -30,6 +31,7 @@ export class DependencyInjectionService {
   private syncModule: ISyncStateModule | null = null;
   private sourceAuditorModule: SourceAuditor.SourceAuditorModule | null = null;
   private agentRunnerModule: IAgentRunner | null = null;
+  private builtinAgents: BuiltinAgentRegistry | null = null;
   private auditOrchestrator: ReturnType<typeof AuditOrchestrator.createAuditOrchestrator> | null = null;
   private configManager: InstanceType<typeof Config.ConfigManager> | null = null;
   private sessionManager: InstanceType<typeof Session.SessionManager> | null = null;
@@ -469,6 +471,24 @@ export class DependencyInjectionService {
     return new FsProjectInitializer(this.projectRoot, await this.getRepoRoot());
   }
 
+  /**
+   * [EARS-C18] The registry of agents that ship inside this CLI's bundle.
+   *
+   * Cached like every other dependency (EARS-C8), and for a reason beyond cost: the runner
+   * and the engine validator must receive the SAME INSTANCE. Two registries with equal
+   * contents satisfy the equivalence test (ARUN-O5) and still let ARUN-M2 stop predicting
+   * execution in production — the validator calling an agent resolvable that the runner
+   * cannot resolve, or the reverse. This service is the only component that builds both
+   * sides, so it is the only one that can break the property, and the only one that can
+   * guarantee it.
+   */
+  private getBuiltinAgents(): BuiltinAgentRegistry {
+    if (!this.builtinAgents) {
+      this.builtinAgents = createBuiltinAgentRegistry();
+    }
+    return this.builtinAgents;
+  }
+
   async getProjectModule(): Promise<ProjectModule> {
     await this.initializeStores();
     if (!this.projectRoot) {
@@ -499,7 +519,8 @@ export class DependencyInjectionService {
       // `require.resolve` would find nothing there. This service is the only component that
       // holds both roots, which is why the binding happens here and not in ProjectModule
       // (PROJ-B7). Same rule as EARS-C12 for the AgentRunner.
-      engineValidator: new FsEngineValidator(this.repoRoot ?? this.projectRoot),
+      // [EARS-C18] Same registry INSTANCE as the runner — see getBuiltinAgents().
+      engineValidator: new FsEngineValidator(this.repoRoot ?? this.projectRoot, this.getBuiltinAgents()),
     };
     if (agentAdapter) deps.agentAdapter = agentAdapter;
     return new ProjectModule(deps);
@@ -792,7 +813,9 @@ export class DependencyInjectionService {
       this.agentRunnerModule = createAgentRunner({
         gitgovPath: path.join(this.projectRoot, '.gitgov'),
         projectRoot: this.repoRoot ?? this.projectRoot,
-        eventBus
+        eventBus,
+        // [EARS-C18] The same instance the engine validator gets.
+        builtinAgents: this.getBuiltinAgents()
       });
 
       return this.agentRunnerModule;

@@ -5,6 +5,7 @@
   "license": "UNLICENSED",
   "type": "module",
   "main": "dist/index.mjs",
+  "types": "dist/index.d.ts",
   "files": [
     "dist",
     "README.md"
@@ -18,7 +19,7 @@
     "directory": "packages/agents/security-audit"
   },
   "scripts": {
-    "build": "esbuild src/index.ts --bundle --platform=node --format=esm --target=node20 --outfile=dist/index.mjs --external:@gitgov/core",
+    "build": "esbuild src/index.ts --bundle --platform=node --format=esm --target=node20 --outfile=dist/index.mjs --external:@gitgov/core && tsc -p tsconfig.build.json",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
     "test": "jest"

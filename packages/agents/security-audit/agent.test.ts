@@ -37,7 +37,7 @@ function makeAuditResult(
     scannedLines: 500,
     duration: 42,
     detectors: ['regex' as const],
-    waivers: { acknowledged: 0, new: 0, unmatched: 0 },
+    waivers: { acknowledged: 0, new: 0, unmatched: 0, outdated: 0 },
     ...overrides,
   };
 }

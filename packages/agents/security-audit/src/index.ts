@@ -3,13 +3,11 @@ import {
   FindingDetector,
   Sarif,
 } from '@gitgov/core';
-import type { Runner } from '@gitgov/core';
+import type { AgentExecutionContext } from '@gitgov/core';
 import { FsFileLister } from '@gitgov/core/fs';
 import type { SecurityAuditInput } from './types';
 import { SecurityAuditAgent } from './agent';
 import { buildConfig } from './config';
-
-type AgentExecutionContext = Runner.AgentExecutionContext;
 
 /**
  * Entry point del agente, invocado por AgentRunner.

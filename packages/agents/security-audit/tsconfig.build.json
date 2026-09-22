@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "declarationDir": "dist",
+    "emitDeclarationOnly": true,
+    "sourceMap": false,
+    // No `paths` override to the core SOURCE here on purpose: the declarations this emits
+    // are what a CONSUMER compiles against, so they must be built the way a consumer
+    // resolves `@gitgov/core` — through node_modules, against the published types. With the
+    // source mapping inherited, tsc follows the import into core's tree and tries to emit
+    // declarations for files outside rootDir.
+    "paths": {}
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.test.ts", "dist"]
+}

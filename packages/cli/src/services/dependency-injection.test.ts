@@ -1052,6 +1052,47 @@ describe('DependencyInjectionService', () => {
       const deps = vi.mocked(ProjectModule).mock.calls[0]![0];
       expect(deps.initializer).toBe(vi.mocked(FsProjectInitializer).mock.results[0]!.value);
     });
+
+    it('[EARS-C18] should inject the same BuiltinAgentRegistry instance into the agent runner and the engine validator', async () => {
+      // ARUN-M2 exists to PREDICT execution. If the validator holds a registry that is merely
+      // EQUAL to the runner's, the equivalence test (ARUN-O5) still passes while the two can
+      // diverge in production — the validator calling an agent resolvable that the runner
+      // cannot resolve. Identity is the requirement, so identity is what is asserted.
+      const { FsEngineValidator, createAgentRunner } = corefs;
+      vi.mocked(FsEngineValidator).mockClear();
+      vi.mocked(createAgentRunner).mockClear();
+
+      await diService.getProjectModule();
+      await diService.getAuditOrchestrator();
+
+      // Anti-vacuity: with either side never constructed, the identity check below would
+      // compare two undefineds and pass.
+      expect(FsEngineValidator).toHaveBeenCalled();
+      expect(createAgentRunner).toHaveBeenCalled();
+
+      const validatorRegistry = vi.mocked(FsEngineValidator).mock.calls[0]![1];
+      const runnerRegistry = vi.mocked(createAgentRunner).mock.calls[0]![0]!.builtinAgents;
+
+      expect(validatorRegistry).toBeDefined();
+      expect(runnerRegistry).toBeDefined();
+      expect(validatorRegistry).toBe(runnerRegistry);
+    });
+
+    it('[EARS-C18] should register security-audit from the statically imported package', async () => {
+      // The agent is bundled by esbuild because it is not in the --external list, which is
+      // what lets `gitgov init` then `gitgov audit` work in a repository that installed
+      // nothing. A registry that resolved by reading node_modules would defeat the point.
+      const { createAgentRunner } = corefs;
+      vi.mocked(createAgentRunner).mockClear();
+
+      await diService.getAuditOrchestrator();
+
+      const registry = vi.mocked(createAgentRunner).mock.calls[0]![0]!.builtinAgents;
+      expect(registry).toBeDefined();
+      expect(typeof registry!.get('security-audit')).toBe('function');
+      // Anti-vacuity: a registry that answered every name would satisfy the line above.
+      expect(registry!.get('an-agent-that-does-not-exist')).toBeUndefined();
+    });
   });
 
   // ============================================================================

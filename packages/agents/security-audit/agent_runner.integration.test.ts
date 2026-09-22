@@ -178,7 +178,7 @@ describe('security-audit integration', () => {
         scannedLines: 10,
         duration: 5,
         detectors: ['regex'],
-        waivers: { acknowledged: 0, new: 1, unmatched: 0 },
+        waivers: { acknowledged: 0, new: 1, unmatched: 0, outdated: 0 },
       });
 
       mockSarifBuild.mockResolvedValue({

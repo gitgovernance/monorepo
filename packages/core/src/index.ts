@@ -53,7 +53,20 @@ export type { IAgentAdapter } from "./adapters/agent_adapter/index";
 export type { ISyncStateModule, SyncStatePushResult, SyncStatePullResult, SyncStateResolveResult, AuditStateReport } from "./sync_state/index";
 
 // AgentRunner type exports
-export type { IAgentRunner, RunOptions, AgentResponse } from "./agent_runner/index";
+// The agent-facing contract, exported BY NAME and not only through the `Runner` namespace.
+// `export * as Runner` puts these behind a namespace that the emitted declarations expose as
+// a value, so an external consumer writing `Runner.AgentExecutionContext` as a type gets
+// TS2749 — measured 2026-09-23 while giving @gitgov/agent-security-audit its own .d.ts.
+// Every agent author needs these two to type an entrypoint, so they belong on the surface.
+export type {
+  IAgentRunner,
+  RunOptions,
+  AgentResponse,
+  BuiltinAgentRegistry,
+  AgentExecutor,
+  AgentExecutionContext,
+  AgentOutput,
+} from "./agent_runner/index";
 
 // KeyProvider type exports
 export type { KeyProvider as IKeyProvider } from "./key_provider/index";
@@ -169,8 +182,10 @@ export type { AuditOrchestrationOptions, AuditOrchestratorDeps } from "./audit_o
 export type { RegexRule } from "./finding_detector/index";
 export type { IWaiverReader } from "./source_auditor/index";
 
-// Sarif direct type exports
+// Sarif direct type exports — same reason as the agent contract above: reachable by name,
+// not only through the `Sarif` namespace.
 export type {
+  SarifBuilder,
   GetLineContentFn,
   SarifLog,
   SarifResult,
