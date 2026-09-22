@@ -34,7 +34,23 @@ export const DEFAULT_AGENTS: DefaultAgentConfig[] = [
     displayName: 'Security Audit',
     // [PROJ-F2] No `runtime`: LocalBackend runs it before the entrypoint, and no RuntimeHandler is
     // registered in production, so the agent never ran (0 findings on init → audit, 2026-09-13).
-    engine: { type: 'local', entrypoint: '@gitgov/agent-security-audit', function: 'runAgent' },
+    //
+    // [PROJ-F2] And a `builtin:` entrypoint, because removing the runtime exposed the next
+    // failure rather than fixing the feature: resolveLocalEntrypoint anchors require.resolve at
+    // the USER's repository (ARUN-B1), and nothing installs this package there. Measured
+    // 2026-09-22 with PROJ-F2 already on main: `agent:security-audit — @gitgov/agent-security-audit
+    // not found`, 0 agents run, exit 1. The agent now travels inside the CLI bundle and resolves
+    // against the registry the host injects (ARUN-O1), so `gitgov init` then `gitgov audit` works
+    // in a repository that installed nothing.
+    //
+    // No `function`: the registry maps a name straight to a function, so there is no module from
+    // which to select an export, and ARUN-O2 gives the field no effect on this form. Keeping it
+    // would leave a value nobody reads and nothing contradicts — the shape `runtime: 'typescript'`
+    // had for months. The package.json keeps its `gitgov.agent.function` for whoever installs it.
+    //
+    // Only this agent is built in (decision A25): review-advisor needs an LLM and semgrep needs an
+    // external binary, so both stay opt-in and keep resolving by package name.
+    engine: { type: 'local', entrypoint: 'builtin:security-audit' },
     purpose: 'audit',
     triggers: [],
     metadata: { target: 'code', outputFormat: 'sarif' },
