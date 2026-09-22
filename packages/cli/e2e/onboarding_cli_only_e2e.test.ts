@@ -234,13 +234,15 @@ describe('Phase E — CLI-only Owner + Collaborator (OB-E1 to OB-E6)', () => {
     return env;
   };
 
-  it('[OB-E7] owner init then audit finds a hardcoded secret when the audit agent resolves', () => {
+  it('[OB-E7] owner init then audit finds a hardcoded secret with no agent installed in the repo', () => {
     const repo = initRepoWithSecret('secret-repo-installed');
-    // The default specialists do not ship with the CLI yet (agent_platform Task 1.2), so the agent
-    // is installed into the repo the way a user would today: resolvable from its node_modules.
-    const agentDir = path.resolve(__dirname, '..', '..', 'agents', 'security-audit');
-    fs.mkdirSync(path.join(repo, 'node_modules', '@gitgov'), { recursive: true });
-    fs.symlinkSync(agentDir, path.join(repo, 'node_modules', '@gitgov', 'agent-security-audit'), 'dir');
+    // NOTHING is installed here, and that is the assertion. Until 2026-09-23 this test
+    // symlinked the agent into the repo's node_modules, because the default specialists did
+    // not travel with the CLI — so the green measured a repo that had installed the agent,
+    // which is not what a user gets. With `builtin:security-audit` the agent ships inside the
+    // bundle (ARUN-O1, PROJ-F2), so the precondition is gone and the promise is unconditional:
+    // install the CLI, init, audit, findings.
+    expect(fs.existsSync(path.join(repo, 'node_modules', '@gitgov', 'agent-security-audit'))).toBe(false);
 
     // Policy fails the audit when it finds the secret, so the command exits non-zero
     const result = runCliCommand(['audit', '--scope', 'full', '--output', 'json'], { cwd: repo, expectError: true, env: repoOnlyEnv() });
@@ -249,5 +251,37 @@ describe('Phase E — CLI-only Owner + Collaborator (OB-E1 to OB-E6)', () => {
     const securityAudit = audit.agentResults.find((r: { agentId: string }) => r.agentId === 'agent:security-audit');
     expect(securityAudit?.status).toBe('success');
     expect(audit.findings.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('[OB-E8] owner init then audit reports the agent error instead of a clean success when it does not resolve', () => {
+    // The other half of E7, and it survives the built-in change with its subject corrected:
+    // "the default agent does not resolve" stopped being reachable for security-audit, but an
+    // agent that does NOT ship with the CLI still is — review-advisor, opt-in by decision A25
+    // because it needs an LLM.
+    //
+    // The requirement is that a non-resolving agent SAYS it failed, rather than reporting an
+    // empty success. That was the second of the two defects behind `0 findings on a live
+    // secret`: the orchestrator read a runner response of status "error" as success, fixed by
+    // AORCH-B5 in #171. The spec carried this EARS at red since 2026-09-14 waiting for that
+    // merge, and the test was never reincorporated after it landed on 2026-09-15.
+    const repo = initRepoWithSecret('secret-repo-not-installed');
+    expect(fs.existsSync(path.join(repo, 'node_modules', '@gitgov', 'agent-review-advisor'))).toBe(false);
+
+    const result = runCliCommand(['audit', '--scope', 'full', '--output', 'json'], { cwd: repo, expectError: true, env: repoOnlyEnv() });
+    const audit = parseAudit(result.output);
+
+    // Review agents report in `reviewResults`, not `agentResults` — measured on the real
+    // output, where the two lists are separate keys. The distinction is not cosmetic: it is
+    // why a review agent failing does not change the exit code (A15 / AORCH-F4).
+    const reviewAdvisor = audit.reviewResults.find((r: { agentId: string }) => r.agentId === 'agent:review-advisor');
+    expect(reviewAdvisor).toBeDefined(); // anti-vacuity: no result means nothing was asserted
+    expect(reviewAdvisor?.status).toBe('error');
+    expect(reviewAdvisor?.errorMessage).toContain('agent-review-advisor');
+
+    // And the built-in one still runs in the same command: a review agent failing to resolve
+    // does not take the audit down with it (A15 / AORCH-F4 keep review agents out of the exit
+    // code). Without this line the test would also pass on a CLI where nothing runs at all.
+    const securityAudit = audit.agentResults.find((r: { agentId: string }) => r.agentId === 'agent:security-audit');
+    expect(securityAudit?.status).toBe('success');
   });
 });
