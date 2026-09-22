@@ -1,3 +1,191 @@
+## [6.0.0](https://github.com/gitgovernance/monorepo/compare/core-v5.0.0...core-v6.0.0) (2026-09-22)
+
+
+### ⚠ BREAKING CHANGES
+
+* **core,cli:** fingerprint values carry a scheme prefix; AuditSummary
+gains outdatedWaivers; WaiverApplicationCounts gains outdated; a run with
+a failed audit agent exits 1; HEURISTIC_PATTERNS is no longer exported.
+* **core:** AuditSummary.unmatchedWaivers is number | null;
+HEURISTIC_PATTERNS values are { source, flags }; fingerprints computed
+by earlier builds of this branch differ (no release carried them).
+* **core:** Finding.snippetHash is NOT NULL in the audit schema; identity and rule tables exported at the root
+* **core:** one entry point for the redaction policy, isScanScope, REDACTED_SNIPPET
+* **core:** the redactor transports snippetHash, omits fixes and classifies every built-in category
+* **core:** source_auditor drops ScoringEngine and carries a marker for every live EARS
+* **core:** one domain each for scan scope, severity counts and built-in categories (AUDIT-J4, J5, M1, B4)
+* **core:** `SourceAuditor.AuditSummary` is now `SourceAuditor.SourceAuditSummary`.
+`audit/types.ts` already exported a different `AuditSummary` — the orchestrator's, whose
+`total` counts findings including the waived ones, while this one counts post-waiver. Two
+sibling modules of one package exported the same name with opposite semantics on a shared
+field. The compiler shows the two are not unifiable: neither is assignable to the other and
+the only shared key is `total`. audit_record_types designates audit/types.ts as canonical,
+so this is the side that renames. Radius measured with the real grep: 12 files, all in the
+monorepo, none in saas-api.
+
+EARS-B3 asked for a warning on an unreadable file and the catch was silent. The test could
+not see it: it deleted the file before audit(), so scope selection never listed it and the
+catch was never entered — it passed because one file existed, not because one failed. The
+read now fails after selection, both files are asserted in scope first, and the warning is
+asserted by content. The waiver-loading catch, equally silent, now warns too: continuing
+without waivers makes every waived finding reappear as new. Mutation: a rethrowing catch
+turns both new tests red where the old one stayed green.
+
+EARS-E4 was green with a test that measured nothing, and the requirement was not
+implemented. createBatches produced slices that a sequential await loop walked one at a time
+— iterating [[a,b],[c,d]] and [a,b,c,d] is the same execution — and audit() had already
+loaded every file before any of it ran. The fixture used 152 files against a 1000 threshold,
+so it produced one batch and asserted `scannedFiles`, which is unrelated. audit() now reads
+and detects in batches of BATCH_SIZE with each batch going out of scope before the next, and
+finishAudit() carries the shared tail so the waiver counters and the summary stay in one
+place. The inert inner batching is removed. The EARS is amended to the clause that makes it
+verifiable: detection of the first batch happens before the last read. Measured on the old
+pipeline, firstDetect was 252 of 252 reads. Mutation with batch = filePaths.length: one red.
+
+tsc 0 in core, both agents and the CLI. source_auditor 48/48, core 3131/3131.
+* **core:** WaiverApplicationCounts gains a required `unmatched` field. It is public
+API through the SourceAuditor namespace of the main barrel, so anyone constructing an
+AuditResult has to supply it.
+
+After the identity cut (AUDIT-K1..K6) every waiver in .gitgov/feedbacks/ written with the
+old value stops matching at once. The SaaS re-keys them with the AP-K2 backfill; the CLI
+without SaaS has no backfill, so those waivers silently apply to nothing. The two counts
+that existed cannot report it: a run with a stale waiver and a run with no waivers at all
+agree on both `acknowledged` and `new`. Only the new counter separates them, and that is
+what its negative control asserts.
+
+createEmptyResult reports `unmatched: 0` deliberately, and the asymmetry with AORCH-B15 is
+declared in the code and in the spec. Nothing was scanned there, so no waiver was tested
+against anything, which is a different fact from "the scan ran and no waiver matched".
+AORCH-B15's early return does count them because its trigger is a misconfiguration, while a
+scope selecting no files is ordinary in incremental mode. Counting them here would also give
+two answers for one situation, since audit() reaches that return before loading waivers at
+all while auditContents() receives them in its input.
+
+The radius was measured by adding the type before the code: exactly two tsc errors, at
+source_auditor.ts:87 and :250. The second is inside createEmptyResult, where the object is
+a literal and a grep for acknowledgedCount does not find it.
+
+Verified by mutation that the tests discriminate rather than merely pass. The first run
+exposed a defect in the test, not the code: with one matching waiver and one stale one,
+counting the waivers that matched and counting those that did not return the same number, so
+an inverted predicate kept it green. Rewritten asymmetric, one matching and two stale. Both
+mutations now turn two red.
+
+tsc 0 in core, core 3128/3128, source_auditor 46/46. Triad verified with the sweep scoped to
+the module directory: [EARS-C6] also exists in ten files of core outside source_auditor, so
+a repo-wide grep reports code present over someone else's code.
+* **core:** AuditSummary gains a required `unmatchedWaivers`. Three sites build one —
+the orchestrator twice and createScan — so requiring it costs three lines and buys a number
+that cannot be silently omitted.
+
+AORCH-B6: consolidation keys on fingerprints["gitgov/v2"], compared by equality, and rebuilds
+each Finding with rehydrateFinding. Reading partialFingerprints here was the defect: that key
+is GitHub's line hash, it carries neither file nor category, and it quietly replaced whatever
+the detector had computed. With the new key, regex and semgrep matching the same token under
+different rules produce ONE finding with both agents in reportedBy — no rule mapping needed,
+because ruleId never enters the identity.
+
+AORCH-B12: a result without the key — an external tool, or a SARIF written before the cut —
+gets its identity from computeFingerprint, the same function the detectors use.
+buildFallbackFingerprint is deleted: `fallback:{ruleId}:{file}:{line}` changed the moment
+anyone inserted a line above the finding, so the same finding became a new one between runs.
+A result with neither key nor snippet is skipped rather than given a fabricated identity.
+
+AORCH-B14: two results sharing the key but declaring different categories are not merged. The
+first wins, the second is rejected with a warning naming both categories and the fingerprint.
+With category inside the preimage this is only reachable from a malformed SARIF, and the point
+is that the consolidated finding must not go quiet wearing whichever category arrived first.
+
+AORCH-B15: summary.unmatchedWaivers counts active waivers that matched no consolidated
+finding, and the CLI prints the line only when that count is above zero. After the identity
+cut every waiver written with the old fingerprint stops matching at once, and the user's only
+other signal is "0 waived" — which reads exactly like having had no waivers at all.
+
+Five test fixtures still built their SARIF with the old key. One had no snippet, so B12 now
+skips its result and the test went red — correctly. The other four kept passing for the wrong
+reason: they fell through to B12's fallback instead of transporting an identity. All five
+moved to the new key; the helper keeps the old one behind a `legacyKeyOnly` flag, which is
+what exercises the fallback path deliberately.
+
+core 3125/3125, cli 622/622, tsc clean in core, cli and both agents.
+* **core:** createFinding no longer accepts `fingerprint`. Producers pass `anchor` —
+the text they matched — and the factory derives the identity. Consumers rebuilding a
+transported Finding use the new rehydrateFinding, which keeps the value byte for byte.
+
+Until now six places computed a finding's identity their own way: three copies of
+generateFingerprint in the detectors, two of buildFallbackFingerprint in the consumers, and
+the SARIF line hash that silently overwrote all of them in transport. The value that
+actually reached the database was sha256(normalized line)[0:16]:occurrence, carrying
+neither file nor category — so the same line in two files was one finding, one waiver
+silenced both, and a reformat that split the line lost the identity altogether.
+
+  fingerprint = sha256("gitgov-fp/2|" + file + "|" + category + "|" + normalizeAnchor(anchor))
+
+AUDIT-K1 to K6 in core/src/audit/fingerprint.ts and types.ts. The scheme tag is hashed
+inside the preimage rather than stored in a column, so identities of different natures
+coexist without runtime branching and a formula change recomputes everything once.
+normalizeAnchor trims and collapses whitespace, and deliberately does not lowercase or
+strip comments: case is semantic in a secret and comment syntax is language-dependent.
+
+EARS-16, 31, 32 and 33 in finding_detector: the three generateFingerprint copies are gone,
+regex and heuristic detectors pass match[0], the LLM detector passes its snippet, and the
+semgrep agent stops emitting an empty fingerprint. HEURISTIC_PATTERNS is exported indexed
+by ruleId because the backfill has to re-run the detector's own rule to derive the anchor
+of a stored finding.
+
+AUDIT-J1 to J3 close as well. They were red in the spec since s78b-37 with a note saying
+the code did not exist; measured at the start of this pass, both the code and the tests
+were there and passing. Only the spec vertex was missing.
+
+audit_orchestrator and policy_evaluator switch to rehydrateFinding. That is mechanical
+adaptation, not their pass: AORCH-B6/B12/B14 and PEVAL-F6 stay open, and the code says so.
+
+Every EARS carries an observed red and a measured negative control. The controls reproduce
+the defects the block closes — dropping `file` from the preimage collapses two files,
+dropping `category` collapses a secret and a PII hit on the same text. Verified by mutation
+that the tests discriminate rather than merely pass: removing `file` turns two red, adding
+toLowerCase to normalizeAnchor turns one red.
+
+tsc clean in core, agents and cli. core 3121/3121, semgrep 27/27.
+
+### ✨ Features
+
+* **cli,core:** exit 1 when no agent completed (AORCH-C9) and name a missing runtime in the load warning (AORCH-G1) ([51d8618](https://github.com/gitgovernance/monorepo/commit/51d8618ebc12c9c669dfd3dc3161147fcb778af2))
+* **core,cli:** versioned fingerprints, one finding per distinct occurrence, and a failed audit agent fails the step ([3746579](https://github.com/gitgovernance/monorepo/commit/37465796ec52fc38efdfc0a508b753c8fe3bcadb))
+* **core:** countUnmatchedWaivers defined once (AUDIT-L1), B12 warns on discard, B6 gains its negative control ([6abf11b](https://github.com/gitgovernance/monorepo/commit/6abf11b18fce78aac94fd419617076301ca4ddcd))
+* **core:** Finding.snippetHash is NOT NULL in the audit schema; identity and rule tables exported at the root ([901e9d9](https://github.com/gitgovernance/monorepo/commit/901e9d9c7f8c2526f2090480de5b7b6e11dccf6c))
+* **core:** one domain each for scan scope, severity counts and built-in categories (AUDIT-J4, J5, M1, B4) ([aa8ec1f](https://github.com/gitgovernance/monorepo/commit/aa8ec1f299c1930f86faaec8a589cc8d6cfe9dfe)), closes [#4](https://github.com/gitgovernance/monorepo/issues/4) [#7](https://github.com/gitgovernance/monorepo/issues/7) [#12](https://github.com/gitgovernance/monorepo/issues/12) [#15](https://github.com/gitgovernance/monorepo/issues/15) [#18](https://github.com/gitgovernance/monorepo/issues/18) [#20](https://github.com/gitgovernance/monorepo/issues/20)
+* **core:** one SARIF rehydrator, no collapsed identities, and failed agents reported as failed ([1446e72](https://github.com/gitgovernance/monorepo/commit/1446e7273ba88a7ded10ed69c94e48c1298e7020))
+* **core:** policy_evaluator rehydrates from the transported identity (PEVAL-F6) ([dc018fd](https://github.com/gitgovernance/monorepo/commit/dc018fdba9e019280cd56fa24234e763049b37e2))
+* **core:** sarif_module closes SARIF-N1/N2 and F1..F5, specifies redaction on request as O1..O4 ([2b3e14c](https://github.com/gitgovernance/monorepo/commit/2b3e14cad617025cb171d0d11ab83efd57db2fda))
+* **core:** SarifBuilder transports the finding identity in fingerprints["gitgov/v2"] (SARIF-N1/N2) ([6e8a3f1](https://github.com/gitgovernance/monorepo/commit/6e8a3f1b28402c60013f14cf576d9b6aaf3d2c33)), closes [#19](https://github.com/gitgovernance/monorepo/issues/19)
+* **core:** source_auditor renames its summary, warns on unreadable files and batches reads (EARS-B3, EARS-E4) ([4c0a439](https://github.com/gitgovernance/monorepo/commit/4c0a4393205672c78f148d10e070f01d7df0200f))
+* **core:** source_auditor reports the active waivers that matched no finding (EARS-C6) ([bce70b9](https://github.com/gitgovernance/monorepo/commit/bce70b90d904b256b48f571f4c18335a37aa32f7))
+* **core:** the finding's identity is computed once, by createFinding, and never recomputed ([c137b0b](https://github.com/gitgovernance/monorepo/commit/c137b0be1ef830637a5d26a9f162d42d3c20763e))
+* **core:** the orchestrator consolidates by the transported identity and reports unmatched waivers ([cdda5c9](https://github.com/gitgovernance/monorepo/commit/cdda5c9657790369a6452cbfd2d5a863983e7f23))
+* **core:** the redactor transports snippetHash, omits fixes and classifies every built-in category ([752e5df](https://github.com/gitgovernance/monorepo/commit/752e5df76075c02545d235710dcaa4282f346f24))
+
+
+### 🐛 Bug Fixes
+
+* **agents:** semgrep agent types its input as the raw semgrep SARIF, not the GitGov SarifLog ([ce3a626](https://github.com/gitgovernance/monorepo/commit/ce3a626e94e542f7de8161b08a0292bd721af69a))
+* **core:** a private key block never runs past the next key's header (EARS-35) ([fecbb3a](https://github.com/gitgovernance/monorepo/commit/fecbb3a7fe241f8846cdc33276972b7e429fd6b5))
+
+
+### ♻️ Refactoring
+
+* **core:** comments keep the reason and drop dates, audits and decisions ([487fe39](https://github.com/gitgovernance/monorepo/commit/487fe396e3ae08a20c7db5e85942d6df9de4f5da))
+* **core:** one entry point for the redaction policy, isScanScope, REDACTED_SNIPPET ([e768e24](https://github.com/gitgovernance/monorepo/commit/e768e24056942834f662c228b7b45c2ba6a3ee08))
+* **core:** redaction declares RedactableInput as Finding and pins the fixes guard ([44cec7d](https://github.com/gitgovernance/monorepo/commit/44cec7d9c79de36bf679d6f4a3ae8c9480b7e7b9))
+* **core:** source_auditor drops ScoringEngine and carries a marker for every live EARS ([59c29df](https://github.com/gitgovernance/monorepo/commit/59c29df3d1b91fdf5790309a14288034af3592a8)), closes [#13](https://github.com/gitgovernance/monorepo/issues/13) [#14](https://github.com/gitgovernance/monorepo/issues/14)
+* **core:** source_auditor imports Finding and DetectorName from the canonical audit/types ([66177c7](https://github.com/gitgovernance/monorepo/commit/66177c742f097635be8c593bea68ed3dbc13c5aa)), closes [#17](https://github.com/gitgovernance/monorepo/issues/17)
+
+
+### 📝 Documentation
+
+* **core:** AuditSummary.agentsRun counts successful agents, not executions ([e22ff70](https://github.com/gitgovernance/monorepo/commit/e22ff70f87e7150b7abc9e769ac3e774d84e49a4))
+
 ## [5.0.0](https://github.com/gitgovernance/monorepo/compare/core-v4.0.0...core-v5.0.0) (2026-09-15)
 
 
