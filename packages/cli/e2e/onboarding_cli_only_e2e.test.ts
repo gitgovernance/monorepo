@@ -1,7 +1,7 @@
 /**
- * onboarding_cli_only_e2e.test.ts — Phase E (EARS OB-E1 to OB-E6)
+ * onboarding_cli_only_e2e.test.ts — Phase E (EARS OB-E1 to OB-E9)
  *
- * Spec: e2e-private/specs/onboarding_flow.md §3.4, §4.4
+ * Spec: e2e-private/specs/onboarding_cli_only_flow.md §3.1
  *
  * Escenario 1: CLI puro sin SaaS. Owner y collaborator trabajan solo con el CLI.
  * No requiere servicios, no requiere SaaS, no requiere Playwright.
@@ -9,7 +9,7 @@
  *
  * Keys: per-repo en {worktree}/.gitgov/keys/ (aislamiento criptografico).
  */
-import { execSync } from 'child_process';
+import { execSync, spawnSync } from 'child_process';
 import { createHash } from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -48,7 +48,7 @@ const cleanupWorktree = (repoPath: string, wtPath: string) => {
   if (fs.existsSync(wtPath)) fs.rmSync(wtPath, { recursive: true, force: true });
 };
 
-describe('Phase E — CLI-only Owner + Collaborator (OB-E1 to OB-E6)', () => {
+describe('Phase E — CLI-only Owner + Collaborator (OB-E1 to OB-E9)', () => {
   let tempDir: string;
   let ownerRepoPath: string;
   let remotePath: string;
@@ -283,5 +283,42 @@ describe('Phase E — CLI-only Owner + Collaborator (OB-E1 to OB-E6)', () => {
     // code). Without this line the test would also pass on a CLI where nothing runs at all.
     const securityAudit = audit.agentResults.find((r: { agentId: string }) => r.agentId === 'agent:security-audit');
     expect(securityAudit?.status).toBe('success');
+  });
+
+  it('[OB-E9] owner init does not report the built-in audit agent as not runnable', () => {
+    // [OB-E9] The init's engine validation (PROJ-B6) does not gate registration: it only warns. Two
+    // mutations of the validator — a wrong root, an empty registry — left this file 8/8 and OB 15/15,
+    // because nothing read that warning. This is the e2e that can fall by it.
+    //
+    // Three conditions, all measured, or the assertion is vacuous: the warning goes to STDERR only
+    // (console.warn); --quiet suppresses it entirely; and runCliCommand returns stdout alone when the
+    // command exits 0. So this test runs its own init, without --quiet, and captures stderr itself.
+    const repo = path.join(tempDir, 'init-warning-repo');
+    fs.mkdirSync(repo, { recursive: true });
+    execSync('git init --initial-branch=main', { cwd: repo, stdio: 'pipe' });
+    execSync('git config user.name "Owner"', { cwd: repo, stdio: 'pipe' });
+    execSync('git config user.email "owner@test.com"', { cwd: repo, stdio: 'pipe' });
+    fs.writeFileSync(path.join(repo, 'README.md'), '# init warning\n');
+    execSync('git add -A && git commit -m "initial"', { cwd: repo, stdio: 'pipe' });
+    worktreesToClean.push({ repo, wt: getWorktreeBasePath(repo) });
+
+    const cliPath = path.resolve(__dirname, '../build/dist/gitgov.mjs');
+    const init = spawnSync(process.execPath, [cliPath, 'init', '--name', 'E2E init warning', '--login', 'owner'], {
+      cwd: repo,
+      encoding: 'utf8',
+      env: repoOnlyEnv(),
+      timeout: 30000,
+    });
+    const stderr = init.stderr ?? '';
+    expect(init.status, `init failed:\n${stderr}\n${init.stdout}`).toBe(0);
+
+    const lines = stderr.split('\n');
+    const notRunnable = (agentId: string) => lines.some((l) => l.includes(agentId) && l.includes('not runnable'));
+
+    // Anti-vacuity: review-advisor is opt-in by A25 and never resolves in a clean repo, so its line
+    // must be here. Without it, this test is not reading the output it thinks it reads. NODE_PATH is
+    // removed above because, inherited from pnpm, it finds the package in the workspace.
+    expect(notRunnable('agent:review-advisor'), `expected a review-advisor "not runnable" line on stderr:\n${stderr}`).toBe(true);
+    expect(notRunnable('agent:security-audit'), `security-audit reported not runnable on stderr:\n${stderr}`).toBe(false);
   });
 });
