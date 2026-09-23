@@ -489,6 +489,23 @@ export class DependencyInjectionService {
     return this.builtinAgents;
   }
 
+  /**
+   * [EARS-C18] The engine validator, built once with BOTH anchors: the repo root where
+   * node_modules lives (ARUN-M1) and the built-in registry the runner uses (ARUN-O1).
+   *
+   * It exists as a factory, rather than each caller constructing its own, because a second
+   * construction site is the defect itself and not merely a duplicate. Until 2026-09-23
+   * `agent-command.ts` built its own with `new FsEngineValidator(repoRoot)` — correct on
+   * the root, silent on the registry — so a `builtin:` entrypoint would have been declared
+   * unresolvable there while the runner executes it without trouble, inverting exactly what
+   * ARUN-M2 promises. Latent today, because `gitgov agent new` never produces a `builtin:`;
+   * the fix is removing the place where it can drift.
+   */
+  async getEngineValidator(): Promise<FsEngineValidator> {
+    await this.initializeStores();
+    return new FsEngineValidator(await this.getRepoRoot(), this.getBuiltinAgents());
+  }
+
   async getProjectModule(): Promise<ProjectModule> {
     await this.initializeStores();
     if (!this.projectRoot) {
@@ -519,8 +536,8 @@ export class DependencyInjectionService {
       // `require.resolve` would find nothing there. This service is the only component that
       // holds both roots, which is why the binding happens here and not in ProjectModule
       // (PROJ-B7). Same rule as EARS-C12 for the AgentRunner.
-      // [EARS-C18] Same registry INSTANCE as the runner — see getBuiltinAgents().
-      engineValidator: new FsEngineValidator(this.repoRoot ?? this.projectRoot, this.getBuiltinAgents()),
+      // [EARS-C18] The one factory, so there is no second place to drift from.
+      engineValidator: await this.getEngineValidator(),
     };
     if (agentAdapter) deps.agentAdapter = agentAdapter;
     return new ProjectModule(deps);

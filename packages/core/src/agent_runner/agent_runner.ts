@@ -75,10 +75,14 @@ export type RuntimeHandler = (
  * `require.resolve` and no filesystem — so it ships from the root entrypoint and does
  * not drag `node:path` or `node:module` into whatever bundle imports it.
  *
- * The shape deliberately matches `RuntimeHandlerRegistry`: a plain
- * `Map<string, AgentExecutor>` satisfies it structurally, which is exactly what the
- * SaaS scan orchestrator already builds by hand. Both hosts converge without either
- * one changing shape.
+ * A single `get` and nothing else, so a plain `Map<string, AgentExecutor>` satisfies it
+ * structurally — which is exactly what the SaaS scan orchestrator already builds by hand.
+ * Both hosts converge without either one changing shape.
+ *
+ * Deliberately NOT the shape of `RuntimeHandlerRegistry`, which also declares `register`:
+ * a Map has `set`, not `register`, so that interface is not Map-compatible. (`register` is
+ * dead on that type — nothing in the tree calls it on a RuntimeHandlerRegistry — but
+ * removing it is a nominal break of a root export and belongs to its own change.)
  */
 export interface BuiltinAgentRegistry {
   get(name: string): AgentExecutor | undefined;

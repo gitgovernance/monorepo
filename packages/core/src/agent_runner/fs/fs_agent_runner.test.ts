@@ -153,7 +153,10 @@ describe("FsAgentRunner", () => {
   });
 
   describe("4.2. LocalBackend - engine.type: \"local\" Execution (ARUN-B1 to ARUN-B7)", () => {
-    it("[ARUN-B1] should resolve absolute path for entrypoint", async () => {
+    it("[ARUN-B1] should resolve a relative path against projectRoot", async () => {
+      // Named "absolute path" until 2026-09-23, which is what hid the gap: two it() shared
+      // that name and both ran this branch, because writeAgentEntrypoint returns a relative
+      // path. The fourth form of ARUN-B1 is tested below, on a file outside projectRoot.
       const entrypoint = writeAgentEntrypoint(
         "src/agent.js",
         "module.exports.runAgent = async () => ({ message: 'from src' })"
@@ -176,28 +179,42 @@ describe("FsAgentRunner", () => {
       expect(response.output?.message).toBe("from src");
     });
 
-    it("[ARUN-B1] should resolve absolute path for entrypoint", async () => {
-      const absoluteEntrypoint = writeAgentEntrypoint(
-        "abs-agent.js",
-        "module.exports.runAgent = async () => ({ message: 'from absolute' })"
-      );
-      // Use absolute path directly (starts with /)
-      writeAgentFile("abs-test", {
-        engine: { type: "local", entrypoint: absoluteEntrypoint },
-      });
+    it("[ARUN-B1] should resolve an absolute path against no root at all", async () => {
+      // The third form of ARUN-B1, and until 2026-09-23 NOTHING tested it. There were two
+      // it() with the identical name "should resolve absolute path for entrypoint", and both
+      // exercised the RELATIVE branch, because `writeAgentEntrypoint` returns the relative
+      // path — the comment claiming "use absolute path directly (starts with /)" was false.
+      // Measured: `grep -nE 'entrypoint: ["\x27]/'` over all of packages/ returned 0, with 69
+      // occurrences of `entrypoint: "` as the positive control. The spec row was green.
+      //
+      // An absolute path must be used AS IS, so the discriminating setup is one that lives
+      // outside projectRoot: joining it with the root would not find it.
+      const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), "runner-outside-"));
+      try {
+        const absoluteEntrypoint = path.join(outsideDir, "abs-agent.js");
+        fs.writeFileSync(absoluteEntrypoint, "module.exports.runAgent = async () => ({ message: 'from absolute' })");
+        expect(path.isAbsolute(absoluteEntrypoint)).toBe(true); // anti-vacuity on the fixture
+        expect(absoluteEntrypoint.startsWith(tempDir)).toBe(false);
 
-      const runner = new FsAgentRunner({
-        executionAdapter: mockExecutionAdapter,
-        gitgovPath,
-        projectRoot: tempDir,
-      });
+        writeAgentFile("abs-test", {
+          engine: { type: "local", entrypoint: absoluteEntrypoint },
+        });
 
-      const response = await runner.runOnce({
-        agentId: "agent:abs-test",
-        taskId: "task:1",
-      });
+        const runner = new FsAgentRunner({
+          executionAdapter: mockExecutionAdapter,
+          gitgovPath,
+          projectRoot: tempDir,
+        });
 
-      expect(response.output?.message).toBe("from absolute");
+        const response = await runner.runOnce({
+          agentId: "agent:abs-test",
+          taskId: "task:1",
+        });
+
+        expect(response.output?.message).toBe("from absolute");
+      } finally {
+        fs.rmSync(outsideDir, { recursive: true, force: true });
+      }
     });
 
     it("[ARUN-B1] should resolve NPM package name via createRequire", async () => {
