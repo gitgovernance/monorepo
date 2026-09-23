@@ -822,9 +822,9 @@ describe('DependencyInjectionService', () => {
   });
 
   // ============================================================================
-  // §4.3. Adapter Factories (EARS-C1 to C15)
+  // §4.3. Adapter Factories (EARS-C1 to C19)
   // ============================================================================
-  describe('4.3. Adapter Factories (EARS-C1 to C17)', () => {
+  describe('4.3. Adapter Factories (EARS-C1 to C19)', () => {
     it('[EARS-C1] should create RecordProjector with all dependencies', async () => {
       const projector = await diService.getRecordProjector();
       expect(projector).toBeDefined();
@@ -1092,6 +1092,32 @@ describe('DependencyInjectionService', () => {
       expect(typeof registry!.get('security-audit')).toBe('function');
       // Anti-vacuity: a registry that answered every name would satisfy the line above.
       expect(registry!.get('an-agent-that-does-not-exist')).toBeUndefined();
+    });
+
+    it('[EARS-C19] should bind the runner and the validator to the same root and registry accessors', async () => {
+      // C12 and C16 each pin ONE side to the repo root, and C18 pins the registry. ARUN-M2 needs
+      // both sides to take BOTH anchors from the same place, so the pair is asserted together.
+      // Today repoRoot is never null when the runner is built, so this stays green before and after
+      // the fix to the fallback — the structural half of C19 (root_derivation.test.ts) is the red.
+      const { FsEngineValidator, createAgentRunner } = corefs;
+      vi.mocked(FsEngineValidator).mockClear();
+      vi.mocked(createAgentRunner).mockClear();
+
+      await diService.getProjectModule();
+      await diService.getAuditOrchestrator();
+
+      // Anti-vacuity: with either side never constructed, the comparisons below compare undefineds.
+      expect(FsEngineValidator).toHaveBeenCalled();
+      expect(createAgentRunner).toHaveBeenCalled();
+
+      const [validatorRoot, validatorRegistry] = vi.mocked(FsEngineValidator).mock.calls[0]!;
+      const runnerDeps = vi.mocked(createAgentRunner).mock.calls[0]![0]!;
+
+      expect(validatorRoot).toBe(await diService.getRepoRoot());
+      expect(runnerDeps.projectRoot).toBe(validatorRoot);
+      expect(runnerDeps.builtinAgents).toBe(validatorRegistry);
+      // The repo, not the worktree the stores live in — the two differ in this fixture.
+      expect(validatorRoot).not.toBe(mockWorktreeBasePath);
     });
   });
 

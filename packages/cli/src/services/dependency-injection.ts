@@ -829,7 +829,8 @@ export class DependencyInjectionService {
       // Record writing is handled by the caller (audit-command) post-redaction.
       this.agentRunnerModule = createAgentRunner({
         gitgovPath: path.join(this.projectRoot, '.gitgov'),
-        projectRoot: this.repoRoot ?? this.projectRoot,
+        // [EARS-C19] The same accessor the engine validator uses — never the fallback.
+        projectRoot: await this.getRepoRoot(),
         eventBus,
         // [EARS-C18] The same instance the engine validator gets.
         builtinAgents: this.getBuiltinAgents()
