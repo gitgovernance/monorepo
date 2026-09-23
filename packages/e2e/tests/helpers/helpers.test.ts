@@ -47,7 +47,7 @@ afterAll(() => {
 
 describe('E2E Helpers', () => {
 
-  describe('4.1. CLI Helpers (HLP-A1 to HLP-A6)', () => {
+  describe('4.1. CLI Helpers (HLP-A1 to HLP-A7)', () => {
 
     it('[HLP-A1] should execute gitgov --version and return success', () => {
       const { tmpDir, repoDir } = createTempGitRepo();
@@ -205,6 +205,33 @@ describe('E2E Helpers', () => {
         if (saved.key === undefined) delete process.env['HLP_A6_KEY']; else process.env['HLP_A6_KEY'] = saved.key;
         if (saved.inherited === undefined) delete process.env['HLP_A6_INHERITED']; else process.env['HLP_A6_INHERITED'] = saved.inherited;
       }
+    });
+
+    it('[HLP-A7] should return the real exit code: 0 on success, the process status on failure, null when killed by the timeout', () => {
+      const { tmpDir, repoDir } = createTempGitRepo();
+      tempDirs.push(tmpDir);
+
+      expect(runGitgovCli('--version', { cwd: repoDir }).exitCode).toBe(0);
+
+      // Measured 2026-09-23 on the checkout build: an unknown option exits 1.
+      const failed = runGitgovCli('--no-such-option', { cwd: repoDir, expectError: true });
+      expect(failed.exitCode).toBe(1);
+
+      // The CLI itself only exits 0 or 1. A status other than 1 comes from the process the helper
+      // spawns: node rejects a flag in NODE_OPTIONS and exits 9 before the CLI runs. A helper that
+      // reports every failure as 1 cannot pass this.
+      const rejected = runGitgovCli('--version', { cwd: repoDir, expectError: true, env: { NODE_OPTIONS: '--no-such-node-flag' } });
+      expect(rejected.exitCode).toBe(9);
+
+      // `success` says nothing under expectError: it is false on a clean exit too. Only exitCode
+      // tells the two apart.
+      const succeeded = runGitgovCli('--version', { cwd: repoDir, expectError: true });
+      expect(succeeded.success).toBe(false);
+      expect(succeeded.exitCode).toBe(0);
+
+      // Killed by the helper's own timeout: there is no exit status.
+      const killed = runGitgovCli('--version', { cwd: repoDir, expectError: true, timeout: 1 });
+      expect(killed.exitCode).toBeNull();
     });
   });
 

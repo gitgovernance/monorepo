@@ -1,7 +1,8 @@
 /**
  * CLI Helpers — Execute the CLI built in the checkout under test for E2E tests.
  * [HLP-A1] Real binary execution (sync), [HLP-A4] Async spawn for interactive commands,
- * [HLP-A5] Resolution of the binary both of them run, [HLP-A6] Caller env merged over the inherited one.
+ * [HLP-A5] Resolution of the binary both of them run, [HLP-A6] Caller env merged over the inherited one,
+ * [HLP-A7] The process's real exit code in every result.
  * [HLP-A2] Git repo creation, [HLP-A3] Worktree cleanup.
  */
 import { execSync, spawn } from 'child_process';
@@ -66,9 +67,12 @@ function cliUnderTest(): GitgovCliBinary {
 }
 
 export type CliResult = {
+  /** With `expectError: true` this is false whether the command failed or not — read `exitCode`. */
   success: boolean;
   output: string;
   error: string | null;
+  /** [HLP-A7] The process's exit status: 0 on success, its own status on failure, null if killed (signal or timeout). */
+  exitCode: number | null;
 };
 
 export type SpawnedCli = {
@@ -94,18 +98,19 @@ export function runGitgovCli(args: string, options: { cwd: string; expectError?:
     });
 
     if (options.expectError) {
-      return { success: false, output: result, error: 'Expected error but succeeded' };
+      return { success: false, output: result, error: 'Expected error but succeeded', exitCode: 0 };
     }
-    return { success: true, output: result, error: null };
+    return { success: true, output: result, error: null, exitCode: 0 };
   } catch (error: unknown) {
-    const execError = error as { stderr?: string; stdout?: string; message?: string };
+    const execError = error as { stderr?: string; stdout?: string; message?: string; status?: number | null };
     const stderr = execError.stderr ?? '';
     const stdout = execError.stdout ?? '';
     const message = execError.message ?? '';
     const combinedOutput = `${stdout}\n${stderr}\n${message}`.trim();
 
     if (options.expectError) {
-      return { success: false, output: stdout || combinedOutput, error: stderr || combinedOutput };
+      // [HLP-A7] execSync sets `status` to null when the process was killed (signal or timeout)
+      return { success: false, output: stdout || combinedOutput, error: stderr || combinedOutput, exitCode: execError.status ?? null };
     }
     throw new Error(`CLI command failed: ${stderr || message}\nStdout: ${stdout}`);
   }
