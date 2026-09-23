@@ -1,7 +1,7 @@
 /**
  * CLI Helpers — Execute the CLI built in the checkout under test for E2E tests.
  * [HLP-A1] Real binary execution (sync), [HLP-A4] Async spawn for interactive commands,
- * [HLP-A5] Resolution of the binary both of them run.
+ * [HLP-A5] Resolution of the binary both of them run, [HLP-A6] Caller env merged over the inherited one.
  * [HLP-A2] Git repo creation, [HLP-A3] Worktree cleanup.
  */
 import { execSync, spawn } from 'child_process';
@@ -89,6 +89,7 @@ export function runGitgovCli(args: string, options: { cwd: string; expectError?:
       encoding: 'utf8',
       stdio: 'pipe',
       timeout: options.timeout ?? 30000,
+      // [HLP-A6] Caller env merged over the inherited one (caller keys win); the binary above never comes from its PATH
       env: options.env ? { ...process.env, ...options.env } : undefined,
     });
 

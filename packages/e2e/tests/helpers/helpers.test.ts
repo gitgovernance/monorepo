@@ -47,7 +47,7 @@ afterAll(() => {
 
 describe('E2E Helpers', () => {
 
-  describe('4.1. CLI Helpers (HLP-A1 to HLP-A5)', () => {
+  describe('4.1. CLI Helpers (HLP-A1 to HLP-A6)', () => {
 
     it('[HLP-A1] should execute gitgov --version and return success', () => {
       const { tmpDir, repoDir } = createTempGitRepo();
@@ -154,6 +154,57 @@ describe('E2E Helpers', () => {
 
       const override = resolveGitgovCli({ [GITGOV_CLI_BIN_ENV]: link });
       expect(override).toEqual({ bin: link, realpath: target, source: 'GITGOV_CLI_BIN', insideCheckout: false });
+    });
+
+    it('[HLP-A6] should run the checkout binary with the caller env merged, even when that env\'s PATH puts an impostor gitgov first', () => {
+      const { tmpDir, repoDir } = createTempGitRepo();
+      tempDirs.push(tmpDir);
+
+      // A preload that runs inside the CLI's own node process and writes down what that process
+      // sees: which script it is running and the two keys under test. It only runs if the
+      // caller's NODE_OPTIONS reached the process, so its file is itself proof the env arrived.
+      const probeDir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'hlp-a6-probe-')));
+      tempDirs.push(probeDir);
+      const probe = path.join(probeDir, 'probe.cjs');
+      const probeOut = path.join(probeDir, 'seen.json');
+      fs.writeFileSync(probe, [
+        `require('fs').writeFileSync(process.env.HLP_A6_PROBE_OUT, JSON.stringify({`,
+        `  script: process.argv[1],`,
+        `  key: process.env.HLP_A6_KEY ?? null,`,
+        `  inherited: process.env.HLP_A6_INHERITED ?? null,`,
+        `}));`,
+      ].join('\n'));
+
+      // Both keys exist in the parent: HLP_A6_KEY is also passed by the caller (the caller must
+      // win), HLP_A6_INHERITED is not (it must survive the merge).
+      const saved = { key: process.env['HLP_A6_KEY'], inherited: process.env['HLP_A6_INHERITED'] };
+      process.env['HLP_A6_KEY'] = 'from-parent';
+      process.env['HLP_A6_INHERITED'] = 'from-parent';
+      try {
+        const env = {
+          PATH: pathWithImpostor(),
+          NODE_OPTIONS: `--require "${probe}"`,
+          HLP_A6_PROBE_OUT: probeOut,
+          HLP_A6_KEY: 'from-caller',
+        };
+
+        // ANTI-VACUITY: this env's PATH really resolves `gitgov` to the impostor.
+        const viaPath = execSync('gitgov --version', { cwd: repoDir, encoding: 'utf8', env: { ...process.env, PATH: env.PATH } });
+        expect(viaPath.trim()).toBe(IMPOSTOR_VERSION);
+
+        const result = runGitgovCli('--version', { cwd: repoDir, env });
+        expect(result.output, `runGitgovCli resolved gitgov through the env's PATH instead of running ${CHECKOUT_CLI_BIN}`).not.toContain(IMPOSTOR_VERSION);
+        expect(result.output).toMatch(/\d+\.\d+\.\d+/);
+
+        expect(fs.existsSync(probeOut), 'the caller env (NODE_OPTIONS) never reached the CLI process').toBe(true);
+        const seen = JSON.parse(fs.readFileSync(probeOut, 'utf8')) as { script: string; key: string | null; inherited: string | null };
+        expect(fs.realpathSync(seen.script), 'the env was applied to a binary other than the one HLP-A1 runs').toBe(resolveGitgovCli().realpath);
+        expect(seen.key, 'an inherited key won over the caller\'s').toBe('from-caller');
+        expect(seen.inherited, 'the caller env replaced the inherited environment instead of merging over it').toBe('from-parent');
+      } finally {
+        if (saved.key === undefined) delete process.env['HLP_A6_KEY']; else process.env['HLP_A6_KEY'] = saved.key;
+        if (saved.inherited === undefined) delete process.env['HLP_A6_INHERITED']; else process.env['HLP_A6_INHERITED'] = saved.inherited;
+      }
     });
   });
 
