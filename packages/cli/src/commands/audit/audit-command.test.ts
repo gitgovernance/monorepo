@@ -73,6 +73,8 @@ vi.mock('@gitgov/core', async () => {
       FindingDetectorModule: vi.fn(),
     },
     Sarif: actual.Sarif,
+    // Real record factories: fixtures are built the way the product builds records (preset rule).
+    Factories: actual.Factories,
     generateExecutionId: actual.generateExecutionId ?? ((title: string, ts: number) => `${ts}-exec-${title}`),
     fingerprintDigest: actual.fingerprintDigest,
   };
@@ -87,6 +89,8 @@ vi.mock('../../services/dependency-injection', () => ({
 
 import { AuditCommand, type AuditCommandOptions } from './audit-command';
 import { DependencyInjectionService } from '../../services/dependency-injection';
+import { Factories } from '@gitgov/core';
+import { discoverInstalledAgents } from '@gitgov/core/fs';
 import type {
   AuditOrchestrationOptions,
   AuditOrchestrationResult,
@@ -148,6 +152,7 @@ let mockDIInstance: {
   getAuditFsProjection: Mock;
   getGitModule: Mock;
   getProjectRoot: Mock;
+  getRepoRoot: Mock;
   getSessionManager: Mock;
 };
 
@@ -336,6 +341,9 @@ describe('AuditCommand', () => {
       getCurrentActor: vi.fn().mockResolvedValue({ id: 'human:developer' }),
       getAuditFsProjection: vi.fn().mockResolvedValue({ persist: mockAuditFsProjectionPersist, readLatest: mockAuditFsProjectionReadLatest }),
       getProjectRoot: vi.fn().mockResolvedValue('/mock/project/root'),
+      // [AORCH-P9] The real container has it; without it `getRepoRoot()` threw inside the command's
+      // empty catch and agent discovery silently never ran in any test.
+      getRepoRoot: vi.fn().mockResolvedValue('/mock/repo'),
       getGitModule: vi.fn().mockResolvedValue({ getCommitHash: vi.fn().mockResolvedValue('abc123'), getRepoRoot: vi.fn().mockResolvedValue('/mock/repo') }),
       getSessionManager: vi.fn().mockResolvedValue({
         getState: vi.fn().mockReturnValue({ actorId: 'human:developer' }),
@@ -1126,29 +1134,56 @@ describe('AuditCommand', () => {
       mockConsoleWarn.mockRestore();
     });
 
-    it('[AORCH-P9] should list unregistered agents as available and suggest gitgov agent new', async () => {
-      // Mock orchestrator returns result with one agent executed
-      const resultWithAgent = {
+    // [AORCH-P9] Until 2026-09-23 this test asserted the OPPOSITE of its name (`not.toContain`) and
+    // could not have seen the listing anyway: discovery is mocked to [], and the container mock had
+    // no getRepoRoot, so the call threw and the command's empty catch swallowed it. The container mock
+    // now has one; both tests below make discovery return one installed-but-unregistered agent.
+    const withUnregisteredAgentDiscovered = () => {
+      vi.mocked(discoverInstalledAgents).mockReturnValueOnce([
+        Factories.createAgentRecord({ id: 'agent:semgrep', engine: { type: 'local', entrypoint: '@gitgov/agent-semgrep' } }),
+      ]);
+      mockOrchestrator.run.mockResolvedValueOnce({
         ...mockResultWithFindings,
         agentResults: [{ agentId: 'agent:security-audit', status: 'success' as const, durationMs: 100, executionId: 'exec-1', sarif: { $schema: '', version: '2.1.0' as const, runs: [] } }],
-      };
-      mockOrchestrator.run.mockResolvedValueOnce(resultWithAgent);
+      });
+    };
 
-      // discoverInstalledAgents runs against process.cwd() which in test context
-      // has node_modules/@gitgov/agent-security-audit (real package).
-      // We verify the output behavior: if unregistered agents exist, they're listed.
-      // Since security-audit IS in agentResults, it won't be listed as unregistered.
-      const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation(() => { });
+    it('[AORCH-P9] should list unregistered agents as available and suggest gitgov agent new', async () => {
+      withUnregisteredAgentDiscovered();
+      const mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => { });
 
       await auditCommand.execute(createDefaultOptions());
 
-      // The discovery runs but security-audit is registered+executed → not listed
-      // No unregistered agents in test env → no "Available but not registered" message
-      // This validates that the code path runs without error
-      const logCalls = mockConsoleLog.mock.calls.map(c => String(c[0])).join('\n');
-      expect(logCalls).not.toContain('Available but not registered');
+      // Anti-vacuity: discovery actually ran, anchored on the container's repo root (INIT-M3).
+      expect(mockDIInstance.getRepoRoot).toHaveBeenCalled();
+      expect(discoverInstalledAgents).toHaveBeenCalledWith('/mock/repo');
 
-      mockConsoleLog.mockRestore();
+      const printed = [...mockConsoleLog.mock.calls, ...mockConsoleWarn.mock.calls].map(c => String(c[0])).join('\n');
+      expect(printed).toContain('Available but not registered');
+      expect(printed).toContain('agent:semgrep — Run: gitgov agent new @gitgov/agent-semgrep');
+      // The registered agent that ran is not listed as unregistered
+      expect(printed).not.toContain('agent:security-audit — Run:');
+
+      mockConsoleWarn.mockRestore();
+    });
+
+    it('[AORCH-P9] should keep stdout a single JSON document when unregistered agents are discovered', async () => {
+      withUnregisteredAgentDiscovered();
+      const mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => { });
+
+      await auditCommand.execute(createDefaultOptions({ output: 'json' }));
+
+      expect(discoverInstalledAgents).toHaveBeenCalledWith('/mock/repo'); // anti-vacuity
+      const stdout = mockConsoleLog.mock.calls.map(c => String(c[0])).join('\n');
+      const stderr = mockConsoleWarn.mock.calls.map(c => String(c[0])).join('\n');
+
+      // stdout is the report and nothing else: one parseable document, no listing around it
+      expect(stdout, `stdout:\n${stdout}`).not.toContain('Available but not registered');
+      expect(() => JSON.parse(stdout), `stdout is not a single JSON document:\n${stdout}`).not.toThrow();
+      // The listing is not lost: it goes to stderr
+      expect(stderr).toContain('Available but not registered');
+
+      mockConsoleWarn.mockRestore();
     });
   });
 });
