@@ -17,12 +17,17 @@ import { getWorktreeBasePath } from '@gitgov/core/fs';
 export const GITGOV_CLI_BIN_ENV = 'GITGOV_CLI_BIN';
 
 /**
- * [HLP-A5] Monorepo root of the checkout these helpers belong to. Resolved through symlinks:
- * e2e-private reaches this file through a per-file symlink, and each checkout's symlink points
- * at its own monorepo, so the root is the checkout under test in the main clone and in any
- * worktree alike.
+ * [HLP-A5] Monorepo root of the checkout that holds the module at `moduleUrl`. The realpath of
+ * the file comes first and the climb after it: e2e-private reaches these helpers through the
+ * workspace link `@gitgov/e2e`, and under a runtime that preserves symlinks the module URL is
+ * that link's path, whose fourth ancestor is `e2e-private/node_modules`, not the checkout.
  */
-export const CHECKOUT_ROOT = fs.realpathSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..'));
+export function checkoutRootOf(moduleUrl: string): string {
+  return path.resolve(path.dirname(fs.realpathSync(fileURLToPath(moduleUrl))), '..', '..', '..', '..');
+}
+
+/** [HLP-A5] Monorepo root of the checkout these helpers belong to. */
+export const CHECKOUT_ROOT = checkoutRootOf(import.meta.url);
 
 /** [HLP-A5] The CLI build of the checkout under test. */
 export const CHECKOUT_CLI_BIN = path.join(CHECKOUT_ROOT, 'packages', 'cli', 'build', 'dist', 'gitgov.mjs');

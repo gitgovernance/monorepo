@@ -10,11 +10,14 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { createRequire } from 'node:module';
+import { pathToFileURL } from 'node:url';
 
 import {
   runGitgovCli,
   spawnGitgovCli,
   resolveGitgovCli,
+  checkoutRootOf,
   CHECKOUT_ROOT,
   CHECKOUT_CLI_BIN,
   GITGOV_CLI_BIN_ENV,
@@ -47,7 +50,7 @@ afterAll(() => {
 
 describe('E2E Helpers', () => {
 
-  describe('4.1. CLI Helpers (HLP-A1 to HLP-A7)', () => {
+  describe('4.1. CLI helpers and package surface (HLP-A1 to HLP-A8)', () => {
 
     it('[HLP-A1] should execute gitgov --version and return success', () => {
       const { tmpDir, repoDir } = createTempGitRepo();
@@ -154,6 +157,50 @@ describe('E2E Helpers', () => {
 
       const override = resolveGitgovCli({ [GITGOV_CLI_BIN_ENV]: link });
       expect(override).toEqual({ bin: link, realpath: target, source: 'GITGOV_CLI_BIN', insideCheckout: false });
+    });
+
+    it('[HLP-A5] should derive the checkout root from the helper file\'s realpath when reached through a symlinked package path', () => {
+      // A checkout that holds the helper, and a consumer package that reaches it through a
+      // workspace link (`node_modules/@gitgov/e2e` → the checkout's `packages/e2e`), the way
+      // e2e-private does. The module URL is the linked path, as a runtime that preserves
+      // symlinks would report it.
+      const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'hlp-a5-')));
+      tempDirs.push(base);
+      const checkout = path.join(base, 'checkout');
+      const helperDir = path.join(checkout, 'packages', 'e2e', 'tests', 'helpers');
+      fs.mkdirSync(helperDir, { recursive: true });
+      fs.writeFileSync(path.join(helperDir, 'cli.ts'), '');
+      const consumerModules = path.join(base, 'consumer', 'packages', 'e2e-private', 'node_modules', '@gitgov');
+      fs.mkdirSync(consumerModules, { recursive: true });
+      fs.symlinkSync(path.join(checkout, 'packages', 'e2e'), path.join(consumerModules, 'e2e'));
+
+      const linkedUrl = pathToFileURL(path.join(consumerModules, 'e2e', 'tests', 'helpers', 'cli.ts')).href;
+      const realUrl = pathToFileURL(path.join(helperDir, 'cli.ts')).href;
+
+      expect(checkoutRootOf(linkedUrl), 'the root was climbed from the link, not from the helper file').toBe(checkout);
+      expect(checkoutRootOf(realUrl)).toBe(checkout);
+      expect(CHECKOUT_ROOT).toBe(checkoutRootOf(pathToFileURL(path.join(CHECKOUT_ROOT, 'packages', 'e2e', 'tests', 'helpers', 'cli.ts')).href));
+    });
+
+    it('[HLP-A8] should resolve the shared helpers through the package exports and refuse the prisma helpers', () => {
+      // Self-reference by package name resolves through `exports`, the same map another
+      // package's import goes through.
+      const require = createRequire(import.meta.url);
+      const helpersDir = path.join(CHECKOUT_ROOT, 'packages', 'e2e', 'tests', 'helpers');
+
+      expect(fs.realpathSync(require.resolve('@gitgov/e2e/helpers'))).toBe(path.join(helpersDir, 'shared.ts'));
+      for (const name of ['cli', 'fs', 'github'] as const) {
+        expect(fs.realpathSync(require.resolve(`@gitgov/e2e/helpers/${name}`))).toBe(path.join(helpersDir, `${name}.ts`));
+      }
+
+      for (const name of ['prisma', 'prisma_protocol', 'prisma_audit'] as const) {
+        expect(() => require.resolve(`@gitgov/e2e/helpers/${name}`), `@gitgov/e2e/helpers/${name} must not resolve`)
+          .toThrow(expect.objectContaining({ code: 'ERR_PACKAGE_PATH_NOT_EXPORTED' }));
+      }
+      expect(() => require.resolve('@gitgov/e2e/tests/helpers/index.ts')).toThrow(expect.objectContaining({ code: 'ERR_PACKAGE_PATH_NOT_EXPORTED' }));
+
+      const reExports = fs.readFileSync(path.join(helpersDir, 'shared.ts'), 'utf8').match(/from '[^']+'/g);
+      expect(reExports).toEqual(["from './cli'", "from './fs'", "from './github'"]);
     });
 
     it('[HLP-A6] should run the checkout binary with the caller env merged, even when that env\'s PATH puts an impostor gitgov first', () => {
