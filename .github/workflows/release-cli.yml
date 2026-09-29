@@ -59,6 +59,11 @@ jobs:
           cd packages/core
           pnpm build
 
+      - name: Build agent-security-audit (bundled into the CLI)
+        run: |
+          cd packages/agents/security-audit
+          pnpm build
+
       - name: Build CLI
         run: |
           cd packages/cli
