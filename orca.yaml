@@ -5,16 +5,19 @@
 # guide). Keeping it here means the setup travels with the repo instead of
 # living in one machine's config.
 #
-# The hook calls the same script a human or another orchestrator would call, so
-# the coupling is to the script, not to Orca:
+# The hook calls the SCRIPT THIS REPO OWNS, through $ORCA_ROOT_PATH. No PATH, no
+# symlink, no other repo:
 #
-#   gitgov-dev setup-worktree "$ORCA_WORKTREE_PATH"
+#   "$ORCA_ROOT_PATH/scripts/worktree-setup.sh" "$ORCA_WORKTREE_PATH"
 #
 # That script is what pairs this monorepo checkout with its own clone of
-# `private` under packages/private, installs both workspaces, builds core and
-# the five agents, generates the Prisma client, and deploys the four .env from
-# ~/.gitgov/envs/. It is idempotent and fail-closed, and it does NOT need this
-# file to exist — Orca, Herd or a human can run it directly.
+# `private` under packages/private, installs the monorepo, builds core and the
+# five agents, and then hands over to private's own script — which is what
+# installs the SaaS services, generates their Prisma client and deploys their
+# four .env from ~/.gitgov/envs/. Each repo prepares its own material.
+#
+# It is idempotent and fail-closed, and it does NOT need this file to exist —
+# Orca, Herd or a human can run it directly.
 #
 # Variables Orca provides to these scripts:
 #   $ORCA_ROOT_PATH      the primary checkout of this project
@@ -22,12 +25,10 @@
 #   $ORCA_WORKSPACE_NAME the worktree name
 
 scripts:
-  # Runs after a new worktree is created. The PATH line is defensive: Orca runs
-  # this as a single shell script and we do not want the first run to fail
-  # because the hook's shell does not have ~/.local/bin.
+  # Runs after a new worktree is created. No PATH games: the script lives in
+  # this repo and is addressed by absolute path.
   setup: |
-    export PATH="$HOME/.local/bin:$PATH"
-    gitgov-dev setup-worktree "$ORCA_WORKTREE_PATH"
+    "$ORCA_ROOT_PATH/scripts/worktree-setup.sh" "$ORCA_WORKTREE_PATH"
 
   # Runs before a worktree is archived or removed. It does NOT stop anything by
   # itself: `gitgov-dev down` kills the shared `dev` tmux session, which may
