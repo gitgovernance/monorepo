@@ -1,0 +1,36 @@
+# Orca project configuration for this repository — versioned on purpose.
+#
+# Orca reads this from the project's PRIMARY checkout, and it does not take
+# effect until it is committed to the primary branch (see the orca-cli skill
+# guide). Keeping it here means the setup travels with the repo instead of
+# living in one machine's config.
+#
+# The hook calls the same script a human or another orchestrator would call, so
+# the coupling is to the script, not to Orca:
+#
+#   gitgov-dev setup-worktree "$ORCA_WORKTREE_PATH"
+#
+# That script is what pairs this monorepo checkout with its own clone of
+# `private` under packages/private, installs both workspaces, builds core and
+# the five agents, generates the Prisma client, and deploys the four .env from
+# ~/.gitgov/envs/. It is idempotent and fail-closed, and it does NOT need this
+# file to exist — Orca, Herd or a human can run it directly.
+#
+# Variables Orca provides to these scripts:
+#   $ORCA_ROOT_PATH      the primary checkout of this project
+#   $ORCA_WORKTREE_PATH  the worktree being created or archived
+#   $ORCA_WORKSPACE_NAME the worktree name
+
+scripts:
+  # Runs after a new worktree is created. The PATH line is defensive: Orca runs
+  # this as a single shell script and we do not want the first run to fail
+  # because the hook's shell does not have ~/.local/bin.
+  setup: |
+    export PATH="$HOME/.local/bin:$PATH"
+    gitgov-dev setup-worktree "$ORCA_WORKTREE_PATH"
+
+  # Runs before a worktree is archived or removed. It does NOT stop anything by
+  # itself: `gitgov-dev down` kills the shared `dev` tmux session, which may
+  # belong to another worktree, so that stays a deliberate act.
+  archive: |
+    echo "archiving $ORCA_WORKSPACE_NAME — stop its dev stack with 'gitgov-dev down' if it owns the tmux session"
