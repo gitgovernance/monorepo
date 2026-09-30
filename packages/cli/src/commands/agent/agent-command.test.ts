@@ -27,15 +27,18 @@ vi.mock('@gitgov/core', () => ({
 // and its FsEngineValidator implementation. If this mock still exported the old name, the
 // import in agent-command would resolve to undefined, the surrounding try/catch would
 // swallow the TypeError, and [EARS-E9] would stay green while validating nothing.
-const { mockValidateAgentEngine } = vi.hoisted(() => ({
+const { mockValidateAgentEngine, mockFsEngineValidatorCtor } = vi.hoisted(() => ({
   // [EARS-E9] Default: engines resolve — individual tests override to simulate phantom agents
   mockValidateAgentEngine: vi.fn().mockResolvedValue({ resolvable: true }),
+  // [EARS-C18] A spy on the CONSTRUCTOR, so a test can assert the command does not build a
+  // validator of its own. `vi.fn(function () {...})` is callable with `new`; an arrow is not.
+  mockFsEngineValidatorCtor: vi.fn(),
 }));
 vi.mock('@gitgov/core/fs', () => ({
   DEFAULT_ID_ENCODER: { encode: (id: string) => id.replace(/:/g, '_'), decode: (id: string) => id.replace(/_/g, ':') },
-  // A real class, not `vi.fn().mockImplementation(() => ({...}))`: the command calls
-  // `new FsEngineValidator()`, and an arrow function is not a constructor.
-  FsEngineValidator: class { validate = mockValidateAgentEngine; },
+  FsEngineValidator: mockFsEngineValidatorCtor.mockImplementation(function (this: { validate: unknown }) {
+    this.validate = mockValidateAgentEngine;
+  }),
 }));
 
 // Mock DependencyInjectionService
@@ -226,6 +229,9 @@ describe('AgentCommand', () => {
       // [ARUN-M1] `executeNew` binds the validator to the REPO root, which the container
       // resolves — not to process.cwd(), and never to the worktree.
       getRepoRoot: vi.fn().mockResolvedValue('/tmp/test-repo-root'),
+      // [EARS-C18] The container builds the validator, so this command has no construction
+      // site of its own to drift from the runner's registry.
+      getEngineValidator: vi.fn().mockResolvedValue({ validate: mockValidateAgentEngine }),
       getCurrentActor: vi.fn().mockResolvedValue({ id: 'human:test-dev', type: 'human', displayName: 'Test Dev', publicKey: 'test-key', roles: ['developer'] }),
     });
 
@@ -613,6 +619,32 @@ describe('AgentCommand', () => {
         expect.stringContaining('not runnable'),
       );
       expect(mockAgentAdapter.createAgentRecord).not.toHaveBeenCalled();
+    });
+
+    it("[EARS-C18] should validate the engine with the container's validator instead of building one", async () => {
+      // Until 2026-09-23 this command built `new FsEngineValidator(repoRoot)` of its own:
+      // right about the root, silent about the built-in registry. Latent, because
+      // `gitgov agent new` never produces a `builtin:` entrypoint — and precisely the site
+      // where ARUN-M2 inverts if it ever does, declaring unresolvable an agent the runner
+      // executes without trouble. The fix removes the second construction site rather than
+      // teaching it to pass the registry, so what this asserts is that the command ASKS
+      // instead of BUILDING.
+      tmpAgentDir = createFakeAgent({
+        name: '@gitgov/agent-asks-the-container',
+        main: 'dist/index.mjs',
+        gitgov: { agent: { purpose: 'audit', function: 'runAgent' } },
+      });
+
+      mockFsEngineValidatorCtor.mockClear();
+
+      await agentCommand.executeNew(tmpAgentDir, {});
+
+      // The assertion that discriminates: the command constructs NO validator.
+      expect(mockFsEngineValidatorCtor).not.toHaveBeenCalled();
+      // Anti-vacuity, both directions: a command that skipped validation entirely would also
+      // satisfy the line above, so the validation has to have run and gated the registration.
+      expect(mockValidateAgentEngine).toHaveBeenCalled();
+      expect(mockAgentAdapter.createAgentRecord).toHaveBeenCalled();
     });
 
     it('[EARS-E4] should warn when required env vars from gitgov.agent.env are missing', async () => {

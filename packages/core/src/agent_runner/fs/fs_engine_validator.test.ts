@@ -18,7 +18,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { FsEngineValidator } from "./fs_engine_validator";
-import type { Engine } from "../agent_runner.types";
+import { LocalBackend } from "../backends/local_backend";
+import type { Engine, LocalEngine, AgentExecutionContext } from "../agent_runner.types";
+import type { BuiltinAgentRegistry, AgentExecutor } from "../agent_runner";
 
 describe("FsEngineValidator", () => {
   let tempDir: string;
@@ -132,5 +134,156 @@ describe("FsEngineValidator", () => {
         fs.rmSync(otherDir, { recursive: true, force: true });
       }
     });
+
+    it("[ARUN-M1] should return resolvable true for a builtin entrypoint present in the registry", async () => {
+      // A `builtin:` is the ONE new case this contract can decide by itself: verifying it
+      // is a map lookup, no filesystem and no network, so it does not need ARUN-M2.
+      const registry = makeRegistry({ "security-audit": async () => ({ data: "ok" }) });
+      const validator = new FsEngineValidator(tempDir, registry);
+
+      const engine: Engine = { type: "local", entrypoint: "builtin:security-audit" };
+      const result = await validator.validate(engine);
+
+      expect(result.resolvable).toBe(true);
+      expect(result.reason).toBeUndefined();
+    });
+
+    it("[ARUN-M1] should return resolvable false with reason for a builtin entrypoint absent from the registry", async () => {
+      const registry = makeRegistry({ "another-agent": async () => ({}) });
+      const engine: Engine = { type: "local", entrypoint: "builtin:security-audit" };
+
+      const withOtherAgent = await new FsEngineValidator(tempDir, registry).validate(engine);
+      // ...and with no registry injected at all, which is the same failure (ARUN-O3).
+      const withNoRegistry = await new FsEngineValidator(tempDir).validate(engine);
+
+      for (const result of [withOtherAgent, withNoRegistry]) {
+        expect(result.resolvable).toBe(false);
+        expect(result.reason).toContain("security-audit");
+        // Anti-vacuity, and it is NOT theoretical: before the builtin branch existed, this
+        // test passed for the wrong reason — `builtin:security-audit` classified as a package
+        // name, `require.resolve` failed, and the MODULE_NOT_FOUND text happened to contain
+        // the agent name. The reason has to come from the registry lookup, not the filesystem.
+        expect(result.reason).toContain("not registered");
+        expect(result.reason).not.toContain("Cannot find module");
+      }
+    });
+  });
+
+  describe("4.12. Built-in Agent Resolution (ARUN-O3, ARUN-O5)", () => {
+    it("[ARUN-O3] should return resolvable false with reason when the builtin is not registered", async () => {
+      // The validator NEVER throws (ARUN-M1); execution does (asserted in fs_agent_runner.test.ts).
+      const validator = new FsEngineValidator(tempDir, makeRegistry({}));
+      const engine: Engine = { type: "local", entrypoint: "builtin:missing-agent" };
+
+      let threw = false;
+      let result;
+      try {
+        result = await validator.validate(engine);
+      } catch {
+        threw = true;
+      }
+
+      expect(threw).toBe(false);
+      expect(result!.resolvable).toBe(false);
+      expect(result!.reason).toContain("missing-agent");
+      // Same anti-vacuity as above: without this, a MODULE_NOT_FOUND from treating the
+      // string as a package name satisfies the assertion and the branch is never exercised.
+      expect(result!.reason).toContain("not registered");
+    });
+
+    it("[ARUN-O5] should resolve to the same target in validation and execution for the three cases", async () => {
+      // ARUN-M2 exists to PREDICT execution. This asserts the property directly, over the
+      // three shapes an entrypoint can take: registered builtin, package installed in the
+      // user's repo, and absent from both. `resolvable: true` must imply that execution
+      // does not fail on resolution, and `false` must imply that it does.
+      const registry = makeRegistry({ "demo-agent": async () => ({ data: "from-builtin" }) });
+      installFakePackage(tempDir, "installed-agent");
+
+      const validator = new FsEngineValidator(tempDir, registry);
+      const backend = new LocalBackend(tempDir, undefined, registry);
+
+      const cases: Array<{ engine: LocalEngine; expected: boolean }> = [
+        { engine: { type: "local", entrypoint: "builtin:demo-agent" }, expected: true },
+        { engine: { type: "local", entrypoint: "installed-agent", function: "runAgent" }, expected: true },
+        { engine: { type: "local", entrypoint: "builtin:nowhere" }, expected: false },
+      ];
+
+      // Anti-vacuity: the loop must cover all three, and both outcomes must occur — a list
+      // where everything resolves would pass without comparing anything.
+      expect(cases).toHaveLength(3);
+      expect(new Set(cases.map((c) => c.expected)).size).toBe(2);
+
+      for (const { engine, expected } of cases) {
+        const validation = await validator.validate(engine);
+        expect(validation.resolvable).toBe(expected);
+
+        const executionResolved = await resolutionSucceeds(backend, engine);
+        expect(executionResolved).toBe(expected);
+      }
+    });
+
+    it("[ARUN-O5] should fail the equivalence when validator and execution get different registries", async () => {
+      // The negative control for the test above. Two registries with different contents make
+      // the validator predict something the runner cannot do — the failure mode this EARS
+      // exists to forbid, and the one that stays invisible in production when both sides are
+      // wired from separate instances. If this test ever goes green by agreement, the
+      // equivalence check above is not discriminating.
+      const validatorRegistry = makeRegistry({ "demo-agent": async () => ({}) });
+      const executionRegistry = makeRegistry({ "a-different-agent": async () => ({}) });
+
+      const validator = new FsEngineValidator(tempDir, validatorRegistry);
+      const backend = new LocalBackend(tempDir, undefined, executionRegistry);
+      const engine: LocalEngine = { type: "local", entrypoint: "builtin:demo-agent" };
+
+      expect((await validator.validate(engine)).resolvable).toBe(true);
+      expect(await resolutionSucceeds(backend, engine)).toBe(false);
+    });
   });
 });
+
+/** A registry satisfying the contract; a plain Map satisfies it structurally too. */
+function makeRegistry(entries: Record<string, AgentExecutor>): BuiltinAgentRegistry {
+  return new Map<string, AgentExecutor>(Object.entries(entries));
+}
+
+/** Installs a minimal npm package inside `root` so `require.resolve` finds it from there. */
+function installFakePackage(root: string, name: string): void {
+  const pkgDir = path.join(root, "node_modules", name);
+  fs.mkdirSync(pkgDir, { recursive: true });
+  fs.writeFileSync(path.join(root, "package.json"), JSON.stringify({ name: "host", version: "1.0.0" }));
+  fs.writeFileSync(path.join(pkgDir, "package.json"), JSON.stringify({ name, version: "1.0.0", main: "index.js" }));
+  fs.writeFileSync(path.join(pkgDir, "index.js"), "module.exports.runAgent = async () => ({ data: 'from-package' });");
+}
+
+/**
+ * True when execution gets far enough to run the agent, false when it fails while RESOLVING.
+ * Errors raised by the agent itself are not resolution failures and must not count.
+ */
+async function resolutionSucceeds(backend: LocalBackend, engine: LocalEngine): Promise<boolean> {
+  const ctx: AgentExecutionContext = {
+    agentId: "agent:test",
+    actorId: "agent:test",
+    taskId: "task:test",
+    runId: "run-1",
+    projectRoot: "/unused",
+  };
+
+  try {
+    await backend.execute(engine, ctx);
+    return true;
+  } catch (error) {
+    return !isResolutionFailure(error);
+  }
+}
+
+/**
+ * The three ways resolution itself can fail, which are exactly the three the validator
+ * reports as `resolvable: false`. Anything else is the agent failing, which ARUN-H2 says
+ * is not a resolution problem and must not count here.
+ */
+function isResolutionFailure(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  if (error.name === "BuiltinAgentNotRegisteredError") return true;
+  if (error.name === "FunctionNotExportedError") return true;
+  return "code" in error && error.code === "MODULE_NOT_FOUND";
+}

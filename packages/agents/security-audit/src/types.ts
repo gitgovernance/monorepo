@@ -1,6 +1,4 @@
-import type { Sarif, SeverityCounts } from '@gitgov/core';
-
-type SarifLog = Sarif.SarifLog;
+import type { SarifLog, SeverityCounts } from '@gitgov/core';
 
 /**
  * Input recibido por el agente via AgentExecutionContext.input.

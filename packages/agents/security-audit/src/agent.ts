@@ -1,9 +1,5 @@
-import type { SourceAuditor, Sarif, Runner } from '@gitgov/core';
+import type { SourceAuditor, SarifBuilder, SarifLog, AgentOutput } from '@gitgov/core';
 import { countBySeverity } from '@gitgov/core';
-
-type SarifBuilder = Sarif.SarifBuilder;
-type SarifLog = Sarif.SarifLog;
-type AgentOutput = Runner.AgentOutput;
 import type {
   SecurityAuditInput,
   AgentDetectorConfig,

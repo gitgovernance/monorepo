@@ -5,6 +5,10 @@
  *
  * EARS Requirements:
  * - EARS-CI07: Every `process.cwd()` in source is declared with a category and a reason.
+ * - EARS-C19 (cli dependency_injection_module.md §4.3, foreign vertex): the runner and validator
+ *   roots come from getRepoRoot(), never through the `repoRoot ?? projectRoot` fallback. It lives
+ *   here because this file already scans packages/cli/src with stripComments — same stripper by
+ *   construction, not by copy.
  *
  * THE PATTERN THIS EXISTS FOR
  *
@@ -152,7 +156,10 @@ const ALLOWED_ROOT_DERIVATIONS: Record<string, Declaration> = {
   },
 };
 
-/** Source roots scanned. `packages/cli` is included even though CI does not run it — see §4.4. */
+/**
+ * Source roots scanned: core and cli. Both are gated in CI — core by `test`, the CLI by `test:unit`
+ * (`.github/workflows/ci.yml:83`, `:94`) — and the root-derivation pattern has occurred in both.
+ */
 const SCANNED_ROOTS = [
   path.join(__dirname, '../../../src'),
   path.join(__dirname, '../../../../cli/src'),
@@ -296,6 +303,40 @@ describe('CI Guardrail: Root Derivation', () => {
 
       expect(badCategory).toHaveLength(0);
       expect(badReason).toHaveLength(0);
+    });
+  });
+
+  describe('cli dependency_injection_module 4.3. Anchor Sources (EARS-C19)', () => {
+    const DI_SOURCE = path.join(__dirname, '../../../../cli/src/services/dependency-injection.ts');
+    const FALLBACK = 'this.repoRoot ?? this.projectRoot';
+
+    it('[EARS-C19] should not derive the runner or validator root through the repoRoot ?? projectRoot fallback', () => {
+      const code = stripComments(fs.readFileSync(DI_SOURCE, 'utf-8'));
+      const joined = code.join('\n');
+
+      // Anti-vacuity: a broken path or a renamed factory would leave 0 uses while reading nothing.
+      expect(joined).toContain('getAgentRunnerModule');
+      expect(joined).toContain('getEngineValidator');
+
+      // The pattern is the literal with `??`, not any repoRoot fallback: getGitModule() runs from
+      // initializeStores() before repoRoot exists, and its `||` fallback is legitimate. It must survive.
+      expect(code.some((line) => line.includes('this.repoRoot || this.projectRoot'))).toBe(true);
+
+      // A comment that documents the defect names it; it is not a use of it.
+      const sample = stripComments([`// never ${FALLBACK}`, `const root = ${FALLBACK};`].join('\n'));
+      expect(sample.filter((line) => line.includes(FALLBACK))).toHaveLength(1);
+
+      const uses = code
+        .map((text, i) => ({ line: i + 1, text: text.trim() }))
+        .filter((s) => s.text.includes(FALLBACK));
+
+      if (uses.length > 0) {
+        throw new Error(
+          `[EARS-C19] Root derived through the fallback instead of getRepoRoot():\n` +
+          uses.map((s) => `  - cli/src/services/dependency-injection.ts:${s.line}\n      ${s.text}`).join('\n'),
+        );
+      }
+      expect(uses).toHaveLength(0);
     });
   });
 });

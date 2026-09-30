@@ -10,11 +10,14 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { createRequire } from 'node:module';
+import { pathToFileURL } from 'node:url';
 
 import {
   runGitgovCli,
   spawnGitgovCli,
   resolveGitgovCli,
+  checkoutRootOf,
   CHECKOUT_ROOT,
   CHECKOUT_CLI_BIN,
   GITGOV_CLI_BIN_ENV,
@@ -47,7 +50,7 @@ afterAll(() => {
 
 describe('E2E Helpers', () => {
 
-  describe('4.1. CLI Helpers (HLP-A1 to HLP-A5)', () => {
+  describe('4.1. CLI helpers and package surface (HLP-A1 to HLP-A8)', () => {
 
     it('[HLP-A1] should execute gitgov --version and return success', () => {
       const { tmpDir, repoDir } = createTempGitRepo();
@@ -154,6 +157,128 @@ describe('E2E Helpers', () => {
 
       const override = resolveGitgovCli({ [GITGOV_CLI_BIN_ENV]: link });
       expect(override).toEqual({ bin: link, realpath: target, source: 'GITGOV_CLI_BIN', insideCheckout: false });
+    });
+
+    it('[HLP-A5] should derive the checkout root from the helper file\'s realpath when reached through a symlinked package path', () => {
+      // A checkout that holds the helper, and a consumer package that reaches it through a
+      // workspace link (`node_modules/@gitgov/e2e` → the checkout's `packages/e2e`), the way
+      // e2e-private does. The module URL is the linked path, as a runtime that preserves
+      // symlinks would report it.
+      const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'hlp-a5-')));
+      tempDirs.push(base);
+      const checkout = path.join(base, 'checkout');
+      const helperDir = path.join(checkout, 'packages', 'e2e', 'tests', 'helpers');
+      fs.mkdirSync(helperDir, { recursive: true });
+      fs.writeFileSync(path.join(helperDir, 'cli.ts'), '');
+      const consumerModules = path.join(base, 'consumer', 'packages', 'e2e-private', 'node_modules', '@gitgov');
+      fs.mkdirSync(consumerModules, { recursive: true });
+      fs.symlinkSync(path.join(checkout, 'packages', 'e2e'), path.join(consumerModules, 'e2e'));
+
+      const linkedUrl = pathToFileURL(path.join(consumerModules, 'e2e', 'tests', 'helpers', 'cli.ts')).href;
+      const realUrl = pathToFileURL(path.join(helperDir, 'cli.ts')).href;
+
+      expect(checkoutRootOf(linkedUrl), 'the root was climbed from the link, not from the helper file').toBe(checkout);
+      expect(checkoutRootOf(realUrl)).toBe(checkout);
+      expect(CHECKOUT_ROOT).toBe(checkoutRootOf(pathToFileURL(path.join(CHECKOUT_ROOT, 'packages', 'e2e', 'tests', 'helpers', 'cli.ts')).href));
+    });
+
+    it('[HLP-A8] should resolve the shared helpers through the package exports and refuse the prisma helpers', () => {
+      // Self-reference by package name resolves through `exports`, the same map another
+      // package's import goes through.
+      const require = createRequire(import.meta.url);
+      const helpersDir = path.join(CHECKOUT_ROOT, 'packages', 'e2e', 'tests', 'helpers');
+
+      expect(fs.realpathSync(require.resolve('@gitgov/e2e/helpers'))).toBe(path.join(helpersDir, 'shared.ts'));
+      for (const name of ['cli', 'fs', 'github'] as const) {
+        expect(fs.realpathSync(require.resolve(`@gitgov/e2e/helpers/${name}`))).toBe(path.join(helpersDir, `${name}.ts`));
+      }
+
+      for (const name of ['prisma', 'prisma_protocol', 'prisma_audit'] as const) {
+        expect(() => require.resolve(`@gitgov/e2e/helpers/${name}`), `@gitgov/e2e/helpers/${name} must not resolve`)
+          .toThrow(expect.objectContaining({ code: 'ERR_PACKAGE_PATH_NOT_EXPORTED' }));
+      }
+      expect(() => require.resolve('@gitgov/e2e/tests/helpers/index.ts')).toThrow(expect.objectContaining({ code: 'ERR_PACKAGE_PATH_NOT_EXPORTED' }));
+
+      const reExports = fs.readFileSync(path.join(helpersDir, 'shared.ts'), 'utf8').match(/from '[^']+'/g);
+      expect(reExports).toEqual(["from './cli'", "from './fs'", "from './github'"]);
+    });
+
+    it('[HLP-A6] should run the checkout binary with the caller env merged, even when that env\'s PATH puts an impostor gitgov first', () => {
+      const { tmpDir, repoDir } = createTempGitRepo();
+      tempDirs.push(tmpDir);
+
+      // A preload that runs inside the CLI's own node process and writes down what that process
+      // sees: which script it is running and the two keys under test. It only runs if the
+      // caller's NODE_OPTIONS reached the process, so its file is itself proof the env arrived.
+      const probeDir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'hlp-a6-probe-')));
+      tempDirs.push(probeDir);
+      const probe = path.join(probeDir, 'probe.cjs');
+      const probeOut = path.join(probeDir, 'seen.json');
+      fs.writeFileSync(probe, [
+        `require('fs').writeFileSync(process.env.HLP_A6_PROBE_OUT, JSON.stringify({`,
+        `  script: process.argv[1],`,
+        `  key: process.env.HLP_A6_KEY ?? null,`,
+        `  inherited: process.env.HLP_A6_INHERITED ?? null,`,
+        `}));`,
+      ].join('\n'));
+
+      // Both keys exist in the parent: HLP_A6_KEY is also passed by the caller (the caller must
+      // win), HLP_A6_INHERITED is not (it must survive the merge).
+      const saved = { key: process.env['HLP_A6_KEY'], inherited: process.env['HLP_A6_INHERITED'] };
+      process.env['HLP_A6_KEY'] = 'from-parent';
+      process.env['HLP_A6_INHERITED'] = 'from-parent';
+      try {
+        const env = {
+          PATH: pathWithImpostor(),
+          NODE_OPTIONS: `--require "${probe}"`,
+          HLP_A6_PROBE_OUT: probeOut,
+          HLP_A6_KEY: 'from-caller',
+        };
+
+        // ANTI-VACUITY: this env's PATH really resolves `gitgov` to the impostor.
+        const viaPath = execSync('gitgov --version', { cwd: repoDir, encoding: 'utf8', env: { ...process.env, PATH: env.PATH } });
+        expect(viaPath.trim()).toBe(IMPOSTOR_VERSION);
+
+        const result = runGitgovCli('--version', { cwd: repoDir, env });
+        expect(result.output, `runGitgovCli resolved gitgov through the env's PATH instead of running ${CHECKOUT_CLI_BIN}`).not.toContain(IMPOSTOR_VERSION);
+        expect(result.output).toMatch(/\d+\.\d+\.\d+/);
+
+        expect(fs.existsSync(probeOut), 'the caller env (NODE_OPTIONS) never reached the CLI process').toBe(true);
+        const seen = JSON.parse(fs.readFileSync(probeOut, 'utf8')) as { script: string; key: string | null; inherited: string | null };
+        expect(fs.realpathSync(seen.script), 'the env was applied to a binary other than the one HLP-A1 runs').toBe(resolveGitgovCli().realpath);
+        expect(seen.key, 'an inherited key won over the caller\'s').toBe('from-caller');
+        expect(seen.inherited, 'the caller env replaced the inherited environment instead of merging over it').toBe('from-parent');
+      } finally {
+        if (saved.key === undefined) delete process.env['HLP_A6_KEY']; else process.env['HLP_A6_KEY'] = saved.key;
+        if (saved.inherited === undefined) delete process.env['HLP_A6_INHERITED']; else process.env['HLP_A6_INHERITED'] = saved.inherited;
+      }
+    });
+
+    it('[HLP-A7] should return the real exit code: 0 on success, the process status on failure, null when killed by the timeout', () => {
+      const { tmpDir, repoDir } = createTempGitRepo();
+      tempDirs.push(tmpDir);
+
+      expect(runGitgovCli('--version', { cwd: repoDir }).exitCode).toBe(0);
+
+      // Measured 2026-09-23 on the checkout build: an unknown option exits 1.
+      const failed = runGitgovCli('--no-such-option', { cwd: repoDir, expectError: true });
+      expect(failed.exitCode).toBe(1);
+
+      // The CLI itself only exits 0 or 1. A status other than 1 comes from the process the helper
+      // spawns: node rejects a flag in NODE_OPTIONS and exits 9 before the CLI runs. A helper that
+      // reports every failure as 1 cannot pass this.
+      const rejected = runGitgovCli('--version', { cwd: repoDir, expectError: true, env: { NODE_OPTIONS: '--no-such-node-flag' } });
+      expect(rejected.exitCode).toBe(9);
+
+      // `success` says nothing under expectError: it is false on a clean exit too. Only exitCode
+      // tells the two apart.
+      const succeeded = runGitgovCli('--version', { cwd: repoDir, expectError: true });
+      expect(succeeded.success).toBe(false);
+      expect(succeeded.exitCode).toBe(0);
+
+      // Killed by the helper's own timeout: there is no exit status.
+      const killed = runGitgovCli('--version', { cwd: repoDir, expectError: true, timeout: 1 });
+      expect(killed.exitCode).toBeNull();
     });
   });
 

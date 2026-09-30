@@ -1,7 +1,8 @@
 /**
  * CLI Helpers — Execute the CLI built in the checkout under test for E2E tests.
  * [HLP-A1] Real binary execution (sync), [HLP-A4] Async spawn for interactive commands,
- * [HLP-A5] Resolution of the binary both of them run.
+ * [HLP-A5] Resolution of the binary both of them run, [HLP-A6] Caller env merged over the inherited one,
+ * [HLP-A7] The process's real exit code in every result.
  * [HLP-A2] Git repo creation, [HLP-A3] Worktree cleanup.
  */
 import { execSync, spawn } from 'child_process';
@@ -16,12 +17,17 @@ import { getWorktreeBasePath } from '@gitgov/core/fs';
 export const GITGOV_CLI_BIN_ENV = 'GITGOV_CLI_BIN';
 
 /**
- * [HLP-A5] Monorepo root of the checkout these helpers belong to. Resolved through symlinks:
- * e2e-private reaches this file through a per-file symlink, and each checkout's symlink points
- * at its own monorepo, so the root is the checkout under test in the main clone and in any
- * worktree alike.
+ * [HLP-A5] Monorepo root of the checkout that holds the module at `moduleUrl`. The realpath of
+ * the file comes first and the climb after it: e2e-private reaches these helpers through the
+ * workspace link `@gitgov/e2e`, and under a runtime that preserves symlinks the module URL is
+ * that link's path, whose fourth ancestor is `e2e-private/node_modules`, not the checkout.
  */
-export const CHECKOUT_ROOT = fs.realpathSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..'));
+export function checkoutRootOf(moduleUrl: string): string {
+  return path.resolve(path.dirname(fs.realpathSync(fileURLToPath(moduleUrl))), '..', '..', '..', '..');
+}
+
+/** [HLP-A5] Monorepo root of the checkout these helpers belong to. */
+export const CHECKOUT_ROOT = checkoutRootOf(import.meta.url);
 
 /** [HLP-A5] The CLI build of the checkout under test. */
 export const CHECKOUT_CLI_BIN = path.join(CHECKOUT_ROOT, 'packages', 'cli', 'build', 'dist', 'gitgov.mjs');
@@ -66,9 +72,12 @@ function cliUnderTest(): GitgovCliBinary {
 }
 
 export type CliResult = {
+  /** With `expectError: true` this is false whether the command failed or not — read `exitCode`. */
   success: boolean;
   output: string;
   error: string | null;
+  /** [HLP-A7] The process's exit status: 0 on success, its own status on failure, null if killed (signal or timeout). */
+  exitCode: number | null;
 };
 
 export type SpawnedCli = {
@@ -89,22 +98,24 @@ export function runGitgovCli(args: string, options: { cwd: string; expectError?:
       encoding: 'utf8',
       stdio: 'pipe',
       timeout: options.timeout ?? 30000,
+      // [HLP-A6] Caller env merged over the inherited one (caller keys win); the binary above never comes from its PATH
       env: options.env ? { ...process.env, ...options.env } : undefined,
     });
 
     if (options.expectError) {
-      return { success: false, output: result, error: 'Expected error but succeeded' };
+      return { success: false, output: result, error: 'Expected error but succeeded', exitCode: 0 };
     }
-    return { success: true, output: result, error: null };
+    return { success: true, output: result, error: null, exitCode: 0 };
   } catch (error: unknown) {
-    const execError = error as { stderr?: string; stdout?: string; message?: string };
+    const execError = error as { stderr?: string; stdout?: string; message?: string; status?: number | null };
     const stderr = execError.stderr ?? '';
     const stdout = execError.stdout ?? '';
     const message = execError.message ?? '';
     const combinedOutput = `${stdout}\n${stderr}\n${message}`.trim();
 
     if (options.expectError) {
-      return { success: false, output: stdout || combinedOutput, error: stderr || combinedOutput };
+      // [HLP-A7] execSync sets `status` to null when the process was killed (signal or timeout)
+      return { success: false, output: stdout || combinedOutput, error: stderr || combinedOutput, exitCode: execError.status ?? null };
     }
     throw new Error(`CLI command failed: ${stderr || message}\nStdout: ${stdout}`);
   }

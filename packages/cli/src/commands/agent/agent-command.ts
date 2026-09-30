@@ -218,9 +218,11 @@ export class AgentCommand extends BaseCommand<RunCommandOptions> {
       // [ARUN-M1] The root is bound at construction, not passed per call. It is the REPO
       // root — where node_modules lives — not the worktree, and not process.cwd(): the
       // container already resolved it, so the anchor is explicit instead of ambient.
-      const { FsEngineValidator } = await import('@gitgov/core/fs');
-      const repoRoot = await this.container.getRepoRoot();
-      const validation = await new FsEngineValidator(repoRoot).validate(engine);
+      // [EARS-C18] The container builds it, so this command cannot drift from the runner:
+      // the validator carries the repo root AND the built-in registry, and it is the same
+      // registry the runner resolves against.
+      const validator = await this.container.getEngineValidator();
+      const validation = await validator.validate(engine);
       if (!validation.resolvable) {
         throw new Error(
           `Agent engine is not runnable: ${validation.reason}. ` +

@@ -4,6 +4,12 @@
   "private": true,
   "type": "module",
   "description": "Cross-package E2E tests for GitGovernance monorepo",
+  "exports": {
+    "./helpers": "./tests/helpers/shared.ts",
+    "./helpers/cli": "./tests/helpers/cli.ts",
+    "./helpers/fs": "./tests/helpers/fs.ts",
+    "./helpers/github": "./tests/helpers/github.ts"
+  },
   "scripts": {
     "prisma:sync": "tsx scripts/sync-prisma-schemas.ts",
     "prisma:generate": "pnpm prisma:sync && prisma generate --schema=prisma/schema",

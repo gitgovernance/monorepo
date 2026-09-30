@@ -264,7 +264,9 @@ export class AuditCommand extends BaseCommand<AuditCommandOptions> {
         const unregistered = discovered.filter(d => !registeredIds.includes(d.id));
         if (unregistered.length > 0) {
           const names = unregistered.map(a => `  ${a.id} — Run: gitgov agent new @gitgov/agent-${a.id.replace('agent:', '')}`);
-          console.log(`\nAvailable but not registered:\n${names.join('\n')}\n`);
+          // [AORCH-P9] stderr in every format: a diagnostic, not part of the report — on stdout it
+          // broke `--output json` and `--output sarif`, which must be one parseable document.
+          console.warn(`\nAvailable but not registered:\n${names.join('\n')}\n`);
         }
       } catch {
         // Discovery failure is non-fatal

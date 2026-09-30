@@ -1,7 +1,7 @@
 /**
- * onboarding_cli_only_e2e.test.ts — Phase E (EARS OB-E1 to OB-E6)
+ * onboarding_cli_only_e2e.test.ts — Phase E (EARS OB-E1 to OB-E9)
  *
- * Spec: e2e-private/specs/onboarding_flow.md §3.4, §4.4
+ * Spec: e2e-private/specs/onboarding_cli_only_flow.md §3.1
  *
  * Escenario 1: CLI puro sin SaaS. Owner y collaborator trabajan solo con el CLI.
  * No requiere servicios, no requiere SaaS, no requiere Playwright.
@@ -9,7 +9,7 @@
  *
  * Keys: per-repo en {worktree}/.gitgov/keys/ (aislamiento criptografico).
  */
-import { execSync } from 'child_process';
+import { execSync, spawnSync } from 'child_process';
 import { createHash } from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -48,7 +48,7 @@ const cleanupWorktree = (repoPath: string, wtPath: string) => {
   if (fs.existsSync(wtPath)) fs.rmSync(wtPath, { recursive: true, force: true });
 };
 
-describe('Phase E — CLI-only Owner + Collaborator (OB-E1 to OB-E6)', () => {
+describe('Phase E — CLI-only Owner + Collaborator (OB-E1 to OB-E9)', () => {
   let tempDir: string;
   let ownerRepoPath: string;
   let remotePath: string;
@@ -234,13 +234,15 @@ describe('Phase E — CLI-only Owner + Collaborator (OB-E1 to OB-E6)', () => {
     return env;
   };
 
-  it('[OB-E7] owner init then audit finds a hardcoded secret when the audit agent resolves', () => {
+  it('[OB-E7] owner init then audit finds a hardcoded secret with no agent installed in the repo', () => {
     const repo = initRepoWithSecret('secret-repo-installed');
-    // The default specialists do not ship with the CLI yet (agent_platform Task 1.2), so the agent
-    // is installed into the repo the way a user would today: resolvable from its node_modules.
-    const agentDir = path.resolve(__dirname, '..', '..', 'agents', 'security-audit');
-    fs.mkdirSync(path.join(repo, 'node_modules', '@gitgov'), { recursive: true });
-    fs.symlinkSync(agentDir, path.join(repo, 'node_modules', '@gitgov', 'agent-security-audit'), 'dir');
+    // NOTHING is installed here, and that is the assertion. Until 2026-09-23 this test
+    // symlinked the agent into the repo's node_modules, because the default specialists did
+    // not travel with the CLI — so the green measured a repo that had installed the agent,
+    // which is not what a user gets. With `builtin:security-audit` the agent ships inside the
+    // bundle (ARUN-O1, PROJ-F2), so the precondition is gone and the promise is unconditional:
+    // install the CLI, init, audit, findings.
+    expect(fs.existsSync(path.join(repo, 'node_modules', '@gitgov', 'agent-security-audit'))).toBe(false);
 
     // Policy fails the audit when it finds the secret, so the command exits non-zero
     const result = runCliCommand(['audit', '--scope', 'full', '--output', 'json'], { cwd: repo, expectError: true, env: repoOnlyEnv() });
@@ -249,5 +251,74 @@ describe('Phase E — CLI-only Owner + Collaborator (OB-E1 to OB-E6)', () => {
     const securityAudit = audit.agentResults.find((r: { agentId: string }) => r.agentId === 'agent:security-audit');
     expect(securityAudit?.status).toBe('success');
     expect(audit.findings.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('[OB-E8] owner init then audit reports the agent error instead of a clean success when it does not resolve', () => {
+    // The other half of E7, and it survives the built-in change with its subject corrected:
+    // "the default agent does not resolve" stopped being reachable for security-audit, but an
+    // agent that does NOT ship with the CLI still is — review-advisor, opt-in by decision A25
+    // because it needs an LLM.
+    //
+    // The requirement is that a non-resolving agent SAYS it failed, rather than reporting an
+    // empty success. That was the second of the two defects behind `0 findings on a live
+    // secret`: the orchestrator read a runner response of status "error" as success, fixed by
+    // AORCH-B5 in #171. The spec carried this EARS at red since 2026-09-14 waiting for that
+    // merge, and the test was never reincorporated after it landed on 2026-09-15.
+    const repo = initRepoWithSecret('secret-repo-not-installed');
+    expect(fs.existsSync(path.join(repo, 'node_modules', '@gitgov', 'agent-review-advisor'))).toBe(false);
+
+    const result = runCliCommand(['audit', '--scope', 'full', '--output', 'json'], { cwd: repo, expectError: true, env: repoOnlyEnv() });
+    const audit = parseAudit(result.output);
+
+    // Review agents report in `reviewResults`, not `agentResults` — measured on the real
+    // output, where the two lists are separate keys. The distinction is not cosmetic: it is
+    // why a review agent failing does not change the exit code (A15 / AORCH-F4).
+    const reviewAdvisor = audit.reviewResults.find((r: { agentId: string }) => r.agentId === 'agent:review-advisor');
+    expect(reviewAdvisor).toBeDefined(); // anti-vacuity: no result means nothing was asserted
+    expect(reviewAdvisor?.status).toBe('error');
+    expect(reviewAdvisor?.errorMessage).toContain('agent-review-advisor');
+
+    // And the built-in one still runs in the same command: a review agent failing to resolve
+    // does not take the audit down with it (A15 / AORCH-F4 keep review agents out of the exit
+    // code). Without this line the test would also pass on a CLI where nothing runs at all.
+    const securityAudit = audit.agentResults.find((r: { agentId: string }) => r.agentId === 'agent:security-audit');
+    expect(securityAudit?.status).toBe('success');
+  });
+
+  it('[OB-E9] owner init does not report the built-in audit agent as not runnable', () => {
+    // [OB-E9] The init's engine validation (PROJ-B6) does not gate registration: it only warns. Two
+    // mutations of the validator — a wrong root, an empty registry — left this file 8/8 and OB 15/15,
+    // because nothing read that warning. This is the e2e that can fall by it.
+    //
+    // Three conditions, all measured, or the assertion is vacuous: the warning goes to STDERR only
+    // (console.warn); --quiet suppresses it entirely; and runCliCommand returns stdout alone when the
+    // command exits 0. So this test runs its own init, without --quiet, and captures stderr itself.
+    const repo = path.join(tempDir, 'init-warning-repo');
+    fs.mkdirSync(repo, { recursive: true });
+    execSync('git init --initial-branch=main', { cwd: repo, stdio: 'pipe' });
+    execSync('git config user.name "Owner"', { cwd: repo, stdio: 'pipe' });
+    execSync('git config user.email "owner@test.com"', { cwd: repo, stdio: 'pipe' });
+    fs.writeFileSync(path.join(repo, 'README.md'), '# init warning\n');
+    execSync('git add -A && git commit -m "initial"', { cwd: repo, stdio: 'pipe' });
+    worktreesToClean.push({ repo, wt: getWorktreeBasePath(repo) });
+
+    const cliPath = path.resolve(__dirname, '../build/dist/gitgov.mjs');
+    const init = spawnSync(process.execPath, [cliPath, 'init', '--name', 'E2E init warning', '--login', 'owner'], {
+      cwd: repo,
+      encoding: 'utf8',
+      env: repoOnlyEnv(),
+      timeout: 30000,
+    });
+    const stderr = init.stderr ?? '';
+    expect(init.status, `init failed:\n${stderr}\n${init.stdout}`).toBe(0);
+
+    const lines = stderr.split('\n');
+    const notRunnable = (agentId: string) => lines.some((l) => l.includes(agentId) && l.includes('not runnable'));
+
+    // Anti-vacuity: review-advisor is opt-in by A25 and never resolves in a clean repo, so its line
+    // must be here. Without it, this test is not reading the output it thinks it reads. NODE_PATH is
+    // removed above because, inherited from pnpm, it finds the package in the workspace.
+    expect(notRunnable('agent:review-advisor'), `expected a review-advisor "not runnable" line on stderr:\n${stderr}`).toBe(true);
+    expect(notRunnable('agent:security-audit'), `security-audit reported not runnable on stderr:\n${stderr}`).toBe(false);
   });
 });

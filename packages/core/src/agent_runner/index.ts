@@ -26,6 +26,9 @@ export type {
   ProtocolHandler,
   RuntimeHandlerRegistry,
   RuntimeHandler,
+  // [ARUN-O1] Pure contract — a name to an already-loaded function. The host composes it.
+  BuiltinAgentRegistry,
+  AgentExecutor,
   IEngineBackend,
   EngineBackendMap,
 } from "./agent_runner";

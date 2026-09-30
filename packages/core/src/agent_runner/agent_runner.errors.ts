@@ -116,3 +116,22 @@ export class RuntimeNotFoundError extends RunnerError {
     Object.setPrototypeOf(this, RuntimeNotFoundError.prototype);
   }
 }
+
+/**
+ * [ARUN-O3] Error thrown when a `builtin:` entrypoint names an agent that the
+ * registry does not hold, or when no registry was injected at all.
+ *
+ * Distinct from AgentNotFoundError on purpose: that one means the AgentRecord file
+ * is missing from `.gitgov/agents/` (ARUN-A2). This one means the record exists and
+ * points at a built-in that the host did not ship — different cause, different fix.
+ */
+export class BuiltinAgentNotRegisteredError extends RunnerError {
+  public readonly agentName: string;
+
+  constructor(agentName: string) {
+    super(`BuiltinAgentNotRegistered: ${agentName}`);
+    this.name = "BuiltinAgentNotRegisteredError";
+    this.agentName = agentName;
+    Object.setPrototypeOf(this, BuiltinAgentNotRegisteredError.prototype);
+  }
+}

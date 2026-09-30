@@ -4,8 +4,9 @@ import {
   LocalEngineConfigError,
   FunctionNotExportedError,
   RuntimeNotFoundError,
+  BuiltinAgentNotRegisteredError,
 } from "../agent_runner.errors";
-import type { RuntimeHandlerRegistry } from "../agent_runner";
+import type { RuntimeHandlerRegistry, BuiltinAgentRegistry, AgentExecutor } from "../agent_runner";
 import type {
   LocalEngine,
   AgentExecutionContext,
@@ -29,28 +30,75 @@ export function isPackageEntrypoint(entrypoint: string): boolean {
     || (!hasFileExtension && !entrypoint.startsWith(".") && !entrypoint.startsWith("/") && !entrypoint.includes(path.sep));
 }
 
+/** [ARUN-B1] Marks an entrypoint as a built-in shipped by the host, not a module to import. */
+export const BUILTIN_PREFIX = "builtin:";
+
 /**
- * [ARUN-B1] Resolves a local engine entrypoint to an absolute path using the
- * SAME rules as agent execution: npm package names (scoped or bare) via Node's
- * `require.resolve` anchored at the project root; absolute/relative paths joined
- * with the project root. Throws when the entrypoint cannot be resolved.
- *
- * Shared by `LocalBackend.executeEntrypoint` (execution) and `FsEngineValidator`
- * (ARUN-M2, creation-time validation) — single source of truth for resolution.
- *
- * CAVEAT worth knowing: this takes ONE root, while execution uses TWO —
- * `executeEntrypoint` anchors packages at `ctx.projectRoot` and paths at
- * `this.projectRoot`. Today both come from the same value (`fs_agent_runner.ts:74`
- * and `:129`), so validation predicts execution exactly. If they ever diverge, the
- * validator would resolve against one root and execution against the other, and
- * ARUN-M2 would stop predicting what actually happens — which is its whole purpose.
+ * [ARUN-O1] The two anchors resolution can land in: the user's repository, and the
+ * registry of the module that executes the agent (the CLI on a developer machine, the
+ * worker in the SaaS).
  */
-export function resolveLocalEntrypoint(entrypoint: string, projectRoot: string): string {
-  if (isPackageEntrypoint(entrypoint)) {
-    const require = createRequire(path.join(projectRoot, "package.json"));
-    return require.resolve(entrypoint);
+export type LocalResolutionAnchors = {
+  projectRoot: string;
+  /** Explicitly `| undefined`: the repo runs with `exactOptionalPropertyTypes`, and callers
+   *  forward an optional dependency rather than omitting the key. */
+  builtinAgents?: BuiltinAgentRegistry | undefined;
+};
+
+/** [ARUN-O2] Where an entrypoint resolved to. A built-in is a function, never a path. */
+export type LocalEntrypointResolution =
+  | { kind: "builtin"; name: string; execute: AgentExecutor }
+  | { kind: "module"; absolutePath: string };
+
+/**
+ * [ARUN-B1] Resolves a local engine entrypoint using the SAME rules as agent execution,
+ * in an EXCLUSIVE order of precedence:
+ *
+ *   1. `builtin:<name>` — looked up in the registry the host injected. Never touches disk.
+ *   2. npm package name (scoped or bare) — `require.resolve` anchored at the project root.
+ *   3. absolute path — used as is.
+ *   4. relative path — joined with the project root.
+ *
+ * A `builtin:` that is not registered fails with its own error and is NOT retried as a
+ * package or a path, even when the repository happens to have one by that name. Overriding
+ * a built-in is done by declaring the package name in the AgentRecord entrypoint, which
+ * keeps the choice auditable in the record.
+ *
+ * [ARUN-O4] The anchors are derived HERE, from the shape of the entrypoint. No caller picks
+ * a root. Until 2026-09-23 `executeEntrypoint` chose between `ctx.projectRoot` for packages
+ * and `this.projectRoot` for paths; both held the same value, so the choice never changed an
+ * outcome, but while it lived at the call site two callers could choose differently and
+ * ARUN-M2 would stop predicting execution with every test still green.
+ *
+ * [ARUN-O5] Shared by `LocalBackend.executeEntrypoint` (execution) and `FsEngineValidator`
+ * (ARUN-M2, creation-time validation). Being the single function both sides call is what
+ * MAKES validation predict execution — the equivalence is a property of this sharing, not
+ * of either caller, which is why it is asserted here and not in one of them.
+ */
+export function resolveLocalEntrypoint(
+  entrypoint: string,
+  anchors: LocalResolutionAnchors
+): LocalEntrypointResolution {
+  // [ARUN-O2] Built-in: a function already in memory, not a module to import.
+  if (entrypoint.startsWith(BUILTIN_PREFIX)) {
+    const name = entrypoint.slice(BUILTIN_PREFIX.length);
+    const execute = anchors.builtinAgents?.get(name);
+    // [ARUN-O3] Missing name, or no registry at all — same failure, named.
+    if (!execute) {
+      throw new BuiltinAgentNotRegisteredError(name);
+    }
+    return { kind: "builtin", name, execute };
   }
-  return path.isAbsolute(entrypoint) ? entrypoint : path.join(projectRoot, entrypoint);
+
+  if (isPackageEntrypoint(entrypoint)) {
+    const require = createRequire(path.join(anchors.projectRoot, "package.json"));
+    return { kind: "module", absolutePath: require.resolve(entrypoint) };
+  }
+
+  return {
+    kind: "module",
+    absolutePath: path.isAbsolute(entrypoint) ? entrypoint : path.join(anchors.projectRoot, entrypoint),
+  };
 }
 
 /**
@@ -65,7 +113,9 @@ export function resolveLocalEntrypoint(entrypoint: string, projectRoot: string):
 export class LocalBackend {
   constructor(
     private projectRoot: string,
-    private runtimeRegistry?: RuntimeHandlerRegistry
+    private runtimeRegistry?: RuntimeHandlerRegistry,
+    // [ARUN-O1] Injected at construction, like every other registry.
+    private builtinAgents?: BuiltinAgentRegistry
   ) {}
 
   /**
@@ -96,19 +146,23 @@ export class LocalBackend {
     engine: LocalEngine,
     ctx: AgentExecutionContext
   ): Promise<AgentOutput> {
-    // [ARUN-B1] Resolve entrypoint via the shared resolver (npm package via
-    // require.resolve, absolute/relative path). Package resolution anchors at
-    // ctx.projectRoot; path resolution at this.projectRoot (same as before).
+    // [ARUN-B1, ARUN-O4] One call, and the resolver picks its own anchors from the shape
+    // of the entrypoint — the backend no longer chooses a root.
     const entrypoint = engine.entrypoint!;
-    // Same classifier the resolver uses — see isPackageEntrypoint. Needed here BEFORE
-    // resolving, because packages and paths anchor at different roots.
-    const absolutePath = resolveLocalEntrypoint(
-      entrypoint,
-      isPackageEntrypoint(entrypoint) ? ctx.projectRoot : this.projectRoot
-    );
+    const resolution = resolveLocalEntrypoint(entrypoint, {
+      projectRoot: this.projectRoot,
+      builtinAgents: this.builtinAgents,
+    });
+
+    // [ARUN-O2] A built-in is already a function: no import, and `engine.function` has no
+    // effect, because there is no module from which to select an export.
+    if (resolution.kind === "builtin") {
+      // [ARUN-B7] Same invocation contract as an imported entrypoint.
+      return this.normalizeOutput(await resolution.execute(ctx));
+    }
 
     // [ARUN-B4] Dynamic import
-    const mod = await import(absolutePath);
+    const mod = await import(resolution.absolutePath);
 
     // [ARUN-B5] Get function (default: "runAgent")
     const fnName = engine.function || "runAgent";

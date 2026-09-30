@@ -3,7 +3,7 @@ import type { IEventStream } from "../event_bus";
 import type { IExecutionAdapter } from "../adapters/execution_adapter";
 import type { KeyProvider } from "../key_provider/key_provider";
 import type { IFeedbackAdapter } from "../adapters/feedback_adapter";
-import type { ProtocolHandlerRegistry, RuntimeHandlerRegistry } from "./agent_runner";
+import type { ProtocolHandlerRegistry, RuntimeHandlerRegistry, BuiltinAgentRegistry } from "./agent_runner";
 
 // ============================================================================
 // Engine Types (derived from AgentRecord — source: agent_record_schema.yaml)
@@ -159,6 +159,11 @@ export type AgentRunnerDependencies = {
   protocolHandlers?: ProtocolHandlerRegistry;
   /** Runtime handler registry (for engine.runtime in local engines) */
   runtimeHandlers?: RuntimeHandlerRegistry;
+  /**
+   * [ARUN-O1] Built-in agents shipped inside the host's bundle. Without it, only a
+   * `builtin:` entrypoint fails, and it fails by name (ARUN-O3).
+   */
+  builtinAgents?: BuiltinAgentRegistry;
 };
 
 /**

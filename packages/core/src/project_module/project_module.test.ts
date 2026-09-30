@@ -1216,12 +1216,46 @@ describe('ProjectModule', () => {
         const pkg = JSON.parse(readFileSync(join(__dirname, '../../../agents', dir, 'package.json'), 'utf8'));
         expect(pkg.name).toBe(agent.packageName);
         const declared = pkg.gitgov.agent;
-        expect({ purpose: agent.purpose, function: agent.engine.function, metadata: agent.metadata })
-          .toEqual({ purpose: declared.purpose, function: declared.function, metadata: declared.metadata });
-        // The whole engine, not just the function: `runtime` is a field no package.json declares,
-        // and LocalBackend runs it BEFORE the entrypoint with no handler registered — measured
-        // as 0 findings on `gitgov init` → `gitgov audit` over a repo with a live secret.
-        expect(agent.engine).toEqual({ type: 'local', entrypoint: agent.packageName, function: declared.function });
+        expect({ purpose: agent.purpose, metadata: agent.metadata })
+          .toEqual({ purpose: declared.purpose, metadata: declared.metadata });
+      }
+    });
+
+    it('[PROJ-F2] should register the built-in agent with a builtin entrypoint and no function', () => {
+      // The engine clause SPLIT rather than being rewritten: rewriting it would have made
+      // review-advisor a built-in too and contradicted A25. `function` is gone because
+      // ARUN-O2 gives it no effect on this form — the registry maps a name straight to a
+      // function, so there is no module from which to select an export, and a field nobody
+      // reads is the shape `runtime: 'typescript'` had for months.
+      const { DEFAULT_AGENTS } = require('./default_agents');
+      const builtin = DEFAULT_AGENTS.find((a: { agentId: string }) => a.agentId === 'agent:security-audit');
+
+      expect(builtin.engine).toEqual({ type: 'local', entrypoint: 'builtin:security-audit' });
+      // Spelled out, because `toEqual` above would also pass if the key were present as
+      // undefined — and that is a different thing to ship in a record.
+      expect('function' in builtin.engine).toBe(false);
+      expect('runtime' in builtin.engine).toBe(false);
+    });
+
+    it('[PROJ-F2] should keep the package entrypoint and function for opt-in specialists', () => {
+      // The other half of the split, and the anti-vacuity of the test above: if `builtin:`
+      // had been applied to every specialist, this fails. A25 keeps review-advisor opt-in
+      // because it needs an LLM, and semgrep because it needs an external binary.
+      const { DEFAULT_AGENTS } = require('./default_agents');
+      const optIn = DEFAULT_AGENTS.filter(
+        (a: { agentId: string }) => a.agentId !== 'agent:gitgov-audit' && a.agentId !== 'agent:security-audit'
+      );
+
+      expect(optIn.length).toBeGreaterThan(0); // anti-vacuity: an empty list asserts nothing
+      for (const agent of optIn) {
+        const dir = agent.packageName.replace('@gitgov/agent-', '');
+        const pkg = JSON.parse(readFileSync(join(__dirname, '../../../agents', dir, 'package.json'), 'utf8'));
+        expect(agent.engine).toEqual({
+          type: 'local',
+          entrypoint: agent.packageName,
+          function: pkg.gitgov.agent.function,
+        });
+        expect(agent.engine.entrypoint.startsWith('builtin:')).toBe(false);
       }
     });
 

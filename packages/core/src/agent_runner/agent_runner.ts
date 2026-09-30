@@ -66,6 +66,37 @@ export type RuntimeHandler = (
 ) => Promise<AgentOutput>;
 
 /**
+ * [ARUN-O1] Registry of built-in agents: the ones shipped inside the bundle of the
+ * host that runs the agent, rather than installed in the user's repository.
+ *
+ * Spec: fs_agent_runner_module.md §4.12
+ *
+ * This is a PURE contract — a name mapped to an already-loaded function, with no
+ * `require.resolve` and no filesystem — so it ships from the root entrypoint and does
+ * not drag `node:path` or `node:module` into whatever bundle imports it.
+ *
+ * A single `get` and nothing else, so a plain `Map<string, AgentExecutor>` satisfies it
+ * structurally — which is exactly what the SaaS scan orchestrator already builds by hand.
+ * Both hosts converge without either one changing shape.
+ *
+ * Deliberately NOT the shape of `RuntimeHandlerRegistry`, which also declares `register`:
+ * a Map has `set`, not `register`, so that interface is not Map-compatible. (`register` is
+ * dead on that type — nothing in the tree calls it on a RuntimeHandlerRegistry — but
+ * removing it is a nominal break of a root export and belongs to its own change.)
+ */
+export interface BuiltinAgentRegistry {
+  get(name: string): AgentExecutor | undefined;
+}
+
+/**
+ * [ARUN-O2] The function of a built-in agent. Same invocation shape LocalBackend uses
+ * for an imported entrypoint (ARUN-B7): the context as its only argument.
+ */
+export type AgentExecutor = (
+  ctx: AgentExecutionContext
+) => Promise<AgentOutput> | AgentOutput;
+
+/**
  * [ARUN-M1] Contract for validating that an agent engine is EXECUTABLE, not just
  * well-formed — the creation-time counterpart of the audit-time detection
  * (AORCH-G1/G2). A registered agent should be an agent that runs, not a JSON
