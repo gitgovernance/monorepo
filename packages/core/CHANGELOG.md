@@ -1,3 +1,27 @@
+## [7.0.0](https://github.com/gitgovernance/monorepo/compare/core-v6.0.0...core-v7.0.0) (2026-09-30)
+
+
+### ⚠ BREAKING CHANGES
+
+* **core:** the default audit agent registers as builtin:security-audit (PROJ-F2)
+* **core:** resolve builtin agent entrypoints through an injected registry
+
+### ✨ Features
+
+* **cli:** compose the builtin agent registry and inject one instance (EARS-C18) ([b249ecd](https://github.com/gitgovernance/monorepo/commit/b249ecd0d6d0529d004b1c3f6cbf478db4f74cba))
+* **core:** resolve builtin agent entrypoints through an injected registry ([a275126](https://github.com/gitgovernance/monorepo/commit/a275126033e63d65953985e9ce09a43d06ef9315))
+* **core:** the default audit agent registers as builtin:security-audit (PROJ-F2) ([ee0879b](https://github.com/gitgovernance/monorepo/commit/ee0879b661c13e155a487f5e790b3e67c6d3e44e))
+* **e2e:** expose the shared helpers as @gitgov/e2e subpaths (HLP-A5, HLP-A8) ([4de3093](https://github.com/gitgovernance/monorepo/commit/4de309394332223f953eff4f4c38f6fa31023a3b))
+* **e2e:** runGitgovCli returns the real exit code (HLP-A7) ([ffee333](https://github.com/gitgovernance/monorepo/commit/ffee333d549a5331372c75bd71a10b4a8446422e))
+
+
+### 🐛 Bug Fixes
+
+* **ci:** build agent-security-audit before the cli typecheck, tests and release build ([19028ad](https://github.com/gitgovernance/monorepo/commit/19028ad5c54750ddc8bf8ae15d5db9d1e30c55cd))
+* **cli:** one factory builds the engine validator; test ARUN-B1's absolute form ([00ccad7](https://github.com/gitgovernance/monorepo/commit/00ccad7b30cc2b8a3a0c358279e6fb0ae7e10cd8))
+* **cli:** runner and validator take both anchors from the same accessors (EARS-C19) ([a73e14f](https://github.com/gitgovernance/monorepo/commit/a73e14f23b05d240da9496e4396e54a4dba51ab2))
+* **cli:** the unregistered-agent listing goes to stderr (AORCH-P9) ([a3f975e](https://github.com/gitgovernance/monorepo/commit/a3f975ef24d14ac465e24e0daa6b8ae2f2aa39f4))
+
 ## [6.0.0](https://github.com/gitgovernance/monorepo/compare/core-v5.0.0...core-v6.0.0) (2026-09-22)
 
 
