@@ -114,10 +114,11 @@ run "pnpm install" "$PNPM" install --frozen-lockfile || exit 1
 head "3. Builds"
 run "@gitgov/core"     "$PNPM" --filter @gitgov/core build             || exit 1
 run "the 5 agents"     "$PNPM" -r --filter './packages/agents/*' build  || exit 1
-# The CLI IS built here. It is not needed to develop the monorepo, but its own
-# unit suite and every e2e suite spawn `packages/cli/build/dist/gitgov.mjs`;
-# without it they fail with "Cannot find module .../gitgov.mjs", which reads
-# like a bug in the code instead of a missing build.
+# The CLI IS built here. It is not needed to develop the monorepo, but the CLI's
+# own e2e suite and every suite of packages/e2e and e2e-private spawn
+# `packages/cli/build/dist/gitgov.mjs`; without it they fail with "Cannot find
+# module .../gitgov.mjs", which reads like a bug in the code instead of a missing
+# build. (The CLI's UNIT suite does not need it: `test:unit` is `vitest run src`.)
 run "the CLI"          "$PNPM" --filter @gitgov/cli build              || exit 1
 
 # e2e generates its OWN Prisma client from core's schemas and does not import
