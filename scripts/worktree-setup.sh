@@ -69,7 +69,8 @@ if [ -e "$PRIVATE/.git" ]; then
 else
   if [ ! -d "$PRIVATE_BASE/.git" ]; then
     fail "no private base clone at $PRIVATE_BASE"
-    echo "        create it once, then run this again:" >&2
+    echo "        gitgovernance/private is a private repo: preparing a worktree needs" >&2
+    echo "        access to it. Create the base clone once, then run this again:" >&2
     echo "          git clone $PRIVATE_REPO $PRIVATE_BASE" >&2
     echo "        (or point GITGOV_PRIVATE_BASE at an existing clone)" >&2
     exit 1
