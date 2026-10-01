@@ -9,12 +9,19 @@
 #      before the CLI because the CLI bundle imports them statically
 #      (packages/cli/src/services/builtin-agents.ts, EARS-C18).
 #
-#   2. The private GUEST, under packages/private. It is a nested clone and
+#   2. The private GUEST, under packages/private. It is a nested checkout and
 #      gitignored — it cannot be a submodule (monorepo 75c26ee: the public repo
 #      would carry a pointer into a private one) — and it links back here
 #      through @gitgov/core -> link:../core, so it MUST live at that exact path.
-#      Preparing it is private's own business, so this file clones it and hands
-#      over to its script.
+#      Preparing it is private's own business, so this file puts it there and
+#      hands over to its script.
+#
+#      It is a `git worktree` of the machine's private base clone, NOT a fresh
+#      clone: the two share their object store, so a new monorepo worktree costs
+#      seconds instead of the minutes a full clone over the network takes. Each
+#      worktree still gets its own checkout and its own branch, which is what
+#      makes it possible to open a pull request against `private` from inside a
+#      monorepo worktree without disturbing any other one.
 #
 # Idempotent: running it twice changes nothing. Fail-closed: any failed step
 # stops the whole thing, because a worktree half-prepared starts on defaults and
@@ -32,14 +39,18 @@ ROOT="${1:-$(cd "$HERE/.." && pwd)}"
 PRIVATE="$ROOT/packages/private"
 PNPM="${PNPM:-pnpm}"
 PRIVATE_REPO="git@github.com:gitgovernance/private.git"
+# The one private checkout the others are worktrees of. It is not created here:
+# without it there is nothing to share objects with, and silently cloning one
+# would hide the mistake behind two minutes of network.
+PRIVATE_BASE="${GITGOV_PRIVATE_BASE:-$HOME/projects/github.com/gitgovernance/private}"
 
 pass() { printf "  \033[32mOK  \033[0m %s\n" "$1"; }
 fail() { printf "  \033[31mFAIL\033[0m %s\n" "$1"; }
 head() { printf "\n\033[1m%s\033[0m\n" "$1"; }
 
 # Run a step, keeping its output out of the way and showing it only if it fails.
-# The label is printed BEFORE the step runs: the clone below takes minutes, and a
-# silent screen reads as a hung one.
+# The label is printed BEFORE the step runs: the fetch below can take a while on
+# a slow link, and a silent screen reads as a hung one.
 run() {
   local label="$1"; shift
   local log; log=$(mktemp)
@@ -53,10 +64,26 @@ run() {
 }
 
 head "1. private (guest)"
-if [ -d "$PRIVATE/.git" ]; then
-  pass "already cloned at packages/private"
+if [ -e "$PRIVATE/.git" ]; then
+  pass "already present at packages/private"
 else
-  run "clone gitgovernance/private" git clone "$PRIVATE_REPO" "$PRIVATE" || exit 1
+  if [ ! -d "$PRIVATE_BASE/.git" ]; then
+    fail "no private base clone at $PRIVATE_BASE"
+    echo "        gitgovernance/private is a private repo: preparing a worktree needs" >&2
+    echo "        access to it. Create the base clone once, then run this again:" >&2
+    echo "          git clone $PRIVATE_REPO $PRIVATE_BASE" >&2
+    echo "        (or point GITGOV_PRIVATE_BASE at an existing clone)" >&2
+    exit 1
+  fi
+  # Prune first: a monorepo worktree that was deleted leaves its admin entry
+  # behind in the base clone, and the list would grow forever otherwise.
+  run "prune stale worktrees"  git -C "$PRIVATE_BASE" worktree prune || exit 1
+  run "fetch $PRIVATE_BASE"    git -C "$PRIVATE_BASE" fetch --prune origin || exit 1
+  # --detach, not a branch: the base clone already has `main` checked out, and
+  # git refuses to hand the same branch to two worktrees at once. Whoever
+  # changes something here creates its branch first — the habit we want anyway.
+  run "worktree at packages/private" \
+    git -C "$PRIVATE_BASE" worktree add --detach "$PRIVATE" origin/main || exit 1
 fi
 
 head "2. Dependencies (monorepo)"
@@ -79,5 +106,9 @@ echo "  ${ROOT}"
 echo
 echo "  start the dev stack:  gitgov-dev up ${ROOT}"
 echo "  check it:             gitgov-dev status"
+echo
+echo "  private is a detached worktree of:"
+echo "    $PRIVATE_BASE"
+echo "  to change something there:  cd $PRIVATE && git switch -c <branch>"
 echo
 echo "  (the CLI is not built here: it is not needed for development)"
