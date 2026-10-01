@@ -4,10 +4,14 @@
 # The monorepo is the host. This is the file the Orca worktree hook calls (see
 # orca.yaml at the repo root), and it does two things, in this order:
 #
-#   1. The monorepo's OWN material: install, build @gitgov/core and the five
-#      agents. Core goes first because everything imports it; the agents go
-#      before the CLI because the CLI bundle imports them statically
-#      (packages/cli/src/services/builtin-agents.ts, EARS-C18).
+#   1. The monorepo's OWN material: install, build @gitgov/core, the five agents
+#      and the CLI, generate the Prisma client the e2e package owns, deploy its
+#      .env, and run the suites the CI runs. Core goes first because everything
+#      imports it; the agents go before the CLI because the CLI bundle imports
+#      them statically (packages/cli/src/services/builtin-agents.ts, EARS-C18).
+#
+#      The tests are REPORTED, not enforced: a red suite does not stop the
+#      worktree, because one of them keeps cases red on purpose.
 #
 #   2. The private GUEST, under packages/private. It is a nested checkout and
 #      gitignored — it cannot be a submodule (monorepo 75c26ee: the public repo
@@ -23,9 +27,10 @@
 #      makes it possible to open a pull request against `private` from inside a
 #      monorepo worktree without disturbing any other one.
 #
-# Idempotent: running it twice changes nothing. Fail-closed: any failed step
-# stops the whole thing, because a worktree half-prepared starts on defaults and
-# the failure is silent.
+# Idempotent: running it twice changes nothing. Fail-closed on PREPARATION: a
+# failed step stops the whole thing, because a worktree half-prepared starts on
+# defaults and the failure is silent. The test step is the one exception, and the
+# script says why where it runs.
 #
 # Usage:
 #   scripts/worktree-setup.sh [<worktree-path>]
@@ -63,6 +68,23 @@ run() {
   rm -f "$log"; return 1
 }
 
+# Like run(), but a red result is REPORTED and does not stop the setup. The point
+# is that whoever lands in the worktree sees the state of the suites without
+# having to run them first — not to gate the worktree on them. It cannot gate it:
+# private's api suite keeps two cases red on purpose (TRPC-C3/C4, until N11-5),
+# so enforcing would mean no worktree is ever created.
+run_soft() {
+  local label="$1"; shift
+  local log; log=$(mktemp)
+  printf "  .... %s\n" "$label"
+  if ( cd "$ROOT" && "$@" ) >"$log" 2>&1; then
+    printf "  \033[32mOK  \033[0m %s\n" "$label"; rm -f "$log"; return 0
+  fi
+  printf "  \033[33mWARN\033[0m %s\n" "$label"
+  grep -E "(Tests|Test Files|Test Suites)" "$log" | tail -3 | sed 's/^/        /'
+  rm -f "$log"; return 0
+}
+
 head "1. private (guest)"
 if [ -e "$PRIVATE/.git" ]; then
   pass "already present at packages/private"
@@ -92,8 +114,42 @@ run "pnpm install" "$PNPM" install --frozen-lockfile || exit 1
 head "3. Builds"
 run "@gitgov/core"     "$PNPM" --filter @gitgov/core build             || exit 1
 run "the 5 agents"     "$PNPM" -r --filter './packages/agents/*' build  || exit 1
+# The CLI IS built here. It is not needed to develop the monorepo, but the CLI's
+# own e2e suite and every suite of packages/e2e and e2e-private spawn
+# `packages/cli/build/dist/gitgov.mjs`; without it they fail with "Cannot find
+# module .../gitgov.mjs", which reads like a bug in the code instead of a missing
+# build. (The CLI's UNIT suite does not need it: `test:unit` is `vitest run src`.)
+run "the CLI"          "$PNPM" --filter @gitgov/cli build              || exit 1
 
-head "4. private setup"
+# e2e generates its OWN Prisma client from core's schemas and does not import
+# core's — by design (packages/e2e/AGENTS.md §2: a cross-path import gives
+# rootDir errors and makes the package depend on core having generated first).
+# The CI runs this before its tests; without it a fresh worktree cannot run
+# packages/e2e at all: nine suites die on
+# `Cannot find module '../../generated/prisma'`.
+run "Prisma client (e2e)" "$PNPM" --filter @gitgov/e2e run prisma:generate || exit 1
+
+head "4. Environment (e2e)"
+# packages/e2e reads its own .env — gitignored, and the four GitHub vars live
+# only there. Its source is in the machine's central store, like every other env.
+# Without it Blocks C, D and F throw "requires GitHub credentials".
+E2E_ENV="${GITGOV_ENV_SRC:-$HOME/.gitgov/envs}/e2e.env"
+if [ -f "$ROOT/packages/e2e/.env" ]; then
+  pass "packages/e2e/.env already present — left alone"
+elif [ -f "$E2E_ENV" ]; then
+  install -m 600 "$E2E_ENV" "$ROOT/packages/e2e/.env" && pass "deployed packages/e2e/.env"
+else
+  printf "  \033[33mWARN\033[0m no %s — the e2e suites will fail without GitHub credentials\n" "$E2E_ENV"
+fi
+
+head "5. Tests (the set CI runs; the e2e flows are not here)"
+# Reported, never enforced — see run_soft(). A red suite does not stop the
+# worktree: it is prepared either way, and its state is on screen.
+run_soft "@gitgov/core"       "$PNPM" --filter @gitgov/core run test
+run_soft "@gitgov/mcp-server" "$PNPM" --filter @gitgov/mcp-server run test
+run_soft "@gitgov/cli (unit)" "$PNPM" --filter @gitgov/cli run test:unit
+
+head "6. private setup"
 if [ -x "$PRIVATE/scripts/worktree-setup.sh" ]; then
   "$PRIVATE/scripts/worktree-setup.sh" "$PRIVATE" || exit 1
 else
@@ -110,5 +166,3 @@ echo
 echo "  private is a detached worktree of:"
 echo "    $PRIVATE_BASE"
 echo "  to change something there:  cd $PRIVATE && git switch -c <branch>"
-echo
-echo "  (the CLI is not built here: it is not needed for development)"
