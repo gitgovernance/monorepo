@@ -204,7 +204,7 @@ describe('Block D: Cross-Path Workflows (CD1-CD5)', () => {
 
   it('[EARS-CD3] should produce unified projection from CLI and GitHub records', async () => {
     // At this point, gitgov-state has:
-    // - Records pushed by CLI in CD1 (task, actor, cycle, config)
+    // - Records pushed by CLI in CD1 (task, actor, config)
     // - Feedback written by API in CD2
     // Both should appear in a single unified projection
 
@@ -365,7 +365,7 @@ describe('Block D: Cross-Path Workflows (CD1-CD5)', () => {
     expect(fs.existsSync(path.join(getGitgovDir(clonePath), 'config.json'))).toBe(true);
 
     // Verify records synced — tasks, actors should be present
-    const syncedDirs = ['tasks', 'actors', 'cycles'];
+    const syncedDirs = ['tasks', 'actors'];
     for (const dir of syncedDirs) {
       const ids = await listRecordIds(clonePath, dir);
       expect(ids.length).toBeGreaterThanOrEqual(1);

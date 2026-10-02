@@ -2,7 +2,7 @@
  * Block A: CLI Record Creation — 8 EARS (CA1-CA7, CA9; CA8 deprecated)
  * Blueprint: e2e/specs/cli_records.md
  *
- * Validates that the real CLI (`node gitgov.mjs`) creates all 7 record types
+ * Validates that the real CLI (`node gitgov.mjs`) creates all record types
  * correctly in the filesystem. All records are created via execSync — black-box.
  *
  * EARS for missing CLI commands (CA2, CA3, CA5, CA6, CA8) FAIL loudly
@@ -191,10 +191,11 @@ describe('Block A: CLI Record Creation (CA1-CA7, CA9)', () => {
     expect(result.success).toBe(true);
 
     const cycleIds = await listRecordIds(repoDir, 'cycles');
-    // gitgov init creates a root cycle, so we expect at least 2 (root + Sprint 1)
-    expect(cycleIds.length).toBeGreaterThanOrEqual(2);
+    // [PROJ-C5] The init no longer creates a root cycle (D29), so the only cycle
+    // here is the one `gitgov cycle new` just created.
+    expect(cycleIds.length).toBeGreaterThanOrEqual(1); // Sprint 1
 
-    // Find our Sprint 1 cycle (not the root cycle created by init)
+    // Find our Sprint 1 cycle
     let sprint1: ParsedRecord | undefined;
     for (const id of cycleIds) {
       const c = await readRecord(repoDir, 'cycles', id);
@@ -208,8 +209,6 @@ describe('Block A: CLI Record Creation (CA1-CA7, CA9)', () => {
     expect(sprint1!.header.signatures.length).toBeGreaterThanOrEqual(1);
     cycleId = sprint1!.payload.id;
   });
-
-  // CA8 (changelog) — DEPRECATED: changelog record type removed from protocol
 
   it('[EARS-CA9] should have valid SHA-256 checksums on all records', async () => {
     const dirs = ['actors', 'tasks', 'feedbacks', 'cycles'];
