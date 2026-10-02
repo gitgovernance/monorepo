@@ -26,6 +26,18 @@ export GITHUB_TOKEN=ghp_xxxxxxxxxxxx
 
 `globalSetup.ts` creates the 2 E2E databases (`gitgov_e2e_protocol`, `gitgov_e2e_audit`) and runs `prisma db push` automatically.
 
+### Databases — layering
+
+Three separate databases share the local dev PostgreSQL container (`gitgov-postgres`, `127.0.0.1:5432`). None is a deploy target:
+
+| Database | Owner | Notes |
+|---|---|---|
+| `gitgov_e2e_protocol` | **this package** | protocol projection (Blocks B, D, E); created by `globalSetup.ts` |
+| `gitgov_e2e_audit` | **this package** | audit projection (Block CBA); created by `globalSetup.ts` |
+| `gitgov_core_e2e` | **`@gitgov/core`** | core's own e2e base (Layer 1); created manually — see core's `pipeline_integration_module.md`. **This package never touches it.** |
+
+`gitgov_dev` is where saas-api runs its migrations (multi-tenant: `repoId`/`orgId` NOT NULL), so core's e2e cannot use it. Dev/test always run against the **local** container — staging is Dokploy/Railway and prod is Neon; neither is a test target.
+
 ## Prisma Schema
 
 E2E generates its own PrismaClient from core schemas (single-tenant, no extensions). See [AGENTS.md §2](./AGENTS.md) for details.
